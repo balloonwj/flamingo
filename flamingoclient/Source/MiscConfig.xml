@@ -1,0 +1,7 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Misc>
+<!--字体信息-->
+<FontInfo Name="宋体" Size="9" Color="000000" Bold="0" Italic="0" UnderLine="0"></FontInfo>
+<!--提取消息热键，目前只支持Ctrl+Alt+某键-->
+<HotKey>X</HotKey>
+</Misc>

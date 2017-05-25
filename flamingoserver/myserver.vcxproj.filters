@@ -1,0 +1,116 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="base\asynclogging.cpp" />
+    <ClCompile Include="base\countdownlatch.cpp" />
+    <ClCompile Include="base\fileutil.cpp" />
+    <ClCompile Include="base\logfile.cpp" />
+    <ClCompile Include="base\logging.cpp" />
+    <ClCompile Include="base\logstream.cpp" />
+    <ClCompile Include="base\timestamp.cpp" />
+    <ClCompile Include="common\ngx_md5.cpp" />
+    <ClCompile Include="database\databasemysql.cpp" />
+    <ClCompile Include="database\field.cpp" />
+    <ClCompile Include="database\queryresult.cpp" />
+    <ClCompile Include="net\acceptor.cpp" />
+    <ClCompile Include="net\buffer.cpp" />
+    <ClCompile Include="net\channel.cpp" />
+    <ClCompile Include="net\connector.cpp" />
+    <ClCompile Include="net\epollpoller.cpp" />
+    <ClCompile Include="net\eventloop.cpp" />
+    <ClCompile Include="net\eventloopthread.cpp" />
+    <ClCompile Include="net\eventloopthreadpool.cpp" />
+    <ClCompile Include="net\inetaddress.cpp" />
+    <ClCompile Include="net\sockets.cpp" />
+    <ClCompile Include="net\tcpclient.cpp" />
+    <ClCompile Include="net\tcpconnection.cpp" />
+    <ClCompile Include="net\tcpserver.cpp" />
+    <ClCompile Include="net\protocolstream.cpp" />
+    <ClCompile Include="jsoncpp-0.5.0\json_reader.cpp" />
+    <ClCompile Include="jsoncpp-0.5.0\json_value.cpp" />
+    <ClCompile Include="jsoncpp-0.5.0\json_writer.cpp" />
+    <ClCompile Include="mysql\mysqlmanager.cpp" />
+    <ClCompile Include="mysql\mysqlthrd.cpp" />
+    <ClCompile Include="mysql\mysqlthrdmgr.cpp" />
+    <ClCompile Include="mysql\tasklist.cpp" />
+    <ClCompile Include="chatserversrc\ClientSession.cpp" />
+    <ClCompile Include="chatserversrc\IMServer.cpp" />
+    <ClCompile Include="chatserversrc\main.cpp" />
+    <ClCompile Include="chatserversrc\MsgCacheManager.cpp" />
+    <ClCompile Include="chatserversrc\UserManager.cpp" />
+    <ClCompile Include="fileserversrc\main.cpp" />
+    <ClCompile Include="fileserversrc\FileServer.cpp" />
+    <ClCompile Include="fileserversrc\FileSession.cpp" />
+    <ClCompile Include="fileserversrc\FileManager.cpp" />
+    <ClCompile Include="fileserversrc\MD5.cpp" />
+    <ClCompile Include="common\TcpSession.cpp" />
+    <ClCompile Include="chatserversrc\TcpSession.cpp" />
+    <ClCompile Include="fileserversrc\TcpSession.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="base\asynclogging.h" />
+    <ClInclude Include="base\countdownlatch.h" />
+    <ClInclude Include="base\fileutil.h" />
+    <ClInclude Include="base\logfile.h" />
+    <ClInclude Include="base\logging.h" />
+    <ClInclude Include="base\logstream.h" />
+    <ClInclude Include="base\singleton.h" />
+    <ClInclude Include="base\timestamp.h" />
+    <ClInclude Include="common\ngx_md5.h" />
+    <ClInclude Include="net\acceptor.h" />
+    <ClInclude Include="net\buffer.h" />
+    <ClInclude Include="net\callbacks.h" />
+    <ClInclude Include="net\channel.h" />
+    <ClInclude Include="net\connector.h" />
+    <ClInclude Include="net\endian.h" />
+    <ClInclude Include="net\epollpoller.h" />
+    <ClInclude Include="net\eventloop.h" />
+    <ClInclude Include="net\eventloopthread.h" />
+    <ClInclude Include="net\eventloopthreadpool.h" />
+    <ClInclude Include="net\inetaddress.h" />
+    <ClInclude Include="net\sockets.h" />
+    <ClInclude Include="net\tcpclient.h" />
+    <ClInclude Include="net\tcpconnection.h" />
+    <ClInclude Include="net\tcpserver.h" />
+    <ClInclude Include="net\protocolstream.h" />
+    <ClInclude Include="jsoncpp-0.5.0\autolink.h" />
+    <ClInclude Include="jsoncpp-0.5.0\config.h" />
+    <ClInclude Include="jsoncpp-0.5.0\features.h" />
+    <ClInclude Include="jsoncpp-0.5.0\forwards.h" />
+    <ClInclude Include="jsoncpp-0.5.0\json.h" />
+    <ClInclude Include="jsoncpp-0.5.0\json_batchallocator.h" />
+    <ClInclude Include="jsoncpp-0.5.0\reader.h" />
+    <ClInclude Include="jsoncpp-0.5.0\value.h" />
+    <ClInclude Include="jsoncpp-0.5.0\writer.h" />
+    <ClInclude Include="mysql\mysqlmanager.h" />
+    <ClInclude Include="mysql\mysqltask.h" />
+    <ClInclude Include="mysql\mysqlthrd.h" />
+    <ClInclude Include="mysql\mysqlthrdmgr.h" />
+    <ClInclude Include="mysql\tasklist.h" />
+    <ClInclude Include="database\field.h" />
+    <ClInclude Include="database\databasemysql.h" />
+    <ClInclude Include="database\queryresult.h" />
+    <ClInclude Include="chatserversrc\ClientSession.h" />
+    <ClInclude Include="chatserversrc\IMServer.h" />
+    <ClInclude Include="chatserversrc\Msg.h" />
+    <ClInclude Include="chatserversrc\MsgCacheManager.h" />
+    <ClInclude Include="chatserversrc\UserManager.h" />
+    <ClInclude Include="fileserversrc\FileServer.h" />
+    <ClInclude Include="fileserversrc\FileSession.h" />
+    <ClInclude Include="fileserversrc\FileMsg.h" />
+    <ClInclude Include="fileserversrc\FileManager.h" />
+    <ClInclude Include="fileserversrc\MD5.h" />
+    <ClInclude Include="common\TcpSession.h" />
+    <ClInclude Include="chatserversrc\TcpSession.h" />
+    <ClInclude Include="fileserversrc\TcpSession.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="jsoncpp-0.5.0\json_internalarray.inl" />
+    <None Include="jsoncpp-0.5.0\json_internalmap.inl" />
+    <None Include="jsoncpp-0.5.0\json_valueiterator.inl" />
+    <None Include="mysql\table.sql" />
+  </ItemGroup>
+</Project>
