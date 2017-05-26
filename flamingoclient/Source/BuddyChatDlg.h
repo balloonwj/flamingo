@@ -1,3 +1,7 @@
+/** 
+ * 单人聊天窗口, BuddyChatDlg.h
+ * zhangyl 2017.05.26
+ */
 #pragma once
 
 #include "resource.h"
@@ -333,4 +337,6 @@ private:
 	RECT				m_rtMidToolBar;
 	RECT				m_rtSplitter;
 	RECT				m_rtRichSend;
+
+    time_t              m_nLastSendShakeWindowTime; //最近一次发送窗口抖动的的时间
 };

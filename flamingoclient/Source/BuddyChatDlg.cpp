@@ -1,3 +1,7 @@
+/**
+ * 单人聊天窗口, BuddyChatDlg.cpp
+ * zhangyl 2017.05.26
+ */
 #include "stdafx.h"
 #include "BuddyChatDlg.h"
 #include "MessageLogger.h"
@@ -395,6 +399,8 @@ CBuddyChatDlg::CBuddyChatDlg(void)
 	::SetRectEmpty(&m_rtMidToolBar);
 	::SetRectEmpty(&m_rtSplitter);
 	::SetRectEmpty(&m_rtRichSend);
+
+    m_nLastSendShakeWindowTime = 0;
 }
 
 CBuddyChatDlg::~CBuddyChatDlg(void)
@@ -1163,14 +1169,24 @@ void CBuddyChatDlg::OnShakeWindow(UINT uNotifyCode, int nID, CWindow wndCtl)
 		return;
 	}
 	
-	ShakeWindow(m_hWnd, 1);
+    CString strInfo(_T("                                            ☆您发送了一个窗口抖动☆\r\n"));
+    time_t nNow = time(NULL);
+    //发生窗口抖动的最小时间间隔是5秒
+    if (nNow - m_nLastSendShakeWindowTime <= 5)
+    {
+        strInfo = _T("                                        ☆您发送的窗口抖动过于频繁，请稍后再发。☆\r\n");
+    }
+    else
+    {
+        m_nLastSendShakeWindowTime = nNow;
+        ShakeWindow(m_hWnd, 1);
+        m_lpFMGClient->SendBuddyMsg(m_LoginUserId, m_strUserName.GetString(), m_UserId, m_strBuddyName.GetString(), nNow, _T("/s[\"1\"]"), m_hWnd);
+    }
 
 	RichEdit_SetSel(m_richRecv.m_hWnd, -1, -1);
-	RichEdit_ReplaceSel(m_richRecv.m_hWnd, _T("                                            ☆您发送了一个窗口抖动☆\r\n"), 
-		_T("微软雅黑"), 10, RGB(0,0,0), FALSE, FALSE, FALSE, FALSE, 0);
+    RichEdit_ReplaceSel(m_richRecv.m_hWnd, strInfo, _T("微软雅黑"), 10, RGB(0,0,0), FALSE, FALSE, FALSE, FALSE, 0);
 	m_richRecv.PostMessage(WM_VSCROLL, SB_BOTTOM, 0);
-	time_t nTime = time(NULL);
-    m_lpFMGClient->SendBuddyMsg(m_LoginUserId, m_strUserName.GetString(), m_UserId, m_strBuddyName.GetString(), nTime, _T("/s[\"1\"]"), m_hWnd);
+	
 }
 
 // “发送图片”按钮

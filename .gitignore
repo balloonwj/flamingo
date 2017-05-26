@@ -1,0 +1,46 @@
+*.sdf
+git提交指令.txt
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.log
+LoginAccountList.data
+flamingoclient/Bin/Users/
+*.ilk
+*.suo
+iUpdateAuto.exe
+*.tlog
+*.lastbuild
+*.ipch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+flamingoclient/Source/Debug/
+flamingoclient/iAutoUpdate/debug/
+flamingoclient/Bin/Flamingo.exe
+flamingoclient/Bin/Log/
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.sbr
+MenuDemo/Debug/vc90.pdb
+*.idb
+QQDemo/Debug/color_skin.obj
+*.obj
+QQDemo/Debug/QQDemo.map
+*.pdb
+*.ncb
+DuiLib.suo
+*.pch
+FlashDemo/Debug/FlashDemo.map
+*.bsc
+FlashDemo/FlashDemo.vcproj.wengmq-PC.wengmq.user
+*.user
+QQDemo/Debug/mt.dep
+*.dep
+*.map
