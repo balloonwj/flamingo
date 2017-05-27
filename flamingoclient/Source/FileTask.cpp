@@ -15,6 +15,8 @@
 #include "net/protocolstream.h"
 #include "net/IUProtocolData.h"
 
+using namespace balloon;
+
 CFileTask::CFileTask(CIUSocket* sockeClient) : m_SocketClient(sockeClient), m_seq(0)
 {
 	m_lpFMGClient = NULL;
@@ -372,12 +374,12 @@ long CFileTask::UploadFile(PCTSTR pszFileName, HWND hwndReflection, HANDLE hCanc
     while (true)
     {
         std::string outbuf;
-        yt::BinaryWriteStream3 writeStream(&outbuf);
-        writeStream.Write(msg_type_upload_req);
-        writeStream.Write(m_seq);
-        writeStream.Write(szMd5, 32);
-        writeStream.Write((int)offsetX);
-        writeStream.Write((int)nFileSize);
+        BinaryWriteStream writeStream(&outbuf);
+        writeStream.WriteInt32(msg_type_upload_req);
+        writeStream.WriteInt32(m_seq);
+        writeStream.WriteCString(szMd5, 32);
+        writeStream.WriteInt32((int32_t)offsetX);
+        writeStream.WriteInt32((int32_t)nFileSize);
         size_t eachfilesize = 512* 1024;
         if (nFileSize - offsetX < eachfilesize)
             eachfilesize = nFileSize - offsetX;
@@ -387,7 +389,7 @@ long CFileTask::UploadFile(PCTSTR pszFileName, HWND hwndReflection, HANDLE hCanc
             break;
         string filedata;
         filedata.append(buffer.GetBuffer(), buffer.GetSize());
-        writeStream.Write(filedata.c_str(), filedata.length());
+        writeStream.WriteString(filedata);
         writeStream.Flush();
         file_msg headerx = { outbuf.length() };
         outbuf.insert(0, (const char*)&headerx, sizeof(headerx));
@@ -413,31 +415,31 @@ long CFileTask::UploadFile(PCTSTR pszFileName, HWND hwndReflection, HANDLE hCanc
         if (!m_SocketClient->RecvOnFilePort(recvBuf.GetBuffer(), recvBuf.GetSize()))
             break;
 
-        yt::BinaryReadStream2 readStream(recvBuf.GetBuffer(), recvBuf.GetSize());
-        int cmd;
-        if (!readStream.Read(cmd) || cmd != msg_type_upload_resp)
+        BinaryReadStream readStream(recvBuf.GetBuffer(), recvBuf.GetSize());
+        int32_t cmd;
+        if (!readStream.ReadInt32(cmd) || cmd != msg_type_upload_resp)
             break;
 
         //int seq;
-        if (!readStream.Read(m_seq))
+        if (!readStream.ReadInt32(m_seq))
             break;
 
         std::string filemd5;
         size_t md5length;
-        if (!readStream.Read(&filemd5, 0, md5length) || md5length != 32)
+        if (!readStream.ReadString(&filemd5, 0, md5length) || md5length != 32)
             break;
 
-        int offset;
-        if (!readStream.Read(offset))
+        int32_t offset;
+        if (!readStream.ReadInt32(offset))
             break;
 
-        int filesize;
-        if (!readStream.Read(filesize))
+        int32_t filesize;
+        if (!readStream.ReadInt32(filesize))
             break;
 
         string dummyfiledata;
         size_t filedatalength;
-        if (!readStream.Read(&dummyfiledata, 0, filedatalength) || filedatalength != 0)
+        if (!readStream.ReadString(&dummyfiledata, 0, filedatalength) || filedatalength != 0)
             break;
 
         if (offset == -1 && filesize == -1)
@@ -504,16 +506,16 @@ long CFileTask::DownloadFile3(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BOOL bO
     while (true)
     {
         std::string outbuf;
-        yt::BinaryWriteStream3 writeStream(&outbuf);
-        writeStream.Write(msg_type_download_req);
-        writeStream.Write(m_seq);
-        writeStream.Write(lpszFileName, strlen(lpszFileName));
+        BinaryWriteStream writeStream(&outbuf);
+        writeStream.WriteInt32(msg_type_download_req);
+        writeStream.WriteInt32(m_seq);
+        writeStream.WriteCString(lpszFileName, strlen(lpszFileName));
         size_t dummyoffset = 0;
-        writeStream.Write((int)dummyoffset);
+        writeStream.WriteInt32((int32_t)dummyoffset);
         size_t dummyfilesize = 0;
-        writeStream.Write((int)dummyfilesize);
+        writeStream.WriteInt32((int32_t)dummyfilesize);
         string dummyfiledata;
-        writeStream.Write(dummyfiledata.c_str(), dummyfiledata.length());
+        writeStream.WriteString(dummyfiledata);
         writeStream.Flush();
 
         file_msg header = { outbuf.length() };
@@ -539,16 +541,16 @@ long CFileTask::DownloadFile3(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BOOL bO
             break;
         }
 
-        yt::BinaryReadStream2 readStream(buffer.GetBuffer(), recvheader.packagesize);
-        int cmd;
-        if (!readStream.Read(cmd) || cmd != msg_type_download_resp)
+        BinaryReadStream readStream(buffer.GetBuffer(), recvheader.packagesize);
+        int32_t cmd;
+        if (!readStream.ReadInt32(cmd) || cmd != msg_type_download_resp)
         {
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
 
         //int seq;
-        if (!readStream.Read(m_seq))
+        if (!readStream.ReadInt32(m_seq))
         {
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
@@ -556,21 +558,21 @@ long CFileTask::DownloadFile3(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BOOL bO
 
         std::string filemd5;
         size_t md5length;
-        if (!readStream.Read(&filemd5, 0, md5length) || md5length == 0)
+        if (!readStream.ReadString(&filemd5, 0, md5length) || md5length == 0)
         {
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
 
-        int offset;
-        if (!readStream.Read(offset))
+        int32_t offset;
+        if (!readStream.ReadInt32(offset))
         {
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
 
-        int filesize;
-        if (!readStream.Read(filesize))
+        int32_t filesize;
+        if (!readStream.ReadInt32(filesize))
         {
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
@@ -578,7 +580,7 @@ long CFileTask::DownloadFile3(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BOOL bO
 
         string filedata;
         size_t filedatalength;
-        if (!readStream.Read(&filedata, 0, filedatalength) || filedatalength == 0)
+        if (!readStream.ReadString(&filedata, 0, filedatalength) || filedatalength == 0)
         {
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
@@ -700,12 +702,12 @@ BOOL CFileTask::UploadUserThumb(PCTSTR pszFileName, HWND hwndReflection, CUpload
     while (true)
     {
         std::string outbuf;
-        yt::BinaryWriteStream3 writeStream(&outbuf);
-        writeStream.Write(msg_type_upload_req);
-        writeStream.Write(m_seq);
-        writeStream.Write(szMd5, 32);
-        writeStream.Write((int)offsetX);
-        writeStream.Write((int)nFileSize);
+        BinaryWriteStream writeStream(&outbuf);
+        writeStream.WriteInt32(msg_type_upload_req);
+        writeStream.WriteInt32(m_seq);
+        writeStream.WriteCString(szMd5, 32);
+        writeStream.WriteInt32((int32_t)offsetX);
+        writeStream.WriteInt32((int32_t)nFileSize);
         size_t eachfilesize = 512* 1024;
         if (nFileSize - offsetX < eachfilesize)
             eachfilesize = nFileSize - offsetX;
@@ -715,7 +717,7 @@ BOOL CFileTask::UploadUserThumb(PCTSTR pszFileName, HWND hwndReflection, CUpload
             break;
         string filedata;
         filedata.append(buffer.GetBuffer(), buffer.GetSize());
-        writeStream.Write(filedata.c_str(), filedata.length());
+        writeStream.WriteString(filedata);
         writeStream.Flush();
         file_msg headerx = { outbuf.length() };
         outbuf.insert(0, (const char*)&headerx, sizeof(headerx));
@@ -741,31 +743,31 @@ BOOL CFileTask::UploadUserThumb(PCTSTR pszFileName, HWND hwndReflection, CUpload
         if (!m_SocketClient->RecvOnFilePort(recvBuf.GetBuffer(), recvBuf.GetSize()))
             break;
 
-        yt::BinaryReadStream2 readStream(recvBuf.GetBuffer(), recvBuf.GetSize());
-        int cmd;
-        if (!readStream.Read(cmd) || cmd != msg_type_upload_resp)
+        BinaryReadStream readStream(recvBuf.GetBuffer(), recvBuf.GetSize());
+        int32_t cmd;
+        if (!readStream.ReadInt32(cmd) || cmd != msg_type_upload_resp)
             break;
 
         //int seq;
-        if (!readStream.Read(m_seq))
+        if (!readStream.ReadInt32(m_seq))
             break;
 
         std::string filemd5;
         size_t md5length;
-        if (!readStream.Read(&filemd5, 0, md5length) || md5length != 32)
+        if (!readStream.ReadString(&filemd5, 0, md5length) || md5length != 32)
             break;
 
-        int offset;
-        if (!readStream.Read(offset))
+        int32_t offset;
+        if (!readStream.ReadInt32(offset))
             break;
 
-        int filesize;
-        if (!readStream.Read(filesize))
+        int32_t filesize;
+        if (!readStream.ReadInt32(filesize))
             break;
 
         string dummyfiledata;
         size_t filedatalength;
-        if (!readStream.Read(&dummyfiledata, 0, filedatalength) || filedatalength != 0)
+        if (!readStream.ReadString(&dummyfiledata, 0, filedatalength) || filedatalength != 0)
             break;
 
         if (offset == -1 && filesize == -1)

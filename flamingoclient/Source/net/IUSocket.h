@@ -62,6 +62,8 @@ private:
     void    SendThreadProc();
     void    RecvThreadProc();
 
+    void    SendHeartbeatPackage();
+
     bool	Send();
     bool	Recv();
     
@@ -77,6 +79,11 @@ private:
 	long							m_nProxyType;			//代理类型（0不使用代理；）
 	CString							m_strProxyServer;		//代理服务器地址
 	short							m_nProxyPort;			//代理服务器端口号
+
+    long                            m_nLastDataTime;        //最近一次收发数据的时间
+    std::mutex                      m_mutexLastDataTime;    //保护m_nLastDataTime的互斥体
+    long                            m_nHeartbeatInterval;   //心跳包时间间隔，单位秒
+    int32_t                         m_nHeartbeatSeq;        //心跳包序列号
 	
 	BOOL							m_bConnected;
 	BOOL							m_bConnectedOnFileSocket;

@@ -11,15 +11,27 @@
 #include <fcntl.h>
 #include "../base/logging.h"
 #include "../base/singleton.h"
-#include "../mysql/mysqlmanager.h"
+#include "../base/configfilereader.h"
+#include "../base/asynclogging.h"
 #include "../net/eventloop.h"
 #include "../net/eventloopthreadpool.h"
+#include "../mysql/mysqlmanager.h"
 #include "UserManager.h"
 #include "IMServer.h"
 
 using namespace net;
 
 EventLoop g_mainLoop;
+
+AsyncLogging* g_asyncLog = NULL;
+void asyncOutput(const char* msg, int len)
+{
+    if (g_asyncLog != NULL)
+    {
+        g_asyncLog->append(msg, len);
+        std::cout << msg << std::endl;
+    }
+}
 
 void prog_exit(int signo)
 {
@@ -72,7 +84,6 @@ int main(int argc, char* argv[])
     signal(SIGKILL, prog_exit);
     signal(SIGTERM, prog_exit);
 
-    short port = 0;
     int ch;
     bool bdaemon = false;
     while ((ch = getopt(argc, argv, "d")) != -1)
@@ -89,16 +100,23 @@ int main(int argc, char* argv[])
         daemon_run();
 
 
-    if (port == 0)
-        port = 12345;
+    CConfigFileReader config("chatserver.conf");
 
     Logger::setLogLevel(Logger::DEBUG);
+    const char* logfilepath = config.GetConfigName("logdir");
+
+    Logger::setLogLevel(Logger::DEBUG);
+    int kRollSize = 500 * 1000 * 1000;
+    AsyncLogging log(logfilepath, kRollSize);
+    log.start();
+    g_asyncLog = &log;
+    Logger::setOutput(asyncOutput);
 
     //初始化数据库配置
-    const char* dbserver = "127.0.0.1";
-    const char* dbuser = "root";
-    const char* dbpassword = "";
-    const char* dbname = "myim";
+    const char* dbserver = config.GetConfigName("dbserver");
+    const char* dbuser = config.GetConfigName("dbuser");
+    const char* dbpassword = config.GetConfigName("dbpassword");
+    const char* dbname = config.GetConfigName("dbname");
 	if (!Singleton<CMysqlManager>::Instance().Init(dbserver, dbuser, dbpassword, dbname))
     {
         LOG_FATAL << "please check your database config..............";
@@ -112,7 +130,9 @@ int main(int argc, char* argv[])
     Singleton<EventLoopThreadPool>::Instance().Init(&g_mainLoop, 4);
     Singleton<EventLoopThreadPool>::Instance().start();
 
-    Singleton<IMServer>::Instance().Init("0.0.0.0", 20000, &g_mainLoop);
+    const char* listenip = config.GetConfigName("listenip");
+    short listenport = (short)atol(config.GetConfigName("listenport"));
+    Singleton<IMServer>::Instance().Init(listenip, listenport, &g_mainLoop);
     
     g_mainLoop.loop();
 

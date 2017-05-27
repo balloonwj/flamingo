@@ -129,7 +129,7 @@ private:
     std::mutex                  m_mtItems;
     std::condition_variable     m_cvItems;
 
-    int                         m_seq{};            //包序列号
+    int32_t                     m_seq{};            //包序列号
 
     CIUSocket*                  m_SocketClient;
 };

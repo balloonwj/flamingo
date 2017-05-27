@@ -1,5 +1,7 @@
+*.opensdf
 *.sdf
 git提交指令.txt
+iKutil.log
 
 # Compiled Object files
 *.slo

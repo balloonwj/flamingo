@@ -111,7 +111,7 @@ BOOL CLoginSettingsDlg::InitUI()
 
 	CIniFile iniFile;
 	CString strIniPath(g_szHomePath);
-	strIniPath += _T("config\\iu.ini");
+	strIniPath += _T("config\\flamingo.ini");
 	long nSel = iniFile.ReadInt(_T("server"), _T("proxyType"), 0, strIniPath);
 	if(nSel == -1)
 		nSel = 0;
@@ -299,7 +299,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 
 	CIniFile iniFile;
 	CString strIniPath(g_szHomePath);
-	strIniPath += _T("config\\iu.ini");
+	strIniPath += _T("config\\flamingo.ini");
 	iniFile.WriteString(_T("server"), _T("server"), m_szSrvAddr, strIniPath); 
 	iniFile.WriteString(_T("server"), _T("fileserver"), m_szFileSrvAddr, strIniPath); 
 	iniFile.WriteString(_T("server"), _T("port"), m_szSrvPort, strIniPath); 
@@ -314,8 +314,8 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 
 	m_pClient->SetServer(m_szSrvAddr);
 	m_pClient->SetFileServer(m_szFileSrvAddr);
-	m_pClient->SetPort(_wtol(m_szSrvPort));
-	m_pClient->SetFilePort(_wtol(m_szFilePort));
+	m_pClient->SetPort((short)_wtol(m_szSrvPort));
+    m_pClient->SetFilePort((short)_wtol(m_szFilePort));
 	//m_pClient->m_IUProtocol.SetProxyType(nCurSel);
 	//if(nCurSel > USE_BROWSER_PROXY)
 	//{

@@ -185,7 +185,7 @@ private:
 
 	UINT										m_nPreMsgId, m_nPreMsgId2;
 
-    int                                         m_seq;
+    int32_t                                     m_seq;
 
     HWND                                        m_hProxyWnd;
 };

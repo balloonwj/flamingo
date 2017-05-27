@@ -5262,7 +5262,7 @@ void CMainDlg::SaveCurrentLogonUserToFile()
 {	
 	CIniFile iniFile;
 	CString strIniFile;
-	strIniFile.Format(_T("%sconfig\\iu.ini"), g_szHomePath);
+	strIniFile.Format(_T("%sconfig\\flamingo.ini"), g_szHomePath);
 	CString strAccountList;
 	iniFile.ReadString(_T("LogonUserList"), _T("AccountName"), _T(""), strAccountList.GetBuffer(256), 256, strIniFile);
 	strAccountList.ReleaseBuffer();
@@ -5275,7 +5275,7 @@ void CMainDlg::DeleteCurrentUserFromFile()
 {	
 	CIniFile iniFile;
 	CString strIniFile;
-	strIniFile.Format(_T("%sconfig\\iu.ini"), g_szHomePath);
+	strIniFile.Format(_T("%sconfig\\flamingo.ini"), g_szHomePath);
 	CString strAccountList;
 	iniFile.ReadString(_T("LogonUserList"), _T("AccountName"), _T(""), strAccountList.GetBuffer(256), 256, strIniFile);
 	strAccountList.ReleaseBuffer();

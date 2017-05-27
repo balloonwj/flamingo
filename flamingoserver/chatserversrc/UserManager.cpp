@@ -23,7 +23,8 @@ bool UserManager::Init(const char* dbServer, const char* dbUserName, const char*
 {
     m_strDbServer = dbServer;
     m_strDbUserName = dbUserName;
-    m_strDbPassword = dbPassword;
+    if (dbPassword != NULL)
+        m_strDbPassword = dbPassword;
     m_strDbName = dbName;
 
     if (!LoadUsersFromDb())

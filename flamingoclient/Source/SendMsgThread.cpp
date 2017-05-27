@@ -12,6 +12,8 @@
 #include "net/IUSocket.h"
 #include "net/protocolstream.h"
 
+using namespace balloon;
+
 CMsgItem::CMsgItem(void)
 {
 	m_nType = FMG_MSG_TYPE_BUDDY;
@@ -180,11 +182,11 @@ void CSendMsgThread::HandleRegister(const CRegisterRequest* pRegisterRequest)
                 pRegisterRequest->m_szPassword);
 
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_register);
-    writeStream.Write(m_seq);
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_register);
+    writeStream.WriteInt32(m_seq);
     std::string data = szRegisterInfo;
-    writeStream.Write(data.c_str(), data.length());
+    writeStream.WriteString(data);
     writeStream.Flush();
 
     CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request register: Account=%s, Password=*****, nickname=%s.", pRegisterRequest->m_szAccountName, pRegisterRequest->m_szPassword, pRegisterRequest->m_szNickName);
@@ -207,11 +209,11 @@ void CSendMsgThread::HandleLogon(const CLoginRequest* pLoginRequest)
              pLoginRequest->m_nStatus);
 
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_login);
-    writeStream.Write(m_seq);
-    std::string data = szLoginInfo;
-    writeStream.Write(data.c_str(), data.length());
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_login);
+    writeStream.WriteInt32(m_seq);
+    //std::string data = szLoginInfo;
+    writeStream.WriteCString(szLoginInfo, strlen(szLoginInfo));
     writeStream.Flush();
 
     CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request logon: Account=%s, Password=*****, Status=%d, LoginType=%d.", pLoginRequest->m_szAccountName, pLoginRequest->m_szPassword, pLoginRequest->m_nStatus, (long)pLoginRequest->m_nLoginType);
@@ -225,11 +227,11 @@ void CSendMsgThread::HandleUserBasicInfo(const CUserBasicInfoRequest* pUserBasic
 		return;
 	
 	std::string outbuf;
-	yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_getofriendlist);
-	writeStream.Write(m_seq);
+	BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_getofriendlist);
+    writeStream.WriteInt32(m_seq);
 	std::string dummy;
-	writeStream.Write(dummy.c_str(), dummy.length());
+	writeStream.WriteString(dummy);
 	writeStream.Flush();
 
 	CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request to get userinfo.");
@@ -243,12 +245,12 @@ void CSendMsgThread::HandleGroupBasicInfo(const CGroupBasicInfoRequest* pGroupBa
         return;
 
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_getgroupmembers);
-    writeStream.Write(m_seq);
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_getgroupmembers);
+    writeStream.WriteInt32(m_seq);
     char szData[32] = {0};
     sprintf_s(szData, ARRAYSIZE(szData), "{\"groupid\": %d}", pGroupBasicInfo->m_groupid);
-    writeStream.Write(szData, strlen(szData));
+    writeStream.WriteCString(szData, strlen(szData));
     writeStream.Flush();
 
     CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request to get group members, groupid=%d.", pGroupBasicInfo->m_groupid);
@@ -265,11 +267,11 @@ void CSendMsgThread::HandleFindFriendMessage(const CFindFriendRequest* pFindFrie
     sprintf_s(szData, 64, "{\"type\": %d, \"username\": \"%s\"}", pFindFriendRequest->m_nType, pFindFriendRequest->m_szAccountName);
 
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_finduser);
-    writeStream.Write(m_seq);
-    std::string data = szData;
-    writeStream.Write(szData, strlen(szData));
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_finduser);
+    writeStream.WriteInt32(m_seq);
+    //std::string data = szData;
+    writeStream.WriteCString(szData, strlen(szData));
     writeStream.Flush();
 
     CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request to find friend, type=%d, accountName=%s", pFindFriendRequest->m_nType, pFindFriendRequest->m_szAccountName);
@@ -297,11 +299,11 @@ void CSendMsgThread::HandleOperateFriendMessage(const COperateFriendRequest* pOp
     }
 
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_operatefriend);
-    writeStream.Write(m_seq);
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_operatefriend);
+    writeStream.WriteInt32(m_seq);
     std::string data = szData;
-    writeStream.Write(szData, strlen(szData));
+    writeStream.WriteCString(szData, strlen(szData));
     writeStream.Flush();
 
     CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request to operate friend, type=%d, accountId=%u", pOperateFriendRequest->m_uCmd, pOperateFriendRequest->m_uAccountID);
@@ -334,10 +336,10 @@ void CSendMsgThread::HandleUpdateLogonUserInfoMessage(const CUpdateLogonUserInfo
 
 
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_updateuserinfo);
-    writeStream.Write(m_seq);
-    writeStream.Write(os.str().c_str(), os.str().length());
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_updateuserinfo);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteString(os.str());
     writeStream.Flush();
 
     CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request to Update User Info, data=%s", os.str().c_str());
@@ -353,10 +355,10 @@ void CSendMsgThread::HandleModifyPassword(const CModifyPasswordRequest* pModifyP
     char szData[256] = { 0 };
     sprintf_s(szData, ARRAYSIZE(szData), "{\"oldpassword\": \"%s\", \"newpassword\": \"%s\"}", pModifyPassword->m_szOldPassword, pModifyPassword->m_szNewPassword);
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_modifypassword);
-    writeStream.Write(m_seq);
-    writeStream.Write(szData, strlen(szData));
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_modifypassword);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteCString(szData, strlen(szData));
     writeStream.Flush();
 
     m_SocketClient->Send(outbuf);
@@ -370,10 +372,10 @@ void CSendMsgThread::HandleCreateNewGroup(const CCreateNewGroupRequest* pCreateN
     char szData[256] = { 0 };
     sprintf_s(szData, ARRAYSIZE(szData), "{\"groupname\": \"%s\", \"type\": 0}", pCreateNewGroup->m_szGroupName);
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_creategroup);
-    writeStream.Write(m_seq);
-    writeStream.Write(szData, strlen(szData));
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_creategroup);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteCString(szData, strlen(szData));
     writeStream.Flush();
 
     m_SocketClient->Send(outbuf);
@@ -444,15 +446,15 @@ BOOL CSendMsgThread::HandleSentConfirmImageMessage(const CSentChatConfirmImageMe
 		//bRet = m_pProtocol->SendChatMessage(pConfirmImageMessage->m_pszConfirmBody, pConfirmImageMessage->m_uConfirmBodySize, FALSE, uTargetID, 0);
         long nChatMsgLength = pConfirmImageMessage->m_uConfirmBodySize;
         std::string outbuf;
-        yt::BinaryWriteStream3 writeStream(&outbuf);
-        writeStream.Write(msg_type_chat);
-        writeStream.Write(m_seq);
+        BinaryWriteStream writeStream(&outbuf);
+        writeStream.WriteInt32(msg_type_chat);
+        writeStream.WriteInt32(m_seq);
         //senderId
         //writeStream.Write((int32_t)lpBuddyMsg->m_nFromUin);
         //消息内容
-        writeStream.Write(pConfirmImageMessage->m_pszConfirmBody, nChatMsgLength);
+        writeStream.WriteCString(pConfirmImageMessage->m_pszConfirmBody, nChatMsgLength);
         //targetId
-        writeStream.Write((int32_t)uTargetID);
+        writeStream.WriteInt32((int32_t)uTargetID);
         writeStream.Flush();
 
         m_SocketClient->Send(outbuf);
@@ -1026,13 +1028,13 @@ BOOL CSendMsgThread::SendMultiMsg(CMsgItem* lpMsgItem)
 BOOL CSendMsgThread::SendMultiChatMessage(const char* pszChatMsg, int nChatMsgLength, UINT* pAccountList, int nAccountNum)
 {
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_multichat);
-    writeStream.Write(m_seq);
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_multichat);
+    writeStream.WriteInt32(m_seq);
     //senderId
     //writeStream.Write((int32_t)lpBuddyMsg->m_nFromUin);
     //消息内容
-    writeStream.Write(pszChatMsg, nChatMsgLength);
+    writeStream.WriteCString(pszChatMsg, nChatMsgLength);
     //targetId
 
     std::ostringstream osTargets;
@@ -1046,7 +1048,7 @@ BOOL CSendMsgThread::SendMultiChatMessage(const char* pszChatMsg, int nChatMsgLe
     std::string strTarget = osTargets.str().substr(0, osTargets.str().length() - 1);
     strTarget += "]}";
 
-    writeStream.Write(strTarget.c_str(), strTarget.length());
+    writeStream.WriteString(strTarget);
     writeStream.Flush();
 
     m_SocketClient->Send(outbuf);
@@ -1290,15 +1292,15 @@ BOOL CSendMsgThread::ProcessBuddyMsg(CBuddyMessage* lpBuddyMsg)
 
     long nChatMsgLength = strUtf8Msg.GetLength();
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_chat);
-    writeStream.Write(m_seq);
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_chat);
+    writeStream.WriteInt32(m_seq);
     //senderId
     //writeStream.Write((int32_t)lpBuddyMsg->m_nFromUin);
     //消息内容
-    writeStream.Write(strUtf8Msg, nChatMsgLength);
+    writeStream.WriteCString(strUtf8Msg, nChatMsgLength);
     //targetId
-    writeStream.Write((int32_t)lpBuddyMsg->m_nToUin);
+    writeStream.WriteInt32((int32_t)lpBuddyMsg->m_nToUin);
     writeStream.Flush();
 
     m_SocketClient->Send(outbuf);

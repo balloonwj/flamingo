@@ -14,6 +14,7 @@
 #include "FileSession.h"
 
 using namespace net;
+using namespace balloon;
 
 FileSession::FileSession(const std::shared_ptr<TcpConnection>& conn) :  
 TcpSession(conn), 
@@ -59,16 +60,16 @@ void FileSession::OnRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBu
 
 bool FileSession::Process(const std::shared_ptr<TcpConnection>& conn, const char* inbuf, size_t length)
 {
-    yt::BinaryReadStream2 readStream(inbuf, length);
-    int cmd;
-    if (!readStream.Read(cmd))
+    balloon::BinaryReadStream readStream(inbuf, length);
+    int32_t cmd;
+    if (!readStream.ReadInt32(cmd))
     {
         LOG_WARN << "read cmd error !!!";
         return false;
     }
 
     //int seq;
-    if (!readStream.Read(m_seq))
+    if (!readStream.ReadInt32(m_seq))
     {
         LOG_WARN << "read seq error !!!";
         return false;
@@ -76,21 +77,22 @@ bool FileSession::Process(const std::shared_ptr<TcpConnection>& conn, const char
 
     std::string filemd5;
     size_t md5length;
-    if (!readStream.Read(&filemd5, 0, md5length) || md5length == 0)
+    if (!readStream.ReadString(&filemd5, 0, md5length) || md5length == 0)
     {
         LOG_WARN << "read filemd5 error !!!";
         return false;
     }
 
-    int offset;
-    if (!readStream.Read(offset))
+    //TODO: 32位的偏移量不能支持大文件
+    int32_t offset;
+    if (!readStream.ReadInt32(offset))
     {
         LOG_WARN << "read offset error !!!";
         return false;
     }
 
-    int filesize;
-    if (!readStream.Read(filesize))
+    int32_t filesize;
+    if (!readStream.ReadInt32(filesize))
     {
         LOG_WARN << "read filesize error !!!";
         return false;
@@ -98,7 +100,7 @@ bool FileSession::Process(const std::shared_ptr<TcpConnection>& conn, const char
 
     string filedata;
     size_t filedatalength;
-    if (!readStream.Read(&filedata, 0, filedatalength))
+    if (!readStream.ReadString(&filedata, 0, filedatalength))
     {
         LOG_WARN << "read filedata error !!!";
         return false;
@@ -149,18 +151,18 @@ void FileSession::OnUploadFileResponse(const std::string& filemd5, int32_t offse
     }
     
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
+    BinaryWriteStream writeStream(&outbuf);
     
     if (Singleton<FileManager>::Instance().IsFileExsit(filemd5.c_str()))
     {
-        writeStream.Write(msg_type_upload_resp);
-        writeStream.Write(m_seq);
-        writeStream.Write(filemd5.c_str(), filemd5.length());
+        writeStream.WriteInt32(msg_type_upload_resp);
+        writeStream.WriteInt32(m_seq);
+        writeStream.WriteString(filemd5);
         offset = filesize = -1;
-        writeStream.Write(offset);
-        writeStream.Write(filesize);
+        writeStream.WriteInt32(offset);
+        writeStream.WriteInt32(filesize);
         string dummyfiledata;
-        writeStream.Write(dummyfiledata.c_str(), dummyfiledata.length());
+        writeStream.WriteString(dummyfiledata);
         LOG_INFO << "Response to client: cmd=msg_type_upload_resp" << ", connection name:" << conn->peerAddress().toIpPort();
         writeStream.Flush();
 
@@ -168,9 +170,9 @@ void FileSession::OnUploadFileResponse(const std::string& filemd5, int32_t offse
         return;
     }
     
-    writeStream.Write(msg_type_upload_resp);
-    writeStream.Write(m_seq);
-    writeStream.Write(filemd5.c_str(), filemd5.length());
+    writeStream.WriteInt32(msg_type_upload_resp);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteString(filemd5);
     if (offset == 0)
     {
         string filename = "filecache/";
@@ -203,10 +205,10 @@ void FileSession::OnUploadFileResponse(const std::string& filemd5, int32_t offse
         ResetFile();
     }
 
-    writeStream.Write(offset);
-    writeStream.Write(filesize);
+    writeStream.WriteInt32(offset);
+    writeStream.WriteInt32(filesize);
     string dummyfiledatax;
-    writeStream.Write(dummyfiledatax.c_str(), dummyfiledatax.length());
+    writeStream.WriteString(dummyfiledatax);
     writeStream.Flush();
 
     Send(outbuf);
@@ -250,10 +252,10 @@ void FileSession::OnDownloadFileResponse(const std::string& filemd5, int32_t off
     }
 
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_download_resp);
-    writeStream.Write(m_seq);
-    writeStream.Write(filemd5.c_str(), filemd5.length());
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_download_resp);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteString(filemd5);
 
     string filedata;
     
@@ -283,11 +285,11 @@ void FileSession::OnDownloadFileResponse(const std::string& filemd5, int32_t off
 	}
 
 
-    writeStream.Write(m_offset);
+    writeStream.WriteInt32(m_offset);
     m_offset += currentSendSize;
     filedata.append(buffer, currentSendSize);   
-    writeStream.Write(m_filesize);
-    writeStream.Write(filedata.c_str(), filedata.length());
+    writeStream.WriteInt32(m_filesize);
+    writeStream.WriteString(filedata);
     writeStream.Flush();
 
     LOG_INFO << "Response to client: cmd = msg_type_download_resp, filemd5: " << filemd5 << ", connection name:" << conn->peerAddress().toIpPort();

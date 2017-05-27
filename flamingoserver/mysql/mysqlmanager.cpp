@@ -132,7 +132,9 @@ bool CMysqlManager::Init(const char* host, const char* user, const char* pwd, co
 {
 	m_strHost = host;
 	m_strUser = user;
-	m_strPassword = pwd;
+    //数据库密码可能为空
+    if (pwd != NULL)
+	    m_strPassword = pwd;
 	m_strDataBase = dbname;
 
 	//注意：检查数据库是否存在时，需要将数据库名称设置为空

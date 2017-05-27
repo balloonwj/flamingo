@@ -9,6 +9,9 @@
 #include "Msg.h"
 #include "IUProtocolData.h"
 #include "../RecvMsgThread.h"
+#include "protocolstream.h"
+
+using namespace balloon;
 
 CIUSocket::CIUSocket(CRecvMsgThread* pThread)
 : m_strServer(_T("iu.Hootina.com")),
@@ -25,6 +28,11 @@ CIUSocket::CIUSocket(CRecvMsgThread* pThread)
 
 	m_bConnected = FALSE;
 	m_bConnectedOnFileSocket = FALSE;
+
+    m_nHeartbeatInterval = 10;
+    m_nLastDataTime = (long)time(NULL);
+
+    m_nHeartbeatSeq = 0;
 }
 
 CIUSocket::~CIUSocket()
@@ -62,7 +70,7 @@ void CIUSocket::LoadConfig()
 {
 	CIniFile iniFile;
 	CString strIniFilePath(g_szHomePath);
-	strIniFilePath += _T("config\\iu.ini");
+	strIniFilePath += _T("config\\flamingo.ini");
 	
 	iniFile.ReadString(_T("server"), _T("server"), _T("iu.Hootina.com"), m_strServer.GetBuffer(64), 64, strIniFilePath);
 	m_strServer.ReleaseBuffer();
@@ -78,6 +86,8 @@ void CIUSocket::LoadConfig()
 	iniFile.ReadString(_T("server"), _T("proxyServer"), _T("xxx.com"), m_strProxyServer.GetBuffer(64), 64, strIniFilePath);
 	m_strProxyServer.ReleaseBuffer();
 	m_nProxyPort = iniFile.ReadInt(_T("server"), _T("proxyPort"), 4000, strIniFilePath);
+
+    m_nHeartbeatInterval = iniFile.ReadInt(_T("server"), _T("heartbeatinterval"), 10, strIniFilePath);
 }
 
 void CIUSocket::SetServer(PCTSTR lpszServer)
@@ -330,6 +340,11 @@ bool CIUSocket::Send()
 		::Sleep(1);
 	}
 
+    {
+        std::lock_guard<std::mutex> guard(m_mutexLastDataTime);
+        m_nLastDataTime = (long)time(NULL);
+    }
+
 	return true;
 }
 
@@ -364,6 +379,11 @@ bool CIUSocket::Recv()
 		
 		::Sleep(1);
 	} 
+
+    {
+        std::lock_guard<std::mutex> guard(m_mutexLastDataTime);
+        m_nLastDataTime = (long)time(NULL);
+    }
 
 	return true;
 }
@@ -543,36 +563,63 @@ void CIUSocket::RecvThreadProc()
 {
     while (!m_bStop)
     {
-        if (!CheckReceivedData())
-            continue;
-
-        //TODO: 进行重连，如果连接不上，则向客户报告错误
-        if (!Recv())
+        //检测到数据则收数据
+        if (CheckReceivedData())
         {
-            continue;
-        }
+            //TODO: 进行重连，如果连接不上，则向客户报告错误
+            if (!Recv())
+            {
+                continue;
+            }
 
-        //一定要放在一个循环里面解包，因为可能一片数据中有多个包，
-        //对于数据收不全，这个地方我纠结了好久T_T
-        while (true)
+            //一定要放在一个循环里面解包，因为可能一片数据中有多个包，
+            //对于数据收不全，这个地方我纠结了好久T_T
+            while (true)
+            {
+                if (m_strRecvBuf.length() <= sizeof(msg))
+                    break;
+
+                msg header;
+                memcpy_s(&header, sizeof(msg), m_strRecvBuf.data(), sizeof(msg));
+                if (m_strRecvBuf.length() < sizeof(msg))
+                    break;
+
+                //去除包头信息
+                m_strRecvBuf.erase(0, sizeof(msg));
+                std::string strBody;
+                strBody.append(m_strRecvBuf.c_str(), header.packagesize);
+                //去除包体信息
+                m_strRecvBuf.erase(0, header.packagesize);
+
+                m_pRecvMsgThread->AddMsgData(strBody);
+            }
+        }
+        else
         {
-            if (m_strRecvBuf.length() <= sizeof(msg))
-                break;
+            long nLastDataTime = 0;
+            {
+                std::lock_guard<std::mutex> guard(m_mutexLastDataTime);
+                nLastDataTime = m_nLastDataTime;
+            }
 
-            msg header;
-            memcpy_s(&header, sizeof(msg), m_strRecvBuf.data(), sizeof(msg));
-            if (m_strRecvBuf.length() < sizeof(msg))
-                break;
-
-            //去除包头信息
-            m_strRecvBuf.erase(0, sizeof(msg));
-            std::string strBody;
-            strBody.append(m_strRecvBuf.c_str(), header.packagesize);
-            //去除包体信息
-            m_strRecvBuf.erase(0, header.packagesize);
-
-            m_pRecvMsgThread->AddMsgData(strBody);
-        }
-    }
+            if (time(NULL) - nLastDataTime >= m_nHeartbeatInterval)
+                SendHeartbeatPackage();
+        }// end if
+    }// end while-loop
 }
 
+
+void CIUSocket::SendHeartbeatPackage()
+{
+    std::string outbuf;
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_heartbeart);
+    writeStream.WriteInt32(m_nHeartbeatSeq);
+    std::string dummy;
+    writeStream.WriteString(dummy);
+    writeStream.Flush();
+
+    ++m_nHeartbeatSeq;
+
+    Send(outbuf);
+}

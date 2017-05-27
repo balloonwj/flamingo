@@ -17,6 +17,7 @@
 #include "MsgCacheManager.h"
 
 using namespace net;
+using namespace balloon;
 
 ClientSession::ClientSession(const std::shared_ptr<TcpConnection>& conn) :  
 TcpSession(conn), 
@@ -63,16 +64,16 @@ void ClientSession::OnRead(const std::shared_ptr<TcpConnection>& conn, Buffer* p
 
 bool ClientSession::Process(const std::shared_ptr<TcpConnection>& conn, const char* inbuf, size_t length)
 {
-    yt::BinaryReadStream2 readStream(inbuf, length);
-    int cmd;
-    if (!readStream.Read(cmd))
+    balloon::BinaryReadStream readStream(inbuf, length);
+    int32_t cmd;
+    if (!readStream.ReadInt32(cmd))
     {
         LOG_WARN << "read cmd error !!!";
         return false;
     }
 
     //int seq;
-    if (!readStream.Read(m_seq))
+    if (!readStream.ReadInt32(m_seq))
     {
         LOG_WARN << "read seq error !!!";
         return false;
@@ -80,7 +81,7 @@ bool ClientSession::Process(const std::shared_ptr<TcpConnection>& conn, const ch
 
     std::string data;
     size_t datalength;
-    if (!readStream.Read(&data, 0, datalength))
+    if (!readStream.ReadString(&data, 0, datalength))
     {
         LOG_WARN << "read data error !!!";
         return false;
@@ -165,7 +166,7 @@ bool ClientSession::Process(const std::shared_ptr<TcpConnection>& conn, const ch
         case msg_type_chat:
         {
             int32_t target;
-            if (!readStream.Read(target))
+            if (!readStream.ReadInt32(target))
             {
                 LOG_WARN << "read target error !!!";
                 return false;
@@ -179,7 +180,7 @@ bool ClientSession::Process(const std::shared_ptr<TcpConnection>& conn, const ch
         {
             std::string targets;
             size_t targetslength;
-            if (!readStream.Read(&targets, 0, targetslength))
+            if (!readStream.ReadString(&targets, 0, targetslength))
             {
                 LOG_WARN << "read targets error !!!";
                 return false;
@@ -205,11 +206,11 @@ bool ClientSession::Process(const std::shared_ptr<TcpConnection>& conn, const ch
 void ClientSession::OnHeartbeatResponse(const std::shared_ptr<TcpConnection>& conn)
 {
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_heartbeart);
-    writeStream.Write(m_seq);
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_heartbeart);
+    writeStream.WriteInt32(m_seq);
     std::string dummy;
-    writeStream.Write(dummy.c_str(), dummy.length());
+    writeStream.WriteString(dummy);
     writeStream.Flush();
 
     LOG_INFO << "Response to client: cmd=1000" << ", sessionId=" << m_id;
@@ -254,10 +255,10 @@ void ClientSession::OnRegisterResponse(const std::string& data, const std::share
     }
     
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_register);
-    writeStream.Write(m_seq);   
-    writeStream.Write(retData.c_str(), retData.length());
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_register);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteString(retData);
     writeStream.Flush();
 
     LOG_INFO << "Response to client: cmd=msg_type_register" << ", userid=" << u.userid << ", data=" << retData;
@@ -316,10 +317,10 @@ void ClientSession::OnLoginResponse(const std::string& data, const std::shared_p
    
     //登录信息应答
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_login);
-    writeStream.Write(m_seq);  
-    writeStream.Write(os.str().c_str(), os.str().length());
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_login);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteString(os.str());
     writeStream.Flush();
 
     LOG_INFO << "Response to client: cmd=msg_type_login, data=" << os.str() << ", userid=" << m_userinfo.userid;
@@ -387,10 +388,10 @@ void ClientSession::OnGetFriendListResponse(const std::shared_ptr<TcpConnection>
 	os << "{\"code\": 0, \"msg\": \"ok\", \"userinfo\":[" << strUserInfo << "]}";
 
 	std::string outbuf;
-	yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_getofriendlist);
-	writeStream.Write(m_seq);
-	writeStream.Write(os.str().c_str(), os.str().length());
+	BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_getofriendlist);
+	writeStream.WriteInt32(m_seq);
+	writeStream.WriteString(os.str());
 	writeStream.Flush();
 
     LOG_INFO << "Response to client: cmd=msg_type_getofriendlist, data=" << os.str() << ", userid=" << m_userinfo.userid;
@@ -430,10 +431,10 @@ void ClientSession::OnFindUserResponse(const std::string& data, const std::share
     }
 
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_finduser);
-    writeStream.Write(m_seq);
-    writeStream.Write(retData.c_str(), retData.length());
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_finduser);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteString(retData);
     writeStream.Flush();
 
     LOG_INFO << "Response to client: cmd=msg_type_finduser, data=" << retData << ", userid=" << m_userinfo.userid;
@@ -528,10 +529,10 @@ void ClientSession::OnOperateFriendResponse(const std::string& data, const std::
         char szSelfData[256] = { 0 };
         snprintf(szSelfData, 256, "{\"userid\": %d, \"type\": 3, \"username\": \"%s\", \"accept\": %d}", targetUser.userid, targetUser.username.c_str(), accept);
         std::string outbufx;
-        yt::BinaryWriteStream3 writeStream(&outbufx);
-        writeStream.Write(msg_type_operatefriend);
-        writeStream.Write(m_seq);
-        writeStream.Write(szSelfData, strlen(szSelfData));
+        BinaryWriteStream writeStream(&outbufx);
+        writeStream.WriteInt32(msg_type_operatefriend);
+        writeStream.WriteInt32(m_seq);
+        writeStream.WriteCString(szSelfData, strlen(szSelfData));
         writeStream.Flush();
 
         Send(outbufx);
@@ -540,10 +541,10 @@ void ClientSession::OnOperateFriendResponse(const std::string& data, const std::
 
     //提示对方加好友成功
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_operatefriend);
-    writeStream.Write(m_seq);
-    writeStream.Write(szData, strlen(szData));
+    balloon::BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_operatefriend);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteCString(szData, strlen(szData));
     writeStream.Flush();
 
     //先看目标用户是否在线
@@ -579,10 +580,10 @@ void ClientSession::OnAddGroupResponse(int32_t groupId, const std::shared_ptr<Tc
     char szSelfData[256] = { 0 };
     snprintf(szSelfData, 256, "{\"userid\": %d, \"type\": 3, \"username\": \"%s\", \"accept\": 3}", groupUser.userid, groupUser.username.c_str());
     std::string outbufx;
-    yt::BinaryWriteStream3 writeStream(&outbufx);
-    writeStream.Write(msg_type_operatefriend);
-    writeStream.Write(m_seq);
-    writeStream.Write(szSelfData, strlen(szSelfData));
+    BinaryWriteStream writeStream(&outbufx);
+    writeStream.WriteInt32(msg_type_operatefriend);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteCString(szSelfData, strlen(szSelfData));
     writeStream.Flush();
 
     Send(outbufx);
@@ -658,10 +659,10 @@ void ClientSession::OnUpdateUserInfoResponse(const std::string& data, const std:
     }
 
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_updateuserinfo);
-    writeStream.Write(m_seq);
-    writeStream.Write(retdata.str().c_str(), retdata.str().length());
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_updateuserinfo);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteString(retdata.str());
     writeStream.Flush();
 
     //应答客户端
@@ -726,10 +727,10 @@ void ClientSession::OnModifyPasswordResponse(const std::string& data, const std:
     }
 
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_modifypassword);
-    writeStream.Write(m_seq);
-    writeStream.Write(retdata.c_str(), retdata.length());
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_modifypassword);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteString(retdata);
     writeStream.Flush();
 
     //应答客户端
@@ -775,10 +776,10 @@ void ClientSession::OnCreateGroupResponse(const std::string& data, const std::sh
     }
 
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_creategroup);
-    writeStream.Write(m_seq);
-    writeStream.Write(retdata.str().c_str(), retdata.str().length());
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_creategroup);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteString(retdata.str());
     writeStream.Flush();
 
     //应答客户端，建群成功
@@ -791,10 +792,10 @@ void ClientSession::OnCreateGroupResponse(const std::string& data, const std::sh
         char szSelfData[256] = { 0 };
         snprintf(szSelfData, 256, "{\"userid\": %d, \"type\": 3, \"username\": \"%s\", \"accept\": 1}", groupid, groupname.c_str());
         std::string outbufx;
-        yt::BinaryWriteStream3 writeStream(&outbufx);
-        writeStream.Write(msg_type_operatefriend);
-        writeStream.Write(m_seq);
-        writeStream.Write(szSelfData, strlen(szSelfData));
+        BinaryWriteStream writeStream(&outbufx);
+        writeStream.WriteInt32(msg_type_operatefriend);
+        writeStream.WriteInt32(m_seq);
+        writeStream.WriteCString(szSelfData, strlen(szSelfData));
         writeStream.Flush();
 
         Send(outbufx);
@@ -850,10 +851,10 @@ void ClientSession::OnGetGroupMembersResponse(const std::string& data, const std
     os << "{\"code\": 0, \"msg\": \"ok\", \"groupid\": " << groupid << ", \"members\":[" << strUserInfo << "]}";
 
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_getgroupmembers);
-    writeStream.Write(m_seq);
-    writeStream.Write(os.str().c_str(), os.str().length());
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_getgroupmembers);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteString(os.str());
     writeStream.Flush();
 
     LOG_INFO << "Response to client: cmd=msg_type_getgroupmembers, data=" << os.str() << ", userid=" << m_userinfo.userid;
@@ -881,11 +882,11 @@ void ClientSession::SendUserStatusChangeMsg(int32_t userid, int type)
     }
 
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_userstatuschange);
-    writeStream.Write(m_seq);
-    writeStream.Write(data.c_str(), data.length());
-    writeStream.Write(userid);
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_userstatuschange);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteString(data);
+    writeStream.WriteInt32(userid);
     writeStream.Flush();
 
     Send(outbuf);
@@ -896,14 +897,14 @@ void ClientSession::SendUserStatusChangeMsg(int32_t userid, int type)
 void ClientSession::OnChatResponse(int32_t targetid, const std::string& data, const std::shared_ptr<TcpConnection>& conn)
 {
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_chat);
-    writeStream.Write(m_seq);
-    writeStream.Write(data.c_str(), data.length());
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_chat);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteString(data);
     //消息发送者
-    writeStream.Write(m_userinfo.userid);
+    writeStream.WriteInt32(m_userinfo.userid);
     //消息接受者
-    writeStream.Write(targetid);
+    writeStream.WriteInt32(targetid);
     writeStream.Flush();
 
     UserManager& userMgr = Singleton<UserManager>::Instance();
@@ -1006,10 +1007,10 @@ void ClientSession::DeleteFriend(const std::shared_ptr<TcpConnection>& conn, int
     //{"userid": 9, "type": 1, }        
     snprintf(szData, 256, "{\"userid\":%d, \"type\":5, \"username\": \"%s\"}", friendid, cachedUser.username.c_str());
     std::string outbuf;
-    yt::BinaryWriteStream3 writeStream(&outbuf);
-    writeStream.Write(msg_type_operatefriend);
-    writeStream.Write(m_seq);
-    writeStream.Write(szData, strlen(szData));
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_operatefriend);
+    writeStream.WriteInt32(m_seq);
+    writeStream.WriteCString(szData, strlen(szData));
     writeStream.Flush();
 
     Send(outbuf);
@@ -1031,9 +1032,9 @@ void ClientSession::DeleteFriend(const std::shared_ptr<TcpConnection>& conn, int
             snprintf(szData, 256, "{\"userid\":%d, \"type\":5, \"username\": \"%s\"}", m_userinfo.userid, m_userinfo.username.c_str());
             outbuf.clear();
             writeStream.Clear();
-            writeStream.Write(msg_type_operatefriend);
-            writeStream.Write(m_seq);
-            writeStream.Write(szData, strlen(szData));
+            writeStream.WriteInt32(msg_type_operatefriend);
+            writeStream.WriteInt32(m_seq);
+            writeStream.WriteCString(szData, strlen(szData));
             writeStream.Flush();
 
             targetSession->Send(outbuf);

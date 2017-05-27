@@ -11,6 +11,8 @@
 #include <fcntl.h>
 #include "../base/logging.h"
 #include "../base/singleton.h"
+#include "../base/configfilereader.h"
+#include "../base/asynclogging.h"
 #include "../net/eventloop.h"
 #include "../net/eventloopthreadpool.h"
 #include "FileManager.h"
@@ -19,6 +21,16 @@
 using namespace net;
 
 EventLoop g_mainLoop;
+
+AsyncLogging* g_asyncLog = NULL;
+void asyncOutput(const char* msg, int len)
+{
+    if (g_asyncLog != NULL)
+    {
+        g_asyncLog->append(msg, len);
+        std::cout << msg << std::endl;
+    }
+}
 
 void prog_exit(int signo)
 {
@@ -71,7 +83,6 @@ int main(int argc, char* argv[])
     signal(SIGKILL, prog_exit);
     signal(SIGTERM, prog_exit);
 
-    short port = 0;
     int ch;
     bool bdaemon = false;
     while ((ch = getopt(argc, argv, "d")) != -1)
@@ -87,18 +98,26 @@ int main(int argc, char* argv[])
     if (bdaemon)
         daemon_run();
 
+    CConfigFileReader config("fileserver.conf");
 
-    if (port == 0)
-        port = 12345;
+    const char* logfilepath = config.GetConfigName("logdir");
 
     Logger::setLogLevel(Logger::DEBUG);
+    int kRollSize = 500 * 1000 * 1000;
+    AsyncLogging log(logfilepath, kRollSize);
+    log.start();
+    g_asyncLog = &log;
+    Logger::setOutput(asyncOutput);
 
-    Singleton<FileManager>::Instance().Init("./filecache");
+    const char* filecachedir = config.GetConfigName("filecachedir");
+    Singleton<FileManager>::Instance().Init(filecachedir);
 
     Singleton<EventLoopThreadPool>::Instance().Init(&g_mainLoop, 6);
     Singleton<EventLoopThreadPool>::Instance().start();
 
-    Singleton<FileServer>::Instance().Init("0.0.0.0", 20001, &g_mainLoop);
+    const char* listenip = config.GetConfigName("listenip");
+    short listenport = (short)atol(config.GetConfigName("listenport"));
+    Singleton<FileServer>::Instance().Init(listenip, listenport, &g_mainLoop);
     
     g_mainLoop.loop();
 

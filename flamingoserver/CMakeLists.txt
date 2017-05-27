@@ -22,6 +22,7 @@ base/logging.cpp
 base/logfile.cpp
 base/logstream.cpp
 base/asynclogging.cpp
+base/configfilereader.cpp
 
 net/acceptor.cpp
 net/buffer.cpp

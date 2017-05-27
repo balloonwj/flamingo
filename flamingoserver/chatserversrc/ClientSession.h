@@ -60,5 +60,5 @@ private:
 private:
     int32_t           m_id;         //session id
     OnlineUserInfo    m_userinfo;
-    int               m_seq;        //当前Session数据包序列号
+    int32_t           m_seq;        //当前Session数据包序列号
 };

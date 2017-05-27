@@ -10,6 +10,8 @@
 #include "FlamingoClient.h"
 #include "IULog.h"
 
+using namespace balloon;
+
 // "/f["系统表情id"] /c["自定义表情文件名"] /o[字体名称，大小，颜色，加粗，倾斜，下划线]"
 tstring FormatContent(std::vector<CContent*>& arrContent)
 {
@@ -304,28 +306,31 @@ void CRecvMsgThread::EnableUI(bool bEnable)
 
 BOOL CRecvMsgThread::HandleMessage(const std::string& strMsg)
 {
-    yt::BinaryReadStream2 readStream(strMsg.c_str(), strMsg.length());
-    int cmd;
-    if (!readStream.Read(cmd))
+    BinaryReadStream readStream(strMsg.c_str(), strMsg.length());
+    int32_t cmd;
+    if (!readStream.ReadInt32(cmd))
     {
         return false;
     }
 
     //int seq;
-    if (!readStream.Read(m_seq))
+    if (!readStream.ReadInt32(m_seq))
     {
         return false;
     }
 
     std::string data;
     size_t datalength;
-    if (!readStream.Read(&data, 0, datalength))
+    if (!readStream.ReadString(&data, 0, datalength))
     {
         return false;
     }
 
     switch (cmd)
     {
+        //心跳包不处理
+        case msg_type_heartbeart:
+            break;
             //注册
         case msg_type_register:
             HandleRegisterMessage(data);
@@ -355,7 +360,7 @@ BOOL CRecvMsgThread::HandleMessage(const std::string& strMsg)
         {
             int32_t targetId;
             //int seq;
-            if (!readStream.Read(targetId))
+            if (!readStream.ReadInt32(targetId))
             {
                 break;
             }
@@ -384,13 +389,13 @@ BOOL CRecvMsgThread::HandleMessage(const std::string& strMsg)
         {
             int32_t senderId;
             //int seq;
-            if (!readStream.Read(senderId))
+            if (!readStream.ReadInt32(senderId))
             {
                 break;
             }
 
             int32_t targetid;
-            if (!readStream.Read(targetid))
+            if (!readStream.ReadInt32(targetid))
             {
                 break;
             }

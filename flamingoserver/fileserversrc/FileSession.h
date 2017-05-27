@@ -31,7 +31,7 @@ private:
 
 private:
     int32_t           m_id;         //session id
-    int               m_seq;        //当前Session数据包序列号
+    int32_t           m_seq;        //当前Session数据包序列号
 
     //当前文件信息
     FILE*             m_fp{};
