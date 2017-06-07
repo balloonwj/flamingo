@@ -35,6 +35,11 @@ public:
         return m_userinfo.userid;
     }
 
+    int32_t GetClientType()
+    {
+        return m_userinfo.clienttype;
+    }
+
     void SendUserStatusChangeMsg(int32_t userid, int type);
 
 private:

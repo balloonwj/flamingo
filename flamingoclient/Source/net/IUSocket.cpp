@@ -601,9 +601,11 @@ void CIUSocket::RecvThreadProc()
                 std::lock_guard<std::mutex> guard(m_mutexLastDataTime);
                 nLastDataTime = m_nLastDataTime;
             }
-
+//调试版本就不要发心跳包了，影响调试
+#ifndef _DEBUG
             if (time(NULL) - nLastDataTime >= m_nHeartbeatInterval)
                 SendHeartbeatPackage();
+#endif
         }// end if
     }// end while-loop
 }

@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include <atomic>
@@ -31,9 +30,9 @@ namespace net
 
 		//TcpServer(EventLoop* loop, const InetAddress& listenAddr);
 		TcpServer(EventLoop* loop,
-			const InetAddress& listenAddr,
-			const std::string& nameArg,
-			Option option = kNoReusePort);      //TODO: 默认修改成kReusePort
+			      const InetAddress& listenAddr,
+			      const std::string& nameArg,
+			      Option option = kReusePort);      //TODO: 默认修改成kReusePort
 		~TcpServer();  // force out-line dtor, for scoped_ptr members.
 
 		const std::string& hostport() const { return hostport_; }
@@ -91,19 +90,19 @@ namespace net
 
 		typedef std::map<string, TcpConnectionPtr> ConnectionMap;
 
-		EventLoop* loop_;  // the acceptor loop
-		const string hostport_;
-		const string name_;
-		std::shared_ptr<Acceptor> acceptor_; // avoid revealing Acceptor
+    private:
+		EventLoop*                  loop_;  // the acceptor loop
+		const string                hostport_;
+		const string                name_;
+		std::shared_ptr<Acceptor>   acceptor_; // avoid revealing Acceptor
 		//std::shared_ptr<EventLoopThreadPool> threadPool_;
-		ConnectionCallback connectionCallback_;
-		MessageCallback messageCallback_;
-		WriteCompleteCallback writeCompleteCallback_;
-		ThreadInitCallback threadInitCallback_;
-		std::atomic<int> started_;
-		// always in loop thread
-		int nextConnId_;
-		ConnectionMap connections_;
+		ConnectionCallback          connectionCallback_;
+		MessageCallback             messageCallback_;
+		WriteCompleteCallback       writeCompleteCallback_;
+		ThreadInitCallback          threadInitCallback_;
+		std::atomic<int>            started_;
+		int                         nextConnId_;  // always in loop thread
+		ConnectionMap               connections_;
 	};
 
 }

@@ -16,6 +16,7 @@
 #include "IMServer.h"
 #include "MsgCacheManager.h"
 
+using namespace std;
 using namespace net;
 using namespace balloon;
 
@@ -285,10 +286,12 @@ void ClientSession::OnLoginResponse(const std::string& data, const std::shared_p
 
     string username = JsonRoot["username"].asString();
     string password = JsonRoot["password"].asString();
+    int clientType = JsonRoot["clienttype"].asInt();
     std::ostringstream os;
     User cachedUser;
     cachedUser.userid = 0;
     Singleton<UserManager>::Instance().GetUserInfoByUsername(username, cachedUser);
+    IMServer& imserver = Singleton<IMServer>::Instance();
     if (cachedUser.userid == 0)
     {
         //TODO: 这些硬编码的字符应该统一放到某个地方统一管理
@@ -300,6 +303,28 @@ void ClientSession::OnLoginResponse(const std::string& data, const std::shared_p
             os << "{\"code\": 103, \"msg\": \"incorrect password\"}";
         else
         {
+            //如果该账号已经登录，则将前一个账号踢下线
+            std::shared_ptr<ClientSession> targetSession;
+            imserver.GetSessionByUserId(targetSession, cachedUser.userid);          
+            if (targetSession)
+            {
+                //由于服务器端支持多类型终端登录，所以只有同一类型的终端用同一个账号登录才踢下前一个账号
+                if (targetSession->GetClientType() == clientType)
+                {
+                    string outbuf;
+                    BinaryWriteStream writeStream(&outbuf);
+                    writeStream.WriteInt32(msg_type_kickuser);
+                    writeStream.WriteInt32(m_seq);
+                    string dummydata;
+                    writeStream.WriteString(dummydata);
+                    writeStream.Flush();
+                    targetSession->Send(outbuf);
+                    //关闭连接
+                    //targetSession->GetConnectionPtr()->shutdown();
+                }
+            }
+            
+            
             //记录用户信息
             m_userinfo.userid = cachedUser.userid;
             m_userinfo.username = username;
@@ -311,7 +336,7 @@ void ClientSession::OnLoginResponse(const std::string& data, const std::shared_p
             os << "{\"code\": 0, \"msg\": \"ok\", \"userid\": " << m_userinfo.userid << ",\"username\":\"" << cachedUser.username << "\", \"nickname\":\"" 
                << cachedUser.nickname << "\", \"facetype\": " << cachedUser.facetype << ", \"customface\":\"" << cachedUser.customface << "\", \"gender\":" << cachedUser.gender
                << ", \"birthday\":" << cachedUser.birthday << ", \"signature\":\"" << cachedUser.signature << "\", \"address\": \"" << cachedUser.address
-               << "\", \"phonenumber\": \"" << cachedUser.phonenumber << "\", \"mail\":\"" << cachedUser.mail << "\"}";
+               << "\", \"phonenumber\": \"" << cachedUser.phonenumber << "\", \"mail\":\"" << cachedUser.mail << "\"}";            
         }
     }
    
@@ -346,7 +371,6 @@ void ClientSession::OnLoginResponse(const std::string& data, const std::shared_p
     //给其他用户推送上线消息
     std::list<User> friends;
     Singleton<UserManager>::Instance().GetFriendInfoByUserId(m_userinfo.userid, friends);
-    IMServer& imserver = Singleton<IMServer>::Instance();
     for (const auto& iter : friends)
     {
         //先看目标用户是否在线
@@ -354,7 +378,7 @@ void ClientSession::OnLoginResponse(const std::string& data, const std::shared_p
         imserver.GetSessionByUserId(targetSession, iter.userid);
         if (targetSession)
             targetSession->SendUserStatusChangeMsg(m_userinfo.userid, 1);
-    }
+    }  
 }
 
 void ClientSession::OnGetFriendListResponse(const std::shared_ptr<TcpConnection>& conn)
@@ -940,6 +964,10 @@ void ClientSession::OnChatResponse(int32_t targetid, const std::string& data, co
     bool userOnline = false;
     for (const auto& iter : friends)
     {
+        //排除群成员中的自己
+        if (iter.userid == m_userinfo.userid)
+            continue;
+        
         //先看目标用户是否在线
         std::shared_ptr<ClientSession> targetSession;
         imserver.GetSessionByUserId(targetSession, iter.userid);

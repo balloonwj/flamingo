@@ -1,4 +1,3 @@
-
 #include "timestamp.h"
 #include <chrono>
 #include <ctime>
@@ -11,6 +10,15 @@ static_assert(sizeof(Timestamp) == sizeof(int64_t), "sizeof(Timestamp) error");
 Timestamp::Timestamp(int64_t microSecondsSinceEpoch)
 : microSecondsSinceEpoch_(microSecondsSinceEpoch)
 {
+}
+
+string Timestamp::toString() const
+{
+    char buf[32] = { 0 };
+    int64_t seconds = microSecondsSinceEpoch_ / kMicroSecondsPerSecond;
+    int64_t microseconds = microSecondsSinceEpoch_ % kMicroSecondsPerSecond;
+    snprintf(buf, sizeof(buf)-1, "%ld.%06ld", seconds, microseconds);
+    return buf;
 }
 
 string Timestamp::toFormattedString(bool showMicroseconds) const

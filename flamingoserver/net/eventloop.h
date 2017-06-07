@@ -1,4 +1,3 @@
-
 #pragma once
 
 #include <vector>
@@ -8,11 +7,15 @@
 #include <mutex>
 
 #include "../base/timestamp.h"
+#include "callbacks.h"
+#include "TimerId.h"
+
 namespace net
 {
 
 	class Channel;
 	class EPollPoller;
+    class TimerQueue;
 
 	///
 	/// Reactor, at most one per thread.
@@ -55,6 +58,33 @@ namespace net
 		/// Runs after finish pooling.
 		/// Safe to call from other threads.
 		void queueInLoop(const Functor& cb);
+
+        // timers
+
+        ///
+        /// Runs callback at 'time'.
+        /// Safe to call from other threads.
+        ///
+        TimerId runAt(const Timestamp& time, const TimerCallback& cb);
+        ///
+        /// Runs callback after @c delay seconds.
+        /// Safe to call from other threads.
+        ///
+        TimerId runAfter(double delay, const TimerCallback& cb);
+        ///
+        /// Runs callback every @c interval seconds.
+        /// Safe to call from other threads.
+        ///
+        TimerId runEvery(double interval, const TimerCallback& cb);
+        ///
+        /// Cancels the timer.
+        /// Safe to call from other threads.
+        ///
+        void cancel(TimerId timerId);
+
+        TimerId runAt(const Timestamp& time, TimerCallback&& cb);
+        TimerId runAfter(double delay, TimerCallback&& cb);
+        TimerId runEvery(double interval, TimerCallback&& cb);
 
 		void setFrameFunctor(const Functor& cb);
 
@@ -100,6 +130,7 @@ namespace net
 		const std::thread::id threadId_;
 		Timestamp pollReturnTime_;
 		std::shared_ptr<EPollPoller> poller_;
+        std::shared_ptr<TimerQueue> timerQueue_;
 
 		int wakeupFd_;
 		// unlike in TimerQueue, which is an internal class,

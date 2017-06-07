@@ -3109,37 +3109,37 @@ LRESULT CMainDlg::OnUpdateGroupInfo(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	UINT uAccountID = (UINT)wParam;
 
- 	//NotifyGroupChatDlg(uAccountID, FMG_MSG_UPDATE_GROUP_INFO, 0, 0);	// 通知群聊天窗口更新
- 	//NotifyGroupInfoDlg(uAccountID, FMG_MSG_UPDATE_GROUP_INFO);		// 通知群信息窗口更新
-	CGroupInfo* pGroupInfo = NULL;
-	CBuddyInfo* pBuddyInfo = NULL;
-	std::map<UINT, CGroupChatDlg*>::iterator iterGroupChatDlg;
-	UINT nGroupCode = 0;
-	for(const auto& iter : m_FMGClient.m_UserMgr.m_GroupList.m_arrGroupInfo)
-	{
-		pGroupInfo = iter;
-		if(pGroupInfo == NULL)
-			continue;
-
-		pBuddyInfo = pGroupInfo->GetMemberByUin(uAccountID);
-		if(pBuddyInfo == NULL)
-			continue;
-		
-		nGroupCode = pGroupInfo->m_nGroupCode;
-		iterGroupChatDlg = m_mapGroupChatDlg.find(nGroupCode);
-		if(iterGroupChatDlg != m_mapGroupChatDlg.end())
-		{
-#ifndef _DEBUG
-			if(iterGroupChatDlg->second->IsWindow())
-			{
-#endif
-				iterGroupChatDlg->second->OnUpdateGroupInfo();
-#ifndef _DEBUG
-			}
-#endif
-		}
-		
-	}
+ 	NotifyGroupChatDlg(uAccountID, FMG_MSG_UPDATE_GROUP_INFO, 0, 0);	// 通知群聊天窗口更新
+ 	NotifyGroupInfoDlg(uAccountID, FMG_MSG_UPDATE_GROUP_INFO);		// 通知群信息窗口更新
+//	CGroupInfo* pGroupInfo = NULL;
+//	CBuddyInfo* pBuddyInfo = NULL;
+//	std::map<UINT, CGroupChatDlg*>::iterator iterGroupChatDlg;
+//	UINT nGroupCode = 0;
+//	for(const auto& iter : m_FMGClient.m_UserMgr.m_GroupList.m_arrGroupInfo)
+//	{
+//		pGroupInfo = iter;
+//		if(pGroupInfo == NULL)
+//			continue;
+//
+//		pBuddyInfo = pGroupInfo->GetMemberByUin(uAccountID);
+//		if(pBuddyInfo == NULL)
+//			continue;
+//		
+//		nGroupCode = pGroupInfo->m_nGroupCode;
+//		iterGroupChatDlg = m_mapGroupChatDlg.find(nGroupCode);
+//		if(iterGroupChatDlg != m_mapGroupChatDlg.end())
+//		{
+//#ifndef _DEBUG
+//			if(iterGroupChatDlg->second->IsWindow())
+//			{
+//#endif
+//				iterGroupChatDlg->second->OnUpdateGroupInfo();
+//#ifndef _DEBUG
+//			}
+//#endif
+//		}
+//		
+//	}
 
 	return 0;
 }
@@ -3464,9 +3464,9 @@ LRESULT CMainDlg::OnDeleteFriendResult(UINT message, WPARAM wParam, LPARAM lPara
 
 LRESULT CMainDlg::OnSelfStatusChange(UINT message, WPARAM wParam, LPARAM lParam)
 {
-	UINT uAccountID = (UINT)wParam;
-	if(uAccountID != m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID)
-		return (LRESULT)0;
+	//UINT uAccountID = (UINT)wParam;
+	//if(uAccountID != m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID)
+	//	return (LRESULT)0;
 
 	long nStatus = (long)lParam;
 	

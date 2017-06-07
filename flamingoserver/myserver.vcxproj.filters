@@ -25,7 +25,6 @@
     <ClCompile Include="net\tcpclient.cpp" />
     <ClCompile Include="net\tcpconnection.cpp" />
     <ClCompile Include="net\tcpserver.cpp" />
-    <ClCompile Include="net\protocolstream.cpp" />
     <ClCompile Include="jsoncpp-0.5.0\json_reader.cpp" />
     <ClCompile Include="jsoncpp-0.5.0\json_value.cpp" />
     <ClCompile Include="jsoncpp-0.5.0\json_writer.cpp" />
@@ -46,6 +45,10 @@
     <ClCompile Include="common\TcpSession.cpp" />
     <ClCompile Include="chatserversrc\TcpSession.cpp" />
     <ClCompile Include="fileserversrc\TcpSession.cpp" />
+    <ClCompile Include="base\ConfigFileReader - 副本.cpp" />
+    <ClCompile Include="base\ConfigFileReader.cpp" />
+    <ClCompile Include="net\TimerQueue.cpp" />
+    <ClCompile Include="net\Timer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="base\asynclogging.h" />
@@ -72,7 +75,6 @@
     <ClInclude Include="net\tcpclient.h" />
     <ClInclude Include="net\tcpconnection.h" />
     <ClInclude Include="net\tcpserver.h" />
-    <ClInclude Include="net\protocolstream.h" />
     <ClInclude Include="jsoncpp-0.5.0\autolink.h" />
     <ClInclude Include="jsoncpp-0.5.0\config.h" />
     <ClInclude Include="jsoncpp-0.5.0\features.h" />
@@ -103,6 +105,11 @@
     <ClInclude Include="common\TcpSession.h" />
     <ClInclude Include="chatserversrc\TcpSession.h" />
     <ClInclude Include="fileserversrc\TcpSession.h" />
+    <ClInclude Include="base\ConfigFileReader - 副本.h" />
+    <ClInclude Include="base\ConfigFileReader.h" />
+    <ClInclude Include="net\TimerQueue.h" />
+    <ClInclude Include="net\TimerId.h" />
+    <ClInclude Include="net\Timer.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

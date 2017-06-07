@@ -22,6 +22,7 @@ enum msg_type
     msg_type_getgroupmembers,
     msg_type_chat   = 1100,         //单聊消息
     msg_type_multichat,             //群发消息
+    msg_type_kickuser               //被踢下线
 };
 
 #pragma pack(push, 1)
@@ -177,5 +178,12 @@ cmd = 1010, seq = 0, {"code":0, "msg": "ok", "groupid": 12345678,
 /*
     cmd = 1101, seq = 0, data:聊天内容 targetid(消息接受者)
     cmd = 1101, seq = 0, data:聊天内容, {"targets": [1, 2, 3]}(消息接收者)
+**/
+
+/**
+ *  被踢下线
+ **/
+/*
+    cmd = 1102, seq = 0, data: 
 **/
 

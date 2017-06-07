@@ -404,6 +404,11 @@ BOOL CRecvMsgThread::HandleMessage(const std::string& strMsg)
         }
             break;
 
+            //±»ÌßÏÂÏß
+        case msg_type_kickuser:
+            ::PostMessage(m_hProxyWnd, FMG_MSG_SELF_STATUS_CHANGE, 0, 0);
+            break;
+
 
 	    case NET_DATA_TARGET_INFO_CHANGE:
 		    //HandleTargetInfoChangeMessage((CTargetInfoChangeResult*)pNetData);

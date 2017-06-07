@@ -130,8 +130,8 @@ public:
 
 		COMMAND_ID_HANDLER_EX(IDM_SENDGROUP_MSG, OnMenu_SendGroupMessage)		//右键菜单发送群消息
 		COMMAND_ID_HANDLER_EX(IDM_VIEW_GROUPINFO, OnMenu_ViewGroupInfo)			//右键菜单查看群资料
-		COMMAND_ID_HANDLER_EX(IDM_EXIT_GROUP, OnMenu_ExitGroup)					//右键菜单退出该群
 		COMMAND_ID_HANDLER_EX(IDM_CREATENEWGROUP, OnMenu_CreateNewGroup)		//右键菜单创建群
+        COMMAND_ID_HANDLER_EX(IDM_EXIT_GROUP, OnMenu_ExitGroup)					//右键菜单退出该群
 
 		//显示昵称和账户、显示昵称、显示账号、显示清爽资料
 		COMMAND_RANGE_HANDLER_EX(ID_32911, ID_32914, OnMenu_ShowNameChoice)

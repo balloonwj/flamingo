@@ -87,35 +87,25 @@ void Socket::shutdownWrite()
 void Socket::setTcpNoDelay(bool on)
 {
 	int optval = on ? 1 : 0;
-	::setsockopt(sockfd_, IPPROTO_TCP, TCP_NODELAY,
-		&optval, static_cast<socklen_t>(sizeof optval));
+	::setsockopt(sockfd_, IPPROTO_TCP, TCP_NODELAY, &optval, static_cast<socklen_t>(sizeof optval));
 	// FIXME CHECK
 }
 
 void Socket::setReuseAddr(bool on)
 {
 	int optval = on ? 1 : 0;
-	::setsockopt(sockfd_, SOL_SOCKET, SO_REUSEADDR,
-		&optval, static_cast<socklen_t>(sizeof optval));
+	::setsockopt(sockfd_, SOL_SOCKET, SO_REUSEADDR, &optval, static_cast<socklen_t>(sizeof optval));
 	// FIXME CHECK
 }
 
 void Socket::setReusePort(bool on)
 {
-#ifdef SO_REUSEPORT
 	int optval = on ? 1 : 0;
-	int ret = ::setsockopt(sockfd_, SOL_SOCKET, SO_REUSEPORT,
-		&optval, static_cast<socklen_t>(sizeof optval));
+	int ret = ::setsockopt(sockfd_, SOL_SOCKET, SO_REUSEPORT, &optval, static_cast<socklen_t>(sizeof optval));
 	if (ret < 0 && on)
 	{
 		LOG_SYSERR << "SO_REUSEPORT failed.";
 	}
-#else
-	if (on)
-	{
-		LOG_ERROR << "SO_REUSEPORT is not supported.";
-	}
-#endif
 }
 
 void Socket::setKeepAlive(bool on)
@@ -309,8 +299,7 @@ void sockets::toIp(char* buf, size_t size,
 	::inet_ntop(AF_INET, &addr.sin_addr, buf, static_cast<socklen_t>(size));
 }
 
-void sockets::fromIpPort(const char* ip, uint16_t port,
-struct sockaddr_in* addr)
+void sockets::fromIpPort(const char* ip, uint16_t port, struct sockaddr_in* addr)
 {
 	addr->sin_family = AF_INET;
 	addr->sin_port = htobe16(port);

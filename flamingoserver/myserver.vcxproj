@@ -77,6 +77,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="base\asynclogging.cpp" />
+    <ClCompile Include="base\ConfigFileReader - 副本.cpp" />
+    <ClCompile Include="base\ConfigFileReader.cpp" />
     <ClCompile Include="base\countdownlatch.cpp" />
     <ClCompile Include="base\fileutil.cpp" />
     <ClCompile Include="base\logfile.cpp" />
@@ -116,14 +118,17 @@
     <ClCompile Include="net\eventloopthread.cpp" />
     <ClCompile Include="net\eventloopthreadpool.cpp" />
     <ClCompile Include="net\inetaddress.cpp" />
-    <ClCompile Include="net\protocolstream.cpp" />
     <ClCompile Include="net\sockets.cpp" />
     <ClCompile Include="net\tcpclient.cpp" />
     <ClCompile Include="net\tcpconnection.cpp" />
     <ClCompile Include="net\tcpserver.cpp" />
+    <ClCompile Include="net\Timer.cpp" />
+    <ClCompile Include="net\TimerQueue.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="base\asynclogging.h" />
+    <ClInclude Include="base\ConfigFileReader - 副本.h" />
+    <ClInclude Include="base\ConfigFileReader.h" />
     <ClInclude Include="base\countdownlatch.h" />
     <ClInclude Include="base\fileutil.h" />
     <ClInclude Include="base\logfile.h" />
@@ -173,11 +178,13 @@
     <ClInclude Include="net\eventloopthread.h" />
     <ClInclude Include="net\eventloopthreadpool.h" />
     <ClInclude Include="net\inetaddress.h" />
-    <ClInclude Include="net\protocolstream.h" />
     <ClInclude Include="net\sockets.h" />
     <ClInclude Include="net\tcpclient.h" />
     <ClInclude Include="net\tcpconnection.h" />
     <ClInclude Include="net\tcpserver.h" />
+    <ClInclude Include="net\Timer.h" />
+    <ClInclude Include="net\TimerId.h" />
+    <ClInclude Include="net\TimerQueue.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

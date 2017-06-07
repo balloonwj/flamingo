@@ -39,6 +39,8 @@ net/eventloopthread.cpp
 net/eventloopthreadpool.cpp
 net/protocolstream.cpp
 net/protocolstream.cpp
+net/Timer.cpp
+net/TimerQueue.cpp
 
 common/ngx_md5.cpp
 )

@@ -1214,7 +1214,8 @@ void CFlamingoClient::OnUpdateGroupBasicInfo(UINT message, WPARAM wParam, LPARAM
 
         if (pGroupInfo != NULL)
         {
-            pGroupInfo->AddMember(pBuddyInfo);
+            if (!pGroupInfo->IsMember(pBuddyInfo->m_uUserID))
+                pGroupInfo->AddMember(pBuddyInfo);
         }
 
        
@@ -1671,14 +1672,7 @@ void CFlamingoClient::OnStatusChangeMsg(UINT message, WPARAM wParam, LPARAM lPar
 
 void CFlamingoClient::OnKickMsg(UINT message, WPARAM wParam, LPARAM lParam)
 {
-	//CKickMessage* lpKickMsg = (CKickMessage*)lParam;
-	//if (NULL == lpKickMsg)
-	//	return;
-	//
-	//delete lpKickMsg;
-	//m_UserMgr.m_UserInfo.m_nStatus = STATUS_OFFLINE;
-	//m_ThreadPool.RemoveAllTask();
-	//::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_KICK_MSG, 0, 0);
+    ::PostMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_SELF_STATUS_CHANGE, 0, (LPARAM)STATUS_ONLINE);
 }
 
 void CFlamingoClient::OnUpdateBuddyNumber(UINT message, WPARAM wParam, LPARAM lParam)
@@ -1987,7 +1981,8 @@ void CFlamingoClient::GoOnline()
 
 void CFlamingoClient::GoOffline()
 {
-	//m_IUProtocol.Disconnect();
+    m_SocketClient.Close();
+    m_SocketClient.CloseFileServerConnection();
 	//m_IUProtocol.DisconnectFileServer();
 
 	m_UserMgr.ResetToOfflineStatus();
@@ -2201,7 +2196,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 	case FMG_MSG_STATUS_CHANGE_MSG:		// 好友状态改变消息
 		lpFMGClient->OnStatusChangeMsg(message, wParam, lParam);
 		break;
-	case FMG_MSG_KICK_MSG:				// 被踢下线消息
+    case FMG_MSG_SELF_STATUS_CHANGE:	//自己的状态发生改变，例如被踢下线消息
 		lpFMGClient->OnKickMsg(message, wParam, lParam);
 		break;
 	case FMG_MSG_SYS_GROUP_MSG:			// 群系统消息
