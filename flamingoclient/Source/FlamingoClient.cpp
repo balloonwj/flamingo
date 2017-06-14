@@ -103,6 +103,11 @@ void CFlamingoClient::SetFileServer(PCTSTR pszServer)
     m_SocketClient.SetFileServer(pszServer);
 }
 
+void CFlamingoClient::SetImgServer(PCTSTR pszServer)
+{
+    m_SocketClient.SetImgServer(pszServer);
+}
+
 void CFlamingoClient::SetPort(short port)
 {
 	m_SocketClient.SetPort(port);
@@ -113,6 +118,10 @@ void CFlamingoClient::SetFilePort(short port)
     m_SocketClient.SetFilePort(port);
 }
 
+void CFlamingoClient::SetImgPort(short port)
+{
+    m_SocketClient.SetImgPort(port);
+}
 
 // …Ë÷√UTalk∫≈¬Î∫Õ√‹¬Î
 void CFlamingoClient::SetUser(LPCTSTR lpUserAccount, LPCTSTR lpUserPwd)

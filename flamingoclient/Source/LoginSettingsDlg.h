@@ -43,27 +43,31 @@ public:
 
 private:
 	CSkinDialog		m_SkinDlg;
-	CSkinStatic		m_staticSrvAddr;
-	CSkinStatic		m_staticFileSrvAddr;
-	CSkinStatic		m_staticSrvPort;
-	CSkinStatic		m_staticFilePort;
+	//CSkinStatic		m_staticSrvAddr;
+	//CSkinStatic		m_staticFileSrvAddr;
+	//CSkinStatic		m_staticSrvPort;
+	//CSkinStatic		m_staticFilePort;
 
 	CSkinEdit		m_editSrvAddr;
 	CSkinEdit		m_editFileSrvAddr;
-	CSkinEdit		m_edtSrvPort;
-	CSkinEdit		m_edtFilePort;
+    CSkinEdit		m_editImgSrvAddr;
+	CSkinEdit		m_editSrvPort;
+	CSkinEdit		m_editFilePort;
+    CSkinEdit		m_editImgPort;
 
 	CSkinComboBox	m_comboProxyType;
 	CSkinEdit		m_editProxyAddr;
-	CSkinEdit		m_edtProxyPort;
+	CSkinEdit		m_editProxyPort;
 
 	CSkinButton		m_btnOK;
 	CSkinButton		m_btnCancel;
 	
 	TCHAR			m_szSrvAddr[MAX_SRV_ADDR];	
 	TCHAR			m_szFileSrvAddr[MAX_SRV_ADDR];
+    TCHAR			m_szImgSrvAddr[MAX_SRV_ADDR];
 	TCHAR			m_szSrvPort[MAX_SRV_PORT];	
 	TCHAR			m_szFilePort[MAX_SRV_PORT];
+    TCHAR			m_szImgPort[MAX_SRV_PORT];
 	TCHAR			m_szProxyAddr[MAX_SRV_ADDR];
 	TCHAR			m_szProxyPort[MAX_SRV_PORT];
 };

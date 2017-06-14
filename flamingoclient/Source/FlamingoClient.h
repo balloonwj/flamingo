@@ -27,8 +27,10 @@ public:
 
 	void SetServer(PCTSTR pszServer);
     void SetFileServer(PCTSTR pszServer);
+    void SetImgServer(PCTSTR pszServer);
     void SetPort(short port);
 	void SetFilePort(short port);
+    void SetImgPort(short port);
 
 	void SetUser(LPCTSTR lpUserAccount, LPCTSTR lpUserPwd);		// ÉèÖÃUTalkºÅÂëºÍÃÜÂë
 	void SetLoginStatus(long nStatus);							// ÉèÖÃµÇÂ¼×´Ì¬

@@ -17,7 +17,12 @@ CLoginSettingsDlg::CLoginSettingsDlg()
 {
 	memset(m_szSrvAddr, 0, sizeof(m_szSrvAddr));
 	memset(m_szFileSrvAddr, 0, sizeof(m_szFileSrvAddr));
+    memset(m_szImgSrvAddr, 0, sizeof(m_szImgSrvAddr));
+
 	memset(m_szSrvPort, 0, sizeof(m_szSrvPort));
+    memset(m_szFileSrvAddr, 0, sizeof(m_szFileSrvAddr));
+    memset(m_szImgPort, 0, sizeof(m_szImgPort));
+
 	memset(m_szProxyAddr, 0, sizeof(m_szProxyAddr));
 	memset(m_szProxyPort, 0, sizeof(m_szProxyPort));
 	m_pClient = NULL;
@@ -66,21 +71,21 @@ BOOL CLoginSettingsDlg::InitUI()
 	
 
 	HDC hDlgBgDC = m_SkinDlg.GetBgDC();
-	m_staticSrvAddr.SubclassWindow(GetDlgItem(IDC_STATIC_SERADDRESS));
-	m_staticSrvAddr.SetTransparent(TRUE, hDlgBgDC);
+	//m_staticSrvAddr.SubclassWindow(GetDlgItem(IDC_STATIC_SERADDRESS));
+	//m_staticSrvAddr.SetTransparent(TRUE, hDlgBgDC);
 	//m_staticSrvAddr.MoveWindow(60, 65, 60, 25, TRUE);
-	m_staticSrvAddr.SetFocus();
+	//m_staticSrvAddr.SetFocus();
 
-	m_staticSrvPort.SubclassWindow(GetDlgItem(IDC_STATIC_SERPORT));
-	m_staticSrvPort.SetTransparent(TRUE, hDlgBgDC);
+	//m_staticSrvPort.SubclassWindow(GetDlgItem(IDC_STATIC_SERPORT));
+	//m_staticSrvPort.SetTransparent(TRUE, hDlgBgDC);
 	//m_staticSrvPort.MoveWindow(215, 65, 60, 25, TRUE);
 
-	m_staticFileSrvAddr.SubclassWindow(GetDlgItem(IDC_STATIC_FILESERVER));
-	m_staticFileSrvAddr.SetTransparent(TRUE, hDlgBgDC);
+	//m_staticFileSrvAddr.SubclassWindow(GetDlgItem(IDC_STATIC_FILESERVER));
+	//m_staticFileSrvAddr.SetTransparent(TRUE, hDlgBgDC);
 	//m_staticFileSrvAddr.MoveWindow(250, 65, 60, 25, TRUE);
 
-	m_staticFilePort.SubclassWindow(GetDlgItem(IDC_STATIC_FILEPORT));
-	m_staticFilePort.SetTransparent(TRUE, hDlgBgDC);
+	//m_staticFilePort.SubclassWindow(GetDlgItem(IDC_STATIC_FILEPORT));
+	//m_staticFilePort.SetTransparent(TRUE, hDlgBgDC);
 	//m_staticFilePort.MoveWindow(370, 65, 60, 25, TRUE);
 
 	m_comboProxyType.SubclassWindow(GetDlgItem(IDC_COMBO_PROTYPE));
@@ -124,7 +129,7 @@ BOOL CLoginSettingsDlg::InitUI()
 	m_editSrvAddr.SubclassWindow(GetDlgItem(IDC_EDIT_SERADDRESS));
 	//m_editSrvAddr.MoveWindow(55, 90, 127, 30, TRUE);
 	CString strTemp;
-	iniFile.ReadString(_T("server"), _T("server"), _T("iu.Hootina.com"), strTemp.GetBuffer(64), 64, strIniPath);
+	iniFile.ReadString(_T("server"), _T("server"), _T("flamingo.hootina.org"), strTemp.GetBuffer(64), 64, strIniPath);
 	strTemp.ReleaseBuffer();
 	m_editSrvAddr.SetWindowText(strTemp);
 
@@ -132,27 +137,41 @@ BOOL CLoginSettingsDlg::InitUI()
 	m_editFileSrvAddr.SetBgHotPic(_T("frameBorderEffect_mouseDownDraw.png"), CRect(2,2,2,2));
 	m_editFileSrvAddr.SetTransparent(TRUE, hDlgBgDC);
 	m_editFileSrvAddr.SubclassWindow(GetDlgItem(IDC_EDIT_FILESERVER));
-	iniFile.ReadString(_T("server"), _T("fileserver"), _T("iu.Hootina.com"), strTemp.GetBuffer(64), 64, strIniPath);
+	iniFile.ReadString(_T("server"), _T("fileserver"), _T("flamingo.hootina.org"), strTemp.GetBuffer(64), 64, strIniPath);
 	strTemp.ReleaseBuffer();
 	m_editFileSrvAddr.SetWindowText(strTemp);
 
-	m_edtSrvPort.SetBgNormalPic(_T("frameBorderEffect_normalDraw.png"), CRect(2,2,2,2));
-	m_edtSrvPort.SetBgHotPic(_T("frameBorderEffect_mouseDownDraw.png"), CRect(2,2,2,2));
-	m_edtSrvPort.SubclassWindow(GetDlgItem(IDC_EDIT_SERPORT));
+    m_editImgSrvAddr.SetBgNormalPic(_T("frameBorderEffect_normalDraw.png"), CRect(2, 2, 2, 2));
+    m_editImgSrvAddr.SetBgHotPic(_T("frameBorderEffect_mouseDownDraw.png"), CRect(2, 2, 2, 2));
+    m_editImgSrvAddr.SetTransparent(TRUE, hDlgBgDC);
+    m_editImgSrvAddr.SubclassWindow(GetDlgItem(IDC_EDIT_IMGSERVER));
+    iniFile.ReadString(_T("server"), _T("imgserver"), _T("flamingo.hootina.org"), strTemp.GetBuffer(64), 64, strIniPath);
+    strTemp.ReleaseBuffer();
+    m_editImgSrvAddr.SetWindowText(strTemp);
+
+	m_editSrvPort.SetBgNormalPic(_T("frameBorderEffect_normalDraw.png"), CRect(2,2,2,2));
+	m_editSrvPort.SetBgHotPic(_T("frameBorderEffect_mouseDownDraw.png"), CRect(2,2,2,2));
+	m_editSrvPort.SubclassWindow(GetDlgItem(IDC_EDIT_SERPORT));
 	//m_edtSrvPort.MoveWindow(215, 90, 126, 30, TRUE);
-	iniFile.ReadString(_T("server"), _T("port"), _T("25251"), strTemp.GetBuffer(32), 32, strIniPath);
+	iniFile.ReadString(_T("server"), _T("port"), _T("20000"), strTemp.GetBuffer(32), 32, strIniPath);
 	strTemp.ReleaseBuffer();
-	m_edtSrvPort.SetWindowText(strTemp);
+	m_editSrvPort.SetWindowText(strTemp);
 
-	m_edtFilePort.SetBgNormalPic(_T("frameBorderEffect_normalDraw.png"), CRect(2,2,2,2));
-	m_edtFilePort.SetBgHotPic(_T("frameBorderEffect_mouseDownDraw.png"), CRect(2,2,2,2));
-	m_edtFilePort.SubclassWindow(GetDlgItem(IDC_EDIT_FILEPORT));
+	m_editFilePort.SetBgNormalPic(_T("frameBorderEffect_normalDraw.png"), CRect(2,2,2,2));
+    m_editFilePort.SetBgHotPic(_T("frameBorderEffect_mouseDownDraw.png"), CRect(2, 2, 2, 2));
+    m_editFilePort.SubclassWindow(GetDlgItem(IDC_EDIT_FILEPORT));
 	//m_edtFilePort.MoveWindow(370, 90, 126, 30, TRUE);
-	iniFile.ReadString(_T("server"), _T("filePort"), _T("25261"), strTemp.GetBuffer(32), 32, strIniPath);
+	iniFile.ReadString(_T("server"), _T("fileport"), _T("20001"), strTemp.GetBuffer(32), 32, strIniPath);
 	strTemp.ReleaseBuffer();
-	m_edtFilePort.SetWindowText(strTemp);
-	
+	m_editFilePort.SetWindowText(strTemp);
 
+    m_editImgPort.SetBgNormalPic(_T("frameBorderEffect_normalDraw.png"), CRect(2, 2, 2, 2));
+    m_editImgPort.SetBgHotPic(_T("frameBorderEffect_mouseDownDraw.png"), CRect(2, 2, 2, 2));
+    m_editImgPort.SubclassWindow(GetDlgItem(IDC_EDIT_IMGPORT));
+    iniFile.ReadString(_T("server"), _T("imgport"), _T("20002"), strTemp.GetBuffer(32), 32, strIniPath);
+    strTemp.ReleaseBuffer();
+    m_editImgPort.SetWindowText(strTemp);
+	
 	m_editProxyAddr.SetBgNormalPic(_T("frameBorderEffect_normalDraw.png"), CRect(2,2,2,2));
 	m_editProxyAddr.SetBgHotPic(_T("frameBorderEffect_mouseDownDraw.png"), CRect(2,2,2,2));
 	m_editProxyAddr.SubclassWindow(GetDlgItem(IDC_EDIT_PROADD));
@@ -160,20 +179,20 @@ BOOL CLoginSettingsDlg::InitUI()
 	//m_editProxyAddr.MoveWindow(212, 180, 126, 30, TRUE);
 	if(nSel > USE_BROWSER_PROXY)
 	{
-		iniFile.ReadString(_T("server"), _T("proxyServer"), _T(""), strTemp.GetBuffer(32), 32, strIniPath);
+		iniFile.ReadString(_T("server"), _T("proxyserver"), _T(""), strTemp.GetBuffer(32), 32, strIniPath);
 		strTemp.ReleaseBuffer();
 		m_editProxyAddr.SetWindowText(strTemp);
 	}
 
-	m_edtProxyPort.SetBgNormalPic(_T("frameBorderEffect_normalDraw.png"), CRect(2,2,2,2));
-	m_edtProxyPort.SetBgHotPic(_T("frameBorderEffect_mouseDownDraw.png"), CRect(2,2,2,2));
-	m_edtProxyPort.SubclassWindow(GetDlgItem(IDC_EDIT_PROPORT));
+	m_editProxyPort.SetBgNormalPic(_T("frameBorderEffect_normalDraw.png"), CRect(2,2,2,2));
+	m_editProxyPort.SetBgHotPic(_T("frameBorderEffect_mouseDownDraw.png"), CRect(2,2,2,2));
+	m_editProxyPort.SubclassWindow(GetDlgItem(IDC_EDIT_PROPORT));
 	//m_edtProxyPort.MoveWindow(368, 180, 127, 30, TRUE);
 	if(nSel > USE_BROWSER_PROXY)
 	{
-		iniFile.ReadString(_T("server"), _T("proxyPort"), _T(""), strTemp.GetBuffer(32), 32, strIniPath);
+		iniFile.ReadString(_T("server"), _T("proxyport"), _T(""), strTemp.GetBuffer(32), 32, strIniPath);
 		strTemp.ReleaseBuffer();
-		m_edtProxyPort.SetWindowText(strTemp);
+		m_editProxyPort.SetWindowText(strTemp);
 	}
 
 	m_btnOK.SetButtonType(SKIN_PUSH_BUTTON);
@@ -192,7 +211,7 @@ BOOL CLoginSettingsDlg::InitUI()
 
 	BOOL bEnabled = (m_comboProxyType.GetCurSel() > USE_BROWSER_PROXY ? TRUE : FALSE);
 	m_editProxyAddr.EnableWindow(bEnabled);
-	m_edtProxyPort.EnableWindow(bEnabled);
+	m_editProxyPort.EnableWindow(bEnabled);
 
 	return TRUE;
 }
@@ -215,31 +234,31 @@ void CLoginSettingsDlg::OnComboBox_Select(UINT uNotifyCode, int nID, CWindow wnd
 {
 	BOOL bEnabled = (m_comboProxyType.GetCurSel() > USE_BROWSER_PROXY ? TRUE : FALSE);
 	m_editProxyAddr.EnableWindow(bEnabled);
-	m_edtProxyPort.EnableWindow(bEnabled);
+	m_editProxyPort.EnableWindow(bEnabled);
 }
 
 void CLoginSettingsDlg::UninitUI()
 {
-	if (m_editSrvAddr.IsWindow())
-		m_editSrvAddr.DestroyWindow();
+	//if (m_editSrvAddr.IsWindow())
+	//	m_editSrvAddr.DestroyWindow();
 
-	if (m_editFileSrvAddr.IsWindow())
-		m_editFileSrvAddr.DestroyWindow();
+	//if (m_editFileSrvAddr.IsWindow())
+	//	m_editFileSrvAddr.DestroyWindow();
 
-	if (m_edtSrvPort.IsWindow())
-		m_edtSrvPort.DestroyWindow();
+	//if (m_editSrvPort.IsWindow())
+	//	m_editSrvPort.DestroyWindow();
 
-	if (m_editProxyAddr.IsWindow())
-		m_editProxyAddr.DestroyWindow();
+	//if (m_editProxyAddr.IsWindow())
+	//	m_editProxyAddr.DestroyWindow();
 
-	if (m_edtProxyPort.IsWindow())
-		m_edtProxyPort.DestroyWindow();
+	//if (m_editProxyPort.IsWindow())
+	//	m_editProxyPort.DestroyWindow();
 
-	if (m_btnOK.IsWindow())
-		m_btnOK.DestroyWindow();
+	//if (m_btnOK.IsWindow())
+	//	m_btnOK.DestroyWindow();
 
-	if (m_btnCancel.IsWindow())
-		m_btnCancel.DestroyWindow();
+	//if (m_btnCancel.IsWindow())
+	//	m_btnCancel.DestroyWindow();
 
 }
 
@@ -261,21 +280,37 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 		return;
 	}
 
-	m_edtSrvPort.GetWindowText(m_szSrvPort, MAX_SRV_PORT);
+    m_editImgSrvAddr.GetWindowText(m_szImgSrvAddr, MAX_SRV_ADDR);
+    if (m_szImgSrvAddr[0] == NULL || m_szImgSrvAddr[0] == _T(' '))
+    {
+        ::MessageBox(m_hWnd, _T("图片服务地址不能为空！"), _T("Flamingo"), MB_OK | MB_ICONINFORMATION);
+        m_editImgSrvAddr.SetFocus();
+        return;
+    }
+
+	m_editSrvPort.GetWindowText(m_szSrvPort, MAX_SRV_PORT);
 	if(m_szSrvPort[0]==NULL || m_szSrvPort[0]==_T(' '))
 	{
-		::MessageBox(m_hWnd, _T("聊天端口号不能为空！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
-		m_edtSrvPort.SetFocus();
+		::MessageBox(m_hWnd, _T("聊天服务端口号不能为空！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		m_editSrvPort.SetFocus();
 		return;
 	}
 
-	m_edtFilePort.GetWindowText(m_szFilePort, MAX_SRV_PORT);
+	m_editFilePort.GetWindowText(m_szFilePort, MAX_SRV_PORT);
 	if(m_szFilePort[0]==NULL || m_szFilePort[0]==_T(' '))
 	{
-		::MessageBox(m_hWnd, _T("文件端口号不能为空！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
-		m_edtFilePort.SetFocus();
+		::MessageBox(m_hWnd, _T("文件服务端口号不能为空！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		m_editFilePort.SetFocus();
 		return;
 	}
+
+    m_editImgPort.GetWindowText(m_szImgPort, MAX_SRV_PORT);
+    if (m_szImgPort[0] == NULL || m_szImgPort[0] == _T(' '))
+    {
+        ::MessageBox(m_hWnd, _T("图片服务端口号不能为空！"), _T("Flamingo"), MB_OK | MB_ICONINFORMATION);
+        m_editImgPort.SetFocus();
+        return;
+    }
 	
 	long nCurSel = m_comboProxyType.GetCurSel();
 	if(nCurSel > USE_BROWSER_PROXY)			
@@ -288,11 +323,11 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 			return;
 		}
 
-		m_edtProxyPort.GetWindowText(m_szProxyPort, MAX_SRV_PORT);
+		m_editProxyPort.GetWindowText(m_szProxyPort, MAX_SRV_PORT);
 		if(m_szProxyPort[0]==NULL || m_szProxyPort[0]==_T(' '))
 		{
 			::MessageBox(m_hWnd, _T("代理端口号不能为空！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
-			m_edtProxyPort.SetFocus();
+			m_editProxyPort.SetFocus();
 			return;
 		}
 	}
@@ -302,20 +337,24 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strIniPath += _T("config\\flamingo.ini");
 	iniFile.WriteString(_T("server"), _T("server"), m_szSrvAddr, strIniPath); 
 	iniFile.WriteString(_T("server"), _T("fileserver"), m_szFileSrvAddr, strIniPath); 
+    iniFile.WriteString(_T("server"), _T("imgserver"), m_szImgSrvAddr, strIniPath);
 	iniFile.WriteString(_T("server"), _T("port"), m_szSrvPort, strIniPath); 
-	iniFile.WriteString(_T("server"), _T("filePort"), m_szFilePort, strIniPath);
+	iniFile.WriteString(_T("server"), _T("fileport"), m_szFilePort, strIniPath);
+    iniFile.WriteString(_T("server"), _T("imgport"), m_szImgPort, strIniPath);
 	
-	iniFile.WriteInt(_T("server"), _T("proxyType"), nCurSel, strIniPath);
+	iniFile.WriteInt(_T("server"), _T("proxytype"), nCurSel, strIniPath);
 	if(nCurSel > USE_BROWSER_PROXY)
 	{
-		iniFile.WriteString(_T("server"), _T("proxyServer"), m_szProxyAddr, strIniPath); 
-		iniFile.WriteString(_T("server"), _T("proxyPort"), m_szProxyPort, strIniPath);
+		iniFile.WriteString(_T("server"), _T("proxyserver"), m_szProxyAddr, strIniPath); 
+		iniFile.WriteString(_T("server"), _T("proxyport"), m_szProxyPort, strIniPath);
 	}
 
 	m_pClient->SetServer(m_szSrvAddr);
 	m_pClient->SetFileServer(m_szFileSrvAddr);
+    m_pClient->SetImgServer(m_szImgSrvAddr);
 	m_pClient->SetPort((short)_wtol(m_szSrvPort));
     m_pClient->SetFilePort((short)_wtol(m_szFilePort));
+    m_pClient->SetImgPort((short)_wtol(m_szImgPort));
 	//m_pClient->m_IUProtocol.SetProxyType(nCurSel);
 	//if(nCurSel > USE_BROWSER_PROXY)
 	//{

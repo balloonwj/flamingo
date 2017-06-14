@@ -48,8 +48,8 @@ bool CIUSocket::Init()
     LoadConfig();
 
     //TODO: 如果服务器连接不上,接收数据线程和发送数据线程不会启动,这个逻辑不好,需要修改
-	if (!Connect())
-		return false;
+	//if (!Connect())
+	//	return false;
 
     m_spSendThread.reset(new std::thread(std::bind(&CIUSocket::SendThreadProc, this)));
     m_spRecvThread.reset(new std::thread(std::bind(&CIUSocket::RecvThreadProc, this)));
@@ -78,23 +78,23 @@ void CIUSocket::LoadConfig()
 	CString strIniFilePath(g_szHomePath);
 	strIniFilePath += _T("config\\flamingo.ini");
 	
-	iniFile.ReadString(_T("server"), _T("server"), _T("iu.Hootina.com"), m_strServer.GetBuffer(64), 64, strIniFilePath);
+	iniFile.ReadString(_T("server"), _T("server"), _T("flamingo.hootina.org"), m_strServer.GetBuffer(64), 64, strIniFilePath);
 	m_strServer.ReleaseBuffer();
 
-	iniFile.ReadString(_T("server"), _T("fileserver"), _T("iu.Hootina.com"), m_strFileServer.GetBuffer(64), 64, strIniFilePath);
+	iniFile.ReadString(_T("server"), _T("fileserver"), _T("flamingo.hootina.org"), m_strFileServer.GetBuffer(64), 64, strIniFilePath);
 	m_strFileServer.ReleaseBuffer();
 
-    iniFile.ReadString(_T("server"), _T("imgserver"), _T("iu.Hootina.com"), m_strImgServer.GetBuffer(64), 64, strIniFilePath);
+    iniFile.ReadString(_T("server"), _T("imgserver"), _T("flamingo.hootina.org"), m_strImgServer.GetBuffer(64), 64, strIniFilePath);
     m_strImgServer.ReleaseBuffer();
 
 	m_nPort = iniFile.ReadInt(_T("server"), _T("port"), 20000, strIniFilePath);
-	m_nFilePort = iniFile.ReadInt(_T("server"), _T("filePort"), 20001, strIniFilePath);
-    m_nImgPort = iniFile.ReadInt(_T("server"), _T("imgPort"), 20002, strIniFilePath);
+	m_nFilePort = iniFile.ReadInt(_T("server"), _T("fileport"), 20001, strIniFilePath);
+    m_nImgPort = iniFile.ReadInt(_T("server"), _T("imgport"), 20002, strIniFilePath);
 
-	m_nProxyType = iniFile.ReadInt(_T("server"), _T("proxyType"), 0, strIniFilePath);
+	m_nProxyType = iniFile.ReadInt(_T("server"), _T("proxytype"), 0, strIniFilePath);
 	iniFile.ReadString(_T("server"), _T("proxyServer"), _T("xxx.com"), m_strProxyServer.GetBuffer(64), 64, strIniFilePath);
 	m_strProxyServer.ReleaseBuffer();
-	m_nProxyPort = iniFile.ReadInt(_T("server"), _T("proxyPort"), 4000, strIniFilePath);
+	m_nProxyPort = iniFile.ReadInt(_T("server"), _T("proxyport"), 4000, strIniFilePath);
 
     m_nHeartbeatInterval = iniFile.ReadInt(_T("server"), _T("heartbeatinterval"), 10, strIniFilePath);
 }
