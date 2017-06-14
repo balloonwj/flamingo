@@ -173,7 +173,9 @@ BOOL CMainDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	m_LoginAccountList.LoadFile(strFileName.c_str());
 
 	//在这个函数里面显示登录对话框
-	StartLogin(m_LoginAccountList.IsAutoLogin());
+    //如果登录对话框不是走正常登录,则主对话框也不应该创建出来
+    if (!StartLogin(m_LoginAccountList.IsAutoLogin()))
+        return TRUE;
 
 	//TODO: 根据账户名设置用户头像
 	UINT nUTalkUin = _tcstoul(m_stAccountInfo.szUser, NULL, 10);
@@ -1362,7 +1364,7 @@ void CMainDlg::ShowLockPanel()
 }
 
 
-void CMainDlg::StartLogin(BOOL bAutoLogin/* = FALSE*/)
+bool CMainDlg::StartLogin(BOOL bAutoLogin/* = FALSE*/)
 {
 	m_FMGClient.SetCallBackWnd(m_hWnd);
 	if (bAutoLogin)
@@ -1388,7 +1390,7 @@ void CMainDlg::StartLogin(BOOL bAutoLogin/* = FALSE*/)
 		
 		BOOL bRet = m_LoginAccountList.GetLastLoginAccountInfo(&m_stAccountInfo);
 		if (!bRet)
-			return;
+			return true;
 
 	}
 	else
@@ -1407,7 +1409,7 @@ void CMainDlg::StartLogin(BOOL bAutoLogin/* = FALSE*/)
 		if (m_LoginDlg.DoModal(g_hwndOwner) != IDOK)	// 显示登录对话框
 		{
 			CloseDialog(IDOK);
-			return;
+			return false;
 		}
 		m_LoginDlg.GetLoginAccountInfo(&m_stAccountInfo);
 	}
@@ -1421,6 +1423,8 @@ void CMainDlg::StartLogin(BOOL bAutoLogin/* = FALSE*/)
 	m_FMGClient.SetUser(m_stAccountInfo.szUser, m_stAccountInfo.szPwd);
 	
 	m_FMGClient.Login();
+
+    return true;
 }
 
 LRESULT CMainDlg::OnTrayIconNotify(UINT uMsg, WPARAM wParam, LPARAM lParam)

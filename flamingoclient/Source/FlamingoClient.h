@@ -5,7 +5,8 @@
 #include "CheckNetworkStatusTask.h"
 #include "SendMsgThread.h"
 #include "RecvMsgThread.h"
-#include "FileTask.h"
+#include "FileTaskThread.h"
+#include "ImageTaskThread.h"
 #include "net/IUSocket.h"
 
 class CFriendStatus;
@@ -188,7 +189,8 @@ public:
 
     CSendMsgThread					m_SendMsgThread;
     CRecvMsgThread                  m_RecvMsgThread;
-    CFileTask						m_FileTask;
+    CFileTaskThread					m_FileTask;
+    CImageTaskThread                m_ImageTask;
 	CIUSocket                       m_SocketClient;
     
 

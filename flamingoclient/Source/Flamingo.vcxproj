@@ -147,7 +147,7 @@
     <ClCompile Include="FaceList.cpp" />
     <ClCompile Include="FaceSelDlg.cpp" />
     <ClCompile Include="File.cpp" />
-    <ClCompile Include="FileTask.cpp" />
+    <ClCompile Include="FileTaskThread.cpp" />
     <ClCompile Include="FileTransferCtrl.cpp" />
     <ClCompile Include="FindFriendDlg.cpp" />
     <ClCompile Include="FontSelDlg.cpp" />
@@ -157,6 +157,7 @@
     <ClCompile Include="GroupInfoDlg.cpp" />
     <ClCompile Include="HeartbeatTask.cpp" />
     <ClCompile Include="ImageEx.cpp" />
+    <ClCompile Include="ImageTaskThread.cpp" />
     <ClCompile Include="IniFile.cpp" />
     <ClCompile Include="IULog.cpp" />
     <ClCompile Include="jsoncpp-0.5.0\json_reader.cpp" />
@@ -256,7 +257,7 @@
     <ClInclude Include="FaceSelDlg.h" />
     <ClInclude Include="FakeData.h" />
     <ClInclude Include="File.h" />
-    <ClInclude Include="FileTask.h" />
+    <ClInclude Include="FileTaskThread.h" />
     <ClInclude Include="FileTransferCtrl.h" />
     <ClInclude Include="FindFriendDlg.h" />
     <ClInclude Include="FontSelDlg.h" />
@@ -267,6 +268,7 @@
     <ClInclude Include="HeartbeatTask.h" />
     <ClInclude Include="IImageOle.h" />
     <ClInclude Include="ImageEx.h" />
+    <ClInclude Include="ImageTaskThread.h" />
     <ClInclude Include="IniFile.h" />
     <ClInclude Include="IULog.h" />
     <ClInclude Include="jsoncpp-0.5.0\autolink.h" />

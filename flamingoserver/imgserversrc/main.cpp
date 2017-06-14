@@ -1,5 +1,5 @@
 /**
- *  文件服务程序入口函数
+ *  聊天图片服务程序入口函数
  *  zhangyl 2017.03.09
  **/
 #include <iostream>
@@ -16,8 +16,8 @@
 #include "../base/asynclogging.h"
 #include "../net/eventloop.h"
 #include "../net/eventloopthreadpool.h"
-#include "FileManager.h"
-#include "FileServer.h"
+#include "../fileserversrc/FileManager.h"
+#include "../fileserversrc/FileServer.h"
 
 using namespace net;
 
@@ -99,7 +99,9 @@ int main(int argc, char* argv[])
     if (bdaemon)
         daemon_run();
 
-    CConfigFileReader config("fileserver.conf");
+    CConfigFileReader config("imgserver.conf");
+
+    Logger::setLogLevel(Logger::DEBUG);
     const char* logfilepath = config.GetConfigName("logfiledir");
     if (logfilepath == NULL)
     {
@@ -133,7 +135,7 @@ int main(int argc, char* argv[])
     g_asyncLog = &log;
     Logger::setOutput(asyncOutput);
 
-    const char* filecachedir = config.GetConfigName("filecachedir");
+    const char* filecachedir = config.GetConfigName("imgcachedir");
     Singleton<FileManager>::Instance().Init(filecachedir);
 
     Singleton<EventLoopThreadPool>::Instance().Init(&g_mainLoop, 6);

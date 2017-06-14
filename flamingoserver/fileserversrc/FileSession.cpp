@@ -16,10 +16,11 @@
 using namespace net;
 using namespace balloon;
 
-FileSession::FileSession(const std::shared_ptr<TcpConnection>& conn) :  
+FileSession::FileSession(const std::shared_ptr<TcpConnection>& conn, const char* filebasedir/* = "filecache/"*/) :
 TcpSession(conn), 
 m_id(0),
-m_seq(0)
+m_seq(0),
+m_strFileBaseDir(filebasedir)
 {
 }
 
@@ -83,16 +84,15 @@ bool FileSession::Process(const std::shared_ptr<TcpConnection>& conn, const char
         return false;
     }
 
-    //TODO: 32位的偏移量不能支持大文件
-    int32_t offset;
-    if (!readStream.ReadInt32(offset))
+    int64_t offset;
+    if (!readStream.ReadInt64(offset))
     {
         LOG_WARN << "read offset error !!!";
         return false;
     }
 
-    int32_t filesize;
-    if (!readStream.ReadInt32(filesize))
+    int64_t filesize;
+    if (!readStream.ReadInt64(filesize))
     {
         LOG_WARN << "read filesize error !!!";
         return false;
@@ -142,7 +142,7 @@ bool FileSession::Process(const std::shared_ptr<TcpConnection>& conn, const char
     return true;
 }
 
-void FileSession::OnUploadFileResponse(const std::string& filemd5, int32_t offset, int32_t filesize, const std::string& filedata, const std::shared_ptr<TcpConnection>& conn)
+void FileSession::OnUploadFileResponse(const std::string& filemd5, int64_t offset, int64_t filesize, const std::string& filedata, const std::shared_ptr<TcpConnection>& conn)
 {
     if (filemd5.empty())
     {
@@ -153,14 +153,15 @@ void FileSession::OnUploadFileResponse(const std::string& filemd5, int32_t offse
     std::string outbuf;
     BinaryWriteStream writeStream(&outbuf);
     
+    //服务器上已经存在该文件，直接返回
     if (Singleton<FileManager>::Instance().IsFileExsit(filemd5.c_str()))
     {
         writeStream.WriteInt32(msg_type_upload_resp);
         writeStream.WriteInt32(m_seq);
         writeStream.WriteString(filemd5);
         offset = filesize = -1;
-        writeStream.WriteInt32(offset);
-        writeStream.WriteInt32(filesize);
+        writeStream.WriteInt64(offset);
+        writeStream.WriteInt64(filesize);
         string dummyfiledata;
         writeStream.WriteString(dummyfiledata);
         LOG_INFO << "Response to client: cmd=msg_type_upload_resp" << ", connection name:" << conn->peerAddress().toIpPort();
@@ -175,12 +176,20 @@ void FileSession::OnUploadFileResponse(const std::string& filemd5, int32_t offse
     writeStream.WriteString(filemd5);
     if (offset == 0)
     {
-        string filename = "filecache/";
+        string filename = m_strFileBaseDir;
         filename += filemd5;
         m_fp = fopen(filename.c_str(), "w");
         if (m_fp == NULL)
         {
-            LOG_INFO << "fopen file error, filemd5=" << filemd5 << ", connection name:" << conn->peerAddress().toIpPort();
+            LOG_ERROR << "fopen file error, filemd5=" << filemd5 << ", connection name:" << conn->peerAddress().toIpPort();
+            return;
+        }
+    }
+    else
+    {
+        if (m_fp == NULL)
+        {
+            LOG_ERROR << "file pointer should not be null, filemd5=" << filemd5 << ", offset=" << offset << ", connection name:" << conn->peerAddress().toIpPort();
             return;
         }
     }
@@ -198,15 +207,15 @@ void FileSession::OnUploadFileResponse(const std::string& filemd5, int32_t offse
     }
 
     //文件上传成功
-    if (offset + (int32_t)filedata.length() == filesize)
+    if (offset + (int64_t)filedata.length() == filesize)
     {
         offset = filesize = -1;
         Singleton<FileManager>::Instance().addFile(filemd5.c_str());
         ResetFile();
     }
 
-    writeStream.WriteInt32(offset);
-    writeStream.WriteInt32(filesize);
+    writeStream.WriteInt64(offset);
+    writeStream.WriteInt64(filesize);
     string dummyfiledatax;
     writeStream.WriteString(dummyfiledatax);
     writeStream.Flush();
@@ -216,7 +225,7 @@ void FileSession::OnUploadFileResponse(const std::string& filemd5, int32_t offse
     LOG_INFO << "Response to client: cmd=msg_type_upload_resp" << ", connection name:" << conn->peerAddress().toIpPort();
 }
 
-void FileSession::OnDownloadFileResponse(const std::string& filemd5, int32_t offset, int32_t filesize, const std::shared_ptr<TcpConnection>& conn)
+void FileSession::OnDownloadFileResponse(const std::string& filemd5, int64_t offset, int64_t filesize, const std::shared_ptr<TcpConnection>& conn)
 {
     if (filemd5.empty())
     {
@@ -233,7 +242,7 @@ void FileSession::OnDownloadFileResponse(const std::string& filemd5, int32_t off
 
     if (m_fp == NULL)
     {
-        string filename = "filecache/";
+        string filename = m_strFileBaseDir;
         filename += filemd5;
         m_fp = fopen(filename.c_str(), "r+");
         if (m_fp == NULL)
@@ -260,7 +269,7 @@ void FileSession::OnDownloadFileResponse(const std::string& filemd5, int32_t off
     string filedata;
     
     //m_offset += offset;
-    int32_t currentSendSize = 512 * 1024;
+    int64_t currentSendSize = 512 * 1024;
     char buffer[512 * 1024] = { 0 };
     if (m_filesize <= m_offset + currentSendSize)
     {
@@ -285,10 +294,10 @@ void FileSession::OnDownloadFileResponse(const std::string& filemd5, int32_t off
 	}
 
 
-    writeStream.WriteInt32(m_offset);
+    writeStream.WriteInt64(m_offset);
     m_offset += currentSendSize;
     filedata.append(buffer, currentSendSize);   
-    writeStream.WriteInt32(m_filesize);
+    writeStream.WriteInt64(m_filesize);
     writeStream.WriteString(filedata);
     writeStream.Flush();
 

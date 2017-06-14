@@ -2,17 +2,17 @@
 #include <vector>
 #include "Path.h"
 
-class CFileTask;
+class CFileTaskThread;
 //自动升级类
 class Updater
 {
 public:
-    Updater(CFileTask* pFileTask);
+    Updater(CFileTaskThread* pFileTask);
 	~Updater();
 
 	BOOL IsNeedUpdate();
 
 public:
-    CFileTask*			    m_pFileTask;
+    CFileTaskThread*	    m_pFileTask;
 	std::vector<CString>	m_aryUpdateFileList;
 };

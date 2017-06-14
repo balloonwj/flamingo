@@ -30,7 +30,7 @@ public:
     FileServer(const FileServer& rhs) = delete;
     FileServer& operator =(const FileServer& rhs) = delete;
 
-    bool Init(const char* ip, short port, EventLoop* loop);
+    bool Init(const char* ip, short port, EventLoop* loop, const char* fileBaseDir = "filecache/");
 
 private:
     //新连接到来调用或连接断开，所以需要通过conn->connected()来判断，一般只在主loop里面调用
@@ -45,4 +45,5 @@ private:
     std::mutex                                     m_sessionMutex;      //多线程之间保护m_sessions
     int                                            m_baseUserId{};
     std::mutex                                     m_idMutex;           //多线程之间保护m_baseUserId
+    std::string                                    m_strFileBaseDir;    //文件目录
 };

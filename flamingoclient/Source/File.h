@@ -1,5 +1,6 @@
 #pragma once
 #include "Buffer.h"
+#include <stdint.h>
 
 ////////////////////////////////////
 //文件系列的函数
@@ -12,7 +13,7 @@ DWORD IUGetFileSize(HANDLE hFile);				//不支持超过4G的文件
 UINT64 IUGetFileSize2(PCTSTR pszFileName);		//支持超过4G的文件
 
 //获取文件md5值
-long GetFileMd5ValueA(PCTSTR pszFileName, char* pszMd5, long nMd5Length, HWND hwndReflection=NULL, HANDLE hCancelEvent=NULL);
+long GetFileMd5ValueA(PCTSTR pszFileName, char* pszMd5, long nMd5Length, int64_t& nFileSize, HWND hwndReflection=NULL, HANDLE hCancelEvent=NULL);
 BOOL GetFileMd5ValueW(PCTSTR pszFileName, TCHAR* pszMd5, long nMd5Length);
 //获取文件的上传名称：大小|md5值
 BOOL GetFileUploadName(PCTSTR pszFileName, char* pszUploadName, long nUploadNameLength);

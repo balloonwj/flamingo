@@ -72,7 +72,6 @@ BOOL CChangePicHeadDlg::Init()
 	return 1;
 }
 
-
 BOOL CChangePicHeadDlg::InitThumbImages()
 {
 	//TODO: 后期改成自动判断\Image\UserThumbs\文件夹里面头像文件的个数

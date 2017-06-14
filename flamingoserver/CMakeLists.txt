@@ -80,6 +80,14 @@ fileserversrc/FileManager.cpp
 fileserversrc/MD5.cpp
 fileserversrc/TcpSession.cpp)
 
+set(myimgserver_srcs
+imgserversrc/main.cpp
+fileserversrc/FileServer.cpp
+fileserversrc/FileSession.cpp
+fileserversrc/FileManager.cpp
+fileserversrc/MD5.cpp
+fileserversrc/TcpSession.cpp)
+
 
 add_executable(mychatserver ${net_srcs} ${json_srcs}  ${mychatserver_srcs} ${mysql_srcs} ${database_srcs})
 #光包含库目录是没用的，还必须使用TARGET_LINK_LIBRARIES链接该库
@@ -87,6 +95,9 @@ TARGET_LINK_LIBRARIES(mychatserver mysqlclient)
 
 add_executable(myfileserver ${net_srcs}  ${myfileserver_srcs} )
 TARGET_LINK_LIBRARIES(myfileserver)
+
+add_executable(myimgserver ${net_srcs}  ${myimgserver_srcs} )
+TARGET_LINK_LIBRARIES(myimgserver)
 
 
 

@@ -3,7 +3,7 @@
 #include <assert.h>
 #include "Utils.h"
 
-CMiniBuffer::CMiniBuffer(long nSize, BOOL bAutoRelease)
+CMiniBuffer::CMiniBuffer(int64_t nSize, BOOL bAutoRelease)
 {
 	assert(nSize > 0);
 	
@@ -26,7 +26,7 @@ void CMiniBuffer::Release()
 	m_nSize = 0;
 }
 
-long CMiniBuffer::GetSize()
+int64_t CMiniBuffer::GetSize()
 {
 	return m_nSize;
 }

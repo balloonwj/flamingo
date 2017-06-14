@@ -303,9 +303,6 @@
     <ClCompile Include="ThreadPool.cpp">
       <Filter>Tasks</Filter>
     </ClCompile>
-    <ClCompile Include="FileTask.cpp">
-      <Filter>Tasks</Filter>
-    </ClCompile>
     <ClCompile Include="net\IUProtocolData.cpp">
       <Filter>net</Filter>
     </ClCompile>
@@ -326,6 +323,12 @@
     </ClCompile>
     <ClCompile Include="FlamingoClient.cpp">
       <Filter>UserData</Filter>
+    </ClCompile>
+    <ClCompile Include="ImageTaskThread.cpp">
+      <Filter>Tasks</Filter>
+    </ClCompile>
+    <ClCompile Include="FileTaskThread.cpp">
+      <Filter>Tasks</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -629,9 +632,6 @@
     <ClInclude Include="ThreadPool.h">
       <Filter>Tasks</Filter>
     </ClInclude>
-    <ClInclude Include="FileTask.h">
-      <Filter>Tasks</Filter>
-    </ClInclude>
     <ClInclude Include="net\FileMsg.h">
       <Filter>net</Filter>
     </ClInclude>
@@ -658,6 +658,12 @@
     </ClInclude>
     <ClInclude Include="FlamingoClient.h">
       <Filter>UserData</Filter>
+    </ClInclude>
+    <ClInclude Include="ImageTaskThread.h">
+      <Filter>Tasks</Filter>
+    </ClInclude>
+    <ClInclude Include="FileTaskThread.h">
+      <Filter>Tasks</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

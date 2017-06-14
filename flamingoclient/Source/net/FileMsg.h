@@ -19,7 +19,6 @@ enum file_msg_type
 //协议头
 struct file_msg
 {
-    //linux下这个字段是64位的
     int64_t  packagesize;       //指定包体的大小
 };
 

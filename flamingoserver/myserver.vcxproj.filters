@@ -49,6 +49,7 @@
     <ClCompile Include="base\ConfigFileReader.cpp" />
     <ClCompile Include="net\TimerQueue.cpp" />
     <ClCompile Include="net\Timer.cpp" />
+    <ClCompile Include="imgserversrc\main.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="base\asynclogging.h" />
@@ -119,5 +120,8 @@
     <None Include="jsoncpp-0.5.0\json_internalmap.inl" />
     <None Include="jsoncpp-0.5.0\json_valueiterator.inl" />
     <None Include="mysql\table.sql" />
+    <None Include="chatserver.conf" />
+    <None Include="fileserver.conf" />
+    <None Include="imgserver.conf" />
   </ItemGroup>
 </Project>

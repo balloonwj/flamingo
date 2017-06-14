@@ -6,6 +6,7 @@
 #include "EncodingUtil.h"
 #include "net/IUProtocolData.h"
 #include "UserSessionData.h"
+#include <stdint.h>
 
 //打开一个文件并获得该文件的句柄
 HANDLE GetFileHandle(PCTSTR pszFileName)
@@ -50,28 +51,33 @@ UINT64 IUGetFileSize2(PCTSTR pszFileName)
 }
 
 //获取文件md5值
-long GetFileMd5ValueA(PCTSTR pszFileName, char* pszMd5, long nMd5Length, HWND hwndReflection/*=NULL*/, HANDLE hCancelEvent/*=NULL*/)
+long GetFileMd5ValueA(PCTSTR pszFileName, char* pszMd5, long nMd5Length, int64_t& nFileSize, HWND hwndReflection/*=NULL*/, HANDLE hCancelEvent/*=NULL*/)
 {
-	HANDLE hFile = GetFileHandle(pszFileName);
+    nFileSize = 0;
+
+    HANDLE hFile = GetFileHandle(pszFileName);
 	if(hFile == INVALID_HANDLE_VALUE)	
 		return GET_FILE_MD5_FAILED;
 
 	CAutoFileHandle autoFile(hFile);
-	DWORD dwFileSize = ::GetFileSize(hFile, NULL);
-	if (dwFileSize == 0)
+    DWORD dwFileSizeHigh;
+    DWORD dwFileSizeLow = ::GetFileSize(hFile, &dwFileSizeHigh);
+    //获取文件失败或者0字节的文件不能上传
+    if (dwFileSizeLow == INVALID_FILE_SIZE || (dwFileSizeLow == 0 && dwFileSizeHigh == 0))
 		return GET_FILE_MD5_FAILED;
 
 	BOOL bError = FALSE;
 
-	//每次最多读取8k大小
-	DWORD dwSizeEachRead = 8*1024;
-	if(dwFileSize <= dwSizeEachRead)
-		dwSizeEachRead = dwFileSize;
+    nFileSize = (((int64_t)(((int64_t)dwFileSizeHigh) << 32)) + (int64_t)dwFileSizeLow);
+	//每次最多读取500k大小
+	int64_t nSizeEachRead = 500*1024;
+    if (nFileSize <= nSizeEachRead)
+        nSizeEachRead = nFileSize;
 
-	DWORD dwFileOffset = 0;
+	int64_t nFileOffset = 0;
 	BOOL bRet = 0;
 	//读取的字节数
-	DWORD dwFileRead = 0;
+    DWORD dwFileRead = 0;
 	MD5_CTX ctx;
     MD5Init(&ctx);
 	FileProgress* pFileProgress = NULL;
@@ -83,31 +89,31 @@ long GetFileMd5ValueA(PCTSTR pszFileName, char* pszMd5, long nMd5Length, HWND hw
 			return GET_FILE_MD5_USERCANCEL;
 		}
 		
-		//如果剩下的文件大小已经不足一个dwSizeEachRead
-		if(dwFileOffset+dwSizeEachRead > dwFileSize)
-			dwSizeEachRead = dwFileSize-dwFileOffset;
+		//如果剩下的文件大小已经不足一个nSizeEachRead
+        if (nFileOffset + nSizeEachRead > nFileSize)
+			nSizeEachRead = nFileSize-nFileOffset;
 		
-		CMiniBuffer miniBuffer(dwSizeEachRead);
+		CMiniBuffer miniBuffer(nSizeEachRead);
 
-		bRet = ::ReadFile(hFile, miniBuffer.GetBuffer(), dwSizeEachRead, &dwFileRead, NULL);
-		if(!bRet || dwSizeEachRead!=dwFileRead)
+        bRet = ::ReadFile(hFile, miniBuffer.GetBuffer(), (DWORD)nSizeEachRead, &dwFileRead, NULL);
+		if(!bRet || nSizeEachRead!=dwFileRead)
 		{
 			bError = TRUE;
 			break;
 		}
 
-		MD5Update(&ctx, (unsigned char*)miniBuffer.GetBuffer(), dwSizeEachRead);
+		MD5Update(&ctx, (unsigned char*)miniBuffer.GetBuffer(), (unsigned int)nSizeEachRead);
 
-		dwFileOffset += dwSizeEachRead;
+		nFileOffset += nSizeEachRead;
 
-		if(dwFileOffset >= dwFileSize)
+		if(nFileOffset >= nFileSize)
 			break;
 
 		
 		pFileProgress = new FileProgress();
 		memset(pFileProgress, 0, sizeof(FileProgress));
 		pFileProgress->nPercent = -1;
-		pFileProgress->nVerificationPercent = (long)((__int64)dwFileOffset*100/dwFileSize);
+		pFileProgress->nVerificationPercent = (long)((__int64)nFileOffset*100/nFileSize);
 		_tcscpy_s(pFileProgress->szDestPath, ARRAYSIZE(pFileProgress->szDestPath), pszFileName);
 		::PostMessage(hwndReflection, FMG_MSG_SEND_FILE_PROGRESS, 0, (LPARAM)pFileProgress);
 
@@ -144,7 +150,8 @@ long GetFileMd5ValueA(PCTSTR pszFileName, char* pszMd5, long nMd5Length, HWND hw
 BOOL GetFileMd5ValueW(PCTSTR pszFileName, TCHAR* pszMd5, long nMd5Length)
 {
 	char szMd5[64] = {0};
-	if(!GetFileMd5ValueA(pszFileName, szMd5, ARRAYSIZE(szMd5)))
+    int64_t nFileSize;
+    if (!GetFileMd5ValueA(pszFileName, szMd5, ARRAYSIZE(szMd5), nFileSize))
 		return FALSE;
 
 	return AnsiToUnicode(szMd5, pszMd5, nMd5Length);
@@ -153,11 +160,9 @@ BOOL GetFileMd5ValueW(PCTSTR pszFileName, TCHAR* pszMd5, long nMd5Length)
 //获取文件的上传名称：大小|md5值
 BOOL GetFileUploadName(PCTSTR pszFileName, char* pszUploadName, long nUploadNameLength)
 {
-	//DWORD dwFileSize = IUGetFileSize(pszFileName);
-	//if(dwFileSize == 0)
-	//	return FALSE;
 	char szMd5[40] = {0};
-	if(!GetFileMd5ValueA(pszFileName, szMd5, ARRAYSIZE(szMd5)))
+    int64_t nFileSize;
+    if (!GetFileMd5ValueA(pszFileName, szMd5, ARRAYSIZE(szMd5), nFileSize))
 		return FALSE;
 
 	sprintf_s(pszUploadName, nUploadNameLength, "%s.%s", szMd5, Hootina::CPath::GetExtension(pszFileName).c_str());

@@ -1,5 +1,5 @@
 /**
- *  文件服务器主服务类，FileServer.cpp
+ *  文件服务器和图片服务器主服务类，FileServer.cpp
  *  zhangyl 2017.03.17
  **/
 #include "../net/inetaddress.h"
@@ -8,10 +8,12 @@
 #include "FileServer.h"
 #include "FileSession.h"
 
-bool FileServer::Init(const char* ip, short port, EventLoop* loop)
+bool FileServer::Init(const char* ip, short port, EventLoop* loop, const char* fileBaseDir/* = "filecache/"*/)
 {
+    m_strFileBaseDir = fileBaseDir;
+
     InetAddress addr(ip, port);
-    m_server.reset(new TcpServer(loop, addr, "ZYL-MYFileServer", TcpServer::kReusePort));
+    m_server.reset(new TcpServer(loop, addr, "ZYL-MYImgAndFileServer", TcpServer::kReusePort));
     m_server->setConnectionCallback(std::bind(&FileServer::OnConnection, this, std::placeholders::_1));
     //启动侦听
     m_server->start();

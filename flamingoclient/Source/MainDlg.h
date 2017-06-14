@@ -273,7 +273,8 @@ private:
 	BOOL Init();
 	void UnInit();
 
-	void StartLogin(BOOL bAutoLogin = FALSE);
+    //返回true,表示登录对话框走的是正常登录流程;返回false,表示直接关闭了登录对话框
+	bool StartLogin(BOOL bAutoLogin = FALSE);
 	void CloseAllDlg();
 
 	LRESULT OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 登录返回消息

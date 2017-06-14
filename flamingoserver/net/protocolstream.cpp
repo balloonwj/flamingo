@@ -190,7 +190,7 @@ namespace balloon
     {
         char int64str[128];
         size_t length;
-        if (!ReadCString(int64str, 0, length))
+        if (!ReadCString(int64str, 128, length))
             return false;
 
         i = atoll(int64str);
@@ -330,7 +330,11 @@ namespace balloon
         char int64str[128];
         if (isNULL == false)
         {
+#ifndef _WIN32
             sprintf(int64str, "%ld", value);
+#else
+            sprintf(int64str, "%lld", value);
+#endif
             WriteCString(int64str, strlen(int64str));
         }
         else

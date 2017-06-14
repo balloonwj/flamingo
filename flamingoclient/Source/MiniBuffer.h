@@ -1,15 +1,16 @@
 #pragma once
+#include <stdint.h>
 
 //可以在作用域消失以后自动释放的迷你内存类
 class CMiniBuffer
 {
 public:
-	CMiniBuffer(long nSize, BOOL bAutoRelease = TRUE);
+	CMiniBuffer(int64_t nSize, BOOL bAutoRelease = TRUE);
 	~CMiniBuffer();
 
 	void Release();
 
-	long GetSize();
+	int64_t GetSize();
 	char* GetBuffer();
 	
 	//TODO: 加一个接口，使CMiniBuffer对象可以直接被当作字符串指针使用
@@ -20,6 +21,6 @@ public:
 
 private:
 	BOOL	m_bAutoRelease;
-	long	m_nSize;
+    int64_t	m_nSize;
 	char*	m_pData;
 };

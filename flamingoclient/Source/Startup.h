@@ -7,3 +7,5 @@ int Run(LPTSTR /*lpstrCmdLine*/ = NULL, int nCmdShow = SW_SHOWDEFAULT);
 BOOL InitSocket();
 
 void UnInitSocket();
+
+void ClearExpiredLog();

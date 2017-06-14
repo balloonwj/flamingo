@@ -139,7 +139,7 @@ void CLogonUserInfoDlg::OnCustomHead(UINT uNotifyCode, int nID, CWindow wndCtl)
 	_tcscpy_s(pFileItemRequest->m_szFilePath, ARRAYSIZE(pFileItemRequest->m_szFilePath), strDestPath);
 	pFileItemRequest->m_nFileType = FILE_ITEM_UPLOAD_USER_THUMB;
 	pFileItemRequest->m_hwndReflection = m_hWnd;
-    m_pFMGClient->m_FileTask.AddItem(pFileItemRequest);
+    m_pFMGClient->m_ImageTask.AddItem(pFileItemRequest);
 	m_btnOK.EnableWindow(FALSE);
 	m_btnCancel.EnableWindow(FALSE);
 	m_btnSysHead.EnableWindow(FALSE);

@@ -17,6 +17,7 @@
 #include "IULog.h"
 #include "UserSessionData.h"
 #include "Utils.h"
+#include "IniFile.h"
 
 CAppModule _Module;
 
@@ -75,6 +76,34 @@ int Run(LPTSTR /*lpstrCmdLine = NULL*/, int nCmdShow/* = SW_SHOWDEFAULT*/)
 	return nRet;
 }
 
+void ClearExpiredLog()
+{    
+    WIN32_FIND_DATA win32FindData = { 0 };
+    TCHAR szLogFilePath[MAX_PATH] = { 0 };
+    _stprintf_s(szLogFilePath, MAX_PATH, _T("%sLog\\*.log"), g_szHomePath);
+    HANDLE hFindFile = ::FindFirstFile(szLogFilePath, &win32FindData);
+    if (hFindFile == INVALID_HANDLE_VALUE)
+        return;
+
+    do
+    {
+        if (_tcsicmp(win32FindData.cFileName, _T(".")) != 0 ||
+            _tcsicmp(win32FindData.cFileName, _T("..")) != 0)
+        {
+            memset(szLogFilePath, 0, sizeof(szLogFilePath));
+            _stprintf_s(szLogFilePath, MAX_PATH, _T("%sLog\\%s"), g_szHomePath, win32FindData.cFileName);
+            //这里不用检测是否删除成功,因为最新的一个log是我们需要的,不能删除,它正被此进程占用着,所以删不掉
+            ::DeleteFile(szLogFilePath);
+        }
+
+        if (!::FindNextFile(hFindFile, &win32FindData))
+            break;
+
+    } while (true);
+
+    ::FindClose(hFindFile);
+}
+
 
 BOOL InitSocket()
 {
@@ -112,6 +141,19 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
 	_stprintf_s(szLogFileName, MAX_PATH, _T("%sLog\\%04d%02d%02d%02d%02d%02d.log"), g_szHomePath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 	CIULog::Init(TRUE, szLogFileName);
 
+    CIniFile iniFile;
+    CString strIniFilePath(g_szHomePath);
+    strIniFilePath += _T("config\\flamingo.ini");
+    bool bNeedClear = true;
+    if (iniFile.ReadInt(_T("app"), _T("clearexpirelog"), 0, strIniFilePath) == 0)
+        bNeedClear = false;
+
+    if (bNeedClear)
+    {
+        //清理过期的日志文件
+        ClearExpiredLog();
+    }
+    
 
 	if(!InitSocket())
 		return 0;

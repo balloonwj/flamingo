@@ -9,9 +9,9 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 
 // Change these values to use different versions
-#define WINVER		0x0500
-#define _WIN32_WINNT	0x0501
-#define _WIN32_IE	0x0501
+#define WINVER		    0x0601
+#define _WIN32_WINNT	0x0601
+#define _WIN32_IE	    0x0601
 #define _RICHEDIT_VER	0x0200
 
 #define _WTL_NO_CSTRING

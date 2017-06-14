@@ -439,7 +439,7 @@ CUploadFileResult::CUploadFileResult()
 {
 	m_nFileType = FILE_ITEM_UNKNOWN;
 	m_bSuccessful = FALSE;
-	m_dwFileSize = 0;
+    m_nFileSize = 0;
 	memset(m_szLocalName, 0, sizeof(m_szLocalName));
 
 	memset(m_szMd5, 0, sizeof(m_szMd5));
@@ -462,7 +462,7 @@ void CUploadFileResult::Clone(const CUploadFileResult* pSource)
 
 	m_nFileType = pSource->m_nFileType;
 	m_bSuccessful = pSource->m_bSuccessful;
-	m_dwFileSize = pSource->m_dwFileSize;
+	m_nFileSize = pSource->m_nFileSize;
 
 	_tcscpy_s(m_szLocalName, ARRAYSIZE(m_szLocalName), pSource->m_szLocalName);
 

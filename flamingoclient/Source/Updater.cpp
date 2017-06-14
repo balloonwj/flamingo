@@ -4,9 +4,9 @@
 #include "File.h"
 #include "EncodingUtil.h"
 #include "Utils.h"
-#include "FileTask.h"
+#include "FileTaskThread.h"
 
-Updater::Updater(CFileTask* pFileTask)
+Updater::Updater(CFileTaskThread* pFileTask)
 {
     m_pFileTask = pFileTask;
 }
@@ -15,7 +15,6 @@ Updater::~Updater()
 {
 	m_aryUpdateFileList.clear();
 }
-
 
 BOOL Updater::IsNeedUpdate()
 {

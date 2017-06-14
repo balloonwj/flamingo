@@ -1465,7 +1465,7 @@ void CRecvMsgThread::GetChatPic(CBuddyMessage* pBuddyMessage)
 				_tcscpy_s(pRequest->m_szFilePath, ARRAYSIZE(pRequest->m_szFilePath), szDestPath);
 				pRequest->m_nFileType = FILE_ITEM_DOWNLOAD_CHAT_IMAGE;
 				pRequest->m_pBuddyMsg = pBuddyMessage;
-				m_pFMGClient->m_FileTask.AddItem(pRequest);
+				m_pFMGClient->m_ImageTask.AddItem(pRequest);
 			}
 		}
 	}

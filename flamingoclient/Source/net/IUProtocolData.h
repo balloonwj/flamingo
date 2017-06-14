@@ -3,6 +3,7 @@
 #pragma once
 #include <set>
 #include <list>
+#include <stdint.h>
 
 //客户端类型
 enum CLIENT_TYPE
@@ -676,7 +677,7 @@ public:
 public:
 	long			m_nFileType;
 	BOOL			m_bSuccessful;					//是否上传成功
-	DWORD			m_dwFileSize;					//文件大小
+	int64_t			m_nFileSize;					//文件大小
 	TCHAR			m_szLocalName[MAX_PATH];		//本地文件名
 						
 	char			m_szMd5[64];					//文件的md5值

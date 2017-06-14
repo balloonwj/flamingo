@@ -1,4 +1,3 @@
-
 #include "acceptor.h"
 #include "../base/logging.h"
 #include "eventloop.h"
@@ -15,11 +14,11 @@
 using namespace net;
 
 Acceptor::Acceptor(EventLoop* loop, const InetAddress& listenAddr, bool reuseport)
-: loop_(loop),
-acceptSocket_(sockets::createNonblockingOrDie()),
-acceptChannel_(loop, acceptSocket_.fd()),
-listenning_(false),
-idleFd_(::open("/dev/null", O_RDONLY | O_CLOEXEC))
+    : loop_(loop),
+    acceptSocket_(sockets::createNonblockingOrDie()),
+    acceptChannel_(loop, acceptSocket_.fd()),
+    listenning_(false),
+    idleFd_(::open("/dev/null", O_RDONLY | O_CLOEXEC))
 {
     assert(idleFd_ >= 0);
     acceptSocket_.setReuseAddr(true);
@@ -78,4 +77,3 @@ void Acceptor::handleRead()
         }
     }
 }
-

@@ -1,5 +1,5 @@
 #include "stdafx.h"
-#include "FileTask.h"
+#include "ImageTaskThread.h"
 #include "UserSessionData.h"
 #include "IULog.h"
 #include "MD5Sum.h"
@@ -17,7 +17,7 @@
 
 using namespace balloon;
 
-CFileTask::CFileTask(CIUSocket* sockeClient) : m_SocketClient(sockeClient), m_seq(0)
+CImageTaskThread::CImageTaskThread(CIUSocket* sockeClient) : m_SocketClient(sockeClient), m_seq(0)
 {
 	m_lpFMGClient = NULL;
 	m_pProtocol = NULL;
@@ -25,19 +25,19 @@ CFileTask::CFileTask(CIUSocket* sockeClient) : m_SocketClient(sockeClient), m_se
 	m_pCurrentTransferringItem = NULL;
 }
 
-CFileTask::~CFileTask()
+CImageTaskThread::~CImageTaskThread()
 {
 	ClearAllItems();
 }
 
 
-void CFileTask::Stop()
+void CImageTaskThread::Stop()
 {
 	m_bStop = true;
 	m_cvItems.notify_one();
 }
 
-BOOL CFileTask::AddItem(CFileItemRequest* pItem)
+BOOL CImageTaskThread::AddItem(CFileItemRequest* pItem)
 {
 	if (NULL == pItem)
 		return FALSE;
@@ -49,7 +49,7 @@ BOOL CFileTask::AddItem(CFileItemRequest* pItem)
 	return TRUE;
 }
 
-void CFileTask::RemoveItem(CFileItemRequest* pItem)
+void CImageTaskThread::RemoveItem(CFileItemRequest* pItem)
 {
 	if(pItem == NULL)
 		return;
@@ -79,7 +79,7 @@ void CFileTask::RemoveItem(CFileItemRequest* pItem)
 	//AtlTrace(_T("File item count: %d.\n"), m_Filelist.size());
 }
 
-void CFileTask::ClearAllItems()
+void CImageTaskThread::ClearAllItems()
 {
 	std::lock_guard<std::mutex> guard(m_mtItems);
 	for (auto& iter : m_Filelist)
@@ -90,7 +90,7 @@ void CFileTask::ClearAllItems()
 	m_Filelist.clear();
 }
 
-void CFileTask::Run()
+void CImageTaskThread::Run()
 {
 	while (!m_bStop)
 	{
@@ -113,7 +113,7 @@ void CFileTask::Run()
 	}
 }
 
-void CFileTask::HandleItem(CFileItemRequest* pFileItem)
+void CImageTaskThread::HandleItem(CFileItemRequest* pFileItem)
 {
 	if(pFileItem==NULL || pFileItem->m_uType!=NET_DATA_FILE)
 		return;
@@ -127,45 +127,45 @@ void CFileTask::HandleItem(CFileItemRequest* pFileItem)
 	if(pFileItem->m_nFileType == FILE_ITEM_UPLOAD_USER_THUMB)
 	{
 		bRet = UploadUserThumb(pFileItem->m_szFilePath, pFileItem->m_hwndReflection,*pUploadFileResult);
-		long nUploadUserThumbResult = (bRet==0 ? UPLOAD_USER_THUMB_RESULT_SUCCESS : UPLOAD_USER_THUMB_RESULT_FAILED);
+		long nUploadUserThumbResult = (bRet!=FALSE ? UPLOAD_USER_THUMB_RESULT_SUCCESS : UPLOAD_USER_THUMB_RESULT_FAILED);
         ::PostMessage(pFileItem->m_hwndReflection, FMG_MSG_UPLOAD_USER_THUMB, (WPARAM)bRet, (LPARAM)pUploadFileResult);      
 	}
-	else if(pFileItem->m_nFileType==FILE_ITEM_UPLOAD_CHAT_IMAGE || pFileItem->m_nFileType==FILE_ITEM_UPLOAD_CHAT_OFFLINE_FILE)
-	{
-		//上传文件如果失败，则重试三次
-		pUploadFileResult->m_uSenderID = pFileItem->m_uSenderID;
-		pUploadFileResult->m_setTargetIDs = pFileItem->m_setTargetIDs;
-		pUploadFileResult->m_nFileType = pFileItem->m_nFileType; 
-		pUploadFileResult->m_hwndReflection = pFileItem->m_hwndReflection;
-		long nRetCode;
-		while(pFileItem->m_nRetryTimes < 3)
-		{
-			//nRetCode = m_pProtocol->UploadFile3(pFileItem->m_szFilePath, pFileItem->m_hwndReflection, pFileItem->m_hCancelEvent,*pUploadFileResult);
-			nRetCode = UploadFile(pFileItem->m_szFilePath, pFileItem->m_hwndReflection, pFileItem->m_hCancelEvent,*pUploadFileResult);
-			if(nRetCode==FILE_UPLOAD_SUCCESS || nRetCode==FILE_UPLOAD_USERCANCEL)
-				break;
+    else if (pFileItem->m_nFileType == FILE_ITEM_UPLOAD_CHAT_IMAGE)
+    {
+        //上传文件如果失败，则重试三次
+        pUploadFileResult->m_uSenderID = pFileItem->m_uSenderID;
+        pUploadFileResult->m_setTargetIDs = pFileItem->m_setTargetIDs;
+        pUploadFileResult->m_nFileType = pFileItem->m_nFileType;
+        pUploadFileResult->m_hwndReflection = pFileItem->m_hwndReflection;
+        long nRetCode;
+        while (pFileItem->m_nRetryTimes < 3)
+        {
+            //nRetCode = m_pProtocol->UploadFile3(pFileItem->m_szFilePath, pFileItem->m_hwndReflection, pFileItem->m_hCancelEvent,*pUploadFileResult);
+            nRetCode = UploadImage(pFileItem->m_szFilePath, pFileItem->m_hwndReflection, pFileItem->m_hCancelEvent, *pUploadFileResult);
+            if (nRetCode == FILE_UPLOAD_SUCCESS || nRetCode == FILE_UPLOAD_USERCANCEL)
+                break;
 
-			::Sleep(3000);
+            ::Sleep(3000);
 
-			++pFileItem->m_nRetryTimes;
-		}
-		
-		//除非用户取消，否则上传成功或失败都要告诉对方
-		if(nRetCode != FILE_UPLOAD_USERCANCEL)
-		{
-			//SendConfirmMessage(pUploadFileResult);
+            ++pFileItem->m_nRetryTimes;
+        }
 
-			//克隆一份上传结果数据以用于PostMessage
-			CUploadFileResult* pResult = new CUploadFileResult();
-			pResult->Clone(pUploadFileResult);
-			long nSendFileResultCode = (nRetCode==FILE_UPLOAD_SUCCESS ? SEND_FILE_SUCCESS : SEND_FILE_FAILED);
+        //除非用户取消，否则上传成功或失败都要告诉对方
+        if (nRetCode != FILE_UPLOAD_USERCANCEL)
+        {
+            //SendConfirmMessage(pUploadFileResult);
+
+            //克隆一份上传结果数据以用于PostMessage
+            CUploadFileResult* pResult = new CUploadFileResult();
+            pResult->Clone(pUploadFileResult);
+            long nSendFileResultCode = (nRetCode == FILE_UPLOAD_SUCCESS ? SEND_FILE_SUCCESS : SEND_FILE_FAILED);
             //如果对话框已经关闭，则直接发给代理窗口
             if (::IsWindow(pFileItem->m_hwndReflection))
                 ::PostMessage(pFileItem->m_hwndReflection, FMG_MSG_SEND_FILE_RESULT, (WPARAM)nSendFileResultCode, (LPARAM)pResult);
             else
-                ::PostMessage(m_lpFMGClient->m_UserMgr.m_hProxyWnd, FMG_MSG_SEND_FILE_RESULT, (WPARAM)nSendFileResultCode, (LPARAM)pResult);			
-		}
-	}
+                ::PostMessage(m_lpFMGClient->m_UserMgr.m_hProxyWnd, FMG_MSG_SEND_FILE_RESULT, (WPARAM)nSendFileResultCode, (LPARAM)pResult);
+        }
+    }
 	else if(pFileItem->m_nFileType==FILE_ITEM_DOWNLOAD_USER_THUMB)
 	{
 		CString strDumyPath;
@@ -173,7 +173,7 @@ void CFileTask::HandleItem(CFileItemRequest* pFileItem)
 		//std::set<UINT>::const_iterator iter = pFileItem->m_setTargetIDs.begin();
 		UINT uTargetID = pFileItem->m_uAccountID;
 		strThumb.Format(_T("%s%u.png"), m_lpFMGClient->m_UserMgr.GetCustomUserThumbFolder().c_str(), uTargetID);
-		long nRetCode = DownloadFile3(pFileItem->m_szUtfFilePath, strThumb, TRUE, pFileItem->m_hwndReflection, pFileItem->m_hCancelEvent);
+		long nRetCode = DownloadImage(pFileItem->m_szUtfFilePath, strThumb, TRUE, pFileItem->m_hwndReflection, pFileItem->m_hCancelEvent);
 
 		if(nRetCode == FILE_DOWNLOAD_SUCCESS)
 		{		
@@ -182,27 +182,6 @@ void CFileTask::HandleItem(CFileItemRequest* pFileItem)
 		}
         else
             CIULog::Log(LOG_ERROR, __FUNCSIG__, "download user thumb [%s] failed, userid = %d.", pFileItem->m_szUtfFilePath, pFileItem->m_uAccountID);
-	}
-	//下载离线文件
-	else if(pFileItem->m_nFileType == FILE_ITEM_DOWNLOAD_CHAT_OFFLINE_FILE)
-	{
-		long nRetCode;
-		while(pFileItem->m_nRetryTimes < 3)
-		{
-            nRetCode = DownloadFile3(pFileItem->m_szUtfFilePath, pFileItem->m_szFilePath, TRUE, pFileItem->m_hwndReflection, pFileItem->m_hCancelEvent);
-            //nRetCode = m_pProtocol->DownloadFile3(pFileItem->m_szUtfFilePath, pFileItem->m_szFilePath, TRUE, pFileItem->m_hwndReflection, pFileItem->m_hCancelEvent);
-			if(nRetCode==FILE_DOWNLOAD_SUCCESS || nRetCode==FILE_DOWNLOAD_USERCANCEL)
-				break;
-
-			++pFileItem->m_nRetryTimes;
-			::Sleep(3000);
-		}
-		
-		//TODO: 应该改成PostMessage
-		if(nRetCode == FILE_DOWNLOAD_SUCCESS)
-			::SendMessage(pFileItem->m_hwndReflection, FMG_MSG_RECV_FILE_RESULT, RECV_FILE_SUCCESS, (LPARAM)pFileItem);
-		else if(nRetCode == FILE_DOWNLOAD_FAILED)
-			::SendMessage(pFileItem->m_hwndReflection, FMG_MSG_RECV_FILE_RESULT, RECV_FILE_FAILED, (LPARAM)pFileItem);
 	}
     //下载聊天图片
 	else if(pFileItem->m_nFileType == FILE_ITEM_DOWNLOAD_CHAT_IMAGE)
@@ -213,7 +192,7 @@ void CFileTask::HandleItem(CFileItemRequest* pFileItem)
 			if(pFileItem->m_szUtfFilePath[0] == NULL)
 				break;
 			//nRetCode = m_pProtocol->DownloadFile3(pFileItem->m_szUtfFilePath, pFileItem->m_szFilePath, TRUE, pFileItem->m_hwndReflection, pFileItem->m_hCancelEvent);
-            nRetCode = DownloadFile3(pFileItem->m_szUtfFilePath, pFileItem->m_szFilePath, TRUE, pFileItem->m_hwndReflection, pFileItem->m_hCancelEvent);
+            nRetCode = DownloadImage(pFileItem->m_szUtfFilePath, pFileItem->m_szFilePath, TRUE, pFileItem->m_hwndReflection, pFileItem->m_hCancelEvent);
             if(nRetCode==FILE_DOWNLOAD_SUCCESS || nRetCode==FILE_DOWNLOAD_USERCANCEL)
 				break;
 
@@ -260,7 +239,7 @@ void CFileTask::HandleItem(CFileItemRequest* pFileItem)
 	m_pCurrentTransferringItem = NULL;
 }
 
-//void CFileTask::SendConfirmMessage(const CUploadFileResult* pUploadFileResult)
+//void CImageTaskThread::SendConfirmMessage(const CUploadFileResult* pUploadFileResult)
 //{
 //	if(pUploadFileResult == NULL)
 //		return;
@@ -308,68 +287,66 @@ void CFileTask::HandleItem(CFileItemRequest* pFileItem)
 //	}
 //}
 
-long CFileTask::UploadFile(PCTSTR pszFileName, HWND hwndReflection, HANDLE hCancelEvent, CUploadFileResult& uploadFileResult)
+//TODO: 这样打开了两次文件，外部如果重试，则获得文件md5也重试了一次，重试的只是网络通信部分
+//修改掉,改成打开一次文件，重试只重试网络通信部分。
+long CImageTaskThread::UploadImage(PCTSTR pszFileName, HWND hwndReflection, HANDLE hCancelEvent, CUploadFileResult& uploadFileResult)
 {
-	_tcscpy_s(uploadFileResult.m_szLocalName, ARRAYSIZE(uploadFileResult.m_szLocalName), pszFileName);
+    _tcscpy_s(uploadFileResult.m_szLocalName, ARRAYSIZE(uploadFileResult.m_szLocalName), pszFileName);
 
-	//文件md5值
-	char szMd5[64] = { 0 };
-	//TODO: 提示用户正在校验文件
-	FileProgress* pFileProgress = NULL;
-	pFileProgress = new FileProgress();
-	memset(pFileProgress, 0, sizeof(FileProgress));
-	pFileProgress->nPercent = -1;
-	pFileProgress->nVerificationPercent = 0;
-	_tcscpy_s(pFileProgress->szDestPath, ARRAYSIZE(pFileProgress->szDestPath), pszFileName);
-	::PostMessage(hwndReflection, FMG_MSG_SEND_FILE_PROGRESS, 0, (LPARAM)pFileProgress);
-	long nRetCode = GetFileMd5ValueA(pszFileName, szMd5, ARRAYSIZE(szMd5), hwndReflection, hCancelEvent);
-	if (nRetCode == GET_FILE_MD5_FAILED)
-	{
-		CIULog::Log(LOG_ERROR, __FUNCSIG__, _T("Failed to upload file:%s as unable to get file md5."), pszFileName);
-		return FILE_UPLOAD_FAILED;
-	}
-	else if (nRetCode == GET_FILE_MD5_USERCANCEL)
-	{
-		CIULog::Log(LOG_NORMAL, __FUNCSIG__, _T("User cancel to upload file:%s."), pszFileName);
-		return FILE_UPLOAD_USERCANCEL;
-	}
+    //文件md5值
+    char szMd5[64] = { 0 };
+    //TODO: 提示用户正在校验文件
+    FileProgress* pFileProgress = NULL;
+    pFileProgress = new FileProgress();
+    memset(pFileProgress, 0, sizeof(FileProgress));
+    pFileProgress->nPercent = -1;
+    pFileProgress->nVerificationPercent = 0;
+    _tcscpy_s(pFileProgress->szDestPath, ARRAYSIZE(pFileProgress->szDestPath), pszFileName);
+    ::PostMessage(hwndReflection, FMG_MSG_SEND_FILE_PROGRESS, 0, (LPARAM)pFileProgress);
+    int64_t nFileSize = 0;
+    long nRetCode = GetFileMd5ValueA(pszFileName, szMd5, ARRAYSIZE(szMd5), nFileSize, hwndReflection, hCancelEvent);
+    if (nRetCode == GET_FILE_MD5_FAILED)
+    {
+        CIULog::Log(LOG_ERROR, __FUNCSIG__, _T("Failed to upload image:%s as unable to get file md5."), pszFileName);
+        return FILE_UPLOAD_FAILED;
+    }
+    else if (nRetCode == GET_FILE_MD5_USERCANCEL)
+    {
+        CIULog::Log(LOG_NORMAL, __FUNCSIG__, _T("User cancel to upload image:%s."), pszFileName);
+        return FILE_UPLOAD_USERCANCEL;
+    }
 
-	strcpy_s(uploadFileResult.m_szMd5, ARRAYSIZE(uploadFileResult.m_szMd5), szMd5);
+    if (nFileSize == 0)
+    {
+        CIULog::Log(LOG_ERROR, __FUNCSIG__, _T("Failed to upload image:%s as filesize is 0."), pszFileName);
+        return FILE_UPLOAD_FAILED;
+    }
 
-	HANDLE	hFile = ::CreateFile(pszFileName,
-		GENERIC_READ,
-		FILE_SHARE_READ,
-		NULL,
-		OPEN_EXISTING,
-		FILE_ATTRIBUTE_NORMAL,
-		NULL);
+    strcpy_s(uploadFileResult.m_szMd5, ARRAYSIZE(uploadFileResult.m_szMd5), szMd5);
+    uploadFileResult.m_nFileSize = nFileSize;
 
-	if (hFile == INVALID_HANDLE_VALUE)
-	{
-		CIULog::Log(LOG_ERROR, __FUNCSIG__, _T("Failed to upload file:%s as unable to open the file."), pszFileName);
-		return FILE_UPLOAD_FAILED;
-	}
+    HANDLE	hFile = ::CreateFile(pszFileName,
+        GENERIC_READ,
+        FILE_SHARE_READ,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL);
 
-	//方便hFile在函数调用结束时自动关闭
-	CAutoFileHandle autoFile(hFile);
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        CIULog::Log(LOG_ERROR, __FUNCSIG__, _T("Failed to upload image:%s as unable to open the file."), pszFileName);
+        return FILE_UPLOAD_FAILED;
+    }
 
-	//文件utf8格式名称
-	char szUtf8Name[MAX_PATH] = { 0 };
-	UnicodeToUtf8(::PathFindFileName(pszFileName), szUtf8Name, ARRAYSIZE(szUtf8Name));
+    //方便hFile在函数调用结束时自动关闭
+    CAutoFileHandle autoFile(hFile);
 
-	//文件大小
-	DWORD nFileSize = ::GetFileSize(hFile, NULL);
-	//文件太大，转换成nFileSize会溢出导致nFileSize值为负数
-	if (nFileSize < 0)
-	{
-		CIULog::Log(LOG_ERROR, __FUNCSIG__, _T("Failed to upload file:%s as file is too big."), pszFileName);
-		return FILE_UPLOAD_FAILED;
-	}
-	uploadFileResult.m_dwFileSize = nFileSize;
+    //文件utf8格式名称
+    char szUtf8Name[MAX_PATH] = { 0 };
+    UnicodeToUtf8(::PathFindFileName(pszFileName), szUtf8Name, ARRAYSIZE(szUtf8Name));
 
-    size_t offsetX = 0;
-    size_t t = 9;
-    size_t offset2 = 0;
+    int64_t offsetX = 0;
 
     while (true)
     {
@@ -378,22 +355,22 @@ long CFileTask::UploadFile(PCTSTR pszFileName, HWND hwndReflection, HANDLE hCanc
         writeStream.WriteInt32(msg_type_upload_req);
         writeStream.WriteInt32(m_seq);
         writeStream.WriteCString(szMd5, 32);
-        writeStream.WriteInt32((int32_t)offsetX);
-        writeStream.WriteInt32((int32_t)nFileSize);
-        size_t eachfilesize = 512* 1024;
+        writeStream.WriteInt64(offsetX);
+        writeStream.WriteInt64(nFileSize);
+        int64_t eachfilesize = 512 * 1024;
         if (nFileSize - offsetX < eachfilesize)
             eachfilesize = nFileSize - offsetX;
         CMiniBuffer buffer(eachfilesize);
         DWORD dwFileRead;
-        if (!::ReadFile(hFile, buffer.GetBuffer(), (DWORD)eachfilesize, &dwFileRead, NULL) || eachfilesize != dwFileRead)
+        if (!::ReadFile(hFile, buffer.GetBuffer(), (DWORD)eachfilesize, &dwFileRead, NULL) || eachfilesize != (int64_t)dwFileRead)
             break;
         string filedata;
-        filedata.append(buffer.GetBuffer(), buffer.GetSize());
+        filedata.append(buffer.GetBuffer(), (size_t)buffer.GetSize());
         writeStream.WriteString(filedata);
         writeStream.Flush();
         file_msg headerx = { outbuf.length() };
         outbuf.insert(0, (const char*)&headerx, sizeof(headerx));
-        if (!m_SocketClient->SendOnFilePort(outbuf.c_str(), outbuf.length()))
+        if (!m_SocketClient->SendOnImgPort(outbuf.c_str(), (int64_t)outbuf.length()))
             break;
 
         offsetX += eachfilesize;
@@ -402,20 +379,20 @@ long CFileTask::UploadFile(PCTSTR pszFileName, HWND hwndReflection, HANDLE hCanc
         //AtlTrace(_T("nTotalSent:%d\n"), nTotalSent);
         //AtlTrace(_T("nFileSize:%d\n"), nFileSize);
         //nTotalSent*100可能会超出long的范围，故先临时转换成__int64
-        pFileProgress->nPercent = (long)((__int64)offsetX* 100 / nFileSize);
+        pFileProgress->nPercent = (long)((__int64)offsetX * 100 / nFileSize);
         //AtlTrace(_T("pFileProgress->nPercent:%d\n"), pFileProgress->nPercent);
         _tcscpy_s(pFileProgress->szDestPath, ARRAYSIZE(pFileProgress->szDestPath), pszFileName);
         ::PostMessage(hwndReflection, FMG_MSG_SEND_FILE_PROGRESS, 0, (LPARAM)pFileProgress);
 
         file_msg header;
-        if (!m_SocketClient->RecvOnFilePort((char*)&header, sizeof(header)))
+        if (!m_SocketClient->RecvOnImgPort((char*)&header, (int64_t)sizeof(header)))
             break;
 
         CMiniBuffer recvBuf(header.packagesize);
-        if (!m_SocketClient->RecvOnFilePort(recvBuf.GetBuffer(), recvBuf.GetSize()))
+        if (!m_SocketClient->RecvOnImgPort(recvBuf.GetBuffer(), recvBuf.GetSize()))
             break;
 
-        BinaryReadStream readStream(recvBuf.GetBuffer(), recvBuf.GetSize());
+        BinaryReadStream readStream(recvBuf.GetBuffer(), (size_t)recvBuf.GetSize());
         int32_t cmd;
         if (!readStream.ReadInt32(cmd) || cmd != msg_type_upload_resp)
             break;
@@ -429,12 +406,12 @@ long CFileTask::UploadFile(PCTSTR pszFileName, HWND hwndReflection, HANDLE hCanc
         if (!readStream.ReadString(&filemd5, 0, md5length) || md5length != 32)
             break;
 
-        int32_t offset;
-        if (!readStream.ReadInt32(offset))
+        int64_t offset;
+        if (!readStream.ReadInt64(offset))
             break;
 
-        int32_t filesize;
-        if (!readStream.ReadInt32(filesize))
+        int64_t filesize;
+        if (!readStream.ReadInt64(filesize))
             break;
 
         string dummyfiledata;
@@ -459,19 +436,19 @@ long CFileTask::UploadFile(PCTSTR pszFileName, HWND hwndReflection, HANDLE hCanc
     }
 
 
-	return FILE_UPLOAD_FAILED;
+    return FILE_UPLOAD_FAILED;
 }
 
-void CFileTask::FillUploadFileResult(CUploadFileResult& uploadFileResult, PCTSTR pszLocalName, PCSTR pszRemoteName, long nFileSize, char* pszMd5)
+void CImageTaskThread::FillUploadFileResult(CUploadFileResult& uploadFileResult, PCTSTR pszLocalName, PCSTR pszRemoteName, int64_t nFileSize, char* pszMd5)
 {
 	uploadFileResult.m_bSuccessful = TRUE;
-	uploadFileResult.m_dwFileSize = (DWORD)nFileSize;
+	uploadFileResult.m_nFileSize = nFileSize;
 	_tcscpy_s(uploadFileResult.m_szLocalName, ARRAYSIZE(uploadFileResult.m_szLocalName), pszLocalName);
 	strcpy_s(uploadFileResult.m_szRemoteName, ARRAYSIZE(uploadFileResult.m_szRemoteName), pszRemoteName);
 	strcpy_s(uploadFileResult.m_szMd5, ARRAYSIZE(uploadFileResult.m_szMd5), pszMd5);
 }
 
-long CFileTask::DownloadFile3(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BOOL bOverwriteIfExist, HWND hwndReflection, HANDLE hCancelEvent)
+long CImageTaskThread::DownloadImage(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BOOL bOverwriteIfExist, HWND hwndReflection, HANDLE hCancelEvent)
 {
     //TODO: 确定是否覆盖的方法应该是根据md5值来判断本地的文件和下载的文件是否完全相同
     if (Hootina::CPath::IsFileExist(lpszDestPath) && IUGetFileSize2(lpszDestPath)>0 && !bOverwriteIfExist)
@@ -481,7 +458,7 @@ long CFileTask::DownloadFile3(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BOOL bO
     }
 
     //偏移量
-    long nOffset = 0;
+    int64_t nOffset = 0;
     long nBreakType = FILE_DOWNLOAD_SUCCESS;
 
     char* pBuffer = NULL;
@@ -501,8 +478,8 @@ long CFileTask::DownloadFile3(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BOOL bO
     }
     CAutoFileHandle autoFileHandle(hFile);
     FileProgress* pFileProgress = NULL;
-    
-    size_t offset = 0;
+
+    int64_t offset = 0;
     while (true)
     {
         std::string outbuf;
@@ -510,10 +487,10 @@ long CFileTask::DownloadFile3(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BOOL bO
         writeStream.WriteInt32(msg_type_download_req);
         writeStream.WriteInt32(m_seq);
         writeStream.WriteCString(lpszFileName, strlen(lpszFileName));
-        size_t dummyoffset = 0;
-        writeStream.WriteInt32((int32_t)dummyoffset);
-        size_t dummyfilesize = 0;
-        writeStream.WriteInt32((int32_t)dummyfilesize);
+        int64_t dummyoffset = 0;
+        writeStream.WriteInt64(dummyoffset);
+        int64_t dummyfilesize = 0;
+        writeStream.WriteInt64(dummyfilesize);
         string dummyfiledata;
         writeStream.WriteString(dummyfiledata);
         writeStream.Flush();
@@ -521,27 +498,27 @@ long CFileTask::DownloadFile3(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BOOL bO
         file_msg header = { outbuf.length() };
         outbuf.insert(0, (const char*)&header, sizeof(header));
 
-        if (!m_SocketClient->SendOnFilePort(outbuf.c_str(), outbuf.length()))
+        if (!m_SocketClient->SendOnImgPort(outbuf.c_str(), (int64_t)outbuf.length()))
         {
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
 
         file_msg recvheader;
-        if (!m_SocketClient->RecvOnFilePort((char*)&recvheader, sizeof(recvheader)))
+        if (!m_SocketClient->RecvOnImgPort((char*)&recvheader, (int64_t)sizeof(recvheader)))
         {
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
 
         CMiniBuffer buffer(recvheader.packagesize);
-        if (!m_SocketClient->RecvOnFilePort(buffer.GetBuffer(), recvheader.packagesize))
+        if (!m_SocketClient->RecvOnImgPort(buffer.GetBuffer(), recvheader.packagesize))
         {
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
 
-        BinaryReadStream readStream(buffer.GetBuffer(), recvheader.packagesize);
+        BinaryReadStream readStream(buffer.GetBuffer(), (size_t)recvheader.packagesize);
         int32_t cmd;
         if (!readStream.ReadInt32(cmd) || cmd != msg_type_download_resp)
         {
@@ -564,15 +541,15 @@ long CFileTask::DownloadFile3(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BOOL bO
             break;
         }
 
-        int32_t offset;
-        if (!readStream.ReadInt32(offset))
+        int64_t offset;
+        if (!readStream.ReadInt64(offset))
         {
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
 
-        int32_t filesize;
-        if (!readStream.ReadInt32(filesize))
+        int64_t filesize;
+        if (!readStream.ReadInt64(filesize))
         {
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
@@ -593,13 +570,13 @@ long CFileTask::DownloadFile3(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BOOL bO
             break;
         }
 
-        offset += filedata.length();
+        offset += (int64_t)filedata.length();
 
         //！！！！TODO: 对于非下载聊天图片，这块内存因为未释放而产生内存泄露！！！！
         pFileProgress = new FileProgress();
         memset(pFileProgress, 0, sizeof(FileProgress));
         _tcscpy_s(pFileProgress->szDestPath, ARRAYSIZE(pFileProgress->szDestPath), lpszDestPath);
-        pFileProgress->nPercent = long(((__int64)offset* 100) / filesize);
+        pFileProgress->nPercent = long(((__int64)offset * 100) / filesize);
         ::PostMessage(hwndReflection, FMG_MSG_RECV_FILE_PROGRESS, 0, (LPARAM)(pFileProgress));
 
 
@@ -625,7 +602,7 @@ long CFileTask::DownloadFile3(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BOOL bO
     else
     {
         if (nBreakType == FILE_DOWNLOAD_FAILED)
-            CIULog::Log(LOG_ERROR, _T("Failed to download file: %s."), lpszDestPath);
+            CIULog::Log(LOG_ERROR, _T("Failed to download image: %s."), lpszDestPath);
         else
             CIULog::Log(LOG_NORMAL, __FUNCSIG__, _T("User canceled to download file: %s."), lpszDestPath);
         //为了能删除下载的半成品，显式关闭文件句柄
@@ -636,161 +613,10 @@ long CFileTask::DownloadFile3(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BOOL bO
     return nBreakType;
 }
 
-BOOL CFileTask::UploadUserThumb(PCTSTR pszFileName, HWND hwndReflection, CUploadFileResult& uploadFileResult)
+BOOL CImageTaskThread::UploadUserThumb(PCTSTR pszFileName, HWND hwndReflection, CUploadFileResult& uploadFileResult)
 {
-    _tcscpy_s(uploadFileResult.m_szLocalName, ARRAYSIZE(uploadFileResult.m_szLocalName), pszFileName);
+    if (UploadImage(pszFileName, hwndReflection, NULL, uploadFileResult) != FILE_UPLOAD_SUCCESS)
+        return FALSE;
 
-    //文件md5值
-    char szMd5[64] = { 0 };
-    //TODO: 提示用户正在校验文件
-    FileProgress* pFileProgress = NULL;
-    pFileProgress = new FileProgress();
-    memset(pFileProgress, 0, sizeof(FileProgress));
-    pFileProgress->nPercent = -1;
-    pFileProgress->nVerificationPercent = 0;
-    _tcscpy_s(pFileProgress->szDestPath, ARRAYSIZE(pFileProgress->szDestPath), pszFileName);
-    ::PostMessage(hwndReflection, FMG_MSG_SEND_FILE_PROGRESS, 0, (LPARAM)pFileProgress);
-    long nRetCode = GetFileMd5ValueA(pszFileName, szMd5, ARRAYSIZE(szMd5), hwndReflection, NULL);
-    if (nRetCode == GET_FILE_MD5_FAILED)
-    {
-        CIULog::Log(LOG_ERROR, __FUNCSIG__, _T("Failed to upload file:%s as unable to get file md5."), pszFileName);
-        return UPLOAD_USER_THUMB_RESULT_FAILED;
-    }
-    else if (nRetCode == GET_FILE_MD5_USERCANCEL)
-    {
-        CIULog::Log(LOG_NORMAL, __FUNCSIG__, _T("User cancel to upload file:%s."), pszFileName);
-        return FILE_UPLOAD_USERCANCEL;
-    }
-
-    strcpy_s(uploadFileResult.m_szMd5, ARRAYSIZE(uploadFileResult.m_szMd5), szMd5);
-
-    HANDLE	hFile = ::CreateFile(pszFileName,
-        GENERIC_READ,
-        FILE_SHARE_READ,
-        NULL,
-        OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL,
-        NULL);
-
-    if (hFile == INVALID_HANDLE_VALUE)
-    {
-        CIULog::Log(LOG_ERROR, __FUNCSIG__, _T("Failed to upload file:%s as unable to open the file."), pszFileName);
-        return UPLOAD_USER_THUMB_RESULT_FAILED;
-    }
-
-    //方便hFile在函数调用结束时自动关闭
-    CAutoFileHandle autoFile(hFile);
-
-    //文件utf8格式名称
-    char szUtf8Name[MAX_PATH] = { 0 };
-    UnicodeToUtf8(::PathFindFileName(pszFileName), szUtf8Name, ARRAYSIZE(szUtf8Name));
-
-    //文件大小
-    DWORD nFileSize = ::GetFileSize(hFile, NULL);
-    //文件太大，转换成nFileSize会溢出导致nFileSize值为负数
-    if (nFileSize < 0)
-    {
-        CIULog::Log(LOG_ERROR, __FUNCSIG__, _T("Failed to upload file:%s as file is too big."), pszFileName);
-        return UPLOAD_USER_THUMB_RESULT_FAILED;
-    }
-    uploadFileResult.m_dwFileSize = nFileSize;
-
-    size_t offsetX = 0;
-    size_t t = 9;
-    size_t offset2 = 0;
-
-    while (true)
-    {
-        std::string outbuf;
-        BinaryWriteStream writeStream(&outbuf);
-        writeStream.WriteInt32(msg_type_upload_req);
-        writeStream.WriteInt32(m_seq);
-        writeStream.WriteCString(szMd5, 32);
-        writeStream.WriteInt32((int32_t)offsetX);
-        writeStream.WriteInt32((int32_t)nFileSize);
-        size_t eachfilesize = 512* 1024;
-        if (nFileSize - offsetX < eachfilesize)
-            eachfilesize = nFileSize - offsetX;
-        CMiniBuffer buffer(eachfilesize);
-        DWORD dwFileRead;
-        if (!::ReadFile(hFile, buffer.GetBuffer(), (DWORD)eachfilesize, &dwFileRead, NULL) || eachfilesize != dwFileRead)
-            break;
-        string filedata;
-        filedata.append(buffer.GetBuffer(), buffer.GetSize());
-        writeStream.WriteString(filedata);
-        writeStream.Flush();
-        file_msg headerx = { outbuf.length() };
-        outbuf.insert(0, (const char*)&headerx, sizeof(headerx));
-        if (!m_SocketClient->SendOnFilePort(outbuf.c_str(), outbuf.length()))
-            break;
-
-        offsetX += eachfilesize;
-        pFileProgress = new FileProgress();
-        memset(pFileProgress, 0, sizeof(FileProgress));
-        //AtlTrace(_T("nTotalSent:%d\n"), nTotalSent);
-        //AtlTrace(_T("nFileSize:%d\n"), nFileSize);
-        //nTotalSent*100可能会超出long的范围，故先临时转换成__int64
-        pFileProgress->nPercent = (long)((__int64)offsetX* 100 / nFileSize);
-        //AtlTrace(_T("pFileProgress->nPercent:%d\n"), pFileProgress->nPercent);
-        _tcscpy_s(pFileProgress->szDestPath, ARRAYSIZE(pFileProgress->szDestPath), pszFileName);
-        ::PostMessage(hwndReflection, FMG_MSG_SEND_FILE_PROGRESS, 0, (LPARAM)pFileProgress);
-
-        file_msg header;
-        if (!m_SocketClient->RecvOnFilePort((char*)&header, sizeof(header)))
-            break;
-
-        CMiniBuffer recvBuf(header.packagesize);
-        if (!m_SocketClient->RecvOnFilePort(recvBuf.GetBuffer(), recvBuf.GetSize()))
-            break;
-
-        BinaryReadStream readStream(recvBuf.GetBuffer(), recvBuf.GetSize());
-        int32_t cmd;
-        if (!readStream.ReadInt32(cmd) || cmd != msg_type_upload_resp)
-            break;
-
-        //int seq;
-        if (!readStream.ReadInt32(m_seq))
-            break;
-
-        std::string filemd5;
-        size_t md5length;
-        if (!readStream.ReadString(&filemd5, 0, md5length) || md5length != 32)
-            break;
-
-        int32_t offset;
-        if (!readStream.ReadInt32(offset))
-            break;
-
-        int32_t filesize;
-        if (!readStream.ReadInt32(filesize))
-            break;
-
-        string dummyfiledata;
-        size_t filedatalength;
-        if (!readStream.ReadString(&dummyfiledata, 0, filedatalength) || filedatalength != 0)
-            break;
-
-        if (offset == -1 && filesize == -1)
-        {
-            FillUploadFileResult(uploadFileResult, pszFileName, filemd5.c_str(), nFileSize, szMd5);
-            CIULog::Log(LOG_NORMAL, __FUNCSIG__, _T("Succeed to upload file:%s as there already exist file on server."), pszFileName);
-
-            //TODO: 如果外部不释放则会有内存泄露
-            pFileProgress = new FileProgress();
-            memset(pFileProgress, 0, sizeof(FileProgress));
-            pFileProgress->nPercent = 100;
-            _tcscpy_s(pFileProgress->szDestPath, ARRAYSIZE(pFileProgress->szDestPath), pszFileName);
-            ::PostMessage(hwndReflection, FMG_MSG_SEND_FILE_PROGRESS, 0, (LPARAM)pFileProgress);
-            return UPLOAD_USER_THUMB_RESULT_SUCCESS;
-        }
-
-    }
-
-
-    return UPLOAD_USER_THUMB_RESULT_FAILED;
-}
-
-BOOL CFileTask::DownloadFileSynchronously(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BOOL bOverwriteIfExist)
-{
-    return DownloadFile3(lpszFileName, lpszDestPath, bOverwriteIfExist, NULL, NULL) == FILE_DOWNLOAD_SUCCESS;
+    return TRUE;
 }

@@ -663,8 +663,36 @@ BOOL CBuddyChatDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 
 	SetHotRgn();
 
+    //FIXME: win7用管理员权限启动,发送富文本还是没法接收窗口拖拽,其他窗口可以
+    if (IsWindowsVistaOrGreater())
+    {
+        //win 7管理员权限启动 默认是从UIPI【用户界面特权隔离】移除WM_DROPFILES消息的,
+        //这里去除这种限制
+        //see: http://blog.csdn.net/whatday/article/details/44278605
+        //see: https://msdn.microsoft.com/EN-US/library/windows/desktop/ms632675(v=vs.85).aspx
+        typedef BOOL(WINAPI* ChangeWindowMessageFilterOkFn)(HWND, UINT, DWORD, PCHANGEFILTERSTRUCT);
+
+        HMODULE hModUser32 = LoadLibrary(_T("user32.dll"));
+        if (hModUser32 != NULL) 
+        { 
+            ChangeWindowMessageFilterOkFn pfnChangeWindowMessageFilter = (ChangeWindowMessageFilterOkFn)GetProcAddress(hModUser32, "ChangeWindowMessageFilterEx");
+            if (pfnChangeWindowMessageFilter != NULL)
+            {
+                //MSGFLT_ADD = 1
+                //WM_COPYGLOBALDATA = 0x0049
+                pfnChangeWindowMessageFilter(m_hWnd, WM_DROPFILES, MSGFLT_ALLOW, NULL);
+                pfnChangeWindowMessageFilter(m_hWnd, 0x0049, MSGFLT_ALLOW, NULL);
+
+                //pfnChangeWindowMessageFilter(m_richSend.m_hWnd, WM_DROPFILES, MSGFLT_ALLOW, NULL);
+                //pfnChangeWindowMessageFilter(m_richSend.m_hWnd, 0x0049, MSGFLT_ALLOW, NULL);
+            }
+            FreeLibrary(hModUser32);       
+        }
+    }
+
 	//允许拖拽文件进窗口
 	::DragAcceptFiles(m_hWnd, TRUE); 
+    //::DragAcceptFiles(m_richSend.m_hWnd, TRUE);
 	//PostMessage(WM_SETDLGINITFOCUS, 0, 0);		// 设置对话框初始焦点
 	SetTimer(1001, 300, NULL);
 	
@@ -1014,12 +1042,12 @@ BOOL CBuddyChatDlg::HandleFileDragResult(PCTSTR lpszFileName)
 	    strFileExtension==_T("bmp")  ||
 		strFileExtension==_T("gif") )
 	{
-		UINT64 nFileSize = IUGetFileSize2(lpszFileName);
-		if(nFileSize > MAX_CHAT_IMAGE_SIZE)
-		{
-			::MessageBox(m_hWnd, _T("图片大小超过10M，请使用截图工具。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
-			return FALSE;
-		}
+		//UINT64 nFileSize = IUGetFileSize2(lpszFileName);
+		//if(nFileSize > MAX_CHAT_IMAGE_SIZE)
+		//{
+		//	::MessageBox(m_hWnd, _T("图片大小超过10M，请使用文件发送。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		//	return FALSE;
+		//}
 		
 		_RichEdit_InsertFace(m_richSend.m_hWnd, lpszFileName, -1, -1);
 		m_richSend.SetFocus();
@@ -2000,11 +2028,11 @@ BOOL CBuddyChatDlg::SendOfflineFile(PCTSTR pszFileName)
 		return FALSE;
 
 	UINT64 nFileSize = IUGetFileSize2(pszFileName);
-	if(nFileSize > (UINT64)MAX_OFFLINE_FILE_SIZE)
-	{
-		::MessageBox(m_hWnd, _T("离线文件暂且不支持大小超过2G的文件。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
-		return FALSE;
-	}
+	//if(nFileSize > (UINT64)MAX_OFFLINE_FILE_SIZE)
+	//{
+	//	::MessageBox(m_hWnd, _T("离线文件暂且不支持大小超过2G的文件。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+	//	return FALSE;
+	//}
 
 	CString strSavePath(pszFileName);
 	CString strExtName(Hootina::CPath::GetExtension(strSavePath).c_str());
@@ -2023,7 +2051,7 @@ BOOL CBuddyChatDlg::SendOfflineFile(PCTSTR pszFileName)
 	//}
 	//::SendMessage(m_btnMsgLog.m_hWnd, BM_CLICK, 0, 0);
 	//TODO: 奇怪为什么对于大文件，总是不能激活文件输出Tab，因而导致文件传输按钮无法响应点击。
-	if(m_bMsgLogWindowVisible)
+	//if(m_bMsgLogWindowVisible)
 		m_richMsgLog.ShowWindow(SW_HIDE);
 	DisplayFileTransfer(TRUE);
 	
@@ -2814,9 +2842,9 @@ LRESULT CBuddyChatDlg::OnBtn_FileTransfer(LPNMHDR pnmh)
 	if(pNMHDREx->btnArea == BTN_CANCEL)
 	{
 		CFileItemRequest* pItemRequest = m_FileTransferCtrl.GetFileItemRequestByID(pNMHDREx->nID);
-        if (pItemRequest != NULL)
+        if (pItemRequest == NULL)
             return 0;
-			m_lpFMGClient->m_FileTask.RemoveItem(pItemRequest);
+		m_lpFMGClient->m_FileTask.RemoveItem(pItemRequest);
 		
 		if(pNMHDREx->nTargetType == RECV_TYPE)
 		{
@@ -3022,7 +3050,7 @@ BOOL CBuddyChatDlg::Init()
 	// 接收消息富文本框控件
 	CRect rcRecv(6, 107, 583, 430);
 	DWORD dwStyle = WS_CHILD|WS_VISIBLE|WS_TABSTOP|WS_CLIPSIBLINGS|WS_CLIPCHILDREN|ES_MULTILINE|ES_AUTOVSCROLL|WS_VSCROLL|ES_WANTRETURN;
-	m_richRecv.Create(m_hWnd, rcRecv, NULL, dwStyle, WS_EX_TRANSPARENT, ID_RICHEDIT_RECV);
+    m_richRecv.Create(m_hWnd, rcRecv, NULL, dwStyle, WS_EX_TRANSPARENT, ID_RICHEDIT_RECV);
 	m_richRecv.SetTransparent(TRUE, hDlgBgDC);	
 	DWORD dwMask = m_richRecv.GetEventMask();
 	dwMask = dwMask | ENM_LINK  | ENM_MOUSEEVENTS | ENM_SCROLLEVENTS | ENM_KEYEVENTS;
@@ -3031,7 +3059,7 @@ BOOL CBuddyChatDlg::Init()
 	m_richRecv.SetReadOnly();
 
 	CRect rcSend(6, 405, 603, 495);
-	m_richSend.Create(m_hWnd, rcSend, NULL, dwStyle, WS_EX_TRANSPARENT, ID_RICHEDIT_SEND);
+    m_richSend.Create(m_hWnd, rcSend, NULL, dwStyle, WS_EX_TRANSPARENT, ID_RICHEDIT_SEND);
 	m_richSend.SetTransparent(TRUE, hDlgBgDC);
 
 	//接收richedit与midToolbar之间的分隔条
@@ -3666,8 +3694,7 @@ void CBuddyChatDlg::InsertAutoReplyContent()
 	wsprintf(szFontInfo, lpFontFmt, fontInfo.m_strName.c_str(), fontInfo.m_nSize, szColor, fontInfo.m_bBold, fontInfo.m_bItalic, fontInfo.m_bUnderLine);
 
 	strAutoReplyContent += szFontInfo;
-    //m_lpFMGClient->SendBuddyMsg(m_LoginUserId, m_strUserName.GetString(), m_UserId, m_strBuddyName.GetString(), nAutoReplyTime, strAutoReplyContent, m_hWnd);
-    //m_lpFMGClient->SendBuddyMsg(m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID, m_nUTalkUin, nAutoReplyTime, strAutoReplyContent.GetString(), m_hWnd);
+    m_lpFMGClient->SendBuddyMsg(m_LoginUserId, m_strUserName.GetString(), m_UserId, m_strBuddyName.GetString(), nAutoReplyTime, strAutoReplyContent.GetString(), m_hWnd);
 }
 void CBuddyChatDlg::AddMsgToMsgLogEdit(std::vector<CContent*>& arrContent)
 {
@@ -4440,9 +4467,9 @@ void CBuddyChatDlg::SendConfirmMessage(const CUploadFileResult* pUploadFileResul
         //    strImageAcquireMsg.Format("{\"msgType\":2,\"time\":%llu,\"clientType\":1,\"content\":[{\"pic\":[\"%s\",\"\",%u,%d,%d]}]}", nTime, szUtf8FileName, pUploadFileResult->m_dwFileSize, nWidth, nHeight);
 
         if (pUploadFileResult->m_bSuccessful)
-            strImageAcquireMsg.Format("{\"msgType\":2,\"time\":%llu,\"clientType\":1,\"content\":[{\"pic\":[\"%s\",\"%s\",%u,%d,%d]}]}", nTime, szUtf8FileName, pUploadFileResult->m_szRemoteName, pUploadFileResult->m_dwFileSize, nWidth, nHeight);
+            strImageAcquireMsg.Format("{\"msgType\":2,\"time\":%llu,\"clientType\":1,\"content\":[{\"pic\":[\"%s\",\"%s\",%lld,%d,%d]}]}", nTime, szUtf8FileName, pUploadFileResult->m_szRemoteName, pUploadFileResult->m_nFileSize, nWidth, nHeight);
         else
-            strImageAcquireMsg.Format("{\"msgType\":2,\"time\":%llu,\"clientType\":1,\"content\":[{\"pic\":[\"%s\",\"\",%u,%d,%d]}]}", nTime, szUtf8FileName, pUploadFileResult->m_dwFileSize, nWidth, nHeight);
+            strImageAcquireMsg.Format("{\"msgType\":2,\"time\":%llu,\"clientType\":1,\"content\":[{\"pic\":[\"%s\",\"\",%lld,%d,%d]}]}", nTime, szUtf8FileName, pUploadFileResult->m_nFileSize, nWidth, nHeight);
 
         long nBodyLength = strImageAcquireMsg.GetLength() + 1;
         char* pszMsgBody = new char[nBodyLength];

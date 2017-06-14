@@ -22,7 +22,8 @@ CFlamingoClient::CFlamingoClient(void) :
 m_SocketClient(&m_RecvMsgThread),
 m_SendMsgThread(&m_SocketClient),
 m_RecvMsgThread(&m_SocketClient),
-m_FileTask(&m_SocketClient)
+m_FileTask(&m_SocketClient),
+m_ImageTask(&m_SocketClient)
 {
 	m_ServerTime = 0;
 
@@ -43,6 +44,7 @@ m_FileTask(&m_SocketClient)
     m_RecvMsgThread.m_lpUserMgr = &m_UserMgr;
     m_RecvMsgThread.m_pFMGClient = this;
     m_FileTask.m_lpFMGClient = this;
+    m_ImageTask.m_lpFMGClient = this;
 }
 
 CFlamingoClient::~CFlamingoClient(void)
@@ -65,6 +67,7 @@ BOOL CFlamingoClient::Init()
 	m_SendMsgThread.m_lpFMGClient = this;
 
 	m_FileTask.Start();
+    m_ImageTask.Start();
 
 	//CSendFileThread::GetInstance().AttachSocketClient(&m_SocketClient);
     //CSendFileThread::GetInstance().Start();
@@ -81,11 +84,13 @@ void CFlamingoClient::UnInit()
     m_SendMsgThread.Stop();
     m_RecvMsgThread.Stop();
 	m_FileTask.Stop();
+    m_ImageTask.Stop();
 
     m_SocketClient.Join();
     m_SendMsgThread.Join();
     m_RecvMsgThread.Join();
 	m_FileTask.Join();
+    m_ImageTask.Join();
 }
 
 void CFlamingoClient::SetServer(PCTSTR pszServer)
@@ -676,6 +681,7 @@ BOOL CFlamingoClient::SendSessMsg(UINT nGroupId, UINT nToUin, time_t nTime, LPCT
 		return FALSE;
 
 	//return m_SendMsgTask.AddSessMsg(nGroupId, nToUin, nTime, lpMsg);
+    return FALSE;
 }
 
 
@@ -1082,7 +1088,7 @@ void CFlamingoClient::OnUpdateUserBasicInfo(UINT message, WPARAM wParam, LPARAM 
 						pFileItem->m_nFileType = FILE_ITEM_DOWNLOAD_USER_THUMB;
 						pFileItem->m_uAccountID = iter->uAccountID;
 						strcpy_s(pFileItem->m_szUtfFilePath, ARRAYSIZE(pFileItem->m_szUtfFilePath), iter->customFace);
-						m_FileTask.AddItem(pFileItem);
+                        m_ImageTask.AddItem(pFileItem);
 					}
 				}
 				else
@@ -1092,7 +1098,7 @@ void CFlamingoClient::OnUpdateUserBasicInfo(UINT message, WPARAM wParam, LPARAM 
 					pFileItem->m_nFileType = FILE_ITEM_DOWNLOAD_USER_THUMB;
 					pFileItem->m_uAccountID = iter->uAccountID;
 					strcpy_s(pFileItem->m_szUtfFilePath, ARRAYSIZE(pFileItem->m_szUtfFilePath), iter->customFace);
-					m_FileTask.AddItem(pFileItem);
+                    m_ImageTask.AddItem(pFileItem);
 				}
 			}
 
@@ -1196,7 +1202,7 @@ void CFlamingoClient::OnUpdateGroupBasicInfo(UINT message, WPARAM wParam, LPARAM
                     pFileItem->m_nFileType = FILE_ITEM_DOWNLOAD_USER_THUMB;
                     pFileItem->m_uAccountID = iter->uAccountID;
                     strcpy_s(pFileItem->m_szUtfFilePath, ARRAYSIZE(pFileItem->m_szUtfFilePath), iter->customFace);
-                    m_FileTask.AddItem(pFileItem);
+                    m_ImageTask.AddItem(pFileItem);
                 }
             }
             else
@@ -1206,7 +1212,7 @@ void CFlamingoClient::OnUpdateGroupBasicInfo(UINT message, WPARAM wParam, LPARAM
                 pFileItem->m_nFileType = FILE_ITEM_DOWNLOAD_USER_THUMB;
                 pFileItem->m_uAccountID = iter->uAccountID;
                 strcpy_s(pFileItem->m_szUtfFilePath, ARRAYSIZE(pFileItem->m_szUtfFilePath), iter->customFace);
-                m_FileTask.AddItem(pFileItem);
+                m_ImageTask.AddItem(pFileItem);
             }
         }
 
@@ -1443,9 +1449,9 @@ void CFlamingoClient::OnSendConfirmMessage(UINT message, WPARAM wParam, LPARAM l
         //    strImageAcquireMsg.Format("{\"msgType\":2,\"time\":%llu,\"clientType\":1,\"content\":[{\"pic\":[\"%s\",\"\",%u,%d,%d]}]}", nTime, szUtf8FileName, pUploadFileResult->m_dwFileSize, nWidth, nHeight);
 
         if (pUploadFileResult->m_bSuccessful)
-            strImageAcquireMsg.Format("{\"msgType\":2,\"time\":%llu,\"clientType\":1,\"content\":[{\"pic\":[\"%s\",\"%s\",%u,%d,%d]}]}", nTime, szUtf8FileName, pUploadFileResult->m_szRemoteName, pUploadFileResult->m_dwFileSize, nWidth, nHeight);
+            strImageAcquireMsg.Format("{\"msgType\":2,\"time\":%lld,\"clientType\":1,\"content\":[{\"pic\":[\"%s\",\"%s\",%u,%d,%d]}]}", nTime, szUtf8FileName, pUploadFileResult->m_szRemoteName, pUploadFileResult->m_nFileSize, nWidth, nHeight);
         else
-            strImageAcquireMsg.Format("{\"msgType\":2,\"time\":%llu,\"clientType\":1,\"content\":[{\"pic\":[\"%s\",\"\",%u,%d,%d]}]}", nTime, szUtf8FileName, pUploadFileResult->m_dwFileSize, nWidth, nHeight);
+            strImageAcquireMsg.Format("{\"msgType\":2,\"time\":%lld,\"clientType\":1,\"content\":[{\"pic\":[\"%s\",\"\",%u,%d,%d]}]}", nTime, szUtf8FileName, pUploadFileResult->m_nFileSize, nWidth, nHeight);
 
         long nBodyLength = strImageAcquireMsg.GetLength() + 1;
         char* pszMsgBody = new char[nBodyLength];

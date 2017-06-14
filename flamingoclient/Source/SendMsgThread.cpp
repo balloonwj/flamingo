@@ -317,6 +317,7 @@ BOOL CSendMsgThread::HandleHeartbeatMessage(const CHeartbeatMessageRequest* pHea
 		return FALSE;
 
 	//return m_pProtocol->RequestHeartbeat();
+    return FALSE;
 }
 
 void CSendMsgThread::HandleUpdateLogonUserInfoMessage(const CUpdateLogonUserInfoRequest* pRequest)
@@ -941,7 +942,7 @@ BOOL CSendMsgThread::SendBuddyMsg(CMsgItem* lpMsgItem)
 		pFileItemRequest->m_setTargetIDs.insert(lpMsg->m_nToUin);
 		pFileItemRequest->m_nFileType = FILE_ITEM_UPLOAD_CHAT_IMAGE;
 
-        m_lpFMGClient->m_FileTask.AddItem(pFileItemRequest);
+        m_lpFMGClient->m_ImageTask.AddItem(pFileItemRequest);
 
 		lpContent->m_CFaceInfo.m_strFileName = Hootina::CPath::GetFileName(strDestPath);
 	}
@@ -1002,7 +1003,7 @@ BOOL CSendMsgThread::SendMultiMsg(CMsgItem* lpMsgItem)
 		pFileItemRequest->m_nFileType = FILE_ITEM_UPLOAD_CHAT_IMAGE;
 		pFileItemRequest->m_setTargetIDs.insert(lpMsgItem->m_arrTargetIDs.begin(), lpMsgItem->m_arrTargetIDs.end());
 
-		m_lpFMGClient->m_FileTask.AddItem(pFileItemRequest);
+        m_lpFMGClient->m_ImageTask.AddItem(pFileItemRequest);
 
 		lpContent->m_CFaceInfo.m_strFileName = Hootina::CPath::GetFileName(strDestPath);
 	}

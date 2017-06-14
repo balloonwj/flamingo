@@ -96,6 +96,7 @@
     <ClCompile Include="fileserversrc\main.cpp" />
     <ClCompile Include="fileserversrc\MD5.cpp" />
     <ClCompile Include="fileserversrc\TcpSession.cpp" />
+    <ClCompile Include="imgserversrc\main.cpp" />
     <ClCompile Include="jsoncpp-0.5.0\json_reader.cpp" />
     <ClCompile Include="jsoncpp-0.5.0\json_value.cpp" />
     <ClCompile Include="jsoncpp-0.5.0\json_writer.cpp" />
@@ -190,6 +191,9 @@
     <Text Include="CMakeLists.txt" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="chatserver.conf" />
+    <None Include="fileserver.conf" />
+    <None Include="imgserver.conf" />
     <None Include="jsoncpp-0.5.0\json_internalarray.inl" />
     <None Include="jsoncpp-0.5.0\json_internalmap.inl" />
     <None Include="jsoncpp-0.5.0\json_valueiterator.inl" />
