@@ -134,6 +134,12 @@ bool ClientSession::Process(const std::shared_ptr<TcpConnection>& conn, const ch
             OnOperateFriendResponse(data, conn);
         }
             break;
+        //用户主动更改自己在线状态
+        case msg_type_userstatuschange:
+        {
+        	OnChangeUserStatusResponse(data, conn);
+        }
+            break;
 
         //更新用户信息
         case msg_type_updateuserinfo:
@@ -377,7 +383,7 @@ void ClientSession::OnLoginResponse(const std::string& data, const std::shared_p
         std::shared_ptr<ClientSession> targetSession;
         imserver.GetSessionByUserId(targetSession, iter.userid);
         if (targetSession)
-            targetSession->SendUserStatusChangeMsg(m_userinfo.userid, 1);
+            targetSession->SendUserStatusChangeMsg(m_userinfo.userid, 1, m_userinfo.status);
     }  
 }
 
@@ -386,11 +392,11 @@ void ClientSession::OnGetFriendListResponse(const std::shared_ptr<TcpConnection>
     std::list<User> friends;
     Singleton<UserManager>::Instance().GetFriendInfoByUserId(m_userinfo.userid, friends);
 	std::string strUserInfo;
-    bool userOnline = false;
+    int32_t userstatus = 0;
     IMServer& imserver = Singleton<IMServer>::Instance();
     for (const auto& iter : friends)
     {	
-        userOnline = imserver.IsUserSessionExsit(iter.userid);
+        userstatus = imserver.GetUserStatusByUserId(iter.userid);
         /*
         {"code": 0, "msg": "ok", "userinfo":[{"userid": 1,"username":"qqq, 
         "nickname":"qqq, "facetype": 0, "customface":"", "gender":0, "birthday":19900101, 
@@ -401,7 +407,7 @@ void ClientSession::OnGetFriendListResponse(const std::shared_ptr<TcpConnection>
                          << "\", \"facetype\": " << iter.facetype << ", \"customface\":\"" << iter.customface << "\", \"gender\":" << iter.gender
                          << ", \"birthday\":" << iter.birthday << ", \"signature\":\"" << iter.signature << "\", \"address\": \"" << iter.address
                          << "\", \"phonenumber\": \"" << iter.phonenumber << "\", \"mail\":\"" << iter.mail << "\", \"clienttype\": 1, \"status\":"
-                         << (userOnline ? 1 : 0) << "}";
+                         << userstatus << "}";
 
         strUserInfo += osSingleUserInfo.str();
         strUserInfo += ",";
@@ -421,6 +427,45 @@ void ClientSession::OnGetFriendListResponse(const std::shared_ptr<TcpConnection>
     LOG_INFO << "Response to client: cmd=msg_type_getofriendlist, data=" << os.str() << ", userid=" << m_userinfo.userid;
 
     Send(outbuf);
+}
+
+void ClientSession::OnChangeUserStatusResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn)
+{
+    //{"type": 1, "onlinestatus" : 1}
+    Json::Reader JsonReader;
+    Json::Value JsonRoot;
+    if (!JsonReader.parse(data, JsonRoot))
+    {
+        LOG_WARN << "invalid json: " << data << ", userid: " << m_userinfo.userid << ", client: " << conn->peerAddress().toIpPort();
+        return;
+    }
+
+    if (!JsonRoot["type"].isInt() || !JsonRoot["onlinestatus"].isInt())
+    {
+        LOG_WARN << "invalid json: " << data << ", userid: " << m_userinfo.userid << ", client: " << conn->peerAddress().toIpPort();
+        return;
+    }
+
+    int newstatus = JsonRoot["onlinestatus"].asInt();
+    if (m_userinfo.status == newstatus)
+        return;
+
+    //更新下当前用户的状态
+    m_userinfo.status = newstatus;
+
+    //TODO: 应答下自己告诉客户端修改成功
+
+    IMServer& imserver = Singleton<IMServer>::Instance();
+    std::list<User> friends;
+    Singleton<UserManager>::Instance().GetFriendInfoByUserId(m_userinfo.userid, friends);
+    for (const auto& iter : friends)
+    {
+        //先看目标用户是否在线
+        std::shared_ptr<ClientSession> targetSession;
+        imserver.GetSessionByUserId(targetSession, iter.userid);
+        if (targetSession)
+            targetSession->SendUserStatusChangeMsg(m_userinfo.userid, 1, newstatus);
+    }
 }
 
 void ClientSession::OnFindUserResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn)
@@ -849,11 +894,11 @@ void ClientSession::OnGetGroupMembersResponse(const std::string& data, const std
     std::list<User> friends;
     Singleton<UserManager>::Instance().GetFriendInfoByUserId(groupid, friends);
     std::string strUserInfo;
-    bool userOnline = false;
+    int userOnline = 0;
     IMServer& imserver = Singleton<IMServer>::Instance();
     for (const auto& iter : friends)
     {
-        userOnline = imserver.IsUserSessionExsit(iter.userid);
+        userOnline = imserver.GetUserStatusByUserId(iter.userid);
         /*
         {"code": 0, "msg": "ok", "members":[{"userid": 1,"username":"qqq,
         "nickname":"qqq, "facetype": 0, "customface":"", "gender":0, "birthday":19900101,
@@ -864,7 +909,7 @@ void ClientSession::OnGetGroupMembersResponse(const std::string& data, const std
             << "\", \"facetype\": " << iter.facetype << ", \"customface\":\"" << iter.customface << "\", \"gender\":" << iter.gender
             << ", \"birthday\":" << iter.birthday << ", \"signature\":\"" << iter.signature << "\", \"address\": \"" << iter.address
             << "\", \"phonenumber\": \"" << iter.phonenumber << "\", \"mail\":\"" << iter.mail << "\", \"clienttype\": 1, \"status\":"
-            << (userOnline ? 1 : 0) << "}";
+            << userOnline << "}";
 
         strUserInfo += osSingleUserInfo.str();
         strUserInfo += ",";
@@ -886,13 +931,16 @@ void ClientSession::OnGetGroupMembersResponse(const std::string& data, const std
     Send(outbuf);
 }
 
-void ClientSession::SendUserStatusChangeMsg(int32_t userid, int type)
+void ClientSession::SendUserStatusChangeMsg(int32_t userid, int type, int status/* = 0*/)
 {
     string data; 
     //用户上线
     if (type == 1)
     {
-        data = "{\"type\": 1, \"onlinestatus\": 1}";
+        char szData[32];
+        memset(szData, 0, sizeof(szData));
+        sprintf(szData, "{ \"type\": 1, \"onlinestatus\": %d}", status);
+        data = szData;
     }
     //用户下线
     else if (type == 2)

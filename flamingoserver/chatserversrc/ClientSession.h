@@ -40,7 +40,12 @@ public:
         return m_userinfo.clienttype;
     }
 
-    void SendUserStatusChangeMsg(int32_t userid, int type);
+    int32_t GetUserStatus()
+    {
+        return m_userinfo.status;
+    }
+
+    void SendUserStatusChangeMsg(int32_t userid, int type, int status = 0);
 
 private:
     bool Process(const std::shared_ptr<TcpConnection>& conn, const char* inbuf, size_t length);
@@ -50,6 +55,7 @@ private:
     void OnLoginResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
     void OnGetFriendListResponse(const std::shared_ptr<TcpConnection>& conn);
     void OnFindUserResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
+    void OnChangeUserStatusResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
     void OnOperateFriendResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
     void OnAddGroupResponse(int32_t groupId, const std::shared_ptr<TcpConnection>& conn);
     void OnUpdateUserInfoResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);

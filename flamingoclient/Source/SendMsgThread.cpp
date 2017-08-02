@@ -119,6 +119,10 @@ void CSendMsgThread::HandleItem(CNetData* pNetData)
 		HandleUserBasicInfo((const CUserBasicInfoRequest*)pNetData);
 		break;
 
+    case NET_DATA_CHANGE_STATUS:
+        HandleChangeUserStatus((const CChangeUserStatusRequest*)pNetData);
+        break;
+
     case NET_DATA_GROUP_BASIC_INFO:
         HandleGroupBasicInfo((const CGroupBasicInfoRequest*)pNetData);
         break;
@@ -237,6 +241,25 @@ void CSendMsgThread::HandleUserBasicInfo(const CUserBasicInfoRequest* pUserBasic
 	CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request to get userinfo.");
 
 	m_SocketClient->Send(outbuf);
+}
+
+void CSendMsgThread::HandleChangeUserStatus(const CChangeUserStatusRequest* pChangeUserStatusRequest)
+{
+    if (pChangeUserStatusRequest == NULL)
+        return;
+
+    std::string outbuf;
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_userstatuschange);
+    writeStream.WriteInt32(m_seq);
+    char szData[32] = { 0 };
+    sprintf_s(szData, ARRAYSIZE(szData), "{\"type\": 1, \"onlinestatus\": %d}", pChangeUserStatusRequest->m_nNewStatus);
+    writeStream.WriteCString(szData, strlen(szData));
+    writeStream.Flush();
+
+    CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request to change user status, newstatus=%d.", pChangeUserStatusRequest->m_nNewStatus);
+
+    m_SocketClient->Send(outbuf);
 }
 
 void CSendMsgThread::HandleGroupBasicInfo(const CGroupBasicInfoRequest* pGroupBasicInfo)

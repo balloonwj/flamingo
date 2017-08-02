@@ -255,6 +255,7 @@ enum NET_DATA_TYPE
 	NET_DATA_REGISTER,
 	NET_DATA_LOGIN,
 	NET_DATA_USER_BASIC_INFO,
+    NET_DATA_CHANGE_STATUS,
     NET_DATA_GROUP_BASIC_INFO,
 	NET_DATA_USER_EXTEND_INFO,
 	NET_DATA_FRIENDS_ID,
@@ -358,6 +359,16 @@ public:
 
 public:
 	std::list<UserBasicInfo*> m_listUserBasicInfo;
+};
+
+class CChangeUserStatusRequest : public CNetData
+{
+public:
+    CChangeUserStatusRequest();
+    ~CChangeUserStatusRequest();
+
+public:
+    int32_t m_nNewStatus;
 };
 
 class CGroupBasicInfoRequest : public CNetData

@@ -661,10 +661,13 @@ BOOL CRecvMsgThread::HandleUserStatusNotifyMessage(int targetId, const std::stri
     int type = JsonRoot["type"].asInt();
     CFriendStatus* pFriendStatus = new CFriendStatus();
     pFriendStatus->m_uAccountID = targetId;
-    //上线
+    //上线 { "type": 1, "onlinestatus": 1/2/3/4..}
     if (type == 1)
     {
-        pFriendStatus->m_nStatus = 1;
+        if (!JsonRoot["onlinestatus"].isNull() && !JsonRoot["onlinestatus"].isInt())
+            pFriendStatus->m_nStatus = JsonRoot["onlinestatus"].asInt();
+        else
+            pFriendStatus->m_nStatus = 1;
         pFriendStatus->m_type = 1;
     }
     //下线

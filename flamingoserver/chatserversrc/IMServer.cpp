@@ -112,16 +112,16 @@ bool IMServer::GetSessionByUserId(std::shared_ptr<ClientSession>& session, int32
     return false;
 }
 
-bool IMServer::IsUserSessionExsit(int32_t userid)
+int32_t IMServer::GetUserStatusByUserId(int32_t userid)
 {
     std::lock_guard<std::mutex> guard(m_sessionMutex);
     for (const auto& iter : m_sessions)
     {
         if (iter->GetUserId() == userid)
         {
-            return true;
+            return iter->GetUserStatus();
         }
     }
 
-    return false;
+    return 0;
 }

@@ -41,15 +41,16 @@ public:
 	void SetFindFriendWindow(HWND hwndFindFriend);				// 设置查找用户结果反馈窗口
 
 	void StartCheckNetworkStatusTask();							
-	//void StartGetUserInfoTask(long nType);						//获取好友
+	//void StartGetUserInfoTask(long nType);					//获取好友
 	void StartHeartbeatTask();
 
 	void Register(PCTSTR pszAccountName, PCTSTR pszNickName, PCTSTR pszPassword);
-	void Login();							                    // 登录
+    void Login(int nStatus = STATUS_ONLINE);				    // 登录
 	BOOL Logout();												// 注销
 	void CancelLogin();											// 取消登录
     void GetFriendList();                                       // 获取好友列表
     void GetGroupMembers(int32_t groupid);                      // 获取群成员
+    void ChangeStatus(int32_t nNewStatus);                      // 更改自己的登录状态        
 
 	BOOL FindFriend(PCTSTR pszAccountName, long nType, HWND hReflectionWnd);// 查找好友
 	BOOL AddFriend(UINT uAccountToAdd);

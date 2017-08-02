@@ -97,6 +97,17 @@ CUserBasicInfoResult::~CUserBasicInfoResult()
 
 }
 
+CChangeUserStatusRequest::CChangeUserStatusRequest()
+{
+    m_uType = NET_DATA_CHANGE_STATUS;
+    m_nNewStatus = 0;
+}
+
+CChangeUserStatusRequest::~CChangeUserStatusRequest()
+{
+    
+}
+
 //class CGroupBasicInfoRequest
 CGroupBasicInfoRequest::CGroupBasicInfoRequest()
 {

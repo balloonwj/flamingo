@@ -85,6 +85,7 @@ private:
 	void HandleRegister(const CRegisterRequest* pRegisterRequest);
     void HandleLogon(const CLoginRequest* pLoginRequest);
 	void HandleUserBasicInfo(const CUserBasicInfoRequest* pUserBasicInfo);
+    void HandleChangeUserStatus(const CChangeUserStatusRequest* pChangeUserStatusRequest);
     void HandleGroupBasicInfo(const CGroupBasicInfoRequest* pGroupBasicInfo);
 	BOOL HandleSentChatMessage(const CSentChatMessage* pSentChatMessage);				
 	BOOL HandleSentConfirmImageMessage(const CSentChatConfirmImageMessage* pConfirmImageMessage);	//图片上传成功以后的确认信息

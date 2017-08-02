@@ -34,7 +34,8 @@ public:
 
     void GetSessions(std::list<std::shared_ptr<ClientSession>>& sessions);
     bool GetSessionByUserId(std::shared_ptr<ClientSession>& session, int32_t userid);
-    bool IsUserSessionExsit(int32_t userid);
+    //获取用户状态，若该用户不存在，则返回0
+    int32_t GetUserStatusByUserId(int32_t userid);
 
 private:
     //新连接到来调用或连接断开，所以需要通过conn->connected()来判断，一般只在主loop里面调用

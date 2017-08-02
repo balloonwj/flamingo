@@ -379,7 +379,7 @@ void CFlamingoClient::ResponseAddFriendApply(UINT uAccountID, UINT uCmd)
 }
 
 // 登录
-void CFlamingoClient::Login()
+void CFlamingoClient::Login(int nStatus/* = STATUS_ONLINE*/)
 {
 	if (!IsOffline() || m_UserMgr.m_UserInfo.m_strAccount.empty() || m_UserMgr.m_UserInfo.m_strPassword.empty())
 		return;
@@ -396,7 +396,8 @@ void CFlamingoClient::Login()
 	UnicodeToUtf8(m_UserMgr.m_UserInfo.m_strPassword.c_str(), szData, ARRAYSIZE(szData));
 	strcpy_s(pLoginRequest->m_szPassword, ARRAYSIZE(pLoginRequest->m_szPassword), szData);
 
-	pLoginRequest->m_nStatus = STATUS_ONLINE;
+    //这个地方加上实际的用户状态
+    pLoginRequest->m_nStatus = STATUS_AWAY;
 	
 	if(IsMobileNumber(m_UserMgr.m_UserInfo.m_strAccount.c_str()))
 		pLoginRequest->m_nLoginType = LOGIN_USE_MOBILE_NUMBER;
@@ -419,6 +420,14 @@ void CFlamingoClient::GetGroupMembers(int32_t groupid)
     CGroupBasicInfoRequest* pGroupInfoRequest = new CGroupBasicInfoRequest();
     pGroupInfoRequest->m_groupid = groupid;
     m_SendMsgThread.AddItem(pGroupInfoRequest);
+}
+
+void CFlamingoClient::ChangeStatus(int32_t nNewStatus)
+{
+    CChangeUserStatusRequest* pChangeStatusRequest = new CChangeUserStatusRequest();
+    pChangeStatusRequest->m_nNewStatus = nNewStatus;
+
+    m_SendMsgThread.AddItem(pChangeStatusRequest);
 }
 
 // 注销
