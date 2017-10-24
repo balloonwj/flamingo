@@ -37,6 +37,11 @@ BOOL CBuddyInfoFloatWnd::SetHeadImg(LPCTSTR lpszFileName)
 
 void CBuddyInfoFloatWnd::SetDataText(LPCTSTR pszNickName, LPCTSTR pszSignature, LPCTSTR pszMail, LPCTSTR pszAddress)
 {
+    m_strNickName.Empty();
+    m_strSignature.Empty();
+    m_strMail.Empty();
+    m_strAddress.Empty();
+    
     if (pszNickName != NULL && pszNickName[0] != NULL)
         m_strNickName = pszNickName;
 
