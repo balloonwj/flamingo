@@ -119,6 +119,7 @@
     <ClCompile Include="net\eventloopthread.cpp" />
     <ClCompile Include="net\eventloopthreadpool.cpp" />
     <ClCompile Include="net\inetaddress.cpp" />
+    <ClCompile Include="net\protocolstream.cpp" />
     <ClCompile Include="net\sockets.cpp" />
     <ClCompile Include="net\tcpclient.cpp" />
     <ClCompile Include="net\tcpconnection.cpp" />
@@ -179,6 +180,7 @@
     <ClInclude Include="net\eventloopthread.h" />
     <ClInclude Include="net\eventloopthreadpool.h" />
     <ClInclude Include="net\inetaddress.h" />
+    <ClInclude Include="net\protocolstream.h" />
     <ClInclude Include="net\sockets.h" />
     <ClInclude Include="net\tcpclient.h" />
     <ClInclude Include="net\tcpconnection.h" />

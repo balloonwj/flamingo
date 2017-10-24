@@ -28,10 +28,10 @@ namespace net
 		///
 		/// User should not create this object.
 		TcpConnection(EventLoop* loop,
-			const string& name,
-			int sockfd,
-			const InetAddress& localAddr,
-			const InetAddress& peerAddr);
+			            const string& name,
+			            int sockfd,
+			            const InetAddress& localAddr,
+			            const InetAddress& peerAddr);
 		~TcpConnection();
 
 		EventLoop* getLoop() const { return loop_; }
@@ -64,6 +64,7 @@ namespace net
 			messageCallback_ = cb;
 		}
 
+        //设置成功发完数据执行的回调
 		void setWriteCompleteCallback(const WriteCompleteCallback& cb)
 		{
 			writeCompleteCallback_ = cb;
@@ -111,22 +112,23 @@ namespace net
 		void setState(StateE s) { state_ = s; }
 		const char* stateToString() const;
 
-		EventLoop* loop_;
-		const string name_;
-		StateE state_;  // FIXME: use atomic variable
+    private:
+		EventLoop*                  loop_;
+		const string                name_;
+		StateE                      state_;  // FIXME: use atomic variable
 		// we don't expose those classes to client.
-		std::shared_ptr<Socket> socket_;
-		std::shared_ptr<Channel> channel_;
-		const InetAddress localAddr_;
-		const InetAddress peerAddr_;
-		ConnectionCallback connectionCallback_;
-		MessageCallback messageCallback_;
-		WriteCompleteCallback writeCompleteCallback_;
-		HighWaterMarkCallback highWaterMarkCallback_;
-		CloseCallback closeCallback_;
-		size_t highWaterMark_;
-		Buffer inputBuffer_;
-		Buffer outputBuffer_; // FIXME: use list<Buffer> as output buffer.
+		std::shared_ptr<Socket>     socket_;
+		std::shared_ptr<Channel>    channel_;
+		const InetAddress           localAddr_;
+		const InetAddress           peerAddr_;
+		ConnectionCallback          connectionCallback_;
+		MessageCallback             messageCallback_;
+		WriteCompleteCallback       writeCompleteCallback_;
+		HighWaterMarkCallback       highWaterMarkCallback_;
+		CloseCallback               closeCallback_;
+		size_t                      highWaterMark_;
+		Buffer                      inputBuffer_;
+		Buffer                      outputBuffer_; // FIXME: use list<Buffer> as output buffer.
 
 		// FIXME: creationTime_, lastReceiveTime_
 		//        bytesReceived_, bytesSent_

@@ -27,12 +27,13 @@ bool UserManager::Init(const char* dbServer, const char* dbUserName, const char*
         m_strDbPassword = dbPassword;
     m_strDbName = dbName;
 
+    //从数据库中加载所有用户信息
     if (!LoadUsersFromDb())
         return false;
 
     for (auto& iter : m_allCachedUsers)
     {
-        if (!LoadRelationhipFromDb(iter.userid, iter.friends))
+        if (!LoadRelationshipFromDb(iter.userid, iter.friends))
         {
             LOG_WARN << "Load relationship from db error, userid=" << iter.userid;
         }
@@ -47,7 +48,9 @@ bool UserManager::LoadUsersFromDb()
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_FATAL << "UserManager::LoadUsersFromDb failed, please check params";
+        LOG_FATAL << "UserManager::LoadUsersFromDb failed, please check params: dbserver=" << m_strDbServer
+            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
+            << ", dbname=" << m_strDbName;
         return false;
     }
 
@@ -109,7 +112,9 @@ bool UserManager::AddUser(User& u)
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_FATAL << "UserManager::AddUser failed, please check params";
+        LOG_FATAL << "UserManager::AddUser failed, please check params: dbserver=" << m_strDbServer
+            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
+            << ", dbname=" << m_strDbName;
         return false;
     }
 
@@ -145,7 +150,9 @@ bool UserManager::MakeFriendRelationship(int32_t smallUserid, int32_t greaterUse
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_FATAL << "UserManager::LoadUsersFromDb failed, please check params";
+        LOG_FATAL << "UserManager::LoadUsersFromDb failed, please check params: dbserver=" << m_strDbServer
+            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
+            << ", dbname=" << m_strDbName;
         return false;
     }
 
@@ -153,13 +160,13 @@ bool UserManager::MakeFriendRelationship(int32_t smallUserid, int32_t greaterUse
     snprintf(sql, 256, "INSERT INTO t_user_relationship(f_user_id1, f_user_id2) VALUES(%d, %d)", smallUserid, greaterUserid);
     if (!pConn->Execute(sql))
     {
-        LOG_WARN << "make relationship error, sql=" << sql << ", smallUserid = " << smallUserid << ", greaterUserid = " << greaterUserid;;
+        LOG_ERROR << "make relationship error, sql=" << sql << ", smallUserid = " << smallUserid << ", greaterUserid = " << greaterUserid;;
         return false;
     }
     
     if (!AddFriendToUser(smallUserid, greaterUserid))
     {
-        LOG_WARN << "make relationship error, smallUserid=" << smallUserid << ", greaterUserid=" << greaterUserid;
+        LOG_ERROR << "make relationship error, smallUserid=" << smallUserid << ", greaterUserid=" << greaterUserid;
         return false;
     }
 
@@ -175,7 +182,9 @@ bool UserManager::ReleaseFriendRelationship(int32_t smallUserid, int32_t greater
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_FATAL << "UserManager::LoadUsersFromDb failed, please check params";
+        LOG_FATAL << "UserManager::LoadUsersFromDb failed, please check params: dbserver=" << m_strDbServer
+            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
+            << ", dbname=" << m_strDbName;
         return false;
     }
 
@@ -183,13 +192,13 @@ bool UserManager::ReleaseFriendRelationship(int32_t smallUserid, int32_t greater
     snprintf(sql, 256, "DELETE FROM t_user_relationship WHERE f_user_id1 = %d AND f_user_id2 = %d", smallUserid, greaterUserid);
     if (!pConn->Execute(sql))
     {
-        LOG_WARN << "release relationship error, sql=" << sql << ", smallUserid = " << smallUserid << ", greaterUserid = " << greaterUserid;;
+        LOG_ERROR << "release relationship error, sql=" << sql << ", smallUserid = " << smallUserid << ", greaterUserid = " << greaterUserid;;
         return false;
     }
 
     if (!DeleteFriendToUser(smallUserid, greaterUserid))
     {
-        LOG_WARN << "delete relationship error, smallUserid=" << smallUserid << ", greaterUserid=" << greaterUserid;
+        LOG_ERROR << "delete relationship error, smallUserid=" << smallUserid << ", greaterUserid=" << greaterUserid;
         return false;
     }
 
@@ -296,7 +305,7 @@ bool UserManager::UpdateUserInfo(int32_t userid, const User& newuserinfo)
         }
     }
 
-    LOG_ERROR << "update userinfo to db successfully, find exsit user in memory error, m_allCachedUsers.size(): " << m_allCachedUsers.size() << ", userid: " << userid << ", sql : " << osSql.str();
+    LOG_ERROR << "Failed to update userinfo to db, find exsit user in memory error, m_allCachedUsers.size(): " << m_allCachedUsers.size() << ", userid: " << userid << ", sql : " << osSql.str();
 
     return false;
 }
@@ -308,7 +317,9 @@ bool UserManager::ModifyUserPassword(int32_t userid, const std::string& newpassw
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_ERROR << "UserManager::Initialize db failed, please check params";
+        LOG_ERROR << "UserManager::Initialize db failed, please check params: dbserver=" << m_strDbServer
+            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
+            << ", dbname=" << m_strDbName;
         return false;
     }
 
@@ -334,7 +345,7 @@ bool UserManager::ModifyUserPassword(int32_t userid, const std::string& newpassw
         }
     }
 
-    LOG_ERROR << "update user password to db successfully, find exsit user in memory error, m_allCachedUsers.size(): " << m_allCachedUsers.size() << ", userid: " << userid << ", sql : " << osSql.str();
+    LOG_ERROR << "Failed to update user password to db, find exsit user in memory error, m_allCachedUsers.size(): " << m_allCachedUsers.size() << ", userid: " << userid << ", sql : " << osSql.str();
 
     return false;
 }
@@ -345,7 +356,9 @@ bool UserManager::AddGroup(const char* groupname, int32_t ownerid, int32_t& grou
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_FATAL << "UserManager::AddUser failed, please check params";
+        LOG_FATAL << "UserManager::AddUser failed, please check params: dbserver=" << m_strDbServer
+            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
+            << ", dbname=" << m_strDbName;
         return false;
     }
 
@@ -381,7 +394,9 @@ bool UserManager::SaveChatMsgToDb(int32_t senderid, int32_t targetid, const std:
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_FATAL << "UserManager::SaveChatMsgToDb failed, please check params";
+        LOG_FATAL << "UserManager::SaveChatMsgToDb failed, please check params: dbserver=" << m_strDbServer
+            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
+            << ", dbname=" << m_strDbName;
         return false;
     }
 
@@ -457,7 +472,7 @@ bool UserManager::GetFriendInfoByUserId(int32_t userid, std::list<User>& friends
     return true;
 }
 
-bool UserManager::LoadRelationhipFromDb(int32_t userid, std::set<int32_t>& r)
+bool UserManager::LoadRelationshipFromDb(int32_t userid, std::set<int32_t>& r)
 {
     std::unique_ptr<CDatabaseMysql> pConn;
     pConn.reset(new CDatabaseMysql());
@@ -487,12 +502,12 @@ bool UserManager::LoadRelationhipFromDb(int32_t userid, std::set<int32_t>& r)
         if (friendid1 == userid)
         {
             r.insert(friendid2);
-            LOG_INFO << "userid=" << userid << ", friendid=" << friendid2;
+            //LOG_INFO << "userid=" << userid << ", friendid=" << friendid2;
         }
         else
         {
             r.insert(friendid1);
-            LOG_INFO << "userid=" << userid << ", friendid=" << friendid1;
+            //LOG_INFO << "userid=" << userid << ", friendid=" << friendid1;
         }
 
         

@@ -23,9 +23,22 @@ CTrayIcon::~CTrayIcon(void)
 }
 
 BOOL CTrayIcon::AddIcon(HWND hCallBackWnd, UINT uCallBackMsg, 
-			 UINT uID, HICON hIcon, LPCTSTR lpszTip/* = NULL*/)
+			            UINT uID, HICON hIcon, LPCTSTR lpszTip/* = NULL*/,
+                        BOOL bPopupBalloon/* = FALSE*/, LPCTSTR lpszBalloonInfoTitle/* = NULL*/,
+                        LPCTSTR lpszBalloonInfo/* = NULL*/, UINT uTimeout/* = 3000*/)
 {
 	m_stNotifyIconData.uFlags = NIF_ICON | NIF_MESSAGE;
+    if (bPopupBalloon && lpszBalloonInfo != NULL && lpszBalloonInfo[0] != NULL)
+    {
+        m_stNotifyIconData.uFlags |= NIF_INFO;
+        m_stNotifyIconData.uTimeout = uTimeout;
+        _tcscpy_s(m_stNotifyIconData.szInfo, ARRAYSIZE(m_stNotifyIconData.szInfo), lpszBalloonInfo);
+        if (lpszBalloonInfoTitle != NULL && lpszBalloonInfoTitle[0] != NULL)
+            _tcscpy_s(m_stNotifyIconData.szInfoTitle, ARRAYSIZE(m_stNotifyIconData.szInfoTitle), lpszBalloonInfoTitle);
+    }       
+    else
+        m_stNotifyIconData.uFlags &= (~NIF_INFO);
+
 	m_stNotifyIconData.hWnd = hCallBackWnd;
 	m_stNotifyIconData.uCallbackMessage = uCallBackMsg;
 	m_stNotifyIconData.uID = uID;
@@ -39,9 +52,22 @@ BOOL CTrayIcon::AddIcon(HWND hCallBackWnd, UINT uCallBackMsg,
 	return ::Shell_NotifyIcon(NIM_ADD, &m_stNotifyIconData);
 }
 
-BOOL CTrayIcon::ModifyIcon(HICON hIcon, LPCTSTR lpszTip/* = NULL*/, UINT uID/*=1*/)
+BOOL CTrayIcon::ModifyIcon(HICON hIcon, LPCTSTR lpszTip/* = NULL*/, UINT uID/*=1*/,
+                           BOOL bPopupBalloon/* = FALSE*/, LPCTSTR lpszBalloonInfoTitle/* = NULL*/,
+                           LPCTSTR lpszBalloonInfo/* = NULL*/, UINT uTimeout/* = 3000*/)
 {
 	m_stNotifyIconData.uFlags = NIF_ICON;
+    if (bPopupBalloon && lpszBalloonInfo != NULL && lpszBalloonInfo[0] != NULL)
+    {
+        m_stNotifyIconData.uFlags |= NIF_INFO;
+        m_stNotifyIconData.uTimeout = uTimeout;
+        _tcscpy_s(m_stNotifyIconData.szInfo, ARRAYSIZE(m_stNotifyIconData.szInfo), lpszBalloonInfo);
+        if (lpszBalloonInfoTitle != NULL && lpszBalloonInfoTitle[0] != NULL)
+            _tcscpy_s(m_stNotifyIconData.szInfoTitle, ARRAYSIZE(m_stNotifyIconData.szInfoTitle), lpszBalloonInfoTitle);
+    }
+    else
+        m_stNotifyIconData.uFlags &= (~NIF_INFO);
+
 	m_stNotifyIconData.hIcon = hIcon;
 	m_stNotifyIconData.uID = uID;
 	if (lpszTip != NULL)
@@ -124,6 +150,19 @@ BOOL CTrayIcon::GetTrayIconRect(RECT* lpRect)
 
 	return TRUE;
 }
+
+//BOOL CTrayIcon::ShowBalloonTip(LPCTSTR szMsg, LPCTSTR szTitle, DWORD dwInfoFlags = NIIF_INFO, UINT uTimeout = 1000)
+//{
+//    m_nid.cbSize = sizeof(NOTIFYICONDATA);
+//    m_nid.uFlags = NIF_INFO;
+//    m_nid.uVersion = NOTIFYICON_VERSION;
+//    m_nid.uTimeout = uTimeout;
+//    m_nid.dwInfoFlags = dwInfoFlags;
+//    strcpy(m_nid.szInfo, szMsg ? szMsg : _T(""));
+//    strcpy(m_nid.szInfoTitle, szTitle ? szTitle : _T(""));
+//
+//    return 0 != Shell_NotifyIcon(NIM_MODIFY, &m_nid);
+//}
 
 // 枚举获取托盘图标区域位置
 BOOL CTrayIcon::EnumNotifyWindow(HWND hWnd, RECT &rect)

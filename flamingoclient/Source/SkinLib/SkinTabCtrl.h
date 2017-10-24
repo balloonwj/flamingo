@@ -4,8 +4,11 @@
 
 #define TCN_DROPDOWN				(NM_FIRST-5)
 
-#define STCI_STYLE_BUTTON			0x0000
-#define STCI_STYLE_DROPDOWN			0x0008
+enum STCI_STYLE
+{
+    STCI_STYLE_BUTTON	= 0x0000,
+    STCI_STYLE_DROPDOWN	= 0x0008
+};
 
 class CSkinTabCtrlItem
 {
@@ -14,17 +17,23 @@ public:
 	~CSkinTabCtrlItem(void);
 
 public:
-	int m_nID;
-	DWORD m_dwStyle;
-	int m_nWidth, m_nHeight;
-	int m_nLeftWidth, m_nRightWidth;
-	int m_nPadding;
-	CString m_strText;
-	CString m_strToolTipText;
-	CImageEx* m_lpBgImgN,* m_lpBgImgH,* m_lpBgImgD;
-	CImageEx* m_lpArrowImgH,* m_lpArrowImgD;
-	CImageEx* m_lpIconImg,* m_lpSelIconImg;
-	BOOL	 m_bVisible;
+	int         m_nID;
+	DWORD       m_dwStyle;  //取值是STCI_STYLE枚举量
+    int         m_nWidth;
+    int         m_nHeight;
+    int         m_nLeftWidth;
+    int         m_nRightWidth;
+	int         m_nPadding;
+	CString     m_strText;
+	CString     m_strToolTipText;
+    CImageEx*   m_lpBgImgN;
+    CImageEx*   m_lpBgImgH;
+    CImageEx*   m_lpBgImgD;
+    CImageEx*   m_lpArrowImgH;
+    CImageEx*   m_lpArrowImgD;
+    CImageEx*   m_lpIconImg;
+    CImageEx*   m_lpSelIconImg;
+	BOOL	    m_bVisible;
 };
 
 class CSkinTabCtrl : public CWindowImpl<CSkinTabCtrl, CWindow>
@@ -36,6 +45,7 @@ public:
 	DECLARE_WND_CLASS(_T("__SkinTabCtrl__"))
 
 	BEGIN_MSG_MAP_EX(CSkinTabCtrl)
+        MSG_WM_CREATE(OnCreate)
 		MSG_WM_ERASEBKGND(OnEraseBkgnd)
 		MSG_WM_PAINT(OnPaint)
 		MSG_WM_LBUTTONDOWN(OnLButtonDown)
@@ -51,8 +61,8 @@ public:
 	void SetAutoSize(BOOL bAutoSize);
 	void SetTransparent(BOOL bTransparent, HDC hBgDC);
 	BOOL SetBgPic(LPCTSTR lpszFileName, const CRect& rcNinePart);
-	BOOL SetItemsBgPic(LPCTSTR lpNormal, LPCTSTR lpHighlight, 
-		LPCTSTR lpDown, const CRect& rcNinePart);
+    void SetBgColor(COLORREF clrBgColor);       //设置背景颜色，如果背景透明则背景颜色设置无效，默认背景颜色为白色
+	BOOL SetItemsBgPic(LPCTSTR lpNormal, LPCTSTR lpHighlight, LPCTSTR lpDown, const CRect& rcNinePart);
 	BOOL SetItemsArrowPic(LPCTSTR lpHighlight, LPCTSTR lpDown);
 	void SetPressArrow(BOOL bPressArrow);
 
@@ -80,6 +90,7 @@ public:
 	void OnPaint(CDCHandle dc); 
 
 private:
+    int OnCreate(LPCREATESTRUCT lpCreateStruct);
 	BOOL OnEraseBkgnd(CDCHandle dc);
 	
 	void OnLButtonDown(UINT nFlags, CPoint point);
@@ -99,16 +110,22 @@ private:
 	void DrawItem(HDC hDC, int nIndex);
 
 private:
-	CToolTipCtrl m_ToolTipCtrl;
-	std::vector<CSkinTabCtrlItem*> m_arrItems;
-	CImageEx* m_lpBgImg;
-	CImageEx* m_lpItemBgImgN,* m_lpItemBgImgH,* m_lpItemBgImgD;
-	CImageEx* m_lpArrowImgH,* m_lpArrowImgD;
-	int m_nSelIndex, m_nHoverIndex;
-	BOOL m_bPressArrow;
-	BOOL m_bMouseTracking;
-	int m_nLeft, m_nTop;
-	BOOL m_bAutoSize;
-	BOOL m_bTransparent;
-	HDC m_hBgDC;
+	CToolTipCtrl    m_ToolTipCtrl;
+	CImageEx*       m_lpBgImg;
+    CImageEx*       m_lpItemBgImgN;
+    CImageEx*       m_lpItemBgImgH;
+    CImageEx*       m_lpItemBgImgD;
+    CImageEx*       m_lpArrowImgH;
+    CImageEx*       m_lpArrowImgD;
+    int             m_nSelIndex;
+    int             m_nHoverIndex;
+	BOOL            m_bPressArrow;
+	BOOL            m_bMouseTracking;
+    int             m_nLeft;
+    int             m_nTop;
+	BOOL            m_bAutoSize;
+	BOOL            m_bTransparent;
+	HDC             m_hBgDC;
+    COLORREF        m_clrBgColor;
+    std::vector<CSkinTabCtrlItem*> m_arrItems;
 };

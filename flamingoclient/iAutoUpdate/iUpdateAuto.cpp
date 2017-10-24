@@ -1,6 +1,7 @@
 #include "wlconfig.h"
 #include <comutil.h>
 #include "unzip.h"
+#include <TlHelp32.h>
 #pragma comment(lib,"comsuppw.lib")
 /////////////////////////////////////////////////////////////////////////////////////////////////
 typedef struct tagVersionInfo
@@ -174,8 +175,46 @@ void osExec(LPTSTR lpCmdLine)
 }
 
 int WINAPI _tWinMain(HINSTANCE hInstance,HINSTANCE,LPTSTR lpCmdLine,int)
-{
-	long l(0);	
+{	
+    PROCESSENTRY32 pe32 = {0};
+    pe32.dwSize = sizeof(PROCESSENTRY32);
+
+    HANDLE hProcessSnap;
+    hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hProcessSnap == INVALID_HANDLE_VALUE)
+        return false;
+
+    if (!Process32First(hProcessSnap, &pe32))
+    {           
+        CloseHandle(hProcessSnap);
+        return false;
+    }
+
+    DWORD dwFlamingoProcessID = 0;
+    do
+    {
+        if (_tcsicmp(pe32.szExeFile, _T("Flamingo.exe")) == 0)
+        {
+            dwFlamingoProcessID = pe32.th32ProcessID;
+            break;
+        }           
+
+    } while (Process32Next(hProcessSnap, &pe32));
+
+    CloseHandle(hProcessSnap);
+
+    //Flamingo.exe进程已经退掉，则认为升级成功
+    if (dwFlamingoProcessID != 0)
+    {
+        HANDLE hAutoUpdateProcess = ::OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwFlamingoProcessID);
+        if (hAutoUpdateProcess == NULL)
+            return false;
+        DWORD dwRet = ::WaitForSingleObject(hAutoUpdateProcess, 5000);
+        if (dwRet != WAIT_OBJECT_0)
+            return 0;
+    }
+    
+    long l(0);	
 	blNoupdate=(lpCmdLine&&*lpCmdLine);
 	
 	GetModuleFileName(hInstance,__main_home__,MAX_PATH);

@@ -82,7 +82,6 @@ int main(int argc, char* argv[])
     signal(SIGCHLD, SIG_DFL);
     signal(SIGPIPE, SIG_IGN);
     signal(SIGINT, prog_exit);
-    signal(SIGKILL, prog_exit);
     signal(SIGTERM, prog_exit);
 
     int ch;
@@ -103,7 +102,7 @@ int main(int argc, char* argv[])
 
     CConfigFileReader config("chatserver.conf");
 
-    Logger::setLogLevel(Logger::DEBUG);
+    Logger::setLogLevel(Logger::INFO);
     const char* logfilepath = config.GetConfigName("logfiledir");
     if (logfilepath == NULL)
     {
@@ -144,12 +143,12 @@ int main(int argc, char* argv[])
     const char* dbname = config.GetConfigName("dbname");
 	if (!Singleton<CMysqlManager>::Instance().Init(dbserver, dbuser, dbpassword, dbname))
     {
-        LOG_FATAL << "please check your database config..............";
+        LOG_FATAL << "Init mysql failed, please check your database config..............";
     }
 
     if (!Singleton<UserManager>::Instance().Init(dbserver, dbuser, dbpassword, dbname))
     {
-        LOG_FATAL << "please check your database config..............";
+        LOG_FATAL << "Init UserManager failed, please check your database config..............";
     }
 
     Singleton<EventLoopThreadPool>::Instance().Init(&g_mainLoop, 4);
@@ -158,6 +157,8 @@ int main(int argc, char* argv[])
     const char* listenip = config.GetConfigName("listenip");
     short listenport = (short)atol(config.GetConfigName("listenport"));
     Singleton<IMServer>::Instance().Init(listenip, listenport, &g_mainLoop);
+
+    LOG_INFO << "chatserver initialization complete.";
     
     g_mainLoop.loop();
 

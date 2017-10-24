@@ -45,9 +45,8 @@ void MsgCacheManager::GetNotifyMsgCache(int32_t userid, std::list<NotifyMsgCache
             iter++;
         }
     }
-
    
-    LOG_INFO << "get notify msg  cache,  userid: " << userid << ", m_mapNotifyMsgCache.size(): " << m_listNotifyMsgCache.size() << ", cached size: " << cached.size();
+    LOG_INFO << "get notify msg cache, userid: " << userid << ", m_mapNotifyMsgCache.size(): " << m_listNotifyMsgCache.size() << ", cached size: " << cached.size();
 }
 
 bool MsgCacheManager::AddChatMsgCache(int32_t userid, const std::string& cache)
@@ -79,5 +78,5 @@ void MsgCacheManager::GetChatMsgCache(int32_t userid, std::list<ChatMsgCache>& c
         }
     }
 
-    LOG_INFO << "get chat msg cache, no cache,  userid: " << userid << ",m_listChatMsgCache.size(): " << m_listChatMsgCache.size() << ", cached size: " << cached.size();
+    LOG_INFO << "get chat msg cache, userid: " << userid << ", m_listChatMsgCache.size(): " << m_listChatMsgCache.size() << ", cached size: " << cached.size();
 }

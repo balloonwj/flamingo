@@ -1,4 +1,13 @@
 //Flamingo聊天格式（json）
+//PC聊天消息未转义前的格式
+helloworld												//普通文本
+/f["111"]												//表情
+/c["C:\Users\zhangyl.COMPANY\Desktop\AddFriend.png"]	//图片
+/o["微软雅黑,12,000000,0,0,0"]							//字体
+/i["md5, filesize,online"]								//文件
+/s["1"]													//窗口抖动
+/r["1"]													//远程桌面请求
+
 //排版格式
 {
 	"msgType": 1, //消息类型 0未知类型 1文本 2窗口抖动 3文件
@@ -12,6 +21,7 @@
 		{"faceID": 101},
 		{"faceID": 102},
 		{"pic": ["name", "server_path", 400, w, h]},
+		{"remotedesktop": 1},
 		{"shake": 1},
 		{"file":["name", "server_path", 400, onlineflag]}		//onlineflag为0是离线文件，不为0为在线文件
 	]	
@@ -39,14 +49,10 @@ enum CONTENT_TYPE
 	CONTENT_TYPE_FACE,          //pc专用，移动端忽略
 	CONTENT_TYPE_CUSTOM_FACE,   //pc专用，移动端忽略
 	CONTENT_TYPE_OFF_PIC        //pc专用，移动端忽略
+	
+	CONTENT_TYPE_REMOTE_DESKTOP //远程桌面
 };
 
-//PC聊天消息未转义前的格式
-helloworld												//普通文本
-/f["111"]												//表情
-/c["C:\Users\zhangyl.COMPANY\Desktop\AddFriend.png"]	//图片
-/o["微软雅黑,12,000000,0,0,0"]							//字体
-/i["md5, filesize,online"]								//文件
 
 //新版Flamingo聊天格式（json）
 //排版格式

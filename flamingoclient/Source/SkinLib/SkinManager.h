@@ -2,7 +2,7 @@
 
 #include <vector>
 #include <map>
-#include "../Path.h"
+//#include "../Path.h"
 #include "../ImageEx.h"
 #include "../XmlDocument.h"
 

@@ -25,6 +25,8 @@ CSkinButton::CSkinButton(void)
 
 	m_clrText = RGB(0, 0, 0);
 	m_bTextBold = FALSE;
+
+    m_clrBgColor = RGB(255, 255, 255);
 }
 
 CSkinButton::~CSkinButton(void)
@@ -212,6 +214,8 @@ int CSkinButton::OnCreate(LPCREATESTRUCT lpCreateStruct)
 // 	DWORD dwClassStyle = ::GetClassLong(m_hWnd, GCL_STYLE);
 // 	::SetClassLong(m_hWnd, GCL_STYLE, dwClassStyle & ~CS_PARENTDC); 
 
+    ModifyStyle(0, WS_CLIPSIBLINGS);
+
 	CRect rcClient;
 	GetClientRect(&rcClient);
 
@@ -236,6 +240,8 @@ void CSkinButton::OnPaint(CDCHandle dc)
 	CPaintDC PaintDC(m_hWnd);
 
 	CMemoryDC MemDC(PaintDC.m_hDC, rcClient);
+
+    MemDC.FillSolidRect(&rcClient, m_clrBgColor);
 
 	switch (m_nBtnType)
 	{

@@ -83,6 +83,7 @@ TimerQueue::TimerQueue(EventLoop* loop)
   timerfdChannel_.setReadCallback(
       std::bind(&TimerQueue::handleRead, this));
   // we are always reading the timerfd, we disarm it with timerfd_settime.
+  //½«timerfd¹Òµ½epollfdÉÏ
   timerfdChannel_.enableReading();
 }
 
@@ -104,8 +105,7 @@ TimerId TimerQueue::addTimer(const TimerCallback& cb,
                              double interval)
 {
   Timer* timer = new Timer(cb, when, interval);
-  loop_->runInLoop(
-      std::bind(&TimerQueue::addTimerInLoop, this, timer));
+  loop_->runInLoop(std::bind(&TimerQueue::addTimerInLoop, this, timer));
   return TimerId(timer, timer->sequence());
 }
 

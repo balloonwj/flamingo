@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "ModifyMarkNameDlg.h"
 #include "FlamingoClient.h"
+#include "UIText.h"
 
 
 CModifyMarkNameDlg::CModifyMarkNameDlg()
@@ -89,12 +90,12 @@ void CModifyMarkNameDlg::OnOK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strMarkName.Trim();
 	if(strMarkName.IsEmpty())
 	{
-		::MessageBox(m_hWnd, _T("备注姓名不能为空。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("备注姓名不能为空。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 	else if(strMarkName.GetLength() >= 16)
 	{
-		::MessageBox(m_hWnd, _T("备注姓名不能超过15个字符。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("备注姓名不能超过15个字符。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 	

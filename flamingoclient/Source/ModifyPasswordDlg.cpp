@@ -1,6 +1,7 @@
 #include "stdafx.h"
 #include "ModifyPasswordDlg.h"
 #include "FlamingoClient.h"
+#include "UIText.h"
 
 CModifyPasswordDlg::CModifyPasswordDlg() : m_pFMGClient(NULL)
 {
@@ -152,7 +153,7 @@ void CModifyPasswordDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_edtOldPassword.GetWindowText(strOldPassword);
 	if(strOldPassword != m_pFMGClient->m_UserMgr.m_UserInfo.m_strPassword.c_str())
 	{
-		::MessageBox(m_hWnd, _T("旧密码不正确！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("旧密码不正确！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_edtOldPassword.SetFocus();
 		return;
 	}
@@ -161,7 +162,7 @@ void CModifyPasswordDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_edtNewPassword.GetWindowText(strNewPassword);
 	if(strNewPassword.IsEmpty() || strNewPassword.GetLength()<3 || strNewPassword.GetLength()>15)
 	{
-		::MessageBox(m_hWnd, _T("新密码长度必须在3～15个字符之间！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("新密码长度必须在3～15个字符之间！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_edtNewPassword.SetFocus();
 		return;
 	}
@@ -170,13 +171,13 @@ void CModifyPasswordDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_edtNewPasswordConfirm.GetWindowText(strNewPasswordConfirm);
 	if (strNewPassword != strNewPasswordConfirm)
 	{
-		::MessageBox(m_hWnd, _T("两次输入的密码不相同，请确认！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("两次输入的密码不相同，请确认！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
 	if(strOldPassword == strNewPassword)
 	{
-		::MessageBox(m_hWnd, _T("新旧密码必须不相同！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("新旧密码必须不相同！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 	
@@ -199,13 +200,13 @@ LRESULT CModifyPasswordDlg::OnModifyPasswordResult(UINT uMsg, WPARAM wParam, LPA
 
 	if(wParam == 0)
 	{
-		::MessageBox(m_hWnd, _T("密码修改成功，您下次可以使用新密码登录了！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("密码修改成功，您下次可以使用新密码登录了！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		ShowWindow(SW_HIDE);
 	}
     else if (wParam == 103)
-        ::MessageBox(m_hWnd, _T("旧密码错误！"), _T("Flamingo"), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(m_hWnd, _T("旧密码错误！"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
 	else/* if (wParam == 105)*/
-		::MessageBox(m_hWnd, _T("密码修改失败，请稍后重试！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("密码修改失败，请稍后重试！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 
 	return (LRESULT)1;
 }

@@ -13,9 +13,6 @@
       <UniqueIdentifier>{05e91e06-c603-4830-969f-b16ad0443ecc}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;jpg;jpeg;jpe;manifest</Extensions>
     </Filter>
-    <Filter Include="jsoncpp-0.5.0">
-      <UniqueIdentifier>{1c3ddfc9-e269-4638-9025-2adaa099cfb8}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Tasks">
       <UniqueIdentifier>{a6dfeba9-4778-4911-b052-62b6d6f4becb}</UniqueIdentifier>
     </Filter>
@@ -39,6 +36,9 @@
     </Filter>
     <Filter Include="net">
       <UniqueIdentifier>{8f305d8c-8e77-47bb-bf54-76f0c041b365}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="jsoncpp-0.5.0">
+      <UniqueIdentifier>{792883a9-fa67-41ef-94a4-302aba71f1ed}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -75,23 +75,8 @@
     <ClCompile Include="stdafx.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="TrayIcon.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="VerifyCodeDlg.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="XmlDocument.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="jsoncpp-0.5.0\json_reader.cpp">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClCompile>
-    <ClCompile Include="jsoncpp-0.5.0\json_value.cpp">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClCompile>
-    <ClCompile Include="jsoncpp-0.5.0\json_writer.cpp">
-      <Filter>jsoncpp-0.5.0</Filter>
     </ClCompile>
     <ClCompile Include="CheckNetworkStatusTask.cpp">
       <Filter>Tasks</Filter>
@@ -255,39 +240,6 @@
     <ClCompile Include="Updater.cpp">
       <Filter>Update</Filter>
     </ClCompile>
-    <ClCompile Include="Buffer.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
-    <ClCompile Include="CriticalSection.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
-    <ClCompile Include="File.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
-    <ClCompile Include="IniFile.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
-    <ClCompile Include="IULog.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
-    <ClCompile Include="MD5.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
-    <ClCompile Include="MD5Sum.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
-    <ClCompile Include="MinuBuffer.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
-    <ClCompile Include="Path.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
-    <ClCompile Include="Time.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
-    <ClCompile Include="Utils.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
     <ClCompile Include="UserConfig.cpp">
       <Filter>UserData</Filter>
     </ClCompile>
@@ -315,9 +267,6 @@
     <ClCompile Include="UserSessionData.cpp">
       <Filter>UserData</Filter>
     </ClCompile>
-    <ClCompile Include="EncodingUtil.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
     <ClCompile Include="UserMgr.cpp">
       <Filter>UserData</Filter>
     </ClCompile>
@@ -330,92 +279,68 @@
     <ClCompile Include="FileTaskThread.cpp">
       <Filter>Tasks</Filter>
     </ClCompile>
+    <ClCompile Include="SkinLib\SkinWebBrowser.cpp">
+      <Filter>SkinLib</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktopDlg.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
+    <ClCompile Include="jsoncpp-0.5.0\json_reader.cpp">
+      <Filter>jsoncpp-0.5.0</Filter>
+    </ClCompile>
+    <ClCompile Include="jsoncpp-0.5.0\json_value.cpp">
+      <Filter>jsoncpp-0.5.0</Filter>
+    </ClCompile>
+    <ClCompile Include="jsoncpp-0.5.0\json_writer.cpp">
+      <Filter>jsoncpp-0.5.0</Filter>
+    </ClCompile>
+    <ClCompile Include="CriticalSection.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="EncodingUtil.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="File.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="File2.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="IniFile.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="IULog.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="MD5.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="MD5Sum.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="MinuBuffer.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="Utils.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="Time.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="Buffer.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="Path.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="TrayIcon.cpp">
+      <Filter>Tasks</Filter>
+    </ClCompile>
+    <ClCompile Include="BuddyInfoFloatWnd.cpp">
+      <Filter>UI</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="CascadeWinManager.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="CustomMsgDef.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="DstVersion.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="FaceList.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="GDIFactory.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="GifImage.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="IImageOle.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ImageEx.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="LoginAccountList.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="MessageLogger.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="resource.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="RichEditUtil.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="SQLite 3.7.17\sqlite3.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="SrcVersion.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Startup.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="stdafx.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="TrayIcon.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="VerifyCodeDlg.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="XmlDocument.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\autolink.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\config.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\features.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\forwards.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\json.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\json_batchallocator.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\reader.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\value.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\writer.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
     <ClInclude Include="CheckNetworkStatusTask.h">
       <Filter>Tasks</Filter>
     </ClInclude>
@@ -584,39 +509,6 @@
     <ClInclude Include="Updater.h">
       <Filter>Update</Filter>
     </ClInclude>
-    <ClInclude Include="Buffer.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
-    <ClInclude Include="CriticalSection.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
-    <ClInclude Include="File.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
-    <ClInclude Include="IniFile.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
-    <ClInclude Include="IULog.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
-    <ClInclude Include="MD5.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
-    <ClInclude Include="MD5Sum.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
-    <ClInclude Include="MiniBuffer.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
-    <ClInclude Include="Path.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
-    <ClInclude Include="Time.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
-    <ClInclude Include="Utils.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
     <ClInclude Include="UserConfig.h">
       <Filter>UserData</Filter>
     </ClInclude>
@@ -650,9 +542,6 @@
     <ClInclude Include="UserSessionData.h">
       <Filter>UserData</Filter>
     </ClInclude>
-    <ClInclude Include="EncodingUtil.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
     <ClInclude Include="UserMgr.h">
       <Filter>UserData</Filter>
     </ClInclude>
@@ -663,6 +552,138 @@
       <Filter>Tasks</Filter>
     </ClInclude>
     <ClInclude Include="FileTaskThread.h">
+      <Filter>Tasks</Filter>
+    </ClInclude>
+    <ClInclude Include="SkinLib\SkinWebBrowser.h">
+      <Filter>SkinLib</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktopDlg.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-0.5.0\autolink.h">
+      <Filter>jsoncpp-0.5.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-0.5.0\config.h">
+      <Filter>jsoncpp-0.5.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-0.5.0\features.h">
+      <Filter>jsoncpp-0.5.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-0.5.0\forwards.h">
+      <Filter>jsoncpp-0.5.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-0.5.0\json.h">
+      <Filter>jsoncpp-0.5.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-0.5.0\json_batchallocator.h">
+      <Filter>jsoncpp-0.5.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-0.5.0\reader.h">
+      <Filter>jsoncpp-0.5.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-0.5.0\value.h">
+      <Filter>jsoncpp-0.5.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-0.5.0\writer.h">
+      <Filter>jsoncpp-0.5.0</Filter>
+    </ClInclude>
+    <ClInclude Include="CriticalSection.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="EncodingUtil.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="File.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="File2.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="IniFile.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="IULog.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="MD5.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="MD5Sum.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="MiniBuffer.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="Utils.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="Time.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="Buffer.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="Path.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="CascadeWinManager.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CustomMsgDef.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DstVersion.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="FaceList.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GDIFactory.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GifImage.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="IImageOle.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ImageEx.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="LoginAccountList.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MessageLogger.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="resource.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="RichEditUtil.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SQLite 3.7.17\sqlite3.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SrcVersion.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Startup.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="stdafx.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="XmlDocument.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="BuddyInfoFloatWnd.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="UIText.h">
+      <Filter>UI</Filter>
+    </ClInclude>
+    <ClInclude Include="TrayIcon.h">
       <Filter>Tasks</Filter>
     </ClInclude>
   </ItemGroup>
@@ -699,6 +720,11 @@
     </Image>
   </ItemGroup>
   <ItemGroup>
+    <ResourceCompile Include="flamingo.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
     <None Include="jsoncpp-0.5.0\json_internalarray.inl">
       <Filter>jsoncpp-0.5.0</Filter>
     </None>
@@ -708,10 +734,5 @@
     <None Include="jsoncpp-0.5.0\json_valueiterator.inl">
       <Filter>jsoncpp-0.5.0</Filter>
     </None>
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="flamingo.rc">
-      <Filter>Resource Files</Filter>
-    </ResourceCompile>
   </ItemGroup>
 </Project>

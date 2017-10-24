@@ -22,8 +22,9 @@ public:
 	~CFlamingoClient(void);
 
 public:
-	BOOL Init();												// 初始化客户端
-	void UnInit();												// 反初始化客户端
+	bool InitProxyWnd();										// 初始化代理窗口
+    bool InitNetThreads();                                      // 初始化网络线程
+	void Uninit();												// 反初始化客户端
 
 	void SetServer(PCTSTR pszServer);
     void SetFileServer(PCTSTR pszServer);
@@ -137,6 +138,7 @@ public:
 	long ParseBuddyStatus(long nFlag);					// 解析用户在线状态
 	void CacheBuddyStatus();							// 缓存用户在线状态
 	BOOL SetBuddyStatus(UINT uAccountID, long nStatus);
+    BOOL SetBuddyClientType(UINT uAccountID, long nNewClientType);
 
 private:
 	void OnHeartbeatResult(UINT message, WPARAM wParam, LPARAM lParam);
@@ -165,6 +167,7 @@ private:
 	void OnSysGroupMsg(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnStatusChangeMsg(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnKickMsg(UINT message, WPARAM wParam, LPARAM lParam);
+    void OnScreenshotMsg(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnUpdateBuddyNumber(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnUpdateGMemberNumber(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnUpdateGroupNumber(UINT message, WPARAM wParam, LPARAM lParam);
@@ -194,9 +197,7 @@ public:
     CRecvMsgThread                  m_RecvMsgThread;
     CFileTaskThread					m_FileTask;
     CImageTaskThread                m_ImageTask;
-	CIUSocket                       m_SocketClient;
     
-
 	CUserConfig						m_UserConfig;
 
 	std::vector<AddFriendInfo*>		m_aryAddFriendInfo;

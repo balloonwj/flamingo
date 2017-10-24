@@ -22,7 +22,8 @@ char* CConfigFileReader::GetConfigName(const char* name)
 
 	char* value = NULL;
     std::map<std::string, std::string>::iterator it = m_config_map.find(name);
-	if (it != m_config_map.end()) {
+	if (it != m_config_map.end())
+    {
 		value = (char*)it->second.c_str();
 	}
 

@@ -25,4 +25,5 @@ private:
     //上传的文件都以文件的md5值命名
     std::list<std::string>      m_listFiles;
     std::mutex                  m_mtFile;
+    std::string                 m_basepath;
 };

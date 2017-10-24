@@ -30,7 +30,7 @@ int CHeartbeatTask::Run()
 
 		if(!IsAlive())
 		{
-			CIULog::Log(LOG_WARNING, __FUNCSIG__, _T("None of 5 heartbeat results received, make the user offline."));
+			LOG_WARNING("None of 5 heartbeat results received, make the user offline.");
 			::SendMessage(m_pTalkClient->m_UserMgr.m_hProxyWnd, FMG_MSG_HEARTBEAT, HEARTBEAT_DEAD, 0);
 			return 1;
 		}

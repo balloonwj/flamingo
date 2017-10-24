@@ -77,24 +77,24 @@ namespace net
 		void update();
 		void handleEventWithGuard(Timestamp receiveTime);
 
-		static const int kNoneEvent;
-		static const int kReadEvent;
-		static const int kWriteEvent;
+		static const int            kNoneEvent;
+		static const int            kReadEvent;
+		static const int            kWriteEvent;
 
-		EventLoop* loop_;
-		const int  fd_;
-		int        events_;
-		int        revents_; // it's the received event types of epoll or poll
-		int        index_; // used by Poller.
-		bool       logHup_;
+		EventLoop*                  loop_;
+		const int                   fd_;
+		int                         events_;
+		int                         revents_; // it's the received event types of epoll or poll
+		int                         index_; // used by Poller.
+		bool                        logHup_;
 
-		std::weak_ptr<void> tie_;
-		bool tied_;
-		bool eventHandling_;
-		bool addedToLoop_;
-		ReadEventCallback readCallback_;
-		EventCallback writeCallback_;
-		EventCallback closeCallback_;
-		EventCallback errorCallback_;
+		std::weak_ptr<void>         tie_;           //std::shared_ptr<void>/std::shared_ptr<void>可以指向不同的数据类型
+		bool                        tied_;
+		bool                        eventHandling_;
+		bool                        addedToLoop_;
+		ReadEventCallback           readCallback_;
+		EventCallback               writeCallback_;
+		EventCallback               closeCallback_;
+		EventCallback               errorCallback_;
 	};
 }

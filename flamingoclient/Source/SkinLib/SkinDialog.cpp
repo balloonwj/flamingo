@@ -69,7 +69,8 @@ CSkinDialog::CSkinDialog(void)/*:m_hWndRgn(NULL)*/
 	m_bMaxBtnPress = m_bMaxBtnHover = FALSE;
 	m_bCloseBtnPress = m_bCloseBtnHover = FALSE;
 
-	m_clrBg = ::GetSysColor(COLOR_BTNFACE);
+	//m_clrBg = ::GetSysColor(COLOR_BTNFACE);
+    m_clrBg = RGB(255, 255, 255);
 
 	m_lpBgImg = NULL;
 	m_lpTitleBarBgImg = NULL;
@@ -426,6 +427,7 @@ void CSkinDialog::OnPaint(CDCHandle dc)
 	}
 
 	CDCHandle MemDC(m_hMemDC);
+    MemDC.FillSolidRect(&rcClient, m_clrBg);
 
 	//m_clrBg = RGB(255, 0, 0);
 	if (m_lpBgImg != NULL && !m_lpBgImg->IsNull())	// 野割嘘尚夕頭
@@ -433,10 +435,10 @@ void CSkinDialog::OnPaint(CDCHandle dc)
 		MemDC.FillSolidRect(&rcClient, m_clrBg);
 		m_lpBgImg->Draw2(MemDC.m_hDC, rcClient);
 	}
-	else	// 野割嘘尚冲弼
-	{
-		MemDC.FillSolidRect(&rcClient, m_clrBg);
-	}
+	//else	// 野割嘘尚冲弼
+	//{
+	//	;
+	//}
 
 	if (m_lpTitleBarBgImg != NULL && !m_lpTitleBarBgImg->IsNull())	// 野割炎籾生嘘尚夕頭
 	{

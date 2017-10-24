@@ -1,14 +1,8 @@
 #pragma once
 
-extern TCHAR g_szHomePath[MAX_PATH];
-extern char g_szHomePathAscii[MAX_PATH];
-extern const UINT USER_THUMB_COUNT;
-
-#pragma once
-
+#include "jsoncpp-0.5.0/json.h"
 #include <string>
 #include <vector>
-#include "jsoncpp-0.5.0/json.h"		// 使用JsonCpp需要包含的头文件
 
 #if defined(UNICODE) || defined(_UNICODE)
 typedef std::wstring tstring;
@@ -16,31 +10,39 @@ typedef std::wstring tstring;
 typedef std::string tstring;
 #endif
 
-#define		FMG_MSG_LOGIN_RESULT				WM_USER + 100		// 登录返回消息
+extern TCHAR g_szHomePath[MAX_PATH];
+extern char g_szHomePathAscii[MAX_PATH];
+extern const UINT USER_THUMB_COUNT;
+
+extern std::wstring g_strAppTitle;
+
+#define     FMG_MSG_NET_ERROR               WM_USER + 50            // 网络错误
+
+#define		FMG_MSG_LOGIN_RESULT			WM_USER + 100		    // 登录返回消息
 #define		FMG_MSG_LOGOUT_RESULT			WM_USER + 101			// 注销返回消息
 #define		FMG_MSG_UPDATE_BUDDY_LIST		WM_USER + 103			// 更新好友列表消息
 #define		FMG_MSG_UPDATE_GROUP_LIST		WM_USER + 104			// 更新群列表消息
-#define		FMG_MSG_UPDATE_RECENT_LIST		WM_USER + 105		// 更新最近联系人列表消息
+#define		FMG_MSG_UPDATE_RECENT_LIST		WM_USER + 105		    // 更新最近联系人列表消息
 #define		FMG_MSG_BUDDY_MSG				WM_USER + 106			// 好友消息
 #define		FMG_MSG_GROUP_MSG				WM_USER + 107			// 群消息
-#define		FMG_MSG_SESS_MSG					WM_USER + 108		// 临时会话消息
+#define		FMG_MSG_SESS_MSG				WM_USER + 108		    // 临时会话消息
 #define		FMG_MSG_STATUS_CHANGE_MSG		WM_USER + 109			// 好友状态改变消息
-#define		FMG_MSG_KICK_MSG					WM_USER + 110		// 被踢下线消息
+#define		FMG_MSG_KICK_MSG				WM_USER + 110		    // 被踢下线消息
 #define		FMG_MSG_SYS_GROUP_MSG			WM_USER + 111			// 群系统消息
-#define		FMG_MSG_UPDATE_BUDDY_NUMBER		WM_USER + 112		// 更新好友号码
+#define		FMG_MSG_UPDATE_BUDDY_NUMBER		WM_USER + 112		    // 更新好友号码
 #define		FMG_MSG_UPDATE_GMEMBER_NUMBER	WM_USER + 113			// 更新群成员号码
-#define		FMG_MSG_UPDATE_GROUP_NUMBER		WM_USER + 114		// 更新群号码
+#define		FMG_MSG_UPDATE_GROUP_NUMBER		WM_USER + 114		    // 更新群号码
 #define		FMG_MSG_UPDATE_BUDDY_SIGN		WM_USER + 115			// 更新好友个性签名
-#define		FMG_MSG_UPDATE_GMEMBER_SIGN		WM_USER + 116		// 更新群成员个性签名
+#define		FMG_MSG_UPDATE_GMEMBER_SIGN		WM_USER + 116		    // 更新群成员个性签名
 #define		FMG_MSG_UPDATE_BUDDY_INFO		WM_USER + 117			// 更新好友信息
-#define		FMG_MSG_UPDATE_GMEMBER_INFO		WM_USER + 118		// 更新群成员信息
+#define		FMG_MSG_UPDATE_GMEMBER_INFO		WM_USER + 118		    // 更新群成员信息
 #define		FMG_MSG_UPDATE_GROUP_INFO		WM_USER + 119			// 更新群信息
-#define		FMG_MSG_UPDATE_C2CMSGSIG			WM_USER + 120		// 更新临时会话信令
-#define		FMG_MSG_UPDATE_GROUPFACESIG		WM_USER + 121		// 更新群表情信令
-#define		FMG_MSG_UPDATE_BUDDY_HEADPIC		WM_USER + 122		// 更新好友头像
-#define		FMG_MSG_UPDATE_GMEMBER_HEADPIC	WM_USER + 123		// 更新群成员头像
-#define		FMG_MSG_UPDATE_GROUP_HEADPIC		WM_USER + 124		// 更新群头像
-#define		FMG_MSG_CHANGE_STATUS_RESULT		WM_USER + 125		// 改变在线状态返回消息
+#define		FMG_MSG_UPDATE_C2CMSGSIG		WM_USER + 120		    // 更新临时会话信令
+#define		FMG_MSG_UPDATE_GROUPFACESIG		WM_USER + 121		    // 更新群表情信令
+#define		FMG_MSG_UPDATE_BUDDY_HEADPIC	WM_USER + 122		    // 更新好友头像
+#define		FMG_MSG_UPDATE_GMEMBER_HEADPIC	WM_USER + 123		    // 更新群成员头像
+#define		FMG_MSG_UPDATE_GROUP_HEADPIC	WM_USER + 124		    // 更新群头像
+#define		FMG_MSG_CHANGE_STATUS_RESULT	WM_USER + 125		    // 改变在线状态返回消息
 
 #define		FMG_MSG_INTERNAL_GETBUDDYDATA	WM_USER + 400
 #define		FMG_MSG_INTERNAL_GETGROUPDATA	WM_USER + 401
@@ -48,54 +50,51 @@ typedef std::string tstring;
 #define		FMG_MSG_INTERNAL_GROUPID2CODE	WM_USER + 403
 
 #define		FMG_MSG_REGISTER				WM_USER + 404			//注册新用户
-#define		FMG_MSG_FINDFREIND			WM_USER + 405
+#define		FMG_MSG_FINDFREIND			    WM_USER + 405
 #define     FMG_MSG_ADDFREIND				WM_USER + 406			//主动发送加好友请求
 #define		FMG_MSG_RECVADDFRIENDREQUSET	WM_USER + 407			//收到加好友请求
 #define		FMG_MSG_DELETEFRIEND			WM_USER + 408
-#define		FMG_MSG_SENDCHATMSG_RESULT	WM_USER + 409			//给好友发消息的反馈结果
-//#define		FMG_MSG_UPLOADFILE_RESULT		WM_USER + 410			//上传文件反馈结果
+#define		FMG_MSG_SENDCHATMSG_RESULT	    WM_USER + 409			//给好友发消息的反馈结果
+//#define		FMG_MSG_UPLOADFILE_RESULT		WM_USER + 410		//上传文件反馈结果
 #define		FMG_MSG_RECVFILE_REQUEST		WM_USER + 411			//接受文件请求
-#define		FMG_MSG_RECVFILE_RESULT		WM_USER + 412			//下载文件反馈结果
+#define		FMG_MSG_RECVFILE_RESULT		    WM_USER + 412			//下载文件反馈结果
 #define     FMG_MSG_RECVADDFRIENDANS		WM_USER + 413			//收到请求添加好友的对方反馈(拒绝或者同意)
 #define		FMG_MSG_HEARTBEAT				WM_USER + 414			//心跳消息
 #define		FMG_MSG_GOOFFLINE				WM_USER + 415			//下线或者掉线
-#define		FMG_MSG_UPDATE_USER_BASIC_INFO WM_USER + 416			//更新某个用户基本信息
+#define		FMG_MSG_UPDATE_USER_BASIC_INFO  WM_USER + 416			//更新某个用户基本信息
 #define		FMG_MSG_UPDATE_GROUP_BASIC_INFO WM_USER + 417		    //更新某个群组基本信息
 
 #define		FMG_MSG_UPDATE_FRIEND_IDS		WM_USER + 418			//更新所有好友ID
 #define		FMG_MSG_MODIFY_USER_INFO		WM_USER + 421			//修改用户信息成功
 #define		FMG_MSG_RECV_USER_STATUS_CHANGE_DATA	WM_USER + 422	//收到用户在线状态改变数据
-#define		FMG_MSG_USER_STATUS_CHANGE	WM_USER + 423			//用户在线状态改变
-#define		FMG_MSG_SELF_STATUS_CHANGE	WM_USER + 424			//自己在另外的终端上下线通知
-#define     FMG_MSG_UPDATE_USER_CHAT_MSG_ID	WM_USER + 425		//更新用户的聊天消息ID
+#define		FMG_MSG_USER_STATUS_CHANGE	    WM_USER + 423			//用户在线状态改变
+#define		FMG_MSG_SELF_STATUS_CHANGE	    WM_USER + 424			//自己在另外的终端上下线通知
+#define     FMG_MSG_UPDATE_USER_CHAT_MSG_ID	WM_USER + 425		    //更新用户的聊天消息ID
 #define		FMG_MSG_RECV_CHAT_MSG			WM_USER + 426			//收到聊天消息
 #define		FMG_MSG_UPDATE_CHATDLG_USERINFO WM_USER + 427			//更新聊天窗口中用户状态
-#define		FMG_MSG_SEND_FILE_PROGRESS	WM_USER + 428			//文件发送进度消息
-#define		FMG_MSG_RECV_FILE_PROGRESS	WM_USER + 429			//接收文件进度消息
+#define		FMG_MSG_SEND_FILE_PROGRESS	    WM_USER + 428			//文件发送进度消息
+#define		FMG_MSG_RECV_FILE_PROGRESS	    WM_USER + 429			//接收文件进度消息
 #define		FMG_MSG_SEND_FILE_RESULT		WM_USER + 430			//发送文件结果
 #define		FMG_MSG_RECV_FILE_RESULT		WM_USER + 431			//接收文件结果
-#define		FMG_MSG_NETWORK_STATUS_CHANGE WM_USER + 432			//本机网络状态发送变化
+#define		FMG_MSG_NETWORK_STATUS_CHANGE   WM_USER + 432			//本机网络状态发送变化
 #define		FMG_MSG_CUSTOMFACE_AVAILABLE	WM_USER + 433			//自定义头像变为可用
 #define		FMG_MSG_UPLOAD_USER_THUMB		WM_USER + 434			//自定义头像消息
-#define		FMG_MSG_TARGET_INFO_CHANGE	WM_USER + 435			//服务器告诉客户端用户信息发生变化，需要用户去取新的用户信息
-#define		FMG_MSG_MODIFY_PASSWORD_RESULT WM_USER + 436			//修改密码结果
+#define		FMG_MSG_TARGET_INFO_CHANGE	    WM_USER + 435			//服务器告诉客户端用户信息发生变化，需要用户去取新的用户信息
+#define		FMG_MSG_MODIFY_PASSWORD_RESULT  WM_USER + 436			//修改密码结果
 #define		FMG_MSG_CREATE_NEW_GROUP_RESULT WM_USER + 437			//创建群组结果
+#define     FMG_MSG_SCREENSHOT              WM_USER + 438			//屏幕截图消息
 
 
-#define		FMG_MSG_FIRST					WM_USER + 100
+#define		FMG_MSG_FIRST					WM_USER + 001
 #define		FMG_MSG_LAST					WM_USER + 500
 
-// UTalk在线状态字符串
-#define		UTalk_STATUS_STR_ONLINE			_T("online")			// 我在线上
-#define		UTalk_STATUS_STR_OFFLINE		_T("offline")			// 离线
-
-// UTalk消息类型字符串
-#define		FMG_MSG_TYPE_STR_BUDDY			_T("message")		// 好友消息类型
-#define		FMG_MSG_TYPE_STR_GROUP			_T("group_message")	// 群消息类型
-#define		FMG_MSG_TYPE_STR_SESS			_T("sess_message")		// 临时会话消息类型
+// 消息类型字符串
+#define		FMG_MSG_TYPE_STR_BUDDY			_T("message")		        // 好友消息类型
+#define		FMG_MSG_TYPE_STR_GROUP			_T("group_message")	        // 群消息类型
+#define		FMG_MSG_TYPE_STR_SESS			_T("sess_message")		    // 临时会话消息类型
 #define		FMG_MSG_TYPE_STR_STATUSCHANGE	_T("buddies_status_change")	// 好友状态改变消息类型
-#define		FMG_MSG_TYPE_STR_KICK			_T("kick_message")		// 被踢下线消息类型
-#define		FMG_MSG_TYPE_STR_SYSGROUP		_T("sys_g_msg")			// 群系统消息类型
+#define		FMG_MSG_TYPE_STR_KICK			_T("kick_message")		    // 被踢下线消息类型
+#define		FMG_MSG_TYPE_STR_SYSGROUP		_T("sys_g_msg")			    // 群系统消息类型
 
 //typedef NS_ENUM(int, IUKMessageInsideType) {// 聊天消息类型
 //    IUKMessageInsideTypeUndefined   = 0,// 未知消息类型
@@ -118,6 +117,8 @@ enum CONTENT_TYPE
     CONTENT_TYPE_FONT_INFO,				//pc专用，移动端忽略
     CONTENT_TYPE_FACE,					//pc专用，移动端忽略
     CONTENT_TYPE_CHAT_IMAGE,			//pc专用，移动端忽略
+
+    CONTENT_TYPE_REMOTE_DESKTOP         //远程桌面
 };
 
 class CBuddyTeamInfo;

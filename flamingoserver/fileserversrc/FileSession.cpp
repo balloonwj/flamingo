@@ -16,7 +16,10 @@
 using namespace net;
 using namespace balloon;
 
-FileSession::FileSession(const std::shared_ptr<TcpConnection>& conn, const char* filebasedir/* = "filecache/"*/) :
+//文件服务器最大的包50M
+#define MAX_PACKAGE_SIZE    50 * 1024 * 1024
+
+FileSession::FileSession(const std::shared_ptr<TcpConnection>& conn, const char* filebasedir) :
 TcpSession(conn), 
 m_id(0),
 m_seq(0),
@@ -36,13 +39,22 @@ void FileSession::OnRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBu
         //不够一个包头大小
         if (pBuffer->readableBytes() < (size_t)sizeof(file_msg))
         {
-            LOG_INFO << "buffer is not enough for a package header, pBuffer->readableBytes()=" << pBuffer->readableBytes() << ", sizeof(msg)=" << sizeof(file_msg);
+            //LOG_INFO << "buffer is not enough for a package header, pBuffer->readableBytes()=" << pBuffer->readableBytes() << ", sizeof(msg)=" << sizeof(file_msg);
             return;
         }
 
         //不够一个整包大小
         file_msg header;
         memcpy(&header, pBuffer->peek(), sizeof(file_msg));
+
+        //包头有错误，立即关闭连接
+        if (header.packagesize <= 0 || header.packagesize > MAX_PACKAGE_SIZE)
+        {
+            //客户端发非法数据包，服务器主动关闭之
+            LOG_ERROR << "Illegal package heade size, close TcpConnection, client: " << conn->peerAddress().toIpPort();
+            conn->forceClose();
+        }
+
         if (pBuffer->readableBytes() < (size_t)header.packagesize + sizeof(file_msg))
             return;
 
@@ -52,7 +64,7 @@ void FileSession::OnRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBu
         pBuffer->retrieve(header.packagesize);
         if (!Process(conn, inbuf.c_str(), inbuf.length()))
         {
-            LOG_WARN << "Process error, close TcpConnection";
+            LOG_ERROR << "Process error, close TcpConnection, client: " << conn->peerAddress().toIpPort();
             conn->forceClose();
         }
     }// end while-loop
@@ -65,14 +77,14 @@ bool FileSession::Process(const std::shared_ptr<TcpConnection>& conn, const char
     int32_t cmd;
     if (!readStream.ReadInt32(cmd))
     {
-        LOG_WARN << "read cmd error !!!";
+        LOG_ERROR << "read cmd error, client: " << conn->peerAddress().toIpPort();
         return false;
     }
 
     //int seq;
     if (!readStream.ReadInt32(m_seq))
     {
-        LOG_WARN << "read seq error !!!";
+        LOG_ERROR << "read seq error, client: " << conn->peerAddress().toIpPort();
         return false;
     }
 
@@ -80,21 +92,21 @@ bool FileSession::Process(const std::shared_ptr<TcpConnection>& conn, const char
     size_t md5length;
     if (!readStream.ReadString(&filemd5, 0, md5length) || md5length == 0)
     {
-        LOG_WARN << "read filemd5 error !!!";
+        LOG_ERROR << "read filemd5 error, client: " << conn->peerAddress().toIpPort();
         return false;
     }
 
     int64_t offset;
     if (!readStream.ReadInt64(offset))
     {
-        LOG_WARN << "read offset error !!!";
+        LOG_ERROR << "read offset error, client: " << conn->peerAddress().toIpPort();
         return false;
     }
 
     int64_t filesize;
     if (!readStream.ReadInt64(filesize))
     {
-        LOG_WARN << "read filesize error !!!";
+        LOG_ERROR << "read filesize error, client: " << conn->peerAddress().toIpPort();
         return false;
     }
 
@@ -102,37 +114,37 @@ bool FileSession::Process(const std::shared_ptr<TcpConnection>& conn, const char
     size_t filedatalength;
     if (!readStream.ReadString(&filedata, 0, filedatalength))
     {
-        LOG_WARN << "read filedata error !!!";
+        LOG_ERROR << "read filedata error, client: " << conn->peerAddress().toIpPort();
         return false;
     }
-
    
-    LOG_INFO << "Recv from client: cmd=" << cmd << ", seq=" << m_seq << ", header.packagesize:" << length << ", filemd5=" << filemd5 << ", md5length=" << md5length;
-    LOG_DEBUG_BIN((unsigned char*)inbuf, length);
+    LOG_INFO << "Request from client: cmd=" << cmd 
+             << ", seq=" << m_seq              
+             << ", filemd5=" << filemd5 
+             << ", md5length=" << md5length
+             << ", offset=" << offset
+             << ", filesize=" << filesize
+             << ", filedata length=" << filedata.length()
+             << ", header.packagesize:" << length
+             << ", client: " << conn->peerAddress().toIpPort();
+    //LOG_DEBUG_BIN((unsigned char*)inbuf, length);
 
     switch (cmd)
     {
-        //文件上传
+        //客户端文件上传
         case msg_type_upload_req:
-        {
-            OnUploadFileResponse(filemd5, offset, filesize,  filedata, conn);
-        }
-            break;
+            return OnUploadFileResponse(filemd5, offset, filesize, filedata, conn);
 
-
-        //客户端上传的文件内容, 服务器端下载
-        case msg_type_download_req:
-        {           
+        //客户端文件下载
+        case msg_type_download_req:         
             //对于下载，客户端不知道文件大小， 所以值是0
-            if (filedatalength != 0)
-                return false;
-            OnDownloadFileResponse(filemd5, offset, filesize,  conn);
-        }
-            break;
+            //if (filedatalength != 0)
+            //    return false;
+            return OnDownloadFileResponse(filemd5, conn);
 
         default:
             //pBuffer->retrieveAll();
-            LOG_WARN << "unsupport cmd, cmd:" << cmd << ", connection name:" << conn->peerAddress().toIpPort();
+            LOG_ERROR << "unsupport cmd, cmd:" << cmd << ", client:" << conn->peerAddress().toIpPort();
             //conn->forceClose();
             return false;
     }// end switch
@@ -142,38 +154,31 @@ bool FileSession::Process(const std::shared_ptr<TcpConnection>& conn, const char
     return true;
 }
 
-void FileSession::OnUploadFileResponse(const std::string& filemd5, int64_t offset, int64_t filesize, const std::string& filedata, const std::shared_ptr<TcpConnection>& conn)
+bool FileSession::OnUploadFileResponse(const std::string& filemd5, int64_t offset, int64_t filesize, const std::string& filedata, const std::shared_ptr<TcpConnection>& conn)
 {
     if (filemd5.empty())
     {
-        LOG_WARN << "Empty filemd5, connection name:" << conn->peerAddress().toIpPort();
-        return;
+        LOG_ERROR << "Empty filemd5, client:" << conn->peerAddress().toIpPort();
+        return false;
     }
-    
-    std::string outbuf;
-    BinaryWriteStream writeStream(&outbuf);
-    
+     
     //服务器上已经存在该文件，直接返回
     if (Singleton<FileManager>::Instance().IsFileExsit(filemd5.c_str()))
     {
-        writeStream.WriteInt32(msg_type_upload_resp);
-        writeStream.WriteInt32(m_seq);
-        writeStream.WriteString(filemd5);
-        offset = filesize = -1;
-        writeStream.WriteInt64(offset);
-        writeStream.WriteInt64(filesize);
-        string dummyfiledata;
-        writeStream.WriteString(dummyfiledata);
-        LOG_INFO << "Response to client: cmd=msg_type_upload_resp" << ", connection name:" << conn->peerAddress().toIpPort();
-        writeStream.Flush();
+        offset = filesize;      
+        string dummyfiledata;      
+        Send(msg_type_upload_resp, m_seq, file_msg_error_complete, filemd5, offset, filesize, dummyfiledata);
+        
+        
+        LOG_INFO << "Response to client: cmd=msg_type_upload_resp, errorcode: file_msg_error_complete"
+                 << ", filemd5: " << filemd5
+                 << ", offset: " << offset
+                 << ", filesize: " << filesize
+                 << ", client:" << conn->peerAddress().toIpPort();
 
-        Send(outbuf);
-        return;
+        return true;
     }
     
-    writeStream.WriteInt32(msg_type_upload_resp);
-    writeStream.WriteInt32(m_seq);
-    writeStream.WriteString(filemd5);
     if (offset == 0)
     {
         string filename = m_strFileBaseDir;
@@ -181,16 +186,16 @@ void FileSession::OnUploadFileResponse(const std::string& filemd5, int64_t offse
         m_fp = fopen(filename.c_str(), "w");
         if (m_fp == NULL)
         {
-            LOG_ERROR << "fopen file error, filemd5=" << filemd5 << ", connection name:" << conn->peerAddress().toIpPort();
-            return;
+            LOG_ERROR << "fopen file error, filemd5=" << filemd5 << ", client:" << conn->peerAddress().toIpPort();
+            return false;
         }
     }
     else
     {
         if (m_fp == NULL)
         {
-            LOG_ERROR << "file pointer should not be null, filemd5=" << filemd5 << ", offset=" << offset << ", connection name:" << conn->peerAddress().toIpPort();
-            return;
+            LOG_ERROR << "file pointer should not be null, filemd5=" << filemd5 << ", offset=" << offset << ", client:" << conn->peerAddress().toIpPort();
+            return false;
         }
     }
 
@@ -202,44 +207,60 @@ void FileSession::OnUploadFileResponse(const std::string& filemd5, int64_t offse
 					<< ", filedata.length(): " << filedata.length()
 					<< ", m_fp: " << m_fp
 					<< ", buffer size is 512*1024"
-					<< ", connection name:" << conn->peerAddress().toIpPort();
-        return;
+					<< ", client:" << conn->peerAddress().toIpPort();
+        return false;
     }
+
+    int32_t errorcode = file_msg_error_progress;
 
     //文件上传成功
     if (offset + (int64_t)filedata.length() == filesize)
     {
-        offset = filesize = -1;
+        offset = filesize;
+        errorcode = file_msg_error_complete;
         Singleton<FileManager>::Instance().addFile(filemd5.c_str());
         ResetFile();
     }
 
-    writeStream.WriteInt64(offset);
-    writeStream.WriteInt64(filesize);
     string dummyfiledatax;
-    writeStream.WriteString(dummyfiledatax);
-    writeStream.Flush();
+    Send(msg_type_upload_resp, m_seq, errorcode, filemd5, offset, filesize, dummyfiledatax);
+       
+    LOG_INFO << "Response to client: cmd=msg_type_upload_resp, errorcode: " 
+             << errorcode << ", filemd5: " << filemd5
+             << ", offset: " << offset
+             << ", filesize: " << filesize
+             << ", client:" << conn->peerAddress().toIpPort();
 
-    Send(outbuf);
-           
-    LOG_INFO << "Response to client: cmd=msg_type_upload_resp" << ", connection name:" << conn->peerAddress().toIpPort();
+    return true;
 }
 
-void FileSession::OnDownloadFileResponse(const std::string& filemd5, int64_t offset, int64_t filesize, const std::shared_ptr<TcpConnection>& conn)
+bool FileSession::OnDownloadFileResponse(const std::string& filemd5, const std::shared_ptr<TcpConnection>& conn)
 {
     if (filemd5.empty())
     {
-        LOG_WARN << "Empty filemd5, connection name:" << conn->peerAddress().toIpPort();
-        return;
+        LOG_ERROR << "Empty filemd5, client:" << conn->peerAddress().toIpPort();
+        return false;
     }
     
-    //TODO: 客户端下载不存在的文件，不应答客户端？
     if (!Singleton<FileManager>::Instance().IsFileExsit(filemd5.c_str()))
     {
-        LOG_WARN << "filemd5 not exsit, filemd5: " << filemd5 << ", connection name:" << conn->peerAddress().toIpPort();
-        return;
+        //客户端下载不存在的文件，告诉客户端不存在该文件
+        string dummyfiledata;
+        //文件不存在,则设置应答中偏移量offset和文件大小filesize均设置为0
+        int64_t notExsitFileOffset = 0;
+        int64_t notExsitFileSize = 0;
+        Send(msg_type_download_resp, m_seq, file_msg_error_not_exist, filemd5, notExsitFileOffset, notExsitFileSize, dummyfiledata);
+        LOG_ERROR << "filemd5 not exsit, filemd5: " << filemd5 << ", client:" << conn->peerAddress().toIpPort();
+        LOG_INFO << "Response to client: cmd=msg_type_download_resp, errorcode=file_msg_error_not_exist "
+                 << ", filemd5: " << filemd5
+                 << ", offset: 0"
+                 << ", filesize: 0"
+                 << ", filedataLength: 0"
+                 << ", client:" << conn->peerAddress().toIpPort();
+        return true;
     }
 
+    //文件还未打开,则先打开
     if (m_fp == NULL)
     {
         string filename = m_strFileBaseDir;
@@ -247,42 +268,30 @@ void FileSession::OnDownloadFileResponse(const std::string& filemd5, int64_t off
         m_fp = fopen(filename.c_str(), "r+");
         if (m_fp == NULL)
         {
-            LOG_ERROR << "fopen file error, filemd5: " << filemd5 << ", connection name:" << conn->peerAddress().toIpPort();
-            return;
+            LOG_ERROR << "fopen file error, filemd5: " << filemd5 << ", client:" << conn->peerAddress().toIpPort();
+            return false;
         }
         fseek(m_fp, 0, SEEK_END);
-        m_filesize = ftell(m_fp);
-		if (m_filesize <= 0)
+        m_currentDownloadFileSize = ftell(m_fp);
+        if (m_currentDownloadFileSize <= 0)
 		{
-			LOG_ERROR << "m_filesize: " << m_filesize << ", errno: " << errno << ", filemd5: " << filemd5 << ", connection name : " << conn->peerAddress().toIpPort();
-			return;
+            LOG_ERROR << "m_filesize: " << m_currentDownloadFileSize << ", errno: " << errno << ", filemd5: " << filemd5 << ", client : " << conn->peerAddress().toIpPort();
+			return false;
 		}
         fseek(m_fp, 0, SEEK_SET);
     }
-
-    std::string outbuf;
-    BinaryWriteStream writeStream(&outbuf);
-    writeStream.WriteInt32(msg_type_download_resp);
-    writeStream.WriteInt32(m_seq);
-    writeStream.WriteString(filemd5);
 
     string filedata;
     
     //m_offset += offset;
     int64_t currentSendSize = 512 * 1024;
     char buffer[512 * 1024] = { 0 };
-    if (m_filesize <= m_offset + currentSendSize)
+    if (m_currentDownloadFileSize <= m_currentDownloadFileOffset + currentSendSize)
     {
-        currentSendSize = m_filesize - m_offset;
+        currentSendSize = m_currentDownloadFileSize - m_currentDownloadFileOffset;
     }
 
-	LOG_INFO << "currentSendSize: " << currentSendSize 
-			 << ", m_filesize: " << m_filesize 
-			 << ", m_offset: " << m_offset 
-			 << ", filemd5: " << filemd5
-			 << ", connection name:" << conn->peerAddress().toIpPort();
-		
-
+    //TODO: 这个fread()调用时可能会出现崩溃,待排查
 	if (currentSendSize <= 0 || fread(buffer, currentSendSize, 1, m_fp) != 1)
 	{
 		LOG_ERROR << "fread error, filemd5: " << filemd5
@@ -293,32 +302,39 @@ void FileSession::OnDownloadFileResponse(const std::string& filemd5, int64_t off
 					<< ", connection name:" << conn->peerAddress().toIpPort();
 	}
 
+    //将要发送的偏移量
+    int sendoffset = m_currentDownloadFileOffset;
+    m_currentDownloadFileOffset += currentSendSize;
+    filedata.append(buffer, currentSendSize);      
 
-    writeStream.WriteInt64(m_offset);
-    m_offset += currentSendSize;
-    filedata.append(buffer, currentSendSize);   
-    writeStream.WriteInt64(m_filesize);
-    writeStream.WriteString(filedata);
-    writeStream.Flush();
-
-    LOG_INFO << "Response to client: cmd = msg_type_download_resp, filemd5: " << filemd5 << ", connection name:" << conn->peerAddress().toIpPort();
-
-    Send(outbuf);
-
+    int errorcode = file_msg_error_progress;
     //文件已经下载完成
-    if (m_offset == m_filesize)
-    {
+    if (m_currentDownloadFileOffset == m_currentDownloadFileSize)
+        errorcode = file_msg_error_complete;
+
+    Send(msg_type_download_resp, m_seq, errorcode, filemd5, sendoffset, m_currentDownloadFileSize, filedata);
+
+    LOG_INFO << "Response to client: cmd=msg_type_download_resp, errorcode: " << errorcode
+             << ", filemd5: " << filemd5
+             << ", offset: " << sendoffset
+             << ", filesize: " << m_currentDownloadFileSize
+             << ", filedataLength: " << filedata.length()
+             << ", client:" << conn->peerAddress().toIpPort();
+
+    //文件下载成功,重置文件状态
+    if (errorcode == file_msg_error_complete)
         ResetFile();
-    }
+
+     return true;
 }
 
 void FileSession::ResetFile()
 {
-    if (m_fp)
+    if (m_fp != NULL)
     {
         fclose(m_fp);
-        m_offset = 0;
-        m_filesize = 0;
+        m_currentDownloadFileOffset = 0;
+        m_currentDownloadFileSize = 0;
 		m_fp = NULL;
     }
 }

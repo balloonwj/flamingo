@@ -81,7 +81,6 @@ int main(int argc, char* argv[])
     signal(SIGCHLD, SIG_DFL);
     signal(SIGPIPE, SIG_IGN);
     signal(SIGINT, prog_exit);
-    signal(SIGKILL, prog_exit);
     signal(SIGTERM, prog_exit);
 
     int ch;
@@ -126,7 +125,7 @@ int main(int argc, char* argv[])
     }
     std::string strLogFileFullPath(logfilepath);
     strLogFileFullPath += logfilename;
-    Logger::setLogLevel(Logger::DEBUG);
+    Logger::setLogLevel(Logger::INFO);
     int kRollSize = 500 * 1000 * 1000;
     AsyncLogging log(strLogFileFullPath.c_str(), kRollSize);
     log.start();
@@ -142,6 +141,8 @@ int main(int argc, char* argv[])
     const char* listenip = config.GetConfigName("listenip");
     short listenport = (short)atol(config.GetConfigName("listenport"));
     Singleton<FileServer>::Instance().Init(listenip, listenport, &g_mainLoop, filecachedir);
+
+    LOG_INFO << "fileserver initialization complete.";
     
     g_mainLoop.loop();
 

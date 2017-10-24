@@ -1,4 +1,6 @@
 #include <functional>
+#include <thread>
+#include <sstream>
 #include <errno.h>
 #include "../base/logging.h"
 #include "sockets.h"
@@ -76,7 +78,6 @@ void TcpConnection::send(const void* data, int len)
         }
         else
         {
-            //TODO: std::bind绑定栈变量会怎么样？
             string message(static_cast<const char*>(data), len);
             loop_->runInLoop(
                 std::bind(static_cast<void (TcpConnection::*)(const string&)>(&TcpConnection::sendInLoop),
@@ -146,6 +147,11 @@ void TcpConnection::sendInLoop(const void* data, size_t len)
     if (!channel_->isWriting() && outputBuffer_.readableBytes() == 0)
     {
         nwrote = sockets::write(channel_->fd(), data, len);
+        //TODO: 打印threadid用于调试，后面去掉
+        //std::stringstream ss;
+        //ss << std::this_thread::get_id();
+        //LOG_INFO << "send data in threadID = " << ss;
+        
         if (nwrote >= 0)
         {
             remaining = len - nwrote;

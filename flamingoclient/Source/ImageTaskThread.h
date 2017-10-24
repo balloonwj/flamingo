@@ -8,7 +8,6 @@ class CIUProtocol;
 class CFileItemRequest;
 class CFlamingoClient;
 class CUploadFileResult;
-class CIUSocket;
 
 /**
  *  用于收发聊天图片和头像的类，连接imgServer
@@ -16,7 +15,7 @@ class CIUSocket;
 class CImageTaskThread : public CThread
 {
 public:
-	CImageTaskThread(CIUSocket* sockeClient);
+	CImageTaskThread();
 	virtual ~CImageTaskThread(void);
 
 public:
@@ -45,6 +44,5 @@ private:
 	std::list<CFileItemRequest*>	m_Filelist;	
 	std::mutex						m_mtItems;
 	std::condition_variable			m_cvItems;
-    CIUSocket*                      m_SocketClient;
     int32_t                         m_seq;
 };

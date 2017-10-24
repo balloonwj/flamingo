@@ -49,11 +49,11 @@ namespace net
         Timer& operator=(const Timer& rhs) = delete;
 
     private:
-        const TimerCallback callback_;
-        Timestamp expiration_;
-        const double interval_;
-        const bool repeat_;
-        const int64_t sequence_;
+        const TimerCallback         callback_;
+        Timestamp                   expiration_;
+        const double                interval_;
+        const bool                  repeat_;
+        const int64_t               sequence_;
 
         static std::atomic<int64_t> s_numCreated_;
     };

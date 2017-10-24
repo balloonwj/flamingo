@@ -22,6 +22,8 @@ FileManager::~FileManager()
 
 bool FileManager::Init(const char* basepath)
 {
+    m_basepath = basepath;
+    
     DIR* dp = opendir(basepath);
     if (dp == NULL)
     {
@@ -69,7 +71,9 @@ bool FileManager::IsFileExsit(const char* filename)
     }
 
     //再查看文件系统
-    FILE* fp = fopen(filename, "r");
+    std::string filepath = m_basepath;
+    filepath += filename;
+    FILE* fp = fopen(filepath.c_str(), "r");
     if (fp != NULL)
     {
         fclose(fp);

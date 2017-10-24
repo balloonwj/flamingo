@@ -71,6 +71,7 @@ BOOL CSystemSettingDlg::InitUI()
 	m_btnMute.SetTransparent(TRUE, hDlgBgDC);
 	m_btnMute.SetCheckBoxPic(_T("CheckBox\\checkbox_normal.png"), _T("CheckBox\\checkbox_hightlight.png"), _T("CheckBox\\checkbox_tick_normal.png"), _T("CheckBox\\checkbox_tick_highlight.png"));
 	m_btnMute.SubclassWindow(GetDlgItem(IDC_MUTE));
+    m_btnMute.SetCheck(m_pFMGClient->m_UserConfig.IsEnableMute());
 
 	m_btnAutoReply.SetButtonType(SKIN_CHECKBOX);
 	m_btnAutoReply.SetTransparent(TRUE, hDlgBgDC);
@@ -165,8 +166,8 @@ void CSystemSettingDlg::OnCheckDestroyAfterRead(UINT uNotifyCode, int nID, CWind
 	
 void CSystemSettingDlg::OnBtnOK(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
-	assert(m_pFMGClient != NULL);
-
+	//assert(m_pFMGClient != NULL);
+    m_pFMGClient->m_UserConfig.EnableMute(m_btnMute.GetCheck());
 	m_pFMGClient->m_UserConfig.EnableExitPrompt(m_btnExitPrompt.GetCheck());
 	m_pFMGClient->m_UserConfig.EnableExitWhenCloseMainDlg(!m_btnExitWhenClose.GetCheck());
 

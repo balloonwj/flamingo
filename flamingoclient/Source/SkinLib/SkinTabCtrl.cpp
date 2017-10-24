@@ -39,6 +39,7 @@ CSkinTabCtrl::CSkinTabCtrl(void)
 	m_bAutoSize = FALSE;
 	m_bTransparent = FALSE;
 	m_hBgDC = NULL;
+    m_clrBgColor = RGB(255, 255, 255);
 }
 
 CSkinTabCtrl::~CSkinTabCtrl(void)
@@ -75,6 +76,11 @@ BOOL CSkinTabCtrl::SetBgPic(LPCTSTR lpszFileName, const CRect& rcNinePart)
 		return FALSE;
 	else
 		return TRUE;
+}
+
+void CSkinTabCtrl::SetBgColor(COLORREF clrBgColor)
+{
+    m_clrBgColor = clrBgColor;
 }
 
 BOOL CSkinTabCtrl::SetItemsBgPic(LPCTSTR lpNormal, LPCTSTR lpHighlight, 
@@ -327,6 +333,12 @@ BOOL CSkinTabCtrl::GetItemRectByID(int nID, CRect& rect)
 	return FALSE;
 }
 
+int CSkinTabCtrl::OnCreate(LPCREATESTRUCT lpCreateStruct)
+{
+    ModifyStyle(0, WS_CLIPSIBLINGS);
+    return 1;
+}
+
 BOOL CSkinTabCtrl::OnEraseBkgnd(CDCHandle dc)
 { 
 	return TRUE;
@@ -341,8 +353,10 @@ void CSkinTabCtrl::OnPaint(CDCHandle dc)
 
 	CMemoryDC MemDC(PaintDC.m_hDC, rcClient);
 
-	if (m_bTransparent)
-		DrawParentWndBg(MemDC.m_hDC);
+    if (m_bTransparent)
+        DrawParentWndBg(MemDC.m_hDC);
+    else
+        MemDC.FillSolidRect(&rcClient, m_clrBgColor);
 
 	if (m_lpBgImg != NULL && !m_lpBgImg->IsNull())
 		m_lpBgImg->Draw2(MemDC.m_hDC, rcClient);

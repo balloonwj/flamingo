@@ -58,12 +58,10 @@ class CUpdateLogonUserInfoRequest;
 class CModifyPasswordRequest;
 class CCreateNewGroupRequest;
 
-class CIUSocket;
-
 class CSendMsgThread : public CThread
 {
 public:
-    CSendMsgThread(CIUSocket* socketClient);
+    CSendMsgThread();
     virtual ~CSendMsgThread(void);
 
 public:
@@ -101,6 +99,7 @@ private:
 	BOOL HandleShakeWindowMsg(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);
 	BOOL HandleCustomPic(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);
 	BOOL HandleFile(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);
+    BOOL HandleRemoteDesktop(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);
 	BOOL CreateMsgContent(const tstring& strChatMsg, std::vector<CContent*>& arrContent);
 	
     //TODO: 这四个函数起始可以合并成一个函数
@@ -131,6 +130,4 @@ private:
     std::condition_variable     m_cvItems;
 
     int32_t                     m_seq{};            //包序列号
-
-    CIUSocket*                  m_SocketClient;
 };

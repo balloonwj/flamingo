@@ -3,7 +3,7 @@
 #include "net/IUProtocolData.h"
 #include "MiniBuffer.h"
 #include "UserSessionData.h"
-#include "File.h"
+#include "File2.h"
 #include "Path.h"
 #include "Utils.h"
 
@@ -617,6 +617,71 @@ long CUserMgr::GetStatus(UINT uAccountID)
 	return -1;
 }
 
+void CUserMgr::SetClientType(UINT uAccountID, long nNewClientType)
+{
+    if (uAccountID == 0)
+        return;
+
+    if (uAccountID == m_UserInfo.m_uUserID)
+    {
+        m_UserInfo.m_nClientType = nNewClientType;
+    }
+
+    CBuddyTeamInfo* pTeamInfo = NULL;
+    CBuddyInfo* pBuddyInfo = NULL;
+    for (size_t i = 0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
+    {
+        pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
+        for (size_t j = 0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
+        {
+            pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
+            if (uAccountID == pBuddyInfo->m_uUserID)
+            {
+                pBuddyInfo->m_nClientType = nNewClientType;
+                break;
+            }
+        }
+    }
+
+    CGroupInfo* pGroupInfo = NULL;
+    for (size_t i = 0; i<m_GroupList.m_arrGroupInfo.size(); ++i)
+    {
+        pGroupInfo = m_GroupList.m_arrGroupInfo[i];
+        for (size_t j = 0; j<pGroupInfo->m_arrMember.size(); ++j)
+        {
+            pBuddyInfo = pGroupInfo->m_arrMember[j];
+            if (uAccountID == pBuddyInfo->m_uUserID)
+            {
+                pBuddyInfo->m_nClientType = nNewClientType;
+                break;
+            }
+        }
+    }
+}
+
+long CUserMgr::GetClientType(UINT uAccountID)
+{
+    if (uAccountID == m_UserInfo.m_uUserID)
+        return m_UserInfo.m_nClientType;
+
+    CBuddyTeamInfo* pTeamInfo = NULL;
+    CBuddyInfo* pBuddyInfo = NULL;
+    for (size_t i = 0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
+    {
+        pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
+        for (size_t j = 0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
+        {
+            pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
+            if (uAccountID == pBuddyInfo->m_uUserID)
+            {
+                return pBuddyInfo->m_nClientType;
+            }
+        }
+    }
+
+    return -1;
+}
+
 UINT CUserMgr::GetMsgID(UINT uAccountID) const
 {
 	if(uAccountID==0 || uAccountID==m_UserInfo.m_uUserID)
@@ -815,7 +880,8 @@ BOOL CUserMgr::StoreRecentList()
 	}
 
 	CFile RecentFile;
-	if(!RecentFile.Open(strRecentFilePath, TRUE) || !RecentFile.Write(miniBuffer.GetBuffer(), miniBuffer.GetSize()))
+    //FIXME: 将int64_t强制转换成int32可能会有问题
+	if(!RecentFile.Open(strRecentFilePath, TRUE) || !RecentFile.Write(miniBuffer.GetBuffer(), (int)miniBuffer.GetSize()))
 		return FALSE;
 
 	return TRUE;
@@ -902,7 +968,8 @@ BOOL CUserMgr::StoreTeamInfo()
 	CString strTeamInfoFilePath;
 	strTeamInfoFilePath.Format(_T("%sUsers\\%s\\BuddyTeamInfo.bti"), g_szHomePath, m_UserInfo.m_strAccount.c_str());
 	CFile file;
-	if(!file.Open(strTeamInfoFilePath, TRUE) || !file.Write(miniBuffer.GetBuffer(), miniBuffer.GetSize()))
+    //FIXME: 将int64_t强制转换成int32可能会有问题
+	if(!file.Open(strTeamInfoFilePath, TRUE) || !file.Write(miniBuffer.GetBuffer(), (int)miniBuffer.GetSize()))
 		return FALSE;
 
 	return TRUE;
@@ -990,7 +1057,8 @@ BOOL CUserMgr::SaveBuddyInfo()
 	CString strBuddyInfoFilePath;
 	strBuddyInfoFilePath.Format(_T("%sUsers\\%s\\BuddyInfo.bi"), g_szHomePath, m_UserInfo.m_strAccount.c_str());
 	CFile file;
-	if(!file.Open(strBuddyInfoFilePath, TRUE) || !file.Write(miniBuffer.GetBuffer(), miniBuffer.GetSize()))
+    //FIXME: 将int64_t强制转换成int32可能会有问题
+	if(!file.Open(strBuddyInfoFilePath, TRUE) || !file.Write(miniBuffer.GetBuffer(), (int)miniBuffer.GetSize()))
 		return FALSE;
 
 	return TRUE;

@@ -81,7 +81,6 @@ int main(int argc, char* argv[])
     signal(SIGCHLD, SIG_DFL);
     signal(SIGPIPE, SIG_IGN);
     signal(SIGINT, prog_exit);
-    signal(SIGKILL, prog_exit);
     signal(SIGTERM, prog_exit);
 
     int ch;
@@ -144,6 +143,8 @@ int main(int argc, char* argv[])
     const char* listenip = config.GetConfigName("listenip");
     short listenport = (short)atol(config.GetConfigName("listenport"));
     Singleton<FileServer>::Instance().Init(listenip, listenport, &g_mainLoop, filecachedir);
+
+    LOG_INFO << "imgserver initialization complete.";
     
     g_mainLoop.loop();
 

@@ -44,7 +44,8 @@ void CSkinStatic::SetFont(HFONT hFont)
 
 int CSkinStatic::OnCreate(LPCREATESTRUCT lpCreateStruct)
 {
-	return 0;
+    ModifyStyle(0, WS_CLIPSIBLINGS);
+    return 0;
 }
 
 
@@ -61,6 +62,8 @@ void CSkinStatic::OnPaint(CDCHandle dc)
 	GetClientRect(&rcClient);
 
 	CMemoryDC MemDC(PaintDC.m_hDC, rcClient);
+    MemDC.FillSolidRect(&rcClient, RGB(255, 255, 255));
+
 	Draw(MemDC.m_hDC);
 }
 

@@ -65,7 +65,7 @@ public:
 
 private:
     bool LoadUsersFromDb();
-    bool LoadRelationhipFromDb(int32_t userid, std::set<int32_t>& r);
+    bool LoadRelationshipFromDb(int32_t userid, std::set<int32_t>& r);
 
 private:
     int                 m_baseUserId{ 0 };        //m_baseUserId, 取数据库里面userid最大值，新增用户在这个基础上递增

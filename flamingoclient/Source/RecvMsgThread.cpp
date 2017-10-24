@@ -195,11 +195,11 @@ CRecvMsg::~CRecvMsg(void)
 }
 
 // class CRecvMsgThread
-CRecvMsgThread::CRecvMsgThread(CIUSocket* socketClient) : 
-m_SocketClient(socketClient), 
+CRecvMsgThread::CRecvMsgThread() : 
 m_bUIEnable(false),
 m_seq(0), 
-m_hProxyWnd(NULL)
+m_hProxyWnd(NULL),
+m_bNetError(false)
 {
 	
 }
@@ -263,16 +263,29 @@ void CRecvMsgThread::Run()
 //
 //}
 
-BOOL CRecvMsgThread::AddMsgData(const std::string& pMsgData)
+void CRecvMsgThread::AddMsgData(const std::string& pMsgData)
 {
 	if (pMsgData.empty())
-		return FALSE;
+		return;
+
+    //收到数据就认为网络没有错误
+    m_bNetError = false;
 
     std::lock_guard<std::mutex> guard(m_mtItems);
     m_listItems.push_back(pMsgData);
     m_cvItems.notify_one();
   	
-	return TRUE;
+	return;
+}
+
+void CRecvMsgThread::NotifyNetError()
+{
+    //已经有错误了，就不要发送重复消息了
+    if (!m_bNetError)
+    {
+        m_bNetError = true;
+        ::PostMessage(m_hProxyWnd, FMG_MSG_NET_ERROR, 0, 0);
+    }       
 }
 
 void CRecvMsgThread::DelAllMsgData()
@@ -329,7 +342,7 @@ BOOL CRecvMsgThread::HandleMessage(const std::string& strMsg)
     switch (cmd)
     {
         //心跳包不处理
-        case msg_type_heartbeart:
+        case msg_type_heartbeat:
             break;
             //注册
         case msg_type_register:
@@ -407,6 +420,27 @@ BOOL CRecvMsgThread::HandleMessage(const std::string& strMsg)
             //被踢下线
         case msg_type_kickuser:
             ::PostMessage(m_hProxyWnd, FMG_MSG_SELF_STATUS_CHANGE, 0, 0);
+            break;
+            
+            //截屏数据
+        case msg_type_screenshot:
+        {
+            string bmpHeader;
+            size_t bmpHeaderlength;
+            if (!readStream.ReadString(&bmpHeader, 0, bmpHeaderlength))
+                break;
+
+            string bmpData;
+            size_t bmpDatalength;
+            if (!readStream.ReadString(&bmpData, 0, bmpDatalength))
+                break;
+
+            int32_t target;
+            if (!readStream.ReadInt32(target))
+                break;
+
+            HandleScreenshotMessage(target, bmpHeader, bmpData);
+         }
             break;
 
 
@@ -511,7 +545,7 @@ BOOL CRecvMsgThread::HandleUserBasicInfo(const std::string& strMsg)
 	if (JsonRoot["code"].isNull() || JsonRoot["code"].asInt() != 0 || !JsonRoot["userinfo"].isArray())
 		return FALSE;
 
-	CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Recv user basic info, info count=%u:", JsonRoot["userinfo"].size());
+	LOG_INFO("Recv user basic info, info count=%u:", JsonRoot["userinfo"].size());
 
 	CUserBasicInfoResult* pUserBasicInfoResult = new CUserBasicInfoResult();
 	UserBasicInfo* pUserBasicInfo = NULL;
@@ -569,7 +603,7 @@ BOOL CRecvMsgThread::HandleGroupBasicInfo(const std::string& strMsg)
     if (JsonRoot["code"].isNull() || JsonRoot["code"].asInt() != 0 || !JsonRoot["groupid"].isInt() || !JsonRoot["members"].isArray())
         return FALSE;
 
-    CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Recv group member info, groupid=%d, info count=%u:", JsonRoot["groupid"].asInt(), JsonRoot["members"].size());
+    LOG_INFO("Recv group member info, groupid=%d, info count=%u:", JsonRoot["groupid"].asInt(), JsonRoot["members"].size());
 
     CGroupBasicInfoResult* pGroupBasicInfoResult = new CGroupBasicInfoResult();
     pGroupBasicInfoResult->m_groupid = JsonRoot["groupid"].asInt();
@@ -661,14 +695,21 @@ BOOL CRecvMsgThread::HandleUserStatusNotifyMessage(int targetId, const std::stri
     int type = JsonRoot["type"].asInt();
     CFriendStatus* pFriendStatus = new CFriendStatus();
     pFriendStatus->m_uAccountID = targetId;
-    //上线 { "type": 1, "onlinestatus": 1/2/3/4..}
+    //上线 { "type": 1, "onlinestatus": 1/2/3/4.., "clienttype": 0/1/2}
     if (type == 1)
     {
+        pFriendStatus->m_type = 1;
+        
         if (!JsonRoot["onlinestatus"].isNull() && !JsonRoot["onlinestatus"].isInt())
             pFriendStatus->m_nStatus = JsonRoot["onlinestatus"].asInt();
         else
-            pFriendStatus->m_nStatus = 1;
-        pFriendStatus->m_type = 1;
+            pFriendStatus->m_nStatus = 1;       
+
+        if (!JsonRoot["clienttype"].isNull() && !JsonRoot["clienttype"].isInt())
+            pFriendStatus->m_nClientType = JsonRoot["clienttype"].asInt();
+        else
+            pFriendStatus->m_nClientType = 0;
+
     }
     //下线
     else if (type == 2)
@@ -701,7 +742,7 @@ BOOL CRecvMsgThread::HandleOperateFriendMessage(const std::string& strMsg)
     if (!JsonRoot["userid"].isInt() || !JsonRoot["type"].isInt() != 0 || !JsonRoot["username"].isString())
         return FALSE;
 
-    CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Recv operate friend request");
+    LOG_INFO("Recv operate friend request");
     int userid = JsonRoot["userid"].asInt();
     int type = JsonRoot["type"].asInt();
     string username = JsonRoot["username"].asString();
@@ -854,6 +895,18 @@ BOOL CRecvMsgThread::HandleCreateNewGroupResult(const std::string& strMsg)
     //发给主线程
     ::PostMessage(m_lpUserMgr->m_hProxyWnd, FMG_MSG_CREATE_NEW_GROUP_RESULT, 0, (LPARAM)pResult);
 
+    return TRUE;
+}
+
+BOOL CRecvMsgThread::HandleScreenshotMessage(int32_t targetId, const std::string& strBmpHeader, const std::string& strBmpData)
+{
+    CScreenshotInfo* pSscreenshotInfo = new CScreenshotInfo();
+    pSscreenshotInfo->m_targetId = targetId;
+    pSscreenshotInfo->m_strBmpHeader = strBmpHeader;
+    pSscreenshotInfo->m_strBmpData = strBmpData;
+
+    //发给主线程
+    ::PostMessage(m_lpUserMgr->m_hProxyWnd, FMG_MSG_SCREENSHOT, 0, (LPARAM)pSscreenshotInfo);
     return TRUE;
 }
 
@@ -1462,7 +1515,7 @@ void CRecvMsgThread::GetChatPic(CBuddyMessage* pBuddyMessage)
 			if(!Hootina::CPath::IsFileExist(szDestPath))
 			{
 				pRequest = new CFileItemRequest();
-				UnicodeToUtf8(lpContent->m_CFaceInfo.m_strFilePath.c_str(), szUtf8Name, ARRAYSIZE(szUtf8Name));
+				EncodeUtil::UnicodeToUtf8(lpContent->m_CFaceInfo.m_strFilePath.c_str(), szUtf8Name, ARRAYSIZE(szUtf8Name));
 				
 				strcpy_s(pRequest->m_szUtfFilePath, ARRAYSIZE(pRequest->m_szUtfFilePath), szUtf8Name);
 				_tcscpy_s(pRequest->m_szFilePath, ARRAYSIZE(pRequest->m_szFilePath), szDestPath);

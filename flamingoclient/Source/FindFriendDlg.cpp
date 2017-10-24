@@ -156,7 +156,7 @@ LRESULT CFindFriendDlg::OnFindFriendResult(UINT uMsg, WPARAM wParam, LPARAM lPar
 		TCHAR szInfo[32] = {0};
 		userSnapInfoDlg.SetUserFaceID(0);
 		TCHAR szAccount[32] = {0};
-		Utf8ToUnicode(pResult->m_szAccountName, szAccount, ARRAYSIZE(szAccount));
+        EncodeUtil::Utf8ToUnicode(pResult->m_szAccountName, szAccount, ARRAYSIZE(szAccount));
 		if(bGroup)
 			_stprintf_s(szInfo, ARRAYSIZE(szInfo), _T("群账户：%s"), szAccount);
 		else
@@ -165,7 +165,7 @@ LRESULT CFindFriendDlg::OnFindFriendResult(UINT uMsg, WPARAM wParam, LPARAM lPar
 
 		TCHAR szNickName[32] = {0};
 		memset(szInfo, 0, sizeof(szInfo));
-		Utf8ToUnicode(pResult->m_szNickName, szNickName, ARRAYSIZE(szNickName));
+        EncodeUtil::Utf8ToUnicode(pResult->m_szNickName, szNickName, ARRAYSIZE(szNickName));
 		if(bGroup)
 			_stprintf_s(szInfo, ARRAYSIZE(szInfo), _T("群名称：%s"), szNickName);
 		else

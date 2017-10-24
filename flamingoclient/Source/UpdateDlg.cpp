@@ -1,11 +1,13 @@
 #include "stdafx.h"
 #include "UpdateDlg.h"
-#include "EncodingUtil.h"
-#include "File.h"
 #include "UserSessionData.h"
 #include "FlamingoClient.h"
 #include "UserMgr.h"
 #include "CustomMsgDef.h"
+#include "EncodingUtil.h"
+#include "File2.h"
+#include "UIText.h"
+#include <TlHelp32.h>
 
 CUpdateDlg::CUpdateDlg()
 {
@@ -88,7 +90,7 @@ void CUpdateDlg::ParseFileInfo()
 	size_t nSize = m_aryFileInfo.size();
 	if(nSize < 2)
 	{
-		::MessageBox(m_hWnd, _T("升级配置文件解析出错，升级终止！"), _T("Flamingo"), MB_OK|MB_ICONERROR);
+		::MessageBox(m_hWnd, _T("升级配置文件解析出错，升级终止！"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
 		EndDialog(IDCANCEL);
 		return;
 	}
@@ -144,7 +146,7 @@ DWORD WINAPI CUpdateDlg::DownloadThread(LPVOID lpParameter)
 	long nSize = pDlg->m_aryFileName.size();
 	if(nSize <= 0)
 	{
-		::MessageBox(pDlg->m_hWnd, _T("解析版本号文件错误，升级失败，请下次重试！"), _T("Flamingo"), MB_OK|MB_ICONEXCLAMATION);
+		::MessageBox(pDlg->m_hWnd, _T("解析版本号文件错误，升级失败，请下次重试！"), g_strAppTitle.c_str(), MB_OK|MB_ICONEXCLAMATION);
 		pDlg->OnClose();
 		return 0;
 	}
@@ -173,7 +175,7 @@ DWORD WINAPI CUpdateDlg::DownloadThread(LPVOID lpParameter)
 			return 1;
 		
         char szUtf8FileName[MAX_PATH] = { 0 };
-        UnicodeToUtf8(strFileName.GetString(), szUtf8FileName, ARRAYSIZE(szUtf8FileName));
+        EncodeUtil::UnicodeToUtf8(strFileName.GetString(), szUtf8FileName, ARRAYSIZE(szUtf8FileName));
         if (!pDlg->m_pFMGClient->m_FileTask.DownloadFileSynchronously(szUtf8FileName, strFilePath, TRUE))
 		{
 			strErrorInfo = strFileName;
@@ -182,7 +184,7 @@ DWORD WINAPI CUpdateDlg::DownloadThread(LPVOID lpParameter)
 			pDlg->m_UpdateListCtrl.SetItemText(i, 1, _T("下载失败"));
 
 			bAllSuccess = FALSE;
-			::MessageBox(pDlg->m_hWnd, _T("升级失败，请下次重试！"), _T("Flamingo"), MB_OK | MB_ICONEXCLAMATION);
+			::MessageBox(pDlg->m_hWnd, _T("升级失败，请下次重试！"), g_strAppTitle.c_str(), MB_OK | MB_ICONEXCLAMATION);
 			pDlg->OnClose();
 			return 0;		
 		}
@@ -201,16 +203,18 @@ DWORD WINAPI CUpdateDlg::DownloadThread(LPVOID lpParameter)
 	}
 	CString strModulePath(g_szHomePath);
 	strModulePath += _T("Flamingo.exe");
-
 	
 	if(bAllSuccess)
 	{
-		//::MessageBox(pDlg->m_hWnd, _T("升级完成！"), _T("Flamingo"), MB_OK|MB_ICONEXCLAMATION);
-		Unzip();
-		::SendMessage(pDlg->m_pFMGClient->m_UserMgr.m_hCallBackWnd, WM_CLOSE_MAINDLG, 0, 0);
-		::ExitProcess(0);
-	}
-		
+		//::MessageBox(pDlg->m_hWnd, _T("升级完成！"), g_strAppTitle.c_str(), MB_OK|MB_ICONEXCLAMATION);
+        if (Unzip())
+        {
+            ::SendMessage(pDlg->m_pFMGClient->m_UserMgr.m_hCallBackWnd, WM_CLOSE_MAINDLG, 0, 0);
+            ::ExitProcess(0);
+        }
+        else
+            ::MessageBox(pDlg->m_hWnd, _T("升级失败，请下次重试！"), g_strAppTitle.c_str(), MB_OK | MB_ICONEXCLAMATION);
+	}		
 	else
 	{
 		tstring strBackupVersionFile = g_szHomePath;
@@ -229,14 +233,14 @@ DWORD WINAPI CUpdateDlg::DownloadThread(LPVOID lpParameter)
 		if(!file2.Open(strVersionFile.c_str(), TRUE) || !file2.Write(pBuffer, file.GetSize()))
 			return 0;
 
-		::MessageBox(pDlg->m_hWnd, _T("升级失败，请下次重试！"), _T("Flamingo"), MB_OK|MB_ICONEXCLAMATION);
+		::MessageBox(pDlg->m_hWnd, _T("升级失败，请下次重试！"), g_strAppTitle.c_str(), MB_OK|MB_ICONEXCLAMATION);
 
 	}
 	
 	return 1;
 }
 
-void Unzip()
+bool Unzip()
 {
 	TCHAR szModulePath[MAX_PATH] = {0};
 	TCHAR szUpdatePath[MAX_PATH] = {0};
@@ -258,15 +262,17 @@ void Unzip()
 	{
 		::MessageBox(NULL, 
 					 _T("找不到解压工具iUpdateAuto.exe，请手动解压Update目录下压缩包至程序根目录下。"), 
-					 _T("Flamingo"),
+					 g_strAppTitle.c_str(),
 					 MB_OK|MB_TOPMOST|MB_ICONERROR);
 
-		return;
+		return false;
 	}
 
 	_tcscpy_s(szCmdLine, MAX_PATH, szModulePath);
 	_tcscat_s(szCmdLine, MAX_PATH, _T("\\Flamingo.exe"));
 
+
+    //bool bRunAutoUpdateSuccess = true;
 	//OSVERSIONINFO osvi={0};
 	//osvi.dwOSVersionInfoSize=sizeof(OSVERSIONINFO); 
 	//GetVersionEx(&osvi);
@@ -276,10 +282,18 @@ void Unzip()
 		STARTUPINFO si={0};
 		PROCESS_INFORMATION pi={0};
 		si.cb = sizeof(si);
-		CreateProcess(szUpdatePath, szCmdLine, NULL,NULL,FALSE,0,NULL,NULL,&si,&pi);
+        if (!::CreateProcess(szUpdatePath, szCmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
+        {
+            TCHAR szErrorInfo[64] = { 0 };
+            _stprintf_s(szErrorInfo, ARRAYSIZE(szErrorInfo), _T("升级失败，无法启动iUpdateAuto.exe。\r\n错误码： %u"), ::GetLastError());
+            ::MessageBox(NULL, szErrorInfo, g_strAppTitle.c_str(), MB_OK | MB_TOPMOST | MB_ICONERROR);
+
+            //bRunAutoUpdateSuccess = false;
+        }
 	}
 	else
 	{
+        ::CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
 		SHELLEXECUTEINFOW sei={0};
 		sei.cbSize = sizeof(SHELLEXECUTEINFOW);
 		sei.lpVerb = _T("runas");
@@ -287,7 +301,66 @@ void Unzip()
 		sei.lpParameters = szCmdLine;
 		sei.lpDirectory = NULL;
 		sei.nShow = SW_HIDE;
-		ShellExecuteEx(&sei);
+        if (!::ShellExecuteEx(&sei))
+        {
+            TCHAR szErrorInfo[64] = { 0 };
+            _stprintf_s(szErrorInfo, ARRAYSIZE(szErrorInfo), _T("升级失败，无法启动iUpdateAuto.exe。\r\n错误码： %u"), ::GetLastError());
+            ::MessageBox(NULL, szErrorInfo, g_strAppTitle.c_str(), MB_OK | MB_TOPMOST | MB_ICONERROR);
+
+            //bRunAutoUpdateSuccess = false;
+        }
+
+        ::CoUninitialize();
 	}
+
+    
+    //if (!bRunAutoUpdateSuccess)
+    //    return false;
+
+    ////启动解压程序成功以后，寻找解压程序进程，并且等待该进程退出，等待五秒
+
+    //PROCESSENTRY32 pe32 = {0};
+    //pe32.dwSize = sizeof(PROCESSENTRY32);
+
+    //HANDLE hProcessSnap;
+    //hProcessSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    //if (hProcessSnap == INVALID_HANDLE_VALUE)
+    //    return false;
+
+    //if (!Process32First(hProcessSnap, &pe32))
+    //{           
+    //    CloseHandle(hProcessSnap);
+    //    return false;
+    //}
+
+    //DWORD dwAutoUpdateProcessID = 0;
+    //do
+    //{
+    //    if (_tcsicmp(pe32.szExeFile, _T("iUpdateAuto")) == 0)
+    //    {
+    //        dwAutoUpdateProcessID = pe32.th32ProcessID;
+    //        break;
+    //    }           
+
+    //} while (Process32Next(hProcessSnap, &pe32));
+
+    //CloseHandle(hProcessSnap);
+
+    ////解压进程已经退掉，则认为升级成功
+    //if (dwAutoUpdateProcessID == 0)
+    //    return true;
+
+    //if (dwAutoUpdateProcessID != 0)
+    //{
+    //    HANDLE hAutoUpdateProcess = ::OpenProcess(PROCESS_ALL_ACCESS, FALSE, dwAutoUpdateProcessID);
+    //    if (hAutoUpdateProcess != NULL)
+    //        return false;
+    //    DWORD dwRet = ::WaitForSingleObject(hAutoUpdateProcess, 5000);
+    //    if (dwRet == WAIT_OBJECT_0)
+    //        return true;
+    //}
+
+    //return false;
+    return true;
 }
 

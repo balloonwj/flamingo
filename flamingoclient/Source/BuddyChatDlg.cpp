@@ -5,7 +5,7 @@
 #include "stdafx.h"
 #include "BuddyChatDlg.h"
 #include "MessageLogger.h"
-#include "File.h"
+#include "File2.h"
 #include "MessageLogger.h"
 #include "UserSessionData.h"
 #include "Time.h"
@@ -13,6 +13,9 @@
 #include "Utils.h"
 #include "GDIFactory.h"
 #include "EncodingUtil.h"
+#include "net/protocolstream.h"
+#include "net/Msg.h"
+#include "UIText.h"
 
 
 #define CHAT_BG_IMAGE_NAME			_T("BuddyChatDlgBg.png")
@@ -558,7 +561,7 @@ void CBuddyChatDlg::OnUpdateBuddyHeadPic()
 	
 	//if(lpBuddyInfo == NULL)
 	//{
-	//	::MessageBox(m_lpFMGClient->m_UserMgr.m_hCallBackWnd, _T("程序遇到一个严重的错误导致打开聊天对话框失败！"), _T("Flamingo"), MB_OK|MB_ICONERROR); 
+	//	::MessageBox(m_lpFMGClient->m_UserMgr.m_hCallBackWnd, _T("程序遇到一个严重的错误导致打开聊天对话框失败！"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR); 
 	//	return;
 	//}
 	if(pBuddyInfo!=NULL && pBuddyInfo->m_bUseCustomFace && pBuddyInfo->m_bCustomFaceAvailable)
@@ -611,7 +614,7 @@ BOOL CBuddyChatDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	CBuddyInfo* lpBuddyInfo = m_lpFMGClient->m_UserMgr.m_BuddyList.GetBuddy(m_nUTalkUin);
 	if(lpBuddyInfo == NULL)
 	{
-		::MessageBox(m_lpFMGClient->m_UserMgr.m_hCallBackWnd, _T("程序遇到一个严重的错误导致打开聊天对话框失败！"), _T("Flamingo"), MB_OK|MB_ICONERROR); 
+		::MessageBox(m_lpFMGClient->m_UserMgr.m_hCallBackWnd, _T("程序遇到一个严重的错误导致打开聊天对话框失败！"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR); 
 		return FALSE;
 	}
 	if(lpBuddyInfo->m_bUseCustomFace && !lpBuddyInfo->m_strCustomFace.empty() && lpBuddyInfo->m_bCustomFaceAvailable)
@@ -662,6 +665,8 @@ BOOL CBuddyChatDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	Init();		// 初始化
 
 	SetHotRgn();
+
+    //ModifyStyle(0, WS_CLIPCHILDREN);
 
     //FIXME: win7用管理员权限启动,发送富文本还是没法接收窗口拖拽,其他窗口可以
     if (IsWindowsVistaOrGreater())
@@ -1045,7 +1050,7 @@ BOOL CBuddyChatDlg::HandleFileDragResult(PCTSTR lpszFileName)
 		//UINT64 nFileSize = IUGetFileSize2(lpszFileName);
 		//if(nFileSize > MAX_CHAT_IMAGE_SIZE)
 		//{
-		//	::MessageBox(m_hWnd, _T("图片大小超过10M，请使用文件发送。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		//	::MessageBox(m_hWnd, _T("图片大小超过10M，请使用文件发送。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		//	return FALSE;
 		//}
 		
@@ -1069,7 +1074,7 @@ void CBuddyChatDlg::OnClose()
 	{
 		//TODO: 系统对话框太丑，自己做一个对话框！
 		ShowWindow(SW_RESTORE);
-		if(IDNO == ::MessageBox(m_hWnd, _T("有文件正在传输，关闭窗口将终止传输，确实要关闭吗？"), _T("Flamingo"), MB_YESNO|MB_ICONQUESTION))
+        if (IDNO == ::MessageBox(m_hWnd, _T("有文件正在传输，关闭窗口将终止传输，确实要关闭吗？"), g_strAppTitle.c_str(), MB_YESNO | MB_ICONQUESTION))
 			return;
 
 		//停止正在传输的文件
@@ -1139,6 +1144,37 @@ void CBuddyChatDlg::OnLnk_BuddyName(UINT uNotifyCode, int nID, CWindow wndCtl)
 	::PostMessage(m_hMainDlg, WM_SHOW_BUDDYINFODLG, NULL, m_nUTalkUin);
 }
 
+void CBuddyChatDlg::OnBtn_RemoteDesktop(UINT uNotifyCode, int nID, CWindow wndCtl)
+{
+   //TODO: 远程桌面的代码暂且注释掉 
+    // if (m_lpFMGClient->IsOffline())
+   // {
+   //     MessageBox(_T("您已经处于离线状态，无法发起远程桌面，请上线后再次尝试。"), g_strAppTitle.c_str());
+   //     return;
+   // }
+
+   // CString strInfo(_T("                                            ☆您发起远程桌面☆\r\n"));
+   // time_t nNow = time(NULL);
+   // //TODO: 如果已经发起远程桌面，则提示下
+   // //if (nNow - m_nLastSendShakeWindowTime <= 5)
+   // //{
+   //  //   strInfo = _T("                                        ☆您发送的窗口抖动过于频繁，请稍后再发。☆\r\n");
+   // //}
+   //// else
+   // //{
+   //     //m_nLastSendShakeWindowTime = nNow;
+   //     //ShakeWindow(m_hWnd, 1);
+   //     m_lpFMGClient->SendBuddyMsg(m_LoginUserId, m_strUserName.GetString(), m_UserId, m_strBuddyName.GetString(), nNow, _T("/r[\"1\"]"), m_hWnd);
+   // //}
+
+   // RichEdit_SetSel(m_richRecv.m_hWnd, -1, -1);
+   // RichEdit_ReplaceSel(m_richRecv.m_hWnd, strInfo, _T("微软雅黑"), 10, RGB(0, 0, 0), FALSE, FALSE, FALSE, FALSE, 0);
+   // m_richRecv.PostMessage(WM_VSCROLL, SB_BOTTOM, 0);
+
+   // HANDLE hRemoteDesktopThread = (HANDLE)::_beginthreadex(NULL, 0, RemoteDesktopProc, this, 0, NULL);
+   // ::CloseHandle(hRemoteDesktopThread);
+}
+
 // “字体选择工具栏”按钮
 void CBuddyChatDlg::OnBtn_Font(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
@@ -1193,7 +1229,7 @@ void CBuddyChatDlg::OnShakeWindow(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	if (m_lpFMGClient->IsOffline())
 	{
-		MessageBox(_T("您已经处于离线状态，无法发送窗口抖动，请上线后再次尝试。"), _T("Flamingo"));
+        MessageBox(_T("您已经处于离线状态，无法发送窗口抖动，请上线后再次尝试。"), g_strAppTitle.c_str());
 		return;
 	}
 	
@@ -1234,7 +1270,7 @@ void CBuddyChatDlg::OnBtn_Image(UINT uNotifyCode, int nID, CWindow wndCtl)
 		UINT64 nFileSize = IUGetFileSize2(fileDlg.m_ofn.lpstrFile);
 		if(nFileSize > MAX_CHAT_IMAGE_SIZE)
 		{
-			::MessageBox(m_hWnd, _T("图片大小超过10M，请使用文件方式发送或使用截图工具。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+            ::MessageBox(m_hWnd, _T("图片大小超过10M，请使用文件方式发送或使用截图工具。"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
 			return;
 		}
 		
@@ -1252,7 +1288,7 @@ void CBuddyChatDlg::OnBtn_ScreenShot(UINT uNotifyCode, int nID, CWindow wndCtl)
 	PROCESS_INFORMATION pi = {0};
 	if(!CreateProcess(NULL, strCatchScreen.GetBuffer(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
 	{
-		::MessageBox(m_hWnd, _T("启动截图工具失败！"), _T("Flamingo"), MB_OK|MB_ICONERROR);
+        ::MessageBox(m_hWnd, _T("启动截图工具失败！"), g_strAppTitle.c_str(), MB_OK | MB_ICONERROR);
 	}
 	if(pi.hProcess != NULL)
 	{
@@ -1461,14 +1497,14 @@ void CBuddyChatDlg::OnBtn_Send(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
     if (m_lpFMGClient->IsOffline())
 	{
-		MessageBox(_T("您已经处于离线状态，无法发送消息，请上线后再次尝试。"), _T("Flamingo"));
+        MessageBox(_T("您已经处于离线状态，无法发送消息，请上线后再次尝试。"), g_strAppTitle.c_str());
 		return;
 	}
 
 	int nCustomPicCnt = RichEdit_GetCustomPicCount(m_richSend.m_hWnd);
 	if (nCustomPicCnt > 1)
 	{
-		MessageBox(_T("每条消息最多包含1张图片，多张图片请分条发送。"), _T("Flamingo"));
+        MessageBox(_T("每条消息最多包含1张图片，多张图片请分条发送。"), g_strAppTitle.c_str());
 		return;
 	}
 
@@ -1476,13 +1512,13 @@ void CBuddyChatDlg::OnBtn_Send(UINT uNotifyCode, int nID, CWindow wndCtl)
 	RichEdit_GetText(m_richSend.m_hWnd, strText);
 	if (strText.empty())
 	{
-		::MessageBox(m_hWnd, _T("发送内容不能为空！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("发送内容不能为空！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
 	if(strText.length() > 1800)
 	{
-		::MessageBox(m_hWnd, _T("您发送的内容太长，请分条发送！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("您发送的内容太长，请分条发送！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
@@ -1888,7 +1924,7 @@ void CBuddyChatDlg::OnMenu_ExportMsgLog(UINT uNotifyCode, int nID, CWindow wndCt
 			return;
 
 		char* pBuffer = new char[strText.size() / 2 + 1];
-		UnicodeToAnsi(strText.c_str(), pBuffer, strlen(pBuffer)* 2);
+        EncodeUtil::UnicodeToAnsi(strText.c_str(), pBuffer, strlen(pBuffer) * 2);
 		file.Write(pBuffer, strlen(pBuffer));
 	}
 }
@@ -2030,7 +2066,7 @@ BOOL CBuddyChatDlg::SendOfflineFile(PCTSTR pszFileName)
 	UINT64 nFileSize = IUGetFileSize2(pszFileName);
 	//if(nFileSize > (UINT64)MAX_OFFLINE_FILE_SIZE)
 	//{
-	//	::MessageBox(m_hWnd, _T("离线文件暂且不支持大小超过2G的文件。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+	//	::MessageBox(m_hWnd, _T("离线文件暂且不支持大小超过2G的文件。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 	//	return FALSE;
 	//}
 
@@ -2117,7 +2153,7 @@ BOOL CBuddyChatDlg::RecvOfflineFile(PCTSTR lpszDownloadName, PCTSTR pszFileName,
 	m_FileTransferCtrl.SetItemFileSizeByID(nItemID, nFileSize);
 	m_FileTransferCtrl.SetItemTargetTypeByID(nItemID, RECV_TYPE);
 	char szDownloadName[MAX_PATH] = {0};
-	UnicodeToUtf8(lpszDownloadName, szDownloadName, ARRAYSIZE(szDownloadName));
+    EncodeUtil::UnicodeToUtf8(lpszDownloadName, szDownloadName, ARRAYSIZE(szDownloadName));
 	m_FileTransferCtrl.SetItemDownloadNameByID(nItemID, szDownloadName);
 
 	m_FileTransferCtrl.Invalidate(FALSE);
@@ -2385,13 +2421,13 @@ BOOL CBuddyChatDlg::InitTopToolBar()
 	m_tbTop.SetItemArrowPic(nIndex, _T("aio_littletoolbar_arrow.png"));
 	m_tbTop.SetItemIconPic(nIndex, _T("BuddyTopToolBar\\sendfile.png"));
 
-	//nIndex = m_tbTop.AddItem(104, STBI_STYLE_BUTTON);
-	//m_tbTop.SetItemSize(nIndex, 36, 40);
-	//m_tbTop.SetItemPadding(nIndex, 2);
-	//m_tbTop.SetItemToolTipText(nIndex, _T("发送短信"));
-	//m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbTop.SetItemIconPic(nIndex, _T("BuddyTopToolBar\\sendsms.png"));
+	nIndex = m_tbTop.AddItem(104, STBI_STYLE_BUTTON);
+    m_tbTop.SetItemSize(nIndex, 38, 28, 28, 10);
+	m_tbTop.SetItemPadding(nIndex, 2);
+	m_tbTop.SetItemToolTipText(nIndex, _T("远程桌面"));
+	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
+		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
+	m_tbTop.SetItemIconPic(nIndex, _T("BuddyTopToolBar\\remote_desktop.png"));
 
 	//nIndex = m_tbTop.AddItem(105, STBI_STYLE_BUTTON);
 	//m_tbTop.SetItemSize(nIndex, 36, 40);
@@ -2842,9 +2878,11 @@ LRESULT CBuddyChatDlg::OnBtn_FileTransfer(LPNMHDR pnmh)
 	if(pNMHDREx->btnArea == BTN_CANCEL)
 	{
 		CFileItemRequest* pItemRequest = m_FileTransferCtrl.GetFileItemRequestByID(pNMHDREx->nID);
-        if (pItemRequest == NULL)
-            return 0;
-		m_lpFMGClient->m_FileTask.RemoveItem(pItemRequest);
+        //TODO: 接收文件请求还没开始下载的文件，请求可能为NULL
+        if (pItemRequest != NULL)
+        {
+            m_lpFMGClient->m_FileTask.RemoveItem(pItemRequest);
+        }
 		
 		if(pNMHDREx->nTargetType == RECV_TYPE)
 		{
@@ -2880,7 +2918,7 @@ LRESULT CBuddyChatDlg::OnBtn_FileTransfer(LPNMHDR pnmh)
 		CString strDefaultPath(m_lpFMGClient->m_UserMgr.GetDefaultRecvFilePath().c_str());
 		if(strDefaultPath == "")
 		{
-			::MessageBox(m_hWnd, _T("无法保存文件至我的文档，请使用[另存为]按钮重新指定文件保存路径！"), _T("Flamingo"), MB_OK|MB_ICONERROR);
+			::MessageBox(m_hWnd, _T("无法保存文件至我的文档，请使用[另存为]按钮重新指定文件保存路径！"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
 			delete pFileItemRequest;
 			return 1;
 		}
@@ -2890,7 +2928,7 @@ LRESULT CBuddyChatDlg::OnBtn_FileTransfer(LPNMHDR pnmh)
 		{
 			CString strInfo;
 			strInfo.Format(_T("[%s]文件已存在，是否覆盖？"), strFilePath);
-			if(IDNO == ::MessageBox(m_hWnd, strInfo, _T("Flamingo"), MB_YESNO|MB_ICONQUESTION))
+			if(IDNO == ::MessageBox(m_hWnd, strInfo, g_strAppTitle.c_str(), MB_YESNO|MB_ICONQUESTION))
 			{
 				delete pFileItemRequest;
 				return 1;
@@ -3087,7 +3125,7 @@ BOOL CBuddyChatDlg::Init()
 	long nCustomFontNameIndex = -1;
 	if(arrSysFont.empty())
 	{
-		::MessageBox(m_hWnd, _T("初始化聊天对话框失败！"), _T("Flamingo"), MB_OK|MB_ICONERROR);
+		::MessageBox(m_hWnd, _T("初始化聊天对话框失败！"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
 		return FALSE;
 	}
 	
@@ -3646,6 +3684,12 @@ void CBuddyChatDlg::AddMsgToRecvEdit(CBuddyMessage* lpBuddyMsg)
 					}
 				}
 				break;
+
+            case CONTENT_TYPE_REMOTE_DESKTOP:
+                {
+                    int k = 0;
+                }
+                break;
 			}
 
 			if( lpContent->m_nType!=CONTENT_TYPE_FONT_INFO && nMsgType!=CONTENT_TYPE_IMAGE_CONFIRM)
@@ -4287,7 +4331,7 @@ LRESULT CBuddyChatDlg::OnSendFileResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
 				if(wParam == SEND_FILE_SUCCESS)
 				{
 					TCHAR szRemoteName[MAX_PATH] = {0};
-					Utf8ToUnicode(pResult->m_szRemoteName, szRemoteName, ARRAYSIZE(szRemoteName));
+                    EncodeUtil::Utf8ToUnicode(pResult->m_szRemoteName, szRemoteName, ARRAYSIZE(szRemoteName));
 					//追加一条聊天消息
 					time_t nMsgTime(time(NULL));
 					CString strFileInfo;
@@ -4452,14 +4496,14 @@ void CBuddyChatDlg::SendConfirmMessage(const CUploadFileResult* pUploadFileResul
     {
         time_t nTime = time(NULL);
         TCHAR szMd5[64] = { 0 };
-        AnsiToUnicode(pUploadFileResult->m_szMd5, szMd5, ARRAYSIZE(szMd5));
+        EncodeUtil::AnsiToUnicode(pUploadFileResult->m_szMd5, szMd5, ARRAYSIZE(szMd5));
         CString strImageName;
         strImageName.Format(_T("%s.%s"), szMd5, Hootina::CPath::GetExtension(pUploadFileResult->m_szLocalName).c_str());
         long nWidth = 0;
         long nHeight = 0;
         GetImageWidthAndHeight(pUploadFileResult->m_szLocalName, nWidth, nHeight);
         char szUtf8FileName[MAX_PATH] = { 0 };
-        UnicodeToUtf8(strImageName, szUtf8FileName, ARRAYSIZE(szUtf8FileName));
+        EncodeUtil::UnicodeToUtf8(strImageName, szUtf8FileName, ARRAYSIZE(szUtf8FileName));
         CStringA strImageAcquireMsg;
         //if (pUploadFileResult->m_bSuccessful)
         //    strImageAcquireMsg.Format("{\"msgType\":2,\"time\":%llu,\"clientType\":1,\"content\":[{\"pic\":[\"%s\",\"%s\",%u,%d,%d]}]}", nTime, szUtf8FileName, pUploadFileResult->m_szRemoteName, pUploadFileResult->m_dwFileSize, nWidth, nHeight);
@@ -4574,4 +4618,168 @@ void CBuddyChatDlg::ReCaculateCtrlPostion(long nMouseY)
 
 	::GetWindowRect(m_richSend, &m_rtRichSend);
 	::ScreenToClient(m_hWnd, m_rtRichSend);
+}
+
+UINT CBuddyChatDlg::RemoteDesktopProc(void* p)
+{
+    CBuddyChatDlg* pThis = (CBuddyChatDlg*)p;
+    if (pThis == NULL)
+        return 0;
+    
+    SIZE screenSize;
+    HDC hScrDC = ::CreateDC(_T("DISPLAY"), NULL, NULL, NULL);
+    screenSize.cx = ::GetDeviceCaps(hScrDC, HORZRES);
+    screenSize.cy = ::GetDeviceCaps(hScrDC, VERTRES);
+
+    int nSeq = 0;
+    while (true)
+    {
+        HDC hDesktopDC = ::GetDC(NULL);
+        HDC hTmpDC = CreateCompatibleDC(hDesktopDC);
+        HBITMAP hBmp = CreateCompatibleBitmap(hDesktopDC, screenSize.cx, screenSize.cy);	//351x250, 示例数据
+        SelectObject(hTmpDC, hBmp);
+        BitBlt(hTmpDC, 0, 0, screenSize.cx, screenSize.cy, hDesktopDC, 0, 0, SRCCOPY);
+        DeleteObject(hTmpDC);
+
+        BITMAP bm;
+        PBITMAPINFO bmpInf;
+        if (GetObject(hBmp, sizeof(bm), &bm) == 0)
+        {
+            ::ReleaseDC(NULL, hDesktopDC);
+            return 0;
+        }
+
+        int nPaletteSize = 0;
+        if (bm.bmBitsPixel < 16)
+            nPaletteSize = (int)pow(2, bm.bmBitsPixel);
+
+        int nSize = sizeof(BITMAPINFOHEADER) +
+            sizeof(RGBQUAD)*nPaletteSize + (bm.bmWidth + 7) / 8 * bm.bmHeight*bm.bmBitsPixel;
+        bmpInf = (PBITMAPINFO)LocalAlloc(LPTR, nSize);
+
+        BYTE* buf = ((BYTE*)bmpInf) +
+            sizeof(BITMAPINFOHEADER) +
+            sizeof(RGBQUAD)*nPaletteSize;
+
+        //-----------------------------------------------
+        bmpInf->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmpInf->bmiHeader.biWidth = bm.bmWidth;
+        bmpInf->bmiHeader.biHeight = bm.bmHeight;
+        bmpInf->bmiHeader.biPlanes = bm.bmPlanes;
+        bmpInf->bmiHeader.biBitCount = bm.bmBitsPixel;
+        bmpInf->bmiHeader.biCompression = BI_RGB;
+        bmpInf->bmiHeader.biSizeImage = (bm.bmWidth + 7) / 8 * bm.bmHeight*bm.bmBitsPixel;
+        //-----------------------------------------------
+
+        if (!::GetDIBits(hDesktopDC, hBmp, 0, (UINT)bm.bmHeight, buf, bmpInf, DIB_RGB_COLORS))
+        {
+            ::ReleaseDC(NULL, hDesktopDC);
+            LocalFree(bmpInf);
+            return 0;
+        }
+
+        ::ReleaseDC(NULL, hDesktopDC);
+
+        std::string outbuf;
+        balloon::BinaryWriteStream writeStream(&outbuf);
+        writeStream.WriteInt32(msg_type_screenshot);
+        writeStream.WriteInt32(nSeq);
+
+        //为了保持统一处理的逻辑，这里加个占位符数据
+        std::string strDummyData;
+        writeStream.WriteString(strDummyData);
+
+        //位图文件头部信息
+        writeStream.WriteCString((const char*)bmpInf, nSize);
+        //位图文件内容
+        writeStream.WriteString(strDummyData);
+        //目标userid
+        writeStream.WriteInt32(pThis->m_nUTalkNumber);
+        writeStream.Flush();
+
+        CIUSocket::GetInstance().Send(outbuf);
+
+        //CString sMsg;
+        //sMsg.Format("BitsPixel:%d,width:%d,height:%d",
+        //    bm.bmBitsPixel, bm.bmWidth, bm.bmHeight);
+        //AfxMessageBox(sMsg);
+
+        ::Sleep(1000);
+        nSeq++;
+    }
+
+    //CClientDC dc(pThis->m_hWnd);
+
+    //int nOffset;
+    //BYTE r, g, b;
+    //int nWidth = bm.bmWidth*bm.bmBitsPixel / 8;
+    //nWidth = ((nWidth + 3) / 4) * 4; //4字节对齐
+
+    //if (bmpInf->bmiHeader.biBitCount == 8)
+    //{
+    //    for (int i = 0; i<bm.bmHeight; i++)
+    //    {
+    //        for (int j = 0; j<bm.bmWidth; j++)
+    //        {
+    //            RGBQUAD rgbQ;
+    //            rgbQ = bmpInf->bmiColors[buf[i*nWidth + j]];
+    //            dc.SetPixel(j, bm.bmHeight - i, RGB(rgbQ.rgbRed, rgbQ.rgbGreen, rgbQ.rgbBlue)); //测试显示
+    //        }
+    //    }
+    //}
+    //else if (bmpInf->bmiHeader.biBitCount == 16)
+    //{
+    //    for (int i = 0; i<bm.bmHeight; i++)
+    //    {
+    //        nOffset = i*nWidth;
+    //        for (int j = 0; j<bm.bmWidth; j++)
+    //        {
+    //            b = buf[nOffset + j * 2] & 0x1F;
+    //            g = buf[nOffset + j * 2] >> 5;
+    //            g |= (buf[nOffset + j * 2 + 1] & 0x03) << 3;
+    //            r = (buf[nOffset + j * 2 + 1] >> 2) & 0x1F;
+
+    //            r *= 8;
+    //            b *= 8;
+    //            g *= 8;
+
+    //            dc.SetPixel(j, bm.bmHeight - i, RGB(r, g, b)); //测试显示
+    //        }
+    //    }
+    //}
+    //else if (bmpInf->bmiHeader.biBitCount == 24)
+    //{
+    //    for (int i = 0; i<bm.bmHeight; i++)
+    //    {
+    //        nOffset = i*nWidth;
+    //        for (int j = 0; j<bm.bmWidth; j++)
+    //        {
+    //            b = buf[nOffset + j * 3];
+    //            g = buf[nOffset + j * 3 + 1];
+    //            r = buf[nOffset + j * 3 + 2];
+
+    //            dc.SetPixel(j, bm.bmHeight - i, RGB(r, g, b)); //测试显示
+    //        }
+    //    }
+    //}
+    //else if (bmpInf->bmiHeader.biBitCount == 32)
+    //{
+    //    for (int i = 0; i<bm.bmHeight; i++)
+    //    {
+    //        nOffset = i*nWidth;
+    //        for (int j = 0; j<bm.bmWidth; j++)
+    //        {
+    //            b = buf[nOffset + j * 4];
+    //            g = buf[nOffset + j * 4 + 1];
+    //            r = buf[nOffset + j * 4 + 2];
+
+    //            dc.SetPixel(j, bm.bmHeight - i, RGB(r, g, b)); //测试显示
+    //        }
+    //    }
+    //}
+
+    //DeleteObject(hBmp);
+    //LocalFree(bmpInf);
+
+    return 0;
 }

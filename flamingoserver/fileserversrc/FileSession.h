@@ -10,7 +10,7 @@
 class FileSession : public TcpSession
 {
 public:
-    FileSession(const std::shared_ptr<TcpConnection>& conn, const char* filebasedir = "filecache/");
+    FileSession(const std::shared_ptr<TcpConnection>& conn, const char* filebasedir);
     virtual ~FileSession();
 
     FileSession(const FileSession& rhs) = delete;
@@ -20,10 +20,11 @@ public:
     void OnRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBuffer, Timestamp receivTime);   
 
 private:
+    //64位机器上，size_t是8个字节
     bool Process(const std::shared_ptr<TcpConnection>& conn, const char* inbuf, size_t length);
     
-    void OnUploadFileResponse(const std::string& filemd5, int64_t offset, int64_t filesize, const std::string& filedata, const std::shared_ptr<TcpConnection>& conn);
-    void OnDownloadFileResponse(const std::string& filemd5, int64_t offset, int64_t filesize, const std::shared_ptr<TcpConnection>& conn);
+    bool OnUploadFileResponse(const std::string& filemd5, int64_t offset, int64_t filesize, const std::string& filedata, const std::shared_ptr<TcpConnection>& conn);
+    bool OnDownloadFileResponse(const std::string& filemd5, const std::shared_ptr<TcpConnection>& conn);
 
     void ResetFile();
 
@@ -33,7 +34,7 @@ private:
 
     //当前文件信息
     FILE*             m_fp{};
-    int64_t           m_offset{};
-    int64_t           m_filesize{};
-    std::string       m_strFileBaseDir; //文件目录
+    int64_t           m_currentDownloadFileOffset{};    //当前在正下载的文件的偏移量
+    int64_t           m_currentDownloadFileSize{};      //当前在正下载的文件的大小(下载完成以后最好置0)
+    std::string       m_strFileBaseDir;                 //文件目录
 };

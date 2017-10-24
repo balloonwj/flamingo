@@ -35,9 +35,10 @@ CSkinToolBarItem::~CSkinToolBarItem(void)
 	CSkinManager::GetInstance()->ReleaseImage(m_lpIconImg);
 }
 
-CSkinToolBar::CSkinToolBar(void)
+CSkinToolBar::CSkinToolBar(BOOL bVertical/* = FALSE*/)
 {
-	m_lpBgImg = NULL;
+    m_bVertical = bVertical;
+    m_lpBgImg = NULL;
 	m_nPressIndex = m_nHoverIndex = -1;
 	m_bPressLorR = m_bHoverLorR = FALSE;
 	m_bMouseTracking = FALSE;
@@ -45,6 +46,9 @@ CSkinToolBar::CSkinToolBar(void)
 	m_bAutoSize = FALSE;
 	m_bTransparent = FALSE;
 	m_hBgDC = NULL;
+    m_clrBgColor = RGB(255, 255, 255);
+
+    m_bUseGroup = FALSE;
 }
 
 CSkinToolBar::~CSkinToolBar(void)
@@ -78,6 +82,11 @@ BOOL CSkinToolBar::SetBgPic(LPCTSTR lpszFileName, const CRect& rcNinePart)
 
 	m_lpBgImg->SetNinePart(&rcNinePart);
 	return TRUE;
+}
+
+void CSkinToolBar::SetBgColor(COLORREF clrBgColor)
+{
+    m_clrBgColor = clrBgColor;
 }
 
 int CSkinToolBar::AddItem(int nID, DWORD dwStyle)
@@ -296,10 +305,23 @@ BOOL CSkinToolBar::GetItemRectByIndex(int nIndex, CRect& rect)
 				rect = CRect(nLeft+lpItem->m_nLeftMargin, nTop, nLeft+lpItem->m_nLeftMargin+lpItem->m_nWidth, nTop+lpItem->m_nHeight);
 				return TRUE;
 			}
-			nLeft += lpItem->m_nWidth;
-			nLeft += lpItem->m_nPadding;
-			nLeft += lpItem->m_nLeftMargin;
-			nLeft += lpItem->m_nRightMargin;
+
+            //计算垂直布局
+            if (m_bVertical)
+            {
+                nTop += lpItem->m_nHeight;
+                //TODO: 加上topPadding和上下margin
+                nTop += lpItem->m_nPadding;
+                //nLeft += lpItem->m_nLeftMargin;
+                //nLeft += lpItem->m_nRightMargin;
+            }
+            else
+            {
+                nLeft += lpItem->m_nWidth;
+                nLeft += lpItem->m_nPadding;
+                nLeft += lpItem->m_nLeftMargin;
+                nLeft += lpItem->m_nRightMargin;
+            }
 		}
 	}
 
@@ -344,6 +366,11 @@ void CSkinToolBar::SetItemCheckState(int nIndex, BOOL bChecked)
 	}
 }
 
+void CSkinToolBar::SetUseGroup(bool bUseGroup)
+{
+    m_bUseGroup = bUseGroup;
+}
+
 BOOL CSkinToolBar::OnEraseBkgnd(CDCHandle dc)
 {
 	return TRUE;
@@ -360,9 +387,19 @@ void CSkinToolBar::OnPaint(CDCHandle dc)
 
 	if (m_bTransparent)
 		DrawParentWndBg(MemDC.m_hDC);
-
-	if (m_lpBgImg != NULL && !m_lpBgImg->IsNull())
-		m_lpBgImg->Draw2(MemDC.m_hDC, rcClient);
+    else
+    {
+        if (m_lpBgImg != NULL && !m_lpBgImg->IsNull())
+            m_lpBgImg->Draw2(MemDC.m_hDC, rcClient);
+        else
+        {
+            MemDC.FillSolidRect(&rcClient, m_clrBgColor);
+            //HBRUSH hBgBrush = ::CreateSolidBrush(m_clrBgColor);
+            ////HBRUSH hOldBrush = (HBRUSH)::SelectObject(MemDC.m_hDC, hBgBrush);
+            //::FillRect(MemDC.m_hDC, &rcClient, hBgBrush);
+            //::DeleteObject(hBgBrush);
+        }
+    }
 
 	size_t nSize = m_arrItems.size();
 	for (size_t i = 0; i < nSize; ++i)
@@ -407,6 +444,22 @@ void CSkinToolBar::OnLButtonDown(UINT nFlags, CPoint point)
 			if (lpItem->m_dwStyle & STBI_STYLE_CHECK && !((lpItem->m_dwStyle & STBI_STYLE_DROPDOWN) && !m_bPressLorR))
 			{
 				lpItem->m_bChecked = !lpItem->m_bChecked;
+
+                //启用组选项之后，一个选中其它的就要被取消选中
+                if (lpItem->m_bChecked && m_bUseGroup)
+                {
+                    CSkinToolBarItem* lpOtherItem = NULL;
+                    int nItemCount = (int)m_arrItems.size();
+                    for (int i = 0; i < nItemCount; ++i)
+                    {
+                        lpOtherItem = GetItemByIndex(i);
+                        if (lpOtherItem != NULL && lpOtherItem != lpItem)
+                        {
+                            lpOtherItem->m_bChecked = FALSE;
+                        }
+                    }
+                }
+                 
 				Invalidate();
 
 				if (lpItem->m_bChecked)
@@ -687,10 +740,22 @@ int CSkinToolBar::HitTest(POINT pt)
 				else
 					return i;
 			}
-			nLeft += lpItem->m_nWidth;
-			nLeft += lpItem->m_nPadding;
-			nLeft += lpItem->m_nLeftMargin;
-			nLeft += lpItem->m_nRightMargin;
+            if (m_bVertical)
+            {
+                nTop += lpItem->m_nHeight;
+
+                //TODO: 后面加上上下padding和上下间距
+                nTop += lpItem->m_nPadding;
+                //nLeft += lpItem->m_nLeftMargin;
+                //nLeft += lpItem->m_nRightMargin;
+            }
+            else
+            {
+                nLeft += lpItem->m_nWidth;
+                nLeft += lpItem->m_nPadding;
+                nLeft += lpItem->m_nLeftMargin;
+                nLeft += lpItem->m_nRightMargin;
+            }
 		}
 	}
 
@@ -827,6 +892,12 @@ void CSkinToolBar::DrawItem(HDC hDC, int nIndex)
 				}
 			}
 		}
+        //画正常状态下的背景图片
+        else
+        {
+            if (lpItem->m_lpBgImgN != NULL && !lpItem->m_lpBgImgN->IsNull())
+                lpItem->m_lpBgImgN->Draw2(hDC, rcItem);
+        }
 	}
 
 	BOOL bHasText = FALSE;

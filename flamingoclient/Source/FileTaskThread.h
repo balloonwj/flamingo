@@ -8,13 +8,12 @@ class CIUProtocol;
 class CFileItemRequest;
 class CFlamingoClient;
 class CUploadFileResult;
-class CIUSocket;
 
 //TODO: 后面改成
 class CFileTaskThread : public CThread
 {
 public:
-	CFileTaskThread(CIUSocket* sockeClient);
+	CFileTaskThread();
 	virtual ~CFileTaskThread(void);
 
 public:
@@ -47,6 +46,5 @@ private:
 	std::list<CFileItemRequest*>	m_Filelist;	
 	std::mutex						m_mtItems;
 	std::condition_variable			m_cvItems;
-    CIUSocket*                      m_SocketClient;
     int32_t                         m_seq;
 };

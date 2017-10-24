@@ -63,7 +63,7 @@ TCHAR g_cHotKey = _T('D');	// 提取消息热键
 //	wsprintf(szBuf, lpFontFmt, g_fontInfo.m_strName.c_str(), g_fontInfo.m_nSize, 
 //		szColor, g_fontInfo.m_bBold, g_fontInfo.m_bItalic, g_fontInfo.m_bUnderLine, g_cHotKey);
 //
-//	char* lpBuf = UnicodeToUtf8(szBuf);
+//	char* lpBuf = EncodeUtil::UnicodeToUtf8(szBuf);
 //	if (NULL == lpBuf)
 //	{
 //		fclose(fp);

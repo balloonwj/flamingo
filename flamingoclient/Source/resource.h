@@ -61,6 +61,8 @@
 #define IDD_MULTICHATDLG                246
 #define IDI_MULTICHATDLG_16             247
 #define IDI_MULTICHATDLG_32             251
+#define IDD_DIALOG2                     252
+#define IDD_REMOTEDESKTOP               252
 #define ID_LEFT_CHAT_WINDOW             997
 #define ID_CHAT_TAB_MGR                 998
 #define ID_TABCTRL_CHAT                 999
@@ -634,7 +636,7 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        252
+#define _APS_NEXT_RESOURCE_VALUE        253
 #define _APS_NEXT_COMMAND_VALUE         33123
 #define _APS_NEXT_CONTROL_VALUE         1187
 #define _APS_NEXT_SYMED_VALUE           101

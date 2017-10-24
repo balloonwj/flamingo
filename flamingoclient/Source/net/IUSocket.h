@@ -12,12 +12,17 @@ class CRecvMsgThread;
 //网络通信层只负责数据传输和接收
 class CIUSocket
 {
-public:
-	CIUSocket(CRecvMsgThread* pThread);
+private:
+	CIUSocket();
     ~CIUSocket(void);
 
     CIUSocket(const CIUSocket& rhs) = delete;
     CIUSocket& operator = (const CIUSocket& rhs) = delete;
+
+public:
+    static CIUSocket&  GetInstance();
+
+    void SetRecvMsgThread(CRecvMsgThread* pThread);
 
     bool Init();
     void Uninit();
@@ -35,38 +40,45 @@ public:
 	void	SetProxyPort(short nProxyPort);
 	void    SetProxyType(long nProxyType);
 
-	PCTSTR  GetServer() const;
-	PCTSTR	GetFileServer() const;
-    PCTSTR	GetImgServer() const;
-	short   GetPort() const;
-    short	GetFilePort() const;
-    short	GetImgPort() const;
+    //开启和关闭聊天服务器断线自动重连
+    void    EnableReconnect(bool bEnable);
 
     /** 
     *@param timeout 超时时间，单位为s
     **/
-	BOOL	Connect(int timeout = 3);
-	BOOL	ConnectToFileServer();
-    BOOL	ConnectToImgServer();
+	bool	Connect(int timeout = 3);
+    bool    Reconnect(int timeout = 3);
+    bool	ConnectToFileServer(int timeout = 3);
+    bool	ConnectToImgServer(int timeout = 3);
 	
-	BOOL	IsClosed();
-	BOOL	IsFileServerClosed();
-    BOOL	IsImgServerClosed();
+	bool	IsClosed();
+	bool	IsFileServerClosed();
+    bool	IsImgServerClosed();
 	
 	void	Close();
 	void	CloseFileServerConnection();
     void	CloseImgServerConnection();
 
-	bool    CheckReceivedData();							//判断普通Socket上是否收到数据，有返回true，没有返回false
+    /** 判断普通Socket上是否收到数据
+     * @return -1出错， 0无数据 1有数据
+     */
+	int    CheckReceivedData();
 
 	//异步接口
     void    Send(const std::string& strBuffer);
-	
-	//同步接口
-	BOOL    SendOnFilePort(const char* pBuffer, int64_t nSize);	
-    BOOL	RecvOnFilePort(char* pBuffer, int64_t nSize);
-    BOOL    SendOnImgPort(const char* pBuffer, int64_t nSize);
-    BOOL	RecvOnImgPort(char* pBuffer, int64_t nSize);
+
+   	//同步接口
+    bool    Register(const char* pszUser, const char* pszNickname, const char* pszPassword, int nTimeout, std::string& strReturnData);
+    bool    Login(const char* pszUser, const char* pszPassword, int nClientType, int nOnlineStatus, int nTimeout, std::string& strReturnData);
+
+    //超时时间,单位为秒
+	bool    SendOnFilePort(const char* pBuffer, int64_t nSize, int nTimeout = 3);	
+    bool	RecvOnFilePort(char* pBuffer, int64_t nSize, int nTimeout = 3);
+    //bool    CheckRecvDataOnFilePort(int nTimeout = 3000);
+
+    bool    SendOnImgPort(const char* pBuffer, int64_t nSize, int nTimeout = 3);
+    bool	RecvOnImgPort(char* pBuffer, int64_t nSize, int nTimeout = 3);
+    //bool    CheckRecvDataOnImgPort(int nTimeout = 3000);
 
 private:   
     void    SendThreadProc();
@@ -76,8 +88,15 @@ private:
 
     bool	Send();
     bool	Recv();
-    
 
+    //发送nBuffSize长度的字节，如果发不出去，则就认为失败
+    bool    SendData(const char* pBuffer, int nBuffSize, int nTimeout);
+    //收取nBufferSize长度的字节，如果收不到，则认为失败
+    bool    RecvData(char* pszBuff, int nBufferSize, int nTimeout);
+
+    //解包
+    bool    DecodePackages();
+    
 private:	
 	SOCKET							m_hSocket;				//一般用途Socket（非阻塞socket）
 	SOCKET							m_hFileSocket;			//传文件的Socket（阻塞socket）
@@ -85,22 +104,22 @@ private:
 	short							m_nPort;
 	short							m_nFilePort;
     short							m_nImgPort;
-	CString							m_strServer;			//服务器地址
-	CString							m_strFileServer;		//文件服务器地址
-    CString							m_strImgServer;		    //图片服务器地址
+	std::string						m_strServer;			//服务器地址
+    std::string						m_strFileServer;		//文件服务器地址
+    std::string						m_strImgServer;		    //图片服务器地址
 	
 	long							m_nProxyType;			//代理类型（0不使用代理；）
-	CString							m_strProxyServer;		//代理服务器地址
+    std::string						m_strProxyServer;		//代理服务器地址
 	short							m_nProxyPort;			//代理服务器端口号
 
     long                            m_nLastDataTime;        //最近一次收发数据的时间
     std::mutex                      m_mutexLastDataTime;    //保护m_nLastDataTime的互斥体
-    long                            m_nHeartbeatInterval;   //心跳包时间间隔，单位秒
+    long                            m_nHeartbeatInterval;   //心跳包时间间隔，单位秒,默认为10秒
     int32_t                         m_nHeartbeatSeq;        //心跳包序列号
 	
-	BOOL							m_bConnected;
-	BOOL							m_bConnectedOnFileSocket;
-    BOOL                            m_bConnectedOnImgSocket;
+	bool							m_bConnected;
+	bool							m_bConnectedOnFileSocket;
+    bool                            m_bConnectedOnImgSocket;
 
     std::shared_ptr<std::thread>    m_spSendThread;
     std::shared_ptr<std::thread>    m_spRecvThread;
@@ -114,6 +133,14 @@ private:
     std::condition_variable         m_cvRecvBuf;
 
     bool                            m_bStop;
+
+    bool                            m_bEnableReconnect;     //聊天服务器断线是否重连
+
+    std::string                     m_strRecordUser;
+    std::string                     m_strRecordPassword;
+    int                             m_nRecordClientType;
+    int                             m_nRecordOnlineStatus;
+
 
 	CRecvMsgThread*					m_pRecvMsgThread;
 };

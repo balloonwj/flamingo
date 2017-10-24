@@ -15,3 +15,4 @@
 #include "SkinListCtrl.h"
 #include "SkinRichEdit.h"
 #include "SkinMessageBox.h"
+#include "SkinWebBrowser.h"

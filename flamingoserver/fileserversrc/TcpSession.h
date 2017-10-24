@@ -22,12 +22,15 @@ public:
 
     std::shared_ptr<TcpConnection> GetConnectionPtr()
     {
-        return tmpConn_.lock();
+        return conn_;
     }
 
-    void Send(const std::string& buf);
-    void Send(const char* p, int length);
+    void Send(int32_t cmd, int32_t seq, int32_t errorcode, const std::string& filemd5, int64_t offset, int64_t filesize, const std::string& filedata);
+
+private:
+    //支持大文件，用int64_t来存储包长，记得梳理一下文件上传于下载逻辑
+    void SendPackage(const char* body, int64_t bodylength);
 
 protected:
-    std::weak_ptr<TcpConnection>    tmpConn_;
+    std::shared_ptr<TcpConnection>    conn_;
 };

@@ -11,6 +11,8 @@
 TCHAR g_szHomePath[MAX_PATH] = {0};
 char g_szHomePathAscii[MAX_PATH] = {0};
 
+std::wstring g_strAppTitle;
+
 //系统库中用户头像的个数
 const UINT USER_THUMB_COUNT = 36;
 
@@ -774,7 +776,7 @@ BOOL CBuddyMessage::Parse(Json::Value& JsonValue)
     if (!JsonValue["font"][(UINT)0].isNull())
     {
         strValue = JsonValue["font"][(UINT)0].asString();
-        Utf8ToUnicode(strValue.data(), strTmp.GetBuffer(strValue.length()* 2), strValue.length()* 2);
+        EncodeUtil::Utf8ToUnicode(strValue.data(), strTmp.GetBuffer(strValue.length()* 2), strValue.length()* 2);
         strTmp.ReleaseBuffer();
         pContent->m_FontInfo.m_strName = strTmp.GetString();
     }
@@ -826,7 +828,7 @@ BOOL CBuddyMessage::Parse(Json::Value& JsonValue)
             pContent = new CContent();
             pContent->m_nType = CONTENT_TYPE_TEXT;
             strNodeValue = JsonValue["content"][i]["msgText"].asString();
-            Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(strNodeValue.length()* 2), strNodeValue.length()* 2);
+            EncodeUtil::Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(strNodeValue.length()* 2), strNodeValue.length()* 2);
             strTmp.ReleaseBuffer();
             pContent->m_strText = strTmp;
             m_arrContent.push_back(pContent);
@@ -850,14 +852,14 @@ BOOL CBuddyMessage::Parse(Json::Value& JsonValue)
             pContent = new CContent();
             pContent->m_nType = CONTENT_TYPE_CHAT_IMAGE;
             strNodeValue = JsonValue["content"][i]["pic"][(UINT)0].asString();;
-            Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(strNodeValue.length()* 2), strNodeValue.length()* 2);
+            EncodeUtil::Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(strNodeValue.length()* 2), strNodeValue.length()* 2);
             strTmp.ReleaseBuffer();
             pContent->m_CFaceInfo.m_strFileName = strTmp;
 
             strNodeValue = JsonValue["content"][i]["pic"][(UINT)1].asString();;
             if (!strNodeValue.empty())
             {
-                Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(strNodeValue.length()* 2), strNodeValue.length()* 2);
+                EncodeUtil::Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(strNodeValue.length()* 2), strNodeValue.length()* 2);
                 strTmp.ReleaseBuffer();
                 pContent->m_CFaceInfo.m_strFilePath = strTmp;
             }
@@ -870,18 +872,24 @@ BOOL CBuddyMessage::Parse(Json::Value& JsonValue)
             pContent = new CContent();
             pContent->m_nType = CONTENT_TYPE_FILE;
             strNodeValue = JsonValue["content"][i]["file"][(UINT)0].asString();;
-            Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(strNodeValue.length()* 2), strNodeValue.length()* 2);
+            EncodeUtil::Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(strNodeValue.length()* 2), strNodeValue.length()* 2);
             strTmp.ReleaseBuffer();
             pContent->m_CFaceInfo.m_strFileName = strTmp;
 
             strNodeValue = JsonValue["content"][i]["file"][(UINT)1].asString();;
-            Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(strNodeValue.length()* 2), strNodeValue.length()* 2);
+            EncodeUtil::Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(strNodeValue.length()* 2), strNodeValue.length()* 2);
             strTmp.ReleaseBuffer();
             pContent->m_CFaceInfo.m_strFilePath = strTmp;
 
             pContent->m_CFaceInfo.m_dwFileSize = JsonValue["content"][i]["file"][2].asUInt();
 
             pContent->m_CFaceInfo.m_bOnline = JsonValue["content"][i]["file"][3].asUInt();
+            m_arrContent.push_back(pContent);
+        }
+        else if (!JsonValue["content"][i]["remotedesktop"].isNull())
+        {
+            pContent = new CContent();
+            pContent->m_nType = CONTENT_TYPE_REMOTE_DESKTOP;
             m_arrContent.push_back(pContent);
         }
 
@@ -1009,7 +1017,7 @@ BOOL CGroupMessage::Parse(Json::Value& JsonValue)
             Replace(strValue, "\r", "\r\n");
 
             lpContent->m_nType = CONTENT_TYPE_TEXT;
-            lpContent->m_strText = Utf8ToUnicode(strValue);
+            lpContent->m_strText = EncodeUtil::Utf8ToUnicode(strValue);
             m_arrContent.push_back(lpContent);
         }
         else if (JsonValue["content"][i].isArray())
@@ -1032,7 +1040,7 @@ BOOL CGroupMessage::Parse(Json::Value& JsonValue)
                 if (!JsonValue["content"][i][(UINT)1]["color"].isNull())			// 字体颜色
                 {
                     strValue = JsonValue["content"][i][(UINT)1]["color"].asString();
-                    lpContent->m_FontInfo.m_clrText = HexStrToRGB(Utf8ToUnicode(strValue).c_str());
+                    lpContent->m_FontInfo.m_clrText = HexStrToRGB(EncodeUtil::Utf8ToUnicode(strValue).c_str());
                 }
 
                 if (!JsonValue["content"][i][(UINT)1]["style"][(UINT)0].isNull())	// 字体风格(加粗)
@@ -1047,7 +1055,7 @@ BOOL CGroupMessage::Parse(Json::Value& JsonValue)
                 if (!JsonValue["content"][i][(UINT)1]["name"].isNull())				// 字体名称
                 {
                     strValue = JsonValue["content"][i][(UINT)1]["name"].asString();
-                    lpContent->m_FontInfo.m_strName = Utf8ToUnicode(strValue);
+                    lpContent->m_FontInfo.m_strName = EncodeUtil::Utf8ToUnicode(strValue);
                 }
 
                 m_arrContent.push_back(lpContent);
@@ -1073,7 +1081,7 @@ BOOL CGroupMessage::Parse(Json::Value& JsonValue)
                     if (!JsonValue["content"][i][(UINT)1]["name"].isNull())
                     {
                         strValue = JsonValue["content"][i][(UINT)1]["name"].asString();
-                        lpContent->m_CFaceInfo.m_strName = Utf8ToUnicode(strValue);
+                        lpContent->m_CFaceInfo.m_strName = EncodeUtil::Utf8ToUnicode(strValue);
                     }
 
                     if (!JsonValue["content"][i][(UINT)1]["file_id"].isNull())
@@ -1082,13 +1090,13 @@ BOOL CGroupMessage::Parse(Json::Value& JsonValue)
                     if (!JsonValue["content"][i][(UINT)1]["key"].isNull())
                     {
                         strValue = JsonValue["content"][i][(UINT)1]["key"].asString();
-                        lpContent->m_CFaceInfo.m_strKey = Utf8ToUnicode(strValue);
+                        lpContent->m_CFaceInfo.m_strKey = EncodeUtil::Utf8ToUnicode(strValue);
                     }
 
                     if (!JsonValue["content"][i][(UINT)1]["server"].isNull())
                     {
                         strValue = JsonValue["content"][i][(UINT)1]["server"].asString();
-                        lpContent->m_CFaceInfo.m_strServer = Utf8ToUnicode(strValue);
+                        lpContent->m_CFaceInfo.m_strServer = EncodeUtil::Utf8ToUnicode(strValue);
                     }
                 }
                 m_arrContent.push_back(lpContent);
@@ -1204,7 +1212,7 @@ BOOL CSessMessage::Parse(Json::Value& JsonValue)
             Replace(strValue, "\r", "\r\n");
 
             lpContent->m_nType = CONTENT_TYPE_TEXT;
-            lpContent->m_strText = Utf8ToUnicode(strValue);
+            lpContent->m_strText = EncodeUtil::Utf8ToUnicode(strValue);
             m_arrContent.push_back(lpContent);
         }
         else if (JsonValue["content"][i].isArray())
@@ -1227,7 +1235,7 @@ BOOL CSessMessage::Parse(Json::Value& JsonValue)
                 if (!JsonValue["content"][i][(UINT)1]["color"].isNull())			// 字体颜色
                 {
                     strValue = JsonValue["content"][i][(UINT)1]["color"].asString();
-                    lpContent->m_FontInfo.m_clrText = HexStrToRGB(Utf8ToUnicode(strValue).c_str());
+                    lpContent->m_FontInfo.m_clrText = HexStrToRGB(EncodeUtil::Utf8ToUnicode(strValue).c_str());
                 }
 
                 if (!JsonValue["content"][i][(UINT)1]["style"][(UINT)0].isNull())	// 字体风格(加粗)
@@ -1242,7 +1250,7 @@ BOOL CSessMessage::Parse(Json::Value& JsonValue)
                 if (!JsonValue["content"][i][(UINT)1]["name"].isNull())				// 字体名称
                 {
                     strValue = JsonValue["content"][i][(UINT)1]["name"].asString();
-                    lpContent->m_FontInfo.m_strName = Utf8ToUnicode(strValue);
+                    lpContent->m_FontInfo.m_strName = EncodeUtil::Utf8ToUnicode(strValue);
                 }
                 m_arrContent.push_back(lpContent);
             }
@@ -1296,7 +1304,7 @@ BOOL CStatusChangeMessage::Parse(Json::Value& JsonValue)
     if (!JsonValue["status"].isNull())
     {
         strValue = JsonValue["status"].asString();
-        /*m_nStatus = ConvertToUTalkStatus(Utf8ToUnicode(strValue).c_str());*/
+        /*m_nStatus = ConvertToUTalkStatus(EncodeUtil::Utf8ToUnicode(strValue).c_str());*/
     }
 
     if (!JsonValue["client_type"].isNull())
@@ -1362,7 +1370,7 @@ BOOL CKickMessage::Parse(Json::Value& JsonValue)
     if (!JsonValue["reason"].isNull())
     {
         strValue = JsonValue["reason"].asString();
-        m_strReason = Utf8ToUnicode(strValue);
+        m_strReason = EncodeUtil::Utf8ToUnicode(strValue);
     }
 
     return TRUE;
@@ -1430,7 +1438,7 @@ BOOL CSysGroupMessage::Parse(Json::Value& JsonValue)
     if (!JsonValue["type"].isNull())
     {
         strValue = JsonValue["type"].asString();
-        m_strSubType = Utf8ToUnicode(strValue);
+        m_strSubType = EncodeUtil::Utf8ToUnicode(strValue);
     }
 
     if (m_strSubType == _T("group_request_join_agree")
@@ -1448,7 +1456,7 @@ BOOL CSysGroupMessage::Parse(Json::Value& JsonValue)
         if (!JsonValue["msg"].isNull())
         {
             strValue = JsonValue["msg"].asString();
-            m_strMsg = Utf8ToUnicode(strValue);
+            m_strMsg = EncodeUtil::Utf8ToUnicode(strValue);
         }
         return TRUE;
     }
@@ -1469,7 +1477,7 @@ BOOL CSysGroupMessage::Parse(Json::Value& JsonValue)
         if (!JsonValue["t_old_member"].isNull())
         {
             strValue = JsonValue["t_old_member"].asString();
-            m_strOldMember = Utf8ToUnicode(strValue);
+            m_strOldMember = EncodeUtil::Utf8ToUnicode(strValue);
         }
 
         if (!JsonValue["admin_uin"].isNull())
@@ -1478,13 +1486,13 @@ BOOL CSysGroupMessage::Parse(Json::Value& JsonValue)
         if (!JsonValue["t_admin_uin"].isNull())
         {
             strValue = JsonValue["t_admin_uin"].asString();
-            m_strAdminUin = Utf8ToUnicode(strValue);
+            m_strAdminUin = EncodeUtil::Utf8ToUnicode(strValue);
         }
 
         if (!JsonValue["admin_nick"].isNull())
         {
             strValue = JsonValue["admin_nick"].asString();
-            m_strAdminNickName = Utf8ToUnicode(strValue);
+            m_strAdminNickName = EncodeUtil::Utf8ToUnicode(strValue);
         }
         return TRUE;
     }

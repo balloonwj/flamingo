@@ -10,15 +10,7 @@
 #include "UserManager.h"
 
 bool IMServer::Init(const char* ip, short port, EventLoop* loop)
-{
-    //从数据库中加载所有用户信息
-    //TODO: 后面把数据库账号信息统一到一个地方
-    if (!Singleton<UserManager>::Instance().Init("127.0.0.1", "root", "", "myim"))
-    {
-        LOG_ERROR << "Load users from db error";
-        return false;
-    }
-    
+{   
     InetAddress addr(ip, port);
     m_server.reset(new TcpServer(loop, addr, "ZYL-MYIMSERVER", TcpServer::kReusePort));
     m_server->setConnectionCallback(std::bind(&IMServer::OnConnection, this, std::placeholders::_1));
@@ -32,10 +24,10 @@ void IMServer::OnConnection(std::shared_ptr<TcpConnection> conn)
 {
     if (conn->connected())
     {
-        LOG_INFO << "client connected:" << conn->peerAddress().toIpPort();
+        //LOG_INFO << "client connected:" << conn->peerAddress().toIpPort();
         ++ m_baseUserId;
         std::shared_ptr<ClientSession> spSession(new ClientSession(conn));
-        conn->setMessageCallback(std::bind(&ClientSession::OnRead, spSession.get(), std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+        conn->setMessageCallback(std::bind(&ClientSession::OnRead, spSession.get(), std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));       
 
         std::lock_guard<std::mutex> guard(m_sessionMutex);
         m_sessions.push_back(spSession);
@@ -62,22 +54,37 @@ void IMServer::OnClose(const std::shared_ptr<TcpConnection>& conn)
             break;
         }
         
+        //通过比对connection对象找到对应的session
         if ((*iter)->GetConnectionPtr() == conn)
         {
-            //遍历其在线好友，给其好友推送离线消息
-            std::list<User> friends;
-            int32_t offlineUserId = (*iter)->GetUserId();
-            userManager.GetFriendInfoByUserId(offlineUserId, friends);
-            for (const auto& iter2 : friends)
-            {
-                std::shared_ptr<ClientSession> targetSession;
-                for (auto& iter3 : m_sessions)
+            //该Session不是之前被踢下线的有效Session，才认为是正常下线，才给其好友推送其下线消息
+            if ((*iter)->IsSessionValid())
+            { 
+                //遍历其在线好友，给其好友推送其下线消息
+                std::list<User> friends;
+                int32_t offlineUserId = (*iter)->GetUserId();
+                userManager.GetFriendInfoByUserId(offlineUserId, friends);
+                for (const auto& iter2 : friends)
                 {
-                    if (iter2.userid == iter3->GetUserId())                 
-                        iter3->SendUserStatusChangeMsg(offlineUserId, 2);
+                    for (auto& iter3 : m_sessions)
+                    {
+                        //该好友是否在线（在线会存在session）
+                        if (iter2.userid == iter3->GetUserId())
+                        {
+                            iter3->SendUserStatusChangeMsg(offlineUserId, 2);
+
+                            LOG_INFO << "SendUserStatusChangeMsg to user(userid=" << iter3->GetUserId() << "): user go offline, offline userid = " << offlineUserId;
+                        }
+                    }
                 }
             }
+            else
+            {
+                LOG_INFO << "Session is invalid, userid=" << (*iter)->GetUserId();
+            }
             
+            //停掉该Session的掉线检测
+            //(*iter)->DisableHeartbaetCheck();
             //用户下线
             m_sessions.erase(iter);
             //bUserOffline = true;
@@ -95,7 +102,24 @@ void IMServer::GetSessions(std::list<std::shared_ptr<ClientSession>>& sessions)
     sessions = m_sessions;
 }
 
-bool IMServer::GetSessionByUserId(std::shared_ptr<ClientSession>& session, int32_t userid)
+bool IMServer::GetSessionByUserIdAndClientType(std::shared_ptr<ClientSession>& session, int32_t userid, int32_t clientType)
+{
+    std::lock_guard<std::mutex> guard(m_sessionMutex);
+    std::shared_ptr<ClientSession> tmpSession;
+    for (const auto& iter : m_sessions)
+    {
+        tmpSession = iter;
+        if (iter->GetUserId() == userid && iter->GetClientType() == clientType)
+        {
+            session = tmpSession;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool IMServer::GetSessionsByUserId(std::list<std::shared_ptr<ClientSession>>& sessions, int32_t userid)
 {
     std::lock_guard<std::mutex> guard(m_sessionMutex);
     std::shared_ptr<ClientSession> tmpSession;
@@ -104,7 +128,7 @@ bool IMServer::GetSessionByUserId(std::shared_ptr<ClientSession>& session, int32
         tmpSession = iter;
         if (iter->GetUserId() == userid)
         {
-            session = tmpSession;
+            sessions.push_back(tmpSession);
             return true;
         }
     }
@@ -124,4 +148,29 @@ int32_t IMServer::GetUserStatusByUserId(int32_t userid)
     }
 
     return 0;
+}
+
+int32_t IMServer::GetUserClientTypeByUserId(int32_t userid)
+{
+    std::lock_guard<std::mutex> guard(m_sessionMutex);
+    bool bMobileOnline = false;
+    int clientType = CLIENT_TYPE_UNKOWN;
+    for (const auto& iter : m_sessions)
+    {
+        if (iter->GetUserId() == userid)
+        {   
+            clientType = iter->GetUserClientType();
+            //电脑在线直接返回电脑在线状态
+            if (clientType == CLIENT_TYPE_PC)
+                return clientType;
+            else if (clientType == CLIENT_TYPE_ANDROID || clientType == CLIENT_TYPE_IOS)
+                bMobileOnline = true;
+        }
+    }
+
+    //只有手机在线才返回手机在线状态
+    if (bMobileOnline)
+        return clientType;
+
+    return CLIENT_TYPE_UNKOWN;
 }

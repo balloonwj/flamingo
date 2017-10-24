@@ -27,7 +27,7 @@ CDatabaseMysql::~CDatabaseMysql(void)
 
 bool CDatabaseMysql::Initialize(const string& host, const string& user, const string& pwd, const string& dbname)
 {
-	LOG_INFO << "CDatabaseMysql::Initialize, begin...";
+	//LOG_INFO << "CDatabaseMysql::Initialize, begin...";
 
 	//ClearStoredResults();
 	if(m_bInit)
@@ -41,10 +41,7 @@ bool CDatabaseMysql::Initialize(const string& host, const string& user, const st
 
 	//ClearStoredResults();
 
-	LOG_INFO << host.c_str() ;
-	LOG_INFO << user.c_str() ;
-	LOG_INFO << pwd.c_str() ;
-	LOG_INFO << dbname.c_str() ;
+    //LOG_INFO << "mysql info: host=" << host << ", user=" << user << ", password=" << pwd << ", dbname=" << dbname;
 	
 	m_DBInfo.strDBName = dbname;
 	m_DBInfo.strHost = host;
@@ -53,8 +50,8 @@ bool CDatabaseMysql::Initialize(const string& host, const string& user, const st
 
 	if (m_Mysql)
     {
-		LOG_INFO << "m_Mysql address " << (long)m_Mysql;
-		LOG_INFO << "CDatabaseMysql::Initialize, set names utf8";
+		//LOG_INFO << "m_Mysql address " << (long)m_Mysql;
+		//LOG_INFO << "CDatabaseMysql::Initialize, set names utf8";
         mysql_query(m_Mysql, "set names utf8");
         //mysql_query(m_Mysql, "set names latin1");
 		m_bInit = true;
@@ -122,7 +119,7 @@ QueryResult* CDatabaseMysql::Query(const char *sql)
 			}            
         }
 
-		LOG_INFO << "call mysql_store_result";
+		//LOG_INFO << "call mysql_store_result";
         result = mysql_store_result(m_Mysql);
 
         rowCount = mysql_affected_rows(m_Mysql);

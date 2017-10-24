@@ -3342,8 +3342,8 @@ LRESULT CSkinRichEdit::RichEditWndProc(UINT msg, WPARAM wparam, LPARAM lparam)
 		SetMsgHandled(FALSE);
 		return 0;
 
-	//case WM_ERASEBKGND:
-	//	return TRUE;
+	case WM_ERASEBKGND:
+		return TRUE;
 
 	case WM_CREATE:
 		OnCreate((LPCREATESTRUCT)lparam);

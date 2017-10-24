@@ -81,18 +81,19 @@ protected:
 	void CalcCenterRect(CRect& rcDest, int cx, int cy, CRect& rcCenter);
 	
 private:
-	CImageEx* m_lpBgImgN,* m_lpBgImgH,* m_lpBgImgD,* m_lpBgImgF;
-	CImageEx* m_lpCheckBoxImgN,* m_lpCheckBoxImgH;
-	CImageEx* m_lpCheckBoxImgTickN,* m_lpCheckBoxImgTickH;
-	CImageEx* m_lpArrowImg,* m_lpIconImg;
-	BOOL m_bFocus, m_bPress, m_bHover, m_bMouseTracking;
+	CImageEx*        m_lpBgImgN,* m_lpBgImgH,* m_lpBgImgD,* m_lpBgImgF;
+	CImageEx*        m_lpCheckBoxImgN,* m_lpCheckBoxImgH;
+	CImageEx*        m_lpCheckBoxImgTickN,* m_lpCheckBoxImgTickH;
+	CImageEx*        m_lpArrowImg,* m_lpIconImg;
+	BOOL             m_bFocus, m_bPress, m_bHover, m_bMouseTracking;
 	SKIN_BUTTON_TYPE m_nBtnType;
-	HMENU m_hMenu;
-	CToolTipCtrl m_ToolTipCtrl;
-	int m_cxRound, m_cyRound;
-	DWORD m_dwTextAlign;
-	BOOL m_bTransparent;
-	HDC m_hBgDC;
-	COLORREF m_clrText;
-	BOOL	 m_bTextBold;
+	HMENU            m_hMenu;
+	CToolTipCtrl     m_ToolTipCtrl;
+	int              m_cxRound, m_cyRound;
+	DWORD            m_dwTextAlign;
+	BOOL             m_bTransparent;
+	HDC              m_hBgDC;
+	COLORREF         m_clrText;
+    COLORREF         m_clrBgColor;
+	BOOL	         m_bTextBold;
 };

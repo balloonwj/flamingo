@@ -6,8 +6,9 @@
 #include "ChatDlgCommon.h"
 #include "GDIFactory.h"
 #include "IULog.h"
-#include "File.h"
+#include "File2.h"
 #include "EncodingUtil.h"
+#include "UIText.h"
 
 #define CHAT_BG_IMAGE_NAME			_T("BuddyChatDlgBg.png")
 #define CHAT_EXPAND_BG_IMAGE_NAME   _T("BuddyChatDlgExpandBg.png")
@@ -474,7 +475,7 @@ void CMultiChatDlg::OnBtn_Image(UINT uNotifyCode, int nID, CWindow wndCtl)
 		UINT64 nFileSize = IUGetFileSize2(fileDlg.m_ofn.lpstrFile);
 		if(nFileSize > MAX_CHAT_IMAGE_SIZE)
 		{
-			::MessageBox(m_hWnd, _T("图片大小超过10M，请使用截图工具或使用文件方式给对方发送。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+			::MessageBox(m_hWnd, _T("图片大小超过10M，请使用截图工具或使用文件方式给对方发送。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 			return;
 		}
 		_RichEdit_InsertFace(m_richSend.m_hWnd, fileDlg.m_ofn.lpstrFile, -1, -1);
@@ -506,7 +507,7 @@ void CMultiChatDlg::OnBtn_ScreenShot(UINT uNotifyCode, int nID, CWindow wndCtl)
 	PROCESS_INFORMATION pi = {0};
 	if(!CreateProcess(NULL, strCatchScreen.GetBuffer(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
 	{
-		::MessageBox(m_hWnd, _T("启动截图工具失败！"), _T("Flamingo"), MB_OK|MB_ICONERROR);
+		::MessageBox(m_hWnd, _T("启动截图工具失败！"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
 	}
 	if(pi.hProcess != NULL)
 	{
@@ -732,14 +733,14 @@ LRESULT CMultiChatDlg::OnGMemberList_DblClick(LPNMHDR pnmh)
 		UINT nUTalkUin = (UINT)m_ListCtrl.GetItemData(nCurSel, 0);
 		if(nUTalkUin == m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID)
 		{
-			::MessageBox(m_hWnd, _T("不能和自己聊天。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+			::MessageBox(m_hWnd, _T("不能和自己聊天。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 			return 0;
 		}
 		
 		if(m_lpFMGClient->m_UserMgr.IsFriend(nUTalkUin))
 			::SendMessage(m_hMainDlg, WM_SHOW_BUDDYCHATDLG, 0, nUTalkUin);
 		else
-			::MessageBox(m_hWnd, _T("暂且不支持临时会话，您必须加对方为好友以后才能与之会话。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+			::MessageBox(m_hWnd, _T("暂且不支持临时会话，您必须加对方为好友以后才能与之会话。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 	}
 	return 0;
 }
@@ -958,7 +959,7 @@ void CMultiChatDlg::OnMenu_ViewInfo(UINT uNotifyCode, int nID, CWindow wndCtl)
 		::PostMessage(m_hMainDlg, WM_SHOW_BUDDYINFODLG, 0, nUTalkUin);
 	else
 	{
-		::MessageBox(m_hWnd, _T("暂不支持查看非好友的资料。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("暂不支持查看非好友的资料。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		//::PostMessage(m_hMainDlg, WM_SHOW_GMEMBERINFODLG, m_nGroupCode, nUTalkUin);
 	}
 }
@@ -998,9 +999,9 @@ void CMultiChatDlg::OnMenu_SendMsg(UINT uNotifyCode, int nID, CWindow wndCtl)
 	if(m_lpFMGClient->m_UserMgr.IsFriend(nUTalkUin))
 		::SendMessage(m_hMainDlg, WM_SHOW_BUDDYCHATDLG, 0, nUTalkUin);
 	else if(nUTalkUin == m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID)
-		::MessageBox(m_hWnd, _T("不能和自己聊天。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("不能和自己聊天。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 	else
-		::MessageBox(m_hWnd, _T("暂且不支持临时会话，您必须加对方为好友以后才能与之会话。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("暂且不支持临时会话，您必须加对方为好友以后才能与之会话。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 }
 
 // 发送/接收文本框的鼠标移动消息
@@ -1539,7 +1540,7 @@ BOOL CMultiChatDlg::Init()
 	long nCustomFontNameIndex = -1;
 	if(arrSysFont.empty())
 	{
-		::MessageBox(m_hWnd, _T("初始化聊天对话框失败！"), _T("Flamingo"), MB_OK|MB_ICONERROR);
+		::MessageBox(m_hWnd, _T("初始化聊天对话框失败！"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
 		return FALSE;
 	}
 	
@@ -2631,14 +2632,14 @@ void CMultiChatDlg::SendConfirmMessage(const CUploadFileResult* pUploadFileResul
     {
         time_t nTime = time(NULL);
         TCHAR szMd5[64] = { 0 };
-        AnsiToUnicode(pUploadFileResult->m_szMd5, szMd5, ARRAYSIZE(szMd5));
+        EncodeUtil::AnsiToUnicode(pUploadFileResult->m_szMd5, szMd5, ARRAYSIZE(szMd5));
         CString strImageName;
         strImageName.Format(_T("%s.%s"), szMd5, Hootina::CPath::GetExtension(pUploadFileResult->m_szLocalName).c_str());
         long nWidth = 0;
         long nHeight = 0;
         GetImageWidthAndHeight(pUploadFileResult->m_szLocalName, nWidth, nHeight);
         char szUtf8FileName[MAX_PATH] = { 0 };
-        UnicodeToUtf8(strImageName, szUtf8FileName, ARRAYSIZE(szUtf8FileName));
+        EncodeUtil::UnicodeToUtf8(strImageName, szUtf8FileName, ARRAYSIZE(szUtf8FileName));
         CStringA strImageAcquireMsg;
         //if (pUploadFileResult->m_bSuccessful)
         //    strImageAcquireMsg.Format("{\"msgType\":2,\"time\":%llu,\"clientType\":1,\"content\":[{\"pic\":[\"%s\",\"%s\",%u,%d,%d]}]}", nTime, szUtf8FileName, pUploadFileResult->m_szRemoteName, pUploadFileResult->m_dwFileSize, nWidth, nHeight);
@@ -2768,7 +2769,7 @@ BOOL CMultiChatDlg::HandleFileDragResult(PCTSTR lpszFileName)
 		UINT64 nFileSize = IUGetFileSize2(lpszFileName);
 		if(nFileSize > MAX_CHAT_IMAGE_SIZE)
 		{
-			::MessageBox(m_hWnd, _T("图片大小超过10M，请使用截图工具。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+			::MessageBox(m_hWnd, _T("图片大小超过10M，请使用截图工具。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 			return FALSE;
 		}
 		_RichEdit_InsertFace(m_richSend.m_hWnd, lpszFileName, -1, -1);
@@ -2913,7 +2914,7 @@ void CMultiChatDlg::OnBtn_ShakeWindow(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	if (m_lpFMGClient->IsOffline())
 	{
-		MessageBox(_T("您已经处于离线状态，无法发送窗口抖动，请上线后再次尝试。"), _T("Flamingo"));
+		MessageBox(_T("您已经处于离线状态，无法发送窗口抖动，请上线后再次尝试。"), g_strAppTitle.c_str());
 		return;
 	}
 	

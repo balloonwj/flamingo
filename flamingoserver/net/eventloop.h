@@ -120,31 +120,32 @@ namespace net
 
 		void printActiveChannels() const; // DEBUG
 
+    private:
 		typedef std::vector<Channel*> ChannelList;
 
-		bool looping_; /* atomic */
-		bool quit_; /* atomic and shared between threads, okay on x86, I guess. */
-		bool eventHandling_; /* atomic */
-		bool callingPendingFunctors_; /* atomic */
-		int64_t iteration_;
-		const std::thread::id threadId_;
-		Timestamp pollReturnTime_;
-		std::shared_ptr<EPollPoller> poller_;
-        std::shared_ptr<TimerQueue> timerQueue_;
+		bool                                looping_; /* atomic */
+		bool                                quit_; /* atomic and shared between threads, okay on x86, I guess. */
+		bool                                eventHandling_; /* atomic */
+		bool                                callingPendingFunctors_; /* atomic */
+		int64_t                             iteration_;
+		const std::thread::id               threadId_;
+		Timestamp                           pollReturnTime_;
+		std::shared_ptr<EPollPoller>        poller_;
+        std::shared_ptr<TimerQueue>         timerQueue_;
 
 		int wakeupFd_;
 		// unlike in TimerQueue, which is an internal class,
 		// we don't expose Channel to client.
-		std::shared_ptr<Channel> wakeupChannel_;
+		std::shared_ptr<Channel>            wakeupChannel_;
 	
 		// scratch variables
-		ChannelList activeChannels_;
-		Channel* currentActiveChannel_;
+		ChannelList                         activeChannels_;
+		Channel*                            currentActiveChannel_;
 
-		std::mutex mutex_;
-		std::vector<Functor> pendingFunctors_; // @GuardedBy mutex_
+		std::mutex                          mutex_;
+		std::vector<Functor>                pendingFunctors_; // Guarded by mutex_
 
-		Functor frameFunctor_;
+		Functor                             frameFunctor_;
 	};
 
 }

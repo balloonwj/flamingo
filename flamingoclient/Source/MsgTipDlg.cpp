@@ -310,7 +310,7 @@ BOOL CMsgTipDlg::InitCtrls()
 	m_ListCtrl.Create(m_hWnd, CRect(0,0,1,1), NULL, 
 		WS_CHILD|WS_VISIBLE, NULL, 1000, NULL);
 	m_ListCtrl.SetTransparent(TRUE, hDlgBgDC);
-	m_ListCtrl.SetItemHotBgPic(_T("MsgTipListItemBg.png"));
+	m_ListCtrl.SetItemHoverBgPic(_T("MsgTipListItemBg.png"));
 	m_ListCtrl.SetItemTextColor(RGB(0,0,0));
 	m_ListCtrl.SetSelItemTextColor(RGB(0,0,0));
 	m_ListCtrl.SetHeadVisible(FALSE);

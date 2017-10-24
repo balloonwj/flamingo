@@ -6,8 +6,10 @@
 #include "ChatDlgCommon.h"
 #include "GDIFactory.h"
 #include "IULog.h"
-#include "File.h"
+#include "File2.h"
 #include "EncodingUtil.h"
+#include "LoginSettingsDlg.h"
+#include "UIText.h"
 
 #define CHAT_BG_IMAGE_NAME			_T("BuddyChatDlgBg.png")
 #define CHAT_EXPAND_BG_IMAGE_NAME   _T("BuddyChatDlgExpandBg.png")
@@ -430,12 +432,12 @@ void CGroupChatDlg::OnSize(UINT nType, CSize size)
 			else
 			{
 				if (m_FontSelDlg.IsWindow() && m_FontSelDlg.IsWindowVisible())
-					m_richRecv.MoveWindow(6, 106, size.cx-GROUP_MEMBER_LIST_WIDTH-2, size.cy-305);
+					m_richRecv.MoveWindow(6, 106, size.cx-GROUP_MEMBER_LIST_WIDTH-20, size.cy-305);
 				else if((m_FontSelDlg.IsWindow()&&!m_FontSelDlg.IsWindowVisible()) || !m_FontSelDlg.IsWindow())
-					m_richRecv.MoveWindow(6, 106, size.cx-GROUP_MEMBER_LIST_WIDTH-2, size.cy-273, TRUE);
+					m_richRecv.MoveWindow(6, 106, size.cx-GROUP_MEMBER_LIST_WIDTH-20, size.cy-273, TRUE);
 
 				if (m_FontSelDlg.IsWindow() && m_FontSelDlg.IsWindowVisible())
-					m_FontSelDlg.MoveWindow(2, size.cy-197, size.cx-20, 32, TRUE);
+                    m_FontSelDlg.MoveWindow(2, size.cy - 197, size.cx-GROUP_MEMBER_LIST_WIDTH/*-40*/, 32, TRUE);
 			}
 		}
 		
@@ -509,7 +511,7 @@ void CGroupChatDlg::OnSize(UINT nType, CSize size)
 					m_richRecv.MoveWindow(6, 106, size.cx-GROUP_MEMBER_LIST_WIDTH-2-GROUP_MSG_LOG_WIDTH, m_rtRichRecv.bottom-m_rtRichRecv.top);
 			
 				if (m_FontSelDlg.IsWindow() && m_FontSelDlg.IsWindowVisible())
-					m_FontSelDlg.MoveWindow(2, m_rtRichRecv.bottom-32, size.cx-GROUP_MEMBER_LIST_WIDTH-GROUP_MSG_LOG_WIDTH, 32, TRUE);
+					m_FontSelDlg.MoveWindow(2, m_rtRichRecv.bottom-32, size.cx-GROUP_MEMBER_LIST_WIDTH-GROUP_MSG_LOG_WIDTH - 20, 32, TRUE);
 			}
 			else
 			{
@@ -519,7 +521,7 @@ void CGroupChatDlg::OnSize(UINT nType, CSize size)
 					m_richRecv.MoveWindow(6, 106, size.cx-GROUP_MEMBER_LIST_WIDTH-2-GROUP_MSG_LOG_WIDTH, size.cy-273);
 			
 				if (m_FontSelDlg.IsWindow() && m_FontSelDlg.IsWindowVisible())
-					m_FontSelDlg.MoveWindow(2, size.cy-197, size.cx-GROUP_MEMBER_LIST_WIDTH-GROUP_MSG_LOG_WIDTH, 32, TRUE);
+					m_FontSelDlg.MoveWindow(2, size.cy-197, size.cx-GROUP_MEMBER_LIST_WIDTH-GROUP_MSG_LOG_WIDTH-20, 32, TRUE);
 			}
 		}
 
@@ -751,7 +753,7 @@ void CGroupChatDlg::OnBtn_Font(UINT uNotifyCode, int nID, CWindow wndCtl)
 	{
 		m_FontSelDlg.ShowWindow(SW_SHOW);
 		m_richRecv.MoveWindow(6, 106, rtRichRecv.right-rtRichRecv.left, rtRichRecv.bottom-rtRichRecv.top-32, TRUE);
-		m_FontSelDlg.MoveWindow(6, rtRichRecv.bottom-32, rtRichRecv.right-rtRichRecv.left+20, 32, TRUE);	
+		m_FontSelDlg.MoveWindow(6, rtRichRecv.bottom-32, rtRichRecv.right-rtRichRecv.left/*+20*/, 32, TRUE);	
 	}
 	else if (BN_UNPUSHED == uNotifyCode)
 	{
@@ -806,7 +808,7 @@ void CGroupChatDlg::OnBtn_Image(UINT uNotifyCode, int nID, CWindow wndCtl)
 		UINT64 nFileSize = IUGetFileSize2(fileDlg.m_ofn.lpstrFile);
 		if(nFileSize > MAX_CHAT_IMAGE_SIZE)
 		{
-			::MessageBox(m_hWnd, _T("图片大小超过10M，请使用截图工具。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+			::MessageBox(m_hWnd, _T("图片大小超过10M，请使用截图工具。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 			return;
 		}
 
@@ -839,7 +841,7 @@ void CGroupChatDlg::OnBtn_ScreenShot(UINT uNotifyCode, int nID, CWindow wndCtl)
 	PROCESS_INFORMATION pi = {0};
 	if(!CreateProcess(NULL, strCatchScreen.GetBuffer(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
 	{
-		::MessageBox(m_hWnd, _T("启动截图工具失败！"), _T("Flamingo"), MB_OK|MB_ICONERROR);
+		::MessageBox(m_hWnd, _T("启动截图工具失败！"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
 	}
 	if(pi.hProcess != NULL)
 	{
@@ -1081,14 +1083,14 @@ LRESULT CGroupChatDlg::OnGMemberList_DblClick(LPNMHDR pnmh)
 		UINT nUTalkUin = (UINT)m_ListCtrl.GetItemData(nCurSel, 0);
 		if(nUTalkUin == m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID)
 		{
-			::MessageBox(m_hWnd, _T("不能和自己聊天。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+			::MessageBox(m_hWnd, _T("不能和自己聊天。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 			return 0;
 		}
 		
 		if(m_lpFMGClient->m_UserMgr.IsFriend(nUTalkUin))
 			::SendMessage(m_hMainDlg, WM_SHOW_BUDDYCHATDLG, 0, nUTalkUin);
 		else
-			::MessageBox(m_hWnd, _T("暂且不支持临时会话，您必须加对方为好友以后才能与之会话。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+			::MessageBox(m_hWnd, _T("暂且不支持临时会话，您必须加对方为好友以后才能与之会话。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 	}
 	return 0;
 }
@@ -1311,7 +1313,7 @@ void CGroupChatDlg::OnMenu_ViewInfo(UINT uNotifyCode, int nID, CWindow wndCtl)
 		::PostMessage(m_hMainDlg, WM_SHOW_BUDDYINFODLG, 0, nUTalkUin);
 	else
 	{
-		::MessageBox(m_hWnd, _T("暂不支持查看非好友的资料。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("暂不支持查看非好友的资料。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		//::PostMessage(m_hMainDlg, WM_SHOW_GMEMBERINFODLG, m_nGroupCode, nUTalkUin);
 	}
 }
@@ -1351,9 +1353,9 @@ void CGroupChatDlg::OnMenu_SendMsg(UINT uNotifyCode, int nID, CWindow wndCtl)
 	if(m_lpFMGClient->m_UserMgr.IsFriend(nUTalkUin))
 		::SendMessage(m_hMainDlg, WM_SHOW_BUDDYCHATDLG, 0, nUTalkUin);
 	else if(nUTalkUin == m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID)
-		::MessageBox(m_hWnd, _T("不能和自己聊天。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("不能和自己聊天。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 	else
-		::MessageBox(m_hWnd, _T("暂且不支持临时会话，您必须加对方为好友以后才能与之会话。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("暂且不支持临时会话，您必须加对方为好友以后才能与之会话。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 }
 
 // 发送/接收文本框的鼠标移动消息
@@ -1683,7 +1685,7 @@ BOOL CGroupChatDlg::UpdateGroupMemberList()
 	m_ListCtrl.SetRedraw(FALSE);
 	m_ListCtrl.DeleteAllItems();
 	BOOL bGray = TRUE;
-	CIULog::Log(LOG_NORMAL, __FUNCSIG__, _T("Update Group Member Info: GroupID=%u, GroupAccount=%s, GroupName=%s."),
+	LOG_INFO("Update Group Member Info: GroupID=%u, GroupAccount=%s, GroupName=%s.",
 					lpGroupInfo->m_nGroupCode, lpGroupInfo->m_strAccount.c_str(), lpGroupInfo->m_strName.c_str());
 	for (int i = 0; i < lpGroupInfo->GetMemberCount(); i++)
 	{
@@ -1721,7 +1723,7 @@ BOOL CGroupChatDlg::UpdateGroupMemberList()
 		m_ListCtrl.InsertItem(nMemberCnt, strText, strFileName, bGray, DT_LEFT, 0);
 		m_ListCtrl.SetItemData(nMemberCnt, 0, lpBuddyInfo->m_uUserID);
 
-		CIULog::Log(LOG_NORMAL, __FUNCSIG__, _T("GroupMemberInfo: AccountID=%u, AccountName=%s, NickName=%s, Gray=%d."),
+		LOG_INFO("GroupMemberInfo: AccountID=%u, AccountName=%s, NickName=%s, Gray=%d.",
 					lpBuddyInfo->m_uUserID, lpBuddyInfo->m_strAccount.c_str(), lpBuddyInfo->m_strNickName.c_str(), bGray);
 
 		++nMemberCnt;
@@ -2149,7 +2151,7 @@ BOOL CGroupChatDlg::Init()
 	long nCustomFontNameIndex = -1;
 	if(arrSysFont.empty())
 	{
-		::MessageBox(m_hWnd, _T("初始化聊天对话框失败！"), _T("Flamingo"), MB_OK|MB_ICONERROR);
+		::MessageBox(m_hWnd, _T("初始化聊天对话框失败！"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
 		return FALSE;
 	}
 	
@@ -3032,14 +3034,14 @@ void CGroupChatDlg::SendConfirmMessage(const CUploadFileResult* pUploadFileResul
     {
         time_t nTime = time(NULL);
         TCHAR szMd5[64] = { 0 };
-        AnsiToUnicode(pUploadFileResult->m_szMd5, szMd5, ARRAYSIZE(szMd5));
+        EncodeUtil::AnsiToUnicode(pUploadFileResult->m_szMd5, szMd5, ARRAYSIZE(szMd5));
         CString strImageName;
         strImageName.Format(_T("%s.%s"), szMd5, Hootina::CPath::GetExtension(pUploadFileResult->m_szLocalName).c_str());
         long nWidth = 0;
         long nHeight = 0;
         GetImageWidthAndHeight(pUploadFileResult->m_szLocalName, nWidth, nHeight);
         char szUtf8FileName[MAX_PATH] = { 0 };
-        UnicodeToUtf8(strImageName, szUtf8FileName, ARRAYSIZE(szUtf8FileName));
+        EncodeUtil::UnicodeToUtf8(strImageName, szUtf8FileName, ARRAYSIZE(szUtf8FileName));
         CStringA strImageAcquireMsg;
         //if (pUploadFileResult->m_bSuccessful)
         //    strImageAcquireMsg.Format("{\"msgType\":2,\"time\":%llu,\"clientType\":1,\"content\":[{\"pic\":[\"%s\",\"%s\",%u,%d,%d]}]}", nTime, szUtf8FileName, pUploadFileResult->m_szRemoteName, pUploadFileResult->m_dwFileSize, nWidth, nHeight);
@@ -3650,7 +3652,7 @@ BOOL CGroupChatDlg::HandleFileDragResult(PCTSTR lpszFileName)
 		UINT64 nFileSize = IUGetFileSize2(lpszFileName);
 		if(nFileSize > MAX_CHAT_IMAGE_SIZE)
 		{
-			::MessageBox(m_hWnd, _T("图片大小超过10M，请使用截图工具。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+			::MessageBox(m_hWnd, _T("图片大小超过10M，请使用截图工具。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 			return FALSE;
 		}
 		

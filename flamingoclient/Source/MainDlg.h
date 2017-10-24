@@ -19,9 +19,20 @@
 #include "LogonUserInfoDlg.h"
 #include "ModifyPasswordDlg.h"
 #include "MultiChatDlg.h"
+#include "BuddyInfoFloatWnd.h"
 
 //分组菜单ID基数
 #define TEAM_MENU_ITEM_BASE       0xF001
+
+//主面板状态
+enum MAINPANEL_STATUS
+{
+    MAINPANEL_STATUS_NOTLOGIN,     //主面板未登录
+    MAINPANEL_STATUS_LOGINING,     //主面板正在登录
+    MAINPANEL_STATUS_LOGIN,        //主面板已经登录
+    MAINPANEL_STATUS_RECONNECTING, //主面板正在重连
+    MAINPANEL_STATUS_USERGOOFFLINE //主面板用户主动下线
+};
 
 class CGMemberInfoMapKey
 {
@@ -49,6 +60,7 @@ class CGroupInfoDlg;
 class CSessChatDlg;
 
 class CFindFriendDlg;
+class CRemoteDesktopDlg;
 
 class CMainDlg : public CDialogImpl<CMainDlg>, public CUpdateUI<CMainDlg>,
 		public CMessageFilter, public CIdleHandler
@@ -95,6 +107,7 @@ public:
 		NOTIFY_HANDLER_EX(ID_TABCTRL_MAIN, TCN_SELCHANGE, OnTabCtrlSelChange)
 		NOTIFY_HANDLER_EX(ID_LISTCTRL_BUDDY, NM_DBLCLK, OnBuddyListDblClk)		 //双击好友列表中的好友
 		NOTIFY_HANDLER_EX(ID_LISTCTRL_BUDDY, NM_RCLICK, OnBuddyListRButtonUp)	 //右键好友列表中的好友
+        NOTIFY_HANDLER_EX(ID_LISTCTRL_BUDDY, NM_HOVER, OnBuddyListHover)	     //鼠标在好友列表项上悬停
 		NOTIFY_HANDLER_EX(ID_LISTCTRL_GROUP, NM_DBLCLK, OnGroupListDblClk)
 		NOTIFY_HANDLER_EX(ID_LISTCTRL_GROUP, NM_RCLICK, OnGroupListRButtonUp)
 		NOTIFY_HANDLER_EX(ID_LISTCTRL_RECENT, NM_DBLCLK, OnRecentListDblClk)
@@ -135,6 +148,9 @@ public:
 
 		//显示昵称和账户、显示昵称、显示账号、显示清爽资料
 		COMMAND_RANGE_HANDLER_EX(ID_32911, ID_32914, OnMenu_ShowNameChoice)
+        
+        //网络错误
+        MESSAGE_HANDLER_EX(FMG_MSG_NET_ERROR, OnNetError)
 
 		MESSAGE_HANDLER_EX(FMG_MSG_LOGIN_RESULT, OnLoginResult)
 		MESSAGE_HANDLER_EX(FMG_MSG_LOGOUT_RESULT, OnLogoutResult)
@@ -154,6 +170,8 @@ public:
 		MESSAGE_HANDLER_EX(FMG_MSG_SESS_MSG, OnSessMsg)
 		MESSAGE_HANDLER_EX(FMG_MSG_STATUS_CHANGE_MSG, OnStatusChangeMsg)
 		MESSAGE_HANDLER_EX(FMG_MSG_KICK_MSG, OnKickMsg)
+        MESSAGE_HANDLER_EX(FMG_MSG_SCREENSHOT, OnScreenshotMsg)
+        
 		MESSAGE_HANDLER_EX(FMG_MSG_SYS_GROUP_MSG, OnSysGroupMsg)
 		
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_GMEMBER_NUMBER, OnUpdateGMemberNumber)
@@ -221,6 +239,7 @@ private:
 	LRESULT OnTabCtrlSelChange(LPNMHDR pnmh);
 	LRESULT OnBuddyListDblClk(LPNMHDR pnmh);
 	LRESULT OnBuddyListRButtonUp(LPNMHDR pnmh);
+    LRESULT OnBuddyListHover(LPNMHDR pnmh);   
 	LRESULT OnGroupListDblClk(LPNMHDR pnmh);
 	LRESULT OnGroupListRButtonUp(LPNMHDR pnmh);
 	LRESULT OnRecentListDblClk(LPNMHDR pnmh);
@@ -270,13 +289,14 @@ private:
 	BOOL InitGroupListCtrl();	// 初始化群列表控件
 	BOOL InitRecentListCtrl();	// 初始化最近联系人列表控件
 
-	BOOL Init();
-	void UnInit();
+	BOOL InitUI();
+	void UninitUI();
 
     //返回true,表示登录对话框走的是正常登录流程;返回false,表示直接关闭了登录对话框
 	bool StartLogin(BOOL bAutoLogin = FALSE);
 	void CloseAllDlg();
 
+    LRESULT OnNetError(UINT uMsg, WPARAM wParam, LPARAM lParam);    
 	LRESULT OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 登录返回消息
 	LRESULT OnLogoutResult(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 注销返回消息
 	LRESULT OnGoOffline(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 下线
@@ -289,6 +309,7 @@ private:
 	LRESULT OnSessMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);				// 临时会话消息
 	LRESULT OnStatusChangeMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 好友状态改变消息
 	LRESULT OnKickMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);				// 被踢下线消息
+    LRESULT OnScreenshotMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 屏幕截图消息   
 	LRESULT OnSysGroupMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 群系统消息
 	LRESULT OnUpdateBuddyNumber(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新好友号码
 	LRESULT OnUpdateGMemberNumber(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新群成员号码_
@@ -385,6 +406,7 @@ private:
 	CLogonUserInfoDlg       m_LogonUserInfoDlg;
 	CModifyPasswordDlg		m_ModifyPasswordDlg;
 	CMultiChatDlg			m_MultiChatDlg;									//群发消息窗口
+    CRemoteDesktopDlg*      m_pRemoteDesktopDlg;                            //远程桌面窗口
 
 	CSkinButton				m_btnMainMenu;
 	CSkinMenu				m_SkinMenu;										//左下角带UTalk头像的菜单
@@ -405,6 +427,8 @@ private:
 	CRecentListCtrl			m_RecentListCtrl;
 	CBuddyListCtrl			m_BuddyListCtrl;
 	CBuddyListCtrl			m_GroupListCtrl;
+
+    CBuddyInfoFloatWnd      m_BuddyInfoFloatWnd;                //鼠标放在好友列表项上显示的提示窗口
 	
 
 	CSkinPictureBox			m_picLogining;
@@ -437,7 +461,13 @@ private:
 	DWORD							m_dwLoginTimerId;
 	DWORD							m_dwMsgTimerId;
 	DWORD							m_dwAddFriendTimerId;					//加好友通知
+    DWORD                           m_dwReconnectTimerId;                   //断线重连定时器ID
 	//DWORD							m_dwExitAppTimerId;						//检测程序退出计时器
+
+    bool                            m_bEnableReconnect;                     //是否断线重连
+    UINT                            m_uReconnectInterval;                   //重连时间间隔，必须大于0，单位毫秒
+
+    bool                            m_bAlreadySendReloginRequest;           //重连过程中是否已经发送过登录请求包
 
 	HICON							m_hDlgIcon, m_hDlgSmallIcon;
 	CLoginAccountList				m_LoginAccountList;
@@ -459,4 +489,6 @@ private:
 	CRect							m_rcTrayIconRect;
 
 	long							m_nCurSelIndexInMainTab;		//主面板Tab选择索引号
+
+    MAINPANEL_STATUS                m_nMainPanelStatus;             //主面板状态
 };

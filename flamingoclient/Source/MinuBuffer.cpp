@@ -1,17 +1,16 @@
 #include "stdafx.h"
 #include "MiniBuffer.h"
-#include <assert.h>
 #include "Utils.h"
 
 CMiniBuffer::CMiniBuffer(int64_t nSize, BOOL bAutoRelease)
 {
-	assert(nSize > 0);
+	//assert(nSize > 0);
 	
 	m_nSize = nSize;
 	m_bAutoRelease = bAutoRelease;
 
-	m_pData = new char[nSize];
-	memset(m_pData, 0, nSize);
+	m_pData = new char[(int)nSize];
+	memset(m_pData, 0, (size_t)nSize);
 }
 
 CMiniBuffer::~CMiniBuffer()
@@ -36,10 +35,10 @@ char* CMiniBuffer::GetBuffer()
 	return m_pData;
 }
 
-//char* CMiniBuffer::operator PSTR()
-//{
-//	return m_pData;
-//}
+CMiniBuffer::operator PSTR()
+{
+	return m_pData;
+}
 	
 void CMiniBuffer::EnableAutoRelease(BOOL bAutoRelease)
 {

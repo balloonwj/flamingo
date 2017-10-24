@@ -11,26 +11,26 @@ struct LOGIN_ACCOUNT_INFO;
 class CLoginDlg : public CDialogImpl<CLoginDlg>
 {
 public:
-	CLoginDlg(void);
+    CLoginDlg(CFlamingoClient*	pFMGClient);
 	virtual ~CLoginDlg(void);
 
 	enum { IDD = IDD_LOGINDLG };
 
-	BEGIN_MSG_MAP_EX(CLoginDlg)
-		MSG_WM_INITDIALOG(OnInitDialog)
-		MSG_WM_SYSCOMMAND(OnSysCommand)
-		MSG_WM_MEASUREITEM(OnMeasureItem)
-		MSG_WM_DRAWITEM(OnDrawItem)
-		MSG_WM_CLOSE(OnClose)
-		MSG_WM_DESTROY(OnDestroy)
-		COMMAND_HANDLER_EX(ID_COMBO_UID, CBN_EDITCHANGE, OnCbo_EditChange_UID)
-		COMMAND_HANDLER_EX(ID_COMBO_UID, CBN_SELCHANGE, OnCbo_SelChange_UID)
-		COMMAND_ID_HANDLER_EX(ID_CHECK_REMEMBER_PWD, OnBtn_RememberPwd)
-		COMMAND_ID_HANDLER_EX(ID_CHECK_AUTO_LOGIN, OnBtn_AutoLogin)
-		COMMAND_ID_HANDLER_EX(ID_BTN_LOGIN, OnBtn_Login)
-		COMMAND_ID_HANDLER_EX(ID_BTN_SET, OnBtn_Set)
-		COMMAND_ID_HANDLER_EX(ID_STATIC_REG_ACCOUNT, OnRegister)
-		COMMAND_RANGE_HANDLER_EX(ID_MENU_IMONLINE, ID_MENU_INVISIBLE, OnMenu_LoginStatus)
+    BEGIN_MSG_MAP_EX(CLoginDlg)
+        MSG_WM_INITDIALOG(OnInitDialog)
+        MSG_WM_SYSCOMMAND(OnSysCommand)
+        MSG_WM_MEASUREITEM(OnMeasureItem)
+        MSG_WM_DRAWITEM(OnDrawItem)
+        MSG_WM_CLOSE(OnClose)
+        MSG_WM_DESTROY(OnDestroy)
+        COMMAND_HANDLER_EX(ID_COMBO_UID, CBN_EDITCHANGE, OnCbo_EditChange_UID)
+        COMMAND_HANDLER_EX(ID_COMBO_UID, CBN_SELCHANGE, OnCbo_SelChange_UID)
+        COMMAND_ID_HANDLER_EX(ID_CHECK_REMEMBER_PWD, OnBtn_RememberPwd)
+        COMMAND_ID_HANDLER_EX(ID_CHECK_AUTO_LOGIN, OnBtn_AutoLogin)
+        COMMAND_ID_HANDLER_EX(ID_BTN_LOGIN, OnBtn_Login)
+        COMMAND_ID_HANDLER_EX(ID_BTN_SET, OnBtn_Set)
+        COMMAND_ID_HANDLER_EX(ID_STATIC_REG_ACCOUNT, OnRegister)
+        COMMAND_RANGE_HANDLER_EX(ID_MENU_IMONLINE, ID_MENU_INVISIBLE, OnMenu_LoginStatus)
 		REFLECT_NOTIFICATIONS()														// 消息反射通知宏
 	END_MSG_MAP()
 
@@ -64,8 +64,10 @@ private:
 	void StatusMenuBtn_SetIconPic(CSkinButton& btnStatus, long nStatus);	// 根据指定状态设置状态菜单按钮的图标
 	void SetCurUser(LPCTSTR lpszUser, BOOL bPwdInvalid = FALSE);
 
+    static UINT WINAPI LoginThreadProc(void* pParam);
+
 public:
-	CFlamingoClient*		m_lpFMGClient;
+	CFlamingoClient*	m_lpFMGClient;
 	CLoginAccountList*  m_pLoginAccountList;
 
 private:

@@ -3,6 +3,7 @@
 #include "FlamingoClient.h"
 #include "net/IUProtocolData.h"
 #include "EncodingUtil.h"
+#include "UIText.h"
 
 // CCreateNewGroupDlg实现代码
 CCreateNewGroupDlg::CCreateNewGroupDlg()
@@ -81,7 +82,7 @@ void CCreateNewGroupDlg::OnOK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strGroupName.Trim();
 	if(strGroupName.IsEmpty() || strGroupName.GetLength()<=0 || strGroupName.GetLength()>=16)
 	{
-		::MessageBox(m_hWnd, _T("群名称必须在1～16个字符之间。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("群名称必须在1～16个字符之间。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_edtGroupName.SetFocus();
 		return;
 	}
@@ -106,17 +107,17 @@ LRESULT CCreateNewGroupDlg::OnCreateNewGroupResult(UINT uMsg, WPARAM wParam, LPA
 	CCreateNewGroupResult* pResult = (CCreateNewGroupResult*)lParam;
 	if(pResult==NULL || pResult->m_uError!=0)
 	{
-		::MessageBox(m_hWnd, _T("创建群失败。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("创建群失败。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 	}
 	else
 	{
 		TCHAR szGroupName[64] = {0};
-		Utf8ToUnicode(pResult->m_szGroupName, szGroupName, ARRAYSIZE(szGroupName));
+        EncodeUtil::Utf8ToUnicode(pResult->m_szGroupName, szGroupName, ARRAYSIZE(szGroupName));
 		//TCHAR szAccountName[64] = {0};
-		//Utf8ToUnicode(pResult->m_szAccount, szAccountName, ARRAYSIZE(szAccountName));
+		//EncodeUtil::Utf8ToUnicode(pResult->m_szAccount, szAccountName, ARRAYSIZE(szAccountName));
 		CString strInfo;
         strInfo.Format(_T("成功创建群[%s], 群号是[%d]。\r\n你现在可以邀请其他人加入了。"), szGroupName, pResult->m_uAccountID);
-		::MessageBox(m_hWnd, strInfo, _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, strInfo, g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 
 		EndDialog(IDOK);
 	}

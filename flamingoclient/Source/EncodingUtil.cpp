@@ -1,11 +1,15 @@
 /**
-* Windows平台用编码格式相互转换类, EncodingUtil.cpp
-* zhangyl 2017.03.29
-**/
+ * Windows平台用编码格式相互转换类, EncodingUtil.cpp
+ * zhangyl 2017.03.29
+ **/
 #include "stdafx.h"
+#include <locale.h>
+//#include <iconv.h>          //linux only
 #include "EncodingUtil.h"
 
-wchar_t* AnsiToUnicode(const char* lpszStr)
+
+
+wchar_t* EncodeUtil::AnsiToUnicode(const char* lpszStr)
 {
     wchar_t* lpUnicode;
     int nLen;
@@ -32,7 +36,7 @@ wchar_t* AnsiToUnicode(const char* lpszStr)
     return lpUnicode;
 }
 
-char* UnicodeToAnsi(const wchar_t* lpszStr)
+char* EncodeUtil::UnicodeToAnsi(const wchar_t* lpszStr)
 {
     char* lpAnsi;
     int nLen;
@@ -59,7 +63,7 @@ char* UnicodeToAnsi(const wchar_t* lpszStr)
     return lpAnsi;
 }
 
-char* AnsiToUtf8(const char* lpszStr)
+char* EncodeUtil::AnsiToUtf8(const char* lpszStr)
 {
     wchar_t* lpUnicode;
     char* lpUtf8;
@@ -112,7 +116,7 @@ char* AnsiToUtf8(const char* lpszStr)
     return lpUtf8;
 }
 
-char* Utf8ToAnsi(const char* lpszStr)
+char* EncodeUtil::Utf8ToAnsi(const char* lpszStr)
 {
     wchar_t* lpUnicode;
     char* lpAnsi;
@@ -165,7 +169,7 @@ char* Utf8ToAnsi(const char* lpszStr)
     return lpAnsi;
 }
 
-char* UnicodeToUtf8(const wchar_t* lpszStr)
+char* EncodeUtil::UnicodeToUtf8(const wchar_t* lpszStr)
 {
     char* lpUtf8;
     int nLen;
@@ -192,7 +196,7 @@ char* UnicodeToUtf8(const wchar_t* lpszStr)
     return lpUtf8;
 }
 
-wchar_t* Utf8ToUnicode(const char* lpszStr)
+wchar_t* EncodeUtil::Utf8ToUnicode(const char* lpszStr)
 {
     wchar_t* lpUnicode;
     int nLen;
@@ -219,34 +223,34 @@ wchar_t* Utf8ToUnicode(const char* lpszStr)
     return lpUnicode;
 }
 
-bool AnsiToUnicode(const char* lpszAnsi, wchar_t* lpszUnicode, int nLen)
+bool EncodeUtil::AnsiToUnicode(const char* lpszAnsi, wchar_t* lpszUnicode, int nLen)
 {
     int nRet = ::MultiByteToWideChar(CP_ACP, 0, lpszAnsi, -1, lpszUnicode, nLen);
     return (0 == nRet) ? FALSE : TRUE;
 }
 
-bool UnicodeToAnsi(const wchar_t* lpszUnicode, char* lpszAnsi, int nLen)
+bool EncodeUtil::UnicodeToAnsi(const wchar_t* lpszUnicode, char* lpszAnsi, int nLen)
 {
     int nRet = ::WideCharToMultiByte(CP_ACP, 0, lpszUnicode, -1, lpszAnsi, nLen, NULL, NULL);
     return (0 == nRet) ? FALSE : TRUE;
 }
 
-bool AnsiToUtf8(const char* lpszAnsi, char* lpszUtf8, int nLen)
+bool EncodeUtil::AnsiToUtf8(const char* lpszAnsi, char* lpszUtf8, int nLen)
 {
-    wchar_t* lpszUnicode = AnsiToUnicode(lpszAnsi);
+    wchar_t* lpszUnicode = EncodeUtil::AnsiToUnicode(lpszAnsi);
     if (NULL == lpszUnicode)
         return FALSE;
 
-    int nRet = UnicodeToUtf8(lpszUnicode, lpszUtf8, nLen);
+    int nRet = EncodeUtil::UnicodeToUtf8(lpszUnicode, lpszUtf8, nLen);
 
     delete[]lpszUnicode;
 
     return (0 == nRet) ? FALSE : TRUE;
 }
 
-bool Utf8ToAnsi(const char* lpszUtf8, char* lpszAnsi, int nLen)
+bool EncodeUtil::Utf8ToAnsi(const char* lpszUtf8, char* lpszAnsi, int nLen)
 {
-    wchar_t* lpszUnicode = Utf8ToUnicode(lpszUtf8);
+    wchar_t* lpszUnicode = EncodeUtil::Utf8ToUnicode(lpszUtf8);
     if (NULL == lpszUnicode)
         return FALSE;
 
@@ -257,23 +261,23 @@ bool Utf8ToAnsi(const char* lpszUtf8, char* lpszAnsi, int nLen)
     return (0 == nRet) ? FALSE : TRUE;
 }
 
-bool UnicodeToUtf8(const wchar_t* lpszUnicode, char* lpszUtf8, int nLen)
+bool EncodeUtil::UnicodeToUtf8(const wchar_t* lpszUnicode, char* lpszUtf8, int nLen)
 {
     int nRet = ::WideCharToMultiByte(CP_UTF8, 0, lpszUnicode, -1, lpszUtf8, nLen, NULL, NULL);
     return (0 == nRet) ? FALSE : TRUE;
 }
 
-bool Utf8ToUnicode(const char* lpszUtf8, wchar_t* lpszUnicode, int nLen)
+bool EncodeUtil::Utf8ToUnicode(const char* lpszUtf8, wchar_t* lpszUnicode, int nLen)
 {
     int nRet = ::MultiByteToWideChar(CP_UTF8, 0, lpszUtf8, -1, lpszUnicode, nLen);
     return (0 == nRet) ? FALSE : TRUE;
 }
 
-std::wstring AnsiToUnicode(const std::string& strAnsi)
+std::wstring EncodeUtil::AnsiToUnicode(const std::string& strAnsi)
 {
     std::wstring strUnicode;
 
-    wchar_t* lpszUnicode = AnsiToUnicode(strAnsi.c_str());
+    wchar_t* lpszUnicode = EncodeUtil::AnsiToUnicode(strAnsi.c_str());
     if (lpszUnicode != NULL)
     {
         strUnicode = lpszUnicode;
@@ -282,7 +286,7 @@ std::wstring AnsiToUnicode(const std::string& strAnsi)
 
     return strUnicode;
 }
-std::string UnicodeToAnsi(const std::wstring& strUnicode)
+std::string EncodeUtil::UnicodeToAnsi(const std::wstring& strUnicode)
 {
     std::string strAnsi;
 
@@ -296,7 +300,7 @@ std::string UnicodeToAnsi(const std::wstring& strUnicode)
     return strAnsi;
 }
 
-std::string AnsiToUtf8(const std::string& strAnsi)
+std::string EncodeUtil::AnsiToUtf8(const std::string& strAnsi)
 {
     std::string strUtf8;
 
@@ -310,7 +314,7 @@ std::string AnsiToUtf8(const std::string& strAnsi)
     return strUtf8;
 }
 
-std::string Utf8ToAnsi(const std::string& strUtf8)
+std::string EncodeUtil::Utf8ToAnsi(const std::string& strUtf8)
 {
     std::string strAnsi;
 
@@ -324,11 +328,11 @@ std::string Utf8ToAnsi(const std::string& strUtf8)
     return strAnsi;
 }
 
-std::string UnicodeToUtf8(const std::wstring& strUnicode)
+std::string EncodeUtil::UnicodeToUtf8(const std::wstring& strUnicode)
 {
     std::string strUtf8;
 
-    char* lpszUtf8 = UnicodeToUtf8(strUnicode.c_str());
+    char* lpszUtf8 = EncodeUtil::UnicodeToUtf8(strUnicode.c_str());
     if (lpszUtf8 != NULL)
     {
         strUtf8 = lpszUtf8;
@@ -338,11 +342,11 @@ std::string UnicodeToUtf8(const std::wstring& strUnicode)
     return strUtf8;
 }
 
-std::wstring Utf8ToUnicode(const std::string& strUtf8)
+std::wstring EncodeUtil::Utf8ToUnicode(const std::string& strUtf8)
 {
     std::wstring strUnicode;
 
-    wchar_t* lpszUnicode = Utf8ToUnicode(strUtf8.c_str());
+    wchar_t* lpszUnicode = EncodeUtil::Utf8ToUnicode(strUtf8.c_str());
     if (lpszUnicode != NULL)
     {
         strUnicode = lpszUnicode;
@@ -351,3 +355,70 @@ std::wstring Utf8ToUnicode(const std::string& strUtf8)
 
     return strUnicode;
 }
+
+//int EncodeUtil::code_convert(char* from_charset, char* to_charset, char* inbuf, size_t inlen, char* outbuf, size_t& outlen)
+//{
+//    iconv_t cd;
+//    char** pin = &inbuf;
+//    char** pout = &outbuf;
+//
+//    cd = iconv_open(to_charset, from_charset);
+//    if (cd == 0)
+//        return false;
+//
+//    memset(outbuf, 0, outlen);
+//
+//    if (iconv(cd, pin, &inlen, pout, &outlen) == -1)
+//        return false;
+//
+//    iconv_close(cd);
+//    return true;
+//}
+//
+//bool EncodeUtil::Utf8ToGbk(char *inbuf, size_t inlen, char *outbuf, size_t outlen)
+//{
+//    return code_convert("utf-8", "gbk", inbuf, inlen, outbuf, outlen);
+//}
+//
+//bool EncodeUtil::GbkToUtf8(char* inbuf, size_t inlen, char* outbuf, size_t outlen)
+//{
+//    return code_convert("gbk", "utf-8", inbuf, inlen, outbuf, outlen);
+//}
+//
+//bool EncodeUtil::Utf8ToGbk2(char* inbuf, size_t inlen, char* outbuf, size_t& outlen)
+//{
+//    return code_convert("gbk", "utf-8", inbuf, inlen, outbuf, outlen);
+//}
+//
+//int EncodeUtil::GbkToUtf8(char* utfstr, const char* srcstr, int maxutfstrlen)
+//{
+//    if (NULL == srcstr)
+//        return -1;
+//
+//    //首先先将gbk编码转换为unicode编码
+//    if (NULL == setlocale(LC_ALL, "zh_CN.gbk"))//设置转换为unicode前的码,当前为gbk编码
+//        return -1;
+//
+//    int unicodelen = mbstowcs(NULL, srcstr, 0);//计算转换后的长度
+//    if (unicodelen <= 0)
+//        return -1;
+//
+//    wchar_t* unicodestr = (wchar_t *)calloc(sizeof(wchar_t), unicodelen + 1);
+//    mbstowcs(unicodestr, srcstr, strlen(srcstr));//将gbk转换为unicode
+//
+//    //将unicode编码转换为utf8编码
+//    if (NULL == setlocale(LC_ALL, "zh_CN.utf8"))//设置unicode转换后的码,当前为utf8
+//        return -1;
+//
+//    int utflen = wcstombs(NULL, unicodestr, 0);//计算转换后的长度
+//    if (utflen <= 0)
+//        return -1;
+//    else if (utflen >= maxutfstrlen)//判断空间是否足够
+//        return -1;
+//
+//    wcstombs(utfstr, unicodestr, utflen);
+//    utfstr[utflen] = 0;//添加结束符
+//    free(unicodestr);
+//
+//    return utflen;
+//}

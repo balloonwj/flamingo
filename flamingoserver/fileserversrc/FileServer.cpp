@@ -25,9 +25,9 @@ void FileServer::OnConnection(std::shared_ptr<TcpConnection> conn)
 {
     if (conn->connected())
     {
-        LOG_INFO << "client connected:" << conn->peerAddress().toIpPort();
+        //LOG_INFO << "client connected:" << conn->peerAddress().toIpPort();
         ++ m_baseUserId;
-        std::shared_ptr<FileSession> spSession(new FileSession(conn));
+        std::shared_ptr<FileSession> spSession(new FileSession(conn, m_strFileBaseDir.c_str()));
         conn->setMessageCallback(std::bind(&FileSession::OnRead, spSession.get(), std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 
         std::lock_guard<std::mutex> guard(m_sessionMutex);

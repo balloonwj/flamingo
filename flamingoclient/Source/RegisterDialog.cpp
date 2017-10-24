@@ -2,7 +2,8 @@
 #include "RegisterDialog.h"
 #include "Utils.h"
 #include "FlamingoClient.h"
-
+#include "EncodingUtil.h"
+#include "UIText.h"
 
 CRegisterDialog::CRegisterDialog() : m_pFMGClient(NULL)
 {
@@ -105,6 +106,47 @@ void CRegisterDialog::UninitUI()
 
 }
 
+UINT CRegisterDialog::RegisterThreadProc(void* pParam)
+{
+    CRegisterDialog* pRegisterDlg = (CRegisterDialog*)pParam;
+    if (pRegisterDlg == NULL)
+        return 0;
+
+    char szUser[64] = { 0 };
+    EncodeUtil::UnicodeToUtf8(pRegisterDlg->m_strMobile, szUser, ARRAYSIZE(szUser));
+    char szNickName[64] = { 0 };
+    EncodeUtil::UnicodeToUtf8(pRegisterDlg->m_strNickName, szNickName, ARRAYSIZE(szNickName));
+    char szPassword[64] = { 0 };
+    EncodeUtil::UnicodeToUtf8(pRegisterDlg->m_strPassword, szPassword, ARRAYSIZE(szPassword));
+
+    std::string strReturnData;
+    //超时时间设置为3秒
+    bool bRet = CIUSocket::GetInstance().Register(szUser, szNickName, szPassword, 3000, strReturnData);
+    CRegisterResult* pRegisterResult = new CRegisterResult();
+    pRegisterResult->m_nResultCode = REGISTER_FAILED;
+    if (bRet)
+    {
+        //{"code": 0, "msg": "ok"}
+        Json::Reader JsonReader;
+        Json::Value JsonRoot;
+        if (JsonReader.parse(strReturnData, JsonRoot))
+        {
+            if (!JsonRoot["code"].isNull() && JsonRoot["code"].isInt())
+            {
+                int nRetCode = JsonRoot["code"].asInt();
+                if (nRetCode == 0)
+                    pRegisterResult->m_nResultCode = REGISTER_SUCCESS;
+                else if (nRetCode == 101)
+                    pRegisterResult->m_nResultCode = REGISTER_EXIST;
+            }
+        }      
+    }
+
+    ::PostMessage(pRegisterDlg->m_pFMGClient->m_UserMgr.m_hProxyWnd, FMG_MSG_REGISTER, 0, (LPARAM)pRegisterResult);
+
+    return 1;
+}
+
 PCTSTR CRegisterDialog::GetAccountName()
 {
 	return m_strAccount;
@@ -124,7 +166,7 @@ void CRegisterDialog::OnBtn_Regist(UINT uNotifyCode, int nID, CWindow wndCtl)
     m_strAccount = m_strMobile;
     if (m_strMobile.IsEmpty())
 	{
-		::MessageBox(m_hWnd, _T("无效的手机号码！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("无效的手机号码！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_edtRegId.SetFocus();
 		return;
 	}
@@ -133,7 +175,7 @@ void CRegisterDialog::OnBtn_Regist(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_strNickName.Trim();
 	if(m_strNickName.IsEmpty() || m_strNickName.GetLength()>15)
 	{
-		::MessageBox(m_hWnd, _T("昵称不能为空且长度不能超过15个字符！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("昵称不能为空且长度不能超过15个字符！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_edtRegName.SetFocus();
 		return;
 	}
@@ -142,30 +184,35 @@ void CRegisterDialog::OnBtn_Regist(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_strPassword.Trim();
 	if(m_strPassword.IsEmpty() || m_strPassword.GetLength()<3 || m_strPassword.GetLength()>15)
 	{
-		::MessageBox(m_hWnd, _T("密码长度必须在6～15个字符之间！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("密码长度必须在6～15个字符之间！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
 	m_edtCheckPwd.GetWindowText(m_strCheckPassword);
 	if(m_strCheckPassword.IsEmpty() || m_strCheckPassword.GetLength()<3 || m_strCheckPassword.GetLength()>15)
 	{
-		::MessageBox(m_hWnd, _T("确认密码长度必须在6～15个字符之间！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("确认密码长度必须在6～15个字符之间！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 	m_strCheckPassword.Trim();
 
 	if (0 != m_strPassword.Compare(m_strCheckPassword))
 	{
-		::MessageBox(m_hWnd, _T("两次输入的密码不相同，请重新确认！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("两次输入的密码不相同，请重新确认！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 	
 
 	m_btnRegist.EnableWindow(FALSE);
+    m_pFMGClient->SetRegisterWindow(m_hWnd);
+
+    HANDLE hRegisterThread = (HANDLE)::_beginthreadex(NULL, 0, RegisterThreadProc, this, 0, NULL);
+    if (hRegisterThread != NULL)
+        ::CloseHandle(hRegisterThread);
 		
-	m_pFMGClient->SetRegisterWindow(m_hWnd);
-	m_pFMGClient->Register(m_strMobile, m_strNickName, m_strPassword);
 	
+    //注册改成同步的，不再需要调用这个接口
+	//m_pFMGClient->Register(m_strMobile, m_strNickName, m_strPassword);	
 }
 
 void CRegisterDialog::OnBtn_Cancel(UINT uNotifyCode, int nID, CWindow wndCtl)	
@@ -182,21 +229,21 @@ LRESULT CRegisterDialog::OnRegisterResult(UINT uMsg, WPARAM wParam, LPARAM lPara
 	
 	long nRegisterResult = pResult->m_nResultCode;
 	if(nRegisterResult == REGISTER_EXIST)
-		::MessageBox(m_hWnd, _T("您注册的手机号已经被注册，请更换其它手机号后重试！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("您注册的手机号已经被注册，请更换其它手机号后重试！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 	else if(nRegisterResult == REGISTER_SUCCESS)
 	{
 		//TCHAR szAccount[64] = {0};
-		//Utf8ToUnicode(pResult->m_szAccount, szAccount, ARRAYSIZE(szAccount));
+		//EncodeUtil::Utf8ToUnicode(pResult->m_szAccount, szAccount, ARRAYSIZE(szAccount));
 		//m_strAccount = szAccount;
 		TCHAR szSuccessInfo[64] = {0};
         _stprintf_s(szSuccessInfo, 64, _T("恭喜您，注册成功，您的账号是[%s]！"), m_strMobile);
 
-		::MessageBox(m_hWnd, szSuccessInfo, _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, szSuccessInfo, g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 
 		EndDialog(IDOK);
 	}
 	else
-		::MessageBox(m_hWnd, _T("网络故障，注册失败，请稍后重试！"), _T("Flamingo"), MB_OK|MB_ICONERROR);
+		::MessageBox(m_hWnd, _T("网络故障，注册失败，请稍后重试！"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
 
 	
 	m_btnRegist.EnableWindow(TRUE);

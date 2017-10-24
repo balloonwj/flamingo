@@ -38,5 +38,6 @@ private:
 	BOOL		m_bTransparent;
 	HDC			m_hBgDC;
 	COLORREF    m_clrText;
+    //COLORREF    m_clrBgColor;
 	HFONT		m_hFont;
 };

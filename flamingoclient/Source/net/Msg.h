@@ -9,7 +9,7 @@
 enum msg_type
 {
     msg_type_unknown,
-    msg_type_heartbeart = 1000,
+    msg_type_heartbeat = 1000,
     msg_type_register,
     msg_type_login,
     msg_type_getofriendlist,
@@ -22,7 +22,8 @@ enum msg_type
     msg_type_getgroupmembers,
     msg_type_chat   = 1100,         //单聊消息
     msg_type_multichat,             //群发消息
-    msg_type_kickuser               //被踢下线
+    msg_type_kickuser,              //被踢下线
+    msg_type_screenshot             //屏幕截图
 };
 
 #pragma pack(push, 1)
@@ -37,6 +38,8 @@ struct msg
 /** 
  *  错误码
  *  0   成功
+ *  1   未知失败
+ *  2   用户未登录
  *  100 注册失败
  *  101 已注册
  *  102 未注册
@@ -121,8 +124,8 @@ struct msg
  *  用户状态改变
  **/
 /*
-    //type 1上线(将来会扩展成在线、隐身、忙碌、离开等状态) 2离线 3用户签名、头像、昵称发生变化
-    cmd = 1006, seq = 0, {"type": 1, "onlinestatus": 1} //上线onlinestatus=1, 离线onlinestatus=0
+    //type 1用户在线状态改变 2离线 3用户签名、头像、昵称发生变化
+    cmd = 1006, seq = 0, {"type": 1, "onlinestatus": 1, "clienttype": 1} //上线onlinestatus=1, 离线onlinestatus=0 2隐身 3忙碌 4离开 5移动版在线 6移动版下线 7手机和电脑同时在线
     cmd = 1006, seq = 0, {"type": 3}
     **/
 
@@ -185,5 +188,12 @@ cmd = 1010, seq = 0, {"code":0, "msg": "ok", "groupid": 12345678,
  **/
 /*
     cmd = 1102, seq = 0, data: 
+**/
+
+/**
+ * 屏幕截屏数据
+ **/
+/*
+    cmd = 1103, seq = 0, string: 位图头部信息， 位图信息，targetId
 **/
 

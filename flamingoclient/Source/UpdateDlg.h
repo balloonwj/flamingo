@@ -6,8 +6,8 @@
 //class CIUProtocol;
 class CFlamingoClient;
 
-//自动解压下载下来的升级包文件
-void Unzip();
+//自动解压下载下来的升级包文件，成功返回true，失败返回false
+bool Unzip();
 
 class CUpdateDlg : public CDialogImpl<CUpdateDlg>
 {

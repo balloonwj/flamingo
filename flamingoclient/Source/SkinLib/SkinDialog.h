@@ -3,6 +3,7 @@
 #include <gdiplus.h>
 #include "SkinManager.h"
 
+//注意：SkinDlg默认没有开启裁剪子窗口，如果界面改变大小时闪烁，记得在外部加上WS_CLIPCHILDREN风格
 class CSkinDialog : public CWindowImpl<CSkinDialog, CWindow>
 {
 public:
@@ -48,12 +49,13 @@ public:
 	
 	BOOL SubclassWindow(HWND hWnd);
 	void SetHotRegion(HRGN hrgnHot);				//设置热点区域
-	void SetDragRegion(HRGN hrgnDrag);				//设置拖拽区域
+	void SetDragRegion(HRGN hrgnDrag);				//设置拖拽区域(TODO: 改成名字为SetTitleRect， Region在内部实现，不要在外部创建区域gdi对象了)
 
 	//void MoveWindow2(int X,int Y,int nWidth,int nHeight,BOOL bRedraw);
 
 private:
 	BOOL OnNcCreate(LPCREATESTRUCT lpCreateStruct);
+    //TODO: 其实这个OnCreate是不会被调用的
 	int OnCreate(LPCREATESTRUCT lpCreateStruct);
 	//HBRUSH OnCtlColorStatic(CDCHandle dc, CStatic wndStatic);
 	BOOL OnInitDialog(CWindow wndFocus, LPARAM lInitParam);

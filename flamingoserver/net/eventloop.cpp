@@ -60,6 +60,7 @@ callingPendingFunctors_(false),
 iteration_(0),
 threadId_(std::this_thread::get_id()),
 poller_(new EPollPoller(this)),
+timerQueue_(new TimerQueue(this)),
 wakeupFd_(createEventfd()),
 wakeupChannel_(new Channel(this, wakeupFd_)),
 currentActiveChannel_(NULL)
@@ -72,8 +73,7 @@ currentActiveChannel_(NULL)
 	{
 		t_loopInThisThread = this;
 	}
-	wakeupChannel_->setReadCallback(
-		std::bind(&EventLoop::handleRead, this));
+	wakeupChannel_->setReadCallback(std::bind(&EventLoop::handleRead, this));
 	// we are always reading the wakeupfd
 	wakeupChannel_->enableReading();
 
@@ -209,6 +209,11 @@ TimerId EventLoop::runEvery(double interval, TimerCallback&& cb)
 {
     Timestamp time(addTime(Timestamp::now(), interval));
     return timerQueue_->addTimer(std::move(cb), time, interval);
+}
+
+void EventLoop::cancel(TimerId timerId)
+{
+    return timerQueue_->cancel(timerId);
 }
 
 void EventLoop::updateChannel(Channel* channel)

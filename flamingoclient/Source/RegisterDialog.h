@@ -39,6 +39,8 @@ private:
 	BOOL InitUI();
 	void UninitUI();
 
+    static UINT WINAPI RegisterThreadProc(void* pParam);
+
 public:
 	CFlamingoClient*		m_pFMGClient;
 

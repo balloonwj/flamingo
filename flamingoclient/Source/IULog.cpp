@@ -1,47 +1,90 @@
 #include "stdafx.h"
 #include "IULog.h"
-#include "Path.h"
-#include "UserSessionData.h"
+//#include "Path.h"
+//#include "UserSessionData.h"
 #include "EncodingUtil.h"
+#include <tchar.h>
 
 #ifndef LOG_OUTPUT
 #define LOG_OUTPUT
 #endif
 
-BOOL CIULog::m_bToFile = FALSE;
-CString CIULog::m_strLogFileName = _T("");
-HANDLE CIULog::m_hLogFile = INVALID_HANDLE_VALUE;
+#define MAX_LINE_LENGTH 256
 
-BOOL CIULog::Init(BOOL bToFile, PCTSTR pszLogFileName)
+bool CIULog::m_bToFile = false;
+bool CIULog::m_bTruncateLongLog = false;
+HANDLE CIULog::m_hLogFile = INVALID_HANDLE_VALUE;
+LOG_LEVEL CIULog::m_nLogLevel = LOG_LEVEL_INFO;
+
+bool CIULog::Init(bool bToFile, bool bTruncateLongLog, PCTSTR pszLogFileName)
 {
 #ifdef LOG_OUTPUT
 	m_bToFile = bToFile;
-	m_strLogFileName = pszLogFileName;
-
-	if(m_hLogFile != INVALID_HANDLE_VALUE)
-	{
-		::CloseHandle(m_hLogFile);
-		m_hLogFile = INVALID_HANDLE_VALUE;
-	}
-
-	if(m_strLogFileName.IsEmpty())
+    m_bTruncateLongLog = bTruncateLongLog;
+   
+    if (pszLogFileName == NULL || pszLogFileName[0] == NULL)
 		return FALSE;
+
+    TCHAR szHomePath[MAX_PATH] = {0};
+    ::GetModuleFileName(NULL, szHomePath, MAX_PATH);
+    for (int i = _tcslen(szHomePath); i >= 0; --i)
+    {
+        if (szHomePath[i] == _T('\\'))
+        {
+            szHomePath[i] = _T('\0');
+            break;
+        }
+    }
+
+    TCHAR szLogDirectory[MAX_PATH] = { 0 };
+    _stprintf_s(szLogDirectory, _T("%s\\Logs\\"), szHomePath);
+    
+    DWORD dwAttr = ::GetFileAttributes(szLogDirectory);
+    if (!((dwAttr != 0xFFFFFFFF) && (dwAttr & FILE_ATTRIBUTE_DIRECTORY)))
+    {
+        TCHAR cPath[MAX_PATH] = { 0 };
+        TCHAR cTmpPath[MAX_PATH] = { 0 };
+        TCHAR* lpPos = NULL;
+        TCHAR cTmp = _T('\0');
+
+        _tcsncpy_s(cPath, szLogDirectory, MAX_PATH);
+
+        for (int i = 0; i < (int)_tcslen(cPath); i++)
+        {
+            if (_T('\\') == cPath[i])
+                cPath[i] = _T('/');
+        }
+
+        lpPos = _tcschr(cPath, _T('/'));
+        while (lpPos != NULL)
+        {
+            if (lpPos == cPath)
+            {
+                lpPos++;
+            }
+            else
+            {
+                cTmp = *lpPos;
+                *lpPos = _T('\0');
+                _tcsncpy_s(cTmpPath, cPath, MAX_PATH);
+                ::CreateDirectory(cTmpPath, NULL);
+                *lpPos = cTmp;
+                lpPos++;
+            }
+            lpPos = _tcschr(lpPos, _T('/'));
+        }
+    }
 		
-	CString strLogDirectory;
-	strLogDirectory.Format(_T("%sLog\\"), g_szHomePath);
-	if(!Hootina::CPath::IsDirectoryExist(strLogDirectory))
-		Hootina::CPath::CreateDirectory(strLogDirectory);
-		
-	m_hLogFile = ::CreateFile(m_strLogFileName, GENERIC_READ|GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
-	if(m_hLogFile == INVALID_HANDLE_VALUE)
-		return FALSE;
+    m_hLogFile = ::CreateFile(pszLogFileName, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (m_hLogFile == INVALID_HANDLE_VALUE)
+        return false;
 
 #endif // end LOG_OUTPUT
 
-	return TRUE;
+	return true;
 }
 
-void CIULog::Unit()
+void CIULog::Uninit()
 {
 #ifdef LOG_OUTPUT
 	if(m_hLogFile != INVALID_HANDLE_VALUE)
@@ -52,169 +95,235 @@ void CIULog::Unit()
 #endif //end LOG_OUTPUT
 }
 
-BOOL CIULog::Log(long nLevel, PCTSTR pszFmt, ...)
+void CIULog::SetLevel(LOG_LEVEL nLevel)
+{
+    m_nLogLevel = nLevel;
+}
+
+bool CIULog::Log(long nLevel, PCTSTR pszFmt, ...)
 {
 #ifdef LOG_OUTPUT
-	CString strDebugInfo(GetCurrentTime());
+    if (nLevel < m_nLogLevel)
+        return false;
+    
+    char szTime[64] = { 0 };
+    GetTime(szTime,ARRAYSIZE(szTime));
+    std::string strDebugInfo(szTime);
 	
-	CString strLevel(_T("[Normal] "));
-	if(nLevel == LOG_WARNING)
-		strLevel = _T("[Warning] ");
-	else if(nLevel == LOG_ERROR)
-		strLevel = _T("[Error] ");
+	std::string strLevel("[INFO]");
+    if (nLevel == LOG_LEVEL_WARNING)
+		strLevel = "[Warning]";
+    else if (nLevel == LOG_LEVEL_ERROR)
+		strLevel = "[Error]";
 
 	strDebugInfo += strLevel;
-	
-	CString str;
-	va_list argList;
-	va_start(argList, pszFmt);
-	str.FormatV(pszFmt, argList);
-	va_end(argList);
 
-	strDebugInfo += str;
-	strDebugInfo += _T("\r\n");
+    //当前线程信息
+    char szThreadID[32] = { 0 };
+    DWORD dwThreadID = ::GetCurrentThreadId();
+    sprintf_s(szThreadID, ARRAYSIZE(szThreadID), "[ThreadID: %u]", dwThreadID);  
+    strDebugInfo += szThreadID;
+
+    //log正文
+    std::wstring strLogMsg;
+    va_list ap;
+    va_start(ap, pszFmt);
+    int nLogMsgLength = _vsctprintf(pszFmt, ap);
+    //容量必须算上最后一个\0
+    if ((int)strLogMsg.capacity() < nLogMsgLength + 1)
+    {
+        strLogMsg.resize(nLogMsgLength + 1);
+    }
+    _vstprintf_s((TCHAR*)strLogMsg.data(), strLogMsg.capacity(), pszFmt, ap);
+    va_end(ap);
+
+    //string内容正确但length不对，恢复一下其length
+    std::wstring strMsgFormal;
+    strMsgFormal.append(strLogMsg.c_str(), nLogMsgLength);
+
+    //如果日志开启截断，长日志只取前MAX_LINE_LENGTH个字符
+    if (m_bTruncateLongLog)
+        strMsgFormal = strMsgFormal.substr(0, MAX_LINE_LENGTH);
+
+    std::string strLogMsgAscii;
+    strLogMsgAscii = EncodeUtil::UnicodeToAnsi(strMsgFormal);
+
+    strDebugInfo += strLogMsgAscii;
+	strDebugInfo += "\r\n";
 	
 	if(m_bToFile)
 	{
 		if(m_hLogFile == INVALID_HANDLE_VALUE)
-			return FALSE;
+			return false;
 		
 		::SetFilePointer(m_hLogFile, 0, NULL, FILE_END);
-		DWORD dwBytesWritten = 0;
-		CStringA strAsciiDebugIfo;
-		UnicodeToAnsi(strDebugInfo, strAsciiDebugIfo.GetBuffer(strDebugInfo.GetLength()*2), strDebugInfo.GetLength()*2);
-		strAsciiDebugIfo.ReleaseBuffer();
-		::WriteFile(m_hLogFile, strAsciiDebugIfo.GetString(), strAsciiDebugIfo.GetLength(), &dwBytesWritten, NULL);
-		return TRUE;
+		DWORD dwBytesWritten = 0;       
+        ::WriteFile(m_hLogFile, strDebugInfo.c_str(), strDebugInfo.length(), &dwBytesWritten, NULL);
+        ::FlushFileBuffers(m_hLogFile);
+        return true;
 	}
 
-	::OutputDebugString(strDebugInfo);
+    ::OutputDebugStringA(strDebugInfo.c_str());
 
 #endif // end LOG_OUTPUT
 
-	return TRUE;
+	return true;
 }
 
-BOOL CIULog::Log(long nLevel, PCSTR pszFunctionSig, PCTSTR pszFmt, ...)
+bool CIULog::Log(long nLevel, PCSTR pszFunctionSig, int nLineNo, PCTSTR pszFmt, ...)
 {
 #ifdef LOG_OUTPUT
+    if (nLevel < m_nLogLevel)
+        return false;
+
 	//时间
-	CString strDebugInfo(GetCurrentTime());
+    char szTime[64] = { 0 };
+    GetTime(szTime, ARRAYSIZE(szTime));
+    std::string strDebugInfo(szTime);
 	
 	//错误级别
-	CString strLevel(_T("[Normal] "));
-	if(nLevel == LOG_WARNING)
-		strLevel = _T("[Warning] ");
-	else if(nLevel == LOG_ERROR)
-		strLevel = _T("[Error] ");
-
-	strDebugInfo += strLevel;
-	
-	//当前线程信息
-	TCHAR szThreadID[32] = {0};
-	DWORD dwThreadID = ::GetCurrentThreadId();
-	_stprintf_s(szThreadID, ARRAYSIZE(szThreadID), _T("[ThreadID:%u]"), dwThreadID);
-	strDebugInfo += szThreadID;
-
-	//函数签名
-	TCHAR szFuncSig[512] = {0};
-	AnsiToUnicode(pszFunctionSig, szFuncSig, ARRAYSIZE(szFuncSig));
-	strDebugInfo += _T("[");
-	strDebugInfo += szFuncSig;
-	strDebugInfo += _T("]");
-	
-	//log正文
-	CString str;
-	va_list argList;
-	va_start(argList, pszFmt);
-	str.FormatV(pszFmt, argList);
-	va_end(argList);
-
-	strDebugInfo += str;
-	strDebugInfo += _T("\r\n");
-	
-	if(m_bToFile)
-	{
-		if(m_hLogFile == INVALID_HANDLE_VALUE)
-			return FALSE;
-		
-		::SetFilePointer(m_hLogFile, 0, NULL, FILE_END);
-		DWORD dwBytesWritten = 0;
-		CStringA strAsciiDebugIfo;
-		UnicodeToAnsi(strDebugInfo, strAsciiDebugIfo.GetBuffer(strDebugInfo.GetLength()*2), strDebugInfo.GetLength()*2);
-		strAsciiDebugIfo.ReleaseBuffer();
-		::WriteFile(m_hLogFile, strAsciiDebugIfo.GetString(), strAsciiDebugIfo.GetLength(), &dwBytesWritten, NULL);
-		return TRUE;
-	}
-
-	::OutputDebugString(strDebugInfo);
-
-#endif // end LOG_OUTPUT
-
-	return TRUE;
-}
-
-BOOL CIULog::Log(long nLevel, PCSTR pszFunctionSig, PCSTR pszFmt, ...)
-{
-#ifdef LOG_OUTPUT
-	//时间
-	CStringA strDebugInfo(GetCurrentTime());
-	
-	//错误级别
-	CStringA strLevel("[Normal] ");
-	if(nLevel == LOG_WARNING)
-		strLevel = "[Warning] ";
-	else if(nLevel == LOG_ERROR)
-		strLevel = "[Error] ";
+	std::string strLevel("[INFO]");
+    if (nLevel == LOG_LEVEL_WARNING)
+		strLevel = "[Warning]";
+    else if (nLevel == LOG_LEVEL_ERROR)
+		strLevel = "[Error]";
 
 	strDebugInfo += strLevel;
 	
 	//当前线程信息
 	char szThreadID[32] = {0};
 	DWORD dwThreadID = ::GetCurrentThreadId();
-	sprintf_s(szThreadID, ARRAYSIZE(szThreadID), "[ThreadID:%u]", dwThreadID);
+    sprintf_s(szThreadID, ARRAYSIZE(szThreadID), "[ThreadID: %u]", dwThreadID);
 	strDebugInfo += szThreadID;
 
 	//函数签名
-	strDebugInfo += "[";
-	strDebugInfo += pszFunctionSig;
-	strDebugInfo += "]";
-	
-	//log正文
-	CStringA str;
-	va_list argList;
-	va_start(argList, pszFmt);
-	str.FormatV(pszFmt, argList);
-	va_end(argList);
+    char szFuncSig[512] = { 0 };
+    sprintf_s(szFuncSig, "[%s:%d]", pszFunctionSig, nLineNo);
+    strDebugInfo += szFuncSig;
 
-	strDebugInfo += str;
+	//log正文
+    std::wstring strLogMsg;
+    va_list ap;
+    va_start(ap, pszFmt);
+    int nLogMsgLength = _vsctprintf(pszFmt, ap);
+    //容量必须算上最后一个\0 
+    if ((int)strLogMsg.capacity() < nLogMsgLength + 1)
+    {
+        strLogMsg.resize(nLogMsgLength + 1);
+    }
+    _vstprintf_s((TCHAR*)strLogMsg.data(), strLogMsg.capacity(), pszFmt, ap);
+    va_end(ap);
+
+    //string内容正确但length不对，恢复一下其length
+    std::wstring strMsgFormal;
+    strMsgFormal.append(strLogMsg.c_str(), nLogMsgLength);
+
+    //如果日志开启截断，长日志只取前MAX_LINE_LENGTH个字符
+    if (m_bTruncateLongLog)
+        strMsgFormal = strMsgFormal.substr(0, MAX_LINE_LENGTH);
+
+    std::string strLogMsgAscii;
+    strLogMsgAscii = EncodeUtil::UnicodeToAnsi(strMsgFormal);
+
+    strDebugInfo += strLogMsgAscii;
 	strDebugInfo += "\r\n";
 	
 	if(m_bToFile)
 	{
 		if(m_hLogFile == INVALID_HANDLE_VALUE)
-			return FALSE;
+			return false;
 		
 		::SetFilePointer(m_hLogFile, 0, NULL, FILE_END);
 		DWORD dwBytesWritten = 0;
-		::WriteFile(m_hLogFile, strDebugInfo.GetString(), strDebugInfo.GetLength(), &dwBytesWritten, NULL);
-		return TRUE;
+        ::WriteFile(m_hLogFile, strDebugInfo.c_str(), strDebugInfo.length(), &dwBytesWritten, NULL);
+        ::FlushFileBuffers(m_hLogFile);
+        return true;
 	}
 
-	::OutputDebugStringA(strDebugInfo);
+    ::OutputDebugStringA(strDebugInfo.c_str());
 
 #endif // end LOG_OUTPUT
 
-	return TRUE;
+	return true;
 }
 
-CString CIULog::GetCurrentTime()
+bool CIULog::Log(long nLevel, PCSTR pszFunctionSig, int nLineNo, PCSTR pszFmt, ...)
+{
+#ifdef LOG_OUTPUT
+    if (nLevel < m_nLogLevel)
+        return false;
+
+	//时间
+    char szTime[64] = { 0 };
+    GetTime(szTime, ARRAYSIZE(szTime));
+    std::string strDebugInfo(szTime);
+	
+	//错误级别
+	std::string strLevel("[INFO]");
+    if (nLevel == LOG_LEVEL_WARNING)
+		strLevel = "[Warning]";
+    else if (nLevel == LOG_LEVEL_ERROR)
+		strLevel = "[Error]";
+
+	strDebugInfo += strLevel;
+	
+	//当前线程信息
+	char szThreadID[32] = {0};
+	DWORD dwThreadID = ::GetCurrentThreadId();
+	sprintf_s(szThreadID, ARRAYSIZE(szThreadID), "[ThreadID: %u]", dwThreadID);
+    strDebugInfo += szThreadID;
+
+    //函数签名
+    char szFuncSig[512] = { 0 };
+    sprintf_s(szFuncSig, "[%s:%d]", pszFunctionSig, nLineNo);
+    strDebugInfo += szFuncSig;
+
+    //日志正文
+    std::string strLogMsg;
+    va_list ap;
+    va_start(ap, pszFmt);
+    int nLogMsgLength = _vscprintf(pszFmt, ap);
+    //容量必须算上最后一个\0
+    if ((int)strLogMsg.capacity() < nLogMsgLength + 1)
+    {
+        strLogMsg.resize(nLogMsgLength + 1);
+    }
+    vsprintf_s((char*)strLogMsg.data(), strLogMsg.capacity(), pszFmt, ap);
+    va_end(ap);
+
+    //string内容正确但length不对，恢复一下其length
+    std::string strMsgFormal;
+    strMsgFormal.append(strLogMsg.c_str(), nLogMsgLength);
+
+    //如果日志开启截断，长日志只取前MAX_LINE_LENGTH个字符
+    if (m_bTruncateLongLog)
+        strMsgFormal = strMsgFormal.substr(0, MAX_LINE_LENGTH);
+
+    strDebugInfo += strMsgFormal;
+    strDebugInfo += "\r\n";
+	
+	if(m_bToFile)
+	{
+		if(m_hLogFile == INVALID_HANDLE_VALUE)
+			return false;
+		
+		::SetFilePointer(m_hLogFile, 0, NULL, FILE_END);
+		DWORD dwBytesWritten = 0;
+        ::WriteFile(m_hLogFile, strDebugInfo.c_str(), strDebugInfo.length(), &dwBytesWritten, NULL);
+        ::FlushFileBuffers(m_hLogFile);
+        return true;
+	}
+
+    ::OutputDebugStringA(strDebugInfo.c_str());
+
+#endif // end LOG_OUTPUT
+
+	return true;
+}
+
+void CIULog::GetTime(char* pszTime, int nTimeStrLength)
 {
 	SYSTEMTIME st = {0};
 	::GetLocalTime(&st);
-
-	CString strTime;
-	strTime.Format(_T("[%04d-%02d-%02d %02d:%02d:%02d:%04d]"), st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
-	
-	return strTime;
+    sprintf_s(pszTime, nTimeStrLength, "[%04d-%02d-%02d %02d:%02d:%02d:%04d]", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
 }

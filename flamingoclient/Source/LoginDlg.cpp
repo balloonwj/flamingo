@@ -9,11 +9,13 @@
 #include "Path.h"
 #include "UserSessionData.h"
 #include "GDIFactory.h"
+#include "EncodingUtil.h"
+#include "IULog.h"
 
 
-CLoginDlg::CLoginDlg(void)
+CLoginDlg::CLoginDlg(CFlamingoClient* pFMGClient)
 {
-	m_lpFMGClient = NULL;
+    m_lpFMGClient = pFMGClient;
 	m_pLoginAccountList = NULL;
 	m_hDlgIcon = m_hDlgSmallIcon = NULL;
 	memset(&m_stAccountInfo, 0, sizeof(m_stAccountInfo));
@@ -196,6 +198,10 @@ void CLoginDlg::OnBtn_Login(UINT uNotifyCode, int nID, CWindow wndCtl)
 
 	// 记录当前用户信息
 	m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount = m_stAccountInfo.szUser;
+
+    HANDLE hLoginThread = (HANDLE)::_beginthreadex(NULL, 0, LoginThreadProc, this, 0, NULL);
+    if (hLoginThread != NULL)
+        ::CloseHandle(hLoginThread);
 
 	EndDialog(IDOK);
 }
@@ -555,6 +561,74 @@ void CLoginDlg::SetCurUser(LPCTSTR lpszUser, BOOL bPwdInvalid/* = FALSE*/)
 			}
 		}
 	}
+}
+
+UINT CLoginDlg::LoginThreadProc(void* pParam)
+{
+    CLoginDlg* pLoginDlg = (CLoginDlg*)pParam;
+    if (pLoginDlg == NULL)
+        return 0;
+
+    char szUser[64] = { 0 };
+    EncodeUtil::UnicodeToUtf8(pLoginDlg->m_stAccountInfo.szUser, szUser, ARRAYSIZE(szUser));
+    char szPassword[64] = { 0 };
+    EncodeUtil::UnicodeToUtf8(pLoginDlg->m_stAccountInfo.szPwd, szPassword, ARRAYSIZE(szPassword));
+
+    std::string strReturnData;
+    //超时时间设置为3秒
+    bool bRet = CIUSocket::GetInstance().Login(szUser, szPassword, 1, 1, 3000, strReturnData);
+    int nRet = LOGIN_FAILED;
+    CLoginResult* pLoginResult = new CLoginResult();
+    pLoginResult->m_LoginResultCode = LOGIN_FAILED;
+    if (bRet)
+    {
+        //{"code": 0, "msg": "ok", "userid": 8}
+        Json::Reader JsonReader;
+        Json::Value JsonRoot;
+        if (JsonReader.parse(strReturnData, JsonRoot) && !JsonRoot["code"].isNull() && JsonRoot["code"].isInt())
+        {
+            int nRetCode = JsonRoot["code"].asInt();
+
+            if (nRetCode == 0)
+            {
+                if (!JsonRoot["userid"].isInt() || !JsonRoot["username"].isString() || !JsonRoot["nickname"].isString() ||
+                    !JsonRoot["facetype"].isInt() || !JsonRoot["gender"].isInt() || !JsonRoot["birthday"].isInt() ||
+                    !JsonRoot["signature"].isString() || !JsonRoot["address"].isString() ||
+                    !JsonRoot["customface"].isString() || !JsonRoot["phonenumber"].isString() ||
+                    !JsonRoot["mail"].isString())
+                {
+                    LOG_ERROR(_T("login failed, login response json is invalid, json=%s"), strReturnData.c_str());
+                    pLoginResult->m_LoginResultCode = LOGIN_FAILED;
+                }
+                else
+                {
+                    pLoginResult->m_LoginResultCode = 0;
+                    pLoginResult->m_uAccountID = JsonRoot["userid"].asInt();
+                    strcpy_s(pLoginResult->m_szAccountName, ARRAYSIZE(pLoginResult->m_szAccountName), JsonRoot["username"].asCString());
+                    strcpy_s(pLoginResult->m_szNickName, ARRAYSIZE(pLoginResult->m_szNickName), JsonRoot["nickname"].asCString());
+                    //pLoginResult->m_nStatus = JsonRoot["status"].asInt();
+                    pLoginResult->m_nFace = JsonRoot["facetype"].asInt();
+                    pLoginResult->m_nGender = JsonRoot["gender"].asInt();
+                    pLoginResult->m_nBirthday = JsonRoot["birthday"].asInt();
+                    strcpy_s(pLoginResult->m_szSignature, ARRAYSIZE(pLoginResult->m_szSignature), JsonRoot["signature"].asCString());
+                    strcpy_s(pLoginResult->m_szAddress, ARRAYSIZE(pLoginResult->m_szAddress), JsonRoot["address"].asCString());
+                    strcpy_s(pLoginResult->m_szCustomFace, ARRAYSIZE(pLoginResult->m_szCustomFace), JsonRoot["customface"].asCString());
+                    strcpy_s(pLoginResult->m_szPhoneNumber, ARRAYSIZE(pLoginResult->m_szPhoneNumber), JsonRoot["phonenumber"].asCString());
+                    strcpy_s(pLoginResult->m_szMail, ARRAYSIZE(pLoginResult->m_szMail), JsonRoot["mail"].asCString());
+                }
+            }
+            else if (nRetCode == 102)
+                pLoginResult->m_LoginResultCode = LOGIN_UNREGISTERED;
+            else if (nRetCode == 103)
+                pLoginResult->m_LoginResultCode = LOGIN_PASSWORD_ERROR;
+            else
+                pLoginResult->m_LoginResultCode = LOGIN_FAILED;
+        }    
+    }
+    //m_lpUserMgr为野指针
+    ::PostMessage(pLoginDlg->m_lpFMGClient->m_UserMgr.m_hProxyWnd, FMG_MSG_LOGIN_RESULT, 0, (LPARAM)pLoginResult);
+
+    return 1;
 }
 
 void CLoginDlg::UninitUI()

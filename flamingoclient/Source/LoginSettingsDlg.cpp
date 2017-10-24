@@ -1,9 +1,9 @@
 #include "stdafx.h"
-#include "LoginSettingsDlg.h"
-#include "File.h"
-#include "IniFile.h"
 #include "UserSessionData.h"
 #include "FlamingoClient.h"
+#include "../IniFile.h"
+#include "UIText.h"
+#include "LoginSettingsDlg.h"
 
 enum PROXY_TYPE
 {
@@ -267,7 +267,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_editSrvAddr.GetWindowText(m_szSrvAddr, MAX_SRV_ADDR);
 	if(m_szSrvAddr[0]==NULL || m_szSrvAddr[0]==_T(' '))
 	{
-		::MessageBox(m_hWnd, _T("聊天服务地址不能为空！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("聊天服务地址不能为空！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_editSrvAddr.SetFocus();
 		return;
 	}
@@ -275,7 +275,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_editFileSrvAddr.GetWindowText(m_szFileSrvAddr, MAX_SRV_ADDR);
 	if(m_szFileSrvAddr[0]==NULL || m_szFileSrvAddr[0]==_T(' '))
 	{
-		::MessageBox(m_hWnd, _T("文件服务地址不能为空！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("文件服务地址不能为空！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_editFileSrvAddr.SetFocus();
 		return;
 	}
@@ -283,7 +283,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
     m_editImgSrvAddr.GetWindowText(m_szImgSrvAddr, MAX_SRV_ADDR);
     if (m_szImgSrvAddr[0] == NULL || m_szImgSrvAddr[0] == _T(' '))
     {
-        ::MessageBox(m_hWnd, _T("图片服务地址不能为空！"), _T("Flamingo"), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(m_hWnd, _T("图片服务地址不能为空！"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
         m_editImgSrvAddr.SetFocus();
         return;
     }
@@ -291,7 +291,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_editSrvPort.GetWindowText(m_szSrvPort, MAX_SRV_PORT);
 	if(m_szSrvPort[0]==NULL || m_szSrvPort[0]==_T(' '))
 	{
-		::MessageBox(m_hWnd, _T("聊天服务端口号不能为空！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("聊天服务端口号不能为空！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_editSrvPort.SetFocus();
 		return;
 	}
@@ -299,7 +299,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_editFilePort.GetWindowText(m_szFilePort, MAX_SRV_PORT);
 	if(m_szFilePort[0]==NULL || m_szFilePort[0]==_T(' '))
 	{
-		::MessageBox(m_hWnd, _T("文件服务端口号不能为空！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("文件服务端口号不能为空！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_editFilePort.SetFocus();
 		return;
 	}
@@ -307,7 +307,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
     m_editImgPort.GetWindowText(m_szImgPort, MAX_SRV_PORT);
     if (m_szImgPort[0] == NULL || m_szImgPort[0] == _T(' '))
     {
-        ::MessageBox(m_hWnd, _T("图片服务端口号不能为空！"), _T("Flamingo"), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(m_hWnd, _T("图片服务端口号不能为空！"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
         m_editImgPort.SetFocus();
         return;
     }
@@ -318,7 +318,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 		m_editProxyAddr.GetWindowText(m_szProxyAddr, MAX_SRV_ADDR);
 		if(m_szProxyAddr[0]==NULL || m_szProxyAddr[0]==_T(' '))
 		{
-			::MessageBox(m_hWnd, _T("代理服务器地址不能为空！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+			::MessageBox(m_hWnd, _T("代理服务器地址不能为空！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 			m_editProxyAddr.SetFocus();
 			return;
 		}
@@ -326,7 +326,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 		m_editProxyPort.GetWindowText(m_szProxyPort, MAX_SRV_PORT);
 		if(m_szProxyPort[0]==NULL || m_szProxyPort[0]==_T(' '))
 		{
-			::MessageBox(m_hWnd, _T("代理端口号不能为空！"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+			::MessageBox(m_hWnd, _T("代理端口号不能为空！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 			m_editProxyPort.SetFocus();
 			return;
 		}

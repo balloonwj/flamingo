@@ -44,6 +44,7 @@
     <IntDir>Debug\</IntDir>
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>wtl9.0\;$(IncludePath)</IncludePath>
+    <LibraryPath>..\Bin\;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>..\bin\</OutDir>
@@ -131,6 +132,7 @@
     <ClCompile Include="AddFriendConfirmDlg.cpp" />
     <ClCompile Include="BuddyChatDlg.cpp" />
     <ClCompile Include="BuddyInfoDlg.cpp" />
+    <ClCompile Include="BuddyInfoFloatWnd.cpp" />
     <ClCompile Include="BuddyListCtrl.cpp" />
     <ClCompile Include="Buffer.cpp" />
     <ClCompile Include="CascadeWinManager.cpp" />
@@ -147,6 +149,7 @@
     <ClCompile Include="FaceList.cpp" />
     <ClCompile Include="FaceSelDlg.cpp" />
     <ClCompile Include="File.cpp" />
+    <ClCompile Include="File2.cpp" />
     <ClCompile Include="FileTaskThread.cpp" />
     <ClCompile Include="FileTransferCtrl.cpp" />
     <ClCompile Include="FindFriendDlg.cpp" />
@@ -190,6 +193,7 @@
     <ClCompile Include="RecentListCtrl.cpp" />
     <ClCompile Include="RecvMsgThread.cpp" />
     <ClCompile Include="RegisterDialog.cpp" />
+    <ClCompile Include="RemoteDesktopDlg.cpp" />
     <ClCompile Include="RichEditUtil.cpp" />
     <ClCompile Include="SendMsgThread.cpp" />
     <ClCompile Include="SessChatDlg.cpp" />
@@ -208,6 +212,7 @@
     <ClCompile Include="SkinLib\SkinStatic.cpp" />
     <ClCompile Include="SkinLib\SkinTabCtrl.cpp" />
     <ClCompile Include="SkinLib\SkinToolBar.cpp" />
+    <ClCompile Include="SkinLib\SkinWebBrowser.cpp" />
     <ClCompile Include="SplitterCtrl.cpp" />
     <ClCompile Include="Startup.cpp" />
     <ClCompile Include="stdafx.cpp">
@@ -231,7 +236,6 @@
     <ClCompile Include="FlamingoClient.cpp" />
     <ClCompile Include="UserMgr.cpp" />
     <ClCompile Include="Utils.cpp" />
-    <ClCompile Include="VerifyCodeDlg.cpp" />
     <ClCompile Include="XmlDocument.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -239,6 +243,7 @@
     <ClInclude Include="AddFriendConfirmDlg.h" />
     <ClInclude Include="BuddyChatDlg.h" />
     <ClInclude Include="BuddyInfoDlg.h" />
+    <ClInclude Include="BuddyInfoFloatWnd.h" />
     <ClInclude Include="BuddyListCtrl.h" />
     <ClInclude Include="Buffer.h" />
     <ClInclude Include="CascadeWinManager.h" />
@@ -257,6 +262,7 @@
     <ClInclude Include="FaceSelDlg.h" />
     <ClInclude Include="FakeData.h" />
     <ClInclude Include="File.h" />
+    <ClInclude Include="File2.h" />
     <ClInclude Include="FileTaskThread.h" />
     <ClInclude Include="FileTransferCtrl.h" />
     <ClInclude Include="FindFriendDlg.h" />
@@ -305,6 +311,7 @@
     <ClInclude Include="RecentListCtrl.h" />
     <ClInclude Include="RecvMsgThread.h" />
     <ClInclude Include="RegisterDialog.h" />
+    <ClInclude Include="RemoteDesktopDlg.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="RichEditUtil.h" />
     <ClInclude Include="SendMsgThread.h" />
@@ -325,6 +332,7 @@
     <ClInclude Include="SkinLib\SkinStatic.h" />
     <ClInclude Include="SkinLib\SkinTabCtrl.h" />
     <ClInclude Include="SkinLib\SkinToolBar.h" />
+    <ClInclude Include="SkinLib\SkinWebBrowser.h" />
     <ClInclude Include="SplitterCtrl.h" />
     <ClInclude Include="SQLite 3.7.17\sqlite3.h" />
     <ClInclude Include="SrcVersion.h" />
@@ -336,6 +344,7 @@
     <ClInclude Include="ThreadPool.h" />
     <ClInclude Include="Time.h" />
     <ClInclude Include="TrayIcon.h" />
+    <ClInclude Include="UIText.h" />
     <ClInclude Include="UpdateDlg.h" />
     <ClInclude Include="Updater.h" />
     <ClInclude Include="UserConfig.h" />
@@ -344,7 +353,6 @@
     <ClInclude Include="FlamingoClient.h" />
     <ClInclude Include="UserMgr.h" />
     <ClInclude Include="Utils.h" />
-    <ClInclude Include="VerifyCodeDlg.h" />
     <ClInclude Include="XmlDocument.h" />
   </ItemGroup>
   <ItemGroup>

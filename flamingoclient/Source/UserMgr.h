@@ -3,6 +3,7 @@
 #include "UserSessionData.h"
 #include "MessageLogger.h"
 #include "UserConfig.h"
+#include <map>
 
 #define GROUP_ID_BASE 0x0FFFFFFF
 
@@ -63,6 +64,9 @@ public:
 
 	void	SetStatus(UINT uAccountID, long nStatus);	//设置自己或者某个好友的状态
 	long	GetStatus(UINT uAccountID);					//获取某个自己或者某个好友的状态
+
+    void	SetClientType(UINT uAccountID, long nNewClientType);
+    long	GetClientType(UINT uAccountID);
 
 	UINT	GetMsgID(UINT uAccountID) const;
 	BOOL	SetMsgID(UINT uAccountID, UINT uMsgID);

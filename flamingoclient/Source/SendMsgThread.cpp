@@ -7,7 +7,7 @@
 #include "EncodingUtil.h"
 #include "FlamingoClient.h"
 #include "UserMgr.h"
-#include "File.h"
+#include "File2.h"
 #include "net/Msg.h"
 #include "net/IUSocket.h"
 #include "net/protocolstream.h"
@@ -41,7 +41,7 @@ CMsgItem::~CMsgItem(void)
 	}
 }
 
-CSendMsgThread::CSendMsgThread(CIUSocket* socketClient) : m_SocketClient(socketClient)
+CSendMsgThread::CSendMsgThread()
 {
 	m_lpFMGClient = NULL;
 	m_lpUserMgr = NULL;
@@ -163,7 +163,7 @@ void CSendMsgThread::HandleItem(CNetData* pNetData)
 #ifdef _DEBUG
 		::MessageBox(::GetForegroundWindow(), _T("Be cautious! Unhandled data type in send queen."), _T("Warning"), MB_OK|MB_ICONERROR);
 #else
-		CIULog::Log(LOG_WARNING, __FUNCSIG__, _T("Be cautious! Unhandled data type in send queen."));
+		LOG_WARNING("Be cautious! Unhandled data type in send queen.");
 #endif
 	}
 
@@ -193,9 +193,9 @@ void CSendMsgThread::HandleRegister(const CRegisterRequest* pRegisterRequest)
     writeStream.WriteString(data);
     writeStream.Flush();
 
-    CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request register: Account=%s, Password=*****, nickname=%s.", pRegisterRequest->m_szAccountName, pRegisterRequest->m_szPassword, pRegisterRequest->m_szNickName);
+    LOG_INFO("Request register: Account=%s, Password=*****, nickname=%s.", pRegisterRequest->m_szAccountName, pRegisterRequest->m_szPassword, pRegisterRequest->m_szNickName);
 
-    m_SocketClient->Send(outbuf);
+    CIUSocket::GetInstance().Send(outbuf);
 }
 
 void CSendMsgThread::HandleLogon(const CLoginRequest* pLoginRequest)
@@ -212,17 +212,62 @@ void CSendMsgThread::HandleLogon(const CLoginRequest* pLoginRequest)
              (long)pLoginRequest->m_nLoginType,
              pLoginRequest->m_nStatus);
 
-    std::string outbuf;
-    BinaryWriteStream writeStream(&outbuf);
-    writeStream.WriteInt32(msg_type_login);
-    writeStream.WriteInt32(m_seq);
-    //std::string data = szLoginInfo;
-    writeStream.WriteCString(szLoginInfo, strlen(szLoginInfo));
-    writeStream.Flush();
+    
+    std::string strReturnData;
+    //超时时间设置为3秒
+    bool bRet = CIUSocket::GetInstance().Login(pLoginRequest->m_szAccountName, pLoginRequest->m_szPassword, (long)pLoginRequest->m_nLoginType, pLoginRequest->m_nStatus, 3000, strReturnData);
+    LOG_INFO("Request logon: Account=%s, Password=*****, Status=%d, LoginType=%d.", pLoginRequest->m_szAccountName, pLoginRequest->m_szPassword, pLoginRequest->m_nStatus, (long)pLoginRequest->m_nLoginType);
+    
+    int nRet = LOGIN_FAILED;
+    CLoginResult* pLoginResult = new CLoginResult();
+    pLoginResult->m_LoginResultCode = LOGIN_FAILED;
+    if (bRet)
+    {
+        //{"code": 0, "msg": "ok", "userid": 8}
+        Json::Reader JsonReader;
+        Json::Value JsonRoot;
+        if (JsonReader.parse(strReturnData, JsonRoot) && !JsonRoot["code"].isNull() && JsonRoot["code"].isInt())
+        {
+            int nRetCode = JsonRoot["code"].asInt();
 
-    CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request logon: Account=%s, Password=*****, Status=%d, LoginType=%d.", pLoginRequest->m_szAccountName, pLoginRequest->m_szPassword, pLoginRequest->m_nStatus, (long)pLoginRequest->m_nLoginType);
+            if (nRetCode == 0)
+            {
+                if (!JsonRoot["userid"].isInt() || !JsonRoot["username"].isString() || !JsonRoot["nickname"].isString() ||
+                    !JsonRoot["facetype"].isInt() || !JsonRoot["gender"].isInt() || !JsonRoot["birthday"].isInt() ||
+                    !JsonRoot["signature"].isString() || !JsonRoot["address"].isString() ||
+                    !JsonRoot["customface"].isString() || !JsonRoot["phonenumber"].isString() ||
+                    !JsonRoot["mail"].isString())
+                {
+                    LOG_ERROR(_T("login failed, login response json is invalid, json=%s"), strReturnData.c_str());
+                    pLoginResult->m_LoginResultCode = LOGIN_FAILED;
+                }
+                else
+                {
+                    pLoginResult->m_LoginResultCode = 0;
+                    pLoginResult->m_uAccountID = JsonRoot["userid"].asInt();
+                    strcpy_s(pLoginResult->m_szAccountName, ARRAYSIZE(pLoginResult->m_szAccountName), JsonRoot["username"].asCString());
+                    strcpy_s(pLoginResult->m_szNickName, ARRAYSIZE(pLoginResult->m_szNickName), JsonRoot["nickname"].asCString());
+                    //pLoginResult->m_nStatus = JsonRoot["status"].asInt();
+                    pLoginResult->m_nFace = JsonRoot["facetype"].asInt();
+                    pLoginResult->m_nGender = JsonRoot["gender"].asInt();
+                    pLoginResult->m_nBirthday = JsonRoot["birthday"].asInt();
+                    strcpy_s(pLoginResult->m_szSignature, ARRAYSIZE(pLoginResult->m_szSignature), JsonRoot["signature"].asCString());
+                    strcpy_s(pLoginResult->m_szAddress, ARRAYSIZE(pLoginResult->m_szAddress), JsonRoot["address"].asCString());
+                    strcpy_s(pLoginResult->m_szCustomFace, ARRAYSIZE(pLoginResult->m_szCustomFace), JsonRoot["customface"].asCString());
+                    strcpy_s(pLoginResult->m_szPhoneNumber, ARRAYSIZE(pLoginResult->m_szPhoneNumber), JsonRoot["phonenumber"].asCString());
+                    strcpy_s(pLoginResult->m_szMail, ARRAYSIZE(pLoginResult->m_szMail), JsonRoot["mail"].asCString());
+                }
+            }
+            else if (nRetCode == 102)
+                pLoginResult->m_LoginResultCode = LOGIN_UNREGISTERED;
+            else if (nRetCode == 103)
+                pLoginResult->m_LoginResultCode = LOGIN_PASSWORD_ERROR;
+            else
+                pLoginResult->m_LoginResultCode = LOGIN_FAILED;
+        }
+    }
 
-    m_SocketClient->Send(outbuf);
+    ::PostMessage(m_lpFMGClient->m_UserMgr.m_hProxyWnd, FMG_MSG_LOGIN_RESULT, 0, (LPARAM)pLoginResult);
 }
 
 void CSendMsgThread::HandleUserBasicInfo(const CUserBasicInfoRequest* pUserBasicInfo)
@@ -238,9 +283,9 @@ void CSendMsgThread::HandleUserBasicInfo(const CUserBasicInfoRequest* pUserBasic
 	writeStream.WriteString(dummy);
 	writeStream.Flush();
 
-	CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request to get userinfo.");
+	LOG_INFO("Request to get userinfo.");
 
-	m_SocketClient->Send(outbuf);
+    CIUSocket::GetInstance().Send(outbuf);
 }
 
 void CSendMsgThread::HandleChangeUserStatus(const CChangeUserStatusRequest* pChangeUserStatusRequest)
@@ -257,9 +302,9 @@ void CSendMsgThread::HandleChangeUserStatus(const CChangeUserStatusRequest* pCha
     writeStream.WriteCString(szData, strlen(szData));
     writeStream.Flush();
 
-    CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request to change user status, newstatus=%d.", pChangeUserStatusRequest->m_nNewStatus);
+    LOG_INFO("Request to change user status, newstatus=%d.", pChangeUserStatusRequest->m_nNewStatus);
 
-    m_SocketClient->Send(outbuf);
+    CIUSocket::GetInstance().Send(outbuf);
 }
 
 void CSendMsgThread::HandleGroupBasicInfo(const CGroupBasicInfoRequest* pGroupBasicInfo)
@@ -276,9 +321,9 @@ void CSendMsgThread::HandleGroupBasicInfo(const CGroupBasicInfoRequest* pGroupBa
     writeStream.WriteCString(szData, strlen(szData));
     writeStream.Flush();
 
-    CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request to get group members, groupid=%d.", pGroupBasicInfo->m_groupid);
+    LOG_INFO("Request to get group members, groupid=%d.", pGroupBasicInfo->m_groupid);
 
-    m_SocketClient->Send(outbuf);
+    CIUSocket::GetInstance().Send(outbuf);
 }
 
 void CSendMsgThread::HandleFindFriendMessage(const CFindFriendRequest* pFindFriendRequest)
@@ -297,9 +342,9 @@ void CSendMsgThread::HandleFindFriendMessage(const CFindFriendRequest* pFindFrie
     writeStream.WriteCString(szData, strlen(szData));
     writeStream.Flush();
 
-    CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request to find friend, type=%d, accountName=%s", pFindFriendRequest->m_nType, pFindFriendRequest->m_szAccountName);
+    LOG_INFO("Request to find friend, type=%d, accountName=%s", pFindFriendRequest->m_nType, pFindFriendRequest->m_szAccountName);
 
-    m_SocketClient->Send(outbuf);
+    CIUSocket::GetInstance().Send(outbuf);
 }
 
 void CSendMsgThread::HandleOperateFriendMessage(const COperateFriendRequest* pOperateFriendRequest)
@@ -329,9 +374,9 @@ void CSendMsgThread::HandleOperateFriendMessage(const COperateFriendRequest* pOp
     writeStream.WriteCString(szData, strlen(szData));
     writeStream.Flush();
 
-    CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request to operate friend, type=%d, accountId=%u", pOperateFriendRequest->m_uCmd, pOperateFriendRequest->m_uAccountID);
+    LOG_INFO("Request to operate friend, type=%d, accountId=%u", pOperateFriendRequest->m_uCmd, pOperateFriendRequest->m_uAccountID);
 
-    m_SocketClient->Send(outbuf);
+    CIUSocket::GetInstance().Send(outbuf);
 }
 
 BOOL CSendMsgThread::HandleHeartbeatMessage(const CHeartbeatMessageRequest* pHeartbeatRequest)
@@ -349,7 +394,7 @@ void CSendMsgThread::HandleUpdateLogonUserInfoMessage(const CUpdateLogonUserInfo
 		return;
 
 	char szCustomFace[MAX_PATH] = {0};
-	UnicodeToUtf8(pRequest->m_szCustomFace, szCustomFace, ARRAYSIZE(szCustomFace));
+	EncodeUtil::UnicodeToUtf8(pRequest->m_szCustomFace, szCustomFace, ARRAYSIZE(szCustomFace));
 	
     std::ostringstream os;
     os << "{\"nickname\": \"" << pRequest->m_szNickName << "\", \"facetype\":" << pRequest->m_uFaceID
@@ -366,9 +411,9 @@ void CSendMsgThread::HandleUpdateLogonUserInfoMessage(const CUpdateLogonUserInfo
     writeStream.WriteString(os.str());
     writeStream.Flush();
 
-    CIULog::Log(LOG_NORMAL, __FUNCSIG__, "Request to Update User Info, data=%s", os.str().c_str());
+    LOG_INFO("Request to Update User Info, data=%s", os.str().c_str());
 
-    m_SocketClient->Send(outbuf);
+    CIUSocket::GetInstance().Send(outbuf);
 }
 
 void CSendMsgThread::HandleModifyPassword(const CModifyPasswordRequest* pModifyPassword)
@@ -385,7 +430,9 @@ void CSendMsgThread::HandleModifyPassword(const CModifyPasswordRequest* pModifyP
     writeStream.WriteCString(szData, strlen(szData));
     writeStream.Flush();
 
-    m_SocketClient->Send(outbuf);
+    LOG_INFO("Request to modify password, data=%s", szData);
+
+    CIUSocket::GetInstance().Send(outbuf);
 }
 
 void CSendMsgThread::HandleCreateNewGroup(const CCreateNewGroupRequest* pCreateNewGroup)
@@ -402,7 +449,9 @@ void CSendMsgThread::HandleCreateNewGroup(const CCreateNewGroupRequest* pCreateN
     writeStream.WriteCString(szData, strlen(szData));
     writeStream.Flush();
 
-    m_SocketClient->Send(outbuf);
+    LOG_INFO("Request to create new group, data=%s", szData);
+
+    CIUSocket::GetInstance().Send(outbuf);
 }
 
 BOOL CSendMsgThread::HandleSentChatMessage(const CSentChatMessage* pSentChatMessage)
@@ -481,8 +530,9 @@ BOOL CSendMsgThread::HandleSentConfirmImageMessage(const CSentChatConfirmImageMe
         writeStream.WriteInt32((int32_t)uTargetID);
         writeStream.Flush();
 
-        m_SocketClient->Send(outbuf);
-        CIULog::Log(LOG_NORMAL, __FUNCSIG__, _T("Send chat msg: msgID=%u, senderId=%u, targetId=%u."), m_nMsgId, pConfirmImageMessage->m_uSenderID, uTargetID);
+        LOG_INFO("Send chat msg: msgID=%u, senderId=%u, targetId=%u.", m_nMsgId, pConfirmImageMessage->m_uSenderID, uTargetID);
+
+        CIUSocket::GetInstance().Send(outbuf);        
     }
 	else if(pConfirmImageMessage->m_nType == CHAT_CONFIRM_TYPE_MULTI)
 	{
@@ -867,6 +917,38 @@ BOOL CSendMsgThread::HandleFile(LPCTSTR& p, tstring& strText, std::vector<CConte
 	return FALSE;
 }
 
+BOOL CSendMsgThread::HandleRemoteDesktop(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent)
+{
+    int nPlaceholder = GetBetweenInt(p + 2, _T("[\""), _T("\"]"), -1);
+    if (nPlaceholder > 0)
+    {
+        if (!strText.empty())
+        {
+            CContent* lpContent = new CContent;
+            if (lpContent != NULL)
+            {
+                lpContent->m_nType = CONTENT_TYPE_TEXT;
+                lpContent->m_strText = strText;
+                arrContent.push_back(lpContent);
+            }
+            strText = _T("");
+        }
+
+        CContent* lpContent = new CContent;
+        if (lpContent != NULL)
+        {
+            lpContent->m_nType = CONTENT_TYPE_REMOTE_DESKTOP;
+            //lpContent->m_nShakeTimes = nPlaceholder;
+            arrContent.push_back(lpContent);
+        }
+
+        p = _tcsstr(p + 2, _T("\"]"));
+        p++;
+        return TRUE;
+    }
+    return FALSE;
+}
+
 
 BOOL CSendMsgThread::CreateMsgContent(const tstring& strChatMsg, std::vector<CContent*>& arrContent)
 {
@@ -907,6 +989,11 @@ BOOL CSendMsgThread::CreateMsgContent(const tstring& strChatMsg, std::vector<CCo
 				if (HandleFile(p, strText, arrContent))
 					continue;
 			}
+            else if (*(p + 1) == _T('r'))
+            {
+                if (HandleRemoteDesktop(p, strText, arrContent))     //远程桌面
+                    continue;
+            }
 		}
 		strText +=*p;
 	}
@@ -1075,9 +1162,10 @@ BOOL CSendMsgThread::SendMultiChatMessage(const char* pszChatMsg, int nChatMsgLe
     writeStream.WriteString(strTarget);
     writeStream.Flush();
 
-    m_SocketClient->Send(outbuf);
-    CIULog::Log(LOG_NORMAL, __FUNCSIG__, _T("Send multi chat msg: nAccountNum=%d."), nAccountNum);
+    LOG_INFO("Send multi chat msg: nAccountNum=%d.", nAccountNum);
 
+    CIUSocket::GetInstance().Send(outbuf);
+    
     //TODO: 不需要返回值的
     return TRUE;
 }
@@ -1287,6 +1375,12 @@ BOOL CSendMsgThread::ProcessBuddyMsg(CBuddyMessage* lpBuddyMsg)
 				strRecentMsg += _T("[文件]");
 
 		}
+        else if (lpContent->m_nType == CONTENT_TYPE_REMOTE_DESKTOP)
+        {
+            strChatContent += _T("{\"remotedesktop\":1},");
+            if (strRecentMsg.GetLength()<MAX_RECENT_MSG_LENGTH && strRecentMsg.GetLength() + 6 <= MAX_RECENT_MSG_LENGTH)
+                strRecentMsg += _T("[远程桌面]");
+        }
 		
 	}
 
@@ -1311,7 +1405,7 @@ BOOL CSendMsgThread::ProcessBuddyMsg(CBuddyMessage* lpBuddyMsg)
 	//utf8存储中文时，对应2～4个字节
 	long nLength = strContent.GetLength()*4;
 	CStringA strUtf8Msg;
-	UnicodeToUtf8(strContent, strUtf8Msg.GetBuffer(nLength), nLength);
+	EncodeUtil::UnicodeToUtf8(strContent, strUtf8Msg.GetBuffer(nLength), nLength);
 	strUtf8Msg.ReleaseBuffer();
 
     long nChatMsgLength = strUtf8Msg.GetLength();
@@ -1327,8 +1421,8 @@ BOOL CSendMsgThread::ProcessBuddyMsg(CBuddyMessage* lpBuddyMsg)
     writeStream.WriteInt32((int32_t)lpBuddyMsg->m_nToUin);
     writeStream.Flush();
 
-    m_SocketClient->Send(outbuf);
-    CIULog::Log(LOG_NORMAL, __FUNCSIG__, _T("Send chat msg: msgID=%u, senderId=%u, targetId=%u."), m_nMsgId, lpBuddyMsg->m_nFromUin, lpBuddyMsg->m_nToUin);
+    CIUSocket::GetInstance().Send(outbuf);
+    LOG_INFO("Send chat msg: msgID=%u, senderId=%u, targetId=%u.", m_nMsgId, lpBuddyMsg->m_nFromUin, lpBuddyMsg->m_nToUin);
 		
 	//TODO: 这个大的个人信息类需要整改
     //只有发送成功的消息才会被添加到最近聊天列表中
@@ -1475,7 +1569,7 @@ BOOL CSendMsgThread::ProcessMultiMsg(CMsgItem* pMsgItem)
 	//utf8存储中文时，对应2～4个字节
 	long nLength = strContent.GetLength()*4;
 	CStringA strUtf8Msg;
-	UnicodeToUtf8(strContent, strUtf8Msg.GetBuffer(nLength), nLength);
+	EncodeUtil::UnicodeToUtf8(strContent, strUtf8Msg.GetBuffer(nLength), nLength);
 	strUtf8Msg.ReleaseBuffer();
 
 	size_t nSize = pMsgItem->m_arrTargetIDs.size();

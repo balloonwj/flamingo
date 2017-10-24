@@ -1,6 +1,5 @@
 #include "stdafx.h"
 #include "SkinPictureBox.h"
-#include "../BuddyInfoDlg.h"
 
 CSkinPictureBox::CSkinPictureBox(void)
 {

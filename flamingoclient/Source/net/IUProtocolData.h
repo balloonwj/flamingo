@@ -442,6 +442,7 @@ public:
 public:
 	UINT	m_uAccountID;
 	long	m_nStatus;
+    long    m_nClientType;
     int     m_type;
 };
 
@@ -647,6 +648,18 @@ public:
 public:
 	UINT m_uAccountID;
 
+};
+
+class CScreenshotInfo
+{
+public:
+    CScreenshotInfo();
+    ~CScreenshotInfo();
+
+public:
+    std::string m_strBmpHeader;
+    std::string m_strBmpData;
+    UINT        m_targetId;
 };
 
 

@@ -181,6 +181,7 @@ CFriendStatus::CFriendStatus()
 	m_uType = NET_DATA_FRIENDS_STATUS;
 	m_uAccountID = 0;
 	m_nStatus = 0;
+    m_nClientType = 0;
     m_type = 0;
 }
 
@@ -414,6 +415,17 @@ CTargetInfoChangeResult::CTargetInfoChangeResult()
 CTargetInfoChangeResult::~CTargetInfoChangeResult()
 {
 
+}
+
+//class CScreenshot
+CScreenshotInfo::CScreenshotInfo() : m_targetId(0)
+{
+
+}
+
+CScreenshotInfo::~CScreenshotInfo()
+{
+    
 }
 
 //class CFileItemRequest

@@ -15,6 +15,14 @@ enum file_msg_type
     msg_type_download_resp,
 };
 
+enum file_msg_error_code
+{
+    file_msg_error_unknown,        //未知错误
+    file_msg_error_progress,       //文件上传或者下载进行中
+    file_msg_error_complete,       //文件上传或者下载完成
+    file_msg_error_not_exist       //文件不存在
+};
+
 #pragma pack(push, 1)
 //协议头
 struct file_msg
@@ -28,16 +36,16 @@ struct file_msg
  *  文件上传
  */
 /**
-    客户端：cmd = msg_type_upload_req, seq = 0, filemd5, offset ,filesize, filedata
-    服务器应答： cmd = msg_type_upload_resp, seq = 0, filemd5, offset, filesize//offset与filesize=-1时上传完成
+    客户端：cmd = msg_type_upload_req, seq, filemd5, offset ,filesize, filedata
+    服务器应答： cmd = msg_type_upload_resp, seq, errorcode, filemd5, offset, filesize
  **/
 
 /** 
  *  文件下载
  */
 /** 
-    客户端：cmd = msg_type_download_req, seq = 0, filemd5, offset, filesize, filedata
-    服务器: cmd = msg_type_download_resp, seq = 0, filemd5, filesize, offset, filedata
+    客户端：cmd = msg_type_download_req, seq, filemd5, offset, filesize, filedata
+    服务器: cmd = msg_type_download_resp, seq, errorcode, filemd5, offset, filesize, filedata
 
  **/
 

@@ -1,5 +1,7 @@
 #include "stdafx.h"
 #include "SkinManager.h"
+#include "../File.h"
+#include "../Path.h"
 
 CSkinManager* CSkinManager::m_lpSkinMgr = NULL;
 

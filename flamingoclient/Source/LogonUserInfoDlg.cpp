@@ -5,6 +5,8 @@
 #include "Utils.h"
 #include "EncodingUtil.h"
 #include "UserSessionData.h"
+#include "Path.h"
+#include "UIText.h"
 
 CLogonUserInfoDlg::CLogonUserInfoDlg(void)
 {
@@ -154,7 +156,7 @@ void CLogonUserInfoDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strNickName.Trim();
 	if(strNickName.GetLength()<=0 || strNickName.GetLength()>16)
 	{
-		::MessageBox(m_hWnd, _T("昵称必须在1～16个字符之间。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("昵称必须在1～16个字符之间。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
@@ -163,7 +165,7 @@ void CLogonUserInfoDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strSignature.Trim();
 	if(strSignature.GetLength()>128)
 	{
-		::MessageBox(m_hWnd, _T("个性签名必须在0～128个字符之间。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("个性签名必须在0～128个字符之间。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
@@ -173,7 +175,7 @@ void CLogonUserInfoDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_dtpBirthday.GetSystemTime(&st);
 	if(st.wYear < 1900)
 	{
-		::MessageBox(m_hWnd, _T("生日年份必须大于1990年。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("生日年份必须大于1990年。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 	long nBirthday = st.wYear*10000 + st.wMonth*100 + st.wDay;
@@ -183,7 +185,7 @@ void CLogonUserInfoDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strAddress.Trim();
 	if(strAddress.GetLength() > 32)
 	{
-		::MessageBox(m_hWnd, _T("地址长度不能超过32位。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("地址长度不能超过32位。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
@@ -192,12 +194,12 @@ void CLogonUserInfoDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strPhone.Trim();
 	if(strPhone.GetLength() > 16)
 	{
-		::MessageBox(m_hWnd, _T("电话长度不能超过16位。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("电话长度不能超过16位。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 	if(strPhone.GetLength()>0 && !ValidatePhone(strPhone))
 	{
-		::MessageBox(m_hWnd, _T("电话号码必须是数字、-和+。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("电话号码必须是数字、-和+。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
@@ -206,7 +208,7 @@ void CLogonUserInfoDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strMail.Trim();
 	if(strMail.GetLength() >= 24)
 	{
-		::MessageBox(m_hWnd, _T("邮箱长度不能超过23位。"), _T("Flamingo"), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("邮箱长度不能超过23位。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
@@ -235,7 +237,7 @@ LRESULT CLogonUserInfoDlg::OnUploadUserThumbResult(UINT uMsg, WPARAM wParam, LPA
 	
 	if(wParam == UPLOAD_USER_THUMB_RESULT_FAILED)
 	{
-		::MessageBox(m_hWnd, _T("上传头像失败！"), _T("Flamingo"), MB_OK|MB_ICONERROR);
+		::MessageBox(m_hWnd, _T("上传头像失败！"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
 		
 	}
 	else if(wParam == UPLOAD_USER_THUMB_RESULT_SUCCESS)
@@ -245,7 +247,7 @@ LRESULT CLogonUserInfoDlg::OnUploadUserThumbResult(UINT uMsg, WPARAM wParam, LPA
 		m_bUseCustomThumb = TRUE;
 
 		TCHAR szData[MAX_PATH] = {0};
-		Utf8ToUnicode(pResult->m_szRemoteName, szData, ARRAYSIZE(szData));
+        EncodeUtil::Utf8ToUnicode(pResult->m_szRemoteName, szData, ARRAYSIZE(szData));
 		_tcscpy_s(m_szCustomFaceRemotePath, ARRAYSIZE(m_szCustomFaceRemotePath), szData);
 	}
 

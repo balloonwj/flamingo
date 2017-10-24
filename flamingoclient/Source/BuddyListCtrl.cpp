@@ -465,6 +465,8 @@ BOOL CBuddyListCtrl::SetBuddyItemHeadPic(int nTeamIndex, int nIndex, LPCTSTR lps
 	if (NULL == lpItem->m_lpHeadImg)
 		return FALSE;
 
+    lpItem->m_strHeadImgName = lpszFileName;
+
 	BOOL bRet = lpItem->m_lpHeadImg->LoadFromFile(lpszFileName);
 	if (!bRet)
 	{
@@ -480,6 +482,15 @@ BOOL CBuddyListCtrl::SetBuddyItemHeadPic(int nTeamIndex, int nIndex, LPCTSTR lps
 		Invalidate();
 
 	return TRUE;
+}
+
+CString CBuddyListCtrl::GetBuddyItemHeadPic(int nTeamIndex, int nIndex)
+{
+    CBuddyItem* lpItem = GetBuddyItemByIndex(nTeamIndex, nIndex);
+    if (NULL == lpItem)
+        return _T("");
+
+    return lpItem->m_strHeadImgName;
 }
 
 BOOL CBuddyListCtrl::SetBuddyItemMobilePic(int nTeamIndex, int nIndex, LPCTSTR lpszFileName, BOOL bShow/*=TRUE*/)
@@ -959,7 +970,7 @@ void CBuddyListCtrl::OnRButtonUp(UINT nFlags, CPoint point)
 
 	Invalidate();
 
-	NMHDREx stNmhdr;
+	BLNMHDREx stNmhdr;
 	stNmhdr.hdr.hwndFrom = m_hWnd;
 	stNmhdr.hdr.idFrom = GetDlgCtrlID();
 	stNmhdr.hdr.code = NM_RCLICK;
@@ -995,6 +1006,21 @@ void CBuddyListCtrl::OnMouseMove(UINT nFlags, CPoint point)
 		m_nHoverTeamIndex = nTeamIndex;
 		m_nHoverIndex = nIndex;
 		Invalidate();
+
+
+        CRect rtItem;
+        GetItemRectByIndex(nTeamIndex, nIndex, rtItem);
+        //告诉父窗口，鼠标在项上悬停
+        BLNMHDREx stNmhdr;
+        stNmhdr.hdr.hwndFrom = m_hWnd;
+        stNmhdr.hdr.idFrom = GetDlgCtrlID();
+        stNmhdr.hdr.code = NM_HOVER;
+        stNmhdr.nPostionFlag = POSITION_ON_ITEM;  
+        stNmhdr.nTeamIndex = nTeamIndex;
+        stNmhdr.nItemIndex = nIndex;
+        stNmhdr.rtItem = rtItem;
+
+        ::SendMessage(::GetParent(m_hWnd), WM_NOTIFY, GetDlgCtrlID(), (LPARAM)&stNmhdr);
 	}
 
 	m_VScrollBar.OnMouseMove(nFlags, point);
@@ -1013,6 +1039,17 @@ void CBuddyListCtrl::OnMouseLeave()
 	}
 
 	m_VScrollBar.OnMouseLeave();
+
+    //告诉父窗口，鼠标在项外（非分组和项元素以外的地方）悬停
+    BLNMHDREx stNmhdr;
+    stNmhdr.hdr.hwndFrom = m_hWnd;
+    stNmhdr.hdr.idFrom = GetDlgCtrlID();
+    stNmhdr.hdr.code = NM_HOVER;
+    stNmhdr.nPostionFlag = POSITION_ON_BLANK;
+    stNmhdr.nTeamIndex = -1;
+    stNmhdr.nItemIndex = -1;
+
+    ::SendMessage(::GetParent(m_hWnd), WM_NOTIFY, GetDlgCtrlID(), (LPARAM)&stNmhdr);
 }
 
 void CBuddyListCtrl::OnTimer(UINT_PTR nIDEvent)

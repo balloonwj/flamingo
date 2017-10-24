@@ -69,7 +69,7 @@ void QueryResult::EndQuery()
 
     if (mResult)
     {
-		LOG_INFO << "QueryResult::EndQuery, mysql_free_result";
+		//LOG_INFO << "QueryResult::EndQuery, mysql_free_result";
         mysql_free_result(mResult);
         mResult = 0;
     }

@@ -84,7 +84,6 @@ class CModifyPasswordResult;
 class CCreateNewGroupResult;
 
 class CFlamingoClient;
-class CIUSocket;
 
 //缓存的聊天消息
 struct CachedChatMsg
@@ -103,12 +102,14 @@ struct CachedNotifyMsg
 class CRecvMsgThread : public CThread
 {
 public:
-    CRecvMsgThread(CIUSocket* socketClient);
+    CRecvMsgThread();
     virtual ~CRecvMsgThread(void);
 
 public:
-	BOOL AddMsgData(const std::string& pMsgData);
+	void AddMsgData(const std::string& pMsgData);
 	void DelAllMsgData();
+
+    void NotifyNetError();
 
     void SetProxyWnd(HWND hwnd)
     {
@@ -140,6 +141,7 @@ private:
     BOOL HandleChatMessage(int32_t senderId, int32_t targetId, const std::string& strMsg);
 
     BOOL HandleCreateNewGroupResult(const std::string& strMsg);
+    BOOL HandleScreenshotMessage(int32_t targetId, const std::string& strBmpHeader, const std::string& strBmpData);
 
 		   
 	BOOL HandleTargetInfoChangeMessage(CTargetInfoChangeResult* pResult);
@@ -165,8 +167,6 @@ private:
 public:
 	CFlamingoClient*		                    m_pFMGClient;
 	CUserMgr*			                        m_lpUserMgr;
-
-    CIUSocket*                                  m_SocketClient;
 	
 private:
 	std::list<std::string>						m_listItems;
@@ -188,4 +188,6 @@ private:
     int32_t                                     m_seq;
 
     HWND                                        m_hProxyWnd;
+
+    bool                                        m_bNetError;        //网络有错误
 };

@@ -1,5 +1,3 @@
-
-
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -107,7 +105,7 @@ void Logger::Impl::formatTime()
 		t_lastSecond = seconds;
 		struct tm tm_time;
 		
-		::gmtime_r(&seconds, &tm_time); // FIXME TimeZone::fromUtcTime
+		::localtime_r(&seconds, &tm_time); // FIXME TimeZone::fromUtcTime
 
 		int len = snprintf(t_time, sizeof(t_time), "%4d%02d%02d %02d:%02d:%02d",
 			tm_time.tm_year + 1900, tm_time.tm_mon + 1, tm_time.tm_mday,

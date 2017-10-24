@@ -68,6 +68,7 @@ void Acceptor::handleRead()
         // Read the section named "The special problem of
         // accept()ing when you can't" in libev's doc.
         // By Marc Lehmann, author of livev.
+        // The process already has the maximum number of files open.
         if (errno == EMFILE)
         {
             ::close(idleFd_);

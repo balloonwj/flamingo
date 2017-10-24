@@ -31,10 +31,13 @@ enum POSITION_FLAG
 	POSITION_ON_BLANK			//在空白处
 };
 
-struct NMHDREx
+struct BLNMHDREx
 {
 	NMHDR			hdr;
 	POSITION_FLAG	nPostionFlag;
+    int             nTeamIndex;
+    int             nItemIndex;
+    RECT            rtItem;
 };
 
 class CBuddyItem
@@ -58,6 +61,7 @@ public:
 	BOOL		m_bHeadFlashAnim;		// 头像闪动动画标志
 	int			m_nHeadFlashAnimState;	// 头像闪动动画状态
 	CImageEx*	m_lpHeadImg;			// 头像图片
+    CString     m_strHeadImgName;       // 头像图片路径
 	BOOL		m_bGender;				// 性别
 	BOOL		m_bMobile;				// 是否手机在线
 	CImageEx*	m_lpMobileImg;			// 手机图标
@@ -162,6 +166,7 @@ public:
 	void SetBuddyItemSign(int nTeamIndex, int nIndex, LPCTSTR lpszText, BOOL bShowSign=TRUE);
 	void SetBuddyItemGender(int nTeamIndex, int nIndex, BOOL bGender);
 	BOOL SetBuddyItemHeadPic(int nTeamIndex, int nIndex, LPCTSTR lpszFileName, BOOL bGray);
+    CString GetBuddyItemHeadPic(int nTeamIndex, int nIndex);
 	BOOL SetBuddyItemMobilePic(int nTeamIndex, int nIndex, LPCTSTR lpszFileName, BOOL bShow=TRUE);
 	void SetBuddyItemHeadFlashAnim(int nTeamIndex, int nIndex, BOOL bHeadFlashAnim);
 	void SetBuddyItemOnline(int nTeamIndex, int nIndex, BOOL bOnline, BOOL bAnim);
