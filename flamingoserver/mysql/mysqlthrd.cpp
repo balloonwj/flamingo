@@ -1,5 +1,6 @@
 #include "../base/logging.h"
 #include "mysqlthrd.h"
+#include <functional>
 
 CMysqlThrd::CMysqlThrd(void)
 {
@@ -59,7 +60,7 @@ bool CMysqlThrd::_Init()
         return true;
     }
 
-    // Æô¶¯Ïß³Ì
+    // ï¿½ï¿½ï¿½ß³ï¿½
 	m_pThread.reset(new std::thread(std::bind(&CMysqlThrd::_MainLoop, this)));
 
 	{

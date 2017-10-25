@@ -86,7 +86,7 @@ int FileUtil::ReadSmallFile::readToString(int maxSize,
 	int64_t* modifyTime,
 	int64_t* createTime)
 {
-	static_assert(sizeof(off_t) == 8, "sizeof(off_t) not 8");
+	// static_assert(sizeof(off_t) == 8, "sizeof(off_t) not 8");
 	assert(content != NULL);
 	int err = err_;
 	if (fd_ >= 0)

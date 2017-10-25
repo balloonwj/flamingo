@@ -16,6 +16,7 @@
 #include <strings.h>  // bzero
 #include <sys/socket.h>
 #include <unistd.h>
+#include <sys/uio.h>
 
 using namespace net;
 

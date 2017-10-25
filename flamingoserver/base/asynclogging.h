@@ -5,6 +5,7 @@
 #include <vector>
 #include <thread>
 #include <string.h>
+#include <functional>
 #include "countdownlatch.h"
 
 using namespace std;
