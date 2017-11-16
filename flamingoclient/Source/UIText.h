@@ -7,6 +7,9 @@
 
 #define UI_APP_TITLE            _T("Flamingo")
 
+#define UI_DEFAULT_MYWEBSITE_TOOLTIP    _T("打开我的博客")
+#define UI_DEFAULT_MYWEBSITE    _T("http://blog.csdn.net/analogous_love")
+
 #define UI_ABOUTWND_TITLE       _T("关于Hootina Flamingo")
 
 #define UI_COPYRIGHT_TEXT       _T("Flamingo IM 2017 v1.000")

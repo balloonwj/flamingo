@@ -55,7 +55,7 @@ bool UserManager::LoadUsersFromDb()
     }
 
     //TODO: 到底是空数据集还是出错，需要修改下返回类型
-    QueryResult* pResult = pConn->Query("SELECT f_user_id, f_username, f_nickname, f_password,  f_facetype, f_customface, f_gender, f_birthday, f_signature, f_address, f_phonenumber, f_mail FROM t_user ORDER BY  f_user_id DESC");
+    QueryResult* pResult = pConn->Query("SELECT f_user_id, f_username, f_nickname, f_password,  f_facetype, f_customface, f_gender, f_birthday, f_signature, f_address, f_phonenumber, f_mail, f_teaminfo FROM t_user ORDER BY  f_user_id DESC");
     if (NULL == pResult)
     {
         LOG_INFO << "UserManager::_Query error, dbname=" << m_strDbName;
@@ -81,6 +81,7 @@ bool UserManager::LoadUsersFromDb()
         u.address = pRow[9].GetString();
         u.phonenumber = pRow[10].GetString();
         u.mail = pRow[11].GetString();
+        u.teaminfo = pRow[12].GetString();
         m_allCachedUsers.push_back(u);
 
         LOG_INFO << "userid: " << u.userid << ", username: " << u.username << ", password: " << u.password << ", nickname: " << u.nickname << ", signature: " << u.signature;
@@ -388,6 +389,38 @@ bool UserManager::AddGroup(const char* groupname, int32_t ownerid, int32_t& grou
     return true;
 }
 
+bool UserManager::InsertDeviceInfo(int32_t userid, int32_t deviceid, int32_t classtype, int64_t uploadtime, const std::string& deviceinfo)
+{
+    std::unique_ptr<CDatabaseMysql> pConn;
+    pConn.reset(new CDatabaseMysql());
+    if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
+    {
+        LOG_FATAL << "UserManager::InsertDeviceInfo failed, please check params: dbserver=" << m_strDbServer
+            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
+            << ", dbname=" << m_strDbName;
+        return false;
+    }
+
+    if (uploadtime <= 0)
+        uploadtime = time(NULL);
+
+    std::ostringstream osSql;
+    osSql << "INSERT INTO t_device(f_user_id, f_deviceid, f_classtype, f_deviceinfo, f_upload_time, f_create_time) VALUES("
+          << userid << ", "
+          << deviceid << ", "
+          << classtype << ", '"
+          << deviceinfo << "',  FROM_UNIXTIME("
+          << uploadtime << ", '%Y-%m-%d %H:%i:%S'), "
+          << "NOW())";
+    if (!pConn->Execute(osSql.str().c_str()))
+    {
+        LOG_WARN << "insert group error, sql=" << osSql.str();
+        return false;
+    }
+
+    return true;
+}
+
 bool UserManager::SaveChatMsgToDb(int32_t senderid, int32_t targetid, const std::string& chatmsg)
 {
     std::unique_ptr<CDatabaseMysql> pConn;
@@ -470,6 +503,22 @@ bool UserManager::GetFriendInfoByUserId(int32_t userid, std::list<User>& friends
     }
 
     return true;
+}
+
+bool UserManager::GetTeamInfoByUserId(int32_t userid, std::string& teaminfo)
+{
+    std::set<int32_t> friendsId;
+    std::lock_guard<std::mutex> guard(m_mutex);
+    for (const auto& iter : m_allCachedUsers)
+    {
+        if (iter.userid == userid)
+        {
+            teaminfo = iter.teaminfo;
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 bool UserManager::LoadRelationshipFromDb(int32_t userid, std::set<int32_t>& r)

@@ -45,11 +45,11 @@
     <ClCompile Include="common\TcpSession.cpp" />
     <ClCompile Include="chatserversrc\TcpSession.cpp" />
     <ClCompile Include="fileserversrc\TcpSession.cpp" />
-    <ClCompile Include="base\ConfigFileReader - 副本.cpp" />
     <ClCompile Include="base\ConfigFileReader.cpp" />
     <ClCompile Include="net\TimerQueue.cpp" />
     <ClCompile Include="net\Timer.cpp" />
     <ClCompile Include="imgserversrc\main.cpp" />
+    <ClCompile Include="net\protocolstream.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="base\asynclogging.h" />
@@ -106,11 +106,11 @@
     <ClInclude Include="common\TcpSession.h" />
     <ClInclude Include="chatserversrc\TcpSession.h" />
     <ClInclude Include="fileserversrc\TcpSession.h" />
-    <ClInclude Include="base\ConfigFileReader - 副本.h" />
     <ClInclude Include="base\ConfigFileReader.h" />
     <ClInclude Include="net\TimerQueue.h" />
     <ClInclude Include="net\TimerId.h" />
     <ClInclude Include="net\Timer.h" />
+    <ClInclude Include="net\protocolstream.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />

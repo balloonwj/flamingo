@@ -87,6 +87,9 @@ private:
     void OnScreenshotResponse(int32_t targetid, const std::string& bmpHeader, const std::string& bmpData, const std::shared_ptr<TcpConnection>& conn);
 
 
+    //¶¨ÖÆº¯Êý
+    void OnUploadDeviceInfo(int32_t deviceid, int32_t classtype, int64_t uploadtime, const std::string& strDeviceInfo, const std::shared_ptr<TcpConnection>& conn);
+
     void DeleteFriend(const std::shared_ptr<TcpConnection>& conn, int32_t friendid);
 
 private:

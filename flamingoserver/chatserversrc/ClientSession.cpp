@@ -237,6 +237,35 @@ bool ClientSession::Process(const std::shared_ptr<TcpConnection>& conn, const ch
                     }
                         break;
 
+                    //上传设备信息
+                    case msg_type_uploaddeviceinfo:
+                    {
+                        int32_t deviceid;
+                        if (!readStream.ReadInt32(deviceid))
+                        {
+                            LOG_ERROR << "read deviceid error, client: " << conn->peerAddress().toIpPort();
+                            return false;
+                        }
+
+                        int32_t classtype;
+                        if (!readStream.ReadInt32(classtype))
+                        {
+                            LOG_ERROR << "read classtype error, client: " << conn->peerAddress().toIpPort();
+                            return false;
+                        }
+
+                        int64_t uploadtime;
+                        if (!readStream.ReadInt64(uploadtime))
+                        {
+                            LOG_ERROR << "read uploadtime error, client: " << conn->peerAddress().toIpPort();
+                            return false;
+                        }
+
+                        OnUploadDeviceInfo(deviceid, classtype, uploadtime, data, conn);
+                    }
+                        break;
+                        
+
                     default:
                         //pBuffer->retrieveAll();
                         LOG_ERROR << "unsupport cmd, cmd:" << cmd << ", data=" << data << ", connection name:" << conn->peerAddress().toIpPort();
@@ -249,7 +278,7 @@ bool ClientSession::Process(const std::shared_ptr<TcpConnection>& conn, const ch
                 //用户未登录，告诉客户端不能进行操作提示“未登录”
                 std::string data = "{\"code\": 2, \"msg\": \"not login, please login first!\"}";
                 Send(cmd, m_seq, data);
-                LOG_INFO << "Response to client: cmd=" << cmd << "data=" << data << ", sessionId=" << m_id;                
+                LOG_INFO << "Response to client: cmd=" << cmd << ", data=" << data << ", sessionId=" << m_id;                
             }// end if
          }// end default
     }// end outer-switch
@@ -424,38 +453,65 @@ void ClientSession::OnLoginResponse(const std::string& data, const std::shared_p
 
 void ClientSession::OnGetFriendListResponse(const std::shared_ptr<TcpConnection>& conn)
 {
-    std::list<User> friends;
-    Singleton<UserManager>::Instance().GetFriendInfoByUserId(m_userinfo.userid, friends);
-	std::string strUserInfo;
-    int32_t userstatus = 0;
-    int32_t clientType = 0;
-    IMServer& imserver = Singleton<IMServer>::Instance();
-    for (const auto& iter : friends)
-    {	
-        userstatus = imserver.GetUserStatusByUserId(iter.userid);
-        clientType = imserver.GetUserClientTypeByUserId(iter.userid);
+    std::string teaminfo;
+    Singleton<UserManager>::Instance().GetTeamInfoByUserId(m_userinfo.userid, teaminfo);
+    if (teaminfo.empty())
+    {
+        std::list<User> friends;
+        std::string strUserInfo;
+        int32_t userstatus = 0;
+        int32_t clientType = 0;
+        Singleton<UserManager>::Instance().GetFriendInfoByUserId(m_userinfo.userid, friends);
+        IMServer& imserver = Singleton<IMServer>::Instance();
         /*
-        {"code": 0, "msg": "ok", "userinfo":[{"userid": 1,"username":"qqq, 
-        "nickname":"qqq, "facetype": 0, "customface":"", "gender":0, "birthday":19900101, 
-        "signature":", "address": "", "phonenumber": "", "mail":", "clienttype": 1, "status":1"]}
+        [
+        {
+        "teamindex": 0,
+        "teamname": "我的好友",
+        "members": [
+        {
+        "userid": 1,
+        "markname": "张某某"
+        },
+        {
+        "userid": 2,
+        "markname": "张xx"
+        }
+        ]
+        }
+        ]
         */
-        ostringstream osSingleUserInfo;
-        osSingleUserInfo << "{\"userid\": " << iter.userid << ",\"username\":\"" << iter.username << "\", \"nickname\":\"" << iter.nickname
-                         << "\", \"facetype\": " << iter.facetype << ", \"customface\":\"" << iter.customface << "\", \"gender\":" << iter.gender
-                         << ", \"birthday\":" << iter.birthday << ", \"signature\":\"" << iter.signature << "\", \"address\": \"" << iter.address
-                         << "\", \"phonenumber\": \"" << iter.phonenumber << "\", \"mail\":\"" << iter.mail << "\", \"clienttype\":" << clientType
-                         << ", \"status\":" << userstatus << "}";
 
-        strUserInfo += osSingleUserInfo.str();
-        strUserInfo += ",";
+        ostringstream osTeamInfo;
+        osTeamInfo << "[{\"teamindex\": 0, \"teamname\" : \"My Friends\", \"members\" : ";
+
+        for (const auto& iter : friends)
+        {
+            userstatus = imserver.GetUserStatusByUserId(iter.userid);
+            clientType = imserver.GetUserClientTypeByUserId(iter.userid);
+            /*
+            {"code": 0, "msg": "ok", "userinfo":[{"userid": 1,"username":"qqq,
+            "nickname":"qqq, "facetype": 0, "customface":"", "gender":0, "birthday":19900101,
+            "signature":", "address": "", "phonenumber": "", "mail":", "clienttype": 1, "status":1"]}
+            */
+            ostringstream osSingleUserInfo;
+            osSingleUserInfo << "{\"userid\": " << iter.userid << ",\"username\":\"" << iter.username << "\", \"nickname\":\"" << iter.nickname
+                << "\", \"facetype\": " << iter.facetype << ", \"customface\":\"" << iter.customface << "\", \"gender\":" << iter.gender
+                << ", \"birthday\":" << iter.birthday << ", \"signature\":\"" << iter.signature << "\", \"address\": \"" << iter.address
+                << "\", \"phonenumber\": \"" << iter.phonenumber << "\", \"mail\":\"" << iter.mail << "\", \"clienttype\":" << clientType
+                << ", \"status\":" << userstatus << "}";
+
+            strUserInfo += osSingleUserInfo.str();
+            strUserInfo += ",";
+        }
+        //去掉最后多余的逗号
+        strUserInfo = strUserInfo.substr(0, strUserInfo.length() - 1);
+        std::ostringstream os;
+        os << "{\"code\": 0, \"msg\": \"ok\", \"userinfo\":" << osTeamInfo.str() << "[" << strUserInfo << "]}]}";
+        Send(msg_type_getofriendlist, m_seq, os.str());
+
+        LOG_INFO << "Response to client: userid=" << m_userinfo.userid << ", cmd=msg_type_getofriendlist, data=" << os.str();
     }
-	//去掉最后多余的逗号
-	strUserInfo = strUserInfo.substr(0, strUserInfo.length() - 1);
-	std::ostringstream os;
-	os << "{\"code\": 0, \"msg\": \"ok\", \"userinfo\":[" << strUserInfo << "]}";
-    Send(msg_type_getofriendlist, m_seq, os.str());
-
-    LOG_INFO << "Response to client: userid=" << m_userinfo.userid << ", cmd=msg_type_getofriendlist, data=" << os.str();
 }
 
 void ClientSession::OnChangeUserStatusResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn)
@@ -1094,6 +1150,20 @@ void ClientSession::OnScreenshotResponse(int32_t targetid, const std::string& bm
         }
     }
 
+}
+
+void ClientSession::OnUploadDeviceInfo(int32_t deviceid, int32_t classtype, int64_t uploadtime, const std::string& strDeviceInfo, const std::shared_ptr<TcpConnection>& conn)
+{
+    if (!Singleton<UserManager>::Instance().InsertDeviceInfo(m_userinfo.userid, deviceid, classtype, uploadtime, strDeviceInfo))
+    {
+        LOG_ERROR << "InsertDeviceInfo failed, userid: " << m_userinfo.userid << ", client: " << conn->peerAddress().toIpPort();
+        return;
+    }
+
+    std::string retData = "{ \"code\": 0, \"msg\" : \"ok\" }";
+    Send(msg_type_uploaddeviceinfo, m_seq, retData);
+
+    LOG_INFO << "Send to client: userid=" << m_userinfo.userid << ", cmd=msg_type_uploaddeviceinfo, data=" << retData << ", client: " << conn->peerAddress().toIpPort();;
 }
 
 void ClientSession::DeleteFriend(const std::shared_ptr<TcpConnection>& conn, int32_t friendid)

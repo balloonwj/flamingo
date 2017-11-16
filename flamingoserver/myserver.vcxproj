@@ -77,7 +77,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="base\asynclogging.cpp" />
-    <ClCompile Include="base\ConfigFileReader - 副本.cpp" />
     <ClCompile Include="base\ConfigFileReader.cpp" />
     <ClCompile Include="base\countdownlatch.cpp" />
     <ClCompile Include="base\fileutil.cpp" />
@@ -129,7 +128,6 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="base\asynclogging.h" />
-    <ClInclude Include="base\ConfigFileReader - 副本.h" />
     <ClInclude Include="base\ConfigFileReader.h" />
     <ClInclude Include="base\countdownlatch.h" />
     <ClInclude Include="base\fileutil.h" />

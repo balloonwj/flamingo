@@ -312,6 +312,8 @@ long CFileTaskThread::UploadFile(PCTSTR pszFileName, HWND hwndReflection, HANDLE
         DWORD dwFileRead;
         if (!::ReadFile(hFile, buffer.GetBuffer(), (DWORD)eachfilesize, &dwFileRead, NULL) || eachfilesize != dwFileRead)
             break;
+
+        AtlTrace("eachfilesize = %d", eachfilesize);
         string filedata;
         filedata.append(buffer.GetBuffer(), buffer.GetSize());
         writeStream.WriteString(filedata);
@@ -328,7 +330,7 @@ long CFileTaskThread::UploadFile(PCTSTR pszFileName, HWND hwndReflection, HANDLE
         //AtlTrace(_T("nFileSize:%d\n"), nFileSize);
         //nTotalSent*100可能会超出long的范围，故先临时转换成__int64
         pFileProgress->nPercent = (long)((__int64)offsetX* 100 / nFileSize);
-        AtlTrace(_T("pFileProgress->nPercent:%d, offsetX:%lld, nFilesize: %lld\n"), pFileProgress->nPercent, offsetX, nFileSize);
+        AtlTrace(_T("pFileProgress->nPercent:%d, eachfilesize=%lld, offsetX:%lld, nFilesize: %lld\n"), pFileProgress->nPercent, eachfilesize, offsetX, nFileSize);
         _tcscpy_s(pFileProgress->szDestPath, ARRAYSIZE(pFileProgress->szDestPath), pszFileName);
         ::PostMessage(hwndReflection, FMG_MSG_SEND_FILE_PROGRESS, 0, (LPARAM)pFileProgress);
 

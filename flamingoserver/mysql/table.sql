@@ -18,11 +18,13 @@ CREATE TABLE IF NOT EXISTS  t_user  (
 		 f_owner_id  bigint(20) DEFAULT 0 COMMENT '群账号群主userid',
          f_remark  varchar(64) DEFAULT NULL COMMENT '备注',
          f_update_time  timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-                
+         f_teaminfo blob DEFAULT NULL COMMENT '好友分组信息',       
          PRIMARY KEY ( f_user_id ),
 		 INDEX f_user_id (f_user_id),
          KEY  f_id  ( f_id )
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8
+
+// alter table t_user add f_teaminfo blob default null comment "好友分组信息";
 
 //用户关系表
 //为了避免冗余，一定要保证f_user_id1小于f_user_id2
@@ -47,3 +49,17 @@ CREATE TABLE IF NOT EXISTS  t_chatmsg  (
          PRIMARY KEY ( f_id ),
          KEY  f_id  ( f_id )
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8
+
+//设备信息表
+CREATE TABLE `t_device` (  
+  `f_id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+  `f_user_id` bigint(20) NOT NULL COMMENT '用户ID',
+  `f_deviceid` bigint(20) NOT NULL COMMENT '设备id',
+  `f_classtype` bigint(20) NOT NULL COMMENT '信息类别',
+  `f_deviceinfo` BLOB NOT NULL COMMENT '设备具体信息内容',
+  `f_upload_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '上传时间',
+  `f_create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `f_remark` varchar(64) DEFAULT NULL COMMENT '备注', 
+  PRIMARY KEY (`f_id`),
+  KEY `f_id` (`f_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=181 DEFAULT CHARSET=utf8

@@ -37,4 +37,5 @@ private:
     int64_t           m_currentDownloadFileOffset{};    //当前在正下载的文件的偏移量
     int64_t           m_currentDownloadFileSize{};      //当前在正下载的文件的大小(下载完成以后最好置0)
     std::string       m_strFileBaseDir;                 //文件目录
+    bool              m_bFileUploading;                 //是否处于正在上传文件的过程中
 };

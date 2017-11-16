@@ -672,8 +672,10 @@ void CFileTransferCtrl::DrawItem(HDC hDC, size_t nIndex)
 	if (rcFileDesc.right > rcItem.right - 10)
 		rcFileDesc.right = rcItem.right - 10;
 
+    int nOldMode = ::SetBkMode(hDC, TRANSPARENT);
 	::SetTextColor(hDC, RGB(0, 0, 0));
 	::DrawText(hDC, strFileDesc, nFileDescLength, &rcFileDesc, nFormat);
+    ::SetBkMode(hDC, nOldMode);
 	
 
 	//»­½ø¶ÈÌõ

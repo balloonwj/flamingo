@@ -23,7 +23,8 @@ FileSession::FileSession(const std::shared_ptr<TcpConnection>& conn, const char*
 TcpSession(conn), 
 m_id(0),
 m_seq(0),
-m_strFileBaseDir(filebasedir)
+m_strFileBaseDir(filebasedir),
+m_bFileUploading(false)
 {
 }
 
@@ -162,8 +163,8 @@ bool FileSession::OnUploadFileResponse(const std::string& filemd5, int64_t offse
         return false;
     }
      
-    //服务器上已经存在该文件，直接返回
-    if (Singleton<FileManager>::Instance().IsFileExsit(filemd5.c_str()))
+    //服务器上已经存在该文件，直接返回(如果该文件是处于打开状态说明处于正在上传的状态)
+    if (Singleton<FileManager>::Instance().IsFileExsit(filemd5.c_str()) && !m_bFileUploading)
     {
         offset = filesize;      
         string dummyfiledata;      
@@ -189,20 +190,37 @@ bool FileSession::OnUploadFileResponse(const std::string& filemd5, int64_t offse
             LOG_ERROR << "fopen file error, filemd5=" << filemd5 << ", client:" << conn->peerAddress().toIpPort();
             return false;
         }
+
+        //标识该文件正在上传中
+        m_bFileUploading = true;
     }
     else
     {
         if (m_fp == NULL)
         {
+            ResetFile();
             LOG_ERROR << "file pointer should not be null, filemd5=" << filemd5 << ", offset=" << offset << ", client:" << conn->peerAddress().toIpPort();
             return false;
         }
     }
 
-    fseek(m_fp, offset, SEEK_SET);
+    if (fseek(m_fp, offset, SEEK_SET) == -1)
+    {
+        LOG_ERROR << "fseek error, filemd5: " << filemd5
+                << ", errno: " << errno << ", errinfo: " << strerror(errno)
+                << ", filedata.length(): " << filedata.length()
+                << ", m_fp: " << m_fp
+                << ", buffer size is 512*1024"
+                << ", client:" << conn->peerAddress().toIpPort();
+
+        ResetFile();
+        return false;
+    }
+
     if (fwrite(filedata.c_str(), filedata.length(), 1, m_fp) != 1)
     {
-		LOG_ERROR << "fwrite error, filemd5: " << filemd5
+        ResetFile();
+        LOG_ERROR << "fwrite error, filemd5: " << filemd5
 					<< ", errno: " << errno << ", errinfo: " << strerror(errno)
 					<< ", filedata.length(): " << filedata.length()
 					<< ", m_fp: " << m_fp
@@ -229,6 +247,7 @@ bool FileSession::OnUploadFileResponse(const std::string& filemd5, int64_t offse
              << errorcode << ", filemd5: " << filemd5
              << ", offset: " << offset
              << ", filesize: " << filesize
+             << ", upload percent: " << (offset * 100 / filesize) << "%"
              << ", client:" << conn->peerAddress().toIpPort();
 
     return true;
@@ -319,6 +338,7 @@ bool FileSession::OnDownloadFileResponse(const std::string& filemd5, const std::
              << ", offset: " << sendoffset
              << ", filesize: " << m_currentDownloadFileSize
              << ", filedataLength: " << filedata.length()
+             << ", download percent: " << (sendoffset * 100 / m_currentDownloadFileSize) << "%"
              << ", client:" << conn->peerAddress().toIpPort();
 
     //文件下载成功,重置文件状态
@@ -336,5 +356,6 @@ void FileSession::ResetFile()
         m_currentDownloadFileOffset = 0;
         m_currentDownloadFileSize = 0;
 		m_fp = NULL;
+        m_bFileUploading = false;
     }
 }

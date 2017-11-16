@@ -127,7 +127,7 @@ private:
 	BOOL HandleMessage(const std::string& strMsg);
     BOOL HandleRegisterMessage(const std::string& strMsg);
     BOOL HandleLoginMessage(const std::string& strMsg);
-    BOOL HandleUserBasicInfo(const std::string& strMsg);
+    BOOL HandleFriendListInfo(const std::string& strMsg);
     BOOL HandleGroupBasicInfo(const std::string& strMsg);
     BOOL HandleFindFriendMessage(const std::string& strMsg);
     BOOL HandleUserStatusNotifyMessage(int targetId, const std::string& strMsg);

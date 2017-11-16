@@ -92,6 +92,22 @@ CMysqlManager::CMysqlManager(void)
 		m_vecTableInfo.push_back(chat);
 	}
 
+    {
+        STableInfo device;
+        device.m_strName = "t_device";
+        device.m_mapField["f_id"] = { "f_id", "bigint(20) NOT NULL AUTO_INCREMENT COMMENT '自增ID'", "bigint(20)" };
+        device.m_mapField["f_userid"] = { "f_userid", "bigint(20) NOT NULL COMMENT '用户id'", "bigint(20)" };
+        device.m_mapField["f_deviceid"] = { "f_deviceid", "bigint(20) NOT NULL COMMENT '设备id'", "bigint(20)" };
+        device.m_mapField["f_classtype"] = { "f_classtype", "bigint(20) NOT NULL COMMENT '信息类别'", "int(20)" };
+        device.m_mapField["f_deviceinfo"] = { "f_deviceinfo", "BLOB NOT NULL COMMENT '设备具体信息内容'", "BLOB" };
+        device.m_mapField["f_upload_time"] = { "f_upload_time", "timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '上传时间'", "timestamp" };
+        device.m_mapField["f_create_time"] = { "f_create_time", "timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'", "timestamp" };
+        device.m_mapField["f_remark"] = { "f_remark", "varchar(64) NULL COMMENT '备注'", "varchar(64)" };
+
+        device.m_strKeyString = "PRIMARY KEY (f_id), INDEX f_id (f_id)";
+        m_vecTableInfo.push_back(device);
+    }
+
 	//// 3. chatmsg 
 	//{
 	//	STableInfo msg;

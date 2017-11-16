@@ -7,7 +7,7 @@
 #include "FileMsg.h"
 #include "TcpSession.h"
 
-TcpSession::TcpSession(const std::shared_ptr<TcpConnection>& conn) : conn_(conn)
+TcpSession::TcpSession(const std::weak_ptr<TcpConnection>& tmpconn) : tmpConn_(tmpconn)
 {
     
 }
@@ -41,10 +41,18 @@ void TcpSession::SendPackage(const char* body, int64_t bodylength)
     strPackageData.append(body, bodylength);
 
     //TODO: 这些Session和connection对象的生命周期要好好梳理一下
-    if (conn_)
+    if (tmpConn_.expired())
+    {
+        //FIXME: 出现这种问题需要排查
+        LOG_ERROR << "Tcp connection is destroyed , but why TcpSession is still alive ?";
+        return;
+    }
+
+    std::shared_ptr<TcpConnection> conn = tmpConn_.lock();
+    if (conn)
     {
         //LOG_INFO << "Send data, length:" << length;
         //LOG_DEBUG_BIN((unsigned char*)p, length);
-        conn_->send(strPackageData.c_str(), strPackageData.length());
+        conn->send(strPackageData.c_str(), strPackageData.length());
     }
 }

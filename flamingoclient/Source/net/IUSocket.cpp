@@ -1047,6 +1047,8 @@ bool CIUSocket::Login(const char* pszUser, const char* pszPassword, int nClientT
 
 bool CIUSocket::SendData(const char* pBuffer, int nBuffSize, int nTimeout)
 {
+    //TODO：这个地方可以先加个select判断下socket是否可写
+
     int64_t nStartTime = time(NULL);
     
     int nSentBytes = 0;

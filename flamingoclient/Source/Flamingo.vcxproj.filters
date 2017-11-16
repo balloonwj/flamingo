@@ -339,6 +339,9 @@
     <ClCompile Include="BuddyInfoFloatWnd.cpp">
       <Filter>UI</Filter>
     </ClCompile>
+    <ClCompile Include="PerformanceCounter.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CheckNetworkStatusTask.h">
@@ -685,6 +688,9 @@
     </ClInclude>
     <ClInclude Include="TrayIcon.h">
       <Filter>Tasks</Filter>
+    </ClInclude>
+    <ClInclude Include="PerformanceCounter.h">
+      <Filter>Utils</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

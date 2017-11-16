@@ -34,6 +34,7 @@
 #include "ChatDlgCommon.h"
 #include "EncodingUtil.h"
 #include "UIText.h"
+#include "PerformanceCounter.h"
 
 #pragma comment(lib, "winmm.lib")
 
@@ -1142,7 +1143,14 @@ BOOL CMainDlg::InitUI()
 	m_btnMail.SetIconPic(_T("MidToolBar\\aio_quickbar_msglog.png"));
 	m_btnMail.SubclassWindow(GetDlgItem(IDC_BTN_MAIL));
 	m_btnMail.MoveWindow(10, 100, 22, 20, TRUE);
-	m_btnMail.SetToolTipText(_T("打开我的博客"));
+
+    CIniFile iniFile;
+    CString strIniFile;
+    strIniFile.Format(_T("%sconfig\\flamingo.ini"), g_szHomePath);
+    TCHAR szMyWebsiteLinkTooltip[32];
+    memset(szMyWebsiteLinkTooltip, 0, sizeof(szMyWebsiteLinkTooltip));
+    iniFile.ReadString(_T("ui"), _T("mywebsitetooltiptext"), UI_DEFAULT_MYWEBSITE_TOOLTIP, szMyWebsiteLinkTooltip, ARRAYSIZE(szMyWebsiteLinkTooltip), strIniFile);
+    m_btnMail.SetToolTipText(szMyWebsiteLinkTooltip);
 	
 	//m_btnMsgBox.SetButtonType(SKIN_ICON_BUTTON);
 	//m_btnMsgBox.SetTransparent(TRUE, hDlgBgDC);
@@ -1634,7 +1642,14 @@ void CMainDlg::OnBtn_ShowSystemSettingDlg(UINT uNotifyCode, int nID, CWindow wnd
 
 void CMainDlg::OnBtn_OpenMail(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
-    ::ShellExecute(NULL, _T("open"), _T("http://blog.csdn.net/analogous_love"), NULL, NULL, SW_SHOWNORMAL);
+    CIniFile iniFile;
+    CString strIniFile;
+    strIniFile.Format(_T("%sconfig\\flamingo.ini"), g_szHomePath);
+    TCHAR szMyWebsiteLink[512];
+    memset(szMyWebsiteLink, 0, sizeof(szMyWebsiteLink));
+    iniFile.ReadString(_T("ui"), _T("mywebsitelink"), UI_DEFAULT_MYWEBSITE, szMyWebsiteLink, ARRAYSIZE(szMyWebsiteLink), strIniFile);
+
+    ::ShellExecute(NULL, _T("open"), szMyWebsiteLink, NULL, NULL, SW_SHOWNORMAL);
 }
 
 void CMainDlg::OnBtn_ModifyPassword(UINT uNotifyCode, int nID, CWindow wndCtl)
@@ -4675,11 +4690,13 @@ void CMainDlg::UpdateBuddyTreeCtrl(UINT uAccountID/*=0*/)
 				m_BuddyListCtrl.SetBuddyItemNickName(nTeamIndex, nIndex, lpBuddyInfo->m_strNickName.c_str());
 				m_BuddyListCtrl.SetBuddyItemMarkName(nTeamIndex, nIndex, lpBuddyInfo->m_strMarkName.c_str());
 
-				LOG_INFO(_T("AccountID=%u, AccountName=%s, NickName=%s, MarkName=%s."), 
-							lpBuddyInfo->m_uUserID,
-							lpBuddyInfo->m_strAccount.c_str(),
-							lpBuddyInfo->m_strNickName.c_str(),
-							lpBuddyInfo->m_strMarkName.c_str());
+    //            BEGIN_PERFORMANCECOUNTER
+				//LOG_INFO(_T("AccountID=%u, AccountName=%s, NickName=%s, MarkName=%s."), 
+				//			lpBuddyInfo->m_uUserID,
+				//			lpBuddyInfo->m_strAccount.c_str(),
+				//			lpBuddyInfo->m_strNickName.c_str(),
+				//			lpBuddyInfo->m_strMarkName.c_str());
+    //            END_PERFORMANCECOUNTER
 				
 				if(nNameStyle == NAME_STYLE_SHOW_NICKNAME)
 				{

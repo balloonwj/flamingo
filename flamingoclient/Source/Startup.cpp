@@ -19,6 +19,7 @@
 #include "Utils.h"
 #include "IniFile.h"
 #include "UIText.h"
+#include "PerformanceCounter.h"
 
 CAppModule _Module;
 
@@ -77,11 +78,14 @@ int Run(LPTSTR /*lpstrCmdLine = NULL*/, int nCmdShow/* = SW_SHOWDEFAULT*/)
 	return nRet;
 }
 
-void ClearExpiredLog()
+void ClearExpiredLog(PCTSTR pszFileSuffixName)
 {    
+    if (pszFileSuffixName == NULL)
+        return;
+    
     WIN32_FIND_DATA win32FindData = { 0 };
     TCHAR szLogFilePath[MAX_PATH] = { 0 };
-    _stprintf_s(szLogFilePath, MAX_PATH, _T("%sLogs\\*.log"), g_szHomePath);
+    _stprintf_s(szLogFilePath, MAX_PATH, _T("%sLogs\\*.%s"), g_szHomePath, pszFileSuffixName);
     HANDLE hFindFile = ::FindFirstFile(szLogFilePath, &win32FindData);
     if (hFindFile == INVALID_HANDLE_VALUE)
         return;
@@ -142,6 +146,12 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
 	_stprintf_s(szLogFileName, MAX_PATH, _T("%s\\Logs\\%04d%02d%02d%02d%02d%02d.log"), g_szHomePath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
 	CIULog::Init(true, false, szLogFileName);
 
+    //初始化性能计数器
+    TCHAR szPerformanceFileName[MAX_PATH] = { 0 };
+    _stprintf_s(szPerformanceFileName, MAX_PATH, _T("%s\\Logs\\%04d%02d%02d%02d%02d%02d.perf"), g_szHomePath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+    CPerformanceCounter::Init(true, szPerformanceFileName);
+
+    //TODO: 统一到AppConfig类中去
     CIniFile iniFile;
     CString strIniFilePath(g_szHomePath);
     strIniFilePath += _T("config\\flamingo.ini");
@@ -152,7 +162,8 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
     if (bNeedClear)
     {
         //清理过期的日志文件
-        ClearExpiredLog();
+        ClearExpiredLog(_T("log"));
+        ClearExpiredLog(_T("perf"));
     }
 
     //日志级别

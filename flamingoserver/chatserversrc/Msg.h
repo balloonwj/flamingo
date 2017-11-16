@@ -23,7 +23,11 @@ enum msg_type
     msg_type_chat   = 1100,         //单聊消息
     msg_type_multichat,             //群发消息
     msg_type_kickuser,              //被踢下线
-    msg_type_screenshot             //屏幕截图
+    msg_type_screenshot,            //屏幕截图
+
+    //定制协议
+    msg_type_uploaddeviceinfo   = 2000, //上传设备信息
+    msg_type_downloaddeviceinfo = 2001  //拉取设备信息
 };
 
 #pragma pack(push, 1)
@@ -83,16 +87,87 @@ struct msg
 /*
     cmd = 1003, seq = 0
     cmd = 1003, seq = 0,  
-    {"code": 0, "msg": "ok", "userinfo":[{"userid": 2,"username":"qqq", 
-                                          "nickname":"qqq123", "facetype": 0, 
-                                          "customface":"466649b507cdf7443c4e88ba44611f0c", 
-                                          "gender":1, "birthday":19900101, "signature":"生活需要很多的力气呀。xx",
-                                          "address": "", "phonenumber": "", "mail":"", "clienttype": 1, 
-                                          "status":1},
-                                          {"userid": 3,"username":"hujing", "nickname":"hujingx", 
-                                          "facetype": 0, "customface":"", "gender":0, "birthday":19900101, 
-                                          "signature":"", "address": "", "phonenumber": "", "mail":"", 
-                                          "clienttype": 1, "status":0}]}
+    {
+    "code": 0,
+    "msg": "ok",
+    "userinfo": [
+        {
+            "teamindex": 1,
+            "teamname": "我的好友",
+            "members": [
+                {
+                    "userid": 2,
+                    "username": "qqq",
+                    "nickname": "qqq123",
+                    "facetype": 0,
+                    "customface": "466649b507cdf7443c4e88ba44611f0c",
+                    "gender": 1,
+                    "birthday": 19900101,
+                    "signature": "生活需要很多的力气呀。xx",
+                    "address": "",
+                    "phonenumber": "",
+                    "mail": "",
+                    "clienttype": 1,
+                    "status": 1,
+                    "markname": "qq测试号"
+                },
+                {
+                    "userid": 3,
+                    "username": "hujing",
+                    "nickname": "hujingx",
+                    "facetype": 0,
+                    "customface": "",
+                    "gender": 0,
+                    "birthday": 19900101,
+                    "signature": "",
+                    "address": "",
+                    "phonenumber": "",
+                    "mail": "",
+                    "clienttype": 1,
+                    "status": 0
+                }
+            ]
+        },
+        {
+            "teamindex": 2,
+            "teamname": "我的同学",
+            "members": [
+                {
+                    "userid": 4,
+                    "username": "qqq",
+                    "nickname": "qqq123",
+                    "facetype": 0,
+                    "customface": "466649b507cdf7443c4e88ba44611f0c",
+                    "gender": 1,
+                    "birthday": 19900101,
+                    "signature": "生活需要很多的力气呀。xx",
+                    "address": "",
+                    "phonenumber": "",
+                    "mail": "",
+                    "clienttype": 1,
+                    "status": 1
+                },
+                {
+                    "userid": 5,
+                    "username": "hujing",
+                    "nickname": "hujingx",
+                    "facetype": 0,
+                    "customface": "",
+                    "gender": 0,
+                    "birthday": 19900101,
+                    "signature": "",
+                    "address": "",
+                    "phonenumber": "",
+                    "mail": "",
+                    "clienttype": 1,
+                    "status": 0,
+                    "markname": "qq测试号"
+                }
+            ]
+        }
+    ]
+}
+    
 **/
 
 /** 
@@ -197,3 +272,15 @@ cmd = 1010, seq = 0, {"code":0, "msg": "ok", "groupid": 12345678,
     cmd = 1103, seq = 0, string: 位图头部信息， 位图信息，targetId
 **/
 
+////////////////////////
+//定制信息
+////////////////////////
+/* 上传设备信息
+    cmd = 2000, seq = 0, data(设备信息json), 设备id(int32)，信息类型classtype(int32), 上传时间(int64， UTC时间)
+    cmd = 2000, seq = 0, data: {"code": 0, "msg": "ok"}    
+**/
+
+/*
+    cmd = 2001, seq = 0, data(空)，设备id(int32)，信息类型classtype(int32), 上传时间(int64, UTC时间)
+    cmd = 2001, seq = 0, data: {具体的设备信息json}
+**/

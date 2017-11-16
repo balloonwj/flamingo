@@ -236,6 +236,11 @@ BOOL CFlamingoClient::DeleteFriend(UINT uAccountID)
 	return TRUE;
 }
 
+bool CFlamingoClient::AddNewTeam(PCTSTR pszNewTeamName)
+{
+    return false;
+}
+
 BOOL CFlamingoClient::UpdateLogonUserInfo(  PCTSTR pszNickName, 
 										 PCTSTR pszSignature, 
 										 UINT uGender, 
@@ -1038,116 +1043,132 @@ void CFlamingoClient::OnUpdateUserBasicInfo(UINT message, WPARAM wParam, LPARAM 
 		return;
 
     m_UserMgr.ClearUserInfo();
-    //TODO: 暂且先创建一个默认好友分组
-    CBuddyTeamInfo* pTeamInfo = new CBuddyTeamInfo();
-    pTeamInfo->m_nIndex = 0;
-    pTeamInfo->m_strName = _T("我的好友");
-    m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.push_back(pTeamInfo);
+    //没有好友，默认创建一个叫“我的好友”的默认好友分组
+    if (pResult->m_mapUserBasicInfo.empty())
+    {
+        CBuddyTeamInfo* pTeamInfo = new CBuddyTeamInfo();
+        pTeamInfo->m_nIndex = 0;
+        pTeamInfo->m_strName = _T("我的好友");
+        m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.push_back(pTeamInfo);
+    }
+    else
+    {
+        //TODO: 暂且先创建一个默认群分组
 
-    //TODO: 暂且先创建一个默认群分组
+        CBuddyInfo* pBuddyInfo = NULL;
+        TCHAR szAccountName[32] = { 0 };
+        TCHAR szNickName[32] = { 0 };
+        TCHAR szSignature[256] = { 0 };
+        TCHAR szPhoneNumber[32] = { 0 };
+        TCHAR szMail[32] = { 0 };
+        TCHAR szAddress[64] = { 0 };
 
-    CBuddyInfo* pBuddyInfo = NULL;
-    TCHAR szAccountName[32] = { 0 };
-    TCHAR szNickName[32] = { 0 };
-    TCHAR szSignature[256] = { 0 };
-    TCHAR szPhoneNumber[32] = { 0 };
-    TCHAR szMail[32] = { 0 };
-    TCHAR szAddress[64] = { 0 };
+        TCHAR szGroupAccount[32];
 
-    TCHAR szGroupAccount[32];
-
-    CGroupInfo* pGroupInfo = NULL;
-    for (auto& iter : pResult->m_listUserBasicInfo)
-    {       
-        EncodeUtil::Utf8ToUnicode(iter->szAccountName, szAccountName, ARRAYSIZE(szAccountName));
-        EncodeUtil::Utf8ToUnicode(iter->szNickName, szNickName, ARRAYSIZE(szNickName));
-        EncodeUtil::Utf8ToUnicode(iter->szSignature, szSignature, ARRAYSIZE(szSignature));
-        EncodeUtil::Utf8ToUnicode(iter->szPhoneNumber, szPhoneNumber, ARRAYSIZE(szPhoneNumber));
-        EncodeUtil::Utf8ToUnicode(iter->szMail, szMail, ARRAYSIZE(szMail));
-        EncodeUtil::Utf8ToUnicode(iter->szAddress, szAddress, ARRAYSIZE(szAddress));
+        CBuddyTeamInfo* pTeamInfo = NULL;
+        CGroupInfo* pGroupInfo = NULL;
+        int nTeamIndex = 0;
+        for (const auto& iter : pResult->m_mapUserBasicInfo)
+        {       
+            pTeamInfo = new CBuddyTeamInfo();
+            pTeamInfo->m_nIndex = nTeamIndex;
+            pTeamInfo->m_strName = EncodeUtil::Utf8ToUnicode(iter.first);
+            m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.push_back(pTeamInfo);
+            
+            for (auto& iter2 : iter.second)
+            {       
+                EncodeUtil::Utf8ToUnicode(iter2->szAccountName, szAccountName, ARRAYSIZE(szAccountName));
+                EncodeUtil::Utf8ToUnicode(iter2->szNickName, szNickName, ARRAYSIZE(szNickName));
+                EncodeUtil::Utf8ToUnicode(iter2->szSignature, szSignature, ARRAYSIZE(szSignature));
+                EncodeUtil::Utf8ToUnicode(iter2->szPhoneNumber, szPhoneNumber, ARRAYSIZE(szPhoneNumber));
+                EncodeUtil::Utf8ToUnicode(iter2->szMail, szMail, ARRAYSIZE(szMail));
+                EncodeUtil::Utf8ToUnicode(iter2->szAddress, szAddress, ARRAYSIZE(szAddress));
         
-        if (iter->uAccountID < 0xFFFFFFF)
-        {
-            pBuddyInfo = new CBuddyInfo();
-            pBuddyInfo->m_uUserID = iter->uAccountID;
+                if (iter2->uAccountID < 0xFFFFFFF)
+                {
+                    pBuddyInfo = new CBuddyInfo();
+                    pBuddyInfo->m_uUserID = iter2->uAccountID;
 
-            pBuddyInfo->m_strAccount = szAccountName;
+                    pBuddyInfo->m_strAccount = szAccountName;
 
-            pBuddyInfo->m_strNickName = szNickName;
+                    pBuddyInfo->m_strNickName = szNickName;
 
-            pBuddyInfo->m_strSign = szSignature;
+                    pBuddyInfo->m_strSign = szSignature;
 
-            pBuddyInfo->m_strMobile = szPhoneNumber;
+                    pBuddyInfo->m_strMobile = szPhoneNumber;
 
-            pBuddyInfo->m_strEmail = szMail;
-            pBuddyInfo->m_strAddress = szAddress;
-            pBuddyInfo->m_nStatus = iter->nStatus;
-            pBuddyInfo->m_nClientType = iter->clientType;
-            pBuddyInfo->m_nFace = iter->uFaceID;
-            pBuddyInfo->m_nBirthday = iter->nBirthday;
-            pBuddyInfo->m_nGender = iter->nGender;
+                    pBuddyInfo->m_strEmail = szMail;
+                    pBuddyInfo->m_strAddress = szAddress;
+                    pBuddyInfo->m_nStatus = iter2->nStatus;
+                    pBuddyInfo->m_nClientType = iter2->clientType;
+                    pBuddyInfo->m_nFace = iter2->uFaceID;
+                    pBuddyInfo->m_nBirthday = iter2->nBirthday;
+                    pBuddyInfo->m_nGender = iter2->nGender;
 
-			pBuddyInfo->m_strCustomFaceName = iter->customFace;
-			if (!pBuddyInfo->m_strCustomFaceName.IsEmpty())
-			{
-				pBuddyInfo->m_bUseCustomFace = TRUE;
-				CString cachedUserThumb;
-				cachedUserThumb.Format(_T("%s%d.png"), m_UserMgr.GetCustomUserThumbFolder().c_str(), iter->uAccountID);
-				if (Hootina::CPath::IsFileExist(cachedUserThumb))
-				{
-					TCHAR szCachedThumbMd5[64] = { 0 };
-					GetFileMd5ValueW(cachedUserThumb, szCachedThumbMd5, ARRAYSIZE(szCachedThumbMd5));
+			        pBuddyInfo->m_strCustomFaceName = iter2->customFace;
+			        if (!pBuddyInfo->m_strCustomFaceName.IsEmpty())
+			        {
+				        pBuddyInfo->m_bUseCustomFace = TRUE;
+				        CString cachedUserThumb;
+				        cachedUserThumb.Format(_T("%s%d.png"), m_UserMgr.GetCustomUserThumbFolder().c_str(), iter2->uAccountID);
+				        if (Hootina::CPath::IsFileExist(cachedUserThumb))
+				        {
+					        TCHAR szCachedThumbMd5[64] = { 0 };
+					        GetFileMd5ValueW(cachedUserThumb, szCachedThumbMd5, ARRAYSIZE(szCachedThumbMd5));
 
-					TCHAR szThumbMd5Unicode[64] = { 0 };
-                    EncodeUtil::Utf8ToUnicode(iter->customFace, szThumbMd5Unicode, ARRAYSIZE(szThumbMd5Unicode));
-					if (_tcsncmp(szCachedThumbMd5, szThumbMd5Unicode, 32) == 0)
-					{
-						pBuddyInfo->m_bUseCustomFace = TRUE;
-						pBuddyInfo->m_bCustomFaceAvailable = TRUE;
-					}
-					//头像不存在，下载该头像
-					else
-					{
-						//下载头像
-						CFileItemRequest* pFileItem = new CFileItemRequest();
-						pFileItem->m_nFileType = FILE_ITEM_DOWNLOAD_USER_THUMB;
-						pFileItem->m_uAccountID = iter->uAccountID;
-						strcpy_s(pFileItem->m_szUtfFilePath, ARRAYSIZE(pFileItem->m_szUtfFilePath), iter->customFace);
-                        m_ImageTask.AddItem(pFileItem);
-					}
-				}
-				else
-				{
-					//下载头像
-					CFileItemRequest* pFileItem = new CFileItemRequest();
-					pFileItem->m_nFileType = FILE_ITEM_DOWNLOAD_USER_THUMB;
-					pFileItem->m_uAccountID = iter->uAccountID;
-					strcpy_s(pFileItem->m_szUtfFilePath, ARRAYSIZE(pFileItem->m_szUtfFilePath), iter->customFace);
-                    m_ImageTask.AddItem(pFileItem);
-				}
-			}
+					        TCHAR szThumbMd5Unicode[64] = { 0 };
+                            EncodeUtil::Utf8ToUnicode(iter2->customFace, szThumbMd5Unicode, ARRAYSIZE(szThumbMd5Unicode));
+					        if (_tcsncmp(szCachedThumbMd5, szThumbMd5Unicode, 32) == 0)
+					        {
+						        pBuddyInfo->m_bUseCustomFace = TRUE;
+						        pBuddyInfo->m_bCustomFaceAvailable = TRUE;
+					        }
+					        //头像不存在，下载该头像
+					        else
+					        {
+						        //下载头像
+						        CFileItemRequest* pFileItem = new CFileItemRequest();
+						        pFileItem->m_nFileType = FILE_ITEM_DOWNLOAD_USER_THUMB;
+						        pFileItem->m_uAccountID = iter2->uAccountID;
+						        strcpy_s(pFileItem->m_szUtfFilePath, ARRAYSIZE(pFileItem->m_szUtfFilePath), iter2->customFace);
+                                m_ImageTask.AddItem(pFileItem);
+					        }
+				        }
+				        else
+				        {
+					        //下载头像
+					        CFileItemRequest* pFileItem = new CFileItemRequest();
+					        pFileItem->m_nFileType = FILE_ITEM_DOWNLOAD_USER_THUMB;
+					        pFileItem->m_uAccountID = iter2->uAccountID;
+					        strcpy_s(pFileItem->m_szUtfFilePath, ARRAYSIZE(pFileItem->m_szUtfFilePath), iter2->customFace);
+                            m_ImageTask.AddItem(pFileItem);
+				        }
+			        }
 
-            pBuddyInfo->m_nTeamIndex = 0;
-            pTeamInfo->m_arrBuddyInfo.push_back(pBuddyInfo);
-        }
-        else
-        {
-            pGroupInfo = new CGroupInfo();
-            pGroupInfo->m_nGroupId = iter->uAccountID;
-            pGroupInfo->m_nGroupCode = iter->uAccountID;
-            pGroupInfo->m_strName = szNickName;
-            memset(szGroupAccount, 0, sizeof(szGroupAccount));
-            _stprintf_s(szGroupAccount, ARRAYSIZE(szGroupAccount), _T("%d"), iter->uAccountID);
-            pGroupInfo->m_strAccount = szGroupAccount;
+                    pBuddyInfo->m_nTeamIndex = 0;
+                    pTeamInfo->m_arrBuddyInfo.push_back(pBuddyInfo);
+                }
+                else
+                {
+                    pGroupInfo = new CGroupInfo();
+                    pGroupInfo->m_nGroupId = iter2->uAccountID;
+                    pGroupInfo->m_nGroupCode = iter2->uAccountID;
+                    pGroupInfo->m_strName = szNickName;
+                    memset(szGroupAccount, 0, sizeof(szGroupAccount));
+                    _stprintf_s(szGroupAccount, ARRAYSIZE(szGroupAccount), _T("%d"), iter2->uAccountID);
+                    pGroupInfo->m_strAccount = szGroupAccount;
 
-            m_UserMgr.m_GroupList.AddGroup(pGroupInfo);
+                    m_UserMgr.m_GroupList.AddGroup(pGroupInfo);
 
-            GetGroupMembers(iter->uAccountID);
-        }
+                    GetGroupMembers(iter2->uAccountID);
+                } 
 
-        DEL(iter);     
-    }       
-   
+                //TODO: 为啥不能直接DEL(iter2);
+                UserBasicInfo* p = iter2;
+                DEL(p);
+            }
+        }       
+   }
 
     delete pResult;
 

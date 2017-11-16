@@ -57,6 +57,9 @@ public:
 	BOOL AddFriend(UINT uAccountToAdd);
 	void ResponseAddFriendApply(UINT uAccountID, UINT uCmd);	//回应加好友请求任务
 	BOOL DeleteFriend(UINT uAccountID);							// 删除好友
+
+    bool AddNewTeam(PCTSTR pszNewTeamName);                     //添加新分组
+
 	BOOL UpdateLogonUserInfo(PCTSTR pszNickName, 
 							 PCTSTR pszSignature,
 							 UINT uGender,

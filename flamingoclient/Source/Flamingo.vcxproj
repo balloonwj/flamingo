@@ -189,6 +189,7 @@
     <ClCompile Include="net\IUSocket.cpp" />
     <ClCompile Include="net\protocolstream.cpp" />
     <ClCompile Include="Path.cpp" />
+    <ClCompile Include="PerformanceCounter.cpp" />
     <ClCompile Include="PicBarDlg.cpp" />
     <ClCompile Include="RecentListCtrl.cpp" />
     <ClCompile Include="RecvMsgThread.cpp" />
@@ -307,6 +308,7 @@
     <ClInclude Include="net\Msg.h" />
     <ClInclude Include="net\protocolstream.h" />
     <ClInclude Include="Path.h" />
+    <ClInclude Include="PerformanceCounter.h" />
     <ClInclude Include="PicBarDlg.h" />
     <ClInclude Include="RecentListCtrl.h" />
     <ClInclude Include="RecvMsgThread.h" />

@@ -110,7 +110,7 @@ void CMultiChatMemberSelectionDlg::InitBuddyList()
 		}
 	}
 	
-	hTreeItemRoot = m_treeBuddyList.InsertItem(_T("我的Flamingo群"), 0, 0, NULL, hTreeItemRoot);
+	hTreeItemRoot = m_treeBuddyList.InsertItem(_T("我的群组"), 0, 0, NULL, hTreeItemRoot);
 	m_treeBuddyList.SetItemData(hTreeItemRoot, (DWORD_PTR)(-1)); 
 	const std::vector<CGroupInfo*>& arrGroupInfo = m_pFMGClient->m_UserMgr.m_GroupList.m_arrGroupInfo;
 	nSize = arrGroupInfo.size();

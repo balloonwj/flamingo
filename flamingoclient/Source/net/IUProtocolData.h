@@ -3,6 +3,7 @@
 #pragma once
 #include <set>
 #include <list>
+#include <map>
 #include <stdint.h>
 
 //客户端类型
@@ -358,7 +359,8 @@ public:
 	~CUserBasicInfoResult();
 
 public:
-	std::list<UserBasicInfo*> m_listUserBasicInfo;
+    //key是分组的名字，value是该组好友的集合
+	std::map<std::string, std::list<UserBasicInfo*>> m_mapUserBasicInfo;
 };
 
 class CChangeUserStatusRequest : public CNetData
