@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    android:orientation="vertical" >
+
+    <RelativeLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bar_color" >
+
+        <TextView
+            android:id="@+id/tv_address_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:text="联系人"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/title_text_size" />
+
+        <ImageButton
+            android:id="@+id/btn_add"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentRight="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/btn_add_selector" />
+    </RelativeLayout>
+
+    <ScrollView
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent"
+        android:scrollbarStyle="outsideOverlay" >
+
+        <LinearLayout
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" >
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/search_bar_bg"
+                android:gravity="center" >
+
+                <EditText
+                    android:id="@+id/editText1"
+                    android:layout_width="fill_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/search_bar_edit_bg"
+                    android:drawableLeft="@drawable/search_bar_icon_normal"
+                    android:focusable="true"
+                    android:focusableInTouchMode="true"
+                    android:hint="搜索"
+                    android:maxLines="1"
+                    android:textColor="#000" >
+                </EditText>
+            </LinearLayout>
+
+            <RelativeLayout
+                android:id="@+id/rel_newfrd"
+                android:layout_width="match_parent"
+                android:layout_height="50.0dip"
+                android:background="@drawable/setting_item_selector"
+                android:paddingLeft="10dip" >
+
+                <ImageView
+                    android:id="@+id/img_photo"
+                    android:layout_width="45dip"
+                    android:layout_height="45dip"
+                    android:layout_centerVertical="true"
+                    android:src="@drawable/icon_qunliao" />
+
+                <TextView
+                    android:id="@+id/txt_name"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:layout_marginLeft="15dp"
+                    android:layout_toRightOf="@+id/img_photo"
+                    android:gravity="center_vertical"
+                    android:text="新的好友"
+                    android:textColor="@color/black"
+                    android:textSize="18sp" />
+
+                <RelativeLayout
+                    android:id="@+id/rl_newfriend"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignRight="@+id/img_photo"
+                    android:visibility="gone" >
+
+                    <ImageView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerInParent="true"
+                        android:background="@drawable/msg_number" />
+
+                    <TextView
+                        android:id="@+id/tv_friend_num"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_centerInParent="true"
+                        android:text="0"
+                        android:textColor="@android:color/white"
+                        android:textSize="10sp" />
+                </RelativeLayout>
+            </RelativeLayout>
+
+            <View
+                android:layout_width="fill_parent"
+                android:layout_height="1.0dip"
+                android:background="@color/black2" />
+
+            <RelativeLayout
+                android:id="@+id/rel_group"
+                android:layout_width="match_parent"
+                android:layout_height="50.0dip"
+                android:background="@drawable/setting_item_selector"
+                android:paddingLeft="10dip" >
+
+                <ImageView
+                    android:id="@+id/img_photos"
+                    android:layout_width="45dip"
+                    android:layout_height="45dip"
+                    android:layout_centerVertical="true"
+                    android:src="@drawable/group" />
+
+                <TextView
+                    android:id="@+id/txt_names"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:layout_marginLeft="15dp"
+                    android:layout_toRightOf="@+id/img_photos"
+                    android:gravity="center_vertical"
+                    android:text="群组"
+                    android:textColor="@color/black"
+                    android:textSize="18sp" />
+            </RelativeLayout>
+
+            <View
+                android:layout_width="fill_parent"
+                android:layout_height="1.0dip"
+                android:background="@color/black2" />
+
+            <RelativeLayout
+                android:layout_width="fill_parent"
+                android:layout_height="fill_parent"
+                android:layout_marginTop="10dp" >
+
+                <org.hootina.platform.widgets.FixedListView
+                    android:id="@+id/lv_friends"
+                    android:layout_width="fill_parent"
+                    android:layout_height="wrap_content"
+                    android:divider="@android:color/transparent"
+                    android:listSelector="@android:color/transparent" />
+            </RelativeLayout>
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>

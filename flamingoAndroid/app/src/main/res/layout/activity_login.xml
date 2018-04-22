@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white_pressed"
+    android:orientation="vertical" >
+
+    <RelativeLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bar_color" >
+
+        <TextView
+            android:id="@+id/tv_address_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:text="@string/login_activity_title"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/title_text_size" />
+
+        <ImageButton
+            android:id="@+id/btn_add"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentRight="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/btn_add_selector"
+            android:visibility="invisible" />
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:id="@+id/rl_server"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="15dp"
+        android:layout_marginRight="15dp"
+        android:layout_marginTop="15dp"
+        android:background="@drawable/preseed" >
+
+        <TextView
+            android:id="@+id/tv_server"
+            android:layout_width="wrap_content"
+            android:layout_height="45dp"
+            android:layout_centerInParent="true"
+            android:gravity="center"
+            android:text="@string/login_activity_srvsettings"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/title_text_size" />
+    </RelativeLayout>
+
+
+    <LinearLayout
+        android:id="@+id/ll_moble"
+        android:layout_width="match_parent"
+        android:layout_height="45dp"
+        android:layout_marginLeft="15dp"
+        android:layout_marginRight="15dp"
+        android:layout_marginTop="15dp"
+        android:background="@drawable/writepressed"
+        android:gravity="center_vertical"
+        android:orientation="horizontal" >
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="15dp"
+            android:text="  用户名: "
+            android:textColor="@color/dark_gray_text"
+            android:textSize="15sp" />
+
+        <EditText
+            android:id="@+id/_etUsername"
+            android:layout_width="0sp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@null"
+            android:hint="输入您的用户名"
+            android:inputType="none"
+            android:maxLength="11"
+            android:maxLines="1"
+            android:textColor="@color/dark_gray_text"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/ll_accounts"
+        android:layout_width="match_parent"
+        android:layout_height="45dp"
+        android:layout_marginLeft="15dp"
+        android:layout_marginRight="15dp"
+        android:layout_marginTop="15dp"
+        android:background="@drawable/writepressed"
+        android:gravity="center_vertical"
+        android:orientation="horizontal" >
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="15dp"
+            android:text="  密码   : "
+            android:textColor="@color/dark_gray_text"
+            android:textSize="15sp" />
+
+        <EditText
+            android:id="@+id/_etPassword"
+            android:layout_width="0sp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@null"
+            android:hint="请输入您的密码"
+            android:inputType="textPassword"
+            android:maxLength="11"
+            android:maxLines="1"
+            android:textColor="@color/dark_gray_text"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <RelativeLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="15dp"
+        android:orientation="horizontal" >
+
+        <Button
+            android:id="@+id/btn_login"
+            android:layout_width="100dp"
+            android:layout_height="45dp"
+            android:background="@drawable/btn_login"
+            android:gravity="center"
+            android:onClick="onClick"
+            android:text="登录"
+            android:layout_marginLeft="40dp"
+            android:layout_marginStart="40dp"
+            android:layout_alignParentTop="true"
+            android:layout_alignParentLeft="true"
+            android:layout_alignParentStart="true"/>
+
+        <Button
+            android:id="@+id/btn_register"
+            android:layout_width="100dp"
+            android:layout_height="45dp"
+            android:layout_marginRight="31dp"
+            android:background="@drawable/btn_login"
+            android:onClick="onClick"
+            android:text="注册"
+            android:layout_marginEnd="31dp"
+            android:layout_alignParentTop="true"
+            android:layout_alignParentRight="true"
+            android:layout_alignParentEnd="true"/>
+    </RelativeLayout>
+
+    <RelativeLayout
+        android:id="@+id/rl_progressbar"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="20dp"
+        android:layout_marginRight="20dp"
+        android:layout_marginTop="15dp"
+        android:background="@color/black1"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:visibility="invisible" >
+
+        <ProgressBar
+            android:id="@+id/progressBar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:max="100"
+            style="@android:style/Widget.ProgressBar.Horizontal"
+            android:layout_alignParentLeft="true"
+            android:layout_alignParentStart="true"/>
+
+    </RelativeLayout>
+
+    <TextView
+        android:id="@+id/tvProgressText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_centerVertical="true"
+        android:layout_marginLeft="26dp"
+        android:layout_toRightOf="@+id/probar"
+        android:textAlignment="center"
+        android:gravity="center"
+        android:text=""/>
+
+</LinearLayout>

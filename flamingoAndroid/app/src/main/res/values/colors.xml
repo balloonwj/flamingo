@@ -1,0 +1,27 @@
+<resources>
+
+    <color name="greeny">#00CB0D</color>
+    <color name="black1">#7A7E83</color>
+    <color name="black2">#ffeeeeee</color>
+    <color name="white">#ffffff</color>
+    <color name="half_white">#66ffffff</color>
+    <color name="black">#000000</color>
+    <color name="white_pressed">#e6e6e6</color>
+    <color name="background">#f4f4f4</color>
+    <color name="light_gray_text">#bcbcbc</color>
+    <color name="gray_text">#999999</color>
+    <color name="dark_gray_text">#424242</color>
+    <color name="red">#ff0000</color>
+    <color name="green">#61b96e</color>
+    <color name="line_bg">#cbcbcb</color>
+    <color name="trans">#00000000</color>
+    <color name="alertdialog_line">#c6c6c6</color>
+    <color name="actionsheet_blue">#037BFF</color>
+    <color name="actionsheet_red">#FD4A2E</color>
+    <color name="actionsheet_gray">#8F8F8F</color>
+    <color name="search_hint">#ffcccccc</color>
+    <color name="bar_color">#232325</color>
+    <color name="gray">#ff808080</color>
+    <color name="top_bar_normal_bg">#4ebcd3</color>
+
+</resources>

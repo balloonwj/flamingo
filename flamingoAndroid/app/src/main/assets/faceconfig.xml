@@ -1,0 +1,508 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<faceconfig
+    col="15"
+    item_height="28"
+    item_wfaceidth="28"
+    row="8"
+    zoom_height="84"
+    zoom_wfaceidth="84" >
+
+    <face
+        faceid="14"
+        file="face14.png"
+        tip="[微笑]" >
+    </face>
+
+    <face
+        faceid="1"
+        file="face1.png"
+        tip="[撇嘴]" >
+    </face>
+
+    <face
+        faceid="2"
+        file="face2.png"
+        tip="[色]" >
+    </face>
+
+    <face
+        faceid="3"
+        file="face3.png"
+        tip="[发呆]" >
+    </face>
+
+    <face
+        faceid="4"
+        file="face4.png"
+        tip="[得意]" >
+    </face>
+
+    <face
+        faceid="5"
+        file="face5.png"
+        tip="[流泪]" >
+    </face>
+
+    <face
+        faceid="6"
+        file="face6.png"
+        tip="[害羞]" >
+    </face>
+
+    <face
+        faceid="7"
+        file="face7.png"
+        tip="[闭嘴]" >
+    </face>
+
+    <face
+        faceid="8"
+        file="face8.png"
+        tip="[睡]" >
+    </face>
+
+    <face
+        faceid="9"
+        file="face9.png"
+        tip="[大哭]" >
+    </face>
+
+    <face
+        faceid="10"
+        file="face10.png"
+        tip="[尴尬]" >
+    </face>
+
+    <face
+        faceid="11"
+        file="face11.png"
+        tip="[发怒]" >
+    </face>
+
+    <face
+        faceid="12"
+        file="face12.png"
+        tip="[调皮]" >
+    </face>
+
+    <face
+        faceid="13"
+        file="face13.png"
+        tip="[呲牙]" >
+    </face>
+
+    <face
+        faceid="0"
+        file="face0.png"
+        tip="[惊讶]" >
+    </face>
+
+    <face
+        faceid="50"
+        file="face15.png"
+        tip="[难过]" >
+    </face>
+
+    <face
+        faceid="51"
+        file="face16.png"
+        tip="[酷]" >
+    </face>
+
+    <face
+        faceid="96"
+        file="face96.png"
+        tip="[冷汗]" >
+    </face>
+
+    <face
+        faceid="53"
+        file="face18.png"
+        tip="[抓狂]" >
+    </face>
+
+    <face
+        faceid="54"
+        file="face19.png"
+        tip="[吐]" >
+    </face>
+
+    <face
+        faceid="73"
+        file="face20.png"
+        tip="[偷笑]" >
+    </face>
+
+    <face
+        faceid="74"
+        file="face21.png"
+        tip="[可爱]" >
+    </face>
+
+    <face
+        faceid="75"
+        file="face22.png"
+        tip="[白眼]" >
+    </face>
+
+    <face
+        faceid="76"
+        file="face23.png"
+        tip="[傲慢]" >
+    </face>
+
+    <face
+        faceid="77"
+        file="face24.png"
+        tip="[饥饿]" >
+    </face>
+
+    <face
+        faceid="78"
+        file="face25.png"
+        tip="[困]" >
+    </face>
+
+    <face
+        faceid="55"
+        file="face26.png"
+        tip="[惊恐]" >
+    </face>
+
+    <face
+        faceid="56"
+        file="face27.png"
+        tip="[流汗]" >
+    </face>
+
+    <face
+        faceid="57"
+        file="face28.png"
+        tip="[憨笑]" >
+    </face>
+
+    <face
+        faceid="58"
+        file="face29.png"
+        tip="[大兵]" >
+    </face>
+
+    <face
+        faceid="79"
+        file="face30.png"
+        tip="[奋斗]" >
+    </face>
+
+    <face
+        faceid="80"
+        file="face31.png"
+        tip="[咒骂]" >
+    </face>
+
+    <face
+        faceid="81"
+        file="face32.png"
+        tip="[疑问]" >
+    </face>
+
+    <face
+        faceid="82"
+        file="face33.png"
+        tip="[嘘...]" >
+    </face>
+
+    <face
+        faceid="83"
+        file="face34.png"
+        tip="[晕]" >
+    </face>
+
+    <face
+        faceid="84"
+        file="face35.png"
+        tip="[折磨]" >
+    </face>
+
+    <face
+        faceid="85"
+        file="face36.png"
+        tip="[衰]" >
+    </face>
+
+    <face
+        faceid="87"
+        file="face38.png"
+        tip="[敲打]" >
+    </face>
+
+    <face
+        faceid="88"
+        file="face39.png"
+        tip="[再见]" >
+    </face>
+
+    <face
+        faceid="97"
+        file="face97.png"
+        tip="[擦汗]" >
+    </face>
+
+    <face
+        faceid="98"
+        file="face98.png"
+        tip="[抠鼻]" >
+    </face>
+
+    <face
+        faceid="99"
+        file="face99.png"
+        tip="[鼓掌]" >
+    </face>
+
+    <face
+        faceid="100"
+        file="face100.png"
+        tip="[糗大了]" >
+    </face>
+
+    <face
+        faceid="101"
+        file="face101.png"
+        tip="[坏笑]" >
+    </face>
+
+    <face
+        faceid="102"
+        file="face102.png"
+        tip="[左哼哼]" >
+    </face>
+
+    <face
+        faceid="103"
+        file="face103.png"
+        tip="[右哼哼]" >
+    </face>
+
+    <face
+        faceid="104"
+        file="face104.png"
+        tip="[哈欠]" >
+    </face>
+
+    <face
+        faceid="105"
+        file="face105.png"
+        tip="[鄙视]" >
+    </face>
+
+    <face
+        faceid="106"
+        file="face106.png"
+        tip="[委屈]" >
+    </face>
+
+    <face
+        faceid="107"
+        file="face107.png"
+        tip="[快哭了]" >
+    </face>
+
+    <face
+        faceid="108"
+        file="face108.png"
+        tip="[阴险]" >
+    </face>
+
+    <face
+        faceid="109"
+        file="face109.png"
+        tip="[亲亲]" >
+    </face>
+
+    <face
+        faceid="110"
+        file="face110.png"
+        tip="[吓]" >
+    </face>
+
+    <face
+        faceid="111"
+        file="face111.png"
+        tip="[可怜]" >
+    </face>
+
+    <face
+        faceid="112"
+        file="face112.png"
+        tip="[菜刀]" >
+    </face>
+
+    <face
+        faceid="32"
+        file="face89.png"
+        tip="[西瓜]" >
+    </face>
+
+    <face
+        faceid="113"
+        file="face113.png"
+        tip="[啤酒]" >
+    </face>
+
+    <face
+        faceid="114"
+        file="face114.png"
+        tip="[篮球]" >
+    </face>
+
+    <face
+        faceid="115"
+        file="face115.png"
+        tip="[乒乓]" >
+    </face>
+
+    <face
+        faceid="63"
+        file="face60.png"
+        tip="[咖啡]" >
+    </face>
+
+    <face
+        faceid="59"
+        file="face46.png"
+        tip="[猪头]" >
+    </face>
+
+    <face
+        faceid="33"
+        file="face63.png"
+        tip="[玫瑰]" >
+    </face>
+
+    <face
+        faceid="34"
+        file="face64.png"
+        tip="[凋谢]" >
+    </face>
+
+    <face
+        faceid="116"
+        file="face116.png"
+        tip="[示爱]" >
+    </face>
+
+    <face
+        faceid="36"
+        file="face66.png"
+        tip="[爱心]" >
+    </face>
+
+    <face
+        faceid="37"
+        file="face67.png"
+        tip="[心碎]" >
+    </face>
+
+    <face
+        faceid="38"
+        file="face53.png"
+        tip="[蛋糕]" >
+    </face>
+
+    <face
+        faceid="91"
+        file="face54.png"
+        tip="[闪电]" >
+    </face>
+
+    <face
+        faceid="92"
+        file="face55.png"
+        tip="[炸弹]" >
+    </face>
+
+    <face
+        faceid="93"
+        file="face56.png"
+        tip="[刀]" >
+    </face>
+
+    <face
+        faceid="29"
+        file="face57.png"
+        tip="[足球]" >
+    </face>
+
+    <face
+        faceid="62"
+        file="face49.png"
+        tip="[拥抱]" >
+    </face>
+
+    <face
+        faceid="46"
+        file="face76.png"
+        tip="[强]" >
+    </face>
+
+    <face
+        faceid="47"
+        file="face77.png"
+        tip="[弱]" >
+    </face>
+
+    <face
+        faceid="71"
+        file="face78.png"
+        tip="[握手]" >
+    </face>
+
+    <face
+        faceid="95"
+        file="face79.png"
+        tip="[胜利]" >
+    </face>
+
+    <face
+        faceid="118"
+        file="face118.png"
+        tip="[抱拳]" >
+    </face>
+
+    <face
+        faceid="119"
+        file="face119.png"
+        tip="[勾引]" >
+    </face>
+
+    <face
+        faceid="120"
+        file="face120.png"
+        tip="[拳头]" >
+    </face>
+
+    <face
+        faceid="121"
+        file="face121.png"
+        tip="[差劲]" >
+    </face>
+
+    <face
+        faceid="122"
+        file="face122.png"
+        tip="[爱你]" >
+    </face>
+
+    <face
+        faceid="123"
+        file="face123.png"
+        tip="[NO]" >
+    </face>
+
+    <face
+        faceid="124"
+        file="face124.png"
+        tip="[OK]" >
+    </face>
+
+</faceconfig>

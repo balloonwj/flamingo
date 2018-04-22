@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    android:orientation="vertical" >
+
+    <RelativeLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bar_color" >
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:background="@drawable/btn_back_selector"
+            android:onClick="onClick" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:text="设置"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/title_text_size" />
+    </RelativeLayout>
+
+    <LinearLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical" >
+
+        <TextView
+            android:id="@+id/txt_modifypass"
+            style="@style/TxtTitle"
+            android:layout_width="fill_parent"
+            android:layout_height="50dp"
+            android:background="@drawable/setting_item_selector"
+            android:drawableRight="@drawable/right"
+            android:gravity="center_vertical"
+            android:paddingLeft="16dp"
+            android:paddingRight="10dp"
+            android:text="修改密码"
+            android:textSize="16sp" />
+
+        <View
+            android:layout_width="fill_parent"
+            android:layout_height="1.0dip"
+            android:background="@color/black2" />
+
+        <TextView
+            android:id="@+id/txt_aboutus"
+            style="@style/TxtTitle"
+            android:layout_width="fill_parent"
+            android:layout_height="50dp"
+            android:background="@drawable/setting_item_selector"
+            android:drawableRight="@drawable/right"
+            android:gravity="center_vertical"
+            android:paddingLeft="16dp"
+            android:paddingRight="10dp"
+            android:text="关于Flamingo"
+            android:textSize="16sp" />
+
+        <View
+            android:layout_width="fill_parent"
+            android:layout_height="1.0dip"
+            android:background="@color/black2" />
+
+        <LinearLayout
+            android:layout_width="fill_parent"
+            android:layout_height="80.0dip"
+            android:layout_marginTop="100dp"
+            android:gravity="center"
+            android:padding="20.0dip" >
+
+            <Button
+                android:id="@+id/btn_endsession"
+                android:layout_width="fill_parent"
+                android:layout_height="40.0dip"
+                android:background="@drawable/btn_bg_red2"
+                android:padding="10.0dip"
+                android:text="退出账号"
+                android:textColor="@color/white" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none" >
+    </ScrollView>
+
+</LinearLayout>

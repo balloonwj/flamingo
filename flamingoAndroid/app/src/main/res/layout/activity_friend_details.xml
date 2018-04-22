@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    android:orientation="vertical" >
+
+    <RelativeLayout
+        android:id="@+id/top_bar"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:background="#232325" >
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:background="@drawable/btn_back_selector"
+            android:onClick="onClick" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:text="详细资料"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/title_text_size" />
+        <Button
+            android:id="@+id/btn_detail"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentRight="true"
+            android:layout_centerVertical="true"
+             android:onClick="onClick"
+            android:background="@drawable/detail" />
+    </RelativeLayout>
+
+    <View
+        android:layout_width="fill_parent"
+        android:layout_height="1.0dip"
+        android:layout_marginTop="15dp"
+        android:background="@color/black2" />
+
+    <RelativeLayout
+        android:id="@+id/view_user"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/setting_item_selector"
+        android:paddingBottom="5dp"
+        android:paddingTop="5dp" >
+
+        <org.hootina.platform.widgets.CircularImage
+            android:id="@+id/iv_head"
+            android:layout_width="80.0dip"
+            android:layout_height="80.0dip"
+            android:layout_marginLeft="10dp"
+            android:layout_marginRight="10dp"
+            android:src="@drawable/head" />
+
+        <TextView
+            android:id="@+id/tv_name"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:layout_toRightOf="@+id/iv_head"
+            android:text="XX"
+            android:textSize="18.0dip" />
+
+        <TextView
+            android:id="@+id/tv_num"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/tv_name"
+            android:layout_marginTop="10dp"
+            android:layout_toRightOf="@+id/iv_head"
+            android:text="账号：zhangy"
+            android:textSize="16dp" />
+    </RelativeLayout>
+
+    <View
+        android:layout_width="fill_parent"
+        android:layout_height="1.0dip"
+        android:background="@color/black2" />
+
+    <View
+        android:layout_width="fill_parent"
+        android:layout_height="1.0dip"
+        android:layout_marginTop="15dp"
+        android:background="@color/black2" />
+
+    <RelativeLayout
+        android:id="@+id/rl_name"
+        android:layout_width="fill_parent"
+        android:layout_height="50dp"
+        android:layout_centerVertical="true"
+        android:background="@drawable/setting_item_selector" >
+
+        <TextView
+            android:id="@+id/sign"
+            style="@style/TxtTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:paddingLeft="16dp"
+            android:paddingRight="16dp"
+            android:text="个性签名："
+            android:textSize="16sp" />
+
+        <TextView
+            android:id="@+id/tv_sign"
+            style="@style/TxtTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignBaseline="@+id/sign"
+            android:layout_alignBottom="@+id/sign"
+            android:layout_toRightOf="@+id/sign"
+            android:maxLines="1"
+            android:text=""
+            android:textSize="16sp" />
+    </RelativeLayout>
+
+    <View
+        android:layout_width="fill_parent"
+        android:layout_height="1.0dip"
+        android:background="@color/black2" />
+
+    <LinearLayout
+        android:layout_width="fill_parent"
+        android:layout_height="80.0dip"
+        android:gravity="center"
+        android:padding="20.0dip" >
+
+        <Button
+            android:id="@+id/btn_send"
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:background="@drawable/btn_bg_green"
+            android:padding="10.0dip"
+            android:onClick="onClick"
+            android:text="发消息"
+            android:textColor="@color/white" />
+    </LinearLayout>
+
+</LinearLayout>

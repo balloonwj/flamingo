@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:background="@color/white"
+    android:gravity="center_horizontal"
+    android:orientation="vertical" >
+
+    <RelativeLayout
+        android:id="@+id/top_bar"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:background="#232325" >
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:background="@drawable/btn_back_selector"
+            android:onClick="onClick" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:text="我的"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/title_text_size" />
+    </RelativeLayout>
+
+    <ScrollView
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:scrollbars="none" >
+
+        <LinearLayout
+            android:layout_width="fill_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" >
+
+            <View
+                android:layout_width="fill_parent"
+                android:layout_height="1.0dip"
+                android:background="@color/black2" />
+
+            <RelativeLayout
+                android:id="@+id/rl_head"
+                android:layout_width="fill_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:background="@drawable/setting_item_selector"
+                android:paddingBottom="5dp"
+                android:paddingTop="5dp" >
+
+                <TextView
+                    android:id="@+id/txt_album"
+                    style="@style/TxtTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="50dp"
+                    android:layout_marginTop="20dp"
+                    android:drawablePadding="10dp"
+                    android:gravity="center_vertical"
+                    android:paddingLeft="16dp"
+                    android:paddingRight="16dp"
+                    android:text="头像"
+                    android:textSize="16sp" />
+
+                <ImageView
+                    android:id="@+id/imageView1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentRight="true"
+                    android:layout_centerVertical="true"
+                    android:layout_marginRight="15dp"
+                    android:src="@drawable/right" />
+
+                <org.hootina.platform.widgets.CircularImage
+                    android:id="@+id/iv_head"
+                    android:layout_width="80.0dip"
+                    android:layout_height="80.0dip"
+                    android:layout_alignParentTop="true"
+                    android:layout_marginRight="22dp"
+                    android:layout_toLeftOf="@+id/imageView1"
+                    android:src="@drawable/head" />
+            </RelativeLayout>
+
+            <View
+                android:layout_width="fill_parent"
+                android:layout_height="1.0dip"
+                android:background="@color/black2" />
+
+            <RelativeLayout
+                android:id="@+id/rl_name"
+                android:layout_width="fill_parent"
+                android:layout_height="50dp"
+                android:layout_centerVertical="true"
+                android:background="@drawable/setting_item_selector" >
+
+                <TextView
+                    style="@style/TxtTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:paddingLeft="16dp"
+                    android:paddingRight="16dp"
+                    android:text="昵称："
+                    android:textSize="16sp" />
+
+                <ImageView
+                    android:id="@+id/tv_acrows"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentRight="true"
+                    android:layout_centerVertical="true"
+                    android:layout_marginRight="12dp"
+                    android:background="@drawable/right" />
+
+                <TextView
+                    android:id="@+id/tv_name"
+                    style="@style/TxtTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:layout_marginRight="25dp"
+                    android:layout_toLeftOf="@+id/tv_acrows"
+                    android:gravity="right"
+                    android:text="未设置"
+                    android:textSize="16sp" />
+            </RelativeLayout>
+
+            <View
+                android:layout_width="fill_parent"
+                android:layout_height="1.0dip"
+                android:background="@color/black2" />
+
+            <RelativeLayout
+                android:id="@+id/rl_number"
+                android:layout_width="fill_parent"
+                android:layout_height="50dp"
+                android:layout_centerVertical="true"
+                android:background="@drawable/setting_item_selector" >
+
+                <TextView
+                    style="@style/TxtTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:paddingLeft="16dp"
+                    android:paddingRight="16dp"
+                    android:text="账号:"
+                    android:textSize="16sp" />
+
+                <ImageView
+                    android:id="@+id/tv_acrowss"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentRight="true"
+                    android:layout_centerVertical="true"
+                    android:layout_marginRight="12dp"
+                    android:background="@drawable/right"
+                    android:visibility="invisible" />
+
+                <TextView
+                    android:id="@+id/tv_number"
+                    style="@style/TxtTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:layout_marginRight="25dp"
+                    android:layout_toLeftOf="@+id/tv_acrowss"
+                    android:gravity="right"
+                    android:text="未设置"
+                    android:textSize="16sp" />
+            </RelativeLayout>
+
+            <View
+                android:layout_width="fill_parent"
+                android:layout_height="1.0dip"
+                android:background="@color/black2" />
+
+            <RelativeLayout
+                android:id="@+id/rl_sign"
+                android:layout_width="fill_parent"
+                android:layout_height="50dp"
+                android:layout_centerVertical="true"
+                android:background="@drawable/setting_item_selector" >
+
+                <TextView
+                    android:id="@+id/texts"
+                    style="@style/TxtTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:paddingLeft="16dp"
+                    android:paddingRight="16dp"
+                    android:text="个性签名:"
+                    android:textSize="16sp" />
+
+                <ImageView
+                    android:id="@+id/tv_acrowsw"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_alignParentRight="true"
+                    android:layout_centerVertical="true"
+                    android:layout_marginRight="12dp"
+                    android:background="@drawable/right" />
+
+                <TextView
+                    android:id="@+id/tv_sign"
+                    style="@style/TxtTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_centerVertical="true"
+                    android:layout_marginRight="25dp"
+                    android:layout_toLeftOf="@+id/tv_acrowsw"
+                    android:layout_toRightOf="@+id/texts"
+                    android:maxLines="1"
+                    android:textSize="16sp" />
+            </RelativeLayout>
+
+            <View
+                android:layout_width="fill_parent"
+                android:layout_height="1.0dip"
+                android:background="@color/black2" />
+
+            <View
+                android:layout_width="fill_parent"
+                android:layout_height="1.0dip"
+                android:background="@color/black2" />
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>

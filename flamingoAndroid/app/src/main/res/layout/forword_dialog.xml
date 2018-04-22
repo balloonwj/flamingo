@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+ android:layout_gravity="center_horizontal"
+    android:background="@drawable/bg"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:padding="20dp" >
+    
+
+    <!-- 自定义dialog的布局，若要控制自定义dialog的长度和宽度只需设置android:layout_width和android:layout_height属性就好 -->
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal|center_vertical"
+        android:weightSum="10" >
+
+     
+      
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+           android:gravity="center_horizontal|center_vertical"
+            android:text="确定发送给"
+            android:textColor="@android:color/black"
+            android:textSize="18dp" />
+    </LinearLayout>
+
+  
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="20dp"
+        android:gravity="center_horizontal|center_vertical"
+        android:orientation="horizontal"
+        android:weightSum="10" >
+
+        <TextView
+            android:id="@+id/tv_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_weight="7"
+            android:gravity="center_horizontal|center_vertical"
+            android:text="手机号:"
+            android:textColor="@android:color/black"
+            android:textSize="18dp" />
+
+     
+    </LinearLayout>
+  <TextView
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginTop="5dp"
+        android:background="@android:color/black" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="30dp"
+        android:layout_marginTop="20dp"
+        android:gravity="center_horizontal|center_vertical"
+        android:orientation="horizontal"
+        android:weightSum="10" >
+
+        <Button
+            android:id="@+id/bt_send"
+            android:layout_width="fill_parent"
+            android:layout_height="40dp"
+            android:layout_marginLeft="10dp"
+            android:layout_marginRight="15dp"
+            android:layout_weight="5"
+             android:background="#ff0099cc"
+            android:gravity="center_horizontal|center_vertical"
+            android:text="发送" />
+
+        <Button
+            android:id="@+id/bt_cancel"
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:layout_marginLeft="15dp"
+            android:layout_marginRight="10dp"
+            android:layout_weight="5"
+           android:background="#ff0099cc"
+            android:gravity="center_horizontal|center_vertical"
+            android:text="取消" />
+    </LinearLayout>
+</LinearLayout>

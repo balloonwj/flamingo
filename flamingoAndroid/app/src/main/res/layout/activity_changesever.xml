@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white">
+    <!-- 标题栏 -->
+    <RelativeLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bar_color" >
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:background="@drawable/btn_back_selector"
+            android:onClick="onClick" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:text="选择服务器"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/title_text_size" />
+    </RelativeLayout>
+
+    <!-- 主体部分 -->
+    <TableLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content">
+        <TableRow>
+            <TextView
+                android:layout_height="wrap_content"
+                android:text="聊天服务器ip:" />
+            <EditText
+                android:id="@+id/chat_server_ip"
+                android:layout_height="wrap_content"
+                android:hint="120.55.94.78"
+                android:layout_weight="1" />
+        </TableRow>
+        <TableRow>
+            <TextView
+                android:layout_height="wrap_content"
+                android:text="聊天服务器端口:" />
+            <EditText
+                android:id="@+id/chat_server_port"
+                android:layout_height="wrap_content"
+                android:hint="20000"
+                android:layout_weight="1" />
+        </TableRow>
+        <TableRow>
+            <TextView
+                android:layout_height="wrap_content"
+                android:text="图片服务器ip:" />
+            <EditText
+                android:id="@+id/img_server_ip"
+                android:layout_height="wrap_content"
+                android:hint="120.55.94.78"
+                android:layout_weight="1" />
+        </TableRow>
+        <TableRow>
+            <TextView
+                android:layout_height="wrap_content"
+                android:text="图片服务器端口:" />
+            <EditText
+                android:id="@+id/img_server_port"
+                android:layout_height="wrap_content"
+                android:hint="20001"
+                android:layout_weight="1" />
+        </TableRow>
+        <TableRow>
+            <TextView
+                android:layout_height="wrap_content"
+                android:text="文件服务器ip:" />
+
+            <EditText
+                android:id="@+id/file_server_ip"
+                android:layout_height="wrap_content"
+                android:hint="120.55.94.78"
+                android:layout_weight="1" />
+        </TableRow>
+        <TableRow>
+            <TextView
+                android:layout_height="wrap_content"
+                android:text="文件服务器端口:" />
+
+            <EditText
+                android:id="@+id/file_server_port"
+                android:layout_height="wrap_content"
+                android:hint="20002"
+                android:layout_weight="1" />
+        </TableRow>
+    </TableLayout>
+
+    <RelativeLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="15dp"
+        android:orientation="horizontal" >
+
+        <Button
+            android:id="@+id/btn_ok"
+            android:layout_width="100dp"
+            android:layout_height="45dp"
+            android:background="@drawable/btn_login"
+            android:gravity="center"
+            android:onClick="onClick"
+            android:text="确定"
+            android:layout_marginLeft="40dp"
+            android:layout_marginStart="40dp"
+            android:layout_alignParentTop="true"
+            android:layout_alignParentLeft="true"
+            android:layout_alignParentStart="true"/>
+
+        <Button
+            android:id="@+id/btn_cancel"
+            android:layout_width="100dp"
+            android:layout_height="45dp"
+            android:layout_marginRight="31dp"
+            android:background="@drawable/btn_login"
+            android:onClick="onClick"
+            android:text="取消"
+            android:layout_marginEnd="31dp"
+            android:layout_alignParentTop="true"
+            android:layout_alignParentRight="true"
+            android:layout_alignParentEnd="true"/>
+    </RelativeLayout>
+
+</LinearLayout>

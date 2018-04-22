@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white_pressed"
+    android:orientation="vertical" >
+
+    <RelativeLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bar_color" >
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:background="@drawable/btn_back_selector"
+            android:onClick="onClick" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:text="修改密码"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/title_text_size" />
+    </RelativeLayout>
+<LinearLayout
+        android:id="@+id/ll_oldpass"
+        android:layout_width="match_parent"
+        android:layout_height="45dp"
+        android:layout_marginLeft="15dp"
+        android:layout_marginRight="15dp"
+        android:layout_marginTop="15dp"
+        android:background="@drawable/writepressed"
+        android:gravity="center_vertical"
+        android:orientation="horizontal" >
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="15dp"
+            android:text="  旧密码: "
+            android:textColor="@color/dark_gray_text"
+            android:textSize="15sp" />
+
+        <EditText
+            android:id="@+id/et_oldpass"
+            android:layout_width="0sp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@null"
+            android:hint="输入旧密码"
+           android:inputType="textPassword"
+            android:maxLength="11"
+            android:singleLine="true"
+            android:textColor="@color/dark_gray_text"
+            android:textSize="15sp" />
+    </LinearLayout>
+    <LinearLayout
+        android:id="@+id/ll_newpass"
+        android:layout_width="match_parent"
+        android:layout_height="45dp"
+        android:layout_marginLeft="15dp"
+        android:layout_marginRight="15dp"
+        android:layout_marginTop="15dp"
+        android:background="@drawable/writepressed"
+        android:gravity="center_vertical"
+        android:orientation="horizontal" >
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="15dp"
+            android:text="  新密码: "
+            android:textColor="@color/dark_gray_text"
+            android:textSize="15sp" />
+
+        <EditText
+            android:id="@+id/et_newpass"
+            android:layout_width="0sp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@null"
+            android:hint="输入新密码"
+            android:inputType="textPassword"
+            android:maxLength="11"
+            android:singleLine="true"
+            android:textColor="@color/dark_gray_text"
+            android:textSize="15sp" />
+    </LinearLayout>
+    <LinearLayout
+        android:id="@+id/ll_surepass"
+        android:layout_width="match_parent"
+        android:layout_height="45dp"
+        android:layout_marginLeft="15dp"
+        android:layout_marginRight="15dp"
+        android:layout_marginTop="15dp"
+        android:background="@drawable/writepressed"
+        android:gravity="center_vertical"
+        android:orientation="horizontal" >
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginRight="15dp"
+            android:text="  新密码: "
+            android:textColor="@color/dark_gray_text"
+            android:textSize="15sp" />
+
+        <EditText
+            android:id="@+id/et_surepass"
+            android:layout_width="0sp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@null"
+            android:hint="确认新密码"
+            android:inputType="textPassword"
+            android:maxLength="11"
+            android:singleLine="true"
+            android:textColor="@color/dark_gray_text"
+            android:textSize="15sp" />
+    </LinearLayout>
+       <LinearLayout
+                android:layout_width="fill_parent"
+                android:layout_height="80.0dip"
+                android:layout_marginTop="20dp"
+                android:gravity="center"
+                android:padding="20.0dip" >
+
+                <Button
+                    android:id="@+id/btnsure"
+                    android:layout_width="fill_parent"
+                    android:layout_height="45.0dip"
+                    android:background="@drawable/btn_bg_red2"
+                    android:padding="10.0dip"
+                    android:text="确认"
+                    android:textColor="@color/white" />
+            </LinearLayout>
+</LinearLayout>

@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    android:orientation="vertical" >
+
+    <RelativeLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bar_color" >
+
+        <ImageButton
+            android:id="@+id/btn_back"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerVertical="true"
+            android:background="@drawable/btn_back_selector"
+            android:onClick="onClick" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:text="添加朋友"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/title_text_size" />
+    </RelativeLayout>
+
+   <LinearLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/white"
+        android:orientation="horizontal" >
+
+        <LinearLayout
+            android:id="@+id/ll_person"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center_horizontal"
+            android:orientation="vertical" >
+
+            <TextView
+                android:id="@+id/tv_person"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:layout_marginTop="8dp"
+                android:text="找人"
+                android:textColor="@color/dark_gray_text"
+                android:textSize="14sp" />
+
+            <ImageView
+                android:id="@+id/iv_person"
+                android:layout_width="fill_parent"
+                android:layout_height="2dp"
+                android:background="@color/green" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/ll_group"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center_horizontal"
+            android:orientation="vertical" >
+
+            <TextView
+                android:id="@+id/tv_group"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:layout_marginTop="8dp"
+                android:text="找群"
+                android:textColor="@color/gray_text"
+                android:textSize="14sp" />
+
+            <ImageView
+                android:id="@+id/iv_group"
+                android:layout_width="fill_parent"
+                android:layout_height="2dp"
+                android:background="@color/white" />
+        </LinearLayout>
+     </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="fill_parent"
+        android:layout_height="50dp"
+        android:background="@color/black2"
+        android:gravity="center"
+        android:orientation="horizontal"
+        android:paddingLeft="10dp"
+        android:paddingRight="10dp" >
+
+        <EditText
+            android:id="@+id/et_addSearch"
+            android:layout_width="wrap_content"
+            android:layout_height="33dp"
+            android:background="@drawable/search_ba"
+            android:drawableLeft="@drawable/search_icon"
+            android:drawablePadding="10dp"
+            android:gravity="center|left"
+            android:hint="输入查询账号"
+            android:paddingLeft="20dp"
+            android:singleLine="true"
+            android:textColor="@color/black1" />
+
+        <TextView
+            android:id="@+id/tv_search"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="10dp"
+            android:gravity="center"
+            android:text="搜索"
+            android:textColor="@color/dark_gray_text"
+            android:textSize="16sp" />
+    </LinearLayout>
+
+    <RelativeLayout
+        android:layout_width="fill_parent"
+        android:layout_height="fill_parent" >
+
+        <org.hootina.platform.widgets.x.XListView
+            android:id="@+id/xlv_searchfriend"
+            android:layout_width="fill_parent"
+            android:layout_height="fill_parent"
+            android:divider="@android:color/transparent"
+            android:listSelector="@android:color/transparent" />
+    </RelativeLayout>
+
+</LinearLayout>

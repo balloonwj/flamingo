@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/white" >
+<RelativeLayout
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/bar_color" >
+
+        <TextView
+            android:id="@+id/tv_address_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:text="我的"
+            android:textColor="@android:color/white"
+            android:textSize="@dimen/title_text_size" />
+        <ImageButton
+            android:id="@+id/btn_add"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentRight="true"
+            android:layout_centerVertical="true"
+            android:background="@drawable/btn_add_selector"
+            android:visibility="invisible" />
+    </RelativeLayout>
+
+    <View
+        android:layout_width="fill_parent"
+        android:layout_height="1.0dip"
+        android:background="@color/black2" />
+
+    <RelativeLayout
+        android:id="@+id/view_user"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/setting_item_selector"
+        android:paddingBottom="5dp"
+        android:paddingTop="5dp" >
+
+        <org.hootina.platform.widgets.CircularImage
+            android:id="@+id/iv_head"
+            android:layout_width="80.0dip"
+            android:layout_height="80.0dip"
+            android:layout_marginLeft="10dp"
+            android:layout_marginRight="10dp"
+            android:src="@drawable/head" />
+
+        <TextView
+            android:id="@+id/tvname"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:layout_toRightOf="@+id/iv_head"
+            android:text=""
+            android:textSize="18.0dip" />
+
+        <TextView
+            android:id="@+id/tvnum"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_below="@+id/tvname"
+            android:layout_marginTop="10dp"
+            android:layout_toRightOf="@+id/iv_head"
+            android:text=""
+            android:textSize="16dp" />
+
+        <ImageView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentRight="true"
+            android:layout_centerVertical="true"
+            android:layout_marginRight="15dp"
+            android:src="@drawable/right" />
+    </RelativeLayout>
+  <View
+        android:layout_width="fill_parent"
+        android:layout_height="1.0dip"
+        android:background="@color/black2" />
+    <View
+        android:layout_width="fill_parent"
+        android:layout_height="1.0dip"
+        android:layout_marginTop="20dp"
+        android:background="@color/black2" />
+           <TextView
+        android:id="@+id/txt_shoucang"
+        android:layout_width="fill_parent"
+        android:layout_height="50dp"
+        android:background="@drawable/setting_item_selector"
+        android:drawableLeft="@drawable/icon_shoucang"
+        android:drawablePadding="10dp"
+        android:drawableRight="@drawable/right"
+        android:gravity="center_vertical"
+        android:paddingLeft="16dp"
+        android:paddingRight="10dp"
+        android:text="收藏"
+        android:textSize="16sp" />
+
+    <View
+        android:layout_width="fill_parent"
+        android:layout_height="1.0dip"
+        android:background="@color/black2" />
+
+    <TextView
+        android:id="@+id/txt_setting"
+        android:layout_width="fill_parent"
+        android:layout_height="50dp"
+        android:background="@drawable/setting_item_selector"
+        android:drawableLeft="@drawable/icon_me_setting"
+        android:drawablePadding="10dp"
+        android:drawableRight="@drawable/right"
+        android:gravity="center_vertical"
+        android:paddingLeft="16dp"
+        android:paddingRight="10dp"
+        android:text="设置"
+        android:textSize="16sp" />
+
+    <View
+        android:layout_width="fill_parent"
+        android:layout_height="1.0dip"
+        android:background="@color/black2" />
+ 
+
+</LinearLayout>
