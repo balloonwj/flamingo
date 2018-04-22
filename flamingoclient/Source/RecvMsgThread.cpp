@@ -344,15 +344,15 @@ BOOL CRecvMsgThread::HandleMessage(const std::string& strMsg)
         //心跳包不处理
         case msg_type_heartbeat:
             break;
-            //注册
+        //注册
         case msg_type_register:
             HandleRegisterMessage(data);
             break;
-            //登录
+        //登录
         case msg_type_login:
             HandleLoginMessage(data);
             break;
-            //用户信息
+        //用户信息
         case msg_type_getofriendlist:
             HandleFriendListInfo(data);
             break;
@@ -360,11 +360,11 @@ BOOL CRecvMsgThread::HandleMessage(const std::string& strMsg)
         case msg_type_getgroupmembers:
             HandleGroupBasicInfo(data);
             break;
-            //查找用户结果
+        //查找用户结果
         case msg_type_finduser:
             HandleFindFriendMessage(data);
             break;
-            //加好友申请或删除好友或加群或退群
+        //加好友申请或删除好友或加群或退群
         case msg_type_operatefriend:
             CacheNotifyMsg(data);
             break;
@@ -423,7 +423,7 @@ BOOL CRecvMsgThread::HandleMessage(const std::string& strMsg)
             break;
             
             //截屏数据
-        case msg_type_screenshot:
+        case msg_type_remotedesktop:
         {
             string bmpHeader;
             size_t bmpHeaderlength;
@@ -536,7 +536,48 @@ BOOL CRecvMsgThread::HandleLoginMessage(const std::string& strMsg)
 BOOL CRecvMsgThread::HandleFriendListInfo(const std::string& strMsg)
 {
     /*
-    {"code": 0, "msg": "ok", "userinfo":[{"teamindex": 0, "teamname" : "ÎÒµÄºÃÓÑ", "members" : [{"userid": 4,"username":"13811411052", "nickname":"bj_man", "facetype": 2, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 5,"username":"15618326596", "nickname":"Half", "facetype": 0, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 6,"username":"13631326122", "nickname":"sun", "facetype": 0, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 7,"username":"china001", "nickname":"äº‘æ·¡é£Žè½»", "facetype": 34, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 8,"username":"we123123", "nickname":"çƒŸäº‘", "facetype": 35, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 10,"username":"qqq", "nickname":"qqq123", "facetype": 5, "customface":"", "gender":0, "birthday":20170914, "signature":"{â€œidâ€ï¼š1}", "address": "ä¸Šæµ·å¸‚æµ¦ä¸œæ–°åŒºå—æ³‰è·¯1200å·409å®¤", "phonenumber": "", "mail":"balloonwj@qq.com", "clienttype":0, "status":0},{"userid": 15,"username":"TzdnerC", "nickname":"TzdnerC", "facetype": 0, "customface":"be19574dcdd11fb9a96cf00f7e5f0e66", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 16,"username":"17091203068", "nickname":"Barry", "facetype": 0, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 19,"username":"13570330825", "nickname":"liyongc", "facetype": 0, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 20,"username":"hj", "nickname":"æ™¶æ™¶", "facetype": 12, "customface":"8a59bf5f960e5d8e4b796e5176b858f4", "gender":0, "birthday":19900101, "signature":"åšä¸€ä¸ªå¥½åª³å¦‡å„¿~", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 21,"username":"13681994834", "nickname":"zsytssk", "facetype": 0, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 34,"username":"15150217213", "nickname":"xiaoqiang", "facetype": 18, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 37,"username":"13739702521", "nickname":"chaoer", "facetype": 0, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 85,"username":"13322888888", "nickname":"apple", "facetype": 0, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 106,"username":"18299081534", "nickname":"æ‰Žè¥¿ã€‚", "facetype": 25, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"wuboui", "clienttype":0, "status":0},{"userid": 115,"username":"13716863074", "nickname":"dongshuaijun", "facetype": 0, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 124,"username":"qwe", "nickname":"qwe", "facetype": 0, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 268435457,"username":"268435457", "nickname":"flamingoæŠ€æœ¯äº¤æµ", "facetype": 0, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 268435458,"username":"268435458", "nickname":"æˆ‘çš„å®¶", "facetype": 0, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0},{"userid": 268435485,"username":"268435485", "nickname":"flamingoä½“éªŒç¾¤", "facetype": 0, "customface":"", "gender":0, "birthday":19900101, "signature":"", "address": "", "phonenumber": "", "mail":"", "clienttype":0, "status":0}]}]}
+    {
+    "code": 0,
+    "msg": "ok",
+    "userinfo": [
+        {
+            "teamindex": 0,
+            "teamname": "My Friends",
+            "members": [
+                {
+                    "userid": 4,
+                    "username": "13811411052",
+                    "nickname": "bj_man",
+                    "facetype": 2,
+                    "customface": "",
+                    "gender": 0,
+                    "birthday": 19900101,
+                    "signature": "",
+                    "address": "",
+                    "phonenumber": "",
+                    "mail": "",
+                    "clienttype": 0,
+                    "status": 0
+                },
+                {
+                    "userid": 5,
+                    "username": "15618326596",
+                    "nickname": "Half",
+                    "facetype": 0,
+                    "customface": "",
+                    "gender": 0,
+                    "birthday": 19900101,
+                    "signature": "",
+                    "address": "",
+                    "phonenumber": "",
+                    "mail": "",
+                    "clienttype": 0,
+                    "status": 0
+                }
+            ]
+        }
+    ]
+}
     */
     
     Json::Reader JsonReader;
@@ -554,12 +595,6 @@ BOOL CRecvMsgThread::HandleFriendListInfo(const std::string& strMsg)
 	CUserBasicInfoResult* pUserBasicInfoResult = new CUserBasicInfoResult();
 	UserBasicInfo* pUserBasicInfo = NULL;
     UINT nTeamCount = (UINT)JsonRoot["userinfo"].size();
-    ////没有好友，默认就建一个“我的好友”分组
-    //if (nTeamCount == 0)
-    //{
-    //    std::list<UserBasicInfo*> dummyList;
-    //    pUserBasicInfoResult->m_mapUserBasicInfo["我的好友"];
-    //}
 
     std::string strTeamName;
     for (UINT i = 0; i < nTeamCount; ++i)
@@ -728,12 +763,12 @@ BOOL CRecvMsgThread::HandleUserStatusNotifyMessage(int targetId, const std::stri
     {
         pFriendStatus->m_type = 1;
         
-        if (!JsonRoot["onlinestatus"].isNull() && !JsonRoot["onlinestatus"].isInt())
+        if (!JsonRoot["onlinestatus"].isNull() && JsonRoot["onlinestatus"].isInt())
             pFriendStatus->m_nStatus = JsonRoot["onlinestatus"].asInt();
         else
             pFriendStatus->m_nStatus = 1;       
 
-        if (!JsonRoot["clienttype"].isNull() && !JsonRoot["clienttype"].isInt())
+        if (!JsonRoot["clienttype"].isNull() && JsonRoot["clienttype"].isInt())
             pFriendStatus->m_nClientType = JsonRoot["clienttype"].asInt();
         else
             pFriendStatus->m_nClientType = 0;
@@ -1054,6 +1089,12 @@ BOOL CRecvMsgThread::HandleBuddyMsg(CRecvMsg* lpRecvMsg)
 	
 	tstring strSenderNickName(m_lpUserMgr->GetNickName(nSenderID));
 	tstring strTargetNickName(m_lpUserMgr->GetNickName(nTargetID));
+    //TODO: 临时会话会发送者昵称会为空，后面加上临时会话的功能会加上
+    if (strSenderNickName.empty() || strTargetNickName.empty())
+    {
+        LOG_ERROR(_T("Recv a chat msg, but sender or target nickname is empty, senderID: %u, targetID: %u, senderName: %s, targetName: %s"), nSenderID, nTargetID, strSenderNickName.c_str(), strTargetNickName.c_str());
+        return FALSE;
+    }
 
 	BOOL bGroup = IsGroupTarget(nTargetID);
 	

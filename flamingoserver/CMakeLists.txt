@@ -64,13 +64,38 @@ jsoncpp-0.5.0/json_value.cpp
 jsoncpp-0.5.0/json_writer.cpp
 )
 
+set(zlib_srcs
+zlib1.2.11/zutil.c
+zlib1.2.11/uncompr.c
+zlib1.2.11/trees.c
+zlib1.2.11/inftrees.c
+zlib1.2.11/inflate.c
+zlib1.2.11/inffast.c
+zlib1.2.11/infback.c
+zlib1.2.11/gzwrite.c
+zlib1.2.11/gzread.c
+zlib1.2.11/gzlib.c
+zlib1.2.11/gzclose.c
+zlib1.2.11/deflate.c
+zlib1.2.11/crc32.c
+zlib1.2.11/compress.c
+zlib1.2.11/adler32.c
+zlib1.2.11/ZlibUtil.cpp
+)
+
+set(utils_srcs
+utils/StringUtil.cpp
+)
+
 set(mychatserver_srcs
 chatserversrc/main.cpp
 chatserversrc/IMServer.cpp
 chatserversrc/ClientSession.cpp
 chatserversrc/UserManager.cpp
 chatserversrc/MsgCacheManager.cpp
-chatserversrc/TcpSession.cpp)
+chatserversrc/TcpSession.cpp
+chatserversrc/MonitorSession.cpp
+chatserversrc/MonitorServer.cpp)
 
 set(myfileserver_srcs
 fileserversrc/main.cpp
@@ -89,11 +114,11 @@ fileserversrc/MD5.cpp
 fileserversrc/TcpSession.cpp)
 
 
-add_executable(mychatserver ${net_srcs} ${json_srcs}  ${mychatserver_srcs} ${mysql_srcs} ${database_srcs})
+add_executable(mychatserver ${net_srcs} ${json_srcs}  ${mychatserver_srcs} ${mysql_srcs} ${database_srcs} ${zlib_srcs} ${utils_srcs})
 #光包含库目录是没用的，还必须使用TARGET_LINK_LIBRARIES链接该库
 TARGET_LINK_LIBRARIES(mychatserver mysqlclient)
 
-add_executable(myfileserver ${net_srcs}  ${myfileserver_srcs} )
+add_executable(myfileserver ${net_srcs}  ${myfileserver_srcs})
 TARGET_LINK_LIBRARIES(myfileserver)
 
 add_executable(myimgserver ${net_srcs}  ${myimgserver_srcs} )

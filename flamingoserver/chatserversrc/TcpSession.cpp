@@ -5,6 +5,7 @@
 #include "../base/logging.h"
 #include "Msg.h"
 #include "../net/protocolstream.h"
+#include "../zlib1.2.11/ZlibUtil.h"
 #include "TcpSession.h"
 
 TcpSession::TcpSession(const std::weak_ptr<TcpConnection>& tmpconn) : tmpConn_(tmpconn)
@@ -46,12 +47,24 @@ void TcpSession::Send(const char* p, int32_t length)
 
 void TcpSession::SendPackage(const char* p, int32_t length)
 {   
+    string srcbuf(p, length);
+    string destbuf;
+    if (!ZlibUtil::CompressBuf(srcbuf, destbuf))
+    {
+        LOG_ERROR << "compress buf error";
+        return;
+    }
+ 
     string strPackageData;
-    msg header = { (int32_t)length };
+    msg header;
+    header.compressflag = 1;
+    header.compresssize = destbuf.length();
+    header.originsize = length;
+
     //LOG_INFO << "Send data, header length:" << sizeof(header) << ", body length:" << outbuf.length();
     //插入一个包头
     strPackageData.append((const char*)&header, sizeof(header));
-    strPackageData.append(p, length);
+    strPackageData.append(destbuf);
 
     //TODO: 这些Session和connection对象的生命周期要好好梳理一下
     if (tmpConn_.expired())
@@ -64,9 +77,9 @@ void TcpSession::SendPackage(const char* p, int32_t length)
     std::shared_ptr<TcpConnection> conn = tmpConn_.lock();
     if (conn)
     {
-        size_t length = strPackageData.length();
+        //size_t length = strPackageData.length();
         //LOG_INFO << "Send data, length:" << length;
         //LOG_DEBUG_BIN((unsigned char*)strSendData.c_str(), length);
-        conn->send(strPackageData.c_str(), length);
+        conn->send(strPackageData);
     }
 }

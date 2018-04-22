@@ -25,8 +25,8 @@ void IMServer::OnConnection(std::shared_ptr<TcpConnection> conn)
     if (conn->connected())
     {
         //LOG_INFO << "client connected:" << conn->peerAddress().toIpPort();
-        ++ m_baseUserId;
-        std::shared_ptr<ClientSession> spSession(new ClientSession(conn));
+        ++m_sessionId;
+        std::shared_ptr<ClientSession> spSession(new ClientSession(conn, m_sessionId));
         conn->setMessageCallback(std::bind(&ClientSession::OnRead, spSession.get(), std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));       
 
         std::lock_guard<std::mutex> guard(m_sessionMutex);

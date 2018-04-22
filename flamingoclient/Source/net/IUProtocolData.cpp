@@ -244,6 +244,17 @@ COperateFriendResult::~COperateFriendResult()
 
 }
 
+//class CAddTeamInfoRequest
+CAddTeamInfoRequest::CAddTeamInfoRequest()
+{
+    m_uType = NET_DATA_ADD_NEW_TEAM;
+}
+
+CAddTeamInfoRequest::~CAddTeamInfoRequest()
+{
+
+}
+
 //class CSentChatMessage
 CSentChatMessage::CSentChatMessage()
 {

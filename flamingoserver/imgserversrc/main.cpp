@@ -98,7 +98,7 @@ int main(int argc, char* argv[])
     if (bdaemon)
         daemon_run();
 
-    CConfigFileReader config("imgserver.conf");
+    CConfigFileReader config("myimgserver.conf");
 
     Logger::setLogLevel(Logger::DEBUG);
     const char* logfilepath = config.GetConfigName("logfiledir");

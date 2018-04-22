@@ -1146,33 +1146,35 @@ void CBuddyChatDlg::OnLnk_BuddyName(UINT uNotifyCode, int nID, CWindow wndCtl)
 
 void CBuddyChatDlg::OnBtn_RemoteDesktop(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
-   //TODO: 远程桌面的代码暂且注释掉 
-    // if (m_lpFMGClient->IsOffline())
-   // {
-   //     MessageBox(_T("您已经处于离线状态，无法发起远程桌面，请上线后再次尝试。"), g_strAppTitle.c_str());
-   //     return;
-   // }
+    //TODO: 远程桌面的代码暂且注释掉 
+    if (m_lpFMGClient->IsOffline())
+    {
+        MessageBox(_T("您已经处于离线状态，无法发起远程桌面，请上线后再次尝试。"), g_strAppTitle.c_str());
+        return;
+    }
 
-   // CString strInfo(_T("                                            ☆您发起远程桌面☆\r\n"));
-   // time_t nNow = time(NULL);
-   // //TODO: 如果已经发起远程桌面，则提示下
-   // //if (nNow - m_nLastSendShakeWindowTime <= 5)
-   // //{
-   //  //   strInfo = _T("                                        ☆您发送的窗口抖动过于频繁，请稍后再发。☆\r\n");
-   // //}
-   //// else
-   // //{
-   //     //m_nLastSendShakeWindowTime = nNow;
-   //     //ShakeWindow(m_hWnd, 1);
-   //     m_lpFMGClient->SendBuddyMsg(m_LoginUserId, m_strUserName.GetString(), m_UserId, m_strBuddyName.GetString(), nNow, _T("/r[\"1\"]"), m_hWnd);
-   // //}
+    CString strInfo(_T("                                            ☆您发起远程桌面☆\r\n"));
+    time_t nNow = time(NULL);
+    //TODO: 如果已经发起远程桌面，则提示下
+    //if (nNow - m_nLastSendShakeWindowTime <= 5)
+    //{
+     //   strInfo = _T("                                        ☆您发送的窗口抖动过于频繁，请稍后再发。☆\r\n");
+    //}
+   // else
+    //{
+        //m_nLastSendShakeWindowTime = nNow;
+        //ShakeWindow(m_hWnd, 1);
+        m_lpFMGClient->SendBuddyMsg(m_LoginUserId, m_strUserName.GetString(), m_UserId, m_strBuddyName.GetString(), nNow, _T("/r[\"1\"]"), m_hWnd);
+    //}
 
-   // RichEdit_SetSel(m_richRecv.m_hWnd, -1, -1);
-   // RichEdit_ReplaceSel(m_richRecv.m_hWnd, strInfo, _T("微软雅黑"), 10, RGB(0, 0, 0), FALSE, FALSE, FALSE, FALSE, 0);
-   // m_richRecv.PostMessage(WM_VSCROLL, SB_BOTTOM, 0);
+    RichEdit_SetSel(m_richRecv.m_hWnd, -1, -1);
+    RichEdit_ReplaceSel(m_richRecv.m_hWnd, strInfo, _T("微软雅黑"), 10, RGB(0, 0, 0), FALSE, FALSE, FALSE, FALSE, 0);
+    m_richRecv.PostMessage(WM_VSCROLL, SB_BOTTOM, 0);
 
-   // HANDLE hRemoteDesktopThread = (HANDLE)::_beginthreadex(NULL, 0, RemoteDesktopProc, this, 0, NULL);
-   // ::CloseHandle(hRemoteDesktopThread);
+    ::PostMessage(m_hMainDlg, FMG_MSG_SCREENSHOT, 0, 0);
+
+    //HANDLE hRemoteDesktopThread = (HANDLE)::_beginthreadex(NULL, 0, RemoteDesktopProc, this, 0, NULL);
+    //::CloseHandle(hRemoteDesktopThread);
 }
 
 // “字体选择工具栏”按钮
@@ -4575,7 +4577,7 @@ void CBuddyChatDlg::ReCaculateCtrlPostion(long nMouseY)
 	::GetClientRect(m_richSend, &rtRichSend);
 	HDWP hdwp = ::BeginDeferWindowPos(5);
 	//接收框
-	if(m_FontSelDlg.IsWindowVisible())
+    if (m_FontSelDlg.IsWindow() && m_FontSelDlg.IsWindowVisible())
 	{
 		//AtlTrace(_T("nMouseY-ptBase.y-3*CHATDLG_TOOLBAR_HEIGHT: %d\n"), nMouseY-ptBase.y-3*CHATDLG_TOOLBAR_HEIGHT);
 		//TODO: nMouseY-ptBase.y-2*CHATDLG_TOOLBAR_HEIGHT为什么不起作用呢？
@@ -4634,70 +4636,70 @@ UINT CBuddyChatDlg::RemoteDesktopProc(void* p)
     int nSeq = 0;
     while (true)
     {
-        HDC hDesktopDC = ::GetDC(NULL);
-        HDC hTmpDC = CreateCompatibleDC(hDesktopDC);
-        HBITMAP hBmp = CreateCompatibleBitmap(hDesktopDC, screenSize.cx, screenSize.cy);	//351x250, 示例数据
-        SelectObject(hTmpDC, hBmp);
-        BitBlt(hTmpDC, 0, 0, screenSize.cx, screenSize.cy, hDesktopDC, 0, 0, SRCCOPY);
-        DeleteObject(hTmpDC);
+        //HDC hDesktopDC = ::GetDC(NULL);
+        //HDC hTmpDC = CreateCompatibleDC(hDesktopDC);
+        //HBITMAP hBmp = CreateCompatibleBitmap(hDesktopDC, screenSize.cx, screenSize.cy);	//351x250, 示例数据
+        //SelectObject(hTmpDC, hBmp);
+        //BitBlt(hTmpDC, 0, 0, screenSize.cx, screenSize.cy, hDesktopDC, 0, 0, SRCCOPY);
+        //DeleteObject(hTmpDC);
 
-        BITMAP bm;
-        PBITMAPINFO bmpInf;
-        if (GetObject(hBmp, sizeof(bm), &bm) == 0)
-        {
-            ::ReleaseDC(NULL, hDesktopDC);
-            return 0;
-        }
+        //BITMAP bm;
+        //PBITMAPINFO bmpInf;
+        //if (GetObject(hBmp, sizeof(bm), &bm) == 0)
+        //{
+        //    ::ReleaseDC(NULL, hDesktopDC);
+        //    return 0;
+        //}
 
-        int nPaletteSize = 0;
-        if (bm.bmBitsPixel < 16)
-            nPaletteSize = (int)pow(2, bm.bmBitsPixel);
+        //int nPaletteSize = 0;
+        //if (bm.bmBitsPixel < 16)
+        //    nPaletteSize = (int)pow(2, bm.bmBitsPixel);
 
-        int nSize = sizeof(BITMAPINFOHEADER) +
-            sizeof(RGBQUAD)*nPaletteSize + (bm.bmWidth + 7) / 8 * bm.bmHeight*bm.bmBitsPixel;
-        bmpInf = (PBITMAPINFO)LocalAlloc(LPTR, nSize);
+        //int nSize = sizeof(BITMAPINFOHEADER) +
+        //    sizeof(RGBQUAD)*nPaletteSize + (bm.bmWidth + 7) / 8 * bm.bmHeight*bm.bmBitsPixel;
+        //bmpInf = (PBITMAPINFO)LocalAlloc(LPTR, nSize);
 
-        BYTE* buf = ((BYTE*)bmpInf) +
-            sizeof(BITMAPINFOHEADER) +
-            sizeof(RGBQUAD)*nPaletteSize;
+        //BYTE* buf = ((BYTE*)bmpInf) +
+        //    sizeof(BITMAPINFOHEADER) +
+        //    sizeof(RGBQUAD)*nPaletteSize;
 
-        //-----------------------------------------------
-        bmpInf->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bmpInf->bmiHeader.biWidth = bm.bmWidth;
-        bmpInf->bmiHeader.biHeight = bm.bmHeight;
-        bmpInf->bmiHeader.biPlanes = bm.bmPlanes;
-        bmpInf->bmiHeader.biBitCount = bm.bmBitsPixel;
-        bmpInf->bmiHeader.biCompression = BI_RGB;
-        bmpInf->bmiHeader.biSizeImage = (bm.bmWidth + 7) / 8 * bm.bmHeight*bm.bmBitsPixel;
-        //-----------------------------------------------
+        ////-----------------------------------------------
+        //bmpInf->bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        //bmpInf->bmiHeader.biWidth = bm.bmWidth;
+        //bmpInf->bmiHeader.biHeight = bm.bmHeight;
+        //bmpInf->bmiHeader.biPlanes = bm.bmPlanes;
+        //bmpInf->bmiHeader.biBitCount = bm.bmBitsPixel;
+        //bmpInf->bmiHeader.biCompression = BI_RGB;
+        //bmpInf->bmiHeader.biSizeImage = (bm.bmWidth + 7) / 8 * bm.bmHeight*bm.bmBitsPixel;
+        ////-----------------------------------------------
 
-        if (!::GetDIBits(hDesktopDC, hBmp, 0, (UINT)bm.bmHeight, buf, bmpInf, DIB_RGB_COLORS))
-        {
-            ::ReleaseDC(NULL, hDesktopDC);
-            LocalFree(bmpInf);
-            return 0;
-        }
+        //if (!::GetDIBits(hDesktopDC, hBmp, 0, (UINT)bm.bmHeight, buf, bmpInf, DIB_RGB_COLORS))
+        //{
+        //    ::ReleaseDC(NULL, hDesktopDC);
+        //    LocalFree(bmpInf);
+        //    return 0;
+        //}
 
-        ::ReleaseDC(NULL, hDesktopDC);
+        //::ReleaseDC(NULL, hDesktopDC);
 
-        std::string outbuf;
-        balloon::BinaryWriteStream writeStream(&outbuf);
-        writeStream.WriteInt32(msg_type_screenshot);
-        writeStream.WriteInt32(nSeq);
+        //std::string outbuf;
+        //balloon::BinaryWriteStream writeStream(&outbuf);
+        //writeStream.WriteInt32(msg_type_screenshot);
+        //writeStream.WriteInt32(nSeq);
 
-        //为了保持统一处理的逻辑，这里加个占位符数据
-        std::string strDummyData;
-        writeStream.WriteString(strDummyData);
+        ////为了保持统一处理的逻辑，这里加个占位符数据
+        //std::string strDummyData;
+        //writeStream.WriteString(strDummyData);
 
-        //位图文件头部信息
-        writeStream.WriteCString((const char*)bmpInf, nSize);
-        //位图文件内容
-        writeStream.WriteString(strDummyData);
-        //目标userid
-        writeStream.WriteInt32(pThis->m_nUTalkNumber);
-        writeStream.Flush();
+        ////位图文件头部信息
+        //writeStream.WriteCString((const char*)bmpInf, nSize);
+        ////位图文件内容
+        //writeStream.WriteString(strDummyData);
+        ////目标userid
+        //writeStream.WriteInt32(pThis->m_nUTalkNumber);
+        //writeStream.Flush();
 
-        CIUSocket::GetInstance().Send(outbuf);
+        //CIUSocket::GetInstance().Send(outbuf);
 
         //CString sMsg;
         //sMsg.Format("BitsPixel:%d,width:%d,height:%d",
@@ -4705,7 +4707,7 @@ UINT CBuddyChatDlg::RemoteDesktopProc(void* p)
         //AfxMessageBox(sMsg);
 
         ::Sleep(1000);
-        nSeq++;
+        //nSeq++;
     }
 
     //CClientDC dc(pThis->m_hWnd);

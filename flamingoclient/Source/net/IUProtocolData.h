@@ -41,7 +41,6 @@ enum LOGIN_TYPE
 {
 	LOGIN_USE_MOBILE_NUMBER = 0,	//使用手机号登录
 	LOGIN_USE_ACCOUNT		= 1,	//使用账号登录
-	LOGIN_USE_UTS_ACCOUNT	= 2		//使用中间件账号登录
 };
 
 enum LOGIN_RESULT_CODE	// 登录结果代码
@@ -270,6 +269,7 @@ enum NET_DATA_TYPE
 	NET_DATA_TARGET_INFO_CHANGE,
 	NET_DATA_MODIFY_PASSWORD,
 	NET_DATA_CREATE_NEW_GROUP,
+    NET_DATA_ADD_NEW_TEAM,              //添加新的好友分组
 
 	NET_DATA_FILE
 };
@@ -494,6 +494,16 @@ public:
 	UINT m_uCmd;
 	char m_szAccountName[64];
 	char m_szNickName[64];
+};
+
+class CAddTeamInfoRequest : public CNetData
+{
+public:
+    CAddTeamInfoRequest();
+    ~CAddTeamInfoRequest();
+
+public:
+    std::wstring m_strNewTeamInfo;
 };
 
 class CMsgItem;

@@ -409,7 +409,7 @@ private:
     CRemoteDesktopDlg*      m_pRemoteDesktopDlg;                            //远程桌面窗口
 
 	CSkinButton				m_btnMainMenu;
-	CSkinMenu				m_SkinMenu;										//左下角带UTalk头像的菜单
+	CSkinMenu				m_SkinMenu;										//左下角带头像的菜单
 	CSkinButton				m_btnMultiChat;									//群发按钮
 	CSkinButton				m_btnFind;										//查找好友按钮
 	CSkinEdit				m_edtSign, m_edtSearch;
@@ -480,7 +480,7 @@ private:
 	BOOL							m_bShowBigHeadPicInSel;					//当是小头像模式时，选中显示大头像
 	BOOL							m_bPanelLocked;							//主面板处于锁定状态
 
-	BOOL							m_bAlreadyLogin;				//是否已经登录过
+	BOOL							m_bAlreadyLogin;				        //是否已经登录过
 
 	HRGN							m_hHotRgn;
 

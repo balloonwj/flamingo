@@ -1,0 +1,21 @@
+ 9、文件概览
+    alder32.c：计算数据流的Alder-32校验和，实现alder32()。
+    crc32.h和crc32.c：计算数据流的CRC-32，实现crc32()。
+    deflate.h和deflate.c：使用默认算法压缩数据，实现deflate函数簇。
+    inflate.h和inflate.c：zlib的解压，实现inflate函数簇。
+    compress.c：实现内存缓冲区的压缩，包括compress(), compress2(), compressBound()。
+    uncompr.c：实现内存缓冲区的解压，包括uncompress()。
+    gzguts.h和gzlib.c：读写gzip文件的通用实现，包括gzopen(), gzdopen(), gzbuffer(), gzrewind(), gzseek(), gztell(), gzoffset(), gzeof(), gzerror(), gzclearerr()。
+    gzclose.c：实现gzclose()。
+    gzread.c：读取gzip文件的实现，包括gzread(), gzgetc(), gzungetc(), gzgets(), gzdirect(), gzclose_r()。
+    gzwrite.c：写gzip文件的实现，包括gzwrite(), gzputc(), gzputs(), gzprintf(), gzflush(), gzsetparams(), gzclose_w()。
+    infback.c：使用回调接口实现解压，包括inflateBackInit(), inflateBack(), inflateBackEnd()。
+    zutil.h和zutil.c：zlib库用到的工具函数。包括zlibVersion(), zlibCompileFlags(), zError()。
+    zlib.h：zlib库导出的接口描述文件，应用程序使用zlib库时需要本文件。
+    zconf.h：zlib库的编译配置文件，如果编译时需要给所有库函数加上唯一的前缀，或者需要针对不同平台作特殊编译，需要用到本文件。还包括标准 C/C++兼容性定义；编译成DLL时是否使用WINAPI/WINAPIV调用方式；类型定义Byte，uInt, uLong, voidpf等。
+    inftrees.h和inftrees.c：为有效的解码生成Huffman树。    
+    trees.h和trees.c：使用Huffman编码输出压缩的数据。
+    inffixed.h：使用固定编码压缩。
+    inffast.h和inffast.c：快速解压数据。
+	
+	文章来源：http://blog.csdn.net/damenhanter/article/details/30757685

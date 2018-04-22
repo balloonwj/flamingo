@@ -10,6 +10,7 @@
 #include "../IULog.h"
 #include "../MiniBuffer.h"
 #include "protocolstream.h"
+#include "../ZlibUtil.h"
 #include <tchar.h>
 #include <Sensapi.h>
 
@@ -22,7 +23,7 @@ using namespace balloon;
 
 CIUSocket::CIUSocket() 
 {
-	m_hSocket = INVALID_SOCKET;
+    m_hSocket = INVALID_SOCKET;
 	m_hFileSocket = INVALID_SOCKET;
     m_hImgSocket = INVALID_SOCKET;
 	m_nPort = 20000;
@@ -47,6 +48,8 @@ CIUSocket::CIUSocket()
 
     m_nRecordClientType = 1;
     m_nRecordOnlineStatus = 1;
+
+    m_seq = 0;
 
     m_pRecvMsgThread = NULL;
 }
@@ -813,11 +816,24 @@ void CIUSocket::SendThreadProc()
 void CIUSocket::Send(const std::string& strBuffer)
 { 
     std::lock_guard<std::mutex> guard(m_mtSendBuf);
+    
+    //size_t nDestLength;
+    std::string strDestBuf;
+    if (!ZlibUtil::CompressBuf(strBuffer, strDestBuf))
+    {
+        LOG_ERROR("Compress error.");
+        return;
+    }
+
     //插入包头
     int32_t length = (int32_t)strBuffer.length();
-    msg header = { length };
+    msg header;
+    header.compressflag = 1;
+    header.originsize = length;
+    header.compresssize = (int32_t)strDestBuf.length();
     m_strSendBuf.append((const char*)&header, sizeof(header));
-    m_strSendBuf.append(strBuffer.c_str(), length);
+
+    m_strSendBuf.append(strDestBuf);
     m_cvSendBuf.notify_one();
 }
 
@@ -891,27 +907,66 @@ bool CIUSocket::DecodePackages()
 
         msg header;
         memcpy_s(&header, sizeof(msg), m_strRecvBuf.data(), sizeof(msg));
-        //防止包头定义的数据是一些错乱的数据，这里最大限制每个包大小为10M
-        if (header.packagesize >= MAX_PACKAGE_SIZE || header.packagesize <= 0)
+        //数据压缩过
+        if (header.compressflag == PACKAGE_COMPRESSED)
         {
-            LOG_ERROR("Recv a strange packagesize in header, packagesize=%d", header.packagesize);
-            m_strRecvBuf.clear();
-            return false;
+            //防止包头定义的数据是一些错乱的数据，这里最大限制每个包大小为10M
+            if (header.compresssize >= MAX_PACKAGE_SIZE || header.compresssize <= 0 ||
+                header.originsize >= MAX_PACKAGE_SIZE || header.originsize <= 0)
+            {
+                LOG_ERROR("Recv a illegal package, compresssize: %d, originsize=%d.", header.compresssize, header.originsize);
+                m_strRecvBuf.clear();
+                return false;
+            }
+
+            //接收缓冲区不够一个整包大小（包头+包体）
+            if (m_strRecvBuf.length() < sizeof(msg) + header.compresssize)
+                break;
+
+            //去除包头信息
+            m_strRecvBuf.erase(0, sizeof(msg));
+            //拿到包体
+            std::string strBody;
+            strBody.append(m_strRecvBuf.c_str(), header.compresssize);
+            //去除包体信息
+            m_strRecvBuf.erase(0, header.compresssize);
+
+            //解压
+            std::string strUncompressBody;
+            if (!ZlibUtil::UncompressBuf(strBody, strUncompressBody, header.originsize))
+            {
+                LOG_ERROR("uncompress buf error, compresssize: %d, originsize: %d", header.compresssize, header.originsize);
+                m_strRecvBuf.clear();
+                return false;
+            }
+
+            m_pRecvMsgThread->AddMsgData(strUncompressBody);
         }
+        //数据未压缩过
+        else
+        {
+            //防止包头定义的数据是一些错乱的数据，这里最大限制每个包大小为10M
+            if (header.originsize >= MAX_PACKAGE_SIZE || header.originsize <= 0)
+            {
+                LOG_ERROR("Recv a illegal package, originsize=%d.", header.originsize);
+                m_strRecvBuf.clear();
+                return false;
+            }
 
-        //接收缓冲区不够一个整包大小（包头+包体）
-        if (m_strRecvBuf.length() < sizeof(msg) + header.packagesize)
-            break;
+            //接收缓冲区不够一个整包大小（包头+包体）
+            if (m_strRecvBuf.length() < sizeof(msg) + header.originsize)
+                break;
 
-        //去除包头信息
-        m_strRecvBuf.erase(0, sizeof(msg));
-        std::string strBody;
-        strBody.append(m_strRecvBuf.c_str(), header.packagesize);
-        //去除包体信息
-        m_strRecvBuf.erase(0, header.packagesize);
-
-        m_pRecvMsgThread->AddMsgData(strBody);
-    }
+            //去除包头信息
+            m_strRecvBuf.erase(0, sizeof(msg));
+            //拿到包体
+            std::string strBody;
+            strBody.append(m_strRecvBuf.c_str(), header.originsize);
+            //去除包体信息
+            m_strRecvBuf.erase(0, header.originsize);         
+            m_pRecvMsgThread->AddMsgData(strBody);
+        }      
+    }// end while
 
     return true;
 }
@@ -939,11 +994,21 @@ bool CIUSocket::Register(const char* pszUser, const char* pszNickname, const cha
 
     LOG_INFO("Request register: Account=%s, Password=*****, nickname=%s.", pszUser, pszNickname, pszPassword);
 
-    int32_t length = (int32_t)outbuf.length();
-    msg header = { length };
+    //int32_t length = (int32_t)outbuf.length();
+
+    std::string strDestBuf;
+    if (!ZlibUtil::CompressBuf(outbuf, strDestBuf))
+    {
+        LOG_ERROR("compress error");
+        return false;
+    }
+    msg header;
+    header.compressflag = 1;
+    header.originsize = outbuf.length();
+    header.compresssize = strDestBuf.length();
     std::string strSendBuf;
     strSendBuf.append((const char*)&header, sizeof(header));
-    strSendBuf.append(outbuf.c_str(), length);
+    strSendBuf.append(strDestBuf);
 
     //超时时间设置为3秒
     if (!SendData(strSendBuf.c_str(), strSendBuf.length(), nTimeout))
@@ -953,16 +1018,53 @@ bool CIUSocket::Register(const char* pszUser, const char* pszNickname, const cha
     if (!RecvData((char*)&header, sizeof(header), nTimeout))
         return false;
 
-    if (header.packagesize <= 0)
-        return false;
-
-    CMiniBuffer minBuff(header.packagesize);
-    if (!RecvData(minBuff, header.packagesize, nTimeout))
+    std::string strData;
+    if (header.compressflag == PACKAGE_COMPRESSED)
     {
-        return false;
+        if (header.compresssize >= MAX_PACKAGE_SIZE || header.compresssize <= 0 ||
+            header.originsize >= MAX_PACKAGE_SIZE || header.originsize <= 0)
+        {
+            Close();
+            LOG_ERROR("Recv a illegal package, compresssize: %d, originsize=%d.", header.compresssize, header.originsize);          
+            return false;
+        }
+
+        CMiniBuffer minBuff(header.compresssize);
+        if (!RecvData(minBuff, header.compresssize, nTimeout))
+        {
+            return false;
+        }
+
+        std::string strOrigin(minBuff, header.compresssize);
+
+        std::string strUncompressBuf;
+        if (!ZlibUtil::UncompressBuf(strOrigin, strUncompressBuf, header.originsize))
+        {
+            Close();
+            LOG_ERROR("uncompress error");
+            return false;
+        }
+
+        strData = strUncompressBuf;
+    }
+    else
+    {
+        if (header.originsize >= MAX_PACKAGE_SIZE || header.originsize <= 0)
+        {
+            Close();
+            LOG_ERROR("Recv a illegal package, originsize=%d.", header.originsize);
+            return false;
+        }
+
+        CMiniBuffer minBuff(header.originsize);
+        if (!RecvData(minBuff, header.originsize, nTimeout))
+        {
+            return false;
+        }
+        strData.append(minBuff, header.originsize);
     }
 
-    BinaryReadStream readStream(minBuff, header.packagesize);
+    BinaryReadStream readStream(strData.c_str(), strData.length());
     int32_t cmd;
     if (!readStream.ReadInt32(cmd))
         return false;
@@ -1004,11 +1106,26 @@ bool CIUSocket::Login(const char* pszUser, const char* pszPassword, int nClientT
 
     LOG_INFO("Request logon: Account=%s, Password=*****, Status=%d, LoginType=%d.", pszUser, pszPassword, nOnlineStatus, nClientType);
 
-    int32_t length = (int32_t)outbuf.length();
-    msg header = { length };
+    std::string strDestBuf;
+    if (!ZlibUtil::CompressBuf(outbuf, strDestBuf))
+    {
+        LOG_ERROR("compress error");
+        return false;
+    }
+    msg header;
+    header.compressflag = 1;
+    header.originsize = outbuf.length();
+    header.compresssize = strDestBuf.length();
+
+    //std::string strX;
+    //if (!::UncompressBuf(strDestBuf, strX, header.originsize))
+    //{
+    //    int x = 0;
+    //}
+
     std::string strSendBuf;
     strSendBuf.append((const char*)&header, sizeof(header));
-    strSendBuf.append(outbuf.c_str(), length);
+    strSendBuf.append(strDestBuf);
     
     //超时时间设置为3秒
     if (!SendData(strSendBuf.c_str(), strSendBuf.length(), nTimeout))
@@ -1018,16 +1135,53 @@ bool CIUSocket::Login(const char* pszUser, const char* pszPassword, int nClientT
     if (!RecvData((char*)&header, sizeof(header), nTimeout))
         return false;
     
-    if (header.packagesize <= 0)
-        return false;
-
-    CMiniBuffer minBuff(header.packagesize);
-    if (!RecvData(minBuff, header.packagesize, nTimeout))
+    std::string strData;
+    if (header.compressflag == PACKAGE_COMPRESSED)
     {
-        return false;
+        if (header.compresssize >= MAX_PACKAGE_SIZE || header.compresssize <= 0 ||
+            header.originsize >= MAX_PACKAGE_SIZE || header.originsize <= 0)
+        {
+            Close();
+            LOG_ERROR("Recv a illegal package, compresssize: %d, originsize=%d.", header.compresssize, header.originsize);
+            return false;
+        }
+
+        CMiniBuffer minBuff(header.compresssize);
+        if (!RecvData(minBuff, header.compresssize, nTimeout))
+        {
+            return false;
+        }
+
+        std::string strOrigin(minBuff, header.compresssize);
+
+        std::string strUncompressBuf;
+        if (!ZlibUtil::UncompressBuf(strOrigin, strUncompressBuf, header.originsize))
+        {
+            Close();
+            LOG_ERROR("uncompress error");
+            return false;
+        }
+
+        strData = strUncompressBuf;
+    }
+    else
+    {
+        if (header.originsize >= MAX_PACKAGE_SIZE || header.originsize <= 0)
+        {
+            Close();
+            LOG_ERROR("Recv a illegal package, originsize=%d.", header.originsize);
+            return false;
+        }
+
+        CMiniBuffer minBuff(header.originsize);
+        if (!RecvData(minBuff, header.originsize, nTimeout))
+        {
+            return false;
+        }
+        strData.append(minBuff, header.originsize);
     }
 
-    BinaryReadStream readStream(minBuff, header.packagesize);
+    BinaryReadStream readStream(strData.c_str(), strData.length());
     int32_t cmd;
     if (!readStream.ReadInt32(cmd))
         return false;

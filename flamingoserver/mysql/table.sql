@@ -24,7 +24,8 @@ CREATE TABLE IF NOT EXISTS  t_user  (
          KEY  f_id  ( f_id )
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8
 
-// alter table t_user add f_teaminfo blob default null comment "好友分组信息";
+//alter table t_user add f_teaminfo blob default null comment "好友分组信息";
+//alter table t_user drop column f_teaminfo;
 
 //用户关系表
 //为了避免冗余，一定要保证f_user_id1小于f_user_id2
@@ -32,11 +33,21 @@ CREATE TABLE IF NOT EXISTS  t_user_relationship  (
          f_id  bigint(20) NOT NULL AUTO_INCREMENT COMMENT '自增ID',
          f_user_id1  bigint(20) NOT NULL COMMENT '第一个用户id',
          f_user_id2  bigint(20) NOT NULL COMMENT '第二个用户id',
-         f_create_time  timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '创建时间',
+		 f_user1_teamindex INT NOT NULL DEFAULT 0 COMMENT "用户2在用户1的好友分组索引",
+		 f_user1_teamname VARCHAR(32) NOT NULL DEFAULT "我的好友" COMMENT "用户2在用户1的好友分组名称",
+		 f_user2_teamindex INT NOT NULL DEFAULT 0 COMMENT "用户1在用户2的好友分组索引",
+		 f_user2_teamname VARCHAR(32) NOT NULL DEFAULT "我的好友" COMMENT "用户1在用户2的好友分组名称",
+         f_update_time  timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
          f_remark  varchar(64) DEFAULT NULL COMMENT '备注',
          PRIMARY KEY ( f_id ),
          KEY  f_id  ( f_id )
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8
+
+//ALTER TABLE t_user_relationship CHANGE f_create_time f_update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间';		
+//alter table t_user_relationship modify f_user1_teamindex int not null default 0 comment "用户2在用户1的好友分组索引";
+//alter table t_user_relationship modify f_user1_teamname varchar(32) not null default "我的好友" comment "用户2在用户1的好友分组名称";
+//alter table t_user_relationship modify f_user2_teamindex int not null default 0 comment "用户1在用户2的好友分组名称";
+//alter table t_user_relationship modify f_user2_teamname varchar(32) not null default "我的好友" comment "用户1在用户2的好友分组名称";
 
 //消息记录表
 CREATE TABLE IF NOT EXISTS  t_chatmsg  (
@@ -63,3 +74,19 @@ CREATE TABLE `t_device` (
   PRIMARY KEY (`f_id`),
   KEY `f_id` (`f_id`)
 ) ENGINE=InnoDB AUTO_INCREMENT=181 DEFAULT CHARSET=utf8
+
+
+//低版本mysql使用如下语句创建设备信息表
+CREATE TABLE `t_device` (  
+  `f_id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '自增ID',
+  `f_user_id` bigint(20) NOT NULL COMMENT '用户ID',
+  `f_deviceid` bigint(20) NOT NULL COMMENT '设备id',
+  `f_classtype` bigint(20) NOT NULL COMMENT '信息类别',
+  `f_deviceinfo` BLOB NOT NULL COMMENT '设备具体信息内容',
+  `f_upload_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '上传时间',
+  `f_create_time` timestamp DEFAULT 0 COMMENT '更新时间',
+  `f_remark` varchar(64) DEFAULT NULL COMMENT '备注', 
+  PRIMARY KEY (`f_id`),
+  KEY `f_id` (`f_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=181 DEFAULT CHARSET=utf8
+

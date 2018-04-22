@@ -19,6 +19,7 @@
 #include "../mysql/mysqlmanager.h"
 #include "UserManager.h"
 #include "IMServer.h"
+#include "MonitorServer.h"
 
 using namespace net;
 
@@ -100,7 +101,7 @@ int main(int argc, char* argv[])
         daemon_run();
 
 
-    CConfigFileReader config("chatserver.conf");
+    CConfigFileReader config("mychatserver.conf");
 
     Logger::setLogLevel(Logger::INFO);
     const char* logfilepath = config.GetConfigName("logfiledir");
@@ -157,6 +158,11 @@ int main(int argc, char* argv[])
     const char* listenip = config.GetConfigName("listenip");
     short listenport = (short)atol(config.GetConfigName("listenport"));
     Singleton<IMServer>::Instance().Init(listenip, listenport, &g_mainLoop);
+
+    const char* monitorlistenip = config.GetConfigName("monitorlistenip");
+    short monitorlistenport = (short)atol(config.GetConfigName("monitorlistenport"));
+    const char* monitortoken = config.GetConfigName("monitortoken");
+    Singleton<MonitorServer>::Instance().Init(monitorlistenip, monitorlistenport, &g_mainLoop, monitortoken);
 
     LOG_INFO << "chatserver initialization complete.";
     

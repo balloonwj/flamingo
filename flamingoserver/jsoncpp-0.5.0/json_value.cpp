@@ -1174,6 +1174,31 @@ Value::removeMember( const std::string &key )
    return removeMember( key.c_str() );
 }
 
+void
+Value::removeArrayElement(ArrayIndex index)
+{
+    if (type_ == arrayValue){
+#ifndef JSON_VALUE_USE_INTERNAL_MAP
+        CZString key(index);
+        ObjectValues::iterator it = value_.map_->find(key);
+        if (it != value_.map_->end()){
+            ArrayIndex oldSize = size();
+            // shift left all items left, into the place of the "removed"
+            for (ArrayIndex i = index; i<oldSize - 1; i++){
+                CZString key(i);
+                (*value_.map_)[key] = (*this)[i + 1];
+            }
+            // erase the last one ("leftover")
+            CZString keyLast(oldSize - 1);
+            ObjectValues::iterator itLast = value_.map_->find(keyLast);
+            value_.map_->erase(itLast);
+        }
+#else
+        NOT SUPPORTED
+#endif
+    }
+}
+
 # ifdef JSON_USE_CPPTL
 Value 
 Value::get( const CppTL::ConstString &key,

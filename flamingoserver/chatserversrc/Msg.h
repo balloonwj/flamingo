@@ -6,6 +6,13 @@
 
 #include <stdint.h>
 
+//包是否压缩过
+enum
+{
+    PACKAGE_UNCOMPRESSED,
+    PACKAGE_COMPRESSED
+};
+
 enum msg_type
 {
     msg_type_unknown,
@@ -23,21 +30,60 @@ enum msg_type
     msg_type_chat   = 1100,         //单聊消息
     msg_type_multichat,             //群发消息
     msg_type_kickuser,              //被踢下线
-    msg_type_screenshot,            //屏幕截图
+    msg_type_remotedesktop,         //屏幕截图
+    msg_type_updateteaminfo,        //更新用户好友分组信息
 
     //定制协议
     msg_type_uploaddeviceinfo   = 2000, //上传设备信息
     msg_type_downloaddeviceinfo = 2001  //拉取设备信息
 };
 
+//在线类型
+enum online_type{
+    online_type_offline         = 0,    //离线
+    online_type_pc_online       = 1,    //电脑在线
+    online_type_pc_invisible    = 2,    //电脑隐身
+    online_type_android_cellular= 3,    //android 3G/4G/5G在线
+    online_type_android_wifi    = 4,    //android wifi在线
+    online_type_ios             = 5,    //ios 在线
+    online_type_mac             = 6     //MAC在线
+};
+
 #pragma pack(push, 1)
 //协议头
 struct msg
 {
-    int32_t  packagesize;       //指定包体的大小
+    char     compressflag;     //压缩标志，如果为1，则启用压缩，反之不启用压缩
+    int32_t  originsize;       //包体压缩前大小
+    int32_t  compresssize;     //包体压缩后大小
+    char     reserved[16];
 };
 
 #pragma pack(pop)
+
+//type为1发出加好友申请 2 收到加好友请求(仅客户端使用) 3应答加好友 4删除好友请求 5应答删除好友
+//当type=3时，accept是必须字段，0对方拒绝，1对方接受
+enum friend_operation_type
+{
+    //发送加好友申请
+    friend_operation_send_add_apply      = 1,
+    //接收到加好友申请(仅客户端使用)
+    friend_operation_recv_add_apply,
+    //应答加好友申请
+    friend_operation_reply_add_apply,
+    //删除好友申请
+    friend_operation_send_delete_apply,
+    //应答删好友申请
+    friend_operation_recv_delete_apply
+};
+
+enum friend_operation_apply_type
+{
+    //拒绝加好友
+    friend_operation_apply_refuse,
+    //接受加好友
+    friend_operation_apply_accept
+};
 
 /** 
  *  错误码
@@ -51,7 +97,23 @@ struct msg
  *  104 更新用户信息失败
  *  105 修改密码失败
  *  106 创建群失败
+ *  107 客户端版本太旧，需要升级成新版本
  */
+//TODO: 其他的地方改成这个错误码
+enum error_code
+{
+    error_code_ok                   = 0,
+    error_code_unknown              = 1,
+    error_code_notlogin             = 2,
+    error_code_registerfail         = 100,
+    error_code_registeralready      = 101,
+    error_code_notregister          = 102,
+    error_code_invalidpassword      = 103,
+    error_code_updateuserinfofail   = 104,
+    error_code_modifypasswordfail   = 105,
+    error_code_creategroupfail      = 106,
+    error_code_toooldversion        = 107
+};
 
 /**
  *  心跳包协议
@@ -271,6 +333,96 @@ cmd = 1010, seq = 0, {"code":0, "msg": "ok", "groupid": 12345678,
 /*
     cmd = 1103, seq = 0, string: 位图头部信息， 位图信息，targetId
 **/
+
+/**
+ * 更新用户好友分组信息
+ **/
+/*
+    客户端请求： cmd = 1104, seq = 0, data: 组装后的json
+    服务器应答： cmd = 1003, seq = 0,  
+    {
+    "code": 0,
+    "msg": "ok",
+    "userinfo": [
+        {
+            "teamindex": 1,
+            "teamname": "我的好友",
+            "members": [
+                {
+                    "userid": 2,
+                    "username": "qqq",
+                    "nickname": "qqq123",
+                    "facetype": 0,
+                    "customface": "466649b507cdf7443c4e88ba44611f0c",
+                    "gender": 1,
+                    "birthday": 19900101,
+                    "signature": "生活需要很多的力气呀。xx",
+                    "address": "",
+                    "phonenumber": "",
+                    "mail": "",
+                    "clienttype": 1,
+                    "status": 1,
+                    "markname": "qq测试号"
+                },
+                {
+                    "userid": 3,
+                    "username": "hujing",
+                    "nickname": "hujingx",
+                    "facetype": 0,
+                    "customface": "",
+                    "gender": 0,
+                    "birthday": 19900101,
+                    "signature": "",
+                    "address": "",
+                    "phonenumber": "",
+                    "mail": "",
+                    "clienttype": 1,
+                    "status": 0
+                }
+            ]
+        },
+        {
+            "teamindex": 2,
+            "teamname": "我的同学",
+            "members": [
+                {
+                    "userid": 4,
+                    "username": "qqq",
+                    "nickname": "qqq123",
+                    "facetype": 0,
+                    "customface": "466649b507cdf7443c4e88ba44611f0c",
+                    "gender": 1,
+                    "birthday": 19900101,
+                    "signature": "生活需要很多的力气呀。xx",
+                    "address": "",
+                    "phonenumber": "",
+                    "mail": "",
+                    "clienttype": 1,
+                    "status": 1
+                },
+                {
+                    "userid": 5,
+                    "username": "hujing",
+                    "nickname": "hujingx",
+                    "facetype": 0,
+                    "customface": "",
+                    "gender": 0,
+                    "birthday": 19900101,
+                    "signature": "",
+                    "address": "",
+                    "phonenumber": "",
+                    "mail": "",
+                    "clienttype": 1,
+                    "status": 0,
+                    "markname": "qq测试号"
+                }
+            ]
+        }
+    ]
+}
+**/
+
+
 
 ////////////////////////
 //定制信息

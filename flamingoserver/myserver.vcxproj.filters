@@ -50,6 +50,26 @@
     <ClCompile Include="net\Timer.cpp" />
     <ClCompile Include="imgserversrc\main.cpp" />
     <ClCompile Include="net\protocolstream.cpp" />
+    <ClCompile Include="zlib1.2.11\adler32.c" />
+    <ClCompile Include="zlib1.2.11\compress.c" />
+    <ClCompile Include="zlib1.2.11\crc32.c" />
+    <ClCompile Include="zlib1.2.11\deflate.c" />
+    <ClCompile Include="zlib1.2.11\gzclose.c" />
+    <ClCompile Include="zlib1.2.11\gzlib.c" />
+    <ClCompile Include="zlib1.2.11\gzread.c" />
+    <ClCompile Include="zlib1.2.11\gzwrite.c" />
+    <ClCompile Include="zlib1.2.11\infback.c" />
+    <ClCompile Include="zlib1.2.11\inffast.c" />
+    <ClCompile Include="zlib1.2.11\inflate.c" />
+    <ClCompile Include="zlib1.2.11\inftrees.c" />
+    <ClCompile Include="zlib1.2.11\trees.c" />
+    <ClCompile Include="zlib1.2.11\uncompr.c" />
+    <ClCompile Include="zlib1.2.11\zlibdemo.c" />
+    <ClCompile Include="zlib1.2.11\ZlibUtil.cpp" />
+    <ClCompile Include="zlib1.2.11\zutil.c" />
+    <ClCompile Include="chatserversrc\MonitorServer.cpp" />
+    <ClCompile Include="chatserversrc\MonitorSession.cpp" />
+    <ClCompile Include="utils\StringUtil.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="base\asynclogging.h" />
@@ -111,6 +131,21 @@
     <ClInclude Include="net\TimerId.h" />
     <ClInclude Include="net\Timer.h" />
     <ClInclude Include="net\protocolstream.h" />
+    <ClInclude Include="zlib1.2.11\crc32.h" />
+    <ClInclude Include="zlib1.2.11\deflate.h" />
+    <ClInclude Include="zlib1.2.11\gzguts.h" />
+    <ClInclude Include="zlib1.2.11\inffast.h" />
+    <ClInclude Include="zlib1.2.11\inffixed.h" />
+    <ClInclude Include="zlib1.2.11\inflate.h" />
+    <ClInclude Include="zlib1.2.11\inftrees.h" />
+    <ClInclude Include="zlib1.2.11\trees.h" />
+    <ClInclude Include="zlib1.2.11\zconf.h" />
+    <ClInclude Include="zlib1.2.11\zlib.h" />
+    <ClInclude Include="zlib1.2.11\ZlibUtil.h" />
+    <ClInclude Include="zlib1.2.11\zutil.h" />
+    <ClInclude Include="chatserversrc\MonitorServer.h" />
+    <ClInclude Include="chatserversrc\MonitorSession.h" />
+    <ClInclude Include="utils\StringUtil.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />
@@ -120,8 +155,8 @@
     <None Include="jsoncpp-0.5.0\json_internalmap.inl" />
     <None Include="jsoncpp-0.5.0\json_valueiterator.inl" />
     <None Include="mysql\table.sql" />
-    <None Include="chatserver.conf" />
-    <None Include="fileserver.conf" />
-    <None Include="imgserver.conf" />
+    <None Include="mychatserver.conf" />
+    <None Include="myfileserver.conf" />
+    <None Include="myimgserver.conf" />
   </ItemGroup>
 </Project>

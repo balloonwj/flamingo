@@ -84,6 +84,8 @@
     <ClCompile Include="base\logging.cpp" />
     <ClCompile Include="base\logstream.cpp" />
     <ClCompile Include="base\timestamp.cpp" />
+    <ClCompile Include="chatserversrc\MonitorServer.cpp" />
+    <ClCompile Include="chatserversrc\MonitorSession.cpp" />
     <ClCompile Include="chatserversrc\TcpSession.cpp" />
     <ClCompile Include="common\ngx_md5.cpp" />
     <ClCompile Include="database\databasemysql.cpp" />
@@ -125,6 +127,24 @@
     <ClCompile Include="net\tcpserver.cpp" />
     <ClCompile Include="net\Timer.cpp" />
     <ClCompile Include="net\TimerQueue.cpp" />
+    <ClCompile Include="utils\StringUtil.cpp" />
+    <ClCompile Include="zlib1.2.11\adler32.c" />
+    <ClCompile Include="zlib1.2.11\compress.c" />
+    <ClCompile Include="zlib1.2.11\crc32.c" />
+    <ClCompile Include="zlib1.2.11\deflate.c" />
+    <ClCompile Include="zlib1.2.11\gzclose.c" />
+    <ClCompile Include="zlib1.2.11\gzlib.c" />
+    <ClCompile Include="zlib1.2.11\gzread.c" />
+    <ClCompile Include="zlib1.2.11\gzwrite.c" />
+    <ClCompile Include="zlib1.2.11\infback.c" />
+    <ClCompile Include="zlib1.2.11\inffast.c" />
+    <ClCompile Include="zlib1.2.11\inflate.c" />
+    <ClCompile Include="zlib1.2.11\inftrees.c" />
+    <ClCompile Include="zlib1.2.11\trees.c" />
+    <ClCompile Include="zlib1.2.11\uncompr.c" />
+    <ClCompile Include="zlib1.2.11\zlibdemo.c" />
+    <ClCompile Include="zlib1.2.11\ZlibUtil.cpp" />
+    <ClCompile Include="zlib1.2.11\zutil.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="base\asynclogging.h" />
@@ -136,6 +156,8 @@
     <ClInclude Include="base\logstream.h" />
     <ClInclude Include="base\singleton.h" />
     <ClInclude Include="base\timestamp.h" />
+    <ClInclude Include="chatserversrc\MonitorServer.h" />
+    <ClInclude Include="chatserversrc\MonitorSession.h" />
     <ClInclude Include="chatserversrc\TcpSession.h" />
     <ClInclude Include="common\ngx_md5.h" />
     <ClInclude Include="database\databasemysql.h" />
@@ -186,17 +208,30 @@
     <ClInclude Include="net\Timer.h" />
     <ClInclude Include="net\TimerId.h" />
     <ClInclude Include="net\TimerQueue.h" />
+    <ClInclude Include="utils\StringUtil.h" />
+    <ClInclude Include="zlib1.2.11\crc32.h" />
+    <ClInclude Include="zlib1.2.11\deflate.h" />
+    <ClInclude Include="zlib1.2.11\gzguts.h" />
+    <ClInclude Include="zlib1.2.11\inffast.h" />
+    <ClInclude Include="zlib1.2.11\inffixed.h" />
+    <ClInclude Include="zlib1.2.11\inflate.h" />
+    <ClInclude Include="zlib1.2.11\inftrees.h" />
+    <ClInclude Include="zlib1.2.11\trees.h" />
+    <ClInclude Include="zlib1.2.11\zconf.h" />
+    <ClInclude Include="zlib1.2.11\zlib.h" />
+    <ClInclude Include="zlib1.2.11\ZlibUtil.h" />
+    <ClInclude Include="zlib1.2.11\zutil.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="CMakeLists.txt" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="chatserver.conf" />
-    <None Include="fileserver.conf" />
-    <None Include="imgserver.conf" />
     <None Include="jsoncpp-0.5.0\json_internalarray.inl" />
     <None Include="jsoncpp-0.5.0\json_internalmap.inl" />
     <None Include="jsoncpp-0.5.0\json_valueiterator.inl" />
+    <None Include="mychatserver.conf" />
+    <None Include="myfileserver.conf" />
+    <None Include="myimgserver.conf" />
     <None Include="mysql\table.sql" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -195,6 +195,9 @@
     <ClCompile Include="RecvMsgThread.cpp" />
     <ClCompile Include="RegisterDialog.cpp" />
     <ClCompile Include="RemoteDesktopDlg.cpp" />
+    <ClCompile Include="RemoteDesktop\ScreenManager.cpp" />
+    <ClCompile Include="RemoteDesktop\ScreenSpy.cpp" />
+    <ClCompile Include="RemoteDesktop\until.cpp" />
     <ClCompile Include="RichEditUtil.cpp" />
     <ClCompile Include="SendMsgThread.cpp" />
     <ClCompile Include="SessChatDlg.cpp" />
@@ -238,6 +241,55 @@
     <ClCompile Include="UserMgr.cpp" />
     <ClCompile Include="Utils.cpp" />
     <ClCompile Include="XmlDocument.cpp" />
+    <ClCompile Include="zlib1.2.11\adler32.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\compress.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\crc32.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\deflate.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\gzclose.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\gzlib.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\gzread.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\gzwrite.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\infback.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\inffast.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\inflate.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\inftrees.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\trees.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\uncompr.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\zlibdemo.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\zutil.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="ZlibUtil.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AboutDlg.h" />
@@ -314,6 +366,10 @@
     <ClInclude Include="RecvMsgThread.h" />
     <ClInclude Include="RegisterDialog.h" />
     <ClInclude Include="RemoteDesktopDlg.h" />
+    <ClInclude Include="RemoteDesktop\CursorInfo.h" />
+    <ClInclude Include="RemoteDesktop\ScreenManager.h" />
+    <ClInclude Include="RemoteDesktop\ScreenSpy.h" />
+    <ClInclude Include="RemoteDesktop\until.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="RichEditUtil.h" />
     <ClInclude Include="SendMsgThread.h" />
@@ -356,6 +412,18 @@
     <ClInclude Include="UserMgr.h" />
     <ClInclude Include="Utils.h" />
     <ClInclude Include="XmlDocument.h" />
+    <ClInclude Include="zlib1.2.11\crc32.h" />
+    <ClInclude Include="zlib1.2.11\deflate.h" />
+    <ClInclude Include="zlib1.2.11\gzguts.h" />
+    <ClInclude Include="zlib1.2.11\inffast.h" />
+    <ClInclude Include="zlib1.2.11\inffixed.h" />
+    <ClInclude Include="zlib1.2.11\inflate.h" />
+    <ClInclude Include="zlib1.2.11\inftrees.h" />
+    <ClInclude Include="zlib1.2.11\trees.h" />
+    <ClInclude Include="zlib1.2.11\zconf.h" />
+    <ClInclude Include="zlib1.2.11\zlib.h" />
+    <ClInclude Include="zlib1.2.11\zutil.h" />
+    <ClInclude Include="ZlibUtil.h" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\100.ico" />
@@ -376,6 +444,9 @@
     <None Include="jsoncpp-0.5.0\json_internalarray.inl" />
     <None Include="jsoncpp-0.5.0\json_internalmap.inl" />
     <None Include="jsoncpp-0.5.0\json_valueiterator.inl" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="zlib1.2.11\文件概览.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

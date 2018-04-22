@@ -11,6 +11,7 @@
 #include "Startup.h"
 #include "File2.h"
 #include "Path.h"
+#include <sstream>
 
 CFlamingoClient& CFlamingoClient::GetInstance()
 {
@@ -238,7 +239,69 @@ BOOL CFlamingoClient::DeleteFriend(UINT uAccountID)
 
 bool CFlamingoClient::AddNewTeam(PCTSTR pszNewTeamName)
 {
-    return false;
+    if (pszNewTeamName == NULL || pszNewTeamName[0] == NULL)
+        return false;
+    /* 组装以后的格式
+            [
+                {
+                    "teamindex": 0,
+                    "teamname": "My Friends",
+                    "members": [
+                        {
+                            "userid": 4,
+                            "markname": ""
+                        },
+                        {
+                            "userid": 124,
+                            "markname": ""
+                        }
+                    ]
+                },
+                {
+                    "teamindex": 1,
+                    "teamname": "My Classmates",    //新分组
+                    "members": []
+                }
+            ]
+    */
+
+    std::wostringstream osTeamInfo;
+    osTeamInfo << _T("[");
+    for (size_t i = 0; i < m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
+    {
+        osTeamInfo << _T("{\"teamindex\":") << i 
+                   << _T(", \"teamname\": \"") << m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo[i]->m_strName 
+                   << _T("\", \"members\":[");
+        for (size_t j = 0; j < m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo[i]->m_arrBuddyInfo.size(); ++j)
+        {
+            osTeamInfo << _T("{\"userid\":") << m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo[i]->m_arrBuddyInfo[j]->m_uUserID << _T(", \"markname\":\"\"}");
+            //最后一个结尾不加逗号
+            if (j != m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo[i]->m_arrBuddyInfo.size() - 1)
+                osTeamInfo << _T(",");
+        }
+
+        osTeamInfo << _T("]}");
+        //最后一个结尾不加逗号
+        if (i != m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.size() - 1)
+            osTeamInfo << _T(",");
+    }
+
+    //新分组节点
+    osTeamInfo << _T(", {\"teamindex\":") << m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.size()
+               << _T(", \"teamname\": \"") << pszNewTeamName
+               << _T("\", \"members\":[");
+
+    osTeamInfo << _T("]}]");
+
+    tstring strTeamInfo = osTeamInfo.str();
+
+    //TODO: 先判断是否离线
+    CAddTeamInfoRequest* pRequest = new CAddTeamInfoRequest();
+    pRequest->m_strNewTeamInfo = strTeamInfo;
+
+    m_SendMsgThread.AddItem(pRequest);
+
+    return true;
 }
 
 BOOL CFlamingoClient::UpdateLogonUserInfo(  PCTSTR pszNickName, 
@@ -1072,6 +1135,7 @@ void CFlamingoClient::OnUpdateUserBasicInfo(UINT message, WPARAM wParam, LPARAM 
         {       
             pTeamInfo = new CBuddyTeamInfo();
             pTeamInfo->m_nIndex = nTeamIndex;
+            ++ nTeamIndex;
             pTeamInfo->m_strName = EncodeUtil::Utf8ToUnicode(iter.first);
             m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.push_back(pTeamInfo);
             

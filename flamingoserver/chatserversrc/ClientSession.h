@@ -23,7 +23,7 @@ struct OnlineUserInfo
 class ClientSession : public TcpSession
 {
 public:
-    ClientSession(const std::shared_ptr<TcpConnection>& conn);
+    ClientSession(const std::shared_ptr<TcpConnection>& conn, int sessionid);
     virtual ~ClientSession();
 
     ClientSession(const ClientSession& rhs) = delete;
@@ -31,10 +31,30 @@ public:
 
     //有数据可读, 会被多个工作loop调用
     void OnRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBuffer, Timestamp receivTime);   
+    
+    int32_t GetSessionId()
+    {
+        return m_id;
+    }
 
     int32_t GetUserId()
     {
         return m_userinfo.userid;
+    }
+
+    std::string GetUsername()
+    {
+        return m_userinfo.username;
+    }
+
+    std::string GetNickname()
+    {
+        return m_userinfo.nickname;
+    }
+
+    std::string GetPassword()
+    {
+        return m_userinfo.password;
     }
 
     int32_t GetClientType()
@@ -68,7 +88,7 @@ public:
     void CheckHeartbeat(const std::shared_ptr<TcpConnection>& conn);
 
 private:
-    bool Process(const std::shared_ptr<TcpConnection>& conn, const char* inbuf, size_t length);
+    bool Process(const std::shared_ptr<TcpConnection>& conn, const char* inbuf, size_t buflength);
     
     void OnHeartbeatResponse(const std::shared_ptr<TcpConnection>& conn);
     void OnRegisterResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
@@ -85,12 +105,16 @@ private:
     void OnChatResponse(int32_t targetid, const std::string& data, const std::shared_ptr<TcpConnection>& conn);
     void OnMultiChatResponse(const std::string& targets, const std::string& data, const std::shared_ptr<TcpConnection>& conn);
     void OnScreenshotResponse(int32_t targetid, const std::string& bmpHeader, const std::string& bmpData, const std::shared_ptr<TcpConnection>& conn);
+    void OnUpdateTeamInfoResponse(const std::string& teaminfodata, const std::shared_ptr<TcpConnection>& conn);
 
 
     //定制函数
     void OnUploadDeviceInfo(int32_t deviceid, int32_t classtype, int64_t uploadtime, const std::string& strDeviceInfo, const std::shared_ptr<TcpConnection>& conn);
 
     void DeleteFriend(const std::shared_ptr<TcpConnection>& conn, int32_t friendid);
+
+    //根据用户分组信息组装应答给客户端的好友列表信息
+    void MakeUpFriendListInfo(std::string& friendinfo, const std::shared_ptr<TcpConnection>& conn);
 
 private:
     int32_t           m_id;                 //session id

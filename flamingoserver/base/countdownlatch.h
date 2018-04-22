@@ -6,20 +6,20 @@
 
 using namespace std;
 
-	class CountDownLatch
-	{
-	public:
+class CountDownLatch
+{
+public:
 
-		explicit CountDownLatch(int count);
+    explicit CountDownLatch(int count);
 
-		void wait();
+    void wait();
 
-		void countDown();
+    void countDown();
 
-		int getCount() const;
+    int getCount() const;
 
-	private:
-		mutable std::mutex mutex_;
-		std::condition_variable condition_;
-		int count_;
-	};
+private:
+    mutable std::mutex      mutex_;
+    std::condition_variable condition_;
+    int                     count_;
+};

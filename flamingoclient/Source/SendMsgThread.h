@@ -93,6 +93,7 @@ private:
 	void HandleUpdateLogonUserInfoMessage(const CUpdateLogonUserInfoRequest* pRequest);
 	void HandleModifyPassword(const CModifyPasswordRequest* pModifyPassword);
 	void HandleCreateNewGroup(const CCreateNewGroupRequest* pCreateNewGroup);
+    void HandleAddNewTeam(const CAddTeamInfoRequest* pAddNewTeam);
 
 	BOOL HandleFontInfo(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);
 	BOOL HandleSysFaceId(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);
@@ -116,7 +117,7 @@ private:
 	std::wstring UnicodeToHexStr(const WCHAR* lpStr, BOOL bDblSlash);
 
 public:
-	CFlamingoClient*				m_lpFMGClient;
+	CFlamingoClient*			m_lpFMGClient;
 	CUserMgr*					m_lpUserMgr;
 
 private:

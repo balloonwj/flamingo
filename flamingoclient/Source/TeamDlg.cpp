@@ -139,9 +139,10 @@ void CTeamDlg::OnOK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	//Ìí¼Ó·Ö×é
 	if(m_nOperationType == TEAM_OPERATION_ADDTEAM)
 	{
-		CBuddyTeamInfo* pTeamInfo = new CBuddyTeamInfo();
-		pTeamInfo->m_strName = strTeamName;
-		m_pFMGClient->m_UserMgr.m_BuddyList.AddBuddyTeam(pTeamInfo);
+		//CBuddyTeamInfo* pTeamInfo = new CBuddyTeamInfo();
+		//pTeamInfo->m_strName = strTeamName;
+		//m_pFMGClient->m_UserMgr.m_BuddyList.AddBuddyTeam(pTeamInfo);
+        m_pFMGClient->AddNewTeam(strTeamName);
 	}
 	else if(m_nOperationType == TEAM_OPERATION_MODIFYTEAMNAME)
 	{

@@ -642,7 +642,7 @@ BOOL CSkinMenu::ModifyMenu(UINT nPosition, UINT nFlags,
 {
 	BOOL bByPosition;
 	SKIN_MENU_ITEM_INFO* lpSkinMenuItemInfo;
-	BOOL bRet;
+	BOOL bRet = FALSE;
 
 	bByPosition = nFlags & MF_BYPOSITION ? TRUE : FALSE;
 	lpSkinMenuItemInfo = GetMenuItemInfo(nPosition, bByPosition);

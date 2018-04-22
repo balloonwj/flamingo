@@ -98,7 +98,7 @@ int main(int argc, char* argv[])
     if (bdaemon)
         daemon_run();
 
-    CConfigFileReader config("fileserver.conf");
+    CConfigFileReader config("myfileserver.conf");
     const char* logfilepath = config.GetConfigName("logfiledir");
     if (logfilepath == NULL)
     {

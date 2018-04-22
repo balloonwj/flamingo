@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include "../database/databasemysql.h"
 #include "../base/logging.h"
+#include "../jsoncpp-0.5.0/json.h"
 #include "UserManager.h"
 
 UserManager::UserManager()
@@ -35,7 +36,13 @@ bool UserManager::Init(const char* dbServer, const char* dbUserName, const char*
     {
         if (!LoadRelationshipFromDb(iter.userid, iter.friends))
         {
-            LOG_WARN << "Load relationship from db error, userid=" << iter.userid;
+            LOG_ERROR << "Load relationship from db error, userid=" << iter.userid;
+            continue;
+        }
+
+        if (!MakeUpTeamInfo(iter, iter.friends))
+        {
+            LOG_ERROR << "MakeUpTeamInfo error, userid=" << iter.userid;
         }
     }
 
@@ -61,7 +68,8 @@ bool UserManager::LoadUsersFromDb()
         LOG_INFO << "UserManager::_Query error, dbname=" << m_strDbName;
         return false;
     }
- 
+    
+    string teaminfo;
     while (true)
     {
         Field* pRow = pResult->Fetch();
@@ -107,6 +115,56 @@ bool UserManager::LoadUsersFromDb()
     return true;
 }
 
+bool UserManager::MakeUpTeamInfo(User& u, const set<int32_t>& friends)
+{
+    //如果已经存在分组信息，则不设置默认的
+    if (!u.teaminfo.empty())
+        return true;
+    
+    //拼装默认的分组信息
+    /*
+    [
+    {
+    "teamindex": 0,
+    "teamname": "我的好友",
+    "members": [
+    {
+    "userid": 1,
+    "markname": "张某某"
+    },
+    {
+    "userid": 2,
+    "markname": "张xx"
+    }
+    ]
+    }
+    ]
+    */
+    std::string strUserInfo;
+    ostringstream osTeamInfo;
+    osTeamInfo << "[{\"teamindex\": 0, \"teamname\" : \"My Friends\", \"members\" : ";
+    for (const auto& iter : friends)
+    {
+        /*
+        {"code": 0, "msg": "ok", "userinfo":[{"userid": 1,"username":"qqq,
+        "nickname":"qqq, "facetype": 0, "customface":"", "gender":0, "birthday":19900101,
+        "signature":", "address": "", "phonenumber": "", "mail":", "clienttype": 1, "status":1"]}
+        */
+        ostringstream osSingleUserInfo;
+        osSingleUserInfo << "{\"userid\": " << iter << ",\"markname\":\"" << "\"}";
+
+        strUserInfo += osSingleUserInfo.str();
+        strUserInfo += ",";
+    }
+    //去掉最后多余的逗号
+    strUserInfo = strUserInfo.substr(0, strUserInfo.length() - 1);
+    std::ostringstream os;
+    os << osTeamInfo.str() << "[" << strUserInfo << "]}]";
+    u.teaminfo = os.str();
+
+    return true;
+}
+
 bool UserManager::AddUser(User& u)
 {
     std::unique_ptr<CDatabaseMysql> pConn;
@@ -134,6 +192,12 @@ bool UserManager::AddUser(User& u)
     u.gender = 0;
     u.ownerid = 0;
 
+    //新注册的用户分组信息由于没有初始化，这里初始化一下
+    if (!MakeUpTeamInfo(u, u.friends))
+    {
+        LOG_ERROR << "MakeUpTeamInfo error, userid=" << u.userid;
+    }
+
     {
         std::lock_guard<std::mutex> guard(m_mutex);
         m_allCachedUsers.push_back(u);
@@ -142,10 +206,18 @@ bool UserManager::AddUser(User& u)
     return true;
 }
 
+//数据库里面互为好友的两个人id，小者在先，大者在后
 bool UserManager::MakeFriendRelationship(int32_t smallUserid, int32_t greaterUserid)
 {
-    if (smallUserid >= greaterUserid)
+    if (smallUserid == greaterUserid)
         return false;
+
+    if (smallUserid > greaterUserid)
+    {
+        int32_t tmp = greaterUserid;
+        greaterUserid = smallUserid;
+        smallUserid = tmp;
+    }
 
     std::unique_ptr<CDatabaseMysql> pConn;
     pConn.reset(new CDatabaseMysql());
@@ -176,8 +248,15 @@ bool UserManager::MakeFriendRelationship(int32_t smallUserid, int32_t greaterUse
 
 bool UserManager::ReleaseFriendRelationship(int32_t smallUserid, int32_t greaterUserid)
 {
-    if(smallUserid >= greaterUserid)
+    if(smallUserid == greaterUserid)
         return false;
+
+    if (smallUserid > greaterUserid)
+    {
+        int32_t tmp = greaterUserid;
+        greaterUserid = smallUserid;
+        smallUserid = tmp;
+    }
 
     std::unique_ptr<CDatabaseMysql> pConn;
     pConn.reset(new CDatabaseMysql());
@@ -258,7 +337,7 @@ bool UserManager::DeleteFriendToUser(int32_t userid, int32_t friendid)
     return false;
 }
 
-bool UserManager::UpdateUserInfo(int32_t userid, const User& newuserinfo)
+bool UserManager::UpdateUserInfoInDb(int32_t userid, const User& newuserinfo)
 {
     std::unique_ptr<CDatabaseMysql> pConn;
     pConn.reset(new CDatabaseMysql());
@@ -311,7 +390,6 @@ bool UserManager::UpdateUserInfo(int32_t userid, const User& newuserinfo)
     return false;
 }
 
-
 bool UserManager::ModifyUserPassword(int32_t userid, const std::string& newpassword)
 {
     std::unique_ptr<CDatabaseMysql> pConn;
@@ -346,7 +424,164 @@ bool UserManager::ModifyUserPassword(int32_t userid, const std::string& newpassw
         }
     }
 
-    LOG_ERROR << "Failed to update user password to db, find exsit user in memory error, m_allCachedUsers.size(): " << m_allCachedUsers.size() << ", userid: " << userid << ", sql : " << osSql.str();
+    LOG_ERROR << "Failed to update user password to db, find no exsit user in memory error, m_allCachedUsers.size(): " << m_allCachedUsers.size() << ", userid: " << userid << ", sql : " << osSql.str();
+
+    return false;
+}
+
+bool UserManager::UpdateUserTeamInfo(int32_t userid, int32_t target, FRIEND_OPERATION operation)
+{
+    std::string* pTeaminfo = NULL;
+    {
+        std::lock_guard<std::mutex> guard(m_mutex);
+        for (auto& iter : m_allCachedUsers)
+        {
+            if (iter.userid == userid)
+            {
+                pTeaminfo = &iter.teaminfo;
+                break;
+            }
+        }
+    }
+    
+    if (pTeaminfo == NULL)
+    {
+        LOG_ERROR << "teaminfo is NULL while they must not be, userid=" << userid 
+                  << ", teaminfo=" << pTeaminfo;
+        return false;
+    }
+    else if (pTeaminfo->empty())
+    {
+        //非群组账号的teaminfo不能为空
+        if (userid < GROUPID_BOUBDARY)
+        {
+            LOG_ERROR << "teaminfo is empty while they must not be, userid=" << userid
+                << ", teaminfo=" << *pTeaminfo;
+            return false;
+        }
+        else
+            return true;
+    }
+        
+    /*
+    [
+        {
+            "teamindex": 0,
+            "teamname" : "我的好友",
+            "members" : [
+            {
+                "userid": 1,
+                "markname" : "张某某"
+            },
+            {
+                "userid": 2,
+                "markname" : "张xx"
+            }
+                ]
+        },
+        {
+            "teamindex": 1,
+            "teamname" : "我的朋友",
+            "members" : [
+            {
+                "userid": 3,
+                "markname" : "张某某"
+            },
+            {
+                "userid": 4,
+                "markname" : "张xx"
+            }
+            ]
+        }
+    ]
+    */
+
+    Json::Reader JsonReader(Json::Features::strictMode());
+    Json::Value JsonRoot;
+    if (!JsonReader.parse(*pTeaminfo, JsonRoot) || !JsonRoot.isArray())
+    {
+        LOG_ERROR << "parse teaminfo json failed, userid: " << userid << ", teaminfo: " << *pTeaminfo;
+        return false;
+    }
+
+    for (size_t i = 0; i < JsonRoot.size(); ++i)
+    {
+        //将添加的好友，默认放到第一个分组里面去
+        if (operation == FRIEND_OPERATION_ADD)
+        {
+            if (JsonRoot[i]["teamindex"].isInt() && JsonRoot[i]["teamindex"].asInt() == 0)
+            {
+                if (JsonRoot[i]["members"].isArray())
+                {
+                    size_t count = JsonRoot[i]["members"].size();
+                    JsonRoot[i]["members"][count]["userid"] = target;
+                    JsonRoot[i]["members"][count]["markname"] = "";
+                    Json::FastWriter writer;
+                    *pTeaminfo = writer.write(JsonRoot);
+                    if (UpdateUserTeamInfoInDb(userid, *pTeaminfo))
+                        return true;
+                    return false;
+                }
+            }
+        }
+        else if (operation == FRIEND_OPERATION_DELETE)
+        {
+            for (size_t j = 0; j < JsonRoot[i]["members"].size(); ++j)
+            {
+                Json::Value& node = JsonRoot[i]["members"][j];
+                if (node["userid"].isInt() && node["userid"].asInt() == target)
+                {
+                    JsonRoot[i]["members"].removeArrayElement(j);
+                    Json::FastWriter writer;
+                    *pTeaminfo = writer.write(JsonRoot);
+                    if(UpdateUserTeamInfoInDb(userid, *pTeaminfo))
+                        return true;
+                    return false;
+                }
+            }
+             
+        }
+    }// end for-loop
+   
+    return false;
+}
+
+bool UserManager::UpdateUserTeamInfoInDb(int32_t userid, const std::string& newteaminfo)
+{
+    std::unique_ptr<CDatabaseMysql> pConn;
+    pConn.reset(new CDatabaseMysql());
+    if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
+    {
+        LOG_ERROR << "UserManager::Initialize db failed, please check params: dbserver=" << m_strDbServer
+            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
+            << ", dbname=" << m_strDbName;
+        return false;
+    }
+
+    std::ostringstream osSql;
+    osSql << "UPDATE t_user SET f_teaminfo='"
+        << newteaminfo << "' WHERE f_user_id="
+        << userid;
+    if (!pConn->Execute(osSql.str().c_str()))
+    {
+        LOG_ERROR << "Update Team Info error, sql=" << osSql.str();
+        return false;
+    }
+
+    LOG_INFO << "update user teaminfo successfully, userid: " << userid << ", sql : " << osSql.str();
+
+    //TODO: 重复的代码，需要去掉
+    std::lock_guard<std::mutex> guard(m_mutex);
+    for (auto& iter : m_allCachedUsers)
+    {
+        if (iter.userid == userid)
+        {
+            iter.teaminfo = newteaminfo;
+            return true;
+        }
+    }
+
+    LOG_ERROR << "Failed to update user teaminfo to db, find no exsit user in memory error, m_allCachedUsers.size(): " << m_allCachedUsers.size() << ", userid: " << userid << ", sql : " << osSql.str();
 
     return false;
 }

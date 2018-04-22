@@ -63,6 +63,6 @@ private:
     std::shared_ptr<TcpServer>                     m_server;
     std::list<std::shared_ptr<ClientSession>>      m_sessions;
     std::mutex                                     m_sessionMutex;      //多线程之间保护m_sessions
-    int                                            m_baseUserId{};
+    int                                            m_sessionId{};
     std::mutex                                     m_idMutex;           //多线程之间保护m_baseUserId
 };

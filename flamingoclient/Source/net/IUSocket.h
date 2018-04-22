@@ -68,6 +68,7 @@ public:
     void    Send(const std::string& strBuffer);
 
    	//同步接口
+    //nTimeout单位是秒
     bool    Register(const char* pszUser, const char* pszNickname, const char* pszPassword, int nTimeout, std::string& strReturnData);
     bool    Login(const char* pszUser, const char* pszPassword, int nClientType, int nOnlineStatus, int nTimeout, std::string& strReturnData);
 
@@ -140,6 +141,7 @@ private:
     std::string                     m_strRecordPassword;
     int                             m_nRecordClientType;
     int                             m_nRecordOnlineStatus;
+    int                             m_seq;
 
 
 	CRecvMsgThread*					m_pRecvMsgThread;

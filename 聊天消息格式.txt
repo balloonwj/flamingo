@@ -1,0 +1,71 @@
+//Flamingo聊天格式（json）
+//PC聊天消息未转义前的格式
+helloworld												//普通文本
+/f["111"]												//表情
+/c["C:\Users\zhangyl.COMPANY\Desktop\AddFriend.png"]	//图片
+/o["微软雅黑,12,000000,0,0,0"]							//字体
+/i["md5, filesize,online"]								//文件
+/s["1"]													//窗口抖动
+/r["1"]													//远程桌面请求
+
+//排版格式
+{
+	"msgType": 1, //消息类型 0未知类型 1文本 2窗口抖动 3文件
+	"time": 2434167,
+	"clientType": 0,		//0未知 1pc端 2苹果端 3安卓端
+	"font":["fontname", fontSize, fontColor, fontBold, fontItalic, fontUnderline],
+	"content":
+	[
+		{"msgText": "text1"},
+		{"msgText": "text2"},
+		{"faceID": 101},
+		{"faceID": 102},
+		{"pic": ["name", "server_path", 400, w, h]},
+		{"remotedesktop": 1},
+		{"shake": 1},
+		{"file":["name", "server_path", 400, onlineflag]}		//onlineflag为0是离线文件，不为0为在线文件
+	]	
+}
+
+enum CONTENT_TYPE
+{
+	CONTENT_TYPE_UNKNOWN,			    // 未知消息类型
+	CONTENT_TYPE_TEXT,				    // 文本类型（包括图文混排类型）
+	CONTENT_TYPE_IMAGE_CONFIRM,		// 图片上传成功后的确认消息类型  pc专用 （pc在上传图片成功后 补发的消息 用于去下载  pc和app端都要处理）
+	CONTENT_TYPE_FILE,				    // 收到好友发送过来的文件
+	CONTENT_TYPE_SHAKE_WINDOW,		// 窗口抖动  pc专用
+	CONTENT_TYPE_MOBILE_IMAGE,		// app端发出的图片  （app端发送的图片信息，已经上传好才会发送的这一条  pc接到这个类型可以直接显示）
+	
+	CONTENT_TYPE_FONT_INFO,     //pc专用，移动端忽略
+	CONTENT_TYPE_FACE,          //pc专用，移动端忽略
+	CONTENT_TYPE_CUSTOM_FACE,   //pc专用，移动端忽略
+	CONTENT_TYPE_OFF_PIC        //pc专用，移动端忽略
+	
+	CONTENT_TYPE_REMOTE_DESKTOP //远程桌面
+};
+
+
+//新版Flamingo聊天格式（json）
+//排版格式
+{
+	"time": 2434167,		//暂且取本地时间
+	"clientType": 0,		//0未知 1pc端 2苹果端 3安卓端
+	"content":"hello[103][shake][pic,name,size,w,h][file,name,size]"	
+}
+
+
+//基本信息(系统头像、昵称、账号)
+
+//扩展信息(签名、自定义头像)
+
+typedef NS_ENUM(int, IUKMessageInsideType) {// 聊天消息类型
+    IUKMessageInsideTypeUndefined   = 0,// 未知消息类型
+    IUKMessageInsideTypeText        = 1,// 文本类型
+    IUKMessageInsideTypeImage       = 2,// 图片类型  pc专用 （pc在上传图片成功后 补发的消息 用于去下载  pc和app端都要处理）
+    IUKMessageInsideTypeFile        = 3,// 文件类型
+    IUKMessageInsideTypeShake       = 4,// 窗口抖动  pc专用
+    IUKMessageinsideTypeApp         = 5 // app端发出的图片  （app端发送的图片信息，已经上传好才会发送的这一条  pc接到这个类型可以直接显示）
+};
+
+
+

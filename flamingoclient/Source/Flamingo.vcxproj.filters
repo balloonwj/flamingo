@@ -40,6 +40,12 @@
     <Filter Include="jsoncpp-0.5.0">
       <UniqueIdentifier>{792883a9-fa67-41ef-94a4-302aba71f1ed}</UniqueIdentifier>
     </Filter>
+    <Filter Include="zlib1.2.11">
+      <UniqueIdentifier>{c4c2b734-8fd0-42a6-8982-08f8bb358676}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="RemoteDesktop">
+      <UniqueIdentifier>{36daf5c6-5829-400c-bd90-74ada6dad94d}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="CascadeWinManager.cpp">
@@ -341,6 +347,66 @@
     </ClCompile>
     <ClCompile Include="PerformanceCounter.cpp">
       <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\adler32.c">
+      <Filter>zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\compress.c">
+      <Filter>zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\crc32.c">
+      <Filter>zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\deflate.c">
+      <Filter>zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\gzclose.c">
+      <Filter>zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\gzlib.c">
+      <Filter>zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\gzread.c">
+      <Filter>zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\gzwrite.c">
+      <Filter>zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\infback.c">
+      <Filter>zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\inffast.c">
+      <Filter>zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\inflate.c">
+      <Filter>zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\inftrees.c">
+      <Filter>zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\trees.c">
+      <Filter>zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\uncompr.c">
+      <Filter>zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\zutil.c">
+      <Filter>zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="zlib1.2.11\zlibdemo.c">
+      <Filter>zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="ZlibUtil.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\ScreenManager.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\ScreenSpy.cpp">
+      <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\until.cpp">
+      <Filter>RemoteDesktop</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -692,6 +758,54 @@
     <ClInclude Include="PerformanceCounter.h">
       <Filter>Utils</Filter>
     </ClInclude>
+    <ClInclude Include="zlib1.2.11\crc32.h">
+      <Filter>zlib1.2.11</Filter>
+    </ClInclude>
+    <ClInclude Include="zlib1.2.11\deflate.h">
+      <Filter>zlib1.2.11</Filter>
+    </ClInclude>
+    <ClInclude Include="zlib1.2.11\gzguts.h">
+      <Filter>zlib1.2.11</Filter>
+    </ClInclude>
+    <ClInclude Include="zlib1.2.11\inffast.h">
+      <Filter>zlib1.2.11</Filter>
+    </ClInclude>
+    <ClInclude Include="zlib1.2.11\inffixed.h">
+      <Filter>zlib1.2.11</Filter>
+    </ClInclude>
+    <ClInclude Include="zlib1.2.11\inflate.h">
+      <Filter>zlib1.2.11</Filter>
+    </ClInclude>
+    <ClInclude Include="zlib1.2.11\inftrees.h">
+      <Filter>zlib1.2.11</Filter>
+    </ClInclude>
+    <ClInclude Include="zlib1.2.11\trees.h">
+      <Filter>zlib1.2.11</Filter>
+    </ClInclude>
+    <ClInclude Include="zlib1.2.11\zconf.h">
+      <Filter>zlib1.2.11</Filter>
+    </ClInclude>
+    <ClInclude Include="zlib1.2.11\zlib.h">
+      <Filter>zlib1.2.11</Filter>
+    </ClInclude>
+    <ClInclude Include="zlib1.2.11\zutil.h">
+      <Filter>zlib1.2.11</Filter>
+    </ClInclude>
+    <ClInclude Include="ZlibUtil.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\ScreenManager.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\ScreenSpy.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\CursorInfo.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="RemoteDesktop\until.h">
+      <Filter>RemoteDesktop</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\100.ico">
@@ -740,5 +854,10 @@
     <None Include="jsoncpp-0.5.0\json_valueiterator.inl">
       <Filter>jsoncpp-0.5.0</Filter>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="zlib1.2.11\文件概览.txt">
+      <Filter>zlib1.2.11</Filter>
+    </Text>
   </ItemGroup>
 </Project>

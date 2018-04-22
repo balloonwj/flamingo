@@ -11,6 +11,7 @@
 #include "GDIFactory.h"
 #include "EncodingUtil.h"
 #include "IULog.h"
+#include "net/Msg.h"
 
 
 CLoginDlg::CLoginDlg(CFlamingoClient* pFMGClient)
@@ -331,7 +332,7 @@ BOOL CLoginDlg::InitUI()
 	m_lnkRegAccount.SubclassWindow(GetDlgItem(ID_STATIC_REG_ACCOUNT));
 	m_lnkRegAccount.SetLabel(_T("×¢²áÕËºÅ"));
 	//m_lnkRegAccount.SetLinkType(SKIN_LINK_REGISTER);
-	//m_lnkRegAccount.SetHyperLink(_T("http://zc.UTalk.com/chs/index.html?from=client&ptlang=2052&ADUIN=0&ADSESSION=0&ADTAG=CLIENT.UTalk.4153_NewAccount_Btn.0"));
+	//m_lnkRegAccount.SetHyperLink(_T("http://zc.flamingo.com/chs/index.html?from=client&ptlang=2052&ADUIN=0&ADSESSION=0&ADTAG=CLIENT.UTalk.4153_NewAccount_Btn.0"));
 	m_lnkRegAccount.SetToolTipText(_T("×¢²áÕËºÅ"));
 	m_lnkRegAccount.MoveWindow(385, 170, 80, 15, FALSE);
 	m_lnkRegAccount.GetClientRect(&rtWindow);
@@ -346,7 +347,7 @@ BOOL CLoginDlg::InitUI()
 	m_lnkLostPwd.SetVisitedLinkColor(RGB(22, 112, 235));
 	m_lnkLostPwd.SubclassWindow(GetDlgItem(ID_STATIC_LOST_PWD));
 	m_lnkLostPwd.SetLabel(_T("ÕÒ»ØÃÜÂë"));
-	//m_lnkLostPwd.SetHyperLink(_T("http://aq.UTalk.com/cn2/findpsw/findpsw_index?source_id=1003&ptlang=2052&aquin=123456"));
+	//m_lnkLostPwd.SetHyperLink(_T("http://aq.flamingo.com/cn2/findpsw/findpsw_index?source_id=1003&ptlang=2052&aquin=123456"));
 	//m_lnkLostPwd.SetToolTipText(_T("ÕÒ»ØÃÜÂë"));
 	m_lnkLostPwd.MoveWindow(385, 215, 80, 15, FALSE);
 	m_lnkLostPwd.GetClientRect(&rtWindow);
@@ -576,7 +577,7 @@ UINT CLoginDlg::LoginThreadProc(void* pParam)
 
     std::string strReturnData;
     //³¬Ê±Ê±¼äÉèÖÃÎª3Ãë
-    bool bRet = CIUSocket::GetInstance().Login(szUser, szPassword, 1, 1, 3000, strReturnData);
+    bool bRet = CIUSocket::GetInstance().Login(szUser, szPassword, 1, online_type_pc_online, 3, strReturnData);
     int nRet = LOGIN_FAILED;
     CLoginResult* pLoginResult = new CLoginResult();
     pLoginResult->m_LoginResultCode = LOGIN_FAILED;

@@ -103,7 +103,6 @@ void CRegisterDialog::UninitUI()
 
 	if (m_btnCancel.IsWindow())
 		m_btnCancel.DestroyWindow();
-
 }
 
 UINT CRegisterDialog::RegisterThreadProc(void* pParam)
@@ -121,7 +120,7 @@ UINT CRegisterDialog::RegisterThreadProc(void* pParam)
 
     std::string strReturnData;
     //超时时间设置为3秒
-    bool bRet = CIUSocket::GetInstance().Register(szUser, szNickName, szPassword, 3000, strReturnData);
+    bool bRet = CIUSocket::GetInstance().Register(szUser, szNickName, szPassword, 3, strReturnData);
     CRegisterResult* pRegisterResult = new CRegisterResult();
     pRegisterResult->m_nResultCode = REGISTER_FAILED;
     if (bRet)

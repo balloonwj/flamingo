@@ -35,6 +35,7 @@
 #include "EncodingUtil.h"
 #include "UIText.h"
 #include "PerformanceCounter.h"
+#include "net/Msg.h"
 
 #pragma comment(lib, "winmm.lib")
 
@@ -2291,8 +2292,12 @@ void CMainDlg::OnMenu_Status(UINT uNotifyCode, int nID, CWindow wndCtl)
 
 	//m_FMGClient.ChangeStatus(nNewStatus);
 
-	if(nNewStatus == STATUS_OFFLINE)
-		m_FMGClient.GoOffline();
+    if (nNewStatus == STATUS_OFFLINE)
+    {
+        m_FMGClient.GoOffline();
+        //重连标志清零
+        m_nMainPanelStatus = MAINPANEL_STATUS_USERGOOFFLINE;
+    }
 	else if(nNewStatus == STATUS_ONLINE)
 		m_FMGClient.GoOnline();
 
@@ -2643,9 +2648,9 @@ LRESULT CMainDlg::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
             //如果都不重连，就没必要读取重连时间间隔了
             if (m_bEnableReconnect)
             {
-                m_uReconnectInterval = iniFile.ReadInt(_T("server"), _T("reconnectinterval"), 3000, strIniFile);
+                m_uReconnectInterval = iniFile.ReadInt(_T("server"), _T("reconnectinterval"), 5000, strIniFile);
                 if (m_uReconnectInterval <= 0)
-                    m_uReconnectInterval = 3000;
+                    m_uReconnectInterval = 5000;
             }
 
 			CreateEssentialDirectories();
@@ -3074,12 +3079,12 @@ LRESULT CMainDlg::OnStatusChangeMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
 	// 设置好友在线状态并启动上线动画
 	m_BuddyListCtrl.SetBuddyItemOnline(nTeamIndex, nIndex, bOnline, TRUE);
 
-	if(lpBuddyInfo->m_nStatus == STATUS_MOBILE_ONLINE)
+    if (lpBuddyInfo->m_nStatus == online_type_android_cellular || lpBuddyInfo->m_nStatus == online_type_android_wifi)
 	{
 		strThumbPath.Format(_T("%sImage\\mobile_online.png"), g_szHomePath);
 		m_BuddyListCtrl.SetBuddyItemMobilePic(nTeamIndex, nIndex, strThumbPath, TRUE);
 	}
-	else
+    else if (lpBuddyInfo->m_nStatus == online_type_offline || lpBuddyInfo->m_nStatus == online_type_pc_invisible)
 	{
 		strThumbPath.Format(_T("%sImage\\mobile_online.png"), g_szHomePath);
 		m_BuddyListCtrl.SetBuddyItemMobilePic(nTeamIndex, nIndex, strThumbPath, FALSE);
@@ -3102,9 +3107,9 @@ LRESULT CMainDlg::OnKickMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 LRESULT CMainDlg::OnScreenshotMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    CScreenshotInfo* pScreenshotInfo = (CScreenshotInfo*)lParam;
-    if (pScreenshotInfo == NULL)
-        return 0;
+    //CScreenshotInfo* pScreenshotInfo = (CScreenshotInfo*)lParam;
+    //if (pScreenshotInfo == NULL)
+    //    return 0;
     
     if (!m_pRemoteDesktopDlg->IsWindow())
     {
@@ -3114,96 +3119,96 @@ LRESULT CMainDlg::OnScreenshotMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     
 
-    BITMAPINFOHEADER*	bmpHeader = (BITMAPINFOHEADER*)pScreenshotInfo->m_strBmpHeader.c_str();
+    //BITMAPINFOHEADER*	bmpHeader = (BITMAPINFOHEADER*)pScreenshotInfo->m_strBmpHeader.c_str();
 
-    const char* bmpbuf = pScreenshotInfo->m_strBmpData.c_str();
+    //const char* bmpbuf = pScreenshotInfo->m_strBmpData.c_str();
 
     m_pRemoteDesktopDlg->ShowWindow(SW_SHOW);
-    
+    return 0;
 
-    HDC hdc = ::GetDC(m_pRemoteDesktopDlg->m_hWnd);
-    BITMAPINFO* bmpinfo = (BITMAPINFO*)bmpHeader;//位图信息 
-    HBITMAP hbitmap = CreateDIBitmap(hdc, bmpHeader, CBM_INIT, bmpbuf, bmpinfo, DIB_RGB_COLORS);
+    //HDC hdc = ::GetDC(m_pRemoteDesktopDlg->m_hWnd);
+    //BITMAPINFO* bmpinfo = (BITMAPINFO*)bmpHeader;//位图信息 
+    //HBITMAP hbitmap = CreateDIBitmap(hdc, bmpHeader, CBM_INIT, bmpbuf, bmpinfo, DIB_RGB_COLORS);
 
-    PBITMAPINFO bmpInf = (PBITMAPINFO)pScreenshotInfo->m_strBmpHeader.c_str();
-    m_pRemoteDesktopDlg->MoveWindow(0, 0, bmpInf->bmiHeader.biWidth - 200, bmpInf->bmiHeader.biHeight - 200, FALSE);
+    //PBITMAPINFO bmpInf = (PBITMAPINFO)pScreenshotInfo->m_strBmpHeader.c_str();
+    //m_pRemoteDesktopDlg->MoveWindow(0, 0, bmpInf->bmiHeader.biWidth - 200, bmpInf->bmiHeader.biHeight - 200, FALSE);
 
-    CClientDC dc(m_pRemoteDesktopDlg->m_hWnd);
+    //CClientDC dc(m_pRemoteDesktopDlg->m_hWnd);
 
-    int nPaletteSize = 0;
-    BYTE* buf = ((BYTE*)bmpInf) +
-        sizeof(BITMAPINFOHEADER) +
-        sizeof(RGBQUAD)*nPaletteSize;
+    //int nPaletteSize = 0;
+    //BYTE* buf = ((BYTE*)bmpInf) +
+    //    sizeof(BITMAPINFOHEADER) +
+    //    sizeof(RGBQUAD)*nPaletteSize;
 
-    int nOffset;
-    BYTE r, g, b;
-    int nWidth = bmpInf->bmiHeader.biWidth*bmpInf->bmiHeader.biBitCount / 8;
-    nWidth = ((nWidth + 3) / 4) * 4; //4字节对齐
+    //int nOffset;
+    //BYTE r, g, b;
+    //int nWidth = bmpInf->bmiHeader.biWidth*bmpInf->bmiHeader.biBitCount / 8;
+    //nWidth = ((nWidth + 3) / 4) * 4; //4字节对齐
 
-    //if (bmpInf->bmiHeader.biBitCount == 8)
+    ////if (bmpInf->bmiHeader.biBitCount == 8)
+    ////{
+    ////    for (int i = 0; i<bmpInf->bmiHeader.biHeight; i++)
+    ////    {
+    ////        for (int j = 0; j<bm.bmWidth; j++)
+    ////        {
+    ////            RGBQUAD rgbQ;
+    ////            rgbQ = bmpInf->bmiColors[buf[i*nWidth + j]];
+    ////            dc.SetPixel(j, bm.bmHeight - i, RGB(rgbQ.rgbRed, rgbQ.rgbGreen, rgbQ.rgbBlue)); //测试显示
+    ////        }
+    ////    }
+    ////}
+    ////else if (bmpInf->bmiHeader.biBitCount == 16)
+    ////{
+    ////    for (int i = 0; i<bm.bmHeight; i++)
+    ////    {
+    ////        nOffset = i*nWidth;
+    ////        for (int j = 0; j<bm.bmWidth; j++)
+    ////        {
+    ////            b = buf[nOffset + j * 2] & 0x1F;
+    ////            g = buf[nOffset + j * 2] >> 5;
+    ////            g |= (buf[nOffset + j * 2 + 1] & 0x03) << 3;
+    ////            r = (buf[nOffset + j * 2 + 1] >> 2) & 0x1F;
+
+    ////            r *= 8;
+    ////            b *= 8;
+    ////            g *= 8;
+
+    ////            dc.SetPixel(j, bm.bmHeight - i, RGB(r, g, b)); //测试显示
+    ////        }
+    ////    }
+    ////}
+    ////else if (bmpInf->bmiHeader.biBitCount == 24)
+    ////{
+    ////    for (int i = 0; i<bm.bmHeight; i++)
+    ////    {
+    ////        nOffset = i*nWidth;
+    ////        for (int j = 0; j<bm.bmWidth; j++)
+    ////        {
+    ////            b = buf[nOffset + j * 3];
+    ////            g = buf[nOffset + j * 3 + 1];
+    ////            r = buf[nOffset + j * 3 + 2];
+
+    ////            dc.SetPixel(j, bm.bmHeight - i, RGB(r, g, b)); //测试显示
+    ////        }
+    ////    }
+    ////}
+    ///*else*/ if (bmpInf->bmiHeader.biBitCount == 32)
     //{
     //    for (int i = 0; i<bmpInf->bmiHeader.biHeight; i++)
     //    {
-    //        for (int j = 0; j<bm.bmWidth; j++)
-    //        {
-    //            RGBQUAD rgbQ;
-    //            rgbQ = bmpInf->bmiColors[buf[i*nWidth + j]];
-    //            dc.SetPixel(j, bm.bmHeight - i, RGB(rgbQ.rgbRed, rgbQ.rgbGreen, rgbQ.rgbBlue)); //测试显示
-    //        }
-    //    }
-    //}
-    //else if (bmpInf->bmiHeader.biBitCount == 16)
-    //{
-    //    for (int i = 0; i<bm.bmHeight; i++)
-    //    {
     //        nOffset = i*nWidth;
-    //        for (int j = 0; j<bm.bmWidth; j++)
+    //        for (int j = 0; j<bmpInf->bmiHeader.biWidth; j++)
     //        {
-    //            b = buf[nOffset + j * 2] & 0x1F;
-    //            g = buf[nOffset + j * 2] >> 5;
-    //            g |= (buf[nOffset + j * 2 + 1] & 0x03) << 3;
-    //            r = (buf[nOffset + j * 2 + 1] >> 2) & 0x1F;
+    //            b = buf[nOffset + j * 4];
+    //            g = buf[nOffset + j * 4 + 1];
+    //            r = buf[nOffset + j * 4 + 2];
 
-    //            r *= 8;
-    //            b *= 8;
-    //            g *= 8;
-
-    //            dc.SetPixel(j, bm.bmHeight - i, RGB(r, g, b)); //测试显示
+    //            dc.SetPixel(j, bmpInf->bmiHeader.biHeight - i, RGB(r, g, b)); //测试显示
     //        }
     //    }
     //}
-    //else if (bmpInf->bmiHeader.biBitCount == 24)
-    //{
-    //    for (int i = 0; i<bm.bmHeight; i++)
-    //    {
-    //        nOffset = i*nWidth;
-    //        for (int j = 0; j<bm.bmWidth; j++)
-    //        {
-    //            b = buf[nOffset + j * 3];
-    //            g = buf[nOffset + j * 3 + 1];
-    //            r = buf[nOffset + j * 3 + 2];
-
-    //            dc.SetPixel(j, bm.bmHeight - i, RGB(r, g, b)); //测试显示
-    //        }
-    //    }
-    //}
-    /*else*/ if (bmpInf->bmiHeader.biBitCount == 32)
-    {
-        for (int i = 0; i<bmpInf->bmiHeader.biHeight; i++)
-        {
-            nOffset = i*nWidth;
-            for (int j = 0; j<bmpInf->bmiHeader.biWidth; j++)
-            {
-                b = buf[nOffset + j * 4];
-                g = buf[nOffset + j * 4 + 1];
-                r = buf[nOffset + j * 4 + 2];
-
-                dc.SetPixel(j, bmpInf->bmiHeader.biHeight - i, RGB(r, g, b)); //测试显示
-            }
-        }
-    }
-    
-    return 0;
+    //
+    //return 0;
 }
 
 // 群系统消息
@@ -4627,7 +4632,8 @@ void CMainDlg::UpdateBuddyTreeCtrl(UINT uAccountID/*=0*/)
 
 	for (int i = 0; i < nBuddyTeamCount; i++)
 	{
-		nBuddyCount = lpBuddyList->GetBuddyCount(i);
+        nValidBuddyCount = 0;
+        nBuddyCount = lpBuddyList->GetBuddyCount(i);
 		nOnlineBuddyCount = lpBuddyList->GetOnlineBuddyCount(i);
 		nTeamIndex = 0;
 
@@ -4665,7 +4671,7 @@ void CMainDlg::UpdateBuddyTreeCtrl(UINT uAccountID/*=0*/)
 
 				bMale = lpBuddyInfo->m_nGender!=0 ? FALSE : TRUE;
 				BOOL bGray = FALSE;
-				if(lpBuddyInfo->m_nStatus==STATUS_OFFLINE || lpBuddyInfo->m_nStatus==STATUS_INVISIBLE || lpBuddyInfo->m_nStatus==STATUS_MOBILE_OFFLINE)
+                if (lpBuddyInfo->m_nStatus == online_type_offline || lpBuddyInfo->m_nStatus == online_type_pc_invisible)
 					bGray = TRUE;
 				BOOL bOnlineFlash = FALSE;
 				if(uAccountID == lpBuddyInfo->m_uUserID)
@@ -4722,11 +4728,17 @@ void CMainDlg::UpdateBuddyTreeCtrl(UINT uAccountID/*=0*/)
 				
 				//SetBuddyItemOnline最后一个参数是上线动画
 				m_BuddyListCtrl.SetBuddyItemOnline(nTeamIndex, nIndex, !bGray, bOnlineFlash);
-                if (lpBuddyInfo->m_nClientType == ONLINE_CLIENT_MOBILE)
+                if (lpBuddyInfo->m_nStatus == online_type_android_cellular || lpBuddyInfo->m_nStatus == online_type_android_wifi)
 				{
 					strThumbPath.Format(_T("%sImage\\mobile_online.png"), g_szHomePath);
-					m_BuddyListCtrl.SetBuddyItemMobilePic(nTeamIndex, nIndex, strThumbPath);
+					m_BuddyListCtrl.SetBuddyItemMobilePic(nTeamIndex, nIndex, strThumbPath, TRUE);
 				}
+                else if (lpBuddyInfo->m_nStatus == online_type_offline || lpBuddyInfo->m_nStatus == online_type_pc_invisible)
+                {
+                    strThumbPath.Format(_T("%sImage\\mobile_online.png"), g_szHomePath);
+                    m_BuddyListCtrl.SetBuddyItemMobilePic(nTeamIndex, nIndex, strThumbPath, FALSE);
+                }
+                    
 				++nValidBuddyCount;
 			}
 		}
@@ -4766,10 +4778,10 @@ void CMainDlg::UpdateGroupTreeCtrl()
 		m_GroupListCtrl.SetBuddyItemMarkName(nTeamIndex, nIndex, lpGroupInfo->m_strName.c_str());
 		m_GroupListCtrl.SetBuddyItemHeadPic(nTeamIndex, nIndex, strFileName.c_str(), FALSE);
 
-		LOG_INFO(_T("GroupID=%u, GroupName=%s, GroupName=%s."), 
-					lpGroupInfo->m_nGroupCode,
-					lpGroupInfo->m_strAccount.c_str(),
-					lpGroupInfo->m_strName.c_str());
+		//LOG_INFO(_T("GroupID=%u, GroupName=%s, GroupName=%s."), 
+		//			lpGroupInfo->m_nGroupCode,
+		//			lpGroupInfo->m_strAccount.c_str(),
+		//			lpGroupInfo->m_strName.c_str());
 
 		++nActualGroupCount;
 		

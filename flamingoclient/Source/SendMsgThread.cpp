@@ -159,6 +159,10 @@ void CSendMsgThread::HandleItem(CNetData* pNetData)
 		HandleCreateNewGroup((const CCreateNewGroupRequest*)pNetData);
 		break;
 
+    case NET_DATA_ADD_NEW_TEAM:
+        HandleAddNewTeam((const CAddTeamInfoRequest*)pNetData);
+        break;
+
 	default:
 #ifdef _DEBUG
 		::MessageBox(::GetForegroundWindow(), _T("Be cautious! Unhandled data type in send queen."), _T("Warning"), MB_OK|MB_ICONERROR);
@@ -450,6 +454,24 @@ void CSendMsgThread::HandleCreateNewGroup(const CCreateNewGroupRequest* pCreateN
     writeStream.Flush();
 
     LOG_INFO("Request to create new group, data=%s", szData);
+
+    CIUSocket::GetInstance().Send(outbuf);
+}
+
+void CSendMsgThread::HandleAddNewTeam(const CAddTeamInfoRequest* pAddNewTeam)
+{
+    if (pAddNewTeam == NULL)
+        return;
+   
+    std::string outbuf;
+    BinaryWriteStream writeStream(&outbuf);
+    writeStream.WriteInt32(msg_type_updateteaminfo);
+    writeStream.WriteInt32(m_seq);
+    std::string strUtf8NewTeamInfo = EncodeUtil::UnicodeToUtf8(pAddNewTeam->m_strNewTeamInfo);
+    writeStream.WriteString(strUtf8NewTeamInfo);
+    writeStream.Flush();
+
+    LOG_INFO(_T("Request to update teaminfo, data=%s"), pAddNewTeam->m_strNewTeamInfo);
 
     CIUSocket::GetInstance().Send(outbuf);
 }
