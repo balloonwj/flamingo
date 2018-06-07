@@ -46,5 +46,5 @@ flamingo服务器端代码使用cmake + makefile编译，使用了纯C++11开发
 flamingo的更新日志参见：
 https://github.com/baloonwj/flamingo/issues/1
 
-=================================================
-Tips： 如果您在使用这份代码的过程中遇到任何问题，可以通过我的微信公众号『easyserverdev』与我取得联系，获得帮助，或者加入QQ技术群进行交流：49114021。
+Tips
+如果您在使用这份代码的过程中遇到任何问题，可以通过我的微信公众号『easyserverdev』与我取得联系，获得帮助，或者加入QQ技术群进行交流：49114021。
