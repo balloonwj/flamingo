@@ -1,6 +1,11 @@
+flamingoserver/FlamingoServer.sdf
+flamingoserver/FlamingoServer.v12.suo
+flamingoserver/FlamingoServer.vcxproj.user
+flamingoAndroid/build
+flamingoAndroid/.idea
+
 *.opensdf
 *.sdf
-git提交指令.txt
 iKutil.log
 
 # Compiled Object files
@@ -30,19 +35,12 @@ flamingoclient/Bin/Log/
 *.la
 *.a
 *.sbr
-MenuDemo/Debug/vc90.pdb
 *.idb
-QQDemo/Debug/color_skin.obj
 *.obj
-QQDemo/Debug/QQDemo.map
 *.pdb
 *.ncb
-DuiLib.suo
 *.pch
-FlashDemo/Debug/FlashDemo.map
 *.bsc
-FlashDemo/FlashDemo.vcproj.wengmq-PC.wengmq.user
 *.user
-QQDemo/Debug/mt.dep
 *.dep
 *.map
