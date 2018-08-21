@@ -1,12 +1,12 @@
-### flamingo
+### Flamingo
 
 #### Introduction
 
-flamingo is a high-performance & light-weight open-source IM software.  We have server side, Windows pc version and android version so far, and Wechat version and IOS version is under developing.
+Flamingo is a high-performance & light-weight open-source IM software.  It has server side, Windows pc version and android version so far, and Wechat version and IOS version is under developing.
 
 #### Feature List
 
-Flamingo has implemented these features below（Remind that we just list the features here related to network communication，as to some other features,  you can explore them by yourself.）
+Flamingo has implemented these features below（Remind that we just list the features here related to network communication, as to some other features,  you can explore them in Flamingo by yourself.）
 
 - user registering
 
@@ -14,7 +14,7 @@ Flamingo has implemented these features below（Remind that we just list the fea
 
 - searching users and groups
 
-- adding usering & joining into groups
+- adding user to friend list & joining in groups
 
 - displaying friends list, group list and recent session list
 
@@ -22,39 +22,39 @@ Flamingo has implemented these features below（Remind that we just list the fea
 
 - chatting in groups(include sending texts, emotions, etc)
 
-- sending messages to multiple friends or groups (different with chatting in groups) 
+- sending messages to multiple friends or groups (This is different from chatting in groups) 
 
-- modifying one's account password
+- modifying password
 
 - modifying one's profile(including nickname, signature, customed avatar, etc)
 
 - dectecting new version and upgrading automatically in Windows pc version
 
-- auto reconnecting when disconnecting
+- reconnecting automatically when disconnecting
 
-- some other handsome features, such as three display mode of user avatars, playing animations when a friend goes online, chat message history, auto-replying chat message when chatting, etc. You can explore more amazing features by your own in flamingo.
+- some other handsome features, such as three mode of friend list, playing animations when a friend going online, chat message history, auto-replying chat message when chatting, etc. You can explore more amazing features by your own in Flamingo.
 
   
 
 #### Compile and Install
 
-##### Compiling and Installing of Server Side
+##### Compiling and Installing of Server
 
 ###### Dev tools Dependencies
 
 1. Install **cmake**, **makefile** and **gcc** tools.
 
-​     Flamingo server uses linux OS as platform(CentOS 7.0 is highly recommended) , and compilers that support C++ 11 is required as the server code is fully developping with C++ 11. So under linux OS, version of gcc/g++ must be high than 4.7(4.8.5 is recommended).    In addition, cmake and makefile tool is required, so you need to install them.
+​     Flamingo server is based on linux OS as platform(CentOS 7.0 is highly recommended), and compilers that support C++ 11 is required because the server code is fully developping with C++ 11. So on linux OS, the version of gcc/g++ must be high than 4.7(4.8.5 is recommended). In addition, cmake and makefile tool is required, so you need to install them.
 
 2. install **mysql**
 
-​    Flaming server uses mysql database to store user data. If your OS is CentOS 7.0, you need to install mariadb-server, mariadb-client and mariadb-devel. On other linux OS, you need to install mysql-server, mysql-client and mysql-devel.
+​    Flaming server uses mysql database to store user data. If your OS is CentOS 7.0, you need to install **mariadb-server**, **mariadb-client** and **mariadb-devel**. On other linux OS, you need to install **mysql-server**, **mysql-client** and **mysql-devel**.
 
-​    The Flamingo **chatserver** will use mysql. The default database is named "**flamingo**". The database name,  database login user account(username, password, etc) is configured in file **flamingoserver/etc/chatserver.conf**. You can change them as you will.
+​    The Flamingo **chatserver** will use mysql database. The default database is named "**flamingo**". The database name,  login user account(including username, password, etc) is configured in the file **flamingoserver/etc/chatserver.conf**. You can change this configuration as you will.
 
-​     When **chatserver**  startups at first time, it will dectect  whether the database you configured exist in mysql. If it does not exist, the **chatserver** will create it including creating its related tables. So you do not to need to create the database and tables manually. While the SQL syntax differs a liitle in different mysql version, some SQL to create tables might failed in some mysql version, therefore under this condition, you have to create tables manually. We prepare these SQLs in file **flamingoserver/table.sql**.
+​     When **chatserver** startups at first time, it will dectect whether the database you configured exist in mysql. If it does not exist, the **chatserver** will create it including creating its related tables. So you do not need to create the database and tables manually. However the SQL syntax of creating table differs a litle in different mysql version, some SQL of creating tables might failed in some mysql version, therefore under this condition, you have to create tables manually. We prepare these SQLs for you in the file **flamingoserver/table.sql**.
 
-Flamingo server uses four tables illustrated below:
+Flamingo server uses four database tables illustrated below:
 
 |     Table Name      |                     Usage                      |
 | :-----------------: | :--------------------------------------------: |
@@ -74,7 +74,7 @@ Flamingo server uses four tables illustrated below:
 
    
 
-2. Execute commands below to generate executable programs: **chatserver**、**fileserver**、**imgserver**。
+2. Execute commands below to generate executable programs: **chatserver**、**fileserver**、**imgserver**.
 
    ```shell
    make
@@ -86,7 +86,7 @@ Flamingo server uses four tables illustrated below:
 
    | Server Name |                            Usage                             |
    | :---------: | :----------------------------------------------------------: |
-   | chatserver  | for user registering, logining and chatting, and other IM essential functionalities。 |
+   | chatserver  | for user registeration, logining and chatting, and other IM essential functionalities |
    | fileserver  | for offline files transferring when chatting and pc upgrading |
    |  imgserver  | for user avatar downloading & uploading and sending chatting image |
 
@@ -94,7 +94,7 @@ Flamingo server uses four tables illustrated below:
 
    ###### How to Startup Servers
 
-   **chatserver**、**fileserver**、**imgserver** are independent with each other. You can startup oneo of them in Linux shell or run in daemon mode. Use following commands to run them in daemon mode:
+   **chatserver**、**fileserver**、**imgserver** are independent with each other. You can startup one of them in Linux shell or run in daemon mode. Use following commands to run them in daemon mode:
 
    ```shell
    ./chatserver -d
@@ -106,7 +106,7 @@ Flamingo server uses four tables illustrated below:
 
    ##### Port Usage
 
-   You can use lsof command to list some port is under listening stated normally:
+   You can use lsof command to confirm that the specified ports are on listening state normally:
 
    ```shell
    [zhangyl@localhost flamingoserver]$ lsof -i -Pn
@@ -123,12 +123,12 @@ Flamingo server uses four tables illustrated below:
    | Port Number |   Owner    |                            Usage                             |
    | :---------: | :--------: | :----------------------------------------------------------: |
    |    20000    | chatserver |                        Chatting Port                         |
-   |    8888     | chatserver | Port for monitoring chatserver's inner state, you can use telnet or nc command to connect to chatserver to retrieve some realtime status and information of chatserver. |
-   |    12345    | chatserver | Http service port for chatserver, chatserver both support long TCP and short http connections. |
+   |    8888     | chatserver | Port for monitoring chatserver's inner state, you can use telnet or nc command to connect to chatserver to retrieve some realtime status and information of chatserver |
+   |    12345    | chatserver | Http service port for chatserver, chatserver both support long TCP and short http connections |
    |    20001    | fileserver |                    File transferring port                    |
-   |    20002    | imgserver  |   Tranferring port  for sent chat images or user avatars.    |
+   |    20002    | imgserver  |   Tranferring port for sent chat images or user avatars    |
 
-   We can use Linux nc command to connect to the Port 8888 of chatserver in table above, in the form of **nc -v ip port**. The port argument here is 8888 and -v option makes nc commadn to display more detailed information. Here is the usage:
+   We can use Linux nc command to connect to the Port 8888 of chatserver in table above, in the form of **nc -v ip port**. The port argument here is 8888 and -v option makes nc command to display more detailed information. Here is the usage:
 
    ```
    [zhangyl@localhost flamingoserver]$ nc -v 127.0.0.1 8888
@@ -149,7 +149,7 @@ Flamingo server uses four tables illustrated below:
 
    
 
-   When connected to chatserver with **nc** successfully, you can type any one of the commands in the given list. We hava just implemented three commands as examples, namely: help, ul, su. You can add more functional commands if you need. 
+   When connected to chatserver with **nc** successfully, you can type any one of the commands in the given list. I hava just implemented three commands as examples, namely: help, ul, su. You can add more functional commands if you need. 
 
    
 
@@ -167,19 +167,19 @@ Flamingo server uses four tables illustrated below:
    | CatchScreen  |     A tool to catch screen in chatting window.     |
    | iUpdateAuto  |     Unzipping downloading files when upgrades.     |
 
-​      When compiling finished, the executabls programs will be located in directory    **flamingoclient\Bin**. And the configuration file which contains configured lines is located in file **flamingoclient\Bin\config\flamingo.ini**. Run **Flamingo.exe** and have fun!     
+​      When compiling finished successfully, the executable programs will be located in directory **flamingoclient\Bin**. And the configuration file which contains configured lines is located in file **flamingoclient\Bin\config\flamingo.ini**. Run **Flamingo.exe** and have fun!     
 
 
 
 #### Android Version Compiling and Installing
 
-Use Android Studio to open the project in directory **flamingoAndroid/** and build to generate flamingo.apk file. Install flamingo.apk to your mobiles. Server settings of Android version is on the logining Activity.
+Use Android Studio to open the project in directory **flamingoAndroid/** and build to generate **flamingo.apk** file. Install **flamingo.apk** to your mobiles. Server settings of Android version is on the logining Activity.
 
 
 
 #### Change Log
 
-I am afraid that I can not to maintain Flamingo in regular intervals because I am very busy with my own work. But I promise that I am going to maintain Flamingo continually.
+I am afraid that I can not maintain Flamingo in regular intervals because I am very busy with my own work. But I promise that I am going to maintain Flamingo continually.
 
 Change Log see here: 
 
@@ -191,13 +191,13 @@ https://github.com/baloonwj/flamingo/issues/1
 
 If you have any questions, you can contact with me by sending email to balloonwj@qq.com. Also, you can report any bugs in the BUG Report Page, its link is https://github.com/baloonwj/flamingo/issues/5.
 
-I promise that fatal problem of Flamingo, such as crash or halting will be solved in three weekdays and other questions that are not severe will be responsed in two weeks.
+I promise that fatal problem of Flamingo, such as crashing or halting will be solved in three weekdays and other questions that are not severe will be responsed in two weeks.
 
 
 
 #### Contact
 
-At last not the least, if you have any suggestions or good advice, welcome to contact with me. Chinese Mainland users can contact with me by joining in my QQ group(**49114021**) or linking my public webchat account(『**easyserverdev**』).  Also you can send me emails,  my email address is **balloonwj@qq.com**. I am waiting for You sincerely.
+At last not the least, if you have any suggestions or good advice, welcome to contact with me. China Mainland users can contact with me by joining in my QQ group(**49114021**) or linking my public webchat account(『**easyserverdev**』).  Also you can send me emails,  my email address is **balloonwj@qq.com**. I am waiting for You sincerely.
 
 
 ### flamingo
@@ -236,7 +236,7 @@ flamingo IM是一款高性能、轻量级的开源即时通讯软件，目前包
 
 2. 安装mysql。
 
-   使用的数据库是mysql，如果您使用的是CentOS 7.0及以上系统，需要安装mariadb-server、mariadb-client和mariadb-devel。如果您使用的是其他版本的linux系统，请安装mysql-server、mysql-client和mysql-devel。
+   使用的数据库是mysql，如果您使用的是CentOS 7.0及以上系统，需要安装**mariadb-server**、**mariadb-client**和**mariadb-devel**。如果您使用的是其他版本的linux系统，请安装**mysql-server**、**mysql-client**和**mysql-devel**。
 
    聊天服务chatserver会使用到mysql，mysql的库名（默认库名叫flamingo）、登陆用户名和密码配置在**flamingoserver/etc/chatserver.conf**文件中。
 
