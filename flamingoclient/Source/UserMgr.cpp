@@ -319,14 +319,21 @@ tstring CUserMgr::GetNickName(UINT uAccountID) const
 	for(size_t i=0; i<m_GroupList.m_arrGroupInfo.size(); ++i)
 	{
 		pGroupInfo = m_GroupList.m_arrGroupInfo[i];
-		for(size_t j=0; j<pGroupInfo->m_arrMember.size(); ++j)
-		{
-			pBuddyInfo = pGroupInfo->m_arrMember[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-			{
-				return pBuddyInfo->m_strNickName;
-			}
-		}
+        if (IsGroupTarget(uAccountID))
+        {
+            return pGroupInfo->m_strName;
+        }
+        else
+        {
+            for (size_t j = 0; j<pGroupInfo->m_arrMember.size(); ++j)
+            {
+                pBuddyInfo = pGroupInfo->m_arrMember[j];
+                if (uAccountID == pBuddyInfo->m_uUserID)
+                {
+                    return pBuddyInfo->m_strNickName;
+                }
+            }
+        }	
 	}
 
 	return _T("");

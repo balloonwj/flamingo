@@ -1,0 +1,11 @@
+#!/bin/bash
+# 假设将myim数据库名改为flamingo
+# MyISAM直接更改数据库目录下的文件即可
+
+mysql -uroot -p123456 -e 'create database if not exists flamingo'
+list_table=$(mysql -uroot -p123456 -Nse "select table_name from information_schema.TABLES where TABLE_SCHEMA='myim'")
+
+for table in $list_table
+do
+    mysql -uroot -p123456 -e "rename table myim.$table to flamingo.$table"
+done

@@ -1,0 +1,7 @@
+1、关闭防火墙：sudo systemctl stop firewalld.service
+2、关闭开机启动：sudo systemctl disable firewalld.service
+3、安装iptables防火墙
+执行以下命令安装iptables防火墙：sudo yum install iptables-services
+4、配置iptables防火墙，打开指定端口（具体跟以前版本一样，网上介绍很多，这里不多介绍了）
+5. 设置iptables防火墙开机启动：sudo systemctl enable iptables
+
