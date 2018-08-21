@@ -383,9 +383,33 @@ https://github.com/baloonwj/flamingo/issues/5。
 
 如果您在使用这个项目的过程中遇到任何问题，或者您对我的项目有任何意见或者建议，再或者有不错的想法欢迎与我交流，可以通过我的微信公众号『**easyserverdev**』与我取得联系，或者可以给我发邮件：**balloonwj@qq.com**，您也可以加入QQ技术群进行交流讨论：**49114021**。
 
+![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/articlelog.jpg)
 
 
-![Mou Icom1](https://img-blog.csdn.net/20170406214113100?watermark/2/text/aHR0cDovL2Jsb2cuY3Nkbi5uZXQvYW5hbG9nb3VzX2xvdmU=/font/5a6L5L2T/fontsize/400/fill/I0JBQkFCMA==/dissolve/70/gravity/Center)
+
+#### Features Snapshot Below：
+
+#### 以下是部分功能截图：
+
+##### PC Client Snapshot
+##### pc版截图
+![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/1.png)
+![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/2.png)
+![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/3.png)
+![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/4.png)
+![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/5.png)
+![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/6.png)
+![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/7.png)
+![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/8.png)
+![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/9.png)
+
+##### Android Version Snapshot
+##### 安卓版截图
+![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m1.jpg)
+![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m2.jpg)
+![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m3.jpg)
+![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m4.jpg)
+![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m5.jpg)
 
 
 
