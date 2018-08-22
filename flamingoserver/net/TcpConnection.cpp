@@ -148,7 +148,7 @@ void TcpConnection::sendInLoop(const void* data, size_t len)
     if (!channel_->isWriting() && outputBuffer_.readableBytes() == 0)
     {
         nwrote = sockets::write(channel_->fd(), data, len);
-        //TODO: ´òÓ¡threadidÓÃÓÚµ÷ÊÔ£¬ºóÃæÈ¥µô
+        //TODO: æ‰“å°threadidç”¨äºè°ƒè¯•ï¼Œåé¢å»æ‰
         //std::stringstream ss;
         //ss << std::this_thread::get_id();
         //LOG_INFO << "send data in threadID = " << ss;
@@ -288,7 +288,7 @@ void TcpConnection::connectEstablished()
     setState(kConnected);
     channel_->tie(shared_from_this());
 
-    //¼ÙÈçÕıÔÚÖ´ĞĞÕâĞĞ´úÂëÊ±£¬¶Ô¶Ë¹Ø±ÕÁËÁ¬½Ó
+    //å‡å¦‚æ­£åœ¨æ‰§è¡Œè¿™è¡Œä»£ç æ—¶ï¼Œå¯¹ç«¯å…³é—­äº†è¿æ¥
     if (!channel_->enableReading())
     {
         LOG_ERROR << "enableReading failed.";
@@ -297,7 +297,7 @@ void TcpConnection::connectEstablished()
         return;
     }
 
-    //connectionCallback_Ö¸Ïòvoid CTcpListener::OnConnection(const std::shared_ptr<TcpConnection>& conn)
+    //connectionCallback_æŒ‡å‘void CTcpListener::OnConnection(const std::shared_ptr<TcpConnection>& conn)
     connectionCallback_(shared_from_this());
 }
 
@@ -321,7 +321,7 @@ void TcpConnection::handleRead(Timestamp receiveTime)
     ssize_t n = inputBuffer_.readFd(channel_->fd(), &savedErrno);
     if (n > 0)
     {
-        //messageCallback_Ö¸ÏòCTcpSession::OnRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBuffer, Timestamp receiveTime)
+        //messageCallback_æŒ‡å‘CTcpSession::OnRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBuffer, Timestamp receiveTime)
         messageCallback_(shared_from_this(), &inputBuffer_, receiveTime);
     }
     else if (n == 0)
@@ -380,7 +380,7 @@ void TcpConnection::handleClose()
 {
     loop_->assertInLoopThread();
     LOG_TRACE << "fd = " << channel_->fd() << " state = " << stateToString();
-    assert(state_ == kConnected || state_ == kDisconnecting);
+    //assert(state_ == kConnected || state_ == kDisconnecting);
     // we don't close fd, leave it to dtor, so we can find leaks easily.
     setState(kDisconnected);
     channel_->disableAll();
@@ -402,7 +402,7 @@ void TcpConnection::handleError()
     LOG_ERROR << "TcpConnection::handleError [" << name_
               << "] - SO_ERROR = " << err << " " << strerror_tl(err);
 
-    //µ÷ÓÃhandleClose()¹Ø±ÕÁ¬½Ó£¬»ØÊÕChannelºÍfd
+    //è°ƒç”¨handleClose()å…³é—­è¿æ¥ï¼Œå›æ”¶Channelå’Œfd
     handleClose();
 }
 
