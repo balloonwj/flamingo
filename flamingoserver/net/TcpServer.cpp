@@ -88,7 +88,7 @@ void TcpServer::newConnection(int sockfd, const InetAddress& peerAddr)
     conn->setMessageCallback(messageCallback_);
     conn->setWriteCompleteCallback(writeCompleteCallback_);
     conn->setCloseCallback(std::bind(&TcpServer::removeConnection, this, std::placeholders::_1)); // FIXME: unsafe
-    //���̷߳�����io�¼�����������TcpConnection::connectEstablished
+    //该线程分离完io事件后，立即调用TcpConnection::connectEstablished
     ioLoop->runInLoop(std::bind(&TcpConnection::connectEstablished, conn));
 }
 
@@ -104,8 +104,15 @@ void TcpServer::removeConnectionInLoop(const TcpConnectionPtr& conn)
     LOG_INFO << "TcpServer::removeConnectionInLoop [" << name_
         << "] - connection " << conn->name();
     size_t n = connections_.erase(conn->name());
-    (void)n;
-    assert(n == 1);
+    //(void)n;
+    //assert(n == 1);
+    if (n != 1)
+    {
+        //出现这种情况，是TcpConneaction对象在创建过程中，对方就断开连接了。
+        LOG_INFO << "TcpServer::removeConnectionInLoop [" << name_ << "] - connection " << conn->name() << ", connection does not exist.";
+        return;
+    }
+    
     EventLoop* ioLoop = conn->getLoop();
     ioLoop->queueInLoop(
         std::bind(&TcpConnection::connectDestroyed, conn));
