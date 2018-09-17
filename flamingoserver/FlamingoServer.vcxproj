@@ -85,7 +85,7 @@
     <ClCompile Include="base\LogStream.cpp" />
     <ClCompile Include="base\Timestamp.cpp" />
     <ClCompile Include="chatserversrc\BussinessLogic.cpp" />
-    <ClCompile Include="chatserversrc\ClientSession.cpp" />
+    <ClCompile Include="chatserversrc\ChatSession.cpp" />
     <ClCompile Include="chatserversrc\HttpServer.cpp" />
     <ClCompile Include="chatserversrc\HttpSession.cpp" />
     <ClCompile Include="chatserversrc\IMServer.cpp" />
@@ -161,7 +161,7 @@
     <ClInclude Include="base\Singleton.h" />
     <ClInclude Include="base\Timestamp.h" />
     <ClInclude Include="chatserversrc\BussinessLogic.h" />
-    <ClInclude Include="chatserversrc\ClientSession.h" />
+    <ClInclude Include="chatserversrc\ChatSession.h" />
     <ClInclude Include="chatserversrc\HttpMsg.h" />
     <ClInclude Include="chatserversrc\HttpServer.h" />
     <ClInclude Include="chatserversrc\HttpSession.h" />

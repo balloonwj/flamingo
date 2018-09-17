@@ -111,13 +111,31 @@ bool EPollPoller::updateChannel(Channel* channel)
 		int fd = channel->fd();
 		if (index == kNew)
 		{          
-            assert(channels_.find(fd) == channels_.end());
+            //assert(channels_.find(fd) == channels_.end())
+            if (channels_.find(fd) != channels_.end())
+            {
+                LOG_ERROR << "fd = " << fd << " must not exist in channels_";
+                return false;
+            }
+                
+
 			channels_[fd] = channel;
 		}
 		else // index == kDeleted
 		{
-			assert(channels_.find(fd) != channels_.end());
-			assert(channels_[fd] == channel);
+            //assert(channels_.find(fd) != channels_.end());
+            if (channels_.find(fd) == channels_.end())
+            {
+                LOG_ERROR << "fd = " << fd << " must exist in channels_";
+                return false;
+            }
+            
+			//assert(channels_[fd] == channel);
+            if (channels_[fd] != channel)
+            {
+                LOG_ERROR << "current channel is not matched current fd, fd = " << fd;
+                return false;
+            }
 		}
 		channel->set_index(kAdded);
 		
@@ -127,9 +145,15 @@ bool EPollPoller::updateChannel(Channel* channel)
 	{
 		// update existing one with EPOLL_CTL_MOD/DEL
 		int fd = channel->fd();
-		assert(channels_.find(fd) != channels_.end());
-		assert(channels_[fd] == channel);
-		assert(index == kAdded);
+		//assert(channels_.find(fd) != channels_.end());
+		//assert(channels_[fd] == channel);
+		//assert(index == kAdded);
+        if (channels_.find(fd) == channels_.end() || channels_[fd] != channel || index != kAdded)
+        {
+            LOG_ERROR << "current channel is not matched current fd, fd = " << fd << ", channel = " << channel;
+            return false;
+        }
+
 		if (channel->isNoneEvent())
 		{
             if (update(EPOLL_CTL_DEL, channel))

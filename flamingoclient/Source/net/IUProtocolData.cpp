@@ -247,10 +247,23 @@ COperateFriendResult::~COperateFriendResult()
 //class CAddTeamInfoRequest
 CAddTeamInfoRequest::CAddTeamInfoRequest()
 {
-    m_uType = NET_DATA_ADD_NEW_TEAM;
+    m_uType = NET_DATA_OPERATE_TEAM;
+    m_opType = -1;
 }
 
 CAddTeamInfoRequest::~CAddTeamInfoRequest()
+{
+
+}
+
+//class CMoveFriendRequest
+CMoveFriendRequest::CMoveFriendRequest()
+{
+    m_uType = NET_DATA_MOVE_FRIEND;
+    m_nFriendID = -1;
+}
+
+CMoveFriendRequest::~CMoveFriendRequest()
 {
 
 }
@@ -349,6 +362,28 @@ CCreateNewGroupResult::CCreateNewGroupResult()
 }
 
 CCreateNewGroupResult::~CCreateNewGroupResult()
+{
+}
+
+//class CModifyFriendMakeNameRequest
+CModifyFriendMakeNameRequest::CModifyFriendMakeNameRequest()
+{
+    m_uType = NET_DATA_MODIFY_FRIEND_MARKNAME;
+    m_uFriendID = -1;
+    memset(m_szNewMarkName, 0, sizeof(m_szNewMarkName));
+}
+
+CModifyFriendMakeNameRequest::~CModifyFriendMakeNameRequest()
+{
+
+}
+
+//class CModifyFriendMakeNameResult
+CModifyFriendMakeNameResult::CModifyFriendMakeNameResult()
+{
+}
+
+CModifyFriendMakeNameResult::~CModifyFriendMakeNameResult()
 {
 }
 

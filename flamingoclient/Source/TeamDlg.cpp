@@ -119,6 +119,12 @@ void CTeamDlg::OnOK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	CString strTeamName;
 	m_edtTeamName.GetWindowText(strTeamName);
 	strTeamName.Trim();
+    if (strTeamName == DEFAULT_TEAMNAME)
+    {
+        ::MessageBox(m_hWnd, _T("[My Friends]是默认分组，不能修改。"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+
 	if(strTeamName.IsEmpty())
 	{
 		::MessageBox(m_hWnd, _T("分组名不能为空。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
@@ -139,9 +145,6 @@ void CTeamDlg::OnOK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	//添加分组
 	if(m_nOperationType == TEAM_OPERATION_ADDTEAM)
 	{
-		//CBuddyTeamInfo* pTeamInfo = new CBuddyTeamInfo();
-		//pTeamInfo->m_strName = strTeamName;
-		//m_pFMGClient->m_UserMgr.m_BuddyList.AddBuddyTeam(pTeamInfo);
         m_pFMGClient->AddNewTeam(strTeamName);
 	}
 	else if(m_nOperationType == TEAM_OPERATION_MODIFYTEAMNAME)
@@ -151,7 +154,8 @@ void CTeamDlg::OnOK(UINT uNotifyCode, int nID, CWindow wndCtl)
 			CBuddyTeamInfo* pTeamInfo = m_pFMGClient->m_UserMgr.m_BuddyList.GetBuddyTeamByIndex(m_nTeamIndex);
 			if(pTeamInfo != NULL)
 			{
-				pTeamInfo->m_strName = strTeamName;
+                m_pFMGClient->ModifyTeamName(strTeamName, pTeamInfo->m_strName.c_str());
+                //pTeamInfo->m_strName = strTeamName;
 			}
 		}
 	}

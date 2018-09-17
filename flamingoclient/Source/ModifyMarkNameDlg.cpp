@@ -99,9 +99,11 @@ void CModifyMarkNameDlg::OnOK(UINT uNotifyCode, int nID, CWindow wndCtl)
 		return;
 	}
 	
-	CBuddyInfo* pBuddyInfo = m_pFMGClient->m_UserMgr.m_BuddyList.GetBuddy(m_uUserID);
-	if(pBuddyInfo != NULL)
-		pBuddyInfo->m_strMarkName = strMarkName;
+	//CBuddyInfo* pBuddyInfo = m_pFMGClient->m_UserMgr.m_BuddyList.GetBuddy(m_uUserID);
+	//if(pBuddyInfo != NULL)
+	//	pBuddyInfo->m_strMarkName = strMarkName;
+
+    m_pFMGClient->ModifyFriendMarkName(m_uUserID, strMarkName);
 
 	EndDialog(IDOK);
 }

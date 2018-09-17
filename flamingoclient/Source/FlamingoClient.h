@@ -53,12 +53,15 @@ public:
     void GetGroupMembers(int32_t groupid);                      // 获取群成员
     void ChangeStatus(int32_t nNewStatus);                      // 更改自己的登录状态        
 
-	BOOL FindFriend(PCTSTR pszAccountName, long nType, HWND hReflectionWnd);// 查找好友
+	BOOL FindFriend(PCTSTR pszAccountName, long nType, HWND hReflectionWnd);                // 查找好友
 	BOOL AddFriend(UINT uAccountToAdd);
-	void ResponseAddFriendApply(UINT uAccountID, UINT uCmd);	//回应加好友请求任务
-	BOOL DeleteFriend(UINT uAccountID);							// 删除好友
-
-    bool AddNewTeam(PCTSTR pszNewTeamName);                     //添加新分组
+	void ResponseAddFriendApply(UINT uAccountID, UINT uCmd);	                            //回应加好友请求任务
+	BOOL DeleteFriend(UINT uAccountID);							                            // 删除好友
+        
+    bool AddNewTeam(PCTSTR pszNewTeamName);                                                 //添加新分组
+    bool DeleteTeam(PCTSTR pszOldTeamName);                                                 //删除分组
+    bool ModifyTeamName(PCTSTR pszNewTeamName, PCTSTR pszOldTeamName);                      //修改分组名称
+    bool MoveFriendToOtherTeam(UINT uUserID, PCTSTR pszOldTeamName, PCTSTR pszNewTeamName); //移动好友至其他分组
 
 	BOOL UpdateLogonUserInfo(PCTSTR pszNickName, 
 							 PCTSTR pszSignature,
@@ -74,6 +77,7 @@ public:
 	void SendHeartbeatMessage();
 	void ModifyPassword(PCTSTR pszOldPassword, PCTSTR pszNewPassword);
 	void CreateNewGroup(PCTSTR pszGroupName);
+    void ModifyFriendMarkName(UINT friendID, PCTSTR pszNewMarkName);
 	void ChangeStatus(long nStatus);							// 改变在线状态
 	void UpdateBuddyList();										// 更新好友列表
 	void UpdateGroupList();										// 更新群列表

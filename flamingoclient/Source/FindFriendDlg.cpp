@@ -98,6 +98,7 @@ void CFindFriendDlg::OnAddFriend(UINT uNotifyCode, int nID, CWindow wndCtl)
 	long nRelationType = 0;
 	if(m_pFMGClient->m_UserMgr.IsSelf(strAccountToAdd))
 		nRelationType = 1;
+    //注意调试版在账号后面加上了userid，所以导致可以加已经是好友的用户为好友，这不是bug；Release版不存在这个问题
 	else if(m_pFMGClient->m_UserMgr.IsFriend(strAccountToAdd))
 		nRelationType = 2;
 	

@@ -2334,12 +2334,17 @@ void CMainDlg::OnBuddyListDeleteTeam(UINT uNotifyCode, int nID, CWindow wndCtl)
 		return;
 	}
 
+    CString strTeamName = m_BuddyListCtrl.GetBuddyTeamName(nTeamIndex);
+    if (strTeamName == DEFAULT_TEAMNAME)
+    {
+        ::MessageBox(m_hWnd, _T("默认分组不能删除！"), g_strAppTitle.c_str(), MB_ICONINFORMATION | MB_OK);
+        return;
+    }
+
 	if(IDYES != ::MessageBox(m_hWnd, _T("删除该分组以后，该组下的好友将移至默认分组中。\n确定要删除该分组吗？"), g_strAppTitle.c_str(), MB_YESNO|MB_ICONQUESTION))
 		return;
 
-	
-	if(DeleteTeam(nTeamIndex))
-		::PostMessage(m_hWnd, FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
+    m_FMGClient.DeleteTeam(strTeamName);   
 }
 
 void CMainDlg::OnBuddyListModifyTeamName(UINT uNotifyCode, int nID, CWindow wndCtl)
@@ -2376,28 +2381,26 @@ void CMainDlg::OnMoveBuddyToTeam(UINT uNotifyCode, int nID, CWindow wndCtl)
 	if(pTeamInfo == NULL)
 		return;
 
-	//从原分组中移除
+    CString strOldTeamName;
+	//获取原分组名
 	for(std::vector<CBuddyInfo*>::iterator iter=pTeamInfo->m_arrBuddyInfo.begin(); iter!=pTeamInfo->m_arrBuddyInfo.end(); ++iter)
 	{
 		pBuddyInfo =*iter;
 		if(pBuddyInfo!=NULL && pBuddyInfo->m_uUserID == uUserID)
 		{
-			pTeamInfo->m_arrBuddyInfo.erase(iter);
+            strOldTeamName = pTeamInfo->m_strName.c_str();
 			break;
 		}
 	}
 	
-	//加到目标分组中
+	//获取目标分组名
 	long nTargetIndex = nID-TEAM_MENU_ITEM_BASE;
 	CBuddyTeamInfo* pTargetTeamInfo = m_FMGClient.m_UserMgr.m_BuddyList.GetBuddyTeamByIndex(nTargetIndex);
 	if(pTargetTeamInfo == NULL)
 		return;
+    CString strNewTeamName = pTargetTeamInfo->m_strName.c_str();
 	
-	//改变用户所在分组索引
-	pBuddyInfo->m_nTeamIndex = nTargetIndex;
-	pTargetTeamInfo->m_arrBuddyInfo.push_back(pBuddyInfo);
-
-	::PostMessage(m_hWnd, FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
+    m_FMGClient.MoveFriendToOtherTeam(uUserID, strOldTeamName, strNewTeamName);
 }
 
 //右键菜单删除好友
@@ -2486,7 +2489,7 @@ void CMainDlg::OnMenu_ViewBuddyInfoFromRecentList(UINT uNotifyCode, int nID, CWi
 	::PostMessage(m_hWnd, WM_SHOW_BUDDYINFODLG, NULL, nUTalkUin);
 }
 
-void CMainDlg::OnMenu_ModifyBuddyName(UINT uNotifyCode, int nID, CWindow wndCtl)
+void CMainDlg::OnMenu_ModifyBuddyMarkName(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	int nTeamIndex, nIndex;
 	m_BuddyListCtrl.GetCurSelIndex(nTeamIndex, nIndex);
@@ -5559,36 +5562,6 @@ void CMainDlg::ShowAddFriendConfirmDlg()
 	
 	DELETE_PTR(pAddFriendInfo);
 	m_FMGClient.m_aryAddFriendInfo.erase(m_FMGClient.m_aryAddFriendInfo.end()-1);
-}
-
-BOOL CMainDlg::DeleteTeam(long nTeamIndex)
-{
-	CBuddyTeamInfo* pTeamInfoToDelete = m_FMGClient.m_UserMgr.m_BuddyList.GetBuddyTeamByIndex(nTeamIndex);
-	if(pTeamInfoToDelete == NULL)
-		return FALSE;
-	std::vector<CBuddyTeamInfo*>::iterator iter = m_FMGClient.m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.begin();
-	//删除分组
-	for(; iter!=m_FMGClient.m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.end(); ++iter)
-	{
-		if((*iter)->m_nIndex == pTeamInfoToDelete->m_nIndex)
-		{
-			m_FMGClient.m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.erase(iter);
-			break;
-		}
-	}
-	//将分组中好友移至第一分组中
-	CBuddyTeamInfo* pDefaultTeamInfo = m_FMGClient.m_UserMgr.m_BuddyList.GetBuddyTeamByIndex(0);
-	CBuddyInfo* pBuddyInfo = NULL;
-	for(std::vector<CBuddyInfo*>::iterator it=pTeamInfoToDelete->m_arrBuddyInfo.begin(); it!=pTeamInfoToDelete->m_arrBuddyInfo.end(); ++it)
-	{
-		pBuddyInfo =*it;
-		pDefaultTeamInfo->m_arrBuddyInfo.push_back(pBuddyInfo);
-	}
-
-	pTeamInfoToDelete->m_arrBuddyInfo.clear();
-	delete pTeamInfoToDelete;
-
-	return TRUE;
 }
 
 BOOL CMainDlg::InsertTeamMenuItem(CSkinMenu& popMenu)

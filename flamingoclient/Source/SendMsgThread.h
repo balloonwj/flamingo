@@ -93,7 +93,9 @@ private:
 	void HandleUpdateLogonUserInfoMessage(const CUpdateLogonUserInfoRequest* pRequest);
 	void HandleModifyPassword(const CModifyPasswordRequest* pModifyPassword);
 	void HandleCreateNewGroup(const CCreateNewGroupRequest* pCreateNewGroup);
-    void HandleAddNewTeam(const CAddTeamInfoRequest* pAddNewTeam);
+    void HandleOperateTeam(const CAddTeamInfoRequest* pAddNewTeam);
+    void HandleModifyFriendMarkName(const CModifyFriendMakeNameRequest* pModifyFriendMakeNameRequest);
+    void HandleMoveFriendMessage(const CMoveFriendRequest* pMoveFriendRequest);
 
 	BOOL HandleFontInfo(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);
 	BOOL HandleSysFaceId(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);

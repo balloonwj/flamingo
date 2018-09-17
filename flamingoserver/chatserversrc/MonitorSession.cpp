@@ -10,7 +10,7 @@
 #include "../base/Logging.h"
 #include "../base/Singleton.h"
 #include "../utils/StringUtil.h"
-#include "ClientSession.h"
+#include "ChatSession.h"
 #include "IMServer.h"
 #include "MonitorServer.h"
 #include "UserManager.h"
@@ -83,7 +83,7 @@ void MonitorSession::ShowHelp()
 
 bool MonitorSession::ShowOnlineUserList(const std::string& token/* = ""*/)
 {
-    std::list<std::shared_ptr<ClientSession>> sessions;
+    std::list<std::shared_ptr<ChatSession>> sessions;
     Singleton<IMServer>::Instance().GetSessions(sessions);
     std::ostringstream os;
     if (sessions.empty())

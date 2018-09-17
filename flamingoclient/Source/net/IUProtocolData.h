@@ -6,6 +6,8 @@
 #include <map>
 #include <stdint.h>
 
+#define DEFAULT_TEAMNAME _T("My Friends")
+
 //客户端类型
 enum CLIENT_TYPE
 {
@@ -158,6 +160,7 @@ struct UserBasicInfo
 	UINT  uAccountID;
 	char  szAccountName[32];
 	char  szNickName[64];
+    char  szMarkName[64];
     char  szSignature[256];
     char  szAddress[51225];
 	UINT  uFaceID;
@@ -269,7 +272,9 @@ enum NET_DATA_TYPE
 	NET_DATA_TARGET_INFO_CHANGE,
 	NET_DATA_MODIFY_PASSWORD,
 	NET_DATA_CREATE_NEW_GROUP,
-    NET_DATA_ADD_NEW_TEAM,              //添加新的好友分组
+    NET_DATA_OPERATE_TEAM,              //添加新的好友分组
+    NET_DATA_MODIFY_FRIEND_MARKNAME,    //修改好友备注名
+    NET_DATA_MOVE_FRIEND,               //移动好友至其他分组
 
 	NET_DATA_FILE
 };
@@ -503,7 +508,31 @@ public:
     ~CAddTeamInfoRequest();
 
 public:
-    std::wstring m_strNewTeamInfo;
+    int          m_opType;          //操作类型
+    std::wstring m_strNewTeamName;
+    std::wstring m_strOldTeamName;  
+};
+
+class CAddTeamInfoResult : public CNetData
+{
+public:
+    CAddTeamInfoResult();
+    ~CAddTeamInfoResult();
+
+public:
+    int          m_opType;          //操作类型  
+};
+
+class CMoveFriendRequest : public CNetData
+{
+public:
+    CMoveFriendRequest();
+    ~CMoveFriendRequest();
+
+public:
+    int          m_nFriendID;          //操作类型
+    std::wstring m_strNewTeamName;
+    std::wstring m_strOldTeamName;
 };
 
 class CMsgItem;
@@ -594,6 +623,30 @@ public:
 	UINT	m_uAccountID;
 	char	m_szGroupName[64];
 	char	m_szAccount[32];
+};
+
+//class CModifyFriendMakeNameRequest
+class CModifyFriendMakeNameRequest : public CNetData
+{
+public:
+    CModifyFriendMakeNameRequest();
+    ~CModifyFriendMakeNameRequest();
+
+public:
+    UINT	m_uFriendID;
+    TCHAR   m_szNewMarkName[64];
+};
+
+//class CModifyFriendMakeNameResult
+class CModifyFriendMakeNameResult : public CNetData
+{
+public:
+    CModifyFriendMakeNameResult();
+    ~CModifyFriendMakeNameResult();
+
+public:
+    UINT	m_uFriendID;
+    //char	m_szNewMarkName[64];
 };
 
 class CHeartbeatMessageRequest : public CNetData

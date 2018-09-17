@@ -92,7 +92,7 @@ utils/DaemonRun.cpp
 set(chatserver_srcs
 chatserversrc/main.cpp
 chatserversrc/IMServer.cpp
-chatserversrc/ClientSession.cpp
+chatserversrc/ChatSession.cpp
 chatserversrc/UserManager.cpp
 chatserversrc/MsgCacheManager.cpp
 chatserversrc/TcpSession.cpp

@@ -90,8 +90,8 @@ namespace net
 
 		std::weak_ptr<void>         tie_;           //std::shared_ptr<void>/std::shared_ptr<void>可以指向不同的数据类型
 		bool                        tied_;
-		bool                        eventHandling_;
-		bool                        addedToLoop_;
+		//bool                        eventHandling_;
+		//bool                        addedToLoop_;
 		ReadEventCallback           readCallback_;
 		EventCallback               writeCallback_;
 		EventCallback               closeCallback_;

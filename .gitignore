@@ -28,7 +28,9 @@ iUpdateAuto.exe
 flamingoclient/Source/Debug/
 flamingoclient/iAutoUpdate/debug/
 flamingoclient/Bin/Flamingo.exe
-flamingoclient/Bin/Log/
+flamingoclient/Bin/CatchScreen.exe
+
+flamingoclient/Bin/Logs/
 
 # Compiled Static libraries
 *.lai

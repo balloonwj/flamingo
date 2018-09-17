@@ -18,19 +18,20 @@ events_(0),
 revents_(0),
 index_(-1),
 logHup_(true),
-tied_(false),
+tied_(false)/*,
 eventHandling_(false),
 addedToLoop_(false)
+*/
 {
 }
 
 Channel::~Channel()
 {
-	assert(!eventHandling_);
-	assert(!addedToLoop_);
+	//assert(!eventHandling_);
+	//assert(!addedToLoop_);
 	if (loop_->isInLoopThread())
 	{
-		assert(!loop_->hasChannel(this));
+		//assert(!loop_->hasChannel(this));
 	}
 }
 
@@ -74,14 +75,14 @@ bool Channel::disableAll()
 
 bool Channel::update()
 {
-	addedToLoop_ = true;
+	//addedToLoop_ = true;
 	return loop_->updateChannel(this);
 }
 
 void Channel::remove()
 {
 	assert(isNoneEvent());
-	addedToLoop_ = false;
+	//addedToLoop_ = false;
 	loop_->removeChannel(this);
 }
 
@@ -104,7 +105,7 @@ void Channel::handleEvent(Timestamp receiveTime)
 
 void Channel::handleEventWithGuard(Timestamp receiveTime)
 {
-	eventHandling_ = true;
+	//eventHandling_ = true;
     /*
     POLLIN ，读事件
     POLLPRI，读事件，但表示紧急数据，例如tcp socket的带外数据
@@ -152,7 +153,7 @@ void Channel::handleEventWithGuard(Timestamp receiveTime)
 		//如果是连接状态服的socket，则writeCallback_指向Connector::handleWrite()
         if (writeCallback_) writeCallback_();
 	}
-	eventHandling_ = false;
+	//eventHandling_ = false;
 }
 
 string Channel::reventsToString() const

@@ -271,10 +271,10 @@ ssize_t sockets::write(int sockfd, const void *buf, size_t count)
 
 void sockets::close(int sockfd)
 {
-	if (::close(sockfd) < 0)
-	{
-		LOG_SYSERR << "sockets::close";
-	}
+    if (::close(sockfd) < 0)
+    {
+        LOG_SYSERR << "sockets::close, fd=" << sockfd << ", errno=" << errno << ", errorinfo=" << strerror(errno);
+    } 
 }
 
 void sockets::shutdownWrite(int sockfd)

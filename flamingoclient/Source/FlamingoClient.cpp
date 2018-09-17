@@ -11,6 +11,7 @@
 #include "Startup.h"
 #include "File2.h"
 #include "Path.h"
+#include "../net/Msg.h"
 #include <sstream>
 
 CFlamingoClient& CFlamingoClient::GetInstance()
@@ -241,63 +242,58 @@ bool CFlamingoClient::AddNewTeam(PCTSTR pszNewTeamName)
 {
     if (pszNewTeamName == NULL || pszNewTeamName[0] == NULL)
         return false;
-    /* 组装以后的格式
-            [
-                {
-                    "teamindex": 0,
-                    "teamname": "My Friends",
-                    "members": [
-                        {
-                            "userid": 4,
-                            "markname": ""
-                        },
-                        {
-                            "userid": 124,
-                            "markname": ""
-                        }
-                    ]
-                },
-                {
-                    "teamindex": 1,
-                    "teamname": "My Classmates",    //新分组
-                    "members": []
-                }
-            ]
-    */
+    
+    //TODO: 先判断是否离线
+    CAddTeamInfoRequest* pRequest = new CAddTeamInfoRequest();
+    pRequest->m_opType = updateteaminfo_operation_add;
+    pRequest->m_strNewTeamName = pszNewTeamName;
 
-    std::wostringstream osTeamInfo;
-    osTeamInfo << _T("[");
-    for (size_t i = 0; i < m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-    {
-        osTeamInfo << _T("{\"teamindex\":") << i 
-                   << _T(", \"teamname\": \"") << m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo[i]->m_strName 
-                   << _T("\", \"members\":[");
-        for (size_t j = 0; j < m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo[i]->m_arrBuddyInfo.size(); ++j)
-        {
-            osTeamInfo << _T("{\"userid\":") << m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo[i]->m_arrBuddyInfo[j]->m_uUserID << _T(", \"markname\":\"\"}");
-            //最后一个结尾不加逗号
-            if (j != m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo[i]->m_arrBuddyInfo.size() - 1)
-                osTeamInfo << _T(",");
-        }
+    m_SendMsgThread.AddItem(pRequest);
 
-        osTeamInfo << _T("]}");
-        //最后一个结尾不加逗号
-        if (i != m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.size() - 1)
-            osTeamInfo << _T(",");
-    }
+    return true;
+}
 
-    //新分组节点
-    osTeamInfo << _T(", {\"teamindex\":") << m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.size()
-               << _T(", \"teamname\": \"") << pszNewTeamName
-               << _T("\", \"members\":[");
-
-    osTeamInfo << _T("]}]");
-
-    tstring strTeamInfo = osTeamInfo.str();
+bool CFlamingoClient::DeleteTeam(PCTSTR pszOldTeamName)
+{
+    if (pszOldTeamName == NULL || pszOldTeamName[0] == NULL)
+        return false;
 
     //TODO: 先判断是否离线
     CAddTeamInfoRequest* pRequest = new CAddTeamInfoRequest();
-    pRequest->m_strNewTeamInfo = strTeamInfo;
+    pRequest->m_opType = updateteaminfo_operation_delete;
+    pRequest->m_strOldTeamName = pszOldTeamName;
+
+    m_SendMsgThread.AddItem(pRequest);
+
+    return true;
+}
+
+bool CFlamingoClient::ModifyTeamName(PCTSTR pszNewTeamName, PCTSTR pszOldTeamName)
+{
+    if (pszNewTeamName == NULL || pszNewTeamName[0] == NULL || pszOldTeamName == NULL || pszOldTeamName[0] == NULL)
+        return false;
+
+    //TODO: 先判断是否离线
+    CAddTeamInfoRequest* pRequest = new CAddTeamInfoRequest();
+    pRequest->m_opType = updateteaminfo_operation_modify;
+    pRequest->m_strNewTeamName = pszNewTeamName;
+    pRequest->m_strOldTeamName = pszOldTeamName;
+
+    m_SendMsgThread.AddItem(pRequest);
+
+    return true;
+}
+
+bool CFlamingoClient::MoveFriendToOtherTeam(UINT uUserID, PCTSTR pszOldTeamName, PCTSTR pszNewTeamName)
+{
+    if (pszOldTeamName == NULL || pszOldTeamName[0] == NULL || pszNewTeamName == NULL || pszNewTeamName[0] == NULL)
+        return false;
+
+    //TODO: 先判断是否离线
+    CMoveFriendRequest* pRequest = new CMoveFriendRequest();
+    pRequest->m_nFriendID = (int)uUserID;
+    pRequest->m_strNewTeamName = pszNewTeamName;
+    pRequest->m_strOldTeamName = pszOldTeamName;
 
     m_SendMsgThread.AddItem(pRequest);
 
@@ -432,6 +428,17 @@ void CFlamingoClient::CreateNewGroup(PCTSTR pszGroupName)
 	CCreateNewGroupRequest* pRequest = new CCreateNewGroupRequest();
     EncodeUtil::UnicodeToUtf8(pszGroupName, szData, ARRAYSIZE(szData));
 	strcpy_s(pRequest->m_szGroupName, ARRAYSIZE(pRequest->m_szGroupName), szData);
+    m_SendMsgThread.AddItem(pRequest);
+}
+
+void CFlamingoClient::ModifyFriendMarkName(UINT friendID, PCTSTR pszNewMarkName)
+{
+    if (!m_bNetworkAvailable)
+        return;
+
+    CModifyFriendMakeNameRequest* pRequest = new CModifyFriendMakeNameRequest();
+    pRequest->m_uFriendID = friendID;
+    _tcscpy_s(pRequest->m_szNewMarkName, ARRAYSIZE(pRequest->m_szNewMarkName), pszNewMarkName);
     m_SendMsgThread.AddItem(pRequest);
 }
 
@@ -1121,6 +1128,7 @@ void CFlamingoClient::OnUpdateUserBasicInfo(UINT message, WPARAM wParam, LPARAM 
         CBuddyInfo* pBuddyInfo = NULL;
         TCHAR szAccountName[32] = { 0 };
         TCHAR szNickName[32] = { 0 };
+        TCHAR szMarkName[32] = { 0 };
         TCHAR szSignature[256] = { 0 };
         TCHAR szPhoneNumber[32] = { 0 };
         TCHAR szMail[32] = { 0 };
@@ -1143,6 +1151,7 @@ void CFlamingoClient::OnUpdateUserBasicInfo(UINT message, WPARAM wParam, LPARAM 
             {       
                 EncodeUtil::Utf8ToUnicode(iter2->szAccountName, szAccountName, ARRAYSIZE(szAccountName));
                 EncodeUtil::Utf8ToUnicode(iter2->szNickName, szNickName, ARRAYSIZE(szNickName));
+                EncodeUtil::Utf8ToUnicode(iter2->szMarkName, szMarkName, ARRAYSIZE(szMarkName));
                 EncodeUtil::Utf8ToUnicode(iter2->szSignature, szSignature, ARRAYSIZE(szSignature));
                 EncodeUtil::Utf8ToUnicode(iter2->szPhoneNumber, szPhoneNumber, ARRAYSIZE(szPhoneNumber));
                 EncodeUtil::Utf8ToUnicode(iter2->szMail, szMail, ARRAYSIZE(szMail));
@@ -1156,6 +1165,8 @@ void CFlamingoClient::OnUpdateUserBasicInfo(UINT message, WPARAM wParam, LPARAM 
                     pBuddyInfo->m_strAccount = szAccountName;
 
                     pBuddyInfo->m_strNickName = szNickName;
+
+                    pBuddyInfo->m_strMarkName = szMarkName;
 
                     pBuddyInfo->m_strSign = szSignature;
 

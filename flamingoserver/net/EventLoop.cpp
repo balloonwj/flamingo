@@ -239,6 +239,8 @@ void EventLoop::removeChannel(Channel* channel)
 		assert(currentActiveChannel_ == channel ||
 			std::find(activeChannels_.begin(), activeChannels_.end(), channel) == activeChannels_.end());
 	}
+
+    LOG_INFO << "Remove channel, channel = " << channel << ", fd = " << channel->fd();
 	poller_->removeChannel(channel);
 }
 

@@ -136,7 +136,7 @@ public:
 		COMMAND_ID_HANDLER_EX(IDM_SENDMSGFROMRECENTLIST, OnMenu_SendBuddyMessageFromRecentList)
 		COMMAND_ID_HANDLER_EX(IDM_VIEWBUDDYINFO, OnMenu_ViewBuddyInfo)			//查看好友资料
 		COMMAND_ID_HANDLER_EX(IDM_VIEWBUDDYINFO_FROMRECENTLIST, OnMenu_ViewBuddyInfoFromRecentList)		
-		COMMAND_ID_HANDLER_EX(IDM_MODIFY_BUDDY_MARKNAME, OnMenu_ModifyBuddyName)//修改好友备注
+        COMMAND_ID_HANDLER_EX(IDM_MODIFY_BUDDY_MARKNAME, OnMenu_ModifyBuddyMarkName)//修改好友备注
         COMMAND_ID_HANDLER_EX(IDM_DELETEFRIEND, OnMenu_DeleteFriend)            //删除好友
 		COMMAND_ID_HANDLER_EX(IDM_CLEARRECENTLIST, OnClearAllRecentList)
 		COMMAND_ID_HANDLER_EX(IDM_DELETERECENTITEM, OnDeleteRecentItem);
@@ -270,7 +270,7 @@ private:
 	void OnDeleteRecentItem(UINT uNotifyCode, int nID, CWindow wndCtl);
 	void OnMenu_ViewBuddyInfo(UINT uNotifyCode, int nID, CWindow wndCtl);		//右键菜单查看好友资料
 	void OnMenu_ViewBuddyInfoFromRecentList(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnMenu_ModifyBuddyName(UINT uNotifyCode, int nID, CWindow wndCtl);		//右键菜单修改好友备注名称
+    void OnMenu_ModifyBuddyMarkName(UINT uNotifyCode, int nID, CWindow wndCtl);		//右键菜单修改好友备注名称
 
 	void OnMenu_SendGroupMessage(UINT uNotifyCode, int nID, CWindow wndCtl);	
 	void OnMenu_ViewGroupInfo(UINT uNotifyCode, int nID, CWindow wndCtl);
@@ -384,8 +384,6 @@ private:
 	void CreateEssentialDirectories();										//登录成功以后创建必需文件夹
 
 	void ShowAddFriendConfirmDlg();											//显示加好友请求对话框 
-
-	BOOL DeleteTeam(long nTeamIndex);
 
 	BOOL InsertTeamMenuItem(CSkinMenu& popMenu);
 

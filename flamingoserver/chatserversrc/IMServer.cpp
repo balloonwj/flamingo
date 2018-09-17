@@ -6,7 +6,7 @@
 #include "../base/Logging.h"
 #include "../base/Singleton.h"
 #include "IMServer.h"
-#include "ClientSession.h"
+#include "ChatSession.h"
 #include "UserManager.h"
 
 bool IMServer::Init(const char* ip, short port, EventLoop* loop)
@@ -26,8 +26,8 @@ void IMServer::OnConnection(std::shared_ptr<TcpConnection> conn)
     {
         //LOG_INFO << "client connected:" << conn->peerAddress().toIpPort();
         ++m_sessionId;
-        std::shared_ptr<ClientSession> spSession(new ClientSession(conn, m_sessionId));
-        conn->setMessageCallback(std::bind(&ClientSession::OnRead, spSession.get(), std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));       
+        std::shared_ptr<ChatSession> spSession(new ChatSession(conn, m_sessionId));
+        conn->setMessageCallback(std::bind(&ChatSession::OnRead, spSession.get(), std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));       
 
         std::lock_guard<std::mutex> guard(m_sessionMutex);
         m_sessions.push_back(spSession);
@@ -96,16 +96,16 @@ void IMServer::OnClose(const std::shared_ptr<TcpConnection>& conn)
     LOG_INFO << "current online user count: " << m_sessions.size();
 }
 
-void IMServer::GetSessions(std::list<std::shared_ptr<ClientSession>>& sessions)
+void IMServer::GetSessions(std::list<std::shared_ptr<ChatSession>>& sessions)
 {
     std::lock_guard<std::mutex> guard(m_sessionMutex);
     sessions = m_sessions;
 }
 
-bool IMServer::GetSessionByUserIdAndClientType(std::shared_ptr<ClientSession>& session, int32_t userid, int32_t clientType)
+bool IMServer::GetSessionByUserIdAndClientType(std::shared_ptr<ChatSession>& session, int32_t userid, int32_t clientType)
 {
     std::lock_guard<std::mutex> guard(m_sessionMutex);
-    std::shared_ptr<ClientSession> tmpSession;
+    std::shared_ptr<ChatSession> tmpSession;
     for (const auto& iter : m_sessions)
     {
         tmpSession = iter;
@@ -119,10 +119,10 @@ bool IMServer::GetSessionByUserIdAndClientType(std::shared_ptr<ClientSession>& s
     return false;
 }
 
-bool IMServer::GetSessionsByUserId(std::list<std::shared_ptr<ClientSession>>& sessions, int32_t userid)
+bool IMServer::GetSessionsByUserId(std::list<std::shared_ptr<ChatSession>>& sessions, int32_t userid)
 {
     std::lock_guard<std::mutex> guard(m_sessionMutex);
-    std::shared_ptr<ClientSession> tmpSession;
+    std::shared_ptr<ChatSession> tmpSession;
     for (const auto& iter : m_sessions)
     {
         tmpSession = iter;

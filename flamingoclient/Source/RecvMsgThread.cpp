@@ -623,6 +623,8 @@ BOOL CRecvMsgThread::HandleFriendListInfo(const std::string& strMsg)
             //strcpy_s(pUserBasicInfo->szAccountName, ARRAYSIZE(pUserBasicInfo->szAccountName), pUserInfo[i].user);
             //昵称
             strcpy_s(pUserBasicInfo->szNickName, ARRAYSIZE(pUserBasicInfo->szNickName), JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["nickname"].asString().c_str());
+            //备注名
+            strcpy_s(pUserBasicInfo->szMarkName, ARRAYSIZE(pUserBasicInfo->szMarkName), JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["markname"].asString().c_str());
             //签名
             strcpy_s(pUserBasicInfo->szSignature, ARRAYSIZE(pUserBasicInfo->szSignature), JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["signature"].asString().c_str());
             //地址
