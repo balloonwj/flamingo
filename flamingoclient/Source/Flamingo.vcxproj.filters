@@ -37,14 +37,14 @@
     <Filter Include="net">
       <UniqueIdentifier>{8f305d8c-8e77-47bb-bf54-76f0c041b365}</UniqueIdentifier>
     </Filter>
-    <Filter Include="jsoncpp-0.5.0">
-      <UniqueIdentifier>{792883a9-fa67-41ef-94a4-302aba71f1ed}</UniqueIdentifier>
-    </Filter>
     <Filter Include="zlib1.2.11">
       <UniqueIdentifier>{c4c2b734-8fd0-42a6-8982-08f8bb358676}</UniqueIdentifier>
     </Filter>
     <Filter Include="RemoteDesktop">
       <UniqueIdentifier>{36daf5c6-5829-400c-bd90-74ada6dad94d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="jsoncpp-1.9.0">
+      <UniqueIdentifier>{792883a9-fa67-41ef-94a4-302aba71f1ed}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -291,15 +291,6 @@
     <ClCompile Include="RemoteDesktopDlg.cpp">
       <Filter>UI</Filter>
     </ClCompile>
-    <ClCompile Include="jsoncpp-0.5.0\json_reader.cpp">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClCompile>
-    <ClCompile Include="jsoncpp-0.5.0\json_value.cpp">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClCompile>
-    <ClCompile Include="jsoncpp-0.5.0\json_writer.cpp">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClCompile>
     <ClCompile Include="CriticalSection.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
@@ -407,6 +398,15 @@
     </ClCompile>
     <ClCompile Include="RemoteDesktop\until.cpp">
       <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="jsoncpp-1.9.0\json_reader.cpp">
+      <Filter>jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="jsoncpp-1.9.0\json_value.cpp">
+      <Filter>jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="jsoncpp-1.9.0\json_writer.cpp">
+      <Filter>jsoncpp-1.9.0</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -629,33 +629,6 @@
     <ClInclude Include="RemoteDesktopDlg.h">
       <Filter>UI</Filter>
     </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\autolink.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\config.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\features.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\forwards.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\json.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\json_batchallocator.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\reader.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\value.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
-    <ClInclude Include="jsoncpp-0.5.0\writer.h">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </ClInclude>
     <ClInclude Include="CriticalSection.h">
       <Filter>Utils</Filter>
     </ClInclude>
@@ -806,6 +779,42 @@
     <ClInclude Include="RemoteDesktop\until.h">
       <Filter>RemoteDesktop</Filter>
     </ClInclude>
+    <ClInclude Include="jsoncpp-1.9.0\allocator.h">
+      <Filter>jsoncpp-1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-1.9.0\assertions.h">
+      <Filter>jsoncpp-1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-1.9.0\autolink.h">
+      <Filter>jsoncpp-1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-1.9.0\config.h">
+      <Filter>jsoncpp-1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-1.9.0\features.h">
+      <Filter>jsoncpp-1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-1.9.0\forwards.h">
+      <Filter>jsoncpp-1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-1.9.0\json.h">
+      <Filter>jsoncpp-1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-1.9.0\json_tool.h">
+      <Filter>jsoncpp-1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-1.9.0\reader.h">
+      <Filter>jsoncpp-1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-1.9.0\value.h">
+      <Filter>jsoncpp-1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-1.9.0\version.h">
+      <Filter>jsoncpp-1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="jsoncpp-1.9.0\writer.h">
+      <Filter>jsoncpp-1.9.0</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <Image Include="res\100.ico">
@@ -845,19 +854,13 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="jsoncpp-0.5.0\json_internalarray.inl">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </None>
-    <None Include="jsoncpp-0.5.0\json_internalmap.inl">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </None>
-    <None Include="jsoncpp-0.5.0\json_valueiterator.inl">
-      <Filter>jsoncpp-0.5.0</Filter>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
     <Text Include="zlib1.2.11\文件概览.txt">
       <Filter>zlib1.2.11</Filter>
     </Text>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="jsoncpp-1.9.0\json_valueiterator.inl">
+      <Filter>jsoncpp-1.9.0</Filter>
+    </None>
   </ItemGroup>
 </Project>

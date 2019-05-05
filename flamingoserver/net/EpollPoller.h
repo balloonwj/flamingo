@@ -1,24 +1,23 @@
 #pragma once
 
+#ifndef WIN32
+
 #include <vector>
 #include <map>
 
 #include "../base/Timestamp.h"
-#include "EventLoop.h"
+//#include "EventLoop.h"
+#include "Poller.h"
 
 struct epoll_event;
 
 namespace net
 {
+    class EventLoop;
 
-	///
-	/// IO Multiplexing with epoll(4).
-	///
-	class EPollPoller
+    class EPollPoller : public Poller
 	{
 	public:
-		typedef std::vector<Channel*> ChannelList;
-
 		EPollPoller(EventLoop* loop);
 		virtual ~EPollPoller();
 
@@ -30,28 +29,26 @@ namespace net
 
 		//static EPollPoller* newDefaultPoller(EventLoop* loop);
 
-		void assertInLoopThread() const
-		{
-			ownerLoop_->assertInLoopThread();
-		}
+        void assertInLoopThread() const;
 
 	private:
 		static const int kInitEventListSize = 16;
 
-		void fillActiveChannels(int numEvents,
-			ChannelList* activeChannels) const;
+		void fillActiveChannels(int numEvents, ChannelList* activeChannels) const;
 		bool update(int operation, Channel* channel);		
 
 	private:
 		typedef std::vector<struct epoll_event> EventList;
 
-		int epollfd_;
-		EventList events_;
+		int                 epollfd_;
+		EventList           events_;
 
 		typedef std::map<int, Channel*> ChannelMap;
 
-		ChannelMap channels_;
-		EventLoop* ownerLoop_;
+		ChannelMap          channels_;
+		EventLoop*          ownerLoop_;
 	};
 
 }
+
+#endif

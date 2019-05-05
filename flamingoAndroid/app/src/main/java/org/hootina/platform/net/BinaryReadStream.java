@@ -1,5 +1,7 @@
 package org.hootina.platform.net;
 
+import java.io.UnsupportedEncodingException;
+
 /**
  *@desc    二进制协议解码类，解析C++结构体
  *@author  zhangyl
@@ -28,6 +30,30 @@ public class BinaryReadStream {
         //return k;
     }
 
+    public static long longToBigEndian(long n)
+    {
+        byte[] b = new byte[8];
+        b[0] = (byte) (n & 0xff);
+        b[1] = (byte) (n >> 8 & 0xff);
+        b[2] = (byte) (n >> 16 & 0xff);
+        b[3] = (byte) (n >> 24 & 0xff);
+        b[4] = (byte) (n >> 32 & 0xff);
+        b[5] = (byte) (n >> 40 & 0xff);
+        b[6] = (byte) (n >> 48 & 0xff);
+        b[7] = (byte) (n >> 56 & 0xff);
+
+        return   b[7] & 0xFF |
+                (b[6] & 0xFF) << 8 |
+                (b[5] & 0xFF) << 16 |
+                (b[4] & 0xFF) << 24 |
+                (b[3] & 0xFF) << 32 |
+                (b[2] & 0xFF) << 40 |
+                (b[1] & 0xFF) << 48 |
+                (b[0] & 0xFF) << 56;
+        //int k = (int)(b[0] << 24) + (int)(b[1] << 16) + (int)(b[2] << 16) + (int)b[3];
+        //return k;
+    }
+
     BinaryReadStream(byte[] data) {
         //cur += BINARY_PACKLEN_LEN_2 + CHECKSUM_LEN;
         //前四个字节是流的长度，第五个和第六个字节是流的校验和
@@ -36,7 +62,7 @@ public class BinaryReadStream {
     }
 
 
-    int unorgpress_(byte[] buf, int nValidLength) {
+    int uncompressInteger(byte[] buf, int nValidLength) {
         int i = 0;
         for (int index = 0; index < nValidLength; index++)
         {
@@ -90,6 +116,8 @@ public class BinaryReadStream {
 
     String readString() {
         int headlen = readLengthWithoutOffset();
+        if (headlen == -1)
+            return "";
 
         // user buffer is not enough
         if (_cur + headlen > _data.length)
@@ -103,7 +131,12 @@ public class BinaryReadStream {
 
         _cur += headlen;
 
-        String res = new String(bytes);
+        String res = "";
+        try {
+            res = new String(bytes, "UTF-8");
+        } catch (UnsupportedEncodingException e) {
+
+        }
 
         return res;
     }
@@ -147,6 +180,7 @@ public class BinaryReadStream {
         b[1] = _data[_cur + 1];
         b[0] = _data[_cur];
 
+        //little endian最低位(b[0])权重最高
         int i =  b[3] & 0xFF |
                 (b[2] & 0xFF) << 8 |
                 (b[1] & 0xFF) << 16 |
@@ -157,6 +191,25 @@ public class BinaryReadStream {
         //i = (int)(_data[_cur + 3] << 24)  + (int)(_data[_cur+2] << 16) + (int)(_data[_cur+1] << 8) + (int)(_data[_cur]);
         return i;
     }
+
+    long readInt64() {
+        //int64就是以String格式存储的，直接读取出来转成String就可以了。
+        String int64String = readString();
+        //返回最大值表示失败
+        if (int64String == null || int64String.isEmpty())
+            return Long.MAX_VALUE;
+
+        long l;
+
+        try {
+            l = Long.parseLong(int64String);
+        } catch (NumberFormatException e) {
+            l = Long.MAX_VALUE;
+        }
+
+        return l;
+    }
+
 
 //    bool BinaryReadStream::ReadInt64(int64_t& i)
 //    {
@@ -216,6 +269,9 @@ public class BinaryReadStream {
 
         for (int i = 0; i< 5 ; i++)
         {
+            if (_cur + i >= _data.length)
+                return -1;
+
             buf[i] = _data[_cur+i];
             nValidHeadLength ++;
 
@@ -226,7 +282,7 @@ public class BinaryReadStream {
 
         _cur += nValidHeadLength;
 
-        return unorgpress_(buf, nValidHeadLength);
+        return uncompressInteger(buf, nValidHeadLength);
     }
 
 //    bool BinaryReadStream::IsEnd() const

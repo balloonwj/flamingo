@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
+    android:layout_height="wrap_content"
     android:orientation="vertical" >
 
     <LinearLayout
@@ -24,7 +24,7 @@
             android:paddingLeft="10dip" >
 
             <org.hootina.platform.widgets.CircularImage
-                android:id="@+id/head"
+                android:id="@+id/img_head"
                 android:layout_width="45dip"
                 android:layout_height="45dip"
                 android:layout_centerVertical="true"
@@ -32,12 +32,12 @@
                 android:src="@drawable/head" />
 
             <TextView
-                android:id="@+id/name"
+                android:id="@+id/tv_window_title"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
                 android:layout_marginLeft="12dp"
-                android:layout_toRightOf="@+id/head"
+                android:layout_toRightOf="@+id/img_head"
                 android:textSize="18sp"
                 android:textColor="#000000"
                 android:text="昵称" 
@@ -45,16 +45,15 @@
                 android:lines="1" />
             
             <TextView
-                android:id="@+id/sign"
+                android:id="@+id/txt_sign"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginLeft="12dp"
                 android:layout_marginTop="34dp"
-                android:layout_toRightOf="@+id/head"
+                android:layout_toRightOf="@+id/img_head"
                 android:textColor="#808080"
                 android:textSize="14sp"  
-                android:ellipsize="marquee" 
-                android:lines="1" />
+                android:maxLines="1" />
         </RelativeLayout>
     </LinearLayout>
 

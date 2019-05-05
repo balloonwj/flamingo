@@ -29,7 +29,7 @@ public class AppManager {
 	/**
 	 * 获取当前Activity（堆栈中最后一个压入的）
 	 */
-	public Activity currentActivity() {
+	public synchronized Activity currentActivity() {
 		if(activityStack.empty())
 		{
 			return null;
@@ -77,11 +77,25 @@ public class AppManager {
 	 * 结束所有Activity
 	 */
 	public void finishAllActivity() {
-		for (int i = 0, size = activityStack.size(); i < size; i++) {
-			if (null != activityStack.get(i)) {
-				activityStack.get(i).finish();
+		for (Activity iter : activityStack) {
+			if (iter != null) {
+				iter.finish();
 			}
 		}
+
+		activityStack.clear();
+	}
+
+	/**
+	 * 结束所有的activity，但保留指定的某个activity
+	 */
+	public void finishAllActivity(Activity keeped) {
+		for (Activity iter : activityStack) {
+			if (iter != null && iter != keeped) {
+				iter.finish();
+			}
+		}
+
 		activityStack.clear();
 	}
 

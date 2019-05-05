@@ -17,7 +17,7 @@ public class SearchFriendActivity extends BaseActivity {
 
 	@Override
 	public void processMessage(Message msg) {
-
+		super.processMessage(msg);
 	}
 
 	@Override

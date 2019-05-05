@@ -60,33 +60,3 @@ CREATE TABLE IF NOT EXISTS  t_chatmsg  (
          PRIMARY KEY ( f_id ),
          KEY  f_id  ( f_id )
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8
-
-//设备信息表
-CREATE TABLE `t_device` (  
-  `f_id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '自增ID',
-  `f_user_id` bigint(20) NOT NULL COMMENT '用户ID',
-  `f_deviceid` bigint(20) NOT NULL COMMENT '设备id',
-  `f_classtype` bigint(20) NOT NULL COMMENT '信息类别',
-  `f_deviceinfo` BLOB NOT NULL COMMENT '设备具体信息内容',
-  `f_upload_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '上传时间',
-  `f_create_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  `f_remark` varchar(64) DEFAULT NULL COMMENT '备注', 
-  PRIMARY KEY (`f_id`),
-  KEY `f_id` (`f_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=181 DEFAULT CHARSET=utf8
-
-
-//低版本mysql使用如下语句创建设备信息表
-CREATE TABLE `t_device` (  
-  `f_id` bigint(20) NOT NULL AUTO_INCREMENT COMMENT '自增ID',
-  `f_user_id` bigint(20) NOT NULL COMMENT '用户ID',
-  `f_deviceid` bigint(20) NOT NULL COMMENT '设备id',
-  `f_classtype` bigint(20) NOT NULL COMMENT '信息类别',
-  `f_deviceinfo` BLOB NOT NULL COMMENT '设备具体信息内容',
-  `f_upload_time` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '上传时间',
-  `f_create_time` timestamp DEFAULT 0 COMMENT '更新时间',
-  `f_remark` varchar(64) DEFAULT NULL COMMENT '备注', 
-  PRIMARY KEY (`f_id`),
-  KEY `f_id` (`f_id`)
-) ENGINE=InnoDB AUTO_INCREMENT=181 DEFAULT CHARSET=utf8
-

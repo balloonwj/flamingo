@@ -8,15 +8,21 @@
 #include <condition_variable>
 
 #include "../base/Timestamp.h"
+#include "../base/Platform.h"
 #include "Callbacks.h"
+#include "Sockets.h"
 #include "TimerId.h"
+#include "TimerQueue.h"
 
 namespace net
 {
-
+    class EventLoop;
 	class Channel;
-	class EPollPoller;
-    class TimerQueue;
+    class Poller;
+    //class TimerQueue;
+    class CTimerHeap;
+
+    EventLoop* getEventLoopOfCurrentThread();
 
 	///
 	/// Reactor, at most one per thread.
@@ -60,8 +66,7 @@ namespace net
 		/// Safe to call from other threads.
 		void queueInLoop(const Functor& cb);
 
-        // timers
-
+        // timers，时间单位均是秒
         ///
         /// Runs callback at 'time'.
         /// Safe to call from other threads.
@@ -71,26 +76,28 @@ namespace net
         /// Runs callback after @c delay seconds.
         /// Safe to call from other threads.
         ///
-        TimerId runAfter(double delay, const TimerCallback& cb);
+        TimerId runAfter(int64_t delay, const TimerCallback& cb);
         ///
         /// Runs callback every @c interval seconds.
         /// Safe to call from other threads.
         ///
-        TimerId runEvery(double interval, const TimerCallback& cb);
+        TimerId runEvery(int64_t interval, const TimerCallback& cb);
         ///
         /// Cancels the timer.
         /// Safe to call from other threads.
         ///
-        void cancel(TimerId timerId);
+        void cancel(TimerId timerId, bool off);
 
+        void remove(TimerId timerId);
+
+        
         TimerId runAt(const Timestamp& time, TimerCallback&& cb);
-        TimerId runAfter(double delay, TimerCallback&& cb);
-        TimerId runEvery(double interval, TimerCallback&& cb);
+        TimerId runAfter(int64_t delay, TimerCallback&& cb);
+        TimerId runEvery(int64_t interval, TimerCallback&& cb);
 
 		void setFrameFunctor(const Functor& cb);
 
-		// internal usage
-		void wakeup();
+        // internal usage
 		bool updateChannel(Channel* channel);
 		void removeChannel(Channel* channel);
 		bool hasChannel(Channel* channel);
@@ -115,8 +122,10 @@ namespace net
 		}
 
 	private:
+        bool createWakeupfd();
+        bool wakeup();
 		void abortNotInLoopThread();
-		void handleRead();  // waked up
+		bool handleRead();  // waked up handler
 		void doPendingFunctors();
 
 		void printActiveChannels() const; // DEBUG
@@ -128,13 +137,20 @@ namespace net
 		bool                                quit_; /* atomic and shared between threads, okay on x86, I guess. */
 		bool                                eventHandling_; /* atomic */
 		bool                                callingPendingFunctors_; /* atomic */
-		int64_t                             iteration_;
 		const std::thread::id               threadId_;
 		Timestamp                           pollReturnTime_;
-		std::shared_ptr<EPollPoller>        poller_;
+		std::shared_ptr<Poller>             poller_;
         std::shared_ptr<TimerQueue>         timerQueue_;
+        int64_t                             iteration_;
+#ifdef WIN32
+        SOCKET                              wakeupFdSend_;
+        SOCKET                              wakeupFdListen_;
+        SOCKET                              wakeupFdRecv_;
 
-		int wakeupFd_;
+        //int                                 fdpipe_[2];
+#else
+        SOCKET                              wakeupFd_;          //TODO: 这个fd什么时候释放？
+#endif
 		// unlike in TimerQueue, which is an internal class,
 		// we don't expose Channel to client.
 		std::shared_ptr<Channel>            wakeupChannel_;

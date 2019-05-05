@@ -107,10 +107,6 @@ public class AppData {
 		return mChatSessions;
 	}
 
-	public static boolean isGroup(int nID) {
-		return nID > 0x0FFFFFFF;
-	}
-
 	public synchronized static ChatSession updateChatSessionByFriendID(int friendID) {
 		ChatSession newSession  = null;
 
@@ -274,7 +270,7 @@ public class AppData {
 		List<UserInfo> list = UserSession.getInstance().friends;
 		for (UserInfo u : list)
 		{
-			if (u.get_userid() >= 0x0FFFFFFF)
+			if (UserInfo.isGroup(u.get_userid()))
 				localList.add(u);
 		}
 		Collections.sort(localList);

@@ -1,0 +1,10 @@
+https://dev.mysql.com/doc/
+
+CREATE USER 'trader'@'%' IDENTIFIED BY 'js2018';
+GRANT ALL ON *.* TO 'root'@'%' IDENTIFIED BY '123456';
+flush privileges;
+GRANT ALL ON *.* TO 'trader'@'localhost' IDENTIFIED BY 'js2018';
+flush privileges;
+-- 实际的机器名以你的实际为准
+GRANT ALL ON *.* TO 'trader'@'js-dev04' IDENTIFIED BY 'js2018';
+flush privileges;

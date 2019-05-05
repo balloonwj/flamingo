@@ -4,7 +4,7 @@
  **/
 #include "FileServer.h"
 #include "../net/InetAddress.h"
-#include "../base/Logging.h"
+#include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
 #include "FileSession.h"
 
@@ -16,16 +16,22 @@ bool FileServer::Init(const char* ip, short port, EventLoop* loop, const char* f
     m_server.reset(new TcpServer(loop, addr, "ZYL-MYImgAndFileServer", TcpServer::kReusePort));
     m_server->setConnectionCallback(std::bind(&FileServer::OnConnection, this, std::placeholders::_1));
     //启动侦听
-    m_server->start();
+    m_server->start(6);
 
     return true;
+}
+
+void FileServer::Uninit()
+{
+    if (m_server)
+        m_server->stop();
 }
 
 void FileServer::OnConnection(std::shared_ptr<TcpConnection> conn)
 {
     if (conn->connected())
     {
-        //LOG_INFO << "client connected:" << conn->peerAddress().toIpPort();
+        //LOGI << "client connected:" << conn->peerAddress().toIpPort();
         ++ m_baseUserId;
         std::shared_ptr<FileSession> spSession(new FileSession(conn, m_strFileBaseDir.c_str()));
         conn->setMessageCallback(std::bind(&FileSession::OnRead, spSession.get(), std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
@@ -47,14 +53,14 @@ void FileServer::OnClose(const std::shared_ptr<TcpConnection>& conn)
     {
         if ((*iter)->GetConnectionPtr() == NULL)
         {
-            LOG_ERROR << "connection is NULL";
+            LOGE("connection is NULL");
             break;
         }
                           
         //用户下线
         m_sessions.erase(iter);
         //bUserOffline = true;
-        LOG_INFO << "client disconnected: " << conn->peerAddress().toIpPort();
+        LOGI("client disconnected: %s", conn->peerAddress().toIpPort().c_str());
         break;       
     }    
 }

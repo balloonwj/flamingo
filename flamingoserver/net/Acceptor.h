@@ -4,10 +4,10 @@
 
 #include "Channel.h"
 #include "Sockets.h"
+//#include "EventLoop.h"
 
 namespace net
 {
-
     class EventLoop;
     class InetAddress;
 
@@ -40,7 +40,10 @@ namespace net
         Channel               acceptChannel_;
         NewConnectionCallback newConnectionCallback_;
         bool                  listenning_;
+
+#ifndef WIN32
         int                   idleFd_;
+#endif
     };
 
 }

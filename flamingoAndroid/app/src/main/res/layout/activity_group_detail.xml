@@ -19,15 +19,24 @@
             android:onClick="onClick" />
 
         <TextView
-            android:id="@+id/tv_name"
+            android:id="@+id/tv_window_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_centerInParent="true"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:text="AAA"
+            android:text="默认群组名"
             android:textColor="@android:color/white"
             android:textSize="@dimen/title_text_size" />
+
+        <ImageView
+            android:id="@+id/img_more"
+            android:layout_marginRight="10dp"
+            android:layout_alignParentRight="true"
+            android:layout_centerVertical="true"
+            android:src="@drawable/btn_more"
+            android:layout_width="30dp"
+            android:layout_height="30dp" />
     </RelativeLayout>
 
     <RelativeLayout
@@ -46,7 +55,7 @@
             android:src="@drawable/right" />
 
         <TextView
-            android:id="@+id/tv_names"
+            android:id="@+id/tv_group_name"
             style="@style/TxtTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -54,7 +63,7 @@
             android:layout_alignBottom="@+id/a"
             android:layout_alignParentRight="true"
             android:layout_marginRight="50dp"
-            android:text="只临信息" />
+            android:text="默认群组名" />
 
         <TextView
             android:id="@+id/a"
@@ -107,6 +116,29 @@
             android:text="群成员" />
     </RelativeLayout>
 
+    <RelativeLayout
+        android:layout_width="fill_parent"
+        android:layout_height="50dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal" >
+
+
+        <TextView
+            android:id="@+id/txt_num"
+            style="@style/TxtTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentRight="true"
+            android:layout_marginRight="50dp"
+            android:text="" />
+
+        <TextView
+            style="@style/TxtTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="20dp"
+            android:text="群号" />
+    </RelativeLayout>
     <View
         android:layout_width="fill_parent"
         android:layout_height="1.0dip"

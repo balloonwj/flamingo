@@ -1,5 +1,5 @@
 /** 
- * 协议类型定义,Msg.h
+ * 聊天协议类型定义,Msg.h
  * zhangyl 2017.03.02
  **/
 #pragma once
@@ -34,12 +34,6 @@ enum msg_type
     msg_type_updateteaminfo,       //更新用户好友分组信息
     msg_type_modifyfriendmarkname, //更新好友备注信息
     msg_type_movefriendtootherteam, //移动好友至
-
-#ifdef FXN_VERSION
-    //定制协议
-    msg_type_uploaddeviceinfo   = 2000, //上传设备信息
-    msg_type_downloaddeviceinfo = 2001  //拉取设备信息
-#endif
 };
 
 //在线类型
@@ -276,9 +270,10 @@ enum error_code
  **/
 /*
     //type 1用户在线状态改变 2离线 3用户签名、头像、昵称发生变化
-    cmd = 1006, seq = 0, {"type": 1, "onlinestatus": 1, "clienttype": 1} //上线onlinestatus=1, 离线onlinestatus=0 2隐身 3忙碌 4离开 5移动版在线 6移动版下线 7手机和电脑同时在线
-    cmd = 1006, seq = 0, {"type": 3}
-    **/
+    //onlinestatus取值： 0离线 1上线 2隐身 3忙碌 4离开 5移动版在线 6移动版下线 7手机和电脑同时在线,
+    cmd = 1006, seq = 0, {"type": 1, "onlinestatus": 1, "clienttype": 1},  targetid(状态改变的用户信息)
+    cmd = 1006, seq = 0, {"type": 3}, targetid(状态改变的用户信息)
+**/
 
 /**
  *  更新用户信息

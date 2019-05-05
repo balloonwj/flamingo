@@ -7,13 +7,13 @@
 #include <string.h>
 #include <vector>
 #include "../net/EventLoopThread.h"
-#include "../base/Logging.h"
+#include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
 #include "../utils/StringUtil.h"
-#include "IMServer.h"
+#include "../utils/URLEncodeUtil.h"
+#include "ChatServer.h"
 #include "UserManager.h"
 #include "BussinessLogic.h"
-#include "../utils/URLEncodeUtil.h"
 
 
 #define MAX_URL_LENGTH 2048
@@ -25,7 +25,7 @@ HttpSession::HttpSession(std::shared_ptr<TcpConnection>& conn) : m_tmpConn(conn)
 
 void HttpSession::OnRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBuffer, Timestamp receivTime)
 {
-    //LOG_INFO << "Recv a http request from " << conn->peerAddress().toIpPort();
+    //LOGI << "Recv a http request from " << conn->peerAddress().toIpPort();
     
     string inbuf;
     //先把所有数据都取出来
@@ -75,7 +75,7 @@ void HttpSession::OnRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBu
         return;
     }
 
-    LOG_INFO << "url: " << chunk[1] << " from " << conn->peerAddress().toIpPort();
+    LOGI("url: %s  from %s", chunk[1].c_str(), conn->peerAddress().toIpPort().c_str());
     //inbuf = /register.do?p={%22username%22:%20%2213917043329%22,%20%22nickname%22:%20%22balloon%22,%20%22password%22:%20%22123%22}
     std::vector<string> part;
     //通过?分割成前后两端，前面是url，后面是参数
@@ -92,7 +92,7 @@ void HttpSession::OnRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBu
         
     if (!Process(conn, url, param))
     {
-        LOG_ERROR << "handle http request error, from:" << conn->peerAddress().toIpPort() << ", request: " << pBuffer->retrieveAllAsString();
+        LOGE("handle http request error, from: %s, request: %s", conn->peerAddress().toIpPort().c_str(), pBuffer->retrieveAllAsString().c_str());
     }
 
     //短连接，处理完关闭连接
@@ -168,7 +168,7 @@ void HttpSession::OnRegisterResponse(const std::string& data, const std::shared_
         MakeupResponse(retData, response);
         conn->send(response);
 
-        LOG_INFO << "Response to client: cmd=msg_type_register" << ", data=" << retData << conn->peerAddress().toIpPort();;
+        LOGI("Response to client: cmd=msg_type_register, data: %s, client: %s", retData.c_str(), conn->peerAddress().toIpPort().c_str());
     }
 }
 

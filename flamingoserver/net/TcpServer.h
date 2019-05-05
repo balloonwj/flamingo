@@ -4,12 +4,12 @@
 //#include <cstdatomic> // 老gcc头文件
 #include <map>
 #include <memory>
+//#include "EventLoop.h"
 
 #include "TcpConnection.h"
 
 namespace net
 {
-
 	class Acceptor;
 	class EventLoop;
 	class EventLoopThreadPool;
@@ -61,7 +61,9 @@ namespace net
 		///
 		/// It's harmless to call it multiple times.
 		/// Thread safe.
-		void start();
+		void start(int workerThreadCount = 4);
+
+        void stop();
 
 		/// Set connection callback.
 		/// Not thread safe.
@@ -91,18 +93,18 @@ namespace net
 		typedef std::map<string, TcpConnectionPtr> ConnectionMap;
 
     private:
-		EventLoop*                  loop_;  // the acceptor loop
-		const string                hostport_;
-		const string                name_;
-		std::shared_ptr<Acceptor>   acceptor_; // avoid revealing Acceptor
-		//std::shared_ptr<EventLoopThreadPool> threadPool_;
-		ConnectionCallback          connectionCallback_;
-		MessageCallback             messageCallback_;
-		WriteCompleteCallback       writeCompleteCallback_;
-		ThreadInitCallback          threadInitCallback_;
-		std::atomic<int>            started_;
-		int                         nextConnId_;  // always in loop thread
-		ConnectionMap               connections_;
+		EventLoop*                                      loop_;  // the acceptor loop
+		const string                                    hostport_;
+		const string                                    name_;
+		std::shared_ptr<Acceptor>                       acceptor_; // avoid revealing Acceptor
+        std::shared_ptr<EventLoopThreadPool>            eventLoopThreadPool_;
+		ConnectionCallback                              connectionCallback_;
+		MessageCallback                                 messageCallback_;
+		WriteCompleteCallback                           writeCompleteCallback_;
+		ThreadInitCallback                              threadInitCallback_;
+		std::atomic<int>                                started_;
+		int                                             nextConnId_;  // always in loop thread
+		ConnectionMap                                   connections_;
 	};
 
 }

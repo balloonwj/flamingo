@@ -7,7 +7,7 @@ public:
 	static T& Instance()
 	{
 		//pthread_once(&ponce_, &Singleton::init);
-		if (NULL == value_)
+		if (nullptr == value_)
 		{
 			value_ = new T();
 		}
@@ -41,4 +41,4 @@ private:
 //pthread_once_t Singleton<T>::ponce_ = PTHREAD_ONCE_INIT;
 
 template<typename T>
-T* Singleton<T>::value_ = NULL;
+T* Singleton<T>::value_ = nullptr;

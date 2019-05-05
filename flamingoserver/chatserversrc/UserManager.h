@@ -89,10 +89,6 @@ public:
 
     bool AddGroup(const char* groupname, int32_t ownerid, int32_t& groupid);
 
-#ifdef FXN_VERSION
-    bool InsertDeviceInfo(int32_t userid, int32_t deviceid, int32_t classtype, int64_t uploadtime, const std::string& deviceinfo);
-#endif
-
     //聊天消息入库
     bool SaveChatMsgToDb(int32_t senderid, int32_t targetid, const std::string& chatmsg);
 

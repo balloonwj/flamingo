@@ -24,7 +24,7 @@
             android:layout_centerInParent="true"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:text="选择服务器"
+            android:text="服务器设置"
             android:textColor="@android:color/white"
             android:textSize="@dimen/title_text_size" />
     </RelativeLayout>
@@ -56,26 +56,6 @@
         <TableRow>
             <TextView
                 android:layout_height="wrap_content"
-                android:text="图片服务器ip:" />
-            <EditText
-                android:id="@+id/img_server_ip"
-                android:layout_height="wrap_content"
-                android:hint="120.55.94.78"
-                android:layout_weight="1" />
-        </TableRow>
-        <TableRow>
-            <TextView
-                android:layout_height="wrap_content"
-                android:text="图片服务器端口:" />
-            <EditText
-                android:id="@+id/img_server_port"
-                android:layout_height="wrap_content"
-                android:hint="20001"
-                android:layout_weight="1" />
-        </TableRow>
-        <TableRow>
-            <TextView
-                android:layout_height="wrap_content"
                 android:text="文件服务器ip:" />
 
             <EditText
@@ -91,6 +71,26 @@
 
             <EditText
                 android:id="@+id/file_server_port"
+                android:layout_height="wrap_content"
+                android:hint="20001"
+                android:layout_weight="1" />
+        </TableRow>
+        <TableRow>
+            <TextView
+                android:layout_height="wrap_content"
+                android:text="图片服务器ip:" />
+            <EditText
+                android:id="@+id/img_server_ip"
+                android:layout_height="wrap_content"
+                android:hint="120.55.94.78"
+                android:layout_weight="1" />
+        </TableRow>
+        <TableRow>
+            <TextView
+                android:layout_height="wrap_content"
+                android:text="图片服务器端口:" />
+            <EditText
+                android:id="@+id/img_server_port"
                 android:layout_height="wrap_content"
                 android:hint="20002"
                 android:layout_weight="1" />

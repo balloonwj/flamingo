@@ -23,6 +23,7 @@ public:
 
 public:
     bool Init(const char* ip, short port, EventLoop* loop, const char* token);
+    void Uninit();
 
     bool IsMonitorTokenValid(const char* token);
 
@@ -33,7 +34,6 @@ public:
 
 private:
     std::shared_ptr<TcpServer>                     m_server;
-    std::shared_ptr<EventLoopThreadPool>           m_eventLoopThreadPool;
     std::list<std::shared_ptr<MonitorSession>>     m_sessions;
     std::mutex                                     m_sessionMutex;      //多线程之间保护m_sessions
     std::string                                    m_token;             //查看某些敏感数据需要的token

@@ -24,6 +24,18 @@
             android:layout_alignParentTop="true"
             android:layout_marginLeft="@dimen/margin_chat_activity"
             android:scaleType="fitXY" />
+        <TextView
+            android:gravity="center"
+            android:layout_marginTop="3dp"
+            android:layout_marginLeft="12dp"
+            android:layout_alignParentLeft="true"
+            android:text=""
+            android:textSize="10sp"
+            android:layout_below="@+id/iv_userhead"
+            android:id="@+id/tv_window_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
 
         <TextView
             android:id="@+id/tv_name"

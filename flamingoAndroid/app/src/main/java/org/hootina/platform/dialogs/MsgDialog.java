@@ -1,19 +1,9 @@
 package org.hootina.platform.dialogs;
 
-import java.text.SimpleDateFormat;
 import java.util.Date;
-import java.util.List;
 
 import org.hootina.platform.R;
-import org.hootina.platform.activities.BaseActivity;
 import org.hootina.platform.activities.member.ForwardActivity;
-import org.hootina.platform.result.ChatMessage;
-import org.hootina.platform.result.FriendInfo;
-import org.hootina.platform.result.ShouCangInfo;
-import org.hootina.platform.util.MegAsnType;
-import com.lidroid.xutils.db.sqlite.Selector;
-import com.lidroid.xutils.db.sqlite.WhereBuilder;
-import com.lidroid.xutils.exception.DbException;
 
 import android.annotation.SuppressLint;
 import android.app.Dialog;
@@ -21,7 +11,6 @@ import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
-import android.os.Message;
 import android.view.View;
 import android.view.Window;
 import android.widget.TextView;
@@ -121,7 +110,7 @@ public class MsgDialog extends Dialog {
 //		long epoch = System.currentTimeMillis();
 //		date = new Date(epoch);
 //		time = formatter.format(date);
-//		ShouCangInfo shouCangInfo = new ShouCangInfo();
+//		FavoriteItem shouCangInfo = new FavoriteItem();
 //		shouCangInfo.setMsgtext(msgtexts);
 //		shouCangInfo.setType(type);
 //		shouCangInfo.setuAccountID(uAccountIDs);

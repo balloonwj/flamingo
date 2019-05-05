@@ -1043,7 +1043,8 @@ BOOL CRecvMsgThread::ParseChatMessage(int32_t senderId, int32_t targetId, const 
 	if (!bRet)
 	{
 		delete lpMsg;
-		::OutputDebugStringA("Unknown message：");
+        LOG_ERROR("Unknown message, invalid json: %s", strMsg.c_str());
+        ::OutputDebugStringA("Unknown message：");
 		::OutputDebugStringA(strText.c_str());
 		::OutputDebugStringA("\r\n");
 	}
@@ -1051,7 +1052,6 @@ BOOL CRecvMsgThread::ParseChatMessage(int32_t senderId, int32_t targetId, const 
 	{
 		arrMsg.push_back(lpMsg);
 	}
-	
 	
 	return TRUE;
 }

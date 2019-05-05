@@ -31,6 +31,7 @@ public:
     FileServer& operator =(const FileServer& rhs) = delete;
 
     bool Init(const char* ip, short port, EventLoop* loop, const char* fileBaseDir = "filecache/");
+    void Uninit();
 
 private:
     //新连接到来调用或连接断开，所以需要通过conn->connected()来判断，一般只在主loop里面调用

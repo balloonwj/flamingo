@@ -30,10 +30,10 @@ public class FriendsAdapter extends BaseAdapter<UserInfo> {
 	@Override
 	public void onInitView(View view, int position) {
 		UserInfo friendInfo = getList().get(position);
-		setText(R.id.name, friendInfo.get_nickname());
-		setText2(R.id.sign, friendInfo.get_onlinetype(), friendInfo.get_signature());
+		setText(R.id.tv_window_title, friendInfo.get_nickname());
+		setText2(R.id.txt_sign, friendInfo.get_onlinetype(), friendInfo.get_signature());
 
-		ImageView iv = (ImageView) (view.findViewById(R.id.head));
+		ImageView iv = (ImageView) (view.findViewById(R.id.img_head));
 		final ImageView iv_product_selected = (ImageView) (view
 				.findViewById(R.id.iv_product_selected));
 		if (iv == null) {

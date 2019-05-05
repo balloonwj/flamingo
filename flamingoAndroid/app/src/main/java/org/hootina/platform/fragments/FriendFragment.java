@@ -1,374 +1,360 @@
 package org.hootina.platform.fragments;
 
-import java.io.File;
-import java.util.ArrayList;
-import java.util.List;
-
-import org.hootina.platform.R;
-import org.hootina.platform.activities.BaseActivity;
-import org.hootina.platform.activities.details.FriendDetailInfoActivity;
-import org.hootina.platform.activities.member.AddFriendActivity;
-import org.hootina.platform.activities.member.GroupActivity;
-import org.hootina.platform.activities.member.NewFriendActivity;
-import org.hootina.platform.adapters.FriendsAdapter;
-import org.hootina.platform.enums.MsgType;
-import org.hootina.platform.result.AppData;
-import org.hootina.platform.result.FileInfo;
-import org.hootina.platform.result.FriendInfo;
-import org.hootina.platform.result.NewFriendEntity;
-import org.hootina.platform.userinfo.UserInfo;
-import org.hootina.platform.userinfo.UserSession;
-import org.hootina.platform.util.MegAsnType;
-import com.lidroid.xutils.DbUtils;
-import com.lidroid.xutils.db.sqlite.Selector;
-import com.lidroid.xutils.db.sqlite.WhereBuilder;
-import com.lidroid.xutils.exception.DbException;
-
 import android.content.Intent;
 import android.os.Handler;
 import android.os.Message;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.AdapterView;
+import android.view.ViewGroup;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.ListView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
-import android.widget.AdapterView.OnItemClickListener;
+
+import com.bumptech.glide.Glide;
+
+import org.hootina.platform.R;
+import org.hootina.platform.activities.details.FriendDetailInfoActivity;
+import org.hootina.platform.activities.member.AddFriendActivity;
+import org.hootina.platform.activities.member.GroupListActivity;
+import org.hootina.platform.activities.member.NewFriendActivity;
+import org.hootina.platform.enums.ClientType;
+import org.hootina.platform.enums.MsgType;
+import org.hootina.platform.net.NetWorker;
+import org.hootina.platform.result.FileInfo;
+import org.hootina.platform.result.FriendInfo;
+import org.hootina.platform.userinfo.UserInfo;
+import org.hootina.platform.userinfo.UserSession;
+import org.hootina.platform.utils.HeadUtil;
+
+import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 /*
  * 联系人
  */
 public class FriendFragment extends BaseFragment {
-	private ImageButton 		btn_add;
-	private RelativeLayout 		rel_newfrd;
-	private RelativeLayout 		rel_group;
-	private ListView 			lv_friends;
-	private FriendsAdapter 		friendsAdapter;
-	private DbUtils 			db;
-	private FriendInfo 			friendInfo;
-	private String 				picname;
-	private File 				file;
-	private byte[] 				contentIntleng;
-	private int 				uAccountID;
-	private List<FileInfo> 		m_downloadingFiles;
-	private int 				mnLoad = 0;
-	private TextView 			tv_friend_num;
-	private RelativeLayout 		rl_newfriend;
+    private ImageButton btn_add;
+    private RelativeLayout rel_newfrd;
+    private RelativeLayout rel_group;
+    private ListView lv_friends;
+    private FriendInfo friendInfo;
+    private String picname;
+    private File file;
+    private byte[] contentIntleng;
+    private int uAccountID;
+    private List<FileInfo> m_downloadingFiles;
+    private int mnLoad = 0;
+    private TextView tv_friend_num;
+    private RelativeLayout rl_newfriend;
 
-	public int getAccountID() {
-		return uAccountID;
-	}
+    //private FriendList mFriendList;
 
-	private MysHandler handler = new MysHandler();
+    private List<UserInfo> friends = new ArrayList<>();
 
-	public class MysHandler extends Handler {
-		@Override
-		public void dispatchMessage(Message msg) {
-			super.dispatchMessage(msg);
-			switch (msg.what) {
-			case 0:
-				break;
-			case 1:
-				break;
-			}
-		}
-	}
+    private RecyclerView mRecyclerView;
+    private FriendListAdapter mAdapter;
 
-	@Override
-	public void onClick(View v) {
-		switch (v.getId()) {
-		case R.id.btn_add:
-			Intent intent = new Intent(getActivity(), AddFriendActivity.class);
-			startActivityForResult(intent, 0);
-			break;
+    public int getAccountID() {
+        return uAccountID;
+    }
 
-		case R.id.rel_newfrd:
-			Intent intent1 = new Intent(getActivity(), NewFriendActivity.class);
-			// startActivityForResult(NewFriendActivity.class, 0);
-			startActivityForResult(intent1, 0);
-			break;
+    private MysHandler handler = new MysHandler();
 
-		case R.id.rel_group:
-			startActivity(GroupActivity.class);
+    public class MysHandler extends Handler {
+        @Override
+        public void dispatchMessage(Message msg) {
+            super.dispatchMessage(msg);
+            switch (msg.what) {
+                case 0:
+                    break;
+                case 1:
+                    break;
+            }
+        }
+    }
 
-		default:
-			break;
-		}
-	}
+    @Override
+    public void onClick(View v) {
+        switch (v.getId()) {
+            case R.id.btn_add:
+                Intent intent = new Intent(getActivity(), AddFriendActivity.class);
+                startActivityForResult(intent, 0);
+                break;
 
-	@Override
-	public void onActivityResult(int requestCode, int resultCode, Intent data) {
-		super.onActivityResult(requestCode, resultCode, data);
-		// con.getFriends(1);
-		loadFriendList();
-	}
+            case R.id.rel_newfrd:
+                Intent intent1 = new Intent(getActivity(), NewFriendActivity.class);
+                // startActivityForResult(NewFriendActivity.class, 0);
+                startActivityForResult(intent1, 0);
+                break;
 
-	public void setFrirndlistCount() {
-		if (mnLoad == 0) {
-			// con.getFriends(1);
-		}
-	}
+            case R.id.rel_group:
+                startActivity(GroupListActivity.class);
+                break;
 
-	public boolean isGroup(int nID) {
-		int nMask = nID & 0xE0000000;
-		if (nMask == 0xC0000000) {
-			return true;
-		}
-		return false;
-	}
-
-	private void loadFriendList() {
-		List<UserInfo> list = UserSession.getInstance().friends;
-		if (list != null && lv_friends != null) {
-			List<UserInfo> friends = new ArrayList<UserInfo>();
-			for (UserInfo u : list)
-			{
-				if (u.get_userid() < 0x0FFFFFFF)
-					friends.add(u);
-			}
-
-			friendsAdapter = new FriendsAdapter(getActivity(), friends, handler);
-			lv_friends.setAdapter(friendsAdapter);
-		}
-
-		if (tv_friend_num != null) {
-			int nWaitFriend = AppData.getFriendApplyWaiting(BaseActivity
-					.getMyAccountID());
-			if (nWaitFriend == 0) {
-				tv_friend_num.setVisibility(View.GONE);
-			} else {
-				rl_newfriend.setVisibility(View.VISIBLE);
-				// tv_friend_num.setVisibility(View.VISIBLE);
-				String strText = "..";
-				if (nWaitFriend < 100) {
-					strText = String.valueOf(nWaitFriend);
-				}
-				tv_friend_num.setText(strText);
-			}
-		}
-	}
-
-	private void refreshFriend(UserInfo friendInfo) {
-		List<UserInfo> list;
-		if (friendsAdapter == null) {
-			list = new ArrayList<UserInfo>();
-			list.add(friendInfo);
-			friendsAdapter = new FriendsAdapter(getActivity(), list, handler);
-		} else {
-			list = friendsAdapter.getList();
-			int nFlag = 0;
-			for (int i = 0; i < list.size(); ++i) {
-				if (list.get(i).get_userid() == friendInfo.get_userid()) {
-					friendsAdapter.getList().set(i, friendInfo);
-					nFlag = 1;
-					break;
-				}
-			}
-
-			if (nFlag == 0) {
-				friendsAdapter.getList().add(friendInfo);
-			}
-		}
-
-		lv_friends.setAdapter(friendsAdapter);
-	}
-
-	@Override
-	protected int getContentView() {
-		return R.layout.activity_friend;
-	}
-
-	@Override
-	protected void initData() {
-			loadFriendList();
-	}
-
-	@Override
-	protected void setData() {
-		btn_add.setOnClickListener(this);
-		rel_group.setOnClickListener(this);
-		rel_newfrd.setOnClickListener(this);
-		lv_friends.setOnItemClickListener(new OnItemClickListener() {
-			@Override
-			public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-				UserInfo currentUser = friendsAdapter.getList().get(position);
-				if (currentUser == null)
-					return;
-				Intent intent = new Intent(getActivity(), FriendDetailInfoActivity.class);
-				intent.putExtra("userid", currentUser.get_userid());
-				intent.putExtra("nickname", currentUser.get_nickname());
-				intent.putExtra("username", currentUser.get_username());
-				intent.putExtra("signature", currentUser.get_signature());
-//				startActivity(intent);
-				startActivityForResult(intent, 0);
-			}
-		});
-	}
-
-	@Override
-	protected void processLogic() {
-		Log.i("zhangyl test", "aaa");
-	}
-
-	@Override
-	public void processMessage(Message msg) {
-		if (msg.what == MsgType.msg_type_getfriendlist) {
-			if (msg.arg1 == MsgType.ERROR_CODE_SUCCESS)
-				loadFriendList();
-		}
+            default:
+                break;
+        }
+    }
 
 
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        // con.getFriends(1);
+        //loadFriendList();
+        //NetWorker.getFriendList();
 
-		else if (msg.what == MegAsnType.UserPrivateInfoList) {
+        Log.d("zzh", "onActivityResult");
+    }
 
-			loadFriendList();
-		} else if (msg.what == MegAsnType.FileLoadData) {
-			loadFriendList();
-		} else if (msg.what == MegAsnType.FriendChange) {
-			loadFriendList();
-		} else if (msg.what == MegAsnType.TargetInfo) {
-			mnLoad = 1;
-		}
+    @Override
+    public void onResume() {
+        super.onResume();
+        loadFriendList();
+        mAdapter.notifyDataSetChanged();
+    }
 
-	}
+    public void setFrirndlistCount() {
+        if (mnLoad == 0) {
+            // con.getFriends(1);
+        }
+    }
 
-	public void OnFriendChange(tms.User.TargetsAdd tTargetsAdd) {
-//		int uTargetID = tTargetsAdd.getUTargetID();
-//		if ((tTargetsAdd.getUError() == 0) && (tTargetsAdd.getUTargetID() != 0)) {
-//			switch (tTargetsAdd.getNcmd()) {
-//			case Agree:
-//				try {
-//					List<NewFriendEntity> list = BaseActivity.getDb().findAll(
-//							Selector.from(NewFriendEntity.class)
-//									.where("uAccountID", "=", uAccountID)
-//									.and(WhereBuilder.b("uTargetID", "=",
-//											uTargetID)));
-//					if (list == null) {
-//						// sava
-//						NewFriendEntity newfriendInfo = new NewFriendEntity();
-//						newfriendInfo.setNcmd(tTargetsAdd.getNcmd().name());
-//						newfriendInfo
-//								.setnFace(tTargetsAdd.getObjs().getNFace());
-//						newfriendInfo.setStrAccountNo(tTargetsAdd.getObjs()
-//								.getStrAccountNo());
-//						newfriendInfo.setStrNickName(tTargetsAdd.getObjs()
-//								.getStrNickName().toStringUtf8());
-//						newfriendInfo.setuTargetID(uTargetID);
-//						newfriendInfo.setuAccountID(uAccountID);
-//						newfriendInfo.setNeedop("true");
-//						BaseActivity.getDb().save(newfriendInfo);
-//					} else {
-//						// //////
-//						if (list.size() > 0) {
-//							BaseActivity.getDb().delete(list.get(0));
-//						}
-//						NewFriendEntity newfriendInfo = new NewFriendEntity();
-//						newfriendInfo.setNcmd(tTargetsAdd.getNcmd().name());
-//						newfriendInfo
-//								.setnFace(tTargetsAdd.getObjs().getNFace());
-//						newfriendInfo.setStrAccountNo(tTargetsAdd.getObjs()
-//								.getStrAccountNo());
-//						newfriendInfo.setStrNickName(tTargetsAdd.getObjs()
-//								.getStrNickName().toStringUtf8());
-//						newfriendInfo.setuTargetID(uTargetID);
-//						newfriendInfo.setuAccountID(uAccountID);
-//						newfriendInfo.setNeedop("true");
-//						BaseActivity.getDb().save(newfriendInfo);
-//					}
-//					FriendInfo friend = null; //AppData.findFriend(uAccountID, uTargetID);
-//					// 可能是pc添加的好友
-//					if (friend != null) {
-//					} else {
-//						FriendInfo info = new FriendInfo();
-//						info.setnFace(tTargetsAdd.getObjs().getNFace());
-//						info.setStrAccountNo(tTargetsAdd.getObjs()
-//								.getStrAccountNo());
-//						info.setStrNickName(tTargetsAdd.getObjs()
-//								.getStrNickName().toStringUtf8());
-//						info.setuAccountID(uAccountID);
-//						info.setuTargetID(uTargetID);
-//						//AppData.updateFriendInfo(info);
-//						tms.User.SysUserPrivateInfoList.Builder sysUserPrivateInfolist = tms.User.SysUserPrivateInfoList
-//								.newBuilder();
-//						tms.User.SysUserPrivateInfo.Builder sysUserPrivateInfo = tms.User.SysUserPrivateInfo
-//								.newBuilder();
-//						sysUserPrivateInfo.setUVersion(0);
-//						sysUserPrivateInfo.setUTargetID(uTargetID);
-//						sysUserPrivateInfolist.addNodes(sysUserPrivateInfo);
-////						con.sendProto(
-////								tms.Base.cmd.n_SysUserPrivateInfoList_VALUE,
-////								sysUserPrivateInfolist.build());
-//					}
-//
-//				} catch (DbException e) {
-//
-//					e.printStackTrace();
-//				}
-//				break;
-//			case Apply:
-//				try {
-//					List<NewFriendEntity> list = BaseActivity.getDb()
-//							.findAll(
-//									Selector.from(NewFriendEntity.class)
-//											.where("uAccountID", "=",
-//													uAccountID)
-//											.and(WhereBuilder.b("uTargetID",
-//													"=", uTargetID))
-//											.and(WhereBuilder.b("ncmd", "=",
-//													"Apply"))
-//											.and(WhereBuilder.b("needop", "=",
-//													"false")));
-//					if (list != null && list.size() != 0) {
-//
-//					} else {
-//						// sava
-//						NewFriendEntity newfriendInfo = new NewFriendEntity();
-//						newfriendInfo.setNcmd(tTargetsAdd.getNcmd().name());
-//						newfriendInfo
-//								.setnFace(tTargetsAdd.getObjs().getNFace());
-//						newfriendInfo.setStrAccountNo(tTargetsAdd.getObjs()
-//								.getStrAccountNo());
-//						newfriendInfo.setStrNickName(tTargetsAdd.getObjs()
-//								.getStrNickName().toStringUtf8());
-//						newfriendInfo.setuTargetID(uTargetID);
-//						newfriendInfo.setuAccountID(uAccountID);
-//						newfriendInfo.setNeedop("true");
-//						BaseActivity.getDb().save(newfriendInfo);
-//
-//					}
-//				} catch (DbException e) {
-//					// TODO Auto-generated catch block
-//					e.printStackTrace();
-//				}
-//
-//				break;
-//			case Delete:
-//
-//				try {
-//					List<FriendInfo> list = BaseActivity.getDb().findAll(
-//							Selector.from(FriendInfo.class)
-//									.where("uAccountID", "=", uAccountID)
-//									.and(WhereBuilder.b("uTargetID", "=",
-//											uTargetID)));
-//					if (list != null && list.size() > 0) {
-//						// delete list
-//						BaseActivity.getDb().delete(list.get(0));
-//					}
-//				} catch (DbException e) {
-//					// TODO Auto-generated catch block
-//					e.printStackTrace();
-//				}
-//
-//				break;
-//			case Refuse:
-//				// delete 添加某人的记录
-//
-//				break;
-//			default:
-//				break;
+    @Override
+    public void onHiddenChanged(boolean hidden) {
+        super.onHiddenChanged(hidden);
+        //if (!hidden) {
+        //    NetWorker.getFriendList();
+        //}
+    }
+
+    private void loadFriendList() {
+        List<UserInfo> storedFriendList = UserSession.getInstance().friends;
+        friends = storedFriendList;
+    }
+
+    @Override
+    protected int getContentView() {
+        return R.layout.activity_friend;
+    }
+
+
+    @Override
+    protected void initData(View view) {
+        loadFriendList();
+
+        mRecyclerView = (RecyclerView) view.findViewById(R.id.recycler);
+        mAdapter = new FriendListAdapter();
+        mRecyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
+        mRecyclerView.setAdapter(mAdapter);
+    }
+
+    @Override
+    protected void setData() {
+        btn_add.setOnClickListener(this);
+        rel_group.setOnClickListener(this);
+        rel_newfrd.setOnClickListener(this);
+//		lv_friends.setOnItemClickListener(new OnItemClickListener() {
+//			@Override
+//			public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+//				UserInfo currentUser = friendsAdapter.getList().get(position);
+//				if (currentUser == null)
+//					return;
+//				Intent intent = new Intent(getActivity(), FriendDetailInfoActivity.class);
+//				intent.putExtra("userid", currentUser.get_userid());
+//				intent.putExtra("nickname", currentUser.get_nickname());
+//				intent.putExtra("username", currentUser.get_username());
+//				intent.putExtra("signature", currentUser.get_signature());
+//				startActivityForResult(intent, 0);
 //			}
-//		}
-	}
+//		});
+    }
+
+    @Override
+    protected void processLogic() {
+        Log.i("zhangyl test", "aaa");
+    }
+
+    @Override
+    public void processMessage(Message msg) {
+        super.processMessage(msg);
+
+        if (msg.what == MsgType.msg_type_getfriendlist) {
+			if (msg.arg1 != MsgType.ERROR_CODE_SUCCESS)
+			    return;
+
+			loadFriendList();
+            //setFriendList((FriendList) msg.obj);
+            mAdapter.notifyDataSetChanged();
+        } else if (msg.what == MsgType.msg_type_operatefriend) {
+            if (msg.arg1 == 3) {
+                NetWorker.getFriendList();
+            }
+        } else if (msg.what == MsgType.msg_type_userstatuschange) {
+            int userid = msg.arg1;
+            int status = msg.arg2;
+            //上线onlinestatus=1, 离线onlinestatus=0 2隐身 3隐身 4离开 5移动版在线 6移动版下线 7手机和电脑同时在线
+            for (UserInfo item : friends) {
+                if (item.get_userid() == userid) {
+                    switch (status) {
+                        case 0:
+                            //item.setState("[离线]");
+                        case 1:
+                            //item.setState("[上线]");
+                            break;
+                        case 2:
+                            //item.setState("[隐身]");
+                            break;
+                        case 3:
+                            //item.setState("[隐身]");
+                            break;
+                        case 4:
+                            //item.setState("[离开]");
+                            break;
+                        case 5:
+                            //item.setState("[移动版在线]");
+                            break;
+                        case 6:
+                            //item.setState("[移动版下线]");
+                            break;
+                        case 7:
+                            //item.setState("[手机和电脑同时在线]");
+                            break;
+                    }
+                    break;
+                }
+            }
+
+            mAdapter.notifyDataSetChanged();
+        }
+    }
+
+    public class FriendListAdapter extends RecyclerView.Adapter<FriendListAdapter.FriendViewHolder> {
+        @Override
+        public FriendViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.friend_item, parent, false);
+            return new FriendViewHolder(view);
+        }
+
+        @Override
+        public void onBindViewHolder(FriendViewHolder holder, int position) {
+            holder.bindDataToView(friends.get(position));
+        }
+
+        @Override
+        public int getItemCount() {
+            return friends.size();
+        }
+
+        public class FriendViewHolder extends RecyclerView.ViewHolder {
+
+            private ImageView mImgHead;
+            private TextView mTxtName;
+            private TextView mTxtSign;
+
+            public FriendViewHolder(View itemView) {
+                super(itemView);
+
+                mImgHead = (ImageView) itemView.findViewById(R.id.img_head);
+                mTxtName = (TextView) itemView.findViewById(R.id.tv_window_title);
+                mTxtSign = (TextView) itemView.findViewById(R.id.txt_sign);
+            }
+
+            public void bindDataToView(final UserInfo result) {
+
+                Glide.with(FriendFragment.this)
+                            .load("file:///android_asset/head" + result.get_faceType() + ".png")
+                            .into(mImgHead);
+//                String status = "";
+////                switch (result.get_onlinetype()) {
+////                    case OnlineType.online_type_offline:
+////                    case OnlineType.online_type_pc_invisible:
+////                        status = "[离线]";
+////                        break;
+////
+////                    case OnlineType.online_type_pc_online:
+////                        status = "[PC在线]";
+////                        break;
+////
+////                    case OnlineType.online_type_android_cellular:
+////                    case OnlineType.online_type_android_wifi:
+////                            status = "[Android在线]";
+////                        break;
+////
+////                    case OnlineType.online_type_ios:
+////                        status = "[IOS在线]";
+////                        break;
+////
+////                    case OnlineType.online_type_mac:
+////                        status = "[Mac在线]";
+////                        break;
+////
+////                    default:
+////                        break;
+////                }
+                String status = "";
+                switch (result.get_clientType()) {
+                    case ClientType.CLIENT_TYPE_PC:
+                        status = "[PC在线]";
+                        break;
+
+                    case ClientType.CLIENT_TYPE_ANDROID:
+                        status = "[Android在线]";
+                        break;
+
+                    case ClientType.CLIENT_TYPE_IOS:
+                        status = "[IOS在线]";
+                        break;
+
+                    default:
+                        status = "[离线]";
+                        break;
+                }
+
+//                //0离线 1在线 2忙碌 3离开 4隐身
+//                switch (result.get_onlinetype()) {
+//                    case 0:
+//                        status = status + "离线]";
+//                        break;
+//                    case 1:
+//                        status = status + "在线]";
+//                        break;
+//                    case 2:
+//                        status = status + "忙碌]";
+//                        break;
+//                    case 3:
+//                        status = status + "离开]";
+//                        break;
+//                    case 4:
+//                        status = status + "隐身]";
+//                        break;
+//                }
+
+                mTxtName.setText(result.get_username());
+                mTxtSign.setText(status + result.get_signature());
+
+                itemView.setOnClickListener(new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        Intent intent = new Intent(getActivity(), FriendDetailInfoActivity.class);
+                        intent.putExtra("userid", result.get_userid());
+                        intent.putExtra("nickname", result.get_nickname());
+                        intent.putExtra("username", result.get_username());
+                        intent.putExtra("signature", result.get_signature());
+                        //getActivity().startActivity(intent);
+                        startActivityForResult(intent, 0);
+                    }
+                });
+
+                HeadUtil.put(result.get_userid(), result.get_faceType());
+            }
+        }
+    }
 
 }

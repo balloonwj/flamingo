@@ -3,7 +3,7 @@
  * zhangyl 2018.03.09
  */
 #include "../net/InetAddress.h"
-#include "../base/Logging.h"
+#include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
 #include "../net/TcpServer.h"
 #include "../net/EventLoop.h"
@@ -15,18 +15,20 @@
 bool MonitorServer::Init(const char* ip, short port, EventLoop* loop, const char* token)
 {
     m_token = token;
-    
-    m_eventLoopThreadPool.reset(new EventLoopThreadPool());
-    m_eventLoopThreadPool->Init(loop, 2);
-    m_eventLoopThreadPool->start();
-    
+     
     InetAddress addr(ip, port);
     m_server.reset(new TcpServer(loop, addr, "ZYL-MYIMMONITORSERVER", TcpServer::kReusePort));
     m_server->setConnectionCallback(std::bind(&MonitorServer::OnConnection, this, std::placeholders::_1));
     //启动侦听
-    m_server->start();
+    m_server->start(1);
 
     return true;
+}
+
+void MonitorServer::Uninit()
+{
+    if (m_server)
+        m_server->stop();
 }
 
 //新连接到来调用或连接断开，所以需要通过conn->connected()来判断，一般只在主loop里面调用
@@ -59,7 +61,7 @@ void MonitorServer::OnClose(const std::shared_ptr<TcpConnection>& conn)
     {
         if ((*iter)->GetConnectionPtr() == NULL)
         {
-            LOG_ERROR << "connection is NULL";
+            LOGE("connection is NULL");
             break;
         }
 
@@ -67,7 +69,7 @@ void MonitorServer::OnClose(const std::shared_ptr<TcpConnection>& conn)
         if ((*iter)->GetConnectionPtr() == conn)
         {
             m_sessions.erase(iter);
-            LOG_INFO << "monitor client disconnected: " << conn->peerAddress().toIpPort();
+            LOGI("monitor client disconnected: %s", conn->peerAddress().toIpPort().c_str());
             break;
         }
     }

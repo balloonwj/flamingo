@@ -31,15 +31,21 @@ void EventLoopThreadPool::Init(EventLoop* baseLoop, int numThreads)
 
 void EventLoopThreadPool::start(const ThreadInitCallback& cb)
 {
-	assert(baseLoop_);
-	assert(!started_);
+    //assert(baseLoop_);
+    if (baseLoop_ == NULL)
+        return;
+    
+    assert(!started_);
+    if (started_)
+        return;  
+	
 	baseLoop_->assertInLoopThread();
 
 	started_ = true;
 
 	for (int i = 0; i < numThreads_; ++i)
 	{
-		char buf[name_.size() + 32];
+		char buf[128];
 		snprintf(buf, sizeof buf, "%s%d", name_.c_str(), i);
 
 		std::shared_ptr<EventLoopThread> t(new EventLoopThread(cb, buf));
@@ -64,7 +70,10 @@ void EventLoopThreadPool::stop()
 EventLoop* EventLoopThreadPool::getNextLoop()
 {
 	baseLoop_->assertInLoopThread();
-	assert(started_);
+    //assert(started_);
+    if (!started_)
+        return NULL;
+	
 	EventLoop* loop = baseLoop_;
 
 	if (!loops_.empty())
@@ -95,7 +104,6 @@ EventLoop* EventLoopThreadPool::getLoopForHash(size_t hashCode)
 std::vector<EventLoop*> EventLoopThreadPool::getAllLoops()
 {
 	baseLoop_->assertInLoopThread();
-	assert(started_);
 	if (loops_.empty())
 	{
 		return std::vector<EventLoop*>(1, baseLoop_);

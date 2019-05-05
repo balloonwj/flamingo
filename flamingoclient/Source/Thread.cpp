@@ -3,6 +3,9 @@
 * zhangyl 2017.03.13
 **/
 #include "stdafx.h"
+
+#include <functional>
+
 #include "Thread.h"
 
 CThread::CThread()

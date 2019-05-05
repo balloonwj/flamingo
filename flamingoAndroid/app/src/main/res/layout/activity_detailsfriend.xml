@@ -37,7 +37,7 @@
         android:gravity="center_vertical" >
 
         <ImageView
-            android:id="@+id/head"
+            android:id="@+id/img_head"
             android:layout_width="55dp"
             android:layout_height="55dp"
             android:layout_alignParentLeft="true"
@@ -46,20 +46,20 @@
             android:src="@drawable/head" />
 
         <TextView
-            android:id="@+id/name"
+            android:id="@+id/tv_window_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_toRightOf="@id/head"
+            android:layout_toRightOf="@id/img_head"
             android:padding="7dp"
             android:text="小黑"
             android:textColor="#000" />
 
         <TextView
-            android:id="@+id/number"
+            android:id="@+id/tv_nickname"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_alignParentBottom="true"
-            android:layout_toRightOf="@id/head"
+            android:layout_toRightOf="@id/img_head"
             android:padding="7dp"
             android:text="......"
             android:textColor="#666" />

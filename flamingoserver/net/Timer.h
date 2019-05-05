@@ -13,33 +13,60 @@ namespace net
     class Timer
     {
     public:
-        Timer(const TimerCallback& cb, Timestamp when, double interval)
+        Timer(const TimerCallback& cb, Timestamp when, int64_t interval)
             : callback_(cb),
             expiration_(when),
             interval_(interval),
-            repeat_(interval > 0.0),
+            repeatCount_(-1),
+            canceled_(false),
             sequence_(++s_numCreated_)
         { }
 
 
-        Timer(TimerCallback&& cb, Timestamp when, double interval)
+        Timer(TimerCallback&& cb, Timestamp when, int64_t interval)
             : callback_(std::move(cb)),
             expiration_(when),
             interval_(interval),
-            repeat_(interval > 0.0),
+            repeatCount_(-1),
+            canceled_(false),
             sequence_(++s_numCreated_)
         { }
 
-        void run() const
+        void run()
         {
+            if (canceled_)
+                return;
+
             callback_();
+
+            if (repeatCount_ != -1)
+            {
+                --repeatCount_;
+                if (repeatCount_ == 0)
+                {
+                    repeatCount_ = 0;
+                    return;
+                }                               
+            }
+           
+            expiration_ += interval_;               
         }
 
-        Timestamp expiration() const  { return expiration_; }
-        bool repeat() const { return repeat_; }
+        bool isCanceled() const
+        {
+            return canceled_;
+        }
+
+        void cancel(bool off)
+        {
+            canceled_ = off;
+        }
+
+        Timestamp expiration() const { return expiration_; }
+        int64_t getRepeatCount() const { return repeatCount_; }
         int64_t sequence() const { return sequence_; }
 
-        void restart(Timestamp now);
+        //void restart(Timestamp now);
 
         static int64_t numCreated() { return s_numCreated_; }
 
@@ -51,11 +78,11 @@ namespace net
     private:
         const TimerCallback         callback_;
         Timestamp                   expiration_;
-        const double                interval_;
-        const bool                  repeat_;
+        const int64_t               interval_;
+        int64_t                     repeatCount_;       //重复次数，-1 表示一直重复下去
         const int64_t               sequence_;
+        bool                        canceled_;   //是否处于取消状态
 
         static std::atomic<int64_t> s_numCreated_;
     };
 }
-

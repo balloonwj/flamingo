@@ -30,8 +30,13 @@
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <uses-permission android:name="android.permission.RESTART_PACKAGES" >
-    </uses-permission>
+    <uses-permission android:name="android.permission.RESTART_PACKAGES" />
+    <!-- bugly权限 -->
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.READ_LOGS" />
 
     <application
         android:name=".FlamingoApplication"
@@ -104,15 +109,15 @@
             android:screenOrientation="portrait" />
         <!-- 收藏 -->
         <activity
-            android:name=".activities.member.ShoucangActivity"
+            android:name=".activities.member.FavoriteActivity"
             android:screenOrientation="portrait" />
         <!-- 个人信息 -->
         <activity
-            android:name=".activities.member.MyPersonInfo"
+            android:name=".activities.member.MyPersonInfoActivity"
             android:screenOrientation="portrait" />
          <!-- 群列表-->
         <activity
-            android:name=".activities.member.GroupActivity"
+            android:name=".activities.member.GroupListActivity"
             android:screenOrientation="portrait" />
         <!-- 好友详细资料 -->
         <activity

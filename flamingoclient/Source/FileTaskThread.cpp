@@ -315,7 +315,7 @@ long CFileTaskThread::UploadFile(PCTSTR pszFileName, HWND hwndReflection, HANDLE
 
         AtlTrace("eachfilesize = %d", eachfilesize);
         string filedata;
-        filedata.append(buffer.GetBuffer(), buffer.GetSize());
+        filedata.append(buffer.GetBuffer(), (size_t)buffer.GetSize());
         writeStream.WriteString(filedata);
         writeStream.Flush();
         file_msg headerx = { outbuf.length() };
@@ -342,7 +342,7 @@ long CFileTaskThread::UploadFile(PCTSTR pszFileName, HWND hwndReflection, HANDLE
         if (!CIUSocket::GetInstance().RecvOnFilePort(recvBuf.GetBuffer(), recvBuf.GetSize()))
             break;
 
-        BinaryReadStream readStream(recvBuf.GetBuffer(), recvBuf.GetSize());
+        BinaryReadStream readStream(recvBuf.GetBuffer(), (size_t)recvBuf.GetSize());
         int32_t cmd;
         if (!readStream.ReadInt32(cmd) || cmd != msg_type_upload_resp)
             break;
@@ -446,6 +446,8 @@ long CFileTaskThread::DownloadFile3(LPCSTR lpszFileName, LPCTSTR lpszDestPath, B
         writeStream.WriteInt64(dummyfilesize);
         string dummyfiledata;
         writeStream.WriteString(dummyfiledata);
+        int32_t clientNetType = client_net_type_broadband;
+        writeStream.WriteInt32(clientNetType);
         writeStream.Flush();
 
         file_msg header = { outbuf.length() };
@@ -471,7 +473,7 @@ long CFileTaskThread::DownloadFile3(LPCSTR lpszFileName, LPCTSTR lpszDestPath, B
             break;
         }
 
-        BinaryReadStream readStream(buffer.GetBuffer(), recvheader.packagesize);
+        BinaryReadStream readStream(buffer.GetBuffer(), (size_t)recvheader.packagesize);
         int32_t cmd;
         if (!readStream.ReadInt32(cmd) || cmd != msg_type_download_resp)
         {

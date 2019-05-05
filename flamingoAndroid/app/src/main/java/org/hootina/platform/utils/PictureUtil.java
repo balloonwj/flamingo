@@ -17,15 +17,12 @@ import android.content.Context;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.os.Message;
 import android.support.v4.util.LruCache;
 import android.util.Log;
 
-import org.hootina.platform.activities.BaseActivity;
 import org.hootina.platform.result.FileInfo;
-import org.hootina.platform.result.AppData;
 import org.hootina.platform.userinfo.UserInfo;
-import org.hootina.platform.util.MegAsnType;
+
 import com.lidroid.xutils.BitmapUtils;
 
 public class PictureUtil {
@@ -213,18 +210,17 @@ public class PictureUtil {
 
 			m_downloadingFiles.remove(0);
 			
-			tms.User.FileLoadData.Builder fileLoadData = tms.User.FileLoadData
-					.newBuilder();
-			fileLoadData.setUError(0);
-			fileLoadData.setUFilesize(uFilesize);
-			fileLoadData.setUOffset(0);
-			fileLoadData.setUDownsize(uDownsize);
-			fileLoadData.setUTmmodified(0);
+			//tms.User.FileLoadData.Builder fileLoadData = tms.User.FileLoadData.newBuilder();
+			//fileLoadData.setUError(0);
+			//fileLoadData.setUFilesize(uFilesize);
+			//fileLoadData.setUOffset(0);
+			//fileLoadData.setUDownsize(uDownsize);
+			//fileLoadData.setUTmmodified(0);
 			
-			Message msg = new Message();
-			msg.obj = fileLoadData;
-			msg.what = MegAsnType.FileLoadData;
-			BaseActivity.sendMessage(msg);
+			//Message msg = new Message();
+			//msg.obj = fileLoadData;
+			//msg.what = MegAsnType.FileLoadData;
+			//BaseActivity.sendMessage(msg);
 
 //			if (m_downloadingFiles.size() > 0) {
 //				contwo.sendFileLoadInfo(m_downloadingFiles.get(0).getName()
@@ -619,15 +615,12 @@ public class PictureUtil {
 		if(bmp == null)
 		{
 			int nFace = info.get_faceType();
-			if(nFace == 0 && AppData.isGroup(info.get_userid()))
-			{
+			if(nFace == 0 && UserInfo.isGroup(info.get_userid()))
 				nFace = 100;
-			}
+
 			return getSystemHead(mgr, nFace);
 		}
-		else
-		{
-			return bmp;
-		}
+
+		return bmp;
 	}
 }

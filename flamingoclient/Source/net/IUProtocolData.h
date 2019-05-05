@@ -1,10 +1,11 @@
 //协议及状态常量
 
 #pragma once
+#include <stdint.h>
 #include <set>
 #include <list>
 #include <map>
-#include <stdint.h>
+#include <string>
 
 #define DEFAULT_TEAMNAME _T("My Friends")
 

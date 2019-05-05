@@ -4,8 +4,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.hootina.platform.R;
+import org.hootina.platform.adapters.SearchFriendAdapter;
+import org.hootina.platform.adapters.ViewPagerAdapter;
 import org.hootina.platform.utils.PointUtil;
-import org.hootina.platform.uutil.ViewPagerAdapter;
 import org.hootina.platform.widgets.ScaleImageView;
 
 import android.content.Intent;

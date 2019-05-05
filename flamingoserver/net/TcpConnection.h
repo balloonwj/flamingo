@@ -5,15 +5,15 @@
 #include "Callbacks.h"
 #include "Buffer.h"
 #include "InetAddress.h"
+//#include "EventLoop.h"
 
 // struct tcp_info is in <netinet/tcp.h>
 struct tcp_info;
 
 namespace net
 {
-
+    class EventLoop;
 	class Channel;
-	class EventLoop;
 	class Socket;
 
 	///

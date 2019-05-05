@@ -1,51 +1,30 @@
 #include "EventLoop.h"
-#include <signal.h>
-#include <sys/eventfd.h>
-#include <unistd.h>
+
+//#include <unistd.h>
 #include <sstream>
 #include <iostream>
-#include "../base/Logging.h"
-#include "TimerQueue.h"
+#include "../base/AsyncLog.h"
 #include "Channel.h"
-#include "EpollPoller.h"
 #include "Sockets.h"
+#include "InetAddress.h"
+
+#ifdef WIN32
+#include "SelectPoller.h"
+#else
+#include "EpollPoller.h"
+#endif
 
 
 using namespace net;
 
-namespace
-{
-	__thread EventLoop* t_loopInThisThread = 0;
+//内部侦听唤醒fd的侦听端口，因此外部可以再使用这个端口
+//#define INNER_WAKEUP_LISTEN_PORT 10000
 
-	const int kPollTimeMs = 1;
+thread_local  EventLoop* t_loopInThisThread = 0;
 
-	int createEventfd()
-	{
-		int evtfd = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-		if (evtfd < 0)
-		{
-			LOG_SYSERR << "Failed in eventfd";
-			abort();
-		}
-		return evtfd;
-	}
+const int kPollTimeMs = 1;
 
-#pragma GCC diagnostic ignored "-Wold-style-cast"
-	class IgnoreSigPipe
-	{
-	public:
-		IgnoreSigPipe()
-		{
-			::signal(SIGPIPE, SIG_IGN);
-			// LOG_TRACE << "Ignore SIGPIPE";
-		}
-	};
-#pragma GCC diagnostic error "-Wold-style-cast"
-
-	IgnoreSigPipe initObj;
-}
-
-EventLoop* EventLoop::getEventLoopOfCurrentThread()
+EventLoop* getEventLoopOfCurrentThread()
 {
 	return t_loopInThisThread;
 }
@@ -58,15 +37,24 @@ eventHandling_(false),
 callingPendingFunctors_(false),
 iteration_(0),
 threadId_(std::this_thread::get_id()),
-poller_(new EPollPoller(this)),
-timerQueue_(new TimerQueue(this)),
-wakeupFd_(createEventfd()),
-wakeupChannel_(new Channel(this, wakeupFd_)),
-currentActiveChannel_(NULL)
+currentActiveChannel_(NULL),
+timerQueue_(new TimerQueue(this))
 {
-	if (t_loopInThisThread)
+    createWakeupfd();
+    
+
+#ifdef WIN32
+    wakeupChannel_.reset(new Channel(this, wakeupFdSend_));
+    poller_.reset(new SelectPoller(this));
+    
+#else
+    wakeupChannel_.reset(new Channel(this, wakeupFd_));
+    poller_.reset(new EPollPoller(this));
+#endif
+    
+    if (t_loopInThisThread)
 	{
-		LOG_FATAL << "Another EventLoop  exists in this thread ";
+		LOGF("Another EventLoop  exists in this thread ");
 	}
 	else
 	{
@@ -84,7 +72,7 @@ currentActiveChannel_(NULL)
 EventLoop::~EventLoop()
 {
     assertInLoopThread();
-    //LOG_DEBUG << "EventLoop destructs in other thread";
+    LOGD("EventLoop 0x%x destructs.", this);
 
 	//std::stringstream ss;
 	//ss << "eventloop destructs threadid = " << threadId_;
@@ -92,36 +80,48 @@ EventLoop::~EventLoop()
 
 	wakeupChannel_->disableAll();
 	wakeupChannel_->remove();
-	::close(wakeupFd_);
+  
+#ifdef WIN32
+    sockets::close(wakeupFdSend_);
+    sockets::close(wakeupFdRecv_);
+    sockets::close(wakeupFdListen_);
+#else
+    sockets::close(wakeupFd_);
+#endif
+
+    //_close(fdpipe_[0]);
+    //_close(fdpipe_[1]);
+
 	t_loopInThisThread = NULL;
 }
 
 void EventLoop::loop()
 {
-	assert(!looping_);
+	//assert(!looping_);
 	assertInLoopThread();
 	looping_ = true;
 	quit_ = false;  // FIXME: what if someone calls quit() before loop() ?
-	LOG_TRACE << "EventLoop " << this << " start looping";
+	LOGD("EventLoop 0x%x  start looping", this);
 
 	while (!quit_)
-	{
-		activeChannels_.clear();
+	{       
+        timerQueue_->doTimer();
+
+        activeChannels_.clear();
 		pollReturnTime_ = poller_->poll(kPollTimeMs, &activeChannels_);
-		++iteration_;
-		if (Logger::logLevel() <= Logger::TRACE)
-		{
+		//if (Logger::logLevel() <= Logger::TRACE)
+		//{
 			printActiveChannels();
-		}
+		//}
+        ++iteration_;
 		// TODO sort channel by priority
 		eventHandling_ = true;
-		for (ChannelList::iterator it = activeChannels_.begin();
-			it != activeChannels_.end(); ++it)
+		for (const auto& it : activeChannels_)
 		{
-			currentActiveChannel_ = *it;
+			currentActiveChannel_ = it;
 			currentActiveChannel_->handleEvent(pollReturnTime_);
 		}
-		currentActiveChannel_ = NULL;
+		currentActiveChannel_ = nullptr;
 		eventHandling_ = false;
 		doPendingFunctors();
 
@@ -131,14 +131,14 @@ void EventLoop::loop()
 		}		
 	}
 
-	LOG_TRACE << "EventLoop " << this << " stop looping";
+	LOGD("EventLoop 0x%0x stop looping", this);
 	looping_ = false;  
 
 
     std::ostringstream oss;
     oss << std::this_thread::get_id();
     std::string stid = oss.str();
-    LOG_INFO << "Exiting loop, EventLoop object: " << this << ", threadID: " << stid;
+    LOGI("Exiting loop, EventLoop object: 0x%x , threadID: %s", this, stid.c_str());
 }
 
 void EventLoop::quit()
@@ -185,46 +185,54 @@ void EventLoop::setFrameFunctor(const Functor& cb)
 
 TimerId EventLoop::runAt(const Timestamp& time, const TimerCallback& cb)
 {
-    return timerQueue_->addTimer(cb, time, 0.0);
+    return timerQueue_->addTimer(cb, time, 0);
 }
 
-TimerId EventLoop::runAfter(double delay, const TimerCallback& cb)
+TimerId EventLoop::runAfter(int64_t delay, const TimerCallback& cb)
 {
     Timestamp time(addTime(Timestamp::now(), delay));
     return runAt(time, cb);
 }
 
-TimerId EventLoop::runEvery(double interval, const TimerCallback& cb)
-{
+TimerId EventLoop::runEvery(int64_t interval, const TimerCallback& cb)
+{  
     Timestamp time(addTime(Timestamp::now(), interval));
     return timerQueue_->addTimer(cb, time, interval);
 }
 
 TimerId EventLoop::runAt(const Timestamp& time, TimerCallback&& cb)
 {
-    return timerQueue_->addTimer(std::move(cb), time, 0.0);
+    return timerQueue_->addTimer(std::move(cb), time, 0);
 }
 
-TimerId EventLoop::runAfter(double delay, TimerCallback&& cb)
+TimerId EventLoop::runAfter(int64_t delay, TimerCallback&& cb)
 {
     Timestamp time(addTime(Timestamp::now(), delay));
     return runAt(time, std::move(cb));
 }
 
-TimerId EventLoop::runEvery(double interval, TimerCallback&& cb)
+TimerId EventLoop::runEvery(int64_t interval, TimerCallback&& cb)
 {
     Timestamp time(addTime(Timestamp::now(), interval));
     return timerQueue_->addTimer(std::move(cb), time, interval);
 }
 
-void EventLoop::cancel(TimerId timerId)
+void EventLoop::cancel(TimerId timerId, bool off)
 {
-    return timerQueue_->cancel(timerId);
+    return timerQueue_->cancel(timerId, off);
+}
+
+void EventLoop::remove(TimerId timerId)
+{
+    return timerQueue_->removeTimer(timerId);
 }
 
 bool EventLoop::updateChannel(Channel* channel)
 {
-	assert(channel->ownerLoop() == this);
+	//assert(channel->ownerLoop() == this);
+    if (channel->ownerLoop() != this)
+        return false;
+
 	assertInLoopThread();
 	
     return poller_->updateChannel(channel);
@@ -232,50 +240,158 @@ bool EventLoop::updateChannel(Channel* channel)
 
 void EventLoop::removeChannel(Channel* channel)
 {
-	assert(channel->ownerLoop() == this);
+	//assert(channel->ownerLoop() == this);
+    if (channel->ownerLoop() != this)
+        return;
+
 	assertInLoopThread();
 	if (eventHandling_)
 	{
-		assert(currentActiveChannel_ == channel ||
-			std::find(activeChannels_.begin(), activeChannels_.end(), channel) == activeChannels_.end());
+		//assert(currentActiveChannel_ == channel || std::find(activeChannels_.begin(), activeChannels_.end(), channel) == activeChannels_.end());
 	}
 
-    LOG_INFO << "Remove channel, channel = " << channel << ", fd = " << channel->fd();
+    LOGD("Remove channel, channel = 0x%x, fd = %d", channel, channel->fd());
 	poller_->removeChannel(channel);
 }
 
 bool EventLoop::hasChannel(Channel* channel)
 {
-	assert(channel->ownerLoop() == this);
+	//assert(channel->ownerLoop() == this);
 	assertInLoopThread();
 	return poller_->hasChannel(channel);
+}
+
+bool EventLoop::createWakeupfd()
+{
+#ifdef WIN32
+    //if (_pipe(fdpipe_, 256, O_BINARY) == -1)
+    //{
+    //    //让程序挂掉
+    //    LOGF("Unable to create pipe, EventLoop: 0x%x", this);
+    //    return false;
+    //}
+        
+    wakeupFdListen_ = sockets::createNonblockingOrDie();
+    wakeupFdSend_ = sockets::createNonblockingOrDie();
+
+    //Windows上需要创建一对socket  
+    struct sockaddr_in bindaddr;
+    bindaddr.sin_family = AF_INET;
+    bindaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    //将port设为0，然后进行bind，再接着通过getsockname来获取port，这可以满足获取随机端口的情况。
+    bindaddr.sin_port = 0;
+    sockets::setReuseAddr(wakeupFdListen_, true);
+    sockets::bindOrDie(wakeupFdListen_, bindaddr);
+    sockets::listenOrDie(wakeupFdListen_);
+     
+    struct sockaddr_in serveraddr;
+    int serveraddrlen = sizeof(serveraddr);
+    if (getsockname(wakeupFdListen_, (sockaddr*)&serveraddr, &serveraddrlen) < 0)
+    {
+        //让程序挂掉
+        LOGF("Unable to bind address info, EventLoop: 0x%x", this);
+        return false;
+    }
+
+    int useport = ntohs(serveraddr.sin_port);
+    LOGD("wakeup fd use port: %d", useport);
+         
+    //serveraddr.sin_family = AF_INET;
+    //serveraddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    //serveraddr.sin_port = htons(INNER_WAKEUP_LISTEN_PORT);   
+    ::connect(wakeupFdSend_, (struct sockaddr*)& serveraddr, sizeof(serveraddr));
+
+    struct sockaddr_in clientaddr;
+    socklen_t clientaddrlen = sizeof(clientaddr);
+    wakeupFdRecv_ = ::accept(wakeupFdListen_, (struct sockaddr*)&clientaddr, &clientaddrlen);
+    if (wakeupFdRecv_ < 0)
+    {
+        //让程序挂掉
+        LOGF("Unable to accept wakeup peer, EventLoop: 0x%x", this);
+        return false;
+    }
+
+    //Windows直接判断socket可写即认为连接上
+    int retryCount = 3;
+    while (true)
+    {
+        fd_set writeset;
+        FD_ZERO(&writeset);
+        FD_SET(wakeupFdSend_, &writeset);
+        struct timeval tv = { 1, 0 };
+        int ret = ::select(wakeupFdSend_ + 1, NULL, &writeset, NULL, &tv);
+        //连接成功
+        if (ret == 1)           
+            break;
+
+        if (ret == 0)
+        {
+            if (retryCount <= 0)
+            {
+                //三次都重试失败，让程序挂掉
+                LOGF("Unable to connect wakeup peer, EventLoop: 0x%x", this);
+                return false;
+            }
+
+            retryCount--;
+            continue;
+        }
+        else
+        {
+            //三次都重试失败，让程序挂掉
+            LOGF("Unable to connect wakeup peer, select error, EventLoop: 0x%x", this);
+        }
+    }
+
+#else
+    //Linux上一个eventfd就够了，可以实现读写
+    wakeupFd_ = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+    if (wakeupFd_ < 0)
+        return false;
+#endif
+
+    return true;
 }
 
 void EventLoop::abortNotInLoopThread()
 {
 	std::stringstream ss;
 	ss << "threadid_ = " << threadId_ << " this_thread::get_id() = " << std::this_thread::get_id();
-	LOG_FATAL << "EventLoop::abortNotInLoopThread - EventLoop " << ss.str();
+	LOGF("EventLoop::abortNotInLoopThread - EventLoop %s", ss.str().c_str());
 }
 
-void EventLoop::wakeup()
+bool EventLoop::wakeup()
 {
 	uint64_t one = 1;
-	ssize_t n = sockets::write(wakeupFd_, &one, sizeof one);
+#ifdef WIN32
+    int32_t n = sockets::write(wakeupFdSend_, &one, sizeof(one));
+#else
+    int32_t n = sockets::write(wakeupFd_, &one, sizeof(one));
+#endif
 	if (n != sizeof one)
 	{
-		LOG_ERROR << "EventLoop::wakeup() writes " << n << " bytes instead of 8";
+		LOGSYSE("EventLoop::wakeup() writes %d  bytes instead of 8", n);
+        return false;
 	}
+
+    return true;
 }
 
-void EventLoop::handleRead()
+bool EventLoop::handleRead()
 {
 	uint64_t one = 1;
-	ssize_t n = sockets::read(wakeupFd_, &one, sizeof one);
+#ifdef WIN32
+    int32_t n = sockets::read(wakeupFdRecv_, &one, sizeof(one));
+#else
+    int32_t n = sockets::read(wakeupFd_, &one, sizeof(one));
+#endif
 	if (n != sizeof one)
 	{
-		LOG_ERROR << "EventLoop::handleRead() reads " << n << " bytes instead of 8";
+		LOGE("EventLoop::handleRead() reads %d bytes instead of 8", n);
+        return false;
 	}
+
+    return true;
 }
 
 void EventLoop::doPendingFunctors()
@@ -297,11 +413,10 @@ void EventLoop::doPendingFunctors()
 
 void EventLoop::printActiveChannels() const
 {
-	for (ChannelList::const_iterator it = activeChannels_.begin();
-		it != activeChannels_.end(); ++it)
+	//TODO: 改成for-each 语法
+    for (ChannelList::const_iterator it = activeChannels_.begin(); it != activeChannels_.end(); ++it)
 	{
 		const Channel* ch = *it;
-		LOG_TRACE << "{" << ch->reventsToString() << "} ";
+		LOGD("{%s}", ch->reventsToString().c_str());
 	}
 }
-

@@ -2,13 +2,13 @@
  *  管理所有的用户信息，初始信息从数据库中加载, UserManager.h
  *  zhangyl 2017.03.15
  **/
+#include "UserManager.h"
 #include <memory>
 #include <sstream>
 #include <stdio.h>
-#include "../database/DatabaseMysql.h"
-#include "../base/Logging.h"
-#include "../jsoncpp-0.5.0/json.h"
-#include "UserManager.h"
+#include "../mysqlapi/DatabaseMysql.h"
+#include "../base/AsyncLog.h"
+#include "../jsoncpp1.9.0/json.h"
 
 UserManager::UserManager()
 {
@@ -32,11 +32,12 @@ bool UserManager::Init(const char* dbServer, const char* dbUserName, const char*
     if (!LoadUsersFromDb())
         return false;
 
+    //TODO: 当用户比较多，这个循环比较慢，优化之
     for (auto& iter : m_allCachedUsers)
     {
         if (!LoadRelationshipFromDb(iter.userid, iter.friends))
         {
-            LOG_ERROR << "Load relationship from db error, userid=" << iter.userid;
+            LOGE("Load relationship from db error, userid: %d", iter.userid);
             continue;
         }
     }
@@ -50,9 +51,8 @@ bool UserManager::LoadUsersFromDb()
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_FATAL << "UserManager::LoadUsersFromDb failed, please check params: dbserver=" << m_strDbServer
-            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
-            << ", dbname=" << m_strDbName;
+        LOGF("UserManager::LoadUsersFromDb failed, please check params: dbserver: %s, dbusername: %s, , dbpassword: %s, dbname: %s",
+                   m_strDbServer.c_str(), m_strDbUserName.c_str(), m_strDbPassword.c_str(), m_strDbName.c_str());
         return false;
     }
 
@@ -60,7 +60,7 @@ bool UserManager::LoadUsersFromDb()
     QueryResult* pResult = pConn->Query("SELECT f_user_id, f_username, f_nickname, f_password,  f_facetype, f_customface, f_gender, f_birthday, f_signature, f_address, f_phonenumber, f_mail, f_teaminfo FROM t_user ORDER BY  f_user_id DESC");
     if (NULL == pResult)
     {
-        LOG_INFO << "UserManager::_Query error, dbname=" << m_strDbName;
+        LOGI("UserManager::_Query error, dbname: %s", m_strDbName.c_str());
         return false;
     }
     
@@ -87,7 +87,7 @@ bool UserManager::LoadUsersFromDb()
         u.teaminfo = pRow[12].GetString();
         m_allCachedUsers.push_back(u);
 
-        LOG_INFO << "userid: " << u.userid << ", username: " << u.username << ", password: " << u.password << ", nickname: " << u.nickname << ", signature: " << u.signature;
+        LOGI("userid: %d, username: %s, password: %s, nickname: %s, signature: %s", u.userid, u.username.c_str(), u.password.c_str(), u.nickname.c_str(), u.signature.c_str());
         
         //计算当前最大userid
         if (u.userid < GROUPID_BOUBDARY && u.userid > m_baseUserId)
@@ -103,7 +103,7 @@ bool UserManager::LoadUsersFromDb()
         }
     }
 
-    LOG_INFO << "current base userid: " << m_baseUserId << ", current base group id: " << m_baseGroupId;
+    LOGI("current base userid: %d, current base group id: %d", m_baseUserId, m_baseGroupId);
 
     pResult->EndQuery();
 
@@ -116,9 +116,7 @@ bool UserManager::AddUser(User& u)
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_FATAL << "UserManager::AddUser failed, please check params: dbserver=" << m_strDbServer
-            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
-            << ", dbname=" << m_strDbName;
+        LOGE("UserManager::AddUser failed, please check params: dbserver: %s, , dbusername: %s, dbpassword: %s, dbname: %s", m_strDbServer.c_str(), m_strDbUserName.c_str(), m_strDbPassword.c_str(), m_strDbName.c_str());
         return false;
     }
 
@@ -127,7 +125,7 @@ bool UserManager::AddUser(User& u)
     snprintf(sql, 256, "INSERT INTO t_user(f_user_id, f_username, f_nickname, f_password, f_register_time) VALUES(%d, '%s', '%s', '%s', NOW())", m_baseUserId, u.username.c_str(), u.nickname.c_str(), u.password.c_str());
     if (!pConn->Execute(sql))
     {
-        LOG_WARN << "insert user error, sql=" << sql;
+        LOGW("insert user error, sql: %s", sql);
         return false;
     }
     //设置一些字段的默认值
@@ -162,9 +160,8 @@ bool UserManager::MakeFriendRelationshipInDB(int32_t smallUserid, int32_t greate
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_FATAL << "UserManager::LoadUsersFromDb failed, please check params: dbserver=" << m_strDbServer
-            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
-            << ", dbname=" << m_strDbName;
+        LOGE("UserManager::LoadUsersFromDb failed, please check params: dbserver: %s, dbusername: %s, dbpassword: %s, , dbname: %s", 
+             m_strDbServer.c_str(),  m_strDbUserName.c_str(), m_strDbPassword.c_str(), m_strDbName.c_str());
         return false;
     }
 
@@ -172,13 +169,13 @@ bool UserManager::MakeFriendRelationshipInDB(int32_t smallUserid, int32_t greate
     snprintf(sql, 512, "INSERT INTO t_user_relationship(f_user_id1, f_user_id2, f_user1_teamname, f_user2_teamname) VALUES(%d, %d, '%s', '%s')", smallUserid, greaterUserid, DEFAULT_TEAMNAME, DEFAULT_TEAMNAME);
     if (!pConn->Execute(sql))
     {
-        LOG_ERROR << "make relationship error, sql=" << sql << ", smallUserid = " << smallUserid << ", greaterUserid = " << greaterUserid;;
+        LOGE("make relationship error, sql: %s, smallUserid: %s, greaterUserid: %s", sql, smallUserid , greaterUserid);
         return false;
     }
     
     //if (!AddFriendToUser(smallUserid, greaterUserid))
     //{
-    //    LOG_ERROR << "make relationship error, smallUserid=" << smallUserid << ", greaterUserid=" << greaterUserid;
+    //    LOGE << "make relationship error, smallUserid=" << smallUserid << ", greaterUserid=" << greaterUserid;
     //    return false;
     //}
 
@@ -201,9 +198,8 @@ bool UserManager::ReleaseFriendRelationshipInDBAndMemory(int32_t smallUserid, in
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_FATAL << "UserManager::LoadUsersFromDb failed, please check params: dbserver=" << m_strDbServer
-            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
-            << ", dbname=" << m_strDbName;
+        LOGE("UserManager::LoadUsersFromDb failed, please check params: dbserver: %s, dbusername: %s, dbpassword: %s, dbname: %s",
+            m_strDbServer.c_str(), m_strDbUserName.c_str(), m_strDbPassword.c_str(), m_strDbName.c_str());
         return false;
     }
 
@@ -211,13 +207,13 @@ bool UserManager::ReleaseFriendRelationshipInDBAndMemory(int32_t smallUserid, in
     snprintf(sql, 256, "DELETE FROM t_user_relationship WHERE f_user_id1 = %d AND f_user_id2 = %d", smallUserid, greaterUserid);
     if (!pConn->Execute(sql))
     {
-        LOG_ERROR << "release relationship error, sql=" << sql << ", smallUserid = " << smallUserid << ", greaterUserid = " << greaterUserid;;
+        LOGE("release relationship error, sql: %s, smallUserid: %d, , greaterUserid: %d", sql, smallUserid, greaterUserid);
         return false;
     }
 
     if (!DeleteFriendToUser(smallUserid, greaterUserid))
     {
-        LOG_ERROR << "delete relationship error, smallUserid=" << smallUserid << ", greaterUserid=" << greaterUserid;
+        LOGE("delete relationship error, smallUserid: %d, , greaterUserid: %d", smallUserid, greaterUserid);
         return false;
     }
 
@@ -408,7 +404,8 @@ bool UserManager::UpdateUserInfoInDb(int32_t userid, const User& newuserinfo)
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_ERROR << "UserManager::Initialize db failed, please check params";
+        LOGE("UserManager::Initialize db failed,  please check params: dbserver: %s, dbusername: %s, dbpassword: %s, dbname: %s",
+            m_strDbServer.c_str(), m_strDbUserName.c_str(), m_strDbPassword.c_str(), m_strDbName.c_str());
         return false;
     }
 
@@ -426,11 +423,11 @@ bool UserManager::UpdateUserInfoInDb(int32_t userid, const User& newuserinfo)
           << userid;
     if (!pConn->Execute(osSql.str().c_str()))
     {
-        LOG_ERROR << "UpdateUserInfo error, sql=" << osSql.str();
+        LOGE("UpdateUserInfo error, sql: %s", osSql.str().c_str());
         return false;
     }
 
-    LOG_INFO << "update userinfo successfully, userid: " << userid << ", sql: " << osSql.str();
+    LOGI("update userinfo successfully, userid: %d, sql: %s", userid, osSql.str().c_str());
 
     std::lock_guard<std::mutex> guard(m_mutex);
     for (auto& iter : m_allCachedUsers)
@@ -450,7 +447,7 @@ bool UserManager::UpdateUserInfoInDb(int32_t userid, const User& newuserinfo)
         }
     }
 
-    LOG_ERROR << "Failed to update userinfo to db, find exsit user in memory error, m_allCachedUsers.size(): " << m_allCachedUsers.size() << ", userid: " << userid << ", sql : " << osSql.str();
+    LOGE("Failed to update userinfo to db, find exsit user in memory error, m_allCachedUsers.size(): %d, userid: %d, sql: %s", m_allCachedUsers.size(), userid, osSql.str().c_str());
 
     return false;
 }
@@ -461,9 +458,8 @@ bool UserManager::ModifyUserPassword(int32_t userid, const std::string& newpassw
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_ERROR << "UserManager::Initialize db failed, please check params: dbserver=" << m_strDbServer
-            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
-            << ", dbname=" << m_strDbName;
+        LOGE("UserManager::Initialize db failed,  please check params: dbserver: %s, dbusername: %s, dbpassword: %s, dbname: %s",
+            m_strDbServer.c_str(), m_strDbUserName.c_str(), m_strDbPassword.c_str(), m_strDbName.c_str());
         return false;
     }
 
@@ -473,11 +469,11 @@ bool UserManager::ModifyUserPassword(int32_t userid, const std::string& newpassw
         << userid;
     if (!pConn->Execute(osSql.str().c_str()))
     {
-        LOG_ERROR << "UpdateUserInfo error, sql=" << osSql.str();
+        LOGE("UpdateUserInfo error, sql: %s", osSql.str().c_str());
         return false;
     }
 
-    LOG_INFO << "update user password successfully, userid: " << userid << ", sql : " << osSql.str();
+    LOGI("update user password successfully, userid: %d, sql: %s" , userid, osSql.str().c_str());
 
     std::lock_guard<std::mutex> guard(m_mutex);
     for (auto& iter : m_allCachedUsers)
@@ -489,7 +485,7 @@ bool UserManager::ModifyUserPassword(int32_t userid, const std::string& newpassw
         }
     }
 
-    LOG_ERROR << "Failed to update user password to db, find no exsit user in memory error, m_allCachedUsers.size(): " << m_allCachedUsers.size() << ", userid: " << userid << ", sql : " << osSql.str();
+    LOGE("Failed to update user password to db, find no exsit user in memory error, m_allCachedUsers.size(): %d, userid: %d, sql: %s", m_allCachedUsers.size(), userid, osSql.str().c_str());
 
     return false;
 }
@@ -500,9 +496,8 @@ bool UserManager::UpdateUserTeamInfoInDbAndMemory(int32_t userid, const std::str
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_ERROR << "UserManager::Initialize db failed, please check params: dbserver=" << m_strDbServer
-            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
-            << ", dbname=" << m_strDbName;
+        LOGE("UserManager::Initialize db failed, please check params: dbserver: %s, dbusername: %s, dbpassword: %s, dbname: %s",
+            m_strDbServer.c_str(), m_strDbUserName.c_str(), m_strDbPassword.c_str(), m_strDbName.c_str());
         return false;
     }
 
@@ -512,11 +507,11 @@ bool UserManager::UpdateUserTeamInfoInDbAndMemory(int32_t userid, const std::str
         << userid;
     if (!pConn->Execute(osSql.str().c_str()))
     {
-        LOG_ERROR << "Update Team Info error, sql=" << osSql.str();
+        LOGE("Update Team Info error, sql: %s", osSql.str().c_str());
         return false;
     }
 
-    LOG_INFO << "update user teaminfo successfully, userid: " << userid << ", sql : " << osSql.str();
+    LOGI("update user teaminfo successfully, userid: %d, sql: %s", userid, osSql.str().c_str());
 
     //TODO: 重复的代码，需要去掉
     std::lock_guard<std::mutex> guard(m_mutex);
@@ -529,7 +524,7 @@ bool UserManager::UpdateUserTeamInfoInDbAndMemory(int32_t userid, const std::str
         }
     }
 
-    LOG_ERROR << "Failed to update user teaminfo to db, find no exsit user in memory error, m_allCachedUsers.size(): " << m_allCachedUsers.size() << ", userid: " << userid << ", sql : " << osSql.str();
+    LOGE("Failed to update user teaminfo to db, find no exsit user in memory error, m_allCachedUsers.size(): %d, userid: %d, sql: %s", m_allCachedUsers.size(), userid, osSql.str().c_str());
 
     return false;
 }
@@ -540,9 +535,8 @@ bool UserManager::DeleteTeam(int32_t userid, const std::string& deletedteamname)
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_ERROR << "UserManager::Initialize db failed, please check params: dbserver=" << m_strDbServer
-            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
-            << ", dbname=" << m_strDbName;
+        LOGE("UserManager::Initialize db failed, please check params: dbserver: %s, dbusername: %s, dbpassword: %s, dbname: %s",
+            m_strDbServer.c_str(), m_strDbUserName.c_str(), m_strDbPassword.c_str(), m_strDbName.c_str());
         return false;
     }
 
@@ -554,9 +548,7 @@ bool UserManager::DeleteTeam(int32_t userid, const std::string& deletedteamname)
 
     if (!pConn->Execute(osSql.str().c_str()))
     {
-        LOG_ERROR << "DeleteTeam error, sql=" << osSql.str() 
-                  << ", userid=" << userid 
-                  << ", deletedteamname=" << deletedteamname;
+        LOGE("DeleteTeam error, sql: %s, userid: %d, deletedteamname: %s", osSql.str().c_str(), userid, deletedteamname.c_str());
         return false;
     }
 
@@ -568,9 +560,7 @@ bool UserManager::DeleteTeam(int32_t userid, const std::string& deletedteamname)
 
     if (!pConn->Execute(osSql.str().c_str()))
     {
-        LOG_ERROR << "DeleteTeam error, sql=" << osSql.str()
-            << ", userid=" << userid
-            << ", deletedteamname=" << deletedteamname;
+        LOGE("DeleteTeam error, sql: %s, userid: %d, deletedteamname: %s", osSql.str().c_str(), userid, deletedteamname.c_str());
         return false;
     }
 
@@ -585,6 +575,7 @@ bool UserManager::DeleteTeam(int32_t userid, const std::string& deletedteamname)
                     if (iter2.teamname == deletedteamname)
                         iter2.teamname = DEFAULT_TEAMNAME;
                 }
+
                 return true;
             }
         }
@@ -599,9 +590,8 @@ bool UserManager::ModifyTeamName(int32_t userid, const std::string& newteamname,
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_ERROR << "UserManager::Initialize db failed, please check params: dbserver=" << m_strDbServer
-            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
-            << ", dbname=" << m_strDbName;
+        LOGE("UserManager::Initialize db failed, please check params: dbserver: %s, dbusername: %s, dbpassword: %s, dbname: %s",
+            m_strDbServer.c_str(), m_strDbUserName.c_str(), m_strDbPassword.c_str(), m_strDbName.c_str());
         return false;
     }
 
@@ -613,10 +603,7 @@ bool UserManager::ModifyTeamName(int32_t userid, const std::string& newteamname,
 
     if (!pConn->Execute(osSql.str().c_str()))
     {
-        LOG_ERROR << "ModifyTeamName error, sql=" << osSql.str() 
-                  << ", userid=" << userid
-                  << ", newteamname=" << newteamname
-                  << ", oldteamname=" << oldteamname;
+        LOGE("ModifyTeamName error, sql: %s, userid: %d, newteamname: %s, oldteamname: %s", osSql.str().c_str(), userid, newteamname.c_str(), oldteamname.c_str());
         return false;
     }
 
@@ -628,10 +615,7 @@ bool UserManager::ModifyTeamName(int32_t userid, const std::string& newteamname,
 
     if (!pConn->Execute(osSql.str().c_str()))
     {
-        LOG_ERROR << "ModifyTeamName error, sql=" << osSql.str()
-                  << ", userid=" << userid
-                  << ", newteamname=" << newteamname
-                  << ", oldteamname=" << oldteamname;
+        LOGE("ModifyTeamName error, sql: %s, userid: %d, newteamname: %s, oldteamname: %s", osSql.str().c_str(), userid, newteamname.c_str(), oldteamname.c_str());
         return false;
     }
 
@@ -660,9 +644,8 @@ bool UserManager::UpdateMarknameInDb(int32_t userid, int32_t friendid, const std
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_ERROR << "UserManager::Initialize db failed, please check params: dbserver=" << m_strDbServer
-            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
-            << ", dbname=" << m_strDbName;
+        LOGE("UserManager::Initialize db failed, please check params: dbserver: %s, dbusername: %s, dbpassword: %s, dbname: %s",
+             m_strDbServer.c_str(), m_strDbUserName.c_str(), m_strDbPassword.c_str(), m_strDbName.c_str());
         return false;
     }
 
@@ -682,11 +665,11 @@ bool UserManager::UpdateMarknameInDb(int32_t userid, int32_t friendid, const std
     
     if (!pConn->Execute(osSql.str().c_str()))
     {
-        LOG_ERROR << "Update Markname error, sql=" << osSql.str();
+        LOGE("Update Markname error, sql: %s", osSql.str().c_str());
         return false;
     }
 
-    LOG_INFO << "update markname successfully, userid: " << userid << ", friendid: " << friendid << ", sql : " << osSql.str();
+    LOGI("update markname successfully, userid: , friendid: %d, sql: %s", userid, friendid, osSql.str().c_str());
 
     //TODO: 重复的代码，需要去掉
     std::lock_guard<std::mutex> guard(m_mutex);
@@ -706,8 +689,8 @@ bool UserManager::UpdateMarknameInDb(int32_t userid, int32_t friendid, const std
         }
     }
 
-    LOG_ERROR << "Failed to update markname, find no exsit user in memory error, m_allCachedUsers.size(): " << m_allCachedUsers.size() 
-              << ", userid: " << userid << ", friendid: " << friendid << ", sql : " << osSql.str();
+    LOGE("Failed to update markname, find no exsit user in memory error, m_allCachedUsers.size(): %d, userid: %d, friendid: %d, sql: %s",
+         m_allCachedUsers.size(), userid, friendid, osSql.str().c_str());
 
     return false;
 }
@@ -718,10 +701,8 @@ bool UserManager::MoveFriendToOtherTeam(int32_t userid, int32_t friendid, const 
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_ERROR << "UserManager::Initialize db failed, please check params: dbserver=" << m_strDbServer
-                  << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
-                  << ", dbname=" << m_strDbName << ", userid=" << userid << ", friendid=" << friendid
-                  << ", newteamname=" << newteamname;
+        LOGE("UserManager::Initialize db failed, please check params: dbserver: %s, dbusername: %s, dbpassword: %s, dbname: %s, userid: %d, friendid: %d, newteamname: %s",
+             m_strDbServer.c_str(), m_strDbUserName.c_str(), m_strDbPassword.c_str(), m_strDbName.c_str(), userid, friendid, newteamname.c_str());
         return false;
     }
 
@@ -741,19 +722,17 @@ bool UserManager::MoveFriendToOtherTeam(int32_t userid, int32_t friendid, const 
 
     if (!pConn->Execute(osSql.str().c_str()))
     {
-        LOG_ERROR << "MoveFriendToOtherTeam, sql=" << osSql.str() 
-                  << ", userid=" << userid << ", friendid=" << friendid
-                  << ", newteamname=" << newteamname;
+        LOGE("MoveFriendToOtherTeam, sql: %s, userid: %d, friendid: %d, newteamname: %s", osSql.str().c_str(), userid, friendid, newteamname.c_str());
         return false;
     }
 
-    LOG_INFO << "MoveFriendToOtherTeam db operation successfully, userid: " << userid << ", friendid: " << friendid << ", sql : " << osSql.str();
+    LOGI("MoveFriendToOtherTeam db operation successfully, userid: %d, friendid: %d, sql: %s" , userid, friendid, osSql.str().c_str());
 
     //改变内存中用户的分组信息
     User* u = NULL;
     if (!GetUserInfoByUserId(userid, u) || u == NULL)
     {
-        LOG_ERROR << "MoveFriendToOtherTeam memory operation error, userid: " << userid << ", friendid: " << friendid;
+        LOGE("MoveFriendToOtherTeam memory operation error, userid: %d, friendid: %d" , userid, friendid);
         return false;
     }
 
@@ -775,9 +754,8 @@ bool UserManager::AddGroup(const char* groupname, int32_t ownerid, int32_t& grou
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_ERROR << "UserManager::AddGroup failed, please check params: dbserver=" << m_strDbServer
-            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
-            << ", dbname=" << m_strDbName << ", groupname=" << groupname << ", ownerid=" << ownerid;
+        LOGE("UserManager::AddGroup failed, please check params: dbserver: %s, dbusername: %s, dbname: %s, dbpassword: %s, groupname: %s, ownerid: %d",
+            m_strDbServer.c_str(), m_strDbUserName.c_str(), m_strDbPassword.c_str(), m_strDbName.c_str(), groupname, ownerid);
         return false;
     }
 
@@ -786,7 +764,7 @@ bool UserManager::AddGroup(const char* groupname, int32_t ownerid, int32_t& grou
     snprintf(sql, 256, "INSERT INTO t_user(f_user_id, f_username, f_nickname, f_password, f_owner_id, f_register_time) VALUES(%d, '%d', '%s', '', %d,  NOW())", m_baseGroupId, m_baseGroupId, groupname, ownerid);
     if (!pConn->Execute(sql))
     {
-        LOG_ERROR << "insert group error, sql=" << sql;
+        LOGE("insert group error, sql: %s", sql);
         return false;
     }
     
@@ -807,49 +785,13 @@ bool UserManager::AddGroup(const char* groupname, int32_t ownerid, int32_t& grou
     return true;
 }
 
-#ifdef FXN_VERSION
-bool UserManager::InsertDeviceInfo(int32_t userid, int32_t deviceid, int32_t classtype, int64_t uploadtime, const std::string& deviceinfo)
-{
-    std::unique_ptr<CDatabaseMysql> pConn;
-    pConn.reset(new CDatabaseMysql());
-    if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
-    {
-        LOG_FATAL << "UserManager::InsertDeviceInfo failed, please check params: dbserver=" << m_strDbServer
-            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
-            << ", dbname=" << m_strDbName;
-        return false;
-    }
-
-    if (uploadtime <= 0)
-        uploadtime = time(NULL);
-
-    std::ostringstream osSql;
-    osSql << "INSERT INTO t_device(f_user_id, f_deviceid, f_classtype, f_deviceinfo, f_upload_time, f_create_time) VALUES("
-          << userid << ", "
-          << deviceid << ", "
-          << classtype << ", '"
-          << deviceinfo << "',  FROM_UNIXTIME("
-          << uploadtime << ", '%Y-%m-%d %H:%i:%S'), "
-          << "NOW())";
-    if (!pConn->Execute(osSql.str().c_str()))
-    {
-        LOG_WARN << "insert group error, sql=" << osSql.str();
-        return false;
-    }
-
-    return true;
-}
-#endif
-
 bool UserManager::SaveChatMsgToDb(int32_t senderid, int32_t targetid, const std::string& chatmsg)
 {
     std::unique_ptr<CDatabaseMysql> pConn;
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_ERROR << "UserManager::SaveChatMsgToDb failed, please check params: dbserver=" << m_strDbServer
-            << ", dbusername=" << m_strDbUserName << ", dbpassword" << m_strDbPassword
-            << ", dbname=" << m_strDbName;
+        LOGE("UserManager::SaveChatMsgToDb failed, please check params: dbserver: %s, dbusername: %s, dbpassword: %s, dbname: %s", m_strDbServer.c_str(), m_strDbUserName.c_str(), m_strDbPassword.c_str(), m_strDbName.c_str());
         return false;
     }
 
@@ -857,7 +799,7 @@ bool UserManager::SaveChatMsgToDb(int32_t senderid, int32_t targetid, const std:
     sql << "INSERT INTO t_chatmsg(f_senderid, f_targetid, f_msgcontent) VALUES(" << senderid << ", " << targetid << ", '" << chatmsg << "')";
     if (!pConn->Execute(sql.str().c_str()))
     {
-        LOG_WARN << "UserManager::SaveChatMsgToDb, sql=" << sql.str() << ", senderid = " << senderid << ", targetid = " << targetid << ", chatmsg:" << chatmsg;
+        LOGE("UserManager::SaveChatMsgToDb, sql: %s, senderid: %d, targetid: %d, chatmsg: %s", sql.str().c_str(), senderid, targetid, chatmsg.c_str());
         return false;
     }
 
@@ -988,7 +930,7 @@ bool UserManager::LoadRelationshipFromDb(int32_t userid, std::list<FriendInfo>& 
     pConn.reset(new CDatabaseMysql());
     if (!pConn->Initialize(m_strDbServer, m_strDbUserName, m_strDbPassword, m_strDbName))
     {
-        LOG_FATAL << "UserManager::LoadRelationhipFromDb failed, please check params";
+        LOGF("UserManager::LoadRelationhipFromDb failed, please check params");
         return false;
     }
 
@@ -997,7 +939,7 @@ bool UserManager::LoadRelationshipFromDb(int32_t userid, std::list<FriendInfo>& 
     QueryResult* pResult = pConn->Query(sql);
     if (NULL == pResult)
     {
-        LOG_INFO << "UserManager::Query error, db=" << m_strDbName;
+        LOGI("UserManager::Query error, db: %s", m_strDbName.c_str());
         return false;
     }
 
@@ -1024,7 +966,7 @@ bool UserManager::LoadRelationshipFromDb(int32_t userid, std::list<FriendInfo>& 
             fi.markname = markname1;
             fi.teamname = teamname1;
             r.emplace_back(fi);
-            //LOG_INFO << "userid=" << userid << ", friendid=" << friendid2;
+            LOGI("userid=%d, friendid=%d", userid, friendid2);
         }
         else
         {
@@ -1032,7 +974,7 @@ bool UserManager::LoadRelationshipFromDb(int32_t userid, std::list<FriendInfo>& 
             fi.markname = markname2;
             fi.teamname = teamname2;
             r.emplace_back(fi);
-            //LOG_INFO << "userid=" << userid << ", friendid=" << friendid1;
+            LOGI("userid=%d, friendid=%d", userid, friendid2);            
         }
        
         if (!pResult->NextRow())

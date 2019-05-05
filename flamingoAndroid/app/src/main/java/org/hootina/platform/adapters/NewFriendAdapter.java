@@ -49,10 +49,10 @@ public class NewFriendAdapter extends BaseAdapter {
 		final ViewHolder holder = new ViewHolder();
 		NewFriendEntity message = chatMessages.get(position);
 		convertView = LayoutInflater.from(context).inflate(
-				R.layout.searchfriend_adapter, null);
+				R.layout.item_search_user, null);
 
-		holder.name = (TextView) convertView.findViewById(R.id.name);
-		holder.number = (TextView) convertView.findViewById(R.id.number);
+		holder.name = (TextView) convertView.findViewById(R.id.tv_window_title);
+		holder.number = (TextView) convertView.findViewById(R.id.tv_nickname);
 		holder.btn_add = (Button) convertView.findViewById(R.id.btn_add);
 		holder.name.setText(message.getStrNickName());
 		holder.number.setText(message.getStrAccountNo());

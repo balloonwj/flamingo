@@ -24,7 +24,7 @@ private:
     bool Process(const std::shared_ptr<TcpConnection>& conn, const char* inbuf, size_t length);
     
     bool OnUploadFileResponse(const std::string& filemd5, int64_t offset, int64_t filesize, const std::string& filedata, const std::shared_ptr<TcpConnection>& conn);
-    bool OnDownloadFileResponse(const std::string& filemd5, const std::shared_ptr<TcpConnection>& conn);
+    bool OnDownloadFileResponse(const std::string& filemd5, int32_t clientNetType, const std::shared_ptr<TcpConnection>& conn);
 
     void ResetFile();
 

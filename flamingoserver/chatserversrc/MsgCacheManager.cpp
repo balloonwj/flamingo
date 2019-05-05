@@ -2,7 +2,7 @@
  *  消息缓存类， MsgCacheManager.cpp
  *  zhangyl 2017.03.16
  **/
-#include "../base/Logging.h"
+#include "../base/AsyncLog.h"
 #include "MsgCacheManager.h"
 
 MsgCacheManager::MsgCacheManager()
@@ -22,7 +22,7 @@ bool MsgCacheManager::AddNotifyMsgCache(int32_t userid, const std::string& cache
     nc.userid = userid;
     nc.notifymsg.append(cache.c_str(), cache.length());;
     m_listNotifyMsgCache.push_back(nc);
-    LOG_INFO << "append notify msg to cache, userid: " << userid << ", m_mapNotifyMsgCache.size() : " << m_listNotifyMsgCache.size() << ", cache length : " << cache.length();
+    LOGI("append notify msg to cache, userid: %d, , m_mapNotifyMsgCache.size(): %d, cache length: %d", userid, m_listNotifyMsgCache.size(), cache.length());
     
 
     //TODO: 存盘或写入数据库以防止程序崩溃丢失
@@ -46,7 +46,7 @@ void MsgCacheManager::GetNotifyMsgCache(int32_t userid, std::list<NotifyMsgCache
         }
     }
    
-    LOG_INFO << "get notify msg cache, userid: " << userid << ", m_mapNotifyMsgCache.size(): " << m_listNotifyMsgCache.size() << ", cached size: " << cached.size();
+    LOGI("get notify msg cache, userid: %d, , m_mapNotifyMsgCache.size(): %d, cached size: %d", userid, m_listNotifyMsgCache.size(), cached.size());
 }
 
 bool MsgCacheManager::AddChatMsgCache(int32_t userid, const std::string& cache)
@@ -56,7 +56,7 @@ bool MsgCacheManager::AddChatMsgCache(int32_t userid, const std::string& cache)
     c.userid = userid;
     c.chatmsg.append(cache.c_str(), cache.length());
     m_listChatMsgCache.push_back(c);
-    LOG_INFO << "append chat msg to cache, userid: " << userid << ", m_listChatMsgCache.size() : " << m_listChatMsgCache.size() << ", cache length : " << cache.length();
+    LOGI("append chat msg to cache, userid: %d, m_listChatMsgCache.size(): , cache length: %d", userid, m_listChatMsgCache.size(), cache.length());
     //TODO: 存盘或写入数据库以防止程序崩溃丢失
 
     return true;
@@ -78,5 +78,5 @@ void MsgCacheManager::GetChatMsgCache(int32_t userid, std::list<ChatMsgCache>& c
         }
     }
 
-    LOG_INFO << "get chat msg cache, userid: " << userid << ", m_listChatMsgCache.size(): " << m_listChatMsgCache.size() << ", cached size: " << cached.size();
+    LOGI("get chat msg cache, userid: %d, m_listChatMsgCache.size(): %d, cached size: %d", userid, m_listChatMsgCache.size(), cached.size());
 }

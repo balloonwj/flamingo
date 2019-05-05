@@ -497,6 +497,8 @@ long CImageTaskThread::DownloadImage(LPCSTR lpszFileName, LPCTSTR lpszDestPath, 
         writeStream.WriteInt64(dummyfilesize);
         string dummyfiledata;
         writeStream.WriteString(dummyfiledata);
+        int32_t clientNetType = client_net_type_broadband;
+        writeStream.WriteInt32(clientNetType);
         writeStream.Flush();
 
         file_msg header = { outbuf.length() };

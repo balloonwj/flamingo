@@ -7,11 +7,11 @@
 #include <string.h>
 #include <list>
 #include "../net/EventLoopThread.h"
-#include "../base/Logging.h"
+#include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
 #include "../utils/StringUtil.h"
 #include "ChatSession.h"
-#include "IMServer.h"
+#include "ChatServer.h"
 #include "MonitorServer.h"
 #include "UserManager.h"
 
@@ -25,7 +25,9 @@ struct HelpInfo
 const HelpInfo g_helpInfo[] = {
     { "help", "show help info" },
     { "ul",   "show online user list" },
-    { "su", "show userinfo specified by userid: su [userid]" }
+    { "su", "show userinfo specified by userid: su [userid]" },
+    { "elpb", "enable log package binary data" },
+    { "dlpb", "disable log package binary data" }
 };
 
 MonitorSession::MonitorSession(std::shared_ptr<TcpConnection>& conn) : m_tmpConn(conn)
@@ -55,8 +57,8 @@ void MonitorSession::OnRead(const std::shared_ptr<TcpConnection>& conn, Buffer* 
                     substr = buf.substr(0, pos);
                 totalsize += substr.length();
                 buf = buf.substr(pos + 1);
-                LOG_INFO << "recv cmd: " << substr;
-                //LOG_INFO << "buf: " << substr;
+                LOGI("recv cmd: %s", substr.c_str());
+                //LOGI << "buf: " << substr;
                 Process(conn, substr);
             }
             else
@@ -84,7 +86,7 @@ void MonitorSession::ShowHelp()
 bool MonitorSession::ShowOnlineUserList(const std::string& token/* = ""*/)
 {
     std::list<std::shared_ptr<ChatSession>> sessions;
-    Singleton<IMServer>::Instance().GetSessions(sessions);
+    Singleton<ChatServer>::Instance().GetSessions(sessions);
     std::ostringstream os;
     if (sessions.empty())
     {
@@ -189,6 +191,22 @@ bool MonitorSession::Process(const std::shared_ptr<TcpConnection>& conn, const s
                 ShowSpecifiedUserInfoByID(atoi(v[1].c_str()));
             }
                 
+        }
+        else if (v[0] == g_helpInfo[3].cmd)
+        {
+            //开启日志数据包打印二进制字节
+            Singleton<ChatServer>::Instance().EnableLogPackageBinary(true);
+
+            char tip[32] = { "OK.\n" };
+            Send(tip, strlen(tip));
+        }
+        else if (v[0] == g_helpInfo[4].cmd)
+        {
+            //开启日志数据包打印二进制字节
+            Singleton<ChatServer>::Instance().EnableLogPackageBinary(false);
+
+            char tip[32] = { "OK.\n" };
+            Send(tip, strlen(tip));
         }
         else
         {

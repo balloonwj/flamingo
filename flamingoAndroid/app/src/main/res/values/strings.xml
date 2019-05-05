@@ -4,11 +4,13 @@
     <string name="app_name">Flamingo</string>
     <string name="login_activity_title">Flamingo 登录</string>
     <string name="login_activity_srvsettings">服务器设置</string>
+    <string name="login_activity_usercancelinglogining">您取消了登陆</string>
     <string name="hello_world">Hello world!</string>
     <string name="title_activity_setting">SettingActivity</string>
     <string name="net_not_available">当前网络不可用，请检查您的网络设置！</string>
     
     <!-- MainActivity option菜单 -->
     <string name="exit_app_menu_item">退出程序</string>
+    <string name="parse_img_error">解析图片出错</string>
 
 </resources>

@@ -14,7 +14,7 @@
         android:onClick="startchat" >
 
         <ImageView
-            android:id="@+id/head"
+            android:id="@+id/img_head"
             android:layout_width="55dp"
             android:layout_height="55dp"
             android:layout_alignParentLeft="true"
@@ -25,7 +25,7 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_toRightOf="@id/head"
+            android:layout_toRightOf="@id/img_head"
             android:padding="7dp"
             android:text="小黑"
             android:textColor="#000" />
@@ -42,7 +42,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_alignParentBottom="true"
-            android:layout_toRightOf="@id/head"
+            android:layout_toRightOf="@id/img_head"
             android:padding="7dp"
             android:text="尼滚...."
             android:textColor="#666" />

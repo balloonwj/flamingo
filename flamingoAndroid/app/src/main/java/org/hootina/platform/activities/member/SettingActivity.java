@@ -9,7 +9,9 @@ import org.hootina.platform.activities.BaseActivity;
 import org.hootina.platform.activities.LoginActivity;
 import org.hootina.platform.activities.details.AboutUsActivity;
 import org.hootina.platform.activities.details.ChangePasswordActivity;
+import org.hootina.platform.db.MyDbUtil;
 import org.hootina.platform.enums.TabbarEnum;
+import org.hootina.platform.net.ChatSessionMgr;
 import org.hootina.platform.net.NetWorker;
 import org.hootina.platform.result.AppData;
 import org.hootina.platform.utils.SharedPreferencesUtils;
@@ -46,9 +48,11 @@ public class SettingActivity extends BaseActivity {
 			BaseActivity.bLogin = false;
 			// 设置第一次使用flag为false
 			SharedPreferencesUtils.put(this, "isFirstUse", true);
-			application.getAppManager().finishAllActivity();
+			//application.getAppManager().finishAllActivity();
 			//application.setMemberEntity(null);
 			AppData.clears();
+			ChatSessionMgr.getInstance().clear();
+			MyDbUtil.uninit();
 			finish();
 			break;
 		

@@ -1,22 +1,40 @@
 package org.hootina.platform.activities;
 
+import android.content.Context;
 import android.content.Intent;
+import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
+import android.support.v4.view.ViewPager;
+import android.text.SpannableString;
+import android.text.TextUtils;
+import android.util.AttributeSet;
+import android.view.Gravity;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.animation.AlphaAnimation;
 import android.view.animation.Animation;
 import android.view.animation.Animation.AnimationListener;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.AdapterView;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.GridView;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.RelativeLayout;
-import android.widget.Toast;
 
 import org.hootina.platform.R;
-import org.hootina.platform.result.MemberEntity;
-import org.hootina.platform.utils.NetUtils;
+import org.hootina.platform.activities.member.ChattingActivity;
+import org.hootina.platform.adapters.SearchFriendAdapter;
 import org.hootina.platform.utils.ScreenUtils;
 import org.hootina.platform.utils.SharedPreferencesUtils;
+import org.hootina.platform.utils.UIUtils;
+
 import com.lidroid.xutils.DbUtils;
-import com.lidroid.xutils.exception.DbException;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * @author 欢迎页
@@ -139,5 +157,4 @@ public class SplashActivity extends BaseActivity {
 	public void onClick(View v) {
 
 	}
-
 }

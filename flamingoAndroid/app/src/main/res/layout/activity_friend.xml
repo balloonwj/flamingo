@@ -30,11 +30,6 @@
             android:background="@drawable/btn_add_selector" />
     </RelativeLayout>
 
-    <ScrollView
-        android:layout_width="fill_parent"
-        android:layout_height="fill_parent"
-        android:scrollbarStyle="outsideOverlay" >
-
         <LinearLayout
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
@@ -75,7 +70,7 @@
                     android:src="@drawable/icon_qunliao" />
 
                 <TextView
-                    android:id="@+id/txt_name"
+                    android:id="@+id/tv_window_title"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_centerVertical="true"
@@ -148,18 +143,15 @@
                 android:background="@color/black2" />
 
             <RelativeLayout
-                android:layout_width="fill_parent"
-                android:layout_height="fill_parent"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
                 android:layout_marginTop="10dp" >
 
-                <org.hootina.platform.widgets.FixedListView
-                    android:id="@+id/lv_friends"
-                    android:layout_width="fill_parent"
-                    android:layout_height="wrap_content"
-                    android:divider="@android:color/transparent"
-                    android:listSelector="@android:color/transparent" />
+                <android.support.v7.widget.RecyclerView
+                    android:id="@+id/recycler"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"></android.support.v7.widget.RecyclerView>
             </RelativeLayout>
         </LinearLayout>
-    </ScrollView>
 
 </LinearLayout>

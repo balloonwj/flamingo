@@ -1,0 +1,5 @@
+聊天服务器协议定义于：
+flamingoserver/chatserversrc/Msg.h
+
+文件传输协议定义于：
+flamingoserver/fileserversrc/FileMsg.h

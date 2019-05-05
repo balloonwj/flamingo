@@ -20,13 +20,13 @@
             android:background="@color/black2" />
 
         <Button
-            android:id="@+id/btn_pictures"
+            android:id="@+id/btn_sesseion"
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
             android:background="@drawable/btn_long_sex_select"
-            android:text="删除好友，同时将删除和该好友的聊天记录"
+            android:text="删除聊天记录"
             android:textColor="@android:color/black"
-            android:textSize="15sp" />
+            android:textSize="20sp" />
 
         <View
             android:layout_width="fill_parent"

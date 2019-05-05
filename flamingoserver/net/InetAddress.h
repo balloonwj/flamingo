@@ -1,12 +1,10 @@
 #pragma once
 
-#include <netinet/in.h>
-#include <inttypes.h>
 #include <string>
+#include "../base/Platform.h"
 
 namespace net
 {
-
 	///
 	/// Wrapper of sockaddr_in.
 	///
@@ -47,7 +45,8 @@ namespace net
 		// static std::vector<InetAddress> resolveAll(const char* hostname, uint16_t port = 0);
 
 	private:
-		struct sockaddr_in addr_;
+        struct sockaddr_in      addr_;
+	
 	};
 
 }

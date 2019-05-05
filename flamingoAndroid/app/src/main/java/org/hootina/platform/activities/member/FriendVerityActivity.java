@@ -82,7 +82,7 @@ public class FriendVerityActivity extends BaseActivity {
 
 	@Override
 	public void processMessage(Message msg) {
-
+		super.processMessage(msg);
 		// if (msg.what == MegAsnType.TargetsAddNotify) {
 		// TargetsAddNotify tTargetsAddNotify = (TargetsAddNotify) msg.obj;
 		// try {

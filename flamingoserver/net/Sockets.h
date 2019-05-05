@@ -1,13 +1,13 @@
 #pragma once
 
-#include <arpa/inet.h>
+#include <stdint.h>
+#include "../base/Platform.h"
 
 // struct tcp_info is in <netinet/tcp.h>
 struct tcp_info;
 
 namespace net
 {
-
 	class InetAddress;
 
 	///
@@ -17,17 +17,17 @@ namespace net
 	/// It's thread safe, all operations are delagated to OS.
 	class Socket
 	{
-	public:
-		explicit Socket(int sockfd)
-			: sockfd_(sockfd)
+	public:      
+		explicit Socket(int sockfd) : sockfd_(sockfd)
 		{ }
 
 		// Socket(Socket&&) // move constructor in C++11
 		~Socket();
 
-		int fd() const { return sockfd_; }
+        SOCKET fd() const { return sockfd_; }
 		// return true if success.
-		bool getTcpInfo(struct tcp_info*) const;
+        //TODO: ÔÝÇÒ×¢ÊÍµô
+		//bool getTcpInfo(struct tcp_info*) const;
 		bool getTcpInfoString(char* buf, int len) const;
 
 		/// abort if address in use
@@ -64,44 +64,43 @@ namespace net
 		void setKeepAlive(bool on);
 
 	private:
-		const int sockfd_;
+		const SOCKET sockfd_;
 	};
 
 	namespace sockets
 	{
-
 		///
 		/// Creates a non-blocking socket file descriptor,
 		/// abort if any error.
-		int createNonblockingOrDie();
+        SOCKET createNonblockingOrDie();
+        void setReuseAddr(SOCKET sockfd, bool on);
+        void setReusePort(SOCKET sockfd, bool on);
 
-		int  connect(int sockfd, const struct sockaddr_in& addr);
-		void bindOrDie(int sockfd, const struct sockaddr_in& addr);
-		void listenOrDie(int sockfd);
-		int  accept(int sockfd, struct sockaddr_in* addr);
-		ssize_t read(int sockfd, void *buf, size_t count);
-		ssize_t readv(int sockfd, const struct iovec *iov, int iovcnt);
-		ssize_t write(int sockfd, const void *buf, size_t count);
-		void close(int sockfd);
-		void shutdownWrite(int sockfd);
+		int  connect(SOCKET sockfd, const struct sockaddr_in& addr);
+		void bindOrDie(SOCKET sockfd, const struct sockaddr_in& addr);
+		void listenOrDie(SOCKET sockfd);
+		int  accept(SOCKET sockfd, struct sockaddr_in* addr);
+        int32_t read(SOCKET sockfd, void *buf, int32_t count);
+#ifndef WIN32
+		ssize_t readv(SOCKET sockfd, const struct iovec *iov, int iovcnt);
+#endif
+		int32_t write(SOCKET sockfd, const void *buf, int32_t count);
+		void close(SOCKET sockfd);
+		void shutdownWrite(SOCKET sockfd);
 
-		void toIpPort(char* buf, size_t size,
-			const struct sockaddr_in& addr);
-		void toIp(char* buf, size_t size,
-			const struct sockaddr_in& addr);
-		void fromIpPort(const char* ip, uint16_t port,
-		struct sockaddr_in* addr);
+		void toIpPort(char* buf, size_t size, const struct sockaddr_in& addr);
+		void toIp(char* buf, size_t size, const struct sockaddr_in& addr);
+		void fromIpPort(const char* ip, uint16_t port, struct sockaddr_in* addr);
 
-		int getSocketError(int sockfd);
+		int getSocketError(SOCKET sockfd);
 
 		const struct sockaddr* sockaddr_cast(const struct sockaddr_in* addr);
 		struct sockaddr* sockaddr_cast(struct sockaddr_in* addr);
 		const struct sockaddr_in* sockaddr_in_cast(const struct sockaddr* addr);
 		struct sockaddr_in* sockaddr_in_cast(struct sockaddr* addr);
 
-		struct sockaddr_in getLocalAddr(int sockfd);
-		struct sockaddr_in getPeerAddr(int sockfd);
-		bool isSelfConnect(int sockfd);
-
+		struct sockaddr_in getLocalAddr(SOCKET sockfd);
+		struct sockaddr_in getPeerAddr(SOCKET sockfd);
+		bool isSelfConnect(SOCKET sockfd);
 	}
 }

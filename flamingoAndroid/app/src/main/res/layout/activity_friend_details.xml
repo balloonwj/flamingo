@@ -99,7 +99,7 @@
         android:background="@drawable/setting_item_selector" >
 
         <TextView
-            android:id="@+id/sign"
+            android:id="@+id/txt_sign"
             style="@style/TxtTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -114,9 +114,9 @@
             style="@style/TxtTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_alignBaseline="@+id/sign"
-            android:layout_alignBottom="@+id/sign"
-            android:layout_toRightOf="@+id/sign"
+            android:layout_alignBaseline="@+id/txt_sign"
+            android:layout_alignBottom="@+id/txt_sign"
+            android:layout_toRightOf="@+id/txt_sign"
             android:maxLines="1"
             android:text=""
             android:textSize="16sp" />

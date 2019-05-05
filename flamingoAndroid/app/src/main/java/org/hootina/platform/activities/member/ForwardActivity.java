@@ -1,49 +1,34 @@
 package org.hootina.platform.activities.member;
 
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import tms.User.FileLoadInfo;
-import tms.User.FileUpInfo;
-import tms.User.TalkMsgAns;
 import android.app.Dialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.os.Handler;
 import android.os.Message;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.widget.AdapterView;
-import android.widget.Button;
 import android.widget.AdapterView.OnItemClickListener;
+import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.ListView;
 import android.widget.TextView;
 
-import com.alibaba.fastjson.JSON;
 import org.hootina.platform.R;
 import org.hootina.platform.activities.BaseActivity;
 import org.hootina.platform.adapters.FriendsAdapter;
 import org.hootina.platform.result.ChatMessage;
 import org.hootina.platform.result.ChatSession;
-import org.hootina.platform.result.ContentText;
-import org.hootina.platform.result.AppData;
 import org.hootina.platform.result.SendMessage;
-import org.hootina.platform.utils.MyMD5;
-import org.hootina.platform.utils.PictureUtil;
-import org.hootina.platform.util.MegAsnType;
 
-import com.lidroid.xutils.db.sqlite.Selector;
-import com.lidroid.xutils.exception.DbException;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class ForwardActivity extends BaseActivity {
 	/*
@@ -330,7 +315,7 @@ public class ForwardActivity extends BaseActivity {
 //				// ".jpg";
 //				String newFileName = name;
 //				//contwo.sendFileUpInfo(newFileName, strChecksum, 0, Long.parseLong(uFilesize));
-//				sendpictrue(newFileName, strChecksum, 0,
+//				sendPicture(newFileName, strChecksum, 0,
 //						Long.parseLong(uFilesize));
 //			}
 //

@@ -4,141 +4,204 @@ import android.content.Context;
 import android.content.res.AssetManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Color;
-import android.graphics.Matrix;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.PaintDrawable;
 import android.text.Html;
 import android.text.Html.ImageGetter;
-import android.view.Gravity;
+import android.text.Spannable;
+import android.text.SpannableString;
+import android.text.style.ImageSpan;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.view.View.OnClickListener;
-import android.view.View.OnLongClickListener;
 import android.view.ViewGroup;
-import android.view.ViewGroup.LayoutParams;
 import android.widget.BaseAdapter;
 import android.widget.ImageView;
-import android.widget.PopupWindow;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import org.hootina.platform.R;
 import org.hootina.platform.activities.member.ChattingActivity;
 import org.hootina.platform.dialogs.MsgDialog;
-import org.hootina.platform.result.ChatMessage;
+import org.hootina.platform.model.GroupInfos;
 import org.hootina.platform.result.ContentText;
 import org.hootina.platform.result.MessageTextEntity;
 import org.hootina.platform.services.Face;
 import org.hootina.platform.userinfo.UserInfo;
 import org.hootina.platform.userinfo.UserSession;
+import org.hootina.platform.utils.FaceConversionUtil;
+import org.hootina.platform.utils.HeadUtil;
 import org.hootina.platform.utils.LoggerFile;
 import org.hootina.platform.utils.PictureUtil;
-import org.hootina.platform.utils.ScreenUtils;
+import org.hootina.platform.utils.TimeUtil;
+import org.hootina.platform.utils.UIUtils;
 import org.hootina.platform.widgets.CircularImage;
+
+import com.bumptech.glide.Glide;
 import com.lidroid.xutils.DbUtils;
-import com.lidroid.xutils.db.sqlite.Selector;
-import com.lidroid.xutils.exception.DbException;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.lang.reflect.Field;
-import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
-import java.util.logging.Logger;
 
 public class ChattingAdapter extends BaseAdapter {
-	private Context 					mContext;
-	private List<MessageTextEntity> 	mChatMessages;
-	private DbUtils 					db;
-	private String 						drawablename;
-	private Date 						date;
-	Bitmap 								bm;
-	private int 						mnAccountID;
-	private int 						position;
-	private MsgDialog 					mDialog;
-	//private int						mResourceID;
+    private static final String     LOG_TAG = "ChattingAdapterTag";
 
+    private Context                 mContext;
+    private List<MessageTextEntity> mChatMessages;
+    private DbUtils                 db;
+    private String                  drawablename;
+    //private Date                  date;
+    Bitmap                          bm;
+    private int                     mnAccountID;
+    private int                     position;
+    private MsgDialog               mDialog;
+    //private int					mResourceID;
 
-	public ChattingAdapter(Context context, List<MessageTextEntity> messages) {
-		super();
+    public ChattingAdapter(Context context, List<MessageTextEntity> messages) {
+        super();
         mContext = context;
         mChatMessages = messages;
         mDialog = new MsgDialog(context);
-	}
+    }
 
-	@Override
-	public int getCount() {
-		return mChatMessages.size();
-	}
+    public void setChatMessages(List<MessageTextEntity> chatMessages) {
+        mChatMessages = chatMessages;
+    }
 
-	@Override
-	public Object getItem(int position) {
-		return mChatMessages.get(position);
-	}
-  
-	@Override
-	public long getItemId(int position) {
-		return position;
-	}
+    @Override
+    public int getCount() {
+        if (mChatMessages == null)
+            return 0;
 
-	@Override
-	public View getView(int position, View convertView, ViewGroup parent) {
-		MessageTextEntity msgItem = mChatMessages.get(position);
-		int msgType = msgItem.getMsgType();
-		int senderID = msgItem.getSenderID();
-		int targetID = msgItem.getTargetID();
-		int selfID = UserSession.getInstance().loginUser.get_userid();
-		if (msgType == MessageTextEntity.CONTENT_TYPE_TEXT) {
-			if (senderID == selfID)
-				convertView = LayoutInflater.from(mContext).inflate(R.layout.raw_send_message, null);
- 			else
-				convertView = LayoutInflater.from(mContext).inflate(R.layout.raw_received_message, null);
+        return mChatMessages.size();
+    }
 
-		} else if (msgType == MessageTextEntity.CONTENT_TYPE_IMAGE_CONFIRM ||
-				msgType == MessageTextEntity.CONTENT_TYPE_MOBILE_IMAGE) {
-			if (senderID == selfID)
-				convertView = LayoutInflater.from(mContext).inflate(R.layout.raw_send_picture, null);
- 			else
-				convertView = LayoutInflater.from(mContext).inflate(R.layout.raw_received_picture, null);
-		}else{
-		    //TODO: 万一出现这种情况怎么办？
+    @Override
+    public Object getItem(int position) {
+        return mChatMessages.get(position);
+    }
+
+    @Override
+    public long getItemId(int position) {
+        return position;
+    }
+
+    @Override
+    public View getView(int position, View convertView, ViewGroup parent) {
+        MessageTextEntity msgItem = mChatMessages.get(position);
+        int msgType = msgItem.getMsgType();
+        int senderID = msgItem.getSenderID();
+        int targetID = msgItem.getTargetID();
+        int selfID = UserSession.getInstance().loginUser.get_userid();
+        if (msgType == MessageTextEntity.CONTENT_TYPE_TEXT) {
+            if (senderID == selfID)
+                convertView = LayoutInflater.from(mContext).inflate(R.layout.raw_send_message, null);
+            else
+                convertView = LayoutInflater.from(mContext).inflate(R.layout.raw_received_message, null);
+        } else if (msgType == MessageTextEntity.CONTENT_TYPE_IMAGE_CONFIRM ||
+                   msgType == MessageTextEntity.CONTENT_TYPE_MOBILE_IMAGE) {
+            ImageView img,headImg;
+            if (senderID == selfID)
+                convertView = LayoutInflater.from(mContext).inflate(R.layout.picture_right, null);
+            else
+                convertView = LayoutInflater.from(mContext).inflate(R.layout.picture_left, null);
+
+            img = (ImageView) convertView.findViewById(R.id.img);
+            headImg = (ImageView) convertView.findViewById(R.id.img_head);
+            Glide.with(convertView.getContext())
+                    .load(new File(mChatMessages.get(position).getImgFile()))
+                    .into(img);
+
+            //好友发送的消息
+            if (senderID != selfID) {
+//				List<UserInfo> storedUserList = null;
+//
+//				try {
+//
+//					if (isGroup(targetID)) {
+//						storedUserList = BaseActivity.getDb().findAll(
+//								Selector.from(UserInfo.class)
+//										.where("mTargetID", "=", targetID)
+//										.and(WhereBuilder.b("mSenderID", "=", senderID)));
+//					} else {
+//						storedUserList = BaseActivity.getDb().findAll(
+//								Selector.from(UserInfo.class)
+//										.where("mTargetID", "=", targetID)
+//										.and(WhereBuilder.b("mSenderID", "=", senderID)));
+//					}
+//				} catch (DbException e) {
+//					e.printStackTrace();
+//				}
+
+                //UserInfo friendInfo = UserSession.getInstance().getUserInfoById(senderID);
+
+                //MyDbUtil.getContactsDao().load((long) senderID);
+
+                Integer faceID;
+                if (UserInfo.isGroup(senderID))
+                    faceID = HeadUtil.get(targetID);
+                else
+                    faceID = HeadUtil.get(senderID);
+
+                if (faceID == null) {
+                    Log.e(LOG_TAG, "line 156, HeadUtil.get error, targetID: " + targetID + ", senderID: " + senderID);
+                    faceID = 0;
+                }
+
+                Glide.with(convertView.getContext())
+                            .load("file:///android_asset/head" + faceID + ".png")
+                            .into(headImg);
+            } else {
+                Bitmap bmp = PictureUtil.getHeadPic(mContext.getAssets(), UserSession.getInstance().loginUser);
+                if (bmp != null)
+                    headImg.setImageBitmap(bmp);
+            }
+
+            return convertView;
+        } else {
+            //TODO: 万一出现这种情况怎么办？
             LoggerFile.LogError("Illegal msg type:" + msgType);
         }
 
-
         final ViewHolder holder = new ViewHolder();
-		long msgtime = msgItem.getMsgTime() * 1000;
-		date = new Date(msgtime);
-        SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd HH:mm");
-		String time = formatter.format(date);
-		holder.time = (TextView) convertView.findViewById(R.id.timestamp);
-		holder.time.setText(time);
-		holder.img = (CircularImage) convertView.findViewById(R.id.iv_userhead);
-		holder.msg_state = (ImageView) convertView.findViewById(R.id.msg_status);
-		holder.tv_name = (TextView) convertView.findViewById(R.id.tv_name);
-		holder.text = (TextView) convertView.findViewById(R.id.tv_chatcontent);
-		holder.iv_sendPicture = (ImageView) convertView.findViewById(R.id.iv_sendPicture);
+        long msgTimeLong = msgItem.getMsgTime() * 1000;
+        Date msgTime = new Date(msgTimeLong);
+        String msgTimeStr = TimeUtil.getFormattedTimeString(msgTime);
 
-			// int nTargetID = ((ChattingActivity)context).
+        holder.time = (TextView) convertView.findViewById(R.id.timestamp);
+        holder.time.setText(msgTimeStr);
+        holder.img = (CircularImage) convertView.findViewById(R.id.iv_userhead);
+        holder.msg_state = (ImageView) convertView.findViewById(R.id.msg_status);
+        holder.tv_name = (TextView) convertView.findViewById(R.id.tv_name);
+        holder.text = (TextView) convertView.findViewById(R.id.tv_chatcontent);
+        holder.iv_sendPicture = (ImageView) convertView.findViewById(R.id.iv_sendPicture);
+        holder.tvSenderName = (TextView) convertView.findViewById(R.id.tv_window_title);
+
+        //群消息显示发消息人的用户昵称
+        if (UserInfo.isGroup(targetID)) {
+            String senderName = UserSession.getInstance().getGroupMemberNickname(targetID, senderID);
+            holder.tvSenderName.setText(senderName);
+        }
+
         ChattingActivity chatActivity = (ChattingActivity) mContext;
         if (chatActivity != null) {
-            if (isGroup(chatActivity.getTargetID())) {
-                String userName = chatActivity.getFriendName(senderID);
+            if (UserInfo.isGroup(chatActivity.getTargetID())) {
+                String userName = UserSession.getInstance().getNicknameById(senderID);
+                if (holder.tv_name != null) {
                     holder.tv_name.setVisibility(View.VISIBLE);
                     holder.tv_name.setText(userName);
+                }
             }
         }
 
+        holder.bar = (ProgressBar) convertView.findViewById(R.id.pb_sending);
 
-		holder.bar = (ProgressBar) convertView.findViewById(R.id.pb_sending);
-
-		//正在发送和发送标识是否显隐藏
-		int nFlag1 = View.GONE;
-		int nFlag2 = View.GONE;
+        //正在发送和发送标识是否显隐藏
+        int nFlag1 = View.GONE;
+        int nFlag2 = View.GONE;
 //		if (message.getmMsgState() == 0) {
 //			nFlag1 = View.GONE;
 //			nFlag2 = View.VISIBLE;
@@ -150,12 +213,12 @@ public class ChattingAdapter extends BaseAdapter {
 //			nFlag2 = View.GONE;
 //		}
 
-		if (holder.msg_state != null) {
-			holder.msg_state.setVisibility(nFlag1);
-		}
-		if (holder.bar != null) {
-			holder.bar.setVisibility(nFlag2);
-		}
+        if (holder.msg_state != null) {
+            holder.msg_state.setVisibility(nFlag1);
+        }
+        if (holder.bar != null) {
+            holder.bar.setVisibility(nFlag2);
+        }
 
         //好友发送的消息
         if (senderID != selfID) {
@@ -178,13 +241,31 @@ public class ChattingAdapter extends BaseAdapter {
 //					e.printStackTrace();
 //				}
 
-            UserInfo friendInfo = UserSession.getInstance().getUserInfoById(senderID);
+            //UserInfo friendInfo = UserSession.getInstance().getUserInfoById(senderID);
+
+            //MyDbUtil.getContactsDao().load((long) senderID);
+
+            Integer faceID;
+            if (UserInfo.isGroup(senderID))
+                faceID = HeadUtil.get(targetID);
+            else
+                faceID = HeadUtil.get(senderID);
+
+            if (faceID == null) {
+                Log.e(LOG_TAG, "line 267, HeadUtil.get error, targetID: " + targetID + ", senderID: " + senderID);
+                faceID = 0;
+            }
+
+            Glide.with(convertView.getContext())
+                            .load("file:///android_asset/head" + faceID + ".png")
+                            .into(holder.img);
+
 
             //if (storedUserList != null && storedUserList.size() > 0) {
-                Bitmap bmp = PictureUtil.getFriendHeadPic(mContext.getAssets(), friendInfo);
-                if (bmp != null) {
-                    holder.img.setImageBitmap(bmp);
-                }
+//                Bitmap bmp = PictureUtil.getFriendHeadPic(mContext.getAssets(), friendInfo);
+//                if (bmp != null) {
+//                    holder.img.setImageBitmap(bmp);
+//                }
             //}
 
             //自己发送的消息
@@ -197,43 +278,54 @@ public class ChattingAdapter extends BaseAdapter {
 
         //idd: [{"msgText":"dfg"}]
         //idd: |[1]|
-		Face f;
-		List<ContentText> c = msgItem.getContent();
-		for (int i = 0; i < c.size(); ++i) {
-			ContentText t = c.get(i);
-			if (t == null)
-			    continue;
+        Face f;
+        List<ContentText> c = msgItem.getContent();
+        if (c != null) {
+            for (int i = 0; i < c.size(); ++i) {
+                ContentText t = c.get(i);
+                if (t == null)
+                    continue;
 
-			if (t.getFaceID() != Face.DEFAULT_NULL_FACEID) {
-				//String html = "<img src='" + drawablename + "'/>";
-				String html = "<img src='" + "face" + t.getFaceID() + ".png'/>";
-				ImageGetter imgGetter = new ImageGetter() {
+                if (t.getFaceID() != Face.DEFAULT_NULL_FACEID) {
+                    //String html = "<img src='" + drawablename + "'/>";
+                    String html = "<img src='" + "face" + t.getFaceID() + ".png'/>";
+                    ImageGetter imgGetter = new ImageGetter() {
 
-					@Override
-					public Drawable getDrawable(String source) {
-						Bitmap b = getImageFromAssetsFile(source);
-						Drawable drawable = new BitmapDrawable(b);
-						drawable.setBounds(0, 0, 56, 56);
-						//drawable.setBackgroundColor(Color.TRANSPARENT);
-						return drawable;
-						// 获取到资源id
-						//int id = Integer.parseInt("14");
-						//int id = mContext.getResources().getIdentifier(source , "drawable", mContext.getPackageName());
+                        @Override
+                        public Drawable getDrawable(String source) {
+                            Bitmap b = getImageFromAssetsFile(source);
+                            Drawable drawable = new BitmapDrawable(b);
+                            drawable.setBounds(0, 0, 56, 56);
+                            //drawable.setBackgroundColor(Color.TRANSPARENT);
+                            return drawable;
+                            // 获取到资源id
+                            //int id = Integer.parseInt("14");
+                            //int id = mContext.getResources().getIdentifier(source , "drawable", mContext.getPackageName());
 //						Drawable drawable = mContext.getResources().getDrawable(R.drawable.face0);
 //						//Drawable drawable = Drawable.createFromPath(source);
 //						drawable.setBounds(0, 0, drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight());
 //						return drawable;
 
-					}
-				};
-				CharSequence charSequence = Html.fromHtml(html, imgGetter,null);
+                        }
+                    };
+                    CharSequence charSequence = Html.fromHtml(html, imgGetter, null);
 
-                if (charSequence != null)
-				    holder.text.append(charSequence);
-			}else{
-				holder.text.append(t.getMsgText());
-			}
-		}
+//				getImageFromAssetsFile("face" + t.getFaceID() + ".png"
+                    String faceIDStr = String.valueOf(t.getFaceID());
+                    ImageSpan imgSpan = new ImageSpan(holder.text.getContext(), FaceConversionUtil.getInstace().getEmojeId(faceIDStr));
+                    SpannableString spannableString = new SpannableString(" ");
+                    spannableString.setSpan(imgSpan, 0, 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+                    if (charSequence != null)
+                        holder.text.append(spannableString);
+                } else {
+                    if (t.getMsgText() != null) {
+                        holder.text.append(t.getMsgText());
+                    }
+
+                }
+            }
+        }
 
 //		String idd = msgItem.getMsgText();
 //		String[] ss = idd.split("\\|");
@@ -431,70 +523,70 @@ public class ChattingAdapter extends BaseAdapter {
 //			});
 //		}
 
-		return convertView;
-	}
+        return convertView;
+    }
 
-	// private static int calculateInSampleSize(BitmapFactory.Options options,
-	// int reqWidth, int reqHeight) {
-	// // raw height and width of image
-	// final int height = options.outHeight;
-	// final int width = options.outWidth;
-	//
-	// int initSize = 1;
-	// if (height > reqHeight || width > reqWidth) {
-	// if (width > height) {
-	// initSize = Math.round((float) height / (float) reqHeight);
-	// } else {
-	// initSize = Math.round((float) width / (float) reqWidth);
-	// }
-	// }
-	//
-	// /*
-	// * the function rounds up the sample size to a power of 2 or multiple of
-	// * 8 because BitmapFactory only honors sample size this way. For
-	// * example, BitmapFactory down samples an image by 2 even though the
-	// * request is 3.
-	// */
-	// int roundedSize;
-	// if (initSize <= 8) {
-	// roundedSize = 1;
-	// while (roundedSize < initSize) {
-	// roundedSize <<= 1;
-	// }
-	// } else {
-	// roundedSize = (initSize + 7) / 8 * 8;
-	// }
-	//
-	// return roundedSize;
-	// }
+    // private static int calculateInSampleSize(BitmapFactory.Options options,
+    // int reqWidth, int reqHeight) {
+    // // raw height and width of image
+    // final int height = options.outHeight;
+    // final int width = options.outWidth;
+    //
+    // int initSize = 1;
+    // if (height > reqHeight || width > reqWidth) {
+    // if (width > height) {
+    // initSize = Math.round((float) height / (float) reqHeight);
+    // } else {
+    // initSize = Math.round((float) width / (float) reqWidth);
+    // }
+    // }
+    //
+    // /*
+    // * the function rounds up the sample size to a power of 2 or multiple of
+    // * 8 because BitmapFactory only honors sample size this way. For
+    // * example, BitmapFactory down samples an image by 2 even though the
+    // * request is 3.
+    // */
+    // int roundedSize;
+    // if (initSize <= 8) {
+    // roundedSize = 1;
+    // while (roundedSize < initSize) {
+    // roundedSize <<= 1;
+    // }
+    // } else {
+    // roundedSize = (initSize + 7) / 8 * 8;
+    // }
+    //
+    // return roundedSize;
+    // }
 
-	public boolean isGroup(int nID) {
-		return nID > 0x0FFFFFFF;
-	}
 
-	private Bitmap getImageFromAssetsFile(String fileName) {
-		Bitmap image = null;
-		AssetManager am = mContext.getResources().getAssets();
-		try {
-			InputStream is = am.open(fileName);
-			image = BitmapFactory.decodeStream(is);
-			is.close();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+    private Bitmap getImageFromAssetsFile(String fileName) {
+        Bitmap image = null;
+        AssetManager am = mContext.getResources().getAssets();
+        try {
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
 
-		return image;
+            InputStream is = am.open(fileName);
+            image = BitmapFactory.decodeStream(is, null, opts);
+            is.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
 
-	}
+        return image;
+    }
 
-	static class ViewHolder {
-		TextView 			time;
-		TextView 			text;
-		TextView			tv;
-		TextView			tv_name;
-		CircularImage 		img;						//头像
-		ImageView 			iv_sendPicture;
-		ImageView 			msg_state;
-		ProgressBar 		bar;
-	}
+    static class ViewHolder {
+        TextView      time;
+        TextView      text;
+        TextView      tv;
+        TextView      tv_name;
+        CircularImage img;                        //头像
+        ImageView     iv_sendPicture;
+        ImageView     msg_state;
+        ProgressBar   bar;
+        TextView      tvSenderName;               //发消息人昵称
+    }
 }

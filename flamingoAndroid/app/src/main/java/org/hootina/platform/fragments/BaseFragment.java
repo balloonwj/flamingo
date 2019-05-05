@@ -19,16 +19,13 @@ import org.hootina.platform.FlamingoApplication;
 import org.hootina.platform.activities.BaseActivity;
 import org.hootina.platform.utils.SharedPreferencesUtils;
 
-import com.lidroid.xutils.DbUtils;
-import com.nostra13.universalimageloader.core.DisplayImageOptions;
-import com.nostra13.universalimageloader.core.ImageLoader;
 
 /**
  * @author Administrator 所有fragment类的父类
  */
 public abstract class BaseFragment extends Fragment implements OnClickListener {
 	protected static FlamingoApplication application;
-	protected static DbUtils db;
+	//protected static DbUtils db;
 
 	@Override
 	public View onCreateView(LayoutInflater inflater, ViewGroup container,
@@ -36,12 +33,12 @@ public abstract class BaseFragment extends Fragment implements OnClickListener {
 		application = (FlamingoApplication) getActivity().getApplication();
 		View view = inflater.inflate(getContentView(), container, false);
 		autoInitAllWidgets(view);
-		initData();
+		initData(view);
 		setData();
 		processLogic();
-		if (db == null) {
-			db = DbUtils.create(application);
-		}
+//		if (db == null) {
+//			db = DbUtils.create(application);
+//		}
 		boolean isFirstUse = (Boolean) SharedPreferencesUtils.get(
 				getActivity(), "isFirstUse", true);
 
@@ -67,13 +64,13 @@ public abstract class BaseFragment extends Fragment implements OnClickListener {
 		return view;
 	}
 
-	public static DbUtils getDb() {
-		return db;
-	}
-
-	public static void setDb(DbUtils db) {
-		BaseFragment.db = db;
-	}
+//	public static DbUtils getDb() {
+//		return db;
+//	}
+//
+//	public static void setDb(DbUtils db) {
+//		BaseFragment.db = db;
+//	}
 
 	/**
 	 * 获取布局文件ID
@@ -91,7 +88,7 @@ public abstract class BaseFragment extends Fragment implements OnClickListener {
 	/**
 	 * 初始化数据
 	 */
-	protected abstract void initData();
+	protected abstract void initData(View view);
 
 	/**
 	 * 初始化数据
@@ -201,19 +198,19 @@ public abstract class BaseFragment extends Fragment implements OnClickListener {
 	/**
 	 * 显示网络图片, 可重新配置options
 	 */
-	protected void displayImage(ImageView iv, String imageUrl,
-			float screenWidthScale, float heightWidthScale,
-			DisplayImageOptions options) {
-		if (imageUrl == null) {
-			return;
-		}
-
-		ViewGroup.LayoutParams params = iv.getLayoutParams();
-		params.width = (int) (screenWidthScale * application.getScreenWidth());
-		params.height = (int) (params.width * heightWidthScale);
-		iv.setLayoutParams(params);
-
-		ImageLoader.getInstance().displayImage(imageUrl, iv, options);
-	}
+//	protected void displayImage(ImageView iv, String imageUrl,
+//			float screenWidthScale, float heightWidthScale,
+//			DisplayImageOptions options) {
+//		if (imageUrl == null) {
+//			return;
+//		}
+//
+//		ViewGroup.LayoutParams params = iv.getLayoutParams();
+//		params.width = (int) (screenWidthScale * application.getScreenWidth());
+//		params.height = (int) (params.width * heightWidthScale);
+//		iv.setLayoutParams(params);
+//
+//		ImageLoader.getInstance().displayImage(imageUrl, iv, options);
+//	}
 
 }

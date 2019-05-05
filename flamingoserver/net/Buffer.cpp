@@ -1,6 +1,6 @@
 #include "Buffer.h"
-#include <errno.h>
-#include <sys/uio.h>
+
+#include "../base/Platform.h"
 #include "Sockets.h"
 #include "Callbacks.h"
 
@@ -11,12 +11,14 @@ const char Buffer::kCRLF[] = "\r\n";
 const size_t Buffer::kCheapPrepend;
 const size_t Buffer::kInitialSize;
 
-ssize_t Buffer::readFd(int fd, int* savedErrno)
+int32_t Buffer::readFd(int fd, int* savedErrno)
 {
 	// saved an ioctl()/FIONREAD call to tell how much to read
 	char extrabuf[65536];
+    const size_t writable = writableBytes();
+#ifndef WIN32
 	struct iovec vec[2];
-	const size_t writable = writableBytes();
+	
 	vec[0].iov_base = begin() + writerIndex_;
 	vec[0].iov_len = writable;
 	vec[1].iov_base = extrabuf;
@@ -25,13 +27,25 @@ ssize_t Buffer::readFd(int fd, int* savedErrno)
 	// when extrabuf is used, we read 128k-1 bytes at most.
 	const int iovcnt = (writable < sizeof extrabuf) ? 2 : 1;
 	const ssize_t n = sockets::readv(fd, vec, iovcnt);
+#else
+    const int32_t n = sockets::read(fd, extrabuf, sizeof(extrabuf));
+#endif
 	if (n < 0)
 	{
+#ifdef WIN32
+        *savedErrno = ::WSAGetLastError();
+#else
 		*savedErrno = errno;
+#endif
 	}
 	else if (implicit_cast<size_t>(n) <= writable)
 	{
-		writerIndex_ += n;
+#ifdef WIN32
+        //Windows平台需要手动把接收到的数据加入buffer中，Linux平台已经在 struct iovec 中指定了缓冲区写入位置
+        append(extrabuf, n);
+#else
+        writerIndex_ += n;
+#endif
 	}
 	else
 	{

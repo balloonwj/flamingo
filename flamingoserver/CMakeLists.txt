@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 2.6)
 
 project (FLAMGINGO_SERVER)
 
-#FXN_VERSION是为网友FXN定制的版本，增加了一些特殊功能，如果您不需要，可以去掉-DFXN_VERSION选项(默认不开启)
-#-DFXN_VERSION
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x -g -Wall -O0 -Wno-unused-variable -pthread")
 
 link_directories(
@@ -11,20 +9,23 @@ link_directories(
 	/usr/lib64/mysql/
 )
 
+# 推荐使用 CentOS 7.0 及以上系统
+# CentOS 7.0 及以上系统默认安装的是mariadb，安装方法
+# yum install mariadb-server mariadb mariadb-devel
+# CentOS 7.0 以下系统默认安装mysql，安装方法：
+# yum install mysql-server mysql mysql-devel
+
 find_library(MYSQL_LIB libmysqlclient.so /usr/lib64/mysql/)
+#如果你的数据库是mariadb，你还需要安装mariadb-devel库；如果你的数据库是mysql，你需要安装mysql-devel，否则会出现如下错误提示。
 IF (NOT MYSQL_LIB)
     MESSAGE(FATAL_ERROR "mysqlclient not found. If your mysql is mariadb, please install mariadb-devel otherwise install mysql-devel.")
 ENDIF(NOT MYSQL_LIB)
 
 set(net_srcs 
-base/Timestamp.cpp
-base/CountDownLatch.cpp
-base/FileUtil.cpp
-base/Logging.cpp
-base/LogFile.cpp
-base/LogStream.cpp
-base/AsyncLogging.cpp
+base/AsyncLog.cpp
 base/ConfigFileReader.cpp
+base/Platform.cpp
+base/Timestamp.cpp
 
 net/Acceptor.cpp
 net/Buffer.cpp
@@ -32,35 +33,38 @@ net/Channel.cpp
 net/Connector.cpp
 net/EpollPoller.cpp
 net/EventLoop.cpp
+net/EventLoopThread.cpp
+net/EventLoopThreadPool.cpp
 net/InetAddress.cpp
+net/Poller.cpp
+net/PollPoller.cpp
+net/ProtocolStream.cpp
+net/SelectPoller.cpp
 net/Sockets.cpp
 net/TcpClient.cpp
 net/TcpConnection.cpp
 net/TcpServer.cpp
-net/EventLoopThread.cpp
-net/EventLoopThreadPool.cpp
-net/ProtocolStream.cpp
 net/Timer.cpp
 net/TimerQueue.cpp
 )
 
-set(database_srcs
-database/DatabaseMysql.cpp
-database/Field.cpp
-database/QueryResult.cpp
+set(mysqlapi_srcs
+mysqlapi/DatabaseMysql.cpp
+mysqlapi/Field.cpp
+mysqlapi/QueryResult.cpp
 )
 
-set(mysql_srcs
-mysql/MysqlManager.cpp
-mysql/MysqlThrd.cpp
-mysql/MysqlThrdMgr.cpp
-mysql/TaskList.cpp
+set(mysqlmgr_srcs
+mysqlmgr/MysqlManager.cpp
+mysqlmgr/MysqlThrd.cpp
+mysqlmgr/MysqlThrdMgr.cpp
+mysqlmgr/TaskList.cpp
 )
 
 set(json_srcs
-jsoncpp-0.5.0/json_reader.cpp
-jsoncpp-0.5.0/json_value.cpp
-jsoncpp-0.5.0/json_writer.cpp
+jsoncpp1.9.0/json_reader.cpp
+jsoncpp1.9.0/json_value.cpp
+jsoncpp1.9.0/json_writer.cpp
 )
 
 set(zlib_srcs
@@ -91,7 +95,7 @@ utils/DaemonRun.cpp
 
 set(chatserver_srcs
 chatserversrc/main.cpp
-chatserversrc/IMServer.cpp
+chatserversrc/ChatServer.cpp
 chatserversrc/ChatSession.cpp
 chatserversrc/UserManager.cpp
 chatserversrc/MsgCacheManager.cpp
@@ -117,7 +121,7 @@ fileserversrc/FileManager.cpp
 fileserversrc/TcpSession.cpp)
 
 
-add_executable(chatserver ${net_srcs} ${json_srcs}  ${chatserver_srcs} ${mysql_srcs} ${database_srcs} ${zlib_srcs} ${utils_srcs})
+add_executable(chatserver ${net_srcs} ${json_srcs}  ${chatserver_srcs} ${mysqlapi_srcs} ${mysqlmgr_srcs} ${zlib_srcs} ${utils_srcs})
 #光包含库目录是没用的，还必须使用TARGET_LINK_LIBRARIES链接该库
 TARGET_LINK_LIBRARIES(chatserver mysqlclient)
 
@@ -126,8 +130,3 @@ TARGET_LINK_LIBRARIES(fileserver)
 
 add_executable(imgserver ${net_srcs}  ${imgserver_srcs} ${utils_srcs})
 TARGET_LINK_LIBRARIES(imgserver)
-
-
-
-
-

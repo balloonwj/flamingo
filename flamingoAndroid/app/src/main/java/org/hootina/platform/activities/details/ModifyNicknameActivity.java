@@ -9,8 +9,6 @@ import org.hootina.platform.R;
 import org.hootina.platform.activities.BaseActivity;
 import org.hootina.platform.result.MemberEntity;
 import org.hootina.platform.userinfo.UserSession;
-import org.hootina.platform.util.MegAsnType;
-import com.lidroid.xutils.exception.DbException;
 
 public class ModifyNicknameActivity extends BaseActivity {
 	/*

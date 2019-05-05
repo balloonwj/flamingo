@@ -1,8 +1,9 @@
 apply plugin: 'com.android.application'
+apply plugin: 'org.greenrobot.greendao'
 
 android {
     compileSdkVersion 24
-    buildToolsVersion '26.0.2'
+    buildToolsVersion '27.0.3'
     useLibrary 'org.apache.http.legacy'
 
     aaptOptions {
@@ -12,8 +13,8 @@ android {
 
     defaultConfig {
         applicationId "org.hootina.flamingo"
-        minSdkVersion 9
-        targetSdkVersion 21
+        minSdkVersion 11
+        targetSdkVersion 19
     }
 
     buildTypes {
@@ -22,19 +23,34 @@ android {
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.txt'
         }
     }
+
+    greendao {
+        schemaVersion 1 //数据库版本号
+        daoPackage 'org.hootina.platform.db'
+        // 设置DaoMaster、DaoSession、Dao 包名
+        targetGenDir 'src/main/java'//设置DaoMaster、DaoSession、Dao目录
+    }
+
 }
 
 dependencies {
-    compile 'com.android.support:appcompat-v7:24.2.1'
-    compile 'com.google.protobuf:protobuf-java:2.5.0'
-    compile files('libs/commons-lang-2.5.jar')
-    compile files('libs/commons-logging-1.1.1.jar')
-    compile files('libs/ezmorph-1.0.6.jar')
-    compile files('libs/fastjson-1.0.4-sources.jar')
-    compile files('libs/fastjson-1.1.33.jar')
-    compile files('libs/json-lib-2.4-jdk15.jar')
-    compile files('libs/json.jar')
-    compile files('libs/universal-image-loader-1.9.3.jar')
-    compile files('libs/xlistview.jar')
-    compile files('libs/xUtils-2.6.14.jar')
+    implementation 'com.tencent.bugly:crashreport:2.1.5'
+
+    implementation 'com.google.protobuf:protobuf-java:2.5.0'
+    implementation files('libs/commons-lang-2.5.jar')
+    implementation files('libs/commons-logging-1.1.1.jar')
+    implementation files('libs/ezmorph-1.0.6.jar')
+    implementation files('libs/fastjson-1.0.4-sources.jar')
+    implementation files('libs/fastjson-1.1.33.jar')
+    implementation files('libs/json-lib-2.4-jdk15.jar')
+    implementation files('libs/json.jar')
+    implementation files('libs/universal-image-loader-1.9.3.jar')
+    implementation files('libs/xlistview.jar')
+    implementation files('libs/xUtils-2.6.14.jar')
+    implementation 'com.google.code.gson:gson:2.8.5'
+    implementation 'com.android.support:appcompat-v7:24.2.1'
+    implementation 'com.android.support:support-v4:24.2.1'
+    implementation 'com.github.bumptech.glide:glide:3.7.0'
+    implementation 'com.android.support:recyclerview-v7:24.2.1'
+    implementation 'org.greenrobot:greendao:3.2.2'
 }

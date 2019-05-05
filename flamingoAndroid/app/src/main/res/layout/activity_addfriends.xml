@@ -123,12 +123,10 @@
         android:layout_width="fill_parent"
         android:layout_height="fill_parent" >
 
-        <org.hootina.platform.widgets.x.XListView
-            android:id="@+id/xlv_searchfriend"
-            android:layout_width="fill_parent"
-            android:layout_height="fill_parent"
-            android:divider="@android:color/transparent"
-            android:listSelector="@android:color/transparent" />
+      <android.support.v7.widget.RecyclerView
+          android:id="@+id/recycler"
+          android:layout_width="match_parent"
+          android:layout_height="match_parent"></android.support.v7.widget.RecyclerView>
     </RelativeLayout>
 
 </LinearLayout>

@@ -5,7 +5,7 @@
 using namespace net;
 
 EventLoopThread::EventLoopThread(const ThreadInitCallback& cb,
-								 const std::string& name)
+								 const std::string& name/* = ""*/)
 								 : loop_(NULL),
 								 exiting_(false),
 								 callback_(cb)

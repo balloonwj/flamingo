@@ -111,15 +111,13 @@ private:
     void OnModifyMarknameResponse(int32_t friendid, const std::string& newmarkname, const std::shared_ptr<TcpConnection>& conn);
     void OnMoveFriendToOtherTeamResponse(int32_t friendid, const std::string& newteamname, const std::string& oldteamname, const std::shared_ptr<TcpConnection>& conn);
 
-#ifdef FXN_VERSION
-    //定制函数
-    void OnUploadDeviceInfo(int32_t deviceid, int32_t classtype, int64_t uploadtime, const std::string& strDeviceInfo, const std::shared_ptr<TcpConnection>& conn);
-#endif
-
     void DeleteFriend(const std::shared_ptr<TcpConnection>& conn, int32_t friendid);
 
     //根据用户分组信息组装应答给客户端的好友列表信息
     void MakeUpFriendListInfo(std::string& friendinfo, const std::shared_ptr<TcpConnection>& conn);
+
+    //将聊天消息的本地时间改成服务器时间，修改成功返回true,失败返回false。
+    bool ModifyChatMsgLocalTimeToServerTime(const std::string& chatInputJson, std::string& chatOutputJson);
 
 private:
     int32_t           m_id;                 //session id

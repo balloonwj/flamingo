@@ -31,7 +31,7 @@ public final class LoggerFile {
         Date curDate = new Date(System.currentTimeMillis());
         SimpleDateFormat formatter = new SimpleDateFormat("yyyyMMddHHmmssSSS");
         String timestr = formatter.format(curDate);
-        String logFilename = String.format("flamingo/flamingo%s.log", timestr);
+        String logFilename = String.format("flamingo/Logs/flamingo%s.log", timestr);
 
         mFile = new File(Environment.getExternalStorageDirectory(), logFilename);
         try {
@@ -95,14 +95,20 @@ public final class LoggerFile {
         else
             levelStr = "[ERROR]";
 
-
         //前面加上日期和级别信息
         Date curDate = new Date(System.currentTimeMillis());
         SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss:SSS");
         String timeStr = formatter.format(curDate);
         String prefix = String.format("[%s]%s", timeStr, levelStr);
+
+        StackTraceElement[] trace = new Throwable().getStackTrace();
+        // 下标为0的元素是上一行语句的信息, 下标为1的才是调用printLine的地方的信息
+        StackTraceElement tmp = trace[1];
+
+        //String lineNoStr = String.format("[%s:%d]", tmp.getFileName(), tmp.getLineNumber());
         String threadIDStr = String.format("[ThreadID %d]", Thread.currentThread().getId());
         StringBuilder builder = new StringBuilder();
+        //builder.append(lineNoStr);
         builder.append(prefix);
         builder.append(threadIDStr);
         for (int i = 0; i < str.length; ++i)
@@ -112,8 +118,10 @@ public final class LoggerFile {
         builder.append("\n");
         String actualLogToWrite = builder.toString();
 
-        byte bt[] = new byte[actualLogToWrite.length()];
-        bt = actualLogToWrite.getBytes();
+        byte[] bt = actualLogToWrite.getBytes();
+        if (bt == null)
+            return false;
+
         try {
             mOutputStream.write(bt, 0, bt.length);
             mOutputStream.flush();

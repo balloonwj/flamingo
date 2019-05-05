@@ -13,6 +13,7 @@
 #include "../ZlibUtil.h"
 #include <tchar.h>
 #include <Sensapi.h>
+#include <functional>
 
 #pragma comment(lib, "Sensapi.lib")
 
@@ -815,8 +816,6 @@ void CIUSocket::SendThreadProc()
 
 void CIUSocket::Send(const std::string& strBuffer)
 {
-    std::lock_guard<std::mutex> guard(m_mtSendBuf);
-
     //size_t nDestLength;
     std::string strDestBuf;
     if (!ZlibUtil::CompressBuf(strBuffer, strDestBuf))
@@ -831,6 +830,8 @@ void CIUSocket::Send(const std::string& strBuffer)
     header.compressflag = 1;
     header.originsize = length;
     header.compresssize = (int32_t)strDestBuf.length();
+	
+	std::lock_guard<std::mutex> guard(m_mtSendBuf);
     m_strSendBuf.append((const char*)&header, sizeof(header));
 
     m_strSendBuf.append(strDestBuf);
@@ -1113,6 +1114,7 @@ bool CIUSocket::Login(const char* pszUser, const char* pszPassword, int nClientT
         return false;
     }
     msg header;
+    memset(&header, 0, sizeof(header));
     header.compressflag = 1;
     header.originsize = outbuf.length();
     header.compresssize = strDestBuf.length();

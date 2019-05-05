@@ -14,16 +14,17 @@
     <ProjectGuid>{8FDC31E9-4762-432C-BB7C-B3AF4CF496A2}</ProjectGuid>
     <RootNamespace>MingUTalk</RootNamespace>
     <ProjectName>Flamingo</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
-    <PlatformToolset>v120</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
-    <PlatformToolset>v120</PlatformToolset>
+    <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -73,7 +74,7 @@
       <PreprocessorDefinitions>WIN32;_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessToFile>false</PreprocessToFile>
       <PreprocessSuppressLineNumbers>false</PreprocessSuppressLineNumbers>
-      <MinimalRebuild>true</MinimalRebuild>
+      <MinimalRebuild>false</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -163,9 +164,9 @@
     <ClCompile Include="ImageTaskThread.cpp" />
     <ClCompile Include="IniFile.cpp" />
     <ClCompile Include="IULog.cpp" />
-    <ClCompile Include="jsoncpp-0.5.0\json_reader.cpp" />
-    <ClCompile Include="jsoncpp-0.5.0\json_value.cpp" />
-    <ClCompile Include="jsoncpp-0.5.0\json_writer.cpp" />
+    <ClCompile Include="jsoncpp-1.9.0\json_reader.cpp" />
+    <ClCompile Include="jsoncpp-1.9.0\json_value.cpp" />
+    <ClCompile Include="jsoncpp-1.9.0\json_writer.cpp" />
     <ClCompile Include="LoginAccountList.cpp" />
     <ClCompile Include="LoginDlg.cpp" />
     <ClCompile Include="LoginSettingsDlg.cpp" />
@@ -243,51 +244,67 @@
     <ClCompile Include="XmlDocument.cpp" />
     <ClCompile Include="zlib1.2.11\adler32.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="zlib1.2.11\compress.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="zlib1.2.11\crc32.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="zlib1.2.11\deflate.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="zlib1.2.11\gzclose.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="zlib1.2.11\gzlib.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="zlib1.2.11\gzread.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="zlib1.2.11\gzwrite.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="zlib1.2.11\infback.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="zlib1.2.11\inffast.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="zlib1.2.11\inflate.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="zlib1.2.11\inftrees.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="zlib1.2.11\trees.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="zlib1.2.11\uncompr.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="zlib1.2.11\zlibdemo.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="zlib1.2.11\zutil.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="ZlibUtil.cpp" />
   </ItemGroup>
@@ -330,15 +347,18 @@
     <ClInclude Include="ImageTaskThread.h" />
     <ClInclude Include="IniFile.h" />
     <ClInclude Include="IULog.h" />
-    <ClInclude Include="jsoncpp-0.5.0\autolink.h" />
-    <ClInclude Include="jsoncpp-0.5.0\config.h" />
-    <ClInclude Include="jsoncpp-0.5.0\features.h" />
-    <ClInclude Include="jsoncpp-0.5.0\forwards.h" />
-    <ClInclude Include="jsoncpp-0.5.0\json.h" />
-    <ClInclude Include="jsoncpp-0.5.0\json_batchallocator.h" />
-    <ClInclude Include="jsoncpp-0.5.0\reader.h" />
-    <ClInclude Include="jsoncpp-0.5.0\value.h" />
-    <ClInclude Include="jsoncpp-0.5.0\writer.h" />
+    <ClInclude Include="jsoncpp-1.9.0\allocator.h" />
+    <ClInclude Include="jsoncpp-1.9.0\assertions.h" />
+    <ClInclude Include="jsoncpp-1.9.0\autolink.h" />
+    <ClInclude Include="jsoncpp-1.9.0\config.h" />
+    <ClInclude Include="jsoncpp-1.9.0\features.h" />
+    <ClInclude Include="jsoncpp-1.9.0\forwards.h" />
+    <ClInclude Include="jsoncpp-1.9.0\json.h" />
+    <ClInclude Include="jsoncpp-1.9.0\json_tool.h" />
+    <ClInclude Include="jsoncpp-1.9.0\reader.h" />
+    <ClInclude Include="jsoncpp-1.9.0\value.h" />
+    <ClInclude Include="jsoncpp-1.9.0\version.h" />
+    <ClInclude Include="jsoncpp-1.9.0\writer.h" />
     <ClInclude Include="LoginAccountList.h" />
     <ClInclude Include="LoginDlg.h" />
     <ClInclude Include="LoginSettingsDlg.h" />
@@ -441,12 +461,10 @@
     <ResourceCompile Include="flamingo.rc" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="jsoncpp-0.5.0\json_internalarray.inl" />
-    <None Include="jsoncpp-0.5.0\json_internalmap.inl" />
-    <None Include="jsoncpp-0.5.0\json_valueiterator.inl" />
+    <Text Include="zlib1.2.11\文件概览.txt" />
   </ItemGroup>
   <ItemGroup>
-    <Text Include="zlib1.2.11\文件概览.txt" />
+    <None Include="jsoncpp-1.9.0\json_valueiterator.inl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

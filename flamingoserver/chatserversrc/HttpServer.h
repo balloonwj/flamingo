@@ -31,6 +31,7 @@ public:
 
 public:
     bool Init(const char* ip, short port, EventLoop* loop);
+    void Uninit();
 
     //新连接到来调用或连接断开，所以需要通过conn->connected()来判断，一般只在主loop里面调用
     void OnConnection(std::shared_ptr<TcpConnection> conn);
@@ -39,7 +40,6 @@ public:
 
 private:
     std::shared_ptr<TcpServer>                     m_server;
-    std::shared_ptr<EventLoopThreadPool>           m_eventLoopThreadPool;
     std::list<std::shared_ptr<HttpSession>>        m_sessions;
     std::mutex                                     m_sessionMutex;      //多线程之间保护m_sessions
 };

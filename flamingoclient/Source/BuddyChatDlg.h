@@ -261,7 +261,7 @@ private:
     static UINT __stdcall RemoteDesktopProc(void* p);
 
 public:
-	CFlamingoClient*		m_lpFMGClient;
+	CFlamingoClient*	m_lpFMGClient;
 	CFaceList*			m_lpFaceList;
 	CCascadeWinManager* m_lpCascadeWinManager;
 	HWND				m_hMainDlg;

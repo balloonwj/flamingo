@@ -1,81 +1,113 @@
 package org.hootina.platform.activities.details;
 
-import android.os.Handler;
-import android.os.Message;
+import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.v4.app.FragmentActivity;
+import android.support.v7.widget.LinearLayoutManager;
+import android.support.v7.widget.RecyclerView;
+import android.view.LayoutInflater;
 import android.view.View;
-import android.widget.ListView;
+import android.view.ViewGroup;
+import android.widget.ImageView;
+import android.widget.TextView;
+
+import com.bumptech.glide.Glide;
 
 import org.hootina.platform.R;
-import org.hootina.platform.activities.BaseActivity;
-import org.hootina.platform.adapters.FriendsAdapter;
 import org.hootina.platform.userinfo.UserInfo;
 import org.hootina.platform.userinfo.UserSession;
 
 import java.util.List;
 
-public class GroupMemberActivity extends BaseActivity {
-	private ListView 		lv_groupmember;
-	private int 			_groupid;
-	private FriendsAdapter 	friendsAdapter;
-	private MysHandler 		handler = new MysHandler();
+public class GroupMemberActivity extends FragmentActivity {
 
-	public class MysHandler extends Handler {
-		@Override
-		public void dispatchMessage(Message msg) {
-			super.dispatchMessage(msg);
-			switch (msg.what) {
-			case 0:
+    public static final String          GROUP_ID = "groupID";
 
-				break;
-			case 1:
+    private List<UserInfo>              mMembers;
 
-				break;
-			case 2:
+    private RecyclerView                mRecyclerView;
+    private GroupMemberAdapter          mGroupMemberAdapter;
 
-				break;
+    private int                         groupID;
+    private String                      groupName;
 
-			default:
-				break;
-			}
-		}
-	}
 
-	@Override
-	public void onClick(View v) {
-		switch (v.getId()) {
-		case R.id.btn_back:
-			finish();
-			break;
+    private TextView                    mTxtName;
 
-		default:
-			break;
-		}
-	}
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_group_member);
 
-	@Override
-	protected int getContentView() {
-		return R.layout.activity_group_member;
-	}
+        mTxtName = (TextView) findViewById(R.id.tv_window_title);
 
-	@Override
-	protected void initData() {
-		_groupid = getIntent().getIntExtra("groupid", 0);
-	}
+        groupID = getIntent().getIntExtra(GROUP_ID, 0);
+        groupName = getIntent().getStringExtra("groupName");
 
-	@Override
-	protected void setData() {
-		loadGroupMembers();
-	}
+        mTxtName.setText(groupName +  " - " + "群成员");
 
-	private void loadGroupMembers() {
-		if (_groupid == 0)
-			return;
+        UserInfo currentGroup = UserSession.getInstance().getGroupById(groupID);
+        if (currentGroup != null)
+            mMembers = currentGroup.groupMembers;
 
-		List<UserInfo> list = UserSession.getInstance().getGroupMembersById(_groupid);
-		if (list == null || lv_groupmember == null)
-			return;
+        mRecyclerView = (RecyclerView) findViewById(R.id.recycler);
+        mRecyclerView.setLayoutManager(new LinearLayoutManager(this));
+        mGroupMemberAdapter = new GroupMemberAdapter();
+        mRecyclerView.setAdapter(mGroupMemberAdapter);
 
-		friendsAdapter = new FriendsAdapter(this, list, handler);
-		lv_groupmember.setAdapter(friendsAdapter);
-	}
+        findViewById(R.id.btn_back).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                finish();
+            }
+        });
+    }
+
+
+    public class GroupMemberAdapter extends RecyclerView.Adapter<GroupMemberAdapter.GroupMemberViewHolder> {
+
+        @Override
+        public GroupMemberViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
+            View view = LayoutInflater.from(parent.getContext()).inflate(R.layout.friend_item, parent, false);
+            return new GroupMemberViewHolder(view);
+        }
+
+        @Override
+        public void onBindViewHolder(GroupMemberViewHolder holder, int position) {
+            holder.bindDataToView(mMembers.get(position));
+        }
+
+        @Override
+        public int getItemCount() {
+            if (mMembers == null) {
+                return 0;
+            }
+            return mMembers.size();
+        }
+
+        public class GroupMemberViewHolder extends RecyclerView.ViewHolder {
+
+            private ImageView mMemberHead;
+            private TextView  mMemberNickname;
+            private TextView  mMemberUserName;
+
+            public GroupMemberViewHolder(View itemView) {
+                super(itemView);
+
+                mMemberHead = (ImageView) itemView.findViewById(R.id.img_head);
+                mMemberNickname = (TextView) itemView.findViewById(R.id.tv_window_title);
+                mMemberUserName = (TextView) itemView.findViewById(R.id.txt_sign);
+            }
+
+            public void bindDataToView(UserInfo member) {
+                Glide.with(itemView.getContext())
+                        .load("file:///android_asset/head" + member.get_faceType() + ".png")
+                        .into(mMemberHead);
+                mMemberNickname.setText(member.get_nickname());
+                mMemberUserName.setText(member.get_username());
+
+                //HeadUtil.put(member.get_userid(), member.get_faceType());
+            }
+        }
+    }
 }

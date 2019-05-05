@@ -1,0 +1,234 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="net">
+      <UniqueIdentifier>{0ab8b0d7-881a-4598-ac12-b4d1c24ba0ad}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="utils">
+      <UniqueIdentifier>{50d8d07d-a617-45c6-b0ca-651d6ccda2b4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="imgserversrc">
+      <UniqueIdentifier>{1dc8cd04-7152-4b83-8c70-f088c0b78326}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="base">
+      <UniqueIdentifier>{2f8d5821-199f-464a-a3d9-cffd7283edef}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\net\Acceptor.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\Buffer.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\Channel.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\Connector.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\EpollPoller.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\EventLoop.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\EventLoopThread.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\EventLoopThreadPool.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\InetAddress.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\Poller.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\PollPoller.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\ProtocolStream.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\SelectPoller.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\Sockets.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\TcpClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\TcpConnection.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\TcpServer.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\Timer.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\TimerQueue.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\DaemonRun.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\MD5.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\StringUtil.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\URLEncodeUtil.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imgserversrc\main.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\FileManager.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\FileServer.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\FileSession.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\TcpSession.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\AsyncLog.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\ConfigFileReader.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\CountDownLatch.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\Platform.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\Timestamp.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\net\Acceptor.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\Buffer.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\Callbacks.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\Channel.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\Connector.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\Endian.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\EpollPoller.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\EventLoop.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\EventLoopThread.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\EventLoopThreadPool.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\InetAddress.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\Poller.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\PollPoller.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\ProtocolStream.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\SelectPoller.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\Sockets.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\TcpClient.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\TcpConnection.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\TcpServer.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\Timer.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\TimerId.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\TimerQueue.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\DaemonRun.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\MD5.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\StringUtil.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\URLEncodeUtil.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\FileManager.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\FileMsg.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\FileServer.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\FileSession.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\TcpSession.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\AsyncLog.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\ConfigFileReader.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\CountDownLatch.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\Platform.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\RAIIWrapper.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\Singleton.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\Timestamp.h">
+      <Filter>base</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

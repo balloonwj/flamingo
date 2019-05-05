@@ -5,23 +5,14 @@
 #include <string>
 
 using namespace std;
-
-
-
-	///
-	/// Time stamp in UTC, in microseconds resolution.
-	///
-	/// This class is immutable.
-	/// It's recommended to pass it by value, since it's passed in register on x64.
-	///
+	
 	class Timestamp
 	{
 	public:
 		///
 		/// Constucts an invalid Timestamp.
 		///
-		Timestamp()
-			: microSecondsSinceEpoch_(0)
+		Timestamp() : microSecondsSinceEpoch_(0)
 		{
 		}
 
@@ -30,6 +21,30 @@ using namespace std;
 		///
 		/// @param microSecondsSinceEpoch
 		explicit Timestamp(int64_t microSecondsSinceEpoch);
+
+        Timestamp& operator+=(Timestamp lhs)
+        {
+            this->microSecondsSinceEpoch_ += lhs.microSecondsSinceEpoch_;
+            return *this;
+        }
+
+        Timestamp& operator+=(int64_t lhs)
+        {
+            this->microSecondsSinceEpoch_ += lhs;
+            return *this;
+        }
+
+        Timestamp& operator-=(Timestamp lhs)
+        {
+            this->microSecondsSinceEpoch_ -= lhs.microSecondsSinceEpoch_;
+            return *this;
+        }
+
+        Timestamp& operator-=(int64_t lhs)
+        {
+            this->microSecondsSinceEpoch_ -= lhs;
+            return *this;
+        }
 
 		void swap(Timestamp& that)
 		{
@@ -59,7 +74,7 @@ using namespace std;
 		static const int kMicroSecondsPerSecond = 1000 * 1000;
 
 	private:
-		int64_t microSecondsSinceEpoch_;
+		int64_t     microSecondsSinceEpoch_;
 	};
 
 	inline bool operator<(Timestamp lhs, Timestamp rhs)
@@ -110,7 +125,7 @@ using namespace std;
 	///
 	/// @return timestamp+seconds as Timestamp
 	///
-	inline Timestamp addTime(Timestamp timestamp, double seconds)
+	inline Timestamp addTime(Timestamp timestamp, int64_t seconds)
 	{
 		int64_t delta = static_cast<int64_t>(seconds * Timestamp::kMicroSecondsPerSecond);
 		return Timestamp(timestamp.microSecondsSinceEpoch() + delta);

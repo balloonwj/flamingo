@@ -3,15 +3,12 @@
 * zhangyl 2018.08.20
 */
 
-#include <unistd.h>
-#include <signal.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <iostream>
 #include "DaemonRun.h"
+#include <stdlib.h>
+#include <iostream>
+#include "../base/Platform.h"
 
+#ifndef WIN32
 void daemon_run()
 {
     int pid;
@@ -45,3 +42,5 @@ void daemon_run()
     if (fd > 2)
         close(fd);
 }
+
+#endif

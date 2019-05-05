@@ -42,7 +42,7 @@ BOOL CFaceSelDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	m_FaceCtrl.SetLineColor(RGB(223, 230, 246));
 	m_FaceCtrl.SetFocusBorderColor(RGB(0, 0, 255));
 	m_FaceCtrl.SetZoomBorderColor(RGB(0, 138, 255));
-	m_FaceCtrl.SetRowAndCol(8, 15);
+	m_FaceCtrl.SetRowAndCol(10, 15);
 	m_FaceCtrl.SetItemSize(28, 28);
 	m_FaceCtrl.SetZoomSize(84, 84);
 	m_FaceCtrl.SetFaceList(m_lpFaceList);
@@ -52,7 +52,7 @@ BOOL CFaceSelDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	rcFaceCtrl.left += 6;
 	rcFaceCtrl.right = rcFaceCtrl.left + 420;
 	rcFaceCtrl.top += 6;
-	rcFaceCtrl.bottom = rcFaceCtrl.top + 224;
+	rcFaceCtrl.bottom = rcFaceCtrl.top + 280;
 	m_FaceCtrl.Create(m_hWnd, rcFaceCtrl, NULL, WS_CHILD | WS_VISIBLE, 
 		NULL, ID_FACE_CTRL, NULL);
 

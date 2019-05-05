@@ -20,7 +20,7 @@
             android:onClick="onClick" />
 
         <TextView
-            android:id="@+id/name"
+            android:id="@+id/tv_window_title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_centerInParent="true"

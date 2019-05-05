@@ -1,9 +1,9 @@
 说明：
 1. 这是个人写的一个即时通讯软件，目前实现了一些基础功能。
-2. 客户端使用VS2013开发, WTL9.0，使用了C++11的一些特性。
+2. 客户端使用VS2019开发, WTL9.0，使用了C++11的一些特性。
 3. 服务器使用的编译环境是CentOS + cmake + gcc，完全使用的C++11开发，编译环境分别是：
 CentOS 7.0
 cmake 2.8.11
 gcc 4.8.5
 mysql 5.6.31(mysql-server/mysql-client/mysql-devel)
-4. iUtalk为即时通讯主程序,CatchScreen为聊天中的截图工具, iAutoUpdate为自动升级工具。
+4. 客户端 Flamingo 为即时通讯主程序,CatchScreen为聊天中的截图工具, iAutoUpdate为自动升级工具。

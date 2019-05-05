@@ -62,5 +62,47 @@ public class SendMessage {
 //		setmLastMsgText();
 	}
 
-	
+	public String getMsgID() {
+		return mMsgID;
+	}
+
+	public void setMsgID(String msgID) {
+		mMsgID = msgID;
+	}
+
+	public int getSenderID() {
+		return mSenderID;
+	}
+
+	public void setSenderID(int senderID) {
+		mSenderID = senderID;
+	}
+
+	public int getTargetID() {
+		return mTargetID;
+	}
+
+	public void setTargetID(int targetID) {
+		mTargetID = targetID;
+	}
+
+	public long getMsgTime() {
+		return mMsgTime;
+	}
+
+	public void setMsgTime(long msgTime) {
+		mMsgTime = msgTime;
+	}
+
+	public int getSenderClientType() {
+		return mSenderClientType;
+	}
+
+	public void setSenderClientType(int senderClientType) {
+		mSenderClientType = senderClientType;
+	}
+
+	public void setTextid(String textid) {
+		this.textid = textid;
+	}
 }

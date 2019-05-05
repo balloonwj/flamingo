@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:orientation="vertical"
+    android:background="@color/white"
+    android:layout_height="match_parent">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="45dp"
+        android:layout_margin="2dp"
+        android:gravity="center"
+        android:text="删除好友将同时删除与该好友的聊天记录"
+        android:textSize="12sp" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1px"
+        android:background="#9e9e9e"/>
+
+    <TextView
+        android:id="@+id/txt_delete"
+        android:layout_width="match_parent"
+        android:layout_height="45dp"
+        android:layout_margin="2dp"
+        android:gravity="center"
+        android:text="删除联系人"
+        android:textColor="@color/black"
+        android:textSize="18sp"
+        />
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1px"
+        android:background="#9e9e9e"
+        />
+    <TextView
+        android:id="@+id/txt_cancle"
+        android:layout_width="match_parent"
+        android:layout_height="45dp"
+        android:layout_margin="2dp"
+        android:gravity="center"
+        android:text="取消"
+        android:textColor="@color/black"
+        android:textSize="18sp" />
+</LinearLayout>

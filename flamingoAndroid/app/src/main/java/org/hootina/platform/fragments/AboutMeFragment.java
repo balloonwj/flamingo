@@ -10,12 +10,12 @@ import android.widget.RelativeLayout;
 import android.widget.TextView;
 
 import org.hootina.platform.R;
-import org.hootina.platform.activities.member.MyPersonInfo;
+import org.hootina.platform.activities.member.MyPersonInfoActivity;
 import org.hootina.platform.activities.member.SettingActivity;
-import org.hootina.platform.activities.member.ShoucangActivity;
+import org.hootina.platform.activities.member.FavoriteActivity;
+import org.hootina.platform.model.LoginResult;
 import org.hootina.platform.userinfo.UserSession;
 import org.hootina.platform.utils.PictureUtil;
-import org.hootina.platform.util.MegAsnType;
 
 import java.io.File;
 
@@ -32,29 +32,32 @@ public class AboutMeFragment extends BaseFragment {
 	private File 			file;
 	private byte[] 			contentIntleng;
 
+	private View mView;
+
 	@Override
 	public void onClick(View v) {
 		switch (v.getId()) {
-
 		case R.id.txt_setting: {
 			Intent intent = new Intent(getActivity(), SettingActivity.class);
 			startActivity(intent);
 
 			// startActivity(SettingActivity.class);
+			break;
+		}
 
-			break;
-		}
 		case R.id.view_user: {
-			Intent intent = new Intent(getActivity(), MyPersonInfo.class);
+			Intent intent = new Intent(getActivity(), MyPersonInfoActivity.class);
 			startActivity(intent);
 			break;
 		}
+
 		case R.id.txt_shoucang: {
-			Intent intent = new Intent(getActivity(), ShoucangActivity.class);
+			Intent intent = new Intent(getActivity(), FavoriteActivity.class);
 			startActivity(intent);
-			// startActivity(MyPersonInfo.class);
+			// startActivity(MyPersonInfoActivity.class);
 			break;
 		}
+
 		default:
 			break;
 		}
@@ -66,16 +69,27 @@ public class AboutMeFragment extends BaseFragment {
 	}
 
 	@Override
-	protected void initData() {
+	protected void initData(View view) {
         //tvname.setText(application.getMemberEntity().getNickname());
         //tvnum.setText("账号:" + application.getMemberEntity().getStrAccountNo2());
-        tvname.setText(UserSession.getInstance().loginUser.get_nickname());
-        tvnum.setText("账号:" + UserSession.getInstance().loginUser.get_username());
+        tvname.setText(LoginResult.getInstance().getNickname());
+        tvnum.setText("账号:" + LoginResult.getInstance().getUsername());
         AssetManager mgr = getActivity().getAssets();
         Bitmap bmp = PictureUtil.getHeadPic(mgr, UserSession.getInstance().loginUser);
         if (bmp != null) {
             iv_head.setImageBitmap(bmp);
+		}
+	}
 
+	@Override
+	public void onResume() {
+		super.onResume();
+		tvname.setText(LoginResult.getInstance().getNickname());
+		tvnum.setText("账号:" + LoginResult.getInstance().getUsername());
+		AssetManager mgr = getActivity().getAssets();
+		Bitmap bmp = PictureUtil.getHeadPic(mgr, UserSession.getInstance().loginUser);
+		if (bmp != null) {
+			iv_head.setImageBitmap(bmp);
 		}
 	}
 
@@ -89,19 +103,18 @@ public class AboutMeFragment extends BaseFragment {
 	@Override
 	public void processMessage(Message msg) {
 		super.processMessage(msg);
-		if (msg.what == MegAsnType.FileLoadData) {
+	//	if (msg.what == MegAsnType.FileLoadData) {
 			// 下载成功
 //			AssetManager mgr = getActivity().getAssets();
 //			Bitmap bmp = PictureUtil.getHeadPic(mgr, application.getMemberEntity());
 //			if (bmp != null) {
 //				iv_head.setImageBitmap(bmp);
 //			}
-		}
+		//}
 	}
 
 	@Override
 	protected void processLogic() {
-
 		if (application == null) {
 			return;
 		}
@@ -109,7 +122,6 @@ public class AboutMeFragment extends BaseFragment {
 		if (application.getMemberEntity() == null) {
 
 		} else {
-
 //			AssetManager mgr = getActivity().getAssets();
 //			Bitmap bmp = PictureUtil.getHeadPic(mgr, application.getMemberEntity());
 //			if (bmp != null) {

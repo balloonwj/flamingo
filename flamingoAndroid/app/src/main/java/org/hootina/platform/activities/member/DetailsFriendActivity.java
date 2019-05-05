@@ -1,9 +1,5 @@
 package org.hootina.platform.activities.member;
 
-import java.util.List;
-
-import tms.User.TargetsAddNotify;
-import android.content.Intent;
 import android.os.Message;
 import android.view.View;
 import android.widget.TextView;
@@ -11,11 +7,7 @@ import android.widget.TextView;
 import org.hootina.platform.R;
 import org.hootina.platform.activities.BaseActivity;
 import org.hootina.platform.result.FriendInfo;
-import org.hootina.platform.result.NewFriendEntity;
-import org.hootina.platform.util.MegAsnType;
-import com.lidroid.xutils.db.sqlite.Selector;
-import com.lidroid.xutils.db.sqlite.WhereBuilder;
-import com.lidroid.xutils.exception.DbException;
+
 
 /*
  * (non-Javadoc)
@@ -104,8 +96,8 @@ public class DetailsFriendActivity extends BaseActivity {
 
 	@Override
 	public void processMessage(Message msg) {
-
-		if (msg.what == MegAsnType.TargetsAddNotify) {
+		super.processMessage(msg);
+//		if (msg.what == MegAsnType.TargetsAddNotify) {
 			// 对方方同意添加好友
 //			TargetsAddNotify tTargetsAddNotify = (TargetsAddNotify) msg.obj;
 //			try {
@@ -123,7 +115,7 @@ public class DetailsFriendActivity extends BaseActivity {
 //				e.printStackTrace();
 //			}
 
-		}
+//		}
 
 	}
 

@@ -11,11 +11,14 @@ import java.util.ArrayList;
  */
 
 /*
-{"code": 0, "msg": "ok", "userid": 8, "username": "13917043320", "nickname": "zhangyl",
+        {"code": 0, "msg": "ok", "userid": 8, "username": "13917043320", "nickname": "zhangyl",
         "facetype": 0, "customface":"文件md5", "gender":0, "birthday":19891208, "signature":"哈哈，终于成功了",
         "address":"上海市东方路3261号", "phonenumber":"021-389456", "mail":"balloonwj@qq.org"}
-        */
-public class UserInfo implements  Comparable{
+*/
+public class UserInfo implements  Comparable {
+    //群组id基数
+    private static final int GROUP_ID_BOUNDARY = 0x0FFFFFFF;
+
     //如果这是一个群id，则该成员存放该群的群成员
     public List<UserInfo> groupMembers = new ArrayList<UserInfo>();
 
@@ -32,17 +35,24 @@ public class UserInfo implements  Comparable{
     private String      _phoneNumber;
     private String      _mail;
 
-    //实时数据
-    private int         mOnlineType;
+    //实时数据, 在线的类型
+    private int         _onlineType;
+
+    //客户端类型
+    private int _clientType;
 
     public UserInfo()
     {
 
     }
 
-    public Boolean isGroup()
+    public boolean isGroup()
     {
-        return _userid > 0x0FFFFFFF;
+        return _userid >= GROUP_ID_BOUNDARY;
+    }
+
+    public static boolean isGroup(int userid) {
+        return userid >= GROUP_ID_BOUNDARY;
     }
 
     public void setId(int id) {
@@ -138,11 +148,19 @@ public class UserInfo implements  Comparable{
     }
 
     public synchronized int get_onlinetype() {
-        return mOnlineType;
+        return _onlineType;
     }
 
     public synchronized void set_onlinetype(int onlinetype) {
-        this.mOnlineType = onlinetype;
+        this._onlineType = onlinetype;
+    }
+
+    public synchronized int get_clientType() {
+        return _clientType;
+    }
+
+    public synchronized void set_clientType(int _clientType) {
+        this._clientType = _clientType;
     }
 
     @Override

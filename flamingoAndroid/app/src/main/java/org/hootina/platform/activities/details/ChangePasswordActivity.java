@@ -1,6 +1,5 @@
 package org.hootina.platform.activities.details;
 
-import tms.User.ChangePasswd;
 import android.os.Message;
 import android.view.View;
 import android.widget.Button;
@@ -9,8 +8,6 @@ import android.widget.Toast;
 
 import org.hootina.platform.R;
 import org.hootina.platform.activities.BaseActivity;
-import org.hootina.platform.util.MegAsnType;
-import org.hootina.platform.utils.ToastUtils;
 
 public class ChangePasswordActivity extends BaseActivity {
 	/*
@@ -73,25 +70,24 @@ public class ChangePasswordActivity extends BaseActivity {
 			Toast.makeText(this, "您输入的密码不一致", Toast.LENGTH_SHORT).show();
 			return;
 		}
-		tms.User.ChangePasswd.Builder changePasswd = tms.User.ChangePasswd
-				.newBuilder();
-		changePasswd.setStrOldPasswd(oldpass);
-		changePasswd.setStrNewPasswd(newpass);
+		//tms.User.ChangePasswd.Builder changePasswd = tms.User.ChangePasswd.newBuilder();
+		//changePasswd.setStrOldPasswd(oldpass);
+		//changePasswd.setStrNewPasswd(newpass);
 		//con.send(tms.Base.cmd.n_ChangePasswd_VALUE, changePasswd.build());
 	}
 
 	@Override
 	public void processMessage(Message msg) {
 		super.processMessage(msg);
-		if(msg.what==MegAsnType.ChagePwd){
-			ChangePasswd changepwd=(ChangePasswd) msg.obj;
-			if(changepwd.getUError()==0){
-				ToastUtils.showLongToast(this, "密码修改成功");
-				finish();
-			}else {
-				ToastUtils.showShortToast(this, "密码修改失败");
-			}
-		}
+		//if(msg.what==MegAsnType.ChagePwd){
+			//ChangePasswd changepwd=(ChangePasswd) msg.obj;
+			//if(changepwd.getUError()==0){
+			//	ToastUtils.showLongToast(this, "密码修改成功");
+			//	finish();
+			//}else {
+			//	ToastUtils.showShortToast(this, "密码修改失败");
+			//}
+		//}
 	}
 
 	@Override

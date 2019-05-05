@@ -3,7 +3,7 @@
  * zhangyl 2017.03.09
  **/
 #include "TcpSession.h"
-#include "../base/Logging.h"
+#include "../base/AsyncLog.h"
 #include "../net/ProtocolStream.h"
 #include "FileMsg.h"
 
@@ -44,15 +44,15 @@ void TcpSession::SendPackage(const char* body, int64_t bodylength)
     if (tmpConn_.expired())
     {
         //FIXME: 出现这种问题需要排查
-        LOG_ERROR << "Tcp connection is destroyed , but why TcpSession is still alive ?";
+        LOGE("Tcp connection is destroyed , but why TcpSession is still alive ?");
         return;
     }
 
     std::shared_ptr<TcpConnection> conn = tmpConn_.lock();
     if (conn)
     {
-        //LOG_INFO << "Send data, length:" << length;
-        //LOG_DEBUG_BIN((unsigned char*)p, length);
+        LOGI("Send data, package length: %d, body length: %d", strPackageData.length(), bodylength);
+        //LOG_DEBUG_BIN((unsigned char*)body, bodylength);
         conn->send(strPackageData.c_str(), strPackageData.length());
     }
 }

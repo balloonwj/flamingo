@@ -28,6 +28,15 @@ public class MessageTextEntity {
 	private String				mTargetNickname;
 	private int 				mClientType; 	// 1.pc端 2.IOS 3.Android
 	private List<ContentText> 	mContent;
+	private String mImgFile;
+
+	public String getImgFile() {
+		return mImgFile;
+	}
+
+	public void setImgFile(String imgFile) {
+		mImgFile = imgFile;
+	}
 
 	public String getMsgID() {
 		return mMsgID;

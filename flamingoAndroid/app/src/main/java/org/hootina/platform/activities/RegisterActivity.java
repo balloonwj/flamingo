@@ -90,7 +90,8 @@ public class RegisterActivity extends BaseActivity {
 
 	@Override
 	public void processMessage(Message msg) {
-		if (msg.what == MsgType.msg_type_register) {
+			super.processMessage(msg);
+		 if (msg.what == MsgType.msg_type_register) {
 			if (msg.arg1 == MsgType.ERROR_CODE_SUCCESS) {
 				Toast.makeText(this, "注册成功", Toast.LENGTH_SHORT).show();
 				//将用户名和密码传给登录界面

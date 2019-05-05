@@ -2,11 +2,13 @@
  * TcpSession.cpp
  * zhangyl 2017.03.09
  **/
-#include "../base/Logging.h"
-#include "Msg.h"
+#include "TcpSession.h"
+#include "../base/AsyncLog.h"
+#include "../base/Singleton.h"
 #include "../net/ProtocolStream.h"
 #include "../zlib1.2.11/ZlibUtil.h"
-#include "TcpSession.h"
+#include "ChatServer.h"
+#include "Msg.h"
 
 TcpSession::TcpSession(const std::weak_ptr<TcpConnection>& tmpconn) : tmpConn_(tmpconn)
 {
@@ -51,7 +53,7 @@ void TcpSession::SendPackage(const char* p, int32_t length)
     string destbuf;
     if (!ZlibUtil::CompressBuf(srcbuf, destbuf))
     {
-        LOG_ERROR << "compress buf error";
+        LOGE("compress buf error");
         return;
     }
  
@@ -60,8 +62,11 @@ void TcpSession::SendPackage(const char* p, int32_t length)
     header.compressflag = 1;
     header.compresssize = destbuf.length();
     header.originsize = length;
-
-    //LOG_INFO << "Send data, header length:" << sizeof(header) << ", body length:" << outbuf.length();
+    if (Singleton<ChatServer>::Instance().IsLogPackageBinaryEnabled())
+    {
+        LOGI("Send data, header length: %d, body length: %d", sizeof(header), destbuf.length());
+    }
+    
     //插入一个包头
     strPackageData.append((const char*)&header, sizeof(header));
     strPackageData.append(destbuf);
@@ -70,16 +75,20 @@ void TcpSession::SendPackage(const char* p, int32_t length)
     if (tmpConn_.expired())
     {
         //FIXME: 出现这种问题需要排查
-        LOG_ERROR << "Tcp connection is destroyed , but why TcpSession is still alive ?";
+        LOGE("Tcp connection is destroyed , but why TcpSession is still alive ?");
         return;
     }
 
     std::shared_ptr<TcpConnection> conn = tmpConn_.lock();
     if (conn)
     {
-        //size_t length = strPackageData.length();
-        //LOG_INFO << "Send data, length:" << length;
-        //LOG_DEBUG_BIN((unsigned char*)strSendData.c_str(), length);
+        if (Singleton<ChatServer>::Instance().IsLogPackageBinaryEnabled())
+        {
+            size_t length = strPackageData.length();
+            LOGI("Send data, package length: %d", length);
+            //LOG_DEBUG_BIN((unsigned char*)strPackageData.c_str(), length);
+        }
+        
         conn->send(strPackageData);
     }
 }

@@ -13,6 +13,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
+import android.app.Application;
 import android.content.Context;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
@@ -24,10 +25,14 @@ import android.util.Log;
 import android.widget.Toast;
 
 import org.hootina.platform.FlamingoApplication;
+import org.hootina.platform.db.MyDbUtil;
+import org.hootina.platform.net.NetWorker;
 
 public class CrashHandler implements UncaughtExceptionHandler {
 
 	public static final String TAG = "CrashHandler";
+
+	private static final String CRASH_FILE_PATH = "/sdcard/flamingo/crash/";
 
 	// 系统默认的UncaughtException处理类
 	private Thread.UncaughtExceptionHandler mDefaultHandler;
@@ -80,6 +85,11 @@ public class CrashHandler implements UncaughtExceptionHandler {
 			android.os.Process.killProcess(android.os.Process.myPid());
 			System.exit(1);
 		}
+
+		//断开网络
+		NetWorker.uninit();
+		MyDbUtil.uninit();
+		(FlamingoApplication.getInstance()).getAppManager().finishAllActivity();
 	}
 
 	/**
@@ -97,7 +107,7 @@ public class CrashHandler implements UncaughtExceptionHandler {
 			@Override
 			public void run() {
 				Looper.prepare();
-				Toast.makeText(mContext, "很抱歉,程序出现异常,即将退出", Toast.LENGTH_SHORT)
+				Toast.makeText(mContext, "很抱歉，程序出现异常，即将退出", Toast.LENGTH_SHORT)
 						.show();
 				Looper.loop();
 			}
@@ -174,12 +184,12 @@ public class CrashHandler implements UncaughtExceptionHandler {
 			String fileName = "crash-" + time + "-" + timestamp + ".txt";
 			if (Environment.getExternalStorageState().equals(
 					Environment.MEDIA_MOUNTED)) {
-				String path = "/sdcard/flamingo/crash/";
-				File dir = new File(path);
+
+				File dir = new File(CRASH_FILE_PATH);
 				if (!dir.exists()) {
 					dir.mkdirs();
 				}
-				FileOutputStream fos = new FileOutputStream(path + fileName);
+				FileOutputStream fos = new FileOutputStream(CRASH_FILE_PATH + fileName);
 				fos.write(sb.toString().getBytes());
 				fos.close();
 			}

@@ -6,33 +6,39 @@
 #include "BussinessLogic.h"
 #include <string>
 #include "../net/TcpConnection.h"
-#include "IMServer.h"
-#include "../jsoncpp-0.5.0/json.h"
-#include "../base/Logging.h"
-#include "UserManager.h"
+#include "../jsoncpp1.9.0/json.h"
+#include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
+#include "ChatServer.h"
+#include "UserManager.h"
 
 void BussinessLogic::RegisterUser(const std::string& data, const std::shared_ptr<TcpConnection>& conn, bool keepalive, std::string& retData)
 {
     //{ "user": "13917043329", "nickname" : "balloon", "password" : "123" }
-    Json::Reader JsonReader;
-    Json::Value JsonRoot;
-    if (!JsonReader.parse(data, JsonRoot))
+
+    Json::CharReaderBuilder b;
+    Json::CharReader* reader(b.newCharReader());
+    Json::Value jsonRoot;
+    JSONCPP_STRING errs;
+    bool ok = reader->parse(data.c_str(), data.c_str() + data.length(), &jsonRoot, &errs);
+    if (!ok || errs.size() != 0)
     {
-        LOG_WARN << "invalid json: " << data << ", client: " << conn->peerAddress().toIpPort();
+        LOGW("invalid json: %s, , client: %s", data.c_str(), conn->peerAddress().toIpPort().c_str());
+        delete reader;
         return;
     }
+    delete reader;
 
-    if (!JsonRoot["username"].isString() || !JsonRoot["nickname"].isString() || !JsonRoot["password"].isString())
+    if (!jsonRoot["username"].isString() || !jsonRoot["nickname"].isString() || !jsonRoot["password"].isString())
     {
-        LOG_WARN << "invalid json: " << data << ", client: " << conn->peerAddress().toIpPort();
+        LOGW("invalid json: %s, , client: %s", data.c_str(), conn->peerAddress().toIpPort().c_str());        
         return;
     }
 
     User u;
-    u.username = JsonRoot["username"].asString();
-    u.nickname = JsonRoot["nickname"].asString();
-    u.password = JsonRoot["password"].asString();
+    u.username = jsonRoot["username"].asString();
+    u.nickname = jsonRoot["nickname"].asString();
+    u.password = jsonRoot["password"].asString();
 
     //std::string retData;
     User cachedUser;
@@ -53,5 +59,5 @@ void BussinessLogic::RegisterUser(const std::string& data, const std::shared_ptr
 
     //conn->Send(msg_type_register, m_seq, retData);
 
-    //LOG_INFO << "Response to client: cmd=msg_type_register" << ", userid=" << u.userid << ", data=" << retData;
+    //LOGI << "Response to client: cmd=msg_type_register" << ", userid=" << u.userid << ", data=" << retData;
 }

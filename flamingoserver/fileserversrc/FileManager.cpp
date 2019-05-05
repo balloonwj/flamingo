@@ -3,12 +3,11 @@
  *  zhangyl 2017.03.17
  **/
 #include "FileManager.h"
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <dirent.h>
+
 #include <string.h>
-//#include <sys/stat.h>
-#include "../base/Logging.h"
+
+#include "../base/AsyncLog.h"
+#include "../base/Platform.h"
 
 
 FileManager::FileManager()
@@ -24,16 +23,31 @@ FileManager::~FileManager()
 bool FileManager::Init(const char* basepath)
 {
     m_basepath = basepath;
-    
+
+#ifdef WIN32
+    //Windows下创建目录
+    if (!PathFileExistsA(basepath))
+    {
+        LOGE("basepath %s doesnot exist.", basepath);
+
+        if (!CreateDirectoryA(basepath, NULL))
+        {
+            LOGE("create base dir error, %s", basepath);
+            return false;
+        }
+    }
+
+    return true;    
+#else
     DIR* dp = opendir(basepath);
     if (dp == NULL)
     {
-        LOG_INFO << "open base dir error, errno: " << errno << ", " << strerror(errno);
+        LOGE("open base dir error, errno: %d, %s",  errno, strerror(errno));
 
         if (mkdir(basepath, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0)
             return true;
 
-        LOG_ERROR << "create base dir error, " << basepath << ", errno: " << errno << ", " << strerror(errno);
+        LOGE("create base dir error, %s , errno: %d, %s", basepath, errno, strerror(errno));
 
         return false;
     }
@@ -48,16 +62,17 @@ bool FileManager::Init(const char* basepath)
 
         //if (stat(dirp->d_name, &filestat) != 0)
         //{
-        //    LOG_WARN << "stat filename: [" << dirp->d_name << "] error, errno: " << errno << ", " << strerror(errno);
+        //    LOGW << "stat filename: [" << dirp->d_name << "] error, errno: " << errno << ", " << strerror(errno);
         //    continue;
         //}
 
         m_listFiles.emplace_back(dirp->d_name);
-        LOG_INFO << "filename: " << dirp->d_name;
+        LOGI("filename: %s", dirp->d_name);
     }
 
     closedir(dp);
-    
+#endif
+
     return true;
 }
 

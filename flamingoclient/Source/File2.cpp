@@ -165,7 +165,7 @@ BOOL GetFileUploadName(PCTSTR pszFileName, char* pszUploadName, long nUploadName
     if (!GetFileMd5ValueA(pszFileName, szMd5, ARRAYSIZE(szMd5), nFileSize))
 		return FALSE;
 
-	sprintf_s(pszUploadName, nUploadNameLength, "%s.%s", szMd5, Hootina::CPath::GetExtension(pszFileName).c_str());
+	sprintf_s(pszUploadName, nUploadNameLength, "%s.%s", szMd5, (char*)Hootina::CPath::GetExtension(pszFileName).c_str());
 	return TRUE;
 }
 //获取文件指定部分

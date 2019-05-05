@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <View
+        android:layout_width="fill_parent"
+        android:layout_height="1dp"
+        android:background="@color/black2" />
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="60.0dip"
+        android:background="@color/white"
+        android:paddingLeft="10dip">
+
+        <ImageView
+            android:id="@+id/img_head"
+            android:layout_width="45dip"
+            android:layout_height="45dip"
+            android:layout_centerVertical="true"
+            android:src="@drawable/head" />
+
+        <TextView
+            android:id="@+id/tv_window_title"
+            style="@style/MMFontTitleInList"
+            android:layout_marginLeft="10dp"
+            android:layout_marginTop="10dp"
+            android:layout_toRightOf="@+id/img_head"
+            android:singleLine="true"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/tv_nickname"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_below="@id/tv_window_title"
+            android:layout_marginLeft="12dp"
+            android:layout_marginTop="2dp"
+            android:layout_toRightOf="@+id/img_head"
+            android:gravity="center_vertical"
+            android:text=""
+            android:textColor="@color/black1"
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/btn_add"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentRight="true"
+            android:layout_centerVertical="true"
+            android:layout_marginRight="10dp"
+            android:background="@null"
+            android:gravity="center"
+            android:text=""
+            android:textColor="@color/green"
+            android:textSize="16sp" />
+    </RelativeLayout>
+
+    <View
+        android:layout_width="fill_parent"
+        android:layout_height="1dp"
+        android:background="@color/black2" />
+</LinearLayout>

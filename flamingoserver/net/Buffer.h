@@ -3,9 +3,10 @@
 #include <algorithm>
 #include <vector>
 #include <string>
-#include <assert.h>
 #include <string.h>
 
+#include "../base/Platform.h"
+#include "Sockets.h"
 #include "Endian.h"
 //#include <unistd.h>  // ssize_t
 
@@ -34,9 +35,9 @@ namespace net
 			readerIndex_(kCheapPrepend),
 			writerIndex_(kCheapPrepend)
 		{
-			assert(readableBytes() == 0);
-			assert(writableBytes() == initialSize);
-			assert(prependableBytes() == kCheapPrepend);
+			//assert(readableBytes() == 0);
+			//assert(writableBytes() == initialSize);
+			//assert(prependableBytes() == kCheapPrepend);
 		}
 
 		// implicit copy-ctor, move-ctor, dtor and assignment are fine
@@ -73,16 +74,20 @@ namespace net
 		{
 			// FIXME: replace with memmem()?
 			const char* crlf = std::search(peek(), beginWrite(), kCRLF, kCRLF + 2);
-			return crlf == beginWrite() ? NULL : crlf;
+			return crlf == beginWrite() ? nullptr : crlf;
 		}
 
 		const char* findCRLF(const char* start) const
 		{
-			assert(peek() <= start);
-			assert(start <= beginWrite());
+            if (peek() > start)
+                return nullptr;
+
+            if (start > beginWrite())
+                return nullptr;
+
 			// FIXME: replace with memmem()?
 			const char* crlf = std::search(start, beginWrite(), kCRLF, kCRLF + 2);
-			return crlf == beginWrite() ? NULL : crlf;
+			return crlf == beginWrite() ? nullptr : crlf;
 		}
 
 		const char* findEOL() const
@@ -93,8 +98,12 @@ namespace net
 
 		const char* findEOL(const char* start) const
 		{
-			assert(peek() <= start);
-			assert(start <= beginWrite());
+            if (peek() > start)
+                return nullptr;
+
+            if (start > beginWrite())
+                return nullptr;
+
 			const void* eol = memchr(start, '\n', beginWrite() - start);
 			return static_cast<const char*>(eol);
 		}
@@ -102,9 +111,11 @@ namespace net
 		// retrieve returns void, to prevent
 		// string str(retrieve(readableBytes()), readableBytes());
 		// the evaluation of two functions are unspecified
-		void retrieve(size_t len)
+		bool retrieve(size_t len)
 		{
-			assert(len <= readableBytes());
+            if (len > readableBytes())
+                return false;
+
 			if (len < readableBytes())
 			{
 				readerIndex_ += len;
@@ -113,13 +124,21 @@ namespace net
 			{
 				retrieveAll();
 			}
+
+            return true;
 		}
 
-		void retrieveUntil(const char* end)
+		bool retrieveUntil(const char* end)
 		{
-			assert(peek() <= end);
-			assert(end <= beginWrite());
+            if (peek() > end)
+                return false;
+
+            if (end > beginWrite())
+                return false;
+
 			retrieve(end - peek());
+
+            return true;
 		}
 
 		void retrieveInt64()
@@ -155,7 +174,9 @@ namespace net
 
 		std::string retrieveAsString(size_t len)
 		{
-			assert(len <= readableBytes());
+            if (len > readableBytes())
+                return "";
+
 			std::string result(peek(), len);
 			retrieve(len);
 			return result;
@@ -184,14 +205,18 @@ namespace net
 			append(static_cast<const char*>(data), len);
 		}
 
-		void ensureWritableBytes(size_t len)
+		bool ensureWritableBytes(size_t len)
 		{
 			//剩下的可写空间如果小于需要的空间len，则增加len长度个空间
             if (writableBytes() < len)
 			{
 				makeSpace(len);
 			}
-			assert(writableBytes() >= len);
+
+            return true;
+
+            //if (writableBytes() >= len)
+            //    return false;
 		}
 
 		char* beginWrite()
@@ -204,16 +229,22 @@ namespace net
 			return begin() + writerIndex_;
 		}
 
-		void hasWritten(size_t len)
+		bool hasWritten(size_t len)
 		{
-			assert(len <= writableBytes());
+            if (len > writableBytes())
+                return false;
+
 			writerIndex_ += len;
+            return true;
 		}
 
-		void unwrite(size_t len)
+		bool unwrite(size_t len)
 		{
-			assert(len <= readableBytes());
+            if (len > readableBytes())
+                return false;
+
 			writerIndex_ -= len;
+            return true;
 		}
 
 		///
@@ -287,7 +318,9 @@ namespace net
 		/// Require: buf->readableBytes() >= sizeof(int64_t)
 		int64_t peekInt64() const
 		{
-			assert(readableBytes() >= sizeof(int64_t));
+            if (readableBytes() < sizeof(int64_t))
+                return -1;
+
 			int64_t be64 = 0;
 			::memcpy(&be64, peek(), sizeof be64);
 			return sockets::networkToHost64(be64);
@@ -299,7 +332,9 @@ namespace net
 		/// Require: buf->readableBytes() >= sizeof(int32_t)
 		int32_t peekInt32() const
 		{
-			assert(readableBytes() >= sizeof(int32_t));
+            if (readableBytes() < sizeof(int32_t))
+                return -1;
+
 			int32_t be32 = 0;
 			::memcpy(&be32, peek(), sizeof be32);
 			return sockets::networkToHost32(be32);
@@ -307,7 +342,9 @@ namespace net
 
 		int16_t peekInt16() const
 		{
-			assert(readableBytes() >= sizeof(int16_t));
+            if (readableBytes() < sizeof(int16_t))
+                return -1;
+
 			int16_t be16 = 0;
 			::memcpy(&be16, peek(), sizeof be16);
 			return sockets::networkToHost16(be16);
@@ -315,7 +352,9 @@ namespace net
 
 		int8_t peekInt8() const
 		{
-			assert(readableBytes() >= sizeof(int8_t));
+            if (readableBytes() < sizeof(int8_t))
+                return -1;
+
 			int8_t x = *peek();
 			return x;
 		}
@@ -349,12 +388,15 @@ namespace net
 			prepend(&x, sizeof x);
 		}
 
-		void prepend(const void* /*restrict*/ data, size_t len)
+		bool prepend(const void* /*restrict*/ data, size_t len)
 		{
-			assert(len <= prependableBytes());
+            if (len > prependableBytes())
+                return false;
+
 			readerIndex_ -= len;
 			const char* d = static_cast<const char*>(data);
 			std::copy(d, d + len, begin() + readerIndex_);
+            return true;
 		}
 
 		void shrink(size_t reserve)
@@ -375,7 +417,7 @@ namespace net
 		///
 		/// It may implement with readv(2)
 		/// @return result of read(2), @c errno is saved
-		ssize_t readFd(int fd, int* savedErrno);
+		int32_t readFd(int fd, int* savedErrno);
 
 	private:
 
@@ -400,23 +442,26 @@ namespace net
 			else
 			{
 				// move readable data to the front, make space inside buffer
-				assert(kCheapPrepend < readerIndex_);
+				//assert(kCheapPrepend < readerIndex_);
+                if (kCheapPrepend >= readerIndex_)
+                    return;
+
 				size_t readable = readableBytes();
 				std::copy(begin() + readerIndex_,
 					begin() + writerIndex_,
 					begin() + kCheapPrepend);
 				readerIndex_ = kCheapPrepend;
 				writerIndex_ = readerIndex_ + readable;
-				assert(readable == readableBytes());
+				//assert(readable == readableBytes());
 			}
 		}
 
 	private:
-		std::vector<char> buffer_;
-		size_t readerIndex_;
-		size_t writerIndex_;
+		std::vector<char>           buffer_;
+		size_t                      readerIndex_;
+		size_t                      writerIndex_;
 
-		static const char kCRLF[];
+		static const char           kCRLF[];
 	};
 
 }

@@ -761,12 +761,16 @@ BOOL CBuddyMessage::Parse(Json::Value& JsonValue)
     std::string strValue;
     int nCount;
 
-    if (JsonValue["msgType"].isNull())
+    if (JsonValue["msgType"].isNull() || !JsonValue["msgType"].isInt())
         return FALSE;
+
     m_nMsgType = (CONTENT_TYPE)JsonValue["msgType"].asInt();
 
-    if (!JsonValue["time"].isNull())
-        m_nTime = JsonValue["time"].asUInt();
+    if (JsonValue["time"].isNull())
+        return false;
+
+
+    m_nTime = JsonValue["time"].asUInt();
 
     CString strTmp;
 

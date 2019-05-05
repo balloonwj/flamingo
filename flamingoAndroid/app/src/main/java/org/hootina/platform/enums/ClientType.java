@@ -7,8 +7,8 @@ package org.hootina.platform.enums;
  */
 
 public final class ClientType {
-    public static int CLIENT_TYPE_UNKNOWN = 0;
-    public static int CLIENT_TYPE_PC      = 1;
-    public static int CLIENT_TYPE_ANDROID = 2;
-    public static int CLIENT_TYPE_IOS     = 3;
+    public static final int CLIENT_TYPE_UNKNOWN = 0;
+    public static final int CLIENT_TYPE_PC      = 1;
+    public static final int CLIENT_TYPE_ANDROID = 2;
+    public static final int CLIENT_TYPE_IOS     = 3;
 }

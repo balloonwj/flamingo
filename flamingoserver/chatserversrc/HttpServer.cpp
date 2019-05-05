@@ -4,7 +4,7 @@
  */
 #include "HttpServer.h"
 #include "../net/InetAddress.h"
-#include "../base/Logging.h"
+#include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
 //#include "../net/eventloop.h"
 #include "../net/EventLoopThread.h"
@@ -14,10 +14,6 @@
 
 bool HttpServer::Init(const char* ip, short port, EventLoop* loop)
 {
-    m_eventLoopThreadPool.reset(new EventLoopThreadPool());
-    m_eventLoopThreadPool->Init(loop, 2);
-    m_eventLoopThreadPool->start();
-
     InetAddress addr(ip, port);
     m_server.reset(new TcpServer(loop, addr, "ZYL-MYHTTPSERVER", TcpServer::kReusePort));
     m_server->setConnectionCallback(std::bind(&HttpServer::OnConnection, this, std::placeholders::_1));
@@ -25,6 +21,12 @@ bool HttpServer::Init(const char* ip, short port, EventLoop* loop)
     m_server->start();
 
     return true;
+}
+
+void HttpServer::Uninit()
+{
+    if (m_server)
+        m_server->stop();
 }
 
 //新连接到来调用或连接断开，所以需要通过conn->connected()来判断，一般只在主loop里面调用
@@ -55,7 +57,7 @@ void HttpServer::OnClose(const std::shared_ptr<TcpConnection>& conn)
     {
         if ((*iter)->GetConnectionPtr() == NULL)
         {
-            LOG_ERROR << "connection is NULL";
+            LOGE("connection is NULL");
             break;
         }
 
@@ -63,7 +65,7 @@ void HttpServer::OnClose(const std::shared_ptr<TcpConnection>& conn)
         if ((*iter)->GetConnectionPtr() == conn)
         {
             m_sessions.erase(iter);
-            LOG_INFO << "monitor client disconnected: " << conn->peerAddress().toIpPort();
+            LOGI("monitor client disconnected: %s", conn->peerAddress().toIpPort().c_str());
             break;
         }
     }
