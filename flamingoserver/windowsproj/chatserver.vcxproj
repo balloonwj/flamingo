@@ -24,11 +24,27 @@
     <ClCompile Include="..\base\CountDownLatch.cpp" />
     <ClCompile Include="..\base\Platform.cpp" />
     <ClCompile Include="..\base\Timestamp.cpp" />
-    <ClCompile Include="..\fileserversrc\FileManager.cpp" />
-    <ClCompile Include="..\fileserversrc\FileServer.cpp" />
-    <ClCompile Include="..\fileserversrc\FileSession.cpp" />
-    <ClCompile Include="..\fileserversrc\TcpSession.cpp" />
-    <ClCompile Include="..\imgserversrc\main.cpp" />
+    <ClCompile Include="..\chatserversrc\BussinessLogic.cpp" />
+    <ClCompile Include="..\chatserversrc\ChatServer.cpp" />
+    <ClCompile Include="..\chatserversrc\ChatSession.cpp" />
+    <ClCompile Include="..\chatserversrc\HttpServer.cpp" />
+    <ClCompile Include="..\chatserversrc\HttpSession.cpp" />
+    <ClCompile Include="..\chatserversrc\main.cpp" />
+    <ClCompile Include="..\chatserversrc\MonitorServer.cpp" />
+    <ClCompile Include="..\chatserversrc\MonitorSession.cpp" />
+    <ClCompile Include="..\chatserversrc\MsgCacheManager.cpp" />
+    <ClCompile Include="..\chatserversrc\TcpSession.cpp" />
+    <ClCompile Include="..\chatserversrc\UserManager.cpp" />
+    <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp" />
+    <ClCompile Include="..\jsoncpp1.9.0\json_value.cpp" />
+    <ClCompile Include="..\jsoncpp1.9.0\json_writer.cpp" />
+    <ClCompile Include="..\mysqlapi\DatabaseMysql.cpp" />
+    <ClCompile Include="..\mysqlapi\Field.cpp" />
+    <ClCompile Include="..\mysqlapi\QueryResult.cpp" />
+    <ClCompile Include="..\mysqlmgr\MysqlManager.cpp" />
+    <ClCompile Include="..\mysqlmgr\MysqlThrd.cpp" />
+    <ClCompile Include="..\mysqlmgr\MysqlThrdMgr.cpp" />
+    <ClCompile Include="..\mysqlmgr\TaskList.cpp" />
     <ClCompile Include="..\net\Acceptor.cpp" />
     <ClCompile Include="..\net\Buffer.cpp" />
     <ClCompile Include="..\net\Channel.cpp" />
@@ -52,6 +68,23 @@
     <ClCompile Include="..\utils\MD5.cpp" />
     <ClCompile Include="..\utils\StringUtil.cpp" />
     <ClCompile Include="..\utils\URLEncodeUtil.cpp" />
+    <ClCompile Include="..\zlib1.2.11\adler32.c" />
+    <ClCompile Include="..\zlib1.2.11\compress.c" />
+    <ClCompile Include="..\zlib1.2.11\crc32.c" />
+    <ClCompile Include="..\zlib1.2.11\deflate.c" />
+    <ClCompile Include="..\zlib1.2.11\gzclose.c" />
+    <ClCompile Include="..\zlib1.2.11\gzlib.c" />
+    <ClCompile Include="..\zlib1.2.11\gzread.c" />
+    <ClCompile Include="..\zlib1.2.11\gzwrite.c" />
+    <ClCompile Include="..\zlib1.2.11\infback.c" />
+    <ClCompile Include="..\zlib1.2.11\inffast.c" />
+    <ClCompile Include="..\zlib1.2.11\inflate.c" />
+    <ClCompile Include="..\zlib1.2.11\inftrees.c" />
+    <ClCompile Include="..\zlib1.2.11\trees.c" />
+    <ClCompile Include="..\zlib1.2.11\uncompr.c" />
+    <ClCompile Include="..\zlib1.2.11\zlibdemo.c" />
+    <ClCompile Include="..\zlib1.2.11\ZlibUtil.cpp" />
+    <ClCompile Include="..\zlib1.2.11\zutil.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\base\AsyncLog.h" />
@@ -61,11 +94,38 @@
     <ClInclude Include="..\base\RAIIWrapper.h" />
     <ClInclude Include="..\base\Singleton.h" />
     <ClInclude Include="..\base\Timestamp.h" />
-    <ClInclude Include="..\fileserversrc\FileManager.h" />
-    <ClInclude Include="..\fileserversrc\FileMsg.h" />
-    <ClInclude Include="..\fileserversrc\FileServer.h" />
-    <ClInclude Include="..\fileserversrc\FileSession.h" />
-    <ClInclude Include="..\fileserversrc\TcpSession.h" />
+    <ClInclude Include="..\chatserversrc\BussinessLogic.h" />
+    <ClInclude Include="..\chatserversrc\ChatServer.h" />
+    <ClInclude Include="..\chatserversrc\ChatSession.h" />
+    <ClInclude Include="..\chatserversrc\HttpMsg.h" />
+    <ClInclude Include="..\chatserversrc\HttpServer.h" />
+    <ClInclude Include="..\chatserversrc\HttpSession.h" />
+    <ClInclude Include="..\chatserversrc\MonitorServer.h" />
+    <ClInclude Include="..\chatserversrc\MonitorSession.h" />
+    <ClInclude Include="..\chatserversrc\Msg.h" />
+    <ClInclude Include="..\chatserversrc\MsgCacheManager.h" />
+    <ClInclude Include="..\chatserversrc\TcpSession.h" />
+    <ClInclude Include="..\chatserversrc\UserManager.h" />
+    <ClInclude Include="..\jsoncpp1.9.0\allocator.h" />
+    <ClInclude Include="..\jsoncpp1.9.0\assertions.h" />
+    <ClInclude Include="..\jsoncpp1.9.0\autolink.h" />
+    <ClInclude Include="..\jsoncpp1.9.0\config.h" />
+    <ClInclude Include="..\jsoncpp1.9.0\features.h" />
+    <ClInclude Include="..\jsoncpp1.9.0\forwards.h" />
+    <ClInclude Include="..\jsoncpp1.9.0\json.h" />
+    <ClInclude Include="..\jsoncpp1.9.0\json_tool.h" />
+    <ClInclude Include="..\jsoncpp1.9.0\reader.h" />
+    <ClInclude Include="..\jsoncpp1.9.0\value.h" />
+    <ClInclude Include="..\jsoncpp1.9.0\version.h" />
+    <ClInclude Include="..\jsoncpp1.9.0\writer.h" />
+    <ClInclude Include="..\mysqlapi\DatabaseMysql.h" />
+    <ClInclude Include="..\mysqlapi\Field.h" />
+    <ClInclude Include="..\mysqlapi\QueryResult.h" />
+    <ClInclude Include="..\mysqlmgr\MysqlManager.h" />
+    <ClInclude Include="..\mysqlmgr\MysqlTask.h" />
+    <ClInclude Include="..\mysqlmgr\MysqlThrd.h" />
+    <ClInclude Include="..\mysqlmgr\MysqlThrdMgr.h" />
+    <ClInclude Include="..\mysqlmgr\TaskList.h" />
     <ClInclude Include="..\net\Acceptor.h" />
     <ClInclude Include="..\net\Buffer.h" />
     <ClInclude Include="..\net\Callbacks.h" />
@@ -92,12 +152,30 @@
     <ClInclude Include="..\utils\MD5.h" />
     <ClInclude Include="..\utils\StringUtil.h" />
     <ClInclude Include="..\utils\URLEncodeUtil.h" />
+    <ClInclude Include="..\zlib1.2.11\crc32.h" />
+    <ClInclude Include="..\zlib1.2.11\deflate.h" />
+    <ClInclude Include="..\zlib1.2.11\gzguts.h" />
+    <ClInclude Include="..\zlib1.2.11\inffast.h" />
+    <ClInclude Include="..\zlib1.2.11\inffixed.h" />
+    <ClInclude Include="..\zlib1.2.11\inflate.h" />
+    <ClInclude Include="..\zlib1.2.11\inftrees.h" />
+    <ClInclude Include="..\zlib1.2.11\trees.h" />
+    <ClInclude Include="..\zlib1.2.11\zconf.h" />
+    <ClInclude Include="..\zlib1.2.11\zlib.h" />
+    <ClInclude Include="..\zlib1.2.11\ZlibUtil.h" />
+    <ClInclude Include="..\zlib1.2.11\zutil.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\jsoncpp1.9.0\json_valueiterator.inl" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="..\zlib1.2.11\文件概览.txt" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>16.0</VCProjectVersion>
-    <ProjectGuid>{09CA9B5C-6474-4D32-96D4-A955885617A1}</ProjectGuid>
+    <ProjectGuid>{A0FA5DFF-BCC2-4720-A197-005FB05BD5B7}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
-    <RootNamespace>imgserver</RootNamespace>
+    <RootNamespace>chatserver</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
@@ -148,6 +226,9 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>./</OutDir>
+    <IncludePath>../mysql-5.1.73-win32/;$(IncludePath)</IncludePath>
+    <LibraryPath>../mysql-5.1.73-win32/lib/debug/;$(LibraryPath)</LibraryPath>
+    <IntDir>chatserver/$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
@@ -165,13 +246,14 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_CONSOLE;WIN32;_DEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_LIB;__LCC__;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <OutputFile>./$(TargetName)$(TargetExt)</OutputFile>
+      <AdditionalDependencies>libmysql.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
