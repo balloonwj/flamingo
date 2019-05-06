@@ -369,6 +369,8 @@ void TcpConnection::handleWrite()
             // {
             //   shutdownInLoop();
             // }
+            //added by zhangyl 2019.05.06
+            handleClose();
         }
     }
     else
@@ -379,6 +381,12 @@ void TcpConnection::handleWrite()
 
 void TcpConnection::handleClose()
 {
+    //在Linux上当一个链接出了问题，会同时触发handleError和handleClose
+    //为了避免重复关闭链接，这里判断下当前状态
+    //已经关闭了，直接返回
+    if (state_ == kDisconnected)
+        return;
+    
     loop_->assertInLoopThread();
     LOGD("fd = %d  state = %s", channel_->fd(), stateToString());
     //assert(state_ == kConnected || state_ == kDisconnecting);
@@ -404,5 +412,5 @@ void TcpConnection::handleError()
     LOGE("TcpConnection::%s handleError [%d] - SO_ERROR = %s" , name_.c_str(), err , strerror(err));
 
     //调用handleClose()关闭连接，回收Channel和fd
-    //handleClose();
+    handleClose();
 }

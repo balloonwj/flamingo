@@ -14,10 +14,10 @@ Timestamp::Timestamp(int64_t microSecondsSinceEpoch)
 
 string Timestamp::toString() const
 {
-    char buf[32] = { 0 };
+    char buf[64] = { 0 };
     int64_t seconds = microSecondsSinceEpoch_ / kMicroSecondsPerSecond;
     int64_t microseconds = microSecondsSinceEpoch_ % kMicroSecondsPerSecond;
-    snprintf(buf, sizeof(buf)-1, "%lld.%06lld", seconds, microseconds);
+    snprintf(buf, sizeof(buf)-1, "%lld.%06lld", (long long int)seconds, (long long int)microseconds);
     return buf;
 }
 

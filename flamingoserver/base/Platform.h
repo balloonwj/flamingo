@@ -2,6 +2,13 @@
 
 #include <stdint.h>
 
+#if defined(__GNUC__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+#elif defined(_MSC_VER)
+#pragma warning(disable : 4996)
+#endif
+
 #ifdef WIN32
 
 #pragma comment(lib, "Ws2_32.lib")
@@ -76,6 +83,7 @@ typedef int SOCKET;
 #include <inttypes.h>
 #include <errno.h>
 #include <dirent.h>
+
 
 #include <sys/socket.h>
 #include <sys/select.h>
