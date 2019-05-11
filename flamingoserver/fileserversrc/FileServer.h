@@ -44,7 +44,5 @@ private:
     std::shared_ptr<TcpServer>                     m_server;
     std::list<std::shared_ptr<FileSession>>        m_sessions;
     std::mutex                                     m_sessionMutex;      //多线程之间保护m_sessions
-    int                                            m_baseUserId{};
-    std::mutex                                     m_idMutex;           //多线程之间保护m_baseUserId
     std::string                                    m_strFileBaseDir;    //文件目录
 };

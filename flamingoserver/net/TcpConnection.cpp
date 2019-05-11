@@ -301,7 +301,7 @@ void TcpConnection::connectEstablished()
         return;
     }
 
-    //connectionCallback_指向void CTcpListener::OnConnection(const std::shared_ptr<TcpConnection>& conn)
+    //connectionCallback_指向void XXServer::OnConnection(const std::shared_ptr<TcpConnection>& conn)
     connectionCallback_(shared_from_this());
 }
 

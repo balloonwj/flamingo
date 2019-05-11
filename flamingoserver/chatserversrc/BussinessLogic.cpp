@@ -23,7 +23,7 @@ void BussinessLogic::RegisterUser(const std::string& data, const std::shared_ptr
     bool ok = reader->parse(data.c_str(), data.c_str() + data.length(), &jsonRoot, &errs);
     if (!ok || errs.size() != 0)
     {
-        LOGW("invalid json: %s, , client: %s", data.c_str(), conn->peerAddress().toIpPort().c_str());
+        LOGW("invalid json: %s, client: %s", data.c_str(), conn->peerAddress().toIpPort().c_str());
         delete reader;
         return;
     }
@@ -31,7 +31,7 @@ void BussinessLogic::RegisterUser(const std::string& data, const std::shared_ptr
 
     if (!jsonRoot["username"].isString() || !jsonRoot["nickname"].isString() || !jsonRoot["password"].isString())
     {
-        LOGW("invalid json: %s, , client: %s", data.c_str(), conn->peerAddress().toIpPort().c_str());        
+        LOGW("invalid json: %s, client: %s", data.c_str(), conn->peerAddress().toIpPort().c_str());        
         return;
     }
 

@@ -57,14 +57,14 @@ private:
 	bool _UpdateTable(const STableInfo& table);
 
 protected:
-	std::shared_ptr<CDatabaseMysql>  m_poConn;
+	std::shared_ptr<CDatabaseMysql>     m_poConn;
 
-    std::string m_strHost;
-    std::string m_strUser;
-    std::string m_strPassword;
-    std::string m_strDataBase;
-    std::string m_strCharactSet;
+    std::string                         m_strHost;
+    std::string                         m_strUser;
+    std::string                         m_strPassword;
+    std::string                         m_strDataBase;
+    std::string                         m_strCharactSet;
 
-	std::vector<STableInfo> m_vecTableInfo;
+	std::vector<STableInfo>             m_vecTableInfo;
 };
 

@@ -2,10 +2,11 @@
  *  服务器主服务类，IMServer.cpp
  *  zhangyl 2017.03.09
  **/
+#include "ChatServer.h"
+
 #include "../net/InetAddress.h"
 #include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
-#include "ChatServer.h"
 #include "ChatSession.h"
 #include "UserManager.h"
 
@@ -45,7 +46,7 @@ void ChatServer::OnConnection(std::shared_ptr<TcpConnection> conn)
 {
     if (conn->connected())
     {
-        //LOGI << "client connected:" << conn->peerAddress().toIpPort();
+        LOGD("client connected: %s", conn->peerAddress().toIpPort().c_str());
         ++m_sessionId;
         std::shared_ptr<ChatSession> spSession(new ChatSession(conn, m_sessionId));
         conn->setMessageCallback(std::bind(&ChatSession::OnRead, spSession.get(), std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));       

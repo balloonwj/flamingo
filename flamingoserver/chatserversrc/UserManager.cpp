@@ -103,9 +103,11 @@ bool UserManager::LoadUsersFromDb()
         }
     }
 
-    LOGI("current base userid: %d, current base group id: %d", m_baseUserId, m_baseGroupId);
+    LOGI("current base userid: %d, current base group id: %d", m_baseUserId.load(), m_baseGroupId.load());
 
     pResult->EndQuery();
+
+    delete pResult;
 
     return true;
 }
@@ -122,7 +124,7 @@ bool UserManager::AddUser(User& u)
 
     ++ m_baseUserId;
     char sql[256] = { 0 };
-    snprintf(sql, 256, "INSERT INTO t_user(f_user_id, f_username, f_nickname, f_password, f_register_time) VALUES(%d, '%s', '%s', '%s', NOW())", m_baseUserId, u.username.c_str(), u.nickname.c_str(), u.password.c_str());
+    snprintf(sql, 256, "INSERT INTO t_user(f_user_id, f_username, f_nickname, f_password, f_register_time) VALUES(%d, '%s', '%s', '%s', NOW())", m_baseUserId.load(), u.username.c_str(), u.nickname.c_str(), u.password.c_str());
     if (!pConn->Execute(sql))
     {
         LOGW("insert user error, sql: %s", sql);
@@ -761,7 +763,7 @@ bool UserManager::AddGroup(const char* groupname, int32_t ownerid, int32_t& grou
 
     ++m_baseGroupId;
     char sql[256] = { 0 };
-    snprintf(sql, 256, "INSERT INTO t_user(f_user_id, f_username, f_nickname, f_password, f_owner_id, f_register_time) VALUES(%d, '%d', '%s', '', %d,  NOW())", m_baseGroupId, m_baseGroupId, groupname, ownerid);
+    snprintf(sql, 256, "INSERT INTO t_user(f_user_id, f_username, f_nickname, f_password, f_owner_id, f_register_time) VALUES(%d, '%d', '%s', '', %d,  NOW())", m_baseGroupId.load(), m_baseGroupId.load(), groupname, ownerid);
     if (!pConn->Execute(sql))
     {
         LOGE("insert group error, sql: %s", sql);
@@ -984,6 +986,8 @@ bool UserManager::LoadRelationshipFromDb(int32_t userid, std::list<FriendInfo>& 
     }
 
     pResult->EndQuery();
+
+    delete pResult;
     
     return true;
 }

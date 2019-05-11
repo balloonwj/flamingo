@@ -187,6 +187,8 @@ bool CMysqlManager::_IsDBExist()
 
 	//LOGI << "CMysqlManager::_IsDBExist, no database(" << m_strDataBase << ")";
 	pResult->EndQuery();
+
+    delete pResult;
 	return false;
 }
 
@@ -264,6 +266,7 @@ bool CMysqlManager::_CheckTable(const STableInfo& table)
 		}
 
 		pResult->EndQuery();
+        delete pResult;
 
 		for (map<string, STableField>::const_iterator it = table.m_mapField.begin();
 			it != table.m_mapField.end(); ++it)

@@ -9,6 +9,7 @@
 #include <list>
 #include <mutex>
 #include <set>
+#include <atomic>
 
 using namespace std;
 
@@ -106,8 +107,8 @@ private:
     bool LoadRelationshipFromDb(int32_t userid, std::list<FriendInfo>& r);
 
 private:
-    int                 m_baseUserId{ 0 };        //m_baseUserId, 取数据库里面userid最大值，新增用户在这个基础上递增
-    int                 m_baseGroupId{0x0FFFFFFF};
+    std::atomic_int     m_baseUserId{ 0 };        //m_baseUserId, 取数据库里面userid最大值，新增用户在这个基础上递增
+    std::atomic<int>    m_baseGroupId{0x0FFFFFFF};
     list<User>          m_allCachedUsers;
     mutex               m_mutex;
 
