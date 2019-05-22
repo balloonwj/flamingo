@@ -67,6 +67,11 @@ public:
 
 typedef int SOCKET;
 
+#define SOCKET_ERROR -1
+
+#define closesocket(s) close(s)
+
+
 #include <arpa/inet.h>
 
 #include <netinet/in.h>
