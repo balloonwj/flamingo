@@ -66,7 +66,7 @@ namespace net
 		/// Safe to call from other threads.
 		void queueInLoop(const Functor& cb);
 
-        // timers，时间单位均是秒
+        // timers，时间单位均是微秒
         ///
         /// Runs callback at 'time'.
         /// Safe to call from other threads.

@@ -116,7 +116,13 @@ int main(int argc, char* argv[])
     const char* logfilename = config.GetConfigName("logfilename");
     logFileFullPath += logfilename;
 
+#ifdef _DEBUG
+    CAsyncLog::Init();
+#else
     CAsyncLog::Init(logFileFullPath.c_str());
+#endif
+    
+    
   
     //初始化数据库配置
     const char* dbserver = config.GetConfigName("dbserver");

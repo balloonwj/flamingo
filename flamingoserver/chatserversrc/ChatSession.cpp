@@ -1810,8 +1810,8 @@ void ChatSession::EnableHearbeatCheck()
     std::shared_ptr<TcpConnection> conn = GetConnectionPtr();
     if (conn)
     {        
-        //每三秒钟检测一下是否有掉线现象
-        m_checkOnlineTimerId = conn->getLoop()->runEvery(10, std::bind(&ChatSession::CheckHeartbeat, this, conn));
+        //每15秒钟检测一下是否有掉线现象
+        m_checkOnlineTimerId = conn->getLoop()->runEvery(15000000, std::bind(&ChatSession::CheckHeartbeat, this, conn));
     }
 }
 
@@ -1826,13 +1826,11 @@ void ChatSession::DisableHeartbeatCheck()
 }
 
 void ChatSession::CheckHeartbeat(const std::shared_ptr<TcpConnection>& conn)
-{
+{   
     if (!conn)
         return;
     
-    //LOGI << "check heartbeat, userid=" << m_userinfo.userid
-    //        << ", clientType=" << m_userinfo.clienttype
-    //        << ", client address: " << conn->peerAddress().toIpPort();
+    //LOGI("check heartbeat, userid: %d, clientType: %d, client address: %s", m_userinfo.userid, m_userinfo.clienttype, conn->peerAddress().toIpPort().c_str());
 
     if (time(NULL) - m_lastPackageTime < MAX_NO_PACKAGE_INTERVAL)
         return;

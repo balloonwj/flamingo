@@ -125,9 +125,9 @@ using namespace std;
 	///
 	/// @return timestamp+seconds as Timestamp
 	///
-	inline Timestamp addTime(Timestamp timestamp, int64_t seconds)
+	inline Timestamp addTime(Timestamp timestamp, int64_t microseconds)
 	{
-		int64_t delta = static_cast<int64_t>(seconds * Timestamp::kMicroSecondsPerSecond);
-		return Timestamp(timestamp.microSecondsSinceEpoch() + delta);
+		//int64_t delta = static_cast<int64_t>(seconds * Timestamp::kMicroSecondsPerSecond);
+		return Timestamp(timestamp.microSecondsSinceEpoch() + microseconds);
 	}
 

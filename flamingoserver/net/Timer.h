@@ -6,18 +6,18 @@
 #include "../net/Callbacks.h"
 
 namespace net
-{
+{ 
     ///
     /// Internal class for timer event.
     ///
     class Timer
     {
     public:
-        Timer(const TimerCallback& cb, Timestamp when, int64_t interval)
+        Timer(const TimerCallback& cb, Timestamp when, int64_t interval, int64_t repeatCount = -1)
             : callback_(cb),
             expiration_(when),
             interval_(interval),
-            repeatCount_(-1),
+            repeatCount_(repeatCount),
             canceled_(false),
             sequence_(++s_numCreated_)
         { }
@@ -44,7 +44,7 @@ namespace net
                 --repeatCount_;
                 if (repeatCount_ == 0)
                 {
-                    repeatCount_ = 0;
+                    //repeatCount_ = 0;
                     return;
                 }                               
             }
@@ -81,7 +81,7 @@ namespace net
         const int64_t               interval_;
         int64_t                     repeatCount_;       //重复次数，-1 表示一直重复下去
         const int64_t               sequence_;
-        bool                        canceled_;   //是否处于取消状态
+        bool                        canceled_;          //是否处于取消状态
 
         static std::atomic<int64_t> s_numCreated_;
     };

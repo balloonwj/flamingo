@@ -185,7 +185,8 @@ void EventLoop::setFrameFunctor(const Functor& cb)
 
 TimerId EventLoop::runAt(const Timestamp& time, const TimerCallback& cb)
 {
-    return timerQueue_->addTimer(cb, time, 0);
+    //只执行一次
+    return timerQueue_->addTimer(cb, time, 0, 1);
 }
 
 TimerId EventLoop::runAfter(int64_t delay, const TimerCallback& cb)
@@ -197,12 +198,13 @@ TimerId EventLoop::runAfter(int64_t delay, const TimerCallback& cb)
 TimerId EventLoop::runEvery(int64_t interval, const TimerCallback& cb)
 {  
     Timestamp time(addTime(Timestamp::now(), interval));
-    return timerQueue_->addTimer(cb, time, interval);
+    //-1表示一直重复下去
+    return timerQueue_->addTimer(cb, time, interval, -1);
 }
 
 TimerId EventLoop::runAt(const Timestamp& time, TimerCallback&& cb)
 {
-    return timerQueue_->addTimer(std::move(cb), time, 0);
+    return timerQueue_->addTimer(std::move(cb), time, 0, 1);
 }
 
 TimerId EventLoop::runAfter(int64_t delay, TimerCallback&& cb)
@@ -214,7 +216,7 @@ TimerId EventLoop::runAfter(int64_t delay, TimerCallback&& cb)
 TimerId EventLoop::runEvery(int64_t interval, TimerCallback&& cb)
 {
     Timestamp time(addTime(Timestamp::now(), interval));
-    return timerQueue_->addTimer(std::move(cb), time, interval);
+    return timerQueue_->addTimer(std::move(cb), time, interval, -1);
 }
 
 void EventLoop::cancel(TimerId timerId, bool off)

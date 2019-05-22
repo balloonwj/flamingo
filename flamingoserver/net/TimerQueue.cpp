@@ -97,16 +97,16 @@ TimerQueue::~TimerQueue()
     }
 }
 
-TimerId TimerQueue::addTimer(const TimerCallback& cb, Timestamp when, int64_t interval)
+TimerId TimerQueue::addTimer(const TimerCallback& cb, Timestamp when, int64_t interval, int64_t repeatCount)
 {
     Timer* timer = new Timer(cb, when, interval);
     loop_->runInLoop(std::bind(&TimerQueue::addTimerInLoop, this, timer));
     return TimerId(timer, timer->sequence());
 }
 
-TimerId TimerQueue::addTimer(TimerCallback&& cb, Timestamp when, int64_t interval)
+TimerId TimerQueue::addTimer(TimerCallback&& cb, Timestamp when, int64_t interval, int64_t repeatCount)
 {
-    Timer* timer = new Timer(std::move(cb), when, interval);
+    Timer* timer = new Timer(std::move(cb), when, interval, repeatCount);
     loop_->runInLoop(std::bind(&TimerQueue::addTimerInLoop, this, timer));
     return TimerId(timer, timer->sequence());
 }
@@ -127,14 +127,20 @@ void TimerQueue::doTimer()
     
     Timestamp now(Timestamp::now());
 
-    for (auto iter = timers_.begin(); iter != timers_.end(); ++iter)
+    for (auto iter = timers_.begin(); iter != timers_.end(); )
     {
-        if (iter->first <= now)
+        //if (iter->first <= now)
+        if (iter->second->expiration() <= now)
         {
+            //LOGD("time: %lld", iter->second->expiration().microSecondsSinceEpoch());
             iter->second->run();
             if (iter->second->getRepeatCount() == 0)
             {
                 iter = timers_.erase(iter);
+            }
+            else
+            {
+                ++iter;
             }
         }
         else
@@ -184,6 +190,7 @@ void TimerQueue::removeTimerInLoop(TimerId timerId)
     {
         if (iter->second == timer)
         {
+            timers_.erase(iter);
             break;
         }
     }  

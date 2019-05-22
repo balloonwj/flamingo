@@ -30,9 +30,9 @@ namespace net
         ///
         /// Must be thread safe. Usually be called from other threads.
         //intervalµ•Œª «Œ¢√Ó
-        TimerId addTimer(const TimerCallback& cb, Timestamp when, int64_t interval);
+        TimerId addTimer(const TimerCallback& cb, Timestamp when, int64_t interval, int64_t repeatCount);
 
-        TimerId addTimer(TimerCallback&& cb, Timestamp when, int64_t interval);
+        TimerId addTimer(TimerCallback&& cb, Timestamp when, int64_t interval, int64_t repeatCount);
 
         void removeTimer(TimerId timerId);
 

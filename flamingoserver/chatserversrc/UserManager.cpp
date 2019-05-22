@@ -671,7 +671,7 @@ bool UserManager::UpdateMarknameInDb(int32_t userid, int32_t friendid, const std
         return false;
     }
 
-    LOGI("update markname successfully, userid: , friendid: %d, sql: %s", userid, friendid, osSql.str().c_str());
+    LOGI("update markname successfully, userid: %d, friendid: %d, sql: %s", userid, friendid, osSql.str().c_str());
 
     //TODO: 重复的代码，需要去掉
     std::lock_guard<std::mutex> guard(m_mutex);

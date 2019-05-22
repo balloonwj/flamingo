@@ -31,7 +31,8 @@ enum LOG_LEVEL
     LOG_LEVEL_WARNING,
     LOG_LEVEL_ERROR,    //用于业务错误
     LOG_LEVEL_SYSERROR, //用于技术框架本身的错误
-    LOG_LEVEL_FATAL     //FATAL 级别的日志会让在程序输出日志后退出
+    LOG_LEVEL_FATAL,    //FATAL 级别的日志会让在程序输出日志后退出
+    LOG_LEVEL_CRITICAL  //CRITICAL 日志不受日志级别控制，总是输出
 };
 
 //TODO: 多增加几个策略
@@ -44,12 +45,10 @@ enum LOG_LEVEL
 #define LOGE(...)    CAsyncLog::Output(LOG_LEVEL_ERROR, __FILE__, __LINE__, __VA_ARGS__)
 #define LOGSYSE(...) CAsyncLog::Output(LOG_LEVEL_SYSERROR, __FILE__, __LINE__, __VA_ARGS__)
 #define LOGF(...)    CAsyncLog::Output(LOG_LEVEL_FATAL, __FILE__, __LINE__, __VA_ARGS__)        //为了让FATAL级别的日志能立即crash程序，采取同步写日志的方法
+#define LOGC(...)    CAsyncLog::Output(LOG_LEVEL_CRITICAL, __FILE__, __LINE__, __VA_ARGS__)        //为了让FATAL级别的日志能立即crash程序，采取同步写日志的方法
 
 //用于输出数据包的二进制格式
 #define LOG_DEBUG_BIN(buf, buflength) CAsyncLog::OutputBinary(buf, buflength)
-
-//TODO: 增加这个功能
-//LOG_DEBUG_BIN
 
 class LOG_API CAsyncLog
 {
@@ -90,6 +89,7 @@ private:
 	static bool		                        m_bToFile;			    //日志写入文件还是写到控制台  
 	static FILE*                            m_hLogFile;
     static std::string                      m_strFileName;          //日志文件名
+    static std::string                      m_strFileNamePID;    //文件名中的进程id
     static bool                             m_bTruncateLongLog;     //长日志是否截断
     static LOG_LEVEL                        m_nCurrentLevel;        //当前日志级别
     static int64_t                          m_nFileRollSize;        //单个日志文件的最大字节数

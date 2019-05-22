@@ -18,6 +18,7 @@
 bool CAsyncLog::m_bTruncateLongLog = false;
 FILE* CAsyncLog::m_hLogFile = NULL;
 std::string CAsyncLog::m_strFileName = "default";
+std::string CAsyncLog::m_strFileNamePID = "";
 LOG_LEVEL CAsyncLog::m_nCurrentLevel = LOG_LEVEL_INFO;
 int64_t CAsyncLog::m_nFileRollSize = DEFAULT_ROLL_SIZE;
 int64_t CAsyncLog::m_nCurrentWrittenSize = 0;
@@ -39,6 +40,15 @@ bool CAsyncLog::Init(const char* pszLogFileName/* = nullptr*/, bool bTruncateLon
     }
     else
         m_strFileName = pszLogFileName;
+
+    //获取进程id，这样快速看到同一个进程的不同日志文件
+    char szPID[8];
+#ifdef WIN32
+    snprintf(szPID, sizeof(szPID), "%05d", (int)::GetCurrentProcessId());  
+#else
+    snprintf(szPID, sizeof(szPID), "%05d", (int)::getpid());
+#endif
+    m_strFileNamePID = szPID;
 
     //TODO：创建文件夹
 
@@ -65,6 +75,9 @@ void CAsyncLog::Uninit()
 
 void CAsyncLog::SetLevel(LOG_LEVEL nLevel)
 {
+    if (nLevel < LOG_LEVEL_TRACE || nLevel > LOG_LEVEL_FATAL)
+        return;
+    
     m_nCurrentLevel = nLevel;
 }
 
@@ -75,9 +88,12 @@ bool CAsyncLog::IsRunning()
 
 bool CAsyncLog::Output(long nLevel, const char* pszFmt, ...)
 {
-    if (nLevel < m_nCurrentLevel)
-        return false;
-
+    if (nLevel != LOG_LEVEL_CRITICAL)
+    {
+        if (nLevel < m_nCurrentLevel)
+            return false;
+    }
+    
     std::string strLine;
     MakeLinePrefix(nLevel, strLine);
 
@@ -151,6 +167,8 @@ bool CAsyncLog::Output(long nLevel, const char* pszFmt, ...)
                 std::string strNewFileName(m_strFileName);
                 strNewFileName += ".";
                 strNewFileName += szNow;
+                strNewFileName += ".";
+                strNewFileName += m_strFileNamePID;
                 strNewFileName += ".log";
                 if (!CreateNewFile(strNewFileName.c_str()))
                     return false;
@@ -170,8 +188,11 @@ bool CAsyncLog::Output(long nLevel, const char* pszFmt, ...)
 
 bool CAsyncLog::Output(long nLevel, const char* pszFileName, int nLineNo, const char* pszFmt, ...)
 {
-    if (nLevel < m_nCurrentLevel)
-        return false;
+    if (nLevel != LOG_LEVEL_CRITICAL)
+    {
+        if (nLevel < m_nCurrentLevel)
+            return false;
+    }
 
     std::string strLine;
     MakeLinePrefix(nLevel, strLine);
@@ -251,6 +272,8 @@ bool CAsyncLog::Output(long nLevel, const char* pszFileName, int nLineNo, const 
                 std::string strNewFileName(m_strFileName);
                 strNewFileName += ".";
                 strNewFileName += szNow;
+                strNewFileName += ".";
+                strNewFileName += m_strFileNamePID;
                 strNewFileName += ".log";
                 if (!CreateNewFile(strNewFileName.c_str()))
                     return false;
@@ -374,6 +397,8 @@ void CAsyncLog::MakeLinePrefix(long nLevel, std::string& strPrefix)
         strPrefix = "[SYSE]";
     else if (nLevel == LOG_LEVEL_FATAL)
         strPrefix = "[Fatal]";
+    else if (nLevel == LOG_LEVEL_CRITICAL)
+        strPrefix = "[CRITICAL]";
 
     //时间
     char szTime[64] = { 0 };
@@ -475,6 +500,8 @@ void CAsyncLog::WriteThreadProc()
                 std::string strNewFileName(m_strFileName);
                 strNewFileName += ".";
                 strNewFileName += szNow;
+                strNewFileName += ".";
+                strNewFileName += m_strFileNamePID;
                 strNewFileName += ".log";
                 if (!CreateNewFile(strNewFileName.c_str()))
                     return;
