@@ -1,4 +1,5 @@
-#pragma once
+#ifndef _XML_DOCUMENT_H_
+#define _XML_DOCUMENT_H_
 
 #import "msxml3.dll"
 #include <msxml2.h>
@@ -71,3 +72,4 @@ public:
 private:
 	IXMLDOMDocument2* m_pXMLDoc;
 };
+#endif

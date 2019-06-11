@@ -16,6 +16,8 @@
 #include "net/protocolstream.h"
 #include "net/Msg.h"
 #include "UIText.h"
+#include <time.h>
+#include <UtilTime.h>
 
 
 #define CHAT_BG_IMAGE_NAME			_T("BuddyChatDlgBg.png")

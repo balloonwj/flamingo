@@ -13,7 +13,7 @@
 #undef APSTUDIO_READONLY_SYMBOLS
 
 /////////////////////////////////////////////////////////////////////////////
-// ÖÐÎÄ(ÖÐ»ªÈËÃñ¹²ºÍ¹ú) resources
+// ï¿½ï¿½ï¿½ï¿½(ï¿½Ð»ï¿½ï¿½ï¿½ï¿½ñ¹²ºÍ¹ï¿½) resources
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
 #ifdef _WIN32
@@ -76,7 +76,7 @@ IDR_MAINFRAME           ICON                    "res\\CatchScreen.ico"
 IDD_CATCHSCREEN_DIALOG DIALOGEX 0, 0, 376, 230
 STYLE DS_SETFONT | WS_POPUP | WS_VISIBLE
 EXSTYLE WS_EX_APPWINDOW
-FONT 9, "ËÎÌå", 0, 0, 0x1
+FONT 9, "ï¿½ï¿½ï¿½ï¿½", 0, 0, 0x1
 BEGIN
     EDITTEXT        IDC_EDIT1,0,0,375,230,ES_MULTILINE | ES_READONLY | NOT WS_BORDER
 END
@@ -104,12 +104,12 @@ BEGIN
     BEGIN
         BLOCK "080404b0"
         BEGIN
-            VALUE "FileDescription", "CatchScreen Microsoft »ù´¡ÀàÓ¦ÓÃ³ÌÐò"
+            VALUE "FileDescription", "CatchScreen Microsoft ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó¦ï¿½Ã³ï¿½ï¿½ï¿½"
             VALUE "FileVersion", "1, 0, 0, 1"
             VALUE "InternalName", "CatchScreen"
-            VALUE "LegalCopyright", "°æÈ¨ËùÓÐ (C) 2006"
+            VALUE "LegalCopyright", "ï¿½ï¿½È¨ï¿½ï¿½ï¿½ï¿½ (C) 2006"
             VALUE "OriginalFilename", "CatchScreen.EXE"
-            VALUE "ProductName", "CatchScreen Ó¦ÓÃ³ÌÐò"
+            VALUE "ProductName", "CatchScreen Ó¦ï¿½Ã³ï¿½ï¿½ï¿½"
             VALUE "ProductVersion", "1, 0, 0, 1"
         END
     END
@@ -137,8 +137,8 @@ IDC_CURSOR6             CURSOR                  "res\\size4_r.cur"
 // Bitmap
 //
 
-IDB_BITMAP1             BITMAP                  "res\\back dd.bmp"
-#endif    // ÖÐÎÄ(ÖÐ»ªÈËÃñ¹²ºÍ¹ú) resources
+IDB_BITMAP1             BITMAP                  "res\\back_dd.bmp"
+#endif    // ï¿½ï¿½ï¿½ï¿½(ï¿½Ð»ï¿½ï¿½ï¿½ï¿½ñ¹²ºÍ¹ï¿½) resources
 /////////////////////////////////////////////////////////////////////////////
 
 

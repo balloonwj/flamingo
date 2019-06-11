@@ -1,0 +1,5 @@
+cmake_minimum_required(VERSION 3.0)
+project(jsoncpp-1.9.0)
+include_directories(.)
+SET(JSON_CPP_SOURCE_FILE ./json_reader.cpp ./json_writer.cpp ./json_value.cpp)
+add_library(jsoncpp ${JSON_CPP_SOURCE_FILE})
