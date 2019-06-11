@@ -2,7 +2,7 @@
 #include "GroupChatDlg.h"
 #include "UserSessionData.h"
 #include "FlamingoClient.h"
-#include "Time.h"
+#include "UtilTime.h"
 #include "ChatDlgCommon.h"
 #include "GDIFactory.h"
 #include "IULog.h"

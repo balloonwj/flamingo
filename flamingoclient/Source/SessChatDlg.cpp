@@ -1,6 +1,6 @@
 #include "stdafx.h"
 #include "SessChatDlg.h"
-#include "Time.h"
+#include "UtilTime.h"
 
 const long SESSIONCHATDLG_WIDTH   = 587;
 const long SESSIONCHATDLG_HEIGHT  = 535;
