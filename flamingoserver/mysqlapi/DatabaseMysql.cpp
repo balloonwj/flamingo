@@ -178,8 +178,7 @@ bool CDatabaseMysql::Execute(const char* sql)
             if (CR_SERVER_GONE_ERROR == uErrno)
             {
                 //LOGI << "CDatabaseMysql::Query, mysql is disconnected!";
-                if (false == Initialize(m_DBInfo.strHost, m_DBInfo.strUser,
-                    m_DBInfo.strPwd, m_DBInfo.strDBName))
+                if (false == Initialize(m_DBInfo.strHost, m_DBInfo.strUser, m_DBInfo.strPwd, m_DBInfo.strDBName))
                 {
                     return false;
                 }
@@ -187,7 +186,7 @@ bool CDatabaseMysql::Execute(const char* sql)
                 iTempRet = mysql_real_query(m_Mysql, sql, strlen(sql));
                 if (iTempRet)
                 {
-                    //LOGE << "SQL: " << sql;
+                    LOGE("sql error: %s, sql: %s", mysql_error(m_Mysql), sql);
                     //LOGE << "query ERROR: " << mysql_error(m_Mysql);
                 }
             }
@@ -195,6 +194,7 @@ bool CDatabaseMysql::Execute(const char* sql)
             {
                 //LOGE << "SQL: " << sql;
                 //LOGE << "query ERROR: " << mysql_error(m_Mysql);
+                LOGE("sql error: %s, sql: %s", mysql_error(m_Mysql), sql);
             }
             return false;
         }

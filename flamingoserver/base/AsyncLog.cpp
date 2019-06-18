@@ -140,16 +140,14 @@ bool CAsyncLog::Output(long nLevel, const char* pszFmt, ...)
     }
     else
     {
-        //为了让FATAL级别的日志能立即crash程序，采取同步写日志的方法
-        if (m_strFileName.empty())
-        {
-            std::cout << strLine << std::endl;
+        //为了让FATAL级别的日志能立即crash程序，采取同步写日志的方法    
+        std::cout << strLine << std::endl;
 #ifdef _WIN32
-            OutputDebugStringA(strLine.c_str());
-            OutputDebugStringA("\n");
+        OutputDebugStringA(strLine.c_str());
+        OutputDebugStringA("\n");
 #endif
-        }
-        else    
+        
+        if (!m_strFileName.empty())    
         {
             if (m_hLogFile == nullptr)
             {
@@ -245,16 +243,14 @@ bool CAsyncLog::Output(long nLevel, const char* pszFileName, int nLineNo, const 
     }
     else
     {
-        //为了让FATAL级别的日志能立即crash程序，采取同步写日志的方法
-        if (m_strFileName.empty())
-        {
-            std::cout << strLine << std::endl;
+        //为了让FATAL级别的日志能立即crash程序，采取同步写日志的方法            
+        std::cout << strLine << std::endl;
 #ifdef _WIN32
-            OutputDebugStringA(strLine.c_str());
-            OutputDebugStringA("\n");
+        OutputDebugStringA(strLine.c_str());
+        OutputDebugStringA("\n");
 #endif
-        }
-        else
+        
+        if (!m_strFileName.empty())
         {
             if (m_hLogFile == nullptr)
             {
@@ -386,17 +382,17 @@ void CAsyncLog::MakeLinePrefix(long nLevel, std::string& strPrefix)
     //级别
     strPrefix = "[INFO]";
     if (nLevel == LOG_LEVEL_TRACE)
-        strPrefix = "[Trace]";
+        strPrefix = "[TRACE]";
     else if (nLevel == LOG_LEVEL_DEBUG)
-        strPrefix = "[Debug]";
+        strPrefix = "[DEBUG]";
     else if (nLevel == LOG_LEVEL_WARNING)
-        strPrefix = "[Warning]";
+        strPrefix = "[WARN]";
     else if (nLevel == LOG_LEVEL_ERROR)
-        strPrefix = "[Error]";
+        strPrefix = "[ERROR]";
     else if (nLevel == LOG_LEVEL_SYSERROR)
         strPrefix = "[SYSE]";
     else if (nLevel == LOG_LEVEL_FATAL)
-        strPrefix = "[Fatal]";
+        strPrefix = "[FATAL]";
     else if (nLevel == LOG_LEVEL_CRITICAL)
         strPrefix = "[CRITICAL]";
 
@@ -522,17 +518,15 @@ void CAsyncLog::WriteThreadProc()
 
             strLine = m_listLinesToWrite.front();
             m_listLinesToWrite.pop_front();
-        }
-
-        if (m_strFileName.empty())
-        {
-            std::cout << strLine << std::endl;
+        }        
+        
+        std::cout << strLine << std::endl;
 #ifdef _WIN32
-            OutputDebugStringA(strLine.c_str());
-            OutputDebugStringA("\n");
+        OutputDebugStringA(strLine.c_str());
+        OutputDebugStringA("\n");
 #endif
-        }
-        else
+        
+        if (!m_strFileName.empty())
         {
             if (!WriteToFile(strLine))
                 return;

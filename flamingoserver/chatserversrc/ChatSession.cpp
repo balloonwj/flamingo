@@ -38,7 +38,7 @@ m_isLogin(false)
 
 //#ifndef _DEBUG
     //暂且注释掉，不利于调试
-    EnableHearbeatCheck();
+    //EnableHearbeatCheck();
 //#endif
 }
 
@@ -1836,5 +1836,5 @@ void ChatSession::CheckHeartbeat(const std::shared_ptr<TcpConnection>& conn)
         return;
     
     conn->forceClose();
-    LOGI("in max no-package time, no package, close the connection, userid: %d, clientType: %d, client address: %s", m_userinfo.userid, m_userinfo.clienttype, conn->peerAddress().toIpPort().c_str());
+    //LOGI("in max no-package time, no package, close the connection, userid: %d, clientType: %d, client address: %s", m_userinfo.userid, m_userinfo.clienttype, conn->peerAddress().toIpPort().c_str());
 }

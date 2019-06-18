@@ -45,7 +45,7 @@ int CConfigFileReader::SetConfigValue(const char* name, const char* value)
         m_config_map.insert(std::make_pair(name, value));
     }
 
-    return _WriteFIle();
+    return _WriteFile();
 }
 void CConfigFileReader::_LoadFile(const char* filename)
 {
@@ -80,7 +80,7 @@ void CConfigFileReader::_LoadFile(const char* filename)
 	m_load_ok = true;
 }
 
-int CConfigFileReader::_WriteFIle(const char* filename)
+int CConfigFileReader::_WriteFile(const char* filename)
 {
    FILE* fp = NULL;
    if(filename == NULL)
@@ -132,7 +132,7 @@ char* CConfigFileReader::_TrimSpace(char* name)
 {
 	// remove starting space or tab
 	char* start_pos = name;
-	while ( (*start_pos == ' ') || (*start_pos == '\t') )
+	while ( (*start_pos == ' ') || (*start_pos == '\t') || (*start_pos == '\r'))
 	{
 		start_pos++;
 	}
@@ -142,7 +142,7 @@ char* CConfigFileReader::_TrimSpace(char* name)
 
 	// remove ending space or tab
 	char* end_pos = name + strlen(name) - 1;
-	while ( (*end_pos == ' ') || (*end_pos == '\t') )
+	while ( (*end_pos == ' ') || (*end_pos == '\t') || (*end_pos == '\r'))
 	{
 		*end_pos = 0;
 		end_pos--;

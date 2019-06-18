@@ -36,8 +36,12 @@ public:
 
 public:
 	BOOL GetLoginAccountInfo(LOGIN_ACCOUNT_INFO* lpAccount);
+    BOOL SetLoginAccountInfo(const LOGIN_ACCOUNT_INFO* lpAccount);
+
 	void SetDefaultAccount(PCTSTR pszDefaultAccount);
 	void SetDefaultPassword(PCTSTR pszDefaultPassword);
+
+    void DoLogin();
 
 private:
 	BOOL OnInitDialog(CWindow wndFocus, LPARAM lInitParam);

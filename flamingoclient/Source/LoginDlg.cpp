@@ -36,6 +36,15 @@ BOOL CLoginDlg::GetLoginAccountInfo(LOGIN_ACCOUNT_INFO* lpAccount)
 	return TRUE;
 }
 
+BOOL CLoginDlg::SetLoginAccountInfo(const LOGIN_ACCOUNT_INFO* lpAccount)
+{
+    if (NULL == lpAccount)
+        return FALSE;
+
+    memcpy(&m_stAccountInfo, lpAccount, sizeof(LOGIN_ACCOUNT_INFO));
+    return TRUE;
+}
+
 void CLoginDlg::SetDefaultAccount(PCTSTR pszDefaultAccount)
 {
 	m_strDefaultAccount = pszDefaultAccount;
@@ -200,9 +209,7 @@ void CLoginDlg::OnBtn_Login(UINT uNotifyCode, int nID, CWindow wndCtl)
 	// 记录当前用户信息
 	m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount = m_stAccountInfo.szUser;
 
-    HANDLE hLoginThread = (HANDLE)::_beginthreadex(NULL, 0, LoginThreadProc, this, 0, NULL);
-    if (hLoginThread != NULL)
-        ::CloseHandle(hLoginThread);
+    DoLogin();
 
 	EndDialog(IDOK);
 }
@@ -701,4 +708,11 @@ void CLoginDlg::StatusMenuBtn_SetIconPic(CSkinButton& btnStatus, long nStatus)
 
 	btnStatus.SetIconPic(lpszFileName);
 	btnStatus.Invalidate();
+}
+
+void CLoginDlg::DoLogin()
+{
+    HANDLE hLoginThread = (HANDLE)::_beginthreadex(NULL, 0, LoginThreadProc, this, 0, NULL);
+    if (hLoginThread != NULL)
+        ::CloseHandle(hLoginThread);
 }

@@ -1440,6 +1440,8 @@ bool CMainDlg::StartLogin(BOOL bAutoLogin/* = FALSE*/)
 		if (!bRet)
 			return true;
 
+        m_LoginDlg.SetLoginAccountInfo(&m_stAccountInfo);
+        m_LoginDlg.DoLogin();
 	}
 	else
 	{
