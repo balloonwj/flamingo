@@ -391,7 +391,6 @@ https://github.com/baloonwj/flamingo/issues/5。
 
 #### 以下是部分功能截图：
 
-##### PC Client Snapshot
 ##### pc版截图
 ![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/1.png)
 ![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/2.png)
@@ -404,7 +403,6 @@ https://github.com/baloonwj/flamingo/issues/5。
 ![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/9.png)
 
 ##### Android Version Snapshot
-##### 安卓版截图
 ![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m1.jpg)
 ![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m2.jpg)
 ![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m3.jpg)
