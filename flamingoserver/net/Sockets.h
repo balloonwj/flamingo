@@ -70,9 +70,13 @@ namespace net
 	namespace sockets
 	{
 		///
-		/// Creates a non-blocking socket file descriptor,
+		/// Creates a socket file descriptor,
 		/// abort if any error.
+        SOCKET createOrDie();
         SOCKET createNonblockingOrDie();
+
+        void setNonBlockAndCloseOnExec(SOCKET sockfd);
+
         void setReuseAddr(SOCKET sockfd, bool on);
         void setReusePort(SOCKET sockfd, bool on);
 

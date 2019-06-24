@@ -1,8 +1,9 @@
 #include "EventLoop.h"
 
-//#include <unistd.h>
 #include <sstream>
 #include <iostream>
+#include <string.h>
+
 #include "../base/AsyncLog.h"
 #include "Channel.h"
 #include "Sockets.h"
@@ -42,7 +43,6 @@ timerQueue_(new TimerQueue(this))
 {
     createWakeupfd();
     
-
 #ifdef WIN32
     wakeupChannel_.reset(new Channel(this, wakeupFdSend_));
     poller_.reset(new SelectPoller(this));
@@ -273,8 +273,8 @@ bool EventLoop::createWakeupfd()
     //    return false;
     //}
         
-    wakeupFdListen_ = sockets::createNonblockingOrDie();
-    wakeupFdSend_ = sockets::createNonblockingOrDie();
+    wakeupFdListen_ = sockets::createOrDie();
+    wakeupFdSend_ = sockets::createOrDie();
 
     //Windows上需要创建一对socket  
     struct sockaddr_in bindaddr;
@@ -301,7 +301,12 @@ bool EventLoop::createWakeupfd()
     //serveraddr.sin_family = AF_INET;
     //serveraddr.sin_addr.s_addr = inet_addr("127.0.0.1");
     //serveraddr.sin_port = htons(INNER_WAKEUP_LISTEN_PORT);   
-    ::connect(wakeupFdSend_, (struct sockaddr*)& serveraddr, sizeof(serveraddr));
+    if (::connect(wakeupFdSend_, (struct sockaddr*) & serveraddr, sizeof(serveraddr)) < 0)
+    {
+        //让程序挂掉
+        LOGF("Unable to connect to wakeup peer, EventLoop: 0x%x", this);
+        return false;
+    }
 
     struct sockaddr_in clientaddr;
     socklen_t clientaddrlen = sizeof(clientaddr);
@@ -313,43 +318,19 @@ bool EventLoop::createWakeupfd()
         return false;
     }
 
-    //Windows直接判断socket可写即认为连接上
-    int retryCount = 3;
-    while (true)
-    {
-        fd_set writeset;
-        FD_ZERO(&writeset);
-        FD_SET(wakeupFdSend_, &writeset);
-        struct timeval tv = { 1, 0 };
-        int ret = ::select(wakeupFdSend_ + 1, NULL, &writeset, NULL, &tv);
-        //连接成功
-        if (ret == 1)           
-            break;
-
-        if (ret == 0)
-        {
-            if (retryCount <= 0)
-            {
-                //三次都重试失败，让程序挂掉
-                LOGF("Unable to connect wakeup peer, EventLoop: 0x%x", this);
-                return false;
-            }
-
-            retryCount--;
-            continue;
-        }
-        else
-        {
-            //三次都重试失败，让程序挂掉
-            LOGF("Unable to connect wakeup peer, select error, EventLoop: 0x%x", this);
-        }
-    }
+    sockets::setNonBlockAndCloseOnExec(wakeupFdSend_);
+    sockets::setNonBlockAndCloseOnExec(wakeupFdRecv_);
 
 #else
     //Linux上一个eventfd就够了，可以实现读写
     wakeupFd_ = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
     if (wakeupFd_ < 0)
+    {
+        //让程序挂掉
+        LOGF("Unable to create wakeup eventfd, EventLoop: 0x%x", this);
         return false;
+    }
+
 #endif
 
     return true;
@@ -370,9 +351,19 @@ bool EventLoop::wakeup()
 #else
     int32_t n = sockets::write(wakeupFd_, &one, sizeof(one));
 #endif
+
+    
 	if (n != sizeof one)
 	{
-		LOGSYSE("EventLoop::wakeup() writes %d  bytes instead of 8", n);
+#ifdef WIN32
+        DWORD error = WSAGetLastError();
+        LOGSYSE("EventLoop::wakeup() writes %d  bytes instead of 8, fd: %d, error: %d", n, wakeupFdSend_, (int32_t)error);
+#else
+        int error = errno;
+        LOGSYSE("EventLoop::wakeup() writes %d  bytes instead of 8, fd: %d, error: %d, errorinfo: %s", n, wakeupFd_, error, strerror(error));
+#endif
+        
+        
         return false;
 	}
 
@@ -387,11 +378,18 @@ bool EventLoop::handleRead()
 #else
     int32_t n = sockets::read(wakeupFd_, &one, sizeof(one));
 #endif
-	if (n != sizeof one)
-	{
-		LOGE("EventLoop::handleRead() reads %d bytes instead of 8", n);
+
+    if (n != sizeof one)
+    {
+#ifdef WIN32
+        DWORD error = WSAGetLastError();
+        LOGSYSE("EventLoop::wakeup() read %d  bytes instead of 8, fd: %d, error: %d", n, wakeupFdRecv_, (int32_t)error);
+#else
+        int error = errno;
+        LOGSYSE("EventLoop::wakeup() read %d  bytes instead of 8, fd: %d, error: %d, errorinfo: %s", n, wakeupFd_, error, strerror(error));
+#endif
         return false;
-	}
+    }
 
     return true;
 }

@@ -111,34 +111,13 @@ void Socket::setKeepAlive(bool on)
 	// FIXME CHECK
 }
 
-namespace
-{
-	typedef struct sockaddr SA;
-
-	void setNonBlockAndCloseOnExec(int sockfd)
-	{
-#ifdef WIN32
-        //将socket设置成非阻塞的
-        unsigned long on = 1;
-        ::ioctlsocket(sockfd, FIONBIO, &on);		
-#else
-        // non-block
-        int flags = ::fcntl(sockfd, F_GETFL, 0);
-        flags |= O_NONBLOCK;
-        int ret = ::fcntl(sockfd, F_SETFL, flags);
-        // FIXME check
-
-        // close-on-exec
-        flags = ::fcntl(sockfd, F_GETFD, 0);
-        flags |= FD_CLOEXEC;
-        ret = ::fcntl(sockfd, F_SETFD, flags);
-        // FIXME check
-
-        (void)ret;
-#endif       
-	}
-
-}
+//namespace
+//{
+//	//typedef struct sockaddr SA;
+//
+//	
+//
+//}
 
 const struct sockaddr* sockets::sockaddr_cast(const struct sockaddr_in* addr)
 {
@@ -160,6 +139,25 @@ struct sockaddr_in* sockets::sockaddr_in_cast(struct sockaddr* addr)
 	return static_cast<struct sockaddr_in*>(implicit_cast<void*>(addr));
 }
 
+SOCKET sockets::createOrDie()
+{
+#ifdef WIN32
+    SOCKET sockfd = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (sockfd < 0)
+    {
+        LOGF("sockets::createNonblockingOrDie");
+    }
+#else
+    SOCKET sockfd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, IPPROTO_TCP);
+    if (sockfd < 0)
+    {
+        LOGF("sockets::createNonblockingOrDie");
+    }
+#endif
+
+    return sockfd;
+}
+
 SOCKET sockets::createNonblockingOrDie()
 {
 #ifdef WIN32
@@ -178,6 +176,29 @@ SOCKET sockets::createNonblockingOrDie()
 
     setNonBlockAndCloseOnExec(sockfd);
 	return sockfd;
+}
+
+void sockets::setNonBlockAndCloseOnExec(SOCKET sockfd)
+{
+#ifdef WIN32
+    //将socket设置成非阻塞的
+    unsigned long on = 1;
+    ::ioctlsocket(sockfd, FIONBIO, &on);
+#else
+    // non-block
+    int flags = ::fcntl(sockfd, F_GETFL, 0);
+    flags |= O_NONBLOCK;
+    int ret = ::fcntl(sockfd, F_SETFL, flags);
+    // FIXME check
+
+    // close-on-exec
+    flags = ::fcntl(sockfd, F_GETFD, 0);
+    flags |= FD_CLOEXEC;
+    ret = ::fcntl(sockfd, F_SETFD, flags);
+    // FIXME check
+
+    (void)ret;
+#endif       
 }
 
 void sockets::bindOrDie(SOCKET sockfd, const struct sockaddr_in& addr)
@@ -284,7 +305,7 @@ int32_t sockets::read(SOCKET sockfd, void *buf, int32_t count)
 #ifdef WIN32
     return ::recv(sockfd, (char*)buf, count, 0);
 #else
-	return ::recv(sockfd, buf, count, 0);
+	return ::read(sockfd, buf, count);
 #endif
 }
 
@@ -300,7 +321,7 @@ int32_t sockets::write(SOCKET sockfd, const void *buf, int32_t count)
 #ifdef WIN32
     return ::send(sockfd, (const char*)buf, count, 0);
 #else
-    return ::send(sockfd, buf, count, 0);
+    return ::write(sockfd, buf, count);
 #endif
     
 }
