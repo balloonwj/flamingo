@@ -1212,10 +1212,10 @@ void ChatSession::OnMultiChatResponse(const std::string& targets, const std::str
     Json::CharReader* reader(b.newCharReader());
     Json::Value jsonRoot;
     JSONCPP_STRING errs;
-    bool ok = reader->parse(data.c_str(), data.c_str() + data.length(), &jsonRoot, &errs);
+    bool ok = reader->parse(targets.c_str(), targets.c_str() + targets.length(), &jsonRoot, &errs);
     if (!ok || errs.size() != 0)
     {
-        LOGE("invalid json: targets: %s, data: %s, userid: %d, , client: %s", targets.c_str(), data.c_str(), m_userinfo.userid, conn->peerAddress().toIpPort().c_str());
+        LOGE("invalid targets string: targets: %s, data: %s, userid: %d, , client: %s", targets.c_str(), data.c_str(), m_userinfo.userid, conn->peerAddress().toIpPort().c_str());
         delete reader;
         return;
     }
@@ -1223,7 +1223,7 @@ void ChatSession::OnMultiChatResponse(const std::string& targets, const std::str
 
     if (!jsonRoot["targets"].isArray())
     {
-        LOGE("invalid json: targets: %s, data: %s, userid: %d, , client: %s", targets.c_str(), data.c_str(), m_userinfo.userid, conn->peerAddress().toIpPort().c_str());
+        LOGE("[targets] node is not array in targets string: targets: %s, data: %s, userid: %d, client: %s", targets.c_str(), data.c_str(), m_userinfo.userid, conn->peerAddress().toIpPort().c_str());
         return;
     }
 
