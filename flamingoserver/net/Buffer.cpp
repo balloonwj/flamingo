@@ -30,7 +30,7 @@ int32_t Buffer::readFd(int fd, int* savedErrno)
 #else
     const int32_t n = sockets::read(fd, extrabuf, sizeof(extrabuf));
 #endif
-	if (n < 0)
+	if (n <= 0)
 	{
 #ifdef WIN32
         *savedErrno = ::WSAGetLastError();
@@ -49,8 +49,14 @@ int32_t Buffer::readFd(int fd, int* savedErrno)
 	}
 	else
 	{
-		writerIndex_ = buffer_.size();
-		append(extrabuf, n - writable);
+#ifdef WIN32
+		//Windows平台直接将所有的字节放入缓冲区去
+        append(extrabuf, n);
+#else
+        //Linux平台把剩下的字节补上去
+        writerIndex_ = buffer_.size();
+        append(extrabuf, n - writable);
+#endif
 	}
 	// if (n == writable + sizeof extrabuf)
 	// {

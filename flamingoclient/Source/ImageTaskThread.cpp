@@ -346,6 +346,13 @@ long CImageTaskThread::UploadImage(PCTSTR pszFileName, HWND hwndReflection, HAND
     char szUtf8Name[MAX_PATH] = { 0 };
     EncodeUtil::UnicodeToUtf8(::PathFindFileName(pszFileName), szUtf8Name, ARRAYSIZE(szUtf8Name));
 
+    CIUSocket& iusocket = CIUSocket::GetInstance();
+    if (!iusocket.ConnectToImgServer())
+    {
+        LOG_ERROR(_T("Failed to connect to ImgServer when upload image:%s as unable to open the file."), pszFileName);
+        return false;
+    }
+
     int64_t offsetX = 0;
 
     while (true)
@@ -370,7 +377,7 @@ long CImageTaskThread::UploadImage(PCTSTR pszFileName, HWND hwndReflection, HAND
         writeStream.Flush();
         file_msg headerx = { outbuf.length() };
         outbuf.insert(0, (const char*)&headerx, sizeof(headerx));
-        if (!CIUSocket::GetInstance().SendOnImgPort(outbuf.c_str(), (int64_t)outbuf.length()))
+        if (!iusocket.SendOnImgPort(outbuf.c_str(), (int64_t)outbuf.length()))
             break;
 
         offsetX += eachfilesize;
@@ -385,11 +392,11 @@ long CImageTaskThread::UploadImage(PCTSTR pszFileName, HWND hwndReflection, HAND
         ::PostMessage(hwndReflection, FMG_MSG_SEND_FILE_PROGRESS, 0, (LPARAM)pFileProgress);
 
         file_msg header;
-        if (!CIUSocket::GetInstance().RecvOnImgPort((char*)&header, (int64_t)sizeof(header)))
+        if (!iusocket.RecvOnImgPort((char*)&header, (int64_t)sizeof(header)))
             break;
 
         CMiniBuffer recvBuf(header.packagesize);
-        if (!CIUSocket::GetInstance().RecvOnImgPort(recvBuf.GetBuffer(), recvBuf.GetSize()))
+        if (!iusocket.RecvOnImgPort(recvBuf.GetBuffer(), recvBuf.GetSize()))
             break;
 
         BinaryReadStream readStream(recvBuf.GetBuffer(), (size_t)recvBuf.GetSize());
@@ -434,12 +441,12 @@ long CImageTaskThread::UploadImage(PCTSTR pszFileName, HWND hwndReflection, HAND
             pFileProgress->nPercent = 100;
             _tcscpy_s(pFileProgress->szDestPath, ARRAYSIZE(pFileProgress->szDestPath), pszFileName);
             ::PostMessage(hwndReflection, FMG_MSG_SEND_FILE_PROGRESS, 0, (LPARAM)pFileProgress);
+            iusocket.CloseImgServerConnection();
             return FILE_UPLOAD_SUCCESS;
         }
-
     }
 
-
+    iusocket.CloseImgServerConnection();
     return FILE_UPLOAD_FAILED;
 }
 
@@ -480,6 +487,14 @@ long CImageTaskThread::DownloadImage(LPCSTR lpszFileName, LPCTSTR lpszDestPath, 
         LOG_ERROR(_T("Failed to download file %s as unable to create the file."), lpszDestPath);
         return FILE_DOWNLOAD_FAILED;
     }
+
+    CIUSocket& iusocket = CIUSocket::GetInstance();
+    if (!iusocket.ConnectToImgServer())
+    {
+        LOG_ERROR(_T("Failed to connect to ImgServer when download file %s as unable to create the file."), lpszDestPath);
+        return FILE_DOWNLOAD_FAILED;
+    }
+
     CAutoFileHandle autoFileHandle(hFile);
     FileProgress* pFileProgress = NULL;
 
@@ -504,21 +519,21 @@ long CImageTaskThread::DownloadImage(LPCSTR lpszFileName, LPCTSTR lpszDestPath, 
         file_msg header = { outbuf.length() };
         outbuf.insert(0, (const char*)&header, sizeof(header));
 
-        if (!CIUSocket::GetInstance().SendOnImgPort(outbuf.c_str(), (int64_t)outbuf.length()))
+        if (!iusocket.SendOnImgPort(outbuf.c_str(), (int64_t)outbuf.length()))
         {
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
 
         file_msg recvheader;
-        if (!CIUSocket::GetInstance().RecvOnImgPort((char*)&recvheader, (int64_t)sizeof(recvheader)))
+        if (!iusocket.RecvOnImgPort((char*)&recvheader, (int64_t)sizeof(recvheader)))
         {
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
 
         CMiniBuffer buffer(recvheader.packagesize);
-        if (!CIUSocket::GetInstance().RecvOnImgPort(buffer.GetBuffer(), recvheader.packagesize))
+        if (!iusocket.RecvOnImgPort(buffer.GetBuffer(), recvheader.packagesize))
         {
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
@@ -600,6 +615,9 @@ long CImageTaskThread::DownloadImage(LPCSTR lpszFileName, LPCTSTR lpszDestPath, 
             break;
         }
     }// end while-loop
+
+    //关闭与图片服务器的连接
+    iusocket.CloseImgServerConnection();
 
     //下载成功
     if (nBreakType == FILE_DOWNLOAD_SUCCESS)

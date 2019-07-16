@@ -36,10 +36,10 @@ EventLoop::EventLoop()
 quit_(false),
 eventHandling_(false),
 callingPendingFunctors_(false),
-iteration_(0L),
 threadId_(std::this_thread::get_id()),
-currentActiveChannel_(NULL),
-timerQueue_(new TimerQueue(this))
+timerQueue_(new TimerQueue(this)),
+iteration_(0L),
+currentActiveChannel_(NULL)
 {
     createWakeupfd();
     

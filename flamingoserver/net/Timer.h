@@ -17,9 +17,9 @@ namespace net
             : callback_(cb),
             expiration_(when),
             interval_(interval),
-            repeatCount_(repeatCount),
-            canceled_(false),
-            sequence_(++s_numCreated_)
+            repeatCount_(repeatCount),       
+            sequence_(++s_numCreated_),
+            canceled_(false)
         { }
 
 
@@ -28,8 +28,8 @@ namespace net
             expiration_(when),
             interval_(interval),
             repeatCount_(-1),
-            canceled_(false),
-            sequence_(++s_numCreated_)
+            sequence_(++s_numCreated_),
+            canceled_(false)          
         { }
 
         void run()

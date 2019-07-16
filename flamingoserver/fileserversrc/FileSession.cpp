@@ -54,6 +54,7 @@ void FileSession::OnRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBu
             LOGE("Illegal package header size: %lld, close TcpConnection, client: %s", header.packagesize, conn->peerAddress().toIpPort().c_str());
             LOG_DEBUG_BIN((unsigned char*)&header, sizeof(header));
             conn->forceClose();
+            return;
         }
 
         if (pBuffer->readableBytes() < (size_t)header.packagesize + sizeof(file_msg))
@@ -119,10 +120,10 @@ bool FileSession::Process(const std::shared_ptr<TcpConnection>& conn, const char
         return false;
     }
    
-    LOGI("Request from client: cmd=%d, seq=%d, filemd5=%s, md5length=%d, offset=%d, filesize=%lld, filedata length=%lld, header.packagesize:%lld, client: %s",
-         cmd, m_seq, filemd5.c_str(), md5length, offset, filesize, filedata.length(), length, conn->peerAddress().toIpPort().c_str());
+    LOGI("Request from client: cmd: %d, seq: %d, filemd5: %s, md5length: %d, offset: %lld, filesize: %lld, filedata length: %lld, header.packagesize: %lld, client: %s",
+         cmd, m_seq, filemd5.c_str(), md5length, offset, filesize, (int64_t)filedata.length(), (int64_t)length, conn->peerAddress().toIpPort().c_str());
 
-    //LOG_DEBUG_BIN((unsigned char*)inbuf, length);
+    //LOG_DEBUG_BIN((unsigned char*)filedata.c_str(), filedatalength);
 
     switch (cmd)
     {
@@ -175,7 +176,7 @@ bool FileSession::OnUploadFileResponse(const std::string& filemd5, int64_t offse
         Send(msg_type_upload_resp, m_seq, file_msg_error_complete, filemd5, offset, filesize, dummyfiledata);
         
         
-        LOGI("Response to client: cmd=msg_type_upload_resp, errorcode: file_msg_error_complete, filemd5: %s, offset: %d, filesize: %d, client: %s", 
+        LOGI("Response to client: cmd=msg_type_upload_resp, errorcode: file_msg_error_complete, filemd5: %s, offset: %lld, filesize: %lld, client: %s", 
               filemd5.c_str(), offset, filesize, conn->peerAddress().toIpPort().c_str());
 
         return true;
@@ -185,7 +186,9 @@ bool FileSession::OnUploadFileResponse(const std::string& filemd5, int64_t offse
     {
         string filename = m_strFileBaseDir;
         filename += filemd5;
-        m_fp = fopen(filename.c_str(), "w");
+        //这个地方我开始使用的是“w”模式，这在Linux平台没问题，但在Windows上因为是文本模式，fwrite函数在遇到文件中有0x0A时，会自动补上0x0D，造成文件内容出错
+        //所以改成wb，使用二进制模式
+        m_fp = fopen(filename.c_str(), "wb");
         if (m_fp == NULL)
         {
             LOGE("fopen file error, filemd5: %s, client: %s", filemd5.c_str(), conn->peerAddress().toIpPort().c_str());
@@ -207,17 +210,17 @@ bool FileSession::OnUploadFileResponse(const std::string& filemd5, int64_t offse
 
     if (fseek(m_fp, offset, SEEK_SET) == -1)
     {
-        LOGE("fseek error, filemd5: %s, errno: %d, errinfo: %s, filedata.length(): %d, m_fp: 0x%x, buffer size is 512*1024, client: %s",
+        LOGE("fseek error, filemd5: %s, errno: %d, errinfo: %s, filedata.length(): %lld, m_fp: 0x%x, buffer size is 512*1024, client: %s",
             filemd5.c_str(), errno, strerror(errno), filedata.length(), m_fp, conn->peerAddress().toIpPort().c_str());
 
         ResetFile();
         return false;
     }
 
-    if (fwrite(filedata.c_str(), filedata.length(), 1, m_fp) != 1)
+    if (fwrite((char*)filedata.c_str(), 1, filedata.length(), m_fp) != filedata.length())
     {
         ResetFile();
-        LOGE("fwrite error, filemd5: %s, errno: %d, errinfo: %s, filedata.length(): %d, m_fp: 0x%x, buffer size is 512*1024, client: %s",
+        LOGE("fwrite error, filemd5: %s, errno: %d, errinfo: %s, filedata.length(): %lld, m_fp: 0x%x, buffer size is 512*1024, client: %s",
             filemd5.c_str(), errno, strerror(errno), filedata.length(), m_fp, conn->peerAddress().toIpPort().c_str());
         return false;
     }
@@ -225,7 +228,7 @@ bool FileSession::OnUploadFileResponse(const std::string& filemd5, int64_t offse
     //将文件内容刷到磁盘上去
     if (fflush(m_fp) != 0)
     {
-        LOGE("fflush error, filemd5: %s, errno: %d, errinfo: %s, filedata.length(): %d, m_fp: 0x%x, buffer size is 512*1024, client: %s",
+        LOGE("fflush error, filemd5: %s, errno: %d, errinfo: %s, filedata.length(): %lld, m_fp: 0x%x, buffer size is 512*1024, client: %s",
             filemd5.c_str(), errno, strerror(errno), filedata.length(), m_fp, conn->peerAddress().toIpPort().c_str());
 
         return false;
@@ -250,7 +253,7 @@ bool FileSession::OnUploadFileResponse(const std::string& filemd5, int64_t offse
         errorcodestr = "file_msg_error_complete";
 
     LOGI("Response to client: cmd=msg_type_upload_resp, errorcode: %s, filemd5: %s, offset: %lld, filesize: %lld, upload percent: %d%%, client: %s", 
-         errorcodestr.c_str(), filemd5.c_str(), offset, filesize, (offset * 100 / filesize), conn->peerAddress().toIpPort().c_str());
+         errorcodestr.c_str(), filemd5.c_str(), offset, filesize, (int32_t)(offset * 100 / filesize), conn->peerAddress().toIpPort().c_str());
 
     return true;
 }
@@ -288,20 +291,32 @@ bool FileSession::OnDownloadFileResponse(const std::string& filemd5, int32_t cli
     {
         string filename = m_strFileBaseDir;
         filename += filemd5;
-        m_fp = fopen(filename.c_str(), "r+");
+        m_fp = fopen(filename.c_str(), "rb+");
         if (m_fp == NULL)
         {
             LOGE("fopen file error, filemd5: %s, clientNetType: %d, client: %s", filemd5.c_str(), clientNetType, conn->peerAddress().toIpPort().c_str());
             return false;
         }
-        fseek(m_fp, 0, SEEK_END);
+        
+        if (fseek(m_fp, 0, SEEK_END) == -1)
+        {
+            LOGE("fseek error, m_filesize: %lld, errno: %d, filemd5: %s, clientNetType: %d, client: %s", m_currentDownloadFileSize, errno, filemd5.c_str(), clientNetType, conn->peerAddress().toIpPort().c_str());
+            return false;
+        }
+
         m_currentDownloadFileSize = ftell(m_fp);
         if (m_currentDownloadFileSize <= 0)
 		{
             LOGE("m_filesize: %lld, errno: %d, filemd5: %s, clientNetType: %d, client: %s", m_currentDownloadFileSize, errno, filemd5.c_str(), clientNetType, conn->peerAddress().toIpPort().c_str());
 			return false;
 		}
-        fseek(m_fp, 0, SEEK_SET);
+
+        if (fseek(m_fp, 0, SEEK_SET) == -1)
+        {
+            
+            LOGE("fseek error, m_filesize: %lld, errno: %d, filemd5: %s, clientNetType: %d, client: %s", m_currentDownloadFileSize, errno, filemd5.c_str(), clientNetType, conn->peerAddress().toIpPort().c_str());
+            return false;     
+        }
     }
 
     string filedata;
@@ -344,12 +359,12 @@ bool FileSession::OnDownloadFileResponse(const std::string& filemd5, int32_t cli
     Send(msg_type_download_resp, m_seq, errorcode, filemd5, sendoffset, m_currentDownloadFileSize, filedata);
 
     std::ostringstream os2;
-    os2 << "Response to client: cmd=msg_type_download_resp, errorcode: " << errorcode
+    os2 << "Response to client: cmd=msg_type_download_resp, errorcode: " << (errorcode == file_msg_error_progress ? "file_msg_error_progress" : "file_msg_error_complete")
              << ", filemd5: " << filemd5 << ", clientNetType: " << clientNetType
              << ", sendoffset: " << sendoffset
              << ", filesize: " << m_currentDownloadFileSize
              << ", filedataLength: " << filedata.length()
-             << ", download percent: " << (sendoffset * 100 / m_currentDownloadFileSize) << "%"
+             << ", download percent: " << (((int64_t)filedata.length()) * 100 / m_currentDownloadFileSize) << "%"
              << ", client:" << conn->peerAddress().toIpPort();
 
     LOGI(os2.str().c_str());

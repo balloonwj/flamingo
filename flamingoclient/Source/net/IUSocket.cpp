@@ -555,11 +555,12 @@ bool CIUSocket::Recv()
 
 bool CIUSocket::SendOnFilePort(const char* pBuffer, int64_t nSize, int nTimeout/* = 3*/)
 {
-    int64_t nStartTime = time(NULL);
     //如果未连接则重连，重连也失败则返回FALSE
-    if (IsFileServerClosed() && !ConnectToFileServer())
+    if (IsFileServerClosed())
         return false;
-
+    
+    int64_t nStartTime = time(NULL);
+   
     int64_t nSentBytes = 0;
     int nRet = 0;
     do
@@ -601,10 +602,10 @@ bool CIUSocket::SendOnFilePort(const char* pBuffer, int64_t nSize, int nTimeout/
 
 bool CIUSocket::RecvOnFilePort(char* pBuffer, int64_t nSize, int nTimeout/* = 3*/)
 {
-    int64_t nStartTime = time(NULL);
-
     if (IsFileServerClosed())
         return false;
+    
+    int64_t nStartTime = time(NULL);
 
     int nRet = 0;
     int64_t nRecvBytes = 0;
@@ -645,11 +646,11 @@ bool CIUSocket::RecvOnFilePort(char* pBuffer, int64_t nSize, int nTimeout/* = 3*
 
 bool CIUSocket::SendOnImgPort(const char* pBuffer, int64_t nSize, int nTimeout/* = 3*/)
 {
-    int64_t nStartTime = time(NULL);
-
-    //如果未连接则重连，重连也失败则返回false
-    if (IsImgServerClosed() && !ConnectToImgServer())
+    //如果未连接则返回false
+    if (IsImgServerClosed())
         return false;
+
+    int64_t nStartTime = time(NULL);
 
     int64_t nSentBytes = 0;
     int nRet = 0;
@@ -691,10 +692,10 @@ bool CIUSocket::SendOnImgPort(const char* pBuffer, int64_t nSize, int nTimeout/*
 
 bool CIUSocket::RecvOnImgPort(char* pBuffer, int64_t nSize, int nTimeout/* = 3*/)
 {
-    int64_t nStartTime = time(NULL);
-
     if (IsImgServerClosed())
         return false;
+
+    int64_t nStartTime = time(NULL);
 
     int nRet = 0;
     int64_t nRecvBytes = 0;
@@ -759,7 +760,7 @@ void CIUSocket::Close()
     ::closesocket(m_hSocket);
     m_hSocket = INVALID_SOCKET;
 
-    m_bConnected = FALSE;
+    m_bConnected = false;
 }
 
 void CIUSocket::CloseFileServerConnection()
@@ -773,7 +774,7 @@ void CIUSocket::CloseFileServerConnection()
 
     LOG_ERROR("Disconnect file server:%s, port:%d.", m_strFileServer.c_str(), m_nFilePort);
 
-    m_bConnectedOnFileSocket = FALSE;
+    m_bConnectedOnFileSocket = false;
 }
 
 void CIUSocket::CloseImgServerConnection()
@@ -787,7 +788,7 @@ void CIUSocket::CloseImgServerConnection()
 
     LOG_ERROR("Disconnect img server:%s, port:%d.", m_strImgServer.c_str(), m_nImgPort);
 
-    m_bConnectedOnImgSocket = FALSE;
+    m_bConnectedOnImgSocket = false;
 }
 
 void CIUSocket::SendThreadProc()

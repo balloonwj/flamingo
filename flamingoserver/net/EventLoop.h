@@ -22,8 +22,6 @@ namespace net
     //class TimerQueue;
     class CTimerHeap;
 
-    EventLoop* getEventLoopOfCurrentThread();
-
 	///
 	/// Reactor, at most one per thread.
 	///
@@ -113,8 +111,6 @@ namespace net
 		bool isInLoopThread() const { return threadId_ == std::this_thread::get_id(); }
 		// bool callingPendingFunctors() const { return callingPendingFunctors_; }
 		bool eventHandling() const { return eventHandling_; }
-
-		static EventLoop* getEventLoopOfCurrentThread();
 
 		const std::thread::id getThreadID() const
 		{
