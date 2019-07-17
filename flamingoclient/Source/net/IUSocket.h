@@ -73,12 +73,12 @@ public:
     bool    Login(const char* pszUser, const char* pszPassword, int nClientType, int nOnlineStatus, int nTimeout, std::string& strReturnData);
 
     //超时时间,单位为秒
-	bool    SendOnFilePort(const char* pBuffer, int64_t nSize, int nTimeout = 3);	
-    bool	RecvOnFilePort(char* pBuffer, int64_t nSize, int nTimeout = 3);
+	bool    SendOnFilePort(const char* pBuffer, int64_t nSize, int nTimeout = 30);	
+    bool	RecvOnFilePort(char* pBuffer, int64_t nSize, int nTimeout = 30);
     //bool    CheckRecvDataOnFilePort(int nTimeout = 3000);
 
-    bool    SendOnImgPort(const char* pBuffer, int64_t nSize, int nTimeout = 3);
-    bool	RecvOnImgPort(char* pBuffer, int64_t nSize, int nTimeout = 3);
+    bool    SendOnImgPort(const char* pBuffer, int64_t nSize, int nTimeout = 30);
+    bool	RecvOnImgPort(char* pBuffer, int64_t nSize, int nTimeout = 30);
     //bool    CheckRecvDataOnImgPort(int nTimeout = 3000);
 
 private:   

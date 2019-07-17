@@ -364,7 +364,7 @@ bool FileSession::OnDownloadFileResponse(const std::string& filemd5, int32_t cli
              << ", sendoffset: " << sendoffset
              << ", filesize: " << m_currentDownloadFileSize
              << ", filedataLength: " << filedata.length()
-             << ", download percent: " << (((int64_t)filedata.length()) * 100 / m_currentDownloadFileSize) << "%"
+             << ", download percent: " << (m_currentDownloadFileOffset * 100 / m_currentDownloadFileSize) << "%"
              << ", client:" << conn->peerAddress().toIpPort();
 
     LOGI(os2.str().c_str());

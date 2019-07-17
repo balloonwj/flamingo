@@ -315,12 +315,16 @@ long CFileTaskThread::UploadFile(PCTSTR pszFileName, HWND hwndReflection, HANDLE
         int64_t eachfilesize = 512 * 1024;
         if (nFileSize - offsetX < eachfilesize)
             eachfilesize = nFileSize - offsetX;
+
         CMiniBuffer buffer(eachfilesize);
         DWORD dwFileRead;
         if (!::ReadFile(hFile, buffer.GetBuffer(), (DWORD)eachfilesize, &dwFileRead, NULL) || eachfilesize != dwFileRead)
+        {
+            LOG_ERROR(_T("Failed to upload file: %s as ReadFile error, errorCode: %d"), pszFileName, (int32_t)::GetLastError());
             break;
-
-        AtlTrace("eachfilesize = %d", eachfilesize);
+        }
+            
+        AtlTrace("eachfilesize = %lld", eachfilesize);
         string filedata;
         filedata.append(buffer.GetBuffer(), (size_t)buffer.GetSize());
         writeStream.WriteString(filedata);
@@ -328,8 +332,11 @@ long CFileTaskThread::UploadFile(PCTSTR pszFileName, HWND hwndReflection, HANDLE
         file_msg headerx = { outbuf.length() };
         outbuf.insert(0, (const char*)& headerx, sizeof(headerx));
         if (!iusocket.SendOnFilePort(outbuf.c_str(), (int64_t)outbuf.length()))
+        {
+            LOG_ERROR(_T("Failed to upload file: %s as SendOnFilePort error."), pszFileName);
             break;
-
+        }
+            
         offsetX += eachfilesize;
         pFileProgress = new FileProgress();
         memset(pFileProgress, 0, sizeof(FileProgress));
@@ -338,47 +345,76 @@ long CFileTaskThread::UploadFile(PCTSTR pszFileName, HWND hwndReflection, HANDLE
         //nTotalSent*100可能会超出long的范围，故先临时转换成__int64
         pFileProgress->nPercent = (long)((__int64)offsetX * 100 / nFileSize);
         AtlTrace(_T("pFileProgress->nPercent:%d, eachfilesize=%lld, offsetX:%lld, nFilesize: %lld\n"), pFileProgress->nPercent, eachfilesize, offsetX, nFileSize);
+        LOG_INFO(_T("pFileProgress->nPercent:%d, eachfilesize=%lld, offsetX:%lld, nFilesize: %lld\n"), pFileProgress->nPercent, eachfilesize, offsetX, nFileSize);
         _tcscpy_s(pFileProgress->szDestPath, ARRAYSIZE(pFileProgress->szDestPath), pszFileName);
         ::PostMessage(hwndReflection, FMG_MSG_SEND_FILE_PROGRESS, 0, (LPARAM)pFileProgress);
 
         file_msg header;
         if (!iusocket.RecvOnFilePort((char*)& header, (int64_t)sizeof(header)))
+        {
+            LOG_ERROR(_T("Failed to upload file: %s as recv header error."), pszFileName);
             break;
-
+        }
+            
         CMiniBuffer recvBuf(header.packagesize);
         if (!iusocket.RecvOnFilePort(recvBuf.GetBuffer(), recvBuf.GetSize()))
+        {
+            LOG_ERROR(_T("Failed to upload file: %s as recv body error, bodysize: %lld"), pszFileName, header.packagesize);
             break;
-
+        }
+            
         BinaryReadStream readStream(recvBuf.GetBuffer(), (size_t)recvBuf.GetSize());
         int32_t cmd;
         if (!readStream.ReadInt32(cmd) || cmd != msg_type_upload_resp)
+        {
+            LOG_ERROR(_T("Failed to upload file: %s as read cmd error."), pszFileName);
             break;
-
+        }
+            
         //int seq;
         if (!readStream.ReadInt32(m_seq))
+        {
+            LOG_ERROR(_T("Failed to upload file: %s as read seq error."), pszFileName);
             break;
-
+        }
+            
         int32_t nErrorCode = 0;
         if (!readStream.ReadInt32(nErrorCode))
+        {
+            LOG_ERROR(_T("Failed to upload file: %s as read ErrorCode error."), pszFileName);
             break;
-
+        }
+            
         std::string filemd5;
         size_t md5length;
         if (!readStream.ReadString(&filemd5, 0, md5length) || md5length != 32)
+        {
+            LOG_ERROR(_T("Failed to upload file: %s as read filemd5 error."), pszFileName);
             break;
-
+        }
+            
         int64_t offset;
         if (!readStream.ReadInt64(offset))
+        {
+            LOG_ERROR(_T("Failed to upload file: %s as read offset error."), pszFileName);
             break;
-
+        }
+            
         int64_t filesize;
         if (!readStream.ReadInt64(filesize))
+        {
+            LOG_ERROR(_T("Failed to upload file: %s as read filesize error."), pszFileName);
             break;
-
+        }
+            
         string dummyfiledata;
         size_t filedatalength;
         if (!readStream.ReadString(&dummyfiledata, 0, filedatalength) || filedatalength != 0)
+        {
+            LOG_ERROR(_T("Failed to upload file: %s as read dummyfiledata error."), pszFileName);
             break;
+        }
+            
 
         if (nErrorCode == file_msg_error_complete)
         {
@@ -473,6 +509,7 @@ long CFileTaskThread::DownloadFile(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BO
 
         if (!iusocket.SendOnFilePort(outbuf.c_str(), (int64_t)outbuf.length()))
         {
+            LOG_ERROR("DownloadFile %s error when SendOnFilePort error", lpszFileName);
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
@@ -480,6 +517,7 @@ long CFileTaskThread::DownloadFile(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BO
         file_msg recvheader;
         if (!iusocket.RecvOnFilePort((char*)& recvheader, (int64_t)sizeof(recvheader)))
         {
+            LOG_ERROR("DownloadFile %s error when recv header error", lpszFileName);
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
@@ -487,6 +525,7 @@ long CFileTaskThread::DownloadFile(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BO
         CMiniBuffer buffer(recvheader.packagesize);
         if (!iusocket.RecvOnFilePort(buffer, recvheader.packagesize))
         {
+            LOG_ERROR("DownloadFile %s error when recv body error, bodysize: %lld", lpszFileName, recvheader.packagesize);
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
@@ -495,6 +534,7 @@ long CFileTaskThread::DownloadFile(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BO
         int32_t cmd;
         if (!readStream.ReadInt32(cmd) || cmd != msg_type_download_resp)
         {
+            LOG_ERROR("DownloadFile %s error when read cmd error", lpszFileName);
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
@@ -502,22 +542,31 @@ long CFileTaskThread::DownloadFile(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BO
         //int seq;
         if (!readStream.ReadInt32(m_seq))
         {
+            LOG_ERROR("DownloadFile %s error when read seq error", lpszFileName);
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
 
         int32_t nErrorCode;
-        if (!readStream.ReadInt32(nErrorCode) && nErrorCode != file_msg_error_not_exist)
+        if (!readStream.ReadInt32(nErrorCode))
         {
+            LOG_ERROR("DownloadFile %s error when read nErrorCode error", lpszFileName);
             nBreakType = FILE_DOWNLOAD_FAILED;
-            if (nErrorCode == file_msg_error_not_exist)
-                LOG_ERROR("File %s does not exsit on server.", lpszFileName);
+            break;
+        }
+
+        if (nErrorCode == file_msg_error_not_exist)
+        {
+            LOG_ERROR("DownloadFile %s error as file not exist on server", lpszFileName);
+            nBreakType = FILE_DOWNLOAD_FAILED;
+            break;
         }
 
         std::string filemd5;
         size_t md5length;
         if (!readStream.ReadString(&filemd5, 0, md5length) || md5length == 0)
         {
+            LOG_ERROR("DownloadFile %s error when read filemd5 error", lpszFileName);
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
@@ -525,6 +574,7 @@ long CFileTaskThread::DownloadFile(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BO
         int64_t offset;
         if (!readStream.ReadInt64(offset))
         {
+            LOG_ERROR("DownloadFile %s error when read offset error", lpszFileName);
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
@@ -532,6 +582,7 @@ long CFileTaskThread::DownloadFile(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BO
         int64_t filesize;
         if (!readStream.ReadInt64(filesize) || filesize <= 0)
         {
+            LOG_ERROR("DownloadFile %s error when read filesize error", lpszFileName);
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;
         }
@@ -541,13 +592,15 @@ long CFileTaskThread::DownloadFile(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BO
         if (!readStream.ReadString(&filedata, 0, filedatalength) || filedatalength == 0)
         {
             nBreakType = FILE_DOWNLOAD_FAILED;
+            LOG_ERROR("DownloadFile %s error when read filedata error", lpszFileName);
             break;
         }
 
         DWORD dwBytesWritten;
         if (!::WriteFile(hFile, filedata.c_str(), filedata.length(), &dwBytesWritten, NULL) || dwBytesWritten != filedata.length())
-        {
+        {          
             nBreakType = FILE_DOWNLOAD_FAILED;
+            LOG_ERROR("DownloadFile %s error when WriteFile error, errorCode: %d", lpszFileName, (int32_t)::GetLastError());
             break;
         }
 
@@ -558,7 +611,11 @@ long CFileTaskThread::DownloadFile(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BO
         memset(pFileProgress, 0, sizeof(FileProgress));
         _tcscpy_s(pFileProgress->szDestPath, ARRAYSIZE(pFileProgress->szDestPath), lpszDestPath);
         pFileProgress->nPercent = long(((__int64)offset * 100) / filesize);
-        ::PostMessage(hwndReflection, FMG_MSG_RECV_FILE_PROGRESS, 0, (LPARAM)(pFileProgress));
+
+        AtlTrace(_T("DownloadFile %s, percent: %d%%\n"), pFileProgress->szDestPath, pFileProgress->nPercent);
+        LOG_INFO(_T("DownloadFile %s, percent: %d%%\n"), pFileProgress->szDestPath, pFileProgress->nPercent);
+
+        ::PostMessage(hwndReflection, FMG_MSG_RECV_FILE_PROGRESS, 0, (LPARAM)(pFileProgress));   
 
         if (nErrorCode == file_msg_error_complete)
         {

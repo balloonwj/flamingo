@@ -563,6 +563,7 @@ bool CIUSocket::SendOnFilePort(const char* pBuffer, int64_t nSize, int nTimeout/
    
     int64_t nSentBytes = 0;
     int nRet = 0;
+    int64_t now;
     do
     {
         //FIXME: 将int64_t强制转换成int32可能会有问题
@@ -570,20 +571,21 @@ bool CIUSocket::SendOnFilePort(const char* pBuffer, int64_t nSize, int nTimeout/
         if (nRet == SOCKET_ERROR && ::WSAGetLastError() == WSAEWOULDBLOCK)
         {
             ::Sleep(1);
-            if (time(NULL) - nStartTime < (int64_t)nTimeout)
+            now = (int64_t)time(NULL);
+            if (now - nStartTime < (int64_t)nTimeout)
                 continue;
             else
             {
                 //超时了,关闭socket,并返回false
                 CloseFileServerConnection();
-                LOG_ERROR("Send data timeout, disconnect file server:%s, port:%d.", m_strFileServer.c_str(), m_nFilePort);
+                LOG_ERROR("Send data timeout, now: %lld, nStartTime: %lld, nTimeout: %d, disconnect file server:%s, port:%d.", now, nStartTime, nTimeout, m_strFileServer.c_str(), m_nFilePort);
                 return false;
             }
         }
         else if (nRet < 1)
         {
             //一旦出现错误就立刻关闭Socket
-            LOG_ERROR("Send data error, disconnect file server:%s, port:%d, socket errorCode: %d", m_strFileServer.c_str(), m_nFilePort, ::WSAGetLastError());
+            LOG_ERROR("Send data error, nRet: %d, disconnect file server: %s, port: %d, socket errorCode: %d", nRet, m_strFileServer.c_str(), m_nFilePort, ::WSAGetLastError());
             CloseFileServerConnection();
             return false;
         }
@@ -609,25 +611,29 @@ bool CIUSocket::RecvOnFilePort(char* pBuffer, int64_t nSize, int nTimeout/* = 3*
 
     int nRet = 0;
     int64_t nRecvBytes = 0;
+    int64_t now;
+
     do
     {
         nRet = ::recv(m_hFileSocket, pBuffer + nRecvBytes, (int)(nSize - nRecvBytes), 0);
-        if (nRet == SOCKET_ERROR && ::WSAGetLastError() == WSAEWOULDBLOCK)				//一旦出现错误就立刻关闭Socket
+        if (nRet == SOCKET_ERROR && ::WSAGetLastError() == WSAEWOULDBLOCK)
         {
             ::Sleep(1);
-            if (time(NULL) - nStartTime < (int64_t)nTimeout)
+            now = time(NULL);
+            if (now - nStartTime < (int64_t)nTimeout)
                 continue;
             else
             {
                 //超时了,关闭socket,并返回false
-                CloseFileServerConnection();
-                LOG_ERROR("Recv data timeout, disconnect file server:%s, port:%d.", m_strFileServer.c_str(), m_nFilePort);
+                CloseFileServerConnection();                
+                LOG_ERROR("Recv data timeout, now: %lld, nStartTime: %lld, nTimeout: %d, disconnect file server:%s, port:%d.", now, nStartTime, nTimeout, m_strFileServer.c_str(), m_nFilePort);
                 return false;
             }
         }
+        //一旦出现错误就立刻关闭Socket
         else if (nRet < 1)
         {
-            LOG_ERROR("Recv data error, disconnect file server:%s, port:%d, socket errorCode: %d.", m_strFileServer.c_str(), m_nFilePort, ::WSAGetLastError());
+            LOG_ERROR("Recv data error, nRet: %d, disconnect file server: %s, port: %d, socket errorCode: %d.", nRet, m_strFileServer.c_str(), m_nFilePort, ::WSAGetLastError());
             CloseFileServerConnection();
             return false;
         }
@@ -654,26 +660,28 @@ bool CIUSocket::SendOnImgPort(const char* pBuffer, int64_t nSize, int nTimeout/*
 
     int64_t nSentBytes = 0;
     int nRet = 0;
+    int64_t now;
     do
     {
         nRet = ::send(m_hImgSocket, pBuffer + nSentBytes, (int)(nSize - nSentBytes), 0);
         if (nRet == SOCKET_ERROR && ::WSAGetLastError() == WSAEWOULDBLOCK)
         {
             ::Sleep(1);
-            if (time(NULL) - nStartTime < (int64_t)nTimeout)
+            now = time(NULL);
+            if (now - nStartTime < (int64_t)nTimeout)
                 continue;
             else
             {
                 //超时了,关闭socket,并返回false
                 CloseImgServerConnection();
-                LOG_ERROR("Send data timeout, disconnect img server:%s, port:%d.", m_strImgServer.c_str(), m_nImgPort);
+                LOG_ERROR("Send data timeout, now: %lld, nStartTime: %lld, nTimeout: %d, disconnect img server: %s, port: %d.", now, nStartTime, nTimeout, m_strImgServer.c_str(), m_nImgPort);
                 return false;
             }
         }
         else if (nRet < 1)
         {
             //一旦出现错误就立刻关闭Socket
-            LOG_ERROR("Send data error, disconnect img server:%s, port:%d, socket errorCode: %d.", m_strImgServer.c_str(), m_nImgPort, ::WSAGetLastError());
+            LOG_ERROR("Send data error, nRet:%d, disconnect img server:%s, port:%d, socket errorCode: %d.", nRet, m_strImgServer.c_str(), m_nImgPort, ::WSAGetLastError());
             CloseImgServerConnection();
             return false;
         }
@@ -699,26 +707,29 @@ bool CIUSocket::RecvOnImgPort(char* pBuffer, int64_t nSize, int nTimeout/* = 3*/
 
     int nRet = 0;
     int64_t nRecvBytes = 0;
+    int64_t now;
     do
-    {
+    {       
         //FIXME: 将int64_t强制转换成int32可能会有问题
         nRet = ::recv(m_hImgSocket, pBuffer + nRecvBytes, (int)(nSize - nRecvBytes), 0);
-        if (nRet == SOCKET_ERROR && ::WSAGetLastError() == WSAEWOULDBLOCK)				//一旦出现错误就立刻关闭Socket
+        if (nRet == SOCKET_ERROR && ::WSAGetLastError() == WSAEWOULDBLOCK)
         {
             ::Sleep(1);
-            if (time(NULL) - nStartTime < (int64_t)nTimeout)
+            now = time(NULL);
+            if (now - nStartTime < (int64_t)nTimeout)
                 continue;
             else
             {
                 //超时了,关闭socket,并返回false
                 CloseImgServerConnection();
-                LOG_ERROR("Recv data timeout, disconnect img server:%s, port:%d.", m_strImgServer.c_str(), m_nImgPort);
+                LOG_ERROR("Recv data timeout, now: %lld, nStartTime: %lld, nTimeout: %d, disconnect img server: %s, port: %d.", now, nStartTime, nTimeout, m_strImgServer.c_str(), m_nImgPort);
                 return false;
             }
         }
+        //一旦出现错误就立刻关闭Socket
         else if (nRet < 1)
         {
-            LOG_ERROR("Recv data error, disconnect img server:%s, port:%d, socket errorCode: %d.", m_strImgServer.c_str(), m_nImgPort, ::WSAGetLastError());
+            LOG_ERROR("Recv data error, nRet: %d, disconnect img server:%s, port:%d, socket errorCode: %d.", nRet, m_strImgServer.c_str(), m_nImgPort, ::WSAGetLastError());
             CloseImgServerConnection();
             return false;
         }

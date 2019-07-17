@@ -199,6 +199,8 @@ void CImageTaskThread::HandleItem(CFileItemRequest* pFileItem)
 			++pFileItem->m_nRetryTimes;
 			::Sleep(3000);
 		}
+
+        //TODO：聊天图片如果下载失败了，不通知界面吗？
 		
 		CBuddyMessage* lpMsg = pFileItem->m_pBuddyMsg;
 

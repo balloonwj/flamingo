@@ -4455,14 +4455,14 @@ LRESULT CBuddyChatDlg::OnRecvFileResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
 			//RichEdit_SetSel(m_richRecv.m_hWnd, -1, -1);
 			RichEdit_ReplaceSel(m_richRecv.m_hWnd, szInfo, _T("微软雅黑"), 10, RGB(0,0,0), FALSE, FALSE, TRUE, TRUE, 0);
 			memset(szInfo, 0, sizeof(szInfo));
-			_stprintf_s(szInfo, ARRAYSIZE(szInfo), _T("。☆\r\n"), pFileItem->m_szFilePath);
+			_stprintf_s(szInfo, ARRAYSIZE(szInfo), _T("%s ☆\r\n"), pFileItem->m_szFilePath);
 			//RichEdit_SetSel(m_richRecv.m_hWnd, -1, -1);
 			RichEdit_ReplaceSel(m_richRecv.m_hWnd, szInfo, _T("微软雅黑"), 10, RGB(0,0,0), FALSE, FALSE, FALSE, FALSE, 0);
 			m_richRecv.SetAutoURLDetect(TRUE);
 
 			time_t nTime = time(NULL);
 			CString strSuccessfulInfo;
-			strSuccessfulInfo.Format(_T("%s已成功接收文件[%s]."), m_strUserName, ::PathFindFileName(pFileItem->m_szFilePath));
+			strSuccessfulInfo.Format(_T("%s已成功接收文件[%s]."), m_strUserName.GetString(), ::PathFindFileName(pFileItem->m_szFilePath));
             m_lpFMGClient->SendBuddyMsg(m_LoginUserId, m_strUserName.GetString(), m_UserId, m_strBuddyName.GetString(), nTime, strSuccessfulInfo.GetString(), m_hWnd);
 		}
 		else if(wParam == RECV_FILE_FAILED)
@@ -4473,7 +4473,7 @@ LRESULT CBuddyChatDlg::OnRecvFileResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
 			RichEdit_ReplaceSel(m_richRecv.m_hWnd, szInfo, _T("微软雅黑"), 10, RGB(255,0,0), FALSE, FALSE, FALSE, FALSE, 0);
 			time_t nTime = time(NULL);
 			CString strFailedInfo;
-			strFailedInfo.Format(_T("%s已接收文件[%s]失败."), m_strUserName, ::PathFindFileName(pFileItem->m_szFilePath));
+			strFailedInfo.Format(_T("%s已接收文件[%s]失败."), m_strUserName.GetString(), ::PathFindFileName(pFileItem->m_szFilePath));
             m_lpFMGClient->SendBuddyMsg(m_LoginUserId, m_strUserName.GetString(), m_UserId, m_strBuddyName.GetString(), nTime, strFailedInfo.GetString(), m_hWnd);
 		}
 
