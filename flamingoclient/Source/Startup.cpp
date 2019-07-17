@@ -142,13 +142,16 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
 
 	SYSTEMTIME st = {0};
 	::GetLocalTime(&st);
+
+    //加上PID，便于同一个目录启动多个进程区分是哪个程序的日志
+    DWORD dwProcessId = ::GetCurrentProcessId();
 	TCHAR szLogFileName[MAX_PATH] = {0};
-	_stprintf_s(szLogFileName, MAX_PATH, _T("%s\\Logs\\%04d%02d%02d%02d%02d%02d.log"), g_szHomePath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+	_stprintf_s(szLogFileName, MAX_PATH, _T("%s\\Logs\\%04d%02d%02d%02d%02d%02d_%d.log"), g_szHomePath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, (int32_t)dwProcessId);
 	CIULog::Init(true, false, szLogFileName);
 
     //初始化性能计数器
     TCHAR szPerformanceFileName[MAX_PATH] = { 0 };
-    _stprintf_s(szPerformanceFileName, MAX_PATH, _T("%s\\Logs\\%04d%02d%02d%02d%02d%02d.perf"), g_szHomePath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+    _stprintf_s(szPerformanceFileName, MAX_PATH, _T("%s\\Logs\\%04d%02d%02d%02d%02d%02d_%d.perf"), g_szHomePath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, (int32_t)dwProcessId);
     CPerformanceCounter::Init(true, szPerformanceFileName);
 
     //TODO: 统一到AppConfig类中去
