@@ -14,7 +14,7 @@ using namespace net;
 
 Socket::~Socket()
 {
-	sockets::close(sockfd_);
+    sockets::close(sockfd_);
 }
 
 //bool Socket::getTcpInfo(struct tcp_info* tcpi) const
@@ -27,67 +27,67 @@ Socket::~Socket()
 
 bool Socket::getTcpInfoString(char* buf, int len) const
 {
-	//struct tcp_info tcpi;
-	//bool ok = getTcpInfo(&tcpi);
-	//if (ok)
-	//{
-	//	snprintf(buf, len, "unrecovered=%u "
-	//		"rto=%u ato=%u snd_mss=%u rcv_mss=%u "
-	//		"lost=%u retrans=%u rtt=%u rttvar=%u "
-	//		"sshthresh=%u cwnd=%u total_retrans=%u",
-	//		tcpi.tcpi_retransmits,  // Number of unrecovered [RTO] timeouts
-	//		tcpi.tcpi_rto,          // Retransmit timeout in usec
-	//		tcpi.tcpi_ato,          // Predicted tick of soft clock in usec
-	//		tcpi.tcpi_snd_mss,
-	//		tcpi.tcpi_rcv_mss,
-	//		tcpi.tcpi_lost,         // Lost packets
-	//		tcpi.tcpi_retrans,      // Retransmitted packets out
-	//		tcpi.tcpi_rtt,          // Smoothed round trip time in usec
-	//		tcpi.tcpi_rttvar,       // Medium deviation
-	//		tcpi.tcpi_snd_ssthresh,
-	//		tcpi.tcpi_snd_cwnd,
-	//		tcpi.tcpi_total_retrans);  // Total retransmits for entire connection
-	//}
-	//return ok;
+    //struct tcp_info tcpi;
+    //bool ok = getTcpInfo(&tcpi);
+    //if (ok)
+    //{
+    //	snprintf(buf, len, "unrecovered=%u "
+    //		"rto=%u ato=%u snd_mss=%u rcv_mss=%u "
+    //		"lost=%u retrans=%u rtt=%u rttvar=%u "
+    //		"sshthresh=%u cwnd=%u total_retrans=%u",
+    //		tcpi.tcpi_retransmits,  // Number of unrecovered [RTO] timeouts
+    //		tcpi.tcpi_rto,          // Retransmit timeout in usec
+    //		tcpi.tcpi_ato,          // Predicted tick of soft clock in usec
+    //		tcpi.tcpi_snd_mss,
+    //		tcpi.tcpi_rcv_mss,
+    //		tcpi.tcpi_lost,         // Lost packets
+    //		tcpi.tcpi_retrans,      // Retransmitted packets out
+    //		tcpi.tcpi_rtt,          // Smoothed round trip time in usec
+    //		tcpi.tcpi_rttvar,       // Medium deviation
+    //		tcpi.tcpi_snd_ssthresh,
+    //		tcpi.tcpi_snd_cwnd,
+    //		tcpi.tcpi_total_retrans);  // Total retransmits for entire connection
+    //}
+    //return ok;
     return false;
 }
 
 void Socket::bindAddress(const InetAddress& addr)
 {
-	sockets::bindOrDie(sockfd_, addr.getSockAddrInet());
+    sockets::bindOrDie(sockfd_, addr.getSockAddrInet());
 }
 
 void Socket::listen()
 {
-	sockets::listenOrDie(sockfd_);
+    sockets::listenOrDie(sockfd_);
 }
 
 int Socket::accept(InetAddress* peeraddr)
 {
-	struct sockaddr_in addr;
-	memset(&addr, 0, sizeof addr);
-	int connfd = sockets::accept(sockfd_, &addr);
-	if (connfd >= 0)
-	{
-		peeraddr->setSockAddrInet(addr);
-	}
-	return connfd;
+    struct sockaddr_in addr;
+    memset(&addr, 0, sizeof addr);
+    int connfd = sockets::accept(sockfd_, &addr);
+    if (connfd >= 0)
+    {
+        peeraddr->setSockAddrInet(addr);
+    }
+    return connfd;
 }
 
 void Socket::shutdownWrite()
 {
-	sockets::shutdownWrite(sockfd_);
+    sockets::shutdownWrite(sockfd_);
 }
 
 void Socket::setTcpNoDelay(bool on)
 {
-	int optval = on ? 1 : 0;
+    int optval = on ? 1 : 0;
 #ifdef WIN32
-    ::setsockopt(sockfd_, IPPROTO_TCP, TCP_NODELAY, (char*)&optval, sizeof(optval));
+    ::setsockopt(sockfd_, IPPROTO_TCP, TCP_NODELAY, (char*)& optval, sizeof(optval));
 #else
-	::setsockopt(sockfd_, IPPROTO_TCP, TCP_NODELAY, &optval, static_cast<socklen_t>(sizeof optval));
+    ::setsockopt(sockfd_, IPPROTO_TCP, TCP_NODELAY, &optval, static_cast<socklen_t>(sizeof optval));
 #endif
-	// FIXME CHECK
+    // FIXME CHECK
 }
 
 void Socket::setReuseAddr(bool on)
@@ -105,10 +105,10 @@ void Socket::setKeepAlive(bool on)
 #ifdef WIN32
     //TODO: 补全Windows的写法
 #else
-	int optval = on ? 1 : 0;
-	::setsockopt(sockfd_, SOL_SOCKET, SO_KEEPALIVE, &optval, static_cast<socklen_t>(sizeof optval));
+    int optval = on ? 1 : 0;
+    ::setsockopt(sockfd_, SOL_SOCKET, SO_KEEPALIVE, &optval, static_cast<socklen_t>(sizeof optval));
 #endif
-	// FIXME CHECK
+    // FIXME CHECK
 }
 
 //namespace
@@ -121,22 +121,22 @@ void Socket::setKeepAlive(bool on)
 
 const struct sockaddr* sockets::sockaddr_cast(const struct sockaddr_in* addr)
 {
-	return static_cast<const struct sockaddr*>(implicit_cast<const void*>(addr));
+    return static_cast<const struct sockaddr*>(implicit_cast<const void*>(addr));
 }
 
 struct sockaddr* sockets::sockaddr_cast(struct sockaddr_in* addr)
 {
-	return static_cast<struct sockaddr*>(implicit_cast<void*>(addr));
+    return static_cast<struct sockaddr*>(implicit_cast<void*>(addr));
 }
 
 const struct sockaddr_in* sockets::sockaddr_in_cast(const struct sockaddr* addr)
 {
-	return static_cast<const struct sockaddr_in*>(implicit_cast<const void*>(addr));
+    return static_cast<const struct sockaddr_in*>(implicit_cast<const void*>(addr));
 }
 
 struct sockaddr_in* sockets::sockaddr_in_cast(struct sockaddr* addr)
 {
-	return static_cast<struct sockaddr_in*>(implicit_cast<void*>(addr));
+    return static_cast<struct sockaddr_in*>(implicit_cast<void*>(addr));
 }
 
 SOCKET sockets::createOrDie()
@@ -165,17 +165,17 @@ SOCKET sockets::createNonblockingOrDie()
     if (sockfd < 0)
     {
         LOGF("sockets::createNonblockingOrDie");
-    }   
+    }
 #else
     SOCKET sockfd = ::socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, IPPROTO_TCP);
     if (sockfd < 0)
     {
         LOGF("sockets::createNonblockingOrDie");
-    } 
+    }
 #endif
 
     setNonBlockAndCloseOnExec(sockfd);
-	return sockfd;
+    return sockfd;
 }
 
 void sockets::setNonBlockAndCloseOnExec(SOCKET sockfd)
@@ -203,38 +203,38 @@ void sockets::setNonBlockAndCloseOnExec(SOCKET sockfd)
 
 void sockets::bindOrDie(SOCKET sockfd, const struct sockaddr_in& addr)
 {
-	int ret = ::bind(sockfd, sockaddr_cast(&addr), static_cast<socklen_t>(sizeof addr));
-	if (ret < 0)
-	{
-		LOGF("sockets::bindOrDie");
-	}
+    int ret = ::bind(sockfd, sockaddr_cast(&addr), static_cast<socklen_t>(sizeof addr));
+    if (ret < 0)
+    {
+        LOGF("sockets::bindOrDie");
+    }
 }
 
 void sockets::listenOrDie(SOCKET sockfd)
 {
-	int ret = ::listen(sockfd, SOMAXCONN);
-	if (ret < 0)
-	{
-		LOGF("sockets::listenOrDie");
-	}
+    int ret = ::listen(sockfd, SOMAXCONN);
+    if (ret < 0)
+    {
+        LOGF("sockets::listenOrDie");
+    }
 }
 
-int sockets::accept(SOCKET sockfd, struct sockaddr_in* addr)
+SOCKET sockets::accept(SOCKET sockfd, struct sockaddr_in* addr)
 {
-	socklen_t addrlen = static_cast<socklen_t>(sizeof *addr);
+    socklen_t addrlen = static_cast<socklen_t>(sizeof * addr);
 #ifdef WIN32
     SOCKET connfd = ::accept(sockfd, sockaddr_cast(addr), &addrlen);
     setNonBlockAndCloseOnExec(connfd);
 #else  
     SOCKET connfd = ::accept4(sockfd, sockaddr_cast(addr), &addrlen, SOCK_NONBLOCK | SOCK_CLOEXEC);
 #endif
-	if (connfd < 0)
-	{
+    if (connfd < 0)
+    {
 #ifdef WIN32
         int savedErrno = ::WSAGetLastError();
         LOGSYSE("Socket::accept");
         if (savedErrno != WSAEWOULDBLOCK)
-            LOGF("unexpected error of ::accept %d", savedErrno);		
+            LOGF("unexpected error of ::accept %d", savedErrno);
 #else
         int savedErrno = errno;
         LOGSYSE("Socket::accept");
@@ -263,12 +263,12 @@ int sockets::accept(SOCKET sockfd, struct sockaddr_in* addr)
         default:
             LOGF("unknown error of ::accept %d", savedErrno);
             break;
-    }
-        
-#endif
-	}
+        }
 
-	return connfd;
+#endif
+    }
+
+    return connfd;
 }
 
 void sockets::setReuseAddr(SOCKET sockfd, bool on)
@@ -295,35 +295,35 @@ void sockets::setReusePort(SOCKET sockfd, bool on)
 #endif
 }
 
-int sockets::connect(SOCKET sockfd, const struct sockaddr_in& addr)
+SOCKET sockets::connect(SOCKET sockfd, const struct sockaddr_in& addr)
 {
-	return ::connect(sockfd, sockaddr_cast(&addr), static_cast<socklen_t>(sizeof addr));
+    return ::connect(sockfd, sockaddr_cast(&addr), static_cast<socklen_t>(sizeof addr));
 }
 
-int32_t sockets::read(SOCKET sockfd, void *buf, int32_t count)
+int32_t sockets::read(SOCKET sockfd, void* buf, int32_t count)
 {
 #ifdef WIN32
     return ::recv(sockfd, (char*)buf, count, 0);
 #else
-	return ::read(sockfd, buf, count);
+    return ::read(sockfd, buf, count);
 #endif
 }
 
 #ifndef WIN32
-ssize_t sockets::readv(SOCKET sockfd, const struct iovec *iov, int iovcnt)
+ssize_t sockets::readv(SOCKET sockfd, const struct iovec* iov, int iovcnt)
 {
-	return ::readv(sockfd, iov, iovcnt);
+    return ::readv(sockfd, iov, iovcnt);
 }
 #endif
 
-int32_t sockets::write(SOCKET sockfd, const void *buf, int32_t count)
+int32_t sockets::write(SOCKET sockfd, const void* buf, int32_t count)
 {
 #ifdef WIN32
     return ::send(sockfd, (const char*)buf, count, 0);
 #else
     return ::write(sockfd, buf, count);
 #endif
-    
+
 }
 
 void sockets::close(SOCKET sockfd)
@@ -335,19 +335,19 @@ void sockets::close(SOCKET sockfd)
 #endif
     {
         LOGSYSE("sockets::close, fd=%d, errno=%d, errorinfo=%s", sockfd, errno, strerror(errno));
-    } 
+    }
 }
 
 void sockets::shutdownWrite(SOCKET sockfd)
 {
 #ifdef WIN32
-    if (::shutdown(sockfd, SD_SEND) < 0)	
+    if (::shutdown(sockfd, SD_SEND) < 0)
 #else
     if (::shutdown(sockfd, SHUT_WR) < 0)
 #endif        
-	{
-		LOGSYSE("sockets::shutdownWrite");
-	}
+    {
+        LOGSYSE("sockets::shutdownWrite");
+    }
 }
 
 void sockets::toIpPort(char* buf, size_t size, const struct sockaddr_in& addr)
@@ -355,13 +355,13 @@ void sockets::toIpPort(char* buf, size_t size, const struct sockaddr_in& addr)
     //if (size >= sizeof(struct sockaddr_in))
     //    return;
 
-	::inet_ntop(AF_INET, &addr.sin_addr, buf, static_cast<socklen_t>(size));
-	size_t end = ::strlen(buf);
-	uint16_t port = sockets::networkToHost16(addr.sin_port);
+    ::inet_ntop(AF_INET, &addr.sin_addr, buf, static_cast<socklen_t>(size));
+    size_t end = ::strlen(buf);
+    uint16_t port = sockets::networkToHost16(addr.sin_port);
     //if (size > end)
     //    return;
 
-	snprintf(buf + end, size - end, ":%u", port);
+    snprintf(buf + end, size - end, ":%u", port);
 }
 
 void sockets::toIp(char* buf, size_t size, const struct sockaddr_in& addr)
@@ -369,70 +369,70 @@ void sockets::toIp(char* buf, size_t size, const struct sockaddr_in& addr)
     if (size >= sizeof(struct sockaddr_in))
         return;
 
-	::inet_ntop(AF_INET, &addr.sin_addr, buf, static_cast<socklen_t>(size));
+    ::inet_ntop(AF_INET, &addr.sin_addr, buf, static_cast<socklen_t>(size));
 }
 
 void sockets::fromIpPort(const char* ip, uint16_t port, struct sockaddr_in* addr)
 {
-	addr->sin_family = AF_INET;
+    addr->sin_family = AF_INET;
     //TODO: 校验下写的对不对
 #ifdef WIN32
     addr->sin_port = htons(port);
 #else
-	addr->sin_port = htobe16(port);
+    addr->sin_port = htobe16(port);
 #endif
-	if (::inet_pton(AF_INET, ip, &addr->sin_addr) <= 0)
-	{
-		LOGSYSE("sockets::fromIpPort");
-	}
+    if (::inet_pton(AF_INET, ip, &addr->sin_addr) <= 0)
+    {
+        LOGSYSE("sockets::fromIpPort");
+    }
 }
 
 int sockets::getSocketError(SOCKET sockfd)
 {
-	int optval;
+    int optval;
 #ifdef WIN32
-    int optvallen;
-    if (::getsockopt(sockfd, SOL_SOCKET, SO_ERROR, (char*)&optval, &optvallen) < 0)
+    int optvallen = sizeof(optval);
+    if (::getsockopt(sockfd, SOL_SOCKET, SO_ERROR, (char*)& optval, &optvallen) < 0)
         return ::WSAGetLastError();
 #else
-	socklen_t optlen = static_cast<socklen_t>(sizeof optval);
+    socklen_t optlen = static_cast<socklen_t>(sizeof optval);
 
-	if (::getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &optval, &optlen) < 0)
-		return errno;
+    if (::getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &optval, &optlen) < 0)
+        return errno;
 #endif
-	return optval;
+    return optval;
 }
 
 struct sockaddr_in sockets::getLocalAddr(SOCKET sockfd)
 {
     struct sockaddr_in localaddr = { 0 };
-	memset(&localaddr, 0, sizeof localaddr);
-	socklen_t addrlen = static_cast<socklen_t>(sizeof localaddr);
+    memset(&localaddr, 0, sizeof localaddr);
+    socklen_t addrlen = static_cast<socklen_t>(sizeof localaddr);
     ::getsockname(sockfd, sockaddr_cast(&localaddr), &addrlen);
-	//if (::getsockname(sockfd, sockaddr_cast(&localaddr), &addrlen) < 0)
-	//{
-	//	LOG_SYSERR << "sockets::getLocalAddr";
+    //if (::getsockname(sockfd, sockaddr_cast(&localaddr), &addrlen) < 0)
+    //{
+    //	LOG_SYSERR << "sockets::getLocalAddr";
     //  return 
-	//}
-	return localaddr;
+    //}
+    return localaddr;
 }
 
 struct sockaddr_in sockets::getPeerAddr(SOCKET sockfd)
 {
     struct sockaddr_in peeraddr = { 0 };
-	memset(&peeraddr, 0, sizeof peeraddr);
-	socklen_t addrlen = static_cast<socklen_t>(sizeof peeraddr);
+    memset(&peeraddr, 0, sizeof peeraddr);
+    socklen_t addrlen = static_cast<socklen_t>(sizeof peeraddr);
     ::getpeername(sockfd, sockaddr_cast(&peeraddr), &addrlen);
-	//if (::getpeername(sockfd, sockaddr_cast(&peeraddr), &addrlen) < 0)
-	//{
-	//	LOG_SYSERR << "sockets::getPeerAddr";
-	//}
-	return peeraddr;
+    //if (::getpeername(sockfd, sockaddr_cast(&peeraddr), &addrlen) < 0)
+    //{
+    //	LOG_SYSERR << "sockets::getPeerAddr";
+    //}
+    return peeraddr;
 }
 
 bool sockets::isSelfConnect(SOCKET sockfd)
 {
-	struct sockaddr_in localaddr = getLocalAddr(sockfd);
-	struct sockaddr_in peeraddr = getPeerAddr(sockfd);
-	return localaddr.sin_port == peeraddr.sin_port && localaddr.sin_addr.s_addr == peeraddr.sin_addr.s_addr;
+    struct sockaddr_in localaddr = getLocalAddr(sockfd);
+    struct sockaddr_in peeraddr = getPeerAddr(sockfd);
+    return localaddr.sin_port == peeraddr.sin_port && localaddr.sin_addr.s_addr == peeraddr.sin_addr.s_addr;
 }

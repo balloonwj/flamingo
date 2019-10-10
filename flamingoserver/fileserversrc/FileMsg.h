@@ -32,7 +32,7 @@ enum client_net_type
 
 #pragma pack(push, 1)
 //协议头
-struct file_msg
+struct file_msg_header
 {
     int64_t  packagesize;       //指定包体的大小
 };

@@ -6,7 +6,7 @@
 #include "Msg.h"
 #include "IUProtocolData.h"
 #include "../RecvMsgThread.h"
-#include "../EncodingUtil.h"
+#include "../EncodeUtil.h"
 #include "../IULog.h"
 #include "../MiniBuffer.h"
 #include "protocolstream.h"

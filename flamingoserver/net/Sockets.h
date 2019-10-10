@@ -80,10 +80,10 @@ namespace net
         void setReuseAddr(SOCKET sockfd, bool on);
         void setReusePort(SOCKET sockfd, bool on);
 
-		int  connect(SOCKET sockfd, const struct sockaddr_in& addr);
+        SOCKET connect(SOCKET sockfd, const struct sockaddr_in& addr);
 		void bindOrDie(SOCKET sockfd, const struct sockaddr_in& addr);
 		void listenOrDie(SOCKET sockfd);
-		int  accept(SOCKET sockfd, struct sockaddr_in* addr);
+        SOCKET accept(SOCKET sockfd, struct sockaddr_in* addr);
         int32_t read(SOCKET sockfd, void *buf, int32_t count);
 #ifndef WIN32
 		ssize_t readv(SOCKET sockfd, const struct iovec *iov, int iovcnt);

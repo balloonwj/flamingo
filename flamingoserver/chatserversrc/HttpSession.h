@@ -23,9 +23,9 @@ public:
 
 public:
     //有数据可读, 会被多个工作loop调用
-    void OnRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBuffer, Timestamp receivTime);
+    void onRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBuffer, Timestamp receivTime);
 
-    std::shared_ptr<TcpConnection> GetConnectionPtr()
+    std::shared_ptr<TcpConnection> getConnectionPtr()
     {
         if (m_tmpConn.expired())
             return NULL;
@@ -33,14 +33,14 @@ public:
         return m_tmpConn.lock();
     }
 
-    void Send(const char* data, size_t length);
+    void send(const char* data, size_t length);
 
 private:
-    bool Process(const std::shared_ptr<TcpConnection>& conn, const std::string& url, const std::string& param);
-    void MakeupResponse(const std::string& input, std::string& output);
+    bool process(const std::shared_ptr<TcpConnection>& conn, const std::string& url, const std::string& param);
+    void makeupResponse(const std::string& input, std::string& output);
 
-    void OnRegisterResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
-    void OnLoginResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
+    void onRegisterResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
+    void onLoginResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
     
 private:
     std::weak_ptr<TcpConnection>       m_tmpConn;

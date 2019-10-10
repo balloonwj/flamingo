@@ -17,7 +17,7 @@ TcpSession::~TcpSession()
     
 }
 
-void TcpSession::Send(int32_t cmd, int32_t seq, int32_t errorcode, const std::string& filemd5, int64_t offset, int64_t filesize, const std::string& filedata)
+void TcpSession::send(int32_t cmd, int32_t seq, int32_t errorcode, const std::string& filemd5, int64_t offset, int64_t filesize, const std::string& filedata)
 {
     std::string outbuf;
     net::BinaryWriteStream writeStream(&outbuf);
@@ -30,13 +30,13 @@ void TcpSession::Send(int32_t cmd, int32_t seq, int32_t errorcode, const std::st
     writeStream.WriteString(filedata);   
     writeStream.Flush();
 
-    SendPackage(outbuf.c_str(), outbuf.length());
+    sendPackage(outbuf.c_str(), outbuf.length());
 }
 
-void TcpSession::SendPackage(const char* body, int64_t bodylength)
+void TcpSession::sendPackage(const char* body, int64_t bodylength)
 {
     string strPackageData;
-    file_msg header = { (int64_t)bodylength };
+    file_msg_header header = { (int64_t)bodylength };
     strPackageData.append((const char*)&header, sizeof(header));
     strPackageData.append(body, bodylength);
 

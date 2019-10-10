@@ -122,8 +122,8 @@ private:
 	bool							m_bConnectedOnFileSocket;
     bool                            m_bConnectedOnImgSocket;
 
-    std::shared_ptr<std::thread>    m_spSendThread;
-    std::shared_ptr<std::thread>    m_spRecvThread;
+    std::unique_ptr<std::thread>    m_spSendThread;
+    std::unique_ptr<std::thread>    m_spRecvThread;
 
     std::string                     m_strSendBuf;
     std::string                     m_strRecvBuf;

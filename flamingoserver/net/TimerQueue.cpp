@@ -287,7 +287,7 @@ void TimerQueue::insert(Timer* timer)
     //assert(timers_.size() == activeTimers_.size());
     bool earliestChanged = false;
     Timestamp when = timer->expiration();
-    TimerList::iterator it = timers_.begin();
+    //TimerList::iterator it = timers_.begin();
     //if (it == timers_.end() || when < it->first)
     //{
     //    earliestChanged = true;

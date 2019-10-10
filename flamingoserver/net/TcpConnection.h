@@ -5,7 +5,6 @@
 #include "Callbacks.h"
 #include "Buffer.h"
 #include "InetAddress.h"
-//#include "EventLoop.h"
 
 // struct tcp_info is in <netinet/tcp.h>
 struct tcp_info;
@@ -116,8 +115,8 @@ namespace net
 		const string                name_;
 		StateE                      state_;  // FIXME: use atomic variable
 		// we don't expose those classes to client.
-		std::shared_ptr<Socket>     socket_;
-		std::shared_ptr<Channel>    channel_;
+		std::unique_ptr<Socket>     socket_;
+		std::unique_ptr<Channel>    channel_;
 		const InetAddress           localAddr_;
 		const InetAddress           peerAddr_;
 		ConnectionCallback          connectionCallback_;

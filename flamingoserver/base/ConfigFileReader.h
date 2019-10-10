@@ -14,14 +14,14 @@ public:
 	CConfigFileReader(const char* filename);
 	~CConfigFileReader();
 
-    char* GetConfigName(const char* name);
-    int SetConfigValue(const char* name, const char*  value);
+    char* getConfigName(const char* name);
+    int setConfigValue(const char* name, const char*  value);
 
 private:
-    void  _LoadFile(const char* filename);
-    int   _WriteFile(const char* filename = NULL);
-    void  _ParseLine(char* line);
-    char* _TrimSpace(char* name);
+    void  loadFile(const char* filename);
+    int   writeFile(const char* filename = NULL);
+    void  parseLine(char* line);
+    char* trimSpace(char* name);
 
     bool                                m_load_ok;
     std::map<std::string, std::string>  m_config_map;

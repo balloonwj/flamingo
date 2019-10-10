@@ -4,7 +4,7 @@
  */
 #include "URLEncodeUtil.h"
 
-bool URLEncodeUtil::Encode(const std::string& src, std::string& dst)
+bool URLEncodeUtil::encode(const std::string& src, std::string& dst)
 {
     if (src.size() == 0)
         return false;
@@ -51,7 +51,7 @@ bool URLEncodeUtil::Encode(const std::string& src, std::string& dst)
     return true;
 }
 
-bool URLEncodeUtil::Decode(const std::string& src, std::string& dst)
+bool URLEncodeUtil::decode(const std::string& src, std::string& dst)
 {
     if (src.size() == 0)
         return false;

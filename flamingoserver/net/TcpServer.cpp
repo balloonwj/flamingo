@@ -49,7 +49,7 @@ void TcpServer::start(int workerThreadCount/* = 4*/)
     if (started_ == 0)
     {
         eventLoopThreadPool_.reset(new EventLoopThreadPool());
-        eventLoopThreadPool_->Init(loop_, workerThreadCount);
+        eventLoopThreadPool_->init(loop_, workerThreadCount);
         eventLoopThreadPool_->start();
         
         //threadPool_->start(threadInitCallback_);

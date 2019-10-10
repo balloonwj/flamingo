@@ -98,6 +98,7 @@ typedef int SOCKET;
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <sys/epoll.h>
+#include <sys/syscall.h>
 
 //for ubuntu readv not found
 #ifdef __UBUNTU
@@ -116,5 +117,9 @@ typedef int SOCKET;
 #define  XEPOLL_CTL_ADD  EPOLL_CTL_ADD
 #define  XEPOLL_CTL_DEL  EPOLL_CTL_DEL
 #define  XEPOLL_CTL_MOD  EPOLL_CTL_MOD
+
+//Linux下没有这两个函数，定义之
+#define ntohll(x) be64toh(x)
+#define htonll(x) htobe64(x)
 
 #endif

@@ -16,8 +16,8 @@ private:
     URLEncodeUtil& operator =(const URLEncodeUtil& rhs) = delete;
 
 public:
-    static bool Encode(const std::string& src, std::string& dst);
-    static bool Decode(const std::string& src, std::string& dst);
+    static bool encode(const std::string& src, std::string& dst);
+    static bool decode(const std::string& src, std::string& dst);
 
 };
 

@@ -16,10 +16,10 @@ public:
 
 private:
 	Singleton();
-	~Singleton();
+	~Singleton() = default;
 
-	Singleton(const Singleton&);
-	Singleton& operator=(const Singleton&);
+	Singleton(const Singleton&) = delete;
+	Singleton& operator=(const Singleton&) = delete;
 
 	static void init()
 	{

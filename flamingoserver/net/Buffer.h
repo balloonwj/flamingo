@@ -70,6 +70,12 @@ namespace net
 			return begin() + readerIndex_;
 		}
 
+        const char* findString(const char* targetStr) const
+        {
+            const char* found = std::search(peek(), beginWrite(), targetStr, targetStr + strlen(targetStr));
+            return found == beginWrite() ? nullptr : found;
+        }
+
 		const char* findCRLF() const
 		{
 			// FIXME: replace with memmem()?

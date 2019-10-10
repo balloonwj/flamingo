@@ -41,20 +41,20 @@ public:
     virtual ~CMysqlManager(void);
 
 public:
-    bool Init(const char* host, const char* user, const char* pwd, const char* dbname);
+    bool init(const char* host, const char* user, const char* pwd, const char* dbname);
 
-	std::string GetHost() { return m_strHost; }
-	std::string GetUser() { return m_strUser; }
-	std::string GetPwd() { return m_strPassword; }
-	std::string GetDBName() { return m_strDataBase; }
-	std::string GetCharSet() { return m_strCharactSet;  }
+	std::string getHost() { return m_strHost; }
+	std::string getUser() { return m_strUser; }
+	std::string getPwd() { return m_strPassword; }
+	std::string getDBName() { return m_strDataBase; }
+	std::string getCharSet() { return m_strCharactSet;  }
 
 private:
-	bool _IsDBExist();
-	bool _CreateDB();
-	bool _CheckTable(const STableInfo& table);
-	bool _CreateTable(const STableInfo& table);
-	bool _UpdateTable(const STableInfo& table);
+	bool isDBExist();
+	bool createDB();
+	bool checkTable(const STableInfo& table);
+	bool createTable(const STableInfo& table);
+	bool updateTable(const STableInfo& table);
 
 protected:
 	std::shared_ptr<CDatabaseMysql>     m_poConn;

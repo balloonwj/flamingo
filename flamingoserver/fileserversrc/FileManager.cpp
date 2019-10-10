@@ -20,7 +20,7 @@ FileManager::~FileManager()
 
 }
 
-bool FileManager::Init(const char* basepath)
+bool FileManager::init(const char* basepath)
 {
     m_basepath = basepath;
 
@@ -76,7 +76,7 @@ bool FileManager::Init(const char* basepath)
     return true;
 }
 
-bool FileManager::IsFileExsit(const char* filename)
+bool FileManager::isFileExsit(const char* filename)
 {
     std::lock_guard<std::mutex> guard(m_mtFile);
     //ÏÈ²é¿´»º´æ

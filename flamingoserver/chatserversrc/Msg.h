@@ -49,7 +49,7 @@ enum online_type{
 
 #pragma pack(push, 1)
 //协议头
-struct msg
+struct chat_msg_header
 {
     char     compressflag;     //压缩标志，如果为1，则启用压缩，反之不启用压缩
     int32_t  originsize;       //包体压缩前大小

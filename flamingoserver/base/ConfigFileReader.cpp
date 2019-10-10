@@ -8,14 +8,14 @@
 
 CConfigFileReader::CConfigFileReader(const char* filename)
 {
-	_LoadFile(filename);
+	loadFile(filename);
 }
 
 CConfigFileReader::~CConfigFileReader()
 {
 }
 
-char* CConfigFileReader::GetConfigName(const char* name)
+char* CConfigFileReader::getConfigName(const char* name)
 {
 	if (!m_load_ok)
 		return NULL;
@@ -30,7 +30,7 @@ char* CConfigFileReader::GetConfigName(const char* name)
 	return value;
 }
 
-int CConfigFileReader::SetConfigValue(const char* name, const char* value)
+int CConfigFileReader::setConfigValue(const char* name, const char* value)
 {
     if(!m_load_ok)
         return -1;
@@ -45,9 +45,9 @@ int CConfigFileReader::SetConfigValue(const char* name, const char* value)
         m_config_map.insert(std::make_pair(name, value));
     }
 
-    return _WriteFile();
+    return writeFile();
 }
-void CConfigFileReader::_LoadFile(const char* filename)
+void CConfigFileReader::loadFile(const char* filename)
 {
     m_config_file.clear();
     m_config_file.append(filename);
@@ -73,14 +73,14 @@ void CConfigFileReader::_LoadFile(const char* filename)
 		if (strlen(buf) == 0)
 			continue;
 
-		_ParseLine(buf);
+		parseLine(buf);
 	}
 
 	fclose(fp);
 	m_load_ok = true;
 }
 
-int CConfigFileReader::_WriteFile(const char* filename)
+int CConfigFileReader::writeFile(const char* filename)
 {
    FILE* fp = NULL;
    if(filename == NULL)
@@ -113,22 +113,22 @@ int CConfigFileReader::_WriteFile(const char* filename)
    return 0;
 }
 
-void CConfigFileReader::_ParseLine(char* line)
+void CConfigFileReader::parseLine(char* line)
 {
 	char* p = strchr(line, '=');
 	if (p == NULL)
 		return;
 
 	*p = 0;
-	char* key =  _TrimSpace(line);
-	char* value = _TrimSpace(p + 1);
+	char* key =  trimSpace(line);
+	char* value = trimSpace(p + 1);
 	if (key && value)
 	{
         m_config_map.insert(std::make_pair(key, value));
 	}
 }
 
-char* CConfigFileReader::_TrimSpace(char* name)
+char* CConfigFileReader::trimSpace(char* name)
 {
 	// remove starting space or tab
 	char* start_pos = name;

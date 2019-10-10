@@ -29,11 +29,11 @@ public:
     MsgCacheManager(const MsgCacheManager& rhs) = delete;
     MsgCacheManager& operator =(const MsgCacheManager& rhs) = delete;
 
-    bool AddNotifyMsgCache(int32_t userid, const std::string& cache);
-    void GetNotifyMsgCache(int32_t userid, std::list<NotifyMsgCache>& cached);
+    bool addNotifyMsgCache(int32_t userid, const std::string& cache);
+    void getNotifyMsgCache(int32_t userid, std::list<NotifyMsgCache>& cached);
 
-    bool AddChatMsgCache(int32_t userid, const std::string& cache);
-    void GetChatMsgCache(int32_t userid, std::list<ChatMsgCache>& cached);
+    bool addChatMsgCache(int32_t userid, const std::string& cache);
+    void getChatMsgCache(int32_t userid, std::list<ChatMsgCache>& cached);
 
 
 private:

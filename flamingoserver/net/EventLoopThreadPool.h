@@ -20,7 +20,7 @@ namespace net
 		EventLoopThreadPool();
 		~EventLoopThreadPool();
 		
-		void Init(EventLoop* baseLoop, int numThreads);
+		void init(EventLoop* baseLoop, int numThreads);
 		void start(const ThreadInitCallback& cb = ThreadInitCallback());
 
         void stop();
@@ -49,7 +49,7 @@ namespace net
 		bool                                            started_;
 		int                                             numThreads_;
 		int                                             next_;
-		std::vector<std::shared_ptr<EventLoopThread> >  threads_;
+		std::vector<std::unique_ptr<EventLoopThread> >  threads_;
 		std::vector<EventLoop*>                         loops_;
 	};
 

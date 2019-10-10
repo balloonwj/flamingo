@@ -37,12 +37,12 @@ void prog_exit(int signo)
 {
     std::cout << "program recv signal [" << signo << "] to exit." << std::endl;
 
-    Singleton<MonitorServer>::Instance().Uninit();
-    Singleton<HttpServer>::Instance().Uninit();
-    Singleton<ChatServer>::Instance().Uninit();
+    Singleton<MonitorServer>::Instance().uninit();
+    Singleton<HttpServer>::Instance().uninit();
+    Singleton<ChatServer>::Instance().uninit();
     g_mainLoop.quit();
 
-    CAsyncLog::Uninit();
+    CAsyncLog::uninit();
 }
 #endif
 
@@ -78,20 +78,20 @@ int main(int argc, char* argv[])
     CConfigFileReader config("etc/chatserver.conf");
 #endif
 
-    const char* logbinarypackage = config.GetConfigName("logbinarypackage");
+    const char* logbinarypackage = config.getConfigName("logbinarypackage");
     if (logbinarypackage != NULL)
     {
         int logbinarypackageint = atoi(logbinarypackage);
         if (logbinarypackageint != 0)
-            Singleton<ChatServer>::Instance().EnableLogPackageBinary(true);
+            Singleton<ChatServer>::Instance().enableLogPackageBinary(true);
         else
-            Singleton<ChatServer>::Instance().EnableLogPackageBinary(false);
+            Singleton<ChatServer>::Instance().enableLogPackageBinary(false);
     }
    
     std::string logFileFullPath;
 
 #ifndef WIN32
-    const char* logfilepath = config.GetConfigName("logfiledir");
+    const char* logfilepath = config.getConfigName("logfiledir");
     if (logfilepath == NULL)
     {
         LOGF("logdir is not set in config file");
@@ -113,44 +113,42 @@ int main(int argc, char* argv[])
     logFileFullPath = logfilepath;
 #endif
 
-    const char* logfilename = config.GetConfigName("logfilename");
+    const char* logfilename = config.getConfigName("logfilename");
     logFileFullPath += logfilename;
 
 #ifdef _DEBUG
-    CAsyncLog::Init();
+    CAsyncLog::init();
 #else
-    CAsyncLog::Init(logFileFullPath.c_str());
+    CAsyncLog::init(logFileFullPath.c_str());
 #endif
     
-    
-  
     //初始化数据库配置
-    const char* dbserver = config.GetConfigName("dbserver");
-    const char* dbuser = config.GetConfigName("dbuser");
-    const char* dbpassword = config.GetConfigName("dbpassword");
-    const char* dbname = config.GetConfigName("dbname");
-    if (!Singleton<CMysqlManager>::Instance().Init(dbserver, dbuser, dbpassword, dbname))
+    const char* dbserver = config.getConfigName("dbserver");
+    const char* dbuser = config.getConfigName("dbuser");
+    const char* dbpassword = config.getConfigName("dbpassword");
+    const char* dbname = config.getConfigName("dbname");
+    if (!Singleton<CMysqlManager>::Instance().init(dbserver, dbuser, dbpassword, dbname))
     {
         LOGF("Init mysql failed, please check your database config..............");
     }
 
-    if (!Singleton<UserManager>::Instance().Init(dbserver, dbuser, dbpassword, dbname))
+    if (!Singleton<UserManager>::Instance().init(dbserver, dbuser, dbpassword, dbname))
     {
         LOGF("Init UserManager failed, please check your database config..............");
     }
 
-    const char* listenip = config.GetConfigName("listenip");
-    short listenport = (short)atol(config.GetConfigName("listenport"));
-    Singleton<ChatServer>::Instance().Init(listenip, listenport, &g_mainLoop);
+    const char* listenip = config.getConfigName("listenip");
+    short listenport = (short)atol(config.getConfigName("listenport"));
+    Singleton<ChatServer>::Instance().init(listenip, listenport, &g_mainLoop);
 
-    const char* monitorlistenip = config.GetConfigName("monitorlistenip");
-    short monitorlistenport = (short)atol(config.GetConfigName("monitorlistenport"));
-    const char* monitortoken = config.GetConfigName("monitortoken");
-    Singleton<MonitorServer>::Instance().Init(monitorlistenip, monitorlistenport, &g_mainLoop, monitortoken);
+    const char* monitorlistenip = config.getConfigName("monitorlistenip");
+    short monitorlistenport = (short)atol(config.getConfigName("monitorlistenport"));
+    const char* monitortoken = config.getConfigName("monitortoken");
+    Singleton<MonitorServer>::Instance().init(monitorlistenip, monitorlistenport, &g_mainLoop, monitortoken);
 
-    const char* httplistenip = config.GetConfigName("monitorlistenip");
-    short httplistenport = (short)atol(config.GetConfigName("httplistenport"));
-    Singleton<HttpServer>::Instance().Init(httplistenip, httplistenport, &g_mainLoop);
+    const char* httplistenip = config.getConfigName("monitorlistenip");
+    short httplistenport = (short)atol(config.getConfigName("httplistenport"));
+    Singleton<HttpServer>::Instance().init(httplistenip, httplistenport, &g_mainLoop);
 
     LOGI("chatserver initialization completed, now you can use client to connect it.");
 

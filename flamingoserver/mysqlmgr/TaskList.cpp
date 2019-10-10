@@ -15,7 +15,7 @@ CTaskList::~CTaskList(void)
 	}
 }
 
-bool CTaskList::Push(IMysqlTask* poTask)
+bool CTaskList::push(IMysqlTask* poTask)
 {
 
 	uint16_t usNextIndex = static_cast<uint16_t>((m_uWriteIndex + 1) % MAX_TASK_NUM);
@@ -32,7 +32,7 @@ bool CTaskList::Push(IMysqlTask* poTask)
     return true;
 }
 
-IMysqlTask* CTaskList::Pop()
+IMysqlTask* CTaskList::pop()
 {
 	if (m_uWriteIndex == m_uReadIndex)
 	{

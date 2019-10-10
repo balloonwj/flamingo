@@ -40,13 +40,13 @@ namespace net
 	private:
 		typedef std::vector<struct epoll_event> EventList;
 
-		int                 epollfd_;
-		EventList           events_;
+		int                                     epollfd_;
+		EventList                               events_;
 
-		typedef std::map<int, Channel*> ChannelMap;
+		typedef std::map<int, Channel*>         ChannelMap;
 
-		ChannelMap          channels_;
-		EventLoop*          ownerLoop_;
+		ChannelMap                              channels_;
+		EventLoop*                              ownerLoop_;
 	};
 
 }

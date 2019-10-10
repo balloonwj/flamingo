@@ -96,8 +96,8 @@ namespace net
 		EventLoop*                                      loop_;  // the acceptor loop
 		const string                                    hostport_;
 		const string                                    name_;
-		std::shared_ptr<Acceptor>                       acceptor_; // avoid revealing Acceptor
-        std::shared_ptr<EventLoopThreadPool>            eventLoopThreadPool_;
+		std::unique_ptr<Acceptor>                       acceptor_; // avoid revealing Acceptor
+        std::unique_ptr<EventLoopThreadPool>            eventLoopThreadPool_;
 		ConnectionCallback                              connectionCallback_;
 		MessageCallback                                 messageCallback_;
 		WriteCompleteCallback                           writeCompleteCallback_;

@@ -11,8 +11,8 @@ public:
     CTaskList();
     ~CTaskList(void);
 
-    bool Push(IMysqlTask* poTask);                  // 逻辑线程修改 
-    IMysqlTask* Pop();				                // 数据库线程修改 
+    bool push(IMysqlTask* poTask);                  // 逻辑线程修改 
+    IMysqlTask* pop();				                // 数据库线程修改 
 
 private:
 	uint16_t            m_uReadIndex;               // 数据库线程修改 

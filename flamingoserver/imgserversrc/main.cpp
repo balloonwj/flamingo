@@ -32,7 +32,7 @@ void prog_exit(int signo)
 {
     std::cout << "program recv signal [" << signo << "] to exit." << std::endl;
 
-    Singleton<FileServer>::Instance().Uninit();
+    Singleton<FileServer>::Instance().uninit();
     g_mainLoop.quit();
 }
 #endif
@@ -72,7 +72,7 @@ int main(int argc, char* argv[])
     std::string logFileFullPath;
 
 #ifndef WIN32
-    const char* logfilepath = config.GetConfigName("logfiledir");
+    const char* logfilepath = config.getConfigName("logfiledir");
     if (logfilepath == NULL)
     {
         LOGF("logdir is not set in config file");
@@ -94,17 +94,17 @@ int main(int argc, char* argv[])
     logFileFullPath = logfilepath;
 #endif
 
-    const char* logfilename = config.GetConfigName("logfilename");
+    const char* logfilename = config.getConfigName("logfilename");
     logFileFullPath += logfilename;
 
-    CAsyncLog::Init(logFileFullPath.c_str());
+    CAsyncLog::init(logFileFullPath.c_str());
 
-    const char* filecachedir = config.GetConfigName("imgcachedir");
-    Singleton<FileManager>::Instance().Init(filecachedir);
+    const char* filecachedir = config.getConfigName("imgcachedir");
+    Singleton<FileManager>::Instance().init(filecachedir);
 
-    const char* listenip = config.GetConfigName("listenip");
-    short listenport = (short)atol(config.GetConfigName("listenport"));
-    Singleton<FileServer>::Instance().Init(listenip, listenport, &g_mainLoop, filecachedir);
+    const char* listenip = config.getConfigName("listenip");
+    short listenport = (short)atol(config.getConfigName("listenport"));
+    Singleton<FileServer>::Instance().init(listenip, listenport, &g_mainLoop, filecachedir);
 
     LOGI("imgserver initialization complete, now you can use client to connect it.");
     

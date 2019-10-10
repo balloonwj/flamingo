@@ -32,44 +32,44 @@ public:
     ChatSession& operator =(const ChatSession& rhs) = delete;
 
     //有数据可读, 会被多个工作loop调用
-    void OnRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBuffer, Timestamp receivTime);   
+    void onRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBuffer, Timestamp receivTime);   
     
-    int32_t GetSessionId()
+    int32_t getSessionId()
     {
         return m_id;
     }
 
-    int32_t GetUserId()
+    int32_t getUserId()
     {
         return m_userinfo.userid;
     }
 
-    std::string GetUsername()
+    std::string getUsername()
     {
         return m_userinfo.username;
     }
 
-    std::string GetNickname()
+    std::string getNickname()
     {
         return m_userinfo.nickname;
     }
 
-    std::string GetPassword()
+    std::string getPassword()
     {
         return m_userinfo.password;
     }
 
-    int32_t GetClientType()
+    int32_t getClientType()
     {
         return m_userinfo.clienttype;
     }
 
-    int32_t GetUserStatus()
+    int32_t getUserStatus()
     {
         return m_userinfo.status;
     }
 
-    int32_t GetUserClientType()
+    int32_t getUserClientType()
     {
         return m_userinfo.clienttype;
     }
@@ -77,47 +77,47 @@ public:
     /**
      *@param type 取值： 1 用户上线； 2 用户下线； 3 个人昵称、头像、签名等信息更改
      */
-    void SendUserStatusChangeMsg(int32_t userid, int type, int status = 0);
+    void sendUserStatusChangeMsg(int32_t userid, int type, int status = 0);
 
     //让Session失效，用于被踢下线的用户的session
-    void MakeSessionInvalid();
-    bool IsSessionValid();
+    void makeSessionInvalid();
+    bool isSessionValid();
 
-    void EnableHearbeatCheck();
-    void DisableHeartbeatCheck();
+    void enableHearbeatCheck();
+    void disableHeartbeatCheck();
 
     //检测心跳包，如果指定时间内（现在是30秒）未收到数据包，则主动断开于客户端的连接
-    void CheckHeartbeat(const std::shared_ptr<TcpConnection>& conn);
+    void checkHeartbeat(const std::shared_ptr<TcpConnection>& conn);
 
 private:
-    bool Process(const std::shared_ptr<TcpConnection>& conn, const char* inbuf, size_t buflength);
+    bool process(const std::shared_ptr<TcpConnection>& conn, const char* inbuf, size_t buflength);
     
-    void OnHeartbeatResponse(const std::shared_ptr<TcpConnection>& conn);
-    void OnRegisterResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
-    void OnLoginResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
-    void OnGetFriendListResponse(const std::shared_ptr<TcpConnection>& conn);
-    void OnFindUserResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
-    void OnChangeUserStatusResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
-    void OnOperateFriendResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
-    void OnAddGroupResponse(int32_t groupId, const std::shared_ptr<TcpConnection>& conn);
-    void OnUpdateUserInfoResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
-    void OnModifyPasswordResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
-    void OnCreateGroupResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
-    void OnGetGroupMembersResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
-    void OnChatResponse(int32_t targetid, const std::string& data, const std::shared_ptr<TcpConnection>& conn);
-    void OnMultiChatResponse(const std::string& targets, const std::string& data, const std::shared_ptr<TcpConnection>& conn);
-    void OnScreenshotResponse(int32_t targetid, const std::string& bmpHeader, const std::string& bmpData, const std::shared_ptr<TcpConnection>& conn);
-    void OnUpdateTeamInfoResponse(int32_t operationType, const std::string& newTeamName, const std::string& oldTeamName, const std::shared_ptr<TcpConnection>& con);
-    void OnModifyMarknameResponse(int32_t friendid, const std::string& newmarkname, const std::shared_ptr<TcpConnection>& conn);
-    void OnMoveFriendToOtherTeamResponse(int32_t friendid, const std::string& newteamname, const std::string& oldteamname, const std::shared_ptr<TcpConnection>& conn);
+    void onHeartbeatResponse(const std::shared_ptr<TcpConnection>& conn);
+    void onRegisterResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
+    void onLoginResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
+    void onGetFriendListResponse(const std::shared_ptr<TcpConnection>& conn);
+    void onFindUserResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
+    void onChangeUserStatusResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
+    void onOperateFriendResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
+    void onAddGroupResponse(int32_t groupId, const std::shared_ptr<TcpConnection>& conn);
+    void onUpdateUserInfoResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
+    void onModifyPasswordResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
+    void onCreateGroupResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
+    void onGetGroupMembersResponse(const std::string& data, const std::shared_ptr<TcpConnection>& conn);
+    void onChatResponse(int32_t targetid, const std::string& data, const std::shared_ptr<TcpConnection>& conn);
+    void onMultiChatResponse(const std::string& targets, const std::string& data, const std::shared_ptr<TcpConnection>& conn);
+    void onScreenshotResponse(int32_t targetid, const std::string& bmpHeader, const std::string& bmpData, const std::shared_ptr<TcpConnection>& conn);
+    void onUpdateTeamInfoResponse(int32_t operationType, const std::string& newTeamName, const std::string& oldTeamName, const std::shared_ptr<TcpConnection>& con);
+    void onModifyMarknameResponse(int32_t friendid, const std::string& newmarkname, const std::shared_ptr<TcpConnection>& conn);
+    void onMoveFriendToOtherTeamResponse(int32_t friendid, const std::string& newteamname, const std::string& oldteamname, const std::shared_ptr<TcpConnection>& conn);
 
-    void DeleteFriend(const std::shared_ptr<TcpConnection>& conn, int32_t friendid);
+    void deleteFriend(const std::shared_ptr<TcpConnection>& conn, int32_t friendid);
 
     //根据用户分组信息组装应答给客户端的好友列表信息
-    void MakeUpFriendListInfo(std::string& friendinfo, const std::shared_ptr<TcpConnection>& conn);
+    void makeUpFriendListInfo(std::string& friendinfo, const std::shared_ptr<TcpConnection>& conn);
 
     //将聊天消息的本地时间改成服务器时间，修改成功返回true,失败返回false。
-    bool ModifyChatMsgLocalTimeToServerTime(const std::string& chatInputJson, std::string& chatOutputJson);
+    bool modifyChatMsgLocalTimeToServerTime(const std::string& chatInputJson, std::string& chatOutputJson);
 
 private:
     int32_t           m_id;                 //session id

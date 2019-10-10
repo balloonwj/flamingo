@@ -17,16 +17,16 @@ public:
     FileSession& operator =(const FileSession& rhs) = delete;
 
     //有数据可读, 会被多个工作loop调用
-    void OnRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBuffer, Timestamp receivTime);   
+    void onRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBuffer, Timestamp receivTime);   
 
 private:
     //64位机器上，size_t是8个字节
-    bool Process(const std::shared_ptr<TcpConnection>& conn, const char* inbuf, size_t length);
+    bool process(const std::shared_ptr<TcpConnection>& conn, const char* inbuf, size_t length);
     
-    bool OnUploadFileResponse(const std::string& filemd5, int64_t offset, int64_t filesize, const std::string& filedata, const std::shared_ptr<TcpConnection>& conn);
-    bool OnDownloadFileResponse(const std::string& filemd5, int32_t clientNetType, const std::shared_ptr<TcpConnection>& conn);
+    bool onUploadFileResponse(const std::string& filemd5, int64_t offset, int64_t filesize, const std::string& filedata, const std::shared_ptr<TcpConnection>& conn);
+    bool onDownloadFileResponse(const std::string& filemd5, int32_t clientNetType, const std::shared_ptr<TcpConnection>& conn);
 
-    void ResetFile();
+    void resetFile();
 
 private:
     int32_t           m_id;         //session id

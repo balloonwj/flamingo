@@ -16,9 +16,9 @@ public:
     FileManager(const FileManager& rhs) = delete;
     FileManager& operator = (const FileManager& rhs) = delete;
 
-    bool Init(const char* basepath);
+    bool init(const char* basepath);
 
-    bool IsFileExsit(const char* filename);
+    bool isFileExsit(const char* filename);
     void addFile(const char* filename);
 
 private:

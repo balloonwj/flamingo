@@ -3,9 +3,7 @@
 #include <algorithm>
 #include <string>
 
-using namespace std;
-
-inline void ToLowerString(string& str)
+inline void toLowerString(std::string& str)
 {
     for(size_t i = 0; i < str.size(); i++)
     {
@@ -35,53 +33,55 @@ class Field
 
         ~Field();
 
-        enum DataTypes GetType() const { return mType; }
+        enum DataTypes getType() const { return m_iType; }
 
-        const string GetString() const { return  m_strValue; }
-        std::string GetCppString() const
+        const std::string getString() const { return  m_strValue; }
+        std::string getCppString() const
         {
             return  m_strValue;                    // std::string s = 0 have undefine result in C++
         }
-        float GetFloat() const { return static_cast<float>(atof( m_strValue.c_str())); }
-        bool GetBool() const { return  atoi(m_strValue.c_str()) > 0; }
-        int32_t GetInt32() const { return  static_cast<int32_t>(atol(m_strValue.c_str())); }
-        uint8_t GetUInt8() const { return  static_cast<uint8_t>(atol(m_strValue.c_str())); }
-        uint16_t GetUInt16() const { return  static_cast<uint16_t>(atol(m_strValue.c_str())); }
-        int16_t GetInt16() const { return  static_cast<int16_t>(atol(m_strValue.c_str())); }
-        uint32_t GetUInt32() const { return  static_cast<uint32_t>(atol(m_strValue.c_str())); }
-        uint64_t GetUInt64() const
+        float getFloat() const { return static_cast<float>(atof( m_strValue.c_str())); }
+        bool getBool() const { return  atoi(m_strValue.c_str()) > 0; }
+        int32_t getInt32() const { return  static_cast<int32_t>(atol(m_strValue.c_str())); }
+        uint8_t getUInt8() const { return  static_cast<uint8_t>(atol(m_strValue.c_str())); }
+        uint16_t getUInt16() const { return  static_cast<uint16_t>(atol(m_strValue.c_str())); }
+        int16_t getInt16() const { return  static_cast<int16_t>(atol(m_strValue.c_str())); }
+        uint32_t getUInt32() const { return  static_cast<uint32_t>(atol(m_strValue.c_str())); }
+        uint64_t getUInt64() const
         {
             uint64_t value = 0;
             value = atoll(m_strValue.c_str());
             return value;
         }
 
-        void SetType(enum DataTypes type) { mType = type; }
+        void setType(enum DataTypes type) { m_iType = type; }
 
-        void SetValue(const char *value, size_t uLen);
-        void SetName(const string& strName)
+        void setValue(const char* value, size_t uLen);
+        void setName(const std::string& strName)
         {
             m_strFieldName = strName;
-            ToLowerString(m_strFieldName);
+            toLowerString(m_strFieldName);
         }
-        const string& GetName()
+        const std::string& getName()
         {
             return m_strFieldName;
         }
 
-        bool IsNULL()
+        bool isNULL()
         {
             return m_bNULL;
         }
 
         template<typename T>
-        void ConvertValue(T& value);
-
-    private:
-        string m_strValue;
-        string m_strFieldName;
-        enum DataTypes mType;
+        void convertValue(T& value);
 
     public:
-        bool m_bNULL;
+        bool                 m_bNULL;
+
+    private:
+        std::string          m_strValue;
+        std::string          m_strFieldName;
+        enum DataTypes       m_iType;
+
+    
 };

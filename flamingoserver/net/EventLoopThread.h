@@ -27,7 +27,7 @@ namespace net
 
 		EventLoop*                   loop_;
 		bool                         exiting_;
-		std::shared_ptr<std::thread> thread_;
+		std::unique_ptr<std::thread> thread_;
 		std::mutex                   mutex_;
 		std::condition_variable      cond_;
 		ThreadInitCallback           callback_;

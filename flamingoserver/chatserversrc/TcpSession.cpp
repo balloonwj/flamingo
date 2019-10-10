@@ -20,12 +20,12 @@ TcpSession::~TcpSession()
     
 }
 
-void TcpSession::Send(int32_t cmd, int32_t seq, const std::string& data)
+void TcpSession::send(int32_t cmd, int32_t seq, const std::string& data)
 {
-    Send(cmd, seq, data.c_str(), data.length());
+    send(cmd, seq, data.c_str(), data.length());
 }
 
-void TcpSession::Send(int32_t cmd, int32_t seq, const char* data, int32_t dataLength)
+void TcpSession::send(int32_t cmd, int32_t seq, const char* data, int32_t dataLength)
 {
     std::string outbuf;
     net::BinaryWriteStream writeStream(&outbuf);
@@ -34,35 +34,35 @@ void TcpSession::Send(int32_t cmd, int32_t seq, const char* data, int32_t dataLe
     writeStream.WriteCString(data, dataLength);
     writeStream.Flush();
 
-    SendPackage(outbuf.c_str(), outbuf.length());
+    sendPackage(outbuf.c_str(), outbuf.length());
 }
 
-void TcpSession::Send(const std::string& p)
+void TcpSession::send(const std::string& p)
 {
-    SendPackage(p.c_str(), p.length());
+    sendPackage(p.c_str(), p.length());
 }
 
-void TcpSession::Send(const char* p, int32_t length)
+void TcpSession::send(const char* p, int32_t length)
 {
-    SendPackage(p, length);
+    sendPackage(p, length);
 }
 
-void TcpSession::SendPackage(const char* p, int32_t length)
+void TcpSession::sendPackage(const char* p, int32_t length)
 {   
     string srcbuf(p, length);
     string destbuf;
-    if (!ZlibUtil::CompressBuf(srcbuf, destbuf))
+    if (!ZlibUtil::compressBuf(srcbuf, destbuf))
     {
         LOGE("compress buf error");
         return;
     }
  
     string strPackageData;
-    msg header;
+    chat_msg_header header;
     header.compressflag = 1;
     header.compresssize = destbuf.length();
     header.originsize = length;
-    if (Singleton<ChatServer>::Instance().IsLogPackageBinaryEnabled())
+    if (Singleton<ChatServer>::Instance().isLogPackageBinaryEnabled())
     {
         LOGI("Send data, header length: %d, body length: %d", sizeof(header), destbuf.length());
     }
@@ -82,7 +82,7 @@ void TcpSession::SendPackage(const char* p, int32_t length)
     std::shared_ptr<TcpConnection> conn = tmpConn_.lock();
     if (conn)
     {
-        if (Singleton<ChatServer>::Instance().IsLogPackageBinaryEnabled())
+        if (Singleton<ChatServer>::Instance().isLogPackageBinaryEnabled())
         {
             size_t length = strPackageData.length();
             LOGI("Send data, package length: %d", length);

@@ -63,19 +63,20 @@ namespace net
         void newConnection(int sockfd);
         /// Not thread safe, but in loop
         void removeConnection(const TcpConnectionPtr& conn);
-
-        EventLoop* loop_;
-        ConnectorPtr connector_; // avoid revealing Connector
-        const std::string name_;
-        ConnectionCallback connectionCallback_;
-        MessageCallback messageCallback_;
-        WriteCompleteCallback writeCompleteCallback_;
-        bool retry_;   // atomic
-        bool connect_; // atomic
+     
+    private:
+        EventLoop*              loop_;
+        ConnectorPtr            connector_; // avoid revealing Connector
+        const std::string       name_;
+        ConnectionCallback      connectionCallback_;
+        MessageCallback         messageCallback_;
+        WriteCompleteCallback   writeCompleteCallback_;
+        bool                    retry_;   // atomic
+        bool                    connect_; // atomic
         // always in loop thread
-        int nextConnId_;
-        mutable std::mutex mutex_;
-        TcpConnectionPtr connection_; // @GuardedBy mutex_
+        int                     nextConnId_;
+        mutable std::mutex      mutex_;
+        TcpConnectionPtr        connection_; // @GuardedBy mutex_
     };
 
 }

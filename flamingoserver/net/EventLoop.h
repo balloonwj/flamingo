@@ -135,8 +135,8 @@ namespace net
 		bool                                callingPendingFunctors_; /* atomic */
 		const std::thread::id               threadId_;
 		Timestamp                           pollReturnTime_;
-		std::shared_ptr<Poller>             poller_;
-        std::shared_ptr<TimerQueue>         timerQueue_;
+		std::unique_ptr<Poller>             poller_;
+        std::unique_ptr<TimerQueue>         timerQueue_;
         int64_t                             iteration_;
 #ifdef WIN32
         SOCKET                              wakeupFdSend_;
@@ -149,7 +149,7 @@ namespace net
 #endif
 		// unlike in TimerQueue, which is an internal class,
 		// we don't expose Channel to client.
-		std::shared_ptr<Channel>            wakeupChannel_;
+		std::unique_ptr<Channel>            wakeupChannel_;
 	
 		// scratch variables
 		ChannelList                         activeChannels_;

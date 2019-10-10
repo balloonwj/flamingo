@@ -20,7 +20,7 @@ private:
     BussinessLogic& operator =(const BussinessLogic& rhs) = delete;
 
 public:
-    static void RegisterUser(const std::string& data, const std::shared_ptr<TcpConnection>& conn, bool keepalive, std::string& retData);
+    static void registerUser(const std::string& data, const std::shared_ptr<TcpConnection>& conn, bool keepalive, std::string& retData);
 
 };
 

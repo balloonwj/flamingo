@@ -44,13 +44,15 @@ namespace net
 		int removeAndResetChannel();
 		void resetChannel();
 
-		EventLoop* loop_;
-		InetAddress serverAddr_;
-		bool connect_; // atomic
-		States state_;  // FIXME: use atomic variable
-		std::shared_ptr<Channel> channel_;
-		NewConnectionCallback newConnectionCallback_;
-		int retryDelayMs_;
+		EventLoop*                      loop_;
+		InetAddress                     serverAddr_;
+        // atomic
+		bool                            connect_; 
+        // FIXME: use atomic variable
+		States                          state_;                  
+		std::unique_ptr<Channel>        channel_;
+		NewConnectionCallback           newConnectionCallback_;
+		int                             retryDelayMs_;
 	};
 
 }

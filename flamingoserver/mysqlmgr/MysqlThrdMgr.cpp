@@ -9,24 +9,24 @@ CMysqlThrdMgr::~CMysqlThrdMgr(void)
 {
 }
 
-bool CMysqlThrdMgr::AddTask( uint32_t dwHashID, IMysqlTask* poTask )
+bool CMysqlThrdMgr::addTask( uint32_t dwHashID, IMysqlTask* poTask )
 {
     //LOG_DEBUG << "CMysqlThrdMgr::AddTask, HashID = " << dwHashID;
-	uint32_t btIndex = GetTableHashID(dwHashID);
+	uint32_t btIndex = getTableHashID(dwHashID);
 
     if (btIndex >= m_dwThreadsCount)
     {
         return false;
     }
 
-    return m_aoMysqlThreads[btIndex].AddTask(poTask);
+    return m_aoMysqlThreads[btIndex].addTask(poTask);
 }
 
-bool CMysqlThrdMgr::Init(const string& host, const string& user, const string& pwd, const string& dbname)
+bool CMysqlThrdMgr::init(const std::string& host, const std::string& user, const std::string& pwd, const std::string& dbname)
 {
     for(uint32_t i = 0; i < m_dwThreadsCount+1; ++i)
     {
-        if (false == m_aoMysqlThreads[i].Start(host, user, pwd, dbname))
+        if (false == m_aoMysqlThreads[i].start(host, user, pwd, dbname))
         {
             return false;
         }
@@ -35,20 +35,20 @@ bool CMysqlThrdMgr::Init(const string& host, const string& user, const string& p
     return true;
 }
 
-bool CMysqlThrdMgr::ProcessReplyTask(int32_t nCount )
+bool CMysqlThrdMgr::processReplyTask(int32_t nCount )
 {
     bool bResult = false;
 
 	for (uint32_t i = 0; i < m_dwThreadsCount + 1; ++i)
     {
-        IMysqlTask* poTask = m_aoMysqlThreads[i].GetReplyTask();
+        IMysqlTask* poTask = m_aoMysqlThreads[i].getReplyTask();
 		int32_t dwProcessedNbr = 0;
 
         while (((nCount == -1) || (dwProcessedNbr < nCount)) && (NULL != poTask))
         {
-            poTask->Reply();
-            poTask->Release();
-            poTask = m_aoMysqlThreads[i].GetReplyTask();
+            poTask->reply();
+            poTask->release();
+            poTask = m_aoMysqlThreads[i].getReplyTask();
             ++dwProcessedNbr;
         }
 

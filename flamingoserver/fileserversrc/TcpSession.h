@@ -20,7 +20,7 @@ public:
     TcpSession(const TcpSession& rhs) = delete;
     TcpSession& operator =(const TcpSession& rhs) = delete;
 
-    std::shared_ptr<TcpConnection> GetConnectionPtr()
+    std::shared_ptr<TcpConnection> getConnectionPtr()
     {
         if (tmpConn_.expired())
             return NULL;
@@ -28,11 +28,11 @@ public:
         return tmpConn_.lock();
     }
 
-    void Send(int32_t cmd, int32_t seq, int32_t errorcode, const std::string& filemd5, int64_t offset, int64_t filesize, const std::string& filedata);
+    void send(int32_t cmd, int32_t seq, int32_t errorcode, const std::string& filemd5, int64_t offset, int64_t filesize, const std::string& filedata);
 
 private:
     //支持大文件，用int64_t来存储包长，记得梳理一下文件上传于下载逻辑
-    void SendPackage(const char* body, int64_t bodylength);
+    void sendPackage(const char* body, int64_t bodylength);
 
 protected:
     //TcpSession引用TcpConnection类必须是弱指针，因为TcpConnection可能会因网络出错自己销毁，此时TcpSession应该也要销毁
