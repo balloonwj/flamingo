@@ -159,7 +159,7 @@ Flamingo server uses four database tables illustrated below:
 
    #### PC Client Compiling and Installing
 
-   All you need to do is just that open file **Flamingo.sln** in **flamingoclient/** directory with Visual Studio 2013 and compile it . The solution includes three projects illstrated in the table below:：
+   All you need to do is just that open file **Flamingo.sln** in **flamingoclient/** directory with Visual Studio 2019 and compile it . The solution includes three projects illstrated in the table below:：
 
    | Project Name |                       Usage                        |
    | :----------: | :------------------------------------------------: |
@@ -343,7 +343,7 @@ flamingo IM是一款高性能、轻量级的开源即时通讯软件，目前包
 
    #### pc客户端编译和安装
 
-   使用Visual Studio 2013打开**flamingoclient/**目录下的**Flamingo.sln**即可编译。这个解决方案包括三个工程项目，说明如下：
+   使用Visual Studio 2019打开**flamingoclient/**目录下的**Flamingo.sln**即可编译。这个解决方案包括三个工程项目，说明如下：
 
    |   项目名称   |                 项目说明                 |
    | :----------: | :--------------------------------------: |
@@ -383,7 +383,7 @@ https://github.com/baloonwj/flamingo/issues/5。
 
 如果您在使用这个项目的过程中遇到任何问题，或者您对我的项目有任何意见或者建议，再或者有不错的想法欢迎与我交流，可以通过我的微信公众号『**easyserverdev**』与我取得联系，或者可以给我发邮件：**balloonwj@qq.com**，您也可以加入QQ技术群进行交流讨论：**578019391**。
 
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/articlelog.jpg)
+![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/articlelognew.jpg)
 
 
 
