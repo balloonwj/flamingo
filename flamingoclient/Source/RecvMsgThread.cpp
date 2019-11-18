@@ -5,12 +5,10 @@
 #include "net/protocolstream.h"
 #include "net/Msg.h"
 #include "File.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include "Path.h"
 #include "FlamingoClient.h"
 #include "IULog.h"
-
-using namespace balloon;
 
 // "/f["系统表情id"] /c["自定义表情文件名"] /o[字体名称，大小，颜色，加粗，倾斜，下划线]"
 tstring FormatContent(std::vector<CContent*>& arrContent)
@@ -319,7 +317,7 @@ void CRecvMsgThread::EnableUI(bool bEnable)
 
 BOOL CRecvMsgThread::HandleMessage(const std::string& strMsg)
 {
-    BinaryReadStream readStream(strMsg.c_str(), strMsg.length());
+    net::BinaryStreamReader readStream(strMsg.c_str(), strMsg.length());
     int32_t cmd;
     if (!readStream.ReadInt32(cmd))
     {
@@ -425,12 +423,12 @@ BOOL CRecvMsgThread::HandleMessage(const std::string& strMsg)
             //截屏数据
         case msg_type_remotedesktop:
         {
-            string bmpHeader;
+            std::string bmpHeader;
             size_t bmpHeaderlength;
             if (!readStream.ReadString(&bmpHeader, 0, bmpHeaderlength))
                 break;
 
-            string bmpData;
+            std::string bmpData;
             size_t bmpDatalength;
             if (!readStream.ReadString(&bmpData, 0, bmpDatalength))
                 break;
@@ -810,7 +808,7 @@ BOOL CRecvMsgThread::HandleOperateFriendMessage(const std::string& strMsg)
     LOG_INFO("Recv operate friend request");
     int userid = JsonRoot["userid"].asInt();
     int type = JsonRoot["type"].asInt();
-    string username = JsonRoot["username"].asString();
+    std::string username = JsonRoot["username"].asString();
     //收到加好友请求
     if (type == 2)
     {

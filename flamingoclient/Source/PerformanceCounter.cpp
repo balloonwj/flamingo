@@ -1,6 +1,6 @@
 #include "stdafx.h"
 #include "PerformanceCounter.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include <tchar.h>
 
 #ifndef PERFORMANCE_OUTPUT

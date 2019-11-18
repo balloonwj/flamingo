@@ -2,7 +2,7 @@
 #include "UserSessionData.h"
 #include "UserSessionData.h"
 #include "net/IUProtocolData.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include "Utils.h"
 #include "Path.h"
 #include "Buffer.h"

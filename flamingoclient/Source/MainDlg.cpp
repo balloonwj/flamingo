@@ -32,7 +32,7 @@
 #include "Startup.h"
 #include "MultiChatMemberSelectionDlg.h"
 #include "ChatDlgCommon.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include "UIText.h"
 #include "PerformanceCounter.h"
 #include "net/Msg.h"

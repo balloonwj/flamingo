@@ -24,10 +24,10 @@ private:
 	BOOL ReAlloc(DWORD dwSize);
 
 private:
-	char m_cFixData[1024* 4];
-	char* m_lpData;
-	void* m_Extra;		//额外数据
-	DWORD m_dwSize;
-	DWORD m_dwMaxSize;
-	DWORD m_dwGrowBy;
+	char        m_cFixData[1024* 4];
+	char*       m_lpData;
+	void*       m_Extra;		//额外数据
+	DWORD       m_dwSize;
+	DWORD       m_dwMaxSize;
+	DWORD       m_dwGrowBy;
 };

@@ -146,7 +146,7 @@
     <ClCompile Include="Crash.cpp" />
     <ClCompile Include="CreateNewGroupDlg.cpp" />
     <ClCompile Include="CriticalSection.cpp" />
-    <ClCompile Include="EncodingUtil.cpp" />
+    <ClCompile Include="EncodeUtil.cpp" />
     <ClCompile Include="FaceCtrl.cpp" />
     <ClCompile Include="FaceList.cpp" />
     <ClCompile Include="FaceSelDlg.cpp" />
@@ -327,7 +327,7 @@
     <ClInclude Include="CriticalSection.h" />
     <ClInclude Include="CustomMsgDef.h" />
     <ClInclude Include="DstVersion.h" />
-    <ClInclude Include="EncodingUtil.h" />
+    <ClInclude Include="EncodeUtil.h" />
     <ClInclude Include="FaceCtrl.h" />
     <ClInclude Include="FaceList.h" />
     <ClInclude Include="FaceSelDlg.h" />

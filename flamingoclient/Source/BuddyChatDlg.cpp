@@ -12,7 +12,7 @@
 #include "ChatDlgCommon.h"
 #include "Utils.h"
 #include "GDIFactory.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include "net/protocolstream.h"
 #include "net/Msg.h"
 #include "UIText.h"
@@ -4684,7 +4684,7 @@ UINT CBuddyChatDlg::RemoteDesktopProc(void* p)
         //::ReleaseDC(NULL, hDesktopDC);
 
         //std::string outbuf;
-        //balloon::BinaryWriteStream writeStream(&outbuf);
+        //balloon::BinaryStreamWriter writeStream(&outbuf);
         //writeStream.WriteInt32(msg_type_screenshot);
         //writeStream.WriteInt32(nSeq);
 

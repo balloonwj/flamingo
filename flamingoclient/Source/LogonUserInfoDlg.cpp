@@ -3,7 +3,7 @@
 #include "ChangePicHeadDlg.h"
 #include "FlamingoClient.h"
 #include "Utils.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include "UserSessionData.h"
 #include "Path.h"
 #include "UIText.h"

@@ -2,7 +2,7 @@
 #include "Updater.h"
 #include "UserSessionData.h"
 #include "File2.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include "Utils.h"
 #include "FileTaskThread.h"
 

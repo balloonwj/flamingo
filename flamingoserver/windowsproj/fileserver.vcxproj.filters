@@ -114,6 +114,9 @@
     <ClCompile Include="..\fileserversrc\TcpSession.cpp">
       <Filter>fileserversrc</Filter>
     </ClCompile>
+    <ClCompile Include="..\utils\UUIDGenerator.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\net\Acceptor.h">
@@ -229,6 +232,9 @@
     </ClInclude>
     <ClInclude Include="..\fileserversrc\TcpSession.h">
       <Filter>fileserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\UUIDGenerator.h">
+      <Filter>utils</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

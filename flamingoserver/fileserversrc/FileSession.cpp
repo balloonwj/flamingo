@@ -75,7 +75,7 @@ void FileSession::onRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBu
 
 bool FileSession::process(const std::shared_ptr<TcpConnection>& conn, const char* inbuf, size_t length)
 {
-    BinaryReadStream readStream(inbuf, length);
+    BinaryStreamReader readStream(inbuf, length);
     int32_t cmd;
     if (!readStream.ReadInt32(cmd))
     {

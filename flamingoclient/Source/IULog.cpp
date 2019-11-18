@@ -2,7 +2,7 @@
 #include "IULog.h"
 //#include "Path.h"
 //#include "UserSessionData.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include <tchar.h>
 
 #ifndef LOG_OUTPUT

@@ -20,7 +20,7 @@ TcpSession::~TcpSession()
 void TcpSession::send(int32_t cmd, int32_t seq, int32_t errorcode, const std::string& filemd5, int64_t offset, int64_t filesize, const std::string& filedata)
 {
     std::string outbuf;
-    net::BinaryWriteStream writeStream(&outbuf);
+    net::BinaryStreamWriter writeStream(&outbuf);
     writeStream.WriteInt32(cmd);
     writeStream.WriteInt32(seq);
     writeStream.WriteInt32(errorcode);

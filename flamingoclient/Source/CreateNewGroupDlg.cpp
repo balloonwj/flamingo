@@ -2,7 +2,7 @@
 #include "CreateNewGroupDlg.h"
 #include "FlamingoClient.h"
 #include "net/IUProtocolData.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include "UIText.h"
 
 // CCreateNewGroupDlg µœ÷¥˙¬Î

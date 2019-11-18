@@ -3,7 +3,7 @@
 #include "FlamingoClient.h"
 #include "UserSnapInfoDlg.h"
 #include "Utils.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 
 // 两种算法
 #define ALGORITHM_SCAN	1	// 速度很快，但碎片太多

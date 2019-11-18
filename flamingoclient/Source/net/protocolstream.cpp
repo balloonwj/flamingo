@@ -1,4 +1,5 @@
 #include "stdafx.h"
+
 #ifndef _WIN32
 #include <arpa/inet.h>
 #else
@@ -6,7 +7,7 @@
 #pragma comment(lib, "Ws2_32.lib")
 #endif
 
-#include "protocolstream.h"
+#include "ProtocolStream.h"
 #include <string.h>
 #include <stdio.h>
 #include <sys/types.h>
@@ -16,10 +17,10 @@
 
 using namespace std;
 
-namespace balloon
+namespace net
 {
     //计算校验和
-    unsigned short checksum(const unsigned short *buffer, int size)
+    unsigned short checksum(const unsigned short* buffer, int size)
     {
         unsigned int cksum = 0;
         while (size > 1)
@@ -38,63 +39,84 @@ namespace balloon
         return (unsigned short)(~cksum);
     }
 
-    bool compress_(unsigned int i, char *buf, size_t &len)
+    //将一个4字节的整型数值压缩成1~5个字节
+    void write7BitEncoded(uint32_t value, std::string& buf)
     {
-        len = 0;
-        for (int a = 4; a >= 0; a--)
+        do
         {
-            char c;
-            c = i >> (a * 7) & 0x7f;
-            if (c == 0x00 && len == 0)
-                continue;
-
-            if (a == 0)
-                c &= 0x7f;
-            else
+            unsigned char c = (unsigned char)(value & 0x7F);
+            value >>= 7;
+            if (value)
                 c |= 0x80;
-            buf[len] = c;
-            len++;
-        }
-        if (len == 0)
-        {
-            len++;
-            buf[0] = 0;
-        }
 
-        //cout << "compress:" << i << endl;
-        //cout << "compress len:" << len << endl;
-        return true;
+            buf.append(1, c);
+        } while (value);
     }
 
-    bool uncompress_(char *buf, size_t len, unsigned int &i)
+    //将一个8字节的整型值编码成1~10个字节
+    void write7BitEncoded(uint64_t value, std::string& buf)
     {
-        i = 0;
-        for (int index = 0; index < (int)len; index++)
+        do
         {
-            char c = *(buf + index);
-            i = i << 7;
+            unsigned char c = (unsigned char)(value & 0x7F);
+            value >>= 7;
+            if (value)
+                c |= 0x80;
 
-            c &= 0x7f;
-            i |= c;
-        }
-        //cout << "uncompress:" << i << endl;
-        return true;
+            buf.append(1, c);
+        } while (value);
     }
 
-    BinaryReadStream::BinaryReadStream(const char* ptr_, size_t len_)
+    //将一个1~5个字节的字符数组值还原成4字节的整型值
+    void read7BitEncoded(const char* buf, uint32_t len, uint32_t& value)
+    {
+        char c;
+        value = 0;
+        int bitCount = 0;
+        int index = 0;
+        do
+        {
+            c = buf[index];
+            uint32_t x = (c & 0x7F);
+            x <<= bitCount;
+            value += x;
+            bitCount += 7;
+            ++index;
+        } while (c & 0x80);
+    }
+
+    //将一个1~10个字节的值还原成4字节的整型值
+    void read7BitEncoded(const char* buf, uint32_t len, uint64_t& value)
+    {
+        char c;
+        value = 0;
+        int bitCount = 0;
+        int index = 0;
+        do
+        {
+            c = buf[index];
+            uint64_t x = (c & 0x7F);
+            x <<= bitCount;
+            value += x;
+            bitCount += 7;
+            ++index;
+        } while (c & 0x80);
+    }
+
+    BinaryStreamReader::BinaryStreamReader(const char* ptr_, size_t len_)
         : ptr(ptr_), len(len_), cur(ptr_)
     {
         cur += BINARY_PACKLEN_LEN_2 + CHECKSUM_LEN;
     }
-    bool BinaryReadStream::IsEmpty() const
+    bool BinaryStreamReader::IsEmpty() const
     {
         return len <= BINARY_PACKLEN_LEN_2;
     }
-    size_t BinaryReadStream::GetSize() const
+    size_t BinaryStreamReader::GetSize() const
     {
         return len;
     }
-    bool BinaryReadStream::ReadCString(char* str, size_t strlen, /* out */ size_t& outlen)
+    bool BinaryStreamReader::ReadCString(char* str, size_t strlen, /* out */ size_t& outlen)
     {
         size_t fieldlen;
         size_t headlen;
@@ -120,7 +142,7 @@ namespace balloon
         cur += outlen;
         return true;
     }
-    bool BinaryReadStream::ReadString(string* str, size_t maxlen, size_t& outlen)
+    bool BinaryStreamReader::ReadString(string* str, size_t maxlen, size_t& outlen)
     {
         size_t headlen;
         size_t fieldlen;
@@ -146,7 +168,7 @@ namespace balloon
         cur += outlen;
         return true;
     }
-    bool BinaryReadStream::ReadCCString(const char** str, size_t maxlen, size_t& outlen)
+    bool BinaryStreamReader::ReadCCString(const char** str, size_t maxlen, size_t& outlen)
     {
         size_t headlen;
         size_t fieldlen;
@@ -173,7 +195,7 @@ namespace balloon
         cur += outlen;
         return true;
     }
-    bool BinaryReadStream::ReadInt32(int32_t& i)
+    bool BinaryStreamReader::ReadInt32(int32_t& i)
     {
         const int VALUE_SIZE = sizeof(int32_t);
 
@@ -187,7 +209,7 @@ namespace balloon
 
         return true;
     }
-    bool BinaryReadStream::ReadInt64(int64_t& i)
+    bool BinaryStreamReader::ReadInt64(int64_t& i)
     {
         char int64str[128];
         size_t length;
@@ -198,7 +220,7 @@ namespace balloon
 
         return true;
     }
-    bool BinaryReadStream::ReadShort(short& i)
+    bool BinaryStreamReader::ReadShort(short& i)
     {
         const int VALUE_SIZE = sizeof(short);
 
@@ -213,7 +235,7 @@ namespace balloon
 
         return true;
     }
-    bool BinaryReadStream::ReadChar(char& c)
+    bool BinaryStreamReader::ReadChar(char& c)
     {
         const int VALUE_SIZE = sizeof(char);
 
@@ -226,7 +248,7 @@ namespace balloon
 
         return true;
     }
-    bool BinaryReadStream::ReadLength(size_t & outlen)
+    bool BinaryStreamReader::ReadLength(size_t& outlen)
     {
         size_t headlen;
         if (!ReadLengthWithoutOffset(headlen, outlen)) {
@@ -237,12 +259,12 @@ namespace balloon
         cur += headlen;
         return true;
     }
-    bool BinaryReadStream::ReadLengthWithoutOffset(size_t& headlen, size_t & outlen)
+    bool BinaryStreamReader::ReadLengthWithoutOffset(size_t& headlen, size_t& outlen)
     {
         headlen = 0;
-        const char *temp = cur;
+        const char* temp = cur;
         char buf[5];
-        for (size_t i = 0; i<sizeof(buf); i++)
+        for (size_t i = 0; i < sizeof(buf); i++)
         {
             memcpy(buf + i, temp, sizeof(char));
             temp++;
@@ -256,7 +278,7 @@ namespace balloon
             return false;
 
         unsigned int value;
-        uncompress_(buf, headlen, value);
+        read7BitEncoded(buf, headlen, value);
         outlen = value;
 
         /*if ( cur + BINARY_PACKLEN_LEN_2 > ptr + len ) {
@@ -268,36 +290,36 @@ namespace balloon
         outlen = ntohl(tmp);*/
         return true;
     }
-    bool BinaryReadStream::IsEnd() const
+    bool BinaryStreamReader::IsEnd() const
     {
         assert(cur <= ptr + len);
         return cur == ptr + len;
     }
-    const char* BinaryReadStream::GetData() const
+    const char* BinaryStreamReader::GetData() const
     {
         return ptr;
     }
-    size_t BinaryReadStream::ReadAll(char * szBuffer, size_t iLen) const
+    size_t BinaryStreamReader::ReadAll(char* szBuffer, size_t iLen) const
     {
         size_t iRealLen = min(iLen, len);
         memcpy(szBuffer, ptr, iRealLen);
         return iRealLen;
     }
 
-    //=================class BinaryWriteStream implementation============//
-    BinaryWriteStream::BinaryWriteStream(string *data) :
+    //=================class BinaryStreamWriter implementation============//
+    BinaryStreamWriter::BinaryStreamWriter(string* data) :
         m_data(data)
     {
         m_data->clear();
         char str[BINARY_PACKLEN_LEN_2 + CHECKSUM_LEN];
         m_data->append(str, sizeof(str));
     }
-    bool BinaryWriteStream::WriteCString(const char* str, size_t len)
+    bool BinaryStreamWriter::WriteCString(const char* str, size_t len)
     {
-        char buf[5];
-        size_t buflen;
-        compress_(len, buf, buflen);
-        m_data->append(buf, sizeof(char)*buflen);
+        std::string buf;
+        write7BitEncoded(len, buf);
+
+        m_data->append(buf);
 
         m_data->append(str, len);
 
@@ -306,27 +328,27 @@ namespace balloon
         //m_data->append(str,len);
         return true;
     }
-    bool BinaryWriteStream::WriteString(const string& str)
+    bool BinaryStreamWriter::WriteString(const string& str)
     {
         return WriteCString(str.c_str(), str.length());
     }
-    const char* BinaryWriteStream::GetData() const
+    const char* BinaryStreamWriter::GetData() const
     {
         return m_data->data();
     }
-    size_t BinaryWriteStream::GetSize() const
+    size_t BinaryStreamWriter::GetSize() const
     {
         return m_data->length();
     }
-    bool BinaryWriteStream::WriteInt32(int32_t i, bool isNULL)
+    bool BinaryStreamWriter::WriteInt32(int32_t i, bool isNULL)
     {
         int32_t i2 = 999999999;
         if (isNULL == false)
             i2 = htonl(i);
-        m_data->append((char*)&i2, sizeof(i2));
+        m_data->append((char*)& i2, sizeof(i2));
         return true;
     }
-    bool BinaryWriteStream::WriteInt64(int64_t value, bool isNULL)
+    bool BinaryStreamWriter::WriteInt64(int64_t value, bool isNULL)
     {
         char int64str[128];
         if (isNULL == false)
@@ -342,15 +364,15 @@ namespace balloon
             WriteCString(int64str, 0);
         return true;
     }
-    bool BinaryWriteStream::WriteShort(short i, bool isNULL)
+    bool BinaryStreamWriter::WriteShort(short i, bool isNULL)
     {
         short i2 = 0;
         if (isNULL == false)
             i2 = htons(i);
-        m_data->append((char*)&i2, sizeof(i2));
+        m_data->append((char*)& i2, sizeof(i2));
         return true;
     }
-    bool BinaryWriteStream::WriteChar(char c, bool isNULL)
+    bool BinaryStreamWriter::WriteChar(char c, bool isNULL)
     {
         char c2 = 0;
         if (isNULL == false)
@@ -358,7 +380,7 @@ namespace balloon
         (*m_data) += c2;
         return true;
     }
-    bool BinaryWriteStream::WriteDouble(double value, bool isNULL)
+    bool BinaryStreamWriter::WriteDouble(double value, bool isNULL)
     {
         char   doublestr[128];
         if (isNULL == false)
@@ -370,17 +392,16 @@ namespace balloon
             WriteCString(doublestr, 0);
         return true;
     }
-    void BinaryWriteStream::Flush()
+    void BinaryStreamWriter::Flush()
     {
-        char *ptr = &(*m_data)[0];
+        char* ptr = &(*m_data)[0];
         unsigned int ulen = htonl(m_data->length());
         memcpy(ptr, &ulen, sizeof(ulen));
     }
-    void BinaryWriteStream::Clear()
+    void BinaryStreamWriter::Clear()
     {
         m_data->clear();
         char str[BINARY_PACKLEN_LEN_2 + CHECKSUM_LEN];
         m_data->append(str, sizeof(str));
     }
 }// end namespace
-

@@ -7,7 +7,7 @@
 #include "GDIFactory.h"
 #include "IULog.h"
 #include "File2.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include "LoginSettingsDlg.h"
 #include "UIText.h"
 

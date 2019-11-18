@@ -114,6 +114,9 @@
     <ClCompile Include="..\base\Timestamp.cpp">
       <Filter>base</Filter>
     </ClCompile>
+    <ClCompile Include="..\utils\UUIDGenerator.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\net\Acceptor.h">
@@ -229,6 +232,9 @@
     </ClInclude>
     <ClInclude Include="..\base\Timestamp.h">
       <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\UUIDGenerator.h">
+      <Filter>utils</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

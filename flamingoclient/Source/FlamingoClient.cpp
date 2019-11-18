@@ -5,7 +5,7 @@
 #include "net/IUProtocolData.h"
 #include "IULog.h"
 #include "UpdateDlg.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include "UserSessionData.h"
 #include "CustomMsgDef.h"
 #include "Startup.h"

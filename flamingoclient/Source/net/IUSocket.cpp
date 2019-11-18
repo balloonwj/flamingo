@@ -17,8 +17,6 @@
 
 #pragma comment(lib, "Sensapi.lib")
 
-using namespace balloon;
-
 //包最大字节数限制为10M
 #define MAX_PACKAGE_SIZE    10 * 1024 * 1024
 
@@ -998,7 +996,7 @@ bool CIUSocket::Register(const char* pszUser, const char* pszNickname, const cha
         pszPassword);
 
     std::string outbuf;
-    BinaryWriteStream writeStream(&outbuf);
+    net::BinaryStreamWriter writeStream(&outbuf);
     writeStream.WriteInt32(msg_type_register);
     writeStream.WriteInt32(0);
     std::string data = szRegisterInfo;
@@ -1077,7 +1075,7 @@ bool CIUSocket::Register(const char* pszUser, const char* pszNickname, const cha
         strData.append(minBuff, header.originsize);
     }
 
-    BinaryReadStream readStream(strData.c_str(), strData.length());
+    net::BinaryStreamReader readStream(strData.c_str(), strData.length());
     int32_t cmd;
     if (!readStream.ReadInt32(cmd))
         return false;
@@ -1110,7 +1108,7 @@ bool CIUSocket::Login(const char* pszUser, const char* pszPassword, int nClientT
         nOnlineStatus);
 
     std::string outbuf;
-    BinaryWriteStream writeStream(&outbuf);
+    net::BinaryStreamWriter writeStream(&outbuf);
     writeStream.WriteInt32(msg_type_login);
     writeStream.WriteInt32(0);
     //std::string data = szLoginInfo;
@@ -1195,7 +1193,7 @@ bool CIUSocket::Login(const char* pszUser, const char* pszPassword, int nClientT
         strData.append(minBuff, header.originsize);
     }
 
-    BinaryReadStream readStream(strData.c_str(), strData.length());
+    net::BinaryStreamReader readStream(strData.c_str(), strData.length());
     int32_t cmd;
     if (!readStream.ReadInt32(cmd))
         return false;
@@ -1313,7 +1311,7 @@ bool CIUSocket::RecvData(char* pszBuff, int nBufferSize, int nTimeout)
 void CIUSocket::SendHeartbeatPackage()
 {
     std::string outbuf;
-    BinaryWriteStream writeStream(&outbuf);
+    net::BinaryStreamWriter writeStream(&outbuf);
     writeStream.WriteInt32(msg_type_heartbeat);
     writeStream.WriteInt32(m_nHeartbeatSeq);
     std::string dummy;

@@ -9,7 +9,7 @@
 #include "Path.h"
 #include "UserSessionData.h"
 #include "GDIFactory.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include "IULog.h"
 #include "net/Msg.h"
 
@@ -279,7 +279,8 @@ BOOL CLoginDlg::InitUI()
 	m_SkinDlg.SetMinSysBtnPic(_T("SysBtn\\btn_mini_normal.png"), _T("SysBtn\\btn_mini_highlight.png"), _T("SysBtn\\btn_mini_down.png"));
 	m_SkinDlg.SetCloseSysBtnPic(_T("SysBtn\\btn_close_normal.png"), _T("SysBtn\\btn_close_highlight.png"), _T("SysBtn\\btn_close_down.png"));
 	m_SkinDlg.SubclassWindow(m_hWnd);
-	m_SkinDlg.MoveWindow(0, 0, 550, 380, FALSE);
+	//m_SkinDlg.MoveWindow(0, 0, 550, 380, FALSE);
+    m_SkinDlg.MoveWindow(0, 0, 550, 350, FALSE);
 	m_SkinDlg.SetTitleText(_T(""));
 
 

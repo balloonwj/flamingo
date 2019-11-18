@@ -4,7 +4,7 @@
 #include "FlamingoClient.h"
 #include "UserMgr.h"
 #include "CustomMsgDef.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include "File2.h"
 #include "UIText.h"
 #include <TlHelp32.h>

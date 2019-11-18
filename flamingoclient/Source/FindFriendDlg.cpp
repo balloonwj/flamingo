@@ -3,7 +3,7 @@
 #include "FlamingoClient.h"
 #include "UserSnapInfoDlg.h"
 #include "Utils.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 
 // CFindFriendDlg µœ÷¥˙¬Î
 CFindFriendDlg::CFindFriendDlg()

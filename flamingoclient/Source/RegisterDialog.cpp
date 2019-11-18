@@ -2,7 +2,7 @@
 #include "RegisterDialog.h"
 #include "Utils.h"
 #include "FlamingoClient.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include "UIText.h"
 
 CRegisterDialog::CRegisterDialog() : m_pFMGClient(NULL)

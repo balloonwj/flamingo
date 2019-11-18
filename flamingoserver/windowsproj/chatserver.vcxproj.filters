@@ -225,6 +225,9 @@
     <ClCompile Include="..\chatserversrc\UserManager.cpp">
       <Filter>chatserversrc</Filter>
     </ClCompile>
+    <ClCompile Include="..\utils\UUIDGenerator.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\net\Acceptor.h">
@@ -457,6 +460,9 @@
     </ClInclude>
     <ClInclude Include="..\chatserversrc\UserManager.h">
       <Filter>chatserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\UUIDGenerator.h">
+      <Filter>utils</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

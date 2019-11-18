@@ -28,7 +28,7 @@ void TcpSession::send(int32_t cmd, int32_t seq, const std::string& data)
 void TcpSession::send(int32_t cmd, int32_t seq, const char* data, int32_t dataLength)
 {
     std::string outbuf;
-    net::BinaryWriteStream writeStream(&outbuf);
+    net::BinaryStreamWriter writeStream(&outbuf);
     writeStream.WriteInt32(cmd);
     writeStream.WriteInt32(seq);
     writeStream.WriteCString(data, dataLength);

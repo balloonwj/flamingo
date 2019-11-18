@@ -142,7 +142,7 @@ void ChatSession::onRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBu
 
 bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn, const char* inbuf, size_t buflength)
 {   
-    BinaryReadStream readStream(inbuf, buflength);
+    BinaryStreamReader readStream(inbuf, buflength);
     int32_t cmd;
     if (!readStream.ReadInt32(cmd))
     {
@@ -747,7 +747,7 @@ void ChatSession::onOperateFriendResponse(const std::string& data, const std::sh
 
     //提示对方加好友成功
     std::string outbuf;
-    BinaryWriteStream writeStream(&outbuf);
+    BinaryStreamWriter writeStream(&outbuf);
     writeStream.WriteInt32(msg_type_operatefriend);
     writeStream.WriteInt32(m_seq);
     writeStream.WriteCString(szData, strlen(szData));
@@ -1101,7 +1101,7 @@ void ChatSession::sendUserStatusChangeMsg(int32_t userid, int type, int status/*
     }
 
     std::string outbuf;
-    BinaryWriteStream writeStream(&outbuf);
+    BinaryStreamWriter writeStream(&outbuf);
     writeStream.WriteInt32(msg_type_userstatuschange);
     writeStream.WriteInt32(m_seq);
     writeStream.WriteString(data);
@@ -1133,7 +1133,7 @@ void ChatSession::onChatResponse(int32_t targetid, const std::string& data, cons
     }
     
     std::string outbuf;
-    BinaryWriteStream writeStream(&outbuf);
+    BinaryStreamWriter writeStream(&outbuf);
     writeStream.WriteInt32(msg_type_chat);
     writeStream.WriteInt32(m_seq);
     writeStream.WriteString(modifiedChatData);
@@ -1238,7 +1238,7 @@ void ChatSession::onMultiChatResponse(const std::string& targets, const std::str
 void ChatSession::onScreenshotResponse(int32_t targetid, const std::string& bmpHeader, const std::string& bmpData, const std::shared_ptr<TcpConnection>& conn)
 {
     std::string outbuf;
-    BinaryWriteStream writeStream(&outbuf);
+    BinaryStreamWriter writeStream(&outbuf);
     writeStream.WriteInt32(msg_type_remotedesktop);
     writeStream.WriteInt32(m_seq);
     std::string dummy;

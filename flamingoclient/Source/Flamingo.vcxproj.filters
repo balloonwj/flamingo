@@ -294,9 +294,6 @@
     <ClCompile Include="CriticalSection.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
-    <ClCompile Include="EncodingUtil.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
     <ClCompile Include="File.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
@@ -407,6 +404,9 @@
     </ClCompile>
     <ClCompile Include="jsoncpp-1.9.0\json_writer.cpp">
       <Filter>jsoncpp-1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="EncodeUtil.cpp">
+      <Filter>Utils</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -632,9 +632,6 @@
     <ClInclude Include="CriticalSection.h">
       <Filter>Utils</Filter>
     </ClInclude>
-    <ClInclude Include="EncodingUtil.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
     <ClInclude Include="File.h">
       <Filter>Utils</Filter>
     </ClInclude>
@@ -814,6 +811,9 @@
     </ClInclude>
     <ClInclude Include="jsoncpp-1.9.0\writer.h">
       <Filter>jsoncpp-1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="EncodeUtil.h">
+      <Filter>Utils</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

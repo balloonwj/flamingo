@@ -3,7 +3,7 @@
 #include "MD5Sum.h"
 #include "MiniBuffer.h"
 #include "Path.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include "net/IUProtocolData.h"
 #include "UserSessionData.h"
 #include <stdint.h>

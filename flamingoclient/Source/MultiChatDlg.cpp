@@ -7,7 +7,7 @@
 #include "GDIFactory.h"
 #include "IULog.h"
 #include "File2.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include "UIText.h"
 
 #define CHAT_BG_IMAGE_NAME			_T("BuddyChatDlgBg.png")

@@ -4,7 +4,7 @@
 #include "IULog.h"
 #include "MD5Sum.h"
 #include "Utils.h"
-#include "EncodingUtil.h"
+#include "EncodeUtil.h"
 #include "Path.h"
 #include "FlamingoClient.h"
 #include "File2.h"
@@ -14,8 +14,6 @@
 #include "net/FileMsg.h"
 #include "net/protocolstream.h"
 #include "net/IUProtocolData.h"
-
-using namespace balloon;
 
 CImageTaskThread::CImageTaskThread() :  m_seq(0)
 {
@@ -360,7 +358,7 @@ long CImageTaskThread::UploadImage(PCTSTR pszFileName, HWND hwndReflection, HAND
     while (true)
     {
         std::string outbuf;
-        BinaryWriteStream writeStream(&outbuf);
+        net::BinaryStreamWriter writeStream(&outbuf);
         writeStream.WriteInt32(msg_type_upload_req);
         writeStream.WriteInt32(m_seq);
         writeStream.WriteCString(szMd5, 32);
@@ -373,7 +371,7 @@ long CImageTaskThread::UploadImage(PCTSTR pszFileName, HWND hwndReflection, HAND
         DWORD dwFileRead;
         if (!::ReadFile(hFile, buffer.GetBuffer(), (DWORD)eachfilesize, &dwFileRead, NULL) || eachfilesize != (int64_t)dwFileRead)
             break;
-        string filedata;
+        std::string filedata;
         filedata.append(buffer.GetBuffer(), (size_t)buffer.GetSize());
         writeStream.WriteString(filedata);
         writeStream.Flush();
@@ -401,7 +399,7 @@ long CImageTaskThread::UploadImage(PCTSTR pszFileName, HWND hwndReflection, HAND
         if (!iusocket.RecvOnImgPort(recvBuf.GetBuffer(), recvBuf.GetSize()))
             break;
 
-        BinaryReadStream readStream(recvBuf.GetBuffer(), (size_t)recvBuf.GetSize());
+        net::BinaryStreamReader readStream(recvBuf.GetBuffer(), (size_t)recvBuf.GetSize());
         int32_t cmd;
         if (!readStream.ReadInt32(cmd) || cmd != msg_type_upload_resp)
             break;
@@ -427,7 +425,7 @@ long CImageTaskThread::UploadImage(PCTSTR pszFileName, HWND hwndReflection, HAND
         if (!readStream.ReadInt64(filesize))
             break;
 
-        string dummyfiledata;
+        std::string dummyfiledata;
         size_t filedatalength;
         if (!readStream.ReadString(&dummyfiledata, 0, filedatalength) || filedatalength != 0)
             break;
@@ -504,7 +502,7 @@ long CImageTaskThread::DownloadImage(LPCSTR lpszFileName, LPCTSTR lpszDestPath, 
     while (true)
     {
         std::string outbuf;
-        BinaryWriteStream writeStream(&outbuf);
+        net::BinaryStreamWriter writeStream(&outbuf);
         writeStream.WriteInt32(msg_type_download_req);
         writeStream.WriteInt32(m_seq);
         writeStream.WriteCString(lpszFileName, strlen(lpszFileName));
@@ -512,7 +510,7 @@ long CImageTaskThread::DownloadImage(LPCSTR lpszFileName, LPCTSTR lpszDestPath, 
         writeStream.WriteInt64(dummyoffset);
         int64_t dummyfilesize = 0;
         writeStream.WriteInt64(dummyfilesize);
-        string dummyfiledata;
+        std::string dummyfiledata;
         writeStream.WriteString(dummyfiledata);
         int32_t clientNetType = client_net_type_broadband;
         writeStream.WriteInt32(clientNetType);
@@ -541,7 +539,7 @@ long CImageTaskThread::DownloadImage(LPCSTR lpszFileName, LPCTSTR lpszDestPath, 
             break;
         }
 
-        BinaryReadStream readStream(buffer.GetBuffer(), (size_t)recvheader.packagesize);
+        net::BinaryStreamReader readStream(buffer.GetBuffer(), (size_t)recvheader.packagesize);
         int32_t cmd;
         if (!readStream.ReadInt32(cmd) || cmd != msg_type_download_resp)
         {
@@ -587,7 +585,7 @@ long CImageTaskThread::DownloadImage(LPCSTR lpszFileName, LPCTSTR lpszDestPath, 
             break;
         }
 
-        string filedata;
+        std::string filedata;
         size_t filedatalength;
         if (!readStream.ReadString(&filedata, 0, filedatalength) || filedatalength == 0)
         {
