@@ -197,7 +197,7 @@ I promise that fatal problem of Flamingo, such as crashing or halting will be so
 
 #### Contact
 
-At last not the least, if you have any suggestions or good advice, welcome to contact with me. China Mainland users can contact with me by joining in my QQ group(**578019391**) or linking my public webchat account(『**easyserverdev**』).  Also you can send me emails,  my email address is **balloonwj@qq.com**. I am waiting for You sincerely.
+At last not the least, if you have any suggestions or good advice, welcome to contact with me. China Mainland users can contact with me by joining in my QQ group(**729995516**) or linking my public webchat account(『**easyserverdev**』).  Also you can send me emails,  my email address is **balloonwj@qq.com**. I am waiting for You sincerely.
 
 
 ### flamingo
@@ -381,7 +381,7 @@ https://github.com/baloonwj/flamingo/issues/5。
 
 #### 联系方式
 
-如果您在使用这个项目的过程中遇到任何问题，或者您对我的项目有任何意见或者建议，再或者有不错的想法欢迎与我交流，可以通过我的微信公众号『**easyserverdev**』与我取得联系，或者可以给我发邮件：**balloonwj@qq.com**，您也可以加入QQ技术群进行交流讨论：**578019391**。
+如果您在使用这个项目的过程中遇到任何问题，或者您对我的项目有任何意见或者建议，再或者有不错的想法欢迎与我交流，可以通过我的微信公众号『**easyserverdev**』与我取得联系，或者可以给我发邮件：**balloonwj@qq.com**，您也可以加入QQ技术群进行交流讨论：**729995516**。
 
 ![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/articlelognew.jpg)
 
