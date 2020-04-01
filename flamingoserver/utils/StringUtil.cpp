@@ -1,5 +1,5 @@
 /**
- * ×Ö·û´®²Ù×÷¹¤¾ßÀà, StringUtil.cpp
+ * ï¿½Ö·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½, StringUtil.cpp
  * zhangyl 2018.03.09
  */
 #include "StringUtil.h"
@@ -46,7 +46,7 @@ void StringUtil::cut(const std::string& str, std::vector<std::string>& v, const 
         return;
 
     std::string substr1 = buf.substr(0, pos);
-    std::string substr2 = buf.substr(pos + 1);
+    std::string substr2 = buf.substr(pos + delimiterlength);
     if (!substr1.empty())
         v.push_back(substr1);
 
