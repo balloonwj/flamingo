@@ -40,7 +40,7 @@
             <EditText
                 android:id="@+id/chat_server_ip"
                 android:layout_height="wrap_content"
-                android:hint="120.55.94.78"
+                android:hint="101.37.25.166"
                 android:layout_weight="1" />
         </TableRow>
         <TableRow>
@@ -61,7 +61,7 @@
             <EditText
                 android:id="@+id/file_server_ip"
                 android:layout_height="wrap_content"
-                android:hint="120.55.94.78"
+                android:hint="101.37.25.166"
                 android:layout_weight="1" />
         </TableRow>
         <TableRow>

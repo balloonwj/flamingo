@@ -76,6 +76,25 @@ public class BinaryReadStream {
         return i;
     }
 
+    int read7BitEncoded(byte[] buf, int nValidLength)
+    {
+        byte c;
+        int value = 0;
+        int bitCount = 0;
+        int index = 0;
+        do
+        {
+            c = buf[index];
+            int x = (c & 0x7F);
+            x <<= bitCount;
+            value += x;
+            bitCount += 7;
+            ++index;
+        } while ((c & 0x80) != 0);
+
+        return value;
+    }
+
     Boolean isEmpty() {
         return _data.length < 6 ? true : false;
     }
@@ -282,7 +301,8 @@ public class BinaryReadStream {
 
         _cur += nValidHeadLength;
 
-        return uncompressInteger(buf, nValidHeadLength);
+        //return uncompressInteger(buf, nValidHeadLength);
+        return read7BitEncoded(buf, nValidHeadLength);
     }
 
 //    bool BinaryReadStream::IsEnd() const

@@ -79,27 +79,44 @@ public class BinaryWriteStream {
         return b;
     }
 
-    int compressInteger(int i, byte[] buf) {
-        int len = 0;
-        for (int a = 4; a >= 0; a--) {
-            byte c;
-            c = (byte) (i >> (a * 7) & 0x7f);
-            if (c == 0x00 && len == 0)
-                continue;
+//    int compressInteger(int i, byte[] buf) {
+//        int len = 0;
+//        for (int a = 4; a >= 0; a--) {
+//            byte c;
+//            c = (byte) (i >> (a * 7) & 0x7f);
+//            if (c == 0x00 && len == 0)
+//                continue;
+//
+//            if (a == 0)
+//                c &= 0x7f;
+//            else
+//                c |= 0x80;
+//            buf[len] = c;
+//            len++;
+//        }
+//        if (len == 0) {
+//            len++;
+//            buf[0] = 0;
+//        }
+//
+//        return len;
+//    }
 
-            if (a == 0)
-                c &= 0x7f;
-            else
+    int write7BitEncoded(int value, byte[] buf)
+    {
+        int length = 0;
+        do
+        {
+            byte c = (byte)(value & 0x7F);
+            value >>= 7;
+            if (value != 0)
                 c |= 0x80;
-            buf[len] = c;
-            len++;
-        }
-        if (len == 0) {
-            len++;
-            buf[0] = 0;
-        }
 
-        return len;
+            buf[length] = c;
+            ++length;
+        } while (value != 0);
+
+        return length;
     }
 
     public boolean writeString(String data) {
@@ -107,9 +124,10 @@ public class BinaryWriteStream {
             return false;
 
         byte[] buf = new byte[5];
-        int orgpressLen = compressInteger(data.length(), buf);
+        //int compressLen = compressInteger(data.length(), buf);
+        int compressLen = write7BitEncoded(data.length(), buf);
 
-        for (int i = 0; i < orgpressLen; ++i) {
+        for (int i = 0; i < compressLen; ++i) {
             _list.add(buf[i]);
         }
 
@@ -135,9 +153,9 @@ public class BinaryWriteStream {
         datalength = data.length;
 
         byte[] buf = new byte[5];
-        int orgpressLen = compressInteger(datalength, buf);
+        int compressLen = write7BitEncoded(datalength, buf);
 
-        for (int i = 0; i < orgpressLen; ++i) {
+        for (int i = 0; i < compressLen; ++i) {
             _list.add(buf[i]);
         }
 
