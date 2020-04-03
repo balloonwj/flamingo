@@ -192,7 +192,7 @@ public class ChatContent {
             }
 
             if (bean.getFaceID() != ContentBean.ERROR_FACEID) {
-                stringBuilder.append("{\"faceID\":" + "\"" + bean.getFaceID() + "\"" + "}");
+                stringBuilder.append("{\"faceID\":" + bean.getFaceID() + "}");
                 //每个节点之间用逗号分隔，最后一个不加逗号
                 if (index != itemNum - 1)
                     stringBuilder.append(", ");
