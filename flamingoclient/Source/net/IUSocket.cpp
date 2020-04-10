@@ -17,7 +17,7 @@
 
 #pragma comment(lib, "Sensapi.lib")
 
-//������ֽ�������Ϊ10M
+//包最大字节数限制为10M
 #define MAX_PACKAGE_SIZE    10 * 1024 * 1024
 
 CIUSocket::CIUSocket()
@@ -58,7 +58,7 @@ CIUSocket::~CIUSocket()
 
 }
 
-CIUSocket&  CIUSocket::GetInstance()
+CIUSocket& CIUSocket::GetInstance()
 {
     static CIUSocket socketInstance;
     return socketInstance;
@@ -93,7 +93,7 @@ void CIUSocket::Uninit()
     m_cvSendBuf.notify_one();
     m_cvRecvBuf.notify_one();
 
-    //����߳��˵��ˣ�����ָ����Զ�Ϊ�գ������ٴ�reset()ʱ���ж�һ��
+    //如果线程退掉了，这里指针会自动为空，所以再次reset()时先判断一下
     if (m_spSendThread)
         m_spSendThread.reset();
     if (m_spRecvThread)
@@ -165,7 +165,7 @@ void CIUSocket::SetImgServer(PCTSTR lpszImgServer)
     CloseImgServerConnection();
 }
 
-//����û�õ�
+//暂且没用到
 void CIUSocket::SetProxyServer(PCTSTR lpszProxyServer)
 {
     m_strProxyServer = EncodeUtil::UnicodeToAnsi(std::wstring(lpszProxyServer));
@@ -189,13 +189,13 @@ void CIUSocket::SetImgPort(short nImgPort)
     CloseImgServerConnection();
 }
 
-//����û�õ�
+//暂且没用到
 void CIUSocket::SetProxyPort(short nProxyPort)
 {
     m_nProxyPort = nProxyPort;
 }
 
-//����û�õ�
+//暂且没用到
 void CIUSocket::SetProxyType(long nProxyType)
 {
     m_nProxyType = nProxyType;
@@ -221,7 +221,7 @@ bool CIUSocket::Connect(int timeout /*= 3*/)
     setsockopt(m_hSocket, SOL_SOCKET, SO_SNDTIMEO, (LPSTR)&tmSend, sizeof(long));
     setsockopt(m_hSocket, SOL_SOCKET, SO_RCVTIMEO, (LPSTR)&tmRecv, sizeof(long));
 
-    //��socket���óɷ�������
+    //将socket设置成非阻塞的
     unsigned long on = 1;
     if (::ioctlsocket(m_hSocket, FIONBIO, &on) == SOCKET_ERROR)
         return false;
@@ -244,7 +244,7 @@ bool CIUSocket::Connect(int timeout /*= 3*/)
 
     addrSrv.sin_family = AF_INET;
     addrSrv.sin_port = htons((u_short)m_nPort);
-    int ret = ::connect(m_hSocket, (struct sockaddr*)&addrSrv, sizeof(addrSrv));
+    int ret = ::connect(m_hSocket, (struct sockaddr*) & addrSrv, sizeof(addrSrv));
     if (ret == 0)
     {
         LOG_INFO("Connect to server:%s, port:%d successfully.", m_strServer.c_str(), m_nPort);
@@ -309,7 +309,7 @@ bool CIUSocket::ConnectToFileServer(int timeout/* = 3*/)
     setsockopt(m_hFileSocket, SOL_SOCKET, SO_SNDTIMEO, (LPSTR)&tmSend, sizeof(long));
     setsockopt(m_hFileSocket, SOL_SOCKET, SO_RCVTIMEO, (LPSTR)&tmRecv, sizeof(long));
 
-    //��socket���óɷ�������
+    //将socket设置成非阻塞的
     unsigned long on = 1;
     if (::ioctlsocket(m_hFileSocket, FIONBIO, &on) == SOCKET_ERROR)
         return false;
@@ -332,7 +332,7 @@ bool CIUSocket::ConnectToFileServer(int timeout/* = 3*/)
 
     addrSrv.sin_family = AF_INET;
     addrSrv.sin_port = htons((u_short)m_nFilePort);
-    int ret = ::connect(m_hFileSocket, (struct sockaddr*)&addrSrv, sizeof(addrSrv));
+    int ret = ::connect(m_hFileSocket, (struct sockaddr*) & addrSrv, sizeof(addrSrv));
     if (ret == 0)
     {
         LOG_INFO("Connect to file server:%s, port:%d successfully.", m_strFileServer.c_str(), m_nFilePort);
@@ -378,7 +378,7 @@ bool CIUSocket::ConnectToImgServer(int timeout/* = 3*/)
     setsockopt(m_hImgSocket, SOL_SOCKET, SO_SNDTIMEO, (LPSTR)&tmSend, sizeof(long));
     setsockopt(m_hImgSocket, SOL_SOCKET, SO_RCVTIMEO, (LPSTR)&tmRecv, sizeof(long));
 
-    //��socket���óɷ�������
+    //将socket设置成非阻塞的
     unsigned long on = 1;
     if (::ioctlsocket(m_hImgSocket, FIONBIO, &on) == SOCKET_ERROR)
         return false;
@@ -401,7 +401,7 @@ bool CIUSocket::ConnectToImgServer(int timeout/* = 3*/)
 
     addrSrv.sin_family = AF_INET;
     addrSrv.sin_port = htons((u_short)m_nImgPort);
-    int ret = ::connect(m_hImgSocket, (struct sockaddr*)&addrSrv, sizeof(addrSrv));
+    int ret = ::connect(m_hImgSocket, (struct sockaddr*) & addrSrv, sizeof(addrSrv));
     if (ret == 0)
     {
         LOG_INFO("Connect to img server:%s, port:%d successfully.", m_strImgServer.c_str(), m_nImgPort);
@@ -454,18 +454,18 @@ int CIUSocket::CheckReceivedData()
         if (FD_ISSET(m_hSocket, &readset))
             return 1;
     }
-    //����
+    //出错
     else if (nRet == SOCKET_ERROR)
         return -1;
 
-    //��ʱnRet=0���ڳ�ʱ�����ʱ����û������
+    //超时nRet=0，在超时的这段时间内没有数据
     return 0;
 }
 
 bool CIUSocket::Send()
 {
-    //���δ����������������Ҳʧ���򷵻�FALSE
-    //TODO: �ڷ������ݵĹ���������ûʲô���壬��Ϊ������Session�Ѿ���Ч�ˣ������ط�����
+    //如果未连接则重连，重连也失败则返回FALSE
+    //TODO: 在发送数据的过程中重连没什么意义，因为与服务的Session已经无效了，换个地方重连
     if (IsClosed() && !Connect())
     {
         LOG_ERROR("connect server:%s:%d error.", m_strServer.c_str(), m_nPort);
@@ -490,7 +490,7 @@ bool CIUSocket::Send()
         }
         else if (nRet < 1)
         {
-            //һ�����ִ�������̹ر�Socket
+            //一旦出现错误就立刻关闭Socket
             LOG_ERROR("Send data error, disconnect server:%s, port:%d.", m_strServer.c_str(), m_nPort);
             Close();
             return false;
@@ -520,7 +520,7 @@ bool CIUSocket::Recv()
     {
 
         nRet = ::recv(m_hSocket, buff, 10 * 1024, 0);
-        if (nRet == SOCKET_ERROR)				//һ�����ִ�������̹ر�Socket
+        if (nRet == SOCKET_ERROR)				//一旦出现错误就立刻关闭Socket
         {
             if (::WSAGetLastError() == WSAEWOULDBLOCK)
                 break;
@@ -553,18 +553,18 @@ bool CIUSocket::Recv()
 
 bool CIUSocket::SendOnFilePort(const char* pBuffer, int64_t nSize, int nTimeout/* = 3*/)
 {
-    //���δ����������������Ҳʧ���򷵻�FALSE
+    //如果未连接则重连，重连也失败则返回FALSE
     if (IsFileServerClosed())
         return false;
-    
+
     int64_t nStartTime = time(NULL);
-   
+
     int64_t nSentBytes = 0;
     int nRet = 0;
     int64_t now;
     do
     {
-        //FIXME: ��int64_tǿ��ת����int32���ܻ�������
+        //FIXME: 将int64_t强制转换成int32可能会有问题
         nRet = ::send(m_hFileSocket, pBuffer + nSentBytes, (int)(nSize - nSentBytes), 0);
         if (nRet == SOCKET_ERROR && ::WSAGetLastError() == WSAEWOULDBLOCK)
         {
@@ -574,7 +574,7 @@ bool CIUSocket::SendOnFilePort(const char* pBuffer, int64_t nSize, int nTimeout/
                 continue;
             else
             {
-                //��ʱ��,�ر�socket,������false
+                //超时了,关闭socket,并返回false
                 CloseFileServerConnection();
                 LOG_ERROR("Send data timeout, now: %lld, nStartTime: %lld, nTimeout: %d, disconnect file server:%s, port:%d.", now, nStartTime, nTimeout, m_strFileServer.c_str(), m_nFilePort);
                 return false;
@@ -582,7 +582,7 @@ bool CIUSocket::SendOnFilePort(const char* pBuffer, int64_t nSize, int nTimeout/
         }
         else if (nRet < 1)
         {
-            //һ�����ִ�������̹ر�Socket
+            //一旦出现错误就立刻关闭Socket
             LOG_ERROR("Send data error, nRet: %d, disconnect file server: %s, port: %d, socket errorCode: %d", nRet, m_strFileServer.c_str(), m_nFilePort, ::WSAGetLastError());
             CloseFileServerConnection();
             return false;
@@ -604,7 +604,7 @@ bool CIUSocket::RecvOnFilePort(char* pBuffer, int64_t nSize, int nTimeout/* = 3*
 {
     if (IsFileServerClosed())
         return false;
-    
+
     int64_t nStartTime = time(NULL);
 
     int nRet = 0;
@@ -622,13 +622,13 @@ bool CIUSocket::RecvOnFilePort(char* pBuffer, int64_t nSize, int nTimeout/* = 3*
                 continue;
             else
             {
-                //��ʱ��,�ر�socket,������false
-                CloseFileServerConnection();                
+                //超时了,关闭socket,并返回false
+                CloseFileServerConnection();
                 LOG_ERROR("Recv data timeout, now: %lld, nStartTime: %lld, nTimeout: %d, disconnect file server:%s, port:%d.", now, nStartTime, nTimeout, m_strFileServer.c_str(), m_nFilePort);
                 return false;
             }
         }
-        //һ�����ִ�������̹ر�Socket
+        //一旦出现错误就立刻关闭Socket
         else if (nRet < 1)
         {
             LOG_ERROR("Recv data error, nRet: %d, disconnect file server: %s, port: %d, socket errorCode: %d.", nRet, m_strFileServer.c_str(), m_nFilePort, ::WSAGetLastError());
@@ -650,7 +650,7 @@ bool CIUSocket::RecvOnFilePort(char* pBuffer, int64_t nSize, int nTimeout/* = 3*
 
 bool CIUSocket::SendOnImgPort(const char* pBuffer, int64_t nSize, int nTimeout/* = 3*/)
 {
-    //���δ�����򷵻�false
+    //如果未连接则返回false
     if (IsImgServerClosed())
         return false;
 
@@ -670,7 +670,7 @@ bool CIUSocket::SendOnImgPort(const char* pBuffer, int64_t nSize, int nTimeout/*
                 continue;
             else
             {
-                //��ʱ��,�ر�socket,������false
+                //超时了,关闭socket,并返回false
                 CloseImgServerConnection();
                 LOG_ERROR("Send data timeout, now: %lld, nStartTime: %lld, nTimeout: %d, disconnect img server: %s, port: %d.", now, nStartTime, nTimeout, m_strImgServer.c_str(), m_nImgPort);
                 return false;
@@ -678,7 +678,7 @@ bool CIUSocket::SendOnImgPort(const char* pBuffer, int64_t nSize, int nTimeout/*
         }
         else if (nRet < 1)
         {
-            //һ�����ִ�������̹ر�Socket
+            //一旦出现错误就立刻关闭Socket
             LOG_ERROR("Send data error, nRet:%d, disconnect img server:%s, port:%d, socket errorCode: %d.", nRet, m_strImgServer.c_str(), m_nImgPort, ::WSAGetLastError());
             CloseImgServerConnection();
             return false;
@@ -707,8 +707,8 @@ bool CIUSocket::RecvOnImgPort(char* pBuffer, int64_t nSize, int nTimeout/* = 3*/
     int64_t nRecvBytes = 0;
     int64_t now;
     do
-    {       
-        //FIXME: ��int64_tǿ��ת����int32���ܻ�������
+    {
+        //FIXME: 将int64_t强制转换成int32可能会有问题
         nRet = ::recv(m_hImgSocket, pBuffer + nRecvBytes, (int)(nSize - nRecvBytes), 0);
         if (nRet == SOCKET_ERROR && ::WSAGetLastError() == WSAEWOULDBLOCK)
         {
@@ -718,13 +718,13 @@ bool CIUSocket::RecvOnImgPort(char* pBuffer, int64_t nSize, int nTimeout/* = 3*/
                 continue;
             else
             {
-                //��ʱ��,�ر�socket,������false
+                //超时了,关闭socket,并返回false
                 CloseImgServerConnection();
                 LOG_ERROR("Recv data timeout, now: %lld, nStartTime: %lld, nTimeout: %d, disconnect img server: %s, port: %d.", now, nStartTime, nTimeout, m_strImgServer.c_str(), m_nImgPort);
                 return false;
             }
         }
-        //һ�����ִ�������̹ر�Socket
+        //一旦出现错误就立刻关闭Socket
         else if (nRet < 1)
         {
             LOG_ERROR("Recv data error, nRet: %d, disconnect img server:%s, port:%d, socket errorCode: %d.", nRet, m_strImgServer.c_str(), m_nImgPort, ::WSAGetLastError());
@@ -761,7 +761,7 @@ bool CIUSocket::IsImgServerClosed()
 
 void CIUSocket::Close()
 {
-    //FIXME: ��������ᱻ���ݷ����̺߳���ȡ�߳�ͬʱ���ã�����ȫ
+    //FIXME: 这个函数会被数据发送线程和收取线程同时调用，不安全
     if (m_hSocket == INVALID_SOCKET)
         return;
 
@@ -817,7 +817,7 @@ void CIUSocket::SendThreadProc()
 
         if (!Send())
         {
-            //����������������Ӳ��ϣ�����ͻ��������
+            //进行重连，如果连接不上，则向客户报告错误
         }
     }
 
@@ -834,14 +834,14 @@ void CIUSocket::Send(const std::string& strBuffer)
         return;
     }
 
-    //�����ͷ
+    //插入包头
     int32_t length = (int32_t)strBuffer.length();
     msg header;
     header.compressflag = 1;
     header.originsize = length;
     header.compresssize = (int32_t)strDestBuf.length();
-	
-	std::lock_guard<std::mutex> guard(m_mtSendBuf);
+
+    std::lock_guard<std::mutex> guard(m_mtSendBuf);
     m_strSendBuf.append((const char*)&header, sizeof(header));
 
     m_strSendBuf.append(strDestBuf);
@@ -853,25 +853,25 @@ void CIUSocket::RecvThreadProc()
     LOG_INFO("Recv data thread start...");
 
     int nRet;
-    //������ʽ 
+    //上网方式 
     DWORD   dwFlags;
     BOOL    bAlive;
     while (!m_bStop)
     {
-        //��⵽������������
+        //检测到数据则收数据
         nRet = CheckReceivedData();
-        //����
+        //出错
         if (nRet == -1)
         {
             m_pRecvMsgThread->NotifyNetError();
         }
-        //������
+        //无数据
         else if (nRet == 0)
         {
-            bAlive = ::IsNetworkAlive(&dwFlags);		//�Ƿ�����    
+            bAlive = ::IsNetworkAlive(&dwFlags);		//是否在线    
             if (!bAlive && ::GetLastError() == 0)
             {
-                //�����Ѿ��Ͽ�
+                //网络已经断开
                 m_pRecvMsgThread->NotifyNetError();
                 LOG_ERROR("net error, exit recv and send thread...");
                 Uninit();
@@ -890,7 +890,7 @@ void CIUSocket::RecvThreadProc()
                     SendHeartbeatPackage();
             }
         }
-        //������
+        //有数据
         else if (nRet == 1)
         {
             if (!Recv())
@@ -908,20 +908,20 @@ void CIUSocket::RecvThreadProc()
 
 bool CIUSocket::DecodePackages()
 {
-    //һ��Ҫ����һ��ѭ������������Ϊ����һƬ�������ж������
-    //���������ղ�ȫ������ط��Ҿ����˺þ�T_T
+    //一定要放在一个循环里面解包，因为可能一片数据中有多个包，
+    //对于数据收不全，这个地方我纠结了好久T_T
     while (true)
     {
-        //���ջ���������һ����ͷ��С
+        //接收缓冲区不够一个包头大小
         if (m_strRecvBuf.length() <= sizeof(msg))
             break;
 
         msg header;
         memcpy_s(&header, sizeof(msg), m_strRecvBuf.data(), sizeof(msg));
-        //����ѹ����
+        //数据压缩过
         if (header.compressflag == PACKAGE_COMPRESSED)
         {
-            //��ֹ��ͷ�����������һЩ���ҵ����ݣ������������ÿ������СΪ10M
+            //防止包头定义的数据是一些错乱的数据，这里最大限制每个包大小为10M
             if (header.compresssize >= MAX_PACKAGE_SIZE || header.compresssize <= 0 ||
                 header.originsize >= MAX_PACKAGE_SIZE || header.originsize <= 0)
             {
@@ -930,19 +930,19 @@ bool CIUSocket::DecodePackages()
                 return false;
             }
 
-            //���ջ���������һ��������С����ͷ+���壩
+            //接收缓冲区不够一个整包大小（包头+包体）
             if (m_strRecvBuf.length() < sizeof(msg) + header.compresssize)
                 break;
 
-            //ȥ����ͷ��Ϣ
+            //去除包头信息
             m_strRecvBuf.erase(0, sizeof(msg));
-            //�õ�����
+            //拿到包体
             std::string strBody;
             strBody.append(m_strRecvBuf.c_str(), header.compresssize);
-            //ȥ��������Ϣ
+            //去除包体信息
             m_strRecvBuf.erase(0, header.compresssize);
 
-            //��ѹ
+            //解压
             std::string strUncompressBody;
             if (!ZlibUtil::UncompressBuf(strBody, strUncompressBody, header.originsize))
             {
@@ -953,10 +953,10 @@ bool CIUSocket::DecodePackages()
 
             m_pRecvMsgThread->AddMsgData(strUncompressBody);
         }
-        //����δѹ����
+        //数据未压缩过
         else
         {
-            //��ֹ��ͷ�����������һЩ���ҵ����ݣ������������ÿ������СΪ10M
+            //防止包头定义的数据是一些错乱的数据，这里最大限制每个包大小为10M
             if (header.originsize >= MAX_PACKAGE_SIZE || header.originsize <= 0)
             {
                 LOG_ERROR("Recv a illegal package, originsize=%d.", header.originsize);
@@ -964,16 +964,16 @@ bool CIUSocket::DecodePackages()
                 return false;
             }
 
-            //���ջ���������һ��������С����ͷ+���壩
+            //接收缓冲区不够一个整包大小（包头+包体）
             if (m_strRecvBuf.length() < sizeof(msg) + header.originsize)
                 break;
 
-            //ȥ����ͷ��Ϣ
+            //去除包头信息
             m_strRecvBuf.erase(0, sizeof(msg));
-            //�õ�����
+            //拿到包体
             std::string strBody;
             strBody.append(m_strRecvBuf.c_str(), header.originsize);
-            //ȥ��������Ϣ
+            //去除包体信息
             m_strRecvBuf.erase(0, header.originsize);
             m_pRecvMsgThread->AddMsgData(strBody);
         }
@@ -1021,7 +1021,7 @@ bool CIUSocket::Register(const char* pszUser, const char* pszNickname, const cha
     strSendBuf.append((const char*)&header, sizeof(header));
     strSendBuf.append(strDestBuf);
 
-    //��ʱʱ������Ϊ3��
+    //超时时间设置为3秒
     if (!SendData(strSendBuf.c_str(), strSendBuf.length(), nTimeout))
         return false;
 
@@ -1139,7 +1139,7 @@ bool CIUSocket::Login(const char* pszUser, const char* pszPassword, int nClientT
     strSendBuf.append((const char*)&header, sizeof(header));
     strSendBuf.append(strDestBuf);
 
-    //��ʱʱ������Ϊ3��
+    //超时时间设置为3秒
     if (!SendData(strSendBuf.c_str(), strSendBuf.length(), nTimeout))
         return false;
 
@@ -1213,7 +1213,7 @@ bool CIUSocket::Login(const char* pszUser, const char* pszPassword, int nClientT
 
 bool CIUSocket::SendData(const char* pBuffer, int nBuffSize, int nTimeout)
 {
-    //TODO������ط������ȼӸ�select�ж���socket�Ƿ��д
+    //TODO：这个地方可以先加个select判断下socket是否可写
 
     int64_t nStartTime = time(NULL);
 
@@ -1224,7 +1224,7 @@ bool CIUSocket::SendData(const char* pBuffer, int nBuffSize, int nTimeout)
         nRet = ::send(m_hSocket, pBuffer, nBuffSize, 0);
         if (nRet == SOCKET_ERROR)
         {
-            //�Է�tcp����̫С��ʱ������ȥ��ͬʱû�г�ʱ��������ȴ�
+            //对方tcp窗口太小暂时发布出去，同时没有超时，则继续等待
             if (::WSAGetLastError() == WSAEWOULDBLOCK && time(NULL) - nStartTime < nTimeout)
             {
                 continue;
@@ -1234,7 +1234,7 @@ bool CIUSocket::SendData(const char* pBuffer, int nBuffSize, int nTimeout)
         }
         else if (nRet < 1)
         {
-            //һ�����ִ�������̹ر�Socket
+            //一旦出现错误就立刻关闭Socket
             LOG_ERROR("Send data error, disconnect server:%s, port:%d.", m_strServer.c_str(), m_nPort);
             Close();
             return false;
@@ -1277,7 +1277,7 @@ bool CIUSocket::RecvData(char* pszBuff, int nBufferSize, int nTimeout)
     while (true)
     {
         nRet = ::recv(m_hSocket, pszBuff, nBytesToRecv, 0);
-        if (nRet == SOCKET_ERROR)				//һ�����ִ�������̹ر�Socket
+        if (nRet == SOCKET_ERROR)				//一旦出现错误就立刻关闭Socket
         {
             if (::WSAGetLastError() == WSAEWOULDBLOCK && time(NULL) - nStartTime < nTimeout)
                 continue;
