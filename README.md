@@ -2,6 +2,11 @@
 
 [Read in English?](https://github.com/balloonwj/flamingo/blob/master/README_en.md)
 
+**我为 Flamingo 专门录制了三部高清技术讲解视频以方便读者学习，视频中介绍了Flamingo的各种技术实现细节和如何学习的方法，需要视频教程的读者可以扫描以下公众号二维码，关注后并在后台回复关键字“flamingo”即可得到下载链接。**
+
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/easyserverdev_logo.jpg)
+
+
 #### 介绍
 
 Flamingo IM 是一款高性能、轻量级的开源即时通讯软件，目前包括服务器端、pc 端、安卓端，微信版本和 IOS 版本目前正在开发中。
@@ -181,9 +186,7 @@ https://github.com/baloonwj/flamingo/issues/5。
 
 #### 联系方式
 
-如果您在使用这个项目的过程中遇到任何问题，或者您对我的项目有任何意见或者建议，再或者有不错的想法欢迎与我交流，可以通过我的微信公众号『**高性能服务器开发**』与我取得联系，或者可以加我微信 **easy_coder**，您也可以加入QQ技术群进行交流讨论：**729995516**。
-
-![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/easyserverdev_logo.jpg)
+如果您在使用这个项目的过程中遇到任何问题，或者您对我的项目有任何意见或者建议，再或者有不错的想法欢迎与我交流，可以加我微信 **easy_coder**，您也可以加入QQ技术群进行交流讨论：**729995516**。
 
 
 
