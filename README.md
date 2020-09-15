@@ -2,7 +2,7 @@
 
 [Read in English?](https://github.com/balloonwj/flamingo/blob/master/README_en.md)
 
-**我为 Flamingo 专门录制了三部高清技术讲解视频以方便读者学习，视频中介绍了Flamingo的各种技术实现细节和如何学习的方法，需要视频教程的读者可以扫描以下公众号二维码，关注后并在后台回复关键字“flamingo”即可得到下载链接。**
+**我为 Flamingo 专门录制了三部高清技术讲解视频以方便读者学习，视频中介绍了Flamingo的编译和部署方法、整体架构、各个模块的技术实现细节以及如何学习Flamingo的方法，需要视频教程的读者可以扫描以下公众号二维码，关注后并在后台回复关键字“flamingo”即可得到下载链接。**
 
 ![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/easyserverdev_logo.jpg)
 
