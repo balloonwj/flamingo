@@ -78,7 +78,7 @@
             android:layout_weight="1"
             android:background="@null"
             android:hint="输入您的用户名"
-            android:inputType="none"
+            android:inputType="text"
             android:maxLength="11"
             android:maxLines="1"
             android:textColor="@color/dark_gray_text"
