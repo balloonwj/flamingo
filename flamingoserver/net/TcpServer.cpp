@@ -1,4 +1,4 @@
-#include "TcpServer.h"
+ï»¿#include "TcpServer.h"
 
 #include <stdio.h>  // snprintf
 #include <functional>
@@ -17,23 +17,23 @@ TcpServer::TcpServer(EventLoop* loop,
     const InetAddress& listenAddr,
     const std::string& nameArg,
     Option option)
-    : loop_(loop),
-    hostport_(listenAddr.toIpPort()),
-    name_(nameArg),
-    acceptor_(new Acceptor(loop, listenAddr, option == kReusePort)),
+    : m_loop(loop),
+    m_hostport(listenAddr.toIpPort()),
+    m_name(nameArg),
+    m_acceptor(new Acceptor(loop, listenAddr, option == kReusePort)),
     //threadPool_(new EventLoopThreadPool(loop, name_)),
-    connectionCallback_(defaultConnectionCallback),
-    messageCallback_(defaultMessageCallback),
-    started_(0),
-    nextConnId_(1)
+    m_connectionCallback(defaultConnectionCallback),
+    m_messageCallback(defaultMessageCallback),
+    m_started(0),
+    m_nextConnId(1)
 {
-    acceptor_->setNewConnectionCallback(std::bind(&TcpServer::newConnection, this, std::placeholders::_1, std::placeholders::_2));
+    m_acceptor->setNewConnectionCallback(std::bind(&TcpServer::newConnection, this, std::placeholders::_1, std::placeholders::_2));
 }
 
 TcpServer::~TcpServer()
 {
-    loop_->assertInLoopThread();
-    LOGD("TcpServer::~TcpServer [%s] destructing", name_.c_str());
+    m_loop->assertInLoopThread();
+    LOGD("TcpServer::~TcpServer [%s] destructing", m_name.c_str());
 
     stop();
 }
@@ -46,25 +46,25 @@ TcpServer::~TcpServer()
 
 void TcpServer::start(int workerThreadCount/* = 4*/)
 {
-    if (started_ == 0)
+    if (m_started == 0)
     {
-        eventLoopThreadPool_.reset(new EventLoopThreadPool());
-        eventLoopThreadPool_->init(loop_, workerThreadCount);
-        eventLoopThreadPool_->start();
-        
+        m_eventLoopThreadPool.reset(new EventLoopThreadPool());
+        m_eventLoopThreadPool->init(m_loop, workerThreadCount);
+        m_eventLoopThreadPool->start();
+
         //threadPool_->start(threadInitCallback_);
         //assert(!acceptor_->listenning());
-        loop_->runInLoop(std::bind(&Acceptor::listen, acceptor_.get()));
-        started_ = 1;
+        m_loop->runInLoop(std::bind(&Acceptor::listen, m_acceptor.get()));
+        m_started = 1;
     }
 }
 
 void TcpServer::stop()
 {
-    if (started_ == 0)
+    if (m_started == 0)
         return;
 
-    for (ConnectionMap::iterator it = connections_.begin(); it != connections_.end(); ++it)
+    for (ConnectionMap::iterator it = m_connections.begin(); it != m_connections.end(); ++it)
     {
         TcpConnectionPtr conn = it->second;
         it->second.reset();
@@ -72,56 +72,55 @@ void TcpServer::stop()
         conn.reset();
     }
 
-    eventLoopThreadPool_->stop();
+    m_eventLoopThreadPool->stop();
 
-    started_ = 0;
+    m_started = 0;
 }
 
 void TcpServer::newConnection(int sockfd, const InetAddress& peerAddr)
 {
-    loop_->assertInLoopThread();
-    EventLoop* ioLoop = eventLoopThreadPool_->getNextLoop();
+    m_loop->assertInLoopThread();
+    EventLoop* ioLoop = m_eventLoopThreadPool->getNextLoop();
     char buf[32];
-    snprintf(buf, sizeof buf, ":%s#%d", hostport_.c_str(), nextConnId_);
-    ++nextConnId_;
-    string connName = name_ + buf;
+    snprintf(buf, sizeof buf, ":%s#%d", m_hostport.c_str(), m_nextConnId);
+    ++m_nextConnId;
+    string connName = m_name + buf;
 
-    LOGD("TcpServer::newConnection [%s] - new connection [%s] from %s", name_.c_str(), connName.c_str(), peerAddr.toIpPort().c_str());
+    LOGD("TcpServer::newConnection [%s] - new connection [%s] from %s", m_name.c_str(), connName.c_str(), peerAddr.toIpPort().c_str());
 
     InetAddress localAddr(sockets::getLocalAddr(sockfd));
     // FIXME poll with zero timeout to double confirm the new connection
     // FIXME use make_shared if necessary
     TcpConnectionPtr conn(new TcpConnection(ioLoop, connName, sockfd, localAddr, peerAddr));
-    connections_[connName] = conn;
-    conn->setConnectionCallback(connectionCallback_);
-    conn->setMessageCallback(messageCallback_);
-    conn->setWriteCompleteCallback(writeCompleteCallback_);
+    m_connections[connName] = conn;
+    conn->setConnectionCallback(m_connectionCallback);
+    conn->setMessageCallback(m_messageCallback);
+    conn->setWriteCompleteCallback(m_writeCompleteCallback);
     conn->setCloseCallback(std::bind(&TcpServer::removeConnection, this, std::placeholders::_1)); // FIXME: unsafe
-    //¸ÃÏß³Ì·ÖÀëÍêioÊÂ¼þºó£¬Á¢¼´µ÷ÓÃTcpConnection::connectEstablished
+    //è¯¥çº¿ç¨‹åˆ†ç¦»å®Œioäº‹ä»¶åŽï¼Œç«‹å³è°ƒç”¨TcpConnection::connectEstablished
     ioLoop->runInLoop(std::bind(&TcpConnection::connectEstablished, conn));
 }
 
 void TcpServer::removeConnection(const TcpConnectionPtr& conn)
 {
     // FIXME: unsafe
-    loop_->runInLoop(std::bind(&TcpServer::removeConnectionInLoop, this, conn));
+    m_loop->runInLoop(std::bind(&TcpServer::removeConnectionInLoop, this, conn));
 }
 
 void TcpServer::removeConnectionInLoop(const TcpConnectionPtr& conn)
 {
-    loop_->assertInLoopThread();
-    LOGD("TcpServer::removeConnectionInLoop [%s] - connection %s", name_.c_str(), conn->name().c_str());
-    size_t n = connections_.erase(conn->name());
+    m_loop->assertInLoopThread();
+    LOGD("TcpServer::removeConnectionInLoop [%s] - connection %s", m_name.c_str(), conn->name().c_str());
+    size_t n = m_connections.erase(conn->name());
     //(void)n;
     //assert(n == 1);
     if (n != 1)
     {
-        //³öÏÖÕâÖÖÇé¿ö£¬ÊÇTcpConneaction¶ÔÏóÔÚ´´½¨¹ý³ÌÖÐ£¬¶Ô·½¾Í¶Ï¿ªÁ¬½ÓÁË¡£
-        LOGD("TcpServer::removeConnectionInLoop [%s] - connection %s, connection does not exist.", name_.c_str(), conn->name().c_str());
+        //å‡ºçŽ°è¿™ç§æƒ…å†µï¼Œæ˜¯TcpConneactionå¯¹è±¡åœ¨åˆ›å»ºè¿‡ç¨‹ä¸­ï¼Œå¯¹æ–¹å°±æ–­å¼€è¿žæŽ¥äº†ã€‚
+        LOGD("TcpServer::removeConnectionInLoop [%s] - connection %s, connection does not exist.", m_name.c_str(), conn->name().c_str());
         return;
     }
 
     EventLoop* ioLoop = conn->getLoop();
     ioLoop->queueInLoop(std::bind(&TcpConnection::connectDestroyed, conn));
 }
-

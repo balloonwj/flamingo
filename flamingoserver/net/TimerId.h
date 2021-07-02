@@ -1,26 +1,23 @@
-#pragma once
+﻿#pragma once
 
 namespace net
 {
     class Timer;
 
-    ///
-    /// An opaque identifier, for canceling Timer.
-    ///
     class TimerId
     {
     public:
-        TimerId(): timer_(NULL), sequence_(0)
+        TimerId() : m_timer(NULL), m_sequence(0)
         {
         }
 
-        TimerId(Timer* timer, int64_t seq) : timer_(timer), sequence_(seq)
+        TimerId(Timer* timer, int64_t seq) : m_timer(timer), m_sequence(seq)
         {
         }
 
         Timer* getTimer()
         {
-            return timer_;
+            return m_timer;
         }
 
         // default copy-ctor, dtor and assignment are okay
@@ -28,8 +25,8 @@ namespace net
         friend class TimerQueue;
 
     private:
-        Timer*      timer_;
-        int64_t     sequence_;
+        Timer* m_timer;
+        int64_t     m_sequence;
     };
 
 }

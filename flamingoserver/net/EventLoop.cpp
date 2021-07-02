@@ -1,4 +1,4 @@
-#include "EventLoop.h"
+ï»¿#include "EventLoop.h"
 
 #include <sstream>
 #include <iostream>
@@ -18,7 +18,7 @@
 
 using namespace net;
 
-//ÄÚ²¿ÕìÌı»½ĞÑfdµÄÕìÌı¶Ë¿Ú£¬Òò´ËÍâ²¿¿ÉÒÔÔÙÊ¹ÓÃÕâ¸ö¶Ë¿Ú
+//å†…éƒ¨ä¾¦å¬å”¤é†’fdçš„ä¾¦å¬ç«¯å£ï¼Œå› æ­¤å¤–éƒ¨å¯ä»¥å†ä½¿ç”¨è¿™ä¸ªç«¯å£
 //#define INNER_WAKEUP_LISTEN_PORT 10000
 
 thread_local  EventLoop* t_loopInThisThread = 0;
@@ -30,26 +30,26 @@ EventLoop* getEventLoopOfCurrentThread()
     return t_loopInThisThread;
 }
 
-// ÔÚÏß³Ìº¯ÊıÖĞ´´½¨eventloop
-EventLoop::EventLoop()
-    : looping_(false),
-    quit_(false),
-    eventHandling_(false),
-    callingPendingFunctors_(false),
-    threadId_(std::this_thread::get_id()),
-    timerQueue_(new TimerQueue(this)),
-    iteration_(0L),
+// åœ¨çº¿ç¨‹å‡½æ•°ä¸­åˆ›å»ºeventloop
+EventLoop::EventLoop() :
+    m_looping(false),
+    m_quit(false),
+    m_eventHandling(false),
+    m_doingOtherTasks(false),
+    m_threadId(std::this_thread::get_id()),
+    m_timerQueue(new TimerQueue(this)),
+    m_iteration(0L),
     currentActiveChannel_(NULL)
 {
     createWakeupfd();
 
 #ifdef WIN32
-    wakeupChannel_.reset(new Channel(this, wakeupFdSend_));
-    poller_.reset(new SelectPoller(this));
+    m_wakeupChannel.reset(new Channel(this, m_wakeupFdSend));
+    m_poller.reset(new SelectPoller(this));
 
 #else
-    wakeupChannel_.reset(new Channel(this, wakeupFd_));
-    poller_.reset(new EPollPoller(this));
+    m_wakeupChannel.reset(new Channel(this, m_wakeupFd));
+    m_poller.reset(new EPollPoller(this));
 #endif
 
     if (t_loopInThisThread)
@@ -60,13 +60,9 @@ EventLoop::EventLoop()
     {
         t_loopInThisThread = this;
     }
-    wakeupChannel_->setReadCallback(std::bind(&EventLoop::handleRead, this));
+    m_wakeupChannel->setReadCallback(std::bind(&EventLoop::handleRead, this));
     // we are always reading the wakeupfd
-    wakeupChannel_->enableReading();
-
-    //std::stringstream ss;	
-    //ss << "eventloop create threadid = " << threadId_;
-    //std::cout << ss.str() << std::endl;
+    m_wakeupChannel->enableReading();
 }
 
 EventLoop::~EventLoop()
@@ -78,15 +74,15 @@ EventLoop::~EventLoop()
     //ss << "eventloop destructs threadid = " << threadId_;
     //std::cout << ss.str() << std::endl;
 
-    wakeupChannel_->disableAll();
-    wakeupChannel_->remove();
+    m_wakeupChannel->disableAll();
+    m_wakeupChannel->remove();
 
 #ifdef WIN32
-    sockets::close(wakeupFdSend_);
-    sockets::close(wakeupFdRecv_);
-    sockets::close(wakeupFdListen_);
+    sockets::close(m_wakeupFdSend);
+    sockets::close(m_wakeupFdRecv);
+    sockets::close(m_wakeupFdListen);
 #else
-    sockets::close(wakeupFd_);
+    sockets::close(m_wakeupFd);
 #endif
 
     //_close(fdpipe_[0]);
@@ -99,40 +95,40 @@ void EventLoop::loop()
 {
     //assert(!looping_);
     assertInLoopThread();
-    looping_ = true;
-    quit_ = false;  // FIXME: what if someone calls quit() before loop() ?
+    m_looping = true;
+    m_quit = false;  // FIXME: what if someone calls quit() before loop() ?
     LOGD("EventLoop 0x%x  start looping", this);
 
-    while (!quit_)
+    while (!m_quit)
     {
-        timerQueue_->doTimer();
+        m_timerQueue->doTimer();
 
-        activeChannels_.clear();
-        pollReturnTime_ = poller_->poll(kPollTimeMs, &activeChannels_);
+        m_activeChannels.clear();
+        m_pollReturnTime = m_poller->poll(kPollTimeMs, &m_activeChannels);
         //if (Logger::logLevel() <= Logger::TRACE)
         //{
         printActiveChannels();
         //}
-        ++iteration_;
+        ++m_iteration;
         // TODO sort channel by priority
-        eventHandling_ = true;
-        for (const auto& it : activeChannels_)
+        m_eventHandling = true;
+        for (const auto& it : m_activeChannels)
         {
             currentActiveChannel_ = it;
-            currentActiveChannel_->handleEvent(pollReturnTime_);
+            currentActiveChannel_->handleEvent(m_pollReturnTime);
         }
         currentActiveChannel_ = nullptr;
-        eventHandling_ = false;
-        doPendingFunctors();
+        m_eventHandling = false;
+        doOtherTasks();
 
-        if (frameFunctor_)
+        if (m_frameFunctor)
         {
-            frameFunctor_();
+            m_frameFunctor();
         }
     }
 
     LOGD("EventLoop 0x%0x stop looping", this);
-    looping_ = false;
+    m_looping = false;
 
 
     std::ostringstream oss;
@@ -143,7 +139,7 @@ void EventLoop::loop()
 
 void EventLoop::quit()
 {
-    quit_ = true;
+    m_quit = true;
     // There is a chance that loop() just executes while(!quit_) and exists,
     // then EventLoop destructs, then we are accessing an invalid object.
     // Can be fixed using mutex_ in both places.
@@ -168,11 +164,11 @@ void EventLoop::runInLoop(const Functor& cb)
 void EventLoop::queueInLoop(const Functor& cb)
 {
     {
-        std::unique_lock<std::mutex> lock(mutex_);
-        pendingFunctors_.push_back(cb);
+        std::unique_lock<std::mutex> lock(m_mutex);
+        m_pendingFunctors.push_back(cb);
     }
 
-    if (!isInLoopThread() || callingPendingFunctors_)
+    if (!isInLoopThread() || m_doingOtherTasks)
     {
         wakeup();
     }
@@ -180,13 +176,13 @@ void EventLoop::queueInLoop(const Functor& cb)
 
 void EventLoop::setFrameFunctor(const Functor& cb)
 {
-    frameFunctor_ = cb;
+    m_frameFunctor = cb;
 }
 
 TimerId EventLoop::runAt(const Timestamp& time, const TimerCallback& cb)
 {
-    //Ö»Ö´ĞĞÒ»´Î
-    return timerQueue_->addTimer(cb, time, 0, 1);
+    //åªæ‰§è¡Œä¸€æ¬¡
+    return m_timerQueue->addTimer(cb, time, 0, 1);
 }
 
 TimerId EventLoop::runAfter(int64_t delay, const TimerCallback& cb)
@@ -198,13 +194,13 @@ TimerId EventLoop::runAfter(int64_t delay, const TimerCallback& cb)
 TimerId EventLoop::runEvery(int64_t interval, const TimerCallback& cb)
 {
     Timestamp time(addTime(Timestamp::now(), interval));
-    //-1±íÊ¾Ò»Ö±ÖØ¸´ÏÂÈ¥
-    return timerQueue_->addTimer(cb, time, interval, -1);
+    //-1è¡¨ç¤ºä¸€ç›´é‡å¤ä¸‹å»
+    return m_timerQueue->addTimer(cb, time, interval, -1);
 }
 
 TimerId EventLoop::runAt(const Timestamp& time, TimerCallback&& cb)
 {
-    return timerQueue_->addTimer(std::move(cb), time, 0, 1);
+    return m_timerQueue->addTimer(std::move(cb), time, 0, 1);
 }
 
 TimerId EventLoop::runAfter(int64_t delay, TimerCallback&& cb)
@@ -216,17 +212,17 @@ TimerId EventLoop::runAfter(int64_t delay, TimerCallback&& cb)
 TimerId EventLoop::runEvery(int64_t interval, TimerCallback&& cb)
 {
     Timestamp time(addTime(Timestamp::now(), interval));
-    return timerQueue_->addTimer(std::move(cb), time, interval, -1);
+    return m_timerQueue->addTimer(std::move(cb), time, interval, -1);
 }
 
 void EventLoop::cancel(TimerId timerId, bool off)
 {
-    return timerQueue_->cancel(timerId, off);
+    return m_timerQueue->cancel(timerId, off);
 }
 
 void EventLoop::remove(TimerId timerId)
 {
-    return timerQueue_->removeTimer(timerId);
+    return m_timerQueue->removeTimer(timerId);
 }
 
 bool EventLoop::updateChannel(Channel* channel)
@@ -237,7 +233,7 @@ bool EventLoop::updateChannel(Channel* channel)
 
     assertInLoopThread();
 
-    return poller_->updateChannel(channel);
+    return m_poller->updateChannel(channel);
 }
 
 void EventLoop::removeChannel(Channel* channel)
@@ -247,20 +243,20 @@ void EventLoop::removeChannel(Channel* channel)
         return;
 
     assertInLoopThread();
-    if (eventHandling_)
+    if (m_eventHandling)
     {
         //assert(currentActiveChannel_ == channel || std::find(activeChannels_.begin(), activeChannels_.end(), channel) == activeChannels_.end());
     }
 
     LOGD("Remove channel, channel = 0x%x, fd = %d", channel, channel->fd());
-    poller_->removeChannel(channel);
+    m_poller->removeChannel(channel);
 }
 
 bool EventLoop::hasChannel(Channel* channel)
 {
     //assert(channel->ownerLoop() == this);
     assertInLoopThread();
-    return poller_->hasChannel(channel);
+    return m_poller->hasChannel(channel);
 }
 
 bool EventLoop::createWakeupfd()
@@ -268,29 +264,29 @@ bool EventLoop::createWakeupfd()
 #ifdef WIN32
     //if (_pipe(fdpipe_, 256, O_BINARY) == -1)
     //{
-    //    //ÈÃ³ÌĞò¹Òµô
+    //    //è®©ç¨‹åºæŒ‚æ‰
     //    LOGF("Unable to create pipe, EventLoop: 0x%x", this);
     //    return false;
     //}
 
-    wakeupFdListen_ = sockets::createOrDie();
-    wakeupFdSend_ = sockets::createOrDie();
+    m_wakeupFdListen = sockets::createOrDie();
+    m_wakeupFdSend = sockets::createOrDie();
 
-    //WindowsÉÏĞèÒª´´½¨Ò»¶Ôsocket  
+    //Windowsä¸Šéœ€è¦åˆ›å»ºä¸€å¯¹socket  
     struct sockaddr_in bindaddr;
     bindaddr.sin_family = AF_INET;
     bindaddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    //½«portÉèÎª0£¬È»ºó½øĞĞbind£¬ÔÙ½Ó×ÅÍ¨¹ıgetsocknameÀ´»ñÈ¡port£¬Õâ¿ÉÒÔÂú×ã»ñÈ¡Ëæ»ú¶Ë¿ÚµÄÇé¿ö¡£
+    //å°†portè®¾ä¸º0ï¼Œç„¶åè¿›è¡Œbindï¼Œå†æ¥ç€é€šè¿‡getsocknameæ¥è·å–portï¼Œè¿™å¯ä»¥æ»¡è¶³è·å–éšæœºç«¯å£çš„æƒ…å†µã€‚
     bindaddr.sin_port = 0;
-    sockets::setReuseAddr(wakeupFdListen_, true);
-    sockets::bindOrDie(wakeupFdListen_, bindaddr);
-    sockets::listenOrDie(wakeupFdListen_);
+    sockets::setReuseAddr(m_wakeupFdListen, true);
+    sockets::bindOrDie(m_wakeupFdListen, bindaddr);
+    sockets::listenOrDie(m_wakeupFdListen);
 
     struct sockaddr_in serveraddr;
     int serveraddrlen = sizeof(serveraddr);
-    if (getsockname(wakeupFdListen_, (sockaddr*)& serveraddr, &serveraddrlen) < 0)
+    if (getsockname(m_wakeupFdListen, (sockaddr*)&serveraddr, &serveraddrlen) < 0)
     {
-        //ÈÃ³ÌĞò¹Òµô
+        //è®©ç¨‹åºæŒ‚æ‰
         LOGF("Unable to bind address info, EventLoop: 0x%x", this);
         return false;
     }
@@ -301,32 +297,32 @@ bool EventLoop::createWakeupfd()
     //serveraddr.sin_family = AF_INET;
     //serveraddr.sin_addr.s_addr = inet_addr("127.0.0.1");
     //serveraddr.sin_port = htons(INNER_WAKEUP_LISTEN_PORT);   
-    if (::connect(wakeupFdSend_, (struct sockaddr*) & serveraddr, sizeof(serveraddr)) < 0)
+    if (::connect(m_wakeupFdSend, (struct sockaddr*)&serveraddr, sizeof(serveraddr)) < 0)
     {
-        //ÈÃ³ÌĞò¹Òµô
+        //è®©ç¨‹åºæŒ‚æ‰
         LOGF("Unable to connect to wakeup peer, EventLoop: 0x%x", this);
         return false;
     }
 
     struct sockaddr_in clientaddr;
     socklen_t clientaddrlen = sizeof(clientaddr);
-    wakeupFdRecv_ = ::accept(wakeupFdListen_, (struct sockaddr*) & clientaddr, &clientaddrlen);
-    if (wakeupFdRecv_ < 0)
+    m_wakeupFdRecv = ::accept(m_wakeupFdListen, (struct sockaddr*)&clientaddr, &clientaddrlen);
+    if (m_wakeupFdRecv < 0)
     {
-        //ÈÃ³ÌĞò¹Òµô
+        //è®©ç¨‹åºæŒ‚æ‰
         LOGF("Unable to accept wakeup peer, EventLoop: 0x%x", this);
         return false;
     }
 
-    sockets::setNonBlockAndCloseOnExec(wakeupFdSend_);
-    sockets::setNonBlockAndCloseOnExec(wakeupFdRecv_);
+    sockets::setNonBlockAndCloseOnExec(m_wakeupFdSend);
+    sockets::setNonBlockAndCloseOnExec(m_wakeupFdRecv);
 
 #else
-    //LinuxÉÏÒ»¸öeventfd¾Í¹»ÁË£¬¿ÉÒÔÊµÏÖ¶ÁĞ´
-    wakeupFd_ = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
-    if (wakeupFd_ < 0)
+    //Linuxä¸Šä¸€ä¸ªeventfdå°±å¤Ÿäº†ï¼Œå¯ä»¥å®ç°è¯»å†™
+    m_wakeupFd = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
+    if (m_wakeupFd < 0)
     {
-        //ÈÃ³ÌĞò¹Òµô
+        //è®©ç¨‹åºæŒ‚æ‰
         LOGF("Unable to create wakeup eventfd, EventLoop: 0x%x", this);
         return false;
     }
@@ -339,7 +335,7 @@ bool EventLoop::createWakeupfd()
 void EventLoop::abortNotInLoopThread()
 {
     std::stringstream ss;
-    ss << "threadid_ = " << threadId_ << " this_thread::get_id() = " << std::this_thread::get_id();
+    ss << "threadid_ = " << m_threadId << " this_thread::get_id() = " << std::this_thread::get_id();
     LOGF("EventLoop::abortNotInLoopThread - EventLoop %s", ss.str().c_str());
 }
 
@@ -347,9 +343,9 @@ bool EventLoop::wakeup()
 {
     uint64_t one = 1;
 #ifdef WIN32
-    int32_t n = sockets::write(wakeupFdSend_, &one, sizeof(one));
+    int32_t n = sockets::write(m_wakeupFdSend, &one, sizeof(one));
 #else
-    int32_t n = sockets::write(wakeupFd_, &one, sizeof(one));
+    int32_t n = sockets::write(m_wakeupFd, &one, sizeof(one));
 #endif
 
 
@@ -357,10 +353,10 @@ bool EventLoop::wakeup()
     {
 #ifdef WIN32
         DWORD error = WSAGetLastError();
-        LOGSYSE("EventLoop::wakeup() writes %d  bytes instead of 8, fd: %d, error: %d", n, wakeupFdSend_, (int32_t)error);
+        LOGSYSE("EventLoop::wakeup() writes %d  bytes instead of 8, fd: %d, error: %d", n, m_wakeupFdSend, (int32_t)error);
 #else
         int error = errno;
-        LOGSYSE("EventLoop::wakeup() writes %d  bytes instead of 8, fd: %d, error: %d, errorinfo: %s", n, wakeupFd_, error, strerror(error));
+        LOGSYSE("EventLoop::wakeup() writes %d  bytes instead of 8, fd: %d, error: %d, errorinfo: %s", n, m_wakeupFd, error, strerror(error));
 #endif
 
 
@@ -374,19 +370,19 @@ bool EventLoop::handleRead()
 {
     uint64_t one = 1;
 #ifdef WIN32
-    int32_t n = sockets::read(wakeupFdRecv_, &one, sizeof(one));
+    int32_t n = sockets::read(m_wakeupFdRecv, &one, sizeof(one));
 #else
-    int32_t n = sockets::read(wakeupFd_, &one, sizeof(one));
+    int32_t n = sockets::read(m_wakeupFd, &one, sizeof(one));
 #endif
 
     if (n != sizeof one)
     {
 #ifdef WIN32
         DWORD error = WSAGetLastError();
-        LOGSYSE("EventLoop::wakeup() read %d  bytes instead of 8, fd: %d, error: %d", n, wakeupFdRecv_, (int32_t)error);
+        LOGSYSE("EventLoop::wakeup() read %d  bytes instead of 8, fd: %d, error: %d", n, m_wakeupFdRecv, (int32_t)error);
 #else
         int error = errno;
-        LOGSYSE("EventLoop::wakeup() read %d  bytes instead of 8, fd: %d, error: %d, errorinfo: %s", n, wakeupFd_, error, strerror(error));
+        LOGSYSE("EventLoop::wakeup() read %d  bytes instead of 8, fd: %d, error: %d, errorinfo: %s", n, m_wakeupFd, error, strerror(error));
 #endif
         return false;
     }
@@ -394,29 +390,30 @@ bool EventLoop::handleRead()
     return true;
 }
 
-void EventLoop::doPendingFunctors()
+void EventLoop::doOtherTasks()
 {
     std::vector<Functor> functors;
-    callingPendingFunctors_ = true;
+    m_doingOtherTasks = true;
 
     {
-        std::unique_lock<std::mutex> lock(mutex_);
-        functors.swap(pendingFunctors_);
+        std::unique_lock<std::mutex> lock(m_mutex);
+        functors.swap(m_pendingFunctors);
     }
 
     for (size_t i = 0; i < functors.size(); ++i)
     {
         functors[i]();
     }
-    callingPendingFunctors_ = false;
+
+    m_doingOtherTasks = false;
 }
 
 void EventLoop::printActiveChannels() const
 {
-    //TODO: ¸Ä³Éfor-each Óï·¨
-    for (ChannelList::const_iterator it = activeChannels_.begin(); it != activeChannels_.end(); ++it)
+    //TODO: æ”¹æˆfor-each è¯­æ³•
+    //std::vector<Channel*>
+    for (const auto& iter : m_activeChannels)
     {
-        const Channel* ch = *it;
-        LOGD("{%s}", ch->reventsToString().c_str());
+        LOGD("{%s}", iter->reventsToString().c_str());
     }
 }

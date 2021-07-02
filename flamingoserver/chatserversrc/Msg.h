@@ -37,7 +37,8 @@ enum msg_type
 };
 
 //在线类型
-enum online_type{
+enum online_type
+{
     online_type_offline         = 0,    //离线
     online_type_pc_online       = 1,    //电脑在线
     online_type_pc_invisible    = 2,    //电脑隐身
@@ -56,7 +57,6 @@ struct chat_msg_header
     int32_t  compresssize;     //包体压缩后大小
     char     reserved[16];
 };
-
 #pragma pack(pop)
 
 //type为1发出加好友申请 2 收到加好友请求(仅客户端使用) 3应答加好友 4删除好友请求 5应答删除好友
@@ -122,7 +122,7 @@ enum error_code
     error_code_creategroupfail      = 106,
     error_code_toooldversion        = 107,
     error_code_modifymarknamefail   = 108,
-    error_code_teamname_exsit       = 109, //分组已经存在
+    error_code_teamname_exist       = 109, //分组已经存在
 };
 
 /**

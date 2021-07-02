@@ -1,73 +1,72 @@
-#include "EventLoopThread.h"
+ï»¿#include "EventLoopThread.h"
 #include <functional>
 #include "EventLoop.h"
 
 using namespace net;
 
 EventLoopThread::EventLoopThread(const ThreadInitCallback& cb,
-								 const std::string& name/* = ""*/)
-								 : loop_(NULL),
-								 exiting_(false),
-								 callback_(cb)
+    const std::string& name/* = ""*/)
+    : m_loop(NULL),
+    m_exiting(false),
+    m_callback(cb)
 {
 }
 
 EventLoopThread::~EventLoopThread()
 {
-	exiting_ = true;
-	if (loop_ != NULL) // not 100% race-free, eg. threadFunc could be running callback_.
-	{
-		// still a tiny chance to call destructed object, if threadFunc exits just now.
-		// but when EventLoopThread destructs, usually programming is exiting anyway.
-		loop_->quit();
-		thread_->join();
-	}
+    m_exiting = true;
+    if (m_loop != NULL) // not 100% race-free, eg. threadFunc could be running callback_.
+    {
+        // still a tiny chance to call destructed object, if threadFunc exits just now.
+        // but when EventLoopThread destructs, usually programming is exiting anyway.
+        m_loop->quit();
+        m_thread->join();
+    }
 }
 
 EventLoop* EventLoopThread::startLoop()
 {
-	//assert(!thread_.started());
-	//thread_.start();
+    //assert(!thread_.started());
+    //thread_.start();
 
-	thread_.reset(new std::thread(std::bind(&EventLoopThread::threadFunc, this)));
+    m_thread.reset(new std::thread(std::bind(&EventLoopThread::threadFunc, this)));
 
-	{
-		std::unique_lock<std::mutex> lock(mutex_);
-		while (loop_ == NULL)
-		{
-			cond_.wait(lock);
-		}
-	}
+    {
+        std::unique_lock<std::mutex> lock(m_mutex);
+        while (m_loop == NULL)
+        {
+            m_cond.wait(lock);
+        }
+    }
 
-	return loop_;
+    return m_loop;
 }
 
 void EventLoopThread::stopLoop()
 {
-    if (loop_ != NULL)
-        loop_->quit();
+    if (m_loop != NULL)
+        m_loop->quit();
 
-    thread_->join();
+    m_thread->join();
 }
 
 void EventLoopThread::threadFunc()
 {
-	EventLoop loop;
+    EventLoop loop;
 
-	if (callback_)
-	{
-		callback_(&loop);
-	}
+    if (m_callback)
+    {
+        m_callback(&loop);
+    }
 
-	{
-		//Ò»¸öÒ»¸öµÄÏß³Ì´´½¨
-        std::unique_lock<std::mutex> lock(mutex_);
-		loop_ = &loop;
-		cond_.notify_all();
-	}
+    {
+        //ä¸€ä¸ªä¸€ä¸ªçš„çº¿ç¨‹åˆ›å»º
+        std::unique_lock<std::mutex> lock(m_mutex);
+        m_loop = &loop;
+        m_cond.notify_all();
+    }
 
-	loop.loop();
-	//assert(exiting_);
-	loop_ = NULL;
+    loop.loop();
+    //assert(exiting_);
+    m_loop = NULL;
 }
-

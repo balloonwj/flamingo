@@ -1,9 +1,9 @@
-#pragma once
+Ôªø#pragma once
 
 #include <memory>
 
 #include "Callbacks.h"
-#include "Buffer.h"
+#include "ByteBuffer.h"
 #include "InetAddress.h"
 
 // struct tcp_info is in <netinet/tcp.h>
@@ -12,126 +12,106 @@ struct tcp_info;
 namespace net
 {
     class EventLoop;
-	class Channel;
-	class Socket;
+    class Channel;
+    class Socket;
 
-	///
-	/// TCP connection, for both client and server usage.
-	///
-	/// This is an interface class, so don't expose too much details.
-	class TcpConnection : public std::enable_shared_from_this<TcpConnection>
-	{
-	public:
-		/// Constructs a TcpConnection with a connected sockfd
-		///
-		/// User should not create this object.
-		TcpConnection(EventLoop* loop,
-			            const string& name,
-			            int sockfd,
-			            const InetAddress& localAddr,
-			            const InetAddress& peerAddr);
-		~TcpConnection();
+    class TcpConnection : public std::enable_shared_from_this<TcpConnection>
+    {
+    public:
+        TcpConnection(EventLoop* loop,
+            const string& name,
+            int sockfd,
+            const InetAddress& localAddr,
+            const InetAddress& peerAddr);
+        ~TcpConnection();
 
-		EventLoop* getLoop() const { return loop_; }
-		const string& name() const { return name_; }
-		const InetAddress& localAddress() const { return localAddr_; }
-		const InetAddress& peerAddress() const { return peerAddr_; }
-		bool connected() const { return state_ == kConnected; }
-		// return true if success.
-		bool getTcpInfo(struct tcp_info*) const;
-		string getTcpInfoString() const;
+        EventLoop* getLoop() const { return m_loop; }
+        const string& name() const { return m_name; }
+        const InetAddress& localAddress() const { return m_localAddr; }
+        const InetAddress& peerAddress() const { return m_peerAddr; }
+        bool connected() const { return m_state == kConnected; }
 
-		// void send(string&& message); // C++11
-		void send(const void* message, int len);
-		void send(const string& message);
-		// void send(Buffer&& message); // C++11
-		void send(Buffer* message);  // this one will swap data
-		void shutdown(); // NOT thread safe, no simultaneous calling
-		// void shutdownAndForceCloseAfter(double seconds); // NOT thread safe, no simultaneous calling
-		void forceClose();
+        void send(const void* message, int len);
+        void send(const string& message);
+        void send(ByteBuffer* message);  // this one will swap data
+        void shutdown();
+        void forceClose();
 
-		void setTcpNoDelay(bool on);
+        void setTcpNoDelay(bool on);
 
-		void setConnectionCallback(const ConnectionCallback& cb)
-		{
-			connectionCallback_ = cb;
-		}
+        void setConnectionCallback(const ConnectionCallback& cb)
+        {
+            m_connectionCallback = cb;
+        }
 
-		void setMessageCallback(const MessageCallback& cb)
-		{
-			messageCallback_ = cb;
-		}
+        void setMessageCallback(const MessageCallback& cb)
+        {
+            m_messageCallback = cb;
+        }
 
-        //…Ë÷√≥…π¶∑¢ÕÍ ˝æ›÷¥––µƒªÿµ˜
-		void setWriteCompleteCallback(const WriteCompleteCallback& cb)
-		{
-			writeCompleteCallback_ = cb;
-		}
+        //ËÆæÁΩÆÊàêÂäüÂèëÂÆåÊï∞ÊçÆÊâßË°åÁöÑÂõûË∞É
+        void setWriteCompleteCallback(const WriteCompleteCallback& cb)
+        {
+            m_writeCompleteCallback = cb;
+        }
 
-		void setHighWaterMarkCallback(const HighWaterMarkCallback& cb, size_t highWaterMark)
-		{
-			highWaterMarkCallback_ = cb; highWaterMark_ = highWaterMark;
-		}
+        void setHighWaterMarkCallback(const HighWaterMarkCallback& cb, size_t highWaterMark)
+        {
+            m_highWaterMarkCallback = cb; m_highWaterMark = highWaterMark;
+        }
 
-		/// Advanced interface
-		Buffer* inputBuffer()
-		{
-			return &inputBuffer_;
-		}
+        ByteBuffer* inputBuffer()
+        {
+            return &m_inputBuffer;
+        }
 
-		Buffer* outputBuffer()
-		{
-			return &outputBuffer_;
-		}
+        ByteBuffer* outputBuffer()
+        {
+            return &m_outputBuffer;
+        }
 
-		/// Internal use only.
-		void setCloseCallback(const CloseCallback& cb)
-		{
-			closeCallback_ = cb;
-		}
+        // Internal use only.
+        void setCloseCallback(const CloseCallback& cb)
+        {
+            m_closeCallback = cb;
+        }
 
-		// called when TcpServer accepts a new connection
-		void connectEstablished();   // should be called only once
-		// called when TcpServer has removed me from its map
-		void connectDestroyed();  // should be called only once
-
-	private:
-		enum StateE { kDisconnected, kConnecting, kConnected, kDisconnecting };
-		void handleRead(Timestamp receiveTime);
-		void handleWrite();
-		void handleClose();
-		void handleError();
-		// void sendInLoop(string&& message);
-		void sendInLoop(const string& message);
-		void sendInLoop(const void* message, size_t len);
-		void shutdownInLoop();
-		// void shutdownAndForceCloseInLoop(double seconds);
-		void forceCloseInLoop();
-		void setState(StateE s) { state_ = s; }
-		const char* stateToString() const;
+        void connectEstablished();
+        void connectDestroyed();
 
     private:
-		EventLoop*                  loop_;
-		const string                name_;
-		StateE                      state_;  // FIXME: use atomic variable
-		// we don't expose those classes to client.
-		std::unique_ptr<Socket>     socket_;
-		std::unique_ptr<Channel>    channel_;
-		const InetAddress           localAddr_;
-		const InetAddress           peerAddr_;
-		ConnectionCallback          connectionCallback_;
-		MessageCallback             messageCallback_;
-		WriteCompleteCallback       writeCompleteCallback_;
-		HighWaterMarkCallback       highWaterMarkCallback_;
-		CloseCallback               closeCallback_;
-		size_t                      highWaterMark_;
-		Buffer                      inputBuffer_;
-		Buffer                      outputBuffer_; // FIXME: use list<Buffer> as output buffer.
+        enum StateE { kDisconnected, kConnecting, kConnected, kDisconnecting };
+        void handleRead(Timestamp receiveTime);
+        void handleWrite();
+        void handleClose();
+        void handleError();
+        // void sendInLoop(string&& message);
+        void sendInLoop(const string& message);
+        void sendInLoop(const void* message, size_t len);
+        void shutdownInLoop();
+        // void shutdownAndForceCloseInLoop(double seconds);
+        void forceCloseInLoop();
+        void setState(StateE s) { m_state = s; }
+        const char* stateToString() const;
 
-		// FIXME: creationTime_, lastReceiveTime_
-		//        bytesReceived_, bytesSent_
-	};
+    private:
+        EventLoop* m_loop;
+        const string                m_name;
+        StateE                      m_state;
+        std::unique_ptr<Socket>     m_socket;
+        std::unique_ptr<Channel>    m_channel;
+        const InetAddress           m_localAddr;
+        const InetAddress           m_peerAddr;
+        ConnectionCallback          m_connectionCallback;
+        MessageCallback             m_messageCallback;
+        WriteCompleteCallback       m_writeCompleteCallback;
+        HighWaterMarkCallback       m_highWaterMarkCallback;
+        CloseCallback               m_closeCallback;
+        size_t                      m_highWaterMark;
+        ByteBuffer                  m_inputBuffer;
+        ByteBuffer                  m_outputBuffer;
+    };
 
-	typedef std::shared_ptr<TcpConnection> TcpConnectionPtr;
+    typedef std::shared_ptr<TcpConnection> TcpConnectionPtr;
 
 }

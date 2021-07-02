@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <mutex>
 #include <condition_variable> 
@@ -16,7 +16,7 @@ public:
     int getCount() const;
 
 private:
-    mutable std::mutex      mutex_;
+    mutable std::mutex      m_mutex;
     std::condition_variable condition_;
     int                     count_;
 };

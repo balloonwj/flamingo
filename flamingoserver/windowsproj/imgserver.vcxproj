@@ -30,7 +30,7 @@
     <ClCompile Include="..\fileserversrc\TcpSession.cpp" />
     <ClCompile Include="..\imgserversrc\main.cpp" />
     <ClCompile Include="..\net\Acceptor.cpp" />
-    <ClCompile Include="..\net\Buffer.cpp" />
+    <ClCompile Include="..\net\ByteBuffer.cpp" />
     <ClCompile Include="..\net\Channel.cpp" />
     <ClCompile Include="..\net\Connector.cpp" />
     <ClCompile Include="..\net\EpollPoller.cpp" />
@@ -68,7 +68,7 @@
     <ClInclude Include="..\fileserversrc\FileSession.h" />
     <ClInclude Include="..\fileserversrc\TcpSession.h" />
     <ClInclude Include="..\net\Acceptor.h" />
-    <ClInclude Include="..\net\Buffer.h" />
+    <ClInclude Include="..\net\ByteBuffer.h" />
     <ClInclude Include="..\net\Callbacks.h" />
     <ClInclude Include="..\net\Channel.h" />
     <ClInclude Include="..\net\Connector.h" />

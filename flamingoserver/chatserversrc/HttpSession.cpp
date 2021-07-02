@@ -23,7 +23,7 @@ HttpSession::HttpSession(std::shared_ptr<TcpConnection>& conn) : m_tmpConn(conn)
 
 }
 
-void HttpSession::onRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBuffer, Timestamp receivTime)
+void HttpSession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer* pBuffer, Timestamp receivTime)
 {
     //LOGI << "Recv a http request from " << conn->peerAddress().toIpPort();
     

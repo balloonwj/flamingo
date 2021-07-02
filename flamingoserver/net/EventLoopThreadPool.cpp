@@ -1,4 +1,4 @@
-#include "EventLoopThreadPool.h"
+﻿#include "EventLoopThreadPool.h"
 #include <stdio.h>
 #include <assert.h>
 #include <sstream>
@@ -11,10 +11,10 @@ using namespace net;
 
 
 EventLoopThreadPool::EventLoopThreadPool()
-    : baseLoop_(NULL),
-    started_(false),
-    numThreads_(0),
-    next_(0)
+    : m_baseLoop(NULL),
+    m_started(false),
+    m_numThreads(0),
+    m_next(0)
 {
 }
 
@@ -25,43 +25,43 @@ EventLoopThreadPool::~EventLoopThreadPool()
 
 void EventLoopThreadPool::init(EventLoop* baseLoop, int numThreads)
 {
-    numThreads_ = numThreads;
-    baseLoop_ = baseLoop;
+    m_numThreads = numThreads;
+    m_baseLoop = baseLoop;
 }
 
 void EventLoopThreadPool::start(const ThreadInitCallback& cb)
 {
     //assert(baseLoop_);
-    if (baseLoop_ == NULL)
+    if (m_baseLoop == NULL)
         return;
 
     //assert(!started_);
-    if (started_)
+    if (m_started)
         return;
 
-    baseLoop_->assertInLoopThread();
+    m_baseLoop->assertInLoopThread();
 
-    started_ = true;
+    m_started = true;
 
-    for (int i = 0; i < numThreads_; ++i)
+    for (int i = 0; i < m_numThreads; ++i)
     {
         char buf[128];
-        snprintf(buf, sizeof buf, "%s%d", name_.c_str(), i);
+        snprintf(buf, sizeof buf, "%s%d", m_name.c_str(), i);
 
         std::unique_ptr<EventLoopThread> t(new EventLoopThread(cb, buf));
-        //EventLoopThread* t = new EventLoopThread(cb, buf);		
-        loops_.push_back(t->startLoop());
-        threads_.push_back(std::move(t));
+        //EventLoopThread* t = new EventLoopThread(cb, buf);        
+        m_loops.push_back(t->startLoop());
+        m_threads.push_back(std::move(t));
     }
-    if (numThreads_ == 0 && cb)
+    if (m_numThreads == 0 && cb)
     {
-        cb(baseLoop_);
+        cb(m_baseLoop);
     }
 }
 
 void EventLoopThreadPool::stop()
 {
-    for (auto& iter : threads_)
+    for (auto& iter : m_threads)
     {
         iter->stopLoop();
     }
@@ -69,21 +69,21 @@ void EventLoopThreadPool::stop()
 
 EventLoop* EventLoopThreadPool::getNextLoop()
 {
-    baseLoop_->assertInLoopThread();
+    m_baseLoop->assertInLoopThread();
     //assert(started_);
-    if (!started_)
+    if (!m_started)
         return NULL;
 
-    EventLoop* loop = baseLoop_;
+    EventLoop* loop = m_baseLoop;
 
-    if (!loops_.empty())
+    if (!m_loops.empty())
     {
         // round-robin
-        loop = loops_[next_];
-        ++next_;
-        if (implicit_cast<size_t>(next_) >= loops_.size())
+        loop = m_loops[m_next];
+        ++m_next;
+        if (size_t(m_next) >= m_loops.size())
         {
-            next_ = 0;
+            m_next = 0;
         }
     }
     return loop;
@@ -91,26 +91,26 @@ EventLoop* EventLoopThreadPool::getNextLoop()
 
 EventLoop* EventLoopThreadPool::getLoopForHash(size_t hashCode)
 {
-    baseLoop_->assertInLoopThread();
-    EventLoop* loop = baseLoop_;
+    m_baseLoop->assertInLoopThread();
+    EventLoop* loop = m_baseLoop;
 
-    if (!loops_.empty())
+    if (!m_loops.empty())
     {
-        loop = loops_[hashCode % loops_.size()];
+        loop = m_loops[hashCode % m_loops.size()];
     }
     return loop;
 }
 
 std::vector<EventLoop*> EventLoopThreadPool::getAllLoops()
 {
-    baseLoop_->assertInLoopThread();
-    if (loops_.empty())
+    m_baseLoop->assertInLoopThread();
+    if (m_loops.empty())
     {
-        return std::vector<EventLoop*>(1, baseLoop_);
+        return std::vector<EventLoop*>(1, m_baseLoop);
     }
     else
     {
-        return loops_;
+        return m_loops;
     }
 }
 
@@ -118,9 +118,9 @@ const std::string EventLoopThreadPool::info() const
 {
     std::stringstream ss;
     ss << "print threads id info " << endl;
-    for (size_t i = 0; i < loops_.size(); i++)
+    for (size_t i = 0; i < m_loops.size(); i++)
     {
-        ss << i << ": id = " << loops_[i]->getThreadID() << endl;
+        ss << i << ": id = " << m_loops[i]->getThreadID() << endl;
     }
     return ss.str();
 }

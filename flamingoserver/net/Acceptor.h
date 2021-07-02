@@ -1,19 +1,15 @@
-#pragma once
+ï»¿#pragma once
 
 #include <functional>
 
 #include "Channel.h"
 #include "Sockets.h"
-//#include "EventLoop.h"
 
 namespace net
 {
     class EventLoop;
     class InetAddress;
 
-    ///
-    /// Acceptor of incoming TCP connections.
-    ///
     class Acceptor
     {
     public:
@@ -22,28 +18,27 @@ namespace net
         Acceptor(EventLoop* loop, const InetAddress& listenAddr, bool reuseport);
         ~Acceptor();
 
-        //ÉèÖÃĞÂÁ¬½Óµ½À´µÄ»Øµ÷º¯Êı
+        //è®¾ç½®æ–°è¿æ¥åˆ°æ¥çš„å›è°ƒå‡½æ•°
         void setNewConnectionCallback(const NewConnectionCallback& cb)
         {
-            newConnectionCallback_ = cb;
+            m_newConnectionCallback = cb;
         }
 
-        bool listenning() const { return listenning_; }
+        bool listenning() const { return m_listenning; }
         void listen();
 
     private:
         void handleRead();
 
     private:
-        EventLoop*            loop_;
-        Socket                acceptSocket_;
-        Channel               acceptChannel_;
-        NewConnectionCallback newConnectionCallback_;
-        bool                  listenning_;
+        EventLoop* m_loop;
+        Socket                m_acceptSocket;
+        Channel               m_acceptChannel;
+        NewConnectionCallback m_newConnectionCallback;
+        bool                  m_listenning;
 
 #ifndef WIN32
-        int                   idleFd_;
+        int                   m_idleFd;
 #endif
     };
-
 }

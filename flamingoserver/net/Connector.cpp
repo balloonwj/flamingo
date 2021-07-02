@@ -1,4 +1,4 @@
-#include "Connector.h"
+ï»¿#include "Connector.h"
 #include <functional>
 #include <errno.h>
 #include <sstream>
@@ -15,11 +15,11 @@ using namespace net;
 const int Connector::kMaxRetryDelayMs;
 
 Connector::Connector(EventLoop* loop, const InetAddress& serverAddr)
-    : loop_(loop),
-    serverAddr_(serverAddr),
-    connect_(false),
-    state_(kDisconnected),
-    retryDelayMs_(kInitRetryDelayMs)
+    : m_loop(loop),
+    m_serverAddr(serverAddr),
+    m_connect(false),
+    m_state(kDisconnected),
+    m_retryDelayMs(kInitRetryDelayMs)
 {
 }
 
@@ -29,18 +29,18 @@ Connector::~Connector()
 
 void Connector::start()
 {
-    connect_ = true;
-    loop_->runInLoop(std::bind(&Connector::startInLoop, this)); // FIXME: unsafe
+    m_connect = true;
+    m_loop->runInLoop(std::bind(&Connector::startInLoop, this)); // FIXME: unsafe
 }
 
 void Connector::startInLoop()
 {
-    loop_->assertInLoopThread();
+    m_loop->assertInLoopThread();
     //assert(state_ == kDisconnected);
-    if (state_ != kDisconnected)
+    if (m_state != kDisconnected)
         return;
 
-    if (connect_)
+    if (m_connect)
     {
         connect();
     }
@@ -52,19 +52,19 @@ void Connector::startInLoop()
 
 void Connector::stop()
 {
-    connect_ = false;
-    loop_->queueInLoop(std::bind(&Connector::stopInLoop, shared_from_this())); // FIXME: unsafe
+    m_connect = false;
+    m_loop->queueInLoop(std::bind(&Connector::stopInLoop, shared_from_this())); // FIXME: unsafe
     // FIXME: cancel timer
 }
 
 void Connector::stopInLoop()
 {
-    //std::stringstream ss;	
+    //std::stringstream ss; 
     //ss << "stopInLoop eventloop threadid = " << std::this_thread::get_id();
     //std::cout << ss.str() << std::endl;
 
-    loop_->assertInLoopThread();
-    if (state_ == kConnecting)
+    m_loop->assertInLoopThread();
+    if (m_state == kConnecting)
     {
         setState(kDisconnected);
         int sockfd = removeAndResetChannel();
@@ -75,18 +75,18 @@ void Connector::stopInLoop()
 void Connector::connect()
 {
     int sockfd = sockets::createNonblockingOrDie();
-    int ret = sockets::connect(sockfd, serverAddr_.getSockAddrInet());
+    int ret = sockets::connect(sockfd, m_serverAddr.getSockAddrInet());
 #ifdef WIN32
     int savedErrno = ::WSAGetLastError();
     if (savedErrno == EWOULDBLOCK)
         connecting(sockfd);
     else
     {
-        //TODO: È·¶¨ÏÂÊÇ·ñÒª¹Ø±Õ
+        //TODO: ç¡®å®šä¸‹æ˜¯å¦è¦å…³é—­
         retry(sockfd);
         sockets::close(sockfd);
     }
-        
+
 #else
     int savedErrno = (ret == 0) ? 0 : errno;
     switch (savedErrno)
@@ -129,10 +129,10 @@ void Connector::connect()
 
 void Connector::restart()
 {
-    loop_->assertInLoopThread();
+    m_loop->assertInLoopThread();
     setState(kDisconnected);
-    retryDelayMs_ = kInitRetryDelayMs;
-    connect_ = true;
+    m_retryDelayMs = kInitRetryDelayMs;
+    m_connect = true;
     startInLoop();
 }
 
@@ -140,35 +140,35 @@ void Connector::connecting(int sockfd)
 {
     setState(kConnecting);
     //assert(!channel_);
-    channel_.reset(new Channel(loop_, sockfd));
-    channel_->setWriteCallback(std::bind(&Connector::handleWrite, this)); // FIXME: unsafe
-    channel_->setErrorCallback(std::bind(&Connector::handleError, this)); // FIXME: unsafe
+    m_channel.reset(new Channel(m_loop, sockfd));
+    m_channel->setWriteCallback(std::bind(&Connector::handleWrite, this)); // FIXME: unsafe
+    m_channel->setErrorCallback(std::bind(&Connector::handleError, this)); // FIXME: unsafe
 
     // channel_->tie(shared_from_this()); is not working,
     // as channel_ is not managed by shared_ptr
-    channel_->enableWriting();
+    m_channel->enableWriting();
 }
 
 int Connector::removeAndResetChannel()
 {
-    channel_->disableAll();
-    channel_->remove();
-    int sockfd = channel_->fd();
+    m_channel->disableAll();
+    m_channel->remove();
+    int sockfd = m_channel->fd();
     // Can't reset channel_ here, because we are inside Channel::handleEvent
-    loop_->queueInLoop(std::bind(&Connector::resetChannel, shared_from_this())); // FIXME: unsafe
+    m_loop->queueInLoop(std::bind(&Connector::resetChannel, shared_from_this())); // FIXME: unsafe
     return sockfd;
 }
 
 void Connector::resetChannel()
 {
-    channel_.reset();
+    m_channel.reset();
 }
 
 void Connector::handleWrite()
 {
-    LOGD("Connector::handleWrite %d", state_);
+    LOGD("Connector::handleWrite %d", m_state);
 
-    if (state_ == kConnecting)
+    if (m_state == kConnecting)
     {
         int sockfd = removeAndResetChannel();
         int err = sockets::getSocketError(sockfd);
@@ -185,10 +185,10 @@ void Connector::handleWrite()
         else
         {
             setState(kConnected);
-            if (connect_)
+            if (m_connect)
             {
-                //newConnectionCallback_Ö¸ÏòTcpClient::newConnection(int sockfd)
-                newConnectionCallback_(sockfd);
+                //newConnectionCallback_æŒ‡å‘TcpClient::newConnection(int sockfd)
+                m_newConnectionCallback(sockfd);
             }
             else
             {
@@ -200,20 +200,20 @@ void Connector::handleWrite()
     {
         // what happened?
         //assert(state_ == kDisconnected);
-        if (state_ != kDisconnected)
+        if (m_state != kDisconnected)
             LOGSYSE("state_ != kDisconnected");
     }
 }
 
 void Connector::handleError()
 {
-    LOGE("Connector::handleError state=%d", state_);
-    if (state_ == kConnecting)
+    LOGE("Connector::handleError state=%d", m_state);
+    if (m_state == kConnecting)
     {
         int sockfd = removeAndResetChannel();
         int err = sockets::getSocketError(sockfd);
         LOGD("SO_ERROR = %d %s", err, strerror(err));
-        LOGE("Connector::handleError state=%d", state_);
+        LOGE("Connector::handleError state=%d", m_state);
         retry(sockfd);
     }
 }
@@ -222,13 +222,13 @@ void Connector::retry(int sockfd)
 {
     sockets::close(sockfd);
     setState(kDisconnected);
-    if (connect_)
+    if (m_connect)
     {
-        LOGI("Connector::retry - Retry connecting to %s in %d  milliseconds.", serverAddr_.toIpPort().c_str(), retryDelayMs_);
+        LOGI("Connector::retry - Retry connecting to %s in %d  milliseconds.", m_serverAddr.toIpPort().c_str(), m_retryDelayMs);
         //loop_->runAfter(retryDelayMs_/1000.0,
         //                std::bind(&Connector::startInLoop, shared_from_this()));
         //retryDelayMs_ = std::min(retryDelayMs_ * 2, kMaxRetryDelayMs);
-        //¶¨Ê±Æ÷ÖØÊÔ£¬ todo
+        //å®šæ—¶å™¨é‡è¯•ï¼Œ todo
     }
     else
     {

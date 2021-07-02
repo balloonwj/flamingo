@@ -1,4 +1,4 @@
-#include "SelectPoller.h"
+ï»¿#include "SelectPoller.h"
 
 #include <sstream>
 #include <string.h>
@@ -17,9 +17,9 @@ namespace
     const int kDeleted = 2;
 }
 
-SelectPoller::SelectPoller(EventLoop* loop) : ownerLoop_(loop)
+SelectPoller::SelectPoller(EventLoop* loop) : m_ownerLoop(loop)
 {
-    
+
 }
 
 SelectPoller::~SelectPoller()
@@ -29,26 +29,26 @@ SelectPoller::~SelectPoller()
 bool SelectPoller::hasChannel(Channel* channel) const
 {
     assertInLoopThread();
-    ChannelMap::const_iterator it = channels_.find(channel->fd());
-    return it != channels_.end() && it->second == channel;
+    ChannelMap::const_iterator it = m_channels.find(channel->fd());
+    return it != m_channels.end() && it->second == channel;
 }
 
 void SelectPoller::assertInLoopThread() const
 {
-    ownerLoop_->assertInLoopThread();
+    m_ownerLoop->assertInLoopThread();
 }
 
 Timestamp SelectPoller::poll(int timeoutMs, ChannelList* activeChannels)
-{    
+{
     fd_set readfds, writefds;
     FD_ZERO(&readfds);
     FD_ZERO(&writefds);
-    
-    //»ñÈ¡×î´ófd 
+
+    //èŽ·å–æœ€å¤§fd 
     int maxfd = 0;
-    
+
     int tmpfd;
-    for (const auto& iter : channels_)
+    for (const auto& iter : m_channels)
     {
         tmpfd = iter.first;
         if (tmpfd > maxfd)
@@ -60,7 +60,7 @@ Timestamp SelectPoller::poll(int timeoutMs, ChannelList* activeChannels)
         if (iter.second->events() & XPOLLOUT)
             FD_SET(tmpfd, &writefds);
     }
-    
+
     struct timeval timeout;
     timeout.tv_sec = timeoutMs / 1000;
     timeout.tv_usec = (timeoutMs - timeoutMs / 1000 * 1000) * 1000;
@@ -70,9 +70,9 @@ Timestamp SelectPoller::poll(int timeoutMs, ChannelList* activeChannels)
     {
         //LOG_TRACE << numEvents << " events happended";
         fillActiveChannels(numEvents, activeChannels, readfds, writefds);
-        if (static_cast<size_t>(numEvents) == events_.size())
+        if (static_cast<size_t>(numEvents) == m_events.size())
         {
-            events_.resize(events_.size() * 2);
+            m_events.resize(m_events.size() * 2);
         }
     }
     else if (numEvents == 0)
@@ -87,7 +87,7 @@ Timestamp SelectPoller::poll(int timeoutMs, ChannelList* activeChannels)
 #else
         savedErrno = errno;
 #endif
-                     
+
         LOGSYSE("SelectPoller::poll() error, errno: %d", savedErrno);
     }
 
@@ -98,9 +98,9 @@ void SelectPoller::fillActiveChannels(int numEvents, ChannelList* activeChannels
 {
     Channel* channel = NULL;
     bool eventTriggered = false;
-    //TODO£ºÃ¿´Î±éÀúchannels_£¬Ð§ÂÊÌ«µÍ£¬ÄÜ·ñ¸Ä½ø£¿
+    //TODOï¼šæ¯æ¬¡éåŽ†channels_ï¼Œæ•ˆçŽ‡å¤ªä½Žï¼Œèƒ½å¦æ”¹è¿›ï¼Ÿ
     int currentCount = 0;
-    for (const auto& iter : channels_)
+    for (const auto& iter : m_channels)
     {
         channel = iter.second;
 
@@ -109,23 +109,23 @@ void SelectPoller::fillActiveChannels(int numEvents, ChannelList* activeChannels
             channel->add_revents(XPOLLIN);
             eventTriggered = true;
         }
-                      
+
         if (FD_ISSET(iter.first, &writefds))
         {
             channel->add_revents(XPOLLOUT);
             eventTriggered = true;
         }
-            
+
         if (eventTriggered)
         {
             activeChannels->push_back(channel);
-            //ÖØÖÃ±êÖ¾
+            //é‡ç½®æ ‡å¿—
             eventTriggered = false;
 
-            ++ currentCount;
+            ++currentCount;
             if (currentCount >= numEvents)
                 break;
-        }            
+        }
     }// end for-loop
 }
 
@@ -141,27 +141,27 @@ bool SelectPoller::updateChannel(Channel* channel)
         if (index == kNew)
         {
             //assert(channels_.find(fd) == channels_.end())
-            if (channels_.find(fd) != channels_.end())
+            if (m_channels.find(fd) != m_channels.end())
             {
                 LOGE("fd = %d must not exist in channels_", fd);
                 return false;
             }
 
 
-            channels_[fd] = channel;
+            m_channels[fd] = channel;
 
         }
         else // index == kDeleted
         {
             //assert(channels_.find(fd) != channels_.end());
-            if (channels_.find(fd) == channels_.end())
+            if (m_channels.find(fd) == m_channels.end())
             {
                 LOGE("fd = %d must not exist in channels_", fd);
                 return false;
             }
 
             //assert(channels_[fd] == channel);
-            if (channels_[fd] != channel)
+            if (m_channels[fd] != channel)
             {
                 LOGE("current channel is not matched current fd, fd = %d", fd);
                 return false;
@@ -178,7 +178,7 @@ bool SelectPoller::updateChannel(Channel* channel)
         //assert(channels_.find(fd) != channels_.end());
         //assert(channels_[fd] == channel);
         //assert(index == kAdded);
-        if (channels_.find(fd) == channels_.end() || channels_[fd] != channel || index != kAdded)
+        if (m_channels.find(fd) == m_channels.end() || m_channels[fd] != channel || index != kAdded)
         {
             LOGE("current channel is not matched current fd, fd = %d, channel = 0x%x", fd, channel);
             return false;
@@ -206,22 +206,22 @@ void SelectPoller::removeChannel(Channel* channel)
     int fd = channel->fd();
     //LOG_TRACE << "fd = " << fd;
     //assert(channels_.find(fd) != channels_.end());
-    if (channels_.find(fd) == channels_.end())
+    if (m_channels.find(fd) == m_channels.end())
         return;
 
-    if (channels_[fd] != channel)
+    if (m_channels[fd] != channel)
     {
         return;
     }
-   // assert(channels_[fd] == channel);
-    //assert(channel->isNoneEvent());
+    // assert(channels_[fd] == channel);
+     //assert(channel->isNoneEvent());
 
     if (!channel->isNoneEvent())
         return;
 
     int index = channel->index();
     //assert(index == kAdded || index == kDeleted);
-    size_t n = channels_.erase(fd);
+    size_t n = m_channels.erase(fd);
     if (n != 1)
         return;
 
@@ -242,27 +242,27 @@ bool SelectPoller::update(int operation, Channel* channel)
     {
         struct epoll_event event;
         memset(&event, 0, sizeof event);
-        event.events = channel->events();        
+        event.events = channel->events();
         event.data.ptr = channel;
 
-        events_.push_back(std::move(event));
+        m_events.push_back(std::move(event));
         return true;
-    }   
+    }
 
     if (operation == XEPOLL_CTL_DEL)
     {
-        for (auto iter = events_.begin(); iter != events_.end(); ++iter)
+        for (auto iter = m_events.begin(); iter != m_events.end(); ++iter)
         {
             if (iter->data.ptr == channel)
             {
-                events_.erase(iter);
+                m_events.erase(iter);
                 return true;
             }
         }
     }
     else if (operation == XEPOLL_CTL_MOD)
     {
-        for (auto iter = events_.begin(); iter != events_.end(); ++iter)
+        for (auto iter = m_events.begin(); iter != m_events.end(); ++iter)
         {
             if (iter->data.ptr == channel)
             {
@@ -271,16 +271,16 @@ bool SelectPoller::update(int operation, Channel* channel)
             }
         }
     }
-    
-    
+
+
     std::ostringstream os;
     os << "SelectPoller update fd failed, op = " << operation << ", fd = " << fd;
     os << ", events_ content: \n";
-    for (const auto& iter : events_)
+    for (const auto& iter : m_events)
     {
         os << "fd: " << iter.data.fd << ", Channel: 0x%x: " << iter.data.ptr << ", events: " << iter.events << "\n";
     }
-    LOGE("%s", os.str().c_str()); 
-       
+    LOGE("%s", os.str().c_str());
+
     return false;
 }

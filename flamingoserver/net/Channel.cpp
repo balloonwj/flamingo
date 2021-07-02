@@ -1,4 +1,4 @@
-#include "Channel.h"
+ï»¿#include "Channel.h"
 #include <sstream>
 
 #include "../base/Platform.h"
@@ -12,172 +12,133 @@ const int Channel::kNoneEvent = 0;
 const int Channel::kReadEvent = XPOLLIN | XPOLLPRI;
 const int Channel::kWriteEvent = XPOLLOUT;
 
-Channel::Channel(EventLoop* loop, int fd__): loop_(loop),
-                                            fd_(fd__),
-                                            events_(0),
-                                            revents_(0),
-                                            index_(-1),
-                                            logHup_(true),
-                                            tied_(false)/*,
-                                            eventHandling_(false),
-                                            addedToLoop_(false)
-                                            */
+Channel::Channel(EventLoop* loop, int fd__) : m_loop(loop),
+m_fd(fd__),
+m_events(0),
+m_revents(0),
+m_index(-1)
 {
 }
 
 Channel::~Channel()
 {
-	//assert(!eventHandling_);
-	//assert(!addedToLoop_);
-	if (loop_->isInLoopThread())
-	{
-		//assert(!loop_->hasChannel(this));
-	}
 }
 
-void Channel::tie(const std::shared_ptr<void>& obj)
+bool Channel::enableReading()
 {
-	tie_ = obj;
-	tied_ = true;
-}
-
-bool Channel::enableReading() 
-{ 
-    events_ |= kReadEvent;
+    m_events |= kReadEvent;
     return update();
 }
 
 bool Channel::disableReading()
 {
-    events_ &= ~kReadEvent; 
-    
+    m_events &= ~kReadEvent;
+
     return update();
 }
 
-bool Channel::enableWriting() 
+bool Channel::enableWriting()
 {
-    events_ |= kWriteEvent; 
-    
-    return update(); 
+    m_events |= kWriteEvent;
+
+    return update();
 }
 
 bool Channel::disableWriting()
-{ 
-    events_ &= ~kWriteEvent; 
+{
+    m_events &= ~kWriteEvent;
     return update();
 }
 
 bool Channel::disableAll()
-{ 
-    events_ = kNoneEvent; 
-    return update(); 
+{
+    m_events = kNoneEvent;
+    return update();
 }
 
 bool Channel::update()
 {
-	//addedToLoop_ = true;
-	return loop_->updateChannel(this);
+    //addedToLoop_ = true;
+    return m_loop->updateChannel(this);
 }
 
 void Channel::remove()
 {
-	if (!isNoneEvent())
+    if (!isNoneEvent())
         return;
-	//addedToLoop_ = false;
-	loop_->removeChannel(this);
+
+    m_loop->removeChannel(this);
 }
 
 void Channel::handleEvent(Timestamp receiveTime)
 {
-	std::shared_ptr<void> guard;
-	if (tied_)
-	{
-		guard = tie_.lock();
-		if (guard)
-		{
-			handleEventWithGuard(receiveTime);
-		}
-	}
-	else
-	{
-		handleEventWithGuard(receiveTime);
-	}
-}
-
-void Channel::handleEventWithGuard(Timestamp receiveTime)
-{
-	//eventHandling_ = true;
     /*
-    XPOLLIN £¬¶ÁÊÂ¼ş
-    XPOLLPRI£¬¶ÁÊÂ¼ş£¬µ«±íÊ¾½ô¼±Êı¾İ£¬ÀıÈçtcp socketµÄ´øÍâÊı¾İ
-    POLLRDNORM , ¶ÁÊÂ¼ş£¬±íÊ¾ÓĞÆÕÍ¨Êı¾İ¿É¶Á¡¡¡¡¡¡
-    POLLRDBAND ,¡¡¶ÁÊÂ¼ş£¬±íÊ¾ÓĞÓÅÏÈÊı¾İ¿É¶Á¡¡¡¡¡¡¡¡
-    XPOLLOUT£¬Ğ´ÊÂ¼ş
-    POLLWRNORM , Ğ´ÊÂ¼ş£¬±íÊ¾ÓĞÆÕÍ¨Êı¾İ¿ÉĞ´
-    POLLWRBAND ,¡¡Ğ´ÊÂ¼ş£¬±íÊ¾ÓĞÓÅÏÈÊı¾İ¿ÉĞ´¡¡¡¡¡¡   ¡¡¡¡¡¡¡¡
-    XPOLLRDHUP (since Linux 2.6.17)£¬Stream socketµÄÒ»¶Ë¹Ø±ÕÁËÁ¬½Ó£¨×¢ÒâÊÇstream socket£¬ÎÒÃÇÖªµÀ»¹ÓĞraw socket,dgram socket£©£¬»òÕßÊÇĞ´¶Ë¹Ø±ÕÁËÁ¬½Ó£¬Èç¹ûÒªÊ¹ÓÃÕâ¸öÊÂ¼ş£¬±ØĞë¶¨Òå_GNU_SOURCE ºê¡£Õâ¸öÊÂ¼ş¿ÉÒÔÓÃÀ´ÅĞ¶ÏÁ´Â·ÊÇ·ñ·¢ÉúÒì³££¨µ±È»¸üÍ¨ÓÃµÄ·½·¨ÊÇÊ¹ÓÃĞÄÌø»úÖÆ£©¡£ÒªÊ¹ÓÃÕâ¸öÊÂ¼ş£¬µÃÕâÑù°üº¬Í·ÎÄ¼ş£º
-    ¡¡¡¡#define _GNU_SOURCE
-      ¡¡¡¡#include <poll.h>
-    XPOLLERR£¬½öÓÃÓÚÄÚºËÉèÖÃ´«³ö²ÎÊırevents£¬±íÊ¾Éè±¸·¢Éú´íÎó
-    XPOLLHUP£¬½öÓÃÓÚÄÚºËÉèÖÃ´«³ö²ÎÊırevents£¬±íÊ¾Éè±¸±»¹ÒÆğ£¬Èç¹ûpoll¼àÌıµÄfdÊÇsocket£¬±íÊ¾Õâ¸ösocket²¢Ã»ÓĞÔÚÍøÂçÉÏ½¨Á¢Á¬½Ó£¬±ÈÈçËµÖ»µ÷ÓÃÁËsocket()º¯Êı£¬µ«ÊÇÃ»ÓĞ½øĞĞconnect¡£
-    XPOLLNVAL£¬½öÓÃÓÚÄÚºËÉèÖÃ´«³ö²ÎÊırevents£¬±íÊ¾·Ç·¨ÇëÇóÎÄ¼şÃèÊö·ûfdÃ»ÓĞ´ò¿ª
+    XPOLLIN ï¼Œè¯»äº‹ä»¶
+    XPOLLPRIï¼Œè¯»äº‹ä»¶ï¼Œä½†è¡¨ç¤ºç´§æ€¥æ•°æ®ï¼Œä¾‹å¦‚tcp socketçš„å¸¦å¤–æ•°æ®
+    POLLRDNORM , è¯»äº‹ä»¶ï¼Œè¡¨ç¤ºæœ‰æ™®é€šæ•°æ®å¯è¯»ã€€ã€€ã€€
+    POLLRDBAND ,ã€€è¯»äº‹ä»¶ï¼Œè¡¨ç¤ºæœ‰ä¼˜å…ˆæ•°æ®å¯è¯»ã€€ã€€ã€€ã€€
+    XPOLLOUTï¼Œå†™äº‹ä»¶
+    POLLWRNORM , å†™äº‹ä»¶ï¼Œè¡¨ç¤ºæœ‰æ™®é€šæ•°æ®å¯å†™
+    POLLWRBAND ,ã€€å†™äº‹ä»¶ï¼Œè¡¨ç¤ºæœ‰ä¼˜å…ˆæ•°æ®å¯å†™ã€€ã€€ã€€   ã€€ã€€ã€€ã€€
+    XPOLLRDHUP (since Linux 2.6.17)ï¼ŒStream socketçš„ä¸€ç«¯å…³é—­äº†è¿æ¥ï¼ˆæ³¨æ„æ˜¯stream socketï¼Œæˆ‘ä»¬çŸ¥é“è¿˜æœ‰raw socket,dgram socketï¼‰ï¼Œæˆ–è€…æ˜¯å†™ç«¯å…³é—­äº†è¿æ¥ï¼Œå¦‚æœè¦ä½¿ç”¨è¿™ä¸ªäº‹ä»¶ï¼Œå¿…é¡»å®šä¹‰_GNU_SOURCE å®ã€‚è¿™ä¸ªäº‹ä»¶å¯ä»¥ç”¨æ¥åˆ¤æ–­é“¾è·¯æ˜¯å¦å‘ç”Ÿå¼‚å¸¸ï¼ˆå½“ç„¶æ›´é€šç”¨çš„æ–¹æ³•æ˜¯ä½¿ç”¨å¿ƒè·³æœºåˆ¶ï¼‰ã€‚è¦ä½¿ç”¨è¿™ä¸ªäº‹ä»¶ï¼Œå¾—è¿™æ ·åŒ…å«å¤´æ–‡ä»¶ï¼š
+    ã€€ã€€#define _GNU_SOURCE
+      ã€€ã€€#include <poll.h>
+    XPOLLERRï¼Œä»…ç”¨äºå†…æ ¸è®¾ç½®ä¼ å‡ºå‚æ•°reventsï¼Œè¡¨ç¤ºè®¾å¤‡å‘ç”Ÿé”™è¯¯
+    XPOLLHUPï¼Œä»…ç”¨äºå†…æ ¸è®¾ç½®ä¼ å‡ºå‚æ•°reventsï¼Œè¡¨ç¤ºè®¾å¤‡è¢«æŒ‚èµ·ï¼Œå¦‚æœpollç›‘å¬çš„fdæ˜¯socketï¼Œè¡¨ç¤ºè¿™ä¸ªsocketå¹¶æ²¡æœ‰åœ¨ç½‘ç»œä¸Šå»ºç«‹è¿æ¥ï¼Œæ¯”å¦‚è¯´åªè°ƒç”¨äº†socket()å‡½æ•°ï¼Œä½†æ˜¯æ²¡æœ‰è¿›è¡Œconnectã€‚
+    XPOLLNVALï¼Œä»…ç”¨äºå†…æ ¸è®¾ç½®ä¼ å‡ºå‚æ•°reventsï¼Œè¡¨ç¤ºéæ³•è¯·æ±‚æ–‡ä»¶æè¿°ç¬¦fdæ²¡æœ‰æ‰“å¼€
     */
-	LOGD(reventsToString().c_str());
-	if ((revents_ & XPOLLHUP) && !(revents_ & XPOLLIN))
-	{
-		if (logHup_)
-		{
-			LOGW("Channel::handle_event() XPOLLHUP");
-		}
-		if (closeCallback_) closeCallback_();
-	}
+    LOGD(reventsToString().c_str());
+    if ((m_revents & XPOLLHUP) && !(m_revents & XPOLLIN))
+    {
+        if (m_closeCallback) m_closeCallback();
+    }
 
-	if (revents_ & XPOLLNVAL)
-	{
-		LOGW("Channel::handle_event() XPOLLNVAL");
-	}
+    if (m_revents & XPOLLNVAL)
+    {
+        LOGW("Channel::handle_event() XPOLLNVAL");
+    }
 
-	if (revents_ & (XPOLLERR | XPOLLNVAL))
-	{
-		if (errorCallback_) 
-            errorCallback_();
-	}
-    
-	if (revents_ & (XPOLLIN | XPOLLPRI | XPOLLRDHUP))
-	{
-		//µ±ÊÇÕìÌısocketÊ±£¬readCallback_Ö¸ÏòAcceptor::handleRead
-        //µ±ÊÇ¿Í»§¶ËsocketÊ±£¬µ÷ÓÃTcpConnection::handleRead 
-        if (readCallback_) 
-            readCallback_(receiveTime);
-	}
+    if (m_revents & (XPOLLERR | XPOLLNVAL))
+    {
+        if (m_errorCallback)
+            m_errorCallback();
+    }
 
-	if (revents_ & XPOLLOUT)
-	{
-		//Èç¹ûÊÇÁ¬½Ó×´Ì¬·şµÄsocket£¬ÔòwriteCallback_Ö¸ÏòConnector::handleWrite()
-        if (writeCallback_) 
-            writeCallback_();
-	}
-	//eventHandling_ = false;
+    if (m_revents & (XPOLLIN | XPOLLPRI | XPOLLRDHUP))
+    {
+        //å½“æ˜¯ä¾¦å¬socketæ—¶ï¼ŒreadCallback_æŒ‡å‘Acceptor::handleRead
+        //å½“æ˜¯å®¢æˆ·ç«¯socketæ—¶ï¼Œè°ƒç”¨TcpConnection::handleRead 
+        if (m_readCallback)
+            m_readCallback(receiveTime);
+    }
+
+    if (m_revents & XPOLLOUT)
+    {
+        //å¦‚æœæ˜¯è¿æ¥çŠ¶æ€æœçš„socketï¼Œåˆ™writeCallback_æŒ‡å‘Connector::handleWrite()
+        if (m_writeCallback)
+            m_writeCallback();
+    }
+    //eventHandling_ = false;
 }
 
 string Channel::reventsToString() const
 {
-	std::ostringstream oss;
-	oss << fd_ << ": ";
-	if (revents_ & XPOLLIN)
-		oss << "IN ";
-	if (revents_ & XPOLLPRI)
-		oss << "PRI ";
-	if (revents_ & XPOLLOUT)
-		oss << "OUT ";
-	if (revents_ & XPOLLHUP)
-		oss << "HUP ";
-	if (revents_ & XPOLLRDHUP)
-		oss << "RDHUP ";
-	if (revents_ & XPOLLERR)
-		oss << "ERR ";
-	if (revents_ & XPOLLNVAL)
-		oss << "NVAL ";
+    std::ostringstream oss;
+    oss << m_fd << ": ";
+    if (m_revents & XPOLLIN)
+        oss << "IN ";
+    if (m_revents & XPOLLPRI)
+        oss << "PRI ";
+    if (m_revents & XPOLLOUT)
+        oss << "OUT ";
+    if (m_revents & XPOLLHUP)
+        oss << "HUP ";
+    if (m_revents & XPOLLRDHUP)
+        oss << "RDHUP ";
+    if (m_revents & XPOLLERR)
+        oss << "ERR ";
+    if (m_revents & XPOLLNVAL)
+        oss << "NVAL ";
 
-	return oss.str().c_str();
+    return oss.str().c_str();
 }

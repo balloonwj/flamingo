@@ -1,4 +1,4 @@
-#pragma once
+Ôªø#pragma once
 
 #include <vector>
 #include <memory>
@@ -17,54 +17,54 @@
 namespace net
 {
     class EventLoop;
-	class Channel;
+    class Channel;
     class Poller;
     //class TimerQueue;
     class CTimerHeap;
 
-	///
-	/// Reactor, at most one per thread.
-	///
-	/// This is an interface class, so don't expose too much details.
-	class EventLoop
-	{
-	public:
-		typedef std::function<void()> Functor;
+    ///
+    /// Reactor, at most one per thread.
+    ///
+    /// This is an interface class, so don't expose too much details.
+    class EventLoop
+    {
+    public:
+        typedef std::function<void()> Functor;
 
-		EventLoop();
-		~EventLoop();  // force out-line dtor, for scoped_ptr members.
+        EventLoop();
+        ~EventLoop();  // force out-line dtor, for scoped_ptr members.
 
-		///
-		/// Loops forever.
-		///
-		/// Must be called in the same thread as creation of the object.
-		///
-		void loop();
+        ///
+        /// Loops forever.
+        ///
+        /// Must be called in the same thread as creation of the object.
+        ///
+        void loop();
 
-		/// Quits loop.
-		///
-		/// This is not 100% thread safe, if you call through a raw pointer,
-		/// better to call through shared_ptr<EventLoop> for 100% safety.
-		void quit();
+        /// Quits loop.
+        ///
+        /// This is not 100% thread safe, if you call through a raw pointer,
+        /// better to call through shared_ptr<EventLoop> for 100% safety.
+        void quit();
 
-		///
-		/// Time when poll returns, usually means data arrival.
-		///
-		Timestamp pollReturnTime() const { return pollReturnTime_; }
+        ///
+        /// Time when poll returns, usually means data arrival.
+        ///
+        Timestamp pollReturnTime() const { return m_pollReturnTime; }
 
-		int64_t iteration() const { return iteration_; }
+        int64_t iteration() const { return m_iteration; }
 
-		/// Runs callback immediately in the loop thread.
-		/// It wakes up the loop, and run the cb.
-		/// If in the same loop thread, cb is run within the function.
-		/// Safe to call from other threads.
-		void runInLoop(const Functor& cb);
-		/// Queues callback in the loop thread.
-		/// Runs after finish pooling.
-		/// Safe to call from other threads.
-		void queueInLoop(const Functor& cb);
+        /// Runs callback immediately in the loop thread.
+        /// It wakes up the loop, and run the cb.
+        /// If in the same loop thread, cb is run within the function.
+        /// Safe to call from other threads.
+        void runInLoop(const Functor& cb);
+        /// Queues callback in the loop thread.
+        /// Runs after finish pooling.
+        /// Safe to call from other threads.
+        void queueInLoop(const Functor& cb);
 
-        // timers£¨ ±º‰µ•Œªæ˘ «Œ¢√Î
+        // timersÔºåÊó∂Èó¥Âçï‰ΩçÂùáÊòØÂæÆÁßí
         ///
         /// Runs callback at 'time'.
         /// Safe to call from other threads.
@@ -88,77 +88,76 @@ namespace net
 
         void remove(TimerId timerId);
 
-        
+
         TimerId runAt(const Timestamp& time, TimerCallback&& cb);
         TimerId runAfter(int64_t delay, TimerCallback&& cb);
         TimerId runEvery(int64_t interval, TimerCallback&& cb);
 
-		void setFrameFunctor(const Functor& cb);
+        void setFrameFunctor(const Functor& cb);
 
         // internal usage
-		bool updateChannel(Channel* channel);
-		void removeChannel(Channel* channel);
-		bool hasChannel(Channel* channel);
+        bool updateChannel(Channel* channel);
+        void removeChannel(Channel* channel);
+        bool hasChannel(Channel* channel);
 
-		// pid_t threadId() const { return threadId_; }
-		void assertInLoopThread()
-		{
-			if (!isInLoopThread())
-			{
-				abortNotInLoopThread();
-			}
-		}
-		bool isInLoopThread() const { return threadId_ == std::this_thread::get_id(); }
-		// bool callingPendingFunctors() const { return callingPendingFunctors_; }
-		bool eventHandling() const { return eventHandling_; }
+        // pid_t threadId() const { return threadId_; }
+        void assertInLoopThread()
+        {
+            if (!isInLoopThread())
+            {
+                abortNotInLoopThread();
+            }
+        }
+        bool isInLoopThread() const { return m_threadId == std::this_thread::get_id(); }
+        bool eventHandling() const { return m_eventHandling; }
 
-		const std::thread::id getThreadID() const
-		{
-			return threadId_;
-		}
-
-	private:
-        bool createWakeupfd();
-        bool wakeup();
-		void abortNotInLoopThread();
-		bool handleRead();  // waked up handler
-		void doPendingFunctors();
-
-		void printActiveChannels() const; // DEBUG
+        const std::thread::id getThreadID() const
+        {
+            return m_threadId;
+        }
 
     private:
-		typedef std::vector<Channel*> ChannelList;
+        bool createWakeupfd();
+        bool wakeup();
+        void abortNotInLoopThread();
+        bool handleRead();  // waked up handler
+        void doOtherTasks();
 
-		bool                                looping_; /* atomic */
-		bool                                quit_; /* atomic and shared between threads, okay on x86, I guess. */
-		bool                                eventHandling_; /* atomic */
-		bool                                callingPendingFunctors_; /* atomic */
-		const std::thread::id               threadId_;
-		Timestamp                           pollReturnTime_;
-		std::unique_ptr<Poller>             poller_;
-        std::unique_ptr<TimerQueue>         timerQueue_;
-        int64_t                             iteration_;
+        void printActiveChannels() const; // DEBUG
+
+    private:
+        typedef std::vector<Channel*> ChannelList;
+
+        bool                                m_looping;
+        bool                                m_quit;
+        bool                                m_eventHandling;
+        bool                                m_doingOtherTasks;
+        const std::thread::id               m_threadId;
+        Timestamp                           m_pollReturnTime;
+        std::unique_ptr<Poller>             m_poller;
+        std::unique_ptr<TimerQueue>         m_timerQueue;
+        int64_t                             m_iteration;
 #ifdef WIN32
-        SOCKET                              wakeupFdSend_;
-        SOCKET                              wakeupFdListen_;
-        SOCKET                              wakeupFdRecv_;
+        SOCKET                              m_wakeupFdSend;
+        SOCKET                              m_wakeupFdListen;
+        SOCKET                              m_wakeupFdRecv;
 
-        //int                                 fdpipe_[2];
+        //int                               fdpipe_[2];
 #else
-        SOCKET                              wakeupFd_;          //TODO: ’‚∏ˆfd ≤√¥ ±∫Ú Õ∑≈£ø
+        SOCKET                              m_wakeupFd;          //TODO: Ëøô‰∏™fd‰ªÄ‰πàÊó∂ÂÄôÈáäÊîæÔºü
 #endif
-		// unlike in TimerQueue, which is an internal class,
-		// we don't expose Channel to client.
-		std::unique_ptr<Channel>            wakeupChannel_;
-	
-		// scratch variables
-		ChannelList                         activeChannels_;
-		Channel*                            currentActiveChannel_;
+        // unlike in TimerQueue, which is an internal class,
+        // we don't expose Channel to client.
+        std::unique_ptr<Channel>            m_wakeupChannel;
 
-		std::mutex                          mutex_;
-		std::vector<Functor>                pendingFunctors_; // Guarded by mutex_
+        // scratch variables
+        ChannelList                         m_activeChannels;
+        Channel* currentActiveChannel_;
 
-		Functor                             frameFunctor_;
-	};
+        std::mutex                          m_mutex;
+        std::vector<Functor>                m_pendingFunctors; // Guarded by mutex_
+
+        Functor                             m_frameFunctor;
+    };
 
 }

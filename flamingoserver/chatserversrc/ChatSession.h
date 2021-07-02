@@ -4,7 +4,7 @@
  **/
 
 #pragma once
-#include "../net/Buffer.h"
+#include "../net/ByteBuffer.h"
 #include "../net/TimerId.h"
 #include "TcpSession.h"
 using namespace net;
@@ -32,7 +32,7 @@ public:
     ChatSession& operator =(const ChatSession& rhs) = delete;
 
     //有数据可读, 会被多个工作loop调用
-    void onRead(const std::shared_ptr<TcpConnection>& conn, Buffer* pBuffer, Timestamp receivTime);   
+    void onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer* pBuffer, Timestamp receivTime);
     
     int32_t getSessionId()
     {

@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <atomic>
 #include <stdint.h>
@@ -6,50 +6,44 @@
 #include "../net/Callbacks.h"
 
 namespace net
-{ 
-    ///
-    /// Internal class for timer event.
-    ///
+{
     class Timer
     {
     public:
-        Timer(const TimerCallback& cb, Timestamp when, int64_t interval, int64_t repeatCount = -1);           
+        Timer(const TimerCallback& cb, Timestamp when, int64_t interval, int64_t repeatCount = -1);
         Timer(TimerCallback&& cb, Timestamp when, int64_t interval);
 
         void run();
-        
+
 
         bool isCanceled() const
         {
-            return canceled_;
+            return m_canceled;
         }
 
         void cancel(bool off)
         {
-            canceled_ = off;
+            m_canceled = off;
         }
 
-        Timestamp expiration() const { return expiration_; }
-        int64_t getRepeatCount() const { return repeatCount_; }
-        int64_t sequence() const { return sequence_; }
+        Timestamp expiration() const { return m_expiration; }
+        int64_t getRepeatCount() const { return m_repeatCount; }
+        int64_t sequence() const { return m_sequence; }
 
-        //void restart(Timestamp now);
-
-        static int64_t numCreated() { return s_numCreated_; }
+        static int64_t numCreated() { return s_numCreated; }
 
     private:
-        //noncopyable
         Timer(const Timer& rhs) = delete;
         Timer& operator=(const Timer& rhs) = delete;
 
     private:
-        const TimerCallback         callback_;
-        Timestamp                   expiration_;
-        const int64_t               interval_;
-        int64_t                     repeatCount_;       //ÖØ¸´´ÎÊı£¬-1 ±íÊ¾Ò»Ö±ÖØ¸´ÏÂÈ¥
-        const int64_t               sequence_;
-        bool                        canceled_;          //ÊÇ·ñ´¦ÓÚÈ¡Ïû×´Ì¬
+        const TimerCallback         m_callback;
+        Timestamp                   m_expiration;
+        const int64_t               m_interval;
+        int64_t                     m_repeatCount;       //é‡å¤æ¬¡æ•°ï¼Œ-1 è¡¨ç¤ºä¸€ç›´é‡å¤ä¸‹å»
+        const int64_t               m_sequence;
+        bool                        m_canceled;          //æ˜¯å¦å¤„äºå–æ¶ˆçŠ¶æ€
 
-        static std::atomic<int64_t> s_numCreated_;
+        static std::atomic<int64_t> s_numCreated;
     };
 }

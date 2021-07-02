@@ -1,9 +1,8 @@
-#pragma once
+﻿#pragma once
 
 #include "Poller.h"
 #include <map>
 #include "../base/Platform.h"
-//#include "EventLoop.h"
 
 namespace net
 {
@@ -35,14 +34,13 @@ namespace net
     private:
         typedef std::vector<struct epoll_event> EventList;
 
-        int             epollfd_;
-        EventList       events_;
+        int             m_epollfd;
+        EventList       m_events;
 
         typedef std::map<int, Channel*> ChannelMap;
 
-        ChannelMap      channels_;
-        EventLoop*      ownerLoop_;
+        ChannelMap      m_channels;
+        EventLoop* m_ownerLoop;
     };
 
 }
-

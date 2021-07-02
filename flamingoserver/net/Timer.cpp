@@ -1,46 +1,46 @@
-#include "Timer.h"
+﻿#include "Timer.h"
 
 using namespace net;
 
-std::atomic<int64_t> Timer::s_numCreated_;
+std::atomic<int64_t> Timer::s_numCreated;
 
 Timer::Timer(const TimerCallback& cb, Timestamp when, int64_t interval, int64_t repeatCount/* = -1*/)
-    : callback_(cb),
-    expiration_(when),
-    interval_(interval),
-    repeatCount_(repeatCount),
-    sequence_(++s_numCreated_),
-    canceled_(false)
+    : m_callback(cb),
+    m_expiration(when),
+    m_interval(interval),
+    m_repeatCount(repeatCount),
+    m_sequence(++s_numCreated),
+    m_canceled(false)
 { }
 
 
 Timer::Timer(TimerCallback&& cb, Timestamp when, int64_t interval)
-    : callback_(std::move(cb)),
-    expiration_(when),
-    interval_(interval),
-    repeatCount_(-1),
-    sequence_(++s_numCreated_),
-    canceled_(false)
+    : m_callback(std::move(cb)),
+    m_expiration(when),
+    m_interval(interval),
+    m_repeatCount(-1),
+    m_sequence(++s_numCreated),
+    m_canceled(false)
 { }
 
 void Timer::run()
 {
-    if (canceled_)
+    if (m_canceled)
         return;
 
-    callback_();
+    m_callback();
 
-    if (repeatCount_ != -1)
+    if (m_repeatCount != -1)
     {
-        --repeatCount_;
-        if (repeatCount_ == 0)
+        --m_repeatCount;
+        if (m_repeatCount == 0)
         {
             //repeatCount_ = 0;
             return;
         }
     }
 
-    expiration_ += interval_;
+    m_expiration += m_interval;
 }
 
 //void Timer::restart(Timestamp now)

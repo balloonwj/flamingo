@@ -30,9 +30,6 @@
     <ClCompile Include="..\net\Acceptor.cpp">
       <Filter>net</Filter>
     </ClCompile>
-    <ClCompile Include="..\net\Buffer.cpp">
-      <Filter>net</Filter>
-    </ClCompile>
     <ClCompile Include="..\net\Channel.cpp">
       <Filter>net</Filter>
     </ClCompile>
@@ -228,12 +225,12 @@
     <ClCompile Include="..\utils\UUIDGenerator.cpp">
       <Filter>utils</Filter>
     </ClCompile>
+    <ClCompile Include="..\net\ByteBuffer.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\net\Acceptor.h">
-      <Filter>net</Filter>
-    </ClInclude>
-    <ClInclude Include="..\net\Buffer.h">
       <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="..\net\Callbacks.h">
@@ -463,6 +460,9 @@
     </ClInclude>
     <ClInclude Include="..\utils\UUIDGenerator.h">
       <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\ByteBuffer.h">
+      <Filter>net</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

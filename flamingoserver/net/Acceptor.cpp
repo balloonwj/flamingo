@@ -1,4 +1,4 @@
-#include "Acceptor.h"
+Ôªø#include "Acceptor.h"
 
 #include "../base/Platform.h"
 #include "../base/AsyncLog.h"
@@ -9,52 +9,51 @@
 using namespace net;
 
 Acceptor::Acceptor(EventLoop* loop, const InetAddress& listenAddr, bool reuseport)
-    : loop_(loop),
-    acceptSocket_(sockets::createNonblockingOrDie()),
-    acceptChannel_(loop, acceptSocket_.fd()),
-    listenning_(false)   
+    : m_loop(loop),
+    m_acceptSocket(sockets::createNonblockingOrDie()),
+    m_acceptChannel(loop, m_acceptSocket.fd()),
+    m_listenning(false)
 {
 #ifndef WIN32
-    idleFd_ = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
+    m_idleFd = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
 #endif
 
-    acceptSocket_.setReuseAddr(true);
-    acceptSocket_.setReusePort(reuseport);
-    acceptSocket_.bindAddress(listenAddr);
-    acceptChannel_.setReadCallback(std::bind(&Acceptor::handleRead, this));
+    m_acceptSocket.setReuseAddr(true);
+    m_acceptSocket.setReusePort(reuseport);
+    m_acceptSocket.bindAddress(listenAddr);
+    m_acceptChannel.setReadCallback(std::bind(&Acceptor::handleRead, this));
 }
 
 Acceptor::~Acceptor()
 {
-    acceptChannel_.disableAll();
-    acceptChannel_.remove();
+    m_acceptChannel.disableAll();
+    m_acceptChannel.remove();
 #ifndef WIN32
-    ::close(idleFd_);
+    ::close(m_idleFd);
 #endif
 }
 
 void Acceptor::listen()
 {
-    loop_->assertInLoopThread();
-    listenning_ = true;
-    acceptSocket_.listen();
-    acceptChannel_.enableReading();
+    m_loop->assertInLoopThread();
+    m_listenning = true;
+    m_acceptSocket.listen();
+    m_acceptChannel.enableReading();
 }
 
 void Acceptor::handleRead()
 {
-    loop_->assertInLoopThread();
+    m_loop->assertInLoopThread();
     InetAddress peerAddr;
-    //FIXME loop until no more
-    int connfd = acceptSocket_.accept(&peerAddr);
+    int connfd = m_acceptSocket.accept(&peerAddr);
     if (connfd >= 0)
     {
-         string hostport = peerAddr.toIpPort();
-         LOGD("Accepts of %s", hostport.c_str());
-        //newConnectionCallback_ µº ÷∏œÚTcpServer::newConnection(int sockfd, const InetAddress& peerAddr)
-        if (newConnectionCallback_)
+        string hostport = peerAddr.toIpPort();
+        LOGD("Accepts of %s", hostport.c_str());
+        //newConnectionCallback_ÂÆûÈôÖÊåáÂêëTcpServer::newConnection(int sockfd, const InetAddress& peerAddr)
+        if (m_newConnectionCallback)
         {
-            newConnectionCallback_(connfd, peerAddr);
+            m_newConnectionCallback(connfd, peerAddr);
         }
         else
         {
@@ -69,12 +68,12 @@ void Acceptor::handleRead()
         /*
         The special problem of accept()ing when you can't
 
-        Many implementations of the POSIX accept function (for example, found in post-2004 Linux) 
+        Many implementations of the POSIX accept function (for example, found in post-2004 Linux)
         have the peculiar behaviour of not removing a connection from the pending queue in all error cases.
 
         For example, larger servers often run out of file descriptors (because of resource limits),
         causing accept to fail with ENFILE but not rejecting the connection, leading to libev signalling
-        readiness on the next iteration again (the connection still exists after all), and typically 
+        readiness on the next iteration again (the connection still exists after all), and typically
         causing the program to loop at 100% CPU usage.
 
         Unfortunately, the set of errors that cause this issue differs between operating systems,
@@ -85,13 +84,13 @@ void Acceptor::handleRead()
         an overload, it will just loop until the situation is over. While this is a form of busy waiting,
         no OS offers an event-based way to handle this situation, so it's the best one can do.
 
-        A better way to handle the situation is to log any errors other than EAGAIN and EWOULDBLOCK, 
+        A better way to handle the situation is to log any errors other than EAGAIN and EWOULDBLOCK,
         making sure not to flood the log with such messages, and continue as usual, which at least gives
-        the user an idea of what could be wrong ("raise the ulimit!"). For extra points one could 
+        the user an idea of what could be wrong ("raise the ulimit!"). For extra points one could
         stop the ev_io watcher on the listening fd "for a while", which reduces CPU usage.
 
         If your program is single-threaded, then you could also keep a dummy file descriptor for overload
-        situations (e.g. by opening /dev/null), and when you run into ENFILE or EMFILE, close it, 
+        situations (e.g. by opening /dev/null), and when you run into ENFILE or EMFILE, close it,
         run accept, close that fd, and create a new dummy fd. This will gracefully refuse clients under
         typical overload conditions.
 
@@ -100,10 +99,10 @@ void Acceptor::handleRead()
         */
         if (errno == EMFILE)
         {
-            ::close(idleFd_);
-            idleFd_ = ::accept(acceptSocket_.fd(), NULL, NULL);
-            ::close(idleFd_);
-            idleFd_ = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
+            ::close(m_idleFd);
+            m_idleFd = ::accept(m_acceptSocket.fd(), NULL, NULL);
+            ::close(m_idleFd);
+            m_idleFd = ::open("/dev/null", O_RDONLY | O_CLOEXEC);
         }
 #endif
     }
