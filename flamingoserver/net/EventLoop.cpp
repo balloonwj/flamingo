@@ -44,7 +44,7 @@ EventLoop::EventLoop() :
     createWakeupfd();
 
 #ifdef WIN32
-    m_wakeupChannel.reset(new Channel(this, m_wakeupFdSend));
+    m_wakeupChannel.reset(new Channel(this, m_wakeupFdRecv));
     m_poller.reset(new SelectPoller(this));
 
 #else
