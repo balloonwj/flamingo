@@ -4,7 +4,7 @@
 
 **我为 Flamingo 专门录制了两部高清技术讲解视频以方便读者学习，视频中介绍了Flamingo的编译和部署方法、整体架构、各个模块的技术实现细节以及如何学习Flamingo的方法，需要视频教程的读者可以扫描[高性能服务器开发]公众号二维码，关注后并在后台回复关键字“flamingo”即可得到下载链接。**
 
-![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/easyserverdev_logo.jpg)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/easyserverdev_logo.jpg)
 
 
 #### 介绍
@@ -142,7 +142,7 @@ Flamingo IM 是一款高性能、轻量级的开源即时通讯软件，目前�
 
    
 
-   **提醒一下：**服务器代码不仅是一款即时通讯软件的服务器代码，同时也是一款通用的 C++11 服务器框架。
+   **提醒一下：** 服务器代码不仅是一款即时通讯软件的服务器代码，同时也是一款通用的 C++11 服务器框架。
 
    
 
@@ -160,9 +160,9 @@ Flamingo IM 是一款高性能、轻量级的开源即时通讯软件，目前�
 
 
 
-####     安卓客户端编译和安装
+#### 安卓客户端编译和安装
 
-用Android Studio打开**flamingoAndroid/**目录下的安卓工程，编译产生相应的flamingo.apk文件，安装至安卓手机即可使用。与服务器的连接设置，在安卓版本的登陆界面的服务器设置中。
+用Android Studio打开 `flamingoAndroid` 目录下的安卓工程，编译产生相应的flamingo.apk文件，安装至安卓手机即可使用。与服务器的连接设置，在安卓版本的登陆界面的服务器设置中。
 
 
 
@@ -170,7 +170,7 @@ Flamingo IM 是一款高性能、轻量级的开源即时通讯软件，目前�
 
 由于平常工作比较忙，不能固定周期地更新flamingo，但我保证我会一直维护下去。更新日志请参见：
 
-https://github.com/baloonwj/flamingo/issues/1
+[Flamingo更新日志](https://github.com/baloonwj/flamingo/issues/1)
 
 
 
@@ -186,31 +186,28 @@ https://github.com/baloonwj/flamingo/issues/5。
 
 #### 联系方式
 
-如果您在使用这个项目的过程中遇到任何问题，或者您对我的项目有任何意见或者建议，再或者有不错的想法欢迎与我交流，可以加我微信 **easy_coder**，您也可以加入QQ技术群进行交流讨论：**729995516**。
+如果您在使用这个项目的过程中遇到任何问题，或者您对我的项目有任何意见或者建议，再或者有不错的想法欢迎与我交流，可以加 **Flamingo微信技术交流群**，先加微信 **easy_coder** 备注“flamingo”，我会邀请你进群。备用 QQ 技术群：**729995516**。
 
-
-
-#### Features Snapshot Below：
 
 #### 以下是部分功能截图：
 
 ##### pc版截图
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/1.png)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/2.png)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/3.png)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/4.png)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/5.png)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/6.png)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/7.png)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/8.png)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/9.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/1.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/2.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/3.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/4.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/5.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/6.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/7.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/8.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/9.png)
 
-##### Android Version Snapshot
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m1.jpg)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m2.jpg)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m3.jpg)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m4.jpg)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m5.jpg)
+##### Android版截图
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/m1.jpg)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/m2.jpg)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/m3.jpg)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/m4.jpg)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/m5.jpg)
 
 
 

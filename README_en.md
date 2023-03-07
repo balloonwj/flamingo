@@ -173,7 +173,7 @@ Flamingo server uses four database tables illustrated below:
 
 #### Android Version Compiling and Installing
 
-Use Android Studio to open the project in directory **flamingoAndroid/** and build to generate **flamingo.apk** file. Install **flamingo.apk** to your mobiles. Server settings of Android version is on the logining Activity.
+Use Android Studio to open the project in directory **flamingoAndroid** and build to generate **flamingo.apk** file. Install **flamingo.apk** to your mobiles. Server settings of Android version is on the logining Activity.
 
 
 
@@ -183,7 +183,7 @@ I am afraid that I can not maintain Flamingo in regular intervals because I am v
 
 Change Log see here: 
 
-https://github.com/baloonwj/flamingo/issues/1
+[Flamingo Change Log](https://github.com/baloonwj/flamingo/issues/1)
 
 
 
@@ -197,24 +197,24 @@ I promise that fatal problem of Flamingo, such as crashing or halting will be so
 
 #### Contact
 
-At last not the least, if you have any suggestions or good advice, welcome to contact with me. China Mainland users can contact with me by joining in my QQ group(**729995516**) or linking my public webchat account(『**easyserverdev**』).  Also you can send me emails,  my email address is **balloonwj@qq.com**. I am waiting for You sincerely.
+At last not the least, if you have any suggestions or questions, welcome to contact with me. China Mainland users can contact with me by joining in my QQ group(**729995516**) or linking my public webchat account(『**easy_coder**』).  Also you can send me emails,  my email address is **balloonwj@qq.com**. I am waiting for You sincerely.
 
 
 #### Features Snapshot Below：
 
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/1.png)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/2.png)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/3.png)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/4.png)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/5.png)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/6.png)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/7.png)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/8.png)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/9.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/1.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/2.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/3.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/4.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/5.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/6.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/7.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/8.png)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/9.png)
 
 ##### Android Version Snapshot
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m1.jpg)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m2.jpg)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m3.jpg)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m4.jpg)
-![flamingo Snapshot](http://www.hootina.org/github_flamingo_imgs/m5.jpg)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/m1.jpg)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/m2.jpg)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/m3.jpg)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/m4.jpg)
+![flamingo Snapshot](https://github.com/balloonwj/flamingo/blob/master/snapshots/m5.jpg)
