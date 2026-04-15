@@ -1,5 +1,5 @@
 /**
- *  ÎÄ¼ş·şÎñÆ÷ºÍÍ¼Æ¬·şÎñÆ÷Ö÷·şÎñÀà£¬FileServer.cpp
+ *  æ–‡ä»¶æœåŠ¡å™¨å’Œå›¾ç‰‡æœåŠ¡å™¨ä¸»æœåŠ¡ç±»ï¼ŒFileServer.cpp
  *  zhangyl 2017.03.17
  **/
 #include "FileServer.h"
@@ -15,7 +15,7 @@ bool FileServer::init(const char* ip, short port, EventLoop* loop, const char* f
     InetAddress addr(ip, port);
     m_server.reset(new TcpServer(loop, addr, "ZYL-MYImgAndFileServer", TcpServer::kReusePort));
     m_server->setConnectionCallback(std::bind(&FileServer::onConnected, this, std::placeholders::_1));
-    //Æô¶¯ÕìÌı
+    //å¯åŠ¨ä¾¦å¬
     m_server->start(6);
 
     return true;
@@ -46,7 +46,7 @@ void FileServer::onConnected(std::shared_ptr<TcpConnection> conn)
 
 void FileServer::onDisconnected(const std::shared_ptr<TcpConnection>& conn)
 {
-    //TODO: ÕâÑùµÄ´úÂëÂß¼­Ì«»ìÂÒ£¬ĞèÒªÓÅ»¯
+    //TODO: è¿™æ ·çš„ä»£ç é€»è¾‘å¤ªæ··ä¹±ï¼Œéœ€è¦ä¼˜åŒ–
     std::lock_guard<std::mutex> guard(m_sessionMutex);
     for (auto iter = m_sessions.begin(); iter != m_sessions.end(); ++iter)
     {
@@ -56,7 +56,7 @@ void FileServer::onDisconnected(const std::shared_ptr<TcpConnection>& conn)
             break;
         }
                           
-        //ÓÃ»§ÏÂÏß
+        //ç”¨æˆ·ä¸‹çº¿
         m_sessions.erase(iter);
         //bUserOffline = true;
         LOGI("client disconnected: %s", conn->peerAddress().toIpPort().c_str());

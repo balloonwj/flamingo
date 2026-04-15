@@ -1,5 +1,5 @@
 /** 
- * @desc:   Òì²½ÈÕÖ¾Àà£¬AsyncLog.h
+ * @desc:   å¼‚æ­¥æ—¥å¿—ç±»ï¼ŒAsyncLog.h
  * @author: zhangyl
  * @date:   2019.04.13
  */
@@ -29,14 +29,14 @@ enum LOG_LEVEL
     LOG_LEVEL_DEBUG,
     LOG_LEVEL_INFO,
     LOG_LEVEL_WARNING,
-    LOG_LEVEL_ERROR,    //ÓÃÓÚÒµÎñ´íÎó
-    LOG_LEVEL_SYSERROR, //ÓÃÓÚ¼¼Êõ¿ò¼Ü±¾ÉíµÄ´íÎó
-    LOG_LEVEL_FATAL,    //FATAL ¼¶±ğµÄÈÕÖ¾»áÈÃÔÚ³ÌĞòÊä³öÈÕÖ¾ºóÍË³ö
-    LOG_LEVEL_CRITICAL  //CRITICAL ÈÕÖ¾²»ÊÜÈÕÖ¾¼¶±ğ¿ØÖÆ£¬×ÜÊÇÊä³ö
+    LOG_LEVEL_ERROR,    //ç”¨äºä¸šåŠ¡é”™è¯¯
+    LOG_LEVEL_SYSERROR, //ç”¨äºæŠ€æœ¯æ¡†æ¶æœ¬èº«çš„é”™è¯¯
+    LOG_LEVEL_FATAL,    //FATAL çº§åˆ«çš„æ—¥å¿—ä¼šè®©åœ¨ç¨‹åºè¾“å‡ºæ—¥å¿—åé€€å‡º
+    LOG_LEVEL_CRITICAL  //CRITICAL æ—¥å¿—ä¸å—æ—¥å¿—çº§åˆ«æ§åˆ¶ï¼Œæ€»æ˜¯è¾“å‡º
 };
 
-//TODO: ¶àÔö¼Ó¼¸¸ö²ßÂÔ
-//×¢Òâ£ºÈç¹û´òÓ¡µÄÈÕÖ¾ĞÅÏ¢ÖĞÓĞÖĞÎÄ£¬Ôò¸ñÊ½»¯×Ö·û´®ÒªÓÃ_T()ºê°ü¹üÆğÀ´£¬
+//TODO: å¤šå¢åŠ å‡ ä¸ªç­–ç•¥
+//æ³¨æ„ï¼šå¦‚æœæ‰“å°çš„æ—¥å¿—ä¿¡æ¯ä¸­æœ‰ä¸­æ–‡ï¼Œåˆ™æ ¼å¼åŒ–å­—ç¬¦ä¸²è¦ç”¨_T()å®åŒ…è£¹èµ·æ¥ï¼Œ
 //e.g. LOGI(_T("GroupID=%u, GroupName=%s, GroupName=%s."), lpGroupInfo->m_nGroupCode, lpGroupInfo->m_strAccount.c_str(), lpGroupInfo->m_strName.c_str());
 #define LOGT(...)    CAsyncLog::output(LOG_LEVEL_TRACE, __FILE__, __LINE__, __VA_ARGS__)
 #define LOGD(...)    CAsyncLog::output(LOG_LEVEL_DEBUG, __FILE__, __LINE__, __VA_ARGS__)
@@ -44,10 +44,10 @@ enum LOG_LEVEL
 #define LOGW(...)    CAsyncLog::output(LOG_LEVEL_WARNING, __FILE__, __LINE__,__VA_ARGS__)
 #define LOGE(...)    CAsyncLog::output(LOG_LEVEL_ERROR, __FILE__, __LINE__, __VA_ARGS__)
 #define LOGSYSE(...) CAsyncLog::output(LOG_LEVEL_SYSERROR, __FILE__, __LINE__, __VA_ARGS__)
-#define LOGF(...)    CAsyncLog::output(LOG_LEVEL_FATAL, __FILE__, __LINE__, __VA_ARGS__)        //ÎªÁËÈÃFATAL¼¶±ğµÄÈÕÖ¾ÄÜÁ¢¼´crash³ÌĞò£¬²ÉÈ¡Í¬²½Ğ´ÈÕÖ¾µÄ·½·¨
-#define LOGC(...)    CAsyncLog::output(LOG_LEVEL_CRITICAL, __FILE__, __LINE__, __VA_ARGS__)     //¹Ø¼üĞÅÏ¢£¬ÎŞÊÓÈÕÖ¾¼¶±ğ£¬×ÜÊÇÊä³ö
+#define LOGF(...)    CAsyncLog::output(LOG_LEVEL_FATAL, __FILE__, __LINE__, __VA_ARGS__)        //ä¸ºäº†è®©FATALçº§åˆ«çš„æ—¥å¿—èƒ½ç«‹å³crashç¨‹åºï¼Œé‡‡å–åŒæ­¥å†™æ—¥å¿—çš„æ–¹æ³•
+#define LOGC(...)    CAsyncLog::output(LOG_LEVEL_CRITICAL, __FILE__, __LINE__, __VA_ARGS__)     //å…³é”®ä¿¡æ¯ï¼Œæ— è§†æ—¥å¿—çº§åˆ«ï¼Œæ€»æ˜¯è¾“å‡º
 
-//ÓÃÓÚÊä³öÊı¾İ°üµÄ¶ş½øÖÆ¸ñÊ½
+//ç”¨äºè¾“å‡ºæ•°æ®åŒ…çš„äºŒè¿›åˆ¶æ ¼å¼
 #define LOG_DEBUG_BIN(buf, buflength) CAsyncLog::outputBinary(buf, buflength)
 
 class LOG_API CAsyncLog
@@ -59,9 +59,9 @@ public:
     static void setLevel(LOG_LEVEL nLevel);
     static bool isRunning();
 	
-	//²»Êä³öÏß³ÌIDºÅºÍËùÔÚº¯ÊıÇ©Ãû¡¢ĞĞºÅ
+	//ä¸è¾“å‡ºçº¿ç¨‹IDå·å’Œæ‰€åœ¨å‡½æ•°ç­¾åã€è¡Œå·
 	static bool output(long nLevel, const char* pszFmt, ...);
-	//Êä³öÏß³ÌIDºÅºÍËùÔÚº¯ÊıÇ©Ãû¡¢ĞĞºÅ	
+	//è¾“å‡ºçº¿ç¨‹IDå·å’Œæ‰€åœ¨å‡½æ•°ç­¾åã€è¡Œå·	
     static bool output(long nLevel, const char* pszFileName, int nLineNo, const char* pszFmt, ...);
 
     static bool outputBinary(unsigned char* buffer, size_t size);
@@ -77,7 +77,7 @@ private:
     static void getTime(char* pszTime, int nTimeStrLength);
     static bool createNewFile(const char* pszLogFileName);
     static bool writeToFile(const std::string& data);
-    //ÈÃ³ÌĞòÖ÷¶¯±ÀÀ£
+    //è®©ç¨‹åºä¸»åŠ¨å´©æºƒ
     static void crash();
 
     static const char* ullto4Str(int n);
@@ -86,20 +86,20 @@ private:
     static void writeThreadProc();
 	
 private:
-	static bool		                        m_bToFile;			    //ÈÕÖ¾Ğ´ÈëÎÄ¼ş»¹ÊÇĞ´µ½¿ØÖÆÌ¨  
+	static bool		                        m_bToFile;			    //æ—¥å¿—å†™å…¥æ–‡ä»¶è¿˜æ˜¯å†™åˆ°æ§åˆ¶å°  
 	static FILE*                            m_hLogFile;
-    static std::string                      m_strFileName;          //ÈÕÖ¾ÎÄ¼şÃû
-    static std::string                      m_strFileNamePID;    //ÎÄ¼şÃûÖĞµÄ½ø³Ìid
-    static bool                             m_bTruncateLongLog;     //³¤ÈÕÖ¾ÊÇ·ñ½Ø¶Ï
-    static LOG_LEVEL                        m_nCurrentLevel;        //µ±Ç°ÈÕÖ¾¼¶±ğ
-    static int64_t                          m_nFileRollSize;        //µ¥¸öÈÕÖ¾ÎÄ¼şµÄ×î´ó×Ö½ÚÊı
-    static int64_t                          m_nCurrentWrittenSize;  //ÒÑ¾­Ğ´ÈëµÄ×Ö½ÚÊıÄ¿
-    static std::list<std::string>           m_listLinesToWrite;     //´ıĞ´ÈëµÄÈÕÖ¾
+    static std::string                      m_strFileName;          //æ—¥å¿—æ–‡ä»¶å
+    static std::string                      m_strFileNamePID;    //æ–‡ä»¶åä¸­çš„è¿›ç¨‹id
+    static bool                             m_bTruncateLongLog;     //é•¿æ—¥å¿—æ˜¯å¦æˆªæ–­
+    static LOG_LEVEL                        m_nCurrentLevel;        //å½“å‰æ—¥å¿—çº§åˆ«
+    static int64_t                          m_nFileRollSize;        //å•ä¸ªæ—¥å¿—æ–‡ä»¶çš„æœ€å¤§å­—èŠ‚æ•°
+    static int64_t                          m_nCurrentWrittenSize;  //å·²ç»å†™å…¥çš„å­—èŠ‚æ•°ç›®
+    static std::list<std::string>           m_listLinesToWrite;     //å¾…å†™å…¥çš„æ—¥å¿—
     static std::unique_ptr<std::thread>     m_spWriteThread;
     static std::mutex                       m_mutexWrite;
     static std::condition_variable          m_cvWrite;
-    static bool                             m_bExit;                //ÍË³ö±êÖ¾
-    static bool                             m_bRunning;             //ÔËĞĞ±êÖ¾
+    static bool                             m_bExit;                //é€€å‡ºæ ‡å¿—
+    static bool                             m_bRunning;             //è¿è¡Œæ ‡å¿—
 };
 
 #endif // !__ASYNC_LOG_H__

@@ -1,5 +1,5 @@
 /**
- * ×Ö·û´®²Ù×÷¹¤¾ßÀà, StringUtil.h
+ * å­—ç¬¦ä¸²æ“ä½œå·¥å…·ç±», StringUtil.h
  * zhangyl 2018.03.09
  */
 #ifndef __STRING_UTIL_H__
@@ -17,7 +17,7 @@ private:
 
 public:
     static void split(const std::string& str, std::vector<std::string>& v, const char* delimiter = "|");
-    //¸ù¾İdelimiterÖ¸¶¨µÄ×Ö·û´®£¬½«strÇĞ¸î³ÉÁ½°ë
+    //æ ¹æ®delimiteræŒ‡å®šçš„å­—ç¬¦ä¸²ï¼Œå°†stråˆ‡å‰²æˆä¸¤åŠ
     static void cut(const std::string& str, std::vector<std::string>& v, const char* delimiter = "|");
     static std::string& replace(std::string& str, const std::string& toReplaced, const std::string& newStr);
 

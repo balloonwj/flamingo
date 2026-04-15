@@ -1,5 +1,5 @@
 /**
- *  简单的配置文件读取类，ConfigFileReader.cpp
+ *  绠�鍗曠殑閰嶇疆鏂囦欢璇诲彇绫伙紝ConfigFileReader.cpp
  *  zhangyl 2017.05.27
  */
 #include "ConfigFileReader.h"

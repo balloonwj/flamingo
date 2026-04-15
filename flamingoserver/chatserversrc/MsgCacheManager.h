@@ -1,5 +1,5 @@
 /** 
- *  ÏûÏ¢»º´æÀà£¬ MsgCacheManager.h
+ *  æ¶ˆæ¯ç¼“å­˜ç±»ï¼Œ MsgCacheManager.h
  *  zhangyl 2017.03.16
  **/
 #pragma once
@@ -37,8 +37,8 @@ public:
 
 
 private:
-    std::list<NotifyMsgCache>       m_listNotifyMsgCache;    //Í¨ÖªÀàÏûÏ¢»º´æ£¬±ÈÈç¼ÓºÃÓÑÏûÏ¢
+    std::list<NotifyMsgCache>       m_listNotifyMsgCache;    //é€šçŸ¥ç±»æ¶ˆæ¯ç¼“å­˜ï¼Œæ¯”å¦‚åŠ å¥½å‹æ¶ˆæ¯
     std::mutex                      m_mtNotifyMsgCache;
-    std::list<ChatMsgCache>         m_listChatMsgCache;      //ÁÄÌìÏûÏ¢»º´æ
+    std::list<ChatMsgCache>         m_listChatMsgCache;      //èŠå¤©æ¶ˆæ¯ç¼“å­˜
     std::mutex                      m_mtChatMsgCache;
 };

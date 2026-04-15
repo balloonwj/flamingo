@@ -1,5 +1,5 @@
 /** 
- *  ÎÄ¼ş¹ÜÀíÀà, FileManager.h
+ *  æ–‡ä»¶ç®¡ç†ç±», FileManager.h
  *  zhangyl 2017.03.17
  **/
 #pragma once
@@ -22,7 +22,7 @@ public:
     void addFile(const char* filename);
 
 private:
-    //ÉÏ´«µÄÎÄ¼ş¶¼ÒÔÎÄ¼şµÄmd5ÖµÃüÃû
+    //ä¸Šä¼ çš„æ–‡ä»¶éƒ½ä»¥æ–‡ä»¶çš„md5å€¼å‘½å
     std::list<std::string>      m_listFiles;
     std::mutex                  m_mtFile;
     std::string                 m_basepath;

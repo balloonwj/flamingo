@@ -1,5 +1,5 @@
 /** 
- *  ·şÎñÆ÷Ö÷·şÎñÀà£¬IMServer.h
+ *  æœåŠ¡å™¨ä¸»æœåŠ¡ç±»ï¼ŒIMServer.h
  *  zhangyl 2017.03.09
  **/
 #pragma once
@@ -47,27 +47,27 @@ public:
     bool isLogPackageBinaryEnabled();
 
     void getSessions(std::list<std::shared_ptr<ChatSession>>& sessions);
-    //ÓÃ»§idºÍclienttype»áÎ¨Ò»È·¶¨Ò»¸ösession
+    //ç”¨æˆ·idå’Œclienttypeä¼šå”¯ä¸€ç¡®å®šä¸€ä¸ªsession
     bool getSessionByUserIdAndClientType(std::shared_ptr<ChatSession>& session, int32_t userid, int32_t clientType);
 
     bool getSessionsByUserId(std::list<std::shared_ptr<ChatSession>>& sessions, int32_t userid);
 
-    //»ñÈ¡ÓÃ»§×´Ì¬£¬Èô¸ÃÓÃ»§²»´æÔÚ£¬Ôò·µ»Ø0
+    //è·å–ç”¨æˆ·çŠ¶æ€ï¼Œè‹¥è¯¥ç”¨æˆ·ä¸å­˜åœ¨ï¼Œåˆ™è¿”å›0
     int32_t getUserStatusByUserId(int32_t userid);
-    //»ñÈ¡ÓÃ»§¿Í»§¶ËÀàĞÍ£¬Èç¹û¸ÃÓÃ»§²»´æÔÚ£¬Ôò·µ»Ø0
+    //è·å–ç”¨æˆ·å®¢æˆ·ç«¯ç±»å‹ï¼Œå¦‚æœè¯¥ç”¨æˆ·ä¸å­˜åœ¨ï¼Œåˆ™è¿”å›0
     int32_t getUserClientTypeByUserId(int32_t userid);
 
 private:
-    //ĞÂÁ¬½Óµ½À´µ÷ÓÃ»òÁ¬½Ó¶Ï¿ª£¬ËùÒÔĞèÒªÍ¨¹ıconn->connected()À´ÅĞ¶Ï£¬Ò»°ãÖ»ÔÚÖ÷loopÀïÃæµ÷ÓÃ
+    //æ–°è¿æ¥åˆ°æ¥è°ƒç”¨æˆ–è¿æ¥æ–­å¼€ï¼Œæ‰€ä»¥éœ€è¦é€šè¿‡conn->connected()æ¥åˆ¤æ–­ï¼Œä¸€èˆ¬åªåœ¨ä¸»loopé‡Œé¢è°ƒç”¨
     void onConnected(std::shared_ptr<TcpConnection> conn);  
-    //Á¬½Ó¶Ï¿ª
+    //è¿æ¥æ–­å¼€
     void onDisconnected(const std::shared_ptr<TcpConnection>& conn);
    
 private:
     std::unique_ptr<TcpServer>                     m_server;
     std::list<std::shared_ptr<ChatSession>>        m_sessions;
-    std::mutex                                     m_sessionMutex;      //¶àÏß³ÌÖ®¼ä±£»¤m_sessions
+    std::mutex                                     m_sessionMutex;      //å¤šçº¿ç¨‹ä¹‹é—´ä¿æŠ¤m_sessions
     std::atomic_int                                m_sessionId{};
-    std::mutex                                     m_idMutex;           //¶àÏß³ÌÖ®¼ä±£»¤m_baseUserId
-    std::atomic_bool                               m_logPackageBinary;  //ÊÇ·ñÈÕÖ¾´òÓ¡³ö°üµÄ¶ş½øÖÆÊı¾İ
+    std::mutex                                     m_idMutex;           //å¤šçº¿ç¨‹ä¹‹é—´ä¿æŠ¤m_baseUserId
+    std::atomic_bool                               m_logPackageBinary;  //æ˜¯å¦æ—¥å¿—æ‰“å°å‡ºåŒ…çš„äºŒè¿›åˆ¶æ•°æ®
 };

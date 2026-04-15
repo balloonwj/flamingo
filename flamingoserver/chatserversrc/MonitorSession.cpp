@@ -1,5 +1,5 @@
 /**
- * ¼à¿Ø»á»°Àà, MonitorSession.cpp
+ * ç›‘æ§ä¼šè¯ç±», MonitorSession.cpp
  * zhangyl 2017.03.09
  */
 #include "MonitorSession.h"
@@ -101,7 +101,7 @@ bool MonitorSession::showOnlineUserList(const std::string& token/* = ""*/)
                 << ",userid:" << iter->getUserId()
                 << ",username:" << iter->getUsername();
 
-            //Èç¹ûÊäÈëÁËtoken£¬ÔòÏÔÊ¾ÓÃ»§ÃÜÂë£¬·ñÔò²»ÏÔÊ¾
+            //å¦‚æœè¾“å…¥äº†tokenï¼Œåˆ™æ˜¾ç¤ºç”¨æˆ·å¯†ç ï¼Œå¦åˆ™ä¸æ˜¾ç¤º
             if (monitorServer.isMonitorTokenValid(token.c_str()))
             {
                 os << ",password:" << iter->getPassword();
@@ -194,7 +194,7 @@ bool MonitorSession::process(const std::shared_ptr<TcpConnection>& conn, const s
         }
         else if (v[0] == g_helpInfo[3].cmd)
         {
-            //¿ªÆôÈÕÖ¾Êı¾İ°ü´òÓ¡¶ş½øÖÆ×Ö½Ú
+            //å¼€å¯æ—¥å¿—æ•°æ®åŒ…æ‰“å°äºŒè¿›åˆ¶å­—èŠ‚
             Singleton<ChatServer>::Instance().enableLogPackageBinary(true);
 
             char tip[32] = { "OK.\n" };
@@ -202,7 +202,7 @@ bool MonitorSession::process(const std::shared_ptr<TcpConnection>& conn, const s
         }
         else if (v[0] == g_helpInfo[4].cmd)
         {
-            //¿ªÆôÈÕÖ¾Êı¾İ°ü´òÓ¡¶ş½øÖÆ×Ö½Ú
+            //å¼€å¯æ—¥å¿—æ•°æ®åŒ…æ‰“å°äºŒè¿›åˆ¶å­—èŠ‚
             Singleton<ChatServer>::Instance().enableLogPackageBinary(false);
 
             char tip[32] = { "OK.\n" };

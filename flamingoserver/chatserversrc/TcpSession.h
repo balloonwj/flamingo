@@ -10,7 +10,7 @@
 
 using namespace net;
 
-//ÎªÁËÈÃÒµÎñÓëÂß¼­·Ö¿ª£¬Êµ¼ÊÓ¦¸ÃĞÂÔöÒ»¸ö×ÓÀà¼Ì³Ğ×ÔTcpSession£¬ÈÃTcpSessionÖĞÖ»ÓĞÂß¼­´úÂë£¬Æä×ÓÀà´æ·ÅÒµÎñ´úÂë
+//ä¸ºäº†è®©ä¸šåŠ¡ä¸é€»è¾‘åˆ†å¼€ï¼Œå®é™…åº”è¯¥æ–°å¢ä¸€ä¸ªå­ç±»ç»§æ‰¿è‡ªTcpSessionï¼Œè®©TcpSessionä¸­åªæœ‰é€»è¾‘ä»£ç ï¼Œå…¶å­ç±»å­˜æ”¾ä¸šåŠ¡ä»£ç 
 class TcpSession
 {
 public:
@@ -37,7 +37,7 @@ private:
     void sendPackage(const char* p, int32_t length);
 
 protected:
-    //TcpSessionÒıÓÃTcpConnectionÀà±ØĞëÊÇÈõÖ¸Õë£¬ÒòÎªTcpConnection¿ÉÄÜ»áÒòÍøÂç³ö´í×Ô¼ºÏú»Ù£¬´ËÊ±TcpSessionÓ¦¸ÃÒ²ÒªÏú»Ù
+    //TcpSessionå¼•ç”¨TcpConnectionç±»å¿…é¡»æ˜¯å¼±æŒ‡é’ˆï¼Œå› ä¸ºTcpConnectionå¯èƒ½ä¼šå› ç½‘ç»œå‡ºé”™è‡ªå·±é”€æ¯ï¼Œæ­¤æ—¶TcpSessionåº”è¯¥ä¹Ÿè¦é”€æ¯
     std::weak_ptr<TcpConnection>    tmpConn_;
     //std::shared_ptr<TcpConnection>    tmpConn_;
 };

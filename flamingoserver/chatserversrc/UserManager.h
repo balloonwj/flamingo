@@ -1,5 +1,5 @@
 /** 
- *  ¹ÜÀíËùÓĞµÄÓÃ»§ĞÅÏ¢£¬³õÊ¼ĞÅÏ¢´ÓÊı¾İ¿âÖĞ¼ÓÔØ, UserManager.h
+ *  ç®¡ç†æ‰€æœ‰çš„ç”¨æˆ·ä¿¡æ¯ï¼Œåˆå§‹ä¿¡æ¯ä»æ•°æ®åº“ä¸­åŠ è½½, UserManager.h
  *  zhangyl 2017.03.15
  **/
 
@@ -30,16 +30,16 @@ struct FriendInfo
     string  teamname;
 };
 
-//ÓÃ»§»òÕßÈº
+//ç”¨æˆ·æˆ–è€…ç¾¤
 struct User
 {
-    int32_t        userid;      //0x0FFFFFFFÒÔÉÏÊÇÈººÅ£¬ÒÔÏÂÊÇÆÕÍ¨ÓÃ»§
-    string         username;    //ÈºÕË»§µÄusernameÒ²ÊÇÈººÅuseridµÄ×Ö·û´®ĞÎÊ½
+    int32_t        userid;      //0x0FFFFFFFä»¥ä¸Šæ˜¯ç¾¤å·ï¼Œä»¥ä¸‹æ˜¯æ™®é€šç”¨æˆ·
+    string         username;    //ç¾¤è´¦æˆ·çš„usernameä¹Ÿæ˜¯ç¾¤å·useridçš„å­—ç¬¦ä¸²å½¢å¼
     string         password;
-    string         nickname;    //ÈºÕËºÅÎªÈºÃû³Æ
+    string         nickname;    //ç¾¤è´¦å·ä¸ºç¾¤åç§°
     int32_t        facetype;
     string         customface;
-    string         customfacefmt;//×Ô¶¨ÒåÍ·Ïñ¸ñÊ½
+    string         customfacefmt;//è‡ªå®šä¹‰å¤´åƒæ ¼å¼
     int32_t        gender;
     int32_t        birthday;
     string         signature;
@@ -47,11 +47,11 @@ struct User
     string         phonenumber;
     string         mail;
     /*
-    ¸öÈËÓÃ»§ºÃÓÑ·Ö×éĞÅÏ¢£¬¶ÔÓÚÈºÕË»§ÔòÎª¿Õ£¬ÀıÈç:
-    [{"teamname": "ÎÒµÄºÃÓÑ"}, {"teamname": "ÎÒµÄÍ¬ÊÂ"}, {"teamname": "ÆóÒµ¿Í»§"}]
+    ä¸ªäººç”¨æˆ·å¥½å‹åˆ†ç»„ä¿¡æ¯ï¼Œå¯¹äºç¾¤è´¦æˆ·åˆ™ä¸ºç©ºï¼Œä¾‹å¦‚:
+    [{"teamname": "æˆ‘çš„å¥½å‹"}, {"teamname": "æˆ‘çš„åŒäº‹"}, {"teamname": "ä¼ä¸šå®¢æˆ·"}]
     */
-    string             teaminfo;       //¶ÔÓÚÆÕÍ¨ÓÃ»§£¬Îª·Ö×éĞÅÏ¢£»¶ÔÓÚÈº×éÔòÎª¿Õ
-    int32_t            ownerid;        //¶ÔÓÚÈºÕËºÅ£¬ÎªÈºÖ÷userid
+    string             teaminfo;       //å¯¹äºæ™®é€šç”¨æˆ·ï¼Œä¸ºåˆ†ç»„ä¿¡æ¯ï¼›å¯¹äºç¾¤ç»„åˆ™ä¸ºç©º
+    int32_t            ownerid;        //å¯¹äºç¾¤è´¦å·ï¼Œä¸ºç¾¤ä¸»userid
     list<FriendInfo>   friends;        
 };
 
@@ -75,30 +75,30 @@ public:
 
     bool isFriend(int32_t userid, int32_t friendid);
     
-    //TODO: ÕâÀà¶¼ÊÇ¸üĞÂÓÃ»§ĞÅÏ¢µÄ½Ó¿Ú£¬½«À´¿ÉÒÔ¿¼ÂÇÍ³Ò»ÆğÀ´
+    //TODO: è¿™ç±»éƒ½æ˜¯æ›´æ–°ç”¨æˆ·ä¿¡æ¯çš„æ¥å£ï¼Œå°†æ¥å¯ä»¥è€ƒè™‘ç»Ÿä¸€èµ·æ¥
     bool updateUserInfoInDb(int32_t userid, const User& newuserinfo);
     bool modifyUserPassword(int32_t userid, const std::string& newpassword);
-    //½«ÄÚ´æºÍÊı¾İ¿âÖĞµÄÄ³¸öÓÃ»§µÄ·Ö×éĞÅÏ¢¸Ä³ÉĞÂµÄnewteaminfo
+    //å°†å†…å­˜å’Œæ•°æ®åº“ä¸­çš„æŸä¸ªç”¨æˆ·çš„åˆ†ç»„ä¿¡æ¯æ”¹æˆæ–°çš„newteaminfo
     bool updateUserTeamInfoInDbAndMemory(int32_t userid, const std::string& newteaminfo);
     bool deleteTeam(int32_t userid, const std::string& deletedteamname);
     bool modifyTeamName(int32_t userid, const std::string& newteamname, const std::string& oldteamname);
     
-    //¸üĞÂÓÃ»§ºÃÓÑ±¸×¢Ãû
+    //æ›´æ–°ç”¨æˆ·å¥½å‹å¤‡æ³¨å
     bool updateMarknameInDb(int32_t userid, int32_t friendid, const std::string& newmarkname);
-    //ÒÆ¶¯ºÃÓÑÖÁÆäËû·Ö×é
+    //ç§»åŠ¨å¥½å‹è‡³å…¶ä»–åˆ†ç»„
     bool moveFriendToOtherTeam(int32_t userid, int32_t friendid, const std::string& newteamname);
 
     bool addGroup(const char* groupname, int32_t ownerid, int32_t& groupid);
 
-    //ÁÄÌìÏûÏ¢Èë¿â
+    //èŠå¤©æ¶ˆæ¯å…¥åº“
     bool saveChatMsgToDb(int32_t senderid, int32_t targetid, const std::string& chatmsg);
 
-    //TODO: µ±ÓÃ»§Ô½À´Ô½¶à£¬²¢·¢Á¿Ô½À´Ô½¶àµÄÊ±ºò£¬Õâ¸öÏµÁĞµÄº¯ÊıĞ§ÂÊ¸ßÂğ£¿
+    //TODO: å½“ç”¨æˆ·è¶Šæ¥è¶Šå¤šï¼Œå¹¶å‘é‡è¶Šæ¥è¶Šå¤šçš„æ—¶å€™ï¼Œè¿™ä¸ªç³»åˆ—çš„å‡½æ•°æ•ˆç‡é«˜å—ï¼Ÿ
     bool getUserInfoByUsername(const std::string& username, User& u);
     bool getUserInfoByUserId(int32_t userid, User& u);
     bool getUserInfoByUserId(int32_t userid, User*& u);
     bool getFriendInfoByUserId(int32_t userid, std::list<User>& friends);
-    //»ñÈ¡ºÃÓÑµÄ±¸×¢Ãû
+    //è·å–å¥½å‹çš„å¤‡æ³¨å
     bool getFriendMarknameByUserId(int32_t userid1, int32_t friendid, std::string& markname);
     bool getTeamInfoByUserId(int32_t userid, std::string& teaminfo);
 
@@ -107,7 +107,7 @@ private:
     bool loadRelationshipFromDb(int32_t userid, std::list<FriendInfo>& r);
 
 private:
-    std::atomic_int     m_baseUserId{ 0 };        //m_baseUserId, È¡Êı¾İ¿âÀïÃæuserid×î´óÖµ£¬ĞÂÔöÓÃ»§ÔÚÕâ¸ö»ù´¡ÉÏµİÔö
+    std::atomic_int     m_baseUserId{ 0 };        //m_baseUserId, å–æ•°æ®åº“é‡Œé¢useridæœ€å¤§å€¼ï¼Œæ–°å¢ç”¨æˆ·åœ¨è¿™ä¸ªåŸºç¡€ä¸Šé€’å¢
     std::atomic<int>    m_baseGroupId{0x0FFFFFFF};
     list<User>          m_allCachedUsers;
     mutex               m_mutex;

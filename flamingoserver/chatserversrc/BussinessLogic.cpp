@@ -1,5 +1,5 @@
 /**
- * 即时通讯的业务逻辑都统一放在这里，BusinessLogic.cpp
+ * 鍗虫椂閫氳鐨勪笟鍔￠�昏緫閮界粺涓�鏀惧湪杩欓噷锛孊usinessLogic.cpp
  * zhangyl 2018.05.16
  */
 

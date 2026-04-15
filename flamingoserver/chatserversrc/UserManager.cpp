@@ -1,5 +1,5 @@
 /**
- *  ¹ÜÀíËùÓĞµÄÓÃ»§ĞÅÏ¢£¬³õÊ¼ĞÅÏ¢´ÓÊı¾İ¿âÖĞ¼ÓÔØ, UserManager.h
+ *  ç®¡ç†æ‰€æœ‰çš„ç”¨æˆ·ä¿¡æ¯ï¼Œåˆå§‹ä¿¡æ¯ä»æ•°æ®åº“ä¸­åŠ è½½, UserManager.h
  *  zhangyl 2017.03.15
  **/
 #include "UserManager.h"
@@ -28,11 +28,11 @@ bool UserManager::init(const char* dbServer, const char* dbUserName, const char*
         m_strDbPassword = dbPassword;
     m_strDbName = dbName;
 
-    //´ÓÊı¾İ¿âÖĞ¼ÓÔØËùÓĞÓÃ»§ĞÅÏ¢
+    //ä»æ•°æ®åº“ä¸­åŠ è½½æ‰€æœ‰ç”¨æˆ·ä¿¡æ¯
     if (!loadUsersFromDb())
         return false;
 
-    //TODO: µ±ÓÃ»§±È½Ï¶à£¬Õâ¸öÑ­»·±È½ÏÂı£¬ÓÅ»¯Ö®
+    //TODO: å½“ç”¨æˆ·æ¯”è¾ƒå¤šï¼Œè¿™ä¸ªå¾ªç¯æ¯”è¾ƒæ…¢ï¼Œä¼˜åŒ–ä¹‹
     for (auto& iter : m_allCachedUsers)
     {
         if (!loadRelationshipFromDb(iter.userid, iter.friends))
@@ -56,7 +56,7 @@ bool UserManager::loadUsersFromDb()
         return false;
     }
 
-    //TODO: µ½µ×ÊÇ¿ÕÊı¾İ¼¯»¹ÊÇ³ö´í£¬ĞèÒªĞŞ¸ÄÏÂ·µ»ØÀàĞÍ
+    //TODO: åˆ°åº•æ˜¯ç©ºæ•°æ®é›†è¿˜æ˜¯å‡ºé”™ï¼Œéœ€è¦ä¿®æ”¹ä¸‹è¿”å›ç±»å‹
     QueryResult* pResult = pConn->query("SELECT f_user_id, f_username, f_nickname, f_password,  f_facetype, f_customface, f_gender, f_birthday, f_signature, f_address, f_phonenumber, f_mail, f_teaminfo FROM t_user ORDER BY  f_user_id DESC");
     if (NULL == pResult)
     {
@@ -89,11 +89,11 @@ bool UserManager::loadUsersFromDb()
 
         LOGI("userid: %d, username: %s, password: %s, nickname: %s, signature: %s", u.userid, u.username.c_str(), u.password.c_str(), u.nickname.c_str(), u.signature.c_str());
         
-        //¼ÆËãµ±Ç°×î´óuserid
+        //è®¡ç®—å½“å‰æœ€å¤§userid
         if (u.userid < GROUPID_BOUBDARY && u.userid > m_baseUserId)
             m_baseUserId = u.userid;
 
-        //¼ÆËãµ±Ç°×î´óÈº×éid
+        //è®¡ç®—å½“å‰æœ€å¤§ç¾¤ç»„id
         if (u.userid > GROUPID_BOUBDARY && u.userid > m_baseGroupId)
             m_baseGroupId = u.userid;
 
@@ -130,7 +130,7 @@ bool UserManager::addUser(User& u)
         LOGW("insert user error, sql: %s", sql);
         return false;
     }
-    //ÉèÖÃÒ»Ğ©×Ö¶ÎµÄÄ¬ÈÏÖµ
+    //è®¾ç½®ä¸€äº›å­—æ®µçš„é»˜è®¤å€¼
     u.userid = m_baseUserId;
     u.facetype = 0;
     u.birthday = 19900101;
@@ -145,7 +145,7 @@ bool UserManager::addUser(User& u)
     return true;
 }
 
-//Êı¾İ¿âÀïÃæ»¥ÎªºÃÓÑµÄÁ½¸öÈËid£¬Ğ¡ÕßÔÚÏÈ£¬´óÕßÔÚºó
+//æ•°æ®åº“é‡Œé¢äº’ä¸ºå¥½å‹çš„ä¸¤ä¸ªäººidï¼Œå°è€…åœ¨å…ˆï¼Œå¤§è€…åœ¨å
 bool UserManager::makeFriendRelationshipInDB(int32_t smallUserid, int32_t greaterUserid)
 {
     if (smallUserid == greaterUserid)
@@ -515,7 +515,7 @@ bool UserManager::updateUserTeamInfoInDbAndMemory(int32_t userid, const std::str
 
     LOGI("update user teaminfo successfully, userid: %d, sql: %s", userid, osSql.str().c_str());
 
-    //TODO: ÖØ¸´µÄ´úÂë£¬ĞèÒªÈ¥µô
+    //TODO: é‡å¤çš„ä»£ç ï¼Œéœ€è¦å»æ‰
     std::lock_guard<std::mutex> guard(m_mutex);
     for (auto& iter : m_allCachedUsers)
     {
@@ -673,7 +673,7 @@ bool UserManager::updateMarknameInDb(int32_t userid, int32_t friendid, const std
 
     LOGI("update markname successfully, userid: %d, friendid: %d, sql: %s", userid, friendid, osSql.str().c_str());
 
-    //TODO: ÖØ¸´µÄ´úÂë£¬ĞèÒªÈ¥µô
+    //TODO: é‡å¤çš„ä»£ç ï¼Œéœ€è¦å»æ‰
     std::lock_guard<std::mutex> guard(m_mutex);
     std::set<FriendInfo> friends;
     for (auto& iter : m_allCachedUsers)
@@ -730,7 +730,7 @@ bool UserManager::moveFriendToOtherTeam(int32_t userid, int32_t friendid, const 
 
     LOGI("MoveFriendToOtherTeam db operation successfully, userid: %d, friendid: %d, sql: %s" , userid, friendid, osSql.str().c_str());
 
-    //¸Ä±äÄÚ´æÖĞÓÃ»§µÄ·Ö×éĞÅÏ¢
+    //æ”¹å˜å†…å­˜ä¸­ç”¨æˆ·çš„åˆ†ç»„ä¿¡æ¯
     User* u = NULL;
     if (!getUserInfoByUserId(userid, u) || u == NULL)
     {
@@ -857,7 +857,7 @@ bool UserManager::getFriendInfoByUserId(int32_t userid, std::list<User>& friends
 {
     std::list<FriendInfo> friendInfo;
     std::lock_guard<std::mutex> guard(m_mutex);
-    //ÏÈÕÒµ½friendsµÄidÁĞ±í
+    //å…ˆæ‰¾åˆ°friendsçš„idåˆ—è¡¨
     for (const auto& iter : m_allCachedUsers)
     {
         if (iter.userid == userid)
@@ -867,8 +867,8 @@ bool UserManager::getFriendInfoByUserId(int32_t userid, std::list<User>& friends
         }
     }
 
-    //ÔÙÍ¨¹ıÃ¿¸öfriendidÕÒµ½¶ÔÓ¦µÄUser¼¯ºÏ
-    //TODO: ÕâÖÖËã·¨Ğ§ÂÊÌ«µÍ
+    //å†é€šè¿‡æ¯ä¸ªfriendidæ‰¾åˆ°å¯¹åº”çš„Useré›†åˆ
+    //TODO: è¿™ç§ç®—æ³•æ•ˆç‡å¤ªä½
     for (const auto& iter : friendInfo)
     {
         User u;
@@ -890,7 +890,7 @@ bool UserManager::getFriendMarknameByUserId(int32_t userid1, int32_t friendid, s
 {
     std::list<FriendInfo> friendInfo;
     std::lock_guard<std::mutex> guard(m_mutex);
-    //ÏÈÕÒµ½friendsµÄidÁĞ±í
+    //å…ˆæ‰¾åˆ°friendsçš„idåˆ—è¡¨
     for (const auto& iter : m_allCachedUsers)
     {
         if (iter.userid == userid1)

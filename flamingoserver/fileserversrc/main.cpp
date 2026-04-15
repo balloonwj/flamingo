@@ -1,5 +1,5 @@
 /**
- *  ÎÄ¼ş·şÎñ³ÌĞòÈë¿Úº¯Êı
+ *  æ–‡ä»¶æœåŠ¡ç¨‹åºå…¥å£å‡½æ•°
  *  zhangyl 2017.03.09
  **/
 #include <iostream>
@@ -22,7 +22,7 @@
 using namespace net;
 
 #ifdef WIN32
-//³õÊ¼»¯Windows socket¿â
+//åˆå§‹åŒ–Windows socketåº“
 NetworkInitializer windowsNetworkInitializer;
 #endif
 
@@ -41,7 +41,7 @@ void prog_exit(int signo)
 int main(int argc, char* argv[])
 {
 #ifndef WIN32
-    //ÉèÖÃĞÅºÅ´¦Àí
+    //è®¾ç½®ä¿¡å·å¤„ç†
     signal(SIGCHLD, SIG_DFL);
     signal(SIGPIPE, SIG_IGN);
     signal(SIGINT, prog_exit);
@@ -80,7 +80,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    //Èç¹ûlogÄ¿Â¼²»´æÔÚÔò´´½¨Ö®
+    //å¦‚æœlogç›®å½•ä¸å­˜åœ¨åˆ™åˆ›å»ºä¹‹
     DIR* dp = opendir(logfilepath);
     if (dp == NULL)
     {

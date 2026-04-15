@@ -1,5 +1,5 @@
 /** 
- * ÎÄ¼ş´«ÊäĞ­ÒéÀàĞÍ¶¨Òå, FileMsg.h
+ * æ–‡ä»¶ä¼ è¾“åè®®ç±»å‹å®šä¹‰, FileMsg.h
  * zhangyl 2017.03.17
  **/
 #pragma once
@@ -17,44 +17,44 @@ enum file_msg_type
 
 enum file_msg_error_code
 {
-    file_msg_error_unknown,        //Î´Öª´íÎó
-    file_msg_error_progress,       //ÎÄ¼şÉÏ´«»òÕßÏÂÔØ½øĞĞÖĞ
-    file_msg_error_complete,       //ÎÄ¼şÉÏ´«»òÕßÏÂÔØÍê³É
-    file_msg_error_not_exist       //ÎÄ¼ş²»´æÔÚ
+    file_msg_error_unknown,        //æœªçŸ¥é”™è¯¯
+    file_msg_error_progress,       //æ–‡ä»¶ä¸Šä¼ æˆ–è€…ä¸‹è½½è¿›è¡Œä¸­
+    file_msg_error_complete,       //æ–‡ä»¶ä¸Šä¼ æˆ–è€…ä¸‹è½½å®Œæˆ
+    file_msg_error_not_exist       //æ–‡ä»¶ä¸å­˜åœ¨
 };
 
-//¿Í»§¶ËÍøÂçÀàĞÍ
+//å®¢æˆ·ç«¯ç½‘ç»œç±»å‹
 enum client_net_type
 {
-    client_net_type_broadband,    //¿í´ø
-    client_net_type_cellular      //ÒÆ¶¯ÍøÂç
+    client_net_type_broadband,    //å®½å¸¦
+    client_net_type_cellular      //ç§»åŠ¨ç½‘ç»œ
 };
 
 #pragma pack(push, 1)
-//Ğ­ÒéÍ·
+//åè®®å¤´
 struct file_msg_header
 {
-    int64_t  packagesize;       //Ö¸¶¨°üÌåµÄ´óĞ¡
+    int64_t  packagesize;       //æŒ‡å®šåŒ…ä½“çš„å¤§å°
 };
 
 #pragma pack(pop)
 
 /** 
- *  ÎÄ¼şÉÏ´«
+ *  æ–‡ä»¶ä¸Šä¼ 
  */
 /**
-    //filemd5ÎªÕû¸öÎÄ¼şÄÚÈİµÄmd5Öµ£¬offsetÎªÃ¿´ÎÎÄ¼şÉÏ´«µÄÆ«ÒÆÁ¿, filesizeÎªÎÄ¼ş´óĞ¡£¬filedataÎªÃ¿´ÎÉÏ´«µÄÎÄ¼ş×Ö½ÚÄÚÈİ
-    ¿Í»§¶Ë£ºcmd = msg_type_upload_req(int32), seq(int32), filemd5(string, ³¤¶ÈÊÇ32), offset(int64) ,filesize(int64), filedata(string)
-    ·şÎñÆ÷Ó¦´ğ£º cmd = msg_type_upload_resp(int32), seq(int32), errorcode(int32), filemd5(string, ³¤¶ÈÊÇ32), offset(int64), filesize(int64)
+    //filemd5ä¸ºæ•´ä¸ªæ–‡ä»¶å†…å®¹çš„md5å€¼ï¼Œoffsetä¸ºæ¯æ¬¡æ–‡ä»¶ä¸Šä¼ çš„åç§»é‡, filesizeä¸ºæ–‡ä»¶å¤§å°ï¼Œfiledataä¸ºæ¯æ¬¡ä¸Šä¼ çš„æ–‡ä»¶å­—èŠ‚å†…å®¹
+    å®¢æˆ·ç«¯ï¼šcmd = msg_type_upload_req(int32), seq(int32), filemd5(string, é•¿åº¦æ˜¯32), offset(int64) ,filesize(int64), filedata(string)
+    æœåŠ¡å™¨åº”ç­”ï¼š cmd = msg_type_upload_resp(int32), seq(int32), errorcode(int32), filemd5(string, é•¿åº¦æ˜¯32), offset(int64), filesize(int64)
  **/
 
 /** 
- *  ÎÄ¼şÏÂÔØ
+ *  æ–‡ä»¶ä¸‹è½½
  */
 /** 
-    //filemd5ÎªÕû¸öÎÄ¼şÄÚÈİµÄmd5Öµ£¬offsetÎªÃ¿´ÎÎÄ¼şÉÏ´«µÄÆ«ÒÆÁ¿, filesizeÎªÎÄ¼ş´óĞ¡£¬filedataÎªÃ¿´ÎÉÏ´«µÄÎÄ¼ş×Ö½ÚÄÚÈİ, 
-    //clientNetType(¿Í»§¶ËÍøÂçÀàĞÍ£¬¿í´ø»òÕßWifi´«0£¬3G/4G/5G´«1£©
-    ¿Í»§¶Ë£ºcmd = msg_type_download_req, seq(int32), filemd5(string, ³¤¶ÈÊÇ32), offset(int64) ,filesize(int64), filedata(string), clientNetType(int32)
-    ·şÎñÆ÷: cmd = msg_type_download_resp(int32), seq(int32), errorcode(int32), filemd5(string, ³¤¶ÈÊÇ32), offset(int64), filesize(int64)
+    //filemd5ä¸ºæ•´ä¸ªæ–‡ä»¶å†…å®¹çš„md5å€¼ï¼Œoffsetä¸ºæ¯æ¬¡æ–‡ä»¶ä¸Šä¼ çš„åç§»é‡, filesizeä¸ºæ–‡ä»¶å¤§å°ï¼Œfiledataä¸ºæ¯æ¬¡ä¸Šä¼ çš„æ–‡ä»¶å­—èŠ‚å†…å®¹, 
+    //clientNetType(å®¢æˆ·ç«¯ç½‘ç»œç±»å‹ï¼Œå®½å¸¦æˆ–è€…Wifiä¼ 0ï¼Œ3G/4G/5Gä¼ 1ï¼‰
+    å®¢æˆ·ç«¯ï¼šcmd = msg_type_download_req, seq(int32), filemd5(string, é•¿åº¦æ˜¯32), offset(int64) ,filesize(int64), filedata(string), clientNetType(int32)
+    æœåŠ¡å™¨: cmd = msg_type_download_resp(int32), seq(int32), errorcode(int32), filemd5(string, é•¿åº¦æ˜¯32), offset(int64), filesize(int64)
  **/
 

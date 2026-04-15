@@ -1,5 +1,5 @@
 /**
- * @desc:   Òì²½ÈÕÖ¾Àà£¬AsyncLog.cpp
+ * @desc:   å¼‚æ­¥æ—¥å¿—ç±»ï¼ŒAsyncLog.cpp
  * @author: zhangyl
  * @date:   2019.04.13
  */
@@ -43,7 +43,7 @@ bool CAsyncLog::init(const char* pszLogFileName/* = nullptr*/, bool bTruncateLon
     else
         m_strFileName = pszLogFileName;
 
-    //»ñÈ¡½ø³Ìid£¬ÕâÑù¿ìËÙ¿´µ½Í¬Ò»¸ö½ø³ÌµÄ²»Í¬ÈÕÖ¾ÎÄ¼ş
+    //è·å–è¿›ç¨‹idï¼Œè¿™æ ·å¿«é€Ÿçœ‹åˆ°åŒä¸€ä¸ªè¿›ç¨‹çš„ä¸åŒæ—¥å¿—æ–‡ä»¶
     char szPID[8];
 #ifdef WIN32
     snprintf(szPID, sizeof(szPID), "%05d", (int)::GetCurrentProcessId());  
@@ -52,7 +52,7 @@ bool CAsyncLog::init(const char* pszLogFileName/* = nullptr*/, bool bTruncateLon
 #endif
     m_strFileNamePID = szPID;
 
-    //TODO£º´´½¨ÎÄ¼ş¼Ğ
+    //TODOï¼šåˆ›å»ºæ–‡ä»¶å¤¹
 
     m_spWriteThread.reset(new std::thread(writeThreadProc));
 
@@ -99,16 +99,16 @@ bool CAsyncLog::output(long nLevel, const char* pszFmt, ...)
     std::string strLine;
     makeLinePrefix(nLevel, strLine);
 
-    //logÕıÎÄ
+    //logæ­£æ–‡
     std::string strLogMsg;
 
-    //ÏÈ¼ÆËãÒ»ÏÂ²»¶¨²ÎÊıµÄ³¤¶È£¬ÒÔ±ãÓÚ·ÖÅä¿Õ¼ä
+    //å…ˆè®¡ç®—ä¸€ä¸‹ä¸å®šå‚æ•°çš„é•¿åº¦ï¼Œä»¥ä¾¿äºåˆ†é…ç©ºé—´
     va_list ap;
     va_start(ap, pszFmt);
     int nLogMsgLength = vsnprintf(NULL, 0, pszFmt, ap);
     va_end(ap);
 
-    //ÈİÁ¿±ØĞëËãÉÏ×îºóÒ»¸ö\0
+    //å®¹é‡å¿…é¡»ç®—ä¸Šæœ€åä¸€ä¸ª\0
     if ((int)strLogMsg.capacity() < nLogMsgLength + 1)
     {
         strLogMsg.resize(nLogMsgLength + 1);
@@ -118,17 +118,17 @@ bool CAsyncLog::output(long nLevel, const char* pszFmt, ...)
     vsnprintf((char*)strLogMsg.data(), strLogMsg.capacity(), pszFmt, aq);
     va_end(aq);
 
-    //stringÄÚÈİÕıÈ·µ«length²»¶Ô£¬»Ö¸´Ò»ÏÂÆälength
+    //stringå†…å®¹æ­£ç¡®ä½†lengthä¸å¯¹ï¼Œæ¢å¤ä¸€ä¸‹å…¶length
     std::string strMsgFormal;
     strMsgFormal.append(strLogMsg.c_str(), nLogMsgLength);
 
-    //Èç¹ûÈÕÖ¾¿ªÆô½Ø¶Ï£¬³¤ÈÕÖ¾Ö»È¡Ç°MAX_LINE_LENGTH¸ö×Ö·û
+    //å¦‚æœæ—¥å¿—å¼€å¯æˆªæ–­ï¼Œé•¿æ—¥å¿—åªå–å‰MAX_LINE_LENGTHä¸ªå­—ç¬¦
     if (m_bTruncateLongLog)
         strMsgFormal = strMsgFormal.substr(0, MAX_LINE_LENGTH);
 
     strLine += strMsgFormal;
 
-    //²»ÊÇÊä³öµ½¿ØÖÆÌ¨²Å»áÔÚÃ¿Ò»ĞĞÄ©Î²¼ÓÒ»¸ö»»ĞĞ·û
+    //ä¸æ˜¯è¾“å‡ºåˆ°æ§åˆ¶å°æ‰ä¼šåœ¨æ¯ä¸€è¡Œæœ«å°¾åŠ ä¸€ä¸ªæ¢è¡Œç¬¦
     if (!m_strFileName.empty())
     {
         strLine += "\n";
@@ -142,7 +142,7 @@ bool CAsyncLog::output(long nLevel, const char* pszFmt, ...)
     }
     else
     {
-        //ÎªÁËÈÃFATAL¼¶±ğµÄÈÕÖ¾ÄÜÁ¢¼´crash³ÌĞò£¬²ÉÈ¡Í¬²½Ğ´ÈÕÖ¾µÄ·½·¨
+        //ä¸ºäº†è®©FATALçº§åˆ«çš„æ—¥å¿—èƒ½ç«‹å³crashç¨‹åºï¼Œé‡‡å–åŒæ­¥å†™æ—¥å¿—çš„æ–¹æ³•
         std::cout << strLine << std::endl;
 #ifdef _WIN32
         OutputDebugStringA(strLine.c_str());
@@ -153,7 +153,7 @@ bool CAsyncLog::output(long nLevel, const char* pszFmt, ...)
         {
             if (m_hLogFile == nullptr)
             {
-                //ĞÂ½¨ÎÄ¼ş
+                //æ–°å»ºæ–‡ä»¶
                 char szNow[64];
                 time_t now = time(NULL);
                 tm time;
@@ -178,7 +178,7 @@ bool CAsyncLog::output(long nLevel, const char* pszFmt, ...)
 
         }// end outer-if
 
-        //ÈÃ³ÌĞòÖ÷¶¯crashµô
+        //è®©ç¨‹åºä¸»åŠ¨crashæ‰
         crash();
     }
     
@@ -197,21 +197,21 @@ bool CAsyncLog::output(long nLevel, const char* pszFileName, int nLineNo, const 
     std::string strLine;
     makeLinePrefix(nLevel, strLine);
 
-    //º¯ÊıÇ©Ãû
+    //å‡½æ•°ç­¾å
     char szFileName[512] = { 0 };
     snprintf(szFileName, sizeof(szFileName), "[%s:%d]", pszFileName, nLineNo);
     strLine += szFileName;
 
-    //ÈÕÖ¾ÕıÎÄ
+    //æ—¥å¿—æ­£æ–‡
     std::string strLogMsg;
 
-    //ÏÈ¼ÆËãÒ»ÏÂ²»¶¨²ÎÊıµÄ³¤¶È£¬ÒÔ±ãÓÚ·ÖÅä¿Õ¼ä
+    //å…ˆè®¡ç®—ä¸€ä¸‹ä¸å®šå‚æ•°çš„é•¿åº¦ï¼Œä»¥ä¾¿äºåˆ†é…ç©ºé—´
     va_list ap;
     va_start(ap, pszFmt);
     int nLogMsgLength = vsnprintf(NULL, 0, pszFmt, ap);
     va_end(ap);
 
-    //ÈİÁ¿±ØĞëËãÉÏ×îºóÒ»¸ö\0
+    //å®¹é‡å¿…é¡»ç®—ä¸Šæœ€åä¸€ä¸ª\0
     if ((int)strLogMsg.capacity() < nLogMsgLength + 1)
     {
         strLogMsg.resize(nLogMsgLength + 1);
@@ -221,17 +221,17 @@ bool CAsyncLog::output(long nLevel, const char* pszFileName, int nLineNo, const 
     vsnprintf((char*)strLogMsg.data(), strLogMsg.capacity(), pszFmt, aq);
     va_end(aq);
 
-    //stringÄÚÈİÕıÈ·µ«length²»¶Ô£¬»Ö¸´Ò»ÏÂÆälength
+    //stringå†…å®¹æ­£ç¡®ä½†lengthä¸å¯¹ï¼Œæ¢å¤ä¸€ä¸‹å…¶length
     std::string strMsgFormal;
     strMsgFormal.append(strLogMsg.c_str(), nLogMsgLength);
 
-    //Èç¹ûÈÕÖ¾¿ªÆô½Ø¶Ï£¬³¤ÈÕÖ¾Ö»È¡Ç°MAX_LINE_LENGTH¸ö×Ö·û
+    //å¦‚æœæ—¥å¿—å¼€å¯æˆªæ–­ï¼Œé•¿æ—¥å¿—åªå–å‰MAX_LINE_LENGTHä¸ªå­—ç¬¦
     if (m_bTruncateLongLog)
         strMsgFormal = strMsgFormal.substr(0, MAX_LINE_LENGTH);
 
     strLine += strMsgFormal;
 
-    //²»ÊÇÊä³öµ½¿ØÖÆÌ¨²Å»áÔÚÃ¿Ò»ĞĞÄ©Î²¼ÓÒ»¸ö»»ĞĞ·û
+    //ä¸æ˜¯è¾“å‡ºåˆ°æ§åˆ¶å°æ‰ä¼šåœ¨æ¯ä¸€è¡Œæœ«å°¾åŠ ä¸€ä¸ªæ¢è¡Œç¬¦
     if (!m_strFileName.empty())
     { 
         strLine += "\n";
@@ -245,7 +245,7 @@ bool CAsyncLog::output(long nLevel, const char* pszFileName, int nLineNo, const 
     }
     else
     {
-        //ÎªÁËÈÃFATAL¼¶±ğµÄÈÕÖ¾ÄÜÁ¢¼´crash³ÌĞò£¬²ÉÈ¡Í¬²½Ğ´ÈÕÖ¾µÄ·½·¨
+        //ä¸ºäº†è®©FATALçº§åˆ«çš„æ—¥å¿—èƒ½ç«‹å³crashç¨‹åºï¼Œé‡‡å–åŒæ­¥å†™æ—¥å¿—çš„æ–¹æ³•
         std::cout << strLine << std::endl;
 #ifdef _WIN32
         OutputDebugStringA(strLine.c_str());
@@ -256,7 +256,7 @@ bool CAsyncLog::output(long nLevel, const char* pszFileName, int nLineNo, const 
         {
             if (m_hLogFile == nullptr)
             {
-                //ĞÂ½¨ÎÄ¼ş
+                //æ–°å»ºæ–‡ä»¶
                 char szNow[64];
                 time_t now = time(NULL);
                 tm time;
@@ -280,7 +280,7 @@ bool CAsyncLog::output(long nLevel, const char* pszFileName, int nLineNo, const 
             writeToFile(strLine);     
         }// end outer-if
 
-        //ÈÃ³ÌĞòÖ÷¶¯crashµô
+        //è®©ç¨‹åºä¸»åŠ¨crashæ‰
         crash();
     }
 
@@ -380,7 +380,7 @@ char* CAsyncLog::formLog(int& index, char* szbuf, size_t size_buf, unsigned char
 
 void CAsyncLog::makeLinePrefix(long nLevel, std::string& strPrefix)
 {
-    //¼¶±ğ
+    //çº§åˆ«
     strPrefix = "[INFO]";
     if (nLevel == LOG_LEVEL_TRACE)
         strPrefix = "[TRACE]";
@@ -397,7 +397,7 @@ void CAsyncLog::makeLinePrefix(long nLevel, std::string& strPrefix)
     else if (nLevel == LOG_LEVEL_CRITICAL)
         strPrefix = "[CRITICAL]";
 
-    //Ê±¼ä
+    //æ—¶é—´
     char szTime[64] = { 0 };
     getTime(szTime, sizeof(szTime));
 
@@ -405,7 +405,7 @@ void CAsyncLog::makeLinePrefix(long nLevel, std::string& strPrefix)
     strPrefix += szTime;
     strPrefix += "]";
 
-    //µ±Ç°Ïß³ÌĞÅÏ¢
+    //å½“å‰çº¿ç¨‹ä¿¡æ¯
     char szThreadID[32] = { 0 };
     std::ostringstream osThreadID;
     osThreadID << std::this_thread::get_id();
@@ -437,14 +437,14 @@ bool CAsyncLog::createNewFile(const char* pszLogFileName)
         fclose(m_hLogFile);
     }
 
-    //Ê¼ÖÕĞÂ½¨ÎÄ¼ş
+    //å§‹ç»ˆæ–°å»ºæ–‡ä»¶
     m_hLogFile = fopen(pszLogFileName, "w+");
     return m_hLogFile != nullptr;
 }
 
 bool CAsyncLog::writeToFile(const std::string& data)
 {
-    //ÎªÁË·ÀÖ¹³¤ÎÄ¼şÒ»´ÎĞÔĞ´²»Íê£¬·ÅÔÚÒ»¸öÑ­»·ÀïÃæ·ÖÅúĞ´
+    //ä¸ºäº†é˜²æ­¢é•¿æ–‡ä»¶ä¸€æ¬¡æ€§å†™ä¸å®Œï¼Œæ”¾åœ¨ä¸€ä¸ªå¾ªç¯é‡Œé¢åˆ†æ‰¹å†™
     std::string strLocal(data);
     int ret = 0;
     while (true)
@@ -485,10 +485,10 @@ void CAsyncLog::writeThreadProc()
         {
             if (m_hLogFile == nullptr || m_nCurrentWrittenSize >= m_nFileRollSize)
             {
-                //ÖØÖÃm_nCurrentWrittenSize´óĞ¡
+                //é‡ç½®m_nCurrentWrittenSizeå¤§å°
                 m_nCurrentWrittenSize = 0;
 
-                //µÚÒ»´Î»òÕßÎÄ¼ş´óĞ¡³¬¹ırollsize£¬¾ùĞÂ½¨ÎÄ¼ş
+                //ç¬¬ä¸€æ¬¡æˆ–è€…æ–‡ä»¶å¤§å°è¶…è¿‡rollsizeï¼Œå‡æ–°å»ºæ–‡ä»¶
                 char szNow[64];
                 time_t now = time(NULL);
                 tm time;

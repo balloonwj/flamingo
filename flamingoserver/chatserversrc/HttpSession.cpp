@@ -1,5 +1,5 @@
 /**
- * Http»á»°Àà, HttpSession.cpp
+ * Httpä¼šè¯ç±», HttpSession.cpp
  * zhangyl 2018.05.16
  */
 #include "HttpSession.h"
@@ -28,14 +28,14 @@ void HttpSession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer*
     //LOGI << "Recv a http request from " << conn->peerAddress().toIpPort();
     
     string inbuf;
-    //ÏÈ°ÑËùÓĞÊı¾İ¶¼È¡³öÀ´
+    //å…ˆæŠŠæ‰€æœ‰æ•°æ®éƒ½å–å‡ºæ¥
     inbuf.append(pBuffer->peek(), pBuffer->readableBytes());
-    //ÒòÎªÒ»¸öhttp°üÍ·µÄÊı¾İÖÁÉÙ\r\n\r\n£¬ËùÒÔ´óÓÚ4¸ö×Ö·û
-    //Ğ¡ÓÚµÈÓÚ4¸ö×Ö·û£¬ËµÃ÷Êı¾İÎ´ÊÕÍê£¬ÍË³ö£¬µÈ´ıÍøÂçµ×²ã½Ó×ÅÊÕÈ¡
+    //å› ä¸ºä¸€ä¸ªhttpåŒ…å¤´çš„æ•°æ®è‡³å°‘\r\n\r\nï¼Œæ‰€ä»¥å¤§äº4ä¸ªå­—ç¬¦
+    //å°äºç­‰äº4ä¸ªå­—ç¬¦ï¼Œè¯´æ˜æ•°æ®æœªæ”¶å®Œï¼Œé€€å‡ºï¼Œç­‰å¾…ç½‘ç»œåº•å±‚æ¥ç€æ”¶å–
     if (inbuf.length() <= 4)
         return;
 
-    //ÎÒÃÇÊÕµ½µÄGETÇëÇóÊı¾İ°üÒ»°ã¸ñÊ½ÈçÏÂ£º
+    //æˆ‘ä»¬æ”¶åˆ°çš„GETè¯·æ±‚æ•°æ®åŒ…ä¸€èˆ¬æ ¼å¼å¦‚ä¸‹ï¼š
     /*
     GET /register.do?p={%22username%22:%20%2213917043329%22,%20%22nickname%22:%20%22balloon%22,%20%22password%22:%20%22123%22} HTTP/1.1\r\n
     Host: 120.55.94.78:12345\r\n
@@ -46,18 +46,18 @@ void HttpSession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer*
     Accept-Language: zh-CN, zh; q=0.9, en; q=0.8\r\n
     \r\n
      */
-    //¼ì²éÊÇ·ñÒÔ\r\n\r\n½áÊø£¬Èç¹û²»ÊÇËµÃ÷°üÍ·²»ÍêÕû£¬ÍË³ö
+    //æ£€æŸ¥æ˜¯å¦ä»¥\r\n\r\nç»“æŸï¼Œå¦‚æœä¸æ˜¯è¯´æ˜åŒ…å¤´ä¸å®Œæ•´ï¼Œé€€å‡º
     string end = inbuf.substr(inbuf.length() - 4);
     if (end != "\r\n\r\n")
         return;
-    //³¬¹ı2048¸ö×Ö·û£¬ÇÒ²»º¬\r\n\r\n£¬ÎÒÃÇÈÏÎªÊÇ·Ç·¨ÇëÇó
+    //è¶…è¿‡2048ä¸ªå­—ç¬¦ï¼Œä¸”ä¸å«\r\n\r\nï¼Œæˆ‘ä»¬è®¤ä¸ºæ˜¯éæ³•è¯·æ±‚
     else if (inbuf.length() >= MAX_URL_LENGTH)
     {
         conn->forceClose();
         return;
     }
 
-    //ÒÔ\r\n·Ö¸îÃ¿Ò»ĞĞ
+    //ä»¥\r\nåˆ†å‰²æ¯ä¸€è¡Œ
     std::vector<string> lines;
     StringUtil::split(inbuf, lines, "\r\n");
     if (lines.size() < 1 || lines[0].empty())
@@ -68,7 +68,7 @@ void HttpSession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer*
 
     std::vector<string> chunk;
     StringUtil::split(lines[0], chunk, " ");
-    //chunkÖĞÖÁÉÙÓĞÈı¸ö×Ö·û´®£ºGET+url+HTTP°æ±¾ºÅ
+    //chunkä¸­è‡³å°‘æœ‰ä¸‰ä¸ªå­—ç¬¦ä¸²ï¼šGET+url+HTTPç‰ˆæœ¬å·
     if (chunk.size() < 3)
     {
         conn->forceClose();
@@ -78,9 +78,9 @@ void HttpSession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer*
     LOGI("url: %s  from %s", chunk[1].c_str(), conn->peerAddress().toIpPort().c_str());
     //inbuf = /register.do?p={%22username%22:%20%2213917043329%22,%20%22nickname%22:%20%22balloon%22,%20%22password%22:%20%22123%22}
     std::vector<string> part;
-    //Í¨¹ı?·Ö¸î³ÉÇ°ºóÁ½¶Ë£¬Ç°ÃæÊÇurl£¬ºóÃæÊÇ²ÎÊı
+    //é€šè¿‡?åˆ†å‰²æˆå‰åä¸¤ç«¯ï¼Œå‰é¢æ˜¯urlï¼Œåé¢æ˜¯å‚æ•°
     StringUtil::split(chunk[1], part, "?");
-    //chunkÖĞÖÁÉÙÓĞÈı¸ö×Ö·û´®£ºGET+url+HTTP°æ±¾ºÅ
+    //chunkä¸­è‡³å°‘æœ‰ä¸‰ä¸ªå­—ç¬¦ä¸²ï¼šGET+url+HTTPç‰ˆæœ¬å·
     if (part.size() < 2)
     {
         conn->forceClose();
@@ -95,7 +95,7 @@ void HttpSession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer*
         LOGE("handle http request error, from: %s, request: %s", conn->peerAddress().toIpPort().c_str(), pBuffer->retrieveAllAsString().c_str());
     }
 
-    //¶ÌÁ¬½Ó£¬´¦ÀíÍê¹Ø±ÕÁ¬½Ó
+    //çŸ­è¿æ¥ï¼Œå¤„ç†å®Œå…³é—­è¿æ¥
     conn->forceClose();
 }
 
@@ -136,7 +136,7 @@ bool HttpSession::process(const std::shared_ptr<TcpConnection>& conn, const std:
     return true;
 }
 
-//×é×°httpĞ­ÒéÓ¦´ğ°ü
+//ç»„è£…httpåè®®åº”ç­”åŒ…
 /* 
     HTTP/1.1 200 OK\r\n
     Content-Type: text/html\r\n   

@@ -1,11 +1,11 @@
 /**
- * httpĞ­Òé¸ñÊ½Àà, HttpMsg.h
+ * httpåè®®æ ¼å¼ç±», HttpMsg.h
  * zhangyl 2018.05.16
  */
 #ifndef __HTTP_MSG_H__
 #define __HTTP_MSG_H__
 
-//×¢²áĞ­Òé
+//æ³¨å†Œåè®®
 //http://120.55.94.78:12345/register.do?p={"username": "13917043329", "nickname": "balloon", "password": "123"}
 //{"code": 0, "msg" : "ok"}
 

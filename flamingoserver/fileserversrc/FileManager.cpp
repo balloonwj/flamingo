@@ -1,5 +1,5 @@
 /**
- *  ÎÄ¼ş¹ÜÀíÀà, FileManager.h
+ *  æ–‡ä»¶ç®¡ç†ç±», FileManager.h
  *  zhangyl 2017.03.17
  **/
 #include "FileManager.h"
@@ -25,7 +25,7 @@ bool FileManager::init(const char* basepath)
     m_basepath = basepath;
 
 #ifdef WIN32
-    //WindowsÏÂ´´½¨Ä¿Â¼
+    //Windowsä¸‹åˆ›å»ºç›®å½•
     if (!PathFileExistsA(basepath))
     {
         LOGE("basepath %s doesnot exist.", basepath);
@@ -79,14 +79,14 @@ bool FileManager::init(const char* basepath)
 bool FileManager::isFileExsit(const char* filename)
 {
     std::lock_guard<std::mutex> guard(m_mtFile);
-    //ÏÈ²é¿´»º´æ
+    //å…ˆæŸ¥çœ‹ç¼“å­˜
     for (const auto& iter : m_listFiles)
     {
         if (iter == filename)
             return true;
     }
 
-    //ÔÙ²é¿´ÎÄ¼şÏµÍ³
+    //å†æŸ¥çœ‹æ–‡ä»¶ç³»ç»Ÿ
     std::string filepath = m_basepath;
     filepath += filename;
     FILE* fp = fopen(filepath.c_str(), "r");

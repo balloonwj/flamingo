@@ -1,5 +1,5 @@
 /**
- *  ÏûÏ¢»º´æÀà£¬ MsgCacheManager.cpp
+ *  æ¶ˆæ¯ç¼“å­˜ç±»ï¼Œ MsgCacheManager.cpp
  *  zhangyl 2017.03.16
  **/
 #include "../base/AsyncLog.h"
@@ -25,7 +25,7 @@ bool MsgCacheManager::addNotifyMsgCache(int32_t userid, const std::string& cache
     LOGI("append notify msg to cache, userid: %d, , m_mapNotifyMsgCache.size(): %d, cache length: %d", userid, m_listNotifyMsgCache.size(), cache.length());
     
 
-    //TODO: ´æÅÌ»òĞ´ÈëÊı¾İ¿âÒÔ·ÀÖ¹³ÌĞò±ÀÀ£¶ªÊ§
+    //TODO: å­˜ç›˜æˆ–å†™å…¥æ•°æ®åº“ä»¥é˜²æ­¢ç¨‹åºå´©æºƒä¸¢å¤±
 
     return true;
 }
@@ -57,7 +57,7 @@ bool MsgCacheManager::addChatMsgCache(int32_t userid, const std::string& cache)
     c.chatmsg.append(cache.c_str(), cache.length());
     m_listChatMsgCache.push_back(c);
     LOGI("append chat msg to cache, userid: %d, m_listChatMsgCache.size(): , cache length: %d", userid, m_listChatMsgCache.size(), cache.length());
-    //TODO: ´æÅÌ»òĞ´ÈëÊı¾İ¿âÒÔ·ÀÖ¹³ÌĞò±ÀÀ£¶ªÊ§
+    //TODO: å­˜ç›˜æˆ–å†™å…¥æ•°æ®åº“ä»¥é˜²æ­¢ç¨‹åºå´©æºƒä¸¢å¤±
 
     return true;
 }

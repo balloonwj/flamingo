@@ -21,7 +21,7 @@ typedef int          socklen_t;
 //typedef uint64_t     ssize_t;
 typedef unsigned int in_addr_t;
 
-//Windows 上没有这些结构的定义，为了移植方便，手动定义这些结构
+//Windows 涓婃病鏈夎繖浜涚粨鏋勭殑瀹氫箟锛屼负浜嗙Щ妞嶆柟渚匡紝鎵嬪姩瀹氫箟杩欎簺缁撴瀯
 #define  XPOLLIN         1
 #define  XPOLLPRI        2
 #define  XPOLLOUT        4
@@ -120,7 +120,7 @@ typedef int SOCKET;
 #define  XEPOLL_CTL_DEL  EPOLL_CTL_DEL
 #define  XEPOLL_CTL_MOD  EPOLL_CTL_MOD
 
-//Linux下没有这两个函数，定义之
+//Linux涓嬫病鏈夎繖涓や釜鍑芥暟锛屽畾涔変箣
 #define ntohll(x) be64toh(x)
 #define htonll(x) htobe64(x)
 

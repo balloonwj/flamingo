@@ -40,10 +40,10 @@ void TcpSession::sendPackage(const char* body, int64_t bodylength)
     strPackageData.append((const char*)&header, sizeof(header));
     strPackageData.append(body, bodylength);
 
-    //TODO: ÕâĞ©SessionºÍconnection¶ÔÏóµÄÉúÃüÖÜÆÚÒªºÃºÃÊáÀíÒ»ÏÂ
+    //TODO: è¿™äº›Sessionå’Œconnectionå¯¹è±¡çš„ç”Ÿå‘½å‘¨æœŸè¦å¥½å¥½æ¢³ç†ä¸€ä¸‹
     if (tmpConn_.expired())
     {
-        //FIXME: ³öÏÖÕâÖÖÎÊÌâĞèÒªÅÅ²é
+        //FIXME: å‡ºç°è¿™ç§é—®é¢˜éœ€è¦æ’æŸ¥
         LOGE("Tcp connection is destroyed , but why TcpSession is still alive ?");
         return;
     }

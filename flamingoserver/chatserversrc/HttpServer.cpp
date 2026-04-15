@@ -1,5 +1,5 @@
 /**
- * ÁÄÌì·şÎñÖ§³ÖhttpÇëÇó, HttpServer.cpp
+ * èŠå¤©æœåŠ¡æ”¯æŒhttpè¯·æ±‚, HttpServer.cpp
  * zhangyl 2018.05.16
  */
 #include "HttpServer.h"
@@ -17,7 +17,7 @@ bool HttpServer::init(const char* ip, short port, EventLoop* loop)
     InetAddress addr(ip, port);
     m_server.reset(new TcpServer(loop, addr, "ZYL-MYHTTPSERVER", TcpServer::kReusePort));
     m_server->setConnectionCallback(std::bind(&HttpServer::onConnected, this, std::placeholders::_1));
-    //Æô¶¯ÕìÌı
+    //å¯åŠ¨ä¾¦å¬
     m_server->start();
 
     return true;
@@ -29,7 +29,7 @@ void HttpServer::uninit()
         m_server->stop();
 }
 
-//ĞÂÁ¬½Óµ½À´µ÷ÓÃ»òÁ¬½Ó¶Ï¿ª£¬ËùÒÔĞèÒªÍ¨¹ıconn->connected()À´ÅĞ¶Ï£¬Ò»°ãÖ»ÔÚÖ÷loopÀïÃæµ÷ÓÃ
+//æ–°è¿æ¥åˆ°æ¥è°ƒç”¨æˆ–è¿æ¥æ–­å¼€ï¼Œæ‰€ä»¥éœ€è¦é€šè¿‡conn->connected()æ¥åˆ¤æ–­ï¼Œä¸€èˆ¬åªåœ¨ä¸»loopé‡Œé¢è°ƒç”¨
 void HttpServer::onConnected(std::shared_ptr<TcpConnection> conn)
 {
     if (conn->connected())
@@ -48,10 +48,10 @@ void HttpServer::onConnected(std::shared_ptr<TcpConnection> conn)
     }
 }
 
-//Á¬½Ó¶Ï¿ª
+//è¿æ¥æ–­å¼€
 void HttpServer::onDisconnected(const std::shared_ptr<TcpConnection>& conn)
 {
-    //TODO: ÕâÑùµÄ´úÂëÂß¼­Ì«»ìÂÒ£¬ĞèÒªÓÅ»¯
+    //TODO: è¿™æ ·çš„ä»£ç é€»è¾‘å¤ªæ··ä¹±ï¼Œéœ€è¦ä¼˜åŒ–
     std::lock_guard<std::mutex> guard(m_sessionMutex);
     for (auto iter = m_sessions.begin(); iter != m_sessions.end(); ++iter)
     {
@@ -61,7 +61,7 @@ void HttpServer::onDisconnected(const std::shared_ptr<TcpConnection>& conn)
             break;
         }
 
-        //Í¨¹ı±È¶Ôconnection¶ÔÏóÕÒµ½¶ÔÓ¦µÄsession
+        //é€šè¿‡æ¯”å¯¹connectionå¯¹è±¡æ‰¾åˆ°å¯¹åº”çš„session
         if ((*iter)->getConnectionPtr() == conn)
         {
             m_sessions.erase(iter);
