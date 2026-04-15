@@ -767,7 +767,7 @@ void ChatSession::onOperateFriendResponse(const std::string& data, const std::sh
         iter->send(outbuf);
     }
 
-    LOGI("Response to client: userid: %d, cmd=msg_type_addfriend, data: %s", targetUserid, data.c_str());
+    LOGI("Response to client: userid: %d, cmd=msg_type_operatefriend, data: %s", targetUserid, szData);
 }
 
 void ChatSession::onAddGroupResponse(int32_t groupId, const std::shared_ptr<TcpConnection>& conn)
