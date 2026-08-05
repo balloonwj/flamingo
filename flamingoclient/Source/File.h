@@ -1,5 +1,5 @@
-/**
- *  �ļ���д��, File.h
+﻿/**
+ *  文件读写类, File.h
  *  zhangyl 2017.07.26 
  */
 #ifndef __FILE_H__
@@ -13,8 +13,8 @@
 
 #define FILE_API
 
-//��֧�ִ��ļ�������2G��
-//TODO: ��ʶλ��Ҫֻ�򿪣�ֻ���������ڼ���
+//不支持大文件（大于2G）
+//TODO: 标识位需要只打开，只创建，后期加上
 class FILE_API CFileX
 {
 public:
@@ -34,9 +34,9 @@ public:
 
     void Close();
 
-    /** ͨ����չ��ɾ��һ���ļ�
-     *@param pszDir�����ļ��� ʾ��E:\\doc\\
-     *@param pszExtension ��չ�� ʾ��*.doc
+    /** 通过扩展名删除一类文件
+     *@param pszDir所在文件夹 示例E:\\doc\\
+     *@param pszExtension 扩展名 示例*.doc
      */
     static bool DeleteAllFileByExtension(PCTSTR pszDir, PCTSTR pszExtension);
 

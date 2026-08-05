@@ -1,4 +1,4 @@
-#include "stdafx.h"
+Ôªø#include "stdafx.h"
 #include "ClosePromptDlg.h"
 #include "FlamingoClient.h"
 #include "UserSessionData.h"
@@ -26,7 +26,7 @@ BOOL CClosePromptDlg::InitUI()
 	m_SkinDlg.SetBgPic(_T("DlgBg\\MsgBoxDlgBg.png"), CRect(4, 69, 4, 33));
 	m_SkinDlg.SetCloseSysBtnPic(_T("SysBtn\\btn_close_normal.png"), _T("SysBtn\\btn_close_highlight.png"), _T("SysBtn\\btn_close_down.png"));
 	m_SkinDlg.SubclassWindow(m_hWnd);
-	m_SkinDlg.SetTitleText(_T("ÕÀ≥ˆÃ· æ"));
+	m_SkinDlg.SetTitleText(_T("ÈÄÄÂá∫ÊèêÁ§∫"));
 	m_SkinDlg.MoveWindow(0, 0, 330, 160, FALSE);
 
 	HDC hDlgBgDC = m_SkinDlg.GetBgDC();
@@ -54,14 +54,14 @@ BOOL CClosePromptDlg::InitUI()
 	m_btnMinimize.SetBgPic(_T("Button\\btn_normal.png"), _T("Button\\btn_focus.png"),_T("Button\\btn_focus.png"), _T("Button\\btn_focus.png"));
 	m_btnMinimize.SetTextColor(RGB(0, 0, 0));
 	m_btnMinimize.SubclassWindow(GetDlgItem(IDC_MINIMIZE));
-	m_btnMinimize.SetWindowText(_T("◊Ó–°ªØ"));
+	m_btnMinimize.SetWindowText(_T("ÊúÄÂ∞èÂåñ"));
 
 	m_btnExit.SetButtonType(SKIN_PUSH_BUTTON);
 	m_btnExit.SetTransparent(TRUE, hDlgBgDC);
 	m_btnExit.SetBgPic(_T("Button\\btn_normal.png"), _T("Button\\btn_focus.png"),_T("Button\\btn_focus.png"), _T("Button\\btn_focus.png"));
 	m_btnExit.SetTextColor(RGB(0, 0, 0));
 	m_btnExit.SubclassWindow(GetDlgItem(IDC_EXIT));
-	m_btnExit.SetWindowText(_T("ÕÀ≥ˆ"));
+	m_btnExit.SetWindowText(_T("ÈÄÄÂá∫"));
 
 	return TRUE;
 }

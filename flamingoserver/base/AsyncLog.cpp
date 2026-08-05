@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @desc:   异步日志类，AsyncLog.cpp
  * @author: zhangyl
  * @date:   2019.04.13
@@ -426,8 +426,10 @@ void CAsyncLog::getTime(char* pszTime, int nTimeStrLength)
     localtime_r(&now, &time);
 #endif
     
-    snprintf(pszTime, nTimeStrLength, "[%04d-%02d-%02d %02d:%02d:%02d:%03d]", time.tm_year + 1900, time.tm_mon + 1, time.tm_mday, time.tm_hour, time.tm_min, time.tm_sec, tp.millitm);
-    //strftime(pszTime, nTimeStrLength, "[%Y-%m-%d %H:%M:%S:]", &time);
+    //这里只输出时间本身，外层的方括号由调用方 makeLinePrefix() 统一添加，
+    //否则会出现 [[2026-08-03 18:30:15:725]] 这样被两层方括号包裹的日志
+    snprintf(pszTime, nTimeStrLength, "%04d-%02d-%02d %02d:%02d:%02d:%03d", time.tm_year + 1900, time.tm_mon + 1, time.tm_mday, time.tm_hour, time.tm_min, time.tm_sec, tp.millitm);
+    //strftime(pszTime, nTimeStrLength, "%Y-%m-%d %H:%M:%S:", &time);
 }
 
 bool CAsyncLog::createNewFile(const char* pszLogFileName)

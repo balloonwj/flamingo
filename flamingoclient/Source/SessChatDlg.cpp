@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "SessChatDlg.h"
 #include "Time.h"
 
@@ -44,24 +44,24 @@ BOOL CSessChatDlg::PreTranslateMessage(MSG* pMsg)
 
 	if (pMsg->hwnd == m_richRecv.m_hWnd || pMsg->hwnd == m_richSend.m_hWnd)
 	{
-		if (pMsg->message == WM_MOUSEMOVE)			// ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êÒÆ¶¯ÏûÏ¢
+		if (pMsg->message == WM_MOUSEMOVE)			// å‘é€/æ¥æ”¶æ–‡æœ¬æ¡†çš„é¼ æ ‡ç§»åŠ¨æ¶ˆæ¯
 		{
 			if (OnRichEdit_MouseMove(pMsg))
 				return TRUE;
 		}
-		else if (pMsg->message == WM_LBUTTONDBLCLK) // ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êË«»÷ÏûÏ¢
+		else if (pMsg->message == WM_LBUTTONDBLCLK) // å‘é€/æ¥æ”¶æ–‡æœ¬æ¡†çš„é¼ æ ‡åŒå‡»æ¶ˆæ¯
 		{
 			if (OnRichEdit_LBtnDblClk(pMsg))
 				return TRUE;
 		}
-		else if (pMsg->message == WM_RBUTTONDOWN)	// ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êÓÒ¼ü°´ÏÂÏûÏ¢
+		else if (pMsg->message == WM_RBUTTONDOWN)	// å‘é€/æ¥æ”¶æ–‡æœ¬æ¡†çš„é¼ æ ‡å³é”®æŒ‰ä¸‹æ¶ˆæ¯
 		{
 			if (OnRichEdit_RBtnDown(pMsg))
 				return TRUE;
 		}
 
 		if ((pMsg->hwnd == m_richSend.m_hWnd) && (pMsg->message == WM_KEYDOWN) 
-			&& (pMsg->wParam == 'V') && (pMsg->lParam & VK_CONTROL))	// ·¢ËÍÎÄ±¾¿òµÄCtrl+VÏûÏ¢
+			&& (pMsg->wParam == 'V') && (pMsg->lParam & VK_CONTROL))	// å‘é€æ–‡æœ¬æ¡†çš„Ctrl+Væ¶ˆæ¯
 		{
 			m_richSend.PasteSpecial(CF_TEXT);
 			return TRUE;
@@ -123,17 +123,17 @@ void CSessChatDlg::OnRecvMsg(UINT nUTalkUin, UINT nMsgId)
 	}
 }
 
-// ¸üĞÂÈº³ÉÔ±ºÅÂë
+// æ›´æ–°ç¾¤æˆå‘˜å·ç 
 void CSessChatDlg::OnUpdateGMemberNumber()
 {
-	UpdateData();					// ¸üĞÂĞÅÏ¢
-	UpdateBuddyNameCtrl();			// ¸üĞÂºÃÓÑÃû³Æ¿Ø¼ş
+	UpdateData();					// æ›´æ–°ä¿¡æ¯
+	UpdateBuddyNameCtrl();			// æ›´æ–°å¥½å‹åç§°æ§ä»¶
 
-	if (m_lpFMGClient->IsNeedUpdateSessHeadPic(m_nUTalkNumber))	// ¸üĞÂÍ·Ïñ
+	if (m_lpFMGClient->IsNeedUpdateSessHeadPic(m_nUTalkNumber))	// æ›´æ–°å¤´åƒ
 		m_lpFMGClient->UpdateGroupMemberHeadPic(m_nGroupCode, m_nUTalkUin, m_nUTalkNumber);
 }
 
-// ¸üĞÂÈº³ÉÔ±Í·Ïñ
+// æ›´æ–°ç¾¤æˆå‘˜å¤´åƒ
 void CSessChatDlg::OnUpdateGMemberHeadPic()
 {
 	tstring strFileName;
@@ -168,11 +168,11 @@ BOOL CSessChatDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 		
 	}
 
-	Init();		// ³õÊ¼»¯
+	Init();		// åˆå§‹åŒ–
 
 	m_FontSelDlg.m_pFMGClient = m_lpFMGClient;
 	//CalcTitleBarRect();
-	PostMessage(WM_SETDLGINITFOCUS, 0, 0);		// ÉèÖÃ¶Ô»°¿ò³õÊ¼½¹µã
+	PostMessage(WM_SETDLGINITFOCUS, 0, 0);		// è®¾ç½®å¯¹è¯æ¡†åˆå§‹ç„¦ç‚¹
 	SetTimer(1001, 300, NULL);
 
 	return TRUE;
@@ -185,14 +185,14 @@ BOOL CSessChatDlg::OnCopyData(CWindow wnd, PCOPYDATASTRUCT pCopyDataStruct)
 
 	switch (pCopyDataStruct->dwData)
 	{
-	case IPC_CODE_MSGLOG_PASTE:			// ÏûÏ¢¼ÇÂ¼ä¯ÀÀ´°¿ÚÕ³ÌùÏûÏ¢
+	case IPC_CODE_MSGLOG_PASTE:			// æ¶ˆæ¯è®°å½•æµè§ˆçª—å£ç²˜è´´æ¶ˆæ¯
 		{
 			if (pCopyDataStruct->lpData != NULL && pCopyDataStruct->cbData > 0)
 				AddMsgToSendEdit((LPCTSTR)pCopyDataStruct->lpData);
 		}
 		break;
 
-	case IPC_CODE_MSGLOG_EXIT:			// ÏûÏ¢¼ÇÂ¼ä¯ÀÀ´°¿ÚÍË³öÏûÏ¢
+	case IPC_CODE_MSGLOG_EXIT:			// æ¶ˆæ¯è®°å½•æµè§ˆçª—å£é€€å‡ºæ¶ˆæ¯
 		{
 			m_tbMid.SetItemCheckState(13, FALSE);
 			m_tbMid.Invalidate();
@@ -279,7 +279,7 @@ void CSessChatDlg::OnTimer(UINT_PTR nIDEvent)
 {
 	if (1001 == nIDEvent)
 	{
-		OnRecvMsg(m_nUTalkUin, NULL);	// ÏÔÊ¾ÏûÏ¢
+		OnRecvMsg(m_nUTalkUin, NULL);	// æ˜¾ç¤ºæ¶ˆæ¯
 		KillTimer(nIDEvent);
 		SetTimer(1002, 300, NULL);
 	}
@@ -306,7 +306,7 @@ void CSessChatDlg::OnDestroy()
 
 	m_lpCascadeWinManager->Del(m_hWnd);
 
-	UnInit();	// ·´³õÊ¼»¯¿Ø¼ş
+	UnInit();	// ååˆå§‹åŒ–æ§ä»¶
 
 	if (m_hDlgIcon != NULL)
 	{
@@ -331,13 +331,13 @@ void CSessChatDlg::OnDestroy()
 	pLoop->RemoveMessageFilter(this);
 }
 
-// ¡°ºÃÓÑÃû³Æ¡±³¬Á´½Ó¿Ø¼ş
+// â€œå¥½å‹åç§°â€è¶…é“¾æ¥æ§ä»¶
 void CSessChatDlg::OnLnk_BuddyName(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	::PostMessage(m_hMainDlg, WM_SHOW_GMEMBERINFODLG, m_nGroupCode, m_nUTalkUin);
 }
 
-// ¡°×ÖÌåÑ¡Ôñ¹¤¾ßÀ¸¡±°´Å¥
+// â€œå­—ä½“é€‰æ‹©å·¥å…·æ â€æŒ‰é’®
 void CSessChatDlg::OnBtn_Font(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	if (BN_PUSHED == uNotifyCode)
@@ -360,7 +360,7 @@ void CSessChatDlg::OnBtn_Font(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ¡°±íÇé¡±°´Å¥
+// â€œè¡¨æƒ…â€æŒ‰é’®
 void CSessChatDlg::OnBtn_Face(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	if (BN_PUSHED == uNotifyCode)
@@ -389,18 +389,18 @@ void CSessChatDlg::OnBtn_Face(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ¡°·¢ËÍÍ¼Æ¬¡±°´Å¥
+// â€œå‘é€å›¾ç‰‡â€æŒ‰é’®
 void CSessChatDlg::OnBtn_Image(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	BOOL bOpenFileDialog = TRUE;
 	LPCTSTR lpszDefExt = NULL;
 	LPCTSTR lpszFileName = NULL;
 	DWORD dwFlags = OFN_HIDEREADONLY|OFN_OVERWRITEPROMPT|OFN_NOCHANGEDIR|OFN_EXTENSIONDIFFERENT;
-	LPCTSTR lpszFilter = _T("Í¼ÏñÎÄ¼ş(*.bmp;*.jpg;*.jpeg;*.gif;*.png)\0*.bmp;*.jpg;*.jpeg;*.gif;*.png\0\0");;
+	LPCTSTR lpszFilter = _T("å›¾åƒæ–‡ä»¶(*.bmp;*.jpg;*.jpeg;*.gif;*.png)\0*.bmp;*.jpg;*.jpeg;*.gif;*.png\0\0");;
 	HWND hWndParent = m_hWnd;
 
 	CFileDialog fileDlg(bOpenFileDialog, lpszDefExt, lpszFileName, dwFlags, lpszFilter, hWndParent);
-	fileDlg.m_ofn.lpstrTitle = _T("´ò¿ªÍ¼Æ¬");
+	fileDlg.m_ofn.lpstrTitle = _T("æ‰“å¼€å›¾ç‰‡");
 	if (fileDlg.DoModal() == IDOK)
 	{
 		_RichEdit_InsertFace(m_richSend.m_hWnd, fileDlg.m_ofn.lpstrFile, -1, -1);
@@ -408,7 +408,7 @@ void CSessChatDlg::OnBtn_Image(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ¡°ÏûÏ¢¼ÇÂ¼¡±°´Å¥
+// â€œæ¶ˆæ¯è®°å½•â€æŒ‰é’®
 void CSessChatDlg::OnBtn_MsgLog(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	if (uNotifyCode == BN_CLICKED)
@@ -424,19 +424,19 @@ void CSessChatDlg::OnBtn_MsgLog(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ¡°µã»÷Áí´æÎª¡±°´Å¥
+// â€œç‚¹å‡»å¦å­˜ä¸ºâ€æŒ‰é’®
 void CSessChatDlg::OnBtn_SaveAs(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	OnMenu_SaveAs(uNotifyCode, nID, wndCtl);
 }
 
-// ¡°¹Ø±Õ¡±°´Å¥
+// â€œå…³é—­â€æŒ‰é’®
 void CSessChatDlg::OnBtn_Close(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	PostMessage(WM_CLOSE);
 }
 
-// ¡°·¢ËÍ¡±°´Å¥
+// â€œå‘é€â€æŒ‰é’®
 void CSessChatDlg::OnBtn_Send(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	if (NULL == m_lpFMGClient)
@@ -445,7 +445,7 @@ void CSessChatDlg::OnBtn_Send(UINT uNotifyCode, int nID, CWindow wndCtl)
 	int nCustomPicCnt = RichEdit_GetCustomPicCount(m_richSend.m_hWnd);
 	if (nCustomPicCnt > 0)
 	{
-		MessageBox(_T("Ä¿Ç°Ôİ²»Ö§³ÖÏòÈº³ÉÔ±·¢ËÍÍ¼Æ¬£¡"), _T("ÌáÊ¾"));
+		MessageBox(_T("ç›®å‰æš‚ä¸æ”¯æŒå‘ç¾¤æˆå‘˜å‘é€å›¾ç‰‡ï¼"), _T("æç¤º"));
 		return;
 	}
 
@@ -477,7 +477,7 @@ void CSessChatDlg::OnBtn_Send(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_richSend.SetFocus();
 }
 
-// ¡°¼ıÍ·¡±°´Å¥
+// â€œç®­å¤´â€æŒ‰é’®
 void CSessChatDlg::OnBtn_Arrow(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	CSkinMenu PopupMenu = m_SkinMenu.GetSubMenu(8);
@@ -554,7 +554,7 @@ LRESULT CSessChatDlg::OnToolbarDropDown(LPNMHDR pnmh)
 	return 0;
 }
 
-// ¸üĞÂ×ÖÌåĞÅÏ¢
+// æ›´æ–°å­—ä½“ä¿¡æ¯
 LRESULT CSessChatDlg::OnUpdateFontInfo(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	CFontInfo fontInfo = m_FontSelDlg.GetFontInfo();
@@ -564,7 +564,7 @@ LRESULT CSessChatDlg::OnUpdateFontInfo(UINT uMsg, WPARAM wParam, LPARAM lParam)
 	return 0;
 }
 
-// ¡°±íÇé¡±¿Ø¼şÑ¡È¡ÏûÏ¢
+// â€œè¡¨æƒ…â€æ§ä»¶é€‰å–æ¶ˆæ¯
 LRESULT CSessChatDlg::OnFaceCtrlSel(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	int nFaceId = m_FaceSelDlg.GetSelFaceId();
@@ -582,14 +582,14 @@ LRESULT CSessChatDlg::OnFaceCtrlSel(UINT uMsg, WPARAM wParam, LPARAM lParam)
 	return 0;
 }
 
-// ÉèÖÃ¶Ô»°¿ò³õÊ¼½¹µã
+// è®¾ç½®å¯¹è¯æ¡†åˆå§‹ç„¦ç‚¹
 LRESULT CSessChatDlg::OnSetDlgInitFocus(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	m_richSend.SetFocus();
 	return 0;
 }
 
-//	¡°½ÓÊÕÏûÏ¢¡±¸»ÎÄ±¾¿òÁ´½Óµã»÷ÏûÏ¢
+//	â€œæ¥æ”¶æ¶ˆæ¯â€å¯Œæ–‡æœ¬æ¡†é“¾æ¥ç‚¹å‡»æ¶ˆæ¯
 LRESULT CSessChatDlg::OnRichEdit_Recv_Link(LPNMHDR pnmh)
 {
 	CString strUrl;
@@ -622,13 +622,13 @@ LRESULT CSessChatDlg::OnRichEdit_Send_Paste(LPNMHDR pnmh)
 	return 0;
 }
 
-// ¡°¼ôÇĞ¡±²Ëµ¥
+// â€œå‰ªåˆ‡â€èœå•
 void CSessChatDlg::OnMenu_Cut(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	m_richSend.Cut();
 }
 
-// ¡°¸´ÖÆ¡±²Ëµ¥
+// â€œå¤åˆ¶â€èœå•
 void CSessChatDlg::OnMenu_Copy(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	HWND hWnd = GetFocus();
@@ -642,13 +642,13 @@ void CSessChatDlg::OnMenu_Copy(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ¡°Õ³Ìù¡±²Ëµ¥
+// â€œç²˜è´´â€èœå•
 void CSessChatDlg::OnMenu_Paste(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	m_richSend.PasteSpecial(CF_TEXT);
 }
 
-// ¡°È«²¿Ñ¡Ôñ¡±²Ëµ¥
+// â€œå…¨éƒ¨é€‰æ‹©â€èœå•
 void CSessChatDlg::OnMenu_SelAll(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	HWND hWnd = GetFocus();
@@ -662,13 +662,13 @@ void CSessChatDlg::OnMenu_SelAll(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ¡°ÇåÆÁ¡±²Ëµ¥
+// â€œæ¸…å±â€èœå•
 void CSessChatDlg::OnMenu_Clear(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	m_richRecv.SetWindowText(_T(""));
 }
 
-// ¡°ÏÔÊ¾±ÈÀı¡±²Ëµ¥
+// â€œæ˜¾ç¤ºæ¯”ä¾‹â€èœå•
 void CSessChatDlg::OnMenu_ZoomRatio(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	switch (nID)
@@ -708,7 +708,7 @@ void CSessChatDlg::OnMenu_ZoomRatio(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}	
 }
 
-// ¡°Áí´æÎª¡±²Ëµ¥
+// â€œå¦å­˜ä¸ºâ€èœå•
 void CSessChatDlg::OnMenu_SaveAs(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	IImageOle* pImageOle = NULL;
@@ -740,26 +740,26 @@ void CSessChatDlg::OnMenu_SaveAs(UINT uNotifyCode, int nID, CWindow wndCtl)
 	if (InlineIsEqualGUID(guid, Gdiplus::ImageFormatJPEG))
 	{
 		lpszDefExt = _T(".jpg");
-		lpszFilter = _T("Í¼ÏñÎÄ¼ş(*.jpg)\0*.jpg\0Í¼ÏñÎÄ¼ş(*.bmp)\0*.bmp\0\0");
+		lpszFilter = _T("å›¾åƒæ–‡ä»¶(*.jpg)\0*.jpg\0å›¾åƒæ–‡ä»¶(*.bmp)\0*.bmp\0\0");
 	}
 	else if (InlineIsEqualGUID(guid, Gdiplus::ImageFormatPNG))
 	{
 		lpszDefExt = _T(".png");
-		lpszFilter = _T("Í¼ÏñÎÄ¼ş(*.png)\0*.png\0\0");
+		lpszFilter = _T("å›¾åƒæ–‡ä»¶(*.png)\0*.png\0\0");
 	}
 	else if (InlineIsEqualGUID(guid, Gdiplus::ImageFormatGIF))
 	{
 		lpszDefExt = _T(".gif");
-		lpszFilter = _T("Í¼ÏñÎÄ¼ş(*.gif)\0*.gif\0Í¼ÏñÎÄ¼ş(*.jpg)\0*.jpg\0Í¼ÏñÎÄ¼ş(*.bmp)\0*.bmp\0\0");
+		lpszFilter = _T("å›¾åƒæ–‡ä»¶(*.gif)\0*.gif\0å›¾åƒæ–‡ä»¶(*.jpg)\0*.jpg\0å›¾åƒæ–‡ä»¶(*.bmp)\0*.bmp\0\0");
 	}
 	else
 	{
 		lpszDefExt = _T(".jpg");
-		lpszFilter = _T("Í¼ÏñÎÄ¼ş(*.jpg)\0*.jpg\0Í¼ÏñÎÄ¼ş(*.bmp)\0*.bmp\0\0");
+		lpszFilter = _T("å›¾åƒæ–‡ä»¶(*.jpg)\0*.jpg\0å›¾åƒæ–‡ä»¶(*.bmp)\0*.bmp\0\0");
 	}
 
 	CFileDialog fileDlg(bOpenFileDialog, lpszDefExt, strFileNamePrefix, dwFlags, lpszFilter, hWndParent);
-	fileDlg.m_ofn.lpstrTitle = _T("±£´æÍ¼Æ¬");
+	fileDlg.m_ofn.lpstrTitle = _T("ä¿å­˜å›¾ç‰‡");
 	if (fileDlg.DoModal() == IDOK)
 	{
 		CString strSavePath = fileDlg.m_ofn.lpstrFile;
@@ -813,7 +813,7 @@ void CSessChatDlg::CalcTitleBarRect()
 		}
 	}
 }
-// ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êÒÆ¶¯ÏûÏ¢
+// å‘é€/æ¥æ”¶æ–‡æœ¬æ¡†çš„é¼ æ ‡ç§»åŠ¨æ¶ˆæ¯
 BOOL CSessChatDlg::OnRichEdit_MouseMove(MSG* pMsg)
 {
 	IImageOle* pNewImageOle = NULL;
@@ -862,23 +862,23 @@ BOOL CSessChatDlg::OnRichEdit_MouseMove(MSG* pMsg)
 	return FALSE;
 }
 
-// ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êË«»÷ÏûÏ¢
+// å‘é€/æ¥æ”¶æ–‡æœ¬æ¡†çš„é¼ æ ‡åŒå‡»æ¶ˆæ¯
 BOOL CSessChatDlg::OnRichEdit_LBtnDblClk(MSG* pMsg)
 {
 	POINT pt = {GET_X_LPARAM(pMsg->lParam), GET_Y_LPARAM(pMsg->lParam)};
 
 	IImageOle* pImageOle = NULL;
 	BOOL bRet = RichEdit_GetImageOle(pMsg->hwnd, pt, &pImageOle);
-	if (bRet && pImageOle != NULL)					// Ë«»÷µÄÊÇÍ¼Æ¬
+	if (bRet && pImageOle != NULL)					// åŒå‡»çš„æ˜¯å›¾ç‰‡
 	{
 		LONG nFaceId = -1, nFaceIndex = -1;
 		pImageOle->GetFaceId(&nFaceId);
 		pImageOle->GetFaceIndex(&nFaceIndex);
-		if (-1 == nFaceId && -1 == nFaceIndex)		// ·ÇÏµÍ³±íÇé
+		if (-1 == nFaceId && -1 == nFaceIndex)		// éç³»ç»Ÿè¡¨æƒ…
 		{
-			BSTR bstrFileName = NULL;				// »ñÈ¡Í¼Æ¬ÎÄ¼şÃû
+			BSTR bstrFileName = NULL;				// è·å–å›¾ç‰‡æ–‡ä»¶å
 			HRESULT hr = pImageOle->GetFileName(&bstrFileName);
-			if (SUCCEEDED(hr))						// µ÷ÓÃÍ¼Æ¬ä¯ÀÀÆ÷³ÌĞò´ò¿ªÍ¼Æ¬
+			if (SUCCEEDED(hr))						// è°ƒç”¨å›¾ç‰‡æµè§ˆå™¨ç¨‹åºæ‰“å¼€å›¾ç‰‡
 			{
 				CString strExeName = Hootina::CPath::GetAppPath().c_str();
 				strExeName += _T("picView.exe");
@@ -907,7 +907,7 @@ BOOL CSessChatDlg::OnRichEdit_LBtnDblClk(MSG* pMsg)
 	return bRet;
 }
 
-// ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êÓÒ¼ü°´ÏÂÏûÏ¢
+// å‘é€/æ¥æ”¶æ–‡æœ¬æ¡†çš„é¼ æ ‡å³é”®æŒ‰ä¸‹æ¶ˆæ¯
 BOOL CSessChatDlg::OnRichEdit_RBtnDown(MSG* pMsg)
 {
 	if (pMsg->hwnd == m_richSend.m_hWnd)
@@ -960,7 +960,7 @@ BOOL CSessChatDlg::OnRichEdit_RBtnDown(MSG* pMsg)
 	return FALSE;
 }
 
-// »ñÈ¡ÈºĞÅÏ¢Ö¸Õë
+// è·å–ç¾¤ä¿¡æ¯æŒ‡é’ˆ
 CGroupInfo* CSessChatDlg::GetGroupInfoPtr()
 {
 	if (m_lpFMGClient != NULL)
@@ -972,7 +972,7 @@ CGroupInfo* CSessChatDlg::GetGroupInfoPtr()
 	return NULL;
 }
 
-// »ñÈ¡ºÃÓÑĞÅÏ¢Ö¸Õë
+// è·å–å¥½å‹ä¿¡æ¯æŒ‡é’ˆ
 CBuddyInfo* CSessChatDlg::GetBuddyInfoPtr()
 {
 	if (m_lpFMGClient != NULL)
@@ -984,7 +984,7 @@ CBuddyInfo* CSessChatDlg::GetBuddyInfoPtr()
 	return NULL;
 }
 
-// »ñÈ¡ÓÃ»§ĞÅÏ¢Ö¸Õë
+// è·å–ç”¨æˆ·ä¿¡æ¯æŒ‡é’ˆ
 CBuddyInfo* CSessChatDlg::GetUserInfoPtr()
 {
 	if (m_lpFMGClient != NULL)
@@ -1004,7 +1004,7 @@ CBuddyInfo* CSessChatDlg::GetUserInfoPtr()
 	return NULL;
 }
 
-// ¸üĞÂÊı¾İ
+// æ›´æ–°æ•°æ®
 void CSessChatDlg::UpdateData()
 {
 	CBuddyInfo* lpBuddyInfo = GetBuddyInfoPtr();
@@ -1032,13 +1032,13 @@ void CSessChatDlg::UpdateData()
 	}
 }
 
-// ¸üĞÂ¶Ô»°¿ò±êÌâÀ¸
+// æ›´æ–°å¯¹è¯æ¡†æ ‡é¢˜æ 
 void CSessChatDlg::UpdateDlgTitle()
 {
 	SetWindowText(m_strBuddyName);
 }
 
-// ¸üĞÂºÃÓÑÃû³Æ¿Ø¼ş
+// æ›´æ–°å¥½å‹åç§°æ§ä»¶
 void CSessChatDlg::UpdateBuddyNameCtrl()
 {
 	CString strText;
@@ -1049,21 +1049,21 @@ void CSessChatDlg::UpdateBuddyNameCtrl()
 	m_lnkBuddyName.SetLabel(strText);
 }
 
-// ¸üĞÂÈºÃû³Æ¿Ø¼ş
+// æ›´æ–°ç¾¤åç§°æ§ä»¶
 void CSessChatDlg::UpdateGroupNameCtrl()
 {
 	CString strText;
-	strText.Format(_T("ÁÙÊ±»á»°-À´×ÔÈº:%s"), m_strGroupName);
+	strText.Format(_T("ä¸´æ—¶ä¼šè¯-æ¥è‡ªç¾¤:%s"), m_strGroupName);
 	m_staGroupName.SetWindowText(strText);
 }
 
-// ³õÊ¼»¯Top¹¤¾ßÀ¸
+// åˆå§‹åŒ–Topå·¥å…·æ 
 BOOL CSessChatDlg::InitTopToolBar()
 {
 	int nIndex = m_tbTop.AddItem(101, STBI_STYLE_DROPDOWN);
 	m_tbTop.SetItemSize(nIndex, 38, 28, 28, 10);
 	m_tbTop.SetItemPadding(nIndex, 1);
-	m_tbTop.SetItemToolTipText(nIndex, _T("¿ªÊ¼ÊÓÆµ»á»°"));
+	m_tbTop.SetItemToolTipText(nIndex, _T("å¼€å§‹è§†é¢‘ä¼šè¯"));
 	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbTop.SetItemLeftBgPic(nIndex, _T("aio_toolbar_leftnormal.png"), 
@@ -1076,7 +1076,7 @@ BOOL CSessChatDlg::InitTopToolBar()
 	nIndex = m_tbTop.AddItem(102, STBI_STYLE_DROPDOWN);
 	m_tbTop.SetItemSize(nIndex, 38, 28, 28, 10);
 	m_tbTop.SetItemPadding(nIndex, 1);
-	m_tbTop.SetItemToolTipText(nIndex, _T("¿ªÊ¼ÓïÒô»á»°"));
+	m_tbTop.SetItemToolTipText(nIndex, _T("å¼€å§‹è¯­éŸ³ä¼šè¯"));
 	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbTop.SetItemLeftBgPic(nIndex, _T("aio_toolbar_leftnormal.png"), 
@@ -1089,7 +1089,7 @@ BOOL CSessChatDlg::InitTopToolBar()
 	nIndex = m_tbTop.AddItem(103, STBI_STYLE_DROPDOWN);
 	m_tbTop.SetItemSize(nIndex, 38, 28, 28, 10);
 	m_tbTop.SetItemPadding(nIndex, 1);
-	m_tbTop.SetItemToolTipText(nIndex, _T("´«ËÍÎÄ¼ş"));
+	m_tbTop.SetItemToolTipText(nIndex, _T("ä¼ é€æ–‡ä»¶"));
 	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbTop.SetItemLeftBgPic(nIndex, _T("aio_toolbar_leftnormal.png"), 
@@ -1102,7 +1102,7 @@ BOOL CSessChatDlg::InitTopToolBar()
 	nIndex = m_tbTop.AddItem(104, STBI_STYLE_BUTTON);
 	m_tbTop.SetItemSize(nIndex, 38, 28, 28, 10);
 	m_tbTop.SetItemPadding(nIndex, 2);
-	m_tbTop.SetItemToolTipText(nIndex, _T("·¢ËÍ¶ÌĞÅ"));
+	m_tbTop.SetItemToolTipText(nIndex, _T("å‘é€çŸ­ä¿¡"));
 	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbTop.SetItemIconPic(nIndex, _T("BuddyTopToolBar\\sendsms.png"));
@@ -1110,7 +1110,7 @@ BOOL CSessChatDlg::InitTopToolBar()
 	nIndex = m_tbTop.AddItem(105, STBI_STYLE_BUTTON);
 	m_tbTop.SetItemSize(nIndex, 38, 28, 28, 10);
 	m_tbTop.SetItemPadding(nIndex, 2);
-	m_tbTop.SetItemToolTipText(nIndex, _T("´´½¨ÌÖÂÛ×é"));
+	m_tbTop.SetItemToolTipText(nIndex, _T("åˆ›å»ºè®¨è®ºç»„"));
 	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbTop.SetItemIconPic(nIndex, _T("BuddyTopToolBar\\create_disc_group.png"));
@@ -1118,7 +1118,7 @@ BOOL CSessChatDlg::InitTopToolBar()
 	nIndex = m_tbTop.AddItem(106, STBI_STYLE_WHOLEDROPDOWN);
 	m_tbTop.SetItemSize(nIndex, 38, 28, 28, 10);
 	m_tbTop.SetItemPadding(nIndex, 2);
-	m_tbTop.SetItemToolTipText(nIndex, _T("¾Ù±¨"));
+	m_tbTop.SetItemToolTipText(nIndex, _T("ä¸¾æŠ¥"));
 	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbTop.SetItemArrowPic(nIndex, _T("aio_littletoolbar_arrow.png"));
@@ -1127,7 +1127,7 @@ BOOL CSessChatDlg::InitTopToolBar()
 	nIndex = m_tbTop.AddItem(107, STBI_STYLE_WHOLEDROPDOWN);
 	m_tbTop.SetItemSize(nIndex, 38, 28, 28, 10);
 	m_tbTop.SetItemPadding(nIndex, 2);
-	m_tbTop.SetItemToolTipText(nIndex, _T("Ó¦ÓÃ"));
+	m_tbTop.SetItemToolTipText(nIndex, _T("åº”ç”¨"));
 	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbTop.SetItemArrowPic(nIndex, _T("aio_littletoolbar_arrow.png"));
@@ -1136,7 +1136,7 @@ BOOL CSessChatDlg::InitTopToolBar()
 	//nIndex = m_tbTop.AddItem(108, STBI_STYLE_BUTTON);
 	//m_tbTop.SetItemSize(nIndex, 36, 40);
 	//m_tbTop.SetItemPadding(nIndex, 2);
-	//m_tbTop.SetItemToolTipText(nIndex, _T("Ô¶³ÌĞ­Öú"));
+	//m_tbTop.SetItemToolTipText(nIndex, _T("è¿œç¨‹ååŠ©"));
 	//m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	//m_tbTop.SetItemIconPic(nIndex, _T("BuddyTopToolBar\\remote_assistance.png"));
@@ -1150,13 +1150,13 @@ BOOL CSessChatDlg::InitTopToolBar()
 	return TRUE;
 }
 
-// ³õÊ¼»¯Middle¹¤¾ßÀ¸
+// åˆå§‹åŒ–Middleå·¥å…·æ 
 BOOL CSessChatDlg::InitMidToolBar()
 {
 	int nIndex = m_tbMid.AddItem(201, STBI_STYLE_BUTTON|STBI_STYLE_CHECK);
 	m_tbMid.SetItemSize(nIndex, 24, 20);
 	m_tbMid.SetItemPadding(nIndex, 1);
-	m_tbMid.SetItemToolTipText(nIndex, _T("×ÖÌåÑ¡Ôñ¹¤¾ßÀ¸"));
+	m_tbMid.SetItemToolTipText(nIndex, _T("å­—ä½“é€‰æ‹©å·¥å…·æ "));
 	m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbMid.SetItemIconPic(nIndex, _T("MidToolBar\\aio_quickbar_font.png"));
@@ -1164,7 +1164,7 @@ BOOL CSessChatDlg::InitMidToolBar()
 	nIndex = m_tbMid.AddItem(202, STBI_STYLE_BUTTON|STBI_STYLE_CHECK);
 	m_tbMid.SetItemSize(nIndex, 24, 20);
 	m_tbMid.SetItemPadding(nIndex, 1);
-	m_tbMid.SetItemToolTipText(nIndex, _T("Ñ¡Ôñ±íÇé"));
+	m_tbMid.SetItemToolTipText(nIndex, _T("é€‰æ‹©è¡¨æƒ…"));
 	m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbMid.SetItemIconPic(nIndex, _T("MidToolBar\\aio_quickbar_face.png"));
@@ -1172,7 +1172,7 @@ BOOL CSessChatDlg::InitMidToolBar()
 	//nIndex = m_tbMid.AddItem(203, STBI_STYLE_BUTTON);
 	//m_tbMid.SetItemSize(nIndex, 24, 20);
 	//m_tbMid.SetItemPadding(nIndex, 1);
-	//m_tbMid.SetItemToolTipText(nIndex, _T("»áÔ±Ä§·¨±íÇé/³¬¼¶±íÇé/Í¿Ñ»±íÇé/³èÎïìÅ"));
+	//m_tbMid.SetItemToolTipText(nIndex, _T("ä¼šå‘˜é­”æ³•è¡¨æƒ…/è¶…çº§è¡¨æƒ…/æ¶‚é¸¦è¡¨æƒ…/å® ç‰©ç‚«"));
 	//m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	//m_tbMid.SetItemIconPic(nIndex, _T("MidToolBar\\aio_quickbar_richface.png"));
@@ -1180,7 +1180,7 @@ BOOL CSessChatDlg::InitMidToolBar()
 	nIndex = m_tbMid.AddItem(204, STBI_STYLE_BUTTON);
 	m_tbMid.SetItemSize(nIndex, 24, 20);
 	m_tbMid.SetItemPadding(nIndex, 1);
-	m_tbMid.SetItemToolTipText(nIndex, _T("ÏòºÃÓÑ·¢ËÍ´°¿Ú¶¶¶¯"));
+	m_tbMid.SetItemToolTipText(nIndex, _T("å‘å¥½å‹å‘é€çª—å£æŠ–åŠ¨"));
 	m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbMid.SetItemIconPic(nIndex, _T("MidToolBar\\aio_quickbar_twitter.png"));
@@ -1188,7 +1188,7 @@ BOOL CSessChatDlg::InitMidToolBar()
 	//nIndex = m_tbMid.AddItem(205, STBI_STYLE_BUTTON);
 	//m_tbMid.SetItemSize(nIndex, 24, 20);
 	//m_tbMid.SetItemPadding(nIndex, 1);
-	//m_tbMid.SetItemToolTipText(nIndex, _T("Ñ¡Ôñ¶¯Ò»ÏÂ±íÇé"));
+	//m_tbMid.SetItemToolTipText(nIndex, _T("é€‰æ‹©åŠ¨ä¸€ä¸‹è¡¨æƒ…"));
 	//m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	//m_tbMid.SetItemIconPic(nIndex, _T("MidToolBar\\aio_quickbar_flirtationface.png"));
@@ -1196,7 +1196,7 @@ BOOL CSessChatDlg::InitMidToolBar()
 	//nIndex = m_tbMid.AddItem(206, STBI_STYLE_BUTTON|STBI_STYLE_CHECK);
 	//m_tbMid.SetItemSize(nIndex, 24, 20);
 	//m_tbMid.SetItemPadding(nIndex, 2);
-	//m_tbMid.SetItemToolTipText(nIndex, _T("¶à¹¦ÄÜ¸¨ÖúÊäÈë"));
+	//m_tbMid.SetItemToolTipText(nIndex, _T("å¤šåŠŸèƒ½è¾…åŠ©è¾“å…¥"));
 	//m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	//m_tbMid.SetItemIconPic(nIndex, _T("MidToolBar\\UTalkIme.png"));
@@ -1209,7 +1209,7 @@ BOOL CSessChatDlg::InitMidToolBar()
 	nIndex = m_tbMid.AddItem(208, STBI_STYLE_BUTTON);
 	m_tbMid.SetItemSize(nIndex, 24, 20);
 	m_tbMid.SetItemPadding(nIndex, 1);
-	m_tbMid.SetItemToolTipText(nIndex, _T("·¢ËÍÍ¼Æ¬"));
+	m_tbMid.SetItemToolTipText(nIndex, _T("å‘é€å›¾ç‰‡"));
 	m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbMid.SetItemIconPic(nIndex, _T("MidToolBar\\aio_quickbar_sendpic.png"));
@@ -1217,7 +1217,7 @@ BOOL CSessChatDlg::InitMidToolBar()
 	//nIndex = m_tbMid.AddItem(209, STBI_STYLE_BUTTON);
 	//m_tbMid.SetItemSize(nIndex, 24, 20);
 	//m_tbMid.SetItemPadding(nIndex, 1);
-	//m_tbMid.SetItemToolTipText(nIndex, _T("µã¸è"));
+	//m_tbMid.SetItemToolTipText(nIndex, _T("ç‚¹æ­Œ"));
 	//m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	//m_tbMid.SetItemIconPic(nIndex, _T("MidToolBar\\musicsharebtn20.png"));
@@ -1225,7 +1225,7 @@ BOOL CSessChatDlg::InitMidToolBar()
 	//nIndex = m_tbMid.AddItem(210, STBI_STYLE_BUTTON);
 	//m_tbMid.SetItemSize(nIndex, 24, 20);
 	//m_tbMid.SetItemPadding(nIndex, 1);
-	//m_tbMid.SetItemToolTipText(nIndex, _T("¸øºÃÓÑËÍ·İÀñÎï£¬ËÍ·İ¾ªÏ²"));
+	//m_tbMid.SetItemToolTipText(nIndex, _T("ç»™å¥½å‹é€ä»½ç¤¼ç‰©ï¼Œé€ä»½æƒŠå–œ"));
 	//m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	//m_tbMid.SetItemIconPic(nIndex, _T("MidToolBar\\present.png"));
@@ -1233,7 +1233,7 @@ BOOL CSessChatDlg::InitMidToolBar()
 	nIndex = m_tbMid.AddItem(211, STBI_STYLE_BUTTON);
 	m_tbMid.SetItemSize(nIndex, 31, 20, 23, 8);
 	m_tbMid.SetItemPadding(nIndex, 1);
-	m_tbMid.SetItemToolTipText(nIndex, _T("ÆÁÄ»½ØÍ¼"));
+	m_tbMid.SetItemToolTipText(nIndex, _T("å±å¹•æˆªå›¾"));
 	m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbMid.SetItemLeftBgPic(nIndex, _T("aio_toolbar_leftnormal.png"), 
@@ -1246,7 +1246,7 @@ BOOL CSessChatDlg::InitMidToolBar()
 	//nIndex = m_tbMid.AddItem(212, STBI_STYLE_DROPDOWN);
 	//m_tbMid.SetItemSize(nIndex, 31, 20, 23, 8);
 	//m_tbMid.SetItemPadding(nIndex, 2);
-	//m_tbMid.SetItemToolTipText(nIndex, _T("»®´ÊËÑË÷"));
+	//m_tbMid.SetItemToolTipText(nIndex, _T("åˆ’è¯æœç´¢"));
 	//m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	//m_tbMid.SetItemLeftBgPic(nIndex, _T("aio_toolbar_leftnormal.png"), 
@@ -1264,8 +1264,8 @@ BOOL CSessChatDlg::InitMidToolBar()
 	nIndex = m_tbMid.AddItem(214, STBI_STYLE_DROPDOWN|STBI_STYLE_CHECK);
 	m_tbMid.SetItemSize(nIndex, 82, 20, 74, 8);
 	m_tbMid.SetItemPadding(nIndex, 2);
-	m_tbMid.SetItemText(nIndex, _T("ÏûÏ¢¼ÇÂ¼"));
-	m_tbMid.SetItemToolTipText(nIndex, _T("ÏÔÊ¾ÏûÏ¢¼ÇÂ¼"));
+	m_tbMid.SetItemText(nIndex, _T("æ¶ˆæ¯è®°å½•"));
+	m_tbMid.SetItemToolTipText(nIndex, _T("æ˜¾ç¤ºæ¶ˆæ¯è®°å½•"));
 	m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbMid.SetItemLeftBgPic(nIndex, _T("aio_toolbar_leftnormal.png"), 
@@ -1287,7 +1287,7 @@ BOOL CSessChatDlg::InitMidToolBar()
 	return TRUE;
 }
 
-// ³õÊ¼»¯IRichEditOleCallback½Ó¿Ú
+// åˆå§‹åŒ–IRichEditOleCallbackæ¥å£
 BOOL CSessChatDlg::InitRichEditOleCallback()
 {
 	IRichEditOleCallback2* pRichEditOleCallback2 = NULL;
@@ -1315,7 +1315,7 @@ BOOL CSessChatDlg::InitRichEditOleCallback()
 	return SUCCEEDED(hr);
 }
 
-// ³õÊ¼»¯¿Ø¼ş
+// åˆå§‹åŒ–æ§ä»¶
 BOOL CSessChatDlg::Init()
 {
 	m_SkinDlg.SubclassWindow(m_hWnd);
@@ -1390,9 +1390,9 @@ BOOL CSessChatDlg::Init()
 	m_SkinMenu.SetTextColor(RGB(0, 20, 35));
 	m_SkinMenu.SetSelTextColor(RGB(254, 254, 254));
 
-	InitTopToolBar();				// ³õÊ¼»¯Top¹¤¾ßÀ¸
-	InitMidToolBar();				// ³õÊ¼»¯Middle¹¤¾ßÀ¸
-	m_PicBarDlg.Create(m_hWnd);		// ´´½¨Í¼Æ¬Ğü¸¡¹¤¾ßÀ¸
+	InitTopToolBar();				// åˆå§‹åŒ–Topå·¥å…·æ 
+	InitMidToolBar();				// åˆå§‹åŒ–Middleå·¥å…·æ 
+	m_PicBarDlg.Create(m_hWnd);		// åˆ›å»ºå›¾ç‰‡æ‚¬æµ®å·¥å…·æ 
 
 	CRect rcRecv(6, 107, 583, 366);
 	DWORD dwStyle = WS_CHILD|WS_VISIBLE|WS_TABSTOP|ES_MULTILINE|ES_AUTOVSCROLL|WS_VSCROLL|ES_WANTRETURN;
@@ -1411,16 +1411,16 @@ BOOL CSessChatDlg::Init()
 	UpdateData();
 	UpdateDlgTitle();
 	UpdateBuddyNameCtrl();
-	UpdateGroupNameCtrl();		// ¸üĞÂÈºÃû³Æ¿Ø¼ş
+	UpdateGroupNameCtrl();		// æ›´æ–°ç¾¤åç§°æ§ä»¶
 
 	m_Accelerator.LoadAccelerators(ID_ACCE_CHATDLG);
 
-	InitRichEditOleCallback();	// ³õÊ¼»¯IRichEditOleCallback½Ó¿Ú
+	InitRichEditOleCallback();	// åˆå§‹åŒ–IRichEditOleCallbackæ¥å£
 
 	return TRUE;
 }
 
-// ·´³õÊ¼»¯¿Ø¼ş
+// ååˆå§‹åŒ–æ§ä»¶
 BOOL CSessChatDlg::UnInit()
 {
 	if (m_PicBarDlg.IsWindow())
@@ -1602,7 +1602,7 @@ BOOL CSessChatDlg::HandleCustomPic(HWND hRichEditWnd, LPCTSTR& p, CString& strTe
 	return FALSE;
 }
 
-// "/f["ÏµÍ³±íÇéid"]/s["ÏµÍ³±íÇéindex"]/c["×Ô¶¨ÒåÍ¼Æ¬Â·¾¶"]"
+// "/f["ç³»ç»Ÿè¡¨æƒ…id"]/s["ç³»ç»Ÿè¡¨æƒ…index"]/c["è‡ªå®šä¹‰å›¾ç‰‡è·¯å¾„"]"
 void CSessChatDlg::AddMsg(HWND hRichEditWnd, LPCTSTR lpText)
 {
 	if (NULL == lpText || NULL ==*lpText)
@@ -1662,7 +1662,7 @@ void CSessChatDlg::AddMsgToRecvEdit(time_t nTime, LPCTSTR lpText)
 
 	RichEdit_SetSel(m_richRecv.m_hWnd, -1, -1);
 	RichEdit_ReplaceSel(m_richRecv.m_hWnd, strText, 
-		_T("ËÎÌå"), 10, RGB(0,128,64), FALSE, FALSE, FALSE, FALSE, 0);
+		_T("å®‹ä½“"), 10, RGB(0,128,64), FALSE, FALSE, FALSE, FALSE, 0);
 	strText = _T("");
 
 	AddMsg(m_richRecv.m_hWnd, lpText);
@@ -1688,7 +1688,7 @@ void CSessChatDlg::AddMsgToRecvEdit(CSessMessage* lpSessMsg)
 
 	RichEdit_SetSel(m_richRecv.m_hWnd, -1, -1);
 	RichEdit_ReplaceSel(m_richRecv.m_hWnd, strText, 
-		_T("ËÎÌå"), 10, RGB(0, 0, 255), FALSE, FALSE, FALSE, FALSE, 0);
+		_T("å®‹ä½“"), 10, RGB(0, 0, 255), FALSE, FALSE, FALSE, FALSE, 0);
 
 	CFontInfo fontInfo;
 	for (int i = 0; i < (int)lpSessMsg->m_arrContent.size(); i++)
@@ -1740,7 +1740,7 @@ void CSessChatDlg::AddMsgToRecvEdit(CSessMessage* lpSessMsg)
 	m_richRecv.PostMessage(WM_VSCROLL, SB_BOTTOM, 0);
 }
 
-// ´ò¿ªÏûÏ¢¼ÇÂ¼ä¯ÀÀ´°¿Ú
+// æ‰“å¼€æ¶ˆæ¯è®°å½•æµè§ˆçª—å£
 void CSessChatDlg::OpenMsgLogBrowser()
 {
 	CString strExeName = Hootina::CPath::GetAppPath().c_str();
@@ -1779,7 +1779,7 @@ void CSessChatDlg::OpenMsgLogBrowser()
 	::CloseHandle(pi.hThread);
 }
 
-// ¹Ø±ÕÏûÏ¢¼ÇÂ¼ä¯ÀÀ´°¿Ú
+// å…³é—­æ¶ˆæ¯è®°å½•æµè§ˆçª—å£
 void CSessChatDlg::CloseMsgLogBrowser()
 {
 	if (m_dwThreadId != NULL)

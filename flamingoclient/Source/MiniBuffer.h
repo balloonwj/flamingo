@@ -1,11 +1,11 @@
-#pragma once
+ï»¿#pragma once
 #include <stdint.h>
 
-//¿ÉÒÔÔÚ³öÁË×÷ÓÃÓò×Ô¶¯ÊÍ·ÅµÄÃÔÄãÄÚ´æÀà
+//å¯ä»¥åœ¨å‡ºäº†ä½œç”¨åŸŸè‡ªåŠ¨é‡Šæ”¾çš„è¿·ä½ å†…å­˜ç±»
 class CMiniBuffer
 {
 public:
-    //FIXME: ½«int64_tÇ¿ÖÆ×ª»»³Éint32¿ÉÄÜ»áÓĞÎÊÌâ(´óµÄÄÚ´æÆäÊµ·ÖÅä²»³öÀ´µÄ!!)
+    //FIXME: å°†int64_tå¼ºåˆ¶è½¬æ¢æˆint32å¯èƒ½ä¼šæœ‰é—®é¢˜(å¤§çš„å†…å­˜å…¶å®åˆ†é…ä¸å‡ºæ¥çš„!!)
 	CMiniBuffer(int64_t nSize, BOOL bAutoRelease = TRUE);
 	~CMiniBuffer();
 
@@ -14,7 +14,7 @@ public:
 	int64_t GetSize();
 	char* GetBuffer();
 	
-    //ËùÓĞĞèÒªÊ¹ÓÃchar* µÄµØ·½¶¼¿ÉÒÔÖ±½ÓÊ¹ÓÃCMiniBuffer¶ÔÏó
+    //æ‰€æœ‰éœ€è¦ä½¿ç”¨char* çš„åœ°æ–¹éƒ½å¯ä»¥ç›´æ¥ä½¿ç”¨CMiniBufferå¯¹è±¡
 	operator PSTR(); 
 	
 	void EnableAutoRelease(BOOL bAutoRelease);

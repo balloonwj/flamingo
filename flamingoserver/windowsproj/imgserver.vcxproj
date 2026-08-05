@@ -29,6 +29,9 @@
     <ClCompile Include="..\fileserversrc\FileSession.cpp" />
     <ClCompile Include="..\fileserversrc\TcpSession.cpp" />
     <ClCompile Include="..\imgserversrc\main.cpp" />
+    <ClCompile Include="..\imgserversrc\RelayServer.cpp" />
+    <ClCompile Include="..\imgserversrc\RelaySession.cpp" />
+    <ClCompile Include="..\imgserversrc\RelayHub.cpp" />
     <ClCompile Include="..\net\Acceptor.cpp" />
     <ClCompile Include="..\net\ByteBuffer.cpp" />
     <ClCompile Include="..\net\Channel.cpp" />
@@ -53,6 +56,12 @@
     <ClCompile Include="..\utils\StringUtil.cpp" />
     <ClCompile Include="..\utils\URLEncodeUtil.cpp" />
     <ClCompile Include="..\utils\UUIDGenerator.cpp" />
+    <ClCompile Include="..\net\FrameCodec.cpp" />
+    <ClCompile Include="..\utils\FileToken.cpp" />
+    <ClCompile Include="..\utils\RelayToken.cpp" />
+    <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp" />
+    <ClCompile Include="..\jsoncpp1.9.0\json_value.cpp" />
+    <ClCompile Include="..\jsoncpp1.9.0\json_writer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\base\AsyncLog.h" />
@@ -65,6 +74,9 @@
     <ClInclude Include="..\fileserversrc\FileManager.h" />
     <ClInclude Include="..\fileserversrc\FileMsg.h" />
     <ClInclude Include="..\fileserversrc\FileServer.h" />
+    <ClInclude Include="..\imgserversrc\RelayServer.h" />
+    <ClInclude Include="..\imgserversrc\RelaySession.h" />
+    <ClInclude Include="..\imgserversrc\RelayHub.h" />
     <ClInclude Include="..\fileserversrc\FileSession.h" />
     <ClInclude Include="..\fileserversrc\TcpSession.h" />
     <ClInclude Include="..\net\Acceptor.h" />
@@ -94,9 +106,13 @@
     <ClInclude Include="..\utils\StringUtil.h" />
     <ClInclude Include="..\utils\URLEncodeUtil.h" />
     <ClInclude Include="..\utils\UUIDGenerator.h" />
+    <ClInclude Include="..\net\FrameCodec.h" />
+    <ClInclude Include="..\utils\FileToken.h" />
+    <ClInclude Include="..\utils\RelayToken.h" />
+    <ClInclude Include="..\chatserversrc\Protocol.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <VCProjectVersion>16.0</VCProjectVersion>
+    <VCProjectVersion>17.0</VCProjectVersion>
     <ProjectGuid>{09CA9B5C-6474-4D32-96D4-A955885617A1}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>imgserver</RootNamespace>

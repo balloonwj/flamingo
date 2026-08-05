@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <vector>
 #include <map>
@@ -6,17 +6,17 @@
 #include "../ImageEx.h"
 #include "../XmlDocument.h"
 
-struct SKIN_INFO		// Æ¤·ôĞÅÏ¢
+struct SKIN_INFO		// çš®è‚¤ä¿¡æ¯
 {
-	int nSkinID;			// Æ¤·ôID
-	CString strSkinName;	// Æ¤·ôÃû³Æ
-	CString strSkinPath;	// Æ¤·ôÂ·¾¶
+	int nSkinID;			// çš®è‚¤ID
+	CString strSkinName;	// çš®è‚¤åç§°
+	CString strSkinPath;	// çš®è‚¤è·¯å¾„
 };
 
-struct SKIN_IMAGE_INFO	// Æ¤·ôÍ¼Æ¬ĞÅÏ¢
+struct SKIN_IMAGE_INFO	// çš®è‚¤å›¾ç‰‡ä¿¡æ¯
 {
-	CImageEx* lpImage;		// Í¼Æ¬¶ÔÏó
-	int nRef;				// ÒıÓÃ¼ÆÊı
+	CImageEx* lpImage;		// å›¾ç‰‡å¯¹è±¡
+	int nRef;				// å¼•ç”¨è®¡æ•°
 };
 
 class CSkinManager

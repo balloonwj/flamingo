@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "resource.h"
 #include "SkinLib/SkinLib.h"
@@ -12,14 +12,14 @@ enum TEAM_OPERATION_TYPE
 
 class CFlamingoClient;
 
-//ĞÂ½¨·Ö×é¶Ô»°¿ò
+//æ–°å»ºåˆ†ç»„å¯¹è¯æ¡†
 class CTeamDlg : public CDialogImpl<CTeamDlg>
 {
 public:
 	CTeamDlg();
 	virtual ~CTeamDlg();
 
-	//ÔÚ×ÊÔ´ÎÄ¼şÀïÃæÔö¼Ó¶Ô»°¿ò×ÊÔ´Ä£°å
+	//åœ¨èµ„æºæ–‡ä»¶é‡Œé¢å¢åŠ å¯¹è¯æ¡†èµ„æºæ¨¡æ¿
 	enum { IDD = IDD_TEAM };
 
 	BEGIN_MSG_MAP_EX(CTeamDlg)

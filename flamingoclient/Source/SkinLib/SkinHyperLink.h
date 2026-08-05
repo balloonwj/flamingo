@@ -1,12 +1,12 @@
-#pragma once
+ï»¿#pragma once
 
 #include "SkinManager.h"
 
 
 enum SKIN_LINK_TYPE
 {
-	SKIN_LINK_DEFAULT,		//Ä¬ÈÏ³¬¼¶Á´½Ó´ò¿ªÒ»¸öÍøÖ·
-	SKIN_LINK_ADDNEW		//Ìí¼ÓĞÂºÃÓÑ¶Ô»°¿òµÄÌáÊ¾ĞÅÏ¢
+	SKIN_LINK_DEFAULT,		//é»˜è®¤è¶…çº§é“¾æ¥æ‰“å¼€ä¸€ä¸ªç½‘å€
+	SKIN_LINK_ADDNEW		//æ·»åŠ æ–°å¥½å‹å¯¹è¯æ¡†çš„æç¤ºä¿¡æ¯
 };
 
 class CSkinHyperLink : public CWindowImpl<CSkinHyperLink, CStatic>

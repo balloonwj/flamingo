@@ -1,4 +1,4 @@
-#include "StdAfx.h"
+ï»¿#include "StdAfx.h"
 #include "File.h"
 #include <tchar.h>
 
@@ -19,7 +19,7 @@ CFileX::~CFileX()
 
 bool CFileX::Open(PCTSTR pszFileName, bool bCreateIfNotExsit/* = true*/)
 {
-    //TODO: ½«À´¸ù¾İĞèÒª¿ÉÒÔ¼ÌĞøÀ©Õ¹¸ü¶à±êÖ¾
+    //TODO: å°†æ¥æ ¹æ®éœ€è¦å¯ä»¥ç»§ç»­æ‰©å±•æ›´å¤šæ ‡å¿—
     DWORD dwCreateFlag = OPEN_EXISTING;
     if (bCreateIfNotExsit)
         dwCreateFlag = CREATE_ALWAYS;
@@ -81,21 +81,21 @@ bool CFileX::Write(const char* pszBuffer, int nBufferLength)
         dwBytesToWrite = (int)nBufferLength;
     while (true)
     {
-        //³ö´í
+        //å‡ºé”™
         if (!::WriteFile(m_hFile, pszBuffer, dwBytesToWrite, &dwBytesWrittenEach, NULL))
             return false;
-        //³ö´í
+        //å‡ºé”™
         if (dwBytesToWrite != dwBytesWrittenEach)
             return false;
 
         dwBytesWritten += dwBytesWrittenEach;
-        //³É¹¦Ğ´Íê
+        //æˆåŠŸå†™å®Œ
         if (dwBytesWritten == nBufferLength)
             break;
 
         pszBuffer += dwBytesWrittenEach;
 
-        //Ê£ÏÂµÄ²»¹»4096¸ö×Ö½Ú£¬Ğ´ÈëÊ£ÓàµÄ×Ö½ÚÊıÄ¿
+        //å‰©ä¸‹çš„ä¸å¤Ÿ4096ä¸ªå­—èŠ‚ï¼Œå†™å…¥å‰©ä½™çš„å­—èŠ‚æ•°ç›®
         if (nBufferLength - dwBytesWritten < dwBytesToWrite)
             dwBytesToWrite = nBufferLength - dwBytesWritten;
     }
@@ -110,7 +110,7 @@ bool CFileX::IsValid()
 
 int CFileX::GetFileSize()
 {
-    //TODO: ºóÆÚÎªÁËÖ§³Ö´óÎÄ¼ş£¬Ó¦¸Ã°ÑGetFileSizeµÄµÚ¶ş¸ö²ÎÊıÓÃÆğÀ´
+    //TODO: åæœŸä¸ºäº†æ”¯æŒå¤§æ–‡ä»¶ï¼Œåº”è¯¥æŠŠGetFileSizeçš„ç¬¬äºŒä¸ªå‚æ•°ç”¨èµ·æ¥
     if (!IsValid())
         return 0;
     int dwFileSize = ::GetFileSize(m_hFile, NULL);
@@ -156,7 +156,7 @@ bool CFileX::DeleteAllFileByExtension(PCTSTR pszDir, PCTSTR pszExtension)
     return true;
 }
 
-// ¼ì²âÖ¸¶¨Ä¿Â¼ÊÇ·ñ´æÔÚ
+// æ£€æµ‹æŒ‡å®šç›®å½•æ˜¯å¦å­˜åœ¨
 bool CFileX::IsDirectoryExist(LPCTSTR lpszPath)
 {
     if (NULL == lpszPath || NULL == *lpszPath)

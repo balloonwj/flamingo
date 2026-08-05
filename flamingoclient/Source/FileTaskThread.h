@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include "Thread.h"
 #include <list>
 #include <mutex>
@@ -9,7 +9,7 @@ class CFileItemRequest;
 class CFlamingoClient;
 class CUploadFileResult;
 
-//TODO: ºóÃæ¸Ä³É
+//TODO: åé¢æ”¹æˆ
 class CFileTaskThread : public CThread
 {
 public:
@@ -20,13 +20,13 @@ public:
 	virtual void Stop() override;
 	
 	BOOL AddItem(CFileItemRequest* pItem);
-	void RemoveItem(CFileItemRequest* pItem);									//ÒÆ³ı¶ÓÁĞÖĞÏÂÔØ»òÕßÉÏ´«µÄÏî
+	void RemoveItem(CFileItemRequest* pItem);									//ç§»é™¤é˜Ÿåˆ—ä¸­ä¸‹è½½æˆ–è€…ä¸Šä¼ çš„é¡¹
 	void ClearAllItems();
 
 	void HandleItem(CFileItemRequest* pFileItem);
 
-	//void SendConfirmMessage(const CUploadFileResult* pUploadFileResult);		//ÁÄÌìÍ¼Æ¬»òÕßÎÄ¼şÉÏ´«³É¹¦ÒÔºó·¢ËÍÈ·ÈÏÁÄÌìÏûÏ¢
-    //ÓÃÓÚÉı¼¶¹¦ÄÜµÄ°æ±¾ºÅÎÄ¼şÏÂÔØ
+	//void SendConfirmMessage(const CUploadFileResult* pUploadFileResult);		//èŠå¤©å›¾ç‰‡æˆ–è€…æ–‡ä»¶ä¸Šä¼ æˆåŠŸä»¥åå‘é€ç¡®è®¤èŠå¤©æ¶ˆæ¯
+    //ç”¨äºå‡çº§åŠŸèƒ½çš„ç‰ˆæœ¬å·æ–‡ä»¶ä¸‹è½½
     BOOL DownloadFileSynchronously(LPCSTR lpszFileName, LPCTSTR lpszDestPath, BOOL bOverwriteIfExist);
 
 protected:
@@ -42,7 +42,7 @@ public:
 	CFlamingoClient*				m_lpFMGClient;
 
 private:
-	CFileItemRequest*				m_pCurrentTransferringItem;					//µ±Ç°ÕıÔÚ´«ÊäµÄÏî
+	CFileItemRequest*				m_pCurrentTransferringItem;					//å½“å‰æ­£åœ¨ä¼ è¾“çš„é¡¹
 	std::list<CFileItemRequest*>	m_Filelist;	
 	std::mutex						m_mtItems;
 	std::condition_variable			m_cvItems;

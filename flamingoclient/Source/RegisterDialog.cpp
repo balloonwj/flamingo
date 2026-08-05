@@ -1,9 +1,10 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "RegisterDialog.h"
 #include "Utils.h"
 #include "FlamingoClient.h"
 #include "EncodeUtil.h"
 #include "UIText.h"
+#include "IULog.h"          // LOG_ERROR（下面拒绝 v1 注册请求时记日志）
 
 CRegisterDialog::CRegisterDialog() : m_pFMGClient(NULL)
 {
@@ -29,7 +30,7 @@ BOOL CRegisterDialog::InitUI()
 	m_RegDlg.SetBgPic(_T("DlgBg\\GeneralBg.png"));
 	m_RegDlg.SetCloseSysBtnPic(_T("SysBtn\\btn_close_normal.png"), _T("SysBtn\\btn_close_highlight.png"), _T("SysBtn\\btn_close_down.png"));
 	m_RegDlg.SubclassWindow(m_hWnd);
-	m_RegDlg.SetTitleText(_T("���û�ע��"));
+	m_RegDlg.SetTitleText(_T("新用户注册"));
 	m_RegDlg.MoveWindow(0, 0, 550, 350, TRUE);
 	CenterWindow();
 
@@ -111,35 +112,20 @@ UINT CRegisterDialog::RegisterThreadProc(void* pParam)
     if (pRegisterDlg == NULL)
         return 0;
 
-    char szUser[64] = { 0 };
-    EncodeUtil::UnicodeToUtf8(pRegisterDlg->m_strMobile, szUser, ARRAYSIZE(szUser));
-    char szNickName[64] = { 0 };
-    EncodeUtil::UnicodeToUtf8(pRegisterDlg->m_strNickName, szNickName, ARRAYSIZE(szNickName));
-    char szPassword[64] = { 0 };
-    EncodeUtil::UnicodeToUtf8(pRegisterDlg->m_strPassword, szPassword, ARRAYSIZE(szPassword));
+    //本对话框是 v1 时代的旧注册框，界面上只有手机号 / 昵称 / 密码，<u>没有</u>
+    //公司名称输入框。而企业版的 v2 注册要求必须给出公司全称（服务端据此定位
+    //企业、把新账号挂进公司根部门），本对话框无从提供，发上去必然被服务端以
+    //error_code_enterprise_not_exist 拒绝。
+    //
+    //本对话框当前已无任何活的入口（旧 CLoginDlg 已被 BalloonAuth 的
+    //CBalloonLoginDlg 取代，且 LoginDlg.cpp 已从工程里移除），仍在编译只是
+    //尚未清理。因此这里直接报失败并记日志，不去发一个注定失败的请求。
+    //真正的注册走 BalloonRegister/CBalloonRegisterWindow。
+    LOG_ERROR("CRegisterDialog is the legacy v1 register dialog and has no company name field; "
+              "v2 registration requires it. Use CBalloonRegisterWindow instead.");
 
-    std::string strReturnData;
-    //��ʱʱ������Ϊ3��
-    bool bRet = CIUSocket::GetInstance().Register(szUser, szNickName, szPassword, 3, strReturnData);
     CRegisterResult* pRegisterResult = new CRegisterResult();
     pRegisterResult->m_nResultCode = REGISTER_FAILED;
-    if (bRet)
-    {
-        //{"code": 0, "msg": "ok"}
-        Json::Reader JsonReader;
-        Json::Value JsonRoot;
-        if (JsonReader.parse(strReturnData, JsonRoot))
-        {
-            if (!JsonRoot["code"].isNull() && JsonRoot["code"].isInt())
-            {
-                int nRetCode = JsonRoot["code"].asInt();
-                if (nRetCode == 0)
-                    pRegisterResult->m_nResultCode = REGISTER_SUCCESS;
-                else if (nRetCode == 101)
-                    pRegisterResult->m_nResultCode = REGISTER_EXIST;
-            }
-        }      
-    }
 
     ::PostMessage(pRegisterDlg->m_pFMGClient->m_UserMgr.m_hProxyWnd, FMG_MSG_REGISTER, 0, (LPARAM)pRegisterResult);
 
@@ -157,7 +143,7 @@ PCTSTR CRegisterDialog::GetPassword()
 }
 
 
-// ��ע�ᡱ��ť
+// “注册”按钮
 void CRegisterDialog::OnBtn_Regist(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	m_edtRegId.GetWindowText(m_strMobile);
@@ -165,7 +151,7 @@ void CRegisterDialog::OnBtn_Regist(UINT uNotifyCode, int nID, CWindow wndCtl)
     m_strAccount = m_strMobile;
     if (m_strMobile.IsEmpty())
 	{
-		::MessageBox(m_hWnd, _T("��Ч���ֻ����룡"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("无效的手机号码！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_edtRegId.SetFocus();
 		return;
 	}
@@ -174,7 +160,7 @@ void CRegisterDialog::OnBtn_Regist(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_strNickName.Trim();
 	if(m_strNickName.IsEmpty() || m_strNickName.GetLength()>15)
 	{
-		::MessageBox(m_hWnd, _T("�ǳƲ���Ϊ���ҳ��Ȳ��ܳ���15���ַ���"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("昵称不能为空且长度不能超过15个字符！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_edtRegName.SetFocus();
 		return;
 	}
@@ -183,21 +169,21 @@ void CRegisterDialog::OnBtn_Regist(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_strPassword.Trim();
 	if(m_strPassword.IsEmpty() || m_strPassword.GetLength()<3 || m_strPassword.GetLength()>15)
 	{
-		::MessageBox(m_hWnd, _T("���볤�ȱ�����6��15���ַ�֮�䣡"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("密码长度必须在6～15个字符之间！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
 	m_edtCheckPwd.GetWindowText(m_strCheckPassword);
 	if(m_strCheckPassword.IsEmpty() || m_strCheckPassword.GetLength()<3 || m_strCheckPassword.GetLength()>15)
 	{
-		::MessageBox(m_hWnd, _T("ȷ�����볤�ȱ�����6��15���ַ�֮�䣡"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("确认密码长度必须在6～15个字符之间！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 	m_strCheckPassword.Trim();
 
 	if (0 != m_strPassword.Compare(m_strCheckPassword))
 	{
-		::MessageBox(m_hWnd, _T("������������벻��ͬ��������ȷ�ϣ�"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("两次输入的密码不相同，请重新确认！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 	
@@ -210,7 +196,7 @@ void CRegisterDialog::OnBtn_Regist(UINT uNotifyCode, int nID, CWindow wndCtl)
         ::CloseHandle(hRegisterThread);
 		
 	
-    //ע��ĳ�ͬ���ģ�������Ҫ��������ӿ�
+    //注册改成同步的，不再需要调用这个接口
 	//m_pFMGClient->Register(m_strMobile, m_strNickName, m_strPassword);	
 }
 
@@ -228,21 +214,21 @@ LRESULT CRegisterDialog::OnRegisterResult(UINT uMsg, WPARAM wParam, LPARAM lPara
 	
 	long nRegisterResult = pResult->m_nResultCode;
 	if(nRegisterResult == REGISTER_EXIST)
-		::MessageBox(m_hWnd, _T("��ע����ֻ����Ѿ���ע�ᣬ����������ֻ��ź����ԣ�"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("您注册的手机号已经被注册，请更换其它手机号后重试！"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 	else if(nRegisterResult == REGISTER_SUCCESS)
 	{
 		//TCHAR szAccount[64] = {0};
 		//EncodeUtil::Utf8ToUnicode(pResult->m_szAccount, szAccount, ARRAYSIZE(szAccount));
 		//m_strAccount = szAccount;
 		TCHAR szSuccessInfo[64] = {0};
-        _stprintf_s(szSuccessInfo, 64, _T("��ϲ����ע��ɹ��������˺���[%s]��"), m_strMobile.GetString());
+        _stprintf_s(szSuccessInfo, 64, _T("恭喜您，注册成功，您的账号是[%s]！"), m_strMobile.GetString());
 
 		::MessageBox(m_hWnd, szSuccessInfo, g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 
 		EndDialog(IDOK);
 	}
 	else
-		::MessageBox(m_hWnd, _T("������ϣ�ע��ʧ�ܣ����Ժ����ԣ�"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
+		::MessageBox(m_hWnd, _T("网络故障，注册失败，请稍后重试！"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
 
 	
 	m_btnRegist.EnableWindow(TRUE);

@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include <list>
 #include <vector>
 #include <mutex>
@@ -14,15 +14,15 @@ class CGroupMessage;
 class CSessMessage;
 class CContent;
 
-// Ğ´ÈëÒ»ÌõºÃÓÑÏûÏ¢¼ÇÂ¼
+// å†™å…¥ä¸€æ¡å¥½å‹æ¶ˆæ¯è®°å½•
 void WriteBuddyMsgLog(CUserMgr* lpUserMgr, UINT nUTalkNum, LPCTSTR lpNickName, 
 					  BOOL bSelf, CBuddyMessage* lpMsg);
 
-// Ğ´ÈëÒ»ÌõÈºÏûÏ¢¼ÇÂ¼
+// å†™å…¥ä¸€æ¡ç¾¤æ¶ˆæ¯è®°å½•
 void WriteGroupMsgLog(CUserMgr* lpUserMgr, UINT nGroupNum, UINT nUTalkNum, 
 					  LPCTSTR lpNickName, CBuddyMessage* lpMsg);
 
-// Ğ´ÈëÒ»ÌõÁÙÊ±»á»°(Èº³ÉÔ±)ÏûÏ¢¼ÇÂ¼
+// å†™å…¥ä¸€æ¡ä¸´æ—¶ä¼šè¯(ç¾¤æˆå‘˜)æ¶ˆæ¯è®°å½•
 void WriteSessMsgLog(CUserMgr* lpUserMgr, UINT nUTalkNum, LPCTSTR lpNickName, 
 					 BOOL bSelf, CSessMessage* lpMsg);
 
@@ -36,11 +36,11 @@ public:
 	long				m_nType;
 	void*				m_lpMsg;
 	UINT				m_nGroupNum;		
-	UINT				m_nUTalkNum;		//TODO: ĞèÒªÉ¾³ı
-	std::vector<UINT>	m_arrTargetIDs;		//¸ÃÏûÏ¢µÄÄ¿±êÓÃ»§ID
+	UINT				m_nUTalkNum;		//TODO: éœ€è¦åˆ é™¤
+	std::vector<UINT>	m_arrTargetIDs;		//è¯¥æ¶ˆæ¯çš„ç›®æ ‡ç”¨æˆ·ID
 	tstring				m_strNickName;
 	tstring				m_strGroupSig;
-	HWND				m_hwndFrom;			//ÏûÏ¢À´×ÔÄÄ¸öÁÄÌì´°¿Ú
+	HWND				m_hwndFrom;			//æ¶ˆæ¯æ¥è‡ªå“ªä¸ªèŠå¤©çª—å£
 };
 
 class CNetData;
@@ -86,7 +86,7 @@ private:
     void HandleChangeUserStatus(const CChangeUserStatusRequest* pChangeUserStatusRequest);
     void HandleGroupBasicInfo(const CGroupBasicInfoRequest* pGroupBasicInfo);
 	BOOL HandleSentChatMessage(const CSentChatMessage* pSentChatMessage);				
-	BOOL HandleSentConfirmImageMessage(const CSentChatConfirmImageMessage* pConfirmImageMessage);	//Í¼Æ¬ÉÏ´«³É¹¦ÒÔºóµÄÈ·ÈÏĞÅÏ¢
+	BOOL HandleSentConfirmImageMessage(const CSentChatConfirmImageMessage* pConfirmImageMessage);	//å›¾ç‰‡ä¸Šä¼ æˆåŠŸä»¥åçš„ç¡®è®¤ä¿¡æ¯
 	void HandleFindFriendMessage(const CFindFriendRequest* pFindFriendRequest);
 	void HandleOperateFriendMessage(const COperateFriendRequest* pOperateFriendRequest);
 	BOOL HandleHeartbeatMessage(const CHeartbeatMessageRequest* pHeartbeatRequest);
@@ -105,17 +105,17 @@ private:
     BOOL HandleRemoteDesktop(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);
 	BOOL CreateMsgContent(const tstring& strChatMsg, std::vector<CContent*>& arrContent);
 	
-    //TODO: ÕâËÄ¸öº¯ÊıÆğÊ¼¿ÉÒÔºÏ²¢³ÉÒ»¸öº¯Êı
-    BOOL SendBuddyMsg(CMsgItem* lpMsgItem);			// ·¢ËÍºÃÓÑÏûÏ¢
-	BOOL SendGroupMsg(CMsgItem* lpMsgItem);			// ·¢ËÍÈºÏûÏ¢
-	BOOL SendMultiMsg(CMsgItem* lpMsgItem);			// Èº·¢ÏûÏ¢
+    //TODO: è¿™å››ä¸ªå‡½æ•°èµ·å§‹å¯ä»¥åˆå¹¶æˆä¸€ä¸ªå‡½æ•°
+    BOOL SendBuddyMsg(CMsgItem* lpMsgItem);			// å‘é€å¥½å‹æ¶ˆæ¯
+	BOOL SendGroupMsg(CMsgItem* lpMsgItem);			// å‘é€ç¾¤æ¶ˆæ¯
+	BOOL SendMultiMsg(CMsgItem* lpMsgItem);			// ç¾¤å‘æ¶ˆæ¯
     BOOL SendMultiChatMessage(const char* pszChatMsg, int nChatMsgLength, UINT* pAccountList, int nAccountNum);
-	BOOL SendSessMsg(CMsgItem* lpMsgItem);			// ·¢ËÍÈº³ÉÔ±ÏûÏ¢
+	BOOL SendSessMsg(CMsgItem* lpMsgItem);			// å‘é€ç¾¤æˆå‘˜æ¶ˆæ¯
     
 	
-	BOOL ProcessBuddyMsg(CBuddyMessage* pMsg);		//¶Ô·¢ËÍµÄÏûÏ¢½øĞĞ¼Ó¹¤
-	BOOL ProcessMultiMsg(CMsgItem* pMsgItem);		//¶ÔÈº·¢ÏûÏ¢½øĞĞ¼Ó¹¤
-	void AddItemToRecentSessionList(UINT uUserID, UINT uFaceID, PCTSTR pszNickName, PCTSTR pszText, time_t nMsgTime);		//Ïò×î½üÁªÏµÈËÁĞ±íÖĞÌí¼ÓÒ»Ïî
+	BOOL ProcessBuddyMsg(CBuddyMessage* pMsg);		//å¯¹å‘é€çš„æ¶ˆæ¯è¿›è¡ŒåŠ å·¥
+	BOOL ProcessMultiMsg(CMsgItem* pMsgItem);		//å¯¹ç¾¤å‘æ¶ˆæ¯è¿›è¡ŒåŠ å·¥
+	void AddItemToRecentSessionList(UINT uUserID, UINT uFaceID, PCTSTR pszNickName, PCTSTR pszText, time_t nMsgTime);		//å‘æœ€è¿‘è”ç³»äººåˆ—è¡¨ä¸­æ·»åŠ ä¸€é¡¹
 	std::wstring UnicodeToHexStr(const WCHAR* lpStr, BOOL bDblSlash);
 
 public:
@@ -132,5 +132,5 @@ private:
     std::mutex                  m_mtItems;
     std::condition_variable     m_cvItems;
 
-    int32_t                     m_seq{};            //°üĞòÁĞºÅ
+    int32_t                     m_seq{};            //åŒ…åºåˆ—å·
 };

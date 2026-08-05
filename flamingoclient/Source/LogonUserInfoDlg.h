@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "resource.h"
 #include "SkinLib/SkinLib.h"
@@ -21,8 +21,8 @@ public:
 		MSG_WM_SHOWWINDOW(OnShowWindow)
 		MSG_WM_CLOSE(OnClose)
 		MSG_WM_DESTROY(OnDestroy)
-		COMMAND_HANDLER_EX(IDC_SYSHEAD, BN_CLICKED, OnSysHead)		//¸ü¸ÄÓÃ»§Í·Ïñ
-		COMMAND_HANDLER_EX(IDC_CUSTOMHEAD, BN_CLICKED, OnCustomHead)	//¸ü¸ÄÓÃ»§Í·Ïñ
+		COMMAND_HANDLER_EX(IDC_SYSHEAD, BN_CLICKED, OnSysHead)		//æ›´æ”¹ç”¨æˆ·å¤´åƒ
+		COMMAND_HANDLER_EX(IDC_CUSTOMHEAD, BN_CLICKED, OnCustomHead)	//æ›´æ”¹ç”¨æˆ·å¤´åƒ
 		COMMAND_HANDLER_EX(IDOK, BN_CLICKED, OnBtn_OK)
 		COMMAND_HANDLER_EX(IDCANCEL, BN_CLICKED, OnBtn_Cancel)
 		MESSAGE_HANDLER_EX(FMG_MSG_UPLOAD_USER_THUMB, OnUploadUserThumbResult)
@@ -36,8 +36,8 @@ private:
 	void OnShowWindow(BOOL bShow, UINT nStatus);
 	void OnClose();
 	void OnDestroy();
-	void OnSysHead(UINT uNotifyCode, int nID, CWindow wndCtl);//¸ü¸ÄÓÃ»§Í·Ïñ
-	void OnCustomHead(UINT uNotifyCode, int nID, CWindow wndCtl);//¸ü¸ÄÓÃ»§Í·Ïñ
+	void OnSysHead(UINT uNotifyCode, int nID, CWindow wndCtl);//æ›´æ”¹ç”¨æˆ·å¤´åƒ
+	void OnCustomHead(UINT uNotifyCode, int nID, CWindow wndCtl);//æ›´æ”¹ç”¨æˆ·å¤´åƒ
 	void OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl);	
 	void OnBtn_Cancel(UINT uNotifyCode, int nID, CWindow wndCtl);
 	LRESULT OnUploadUserThumbResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	
@@ -45,13 +45,13 @@ private:
 	BOOL ValidatePhone(const CString& strPhone);
 
 
-	BOOL Init();		// ³õÊ¼»¯
-	void UnInit();		// ·´³õÊ¼»¯
+	BOOL Init();		// åˆå§‹åŒ–
+	void UnInit();		// ååˆå§‹åŒ–
 
 public:
 	CFlamingoClient*		m_pFMGClient;
 	UINT				m_uUserID;
-	UINT				m_uSysFaceID;	//ÏµÍ³Í·ÏñID
+	UINT				m_uSysFaceID;	//ç³»ç»Ÿå¤´åƒID
 	TCHAR				m_szCustomFacePath[MAX_PATH];
 
 private:
@@ -75,7 +75,7 @@ private:
 	HICON				m_hDlgIcon;
 	HICON				m_hDlgSmallIcon;
 
-	BOOL				m_bUseCustomThumb;	//ÊÇ·ñÊ¹ÓÃ×Ô¶¨ÒåÍ·Ïñ
+	BOOL				m_bUseCustomThumb;	//æ˜¯å¦ä½¿ç”¨è‡ªå®šä¹‰å¤´åƒ
 	TCHAR				m_szCustomFaceRemotePath[MAX_PATH];
 
 };

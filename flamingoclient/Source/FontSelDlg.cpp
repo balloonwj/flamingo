@@ -1,12 +1,12 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "FontSelDlg.h"
 
-CFontInfo g_fontInfo;		// ×ÖÌåĞÅÏ¢
-TCHAR g_cHotKey = _T('D');	// ÌáÈ¡ÏûÏ¢ÈÈ¼ü
+CFontInfo g_fontInfo;		// å­—ä½“ä¿¡æ¯
+TCHAR g_cHotKey = _T('D');	// æå–æ¶ˆæ¯çƒ­é”®
 
-// ÕâÀïÎªÍ¼·½±ã£¬ËùÒÔ½«ÕâÁ½¸öº¯Êı·ÅÕâÀï
+// è¿™é‡Œä¸ºå›¾æ–¹ä¾¿ï¼Œæ‰€ä»¥å°†è¿™ä¸¤ä¸ªå‡½æ•°æ”¾è¿™é‡Œ
 
-//// ¼ÓÔØÔÓÏîÅäÖÃ
+//// åŠ è½½æ‚é¡¹é…ç½®
 //BOOL LoadMiscConfig(LPCTSTR lpszFileName)
 //{
 //	CXmlDocument xmlDoc;
@@ -43,11 +43,11 @@ TCHAR g_cHotKey = _T('D');	// ÌáÈ¡ÏûÏ¢ÈÈ¼ü
 
 
 
-//// ±£´æÔÓÏîÅäÖÃ
+//// ä¿å­˜æ‚é¡¹é…ç½®
 //BOOL SaveMiscConfig(LPCTSTR lpszFileName)
 //{
 //	unsigned char cUtf8Header[3] = {0xEF,0xBB,0xBF};
-//	const wchar_t* lpFontFmt = _T("<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<Misc>\r\n<!--×ÖÌåĞÅÏ¢-->\r\n<FontInfo Name=\"%s\" Size=\"%d\" Color=\"%s\" Bold=\"%d\" Italic=\"%d\" UnderLine=\"%d\"></FontInfo>\r\n<!--ÌáÈ¡ÏûÏ¢ÈÈ¼ü£¬Ä¿Ç°Ö»Ö§³ÖCtrl+Alt+Ä³¼ü-->\r\n<HotKey>%c</HotKey>\r\n</Misc>\r\n");
+//	const wchar_t* lpFontFmt = _T("<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n<Misc>\r\n<!--å­—ä½“ä¿¡æ¯-->\r\n<FontInfo Name=\"%s\" Size=\"%d\" Color=\"%s\" Bold=\"%d\" Italic=\"%d\" UnderLine=\"%d\"></FontInfo>\r\n<!--æå–æ¶ˆæ¯çƒ­é”®ï¼Œç›®å‰åªæ”¯æŒCtrl+Alt+æŸé”®-->\r\n<HotKey>%c</HotKey>\r\n</Misc>\r\n");
 //
 //	if (NULL == lpszFileName)
 //		return FALSE;
@@ -87,13 +87,13 @@ CFontSelDlg::~CFontSelDlg(void)
 {
 }
 
-// »ñÈ¡È«¾Ö×ÖÌåĞÅÏ¢
+// è·å–å…¨å±€å­—ä½“ä¿¡æ¯
 CFontInfo& CFontSelDlg::GetPublicFontInfo()
 {
 	return g_fontInfo;
 }
 
-// »ñÈ¡×ÖÌåĞÅÏ¢
+// è·å–å­—ä½“ä¿¡æ¯
 CFontInfo& CFontSelDlg::GetFontInfo()
 {
 	return m_fontInfo;
@@ -101,7 +101,7 @@ CFontInfo& CFontSelDlg::GetFontInfo()
 
 BOOL CFontSelDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 {
-	Init();		// ³õÊ¼»¯
+	Init();		// åˆå§‹åŒ–
 
 	ModifyStyle(WS_CLIPSIBLINGS|WS_CLIPCHILDREN, 0);
 	return FALSE;
@@ -114,10 +114,10 @@ void CFontSelDlg::OnClose()
 
 void CFontSelDlg::OnDestroy()
 {
-	UnInit();	// ·´³õÊ¼»¯
+	UnInit();	// ååˆå§‹åŒ–
 }
 
-// ¡°ÏµÍ³×ÖÌå¡±°´Å¥
+// â€œç³»ç»Ÿå­—ä½“â€æŒ‰é’®
 void CFontSelDlg::OnBtn_SysFont(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	if (BN_PUSHED == uNotifyCode)
@@ -126,7 +126,7 @@ void CFontSelDlg::OnBtn_SysFont(UINT uNotifyCode, int nID, CWindow wndCtl)
 		m_tbFontClass.SetItemCheckState(0, TRUE);
 }
 
-// ¡°»áÔ±ìÅ²Ê×Ö¡±°´Å¥
+// â€œä¼šå‘˜ç‚«å½©å­—â€æŒ‰é’®
 void CFontSelDlg::OnBtn_MemberFont(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	if (BN_PUSHED == uNotifyCode)
@@ -135,7 +135,7 @@ void CFontSelDlg::OnBtn_MemberFont(UINT uNotifyCode, int nID, CWindow wndCtl)
 		m_tbFontClass.SetItemCheckState(1, TRUE);
 }
 
-// ¡°×ÖÌåÃû³Æ¡±×éºÏ¿ò
+// â€œå­—ä½“åç§°â€ç»„åˆæ¡†
 void CFontSelDlg::OnCbo_SelChange_FontName(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	int nCurSel = m_cboFontName.GetCurSel();
@@ -153,7 +153,7 @@ void CFontSelDlg::OnCbo_SelChange_FontName(UINT uNotifyCode, int nID, CWindow wn
 	}
 }
 
-// ¡°×ÖÌå´óĞ¡¡±×éºÏ¿ò
+// â€œå­—ä½“å¤§å°â€ç»„åˆæ¡†
 void CFontSelDlg::OnCbo_SelChange_FontSize(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	int nCurSel = m_cboFontSize.GetCurSel();
@@ -171,7 +171,7 @@ void CFontSelDlg::OnCbo_SelChange_FontSize(UINT uNotifyCode, int nID, CWindow wn
 	}
 }
 
-// ¡°¼Ó´Ö¡±°´Å¥
+// â€œåŠ ç²—â€æŒ‰é’®
 void CFontSelDlg::OnBtn_Bold(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	if (BN_PUSHED == uNotifyCode || BN_UNPUSHED == uNotifyCode)
@@ -187,7 +187,7 @@ void CFontSelDlg::OnBtn_Bold(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ¡°ÇãĞ±¡±°´Å¥
+// â€œå€¾æ–œâ€æŒ‰é’®
 void CFontSelDlg::OnBtn_Italic(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	if (BN_PUSHED == uNotifyCode || BN_UNPUSHED == uNotifyCode)
@@ -203,7 +203,7 @@ void CFontSelDlg::OnBtn_Italic(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ¡°ÏÂ»®Ïß¡±°´Å¥
+// â€œä¸‹åˆ’çº¿â€æŒ‰é’®
 void CFontSelDlg::OnBtn_UnderLine(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	if (BN_PUSHED == uNotifyCode || BN_UNPUSHED == uNotifyCode)
@@ -219,7 +219,7 @@ void CFontSelDlg::OnBtn_UnderLine(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ¡°ÑÕÉ«¡±°´Å¥
+// â€œé¢œè‰²â€æŒ‰é’®
 void CFontSelDlg::OnBtn_Color(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	CColorDialog colorDlg = m_pFMGClient->m_UserConfig.GetFontColor();
@@ -236,14 +236,14 @@ void CFontSelDlg::OnBtn_Color(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ³õÊ¼»¯×ÖÌå·ÖÀà¹¤¾ßÀ¸
+// åˆå§‹åŒ–å­—ä½“åˆ†ç±»å·¥å…·æ 
 BOOL CFontSelDlg::InitFontClassToolBar()
 {
 	int nIndex = m_tbFontClass.AddItem(101, STBI_STYLE_BUTTON|STBI_STYLE_CHECK);
 	m_tbFontClass.SetItemSize(nIndex, 20, 20);
 	m_tbFontClass.SetItemPadding(nIndex, 0);
 	m_tbFontClass.SetItemCheckState(nIndex, TRUE);
-	m_tbFontClass.SetItemToolTipText(nIndex, _T("ÏµÍ³×ÖÌå"));
+	m_tbFontClass.SetItemToolTipText(nIndex, _T("ç³»ç»Ÿå­—ä½“"));
 	m_tbFontClass.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbFontClass.SetItemIconPic(nIndex, _T("MidToolBar\\aio_quickbar_sysfont_tab_button.png"));
@@ -252,7 +252,7 @@ BOOL CFontSelDlg::InitFontClassToolBar()
 	//nIndex = m_tbFontClass.AddItem(102, STBI_STYLE_BUTTON|STBI_STYLE_CHECK);
 	//m_tbFontClass.SetItemSize(nIndex, 20, 20);
 	m_tbFontClass.SetItemPadding(nIndex, 8);
-	//m_tbFontClass.SetItemToolTipText(nIndex, _T("»áÔ±ìÅ²Ê×Ö"));
+	//m_tbFontClass.SetItemToolTipText(nIndex, _T("ä¼šå‘˜ç‚«å½©å­—"));
 	//m_tbFontClass.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		//_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	//m_tbFontClass.SetItemIconPic(nIndex, _T("MidToolBar\\SetFontTabButton.png"));
@@ -270,7 +270,7 @@ BOOL CFontSelDlg::InitFontClassToolBar()
 	return TRUE;
 }
 
-// ³õÊ¼»¯×ÖÌåÃû³Æ×éºÏ¿ò
+// åˆå§‹åŒ–å­—ä½“åç§°ç»„åˆæ¡†
 BOOL CFontSelDlg::InitFontNameComboBox()
 {
 	m_cboFontName.SubclassWindow(GetDlgItem(ID_COMBO_FONTNAME));
@@ -301,7 +301,7 @@ BOOL CFontSelDlg::InitFontNameComboBox()
 	CString strCustomFontName(m_pFMGClient->m_UserConfig.GetFontName());
 	if(strCustomFontName.IsEmpty())
 	{
-		strCustomFontName = _T("Î¢ÈíÑÅºÚ");
+		strCustomFontName = _T("å¾®è½¯é›…é»‘");
 		m_pFMGClient->m_UserConfig.SetFontName(strCustomFontName);
 	}
 	int nIndex = m_cboFontName.FindString(0, strCustomFontName);
@@ -316,7 +316,7 @@ BOOL CFontSelDlg::InitFontNameComboBox()
 	return TRUE;
 }
 
-// ³õÊ¼»¯×ÖÌå´óĞ¡×éºÏ¿ò
+// åˆå§‹åŒ–å­—ä½“å¤§å°ç»„åˆæ¡†
 BOOL CFontSelDlg::InitFontSizeComboBox()
 {
 	m_cboFontSize.SubclassWindow(GetDlgItem(ID_COMBO_FONTSIZE));
@@ -351,13 +351,13 @@ BOOL CFontSelDlg::InitFontSizeComboBox()
 	return TRUE;
 }
 
-// ³õÊ¼»¯×ÖÌåÊôĞÔ¹¤¾ßÀ¸
+// åˆå§‹åŒ–å­—ä½“å±æ€§å·¥å…·æ 
 BOOL CFontSelDlg::InitFontAttrToolBar()
 {
 	int nIndex = m_tbFontAttr.AddItem(104, STBI_STYLE_BUTTON|STBI_STYLE_CHECK);
 	m_tbFontAttr.SetItemSize(nIndex, 30, 24);
 	m_tbFontAttr.SetItemPadding(nIndex, 0);
-	m_tbFontAttr.SetItemToolTipText(nIndex, _T("¼Ó´Ö"));
+	m_tbFontAttr.SetItemToolTipText(nIndex, _T("åŠ ç²—"));
 	m_tbFontAttr.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbFontAttr.SetItemIconPic(nIndex, _T("MidToolBar\\Bold.png"));
@@ -365,7 +365,7 @@ BOOL CFontSelDlg::InitFontAttrToolBar()
 	nIndex = m_tbFontAttr.AddItem(105, STBI_STYLE_BUTTON|STBI_STYLE_CHECK);
 	m_tbFontAttr.SetItemSize(nIndex, 30, 24);
 	m_tbFontAttr.SetItemPadding(nIndex, 0);
-	m_tbFontAttr.SetItemToolTipText(nIndex, _T("ÇãĞ±"));
+	m_tbFontAttr.SetItemToolTipText(nIndex, _T("å€¾æ–œ"));
 	m_tbFontAttr.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbFontAttr.SetItemIconPic(nIndex, _T("MidToolBar\\Italic.png"));
@@ -373,7 +373,7 @@ BOOL CFontSelDlg::InitFontAttrToolBar()
 	nIndex = m_tbFontAttr.AddItem(106, STBI_STYLE_BUTTON|STBI_STYLE_CHECK);
 	m_tbFontAttr.SetItemSize(nIndex, 30, 24);
 	m_tbFontAttr.SetItemPadding(nIndex, 0);
-	m_tbFontAttr.SetItemToolTipText(nIndex, _T("ÏÂ»®Ïß"));
+	m_tbFontAttr.SetItemToolTipText(nIndex, _T("ä¸‹åˆ’çº¿"));
 	m_tbFontAttr.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbFontAttr.SetItemIconPic(nIndex, _T("MidToolBar\\underline.png"));
@@ -381,7 +381,7 @@ BOOL CFontSelDlg::InitFontAttrToolBar()
 	nIndex = m_tbFontAttr.AddItem(107, STBI_STYLE_BUTTON);
 	m_tbFontAttr.SetItemSize(nIndex, 30, 24);
 	m_tbFontAttr.SetItemPadding(nIndex, 0);
-	m_tbFontAttr.SetItemToolTipText(nIndex, _T("ÑÕÉ«"));
+	m_tbFontAttr.SetItemToolTipText(nIndex, _T("é¢œè‰²"));
 	m_tbFontAttr.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbFontAttr.SetItemIconPic(nIndex, _T("MidToolBar\\color.png"));
@@ -397,7 +397,7 @@ BOOL CFontSelDlg::InitFontAttrToolBar()
 	return TRUE;
 }
 
-// ³õÊ¼»¯
+// åˆå§‹åŒ–
 BOOL CFontSelDlg::Init()
 {
 	g_fontInfo.m_strName = m_pFMGClient->m_UserConfig.GetFontName();
@@ -411,15 +411,15 @@ BOOL CFontSelDlg::Init()
 	m_SkinDlg.SubclassWindow(m_hWnd);
 	m_SkinDlg.SetBgPic(_T("ChatFrame_FontSetup_background.bmp"), CRect(0, 1, 1, 0));
 	
-	//InitFontClassToolBar();		// ³õÊ¼»¯×ÖÌå·ÖÀà¹¤¾ßÀ¸
-	InitFontNameComboBox();		// ³õÊ¼»¯×ÖÌåÃû³Æ×éºÏ¿ò
-	InitFontSizeComboBox();		// ³õÊ¼»¯×ÖÌå´óĞ¡×éºÏ¿ò
-	InitFontAttrToolBar();		// ³õÊ¼»¯×ÖÌåÊôĞÔ¹¤¾ßÀ¸
+	//InitFontClassToolBar();		// åˆå§‹åŒ–å­—ä½“åˆ†ç±»å·¥å…·æ 
+	InitFontNameComboBox();		// åˆå§‹åŒ–å­—ä½“åç§°ç»„åˆæ¡†
+	InitFontSizeComboBox();		// åˆå§‹åŒ–å­—ä½“å¤§å°ç»„åˆæ¡†
+	InitFontAttrToolBar();		// åˆå§‹åŒ–å­—ä½“å±æ€§å·¥å…·æ 
 
 	return TRUE;
 }
 
-// ·´³õÊ¼»¯
+// ååˆå§‹åŒ–
 void CFontSelDlg::UnInit()
 {
 	if (m_tbFontClass.IsWindow())

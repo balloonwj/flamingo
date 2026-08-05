@@ -1,11 +1,11 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "FindFriendDlg.h"
 #include "FlamingoClient.h"
 #include "UserSnapInfoDlg.h"
 #include "Utils.h"
 #include "EncodeUtil.h"
 
-// CFindFriendDlgÊµÏÖ´úÂë
+// CFindFriendDlgå®žçŽ°ä»£ç 
 CFindFriendDlg::CFindFriendDlg()
 {
 	m_pFMGClient = NULL;
@@ -17,7 +17,7 @@ CFindFriendDlg::~CFindFriendDlg()
 
 BOOL CFindFriendDlg::PreTranslateMessage(MSG* pMsg)
 {
-	//Ö§³Ö»Ø³µ¼ü²éÕÒ
+	//æ”¯æŒå›žè½¦é”®æŸ¥æ‰¾
 	if (pMsg->hwnd==m_hWnd && pMsg->message==WM_KEYDOWN && pMsg->wParam==VK_RETURN)
  	{
 		PostMessage(WM_COMMAND, (WPARAM)IDC_BTN_ADD, 0);
@@ -48,7 +48,7 @@ BOOL CFindFriendDlg::InitUI()
 	m_SkinDlg.SetBgPic(_T("DlgBg\\FindFriendDlgBg.png"));
 	m_SkinDlg.SetCloseSysBtnPic(_T("SysBtn\\btn_close_normal.png"), _T("SysBtn\\btn_close_highlight.png"), _T("SysBtn\\btn_close_down.png"));
 	m_SkinDlg.SubclassWindow(m_hWnd);
-	m_SkinDlg.SetTitleText(_T("²éÕÒÁªÏµÈË»òÈº×é"));	
+	m_SkinDlg.SetTitleText(_T("æŸ¥æ‰¾è”ç³»äººæˆ–ç¾¤ç»„"));	
 	m_SkinDlg.MoveWindow(0, 0, 350, 200, TRUE);
 
 
@@ -64,8 +64,8 @@ BOOL CFindFriendDlg::InitUI()
 	m_btnAdd.SetBgPic(_T("Button\\btn_normal.png"), _T("Button\\btn_focus.png"),_T("Button\\btn_focus.png"), _T("Button\\btn_focus.png"));
 	m_btnAdd.SetRound(4, 4);
 	m_btnAdd.SubclassWindow(GetDlgItem(IDC_BTN_ADD));
-	m_btnAdd.SetWindowText(_T("²éÕÒ"));
-	m_btnAdd.SetToolTipText(_T("µã»÷°´Å¥½øÐÐ²éÕÒ"));
+	m_btnAdd.SetWindowText(_T("æŸ¥æ‰¾"));
+	m_btnAdd.SetToolTipText(_T("ç‚¹å‡»æŒ‰é’®è¿›è¡ŒæŸ¥æ‰¾"));
 
 	m_btnFindTypeSingle.Attach(GetDlgItem(IDC_RADIO_FINDTYPE1));
 	m_btnFindTypeSingle.SetCheck(TRUE);
@@ -89,7 +89,7 @@ void CFindFriendDlg::OnAddFriend(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strAccountToAdd.Trim();
 	if(strAccountToAdd.GetLength()>32 || strAccountToAdd.GetLength()<=0)
 	{
-		m_staticAddInfo.SetWindowText(_T("²éÕÒµÄÕËºÅ³¤¶È±ØÐëÔÚ1¡«30¸ö×Ö·ûÖ®¼ä£¡"));
+		m_staticAddInfo.SetWindowText(_T("æŸ¥æ‰¾çš„è´¦å·é•¿åº¦å¿…é¡»åœ¨1ï½ž30ä¸ªå­—ç¬¦ä¹‹é—´ï¼"));
 		m_edtAddId.SetFocus();
 
 		return;
@@ -98,7 +98,7 @@ void CFindFriendDlg::OnAddFriend(UINT uNotifyCode, int nID, CWindow wndCtl)
 	long nRelationType = 0;
 	if(m_pFMGClient->m_UserMgr.IsSelf(strAccountToAdd))
 		nRelationType = 1;
-    //×¢Òâµ÷ÊÔ°æÔÚÕËºÅºóÃæ¼ÓÉÏÁËuserid£¬ËùÒÔµ¼ÖÂ¿ÉÒÔ¼ÓÒÑ¾­ÊÇºÃÓÑµÄÓÃ»§ÎªºÃÓÑ£¬Õâ²»ÊÇbug£»Release°æ²»´æÔÚÕâ¸öÎÊÌâ
+    //æ³¨æ„è°ƒè¯•ç‰ˆåœ¨è´¦å·åŽé¢åŠ ä¸Šäº†useridï¼Œæ‰€ä»¥å¯¼è‡´å¯ä»¥åŠ å·²ç»æ˜¯å¥½å‹çš„ç”¨æˆ·ä¸ºå¥½å‹ï¼Œè¿™ä¸æ˜¯bugï¼›Releaseç‰ˆä¸å­˜åœ¨è¿™ä¸ªé—®é¢˜
 	else if(m_pFMGClient->m_UserMgr.IsFriend(strAccountToAdd))
 		nRelationType = 2;
 	
@@ -108,17 +108,17 @@ void CFindFriendDlg::OnAddFriend(UINT uNotifyCode, int nID, CWindow wndCtl)
 		CUserSnapInfoDlg userSnapInfoDlg;
 		userSnapInfoDlg.SetUserFaceID(m_pFMGClient->m_UserMgr.GetFaceID(strAccountToAdd));
 		memset(szData, 0, sizeof(szData));
-		_stprintf_s(szData, ARRAYSIZE(szData), _T("ÕË»§£º%s"), strAccountToAdd.GetString());
+		_stprintf_s(szData, ARRAYSIZE(szData), _T("è´¦æˆ·ï¼š%s"), strAccountToAdd.GetString());
 		userSnapInfoDlg.SetAccountName(szData);
 		memset(szData, 0, sizeof(szData));
-		_stprintf_s(szData, ARRAYSIZE(szData), _T("êÇ³Æ£º%s"), m_pFMGClient->m_UserMgr.GetNickName(strAccountToAdd).c_str());
+		_stprintf_s(szData, ARRAYSIZE(szData), _T("æ˜µç§°ï¼š%s"), m_pFMGClient->m_UserMgr.GetNickName(strAccountToAdd).c_str());
 		userSnapInfoDlg.SetNickName(szData);
 		if(nRelationType == 1)
-			userSnapInfoDlg.SetOperationDescription(_T("Äú²»ÄÜÌí¼Ó×Ô¼ºÎªºÃÓÑ¡£"));
+			userSnapInfoDlg.SetOperationDescription(_T("æ‚¨ä¸èƒ½æ·»åŠ è‡ªå·±ä¸ºå¥½å‹ã€‚"));
 		else if(nRelationType == 2)
-			userSnapInfoDlg.SetOperationDescription(_T("¸ÃÕË»§ÒÑ¾­ÊÇÄúµÄºÃÓÑ£¬ÎÞÐèÌí¼Ó¡£"));
+			userSnapInfoDlg.SetOperationDescription(_T("è¯¥è´¦æˆ·å·²ç»æ˜¯æ‚¨çš„å¥½å‹ï¼Œæ— éœ€æ·»åŠ ã€‚"));
 
-		userSnapInfoDlg.SetOKButtonText(_T("¼ÓÎªºÃÓÑ"));
+		userSnapInfoDlg.SetOKButtonText(_T("åŠ ä¸ºå¥½å‹"));
 		userSnapInfoDlg.EnableOKButton(FALSE);
 
 		userSnapInfoDlg.DoModal(m_hWnd, NULL);
@@ -127,10 +127,10 @@ void CFindFriendDlg::OnAddFriend(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 	
 	long nType = m_btnFindTypeSingle.GetCheck() ? 1 : 2;
-	//²éÕÒÕË»§²¢Ìí¼ÓºÃÓÑ	
+	//æŸ¥æ‰¾è´¦æˆ·å¹¶æ·»åŠ å¥½å‹	
 	m_pFMGClient->FindFriend(strAccountToAdd, nType, m_hWnd);
 	
-	m_staticAddInfo.SetWindowText(_T("ÕýÔÚ²éÕÒÓÃ»§£¬ÇëÉÔµÈ..."));	
+	m_staticAddInfo.SetWindowText(_T("æ­£åœ¨æŸ¥æ‰¾ç”¨æˆ·ï¼Œè¯·ç¨ç­‰..."));	
 }
 
 LRESULT CFindFriendDlg::OnFindFriendResult(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
@@ -142,9 +142,9 @@ LRESULT CFindFriendDlg::OnFindFriendResult(UINT uMsg, WPARAM wParam, LPARAM lPar
 	long nResultCode = pResult->m_nResultCode;
 	
 	if(nResultCode == FIND_FRIEND_NOT_FOUND)
-		m_staticAddInfo.SetWindowText(_T("Äú²éÕÒµÄÕË»§²»´æÔÚ£¡"));
+		m_staticAddInfo.SetWindowText(_T("æ‚¨æŸ¥æ‰¾çš„è´¦æˆ·ä¸å­˜åœ¨ï¼"));
 	else if(nResultCode == FIND_FRIEND_FAILED)
-		m_staticAddInfo.SetWindowText(_T("ÍøÂç¹ÊÕÏ£¬²éÕÒÕË»§Ê§°Ü£¡"));
+		m_staticAddInfo.SetWindowText(_T("ç½‘ç»œæ•…éšœï¼ŒæŸ¥æ‰¾è´¦æˆ·å¤±è´¥ï¼"));
 	else if(nResultCode == FIND_FRIEND_FOUND)
 	{
 		m_staticAddInfo.SetWindowText(_T(""));
@@ -159,34 +159,34 @@ LRESULT CFindFriendDlg::OnFindFriendResult(UINT uMsg, WPARAM wParam, LPARAM lPar
 		TCHAR szAccount[32] = {0};
         EncodeUtil::Utf8ToUnicode(pResult->m_szAccountName, szAccount, ARRAYSIZE(szAccount));
 		if(bGroup)
-			_stprintf_s(szInfo, ARRAYSIZE(szInfo), _T("ÈºÕË»§£º%s"), szAccount);
+			_stprintf_s(szInfo, ARRAYSIZE(szInfo), _T("ç¾¤è´¦æˆ·ï¼š%s"), szAccount);
 		else
-			_stprintf_s(szInfo, ARRAYSIZE(szInfo), _T("ÕË»§£º%s"), szAccount);
+			_stprintf_s(szInfo, ARRAYSIZE(szInfo), _T("è´¦æˆ·ï¼š%s"), szAccount);
 		userSnapInfoDlg.SetAccountName(szInfo);
 
 		TCHAR szNickName[32] = {0};
 		memset(szInfo, 0, sizeof(szInfo));
         EncodeUtil::Utf8ToUnicode(pResult->m_szNickName, szNickName, ARRAYSIZE(szNickName));
 		if(bGroup)
-			_stprintf_s(szInfo, ARRAYSIZE(szInfo), _T("ÈºÃû³Æ£º%s"), szNickName);
+			_stprintf_s(szInfo, ARRAYSIZE(szInfo), _T("ç¾¤åç§°ï¼š%s"), szNickName);
 		else
-			_stprintf_s(szInfo, ARRAYSIZE(szInfo), _T("êÇ³Æ£º%s"), szNickName);
+			_stprintf_s(szInfo, ARRAYSIZE(szInfo), _T("æ˜µç§°ï¼š%s"), szNickName);
 		userSnapInfoDlg.SetNickName(szInfo);
 
 		if(bGroup)
-			userSnapInfoDlg.SetOKButtonText(_T("¼ÓÈë¸ÃÈº"));
+			userSnapInfoDlg.SetOKButtonText(_T("åŠ å…¥è¯¥ç¾¤"));
 		else
-			userSnapInfoDlg.SetOKButtonText(_T("¼ÓÎªºÃÓÑ"));
+			userSnapInfoDlg.SetOKButtonText(_T("åŠ ä¸ºå¥½å‹"));
 		
 		if(bGroup && m_pFMGClient->m_UserMgr.IsGroupMember(m_pFMGClient->m_UserMgr.m_UserInfo.m_uUserID, pResult->m_uAccountID))
 		{
-			userSnapInfoDlg.SetOperationDescription(_T("ÄúÒÑ¾­ÊÇ¸ÃÈº³ÉÔ±£¬²»ÄÜÖØ¸´Ìí¼Ó¡£"));
+			userSnapInfoDlg.SetOperationDescription(_T("æ‚¨å·²ç»æ˜¯è¯¥ç¾¤æˆå‘˜ï¼Œä¸èƒ½é‡å¤æ·»åŠ ã€‚"));
 			userSnapInfoDlg.EnableOKButton(FALSE);
 		}
 
 		if(userSnapInfoDlg.DoModal(m_hWnd, NULL) == IDOK)
 		{
-			m_staticAddInfo.SetWindowText(_T("ÄúµÄÇëÇóÒÑ¾­·¢ËÍ£¬ÇëµÈ´ý¶Ô·½»ØÓ¦¡£"));
+			m_staticAddInfo.SetWindowText(_T("æ‚¨çš„è¯·æ±‚å·²ç»å‘é€ï¼Œè¯·ç­‰å¾…å¯¹æ–¹å›žåº”ã€‚"));
 			m_pFMGClient->AddFriend(pResult->m_uAccountID);
 		}
 			

@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "SkinLib/SkinLib.h"
 #include "RegisterDialog.h"
@@ -31,7 +31,7 @@ public:
         COMMAND_ID_HANDLER_EX(ID_BTN_SET, OnBtn_Set)
         COMMAND_ID_HANDLER_EX(ID_STATIC_REG_ACCOUNT, OnRegister)
         COMMAND_RANGE_HANDLER_EX(ID_MENU_IMONLINE, ID_MENU_INVISIBLE, OnMenu_LoginStatus)
-		REFLECT_NOTIFICATIONS()														// ÏûÏ¢·´ÉäÍ¨Öªºê
+		REFLECT_NOTIFICATIONS()														// æ¶ˆæ¯åå°„é€šçŸ¥å®
 	END_MSG_MAP()
 
 public:
@@ -50,22 +50,22 @@ private:
 	void OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct);
 	void OnClose();
 	void OnDestroy();
-	void OnCbo_EditChange_UID(UINT uNotifyCode, int nID, CWindow wndCtl);			// ¡°UTalkÕÊºÅ¡±×éºÏ¿ò
-	void OnCbo_SelChange_UID(UINT uNotifyCode, int nID, CWindow wndCtl);			// ¡°UTalkÕÊºÅ¡±×éºÏ¿ò
-	void OnBtn_RememberPwd(UINT uNotifyCode, int nID, CWindow wndCtl);				// ¡°¼Ç×¡ÃÜÂë¡±¸´Ñ¡¿ò
-	void OnBtn_AutoLogin(UINT uNotifyCode, int nID, CWindow wndCtl);				// ¡°×Ô¶¯µÇÂ¼¡±¸´Ñ¡¿ò
-	void OnBtn_Login(UINT uNotifyCode, int nID, CWindow wndCtl);					// ¡°µÇÂ¼¡±°´Å¥
-	void OnBtn_Set(UINT uNotifyCode, int nID, CWindow wndCtl);						// ¡°ÉèÖÃ¡±°´Å¥
-	void OnMenu_LoginStatus(UINT uNotifyCode, int nID, CWindow wndCtl);				// ¡°µÇÂ¼×´Ì¬¡±²Ëµ¥°´Å¥
+	void OnCbo_EditChange_UID(UINT uNotifyCode, int nID, CWindow wndCtl);			// â€œUTalkå¸å·â€ç»„åˆæ¡†
+	void OnCbo_SelChange_UID(UINT uNotifyCode, int nID, CWindow wndCtl);			// â€œUTalkå¸å·â€ç»„åˆæ¡†
+	void OnBtn_RememberPwd(UINT uNotifyCode, int nID, CWindow wndCtl);				// â€œè®°ä½å¯†ç â€å¤é€‰æ¡†
+	void OnBtn_AutoLogin(UINT uNotifyCode, int nID, CWindow wndCtl);				// â€œè‡ªåŠ¨ç™»å½•â€å¤é€‰æ¡†
+	void OnBtn_Login(UINT uNotifyCode, int nID, CWindow wndCtl);					// â€œç™»å½•â€æŒ‰é’®
+	void OnBtn_Set(UINT uNotifyCode, int nID, CWindow wndCtl);						// â€œè®¾ç½®â€æŒ‰é’®
+	void OnMenu_LoginStatus(UINT uNotifyCode, int nID, CWindow wndCtl);				// â€œç™»å½•çŠ¶æ€â€èœå•æŒ‰é’®
 
-	void DetectNewVersion();														//¼ì²âĞÂ°æ±¾
+	void DetectNewVersion();														//æ£€æµ‹æ–°ç‰ˆæœ¬
 	void OnRegister(UINT uNotifyCode, int nID, CWindow wndCtl);
 
 	BOOL InitUI();
 	void UninitUI();
 
-	long GetStatusFromMenuID(int nMenuID);									// ´Ó²Ëµ¥ID»ñÈ¡¶ÔÓ¦µÄUTalk_STATUS
-	void StatusMenuBtn_SetIconPic(CSkinButton& btnStatus, long nStatus);	// ¸ù¾İÖ¸¶¨×´Ì¬ÉèÖÃ×´Ì¬²Ëµ¥°´Å¥µÄÍ¼±ê
+	long GetStatusFromMenuID(int nMenuID);									// ä»èœå•IDè·å–å¯¹åº”çš„UTalk_STATUS
+	void StatusMenuBtn_SetIconPic(CSkinButton& btnStatus, long nStatus);	// æ ¹æ®æŒ‡å®šçŠ¶æ€è®¾ç½®çŠ¶æ€èœå•æŒ‰é’®çš„å›¾æ ‡
 	void SetCurUser(LPCTSTR lpszUser, BOOL bPwdInvalid = FALSE);
 
     static UINT WINAPI LoginThreadProc(void* pParam);
@@ -80,7 +80,7 @@ private:
 	CSkinEdit			m_edtPwd;
 	CSkinButton			m_btnRememberPwd;
 	CSkinButton			m_btnAutoLogin;
-	CSkinHyperLink		m_lnkRegAccount;											//×¢²áÁ´½Ó°´Å¥
+	CSkinHyperLink		m_lnkRegAccount;											//æ³¨å†Œé“¾æ¥æŒ‰é’®
 	CSkinHyperLink		m_lnkLostPwd;
 
 	CSkinButton			m_btnSet;
@@ -93,8 +93,8 @@ private:
 	LOGIN_ACCOUNT_INFO	m_stAccountInfo;
 	BOOL				m_bFirstModify;
 
-	CLoginSettingsDlg	m_LoginSettingDlg;											// ÉèÖÃ¶Ô»°¿ò
-	CRegisterDialog		m_RegDlg;													// ×¢²á¶Ô»°¿ò
+	CLoginSettingsDlg	m_LoginSettingDlg;											// è®¾ç½®å¯¹è¯æ¡†
+	CRegisterDialog		m_RegDlg;													// æ³¨å†Œå¯¹è¯æ¡†
 	CString				m_strDefaultAccount;
 	CString				m_strDefaultPassword;
 };

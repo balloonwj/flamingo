@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 HWND CreateOwnerWindow();
 
@@ -9,6 +9,6 @@ BOOL InitSocket();
 void UnInitSocket();
 
 /**
- *@param pszFileSuffixName ÒªÇåÀíµÄÈÕÖ¾ÎÄ¼şµÄÀ©Õ¹Ãû£¬²»ÒªÒÔ.¿ªÍ·£¬ÀıÈçlog
+ *@param pszFileSuffixName è¦æ¸…ç†çš„æ—¥å¿—æ–‡ä»¶çš„æ‰©å±•åï¼Œä¸è¦ä»¥.å¼€å¤´ï¼Œä¾‹å¦‚log
  */
 void ClearExpiredLog(PCTSTR pszFileSuffixName);

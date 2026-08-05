@@ -1,7 +1,7 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "ChatDlgCommon.h"
 
-//´°¿Ú¶¶¶¯Ïß³Ì
+//çª—å£æŠ–åŠ¨çº¿ç¨‹
 DWORD __stdcall ShakeWindowThreadProc(LPVOID pParameters)
 {
     HWND hwnd = (HWND)pParameters;
@@ -39,7 +39,7 @@ DWORD __stdcall ShakeWindowThreadProc(LPVOID pParameters)
 
 void ShakeWindow(HWND hwnd, long nTimes)
 {
-	//ĞÂ½¨Ò»¸öÏÖ³ÉÀ´¶¶¶¯´°¿Ú£¬±ÜÃâSleepÊ±×èÈûÖ÷Ïß³ÌÏûÏ¢Ñ­»·
+	//æ–°å»ºä¸€ä¸ªç°æˆæ¥æŠ–åŠ¨çª—å£ï¼Œé¿å…Sleepæ—¶é˜»å¡ä¸»çº¿ç¨‹æ¶ˆæ¯å¾ªç¯
     HANDLE hShakeWindowThread = ::CreateThread(NULL, 0, ShakeWindowThreadProc, (LPVOID)hwnd, 0, NULL);
     ::CloseHandle(hShakeWindowThread);   
 }

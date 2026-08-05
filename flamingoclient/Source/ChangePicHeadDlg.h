@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "resource.h"
 #include "SkinLib/SkinLib.h"
@@ -46,8 +46,8 @@ private:
 
 	CSkinPictureBox						m_ThumbBox;
 
-	std::vector<CSkinPictureBox*>		m_aryThumbWindows;	//¹©Ñ¡ÔñµÄÍ·ÏñÁĞ±í
+	std::vector<CSkinPictureBox*>		m_aryThumbWindows;	//ä¾›é€‰æ‹©çš„å¤´åƒåˆ—è¡¨
 
-	long								m_SelectedIndex;	//Ñ¡ÖĞµÄÍ·ÏñË÷Òı
-	long								m_LastSelectedIndex;//ÉÏÒ»´ÎÑ¡ÖĞµÄÍ·ÏñË÷Òı
+	long								m_SelectedIndex;	//é€‰ä¸­çš„å¤´åƒç´¢å¼•
+	long								m_LastSelectedIndex;//ä¸Šä¸€æ¬¡é€‰ä¸­çš„å¤´åƒç´¢å¼•
 };

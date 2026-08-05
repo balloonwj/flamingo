@@ -11,6 +11,7 @@
 #include "net/Msg.h"
 #include "net/IUSocket.h"
 #include "net/ProtocolStream.h"
+#include "net/LoginProtocolClient.h"     // v2 登录应答解析（重连路径用）
 
 CMsgItem::CMsgItem(void)
 {
@@ -208,74 +209,100 @@ void CSendMsgThread::HandleRegister(const CRegisterRequest* pRegisterRequest)
     CIUSocket::GetInstance().Send(outbuf);
 }
 
+// 重连登录入口：被 MainDlg 的 m_dwReconnectTimerId 触发后，CFlamingoClient::Login()
+// 投递的 CLoginRequest 在本函数里处理。改造期内统一走 v2 协议 ——
+//   1) 仍调 CIUSocket::Login() 走 cmd_login（其内部已 SHA-256 + encodeFrame）
+//   2) 应答解析改用 net::LoginProtocolClient::parseLoginResponse
+// 与 BalloonLoginDlg::LoginThreadProc 的处理保持一致，结果通过
+// FMG_MSG_LOGIN_RESULT 回投给 m_hProxyWnd（FlamingoClient → MainDlg）。
+//
+// 历史 bug：旧实现按 v1 顶层平铺字段校验（要求 userid 为 int、username 在顶层等），
+//          而 v2 应答 userid 为 string、用户资料嵌在 profile 子对象，
+//          导致每次重连必判 LOGIN_FAILED，MainDlg 收到后重开登录窗
+//          触发 balloonui DuiFrameWindow 悬空 m_titleBar 崩溃。
 void CSendMsgThread::HandleLogon(const CLoginRequest* pLoginRequest)
 {
     if (pLoginRequest == NULL)
         return;
 
-    char szLoginInfo[256] = { 0 };
-    sprintf_s(szLoginInfo,
-        ARRAYSIZE(szLoginInfo),
-        "{\"username\": \"%s\", \"password\": \"%s\", \"clienttype\": %d, \"status\": %d}",
+    LOG_INFO("Reconnect logon request: Account=%s, Status=%d, LoginType=%ld.",
+             pLoginRequest->m_szAccountName,
+             pLoginRequest->m_nStatus,
+             (long)pLoginRequest->m_nLoginType);
+
+    //超时单位为秒（对齐 BalloonLoginDlg 的 kLoginTimeoutSeconds=3）。
+    //旧实现传 3000 实际被当作 3000 秒（CIUSocket::RecvData 用 time(NULL)
+    //做超时判定，单位为秒），等同于"无超时"。
+    const int kReconnectTimeoutSeconds = 3;
+
+    std::string strReturnData;
+    bool bRet = CIUSocket::GetInstance().Login(
         pLoginRequest->m_szAccountName,
         pLoginRequest->m_szPassword,
         (long)pLoginRequest->m_nLoginType,
-        pLoginRequest->m_nStatus);
+        pLoginRequest->m_nStatus,
+        kReconnectTimeoutSeconds,
+        strReturnData);
 
-
-    std::string strReturnData;
-    //超时时间设置为3秒
-    bool bRet = CIUSocket::GetInstance().Login(pLoginRequest->m_szAccountName, pLoginRequest->m_szPassword, (long)pLoginRequest->m_nLoginType, pLoginRequest->m_nStatus, 3000, strReturnData);
-    LOG_INFO("Request logon: Account=%s, Password=*****, Status=%d, LoginType=%d.", pLoginRequest->m_szAccountName, pLoginRequest->m_szPassword, pLoginRequest->m_nStatus, (long)pLoginRequest->m_nLoginType);
-
-    int nRet = LOGIN_FAILED;
     CLoginResult* pLoginResult = new CLoginResult();
     pLoginResult->m_LoginResultCode = LOGIN_FAILED;
     if (bRet)
     {
-        //{"code": 0, "msg": "ok", "userid": 8}
-        Json::Reader JsonReader;
-        Json::Value JsonRoot;
-        if (JsonReader.parse(strReturnData, JsonRoot) && !JsonRoot["code"].isNull() && JsonRoot["code"].isInt())
+        net::LoginResponse resp;
+        if (net::LoginProtocolClient::parseLoginResponse(strReturnData, resp))
         {
-            int nRetCode = JsonRoot["code"].asInt();
-
-            if (nRetCode == 0)
+            //成功应答：填 LoginResult，profile 字段全部从 resp.profile 取
+            if (resp.code == 0)
             {
-                if (!JsonRoot["userid"].isInt() || !JsonRoot["username"].isString() || !JsonRoot["nickname"].isString() ||
-                    !JsonRoot["facetype"].isInt() || !JsonRoot["gender"].isInt() || !JsonRoot["birthday"].isInt() ||
-                    !JsonRoot["signature"].isString() || !JsonRoot["address"].isString() ||
-                    !JsonRoot["customface"].isString() || !JsonRoot["phonenumber"].isString() ||
-                    !JsonRoot["mail"].isString())
-                {
-                    LOG_ERROR(_T("login failed, login response json is invalid, json=%s"), strReturnData.c_str());
-                    pLoginResult->m_LoginResultCode = LOGIN_FAILED;
-                } else
-                {
-                    pLoginResult->m_LoginResultCode = 0;
-                    pLoginResult->m_uAccountID = JsonRoot["userid"].asInt();
-                    strcpy_s(pLoginResult->m_szAccountName, ARRAYSIZE(pLoginResult->m_szAccountName), JsonRoot["username"].asCString());
-                    strcpy_s(pLoginResult->m_szNickName, ARRAYSIZE(pLoginResult->m_szNickName), JsonRoot["nickname"].asCString());
-                    //pLoginResult->m_nStatus = JsonRoot["status"].asInt();
-                    pLoginResult->m_nFace = JsonRoot["facetype"].asInt();
-                    pLoginResult->m_nGender = JsonRoot["gender"].asInt();
-                    pLoginResult->m_nBirthday = JsonRoot["birthday"].asInt();
-                    strcpy_s(pLoginResult->m_szSignature, ARRAYSIZE(pLoginResult->m_szSignature), JsonRoot["signature"].asCString());
-                    strcpy_s(pLoginResult->m_szAddress, ARRAYSIZE(pLoginResult->m_szAddress), JsonRoot["address"].asCString());
-                    strcpy_s(pLoginResult->m_szCustomFace, ARRAYSIZE(pLoginResult->m_szCustomFace), JsonRoot["customface"].asCString());
-                    strcpy_s(pLoginResult->m_szPhoneNumber, ARRAYSIZE(pLoginResult->m_szPhoneNumber), JsonRoot["phonenumber"].asCString());
-                    strcpy_s(pLoginResult->m_szMail, ARRAYSIZE(pLoginResult->m_szMail), JsonRoot["mail"].asCString());
-                }
-            } else if (nRetCode == 102)
+                pLoginResult->m_LoginResultCode = LOGIN_SUCCESS;
+                pLoginResult->m_uAccountID = (UINT)resp.userid;
+                strcpy_s(pLoginResult->m_szAccountName, ARRAYSIZE(pLoginResult->m_szAccountName),
+                         resp.profile.username.c_str());
+                strcpy_s(pLoginResult->m_szNickName, ARRAYSIZE(pLoginResult->m_szNickName),
+                         resp.profile.nickname.c_str());
+                pLoginResult->m_nFace     = resp.profile.facetype;
+                pLoginResult->m_nGender   = resp.profile.gender;
+                pLoginResult->m_nBirthday = resp.profile.birthday;
+                strcpy_s(pLoginResult->m_szSignature, ARRAYSIZE(pLoginResult->m_szSignature),
+                         resp.profile.signature.c_str());
+                strcpy_s(pLoginResult->m_szAddress, ARRAYSIZE(pLoginResult->m_szAddress),
+                         resp.profile.address.c_str());
+                strcpy_s(pLoginResult->m_szCustomFace, ARRAYSIZE(pLoginResult->m_szCustomFace),
+                         resp.profile.customface.c_str());
+                strcpy_s(pLoginResult->m_szPhoneNumber, ARRAYSIZE(pLoginResult->m_szPhoneNumber),
+                         resp.profile.phonenumber.c_str());
+                strcpy_s(pLoginResult->m_szMail, ARRAYSIZE(pLoginResult->m_szMail),
+                         resp.profile.mail.c_str());
+            }
+            //失败应答：把服务端错误码映射到客户端 LOGIN_RESULT_CODE
+            //（错误码定义见 server chatserversrc/Protocol.h enum error_code）
+            else if (resp.code == 102)
                 pLoginResult->m_LoginResultCode = LOGIN_UNREGISTERED;
-            else if (nRetCode == 103)
+            else if (resp.code == 103)
                 pLoginResult->m_LoginResultCode = LOGIN_PASSWORD_ERROR;
             else
+            {
+                LOG_ERROR("Reconnect logon failed: server returned code=%d, msg=%s.",
+                          resp.code, resp.msg.c_str());
                 pLoginResult->m_LoginResultCode = LOGIN_FAILED;
+            }
+        }
+        else
+        {
+            LOG_ERROR("Reconnect logon failed: v2 response json invalid, json=%s",
+                      strReturnData.c_str());
         }
     }
+    else
+    {
+        LOG_ERROR("Reconnect logon failed: CIUSocket::Login returned false.");
+    }
 
-    ::PostMessage(m_lpFMGClient->m_UserMgr.m_hProxyWnd, FMG_MSG_LOGIN_RESULT, 0, (LPARAM)pLoginResult);
+    LOG_INFO("Reconnect logon result code=%d (0=SUCCESS 1=FAILED 2=UNREG 3=PWD_ERR).",
+             (int)pLoginResult->m_LoginResultCode);
+
+    ::PostMessage(m_lpFMGClient->m_UserMgr.m_hProxyWnd, FMG_MSG_LOGIN_RESULT, 0,
+                  (LPARAM)pLoginResult);
 }
 
 void CSendMsgThread::HandleUserBasicInfo(const CUserBasicInfoRequest* pUserBasicInfo)

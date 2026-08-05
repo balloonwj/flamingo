@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "LoginDlg.h"
 #include "Startup.h"
 #include "Utils.h"
@@ -123,7 +123,7 @@ void CLoginDlg::OnDestroy()
 	UninitUI();
 }
 
-// ¡°UTalkÕÊºÅ¡±×éºÏ¿ò
+// â€œUTalkå¸å·â€ç»„åˆæ¡†
 void CLoginDlg::OnCbo_EditChange_UID(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	CString strText;
@@ -136,7 +136,7 @@ void CLoginDlg::OnCbo_EditChange_UID(UINT uNotifyCode, int nID, CWindow wndCtl)
 		{
 			m_bFirstModify = FALSE;
 
-			m_picHead.SetBitmap(_T("DefaultFace.png"));		// ÉèÖÃÓÃ»§Í·Ïñ
+			m_picHead.SetBitmap(_T("DefaultFace.png"));		// è®¾ç½®ç”¨æˆ·å¤´åƒ
 			m_picHead.Invalidate();
 			
 			m_btnRememberPwd.SetCheck(m_stAccountInfo.bRememberPwd ? BST_CHECKED : BST_UNCHECKED);
@@ -151,7 +151,7 @@ void CLoginDlg::OnCbo_EditChange_UID(UINT uNotifyCode, int nID, CWindow wndCtl)
 		SetCurUser(strText);
 }
 
-// ¡°UTalkÕÊºÅ¡±×éºÏ¿ò
+// â€œUTalkå¸å·â€ç»„åˆæ¡†
 void CLoginDlg::OnCbo_SelChange_UID(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	int nCurSel = m_cboUid.GetCurSel();
@@ -163,40 +163,40 @@ void CLoginDlg::OnCbo_SelChange_UID(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ¡°¼Ç×¡ÃÜÂë¡±¸´Ñ¡¿ò
+// â€œè®°ä½å¯†ç â€å¤é€‰æ¡†
 void CLoginDlg::OnBtn_RememberPwd(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
-	// È¡Ïû¡°¼Ç×¡ÃÜÂë¡±¸´Ñ¡¿ò£¬Ôò×Ô¶¯È¡Ïû¡°×Ô¶¯µÇÂ¼¡±¸´Ñ¡¿ò
+	// å–æ¶ˆâ€œè®°ä½å¯†ç â€å¤é€‰æ¡†ï¼Œåˆ™è‡ªåŠ¨å–æ¶ˆâ€œè‡ªåŠ¨ç™»å½•â€å¤é€‰æ¡†
 	if (m_btnRememberPwd.GetCheck() == BST_UNCHECKED)
 		m_btnAutoLogin.SetCheck(BST_UNCHECKED);
 }
 
-// ¡°×Ô¶¯µÇÂ¼¡±¸´Ñ¡¿ò
+// â€œè‡ªåŠ¨ç™»å½•â€å¤é€‰æ¡†
 void CLoginDlg::OnBtn_AutoLogin(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
-	// Ñ¡ÖĞ¡°×Ô¶¯µÇÂ¼¡±¸´Ñ¡¿ò£¬Ôò×Ô¶¯Ñ¡ÉÏ¡°¼Ç×¡ÃÜÂë¡±¸´Ñ¡¿ò
+	// é€‰ä¸­â€œè‡ªåŠ¨ç™»å½•â€å¤é€‰æ¡†ï¼Œåˆ™è‡ªåŠ¨é€‰ä¸Šâ€œè®°ä½å¯†ç â€å¤é€‰æ¡†
 	if (m_btnAutoLogin.GetCheck() == BST_CHECKED)
 		m_btnRememberPwd.SetCheck(BST_CHECKED);
 }
 
-// ¡°µÇÂ¼¡±°´Å¥
+// â€œç™»å½•â€æŒ‰é’®
 void CLoginDlg::OnBtn_Login(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
-	//µ÷ÊÔ°æ¾Í²»Òª¼ì²â×Ô¶¯Éı¼¶ÁË£¬²»È»ÈçºÎµ÷ÊÔÄØ£¿
+	//è°ƒè¯•ç‰ˆå°±ä¸è¦æ£€æµ‹è‡ªåŠ¨å‡çº§äº†ï¼Œä¸ç„¶å¦‚ä½•è°ƒè¯•å‘¢ï¼Ÿ
 #ifndef _DEBUG
 	DetectNewVersion();
 #endif
 	
 	if (m_cboUid.IsDefaultText())
 	{
-		MessageBox(_T("ÇëÊäÈëÕËºÅ£¡"), _T("ÌáÊ¾"), MB_OK|MB_ICONINFORMATION);
+		MessageBox(_T("è¯·è¾“å…¥è´¦å·ï¼"), _T("æç¤º"), MB_OK|MB_ICONINFORMATION);
 		m_cboUid.SetFocus();
 		return;
 	}
 
 	if (m_edtPwd.IsDefaultText())
 	{
-		MessageBox(_T("ÇëÊäÈëÃÜÂë£¡"), _T("ÌáÊ¾"), MB_OK|MB_ICONINFORMATION);
+		MessageBox(_T("è¯·è¾“å…¥å¯†ç ï¼"), _T("æç¤º"), MB_OK|MB_ICONINFORMATION);
 		m_edtPwd.SetFocus();
 		return;
 	}
@@ -206,7 +206,7 @@ void CLoginDlg::OnBtn_Login(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_stAccountInfo.bRememberPwd = (m_btnRememberPwd.GetCheck() == BST_CHECKED);
 	m_stAccountInfo.bAutoLogin = (m_btnAutoLogin.GetCheck() == BST_CHECKED);
 
-	// ¼ÇÂ¼µ±Ç°ÓÃ»§ĞÅÏ¢
+	// è®°å½•å½“å‰ç”¨æˆ·ä¿¡æ¯
 	m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount = m_stAccountInfo.szUser;
 
     DoLogin();
@@ -214,7 +214,7 @@ void CLoginDlg::OnBtn_Login(UINT uNotifyCode, int nID, CWindow wndCtl)
 	EndDialog(IDOK);
 }
 
-// ¡°ÉèÖÃ¡±°´Å¥
+// â€œè®¾ç½®â€æŒ‰é’®
 void CLoginDlg::OnBtn_Set(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	CLoginSettingsDlg m_LoginSettingDlg;
@@ -226,13 +226,13 @@ void CLoginDlg::OnBtn_Set(UINT uNotifyCode, int nID, CWindow wndCtl)
 
 void CLoginDlg::DetectNewVersion()
 {
-	//½«updater.IsNeedUpdate()×ö³ÉUpdateDlg³ÉÔ±·½·¨
+	//å°†updater.IsNeedUpdate()åšæˆUpdateDlgæˆå‘˜æ–¹æ³•
 	Updater updater(&(m_lpFMGClient->m_FileTask));
 	
-	//ĞèÒªÉı¼¶
+	//éœ€è¦å‡çº§
 	if(CheckOnlyOneInstance() && updater.IsNeedUpdate())
 	{
-		if(IDYES == ::MessageBox(m_hWnd, _T("¼ì²âµ½ĞÂ°æ±¾£¬ÊÇ·ñÏÖÔÚ¾ÍÉı¼¶£¿"), _T("ĞÂ°æ±¾Éı¼¶ÌáÊ¾"), MB_YESNO|MB_ICONQUESTION|MB_TOPMOST))
+		if(IDYES == ::MessageBox(m_hWnd, _T("æ£€æµ‹åˆ°æ–°ç‰ˆæœ¬ï¼Œæ˜¯å¦ç°åœ¨å°±å‡çº§ï¼Ÿ"), _T("æ–°ç‰ˆæœ¬å‡çº§æç¤º"), MB_YESNO|MB_ICONQUESTION|MB_TOPMOST))
 		{
 			ShowWindow(SW_HIDE);
 			CUpdateDlg updateDlg;
@@ -249,12 +249,12 @@ void CLoginDlg::DetectNewVersion()
 
 void CLoginDlg::OnRegister(UINT uNotifyCode, int nID, CWindow wndCtl)
 {	
-	//ÏÔÊ¾×¢²á¶Ô»°¿ò
+	//æ˜¾ç¤ºæ³¨å†Œå¯¹è¯æ¡†
 	m_RegDlg.m_pFMGClient = m_lpFMGClient;
 	if(m_RegDlg.DoModal(m_hWnd, NULL) != IDOK)
 		return;
 	
-	//×¢²á³É¹¦ÒÔºó½«×¢²áºÃµÄÕË»§ÃûºÍÃÜÂëÌîÈëµÇÂ¼ÎÄ±¾¿òÖĞ
+	//æ³¨å†ŒæˆåŠŸä»¥åå°†æ³¨å†Œå¥½çš„è´¦æˆ·åå’Œå¯†ç å¡«å…¥ç™»å½•æ–‡æœ¬æ¡†ä¸­
 	m_cboUid.SetDefaultTextMode(FALSE);
 	m_cboUid.SetWindowText(m_RegDlg.GetAccountName());
 	m_edtPwd.SetDefaultTextMode(FALSE);
@@ -262,7 +262,7 @@ void CLoginDlg::OnRegister(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_edtPwd.SetPasswordChar(0x25CF);
 }
 
-// ¡°µÇÂ¼×´Ì¬¡±²Ëµ¥°´Å¥
+// â€œç™»å½•çŠ¶æ€â€èœå•æŒ‰é’®
 void CLoginDlg::OnMenu_LoginStatus(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	m_stAccountInfo.nStatus = (int)GetStatusFromMenuID(nID);
@@ -294,7 +294,7 @@ BOOL CLoginDlg::InitUI()
 	m_btnSet.SetBgPic(_T("Button\\login_setting_btn_normal.png"), _T("Button\\login_setting_btn_focus.png"), _T("Button\\login_setting_btn_focus.png"), _T("Button\\login_setting_btn_focus.png"));
 	m_btnSet.SubclassWindow(GetDlgItem(ID_BTN_SET));
 	m_btnSet.MoveWindow(472, 0, 26, 26, FALSE);
-	m_btnSet.SetToolTipText(_T("ÍøÂçÉèÖÃ"));
+	m_btnSet.SetToolTipText(_T("ç½‘ç»œè®¾ç½®"));
 	m_btnSet.GetClientRect(&rtWindow);
 	hHotRgn = ::CreateRectRgnIndirect(&rtWindow);
 
@@ -338,10 +338,10 @@ BOOL CLoginDlg::InitUI()
 	m_lnkRegAccount.SetHoverLinkColor(RGB(22, 112, 235));
 	m_lnkRegAccount.SetVisitedLinkColor(RGB(22, 112, 235));
 	m_lnkRegAccount.SubclassWindow(GetDlgItem(ID_STATIC_REG_ACCOUNT));
-	m_lnkRegAccount.SetLabel(_T("×¢²áÕËºÅ"));
+	m_lnkRegAccount.SetLabel(_T("æ³¨å†Œè´¦å·"));
 	//m_lnkRegAccount.SetLinkType(SKIN_LINK_REGISTER);
 	//m_lnkRegAccount.SetHyperLink(_T("http://zc.flamingo.com/chs/index.html?from=client&ptlang=2052&ADUIN=0&ADSESSION=0&ADTAG=CLIENT.UTalk.4153_NewAccount_Btn.0"));
-	m_lnkRegAccount.SetToolTipText(_T("×¢²áÕËºÅ"));
+	m_lnkRegAccount.SetToolTipText(_T("æ³¨å†Œè´¦å·"));
 	m_lnkRegAccount.MoveWindow(385, 170, 80, 15, FALSE);
 	m_lnkRegAccount.GetClientRect(&rtWindow);
 	hTemp = ::CreateRectRgnIndirect(&rtWindow);
@@ -354,9 +354,9 @@ BOOL CLoginDlg::InitUI()
 	m_lnkLostPwd.SetHoverLinkColor(RGB(22, 112, 235));
 	m_lnkLostPwd.SetVisitedLinkColor(RGB(22, 112, 235));
 	m_lnkLostPwd.SubclassWindow(GetDlgItem(ID_STATIC_LOST_PWD));
-	m_lnkLostPwd.SetLabel(_T("ÕÒ»ØÃÜÂë"));
+	m_lnkLostPwd.SetLabel(_T("æ‰¾å›å¯†ç "));
 	//m_lnkLostPwd.SetHyperLink(_T("http://aq.flamingo.com/cn2/findpsw/findpsw_index?source_id=1003&ptlang=2052&aquin=123456"));
-	//m_lnkLostPwd.SetToolTipText(_T("ÕÒ»ØÃÜÂë"));
+	//m_lnkLostPwd.SetToolTipText(_T("æ‰¾å›å¯†ç "));
 	m_lnkLostPwd.MoveWindow(385, 215, 80, 15, FALSE);
 	m_lnkLostPwd.GetClientRect(&rtWindow);
 	hTemp = ::CreateRectRgnIndirect(&rtWindow);
@@ -372,7 +372,7 @@ BOOL CLoginDlg::InitUI()
 	m_cboUid.SetArrowPushedPic(_T("ComboBox\\login_inputbtn_down.png"));
 	m_cboUid.SetTransparent(TRUE, hDlgBgDC);
 	m_cboUid.SetArrowWidth(28);
-	m_cboUid.SetDefaultText(_T("ÇëÊäÈëÕËºÅ»òÊÖ»úºÅ"));
+	m_cboUid.SetDefaultText(_T("è¯·è¾“å…¥è´¦å·æˆ–æ‰‹æœºå·"));
 	//m_cboUid.SetDefaultTextMode(TRUE);
 	m_cboUid.SetItemHeight(-1, 22);
 	m_cboUid.GetClientRect(&rtWindow);
@@ -381,7 +381,7 @@ BOOL CLoginDlg::InitUI()
 	::DeleteObject(hTemp);
 
 
-	if (m_pLoginAccountList != NULL)	// Ìí¼ÓµÇÂ¼ÕÊºÅÁĞ±í
+	if (m_pLoginAccountList != NULL)	// æ·»åŠ ç™»å½•å¸å·åˆ—è¡¨
 	{
 		for (int i = 0; i < m_pLoginAccountList->GetCount(); i++)
 		{
@@ -398,7 +398,7 @@ BOOL CLoginDlg::InitUI()
 	m_edtPwd.SetTransparent(TRUE, hDlgBgDC);
 	m_edtPwd.SetPasswordChar(0x25CF);
 	m_edtPwd.SetDefaultTextMode(TRUE);
-	m_edtPwd.SetDefaultText(_T("ÇëÊäÈëÃÜÂë"));
+	m_edtPwd.SetDefaultText(_T("è¯·è¾“å…¥å¯†ç "));
 	m_edtPwd.MoveWindow(185, 210, 180, 30, FALSE);
 	m_edtPwd.GetClientRect(&rtWindow);
 	hTemp = ::CreateRectRgnIndirect(&rtWindow);
@@ -490,7 +490,7 @@ void CLoginDlg::SetCurUser(LPCTSTR lpszUser, BOOL bPwdInvalid/* = FALSE*/)
 {
 	if (NULL == lpszUser)
 	{
-		m_picHead.SetBitmap(_T("DefaultFace.png"));		// ÉèÖÃÓÃ»§Í·Ïñ
+		m_picHead.SetBitmap(_T("DefaultFace.png"));		// è®¾ç½®ç”¨æˆ·å¤´åƒ
 		m_picHead.Invalidate();
 
 		m_btnRememberPwd.SetCheck(m_stAccountInfo.bRememberPwd ? BST_CHECKED : BST_UNCHECKED);
@@ -498,9 +498,9 @@ void CLoginDlg::SetCurUser(LPCTSTR lpszUser, BOOL bPwdInvalid/* = FALSE*/)
 		m_stAccountInfo.nStatus = (int)STATUS_ONLINE;
 		//StatusMenuBtn_SetIconPic(m_btnLoginStatus, (UTalk_STATUS)m_stAccountInfo.nStatus);
 		m_cboUid.SetDefaultTextMode(TRUE);
-		m_cboUid.SetWindowText(_T("ÇëÊäÈëÕËºÅ»òÊÖ»úºÅ"));
+		m_cboUid.SetWindowText(_T("è¯·è¾“å…¥è´¦å·æˆ–æ‰‹æœºå·"));
 		m_edtPwd.SetDefaultTextMode(TRUE);
-		m_edtPwd.SetWindowText(_T("ÇëÊäÈëÃÜÂë"));
+		m_edtPwd.SetWindowText(_T("è¯·è¾“å…¥å¯†ç "));
 	}
 	else
 	{
@@ -509,7 +509,7 @@ void CLoginDlg::SetCurUser(LPCTSTR lpszUser, BOOL bPwdInvalid/* = FALSE*/)
 			LOGIN_ACCOUNT_INFO* lpAccount = m_pLoginAccountList->Find(lpszUser);
 			if (NULL == lpAccount)
 			{
-				m_picHead.SetBitmap(_T("DefaultFace.png"));		// ÉèÖÃÓÃ»§Í·Ïñ
+				m_picHead.SetBitmap(_T("DefaultFace.png"));		// è®¾ç½®ç”¨æˆ·å¤´åƒ
 				m_picHead.Invalidate();
 
 				m_btnRememberPwd.SetCheck(m_stAccountInfo.bRememberPwd ? BST_CHECKED : BST_UNCHECKED);
@@ -524,7 +524,7 @@ void CLoginDlg::SetCurUser(LPCTSTR lpszUser, BOOL bPwdInvalid/* = FALSE*/)
 			}
 			else
 			{
-				if (m_lpFMGClient != NULL)	// ÉèÖÃÓÃ»§Í·Ïñ
+				if (m_lpFMGClient != NULL)	// è®¾ç½®ç”¨æˆ·å¤´åƒ
 				{
 					CString strPath;
 					strPath.Format(_T("%sUsers\\%s\\%s.cfg"), g_szHomePath, lpszUser, lpszUser);
@@ -584,7 +584,7 @@ UINT CLoginDlg::LoginThreadProc(void* pParam)
     EncodeUtil::UnicodeToUtf8(pLoginDlg->m_stAccountInfo.szPwd, szPassword, ARRAYSIZE(szPassword));
 
     std::string strReturnData;
-    //³¬Ê±Ê±¼äÉèÖÃÎª3Ãë
+    //è¶…æ—¶æ—¶é—´è®¾ç½®ä¸º3ç§’
     bool bRet = CIUSocket::GetInstance().Login(szUser, szPassword, 1, online_type_pc_online, 3, strReturnData);
     int nRet = LOGIN_FAILED;
     CLoginResult* pLoginResult = new CLoginResult();
@@ -634,7 +634,7 @@ UINT CLoginDlg::LoginThreadProc(void* pParam)
                 pLoginResult->m_LoginResultCode = LOGIN_FAILED;
         }    
     }
-    //m_lpUserMgrÎªÒ°Ö¸Õë
+    //m_lpUserMgrä¸ºé‡æŒ‡é’ˆ
     ::PostMessage(pLoginDlg->m_lpFMGClient->m_UserMgr.m_hProxyWnd, FMG_MSG_LOGIN_RESULT, 0, (LPARAM)pLoginResult);
 
     return 1;
@@ -676,7 +676,7 @@ void CLoginDlg::UninitUI()
 	m_SkinMenu.DestroyMenu();
 }
 
-// ´Ó²Ëµ¥ID»ñÈ¡¶ÔÓ¦µÄUTalk_STATUS
+// ä»èœå•IDè·å–å¯¹åº”çš„UTalk_STATUS
 long CLoginDlg::GetStatusFromMenuID(int nMenuID)
 {
 	switch (nMenuID)
@@ -690,7 +690,7 @@ long CLoginDlg::GetStatusFromMenuID(int nMenuID)
 	}
 }
 
-// ¸ù¾İÖ¸¶¨×´Ì¬ÉèÖÃ×´Ì¬²Ëµ¥°´Å¥µÄÍ¼±ê
+// æ ¹æ®æŒ‡å®šçŠ¶æ€è®¾ç½®çŠ¶æ€èœå•æŒ‰é’®çš„å›¾æ ‡
 void CLoginDlg::StatusMenuBtn_SetIconPic(CSkinButton& btnStatus, long nStatus)
 {
 	LPCTSTR lpszFileName;

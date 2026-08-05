@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "ModifyPasswordDlg.h"
 #include "FlamingoClient.h"
 #include "UIText.h"
@@ -15,7 +15,7 @@ CModifyPasswordDlg::~CModifyPasswordDlg()
 
 BOOL CModifyPasswordDlg::PreTranslateMessage(MSG* pMsg)
 {
-	//Ö§³ÖEsc¹Ø±Õ¶Ô»°¿ò
+	//æ”¯æŒEscå…³é—­å¯¹è¯æ¡†
 	if (pMsg->hwnd==m_hWnd && pMsg->message==WM_KEYDOWN && pMsg->wParam==VK_ESCAPE)
  	{
 		PostMessage(WM_CLOSE, 0, 0);
@@ -52,7 +52,7 @@ BOOL CModifyPasswordDlg::InitUI()
 	m_SkinDlg.SetBgPic(_T("DlgBg\\GeneralBg.png"));
 	m_SkinDlg.SetCloseSysBtnPic(_T("SysBtn\\btn_close_normal.png"), _T("SysBtn\\btn_close_highlight.png"), _T("SysBtn\\btn_close_down.png"));
 	m_SkinDlg.SubclassWindow(m_hWnd);
-	m_SkinDlg.SetTitleText(_T("ÃÜÂëĞŞ¸Ä"));
+	m_SkinDlg.SetTitleText(_T("å¯†ç ä¿®æ”¹"));
 	m_SkinDlg.MoveWindow(0, 0, 427, 320, TRUE);
 
 	HDC hDlgBgDC = m_SkinDlg.GetBgDC();
@@ -137,7 +137,7 @@ void CModifyPasswordDlg::Reset()
 
 	m_btnOK.EnableWindow(TRUE);
 	m_btnCancel.EnableWindow(TRUE);
-	m_SkinDlg.SetTitleText(_T("ÃÜÂëĞŞ¸Ä"));
+	m_SkinDlg.SetTitleText(_T("å¯†ç ä¿®æ”¹"));
 }
 
 void CModifyPasswordDlg::RemoveMessageFilter()
@@ -153,7 +153,7 @@ void CModifyPasswordDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_edtOldPassword.GetWindowText(strOldPassword);
 	if(strOldPassword != m_pFMGClient->m_UserMgr.m_UserInfo.m_strPassword.c_str())
 	{
-		::MessageBox(m_hWnd, _T("¾ÉÃÜÂë²»ÕıÈ·£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("æ—§å¯†ç ä¸æ­£ç¡®ï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_edtOldPassword.SetFocus();
 		return;
 	}
@@ -162,7 +162,7 @@ void CModifyPasswordDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_edtNewPassword.GetWindowText(strNewPassword);
 	if(strNewPassword.IsEmpty() || strNewPassword.GetLength()<3 || strNewPassword.GetLength()>15)
 	{
-		::MessageBox(m_hWnd, _T("ĞÂÃÜÂë³¤¶È±ØĞëÔÚ3¡«15¸ö×Ö·ûÖ®¼ä£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("æ–°å¯†ç é•¿åº¦å¿…é¡»åœ¨3ï½15ä¸ªå­—ç¬¦ä¹‹é—´ï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_edtNewPassword.SetFocus();
 		return;
 	}
@@ -171,17 +171,17 @@ void CModifyPasswordDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_edtNewPasswordConfirm.GetWindowText(strNewPasswordConfirm);
 	if (strNewPassword != strNewPasswordConfirm)
 	{
-		::MessageBox(m_hWnd, _T("Á½´ÎÊäÈëµÄÃÜÂë²»ÏàÍ¬£¬ÇëÈ·ÈÏ£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("ä¸¤æ¬¡è¾“å…¥çš„å¯†ç ä¸ç›¸åŒï¼Œè¯·ç¡®è®¤ï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
 	if(strOldPassword == strNewPassword)
 	{
-		::MessageBox(m_hWnd, _T("ĞÂ¾ÉÃÜÂë±ØĞë²»ÏàÍ¬£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("æ–°æ—§å¯†ç å¿…é¡»ä¸ç›¸åŒï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 	
-	m_SkinDlg.SetTitleText(_T("ÃÜÂëĞŞ¸Ä(ÕıÔÚĞŞ¸ÄÃÜÂë£¬ÇëÉÔµÈ...)"));
+	m_SkinDlg.SetTitleText(_T("å¯†ç ä¿®æ”¹(æ­£åœ¨ä¿®æ”¹å¯†ç ï¼Œè¯·ç¨ç­‰...)"));
 	m_btnOK.EnableWindow(FALSE);	
 	m_btnCancel.EnableWindow(FALSE);
 	m_pFMGClient->SetModifyPasswordWindow(m_hWnd);
@@ -200,13 +200,13 @@ LRESULT CModifyPasswordDlg::OnModifyPasswordResult(UINT uMsg, WPARAM wParam, LPA
 
 	if(wParam == 0)
 	{
-		::MessageBox(m_hWnd, _T("ÃÜÂëĞŞ¸Ä³É¹¦£¬ÄúÏÂ´Î¿ÉÒÔÊ¹ÓÃĞÂÃÜÂëµÇÂ¼ÁË£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("å¯†ç ä¿®æ”¹æˆåŠŸï¼Œæ‚¨ä¸‹æ¬¡å¯ä»¥ä½¿ç”¨æ–°å¯†ç ç™»å½•äº†ï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		ShowWindow(SW_HIDE);
 	}
     else if (wParam == 103)
-        ::MessageBox(m_hWnd, _T("¾ÉÃÜÂë´íÎó£¡"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(m_hWnd, _T("æ—§å¯†ç é”™è¯¯ï¼"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
 	else/* if (wParam == 105)*/
-		::MessageBox(m_hWnd, _T("ÃÜÂëĞŞ¸ÄÊ§°Ü£¬ÇëÉÔºóÖØÊÔ£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("å¯†ç ä¿®æ”¹å¤±è´¥ï¼Œè¯·ç¨åé‡è¯•ï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 
 	return (LRESULT)1;
 }

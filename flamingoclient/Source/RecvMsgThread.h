@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <mutex>
 #include <condition_variable>
@@ -7,15 +7,15 @@
 #include "UserMgr.h"
 #include "Thread.h"
 
-// д��һ��������Ϣ��¼
+// 写入一条好友消息记录
 void WriteBuddyMsgLog(CUserMgr* lpUserMgr, UINT nUTalkNum, 
 					  LPCTSTR lpNickName, BOOL bSelf, CBuddyMessage* lpMsg);
 
-// д��һ��Ⱥ��Ϣ��¼
+// 写入一条群消息记录
 void WriteGroupMsgLog(CUserMgr* lpUserMgr, UINT nGroupNum, UINT nUTalkNum, 
 					  LPCTSTR lpNickName, CBuddyMessage* lpMsg);
 
-// д��һ����ʱ�Ự(Ⱥ��Ա)��Ϣ��¼
+// 写入一条临时会话(群成员)消息记录
 void WriteSessMsgLog(CUserMgr* lpUserMgr, UINT nUTalkNum, 
 					 LPCTSTR lpNickName, BOOL bSelf, CSessMessage* lpMsg);
 
@@ -85,7 +85,7 @@ class CCreateNewGroupResult;
 
 class CFlamingoClient;
 
-//�����������Ϣ
+//缓存的聊天消息
 struct CachedChatMsg
 {
     int         targetid;
@@ -93,7 +93,7 @@ struct CachedChatMsg
     std::string strChatMsg;
 };
 
-//�����֪ͨ����Ϣ
+//缓存的通知类消息
 struct CachedNotifyMsg
 {
     std::string strNotifyMsg;
@@ -111,9 +111,22 @@ public:
 
     void NotifyNetError();
 
+    // 复位"网络已出错"标志，使后续真实断线能再次经 NotifyNetError 上报。
+    // 背景：m_bNetError 一旦置真就不再发 FMG_MSG_NET_ERROR；其原复位点 AddMsgData 在 v2
+    // 下已无调用方（见 FlamingoClient.cpp 注释掉的 m_RecvMsgTask.AddMsgData），故必须在
+    // 每次(重新)登录成功时显式复位，否则一次掉线 / 主动离线后网络错误检测会永久失效、
+    // 之后真掉线不再触发自动重连。由 CIUSocket::Login 成功收到应答帧后调用。
+    void ResetNetError() { m_bNetError = false; }
+
     void SetProxyWnd(HWND hwnd)
     {
         m_hProxyWnd = hwnd;
+    }
+
+    //取代理窗口句柄，供网络层把收到的 v2 消息 PostMessage 回 UI 线程
+    HWND GetProxyWnd() const
+    {
+        return m_hProxyWnd;
     }
 
     void EnableUI(bool bEnable);
@@ -161,8 +174,8 @@ private:
 	BOOL IsNeedDownloadPic(const CBuddyMessage* pBuddyMessage);
 	void GetChatPic(CBuddyMessage* pBuddyMessage);
 
-	BOOL ProcessBuddyMsg(CBuddyMessage* lpBuddyMsg);									//����ȡ����Ϣ���мӹ�
-	void AddItemToRecentSessionList(UINT uUserID, UINT uFaceID, PCTSTR pszNickName, PCTSTR pszText, time_t nMsgTime);		//�������ϵ���б�������һ��
+	BOOL ProcessBuddyMsg(CBuddyMessage* lpBuddyMsg);									//对收取的消息进行加工
+	void AddItemToRecentSessionList(UINT uUserID, UINT uFaceID, PCTSTR pszNickName, PCTSTR pszText, time_t nMsgTime);		//向最近联系人列表中添加一项
 
 public:
 	CFlamingoClient*		                    m_pFMGClient;
@@ -178,10 +191,10 @@ private:
 	std::map<UINT,UINT>							m_mapGroupId2Code;
 	std::map<CGMemberMapKey, RMT_BUDDY_DATA*>	m_mapGMemberData;
 	
-    std::list<CachedChatMsg>	                m_listCachedChatMsg;			//�����������Ϣ
-    std::list<CachedNotifyMsg>                  m_listCachedNotifyMsg;          //�����֪ͨ����Ϣ
-	bool										m_bUIEnable;                    //UI�����Ƿ��Ѿ�׼����
-    std::mutex                                  m_mtUIEnable;                   //���̱߳���m_bUIEnable��m_listCacheChatMsg�ı���
+    std::list<CachedChatMsg>	                m_listCachedChatMsg;			//缓存的聊天消息
+    std::list<CachedNotifyMsg>                  m_listCachedNotifyMsg;          //缓存的通知类消息
+	bool										m_bUIEnable;                    //UI界面是否已经准备好
+    std::mutex                                  m_mtUIEnable;                   //多线程保护m_bUIEnable和m_listCacheChatMsg的变量
 
 	UINT										m_nPreMsgId, m_nPreMsgId2;
 
@@ -189,5 +202,5 @@ private:
 
     HWND                                        m_hProxyWnd;
 
-    bool                                        m_bNetError;        //�����д���
+    bool                                        m_bNetError;        //网络有错误
 };

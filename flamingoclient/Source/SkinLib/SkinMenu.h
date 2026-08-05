@@ -1,38 +1,38 @@
-#pragma once
+ï»¿#pragma once
 
 #include "SkinManager.h"
 
-#define		SKIN_MENU_MAGIC		0x2010		// Æ¤·ô²Ëµ¥ÏîÄ¿ĞÅÏ¢±êÊ¶
+#define		SKIN_MENU_MAGIC		0x2010		// çš®è‚¤èœå•é¡¹ç›®ä¿¡æ¯æ ‡è¯†
 
-struct SKIN_MENU_ITEM_INFO					// Æ¤·ô²Ëµ¥ÏîÄ¿ĞÅÏ¢½á¹¹
+struct SKIN_MENU_ITEM_INFO					// çš®è‚¤èœå•é¡¹ç›®ä¿¡æ¯ç»“æ„
 {
-	UINT nMagic;							// Æ¤·ô²Ëµ¥ÏîÄ¿ĞÅÏ¢±êÊ¶
-	UINT nID;								// ²Ëµ¥ID
-	UINT nState;							// ²Ëµ¥×´Ì¬
-	UINT nType;								// ÀàĞÍ
-	HMENU hSubMenu;							// ×Óµ¯²Ë(¼´µ¯³öÊ½²Ëµ¥)¾ä±ú
-	TCHAR szText[256];						// ²Ëµ¥ÏîÎÄ±¾
-	CImageEx* lpIconImgN;					// Î´Ñ¡ÖĞÍ¼±ê
-	CImageEx* lpIconImgH;					// Ñ¡ÖĞÍ¼±ê
+	UINT nMagic;							// çš®è‚¤èœå•é¡¹ç›®ä¿¡æ¯æ ‡è¯†
+	UINT nID;								// èœå•ID
+	UINT nState;							// èœå•çŠ¶æ€
+	UINT nType;								// ç±»å‹
+	HMENU hSubMenu;							// å­å¼¹èœ(å³å¼¹å‡ºå¼èœå•)å¥æŸ„
+	TCHAR szText[256];						// èœå•é¡¹æ–‡æœ¬
+	CImageEx* lpIconImgN;					// æœªé€‰ä¸­å›¾æ ‡
+	CImageEx* lpIconImgH;					// é€‰ä¸­å›¾æ ‡
 };
 
-class CSkinMenu								// Æ¤·ô²Ëµ¥·â×°Àà
+class CSkinMenu								// çš®è‚¤èœå•å°è£…ç±»
 {
 public:
 	CSkinMenu(HMENU hMenu = NULL);
 	~CSkinMenu(void);
 
 public:
-	BOOL SetBgPic(LPCTSTR lpszLeftBg, LPCTSTR lpszRightBg);	// ÉèÖÃ²Ëµ¥Ïî±³¾°Í¼Æ¬
-	BOOL SetSelectedPic(LPCTSTR lpszFileName);		// ÉèÖÃ²Ëµ¥ÏîÑ¡ÖĞÍ¼Æ¬
-	BOOL SetSepartorPic(LPCTSTR lpszFileName);		// ÉèÖÃ·Ö¸ô·ûÍ¼Æ¬
-	BOOL SetArrowPic(LPCTSTR lpszFileName);			// ÉèÖÃµ¯³öÊ½²Ëµ¥¼ıÍ·Í¼Æ¬
-	BOOL SetCheckPic(LPCTSTR lpszFileName);			// ÉèÖÃCheck×´Ì¬Í¼Æ¬
-	BOOL SetIcon(UINT nItem, BOOL bByPosition, LPCTSTR lpszIconN, LPCTSTR lpszIconH);	// ÉèÖÃÖ¸¶¨²Ëµ¥ÏîËùÊ¹ÓÃµÄÍ¼±ê
+	BOOL SetBgPic(LPCTSTR lpszLeftBg, LPCTSTR lpszRightBg);	// è®¾ç½®èœå•é¡¹èƒŒæ™¯å›¾ç‰‡
+	BOOL SetSelectedPic(LPCTSTR lpszFileName);		// è®¾ç½®èœå•é¡¹é€‰ä¸­å›¾ç‰‡
+	BOOL SetSepartorPic(LPCTSTR lpszFileName);		// è®¾ç½®åˆ†éš”ç¬¦å›¾ç‰‡
+	BOOL SetArrowPic(LPCTSTR lpszFileName);			// è®¾ç½®å¼¹å‡ºå¼èœå•ç®­å¤´å›¾ç‰‡
+	BOOL SetCheckPic(LPCTSTR lpszFileName);			// è®¾ç½®CheckçŠ¶æ€å›¾ç‰‡
+	BOOL SetIcon(UINT nItem, BOOL bByPosition, LPCTSTR lpszIconN, LPCTSTR lpszIconH);	// è®¾ç½®æŒ‡å®šèœå•é¡¹æ‰€ä½¿ç”¨çš„å›¾æ ‡
 
-	void SetTextColor(COLORREF clrText);			// ÉèÖÃÆÕÍ¨²Ëµ¥ÎÄ±¾ÑÕÉ«
-	void SetSelTextColor(COLORREF clrSelText);		// ÉèÖÃÑ¡ÖĞ²Ëµ¥ÎÄ±¾ÑÕÉ«
-	void SetGrayedTextColor(COLORREF clrGrayedText);// ÉèÖÃ»Ò»¯²Ëµ¥ÎÄ±¾ÑÕÉ«
+	void SetTextColor(COLORREF clrText);			// è®¾ç½®æ™®é€šèœå•æ–‡æœ¬é¢œè‰²
+	void SetSelTextColor(COLORREF clrSelText);		// è®¾ç½®é€‰ä¸­èœå•æ–‡æœ¬é¢œè‰²
+	void SetGrayedTextColor(COLORREF clrGrayedText);// è®¾ç½®ç°åŒ–èœå•æ–‡æœ¬é¢œè‰²
 
 public:
 	BOOL CreateMenu();
@@ -73,36 +73,36 @@ public:
 	BOOL IsMenu();
 
 private:
-	SKIN_MENU_ITEM_INFO* GetMenuItemInfo(UINT nItem, BOOL bByPosition);	// »ñÈ¡Ö¸¶¨²Ëµ¥ÏîĞÅÏ¢Êı¾İº¯Êı
-	BOOL SetMenuItemInfo(UINT nItem, BOOL bByPosition, SKIN_MENU_ITEM_INFO* lpItemInfo);	// ÉèÖÃÖ¸¶¨²Ëµ¥¶¥ĞÅÏ¢Êı¾İº¯Êı
+	SKIN_MENU_ITEM_INFO* GetMenuItemInfo(UINT nItem, BOOL bByPosition);	// è·å–æŒ‡å®šèœå•é¡¹ä¿¡æ¯æ•°æ®å‡½æ•°
+	BOOL SetMenuItemInfo(UINT nItem, BOOL bByPosition, SKIN_MENU_ITEM_INFO* lpItemInfo);	// è®¾ç½®æŒ‡å®šèœå•é¡¶ä¿¡æ¯æ•°æ®å‡½æ•°
 
-	BOOL EnableOwnerDraw(HMENU hMenu, BOOL bEnable);			// Ê¹ÄÜ²Ëµ¥×Ô»æ·ç¸ñ
+	BOOL EnableOwnerDraw(HMENU hMenu, BOOL bEnable);			// ä½¿èƒ½èœå•è‡ªç»˜é£æ ¼
 
-	SIZE GetTextExtent(LPCTSTR lpszText);						// »ñÈ¡Ö¸¶¨ÎÄ×ÖµÄ¿í¸ß¶È
+	SIZE GetTextExtent(LPCTSTR lpszText);						// è·å–æŒ‡å®šæ–‡å­—çš„å®½é«˜åº¦
 
-	void DrawBg(HDC hDC, CRect& rect);							// »æÖÆ²Ëµ¥Ïî±³¾°
-	void DrawSepartor(HDC hDC, CRect& rect);					// »æÖÆ·Ö¸ô·û
-	void DrawSelRect(HDC hDC, CRect& rect);						// Ìî³äÑ¡ÖĞÇøÓò
-	void DrawIcon(HDC hDC, CRect& rect, CImageEx* lpIconImg);	// »æÖÆ²Ëµ¥Í¼±ê
-	void DrawCheckState(HDC hDC, CRect& rect);					// »æÖÆCheck×´Ì¬
-	void DrawText(HDC hDC, CRect& rect, BOOL bGrayed,			// »æÖÆ²Ëµ¥ÎÄ±¾
+	void DrawBg(HDC hDC, CRect& rect);							// ç»˜åˆ¶èœå•é¡¹èƒŒæ™¯
+	void DrawSepartor(HDC hDC, CRect& rect);					// ç»˜åˆ¶åˆ†éš”ç¬¦
+	void DrawSelRect(HDC hDC, CRect& rect);						// å¡«å……é€‰ä¸­åŒºåŸŸ
+	void DrawIcon(HDC hDC, CRect& rect, CImageEx* lpIconImg);	// ç»˜åˆ¶èœå•å›¾æ ‡
+	void DrawCheckState(HDC hDC, CRect& rect);					// ç»˜åˆ¶CheckçŠ¶æ€
+	void DrawText(HDC hDC, CRect& rect, BOOL bGrayed,			// ç»˜åˆ¶èœå•æ–‡æœ¬
 		BOOL bSelected, BOOL bIsSubMenu, LPCTSTR lpText);	
-	void DrawArrow(HDC hDC, CRect& rect);						// »æÖÆµ¯³öÊ½²Ëµ¥¼ıÍ·
+	void DrawArrow(HDC hDC, CRect& rect);						// ç»˜åˆ¶å¼¹å‡ºå¼èœå•ç®­å¤´
 
 public:
-	HMENU m_hMenu;							// ²Ëµ¥¾ä±ú
+	HMENU m_hMenu;							// èœå•å¥æŸ„
 
 private:
-	CImageEx* m_lpBgImgL,* m_lpBgImgR;	// ²Ëµ¥Ïî±³¾°Í¼Æ¬
-	CImageEx* m_lpSelectedImg;				// ²Ëµ¥ÏîÑ¡ÖĞÍ¼Æ¬
-	CImageEx* m_lpSepartorImg;				// ·Ö¸ô·ûÍ¼Æ¬
-	CImageEx* m_lpArrowImg;				// µ¯³öÊ½²Ëµ¥¼ıÍ·Í¼Æ¬
-	CImageEx* m_lpCheckImg;				// Check×´Ì¬Í¼Æ¬
+	CImageEx* m_lpBgImgL,* m_lpBgImgR;	// èœå•é¡¹èƒŒæ™¯å›¾ç‰‡
+	CImageEx* m_lpSelectedImg;				// èœå•é¡¹é€‰ä¸­å›¾ç‰‡
+	CImageEx* m_lpSepartorImg;				// åˆ†éš”ç¬¦å›¾ç‰‡
+	CImageEx* m_lpArrowImg;				// å¼¹å‡ºå¼èœå•ç®­å¤´å›¾ç‰‡
+	CImageEx* m_lpCheckImg;				// CheckçŠ¶æ€å›¾ç‰‡
 
-	COLORREF m_clrText;						// ÆÕÍ¨²Ëµ¥ÎÄ±¾ÑÕÉ«
-	COLORREF m_clrSelText;					// Ñ¡ÖĞ²Ëµ¥ÎÄ±¾ÑÕÉ«
-	COLORREF m_clrGrayedText;				// »Ò»¯²Ëµ¥ÎÄ±¾ÑÕÉ«
+	COLORREF m_clrText;						// æ™®é€šèœå•æ–‡æœ¬é¢œè‰²
+	COLORREF m_clrSelText;					// é€‰ä¸­èœå•æ–‡æœ¬é¢œè‰²
+	COLORREF m_clrGrayedText;				// ç°åŒ–èœå•æ–‡æœ¬é¢œè‰²
 
-	HFONT m_hFont;							// ²Ëµ¥×ÖÌå
-	int m_nLMargin;							// ×ó±ßÀ¸¿í¶È
+	HFONT m_hFont;							// èœå•å­—ä½“
+	int m_nLMargin;							// å·¦è¾¹æ å®½åº¦
 };

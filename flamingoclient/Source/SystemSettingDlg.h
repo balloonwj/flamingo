@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "resource.h"
 #include "SkinLib/SkinLib.h"
@@ -43,18 +43,18 @@ public:
 private:
 	CSkinDialog			m_SkinDlg;
 		
-	CSkinButton			m_btnMute;					//¹Ø±ÕËùÓĞÉùÒô
-	CSkinButton			m_btnAutoReply;				//×Ô¶¯»Ø¸´
-	CSkinEdit			m_edtAutoReply;				//×Ô¶¯»Ø¸´ÄÚÈİ
-	CSkinButton			m_btnDestroyAfterRead;		//ÔÄºó¼´·Ù
-	CSkinComboBox		m_cboDurationRead;			//ÔÄºó¼´·Ù³ÖĞøÊ±¼ä
-	CSkinButton			m_btnRevokeChatMsg;			//ÏûÏ¢³·»Ø¹¦ÄÜ
-	CSkinButton			m_btnExitPrompt;			//¹Ø±ÕÖ÷¶Ô»°¿òÊ±µ¯³öÌáÊ¾¶Ô»°¿ò
-	CSkinButton			m_btnExitWhenClose;			//¹Ø±ÕÖ÷¶Ô»°¿òÊ±Ö±½ÓÍË³ö
-	CSkinButton			m_btnShowLastMsg;			//ÁÄÌì´°¿ÚÏÔÊ¾×î½üÁÄÌì¼ÇÂ¼
+	CSkinButton			m_btnMute;					//å…³é—­æ‰€æœ‰å£°éŸ³
+	CSkinButton			m_btnAutoReply;				//è‡ªåŠ¨å›å¤
+	CSkinEdit			m_edtAutoReply;				//è‡ªåŠ¨å›å¤å†…å®¹
+	CSkinButton			m_btnDestroyAfterRead;		//é˜…åå³ç„š
+	CSkinComboBox		m_cboDurationRead;			//é˜…åå³ç„šæŒç»­æ—¶é—´
+	CSkinButton			m_btnRevokeChatMsg;			//æ¶ˆæ¯æ’¤å›åŠŸèƒ½
+	CSkinButton			m_btnExitPrompt;			//å…³é—­ä¸»å¯¹è¯æ¡†æ—¶å¼¹å‡ºæç¤ºå¯¹è¯æ¡†
+	CSkinButton			m_btnExitWhenClose;			//å…³é—­ä¸»å¯¹è¯æ¡†æ—¶ç›´æ¥é€€å‡º
+	CSkinButton			m_btnShowLastMsg;			//èŠå¤©çª—å£æ˜¾ç¤ºæœ€è¿‘èŠå¤©è®°å½•
 
-	CSkinButton			m_btnOK;					//È·¶¨
-	CSkinButton			m_btnCancel;				//È¡Ïû
+	CSkinButton			m_btnOK;					//ç¡®å®š
+	CSkinButton			m_btnCancel;				//å–æ¶ˆ
 	
 	HFONT				m_hFont;
 

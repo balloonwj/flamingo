@@ -1,11 +1,11 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "RichEditUtil.h"
 #include "UserSessionData.h"
 
 
 static BOOL bIsInstallImageOleCtrl = FALSE;
 
-//×¢²áÃû³ÆÎªImageOleCtrlµÄCOM×é¼ş
+//æ³¨å†Œåç§°ä¸ºImageOleCtrlçš„COMç»„ä»¶
 void RegisterCom_ImageOleCtrl()
 {
 	CString strImageOleCtrlFilePath = g_szHomePath;
@@ -97,7 +97,7 @@ DWORD RichEdit_GetDefaultCharFormat(HWND hWnd, CHARFORMAT& cf)
 
 BOOL RichEdit_SetDefaultCharFormat(HWND hWnd, CHARFORMAT& cf)
 {
-	//±ØĞë¹Ø±ÕÕâ¸öÑ¡Ïî£¬·ñÔòÉèÖÃµÄÄ¬ÈÏ×ÖÌåÖ»¶ÔÖĞÎÄÆğ×÷ÓÃ£¬¶ÔÓ¢ÎÄ²»Æğ×÷ÓÃ.
+	//å¿…é¡»å…³é—­è¿™ä¸ªé€‰é¡¹ï¼Œå¦åˆ™è®¾ç½®çš„é»˜è®¤å­—ä½“åªå¯¹ä¸­æ–‡èµ·ä½œç”¨ï¼Œå¯¹è‹±æ–‡ä¸èµ·ä½œç”¨.
 	//see: https://msdn.microsoft.com/en-us/library/windows/desktop/bb774250(v=vs.85).aspx
 	::SendMessage(hWnd, EM_SETLANGOPTIONS, 0, 0);
 
@@ -136,7 +136,7 @@ int RichEdit_SetSel(HWND hWnd, LONG nStartChar, LONG nEndChar)
 	return (int)::SendMessage(hWnd, EM_EXSETSEL, 0, (LPARAM)&cr);
 }
 
-// ÉèÖÃÄ¬ÈÏ×ÖÌå
+// è®¾ç½®é»˜è®¤å­—ä½“
 void RichEdit_SetDefFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize,
 						 COLORREF clrText, BOOL bBold, BOOL bItalic, 
 						 BOOL bUnderLine, BOOL bIsLink)
@@ -145,13 +145,13 @@ void RichEdit_SetDefFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize,
 	memset(&cf, 0, sizeof(cf));
 	RichEdit_GetDefaultCharFormat(hWnd, cf);
 
-	if (lpFontName != NULL)					// ÉèÖÃ×ÖÌåÃû³Æ
+	if (lpFontName != NULL)					// è®¾ç½®å­—ä½“åç§°
 	{
 		cf.dwMask = cf.dwMask | CFM_FACE;
 		_tcscpy(cf.szFaceName, lpFontName);
 	}
 
-	if (nFontSize > 0)						// ÉèÖÃ×ÖÌå¸ß¶È
+	if (nFontSize > 0)						// è®¾ç½®å­—ä½“é«˜åº¦
 	{
 		cf.dwMask = cf.dwMask | CFM_SIZE;
 		cf.yHeight = nFontSize* 20;
@@ -159,25 +159,25 @@ void RichEdit_SetDefFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize,
 
 	cf.dwMask |= CFM_COLOR | CFM_BOLD | CFM_ITALIC | CFM_UNDERLINE | CFM_LINK;
 
-	cf.crTextColor = clrText;				// ÉèÖÃ×ÖÌåÑÕÉ«
+	cf.crTextColor = clrText;				// è®¾ç½®å­—ä½“é¢œè‰²
 	cf.dwEffects &= ~CFE_AUTOCOLOR;
 
-	if (bBold)								// ÉèÖÃ´ÖÌå
+	if (bBold)								// è®¾ç½®ç²—ä½“
 		cf.dwEffects |= CFE_BOLD;
 	else
 		cf.dwEffects &= ~CFE_BOLD;
 
-	if (bItalic)							// ÉèÖÃÇãĞ±
+	if (bItalic)							// è®¾ç½®å€¾æ–œ
 		cf.dwEffects |= CFE_ITALIC;
 	else
 		cf.dwEffects &= ~CFE_ITALIC;
 
-	if (bUnderLine)							// ÉèÖÃÏÂ»®Ïß
+	if (bUnderLine)							// è®¾ç½®ä¸‹åˆ’çº¿
 		cf.dwEffects |= CFE_UNDERLINE;
 	else
 		cf.dwEffects &= ~CFE_UNDERLINE;
 
-	if (bIsLink)							// ÉèÖÃ³¬Á´½Ó
+	if (bIsLink)							// è®¾ç½®è¶…é“¾æ¥
 		cf.dwEffects |= CFE_LINK;
 	else
 		cf.dwEffects &= ~CFE_LINK;
@@ -185,20 +185,20 @@ void RichEdit_SetDefFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize,
 	RichEdit_SetDefaultCharFormat(hWnd, cf);
 }
 
-// ÉèÖÃÄ¬ÈÏ×ÖÌåÃû³ÆºÍ´óĞ¡
+// è®¾ç½®é»˜è®¤å­—ä½“åç§°å’Œå¤§å°
 void RichEdit_SetDefFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize)
 {
 	CHARFORMAT cf;
 	memset(&cf, 0, sizeof(cf));
 	RichEdit_GetDefaultCharFormat(hWnd, cf);
 
-	if (lpFontName != NULL)					// ÉèÖÃ×ÖÌåÃû³Æ
+	if (lpFontName != NULL)					// è®¾ç½®å­—ä½“åç§°
 	{
 		cf.dwMask = cf.dwMask | CFM_FACE;
 		_tcscpy(cf.szFaceName, lpFontName);
 	}
 
-	if (nFontSize > 0)						// ÉèÖÃ×ÖÌå¸ß¶È
+	if (nFontSize > 0)						// è®¾ç½®å­—ä½“é«˜åº¦
 	{
 		cf.dwMask = cf.dwMask | CFM_SIZE;
 		cf.yHeight = nFontSize* 20;
@@ -207,7 +207,7 @@ void RichEdit_SetDefFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize)
 	RichEdit_SetDefaultCharFormat(hWnd, cf);
 }
 
-// ÉèÖÃÄ¬ÈÏ×ÖÌåÑÕÉ«
+// è®¾ç½®é»˜è®¤å­—ä½“é¢œè‰²
 void RichEdit_SetDefTextColor(HWND hWnd, COLORREF clrText)
 {
 	CHARFORMAT cf;
@@ -220,7 +220,7 @@ void RichEdit_SetDefTextColor(HWND hWnd, COLORREF clrText)
 	RichEdit_SetDefaultCharFormat(hWnd, cf);
 }
 
-// ÉèÖÃÄ¬ÈÏ³¬Á´½Ó
+// è®¾ç½®é»˜è®¤è¶…é“¾æ¥
 void RichEdit_SetDefLinkText(HWND hWnd, BOOL bEnable)
 {
 	CHARFORMAT cf;
@@ -228,7 +228,7 @@ void RichEdit_SetDefLinkText(HWND hWnd, BOOL bEnable)
 	RichEdit_GetDefaultCharFormat(hWnd, cf);
 
 	cf.dwMask = cf.dwMask | CFM_LINK;
-	if (bEnable)							// ÉèÖÃ³¬Á´½Ó
+	if (bEnable)							// è®¾ç½®è¶…é“¾æ¥
 		cf.dwEffects |= CFE_LINK;
 	else
 		cf.dwEffects &= ~CFE_LINK;
@@ -236,7 +236,7 @@ void RichEdit_SetDefLinkText(HWND hWnd, BOOL bEnable)
 	RichEdit_SetDefaultCharFormat(hWnd, cf);
 }
 
-// ÉèÖÃ×ÖÌå
+// è®¾ç½®å­—ä½“
 void RichEdit_SetFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize,
 					  COLORREF clrText, BOOL bBold, BOOL bItalic, 
 					  BOOL bUnderLine, BOOL bIsLink)
@@ -245,13 +245,13 @@ void RichEdit_SetFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize,
 	memset(&cf, 0, sizeof(cf));
 	RichEdit_GetSelectionCharFormat(hWnd, cf);
 
-	if (lpFontName != NULL)					// ÉèÖÃ×ÖÌåÃû³Æ
+	if (lpFontName != NULL)					// è®¾ç½®å­—ä½“åç§°
 	{
 		cf.dwMask = cf.dwMask | CFM_FACE;
 		_tcscpy(cf.szFaceName, lpFontName);
 	}
 
-	if (nFontSize > 0)						// ÉèÖÃ×ÖÌå¸ß¶È
+	if (nFontSize > 0)						// è®¾ç½®å­—ä½“é«˜åº¦
 	{
 		cf.dwMask = cf.dwMask | CFM_SIZE;
 		cf.yHeight = nFontSize* 20;
@@ -259,25 +259,25 @@ void RichEdit_SetFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize,
 
 	cf.dwMask |= CFM_COLOR | CFM_BOLD | CFM_ITALIC | CFM_UNDERLINE | CFM_LINK;
 
-	cf.crTextColor = clrText;				// ÉèÖÃ×ÖÌåÑÕÉ«
+	cf.crTextColor = clrText;				// è®¾ç½®å­—ä½“é¢œè‰²
 	cf.dwEffects &= ~CFE_AUTOCOLOR;
 
-	if (bBold)								// ÉèÖÃ´ÖÌå
+	if (bBold)								// è®¾ç½®ç²—ä½“
 		cf.dwEffects |= CFE_BOLD;
 	else
 		cf.dwEffects &= ~CFE_BOLD;
 
-	if (bItalic)							// ÉèÖÃÇãĞ±
+	if (bItalic)							// è®¾ç½®å€¾æ–œ
 		cf.dwEffects |= CFE_ITALIC;
 	else
 		cf.dwEffects &= ~CFE_ITALIC;
 
-	if (bUnderLine)							// ÉèÖÃÏÂ»®Ïß
+	if (bUnderLine)							// è®¾ç½®ä¸‹åˆ’çº¿
 		cf.dwEffects |= CFE_UNDERLINE;
 	else
 		cf.dwEffects &= ~CFE_UNDERLINE;
 
-	if (bIsLink)							// ÉèÖÃ³¬Á´½Ó
+	if (bIsLink)							// è®¾ç½®è¶…é“¾æ¥
 		cf.dwEffects |= CFE_LINK;
 	else
 		cf.dwEffects &= ~CFE_LINK;
@@ -285,20 +285,20 @@ void RichEdit_SetFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize,
 	RichEdit_SetSelectionCharFormat(hWnd, cf);
 }
 
-// ÉèÖÃ×ÖÌåÃû³ÆºÍ´óĞ¡
+// è®¾ç½®å­—ä½“åç§°å’Œå¤§å°
 void RichEdit_SetFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize)
 {
 	CHARFORMAT cf;
 	memset(&cf, 0, sizeof(cf));
 	RichEdit_GetSelectionCharFormat(hWnd, cf);
 
-	if (lpFontName != NULL)					// ÉèÖÃ×ÖÌåÃû³Æ
+	if (lpFontName != NULL)					// è®¾ç½®å­—ä½“åç§°
 	{
 		cf.dwMask = cf.dwMask | CFM_FACE;
 		_tcscpy(cf.szFaceName, lpFontName);
 	}
 
-	if (nFontSize > 0)						// ÉèÖÃ×ÖÌå¸ß¶È
+	if (nFontSize > 0)						// è®¾ç½®å­—ä½“é«˜åº¦
 	{
 		cf.dwMask = cf.dwMask | CFM_SIZE;
 		cf.yHeight = nFontSize* 20;
@@ -307,7 +307,7 @@ void RichEdit_SetFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize)
 	RichEdit_SetSelectionCharFormat(hWnd, cf);
 }
 
-// ÉèÖÃ×ÖÌåÑÕÉ«
+// è®¾ç½®å­—ä½“é¢œè‰²
 void RichEdit_SetTextColor(HWND hWnd, COLORREF clrText)
 {
 	CHARFORMAT cf;
@@ -321,7 +321,7 @@ void RichEdit_SetTextColor(HWND hWnd, COLORREF clrText)
 	RichEdit_SetSelectionCharFormat(hWnd, cf);
 }
 
-// ÉèÖÃ³¬Á´½Ó
+// è®¾ç½®è¶…é“¾æ¥
 void RichEdit_SetLinkText(HWND hWnd, BOOL bEnable)
 {
 	CHARFORMAT cf;
@@ -329,7 +329,7 @@ void RichEdit_SetLinkText(HWND hWnd, BOOL bEnable)
 	RichEdit_GetSelectionCharFormat(hWnd, cf);
 
 	cf.dwMask = cf.dwMask | CFM_LINK;
-	if (bEnable)							// ÉèÖÃ³¬Á´½Ó
+	if (bEnable)							// è®¾ç½®è¶…é“¾æ¥
 		cf.dwEffects |= CFE_LINK;
 	else
 		cf.dwEffects &= ~CFE_LINK;
@@ -337,7 +337,7 @@ void RichEdit_SetLinkText(HWND hWnd, BOOL bEnable)
 	RichEdit_SetSelectionCharFormat(hWnd, cf);
 }
 
-// ÉèÖÃ×óËõ½ø(µ¥Î»:ç¾)
+// è®¾ç½®å·¦ç¼©è¿›(å•ä½:ç¼‡)
 BOOL RichEdit_SetStartIndent(HWND hWnd, int nSize)
 {
 	PARAFORMAT2 pf2;
@@ -348,7 +348,7 @@ BOOL RichEdit_SetStartIndent(HWND hWnd, int nSize)
 	return (BOOL)::SendMessage(hWnd, EM_SETPARAFORMAT, 0, (LPARAM)&pf2);
 }
 
-// ²åÈë±íÇéÍ¼Æ¬
+// æ’å…¥è¡¨æƒ…å›¾ç‰‡
 BOOL RichEdit_InsertFace(HWND hWnd, LPCTSTR lpszFileName, int nFaceId,
 						 int nFaceIndex, COLORREF clrBg, BOOL bAutoScale, int nReservedWidth)
 {
@@ -432,7 +432,7 @@ Ret0:
 	return SUCCEEDED(hr);
 }
 
-// »ñÈ¡ÎÄ±¾
+// è·å–æ–‡æœ¬
 void RichEdit_GetText(HWND hWnd, tstring& strText)
 {
 	REOBJECT reobject;
@@ -553,7 +553,7 @@ void RichEdit_GetText(HWND hWnd, tstring& strText)
 }
 
 
-// »ñÈ¡ÎÄ±¾
+// è·å–æ–‡æœ¬
 void RichEdit_GetImageInfo(HWND hWnd, std::vector<ImageInfo*>& arrImageInfo)
 {
 	REOBJECT reobject;
@@ -635,7 +635,7 @@ void RichEdit_GetImageInfo(HWND hWnd, std::vector<ImageInfo*>& arrImageInfo)
 	pRichEditOle->Release();
 }
 
-// Ìæ»»Ñ¡ÖĞÎÄ±¾
+// æ›¿æ¢é€‰ä¸­æ–‡æœ¬
 void RichEdit_ReplaceSel(HWND hWnd, LPCTSTR lpszNewText, LPCTSTR lpFontName,
 						 int nFontSize,	COLORREF clrText, BOOL bBold, BOOL bItalic, 
 						 BOOL bUnderLine, BOOL bIsLink, int nStartIndent, BOOL bCanUndo/* = FALSE*/)
@@ -823,14 +823,14 @@ IRichEditOle* RichEdit_GetOleInterface(ITextServices* pTextServices)
 
 int RichEdit_GetWindowTextLength(ITextServices* pTextServices)
 {
-	HRESULT lRes = 0;
+	LRESULT lRes = 0;
 	pTextServices->TxSendMessage(WM_GETTEXTLENGTH, 0, 0, &lRes);
 	return (int)lRes;
 }
 
 int RichEdit_GetWindowText(ITextServices* pTextServices, LPTSTR lpszStringBuf, int nMaxCount)
 {
-	HRESULT lRes = 0;
+	LRESULT lRes = 0;
 	pTextServices->TxSendMessage(WM_GETTEXT, nMaxCount, (LPARAM)lpszStringBuf, &lRes);
 	return (int)lRes;
 }
@@ -870,7 +870,7 @@ int RichEdit_GetTextRange(ITextServices* pTextServices, CHARRANGE* lpchrg, tstri
 	tr.chrg =*lpchrg;
 	tr.lpstrText = pText;
 
-	HRESULT lRes = 0;
+	LRESULT lRes = 0;
 	pTextServices->TxSendMessage(EM_GETTEXTRANGE, 0, (LPARAM)&tr, &lRes);
 
 	strText = pText;
@@ -882,7 +882,7 @@ int RichEdit_GetTextRange(ITextServices* pTextServices, CHARRANGE* lpchrg, tstri
 DWORD RichEdit_GetDefaultCharFormat(ITextServices* pTextServices, CHARFORMAT& cf)
 {
 	cf.cbSize = sizeof(CHARFORMAT);
-	HRESULT lRes = 0;
+	LRESULT lRes = 0;
 	pTextServices->TxSendMessage(EM_GETCHARFORMAT, 0, (LPARAM)&cf, &lRes);
 	return (DWORD)lRes;
 }
@@ -890,7 +890,7 @@ DWORD RichEdit_GetDefaultCharFormat(ITextServices* pTextServices, CHARFORMAT& cf
 BOOL RichEdit_SetDefaultCharFormat(ITextServices* pTextServices, CHARFORMAT& cf)
 {
 	cf.cbSize = sizeof(CHARFORMAT);
-	HRESULT lRes = 0;
+	LRESULT lRes = 0;
 	pTextServices->TxSendMessage(EM_SETCHARFORMAT, 0, (LPARAM)&cf, &lRes);
 	return (BOOL)lRes;
 }
@@ -927,12 +927,12 @@ void RichEdit_GetSel(ITextServices* pTextServices, LONG& nStartChar, LONG& nEndC
 int RichEdit_SetSel(ITextServices* pTextServices, LONG nStartChar, LONG nEndChar)
 {
 	CHARRANGE cr = { nStartChar, nEndChar };
-	HRESULT lRes = 0;
+	LRESULT lRes = 0;
 	pTextServices->TxSendMessage(EM_EXSETSEL, 0, (LPARAM)&cr, &lRes);
 	return (int)lRes;
 }
 
-// ÉèÖÃÄ¬ÈÏ×ÖÌå
+// è®¾ç½®é»˜è®¤å­—ä½“
 void RichEdit_SetDefFont(ITextServices* pTextServices, LPCTSTR lpFontName,	
 						 int nFontSize,	COLORREF clrText, BOOL bBold, 
 						 BOOL bItalic, BOOL bUnderLine, BOOL bIsLink)
@@ -941,13 +941,13 @@ void RichEdit_SetDefFont(ITextServices* pTextServices, LPCTSTR lpFontName,
 	memset(&cf, 0, sizeof(cf));
 	RichEdit_GetDefaultCharFormat(pTextServices, cf);
 
-	if (lpFontName != NULL)					// ÉèÖÃ×ÖÌåÃû³Æ
+	if (lpFontName != NULL)					// è®¾ç½®å­—ä½“åç§°
 	{
 		cf.dwMask = cf.dwMask | CFM_FACE;
 		_tcscpy(cf.szFaceName, lpFontName);
 	}
 
-	if (nFontSize > 0)						// ÉèÖÃ×ÖÌå¸ß¶È
+	if (nFontSize > 0)						// è®¾ç½®å­—ä½“é«˜åº¦
 	{
 		cf.dwMask = cf.dwMask | CFM_SIZE;
 		cf.yHeight = nFontSize* 20;
@@ -955,25 +955,25 @@ void RichEdit_SetDefFont(ITextServices* pTextServices, LPCTSTR lpFontName,
 
 	cf.dwMask |= CFM_COLOR | CFM_BOLD | CFM_ITALIC | CFM_UNDERLINE | CFM_LINK;
 
-	cf.crTextColor = clrText;				// ÉèÖÃ×ÖÌåÑÕÉ«
+	cf.crTextColor = clrText;				// è®¾ç½®å­—ä½“é¢œè‰²
 	cf.dwEffects &= ~CFE_AUTOCOLOR;
 
-	if (bBold)								// ÉèÖÃ´ÖÌå
+	if (bBold)								// è®¾ç½®ç²—ä½“
 		cf.dwEffects |= CFE_BOLD;
 	else
 		cf.dwEffects &= ~CFE_BOLD;
 
-	if (bItalic)							// ÉèÖÃÇãĞ±
+	if (bItalic)							// è®¾ç½®å€¾æ–œ
 		cf.dwEffects |= CFE_ITALIC;
 	else
 		cf.dwEffects &= ~CFE_ITALIC;
 
-	if (bUnderLine)							// ÉèÖÃÏÂ»®Ïß
+	if (bUnderLine)							// è®¾ç½®ä¸‹åˆ’çº¿
 		cf.dwEffects |= CFE_UNDERLINE;
 	else
 		cf.dwEffects &= ~CFE_UNDERLINE;
 
-	if (bIsLink)							// ÉèÖÃ³¬Á´½Ó
+	if (bIsLink)							// è®¾ç½®è¶…é“¾æ¥
 		cf.dwEffects |= CFE_LINK;
 	else
 		cf.dwEffects &= ~CFE_LINK;
@@ -981,7 +981,7 @@ void RichEdit_SetDefFont(ITextServices* pTextServices, LPCTSTR lpFontName,
 	RichEdit_SetDefaultCharFormat(pTextServices, cf);
 }
 
-// ÉèÖÃ×ÖÌå
+// è®¾ç½®å­—ä½“
 void RichEdit_SetFont(ITextServices* pTextServices, LPCTSTR lpFontName, int nFontSize,
 					  COLORREF clrText, BOOL bBold, BOOL bItalic, BOOL bUnderLine, BOOL bIsLink)
 {
@@ -989,13 +989,13 @@ void RichEdit_SetFont(ITextServices* pTextServices, LPCTSTR lpFontName, int nFon
 	memset(&cf, 0, sizeof(cf));
 	RichEdit_GetSelectionCharFormat(pTextServices, cf);
 
-	if (lpFontName != NULL)					// ÉèÖÃ×ÖÌåÃû³Æ
+	if (lpFontName != NULL)					// è®¾ç½®å­—ä½“åç§°
 	{
 		cf.dwMask = cf.dwMask | CFM_FACE;
 		_tcscpy(cf.szFaceName, lpFontName);
 	}
 
-	if (nFontSize > 0)						// ÉèÖÃ×ÖÌå¸ß¶È
+	if (nFontSize > 0)						// è®¾ç½®å­—ä½“é«˜åº¦
 	{
 		cf.dwMask = cf.dwMask | CFM_SIZE;
 		cf.yHeight = nFontSize* 20;
@@ -1003,25 +1003,25 @@ void RichEdit_SetFont(ITextServices* pTextServices, LPCTSTR lpFontName, int nFon
 
 	cf.dwMask |= CFM_COLOR | CFM_BOLD | CFM_ITALIC | CFM_UNDERLINE | CFM_LINK;
 
-	cf.crTextColor = clrText;				// ÉèÖÃ×ÖÌåÑÕÉ«
+	cf.crTextColor = clrText;				// è®¾ç½®å­—ä½“é¢œè‰²
 	cf.dwEffects &= ~CFE_AUTOCOLOR;
 
-	if (bBold)								// ÉèÖÃ´ÖÌå
+	if (bBold)								// è®¾ç½®ç²—ä½“
 		cf.dwEffects |= CFE_BOLD;
 	else
 		cf.dwEffects &= ~CFE_BOLD;
 
-	if (bItalic)							// ÉèÖÃÇãĞ±
+	if (bItalic)							// è®¾ç½®å€¾æ–œ
 		cf.dwEffects |= CFE_ITALIC;
 	else
 		cf.dwEffects &= ~CFE_ITALIC;
 
-	if (bUnderLine)							// ÉèÖÃÏÂ»®Ïß
+	if (bUnderLine)							// è®¾ç½®ä¸‹åˆ’çº¿
 		cf.dwEffects |= CFE_UNDERLINE;
 	else
 		cf.dwEffects &= ~CFE_UNDERLINE;
 
-	if (bIsLink)							// ÉèÖÃ³¬Á´½Ó
+	if (bIsLink)							// è®¾ç½®è¶…é“¾æ¥
 		cf.dwEffects |= CFE_LINK;
 	else
 		cf.dwEffects &= ~CFE_LINK;
@@ -1029,7 +1029,7 @@ void RichEdit_SetFont(ITextServices* pTextServices, LPCTSTR lpFontName, int nFon
 	RichEdit_SetSelectionCharFormat(pTextServices, cf);
 }
 
-// ÉèÖÃ×óËõ½ø(µ¥Î»:ç¾)
+// è®¾ç½®å·¦ç¼©è¿›(å•ä½:ç¼‡)
 BOOL RichEdit_SetStartIndent(ITextServices* pTextServices, int nSize)
 {
 	PARAFORMAT2 pf2;
@@ -1037,12 +1037,12 @@ BOOL RichEdit_SetStartIndent(ITextServices* pTextServices, int nSize)
 	pf2.cbSize = sizeof(PARAFORMAT2);
 	pf2.dwMask = PFM_STARTINDENT;
 	pf2.dxStartIndent = nSize;
-	HRESULT lRes = 0;
+	LRESULT lRes = 0;
 	pTextServices->TxSendMessage(EM_SETPARAFORMAT, 0, (LPARAM)&pf2, &lRes);
 	return (BOOL)lRes;
 }
 
-// ²åÈë±íÇéÍ¼Æ¬
+// æ’å…¥è¡¨æƒ…å›¾ç‰‡
 BOOL RichEdit_InsertFace(ITextServices*pTextServices, ITextHost*pTextHost,	
 						 LPCTSTR lpszFileName, int nFaceId,	int nFaceIndex, 
 						 COLORREF clrBg, BOOL bAutoScale, int nReservedWidth, long cxImage/*=0*/, long cyImage/*=0*/)
@@ -1142,7 +1142,7 @@ Ret0:
 	return SUCCEEDED(hr);
 }
 
-// »ñÈ¡ÎÄ±¾
+// è·å–æ–‡æœ¬
 void RichEdit_GetText(ITextServices* pTextServices, tstring& strText)
 {
 	REOBJECT reobject;
@@ -1214,7 +1214,7 @@ void RichEdit_GetText(ITextServices* pTextServices, tstring& strText)
 	pRichEditOle->Release();
 }
 
-// Ìæ»»Ñ¡ÖĞÎÄ±¾
+// æ›¿æ¢é€‰ä¸­æ–‡æœ¬
 void RichEdit_ReplaceSel(ITextServices* pTextServices, LPCTSTR lpszNewText,	
 						 LPCTSTR lpFontName, int nFontSize,	COLORREF clrText, 
 						 BOOL bBold, BOOL bItalic, BOOL bUnderLine, BOOL bIsLink, 

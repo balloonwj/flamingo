@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "UserSessionData.h"
 #include "MessageLogger.h"
@@ -9,7 +9,7 @@
 
 #define IsGroupTarget(u) ((u >= GROUP_ID_BASE) ? TRUE : FALSE)
 
-//µ±Ç°µÇÂ¼µÄÓÃ»§ĞÅÏ¢
+//å½“å‰ç™»å½•çš„ç”¨æˆ·ä¿¡æ¯
 class CUserMgr
 {
 public:
@@ -20,38 +20,39 @@ public:
 	~CUserMgr(void);
 
 public:
-	tstring GetUserFolder();							// »ñÈ¡ÓÃ»§ÎÄ¼ş¼Ğ´æ·ÅÂ·¾¶
+	tstring GetUserFolder();							// è·å–ç”¨æˆ·æ–‡ä»¶å¤¹å­˜æ”¾è·¯å¾„
 	
-	tstring GetPersonalFolder();						// »ñÈ¡¸öÈËÎÄ¼ş¼Ğ´æ·ÅÂ·¾¶
-	tstring GetChatPicFolder();							// »ñÈ¡ÁÄÌìÍ¼Æ¬´æ·ÅÂ·¾¶
-	tstring GetCustomUserThumbFolder();					// »ñÈ¡×Ô¶¨ÒåÓÃ»§Í·ÏñÄ¿Â¼
+	tstring GetPersonalFolder();						// è·å–ä¸ªäººæ–‡ä»¶å¤¹å­˜æ”¾è·¯å¾„
+	tstring GetChatPicFolder();							// è·å–èŠå¤©å›¾ç‰‡å­˜æ”¾è·¯å¾„
+	tstring GetCustomUserThumbFolder();					// è·å–è‡ªå®šä¹‰ç”¨æˆ·å¤´åƒç›®å½•
 
-	tstring GetUserHeadPicFullName(UINT uFace);			// »ñÈ¡ÓÃ»§Í·ÏñÍ¼Æ¬È«Â·¾¶ÎÄ¼şÃû
-	tstring GetBuddyHeadPicFullName(UINT uFace);		// »ñÈ¡ºÃÓÑÍ·ÏñÍ¼Æ¬È«Â·¾¶ÎÄ¼şÃû
-	tstring GetGroupHeadPicFullName(UINT nGroupNum);	// »ñÈ¡ÈºÍ·ÏñÍ¼Æ¬È«Â·¾¶ÎÄ¼şÃû
-	tstring GetSessHeadPicFullName(UINT nUTalkNum);		// »ñÈ¡Èº³ÉÔ±Í·ÏñÍ¼Æ¬È«Â·¾¶ÎÄ¼şÃû
-	tstring GetChatPicFullName(LPCTSTR lpszFileName);	// »ñÈ¡ÁÄÌìÍ¼Æ¬È«Â·¾¶ÎÄ¼şÃû
-	tstring GetMsgLogFullName();						// »ñÈ¡ÏûÏ¢¼ÇÂ¼È«Â·¾¶ÎÄ¼şÃû
-	tstring GetDefaultRecvFilePath();					// »ñÈ¡Ä¬ÈÏ½ÓÊÕÎÄ¼şÂ·¾¶Ãû
+	tstring GetUserHeadPicFullName(UINT uFace);			// è·å–ç”¨æˆ·å¤´åƒå›¾ç‰‡å…¨è·¯å¾„æ–‡ä»¶å
+	tstring GetBuddyHeadPicFullName(UINT uFace);		// è·å–å¥½å‹å¤´åƒå›¾ç‰‡å…¨è·¯å¾„æ–‡ä»¶å
+	tstring GetGroupHeadPicFullName(UINT nGroupNum);	// è·å–ç¾¤å¤´åƒå›¾ç‰‡å…¨è·¯å¾„æ–‡ä»¶å
+	tstring GetSessHeadPicFullName(UINT nUTalkNum);		// è·å–ç¾¤æˆå‘˜å¤´åƒå›¾ç‰‡å…¨è·¯å¾„æ–‡ä»¶å
+	tstring GetChatPicFullName(LPCTSTR lpszFileName);	// è·å–èŠå¤©å›¾ç‰‡å…¨è·¯å¾„æ–‡ä»¶å
+	tstring GetMsgLogFullName();						// è·å–æ¶ˆæ¯è®°å½•å…¨è·¯å¾„æ–‡ä»¶å
+	tstring GetDefaultRecvFilePath();					// è·å–é»˜è®¤æ¥æ”¶æ–‡ä»¶è·¯å¾„å
+	void	SetCustomRecvFilePath(PCTSTR pszPath);		// è®¾ç½®è‡ªå®šä¹‰æ¥æ”¶ç›®å½•ï¼ˆç©º=ç”¨é»˜è®¤ï¼‰ï¼›GetDefaultRecvFilePath ä¼˜å…ˆç”¨å®ƒ
 
-	BOOL IsNeedUpdateBuddyHeadPic(UINT nUTalkNum);		// ÅĞ¶ÏÊÇ·ñĞèÒª¸üĞÂºÃÓÑÍ·Ïñ
-	BOOL IsNeedUpdateGroupHeadPic(UINT nGroupNum);		// ÅĞ¶ÏÊÇ·ñĞèÒª¸üĞÂÈºÍ·Ïñ
-	BOOL IsNeedUpdateSessHeadPic(UINT nUTalkNum);		// ÅĞ¶ÏÊÇ·ñĞèÒª¸üĞÂÈº³ÉÔ±Í·Ïñ
+	BOOL IsNeedUpdateBuddyHeadPic(UINT nUTalkNum);		// åˆ¤æ–­æ˜¯å¦éœ€è¦æ›´æ–°å¥½å‹å¤´åƒ
+	BOOL IsNeedUpdateGroupHeadPic(UINT nGroupNum);		// åˆ¤æ–­æ˜¯å¦éœ€è¦æ›´æ–°ç¾¤å¤´åƒ
+	BOOL IsNeedUpdateSessHeadPic(UINT nUTalkNum);		// åˆ¤æ–­æ˜¯å¦éœ€è¦æ›´æ–°ç¾¤æˆå‘˜å¤´åƒ
 
 	BOOL IsSelf(PCTSTR pszAccountName);
 	
 	
-	BOOL IsFriend(UINT uAccountID);						//Ö¸¶¨ÕËºÅIDÊÇ·ñÊÇºÃÓÑ
-	BOOL IsFriend(PCTSTR pszAccountName);				//Ö¸¶¨ÕËºÅÃûÊÇ·ñÊÇºÃÓÑ
+	BOOL IsFriend(UINT uAccountID);						//æŒ‡å®šè´¦å·IDæ˜¯å¦æ˜¯å¥½å‹
+	BOOL IsFriend(PCTSTR pszAccountName);				//æŒ‡å®šè´¦å·åæ˜¯å¦æ˜¯å¥½å‹
 
 	BOOL AddFriend(UINT uAccountID, PCTSTR pszAccountName, PCTSTR pszNickName);
 	BOOL DeleteFriend(UINT uAccountID);
 
 	
-	tstring GetAccountName(UINT uAccountID) const;			//Í¨¹ıÄÚ²¿ID»ñÈ¡ÕË»§Ãû
+	tstring GetAccountName(UINT uAccountID) const;			//é€šè¿‡å†…éƒ¨IDè·å–è´¦æˆ·å
 	void	SetAccountName(UINT uAccountID, PCTSTR pszAccountName);
 
-	tstring GetNickName(UINT uAccountID) const;				//Í¨¹ıÄÚ²¿ID»ñÈ¡êÇ³ÆÃû
+	tstring GetNickName(UINT uAccountID) const;				//é€šè¿‡å†…éƒ¨IDè·å–æ˜µç§°å
 	void	SetNickName(UINT uAccountID, PCTSTR pszNickName);
 
 	tstring GetGroupName(UINT uGroupCode);
@@ -62,8 +63,8 @@ public:
 
 	PCTSTR  GetCustomFace(UINT uAccountID) const;
 
-	void	SetStatus(UINT uAccountID, long nStatus);	//ÉèÖÃ×Ô¼º»òÕßÄ³¸öºÃÓÑµÄ×´Ì¬
-	long	GetStatus(UINT uAccountID);					//»ñÈ¡Ä³¸ö×Ô¼º»òÕßÄ³¸öºÃÓÑµÄ×´Ì¬
+	void	SetStatus(UINT uAccountID, long nStatus);	//è®¾ç½®è‡ªå·±æˆ–è€…æŸä¸ªå¥½å‹çš„çŠ¶æ€
+	long	GetStatus(UINT uAccountID);					//è·å–æŸä¸ªè‡ªå·±æˆ–è€…æŸä¸ªå¥½å‹çš„çŠ¶æ€
 
     void	SetClientType(UINT uAccountID, long nNewClientType);
     long	GetClientType(UINT uAccountID);
@@ -71,24 +72,24 @@ public:
 	UINT	GetMsgID(UINT uAccountID) const;
 	BOOL	SetMsgID(UINT uAccountID, UINT uMsgID);
 
-	tstring GetNickName(PCTSTR pszAccountName) const;	//Í¨¹ıÕË»§»ñÈ¡êÇ³ÆÃû
+	tstring GetNickName(PCTSTR pszAccountName) const;	//é€šè¿‡è´¦æˆ·è·å–æ˜µç§°å
 
-	UINT	GetFaceID(PCTSTR pszAccountName) const;		//Í¨¹ıÕË»§»ñÈ¡êÇ³Æ
+	UINT	GetFaceID(PCTSTR pszAccountName) const;		//é€šè¿‡è´¦æˆ·è·å–æ˜µç§°
 
-	void	ResetToOfflineStatus();						//ÖØÖÃ³ÉÀëÏß×´Ì¬
+	void	ResetToOfflineStatus();						//é‡ç½®æˆç¦»çº¿çŠ¶æ€
 
-	BOOL ExitGroup(UINT uGroupID);						//ÍË³öÈº×é
-	BOOL IsGroupMember(UINT uAccountID, UINT uGroupID);	//ÕË»§uAccountÊÇ·ñÊÇÖ¸¶¨ÈºµÄ³ÉÔ±
+	BOOL ExitGroup(UINT uGroupID);						//é€€å‡ºç¾¤ç»„
+	BOOL IsGroupMember(UINT uAccountID, UINT uGroupID);	//è´¦æˆ·uAccountæ˜¯å¦æ˜¯æŒ‡å®šç¾¤çš„æˆå‘˜
 
-	BOOL LoadRecentList();								//´Ó´ÅÅÌÖĞ¼ÓÔØ×î½üÁªÏµÈË
-	BOOL StoreRecentList();								//½«×î½üÁªÏµÈË´æ´¢ÖÁ´ÅÅÌ
+	BOOL LoadRecentList();								//ä»ç£ç›˜ä¸­åŠ è½½æœ€è¿‘è”ç³»äºº
+	BOOL StoreRecentList();								//å°†æœ€è¿‘è”ç³»äººå­˜å‚¨è‡³ç£ç›˜
 
-	long GetRecentListCount();							//»ñÈ¡×î½üÁªÏµÈËÊıÁ¿
-	void ClearRecentList();								//Çå¿Õ×î½üÁªÏµÈË
-	BOOL DeleteRecentItem(UINT uAccountID);				//É¾³ıÖ¸¶¨ºÃÓÑ»á»°
+	long GetRecentListCount();							//è·å–æœ€è¿‘è”ç³»äººæ•°é‡
+	void ClearRecentList();								//æ¸…ç©ºæœ€è¿‘è”ç³»äºº
+	BOOL DeleteRecentItem(UINT uAccountID);				//åˆ é™¤æŒ‡å®šå¥½å‹ä¼šè¯
 
-	BOOL LoadTeamInfo();								//´Ó´ÅÅÌÖĞ¼ÓÔØ·Ö×éĞÅÏ¢
-	BOOL StoreTeamInfo();								//½«·Ö×éĞÅÏ¢´æ´¢ÖÁ´ÅÅÌ
+	BOOL LoadTeamInfo();								//ä»ç£ç›˜ä¸­åŠ è½½åˆ†ç»„ä¿¡æ¯
+	BOOL StoreTeamInfo();								//å°†åˆ†ç»„ä¿¡æ¯å­˜å‚¨è‡³ç£ç›˜
 
 	BOOL LoadBuddyInfo();
 	BOOL SaveBuddyInfo();
@@ -103,7 +104,7 @@ public:
 
 public:		
 	HWND			m_hProxyWnd;
-	HWND			m_hCallBackWnd;		//ÉèÖÃÎªÖ÷´°¿Ú¶Ô»°¿ò
+	HWND			m_hCallBackWnd;		//è®¾ç½®ä¸ºä¸»çª—å£å¯¹è¯æ¡†
 	
 	CBuddyInfo		m_UserInfo;
 	CBuddyList		m_BuddyList;
@@ -116,4 +117,5 @@ public:
 
 private:
 	std::map<UINT, BuddyInfo*>		m_mapLocalBuddyInfo;
+	tstring							m_strCustomRecvPath;	// ç³»ç»Ÿè®¾ç½®é‡Œé€‰çš„è‡ªå®šä¹‰æ¥æ”¶ç›®å½•ï¼›ç©º=ç”¨é»˜è®¤æ¨å¯¼è·¯å¾„
 };

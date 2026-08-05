@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "SkinHyperLink.h"
 
 CSkinHyperLink::CSkinHyperLink(void)
@@ -61,7 +61,7 @@ void CSkinHyperLink::SetHyperLink(LPCTSTR lpszLink)
 
 void CSkinHyperLink::SetToolTipText(LPCTSTR lpszText)
 {
-	if (!IsWindow())		// SetToolTipTextº¯Êı±ØĞëÔÚ´´½¨°´Å¥´°¿Úºó²ÅÄÜµ÷ÓÃ
+	if (!IsWindow())		// SetToolTipTextå‡½æ•°å¿…é¡»åœ¨åˆ›å»ºæŒ‰é’®çª—å£åæ‰èƒ½è°ƒç”¨
 		return;
 
 	if (!m_ToolTipCtrl.IsWindow())
@@ -248,7 +248,7 @@ LRESULT CSkinHyperLink::OnMouseMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 void CSkinHyperLink::OnDestroy()
 {
-	if (m_ToolTipCtrl.IsWindow())	// ToolTipCtrlÔçÔÚÖ®Ç°µÄ²»ÖªµÀÊ²Ã´µØ·½ÒÑÏú»Ù£¬ÕâÀïÏÔÊ½ÖÃ¿Õm_hWnd
+	if (m_ToolTipCtrl.IsWindow())	// ToolTipCtrlæ—©åœ¨ä¹‹å‰çš„ä¸çŸ¥é“ä»€ä¹ˆåœ°æ–¹å·²é”€æ¯ï¼Œè¿™é‡Œæ˜¾å¼ç½®ç©ºm_hWnd
 		m_ToolTipCtrl.DestroyWindow();
 	m_ToolTipCtrl.m_hWnd = NULL;
 
@@ -315,7 +315,7 @@ void CSkinHyperLink::Draw(HDC hDC)
 	if (NULL == hNormalFont)
 		hNormalFont = (HFONT)::SendMessage(m_hWnd, WM_GETFONT, 0, 0L);
 
-	if (m_bHover)	// Êó±êĞüÍ£×´Ì¬
+	if (m_bHover)	// é¼ æ ‡æ‚¬åœçŠ¶æ€
 	{
 		hHoverFont = m_hHoverFont;
 		if (NULL == hHoverFont)
@@ -340,7 +340,7 @@ void CSkinHyperLink::Draw(HDC hDC)
 		hFont = hVisitedFont;
 		clrText = m_clrVisited;
 	}
-	else	// ÆÕÍ¨×´Ì¬
+	else	// æ™®é€šçŠ¶æ€
 	{
 		hFont = hNormalFont;
 		clrText = m_clrLink;

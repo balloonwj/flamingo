@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "resource.h"
 #include "SkinLib/SkinLib.h"
@@ -6,7 +6,7 @@
 
 class CFlamingoClient;
 
-//ĞŞ¸ÄÃÜÂë¶Ô»°¿òÀà
+//ä¿®æ”¹å¯†ç å¯¹è¯æ¡†ç±»
 class CModifyPasswordDlg : public CDialogImpl<CModifyPasswordDlg>, public CMessageFilter
 {
 public:

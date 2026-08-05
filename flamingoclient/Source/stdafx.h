@@ -1,4 +1,4 @@
-// stdafx.h : include file for standard system include files,
+ï»¿// stdafx.h : include file for standard system include files,
 //  or project specific include files that are used frequently, but
 //  are changed infrequently
 //
@@ -17,22 +17,22 @@
 #define _WTL_NO_CSTRING
 #define _WTL_NO_WTYPES
 
-#include <atlbase.h>	// »ù±¾µÄATLÀà
+#include <atlbase.h>	// åŸºæœ¬çš„ATLç±»
 #include <atlstr.h>
 #include <atltypes.h>
-#include <atlapp.h>		// »ù±¾µÄWTLÀà
+#include <atlapp.h>		// åŸºæœ¬çš„WTLç±»
 
-extern CAppModule _Module;	// WTLÅÉÉúµÄCComModule°æ±¾
+extern CAppModule _Module;	// WTLæ´¾ç”Ÿçš„CComModuleç‰ˆæœ¬
 
-#include <atlwin.h>		// ATL´°¿ÚÀà
-#include <atlcrack.h>	// WTLÔöÇ¿µÄÏûÏ¢ºê
+#include <atlwin.h>		// ATLçª—å£ç±»
+#include <atlcrack.h>	// WTLå¢å¼ºçš„æ¶ˆæ¯å®
 //#include <atlsplit.h>
-#include <atlframe.h>	// WTLÖ÷¿ò¼Ü´°¿ÚÀà
+#include <atlframe.h>	// WTLä¸»æ¡†æ¶çª—å£ç±»
 //#include <atlgdi.h>
 #include <atlctrls.h>
 #include <atlctrlx.h>
 #include <atldlgs.h>
-#include <atlmisc.h>	// WTLÊµÓÃ¹¤¾ßÀà
+#include <atlmisc.h>	// WTLå®ç”¨å·¥å…·ç±»
 #include "resource.h"
 
 #if defined _M_IX86

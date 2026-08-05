@@ -13,6 +13,9 @@
     <Filter Include="base">
       <UniqueIdentifier>{2f8d5821-199f-464a-a3d9-cffd7283edef}</UniqueIdentifier>
     </Filter>
+    <Filter Include="jsoncpp">
+      <UniqueIdentifier>{7c3e9a14-2b6d-4f81-9a05-3d2e6f8b1c40}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\net\Acceptor.cpp">
@@ -84,6 +87,15 @@
     <ClCompile Include="..\imgserversrc\main.cpp">
       <Filter>imgserversrc</Filter>
     </ClCompile>
+    <ClCompile Include="..\imgserversrc\RelayServer.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imgserversrc\RelaySession.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imgserversrc\RelayHub.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
     <ClCompile Include="..\fileserversrc\FileManager.cpp">
       <Filter>imgserversrc</Filter>
     </ClCompile>
@@ -116,6 +128,24 @@
     </ClCompile>
     <ClCompile Include="..\net\ByteBuffer.cpp">
       <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\FrameCodec.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\FileToken.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\RelayToken.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp">
+      <Filter>jsoncpp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\jsoncpp1.9.0\json_value.cpp">
+      <Filter>jsoncpp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\jsoncpp1.9.0\json_writer.cpp">
+      <Filter>jsoncpp</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -203,6 +233,15 @@
     <ClInclude Include="..\fileserversrc\FileServer.h">
       <Filter>imgserversrc</Filter>
     </ClInclude>
+    <ClInclude Include="..\imgserversrc\RelayServer.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\imgserversrc\RelaySession.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\imgserversrc\RelayHub.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
     <ClInclude Include="..\fileserversrc\FileSession.h">
       <Filter>imgserversrc</Filter>
     </ClInclude>
@@ -235,6 +274,18 @@
     </ClInclude>
     <ClInclude Include="..\net\ByteBuffer.h">
       <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\FrameCodec.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\Protocol.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\FileToken.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\RelayToken.h">
+      <Filter>utils</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

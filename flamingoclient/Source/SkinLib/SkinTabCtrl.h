@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "SkinManager.h"
 
@@ -18,7 +18,7 @@ public:
 
 public:
 	int         m_nID;
-	DWORD       m_dwStyle;  //È¡ÖµÊÇSTCI_STYLEÃ¶¾ÙÁ¿
+	DWORD       m_dwStyle;  //å–å€¼æ˜¯STCI_STYLEæšä¸¾é‡
     int         m_nWidth;
     int         m_nHeight;
     int         m_nLeftWidth;
@@ -61,7 +61,7 @@ public:
 	void SetAutoSize(BOOL bAutoSize);
 	void SetTransparent(BOOL bTransparent, HDC hBgDC);
 	BOOL SetBgPic(LPCTSTR lpszFileName, const CRect& rcNinePart);
-    void SetBgColor(COLORREF clrBgColor);       //ÉèÖÃ±³¾°ÑÕÉ«£¬Èç¹û±³¾°Í¸Ã÷Ôò±³¾°ÑÕÉ«ÉèÖÃÎŞĞ§£¬Ä¬ÈÏ±³¾°ÑÕÉ«Îª°×É«
+    void SetBgColor(COLORREF clrBgColor);       //è®¾ç½®èƒŒæ™¯é¢œè‰²ï¼Œå¦‚æœèƒŒæ™¯é€æ˜åˆ™èƒŒæ™¯é¢œè‰²è®¾ç½®æ— æ•ˆï¼Œé»˜è®¤èƒŒæ™¯é¢œè‰²ä¸ºç™½è‰²
 	BOOL SetItemsBgPic(LPCTSTR lpNormal, LPCTSTR lpHighlight, LPCTSTR lpDown, const CRect& rcNinePart);
 	BOOL SetItemsArrowPic(LPCTSTR lpHighlight, LPCTSTR lpDown);
 	void SetPressArrow(BOOL bPressArrow);

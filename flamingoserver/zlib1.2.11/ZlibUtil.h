@@ -1,5 +1,5 @@
-/*
- *  Ñ¹Ëõ¹¤¾ßÀà£¬ZlibUtil.h
+ï»¿/*
+ *  å‹ç¼©å·¥å…·ç±»ï¼ŒZlibUtil.h
  *  zhangyl 2018.03.09
  */
 #ifndef __ZLIB_UTIL_H__
@@ -18,9 +18,9 @@ public:
     static bool compressBuf(const std::string& strSrcBuf, std::string& strDestBuf);
     static bool uncompressBuf(const std::string& strSrcBuf, std::string& strDestBuf, size_t nDestBufLength);
 
-    //gzipÑ¹Ëõ
+    //gzipå‹ç¼©
     static bool inflate(const std::string& strSrc, std::string& dest);
-    //gzip½âÑ¹
+    //gzipè§£å‹
     static bool deflate(const std::string& strSrc, std::string& strDest);
 
 };

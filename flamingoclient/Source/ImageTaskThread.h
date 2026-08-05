@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include "Thread.h"
 #include <list>
 #include <mutex>
@@ -10,7 +10,7 @@ class CFlamingoClient;
 class CUploadFileResult;
 
 /**
- *  ÓÃÓÚÊÕ·¢ÁÄÌìÍ¼Æ¬ºÍÍ·ÏñµÄÀà£¬Á¬½ÓimgServer
+ *  ç”¨äºæ”¶å‘èŠå¤©å›¾ç‰‡å’Œå¤´åƒçš„ç±»ï¼Œè¿æ¥imgServer
  */
 class CImageTaskThread : public CThread
 {
@@ -22,7 +22,7 @@ public:
 	virtual void Stop() override;
 	
 	BOOL AddItem(CFileItemRequest* pItem);
-	void RemoveItem(CFileItemRequest* pItem);									//ÒÆ³ı¶ÓÁĞÖĞÏÂÔØ»òÕßÉÏ´«µÄÏî
+	void RemoveItem(CFileItemRequest* pItem);									//ç§»é™¤é˜Ÿåˆ—ä¸­ä¸‹è½½æˆ–è€…ä¸Šä¼ çš„é¡¹
 	void ClearAllItems();
 
 	void HandleItem(CFileItemRequest* pFileItem);
@@ -40,7 +40,7 @@ public:
 	CFlamingoClient*				m_lpFMGClient;
 
 private:
-	CFileItemRequest*				m_pCurrentTransferringItem;					//µ±Ç°ÕıÔÚ´«ÊäµÄÏî
+	CFileItemRequest*				m_pCurrentTransferringItem;					//å½“å‰æ­£åœ¨ä¼ è¾“çš„é¡¹
 	std::list<CFileItemRequest*>	m_Filelist;	
 	std::mutex						m_mtItems;
 	std::condition_variable			m_cvItems;

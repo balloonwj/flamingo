@@ -1,36 +1,36 @@
-//zlibÑ¹ËõÓë½âÑ¹Ê¹ÓÃÊ¾Àı
+ï»¿//zlibå‹ç¼©ä¸è§£å‹ä½¿ç”¨ç¤ºä¾‹
 //#include "zlib.h"
 
 //int CompressBuf()
 //{
 //    char text[] = "zlib compress and uncompress test\nturingo@163.com\n2012-11-05\n";
-//    uLong tlen = strlen(text) + 1;  /* ĞèÒª°Ñ×Ö·û´®µÄ½áÊø·û'\0'Ò²Ò»²¢´¦Àí */
+//    uLong tlen = strlen(text) + 1;  /* éœ€è¦æŠŠå­—ç¬¦ä¸²çš„ç»“æŸç¬¦'\0'ä¹Ÿä¸€å¹¶å¤„ç† */
 //    char* buf = NULL;
 //    uLong blen;
 //
-//    /* ¼ÆËã»º³åÇø´óĞ¡£¬²¢ÎªÆä·ÖÅäÄÚ´æ */
-//    blen = compressBound(tlen); /* Ñ¹ËõºóµÄ³¤¶ÈÊÇ²»»á³¬¹ıblenµÄ */
+//    /* è®¡ç®—ç¼“å†²åŒºå¤§å°ï¼Œå¹¶ä¸ºå…¶åˆ†é…å†…å­˜ */
+//    blen = compressBound(tlen); /* å‹ç¼©åçš„é•¿åº¦æ˜¯ä¸ä¼šè¶…è¿‡blençš„ */
 //    if ((buf = (char*)malloc(sizeof(char) * blen)) == NULL)
 //    {
 //        printf("no enough memory!\n");
 //        return -1;
 //    }
 //
-//    /* Ñ¹Ëõ */
+//    /* å‹ç¼© */
 //    if (compress((Bytef*)buf, &blen, (const Bytef*)text, tlen) != Z_OK)
 //    {
 //        printf("compress failed!\n");
 //        return -1;
 //    }
 //
-//    /* ½âÑ¹Ëõ */
+//    /* è§£å‹ç¼© */
 //    if (uncompress((Bytef*)text, &tlen, (const Bytef*)buf, blen) != Z_OK)
 //    {
 //        printf("uncompress failed!\n");
 //        return -1;
 //    }
 //
-//    /* ´òÓ¡½á¹û£¬²¢ÊÍ·ÅÄÚ´æ */
+//    /* æ‰“å°ç»“æœï¼Œå¹¶é‡Šæ”¾å†…å­˜ */
 //    printf("%s", text);
 //    if (buf != NULL)
 //    {

@@ -1,5 +1,5 @@
-/** 
- * WindowsÆ½Ì¨ÓÃ±àÂë¸ñÊ½Ïà»¥×ª»»Àà, EncodingUtil.h
+ï»¿/** 
+ * Windowså¹³å°ç”¨ç¼–ç æ ¼å¼ç›¸äº’è½¬æ¢ç±», EncodingUtil.h
  * zhangyl 2017.03.29
  **/
 #ifndef __ENCODE_H__
@@ -18,23 +18,23 @@
 class ENCODE_API EncodeUtil
 {
 public:
-    //===BEGIN: ×¢Òâ£ºÒÔÏÂ6¸öº¯Êı,ĞèÒªÔÚÍâ²¿ÊÍ·Å·µ»ØµÄ×Ö·û´®Ö¸Õë£¬·ñÔò»áÓĞÄÚ´æĞ¹Â¶
+    //===BEGIN: æ³¨æ„ï¼šä»¥ä¸‹6ä¸ªå‡½æ•°,éœ€è¦åœ¨å¤–éƒ¨é‡Šæ”¾è¿”å›çš„å­—ç¬¦ä¸²æŒ‡é’ˆï¼Œå¦åˆ™ä¼šæœ‰å†…å­˜æ³„éœ²
     static wchar_t* AnsiToUnicode(const char* lpszStr);
     static char* UnicodeToAnsi(const wchar_t* lpszStr);
     static char* AnsiToUtf8(const char* lpszStr);
     static char* Utf8ToAnsi(const char* lpszStr);
     static char* UnicodeToUtf8(const wchar_t* lpszStr);
     static wchar_t* Utf8ToUnicode(const char* lpszStr);
-    //===END: ×¢Òâ£ºÒÔÏÂ6¸öº¯Êı,ĞèÒªÔÚÍâ²¿ÊÍ·Å·µ»ØµÄ×Ö·û´®Ö¸Õë£¬·ñÔò»áÓĞÄÚ´æĞ¹Â¶
+    //===END: æ³¨æ„ï¼šä»¥ä¸‹6ä¸ªå‡½æ•°,éœ€è¦åœ¨å¤–éƒ¨é‡Šæ”¾è¿”å›çš„å­—ç¬¦ä¸²æŒ‡é’ˆï¼Œå¦åˆ™ä¼šæœ‰å†…å­˜æ³„éœ²
 
-    //===BEGIN: ÒÔÏÂº¯ÊıµÚÒ»¸ö²ÎÊıÊÇĞèÒª×ª»»µÄÔ´×Ö·û´®Ö¸Õë£¬µÚ¶ş¸ö²ÎÊıÊÇ´æ·Å×ª»»ºóµÄÄ¿±ê»º³åÇøÖ¸Õë£¬µÚÈı¸ö²ÎÊıÊÇÄ¿±ê»º³åÇøµÄ´óĞ¡
+    //===BEGIN: ä»¥ä¸‹å‡½æ•°ç¬¬ä¸€ä¸ªå‚æ•°æ˜¯éœ€è¦è½¬æ¢çš„æºå­—ç¬¦ä¸²æŒ‡é’ˆï¼Œç¬¬äºŒä¸ªå‚æ•°æ˜¯å­˜æ”¾è½¬æ¢åçš„ç›®æ ‡ç¼“å†²åŒºæŒ‡é’ˆï¼Œç¬¬ä¸‰ä¸ªå‚æ•°æ˜¯ç›®æ ‡ç¼“å†²åŒºçš„å¤§å°
     static bool AnsiToUnicode(const char* lpszAnsi, wchar_t* lpszUnicode, int nLen);
     static bool UnicodeToAnsi(const wchar_t* lpszUnicode, char* lpszAnsi, int nLen);
     static bool AnsiToUtf8(const char* lpszAnsi, char* lpszUtf8, int nLen);
     static bool Utf8ToAnsi(const char* lpszUtf8, char* lpszAnsi, int nLen);
     static bool UnicodeToUtf8(const wchar_t* lpszUnicode, char* lpszUtf8, int nLen);
     static bool Utf8ToUnicode(const char* lpszUtf8, wchar_t* lpszUnicode, int nLen);
-    //===END: ÒÔÏÂº¯ÊıµÚÒ»¸ö²ÎÊıÊÇĞèÒª×ª»»µÄÔ´×Ö·û´®Ö¸Õë£¬µÚ¶ş¸ö²ÎÊıÊÇ´æ·Å×ª»»ºóµÄÄ¿±ê»º³åÇøÖ¸Õë£¬µÚÈı¸ö²ÎÊıÊÇÄ¿±ê»º³åÇøµÄ´óĞ¡
+    //===END: ä»¥ä¸‹å‡½æ•°ç¬¬ä¸€ä¸ªå‚æ•°æ˜¯éœ€è¦è½¬æ¢çš„æºå­—ç¬¦ä¸²æŒ‡é’ˆï¼Œç¬¬äºŒä¸ªå‚æ•°æ˜¯å­˜æ”¾è½¬æ¢åçš„ç›®æ ‡ç¼“å†²åŒºæŒ‡é’ˆï¼Œç¬¬ä¸‰ä¸ªå‚æ•°æ˜¯ç›®æ ‡ç¼“å†²åŒºçš„å¤§å°
 
     static std::wstring AnsiToUnicode(const std::string& strAnsi);
     static std::string UnicodeToAnsi(const std::wstring& strUnicode);

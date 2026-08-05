@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <vector>
 
@@ -12,14 +12,14 @@ public:
 	virtual BOOL IsRunning();
 	virtual void SetRunning(BOOL bRunning);
 	virtual int Run();
-	virtual int Stop();						//ÈÃÕıÔÚÔËĞĞµÄÈÎÎñ½áÊøµÄ½Ó¿Ú£¨±ØĞëÊµÏÖ£©
-	virtual void TaskFinish();				//ÖØÔØÕâ¸öº¯ÊıÈÃÒÑ¾­½áÊøµÄÈÎÎñÌá¹©Ò»¸öÇåÀí×ÊÔ´µÄ»ú»á
+	virtual int Stop();						//è®©æ­£åœ¨è¿è¡Œçš„ä»»åŠ¡ç»“æŸçš„æ¥å£ï¼ˆå¿…é¡»å®ç°ï¼‰
+	virtual void TaskFinish();				//é‡è½½è¿™ä¸ªå‡½æ•°è®©å·²ç»ç»“æŸçš„ä»»åŠ¡æä¾›ä¸€ä¸ªæ¸…ç†èµ„æºçš„æœºä¼š
 
 private:
 	BOOL m_bRunning;
 };
 
-struct TP_THREAD_INFO		// Ïß³ÌĞÅÏ¢½á¹¹
+struct TP_THREAD_INFO		// çº¿ç¨‹ä¿¡æ¯ç»“æ„
 {
 	HANDLE hThread;
 	LPARAM lParam;
@@ -40,19 +40,19 @@ public:
 	void RemoveAllTask();
 
 private:
-	static UINT APIENTRY ThreadProc(LPVOID lpParam);	// Ïß³Ìº¯Êı
+	static UINT APIENTRY ThreadProc(LPVOID lpParam);	// çº¿ç¨‹å‡½æ•°
 
 private:
-	std::vector<TP_THREAD_INFO*> m_arrThreadInfo;		// Ïß³ÌĞÅÏ¢Êı×é
-	std::vector<CThreadPoolTask*> m_arrTask;			// ÈÎÎñĞÅÏ¢Êı×é
+	std::vector<TP_THREAD_INFO*> m_arrThreadInfo;		// çº¿ç¨‹ä¿¡æ¯æ•°ç»„
+	std::vector<CThreadPoolTask*> m_arrTask;			// ä»»åŠ¡ä¿¡æ¯æ•°ç»„
 	
-	CRITICAL_SECTION m_csThreadInfo;					// Ïß³ÌĞÅÏ¢ÁÙ½çÇø
-	CRITICAL_SECTION m_csTask;							// ÈÎÎñĞÅÏ¢ÁÙ½çÇø
+	CRITICAL_SECTION m_csThreadInfo;					// çº¿ç¨‹ä¿¡æ¯ä¸´ç•ŒåŒº
+	CRITICAL_SECTION m_csTask;							// ä»»åŠ¡ä¿¡æ¯ä¸´ç•ŒåŒº
 
-	HANDLE m_hSemaphore_Task;							// ÈÎÎñÍ¨ÖªĞÅºÅÁ¿
-	HANDLE m_hEvent_Exit;								// ÍË³öÏß³ÌÍ¨ÖªÊÂ¼ş¾ä±ú
-	HANDLE m_hEvent_ExitAll;							// ËùÓĞÏß³Ì¾ùÍË³öÍê³ÉÍ¨ÖªÊÂ¼ş¾ä±ú
+	HANDLE m_hSemaphore_Task;							// ä»»åŠ¡é€šçŸ¥ä¿¡å·é‡
+	HANDLE m_hEvent_Exit;								// é€€å‡ºçº¿ç¨‹é€šçŸ¥äº‹ä»¶å¥æŸ„
+	HANDLE m_hEvent_ExitAll;							// æ‰€æœ‰çº¿ç¨‹å‡é€€å‡ºå®Œæˆé€šçŸ¥äº‹ä»¶å¥æŸ„
 
-	long m_lThreadNums;									// Ïß³Ì×ÜÊı
-	long m_lRunningThreadNums;							// ÕıÔÚ¹¤×÷ÖĞµÄÏß³Ì¼ÆÊı
+	long m_lThreadNums;									// çº¿ç¨‹æ€»æ•°
+	long m_lRunningThreadNums;							// æ­£åœ¨å·¥ä½œä¸­çš„çº¿ç¨‹è®¡æ•°
 };

@@ -1,5 +1,5 @@
-/*
- *  Ñ¹Ëõ¹¤¾ßÀà£¬ZlibUtil.h
+ï»¿/*
+ *  åŽ‹ç¼©å·¥å…·ç±»ï¼ŒZlibUtil.h
  *  zhangyl 2018.03.09
  */
 #ifndef __ZLIB_UTIL_H__

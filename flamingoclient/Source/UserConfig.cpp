@@ -1,8 +1,8 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "UserConfig.h"
 #include "IniFile.h"
 
-CUserConfig::CUserConfig() : m_strFontName(_T("΢���ź�"))
+CUserConfig::CUserConfig() : m_strFontName(_T("微软雅黑"))
 {
 	m_bMute = FALSE;
 	m_bDestroyAfterRead = FALSE;
@@ -17,6 +17,7 @@ CUserConfig::CUserConfig() : m_strFontName(_T("΢���ź�"))
 
 	m_bEnableExitPrompt = TRUE;
 	m_bExitWhenCloseMainDlg = FALSE;
+	m_bTrayMinimizeTipShown = FALSE;		//新账号默认没提示过，首次最小化到托盘时弹一次
 
 	m_nBuddyListHeadPicStyle = 0;
 	m_bBuddyListShowBigHeadPicInSel = TRUE;
@@ -42,6 +43,24 @@ CUserConfig::CUserConfig() : m_strFontName(_T("΢���ź�"))
 	memset(m_szCustomFace, 0, sizeof(m_szCustomFace));
 
 	m_bShowLastMsg = TRUE;
+
+	// 系统设置（新版对话框）新增项默认值，对照 design/系统设置1~3.png 各开关初始态。
+	m_nLanguageIndex = 0;			//简体中文
+	m_nUiFontScaleIndex = 1;		//中
+	m_bNewMsgNotify = TRUE;
+	m_bDesktopPopup = TRUE;
+	m_bShakeFlashIcon = FALSE;
+	m_bDoNotDisturb = FALSE;
+	m_bNotifyAfterLock = TRUE;
+	m_bAutoRecvImage = TRUE;
+	m_bAutoRecvFile = FALSE;
+	m_bMsgRoaming = TRUE;
+	m_bEmojiRain = TRUE;
+	m_nAudioInputIndex = 0;
+	m_nAudioOutputIndex = 0;
+	m_nCameraIndex = 0;
+	m_bEchoCancel = TRUE;		//设计稿默认开
+	m_bTwoFactor = FALSE;		//设计稿默认关
 }
 
 CUserConfig::~CUserConfig()
@@ -70,13 +89,15 @@ BOOL CUserConfig::LoadConfig(PCTSTR pszFilePath)
 	iniFile.ReadString(_T("App"), _T("AutoReplyContent"), _T(""), m_szAutoReplyContent, ARRAYSIZE(m_szAutoReplyContent), pszFilePath);
 	m_bEnableRevokeChatMsg = iniFile.ReadInt(_T("App"), _T("RevokeChatMsg"), 0, pszFilePath) ? TRUE : FALSE;
 	
-	//���Ի���
+	//主对话框
 	m_xMainDlg = iniFile.ReadInt(_T("MainDlg"), _T("MainDlgX"), nMainDlgDefaultX, pszFilePath);
 	m_yMainDlg = iniFile.ReadInt(_T("MainDlg"), _T("MainDlgY"),  nMainDlgDefaultY, pszFilePath);
 	m_cxMainDlg = iniFile.ReadInt(_T("MainDlg"), _T("MainDlgWidth"), nMainDlgDefaultWidth, pszFilePath);
 	m_cyMainDlg = iniFile.ReadInt(_T("MainDlg"), _T("MainDlgHeight"), nMainDlgDefaultHeight, pszFilePath);
 	m_bEnableExitPrompt = iniFile.ReadInt(_T("MainDlg"), _T("ExitPrompt"), 1, pszFilePath) ? TRUE : FALSE;
 	m_bExitWhenCloseMainDlg = iniFile.ReadInt(_T("MainDlg"), _T("ExitWhenClose"), 0, pszFilePath) ? TRUE : FALSE;
+	// 老配置文件里没有这个键，缺省按 0（没提示过）读，使升级上来的用户也能收到一次提示。
+	m_bTrayMinimizeTipShown = iniFile.ReadInt(_T("MainDlg"), _T("TrayMinimizeTipShown"), 0, pszFilePath) ? TRUE : FALSE;
 
 	m_nBuddyListHeadPicStyle = iniFile.ReadInt(_T("MainDlg"), _T("BuddyListHeadPicStyle"), 0, pszFilePath);
 	m_bBuddyListShowBigHeadPicInSel = iniFile.ReadInt(_T("MainDlg"), _T("ShowBigHeadPicInSel"), 0, pszFilePath) ? TRUE : FALSE;
@@ -84,11 +105,11 @@ BOOL CUserConfig::LoadConfig(PCTSTR pszFilePath)
 	m_nNameStyleIndex = iniFile.ReadInt(_T("MainDlg"), _T("NameStyleIndex"), 0, pszFilePath);
 	m_bShowSimpleProfile = iniFile.ReadInt(_T("MainDlg"), _T("SimpleProfile"), 0, pszFilePath) ? TRUE:FALSE;
 
-	// ����Ի���
+	// 聊天对话框
 	m_cxChatDlg = iniFile.ReadInt(_T("ChatDlg"), _T("ChatDlgWidth"), nChatDlgDefaultWidth, pszFilePath);
 	m_cyChatDlg = iniFile.ReadInt(_T("ChatDlg"), _T("ChatDlgWidth"), nChatDlgDefaultHeight, pszFilePath);
 	m_bPressEnterToSend = iniFile.ReadInt(_T("ChatDlg"), _T("EnableEnterToSend"), 1, pszFilePath) ? TRUE : FALSE;
-	iniFile.ReadString(_T("ChatDlg"), _T("FontName"), _T("΢���ź�"), m_strFontName.GetBuffer(32), 32, pszFilePath);
+	iniFile.ReadString(_T("ChatDlg"), _T("FontName"), _T("微软雅黑"), m_strFontName.GetBuffer(32), 32, pszFilePath);
 	m_strFontName.ReleaseBuffer();
 	m_nFontSize = iniFile.ReadInt(_T("ChatDlg"), _T("FontSize"), 12, pszFilePath);
 	m_lFontColor = iniFile.ReadInt(_T("ChatDlg"), _T("FontColor"), 0,pszFilePath);
@@ -102,6 +123,26 @@ BOOL CUserConfig::LoadConfig(PCTSTR pszFilePath)
 
 	m_cxGroupDlg = iniFile.ReadInt(_T("GroupDlg"), _T("GroupDlgWidth"), nGroupDlgDefaultWidth, pszFilePath);
 	m_cyGroupDlg = iniFile.ReadInt(_T("GroupDlg"), _T("GroupDlgWidth"), nGroupDlgDefaultHeight, pszFilePath);
+
+	// 系统设置（新版对话框）新增项 —— 默认值与构造函数一致，缺键时回落默认。
+	m_nLanguageIndex = iniFile.ReadInt(_T("Settings"), _T("LanguageIndex"), 0, pszFilePath);
+	m_nUiFontScaleIndex = iniFile.ReadInt(_T("Settings"), _T("UiFontScaleIndex"), 1, pszFilePath);
+	m_bNewMsgNotify = iniFile.ReadInt(_T("Settings"), _T("NewMsgNotify"), 1, pszFilePath) ? TRUE : FALSE;
+	m_bDesktopPopup = iniFile.ReadInt(_T("Settings"), _T("DesktopPopup"), 1, pszFilePath) ? TRUE : FALSE;
+	m_bShakeFlashIcon = iniFile.ReadInt(_T("Settings"), _T("ShakeFlashIcon"), 0, pszFilePath) ? TRUE : FALSE;
+	m_bDoNotDisturb = iniFile.ReadInt(_T("Settings"), _T("DoNotDisturb"), 0, pszFilePath) ? TRUE : FALSE;
+	m_bNotifyAfterLock = iniFile.ReadInt(_T("Settings"), _T("NotifyAfterLock"), 1, pszFilePath) ? TRUE : FALSE;
+	m_bAutoRecvImage = iniFile.ReadInt(_T("Settings"), _T("AutoRecvImage"), 1, pszFilePath) ? TRUE : FALSE;
+	m_bAutoRecvFile = iniFile.ReadInt(_T("Settings"), _T("AutoRecvFile"), 0, pszFilePath) ? TRUE : FALSE;
+	m_bMsgRoaming = iniFile.ReadInt(_T("Settings"), _T("MsgRoaming"), 1, pszFilePath) ? TRUE : FALSE;
+	m_bEmojiRain = iniFile.ReadInt(_T("Settings"), _T("EmojiRain"), 1, pszFilePath) ? TRUE : FALSE;
+	m_nAudioInputIndex = iniFile.ReadInt(_T("Settings"), _T("AudioInputIndex"), 0, pszFilePath);
+	m_nAudioOutputIndex = iniFile.ReadInt(_T("Settings"), _T("AudioOutputIndex"), 0, pszFilePath);
+	m_nCameraIndex = iniFile.ReadInt(_T("Settings"), _T("CameraIndex"), 0, pszFilePath);
+	m_bEchoCancel = iniFile.ReadInt(_T("Settings"), _T("EchoCancel"), 1, pszFilePath) ? TRUE : FALSE;
+	m_bTwoFactor = iniFile.ReadInt(_T("Settings"), _T("TwoFactor"), 0, pszFilePath) ? TRUE : FALSE;
+	iniFile.ReadString(_T("Settings"), _T("RecvFilePath"), _T(""), m_strRecvFilePath.GetBuffer(MAX_PATH), MAX_PATH, pszFilePath);
+	m_strRecvFilePath.ReleaseBuffer();
 
 	return TRUE;
 }
@@ -117,13 +158,14 @@ BOOL CUserConfig::SaveConfig(PCTSTR pszFilePath)
 	iniFile.WriteString(_T("App"), _T("AutoReplyContent"), m_szAutoReplyContent, pszFilePath);
 	iniFile.WriteInt(_T("App"), _T("RevokeChatMsg"), m_bEnableRevokeChatMsg, pszFilePath);
 	
-	//���Ի���
+	//主对话框
 	iniFile.WriteInt(_T("MainDlg"), _T("MainDlgX"), m_xMainDlg, pszFilePath);
 	iniFile.WriteInt(_T("MainDlg"), _T("MainDlgY"),  m_yMainDlg, pszFilePath);
 	iniFile.WriteInt(_T("MainDlg"), _T("MainDlgWidth"), m_cxMainDlg, pszFilePath);
 	iniFile.WriteInt(_T("MainDlg"), _T("MainDlgHeight"), m_cyMainDlg, pszFilePath);
 	iniFile.WriteInt(_T("MainDlg"), _T("ExitPrompt"), m_bEnableExitPrompt, pszFilePath);
 	iniFile.WriteInt(_T("MainDlg"), _T("ExitWhenClose"), m_bExitWhenCloseMainDlg, pszFilePath);
+	iniFile.WriteInt(_T("MainDlg"), _T("TrayMinimizeTipShown"), m_bTrayMinimizeTipShown, pszFilePath);
 
 	iniFile.WriteInt(_T("MainDlg"), _T("BuddyListHeadPicStyle"), m_nBuddyListHeadPicStyle, pszFilePath);
 	iniFile.WriteInt(_T("MainDlg"), _T("ShowBigHeadPicInSel"), m_bBuddyListShowBigHeadPicInSel, pszFilePath);
@@ -131,7 +173,7 @@ BOOL CUserConfig::SaveConfig(PCTSTR pszFilePath)
 	iniFile.WriteInt(_T("MainDlg"), _T("NameStyleIndex"), m_nNameStyleIndex, pszFilePath);
 	iniFile.WriteInt(_T("MainDlg"), _T("SimpleProfile"), m_bShowSimpleProfile, pszFilePath);
 
-	// ����Ի���
+	// 聊天对话框
 	iniFile.WriteInt(_T("ChatDlg"), _T("ChatDlgWidth"), m_cxChatDlg, pszFilePath);
 	iniFile.WriteInt(_T("ChatDlg"), _T("ChatDlgHeight"), m_cyChatDlg, pszFilePath);
 	iniFile.WriteInt(_T("ChatDlg"), _T("EnableEnterToSend"), m_bPressEnterToSend, pszFilePath);
@@ -148,8 +190,37 @@ BOOL CUserConfig::SaveConfig(PCTSTR pszFilePath)
 
 	iniFile.WriteInt(_T("GroupDlg"), _T("GroupDlgWidth"), m_cxGroupDlg, pszFilePath);
 	iniFile.WriteInt(_T("GroupDlg"), _T("GroupDlgHeight"), m_cyGroupDlg, pszFilePath);
-	
+
+	// 系统设置（新版对话框）新增项 —— [Settings] 节。
+	iniFile.WriteInt(_T("Settings"), _T("LanguageIndex"), m_nLanguageIndex, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("UiFontScaleIndex"), m_nUiFontScaleIndex, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("NewMsgNotify"), m_bNewMsgNotify, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("DesktopPopup"), m_bDesktopPopup, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("ShakeFlashIcon"), m_bShakeFlashIcon, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("DoNotDisturb"), m_bDoNotDisturb, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("NotifyAfterLock"), m_bNotifyAfterLock, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("AutoRecvImage"), m_bAutoRecvImage, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("AutoRecvFile"), m_bAutoRecvFile, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("MsgRoaming"), m_bMsgRoaming, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("EmojiRain"), m_bEmojiRain, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("AudioInputIndex"), m_nAudioInputIndex, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("AudioOutputIndex"), m_nAudioOutputIndex, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("CameraIndex"), m_nCameraIndex, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("EchoCancel"), m_bEchoCancel, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("TwoFactor"), m_bTwoFactor, pszFilePath);
+	iniFile.WriteString(_T("Settings"), _T("RecvFilePath"), m_strRecvFilePath, pszFilePath);
+
 	return TRUE;
+}
+
+void CUserConfig::SetRecvFilePath(PCTSTR pszPath)
+{
+	m_strRecvFilePath = (pszPath != NULL) ? pszPath : _T("");
+}
+
+PCTSTR CUserConfig::GetRecvFilePath() const
+{
+	return m_strRecvFilePath;
 }
 
 void CUserConfig::EnableMute(BOOL bMute)
@@ -240,6 +311,16 @@ void CUserConfig::EnableExitWhenCloseMainDlg(BOOL bEnable)
 BOOL CUserConfig::IsEnableExitWhenCloseMainDlg()
 {
 	return m_bExitWhenCloseMainDlg;
+}
+
+void CUserConfig::SetTrayMinimizeTipShown(BOOL bShown)
+{
+	m_bTrayMinimizeTipShown = bShown;
+}
+
+BOOL CUserConfig::IsTrayMinimizeTipShown() const
+{
+	return m_bTrayMinimizeTipShown;
 }
 
 void CUserConfig::SetBuddyListHeadPicStyle(long nStyle)
@@ -448,6 +529,168 @@ void CUserConfig::EnableShowLastMsgInChatDlg(BOOL bEnable)
 BOOL CUserConfig::IsEnableShowLastMsgInChatDlg()
 {
 	return m_bShowLastMsg;
+}
+
+// ======================= 系统设置（新版对话框）新增项 =======================
+
+void CUserConfig::SetLanguageIndex(long nIndex)
+{
+	m_nLanguageIndex = nIndex;
+}
+
+long CUserConfig::GetLanguageIndex() const
+{
+	return m_nLanguageIndex;
+}
+
+void CUserConfig::SetUiFontScaleIndex(long nIndex)
+{
+	m_nUiFontScaleIndex = nIndex;
+}
+
+long CUserConfig::GetUiFontScaleIndex() const
+{
+	return m_nUiFontScaleIndex;
+}
+
+void CUserConfig::EnableNewMsgNotify(BOOL bEnable)
+{
+	m_bNewMsgNotify = bEnable;
+}
+
+BOOL CUserConfig::IsEnableNewMsgNotify() const
+{
+	return m_bNewMsgNotify;
+}
+
+void CUserConfig::EnableDesktopPopup(BOOL bEnable)
+{
+	m_bDesktopPopup = bEnable;
+}
+
+BOOL CUserConfig::IsEnableDesktopPopup() const
+{
+	return m_bDesktopPopup;
+}
+
+void CUserConfig::EnableShakeFlashIcon(BOOL bEnable)
+{
+	m_bShakeFlashIcon = bEnable;
+}
+
+BOOL CUserConfig::IsEnableShakeFlashIcon() const
+{
+	return m_bShakeFlashIcon;
+}
+
+void CUserConfig::EnableDoNotDisturb(BOOL bEnable)
+{
+	m_bDoNotDisturb = bEnable;
+}
+
+BOOL CUserConfig::IsEnableDoNotDisturb() const
+{
+	return m_bDoNotDisturb;
+}
+
+void CUserConfig::EnableNotifyAfterLock(BOOL bEnable)
+{
+	m_bNotifyAfterLock = bEnable;
+}
+
+BOOL CUserConfig::IsEnableNotifyAfterLock() const
+{
+	return m_bNotifyAfterLock;
+}
+
+void CUserConfig::EnableAutoRecvImage(BOOL bEnable)
+{
+	m_bAutoRecvImage = bEnable;
+}
+
+BOOL CUserConfig::IsEnableAutoRecvImage() const
+{
+	return m_bAutoRecvImage;
+}
+
+void CUserConfig::EnableAutoRecvFile(BOOL bEnable)
+{
+	m_bAutoRecvFile = bEnable;
+}
+
+BOOL CUserConfig::IsEnableAutoRecvFile() const
+{
+	return m_bAutoRecvFile;
+}
+
+void CUserConfig::EnableMsgRoaming(BOOL bEnable)
+{
+	m_bMsgRoaming = bEnable;
+}
+
+BOOL CUserConfig::IsEnableMsgRoaming() const
+{
+	return m_bMsgRoaming;
+}
+
+void CUserConfig::EnableEmojiRain(BOOL bEnable)
+{
+	m_bEmojiRain = bEnable;
+}
+
+BOOL CUserConfig::IsEnableEmojiRain() const
+{
+	return m_bEmojiRain;
+}
+
+void CUserConfig::SetAudioInputIndex(long nIndex)
+{
+	m_nAudioInputIndex = nIndex;
+}
+
+long CUserConfig::GetAudioInputIndex() const
+{
+	return m_nAudioInputIndex;
+}
+
+void CUserConfig::SetAudioOutputIndex(long nIndex)
+{
+	m_nAudioOutputIndex = nIndex;
+}
+
+long CUserConfig::GetAudioOutputIndex() const
+{
+	return m_nAudioOutputIndex;
+}
+
+void CUserConfig::SetCameraIndex(long nIndex)
+{
+	m_nCameraIndex = nIndex;
+}
+
+long CUserConfig::GetCameraIndex() const
+{
+	return m_nCameraIndex;
+}
+
+void CUserConfig::EnableEchoCancel(BOOL bEnable)
+{
+	m_bEchoCancel = bEnable;
+}
+
+BOOL CUserConfig::IsEnableEchoCancel() const
+{
+	return m_bEchoCancel;
+}
+
+void CUserConfig::EnableTwoFactor(BOOL bEnable)
+{
+	m_bTwoFactor = bEnable;
+}
+
+BOOL CUserConfig::IsEnableTwoFactor() const
+{
+	return m_bTwoFactor;
 }
 
 

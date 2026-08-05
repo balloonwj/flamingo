@@ -1,15 +1,31 @@
-#pragma once
+﻿#pragma once
 
 #include <thread>
 #include <mutex>
 #include <string>
+#include <vector>
 #include <memory>
 #include <condition_variable>
+#include <atomic>
 #include <stdint.h>
+
+#include "MessageProtocolClient.h"   // net::TextFont（发送文本可带字体设置）
+#include "TransferOwnerRegistry.h"   // net::TransferOwner / net::TransferOwnerRegistry（1801/1802 应答路由）
+#include "GroupProtocolClient.h"     // net::UpdateGroupInfoParams（SendUpdateGroupInfo 按值传引用，需完整类型）
 
 class CRecvMsgThread;
 
-//����ͨ�Ų�ֻ�������ݴ���ͽ���
+//v2 协议帧头前置声明。本头文件被众多 .cpp 引用，其中部分仍包含旧
+//net/Msg.h；而 net/Protocol.h 与 Msg.h 的枚举同名冲突，故本头文件不能
+//直接包含 Protocol.h，只前置声明 frame_header 供成员函数声明使用，
+//完整定义在 IUSocket.cpp 内经 FrameCodec.h 引入。
+struct frame_header;
+
+//注册请求参数前置声明。Register 只按 const 引用收它，无需完整类型；
+//完整定义在 net/RegisterProtocolClient.h，由 IUSocket.cpp 引入。
+namespace net { struct RegisterRequestParams; }
+
+//网络通信层只负责数据传输和接收
 class CIUSocket
 {
 private:
@@ -40,14 +56,25 @@ public:
 	void	SetProxyPort(short nProxyPort);
 	void    SetProxyType(long nProxyType);
 
-    //�����͹ر���������������Զ�����
+    //开启和关闭聊天服务器断线自动重连
     void    EnableReconnect(bool bEnable);
 
     /** 
-    *@param timeout ��ʱʱ�䣬��λΪs
+    *@param timeout 超时时间，单位为s
     **/
 	bool	Connect(int timeout = 3);
     bool    Reconnect(int timeout = 3);
+
+    /**
+     *  探测某服务器地址是否可连通（网络设置的"测试连接"用）。
+     *  用一个临时 socket 做带超时的 TCP 连接探测后立即关闭，**不影响**
+     *  聊天主连接（m_hSocket）；可在登录前调用。
+     *  @param lpszHost    服务器地址（域名或 IP）
+     *  @param nPort       端口号
+     *  @param nTimeoutSec 连接超时时间，单位秒
+     *  @return 能在超时内建立 TCP 连接返回 true，否则返回 false
+     */
+    bool    TestConnect(PCTSTR lpszHost, short nPort, int nTimeoutSec = 3);
     bool	ConnectToFileServer(int timeout = 3);
     bool	ConnectToImgServer(int timeout = 3);
 	
@@ -59,21 +86,763 @@ public:
 	void	CloseFileServerConnection();
     void	CloseImgServerConnection();
 
-    /** �ж���ͨSocket���Ƿ��յ�����
-     * @return -1������ 0������ 1������
+    /** 判断普通Socket上是否收到数据
+     * @return -1出错， 0无数据 1有数据
      */
 	int    CheckReceivedData();
 
-	//�첽�ӿ�
+	//异步接口
     void    Send(const std::string& strBuffer);
 
-   	//ͬ���ӿ�
-    //nTimeout��λ����
-    bool    Register(const char* pszUser, const char* pszNickname, const char* pszPassword, int nTimeout, std::string& strReturnData);
+    /**
+     *  发送一条单聊文本消息（v2，cmd_send_message=1503）。线程安全，可在 UI
+     *  线程调用：内部组帧后追加进发送缓冲、唤醒发送线程。发送回执经
+     *  cmd_send_message 应答异步回投到 UI（FMG_MSG_V2_SEND_CHATMSG_ACK）。
+     *  @param peerUserId  对端用户 userid（>0）
+     *  @param clientMsgId 客户端消息ID（UUID，非空），用于回执回填与去重
+     *  @param text        文本正文（UTF-8 字节）
+     */
+    void    SendChatTextMessage(int64_t peerUserId, const std::string& clientMsgId,
+                                const std::string& text,
+                                const net::TextFont& font = net::TextFont(),
+                                const net::ReplyQuote& quote = net::ReplyQuote());
+
+    /**
+     *  发送一条单聊"窗口抖动"消息（v2，cmd_send_message=1503，msgtype=13）。线程
+     *  安全，可在 UI 线程调用：内部组帧（content 为空对象）后追加进发送缓冲、
+     *  唤醒发送线程。回执经 cmd_send_message 应答异步回投（FMG_MSG_V2_SEND_CHATMSG_ACK）。
+     *  @param peerUserId  对端用户 userid（>0）
+     *  @param clientMsgId 客户端消息ID（UUID，非空），用于回执回填与去重
+     */
+    void    SendChatShakeMessage(int64_t peerUserId, const std::string& clientMsgId);
+
+    /**
+     *  发送一条群聊文本消息（v2，cmd_send_message=1503，ctype=群聊）。线程安全。
+     *  回执经 cmd_send_message 应答异步回投（FMG_MSG_V2_SEND_CHATMSG_ACK）；服务端
+     *  随后向全群 fan-out cmd_message_notify。
+     *  @param groupId     目标群 id（>0）
+     *  @param clientMsgId 客户端消息ID（UUID，非空），用于回执回填与去重
+     *  @param text        文本正文（UTF-8 字节）
+     */
+    void    SendGroupTextMessage(int64_t groupId, const std::string& clientMsgId,
+                                 const std::string& text,
+                                 const net::TextFont& font = net::TextFont(),
+                                 const net::ReplyQuote& quote = net::ReplyQuote());
+
+    /**
+     *  发送一条<u>带 @提醒</u>的群聊文本消息（v2，cmd_send_message=1503）。线程安全。
+     *  与上面的重载同路径，只是 content 里多一个 at 对象；ats 空且 atAll 为假时
+     *  等价于普通群聊文本消息。协议格式见 docs/群聊@提醒方案.md §3。
+     *  @param groupId     目标群 id（>0）
+     *  @param clientMsgId 客户端消息ID（UUID，非空）
+     *  @param text        文本正文（UTF-8 字节）
+     *  @param ats         被 @ 的人及其片段（偏移为 text 的 UTF-8 字节口径，调用方
+     *                     须已用 RescanMentions 按最终文本重算过）
+     *  @param atAll       是否 @所有人
+     *  @param font        文本字体设置
+     *  @param quote       引用回复快照；m_valid 为真时写入 content.quote
+     */
+    void    SendGroupTextMessageWithMentions(
+                int64_t groupId, const std::string& clientMsgId,
+                const std::string& text,
+                const std::vector<balloonchatwnd::MentionSpan>& ats,
+                bool atAll,
+                const net::TextFont& font = net::TextFont(),
+                const net::ReplyQuote& quote = net::ReplyQuote());
+
+    /**
+     *  发起一次远程桌面邀请（v2，cmd_rd_invite=1710）。线程安全。应答（成功带
+     *  sessionid，失败如对方离线 / 忙）经 cmd_rd_invite 异步回投 FMG_MSG_V2_RD_INVITE_ACK。
+     *  @param peerUserId 被控端用户 userid（>0）
+     */
+    void    SendRemoteDesktopInvite(int64_t peerUserId);
+
+    /**
+     *  被控端应答远程桌面邀请（v2，cmd_rd_response=1712）。线程安全。接受后双方收
+     *  cmd_rd_relay_info，拒绝时控制端收 cmd_rd_state_notify。
+     *  @param sessionId 邀请推送里带来的会话 id
+     *  @param accept    true 接受 / false 拒绝
+     */
+    void    SendRemoteDesktopResponse(const std::string& sessionId, bool accept);
+
+    /**
+     *  控制端在被控端应答前取消远程桌面邀请（v2，cmd_rd_cancel=1713）。线程安全。
+     *  @param sessionId 会话 id
+     */
+    void    SendRemoteDesktopCancel(const std::string& sessionId);
+
+    /**
+     *  结束远程桌面会话（v2，cmd_rd_close=1714），控制端 / 被控端均可调。线程安全。
+     *  @param sessionId 会话 id
+     */
+    void    SendRemoteDesktopClose(const std::string& sessionId);
+
+    /**
+     *  发起一次音视频通话邀请（v2，cmd_call_invite=1701）。线程安全。应答（成功带
+     *  sessionid，失败如对方离线 / 忙）经 cmd_call_invite 异步回投 FMG_MSG_V2_CALL_INVITE_ACK。
+     *  @param peerUserId 被叫用户 userid（>0）
+     *  @param media      媒体类型（net::call_media；第一期固定纯语音 call_media_audio）
+     */
+    void    SendCallInvite(int64_t peerUserId, int media);
+
+    /**
+     *  被叫应答音视频通话邀请（v2，cmd_call_response=1703）。线程安全。接听后双方收
+     *  cmd_call_signaling 与接通态，拒绝时主叫收 cmd_call_state_notify。
+     *  @param sessionId 邀请推送里带来的会话 id
+     *  @param accept    true 接听 / false 拒绝
+     */
+    void    SendCallResponse(const std::string& sessionId, bool accept);
+
+    /**
+     *  主叫在被叫应答前取消呼叫（v2，cmd_call_cancel=1704）。线程安全。
+     *  @param sessionId 会话 id
+     */
+    void    SendCallCancel(const std::string& sessionId);
+
+    /**
+     *  挂断音视频通话（v2，cmd_call_hangup=1705），主叫 / 被叫均可调。线程安全。
+     *  @param sessionId 会话 id
+     */
+    void    SendCallHangup(const std::string& sessionId);
+
+    /**
+     *  通话中切换媒体类型（v2，cmd_call_switch_media=1708）。线程安全。
+     *
+     *  仅通话已接通时可用。应答经 FMG_MSG_V2_CALL_SWITCH_MEDIA_RESULT 回投 UI（失败时
+     *  据 code 提示原因）；服务端切换成功后还会向<u>双方（含本端）</u>推送
+     *  cmd_call_media_changed_notify，客户端统一在收到<u>推送</u>时才改界面与引擎 ——
+     *  这样本端与对端看到的媒体类型必然一致。
+     *
+     *  @param sessionId 本次会话 id；为空则本方法直接跳过不发包
+     *  @param media     目标媒体类型，取值见 net::call_media；非法值同样跳过不发包
+     */
+    void    SwitchCallMedia(const std::string& sessionId, int media);
+
+    /**
+     *  申请上传一个文件（v2，cmd_request_upload=1801）。线程安全。组帧发出后立即
+     *  返回所用的帧 seq，并按 owner 在归属表登记该 seq；应答（秒传判断 / 上传令牌 /
+     *  目标服务器）经 cmd_request_upload 异步回到 HandleV2Frame，再按 seq 查归属转交
+     *  给 ImageTransfer 或 FileTransfer 的等待槽。一般由二者的工作线程调用，不直接
+     *  面向 UI。
+     *  @param scene 文件用途场景，取值见 enum file_scene（图片消息传 file_scene_image_msg，
+     *               聊天文件传 file_scene_chat_file）
+     *  @param md5   文件内容MD5（小写十六进制，32 位）
+     *  @param size  文件总字节数（>0）
+     *  @param name  原始文件名（图片场景可空，文件场景须带含扩展名的原始名）
+     *  @param ext   扩展名，不含点（可空）
+     *  @param owner 传输归属（见 enum net::TransferOwner），决定应答转交给图片还是文件
+     *               传输管理器；缺省为图片，使既有 ImageTransfer 调用无需改动
+     *  @return 本次申请所用的帧 seq，调用方据此关联应答
+     */
+    uint32_t RequestUpload(int scene, const std::string& md5, int64_t size,
+                           const std::string& name, const std::string& ext,
+                           int owner = net::transfer_owner_image);
+
+    /**
+     *  申请下载一个文件（v2，cmd_request_download=1802）。线程安全。组帧发出后立即
+     *  返回所用的帧 seq，并按 owner 在归属表登记该 seq；应答（下载令牌 / 目标服务器 /
+     *  md5 / 大小）经 cmd_request_download 异步回到 HandleV2Frame，再按 seq 查归属转交
+     *  给 ImageTransfer 或 FileTransfer 的下载等待槽。一般由二者的工作线程调用。
+     *  @param fileid 待下载文件的文件ID（字符串编码，来自图片 / 文件消息 content）
+     *  @param owner  传输归属（见 enum net::TransferOwner）；缺省为图片，使既有
+     *                ImageTransfer 调用无需改动
+     *  @return 本次申请所用的帧 seq，调用方据此关联应答
+     */
+    uint32_t RequestDownload(const std::string& fileid, int owner = net::transfer_owner_image);
+
+    /**
+     *  发送一条图片消息（v2，cmd_send_message=1503，msgtype=2）。线程安全。图片须
+     *  已上传到 imgserver（先经 cmd_request_upload + cmd_file_upload 拿到 fileid）。
+     *  回执沿用 cmd_send_message 应答路径（FMG_MSG_V2_SEND_CHATMSG_ACK）。一般由
+     *  ImageTransfer 工作线程在字节流上传完成后调用。
+     *  @param ctype       会话类型（单聊=1、群聊=2，见 enum conversation_type）
+     *  @param cid         会话ID（单聊=对端 userid，群聊=群id）
+     *  @param clientMsgId 客户端消息ID（UUID，非空）
+     *  @param fileid      图片文件ID（字符串编码，来自 cmd_request_upload 应答）
+     *  @param md5         图片内容MD5（小写十六进制）
+     *  @param width       图片像素宽（>0）
+     *  @param height      图片像素高（>0）
+     *  @param size        图片字节数（>0）
+     */
+    void    SendChatImageMessage(int ctype, int64_t cid, const std::string& clientMsgId,
+                                 const std::string& fileid, const std::string& md5,
+                                 int width, int height, int64_t size);
+
+    /**
+     *  发送一条文件消息（v2，cmd_send_message=1503，msgtype=3）。线程安全。文件须已
+     *  上传到 fileserver（先经 cmd_request_upload + cmd_file_upload 拿到 fileid）。回执
+     *  沿用 cmd_send_message 应答路径（FMG_MSG_V2_SEND_CHATMSG_ACK）。一般由 FileTransfer
+     *  工作线程在字节流上传完成后调用。
+     *  @param ctype       会话类型（单聊=1、群聊=2，见 enum conversation_type）
+     *  @param cid         会话ID（单聊=对端 userid，群聊=群id）
+     *  @param clientMsgId 客户端消息ID（UUID，非空）
+     *  @param fileid      文件ID（字符串编码，来自 cmd_request_upload 应答）
+     *  @param filename    原始文件名（含扩展名，UTF-8，非空）
+     *  @param size        文件字节数（>0）
+     *  @param md5         文件内容MD5（小写十六进制）
+     */
+    void    SendChatFileMessage(int ctype, int64_t cid, const std::string& clientMsgId,
+                                const std::string& fileid, const std::string& filename,
+                                int64_t size, const std::string& md5);
+
+    /**
+     *  取 UI 代理窗口句柄，供 ImageTransfer 把发图进度 / 结果异步回投到 UI。
+     *  @return UI 代理窗口句柄；接收线程未就绪时返回 NULL
+     */
+    HWND    GetUIProxyWnd();
+
+    /**
+     *  请求某群的群资料（v2，cmd_get_group_info=1303）。线程安全。应答经
+     *  cmd_get_group_info 异步回投到 UI（FMG_MSG_V2_GROUP_INFO）。
+     *  @param groupId 目标群 id（>0）
+     */
+    void    RequestGroupInfo(int64_t groupId);
+
+    /**
+     *  请求某群的群成员列表（v2，cmd_get_group_members=1304）。线程安全。应答经
+     *  cmd_get_group_members 异步回投到 UI（FMG_MSG_V2_GROUP_MEMBERS）。
+     *  @param groupId 目标群 id（>0）
+     */
+    void    RequestGroupMembers(int64_t groupId);
+
+    /**
+     *  请求某群的群文件库列表的一页（v2，cmd_get_group_files=1803）。线程安全。应答经
+     *  cmd_get_group_files 异步回投到 UI（FMG_MSG_V2_GROUP_FILES）。客户端按 Option B
+     *  全量缓存：群聊窗首次打开「群文件」面板时从 offset=0 起逐页拉取，应答里 hasmore
+     *  为真则继续拉下一页，直到拉全。
+     *  @param groupId  目标群 id（>0）
+     *  @param filetype 服务端类型筛选（见 group_file_type）；客户端全量缓存传 0=全部
+     *  @param offset   分页偏移（>=0）
+     *  @param count    本页期望条数（服务端上限 50）
+     */
+    void    RequestGroupFiles(int64_t groupId, int filetype, int offset, int count);
+
+    /**
+     *  把一个已上传到 fileserver（scene=群文件）的文件登记进群文件库（v2，
+     *  cmd_add_group_file=1804）。线程安全。服务端登记成功后会向全群（含本人）推
+     *  cmd_group_files_changed_notify(1806)，各端据此刷新群文件库；本请求的应答仅作
+     *  成功 / 失败日志，不单独路由。一般在群文件上传完成回投后由群聊窗调用。
+     *  @param groupId 目标群id（>0）
+     *  @param fileid  已上传文件的文件ID（来自上传结果，字符串编码int64）
+     */
+    void    RequestAddGroupFile(int64_t groupId, const std::string& fileid);
+
+    /**
+     *  删除一个群文件登记（v2，cmd_delete_group_file=1805）。线程安全。服务端校验
+     *  权限（群主 / 管理员 / 上传者本人）后删 t_group_file 登记行，并向全群（含本人）推
+     *  cmd_group_files_changed_notify(1806, changetype=removed)，各端据此把该文件移出
+     *  群文件库。本请求的应答仅作成功 / 失败日志，不单独路由 UI（UI 的移除靠 1806）。
+     *  一般由群聊窗在用户确认删除后调用；调用方须自行做权限门控（与服务端同规则）。
+     *  @param groupId 目标群id（>0）
+     *  @param entryid 待删除的群文件条目ID（字符串编码int64，来自列表项 m_entryid）
+     */
+    void    RequestDeleteGroupFile(int64_t groupId, const std::string& entryid);
+
+    /**
+     *  请求拉取本人加入的全部群列表（v2，cmd_get_user_groups=1320）。线程安全。
+     *  应答经 cmd_get_user_groups 异步回投到 UI（FMG_MSG_V2_USER_GROUPS）。一般在
+     *  应答经 cmd_get_user_groups 异步回投到 UI（FMG_MSG_V2_USER_GROUPS）。一般在
+     *  登录成功、主面板显示后调用一次，用于填"群"Tab（含无消息的空群）。
+     */
+    void    RequestUserGroups();
+
+    /**
+     *  请求拉取某会话的历史消息（v2，cmd_sync_messages=1502）。线程安全。应答经
+     *  cmd_sync_messages 异步回投到 UI（FMG_MSG_V2_SYNC_MESSAGES）。聊天窗打开时
+     *  调用一次拉最近 N 条（beforeMsgId=0、limit=100）。
+     *  @param ctype       会话类型（1 单聊 2 群聊）
+     *  @param cid         会话ID（单聊=对端userid，群聊=群id）
+     *  @param beforeMsgId 翻历史锚点：取此 msgid 之前的消息；0=从最新开始
+     *  @param limit       本次最多拉取条数（服务端上限 100）
+     */
+    void    RequestSyncMessages(int ctype, int64_t cid, int64_t beforeMsgId, int limit);
+
+    /**
+     *  发送创建群聊请求（v2，cmd_create_group=1301）。线程安全，可在 UI 线程调用：
+     *  内部组帧后追加进发送缓冲、唤醒发送线程。应答经 cmd_create_group 异步回投到
+     *  UI（FMG_MSG_V2_CREATE_GROUP_RESULT）。
+     *  @param groupName  群名称（UTF-8，非空；调用方须保证）
+     *  @param memberIds  初始成员 userid 列表（不含创建者；可为空）
+     */
+    void    SendCreateGroup(const std::string& groupName, const std::vector<int64_t>& memberIds);
+
+    /**
+     *  发送"会话设置"请求（v2，cmd_set_conversation=1513）：改置顶 / 免打扰。线程安全，
+     *  可在 UI 线程调用。只有 hasPinned / hasMute 为 true 的字段会写进请求，未指定的
+     *  字段服务端保持原值。应答（通用 {code,msg}）经 cmd_set_conversation 异步回投到
+     *  UI（FMG_MSG_V2_SET_CONVERSATION_RESULT）。
+     *  @param ctype     会话类型（1单聊 2群聊）
+     *  @param cid       会话ID（群聊=群id）
+     *  @param hasPinned true=本次要改置顶，按 pinned 写入；false 则不带 pinned 字段
+     *  @param pinned    置顶目标值（hasPinned 为 true 时有效）
+     *  @param hasMute   true=本次要改免打扰，按 mute 写入；false 则不带 mute 字段
+     *  @param mute      免打扰目标值（hasMute 为 true 时有效）
+     */
+    void    SendSetConversation(int ctype, int64_t cid,
+                                bool hasPinned, bool pinned,
+                                bool hasMute, bool mute);
+
+    /**
+     *  发送"删除会话"请求（v2，复用 cmd_set_conversation=1513 的 deleted 字段）。线程
+     *  安全，可在 UI 线程调用。语义是把该会话从最近会话列表移除，<u>不删除聊天消息
+     *  本体</u>；该会话之后再来新消息时会重新出现在列表里。应答（通用 {code,msg}）经
+     *  cmd_set_conversation 异步回投到 UI（FMG_MSG_V2_SET_CONVERSATION_RESULT）。
+     *  @param ctype  会话类型（1单聊 2群聊）
+     *  @param cid    会话ID（单聊=对端userid，群聊=群id；>0）
+     */
+    void    SendDeleteConversation(int ctype, int64_t cid);
+
+    /**
+     *  发送"加入 / 取消收藏"请求（v2，cmd_set_favorite=1215）。线程安全，可在 UI
+     *  线程调用。收藏对象既可以是联系人也可以是群，用 (ctype, cid) 区分，口径与会话
+     *  一致。应答经 cmd_set_favorite 异步回投到 UI（FMG_MSG_V2_SET_FAVORITE_RESULT，
+     *  lParam 为堆上的 net::SetFavoriteResult*），主面板据其中原样回带的 ctype/cid/favorite
+     *  判断是哪一条请求的结果，失败时回滚对应的乐观更新。
+     *  @param ctype     收藏对象类型（1联系人 2群组）
+     *  @param cid       收藏对象ID（联系人=对端userid，群组=群id；>0）
+     *  @param favorite  true=加入收藏，false=移出收藏
+     */
+    void    SendSetFavorite(int ctype, int64_t cid, bool favorite);
+
+    /**
+     *  发送"设置好友备注名"请求（v2，cmd_set_friend_remark=1209）。线程安全，可在
+     *  UI 线程调用。应答经同一 cmd 异步回投到 UI（FMG_MSG_V2_SET_REMARK_RESULT，
+     *  lParam 为堆上的 net::SetFriendRemarkResult*），主面板据其中原样回带的 userid
+     *  判断是哪一条请求的结果，失败时回滚对应的乐观更新。
+     *
+     *  备注名是单向的（只影响本人看该好友的显示），改完<u>不走推送</u>；本端的显示
+     *  靠发起时的乐观更新，重登后靠通讯录应答里的 contacts[].remark 读回。
+     *
+     *  @param userid      目标好友 userid（>0）
+     *  @param remarkUtf8  新备注名（UTF-8）；<u>空串表示清除备注</u>，是合法取值
+     */
+    void    SendSetFriendRemark(int64_t userid, const std::string& remarkUtf8);
+
+    /**
+     *  发送「拉取发给本人的平台公告」请求（v2，cmd_get_announcements=2101）。线程安全，
+     *  可在 UI 线程调用。应答经同一 cmd 异步回投到 UI（FMG_MSG_V2_ANNOUNCEMENTS，
+     *  lParam 为堆上的 net::AnnouncementsResult*）。
+     *
+     *  这是主面板「消息盒子」的数据来源：登录后全量拉一遍（sinceId 传 0）落本地库，
+     *  之后靠 cmd_announcement_notify 推送收增量；应答里 hasmore 为 true 时，应以本批
+     *  最后一条的公告ID作新的 sinceId 再拉一次。
+     *
+     *  @param sinceId  增量游标，只要ID大于它的公告；0 表示全量拉取
+     *  @param limit    本次最多要多少条；服务端会规整到 [1,100]，传 0 即用服务端默认值
+     */
+    void    SendGetAnnouncements(int64_t sinceId, int limit);
+
+    /**
+     *  发送「某条平台公告已读」上报（v2，cmd_mark_announcement_read=2102）。线程安全，
+     *  可在 UI 线程调用。应答经同一 cmd 异步回投到 UI（FMG_MSG_V2_ANN_MARK_READ_RESULT，
+     *  lParam 为堆上的 net::AnnounceMarkReadResult*，其中原样回带 announcementid）。
+     *
+     *  用户在消息盒子里点开某条公告时调用。服务端据此写 t_announcement_read，管理控制台
+     *  的「已读进度」统计的就是这张表。重复上报是安全的，服务端靠唯一键吸收。
+     *
+     *  @param announcementId  被读的公告ID（>0）
+     */
+    void    SendMarkAnnouncementRead(int64_t announcementId);
+
+    /**
+     *  发送"修改本人群名片"请求（v2，cmd_set_member_card=1315）。线程安全，可在 UI
+     *  线程调用。应答（通用 {code,msg}）经 cmd_set_member_card 异步回投到 UI
+     *  （FMG_MSG_V2_SET_MEMBER_CARD_RESULT）。
+     *  @param groupId  目标群ID（>0）
+     *  @param cardUtf8 新群名片（UTF-8，可为空=清空名片）
+     */
+    void    SendSetMemberCard(int64_t groupId, const std::string& cardUtf8);
+
+    /**
+     *  发送"退出群聊"请求（v2，cmd_leave_group=1309）。线程安全，可在 UI 线程调用。
+     *  应答（通用 {code,msg}）经 cmd_leave_group 异步回投到 UI
+     *  （FMG_MSG_V2_LEAVE_GROUP_RESULT）。
+     *  @param groupId  目标群ID（>0）
+     */
+    void    SendLeaveGroup(int64_t groupId);
+
+    // ================================================================
+    // 群管理（群管理窗口用）
+    // ================================================================
+    //
+    // 以下写操作的应答体都是通用 { code, msg }，统一经
+    // FMG_MSG_V2_GROUP_OP_RESULT 回投，wParam 带上对应的 cmd 协议号。
+    // 界面收到成功应答时<u>不要</u>直接改界面 —— 服务端在写成功后会向全体成员推
+    // 1317 / 1318，本端也在推送范围内，等推送统一刷新即可，否则同一次操作会
+    // 重排两遍界面。只有失败路径需要靠应答给提示（失败没有推送）。
+
+    /**
+     *  拉取待审批的加群申请列表（cmd_get_group_join_requests=1319）。仅群主 /
+     *  管理员有权，普通成员会收到 error_code_not_group_admin。
+     *  应答经 FMG_MSG_V2_GROUP_JOIN_REQUESTS 回投。
+     *  @param groupId 目标群ID（>0）
+     */
+    void    SendGetGroupJoinRequests(int64_t groupId);
+
+    /**
+     *  审批一条加群申请（cmd_handle_join_group=1308）。
+     *  @param requestId 申请ID（>0），来自 1319 应答或 1307 推送
+     *  @param accept    true 同意入群，false 拒绝
+     */
+    void    SendHandleJoinGroup(int64_t requestId, bool accept);
+
+    /**
+     *  邀请好友入群（cmd_invite_to_group=1305）。群主 / 管理员直接拉人；普通成员
+     *  在群关闭"成员邀请免审批"时，邀请会被服务端转成待审批申请（仍回 ok）。
+     *  @param groupId 目标群ID（>0）
+     *  @param userIds 被邀请人 userid 列表，不可为空
+     */
+    void    SendInviteToGroup(int64_t groupId, const std::vector<int64_t>& userIds);
+
+    /**
+     *  移出群成员（cmd_kick_group_member=1310）。仅群主 / 管理员有权；管理员不能
+     *  移出其他管理员，任何人不能移出群主。
+     *  @param groupId 目标群ID（>0）
+     *  @param userIds 被移出的 userid 列表，不可为空
+     */
+    void    SendKickGroupMembers(int64_t groupId, const std::vector<int64_t>& userIds);
+
+    /**
+     *  设置 / 取消管理员（cmd_set_member_role=1312）。仅群主有权。
+     *  @param groupId 目标群ID（>0）
+     *  @param userId  目标成员userid
+     *  @param isAdmin true 设为管理员，false 降为普通成员
+     */
+    void    SendSetMemberRole(int64_t groupId, int64_t userId, bool isAdmin);
+
+    /**
+     *  禁言 / 解禁某成员（cmd_mute_member=1313）。仅群主 / 管理员有权。
+     *  @param groupId  目标群ID（>0）
+     *  @param userId   目标成员userid
+     *  @param muted    true 禁言，false 解禁
+     *  @param duration 禁言时长（秒）；0 表示永久禁言。muted 为 false 时忽略
+     *  @param reason   禁言原因（UTF-8），可为空。muted 为 false 时忽略
+     */
+    void    SendMuteMember(int64_t groupId, int64_t userId, bool muted,
+                           int duration, const std::string& reason);
+
+    /**
+     *  开启 / 关闭全员禁言（cmd_mute_all=1314）。仅群主 / 管理员有权；开启后
+     *  管理员及以上仍可发言。
+     *  @param groupId 目标群ID（>0）
+     *  @param muteAll true 开启，false 关闭
+     */
+    void    SendMuteAll(int64_t groupId, bool muteAll);
+
+    /**
+     *  修改群资料与群权限（cmd_update_group_info=1311）。仅群主 / 管理员有权。
+     *  只有 params 里 m_hasXxx 为 true 的项会被发送与更新。
+     *  @param params 待修改项集合，m_groupid 必填
+     */
+    void    SendUpdateGroupInfo(const net::UpdateGroupInfoParams& params);
+
+    /**
+     *  修改群头像（复用 cmd_update_group_info=1311 的 facetype / customface 两项）。
+     *  仅群主 / 管理员有权，普通成员会拿回 error_code_not_group_admin。
+     *
+     *  单独开这个口子而不是让调用方自己填 UpdateGroupInfoParams：改头像与基本
+     *  信息页的「保存修改」是两个独立入口，混在一起就得在保存逻辑里比对头像有没有
+     *  变过。这里只发头像两项，别的项一律不带。
+     *
+     *  @param groupId        目标群ID（>0）
+     *  @param facetype       头像类型（见 BalloonMain/AvatarSpec.h AvatarKind：
+     *                        0 自动 / 1 字形 / 2 自定义图）
+     *  @param customfaceUtf8 头像标识（UTF-8）：字形头像为 "glyph|colorIdx"，
+     *                        自定义图为 fileid；恢复默认头像时传空串 —— 空串<u>会</u>
+     *                        照常发出去（服务端据此把库里旧值清掉），不会被省略
+     */
+    void    SendChangeGroupAvatar(int64_t groupId, int facetype,
+                                  const std::string& customfaceUtf8);
+
+    /**
+     *  转让群主（cmd_transfer_owner=1316）。仅群主有权。
+     *  @param groupId  目标群ID（>0）
+     *  @param newOwner 新群主userid，须为本群现有成员且不是自己
+     */
+    void    SendTransferOwner(int64_t groupId, int64_t newOwner);
+
+    /**
+     *  解散群聊（cmd_dismiss_group=1302）。仅群主有权，不可撤销。
+     *  @param groupId 目标群ID（>0）
+     */
+    void    SendDismissGroup(int64_t groupId);
+
+    /**
+     *  拉取本群敏感词库（cmd_get_sensitive_words=1321）。仅群主 / 管理员有权。
+     *  应答经 FMG_MSG_V2_SENSITIVE_WORDS 回投。
+     *  @param groupId 目标群ID（>0）
+     */
+    void    SendGetSensitiveWords(int64_t groupId);
+
+    /**
+     *  新增一条敏感词（cmd_operate_sensitive_word=1322）。仅群主 / 管理员有权。
+     *  重复添加同一个词服务端会静默忽略并仍回 ok。
+     *  @param groupId 目标群ID（>0）
+     *  @param wordUtf8 敏感词（UTF-8），不可为空
+     */
+    void    SendAddSensitiveWord(int64_t groupId, const std::string& wordUtf8);
+
+    /**
+     *  删除一条敏感词（cmd_operate_sensitive_word=1322）。仅群主 / 管理员有权。
+     *  @param groupId 目标群ID（>0）
+     *  @param wordId  词条ID，来自 1321 应答
+     */
+    void    SendDeleteSensitiveWord(int64_t groupId, int64_t wordId);
+
+    /**
+     *  拉取本群公告列表（cmd_get_group_announcements=1323）。全体群成员都有权。
+     *  应答经 FMG_MSG_V2_GROUP_ANNOUNCEMENTS 回投。
+     *  @param groupId 目标群ID（>0）
+     *  @param offset  分页起始下标，从 0 起
+     *  @param count   本页最多几条；服务端按 100 封顶
+     */
+    void    SendGetGroupAnnouncements(int64_t groupId, int offset, int count);
+
+    /**
+     *  发布一条新公告（cmd_publish_group_announcement=1324）。仅群主 / 管理员有权。
+     *  应答走通用的 FMG_MSG_V2_GROUP_OP_RESULT；成功后服务端会推 1326 与 1318，
+     *  界面靠推送刷新，不必在应答里自己改。
+     *  @param groupId     目标群ID（>0）
+     *  @param titleUtf8   标题（UTF-8），非空、不超过 128 个字符
+     *  @param contentUtf8 正文（UTF-8），可空、不超过 2048 个字符
+     *  @param severity    优先级，取值见 group_announcement_severity
+     */
+    void    SendPublishGroupAnnouncement(int64_t groupId, const std::string& titleUtf8,
+                                         const std::string& contentUtf8, int severity);
+
+    /**
+     *  把一条历史公告重新发布一遍（cmd_publish_group_announcement=1324 的另一种用法）。
+     *  标题正文由服务端读回原件补齐，结果是历史里多出一条新记录。
+     *  @param groupId    目标群ID（>0）
+     *  @param announceId 原公告ID，来自 1323 应答
+     */
+    void    SendRepublishGroupAnnouncement(int64_t groupId, int64_t announceId);
+
+    /**
+     *  删除一条公告（cmd_delete_group_announcement=1325）。仅群主 / 管理员有权，
+     *  且可删任意一条（不限于自己发的）。<u>不可恢复</u>，调用方须先让用户确认。
+     *  @param groupId    目标群ID（>0）
+     *  @param announceId 公告ID，来自 1323 应答
+     */
+    void    SendDeleteGroupAnnouncement(int64_t groupId, int64_t announceId);
+
+    /**
+     *  发送修改登录密码请求（v2，cmd_change_password=1105）。线程安全，可在 UI 线程
+     *  调用：内部组帧后追加进发送缓冲、唤醒发送线程。应答经 cmd_change_password 异步
+     *  回投到 UI（FMG_MSG_V2_CHANGE_PWD_RESULT）。
+     *  @param oldHashHex 旧口令的 SHA-256 小写 hex（调用方须已哈希，明文不入网络/日志）
+     *  @param newHashHex 新口令的 SHA-256 小写 hex（调用方须已哈希）
+     */
+    void    SendChangePassword(const std::string& oldHashHex, const std::string& newHashHex);
+
+    /**
+     *  发送"更新个性签名"请求（v2，cmd_update_profile=1104，仅含 signature 字段）。
+     *  线程安全，可在 UI 线程调用：内部组帧后追加进发送缓冲、唤醒发送线程。应答经
+     *  cmd_update_profile 异步回投到 UI（FMG_MSG_V2_UPDATE_PROFILE_RESULT）。
+     *  @param signatureUtf8 新个性签名（UTF-8；可为空串，表示清空签名）
+     */
+    void    SendUpdateSignature(const std::string& signatureUtf8);
+
+    /**
+     *  发送"更新本人资料（全字段）"请求（v2，cmd_update_profile=1104）。线程安全，可在
+     *  UI 线程调用。应答同样经 cmd_update_profile 异步回投到 UI
+     *  （FMG_MSG_V2_UPDATE_PROFILE_RESULT）。各串均为 UTF-8。
+     *  @param nicknameUtf8  昵称   @param signatureUtf8 个性签名
+     *  @param gender        性别（0 男 / 1 女）  @param birthday YYYYMMDD 整数（0 未设）
+     *  @param addressUtf8   所在地  @param mailUtf8 邮箱
+     */
+    void    SendUpdateProfile(const std::string& nicknameUtf8,
+                              const std::string& signatureUtf8,
+                              int gender, long birthday,
+                              const std::string& addressUtf8,
+                              const std::string& mailUtf8);
+
+    /**
+     *  发送"修改头像"请求（v2，cmd_change_avatar=1106）。线程安全，可在 UI 线程
+     *  调用：内部组帧后追加进发送缓冲、唤醒发送线程。系统头像 / 首字母 / 自定义图
+     *  都走这条，facetype 区分类型、customface 承载标识（编码约定见
+     *  BalloonMain/AvatarSpec.h）。应答（通用 {code,msg}）经 cmd_change_avatar 异步
+     *  回投到 UI（FMG_MSG_V2_CHANGE_AVATAR_RESULT）。
+     *  @param facetype       头像类型（0 自动 / 1 字形 / 2 自定义图）
+     *  @param customfaceUtf8 头像标识（UTF-8；字形为 "glyph|idx"，自定义图为 fileid，
+     *                        自动可为空串）
+     */
+    void    SendChangeAvatar(int facetype, const std::string& customfaceUtf8);
+
+    /**
+     *  发送"修改在线状态"请求（v2，cmd_change_presence=1107）。线程安全，可在 UI 线程
+     *  调用：内部组帧后追加进发送缓冲、唤醒发送线程；并把 presence 记入
+     *  m_nRecordOnlineStatus，供断线重连 / 重新上线时沿用。应答经 cmd_change_presence
+     *  异步回投到 UI（FMG_MSG_V2_CHANGE_PRESENCE_RESULT）。
+     *  仅在已连接、已登录时调用才有意义（离线态切换状态由上层走 GoOffline/GoOnline）。
+     *  @param presence 目标在线状态（v2 presence_type，见 net/Protocol.h）
+     */
+    void    SendChangePresence(int presence);
+
+    /**
+     *  读取 / 写入"期望在线状态"（v2 presence_type）。本字段是客户端"我想以什么状态在线"
+     *  的唯一真相源：每次实际登录（Login）会写入登录时的 presence；SendChangePresence 改状态
+     *  时也会写入；断线重连 / 主动重新上线时由 CFlamingoClient::Login 读取它作为登录 presence，
+     *  从而"本次会话沿用上次选择的状态"。进程重启后回到构造默认值（在线）。线程安全性：仅做
+     *  单个 int 读写，调用方多在 UI 线程，足够。
+     */
+    int     GetRecordOnlineStatus() const { return m_nRecordOnlineStatus; }
+    void    SetRecordOnlineStatus(int presence) { m_nRecordOnlineStatus = presence; }
+
+    /**
+     *  读取 / 写入"用户已主动离线"标志。置真后本类<u>拒绝一切自发的联网行为</u>：
+     *    · EnqueueFrame 直接丢弃业务帧，不再往发送缓冲里堆（否则离线期间攒下的帧
+     *      会在下次连上时被批量补发出去，对端会突然收到一堆过期消息）。
+     *    · 发送线程在 Send() 里<u>不再自动 Connect</u> —— 那里原本有一句
+     *      "IsClosed() && !Connect()"，只要发送缓冲里有数据就会自己把连接重建起来，
+     *      是一条绕开上层登录态判断的隐藏重连路径，用户主动离线时必须堵上。
+     *
+     *  由 CFlamingoClient::GoOffline 置真、Login 置假。<u>不影响</u>登录帧本身 ——
+     *  登录走 SendData 直发，不经过 EnqueueFrame（见 CIUSocket::Login）。
+     *
+     *  线程安全性：仅单个 bool 读写，写在 UI 线程、读在发送线程，足够。
+     */
+    bool    IsUserOffline() const { return m_bUserOffline; }
+    void    SetUserOffline(bool offline) { m_bUserOffline = offline; }
+
+    /**
+     *  清空尚未发出的发送缓冲。用户主动离线时调用，丢弃排队中的业务帧。
+     *
+     *  <u>不能</u>把这件事塞进 Close()：Close() 会被发送线程在持有 m_mtSendBuf 的
+     *  情况下调用（见 CIUSocket::Send 的错误分支），在里面再去锁同一把非递归互斥量
+     *  会死锁。故单列一个方法，由上层在 UI 线程显式调用。
+     */
+    void    ClearPendingSendData();
+
+    /**
+     *  请求拉取通讯录（v2，cmd_get_contacts=1201）。线程安全。应答经
+     *  cmd_get_contacts 异步回投到 UI（FMG_MSG_V2_CONTACTS）。一般在登录
+     *  成功、主面板显示后调用一次。
+     */
+    void    RequestContacts();
+
+    /**
+     *  请求同步最近会话列表（v2，cmd_sync_conversations=1501）。线程安全。
+     *  应答经 cmd_sync_conversations 异步回投到 UI（FMG_MSG_V2_CONVERSATIONS）。
+     *  一般在登录成功、主面板显示后调用一次。
+     */
+    void    RequestConversations();
+
+    /**
+     *  上报会话已读位点（v2，cmd_mark_read=1506）。线程安全。用户查看某会话后
+     *  调用，告诉服务端"本会话已读至 readmsgid"，服务端据此更新 t_conversation
+     *  的 f_readmsgid，使重新登录时该会话未读数能正确清零。应答仅记日志、不回投
+     *  UI（已读位点更新对界面无即时影响）。
+     *  @param ctype     会话类型（1 单聊 2 群聊）
+     *  @param cid       会话ID（单聊=对端userid，群聊=群id）
+     *  @param readmsgid 已读到的最大消息msgid；<=0（会话尚无已知消息）时本方法
+     *                   直接跳过，不发包（服务端对 readmsgid<=0 会判为非法请求）
+     */
+    void    ReportConversationRead(int ctype, int64_t cid, int64_t readmsgid);
+
+    /**
+     *  撤回一条已发出的消息（v2，cmd_recall_message=1508）。线程安全。
+     *
+     *  应答经 FMG_MSG_V2_RECALL_RESULT 回投 UI（失败时据 code 提示原因）；服务端撤回
+     *  成功后还会向相关方（单聊双方 / 全体群成员，含撤回者本人）推送
+     *  cmd_message_recalled_notify，客户端统一在收到<u>推送</u>时才把气泡改成提示行、
+     *  更新会话列表与本地消息库 —— 这样本端、对端、多端看到的结果始终一致。
+     *
+     *  @param ctype 会话类型（1 单聊 2 群聊）
+     *  @param cid   会话ID（单聊=对端userid，群聊=群id）
+     *  @param msgid 被撤回消息的服务器msgid；与 cid 一样须 >0，否则本方法直接跳过
+     *               不发包（服务端对 <=0 会判为非法请求）
+     */
+    void    RecallMessage(int ctype, int64_t cid, int64_t msgid);
+
+    /**
+     *  Pin / 取消 Pin 一条消息（v2，cmd_pin_message=1518）。线程安全。
+     *
+     *  Pin 是<u>会话内共享</u>的状态：单聊里对方也看得到，群里全体成员都看得到。
+     *  应答经 FMG_MSG_V2_PIN_RESULT 回投 UI（只在失败时据 code 提示原因）；服务端落库
+     *  成功后还会向相关方（单聊双方 / 全体群成员，含操作者本人）推送
+     *  cmd_message_pinned_notify，客户端统一在收到<u>推送</u>时才改本地标记与界面，
+     *  与撤回同口径 —— 这样本端与对端看到的结果必然一致。
+     *
+     *  @param ctype 会话类型（见 enum conversation_type，1 单聊 2 群聊）
+     *  @param cid   会话ID（单聊=对端userid，群聊=群id）；须 >0，否则本方法直接跳过不发
+     *  @param msgid 目标消息的服务器msgid；与 cid 一样须 >0，否则本方法直接跳过不发
+     *               （典型：本端刚发出、服务器回执还没回填就点了 Pin）
+     *  @param pin   true 钉住、false 取消
+     */
+    void    PinMessage(int ctype, int64_t cid, int64_t msgid, bool pin);
+
+    /**
+     *  拉取某会话当前被 Pin 的消息全集（v2，cmd_get_pinned_messages=1520）。线程安全。
+     *
+     *  应答经 FMG_MSG_V2_PINNED_MESSAGES 回投 UI，带完整消息体：UI 把本地消息库里缺的
+     *  那些补齐，并与这一份对账。之所以要有这一步 —— 本地库里只有本机同步过的消息，
+     *  同事钉了一条三个月前的老消息时本机很可能压根没有那一行，"消息记录"窗的 Pin
+     *  分类就会漏掉它。发起时机是打开会话窗与打开消息记录窗，详见
+     *  docs/消息Pin接入方案.md §4.3。
+     *
+     *  服务端单次最多返回最近 PIN_FETCH_LIMIT 条，应答的 total 带回真实总数 ——
+     *  UI 据此判断是否被截断，进而决定本地对账的时间下界。
+     *
+     *  @param ctype 会话类型（1 单聊 2 群聊）
+     *  @param cid   会话ID；须 >0，否则本方法直接跳过不发
+     */
+    void    GetPinnedMessages(int ctype, int64_t cid);
+
+    /**
+     *  上报文件收取状态（v2，cmd_file_transfer_ack=1517）。线程安全，无应答。
+     *  由文件<u>接收方</u>在点「接收」、下载成功、点「拒绝」这三处各调一次；服务端
+     *  校验本端确为该消息的收件人后落库，并转推给发送方，使其气泡上能显示对方收到
+     *  什么程度了。发送方不在线时不推，等它下次拉历史时从库里带出，故不会丢。
+     *  @param peerUserId 该文件消息的发送方userid（>0），即本会话的对端
+     *  @param msgid      被收取的文件消息的服务器msgid；与 peerUserId 一样须 >0，
+     *                    否则本方法直接跳过不发包（服务端会判为非法请求）
+     *  @param state      收取状态，取值见 enum file_ack_state
+     */
+    void    ReportFileTransferAck(int64_t peerUserId, int64_t msgid, int state);
+
+    /**
+     *  上报「正在输入」状态（v2，cmd_typing_notify=1510）。线程安全，无应答。
+     *
+     *  这是一条<u>不可靠</u>的提示：服务端收到后直接转给对端、既不落库也不应答，
+     *  对端不在线就丢弃。因此调用方不必关心结果，发送频率则须由调用方自行节流
+     *  （见 BalloonChatWnd/TypingIndicator.h 的 TypingSendThrottle），不要每敲
+     *  一个键就调一次。
+     *
+     *  @param peerUserId 对端userid（>0），即这条提示发给谁；非正时直接跳过不发包
+     *  @param state      输入状态，取值见 enum typing_state：1 输入中、0 停止
+     */
+    void    ReportTyping(int64_t peerUserId, int state);
+
+   	//同步接口
+    //nTimeout单位是秒
+    /**
+     *  同步发起一次 v2 注册（cmd_register）。内部自行建连、发帧、等应答，
+     *  与 Login 同为阻塞式调用，须在工作线程里调，不能在 UI 线程调。
+     *
+     *  @param params        注册参数；其中 password 传<u>明文</u>，本函数内部做
+     *                       SHA-256 后再上网，明文不出本机。各字符串均须是
+     *                       UTF-8 字节序列。
+     *  @param nTimeout      收发超时，单位秒。
+     *  @param strReturnData [出参] 服务端应答的 JSON 包体原文（已解压），
+     *                       交由调用方用 RegisterProtocolClient 解析。
+     *  @return 成功收到一个完整应答帧返回 true（<u>不代表注册成功</u>，注册
+     *          结果看应答里的 code）；建连 / 发送 / 收取 / 解压失败返回 false。
+     */
+    bool    Register(const net::RegisterRequestParams& params, int nTimeout, std::string& strReturnData);
     bool    Login(const char* pszUser, const char* pszPassword, int nClientType, int nOnlineStatus, int nTimeout, std::string& strReturnData);
 
-    //��ʱʱ��,��λΪ��
-	bool    SendOnFilePort(const char* pBuffer, int64_t nSize, int nTimeout = 30);	
+    /**
+     *  取文件服务器地址 / 端口（只读快照）。供群文件并发传输池里每条独立连接
+     *  （net::FileServerConn）建连用——它不复用本类那条共享的 m_hFileSocket，而是
+     *  各自新建 socket 连到这同一个 fileserver。返回值是配置加载 / 网络设置写入后的
+     *  当前值的拷贝，会话内稳定；按值返回避免跨线程读到正在改写的串。
+     */
+    std::string GetFileServerAddr() const { return m_strFileServer; }
+    short       GetFilePort() const { return m_nFilePort; }
+
+    //超时时间,单位为秒
+	bool    SendOnFilePort(const char* pBuffer, int64_t nSize, int nTimeout = 30);
     bool	RecvOnFilePort(char* pBuffer, int64_t nSize, int nTimeout = 30);
     //bool    CheckRecvDataOnFilePort(int nTimeout = 3000);
 
@@ -90,33 +859,57 @@ private:
     bool	Send();
     bool	Recv();
 
-    //����nBuffSize���ȵ��ֽڣ����������ȥ�������Ϊʧ��
+    //发送nBuffSize长度的字节，如果发不出去，则就认为失败
     bool    SendData(const char* pBuffer, int nBuffSize, int nTimeout);
-    //��ȡnBufferSize���ȵ��ֽڣ�����ղ���������Ϊʧ��
+    //收取nBufferSize长度的字节，如果收不到，则认为失败
     bool    RecvData(char* pszBuff, int nBufferSize, int nTimeout);
 
-    //���
+    //解包
     bool    DecodePackages();
-    
-private:	
-	SOCKET							m_hSocket;				//һ����;Socket��������socket��
-	SOCKET							m_hFileSocket;			//���ļ���Socket������socket��
-    SOCKET							m_hImgSocket;			//�������Socket������socket��
+
+    //——以下为 v2 协议相关的内部方法——
+
+    //同步收取一个完整的 v2 帧，供登录这类同步请求使用。
+    //@param header  [出参] 解析出的帧头
+    //@param body    [出参] 包体（线上字节，未解压）
+    //@param nTimeout 收取超时时间，单位秒
+    //@return 成功返回 true；收取失败或帧头非法返回 false
+    bool    RecvOneFrame(frame_header& header, std::string& body, int nTimeout);
+
+    //把一条消息编码成 v2 帧，追加进发送缓冲并唤醒发送线程。
+    //包体达到压缩阈值时会先做 zlib 压缩。cmd 取值见 net/Protocol.h。
+    void    EnqueueFrame(uint16_t cmd, uint32_t seq, const std::string& body);
+
+    //分发一个收到的 v2 帧（在接收线程中调用）。本期只处理心跳/被踢/
+    //设备变更通知，其余 cmd 仅记日志（对应功能尚未迁移到 v2）。
+    void    HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& body);
+
+    //取得本机设备唯一标识：首次调用生成 GUID 写入 flamingo.ini，
+    //之后调用直接读回。返回 ASCII 字符串（保证 flamingo.ini 仍为 ASCII）。
+    std::string GetOrCreateDeviceId();
+
+    //取得本机设备名称（计算机名），以 UTF-8 编码返回，供 v2 登录请求使用。
+    std::string GetDeviceName();
+
+private:
+	SOCKET							m_hSocket;				//一般用途Socket（非阻塞socket）
+	SOCKET							m_hFileSocket;			//传文件的Socket（阻塞socket）
+    SOCKET							m_hImgSocket;			//传聊天的Socket（阻塞socket）
 	short							m_nPort;
 	short							m_nFilePort;
     short							m_nImgPort;
-	std::string						m_strServer;			//��������ַ
-    std::string						m_strFileServer;		//�ļ���������ַ
-    std::string						m_strImgServer;		    //ͼƬ��������ַ
+	std::string						m_strServer;			//服务器地址
+    std::string						m_strFileServer;		//文件服务器地址
+    std::string						m_strImgServer;		    //图片服务器地址
 	
-	long							m_nProxyType;			//�������ͣ�0��ʹ�ô�������
-    std::string						m_strProxyServer;		//������������ַ
-	short							m_nProxyPort;			//�����������˿ں�
+	long							m_nProxyType;			//代理类型（0不使用代理；）
+    std::string						m_strProxyServer;		//代理服务器地址
+	short							m_nProxyPort;			//代理服务器端口号
 
-    long                            m_nLastDataTime;        //���һ���շ����ݵ�ʱ��
-    std::mutex                      m_mutexLastDataTime;    //����m_nLastDataTime�Ļ�����
-    long                            m_nHeartbeatInterval;   //������ʱ��������λ��,Ĭ��Ϊ10��
-    int32_t                         m_nHeartbeatSeq;        //���������к�
+    long                            m_nLastDataTime;        //最近一次收发数据的时间
+    std::mutex                      m_mutexLastDataTime;    //保护m_nLastDataTime的互斥体
+    long                            m_nHeartbeatInterval;   //心跳包时间间隔，单位秒,默认为10秒
+    int32_t                         m_nHeartbeatSeq;        //心跳包序列号
 	
 	bool							m_bConnected;
 	bool							m_bConnectedOnFileSocket;
@@ -135,14 +928,24 @@ private:
 
     bool                            m_bStop;
 
-    bool                            m_bEnableReconnect;     //��������������Ƿ�����
+    bool                            m_bEnableReconnect;     //聊天服务器断线是否重连
 
     std::string                     m_strRecordUser;
     std::string                     m_strRecordPassword;
     int                             m_nRecordClientType;
     int                             m_nRecordOnlineStatus;
-    int                             m_seq;
+    //用户已主动离线（托盘 / 状态菜单选了"离线"）。置真期间本类拒绝一切自发联网：
+    //EnqueueFrame 丢弃业务帧、发送线程不再自动 Connect。GoOffline 置真、Login 置假。
+    //生命周期同本单例；进程重启后回到构造默认值 false。
+    bool                            m_bUserOffline;
+    //v2 帧序号分配器。UI 线程与各传输线程（图片 / 文件 / 群文件并发池）都会 ++ 它
+    //来取下一个 seq，故必须原子自增，否则并发分配会撞号、导致按 seq 路由的应答串槽。
+    std::atomic<int>                m_seq;
 
+    //1801/1802 信令归属表：发请求时按 seq 记下属于图片还是文件传输，收应答时按 seq
+    //取回归属、转交给对应管理器（见 HandleV2Frame）。m_transferOwnerMtx 保护其访问。
+    net::TransferOwnerRegistry      m_transferOwners;
+    std::mutex                      m_transferOwnerMtx;
 
 	CRecvMsgThread*					m_pRecvMsgThread;
 };

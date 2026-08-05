@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "GroupInfoDlg.h"
 
 CGroupInfoDlg::CGroupInfoDlg(void)
@@ -15,7 +15,7 @@ CGroupInfoDlg::~CGroupInfoDlg(void)
 
 BOOL CGroupInfoDlg::PreTranslateMessage(MSG* pMsg)
 {
-	//Ö§³Ö»Ø³µ¼ü²éÕÒ
+	//æ”¯æŒå›è½¦é”®æŸ¥æ‰¾
 	if (pMsg->message == WM_KEYDOWN && pMsg->wParam==VK_ESCAPE)
  	{
 		PostMessage(WM_CLOSE, 0, 0);
@@ -41,7 +41,7 @@ BOOL CGroupInfoDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	m_hDlgSmallIcon = AtlLoadIconImage(IDI_GROUPCHATDLG_16, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
 	SetIcon(m_hDlgSmallIcon, FALSE);
 
-	Init();		// ³õÊ¼»¯
+	Init();		// åˆå§‹åŒ–
 
 	CGroupInfo* lpGroupInfo = GetGroupInfoPtr();
 	if (lpGroupInfo != NULL)
@@ -52,7 +52,7 @@ BOOL CGroupInfoDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 			m_lpFMGClient->UpdateGroupNum(m_nGroupCode);
 
 		CString strTitle;
-		strTitle.Format(_T("ÈºÉèÖÃ - %s"), lpGroupInfo->m_strName.c_str());
+		strTitle.Format(_T("ç¾¤è®¾ç½® - %s"), lpGroupInfo->m_strName.c_str());
 		m_SkinDlg.SetTitleText(strTitle);
 	}
 
@@ -70,7 +70,7 @@ void CGroupInfoDlg::OnDestroy()
 {
 	SetMsgHandled(FALSE);
 
-	UnInit();	// ·´³õÊ¼»¯
+	UnInit();	// ååˆå§‹åŒ–
 
 	if (m_hDlgIcon != NULL)
 	{
@@ -89,25 +89,25 @@ void CGroupInfoDlg::OnDestroy()
 	pLoop->RemoveMessageFilter(this);
 }
 
-// ¡°È·¶¨¡±°´Å¥
+// â€œç¡®å®šâ€æŒ‰é’®
 void CGroupInfoDlg::OnBtn_Ok(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	SendMessage(WM_CLOSE);
 }
 
-// ¡°È¡Ïû¡±°´Å¥
+// â€œå–æ¶ˆâ€æŒ‰é’®
 void CGroupInfoDlg::OnBtn_Cancel(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	SendMessage(WM_CLOSE);
 }
 
-// ¸üĞÂÈºĞÅÏ¢
+// æ›´æ–°ç¾¤ä¿¡æ¯
 void CGroupInfoDlg::OnUpdateGroupInfo()
 {
 	UpdateCtrls();
 }
 
-// ¸üĞÂÈººÅÂë
+// æ›´æ–°ç¾¤å·ç 
 void CGroupInfoDlg::OnUpdateGroupNumber()
 {
 	UpdateCtrls();
@@ -142,7 +142,7 @@ void CGroupInfoDlg::UpdateCtrls()
 		TCHAR cTime[32] = {0};
 		FormatTime(lpGroupInfo->m_nCreateTime, _T("%Y-%m-%d"), cTime, sizeof(cTime)/sizeof(TCHAR));
 		//SetDlgItemText(ID_EDIT_CREATETIME, cTime);
-		SetDlgItemText(ID_EDIT_CREATETIME, _T("2015Äê12ÔÂ24ÈÕ"));
+		SetDlgItemText(ID_EDIT_CREATETIME, _T("2015å¹´12æœˆ24æ—¥"));
 		strText.Format(_T("%u"), lpGroupInfo->m_nClass);
 		SetDlgItemText(ID_EDIT_CLASS, _T(""));
 		SetDlgItemText(ID_EDIT_REMARK, _T(""));
@@ -156,7 +156,7 @@ void CGroupInfoDlg::UpdateCtrls()
 			if (lpBuddyInfo != NULL)
 			{
 				SetDlgItemText(ID_EDIT_CARDNAME, lpBuddyInfo->m_strNickName.c_str());
-				SetDlgItemText(ID_EDIT_GENDER, lpBuddyInfo->m_nGender==0? _T("ÄĞ"):_T("Å®"));
+				SetDlgItemText(ID_EDIT_GENDER, lpBuddyInfo->m_nGender==0? _T("ç”·"):_T("å¥³"));
 				SetDlgItemText(ID_EDIT_PHONE, lpBuddyInfo->m_strMobile.c_str());
 				SetDlgItemText(ID_EDIT_EMAIL, lpBuddyInfo->m_strEmail.c_str());
 				SetDlgItemText(ID_EDIT_REMARK2, _T(""));
@@ -165,7 +165,7 @@ void CGroupInfoDlg::UpdateCtrls()
 	}
 }
 
-// ³õÊ¼»¯
+// åˆå§‹åŒ–
 BOOL CGroupInfoDlg::Init()
 {
 	m_SkinDlg.SetBgPic(_T("LoginPanel_window_windowBkg.png"), CRect(40, 86, 152, 155));
@@ -275,7 +275,7 @@ BOOL CGroupInfoDlg::Init()
 	return TRUE;
 }
 
-// ·´³õÊ¼»¯
+// ååˆå§‹åŒ–
 void CGroupInfoDlg::UnInit()
 {
 	if (m_staName.IsWindow())

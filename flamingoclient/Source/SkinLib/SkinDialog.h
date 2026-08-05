@@ -1,9 +1,9 @@
-#pragma once
+ï»¿#pragma once
 
 #include <gdiplus.h>
 #include "SkinManager.h"
 
-//×¢Òâ£ºSkinDlgÄ¬ÈÏÃ»ÓĞ¿ªÆô²Ã¼ô×Ó´°¿Ú£¬Èç¹û½çÃæ¸Ä±ä´óĞ¡Ê±ÉÁË¸£¬¼ÇµÃÔÚÍâ²¿¼ÓÉÏWS_CLIPCHILDREN·ç¸ñ
+//æ³¨æ„ï¼šSkinDlgé»˜è®¤æ²¡æœ‰å¼€å¯è£å‰ªå­çª—å£ï¼Œå¦‚æœç•Œé¢æ”¹å˜å¤§å°æ—¶é—ªçƒï¼Œè®°å¾—åœ¨å¤–éƒ¨åŠ ä¸ŠWS_CLIPCHILDRENé£æ ¼
 class CSkinDialog : public CWindowImpl<CSkinDialog, CWindow>
 {
 public:
@@ -48,14 +48,14 @@ public:
 	HDC GetBgDC();
 	
 	BOOL SubclassWindow(HWND hWnd);
-	void SetHotRegion(HRGN hrgnHot);				//ÉèÖÃÈÈµãÇøÓò
-	void SetDragRegion(HRGN hrgnDrag);				//ÉèÖÃÍÏ×§ÇøÓò(TODO: ¸Ä³ÉÃû×ÖÎªSetTitleRect£¬ RegionÔÚÄÚ²¿ÊµÏÖ£¬²»ÒªÔÚÍâ²¿´´½¨ÇøÓògdi¶ÔÏóÁË)
+	void SetHotRegion(HRGN hrgnHot);				//è®¾ç½®çƒ­ç‚¹åŒºåŸŸ
+	void SetDragRegion(HRGN hrgnDrag);				//è®¾ç½®æ‹–æ‹½åŒºåŸŸ(TODO: æ”¹æˆåå­—ä¸ºSetTitleRectï¼Œ Regionåœ¨å†…éƒ¨å®ç°ï¼Œä¸è¦åœ¨å¤–éƒ¨åˆ›å»ºåŒºåŸŸgdiå¯¹è±¡äº†)
 
 	//void MoveWindow2(int X,int Y,int nWidth,int nHeight,BOOL bRedraw);
 
 private:
 	BOOL OnNcCreate(LPCREATESTRUCT lpCreateStruct);
-    //TODO: ÆäÊµÕâ¸öOnCreateÊÇ²»»á±»µ÷ÓÃµÄ
+    //TODO: å…¶å®è¿™ä¸ªOnCreateæ˜¯ä¸ä¼šè¢«è°ƒç”¨çš„
 	int OnCreate(LPCREATESTRUCT lpCreateStruct);
 	//HBRUSH OnCtlColorStatic(CDCHandle dc, CStatic wndStatic);
 	BOOL OnInitDialog(CWindow wndFocus, LPARAM lInitParam);
@@ -108,10 +108,10 @@ private:
 	HDC			m_hMemDC;
 	HBITMAP		m_hMemBmp, m_hOldBmp;
 
-	HRGN		m_hHotRgn;				//¿ÉÒÔµÄÍÏ×§ÇøÓò
+	HRGN		m_hHotRgn;				//å¯ä»¥çš„æ‹–æ‹½åŒºåŸŸ
 	HRGN		m_hDragRgn;
 
-	HRGN		m_hWndRgn;				//´°¿ÚĞÎ×´
+	HRGN		m_hWndRgn;				//çª—å£å½¢çŠ¶
 
 	CToolTipCtrl m_ToolTipCtrl;
 };

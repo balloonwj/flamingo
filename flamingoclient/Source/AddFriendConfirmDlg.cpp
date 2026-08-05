@@ -1,7 +1,7 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "AddFriendConfirmDlg.h"
 
-// CAddFriendConfirmDlgÊµÏÖ´úÂë
+// CAddFriendConfirmDlgå®ç°ä»£ç 
 CAddFriendConfirmDlg::CAddFriendConfirmDlg()
 {
 	m_pFMGClient = NULL;

@@ -1,8 +1,20 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "FlamingoClient.h"
 #include "IniFile.h"
-#include "LoginDlg.h"
+#include "BalloonAuth/BalloonLoginDlg.h"
 #include "net/IUProtocolData.h"
+#include "net/MessageProtocolClient.h"  // net::MessageNotify / net::SendMessageResponse（v2 单聊消息投递载体）
+#include "net/ContactsProtocolClient.h" // net::ContactsResult（v2 通讯录投递载体）
+#include "net/ConversationsProtocolClient.h" // net::ConversationsResult（v2 会话列表投递载体）
+#include "net/GroupProtocolClient.h"        // net::CreateGroupResponse（v2 建群应答投递载体）
+#include "net/GroupFileProtocolClient.h"    // net::GetGroupFilesResult / GroupFilesChangedNotify（v2 群文件库投递载体）
+#include "net/ProfileProtocolClient.h"      // net::UpdateProfileResponse（v2 改头像应答投递载体）
+#include "net/ImageTransfer.h"              // net::ImageSendProgress / ImageSendResult / ImageDownloadResult（v2 图片收发投递载体）
+#include "net/FileTransfer.h"               // net::FileSendProgress / FileSendResult / FileDownload*（v2 文件收发投递载体）
+#include "net/RemoteDesktopProtocolClient.h" // net::RDInviteResponse / RDInviteNotify / RDRelayInfo / RDStateNotify（v2 远程桌面投递载体）
+#include "net/CallProtocolClient.h"          // net::CallInviteResponse / CallInviteNotify / CallSignalingInfo / CallStateNotify（v2 音视频通话投递载体）
+#include "net/AnnounceProtocolClient.h"      // net::AnnouncementsResult / AnnouncementNotify / AnnounceMarkReadResult（v2 平台公告投递载体）
+#include "net/FriendProtocolClient.h"        // net::SetFriendRemarkResult（v2 设置好友备注名应答投递载体）
 #include "IULog.h"
 #include "UpdateDlg.h"
 #include "EncodeUtil.h"
@@ -50,10 +62,10 @@ CFlamingoClient::~CFlamingoClient(void)
 
 }
 
-// ��ʼ���ͻ���
+// 初始化客户端
 bool CFlamingoClient::InitProxyWnd()
 {
-	BOOL bRet = CreateProxyWnd();	// ������������
+	BOOL bRet = CreateProxyWnd();	// 创建代理窗口
 	if (!bRet)
 		return false;
 
@@ -81,10 +93,10 @@ bool CFlamingoClient::InitNetThreads()
     return true;
 }
 
-// ����ʼ���ͻ���
+// 反初始化客户端
 void CFlamingoClient::Uninit()
 {
-	DestroyProxyWnd();				// ���ٴ�������
+	DestroyProxyWnd();				// 销毁代理窗口
 
     CIUSocket::GetInstance().Uninit();
     m_SendMsgThread.Stop();
@@ -129,7 +141,7 @@ void CFlamingoClient::SetImgPort(short port)
     CIUSocket::GetInstance().SetImgPort(port);
 }
 
-// ����UTalk���������
+// 设置UTalk号码和密码
 void CFlamingoClient::SetUser(LPCTSTR lpUserAccount, LPCTSTR lpUserPwd)
 {
 	if (NULL == lpUserAccount || NULL == lpUserPwd || m_UserMgr.m_UserInfo.m_nStatus != STATUS_OFFLINE)
@@ -143,13 +155,13 @@ void CFlamingoClient::SetUser(LPCTSTR lpUserAccount, LPCTSTR lpUserPwd)
 	//m_UserMgr.m_UserInfo.m_bHasUTalkNum = TRUE;
 }
 
-// ���õ�¼״̬
+// 设置登录状态
 void CFlamingoClient::SetLoginStatus(long nStatus)
 {
 	m_UserMgr.m_UserInfo.m_nStatus = nStatus;
 }
 
-// ���ûص����ھ��
+// 设置回调窗口句柄
 void CFlamingoClient::SetCallBackWnd(HWND hCallBackWnd)
 {
 	m_UserMgr.m_hCallBackWnd = hCallBackWnd;
@@ -172,7 +184,7 @@ void CFlamingoClient::SetCreateNewGroupWindow(HWND hwndCreateNewGroup)
 
 void CFlamingoClient::Register(PCTSTR pszAccountName, PCTSTR pszNickName, PCTSTR pszPassword)
 {
-	//TODO: �����ʱ��������ֱ�ӷ���
+	//TODO: 如果此时断网，则直接返回
 	CRegisterRequest* pRequest = new CRegisterRequest();
 	char szData[64] = {0};
     EncodeUtil::UnicodeToUtf8(pszAccountName, szData, ARRAYSIZE(szData));
@@ -189,10 +201,10 @@ void CFlamingoClient::Register(PCTSTR pszAccountName, PCTSTR pszNickName, PCTSTR
 	m_SendMsgThread.AddItem(pRequest);
 }
 
-// ���Һ���
+// 查找好友
 BOOL CFlamingoClient::FindFriend(PCTSTR pszAccountName, long nType, HWND hReflectionWnd)
 {
-	//TODO: ���ж�һ���Ƿ�����
+	//TODO: 先判断一下是否离线
 
 	if(pszAccountName==NULL ||*pszAccountName==NULL)
 		return FALSE;
@@ -212,7 +224,7 @@ BOOL CFlamingoClient::FindFriend(PCTSTR pszAccountName, long nType, HWND hReflec
 
 BOOL CFlamingoClient::AddFriend(UINT uAccountToAdd)
 {
-	//TODO: ���ж��Ƿ�����
+	//TODO: 先判断是否离线
 	if(uAccountToAdd == 0)
 		return FALSE;
 
@@ -225,10 +237,10 @@ BOOL CFlamingoClient::AddFriend(UINT uAccountToAdd)
     return TRUE;
 }
 
-// ɾ������
+// 删除好友
 BOOL CFlamingoClient::DeleteFriend(UINT uAccountID)
 {
-	//TODO: ���ж��Ƿ�����
+	//TODO: 先判断是否离线
 	COperateFriendRequest* pRequest = new COperateFriendRequest();
 	pRequest->m_uCmd = Delete;
 	pRequest->m_uAccountID = uAccountID;
@@ -243,7 +255,7 @@ bool CFlamingoClient::AddNewTeam(PCTSTR pszNewTeamName)
     if (pszNewTeamName == NULL || pszNewTeamName[0] == NULL)
         return false;
     
-    //TODO: ���ж��Ƿ�����
+    //TODO: 先判断是否离线
     CAddTeamInfoRequest* pRequest = new CAddTeamInfoRequest();
     pRequest->m_opType = updateteaminfo_operation_add;
     pRequest->m_strNewTeamName = pszNewTeamName;
@@ -258,7 +270,7 @@ bool CFlamingoClient::DeleteTeam(PCTSTR pszOldTeamName)
     if (pszOldTeamName == NULL || pszOldTeamName[0] == NULL)
         return false;
 
-    //TODO: ���ж��Ƿ�����
+    //TODO: 先判断是否离线
     CAddTeamInfoRequest* pRequest = new CAddTeamInfoRequest();
     pRequest->m_opType = updateteaminfo_operation_delete;
     pRequest->m_strOldTeamName = pszOldTeamName;
@@ -273,7 +285,7 @@ bool CFlamingoClient::ModifyTeamName(PCTSTR pszNewTeamName, PCTSTR pszOldTeamNam
     if (pszNewTeamName == NULL || pszNewTeamName[0] == NULL || pszOldTeamName == NULL || pszOldTeamName[0] == NULL)
         return false;
 
-    //TODO: ���ж��Ƿ�����
+    //TODO: 先判断是否离线
     CAddTeamInfoRequest* pRequest = new CAddTeamInfoRequest();
     pRequest->m_opType = updateteaminfo_operation_modify;
     pRequest->m_strNewTeamName = pszNewTeamName;
@@ -289,7 +301,7 @@ bool CFlamingoClient::MoveFriendToOtherTeam(UINT uUserID, PCTSTR pszOldTeamName,
     if (pszOldTeamName == NULL || pszOldTeamName[0] == NULL || pszNewTeamName == NULL || pszNewTeamName[0] == NULL)
         return false;
 
-    //TODO: ���ж��Ƿ�����
+    //TODO: 先判断是否离线
     CMoveFriendRequest* pRequest = new CMoveFriendRequest();
     pRequest->m_nFriendID = (int)uUserID;
     pRequest->m_strNewTeamName = pszNewTeamName;
@@ -457,7 +469,7 @@ void CFlamingoClient::ResponseAddFriendApply(UINT uAccountID, UINT uCmd)
 	m_SendMsgThread.AddItem(pRequest);
 }
 
-// ��¼
+// 登录
 void CFlamingoClient::Login(int nStatus/* = STATUS_ONLINE*/)
 {
 	if (!IsOffline() || m_UserMgr.m_UserInfo.m_strAccount.empty() || m_UserMgr.m_UserInfo.m_strPassword.empty())
@@ -475,8 +487,15 @@ void CFlamingoClient::Login(int nStatus/* = STATUS_ONLINE*/)
     EncodeUtil::UnicodeToUtf8(m_UserMgr.m_UserInfo.m_strPassword.c_str(), szData, ARRAYSIZE(szData));
 	strcpy_s(pLoginRequest->m_szPassword, ARRAYSIZE(pLoginRequest->m_szPassword), szData);
 
-    //����ط�����ʵ�ʵ��û�״̬
-    pLoginRequest->m_nStatus = STATUS_AWAY;
+    //登录使用的在线状态取"期望在线状态"（v2 presence_type，见 net/Protocol.h），
+    //而非写死值。该字段由 CIUSocket 维护：初次登录写入登录 presence、用户在状态菜单里
+    //改状态时写入新值，故断线重连 / 主动重新上线会沿用上次选择的状态。
+    //注意此处承载的是 v2 presence（0 离线/1 在线/2 离开/3 勿扰），不是 v1 ONLINE_STATUS——
+    //两套枚举的 away/invisible 值是反的；HandleLogon 会把它原样传给 CIUSocket::Login 的
+    //nOnlineStatus（即 v2 presence）。旧实现写死 STATUS_AWAY(v1=4)，等于把自己登成 v2 隐身(4)。
+    //入参 nStatus 是历史遗留的 v1 形参，唯一调用方（重连定时器）按默认值传入，不再使用。
+    (void)nStatus;
+    pLoginRequest->m_nStatus = CIUSocket::GetInstance().GetRecordOnlineStatus();
 	
 	if(IsMobileNumber(m_UserMgr.m_UserInfo.m_strAccount.c_str()))
 		pLoginRequest->m_nLoginType = LOGIN_USE_MOBILE_NUMBER;
@@ -509,7 +528,7 @@ void CFlamingoClient::ChangeStatus(int32_t nNewStatus)
     m_SendMsgThread.AddItem(pChangeStatusRequest);
 }
 
-// ע��
+// 注销
 BOOL CFlamingoClient::Logout()
 {
 	if (IsOffline())
@@ -518,7 +537,7 @@ BOOL CFlamingoClient::Logout()
 	return FALSE;
 }
 
-// ȡ����¼
+// 取消登录
 void CFlamingoClient::CancelLogin()
 {
 	//m_ThreadPool.RemoveAllTask();
@@ -529,49 +548,49 @@ void CFlamingoClient::SetFindFriendWindow(HWND hwndFindFriend)
 	m_hwndFindFriend = hwndFindFriend;
 }
 
-// �ı�����״̬
+// 改变在线状态
 void CFlamingoClient::ChangeStatus(long nStatus)
 {
 	if (IsOffline())
 		return;
 }
 
-// ���º����б�
+// 更新好友列表
 void CFlamingoClient::UpdateBuddyList()
 {
 	if (IsOffline())
 		return;
 }
 
-// ����Ⱥ�б�
+// 更新群列表
 void CFlamingoClient::UpdateGroupList()
 {
 	if (IsOffline())
 		return;
 }
 
-// ���������ϵ���б�
+// 更新最近联系人列表
 void CFlamingoClient::UpdateRecentList()
 {
 	if (IsOffline())
 		return;
 }
 
-// ���º�����Ϣ
+// 更新好友信息
 void CFlamingoClient::UpdateBuddyInfo(UINT nUTalkUin)
 {	
 	if (IsOffline())
 		return;
 }
 
-// ����Ⱥ��Ա��Ϣ
+// 更新群成员信息
 void CFlamingoClient::UpdateGroupMemberInfo(UINT nGroupCode, UINT nUTalkUin)
 {
 	if (IsOffline())
 		return;
 }
 
-// ����Ⱥ��Ϣ
+// 更新群信息
 void CFlamingoClient::UpdateGroupInfo(UINT nGroupCode)
 {
 	if (IsOffline())
@@ -579,7 +598,7 @@ void CFlamingoClient::UpdateGroupInfo(UINT nGroupCode)
 
 }
 
-// ���º��Ѻ���
+// 更新好友号码
 void CFlamingoClient::UpdateBuddyNum(UINT nUTalkUin)
 {
 	//if (IsOffline())
@@ -595,7 +614,7 @@ void CFlamingoClient::UpdateBuddyNum(UINT nUTalkUin)
 	//}
 }
 
-// ����Ⱥ��Ա����
+// 更新群成员号码
 void CFlamingoClient::UpdateGroupMemberNum(UINT nGroupCode, UINT nUTalkUin)
 {
 	//if (IsOffline())
@@ -611,7 +630,7 @@ void CFlamingoClient::UpdateGroupMemberNum(UINT nGroupCode, UINT nUTalkUin)
 	//}
 }
 
-// ����Ⱥ��Ա����
+// 更新群成员号码
 void CFlamingoClient::UpdateGroupMemberNum(UINT nGroupCode, std::vector<UINT>* arrUTalkUin)
 {
 	//if (UTalk_STATUS_OFFLINE == m_UserMgr.m_nStatus
@@ -631,7 +650,7 @@ void CFlamingoClient::UpdateGroupMemberNum(UINT nGroupCode, std::vector<UINT>* a
 	//}
 }
 
-// ����Ⱥ����
+// 更新群号码
 void CFlamingoClient::UpdateGroupNum(UINT nGroupCode)
 {
 	//if (IsOffline())
@@ -647,7 +666,7 @@ void CFlamingoClient::UpdateGroupNum(UINT nGroupCode)
 	//}
 }
 
-// ���º��Ѹ���ǩ��
+// 更新好友个性签名
 void CFlamingoClient::UpdateBuddySign(UINT nUTalkUin)
 {
 	//if (IsOffline())
@@ -664,7 +683,7 @@ void CFlamingoClient::UpdateBuddySign(UINT nUTalkUin)
 	//m_ThreadPool.AddTask(lpUTalkSignTask);
 }
 
-// ����Ⱥ��Ա����ǩ��
+// 更新群成员个性签名
 void CFlamingoClient::UpdateGroupMemberSign(UINT nGroupCode, UINT nUTalkUin)
 {
 	//if (IsOffline())
@@ -681,7 +700,7 @@ void CFlamingoClient::UpdateGroupMemberSign(UINT nGroupCode, UINT nUTalkUin)
 	//m_ThreadPool.AddTask(lpUTalkSignTask);
 }
 
-// �޸�UTalk����ǩ��
+// 修改UTalk个性签名
 void CFlamingoClient::ModifyUTalkSign(LPCTSTR lpSign)
 {
 	const CBuddyInfo& currentLogonUser = m_UserMgr.m_UserInfo;
@@ -698,7 +717,7 @@ void CFlamingoClient::ModifyUTalkSign(LPCTSTR lpSign)
 						currentLogonUser.m_bUseCustomFace);
 }
 
-// ���º���ͷ��
+// 更新好友头像
 void CFlamingoClient::UpdateBuddyHeadPic(UINT nUTalkUin, UINT nUTalkNum)
 {
 	//if (IsOffline())
@@ -714,7 +733,7 @@ void CFlamingoClient::UpdateBuddyHeadPic(UINT nUTalkUin, UINT nUTalkNum)
 	//m_ThreadPool.AddTask(lpGetHeadPicTask);
 }
 
-// ����Ⱥ��Աͷ��
+// 更新群成员头像
 void CFlamingoClient::UpdateGroupMemberHeadPic(UINT nGroupCode, UINT nUTalkUin, UINT nUTalkNum)
 {
 	//if (IsOffline())
@@ -730,7 +749,7 @@ void CFlamingoClient::UpdateGroupMemberHeadPic(UINT nGroupCode, UINT nUTalkUin, 
 	//m_ThreadPool.AddTask(lpGetHeadPicTask);
 }
 
-// ����Ⱥͷ��
+// 更新群头像
 void CFlamingoClient::UpdateGroupHeadPic(UINT nGroupCode, UINT nGroupNum)
 {
 	//if (IsOffline())
@@ -746,32 +765,32 @@ void CFlamingoClient::UpdateGroupHeadPic(UINT nGroupCode, UINT nGroupNum)
 	//m_ThreadPool.AddTask(lpGetHeadPicTask);
 }
 
-// ����Ⱥ��������
+// 更新群表情信令
 void CFlamingoClient::UpdateGroupFaceSignal()
 {
 	if (IsOffline())
 		return;
 }
 
-// ���ͺ�����Ϣ
+// 发送好友消息
 BOOL CFlamingoClient::SendBuddyMsg(UINT nFromUin, const tstring& strFromNickName, UINT nToUin, const tstring& strToNickName, time_t nTime, const tstring& strChatMsg, HWND hwndFrom/* = NULL*/)
 {
     return m_SendMsgThread.AddBuddyMsg(nFromUin, strFromNickName, nToUin, strToNickName, nTime, strChatMsg, hwndFrom);
 }
 
-// ����Ⱥ��Ϣ
+// 发送群消息
 BOOL CFlamingoClient::SendGroupMsg(UINT nGroupId, time_t nTime, LPCTSTR lpMsg, HWND hwndFrom)
 {
 	if (IsOffline())
 		return FALSE;
 
-    //TODO: ԭ����
+    //TODO: 原来的
     //return m_SendMsgThread.AddBuddyMsg(nGroupId, nTime, lpMsg, hwndFrom);
     //return m_SendMsgThread.AddGroupMsg(nGroupId, nTime, lpMsg, hwndFrom);
     return m_SendMsgThread.AddBuddyMsg(m_UserMgr.m_UserInfo.m_uUserID, m_UserMgr.m_UserInfo.m_strAccount, nGroupId, _T(""), nTime, lpMsg, hwndFrom);
 }
 
-// ������ʱ�Ự��Ϣ
+// 发送临时会话消息
 BOOL CFlamingoClient::SendSessMsg(UINT nGroupId, UINT nToUin, time_t nTime, LPCTSTR lpMsg)
 {
 	if (IsOffline())
@@ -786,23 +805,23 @@ BOOL CFlamingoClient::SendMultiChatMsg(const std::set<UINT> setAccountID, time_t
 {
 	if (IsOffline())
 		return FALSE;
-	//Ⱥ����Ϣ
+	//群发消息
 	return m_SendMsgThread.AddMultiMsg(setAccountID, nTime, lpMsg, hwndFrom);
 }
 
-// �Ƿ�����״̬
+// 是否离线状态
 BOOL CFlamingoClient::IsOffline()
 {
 	return (STATUS_OFFLINE == m_UserMgr.m_UserInfo.m_nStatus) ? TRUE : FALSE;
 }
 
-// ��ȡ����״̬
+// 获取在线状态
 long CFlamingoClient::GetStatus()
 {
 	return m_UserMgr.m_UserInfo.m_nStatus;
 }
 
-// ��ȡ��֤��ͼƬ
+// 获取验证码图片
 BOOL CFlamingoClient::GetVerifyCodePic(const BYTE*& lpData, DWORD& dwSize)
 {
 	//lpData = (const BYTE*)m_UserMgr.m_VerifyCodePic.GetData();
@@ -831,7 +850,7 @@ BOOL CFlamingoClient::IsBuddyListAvailable()
 	return m_bBuddyListAvailable;
 }
 
-// ��ȡ�û���Ϣ
+// 获取用户信息
 CBuddyInfo* CFlamingoClient::GetUserInfo(UINT uAccountID/*=0*/)
 {
 	if(uAccountID==0 || uAccountID==m_UserMgr.m_UserInfo.m_uUserID)
@@ -866,109 +885,109 @@ CBuddyInfo* CFlamingoClient::GetUserInfo(UINT uAccountID/*=0*/)
 	return NULL;
 }
 
-// ��ȡ�����б�
+// 获取好友列表
 CBuddyList* CFlamingoClient::GetBuddyList()
 {
 	return &m_UserMgr.m_BuddyList;
 }
 
-// ��ȡȺ�б�
+// 获取群列表
 CGroupList* CFlamingoClient::GetGroupList()
 {
 	return &m_UserMgr.m_GroupList;
 }
 
-// ��ȡ�����ϵ���б�
+// 获取最近联系人列表
 CRecentList* CFlamingoClient::GetRecentList()
 {
 	return &m_UserMgr.m_RecentList;
 }
 
-// ��ȡ��Ϣ�б�
+// 获取消息列表
 CMessageList* CFlamingoClient::GetMessageList()
 {
 	return &m_UserMgr.m_MsgList;
 }
 
-// ��ȡ��Ϣ��¼������
+// 获取消息记录管理器
 CMessageLogger* CFlamingoClient::GetMsgLogger()
 {
 	return &m_UserMgr.m_MsgLogger;
 }
 
-// ��ȡ�û��ļ��д��·��
+// 获取用户文件夹存放路径
 tstring CFlamingoClient::GetUserFolder()
 {
 	return m_UserMgr.GetUserFolder();
 }
 
-// ��ȡ�����ļ��д��·��
+// 获取个人文件夹存放路径
 tstring CFlamingoClient::GetPersonalFolder(UINT nUserNum/* = 0*/)
 {
 	return m_UserMgr.GetPersonalFolder();
 }
 
-// ��ȡ����ͼƬ���·��
+// 获取聊天图片存放路径
 tstring CFlamingoClient::GetChatPicFolder(UINT nUserNum/* = 0*/)
 {
 	return m_UserMgr.GetChatPicFolder();
 }
 
-// ��ȡ�û�ͷ��ͼƬȫ·���ļ���
+// 获取用户头像图片全路径文件名
 tstring CFlamingoClient::GetUserHeadPicFullName(UINT nUserNum/* = 0*/)
 {
 	return m_UserMgr.GetUserHeadPicFullName(nUserNum);
 }
 
-// ��ȡ����ͷ��ͼƬȫ·���ļ���
+// 获取好友头像图片全路径文件名
 tstring CFlamingoClient::GetBuddyHeadPicFullName(UINT nUTalkNum)
 {
 	return m_UserMgr.GetBuddyHeadPicFullName(nUTalkNum);
 }
 
-// ��ȡȺͷ��ͼƬȫ·���ļ���
+// 获取群头像图片全路径文件名
 tstring CFlamingoClient::GetGroupHeadPicFullName(UINT nGroupNum)
 {
 	return m_UserMgr.GetGroupHeadPicFullName(nGroupNum);
 }
 
-// ��ȡȺ��Աͷ��ͼƬȫ·���ļ���
+// 获取群成员头像图片全路径文件名
 tstring CFlamingoClient::GetSessHeadPicFullName(UINT nUTalkNum)
 {
 	return m_UserMgr.GetSessHeadPicFullName(nUTalkNum);
 }
 
-// ��ȡ����ͼƬȫ·���ļ���
+// 获取聊天图片全路径文件名
 tstring CFlamingoClient::GetChatPicFullName(LPCTSTR lpszFileName)
 {
 	return m_UserMgr.GetChatPicFullName(lpszFileName);
 }
 
-// ��ȡ��Ϣ��¼ȫ·���ļ���
+// 获取消息记录全路径文件名
 tstring CFlamingoClient::GetMsgLogFullName(UINT nUserNum/* = 0*/)
 {
 	return m_UserMgr.GetMsgLogFullName();
 }
 
-// �ж��Ƿ���Ҫ���º���ͷ��
+// 判断是否需要更新好友头像
 BOOL CFlamingoClient::IsNeedUpdateBuddyHeadPic(UINT nUTalkNum)
 {
 	return m_UserMgr.IsNeedUpdateBuddyHeadPic(nUTalkNum);
 }
 
-// �ж��Ƿ���Ҫ����Ⱥͷ��
+// 判断是否需要更新群头像
 BOOL CFlamingoClient::IsNeedUpdateGroupHeadPic(UINT nGroupNum)
 {
 	return m_UserMgr.IsNeedUpdateGroupHeadPic(nGroupNum);
 }
 
-// �ж��Ƿ���Ҫ����Ⱥ��Աͷ��
+// 判断是否需要更新群成员头像
 BOOL CFlamingoClient::IsNeedUpdateSessHeadPic(UINT nUTalkNum)
 {
 	return m_UserMgr.IsNeedUpdateSessHeadPic(nUTalkNum);
 }
 
-// ��ȡ������ʱ��
+// 获取服务器时间
 void CFlamingoClient::RequestServerTime()
 {
 	//m_IUProtocol.RequestServerTime();
@@ -985,7 +1004,7 @@ void CFlamingoClient::OnNetworkStatusChange(UINT message, WPARAM wParam, LPARAM 
 {
 	BOOL bAvailable = (wParam>0 ? TRUE : FALSE);
 	
-	//��״̬�͵�ǰ��һ�£����ֲ���
+	//新状态和当前的一致，保持不变
 	if(m_bNetworkAvailable == bAvailable)
 		return;
 
@@ -993,8 +1012,14 @@ void CFlamingoClient::OnNetworkStatusChange(UINT message, WPARAM wParam, LPARAM 
 
 	if(m_bNetworkAvailable)
 	{
-		LOG_WARNING("Local connection is on service, try to relogon.");		
-		GoOnline();
+		//本机网络恢复了。要不要趁机连回服务器，<u>不由这里决定</u>：用户主动选了离线、
+		//或者账号在别处登录被顶下线之后，语义都是"别再连了"，此刻自己连回去就绕开了
+		//那个决定（被踢的那一路还会把刚在别处登上去的那一端又顶下来，两端来回顶号）。
+		//故把决定权交给 CMainDlg —— 登录态在它手里，它用与掉线事件、重连定时器同一个
+		//守卫函数(balloonmain::ShouldAutoReconnect)判断，三处共用一个判定，不再各判各的。
+		LOG_WARNING("Local connection is on service, ask main window whether to relogon.");
+		if (m_UserMgr.m_hCallBackWnd != NULL)
+			::PostMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_NETWORK_RESUMED, 0, 0);
 	}
 	else
 	{
@@ -1025,6 +1050,11 @@ void CFlamingoClient::OnLoginResult(UINT message, WPARAM wParam, LPARAM lParam)
 
 	long nLoginResultCode = pLoginResult->m_LoginResultCode;
 	UINT uAccountID = pLoginResult->m_uAccountID;
+
+	LOG_INFO("FlamingoClient::OnLoginResult: code=%d (0=SUCCESS 1=FAILED 2=UNREG "
+	         "3=PWD_ERR), userid=%u, account=%s.",
+	         (int)nLoginResultCode, (unsigned int)uAccountID,
+	         pLoginResult->m_szAccountName);
 	
 	if(uAccountID > 0)
 		m_UserMgr.m_UserInfo.m_uUserID = uAccountID;
@@ -1075,7 +1105,7 @@ void CFlamingoClient::OnLoginResult(UINT message, WPARAM wParam, LPARAM lParam)
                     m_UserMgr.m_UserInfo.m_bUseCustomFace = TRUE;
                     m_UserMgr.m_UserInfo.m_bCustomFaceAvailable = TRUE;
                 }
-                //ͷ�񲻴��ڣ����ظ�ͷ��
+                //头像不存在，下载该头像
                 else
                 {					
 					CFileItemRequest* pFileItem = new CFileItemRequest();
@@ -1088,7 +1118,7 @@ void CFlamingoClient::OnLoginResult(UINT message, WPARAM wParam, LPARAM lParam)
             }
 			else
 			{
-				//����ͷ��
+				//下载头像
 				CFileItemRequest* pFileItem = new CFileItemRequest();
 				pFileItem->m_nFileType = FILE_ITEM_DOWNLOAD_USER_THUMB;
 				pFileItem->m_uAccountID = uAccountID;
@@ -1113,17 +1143,17 @@ void CFlamingoClient::OnUpdateUserBasicInfo(UINT message, WPARAM wParam, LPARAM 
 		return;
 
     m_UserMgr.ClearUserInfo();
-    //û�к��ѣ�Ĭ�ϴ���һ���С��ҵĺ��ѡ���Ĭ�Ϻ��ѷ���
+    //没有好友，默认创建一个叫“我的好友”的默认好友分组
     if (pResult->m_mapUserBasicInfo.empty())
     {
         CBuddyTeamInfo* pTeamInfo = new CBuddyTeamInfo();
         pTeamInfo->m_nIndex = 0;
-        pTeamInfo->m_strName = _T("�ҵĺ���");
+        pTeamInfo->m_strName = _T("我的好友");
         m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.push_back(pTeamInfo);
     }
     else
     {
-        //TODO: �����ȴ���һ��Ĭ��Ⱥ����
+        //TODO: 暂且先创建一个默认群分组
 
         CBuddyInfo* pBuddyInfo = NULL;
         TCHAR szAccountName[32] = { 0 };
@@ -1198,10 +1228,10 @@ void CFlamingoClient::OnUpdateUserBasicInfo(UINT message, WPARAM wParam, LPARAM 
 						        pBuddyInfo->m_bUseCustomFace = TRUE;
 						        pBuddyInfo->m_bCustomFaceAvailable = TRUE;
 					        }
-					        //ͷ�񲻴��ڣ����ظ�ͷ��
+					        //头像不存在，下载该头像
 					        else
 					        {
-						        //����ͷ��
+						        //下载头像
 						        CFileItemRequest* pFileItem = new CFileItemRequest();
 						        pFileItem->m_nFileType = FILE_ITEM_DOWNLOAD_USER_THUMB;
 						        pFileItem->m_uAccountID = iter2->uAccountID;
@@ -1211,7 +1241,7 @@ void CFlamingoClient::OnUpdateUserBasicInfo(UINT message, WPARAM wParam, LPARAM 
 				        }
 				        else
 				        {
-					        //����ͷ��
+					        //下载头像
 					        CFileItemRequest* pFileItem = new CFileItemRequest();
 					        pFileItem->m_nFileType = FILE_ITEM_DOWNLOAD_USER_THUMB;
 					        pFileItem->m_uAccountID = iter2->uAccountID;
@@ -1238,7 +1268,7 @@ void CFlamingoClient::OnUpdateUserBasicInfo(UINT message, WPARAM wParam, LPARAM 
                     GetGroupMembers(iter2->uAccountID);
                 } 
 
-                //TODO: Ϊɶ����ֱ��DEL(iter2);
+                //TODO: 为啥不能直接DEL(iter2);
                 UserBasicInfo* p = iter2;
                 DEL(p);
             }
@@ -1315,10 +1345,10 @@ void CFlamingoClient::OnUpdateGroupBasicInfo(UINT message, WPARAM wParam, LPARAM
                     pBuddyInfo->m_bUseCustomFace = TRUE;
                     pBuddyInfo->m_bCustomFaceAvailable = TRUE;
                 }
-                //ͷ�񲻴��ڣ����ظ�ͷ��
+                //头像不存在，下载该头像
                 else
                 {
-                    //����ͷ��
+                    //下载头像
                     CFileItemRequest* pFileItem = new CFileItemRequest();
                     pFileItem->m_nFileType = FILE_ITEM_DOWNLOAD_USER_THUMB;
                     pFileItem->m_uAccountID = iter->uAccountID;
@@ -1328,7 +1358,7 @@ void CFlamingoClient::OnUpdateGroupBasicInfo(UINT message, WPARAM wParam, LPARAM
             }
             else
             {
-                //����ͷ��
+                //下载头像
                 CFileItemRequest* pFileItem = new CFileItemRequest();
                 pFileItem->m_nFileType = FILE_ITEM_DOWNLOAD_USER_THUMB;
                 pFileItem->m_uAccountID = iter->uAccountID;
@@ -1406,7 +1436,7 @@ void CFlamingoClient::OnModifyInfoResult(UINT message, WPARAM wParam, LPARAM lPa
 				m_UserMgr.m_UserInfo.m_bUseCustomFace = TRUE;
 				m_UserMgr.m_UserInfo.m_bCustomFaceAvailable = TRUE;
 			}
-			//ͷ�񲻴��ڣ����ظ�ͷ��
+			//头像不存在，下载该头像
 			else
 			{
 				CFileItemRequest* pFileItem = new CFileItemRequest();
@@ -1417,7 +1447,7 @@ void CFlamingoClient::OnModifyInfoResult(UINT message, WPARAM wParam, LPARAM lPa
 			}
 
 		}
-		//����ͷ��
+		//下载头像
 		else
 		{
 			CFileItemRequest* pFileItem = new CFileItemRequest();
@@ -1446,7 +1476,7 @@ void CFlamingoClient::OnRecvUserStatusChangeData(UINT message, WPARAM wParam, LP
 
 void CFlamingoClient::OnRecvAddFriendRequest(UINT message, WPARAM wParam, LPARAM lParam)
 {
-	//TODO: ���ּӺ��ѵ��߼�̫�ã���Ҫ�Ż���
+	//TODO: 这种加好友的逻辑太烂，需要优化。
 	COperateFriendResult* pOperateFriendResult = (COperateFriendResult*)lParam;
 	if(pOperateFriendResult == NULL)
 		return;
@@ -1463,14 +1493,14 @@ void CFlamingoClient::OnRecvAddFriendRequest(UINT message, WPARAM wParam, LPARAM
 		//else if(pOperateFriendResult->m_uCmd==Agree && pOperateFriendResult->m_uCmd==iter->second && iter->first==pOperateFriendResult->m_uAccountID)
 		//{
 		//	bAlreadyExist = TRUE;
-		//	//����Ҫ���º����б��ˣ��Ƚ�m_bBuddyListAvailable����ΪFALSE���Ա㻺���¼ӵĺ�������֪ͨ
+		//	//马上要更新好友列表了，先将m_bBuddyListAvailable设置为FALSE，以便缓存新加的好友在线通知
 		//	StartGetUserInfoTask(USER_INFO_TYPE_SELF);
 		//	StartGetUserInfoTask(USER_INFO_TYPE_FRIENDS);
 		//	break;
 		//}
 		else
 		{
-			//����Ҫ���º����б��ˣ��Ƚ�m_bBuddyListAvailable����ΪFALSE���Ա㻺���¼ӵĺ�������֪ͨ
+			//马上要更新好友列表了，先将m_bBuddyListAvailable设置为FALSE，以便缓存新加的好友在线通知
 			m_bBuddyListAvailable = FALSE;
 			m_mapAddFriendCache.erase(iter);
 			break;
@@ -1499,7 +1529,7 @@ void CFlamingoClient::OnUserStatusChange(UINT message, WPARAM wParam, LPARAM lPa
 	
 
 	//AtlTrace(_T("AccountID=%u, Status=%d\n"), uAccountID, nStatus);
-	//����û���Ϣ��ʱ�����ã��Ȼ�������
+	//如果用户信息暂时不可用，先缓存起来
 	//if(!m_bBuddyListAvailable || !m_bGroupMemberInfoAvailable)
 	//{
 	//	std::map<UINT, long>::iterator iter = m_mapUserStatusCache.find(uAccountID);
@@ -1516,7 +1546,7 @@ void CFlamingoClient::OnUserStatusChange(UINT message, WPARAM wParam, LPARAM lPa
         SetBuddyStatus(uAccountID, nFlag);
         SetBuddyClientType(uAccountID, pFriendStatus->m_nClientType);
 
-        //�Լ�
+        //自己
         //if(uAccountID == m_UserMgr.m_UserInfo.m_uUserID)
         //{
         //	::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_SELF_STATUS_CHANGE, (WPARAM)uAccountID, (LPARAM)nStatus);
@@ -1531,7 +1561,7 @@ void CFlamingoClient::OnUserStatusChange(UINT message, WPARAM wParam, LPARAM lPa
     }
     else if (pFriendStatus->m_type == 3)
     {
-        //������Ϣ�и��£��������º����б�(TODO: �����̫�������������Ż���ֻ�����µĺ�����Ϣ)
+        //好友信息有更新，重新拉下好友列表(TODO: 这操作太耗流量，后期优化成只拉更新的好友信息)
         GetFriendList();
     }
 
@@ -1546,12 +1576,12 @@ void CFlamingoClient::OnSendConfirmMessage(UINT message, WPARAM wParam, LPARAM l
 
     if (wParam != 0)
     {
-        //ͼƬ�ϴ�ʧ��
+        //图片上传失败
         delete pUploadFileResult;
         return;
     }
 
-    //�ϴ�ͼƬ���
+    //上传图片结果
     if (pUploadFileResult->m_nFileType == FILE_ITEM_UPLOAD_CHAT_IMAGE)
     {
         time_t nTime = time(NULL);
@@ -1706,7 +1736,7 @@ void CFlamingoClient::OnBuddyMsg(UINT message, WPARAM wParam, LPARAM lParam)
 
 	m_UserMgr.m_MsgList.AddMsg(FMG_MSG_TYPE_BUDDY, lpBuddyMsg->m_nFromUin, 0, (void*)lpBuddyMsg);
 	
-	//��������Ự�б���������Ự�б�����ʾ��Ϣ�ĸ���
+	//更新最近会话列表以在最近会话列表中显示消息的个数
 	::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
 	::SendMessage(m_UserMgr.m_hCallBackWnd, message, nUTalkUin, lParam);
 }
@@ -1723,7 +1753,7 @@ void CFlamingoClient::OnGroupMsg(UINT message, WPARAM wParam, LPARAM lParam)
 	m_UserMgr.m_MsgList.AddMsg(FMG_MSG_TYPE_GROUP, 
 		lpGroupMsg->m_nToUin, lpGroupMsg->m_nToUin, (void*)lpGroupMsg);
 	
-	//��������Ự�б���������Ự�б�����ʾ��Ϣ�ĸ���
+	//更新最近会话列表以在最近会话列表中显示消息的个数
 	::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
 	::SendMessage(m_UserMgr.m_hCallBackWnd, message, nGroupCode, nMsgId);
 }
@@ -1860,11 +1890,11 @@ void CFlamingoClient::OnUpdateBuddySign(UINT message, WPARAM wParam, LPARAM lPar
 	//if (lpGetSignResult != NULL)
 	//{
 	//	nUTalkUin = lpGetSignResult->m_nUTalkUin;
-	//	if (m_UserMgr.m_UserInfo.m_nUTalkUin == nUTalkUin)		// �����û�����ǩ��
+	//	if (m_UserMgr.m_UserInfo.m_nUTalkUin == nUTalkUin)		// 更新用户个性签名
 	//	{
 	//		m_UserMgr.m_UserInfo.SetUTalkSign(lpGetSignResult);
 	//	}
-	//	else											// ���º��Ѹ���ǩ��
+	//	else											// 更新好友个性签名
 	//	{
 	//		CBuddyInfo* lpBuddyInfo = m_UserMgr.m_BuddyList.GetBuddy(nUTalkUin);
 	//		if (lpBuddyInfo != NULL)
@@ -1960,7 +1990,7 @@ void CFlamingoClient::OnTargetInfoChange(UINT message, WPARAM wParam, LPARAM lPa
 	if(uAccountID==0 || !IsGroupTarget(uAccountID))
 		return;
 
-	//Ⱥ���˺�ֻ�л�����Ϣ��ID�б���û����չ��Ϣ
+	//群组账号只有基本信息和ID列表，没有扩展信息
 	//CUserBasicInfoRequest* pBasicInfoRequest = new CUserBasicInfoRequest();
 	//pBasicInfoRequest->m_setAccountID.insert(uAccountID);
 	//m_SendMsgTask.AddItem(pBasicInfoRequest);
@@ -2034,7 +2064,7 @@ UINT CFlamingoClient::OnInternal_GroupId2Code(UINT message, WPARAM wParam, LPARA
 	CGroupInfo* lpGroupInfo = m_UserMgr.m_GroupList.GetGroupById(lParam);
 	return ((lpGroupInfo != NULL) ? lpGroupInfo->m_nGroupCode : 0);
 }
-// �����û�������Ϣ
+// 加载用户设置信息
 void CFlamingoClient::LoadUserConfig()
 {
 	if(m_UserMgr.m_UserInfo.m_strAccount.empty())
@@ -2046,6 +2076,10 @@ void CFlamingoClient::LoadUserConfig()
 	_stprintf_s(szConfigPath, MAX_PATH, _T("%sUsers\\%s\\%s.cfg"), g_szHomePath, pszAccount, pszAccount);
 
 	m_UserConfig.LoadConfig(szConfigPath);
+
+	// 把配置里的自定义接收目录回填给 UserMgr，使本次会话的文件接收按它生效；
+	// 空串时 UserMgr 自动退回默认推导路径。
+	m_UserMgr.SetCustomRecvFilePath(m_UserConfig.GetRecvFilePath());
 }
 
 void CFlamingoClient::SaveUserConfig()
@@ -2063,7 +2097,7 @@ void CFlamingoClient::SaveUserConfig()
 
 BOOL CFlamingoClient::SetBuddyStatus(UINT uAccountID, long nStatus)
 {
-	//��������
+	//好友上线
 	if(uAccountID!=m_UserMgr.m_UserInfo.m_uUserID)
 	{
 		m_UserMgr.SetStatus(uAccountID, nStatus);
@@ -2125,6 +2159,14 @@ void CFlamingoClient::GoOnline()
 
 void CFlamingoClient::GoOffline()
 {
+    //先立起"用户主动离线"闸门，再关连接。顺序不能反：闸门一旦立起，网络层就不再
+    //自发重连、也不再往发送缓冲排帧（见 CIUSocket::SetUserOffline 的说明）；若先关
+    //连接再立闸门，中间那一小段里发送线程有机会自己把连接重新建起来。
+    CIUSocket::GetInstance().SetUserOffline(true);
+
+    //丢弃排队中尚未发出的业务帧，否则下次连上会被批量补发，对端突然收到一堆过期消息。
+    CIUSocket::GetInstance().ClearPendingSendData();
+
     CIUSocket::GetInstance().Close();
     CIUSocket::GetInstance().CloseFileServerConnection();
     CIUSocket::GetInstance().CloseImgServerConnection();
@@ -2164,7 +2206,7 @@ void CFlamingoClient::CacheBuddyStatus()
 		}
 	}
 
-	//Ⱥ��Ա������״̬ҲҪ����
+	//群成员的在线状态也要缓存
 	CGroupInfo* pGroupInfo = NULL;
 	for(std::vector<CGroupInfo*>::iterator iter=m_UserMgr.m_GroupList.m_arrGroupInfo.begin(); 
 		iter!=m_UserMgr.m_GroupList.m_arrGroupInfo.end();
@@ -2186,14 +2228,14 @@ void CFlamingoClient::CacheBuddyStatus()
 	}
 }
 
-// ������������
+// 创建代理窗口
 BOOL CFlamingoClient::CreateProxyWnd()
 {
 	WNDCLASSEX wcex;
 	LPCTSTR szWindowClass = _T("FLAMINGO_PROXY_WND");
 	HWND hWnd;
 
-	DestroyProxyWnd();	// ���ٴ�������
+	DestroyProxyWnd();	// 销毁代理窗口
 
 	HINSTANCE hInstance = ::GetModuleHandle(NULL);
 
@@ -2218,7 +2260,7 @@ BOOL CFlamingoClient::CreateProxyWnd()
 	if (NULL == hWnd)
 		return FALSE;
 
-	::SetWindowLong(hWnd, GWL_USERDATA, (LONG)this);
+	::SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)this);
 	
     m_RecvMsgThread.SetProxyWnd(hWnd);
     m_UserMgr.m_hProxyWnd = hWnd;
@@ -2226,7 +2268,7 @@ BOOL CFlamingoClient::CreateProxyWnd()
 	return TRUE;
 }
 
-// ���ٴ�������
+// 销毁代理窗口
 BOOL CFlamingoClient::DestroyProxyWnd()
 {
 	if (m_UserMgr.m_hProxyWnd != NULL)
@@ -2239,7 +2281,7 @@ BOOL CFlamingoClient::DestroyProxyWnd()
 
 LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
-	CFlamingoClient* lpFMGClient = (CFlamingoClient*)::GetWindowLong(hWnd, GWL_USERDATA);
+	CFlamingoClient* lpFMGClient = (CFlamingoClient*)::GetWindowLongPtr(hWnd, GWLP_USERDATA);
 	if (NULL == lpFMGClient)
 		return ::DefWindowProc(hWnd, message, wParam, lParam);
 
@@ -2248,7 +2290,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
 	switch (message)
 	{
-    //�������
+    //网络错误
     case FMG_MSG_NET_ERROR:
         ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, FMG_MSG_NET_ERROR, 0, 0);
         break;
@@ -2261,20 +2303,20 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 		lpFMGClient->OnNetworkStatusChange(message, wParam, lParam);
 		break;
 	
-	case FMG_MSG_REGISTER:				// ע����
+	case FMG_MSG_REGISTER:				// 注册结果
 		lpFMGClient->OnRegisterResult(message, wParam, lParam);
 		break;
-	case FMG_MSG_LOGIN_RESULT:			// ��¼������Ϣ
+	case FMG_MSG_LOGIN_RESULT:			// 登录返回消息
 		lpFMGClient->OnLoginResult(message, wParam, lParam);
 		break;
-	case FMG_MSG_LOGOUT_RESULT:			// ע��������Ϣ
-	case FMG_MSG_UPDATE_BUDDY_HEADPIC:	// ���º���ͷ��
+	case FMG_MSG_LOGOUT_RESULT:			// 注销返回消息
+	case FMG_MSG_UPDATE_BUDDY_HEADPIC:	// 更新好友头像
 		//::MessageBox(NULL, _T("Change headpic"), _T("Change head"), MB_OK);
-	case FMG_MSG_UPDATE_GMEMBER_HEADPIC:	// ����Ⱥ��Աͷ��
-	case FMG_MSG_UPDATE_GROUP_HEADPIC:	// ����Ⱥͷ��
+	case FMG_MSG_UPDATE_GMEMBER_HEADPIC:	// 更新群成员头像
+	case FMG_MSG_UPDATE_GROUP_HEADPIC:	// 更新群头像
 		::SendMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
 		break;
-	case FMG_MSG_UPDATE_USER_BASIC_INFO:	//�յ��û��Ļ�����Ϣ
+	case FMG_MSG_UPDATE_USER_BASIC_INFO:	//收到用户的基本信息
 		lpFMGClient->OnUpdateUserBasicInfo(message, wParam, lParam);
 		break;
 
@@ -2282,7 +2324,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
         lpFMGClient->OnUpdateGroupBasicInfo(message, wParam, lParam);
         break;
 
-	case FMG_MSG_MODIFY_USER_INFO:				//�޸ĸ�����Ϣ���
+	case FMG_MSG_MODIFY_USER_INFO:				//修改个人信息结果
 		lpFMGClient->OnModifyInfoResult(message, wParam, lParam);
 		break;
 	case FMG_MSG_RECV_USER_STATUS_CHANGE_DATA:
@@ -2324,67 +2366,541 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 		lpFMGClient->OnCreateNewGroupResult(message, wParam, lParam);
 		break;
 
-	case FMG_MSG_UPDATE_BUDDY_LIST:				//���º����б�
+	case FMG_MSG_UPDATE_BUDDY_LIST:				//更新好友列表
 		lpFMGClient->OnUpdateBuddyList(message, wParam, lParam);
 		break;
-	case FMG_MSG_UPDATE_GROUP_LIST:		// ����Ⱥ�б���Ϣ
+	case FMG_MSG_UPDATE_GROUP_LIST:		// 更新群列表消息
 		lpFMGClient->OnUpdateGroupList(message, wParam, lParam);
 		break;
-	case FMG_MSG_UPDATE_RECENT_LIST:		// ���������ϵ���б���Ϣ
+	case FMG_MSG_UPDATE_RECENT_LIST:		// 更新最近联系人列表消息
 		lpFMGClient->OnUpdateRecentList(message, wParam, lParam);
 		break;
-	case FMG_MSG_BUDDY_MSG:				// ������Ϣ
+	case FMG_MSG_BUDDY_MSG:				// 好友消息
 		lpFMGClient->OnBuddyMsg(message, wParam, lParam);
 		break;
-	case FMG_MSG_GROUP_MSG:				// Ⱥ��Ϣ
+	case FMG_MSG_GROUP_MSG:				// 群消息
 		lpFMGClient->OnGroupMsg(message, wParam, lParam);
 		break;
-	case FMG_MSG_SESS_MSG:				// ��ʱ�Ự��Ϣ
+	case FMG_MSG_SESS_MSG:				// 临时会话消息
 		lpFMGClient->OnSessMsg(message, wParam, lParam);
 		break;
-	case FMG_MSG_STATUS_CHANGE_MSG:		// ����״̬�ı���Ϣ
+	case FMG_MSG_STATUS_CHANGE_MSG:		// 好友状态改变消息
 		lpFMGClient->OnStatusChangeMsg(message, wParam, lParam);
 		break;
-    case FMG_MSG_SELF_STATUS_CHANGE:	//�Լ���״̬�����ı䣬���类��������Ϣ
+    case FMG_MSG_SELF_STATUS_CHANGE:	//自己的状态发生改变，例如被踢下线消息
 		lpFMGClient->OnKickMsg(message, wParam, lParam);
 		break;
-    case FMG_MSG_SCREENSHOT:    //������Ϣ
-        lpFMGClient->OnScreenshotMsg(message, wParam, lParam);        
+    case FMG_MSG_SCREENSHOT:    //截屏消息
+        lpFMGClient->OnScreenshotMsg(message, wParam, lParam);
         break;
-	case FMG_MSG_SYS_GROUP_MSG:			// Ⱥϵͳ��Ϣ
+
+    //v2 单聊消息（收到推送 / 发送回执）：转发给主窗口处理并路由到对应聊天窗。
+    //lParam 为堆上 net:: 结构体指针，主窗口处理后负责 delete；若主窗口未就绪
+    //则在此就地释放，避免泄漏。
+    case FMG_MSG_V2_RECV_CHATMSG:
+    case FMG_MSG_V2_SEND_CHATMSG_ACK:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else if (message == FMG_MSG_V2_RECV_CHATMSG)
+            delete (net::MessageNotify*)lParam;
+        else
+            delete (net::SendMessageResponse*)lParam;
+        break;
+
+    //v2 通讯录应答：转发给主窗口填充联系人面板；主窗口未就绪则就地释放。
+    case FMG_MSG_V2_CONTACTS:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::ContactsResult*)lParam;
+        break;
+
+    //v2 会话列表应答：转发给主窗口填充"消息"页；主窗口未就绪则就地释放。
+    case FMG_MSG_V2_CONVERSATIONS:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::ConversationsResult*)lParam;
+        break;
+
+    //v2 建群应答：转发给主窗口提示建群结果；主窗口未就绪则就地释放。
+    case FMG_MSG_V2_CREATE_GROUP_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::CreateGroupResponse*)lParam;
+        break;
+
+    //v2 修改头像应答：转发给主窗口（→修改头像对话框提示/关闭、本端头像刷新）；未就绪则就地释放。
+    case FMG_MSG_V2_CHANGE_AVATAR_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::UpdateProfileResponse*)lParam;
+        break;
+
+    //v2 头像图片上传结果：转发给主窗口（→修改头像对话框，成功后发 cmd_change_avatar）；未就绪则就地释放。
+    case FMG_MSG_V2_AVATAR_UPLOAD_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::AvatarUploadResult*)lParam;
+        break;
+
+    //v2 头像图片下载结果：转发给主窗口（→主面板按 fileid 刷新联系人/会话节点头像）；未就绪则就地释放。
+    case FMG_MSG_V2_AVATAR_DOWNLOAD_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::AvatarDownloadResult*)lParam;
+        break;
+
+    //v2 联系人资料变更推送（头像/昵称）：转发给主窗口实时刷新联系人/会话头像；未就绪则就地释放。
+    case FMG_MSG_V2_USERINFO_CHANGED:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::UserInfoChangedNotify*)lParam;
+        break;
+
+    //v2 会话属性多端同步推送：转发给主窗口按新状态刷新会话列表（置顶 / 免打扰 / 删除）；
+    //未就绪则就地释放。
+    case FMG_MSG_V2_CONVERSATION_CHANGED:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::ConversationChangedNotify*)lParam;
+        break;
+
+    //v2 群管理写操作应答（邀请/移出/设管理员/禁言/全员禁言/改群资料/转让/解散/
+    //审批/敏感词增删共用）：转发给主窗口，成功不动界面（等 1317/1318 推送统一刷新），
+    //失败据 code 提示。wParam 带的是具体哪条协议，须原样传下去。
+    case FMG_MSG_V2_GROUP_OP_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::GroupOpResult*)lParam;
+        break;
+
+    //v2 待审批加群申请列表应答：转发给群管理窗口的"加群审批"页
+    case FMG_MSG_V2_GROUP_JOIN_REQUESTS:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::GroupJoinRequestsResult*)lParam;
+        break;
+
+    //v2 群敏感词库应答：转发给群权限页的"管理词库"
+    case FMG_MSG_V2_SENSITIVE_WORDS:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::SensitiveWordsResult*)lParam;
+        break;
+
+    //v2 群成员变动推送：转发给主窗口，刷新群管理窗口、群聊窗成员边栏与标题
+    case FMG_MSG_V2_GROUP_MEMBER_CHANGED:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::GroupMemberChangedNotify*)lParam;
+        break;
+
+    //v2 群资料变更推送：转发给主窗口，刷新群名与各页；changetype=2 时关窗
+    case FMG_MSG_V2_GROUP_INFO_CHANGED:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::GroupInfoChangedNotify*)lParam;
+        break;
+
+    //v2 群公告列表应答：转发给主窗口，再由它分给群管理窗的公告页或群聊窗的公告边栏
+    case FMG_MSG_V2_GROUP_ANNOUNCEMENTS:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::GroupAnnouncementsResult*)lParam;
+        break;
+
+    //v2 群公告变更推送：转发给主窗口刷新公告界面；新发布时还要弹一次提示
+    case FMG_MSG_V2_ANNOUNCEMENT_CHANGED:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::GroupAnnouncementNotify*)lParam;
+        break;
+
+    //v2 有人申请加群推送：转发给主窗口，让审批入口出现待处理红点
+    case FMG_MSG_V2_JOIN_GROUP_REQUEST:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::GroupJoinRequestItem*)lParam;
+        break;
+
+    //v2 切换通话媒体类型应答：转发给主窗口按 code 提示失败原因（成功不动界面，等推送）；
+    //未就绪则就地释放，避免堆对象泄漏。
+    case FMG_MSG_V2_CALL_SWITCH_MEDIA_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::CallSwitchMediaResponse*)lParam;
+        break;
+
+    //v2 通话媒体类型已变更推送：转发给主窗口重建通话窗媒体层、启停视频引擎；
+    //未就绪则就地释放。
+    case FMG_MSG_V2_CALL_MEDIA_CHANGED:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::CallMediaChangedNotify*)lParam;
+        break;
+
+    //v2 撤回消息应答：转发给主窗口按 code 提示失败原因（成功不动界面，等下面的推送）；
+    //未就绪则就地释放，避免堆对象泄漏。
+    case FMG_MSG_V2_RECALL_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::RecallMessageResponse*)lParam;
+        break;
+
+    //v2 某条消息被撤回的推送：转发给主窗口把气泡改成提示行 / 刷会话列表预览 /
+    //标记本地消息库；未就绪则就地释放。
+    case FMG_MSG_V2_MESSAGE_RECALLED:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::MessageRecalledNotify*)lParam;
+        break;
+
+    //v2 平台公告列表应答：转发给主窗口落本地库 announce.db 并刷新铃铛角标；
+    //未就绪则就地释放，避免堆对象泄漏。
+    case FMG_MSG_V2_ANNOUNCEMENTS:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::AnnouncementsResult*)lParam;
+        break;
+
+    //v2 平台公告新发布 / 被撤回的推送：转发给主窗口落本地库、刷角标、刷消息盒子窗；
+    //未就绪则就地释放。
+    case FMG_MSG_V2_ANNOUNCEMENT_NOTIFY:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::AnnouncementNotify*)lParam;
+        break;
+
+    //v2 平台公告已读上报的应答：转发给主窗口（成功不动界面，仅失败时留痕）；
+    //未就绪则就地释放。
+    case FMG_MSG_V2_ANN_MARK_READ_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::AnnounceMarkReadResult*)lParam;
+        break;
+
+    //v2 设置好友备注名的应答：转发给主窗口（成功只记日志，失败时主面板据回带的
+    //userid 把那一个人的备注回滚）；未就绪则就地释放。
+    case FMG_MSG_V2_SET_REMARK_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::SetFriendRemarkResult*)lParam;
+        break;
+
+    //v2 Pin 消息应答：转发给主窗口按 code 提示失败原因（成功不动界面，等下面的推送）；
+    //未就绪则就地释放，避免堆对象泄漏。
+    case FMG_MSG_V2_PIN_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::PinMessageResponse*)lParam;
+        break;
+
+    //v2 某条消息被 Pin / 取消 Pin 的推送：转发给主窗口落本地消息库标记 / 刷气泡上的
+    //图钉 / 刷消息记录窗；未就绪则就地释放。
+    case FMG_MSG_V2_MESSAGE_PINNED:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::MessagePinnedNotify*)lParam;
+        break;
+
+    //v2 被 Pin 消息全集应答：转发给主窗口补齐本地库缺的消息体并与服务端对账；
+    //未就绪则就地释放。
+    case FMG_MSG_V2_PINNED_MESSAGES:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::PinnedMessagesResult*)lParam;
+        break;
+
+    //v2 被踢下线推送：转发给主窗口进入离线态（停自动重连）并弹托盘气泡。
+    //wParam 是被踢原因，无堆负载，主窗口未就绪时直接丢掉即可（此时也没有界面可提示）。
+    case FMG_MSG_V2_KICKOUT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        break;
+
+    //v2 联系人在线状态变更推送：转发给主窗口重着联系人/会话状态点；未就绪则就地释放。
+    case FMG_MSG_V2_PRESENCE_CHANGED:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::PresenceChangedNotify*)lParam;
+        break;
+
+    //v2 群资料应答：转发给主窗口写群信息缓存 / 刷新群名；未就绪则就地释放。
+    case FMG_MSG_V2_GROUP_INFO:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::GroupInfoResult*)lParam;
+        break;
+
+    //v2 群成员应答：转发给主窗口路由到对应群聊窗；未就绪则就地释放。
+    case FMG_MSG_V2_GROUP_MEMBERS:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::GroupMembersResult*)lParam;
+        break;
+
+    //v2 群文件列表应答：转发给主窗口路由到对应群聊窗；未就绪则就地释放。
+    case FMG_MSG_V2_GROUP_FILES:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::GetGroupFilesResult*)lParam;
+        break;
+
+    //v2 群文件变更推送：转发给主窗口路由到对应群聊窗；未就绪则就地释放。
+    case FMG_MSG_V2_GROUP_FILES_CHANGED:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::GroupFilesChangedNotify*)lParam;
+        break;
+
+    //v2 群文件上传结果：转发给主窗口路由到对应群聊窗；未就绪则就地释放。
+    case FMG_MSG_V2_GROUP_FILE_UPLOAD_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::GroupFileUploadResult*)lParam;
+        break;
+
+    //v2 群文件下载结果：转发给主窗口路由到对应群聊窗；未就绪则就地释放。
+    case FMG_MSG_V2_GROUP_FILE_DOWNLOAD_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::GroupFileDownloadResult*)lParam;
+        break;
+
+    //v2 群文件上传进度：转发给主窗口路由到对应群聊窗；未就绪则就地释放。
+    case FMG_MSG_V2_GROUP_FILE_UPLOAD_PROGRESS:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::GroupFileUploadProgress*)lParam;
+        break;
+
+    //v2 群文件下载进度：转发给主窗口路由到对应群聊窗；未就绪则就地释放。
+    case FMG_MSG_V2_GROUP_FILE_DOWNLOAD_PROGRESS:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::GroupFileDownloadProgress*)lParam;
+        break;
+
+    //v2 我的群列表应答：转发给主窗口填"群"Tab；未就绪则就地释放。
+    case FMG_MSG_V2_USER_GROUPS:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::UserGroupsResult*)lParam;
+        break;
+
+    //v2 历史消息应答：转发给主窗口路由到对应聊天窗渲染历史；未就绪则就地释放。
+    case FMG_MSG_V2_SYNC_MESSAGES:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::SyncMessagesResult*)lParam;
+        break;
+
+    //v2 远程桌面邀请应答：转发给主窗口（→控制端呼叫窗按 code 置会话 / 提示失败）；未就绪则就地释放。
+    case FMG_MSG_V2_RD_INVITE_ACK:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::RDInviteResponse*)lParam;
+        break;
+
+    //v2 远程桌面邀请推送：转发给主窗口（→被控端弹授权窗）；未就绪则就地释放。
+    case FMG_MSG_V2_RD_INVITE_NOTIFY:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::RDInviteNotify*)lParam;
+        break;
+
+    //v2 远程桌面中转参数下发：转发给主窗口（→双方接通，连 imgserver 中转通道）；未就绪则就地释放。
+    case FMG_MSG_V2_RD_RELAY_INFO:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::RDRelayInfo*)lParam;
+        break;
+
+    //v2 远程桌面状态推送：转发给主窗口（→关对话框并按 state 提示拒绝 / 取消 / 离线 / 超时 / 断开）；未就绪则就地释放。
+    case FMG_MSG_V2_RD_STATE_NOTIFY:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::RDStateNotify*)lParam;
+        break;
+
+    //v2 音视频通话邀请应答：转发给主窗口（→主叫呼叫窗按 code 置会话 / 提示失败）；未就绪则就地释放。
+    case FMG_MSG_V2_CALL_INVITE_ACK:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::CallInviteResponse*)lParam;
+        break;
+
+    //v2 音视频通话邀请推送：转发给主窗口（→被叫弹来电窗）；未就绪则就地释放。
+    case FMG_MSG_V2_CALL_INVITE_NOTIFY:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::CallInviteNotify*)lParam;
+        break;
+
+    //v2 音视频通话中转参数下发：转发给主窗口（→双方接通，连 imgserver 中转通道）；未就绪则就地释放。
+    case FMG_MSG_V2_CALL_SIGNALING:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::CallSignalingInfo*)lParam;
+        break;
+
+    //v2 音视频通话状态推送：转发给主窗口（→关对话框并按 state 提示 / 收尾）；未就绪则就地释放。
+    case FMG_MSG_V2_CALL_STATE_NOTIFY:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::CallStateNotify*)lParam;
+        break;
+
+    //v2 发图上传进度：转发给主窗口按 clientmsgid 更新"发送中"气泡进度；未就绪则就地释放。
+    case FMG_MSG_V2_IMAGE_SEND_PROGRESS:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::ImageSendProgress*)lParam;
+        break;
+
+    //v2 发图最终结果：转发给主窗口收尾"发送中"气泡（成功转正常 / 失败标红）；未就绪则就地释放。
+    case FMG_MSG_V2_IMAGE_SEND_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::ImageSendResult*)lParam;
+        break;
+
+    //v2 收图下载结果：转发给主窗口按 msgid 把"下载中"气泡回填渲染 / 标失败；未就绪则就地释放。
+    case FMG_MSG_V2_IMAGE_DOWNLOAD_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::ImageDownloadResult*)lParam;
+        break;
+
+    //v2 发文件上传进度：转发给主窗口更新"发送中"文件气泡进度；未就绪则就地释放。
+    case FMG_MSG_V2_FILE_SEND_PROGRESS:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::FileSendProgress*)lParam;
+        break;
+
+    //v2 发文件最终结果：转发给主窗口收尾"发送中"文件气泡（成功转完成 / 失败标红）；未就绪则就地释放。
+    case FMG_MSG_V2_FILE_SEND_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::FileSendResult*)lParam;
+        break;
+
+    //v2 收文件下载进度：转发给主窗口按 msgid 更新"下载中"文件气泡进度；未就绪则就地释放。
+    case FMG_MSG_V2_FILE_DOWNLOAD_PROGRESS:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::FileDownloadProgress*)lParam;
+        break;
+
+    //v2 收文件下载结果：转发给主窗口按 msgid 把"下载中"文件气泡回填渲染 / 标失败；未就绪则就地释放。
+    case FMG_MSG_V2_FILE_DOWNLOAD_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::FileDownloadResult*)lParam;
+        break;
+
+    //v2 对方收取本端所发文件的状态：转发给主窗口按 msgid 更新那条文件气泡的状态行；未就绪则就地释放。
+    case FMG_MSG_V2_FILE_TRANSFER_ACK:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::FileTransferAckNotify*)lParam;
+        break;
+
+    //v2 对端正在 / 停止输入：转发给主窗口按 cid 路由到单聊窗刷新头部提示；未就绪则就地释放。
+    case FMG_MSG_V2_TYPING_NOTIFY:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::TypingNotify*)lParam;
+        break;
+	case FMG_MSG_SYS_GROUP_MSG:			// 群系统消息
 		lpFMGClient->OnSysGroupMsg(message, wParam, lParam);
 		break;
-	case FMG_MSG_UPDATE_BUDDY_NUMBER:	// ���º��Ѻ���
+	case FMG_MSG_UPDATE_BUDDY_NUMBER:	// 更新好友号码
 		lpFMGClient->OnUpdateBuddyNumber(message, wParam, lParam);
 		break;
-	case FMG_MSG_UPDATE_GMEMBER_NUMBER:	// ����Ⱥ��Ա����
+	case FMG_MSG_UPDATE_GMEMBER_NUMBER:	// 更新群成员号码
 		lpFMGClient->OnUpdateGMemberNumber(message, wParam, lParam);
 		break;
-	case FMG_MSG_UPDATE_GROUP_NUMBER:	// ����Ⱥ����
+	case FMG_MSG_UPDATE_GROUP_NUMBER:	// 更新群号码
 		lpFMGClient->OnUpdateGroupNumber(message, wParam, lParam);
 		break;
-	case FMG_MSG_UPDATE_BUDDY_SIGN:		// ���º��Ѹ���ǩ��
+	case FMG_MSG_UPDATE_BUDDY_SIGN:		// 更新好友个性签名
 		lpFMGClient->OnUpdateBuddySign(message, wParam, lParam);
 		break;
-	case FMG_MSG_UPDATE_GMEMBER_SIGN:	// ����Ⱥ��Ա����ǩ��
+	case FMG_MSG_UPDATE_GMEMBER_SIGN:	// 更新群成员个性签名
 		lpFMGClient->OnUpdateGMemberSign(message, wParam, lParam);
 		break;
-	case FMG_MSG_UPDATE_BUDDY_INFO:		// �����û���Ϣ
+	case FMG_MSG_UPDATE_BUDDY_INFO:		// 更新用户信息
 		lpFMGClient->OnUpdateBuddyInfo(message, wParam, lParam);
 		break;
-	case FMG_MSG_UPDATE_GMEMBER_INFO:	// ����Ⱥ��Ա��Ϣ
+	case FMG_MSG_UPDATE_GMEMBER_INFO:	// 更新群成员信息
 		lpFMGClient->OnUpdateGMemberInfo(message, wParam, lParam);
 		break;
-	case FMG_MSG_UPDATE_GROUP_INFO:		// ����Ⱥ��Ϣ
+	case FMG_MSG_UPDATE_GROUP_INFO:		// 更新群信息
 		lpFMGClient->OnUpdateGroupInfo(message, wParam, lParam);
 		break;
-	case FMG_MSG_UPDATE_C2CMSGSIG:		// ������ʱ�Ự����
+	case FMG_MSG_UPDATE_C2CMSGSIG:		// 更新临时会话信令
 		//lpFMGClient->OnUpdateC2CMsgSig(message, wParam, lParam);
 		break;
-	case FMG_MSG_CHANGE_STATUS_RESULT:	// �ı�����״̬������Ϣ
+	case FMG_MSG_CHANGE_STATUS_RESULT:	// 改变在线状态返回消息
 		lpFMGClient->OnChangeStatusResult(message, wParam, lParam);
 		break;
-	case FMG_MSG_TARGET_INFO_CHANGE:		//���û���Ϣ�����ı䣺
+	case FMG_MSG_TARGET_INFO_CHANGE:		//有用户信息发生改变：
 		lpFMGClient->OnTargetInfoChange(message, wParam, lParam);
 		break;
 

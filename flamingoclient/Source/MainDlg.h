@@ -1,4 +1,4 @@
-// MainDlg.h : interface of the CMainDlg class
+﻿// MainDlg.h : interface of the CMainDlg class
 //
 /////////////////////////////////////////////////////////////////////////////
 
@@ -13,25 +13,50 @@
 #include "CascadeWinManager.h"
 #include "RecentListCtrl.h"
 #include "BuddyListCtrl.h"
-#include "LoginDlg.h"
+#include "BalloonAuth/BalloonLoginDlg.h"
 //#include "VerifyCodeDlg.h"
 #include "MsgTipDlg.h"
 #include "LogonUserInfoDlg.h"
 #include "ModifyPasswordDlg.h"
-#include "MultiChatDlg.h"
+#include "BalloonChat/BalloonBuddyChatDlg.h"
+#include "BalloonChat/BalloonGroupChatDlg.h"
+#include "BalloonChat/BalloonSessChatDlg.h"
+#include "BalloonChat/BalloonMultiChatDlg.h"
+#include "BalloonMain/BalloonMainPanel.h"
+#include "BalloonMain/TrayFlashController.h"		// 托盘"新消息闪头像"状态机（m_trayFlash 成员需完整类型）
+#include "BalloonMain/TrayMsgTipPopup.h"			// 托盘悬停未读消息提示浮窗（m_trayMsgTipPopup 成员需完整类型）
+#include "BalloonChatWnd/BalloonChatWindow.h"
+#include "BalloonChatWnd/BalloonGroupChatWindow.h"
+#include "BalloonNetSettings/BalloonNetSettingsWindow.h"
+#include "BalloonRegister/BalloonRegisterWindow.h"
+#include "BalloonProfile/BalloonProfileWindow.h"
+#include "BalloonContact/BalloonContactWindow.h"
+#include "BalloonGroupManage/BalloonGroupManageWindow.h"
+#include "BalloonHistory/BalloonHistoryWindow.h"
+#include "BalloonSettings/BalloonSystemSettingDlg.h"
+#include "BalloonMain/BalloonAboutDlg.h"
+#include "BalloonMain/BalloonGroupInfoDlg.h"
+#include "BalloonImageViewer/BalloonImageViewerWindow.h"
+#include "RemoteDesktop/RdSelfTestWindow.h"
+#include "RemoteDesktop/RdControlledStreamer.h"
+#include "BalloonRemoteDesktop/BalloonRemoteDesktopDlg.h"
+#include "Call/BalloonCallDlg.h"
+#include "Call/CallMediaSession.h"
+#include "BalloonRemoteDesktop/RdViewerWindow.h"
+#include "BalloonRemoteDesktop/RdControlledBar.h"
 #include "BuddyInfoFloatWnd.h"
 
-//����˵�ID����
+//分组菜单ID基数
 #define TEAM_MENU_ITEM_BASE       0xF001
 
-//�����״̬
+//主面板状态
 enum MAINPANEL_STATUS
 {
-    MAINPANEL_STATUS_NOTLOGIN,     //�����δ��¼
-    MAINPANEL_STATUS_LOGINING,     //��������ڵ�¼
-    MAINPANEL_STATUS_LOGIN,        //������Ѿ���¼
-    MAINPANEL_STATUS_RECONNECTING, //�������������
-    MAINPANEL_STATUS_USERGOOFFLINE //������û���������
+    MAINPANEL_STATUS_NOTLOGIN,     //主面板未登录
+    MAINPANEL_STATUS_LOGINING,     //主面板正在登录
+    MAINPANEL_STATUS_LOGIN,        //主面板已经登录
+    MAINPANEL_STATUS_RECONNECTING, //主面板正在重连
+    MAINPANEL_STATUS_USERGOOFFLINE //主面板用户主动下线
 };
 
 class CGMemberInfoMapKey
@@ -53,11 +78,8 @@ public:
 	UINT m_nUTalkUin;
 };
 
-class CBuddyChatDlg;
 class CBuddyInfoDlg;
-class CGroupChatDlg;
 class CGroupInfoDlg;
-class CSessChatDlg;
 
 class CFindFriendDlg;
 class CRemoteDesktopDlg;
@@ -80,92 +102,119 @@ public:
 	BEGIN_MSG_MAP_EX(CMainDlg)
 		MSG_WM_INITDIALOG(OnInitDialog)
 		MSG_WM_SYSCOMMAND(OnSysCommand)
-		MSG_WM_MEASUREITEM(OnMeasureItem)
-		MSG_WM_DRAWITEM(OnDrawItem)
-		MSG_WM_GETMINMAXINFO(OnGetMinMaxInfo)
-		MSG_WM_LBUTTONDOWN(OnLButtonDown)
 		MSG_WM_TIMER(OnTimer)
 		MSG_WM_SIZE(OnSize)
 		MSG_WM_HOTKEY(OnHotKey)
 		MSG_WM_CLOSE(OnClose)
 		MSG_WM_DESTROY(OnDestroy)
-		COMMAND_ID_HANDLER_EX(IDM_APP_ABOUT, OnAppAbout)
-		COMMAND_ID_HANDLER_EX(ID_BTN_SIGN, OnBtn_Sign)
-		COMMAND_ID_HANDLER_EX(IDC_UNLOCK, OnBtn_UnlockPanel)				    //����������
-		COMMAND_ID_HANDLER_EX(ID_MENU_SHOW_MAIN_PANEL, OnMenu_ShowMainPanel)
-		COMMAND_ID_HANDLER_EX(ID_MENU_LOCK, OnMenu_LockPanel)					//����������
-		COMMAND_ID_HANDLER_EX(ID_MENU_EXIT, OnMenu_Exit)
-		COMMAND_ID_HANDLER_EX(ID_MENU_MUTE, OnMenu_Mute)						//�ر���������
-		COMMAND_ID_HANDLER_EX(ID_BTN_FIND, OnBtn_ShowAddFriendDlg)
-		COMMAND_ID_HANDLER_EX(IDM_SYSTEMSETTINGS, OnBtn_ShowSystemSettingDlg)	//��ϵͳ���öԻ���
-		COMMAND_ID_HANDLER_EX(IDM_MODIFYPASSWORD, OnBtn_ModifyPassword)			//�޸�����
-        COMMAND_ID_HANDLER_EX(IDC_BTN_MAIL, OnBtn_OpenMail)      
-		COMMAND_ID_HANDLER_EX(ID_BTN_MAIN_MENU, OnBtn_MainMenu)					//���˵���ť
-		COMMAND_ID_HANDLER_EX(ID_BTN_MULTI_CHAT, OnBtn_MultiChat)				//Ⱥ����ť
-		COMMAND_HANDLER_EX(ID_BTN_CANCEL, BN_CLICKED, OnBtn_Cancel)				//ȡ����¼
-		NOTIFY_HANDLER_EX(ID_TABCTRL_MAIN, TCN_DROPDOWN, OnTabCtrlDropDown)
-		NOTIFY_HANDLER_EX(ID_TABCTRL_MAIN, TCN_SELCHANGE, OnTabCtrlSelChange)
-		NOTIFY_HANDLER_EX(ID_LISTCTRL_BUDDY, NM_DBLCLK, OnBuddyListDblClk)		 //˫�������б��еĺ���
-		NOTIFY_HANDLER_EX(ID_LISTCTRL_BUDDY, NM_RCLICK, OnBuddyListRButtonUp)	 //�Ҽ������б��еĺ���
-        NOTIFY_HANDLER_EX(ID_LISTCTRL_BUDDY, NM_HOVER, OnBuddyListHover)	     //����ں����б�������ͣ
-		NOTIFY_HANDLER_EX(ID_LISTCTRL_GROUP, NM_DBLCLK, OnGroupListDblClk)
-		NOTIFY_HANDLER_EX(ID_LISTCTRL_GROUP, NM_RCLICK, OnGroupListRButtonUp)
-		NOTIFY_HANDLER_EX(ID_LISTCTRL_RECENT, NM_DBLCLK, OnRecentListDblClk)
-		NOTIFY_HANDLER_EX(ID_LISTCTRL_RECENT, NM_RCLICK, OnRecentListRButtonUp)	 //�Ҽ������б��еĺ���
-		COMMAND_HANDLER_EX(ID_PIC_HEAD, BN_CLICKED, OnPic_Clicked_Head)			 //����ҵ�ͷ��
+		COMMAND_ID_HANDLER_EX(IDM_SYSTEMSETTINGS, OnBtn_ShowSystemSettingDlg)	//打开系统设置对话框
+		COMMAND_ID_HANDLER_EX(IDM_MODIFYPASSWORD, OnBtn_ModifyPassword)			//修改密码
+		COMMAND_ID_HANDLER_EX(ID_MENU_NETSETTINGS, OnMenu_NetSettings)			//打开网络设置窗（主面板系统菜单转发）
+		COMMAND_ID_HANDLER_EX(ID_BTN_MULTI_CHAT, OnBtn_MultiChat)				//群发按钮
 		
-		COMMAND_ID_HANDLER_EX(IDM_ADDTEAM, OnBuddyListAddTeam);					//�����б����ӷ���
-		COMMAND_ID_HANDLER_EX(IDM_DELETETEAM, OnBuddyListDeleteTeam)			//�����б�ɾ������
-		COMMAND_ID_HANDLER_EX(IDM_MODIFYTEAMNAME, OnBuddyListModifyTeamName)	//���ѷ����޸�����
-		COMMAND_RANGE_HANDLER_EX(TEAM_MENU_ITEM_BASE, 0xF015, OnMoveBuddyToTeam)//�ƶ���ϵ����ָ������
 
 		
-		COMMAND_ID_HANDLER_EX(ID_MENU_BIGHEADPIC, OnMenu_BigHeadPic)			//��ͷ��˵�
-		COMMAND_ID_HANDLER_EX(ID_MENU_SMALLHEADPIC, OnMenu_SmallHeadPic)		//Сͷ��˵�
-		COMMAND_ID_HANDLER_EX(ID_MENU_STDHEADPIC, OnMenu_StdHeadPic)			//��׼ͷ��˵�
-		COMMAND_ID_HANDLER_EX(ID_MENU_SHOWBIGHEADPICINSEL, OnMenu_ShowBigHeadPicInSel)
-		COMMAND_ID_HANDLER_EX(ID_BTN_SIGN, OnBtn_Sign)								//����ǩ����ť
-		COMMAND_HANDLER_EX(ID_EDIT_SIGN, EN_KILLFOCUS, OnEdit_Sign_KillFocus)		//����ǩ���༭��
-		COMMAND_RANGE_HANDLER_EX(ID_MENU_IMONLINE, ID_MENU_IMOFFLINE, OnMenu_Status)
 		COMMAND_ID_HANDLER_EX(ID_ABOUT, OnMainMenu_About)
 
-		COMMAND_ID_HANDLER_EX(IDM_REFRESH_BUDDYLIST, OnRefreshBuddyList)		//ˢ����ϵ���б�
-		COMMAND_ID_HANDLER_EX(IDM_SHOW_ONLINEBUDDY_ONLY, OnShowOnlineBuddyOnly) //����ʾ���ߺ���
 
-		COMMAND_ID_HANDLER_EX(IDM_SENDMSG, OnMenu_SendBuddyMessage)				//���ͼ�ʱ��Ϣ
-		COMMAND_ID_HANDLER_EX(IDM_SENDMSGFROMRECENTLIST, OnMenu_SendBuddyMessageFromRecentList)
-		COMMAND_ID_HANDLER_EX(IDM_VIEWBUDDYINFO, OnMenu_ViewBuddyInfo)			//�鿴��������
-		COMMAND_ID_HANDLER_EX(IDM_VIEWBUDDYINFO_FROMRECENTLIST, OnMenu_ViewBuddyInfoFromRecentList)		
-        COMMAND_ID_HANDLER_EX(IDM_MODIFY_BUDDY_MARKNAME, OnMenu_ModifyBuddyMarkName)//�޸ĺ��ѱ�ע
-        COMMAND_ID_HANDLER_EX(IDM_DELETEFRIEND, OnMenu_DeleteFriend)            //ɾ������
-		COMMAND_ID_HANDLER_EX(IDM_CLEARRECENTLIST, OnClearAllRecentList)
-		COMMAND_ID_HANDLER_EX(IDM_DELETERECENTITEM, OnDeleteRecentItem);
 
-		COMMAND_ID_HANDLER_EX(IDM_SENDGROUP_MSG, OnMenu_SendGroupMessage)		//�Ҽ��˵�����Ⱥ��Ϣ
-		COMMAND_ID_HANDLER_EX(IDM_VIEW_GROUPINFO, OnMenu_ViewGroupInfo)			//�Ҽ��˵��鿴Ⱥ����
-		COMMAND_ID_HANDLER_EX(IDM_CREATENEWGROUP, OnMenu_CreateNewGroup)		//�Ҽ��˵�����Ⱥ
-        COMMAND_ID_HANDLER_EX(IDM_EXIT_GROUP, OnMenu_ExitGroup)					//�Ҽ��˵��˳���Ⱥ
 
-		//��ʾ�ǳƺ��˻�����ʾ�ǳơ���ʾ�˺š���ʾ��ˬ����
-		COMMAND_RANGE_HANDLER_EX(ID_32911, ID_32914, OnMenu_ShowNameChoice)
+		//显示昵称和账户、显示昵称、显示账号、显示清爽资料
         
-        //�������
+        //网络错误
         MESSAGE_HANDLER_EX(FMG_MSG_NET_ERROR, OnNetError)
 
 		MESSAGE_HANDLER_EX(FMG_MSG_LOGIN_RESULT, OnLoginResult)
 		MESSAGE_HANDLER_EX(FMG_MSG_LOGOUT_RESULT, OnLogoutResult)
 
-		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_BUDDY_INFO, OnUpdateBuddyInfo)		 //�����û���Ϣ
-		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_BUDDY_NUMBER, OnUpdateBuddyNumber)	 //�����û��ǳ�(TODO: ����Ҫ��)
+		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_BUDDY_INFO, OnUpdateBuddyInfo)		 //更新用户信息
+		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_BUDDY_NUMBER, OnUpdateBuddyNumber)	 //更新用户昵称(TODO: 名字要改)
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_BUDDY_HEADPIC, OnUpdateBuddyHeadPic)
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_BUDDY_SIGN, OnUpdateBuddySign)
 		MESSAGE_HANDLER_EX(FMG_MSG_SELF_STATUS_CHANGE, OnSelfStatusChange)
 
-		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_CHATDLG_USERINFO, OnUpdateChatDlgOnlineStatus)			//�������촰�����û�״̬
-		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_BUDDY_LIST, OnUpdateBuddyList)		 //���º����б���Ϣ
+		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_CHATDLG_USERINFO, OnUpdateChatDlgOnlineStatus)			//更新聊天窗口中用户状态
+		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_BUDDY_LIST, OnUpdateBuddyList)		 //更新好友列表信息
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_GROUP_LIST, OnUpdateGroupList)
-		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_RECENT_LIST, OnUpdateRecentList)	 //���������ϵ���б�
+		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_RECENT_LIST, OnUpdateRecentList)	 //更新最近联系人列表
 		MESSAGE_HANDLER_EX(FMG_MSG_BUDDY_MSG, OnBuddyMsg)
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_CONTACTS, OnV2Contacts)					//v2 通讯录应答：填充联系人面板
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_CONVERSATIONS, OnV2Conversations)			//v2 会话列表应答：填充消息页
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_CREATE_GROUP_RESULT, OnV2CreateGroupResult)	//v2 建群应答：提示建群结果
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_INFO, OnV2GroupInfo)				//v2 群资料应答：缓存群名/刷新群列表
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_MEMBERS, OnV2GroupMembers)			//v2 群成员应答：路由到群聊窗
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_CONVERSATION_RESULT, OnV2GroupWriteResult)	//v2 会话设置应答：日志/失败提示
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_MEMBER_CARD_RESULT, OnV2GroupWriteResult)	//v2 改群名片应答：日志/失败提示
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_LEAVE_GROUP_RESULT, OnV2GroupWriteResult)		//v2 退群应答：日志/失败提示
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_FAVORITE_RESULT, OnV2SetFavoriteResult)	//v2 收藏设置应答：失败时让主面板回滚乐观更新
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_REMARK_RESULT, OnV2SetRemarkResult)		//v2 设置好友备注名应答：失败时让主面板按回带的 userid 回滚那一个人的备注
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILES, OnV2GroupFiles)				//v2 群文件列表应答：路由到群聊窗
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILES_CHANGED, OnV2GroupFilesChanged)	//v2 群文件变更推送：路由到群聊窗
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILE_UPLOAD_RESULT, OnV2GroupFileUploadResult)		//v2 群文件上传结果：路由到群聊窗
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILE_DOWNLOAD_RESULT, OnV2GroupFileDownloadResult)	//v2 群文件下载结果：路由到群聊窗
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILE_UPLOAD_PROGRESS, OnV2GroupFileUploadProgress)	//v2 群文件上传进度：路由到群聊窗
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILE_DOWNLOAD_PROGRESS, OnV2GroupFileDownloadProgress)	//v2 群文件下载进度：路由到群聊窗
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_USER_GROUPS, OnV2UserGroups)				//v2 我的群列表应答：填群Tab
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_SYNC_MESSAGES, OnV2SyncMessages)			//v2 历史消息应答：路由到聊天窗渲染
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_CHANGE_PWD_RESULT, OnV2ChangePwdResult)	//v2 修改密码应答：转发到改密对话框
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_UPDATE_PROFILE_RESULT, OnV2UpdateProfileResult)	//v2 更新资料应答（个性签名）：转发到主面板
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_CHANGE_AVATAR_RESULT, OnV2ChangeAvatarResult)	//v2 修改头像应答：转发到修改头像对话框
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_AVATAR_UPLOAD_RESULT, OnV2AvatarUploadResult)	//v2 头像图片上传结果：转发到修改头像对话框
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_AVATAR_DOWNLOAD_RESULT, OnV2AvatarDownloadResult)	//v2 头像图片下载结果：转发到主面板刷新节点头像
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_USERINFO_CHANGED, OnV2UserInfoChanged)		//v2 联系人资料变更推送：转发到主面板实时刷新头像
+		MESSAGE_HANDLER_EX(FMG_MSG_CHANGE_MY_PRESENCE, OnChangeMyPresence)		//主面板状态菜单切换在线状态：据连接态走 GoOffline/GoOnline/SendChangePresence
+		MESSAGE_HANDLER_EX(FMG_MSG_LOGOUT, OnLogout)					//托盘菜单/系统菜单登出：二次确认后断开连接、销毁主面板并回登录界面
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_RECALL_RESULT, OnV2RecallResult)			//v2 撤回消息应答：失败时提示原因，成功不动界面（等推送）
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_MESSAGE_RECALLED, OnV2MessageRecalled)		//v2 消息被撤回推送：转发到主面板改气泡/刷会话列表/标记本地库
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_PIN_RESULT, OnV2PinResult)				//v2 Pin 消息应答：失败时提示原因，成功不动界面（等推送）
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_MESSAGE_PINNED, OnV2MessagePinned)		//v2 消息被 Pin / 取消 Pin 推送：转发到主面板落本地标记并刷新消息记录窗
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_PINNED_MESSAGES, OnV2PinnedMessages)		//v2 被 Pin 消息全集应答：转发到主面板补齐本地库缺行并对账
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_ANNOUNCEMENTS, OnV2Announcements)			//v2 平台公告列表应答：转发到主面板落本地库 announce.db 并刷新铃铛角标
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_ANNOUNCEMENT_NOTIFY, OnV2AnnouncementNotify)	//v2 平台公告新发布/被撤回推送：转发到主面板落库、刷角标、刷消息盒子窗
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_ANN_MARK_READ_RESULT, OnV2AnnMarkReadResult)	//v2 平台公告已读上报应答：成功不动界面，失败时留痕
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_CHANGE_PRESENCE_RESULT, OnV2ChangePresenceResult)	//v2 修改在线状态应答：转发到主面板
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_PRESENCE_CHANGED, OnV2PresenceChanged)		//v2 好友在线状态变更推送：刷新联系人树状态点
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_KICKOUT, OnV2Kickout)				//v2 被踢下线推送：进入离线态、停自动重连并弹托盘气泡
+		MESSAGE_HANDLER_EX(FMG_MSG_NETWORK_RESUMED, OnNetworkResumed)			//本机网络恢复：过自动重连守卫，非离线态才连回服务器
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_CONVERSATION_CHANGED, OnV2ConversationChanged)	//v2 会话属性多端同步推送：按新状态刷新会话列表
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_OP_RESULT, OnV2GroupOpResult)				//v2 群管理写操作应答：失败时提示，成功不动界面（等推送）
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_JOIN_REQUESTS, OnV2GroupJoinRequests)		//v2 待审批加群申请列表应答：填进群管理窗口的审批页
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_SENSITIVE_WORDS, OnV2SensitiveWords)				//v2 群敏感词库应答：填进群权限页的词库管理
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_ANNOUNCEMENTS, OnV2GroupAnnouncements)		//v2 群公告列表应答：填进群管理窗公告页与群聊窗公告边栏
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_ANNOUNCEMENT_CHANGED, OnV2AnnouncementChanged)	//v2 群公告变更推送：刷新公告界面；新发布时还要弹一次提示
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_MEMBER_CHANGED, OnV2GroupMemberChanged)		//v2 群成员变动推送：刷新群管理窗口与群聊窗成员边栏
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_INFO_CHANGED, OnV2GroupInfoChanged)			//v2 群资料变更推送：刷新群名与各页；已解散时关窗
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_JOIN_GROUP_REQUEST, OnV2JoinGroupRequest)			//v2 有人申请加群推送：让审批入口出现待处理红点
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_RECV_CHATMSG, OnV2RecvChatMsg)			//v2 单聊收到新消息：路由到对应聊天窗
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_SEND_CHATMSG_ACK, OnV2SendChatAck)		//v2 单聊发送回执
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_RD_INVITE_ACK, OnV2RdInviteAck)			//v2 远程桌面邀请应答
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_RD_INVITE_NOTIFY, OnV2RdInviteNotify)		//v2 远程桌面邀请推送：被控端弹授权窗
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_RD_RELAY_INFO, OnV2RdRelayInfo)			//v2 远程桌面中转参数：连 imgserver 中转
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_RD_STATE_NOTIFY, OnV2RdStateNotify)		//v2 远程桌面状态推送
+		MESSAGE_HANDLER_EX(FMG_MSG_RD_START_INVITE, OnRdStartInvite)			//聊天窗显示器按钮→协调器发起远程桌面
+		MESSAGE_HANDLER_EX(FMG_MSG_RD_CONTROLLED_END_BY_USER, OnRdControlledEndByUser)	//被控端受控提示条"结束控制"→协调器收尾
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_CALL_INVITE_ACK, OnV2CallInviteAck)			//v2 音视频通话邀请应答
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_CALL_INVITE_NOTIFY, OnV2CallInviteNotify)		//v2 音视频通话邀请推送：被叫弹来电窗
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_CALL_SIGNALING, OnV2CallSignaling)			//v2 音视频通话中转参数：连 imgserver 中转
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_CALL_STATE_NOTIFY, OnV2CallStateNotify)		//v2 音视频通话状态推送
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_CALL_SWITCH_MEDIA_RESULT, OnV2CallSwitchMediaResult)	//v2 切换通话媒体应答：失败时提示原因
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_CALL_MEDIA_CHANGED, OnV2CallMediaChanged)		//v2 通话媒体已变更推送：重建通话窗媒体层 + 启停视频引擎
+		MESSAGE_HANDLER_EX(FMG_MSG_CALL_STOP_MEDIA, OnCallStopMedia)			//通话窗关窗：停掉媒体会话，释放摄像头 / 麦克风
+		MESSAGE_HANDLER_EX(FMG_MSG_CALL_START_INVITE, OnCallStartInvite)			//单聊窗"语音通话"按钮→协调器发起呼叫
+		MESSAGE_HANDLER_EX(FMG_MSG_CALL_START_VIDEO_INVITE, OnCallStartVideoInvite)	//单聊窗"视频通话"按钮→协调器发起视频呼叫
+		MESSAGE_HANDLER_EX(FMG_MSG_CALL_RELAY_EVENT, OnCallRelayEvent)			//通话中转会话事件(连通/透传校验/失败/断开)
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_IMAGE_SEND_PROGRESS, OnV2ImageSendProgress)	//v2 发图上传进度：路由到聊天窗更新气泡进度
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_IMAGE_SEND_RESULT, OnV2ImageSendResult)		//v2 发图最终结果：路由到聊天窗收尾气泡
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_IMAGE_DOWNLOAD_RESULT, OnV2ImageDownloadResult)	//v2 收图下载结果：路由到聊天窗回填渲染
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_FILE_SEND_PROGRESS, OnV2FileSendProgress)		//v2 发文件上传进度：路由到聊天窗更新文件气泡进度
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_FILE_SEND_RESULT, OnV2FileSendResult)			//v2 发文件最终结果：路由到聊天窗收尾文件气泡
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_FILE_DOWNLOAD_PROGRESS, OnV2FileDownloadProgress)	//v2 收文件下载进度：路由到聊天窗更新进度
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_FILE_DOWNLOAD_RESULT, OnV2FileDownloadResult)	//v2 收文件下载结果：路由到聊天窗回填渲染
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_FILE_TRANSFER_ACK, OnV2FileTransferAck)		//v2 对方收取本端所发文件的状态：路由到聊天窗更新文件气泡状态行
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_TYPING_NOTIFY, OnV2TypingNotify)				//v2 对端正在/停止输入：路由到对应单聊窗刷新头部提示
+		MESSAGE_HANDLER_EX(FMG_MSG_TRAY_FLASH, OnV2TrayFlash)					//v2 有新消息：托盘闪发送方头像
+		MESSAGE_HANDLER_EX(FMG_MSG_TRAY_CLEAR, OnV2TrayClear)					//v2 某会话已读：从托盘闪烁集合移除
+		MESSAGE_HANDLER_EX(FMG_MSG_TRAY_MINIMIZE_TIP, OnTrayMinimizeTip)		//主面板首次最小化隐藏到托盘：弹一次托盘气泡提示
 		MESSAGE_HANDLER_EX(FMG_MSG_GROUP_MSG, OnGroupMsg)
 		MESSAGE_HANDLER_EX(FMG_MSG_SESS_MSG, OnSessMsg)
 		MESSAGE_HANDLER_EX(FMG_MSG_STATUS_CHANGE_MSG, OnStatusChangeMsg)
@@ -179,16 +228,16 @@ public:
 		
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_GMEMBER_SIGN, OnUpdateGMemberSign)
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_GMEMBER_INFO, OnUpdateGMemberInfo)
-		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_GROUP_INFO, OnUpdateGroupInfo)				//����Ⱥ��Ϣ
+		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_GROUP_INFO, OnUpdateGroupInfo)				//更新群信息
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_GMEMBER_HEADPIC, OnUpdateGMemberHeadPic)
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_GROUP_HEADPIC, OnUpdateGroupHeadPic)
 		MESSAGE_HANDLER_EX(FMG_MSG_CHANGE_STATUS_RESULT, OnChangeStatusResult)
-		MESSAGE_HANDLER_EX(FMG_MSG_ADDFREIND, OnSendAddFriendRequestResult)			//�Լ��Ӻ����Ƿ��ͳɹ�
-		MESSAGE_HANDLER_EX(FMG_MSG_RECVADDFRIENDREQUSET, OnRecvAddFriendRequest)		//�յ��Ӻ������֪ͨ
-		MESSAGE_HANDLER_EX(FMG_MSG_DELETEFRIEND, OnDeleteFriendResult)				//ɾ�����ѽ��
+		MESSAGE_HANDLER_EX(FMG_MSG_ADDFREIND, OnSendAddFriendRequestResult)			//自己加好友是否发送成功
+		MESSAGE_HANDLER_EX(FMG_MSG_RECVADDFRIENDREQUSET, OnRecvAddFriendRequest)		//收到加好友相关通知
+		MESSAGE_HANDLER_EX(FMG_MSG_DELETEFRIEND, OnDeleteFriendResult)				//删除好友结果
 
 		MESSAGE_HANDLER_EX(WM_TRAYICON_NOTIFY, OnTrayIconNotify)
-		MESSAGE_HANDLER_EX(WM_SHOW_BUDDYCHATDLG, OnShowOrCloseDlg)				//��ʾ��ر����������Ի���
+		MESSAGE_HANDLER_EX(WM_SHOW_BUDDYCHATDLG, OnShowOrCloseDlg)				//显示或关闭与好友聊天对话框
 		MESSAGE_HANDLER_EX(WM_SHOW_GROUPCHATDLG, OnShowOrCloseDlg)
 		MESSAGE_HANDLER_EX(WM_SHOW_SESSCHATDLG, OnShowOrCloseDlg)
 		MESSAGE_HANDLER_EX(WM_SHOW_SYSGROUPCHATDLG, OnShowOrCloseDlg)
@@ -202,132 +251,191 @@ public:
 		MESSAGE_HANDLER_EX(WM_CLOSE_BUDDYINFODLG, OnShowOrCloseDlg)
 		MESSAGE_HANDLER_EX(WM_CLOSE_GMEMBERINFODLG, OnShowOrCloseDlg)
 		MESSAGE_HANDLER_EX(WM_CLOSE_GROUPINFODLG, OnShowOrCloseDlg)
-		MESSAGE_HANDLER_EX(WM_CLOSE_MAINDLG, OnCloseDlg)						//�ر����Ի���
+		MESSAGE_HANDLER_EX(WM_CLOSE_MAINDLG, OnCloseDlg)						//关闭主对话框
 		MESSAGE_HANDLER_EX(WM_DEL_MSG_SENDER, OnDelMsgSender)
 		MESSAGE_HANDLER_EX(WM_CANCEL_FLASH, OnCancelFlash)
 
-		REFLECT_NOTIFICATIONS()													//��Ϣ����֪ͨ��
+		REFLECT_NOTIFICATIONS()													//消息反射通知宏
 	END_MSG_MAP()
 
 private:
 	BOOL OnInitDialog(CWindow wndFocus, LPARAM lInitParam);
 	void OnSysCommand(UINT nID, CPoint pt);
-	void OnMeasureItem(int nIDCtl, LPMEASUREITEMSTRUCT lpMeasureItemStruct);
-	void OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct);
-	void OnGetMinMaxInfo(LPMINMAXINFO lpMMI);
-	void OnLButtonDown(UINT nFlags, CPoint point);
 	void OnTimer(UINT_PTR nIDEvent);
 	void OnSize(UINT nType, CSize size);
 	void OnHotKey(int nHotKeyID, UINT uModifiers, UINT uVirtKey);
 	void OnClose();
 	void OnDestroy();
-	void OnAppAbout(UINT uNotifyCode, int nID, CWindow wndCtl);
 	LRESULT OnTrayIconNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);
 	void OnMenu_ShowMainPanel(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnMenu_LockPanel(UINT uNotifyCode, int nID, CWindow wndCtl);
 	void OnMenu_Exit(UINT uNotifyCode, int nID, CWindow wndCtl);
 	void OnMenu_Mute(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnBtn_Sign(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnBtn_UnlockPanel(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnBtn_ShowAddFriendDlg(UINT uNotifyCode, int nID, CWindow wndCtl);
 	void OnBtn_ShowSystemSettingDlg(UINT uNotifyCode, int nID, CWindow wndCtl);
-    void OnBtn_OpenMail(UINT uNotifyCode, int nID, CWindow wndCtl);  
+	// 打开新版网络设置窗 —— 主面板系统菜单"网络设置"项经 WM_COMMAND 转发到此。
+	void OnMenu_NetSettings(UINT uNotifyCode, int nID, CWindow wndCtl);
 	void OnBtn_ModifyPassword(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnBtn_MainMenu(UINT uNotifyCode, int nId, CWindow wndCtl);
 	void OnBtn_MultiChat(UINT uNotifyCode, int nId, CWindow wndCtl);
-	LRESULT OnTabCtrlDropDown(LPNMHDR pnmh);
-	LRESULT OnTabCtrlSelChange(LPNMHDR pnmh);
-	LRESULT OnBuddyListDblClk(LPNMHDR pnmh);
-	LRESULT OnBuddyListRButtonUp(LPNMHDR pnmh);
-    LRESULT OnBuddyListHover(LPNMHDR pnmh);   
-	LRESULT OnGroupListDblClk(LPNMHDR pnmh);
-	LRESULT OnGroupListRButtonUp(LPNMHDR pnmh);
-	LRESULT OnRecentListDblClk(LPNMHDR pnmh);
-	LRESULT OnRecentListRButtonUp(LPNMHDR pnmh);
 	
-	void OnRefreshBuddyList(UINT uNotifyCode, int nID, CWindow wndCtl);			// ˢ����ϵ���б�
-	void OnShowOnlineBuddyOnly(UINT uNotifyCode, int nID, CWindow wndCtl);		// ����ʾ���ߺ���
-	void OnMainMenu_About(UINT uNotifyCode, int nID, CWindow wndCtl);			// ���˵����ڲ˵����
-	void OnBtn_Cancel(UINT uNotifyCode, int nID, CWindow wndCtl);				// ��ȡ������ť(ȡ����¼)
-	void OnPic_Clicked_Head(UINT uNotifyCode, int nID, CWindow wndCtl);			// ���û�ͷ�񡱿ؼ�
-	void OnMenu_BigHeadPic(UINT uNotifyCode, int nID, CWindow wndCtl);			// ����ͷ�񡱲˵�
-	void OnMenu_SmallHeadPic(UINT uNotifyCode, int nID, CWindow wndCtl);		// ��Сͷ�񡱲˵�
-	void OnMenu_StdHeadPic(UINT uNotifyCode, int nID, CWindow wndCtl);			// ����׼ͷ�񡱲˵�
-	void OnMenu_ShowBigHeadPicInSel(UINT uNotifyCode, int nID, CWindow wndCtl);	// ��ѡ��ʱ��ʾ��ͷ�񡱲˵�
-	void OnEdit_Sign_KillFocus(UINT uNotifyCode, int nID, CWindow wndCtl);	// ������ǩ�����༭�ı���
-	void OnMenu_Status(UINT uNotifyCode, int nID, CWindow wndCtl);				// ���û�����״̬���˵�
-
-	void OnBuddyListAddTeam(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnBuddyListDeleteTeam(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnBuddyListModifyTeamName(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnMoveBuddyToTeam(UINT uNotifyCode, int nID, CWindow wndCtl);
+	void OnMainMenu_About(UINT uNotifyCode, int nID, CWindow wndCtl);			// 主菜单关于菜单点击
+	void OnMenu_Status(UINT uNotifyCode, int nID, CWindow wndCtl);				// “用户在线状态”菜单
 
 
-	void OnMenu_SendBuddyMessage(UINT uNotifyCode, int nID, CWindow wndCtl);	//�Ҽ��˵����ͼ�ʱ��Ϣ
-	void OnMenu_SendBuddyMessageFromRecentList(UINT uNotifyCode, int nID, CWindow wndCtl);	//�����ϵ���Ҽ��˵����ͼ�ʱ��Ϣ
-	void OnMenu_DeleteFriend(UINT uNotifyCode, int nID, CWindow wndCtl);		//�Ҽ��˵�ɾ������
-	void OnClearAllRecentList(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnDeleteRecentItem(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnMenu_ViewBuddyInfo(UINT uNotifyCode, int nID, CWindow wndCtl);		//�Ҽ��˵��鿴��������
-	void OnMenu_ViewBuddyInfoFromRecentList(UINT uNotifyCode, int nID, CWindow wndCtl);
-    void OnMenu_ModifyBuddyMarkName(UINT uNotifyCode, int nID, CWindow wndCtl);		//�Ҽ��˵��޸ĺ��ѱ�ע����
 
-	void OnMenu_SendGroupMessage(UINT uNotifyCode, int nID, CWindow wndCtl);	
-	void OnMenu_ViewGroupInfo(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnMenu_ExitGroup(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnMenu_CreateNewGroup(UINT uNotifyCode, int nID, CWindow wndCtl);
 
-	void OnMenu_ShowNameChoice(UINT uNotifyCode, int nID, CWindow wndCtl);		//������ʾ�����Ӳ˵�
+
 
 	void CloseDialog(int nVal);
 	void OnFindBtn(UINT uNotifyCode, int nID, CWindow wndCtl);
 
-	BOOL InitTopToolBar();		// ��ʼ��Top������
-	BOOL InitBottomToolBar();	// ��ʼ��Bottom������
-	BOOL InitTabCtrl();			// ��ʼ��Tab��
-	BOOL InitBuddyListCtrl();	// ��ʼ�������б��ؼ�
-	BOOL InitGroupListCtrl();	// ��ʼ��Ⱥ�б��ؼ�
-	BOOL InitRecentListCtrl();	// ��ʼ�������ϵ���б��ؼ�
 
-	BOOL InitUI();
-	void UninitUI();
 
-    //����true,��ʾ��¼�Ի����ߵ���������¼����;����false,��ʾֱ�ӹر��˵�¼�Ի���
+    //返回true,表示登录对话框走的是正常登录流程;返回false,表示直接关闭了登录对话框
 	bool StartLogin(BOOL bAutoLogin = FALSE);
 	void CloseAllDlg();
 
+	// 断开连接、关掉所有窗口、清空登录态并重新弹出登录窗 —— 用户主动登出(OnLogout)与
+	// 账号在别处登录被顶下线(OnV2Kickout)共用的收尾序列。调用方须跑在由 PostMessage
+	// 投递而来的干净调用栈上：本函数要销毁主面板、并进入登录窗的模态循环。
+	void ReturnToLoginWindow();
+
+	/**
+	 *  把历史登录账号列表写回 Bin\Users\LoginAccountList.dat。
+	 *  登录成功记下账号 / 姓名后、以及用户改了昵称后调用，使登录窗下次
+	 *  打开时能按账号显示对应的姓名。无返回值，写失败只记日志。
+	 */
+	void SaveLoginAccountListFile();
+
+	/**
+	 *  把当前登录账号的昵称同步进历史登录账号列表 —— 与列表里存的姓名
+	 *  不一致时才写入并落盘（用户刚改过昵称的情形）。当前账号不在列表里
+	 *  （尚未登录成功过）时什么都不做。
+	 */
+	void SyncNickNameToLoginAccountList();
+
     LRESULT OnNetError(UINT uMsg, WPARAM wParam, LPARAM lParam);    
-	LRESULT OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam);			// ��¼������Ϣ
-	LRESULT OnLogoutResult(UINT uMsg, WPARAM wParam, LPARAM lParam);		// ע��������Ϣ
-	LRESULT OnGoOffline(UINT uMsg, WPARAM wParam, LPARAM lParam);			// ����
-	LRESULT OnUpdateUserInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);		// �����û���Ϣ
-	LRESULT OnUpdateBuddyList(UINT uMsg, WPARAM wParam, LPARAM lParam);		// ���º����б���Ϣ
-	LRESULT OnUpdateGroupList(UINT uMsg, WPARAM wParam, LPARAM lParam);		// ����Ⱥ�б���Ϣ
-	LRESULT OnUpdateRecentList(UINT uMsg, WPARAM wParam, LPARAM lParam);	// ���������ϵ���б���Ϣ
-	LRESULT OnBuddyMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);			// ������Ϣ
-	LRESULT OnGroupMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);			// Ⱥ��Ϣ
-	LRESULT OnSessMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);				// ��ʱ�Ự��Ϣ
-	LRESULT OnStatusChangeMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);		// ����״̬�ı���Ϣ
-	LRESULT OnKickMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);				// ����������Ϣ
-    LRESULT OnScreenshotMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);		// ��Ļ��ͼ��Ϣ   
-	LRESULT OnSysGroupMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);			// Ⱥϵͳ��Ϣ
-	LRESULT OnUpdateBuddyNumber(UINT uMsg, WPARAM wParam, LPARAM lParam);	// ���º��Ѻ���
-	LRESULT OnUpdateGMemberNumber(UINT uMsg, WPARAM wParam, LPARAM lParam);	// ����Ⱥ��Ա����_
-	LRESULT OnUpdateGroupNumber(UINT uMsg, WPARAM wParam, LPARAM lParam);	// ����Ⱥ����
-	LRESULT OnUpdateBuddySign(UINT uMsg, WPARAM wParam, LPARAM lParam);		// ���º��Ѹ���ǩ��
-	LRESULT OnUpdateGMemberSign(UINT uMsg, WPARAM wParam, LPARAM lParam);	// ����Ⱥ��Ա����ǩ��
-	LRESULT OnUpdateBuddyInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);		// ���º�����Ϣ
-	LRESULT OnUpdateChatDlgOnlineStatus(UINT uMsg, WPARAM wParam, LPARAM lParam);	////�������촰���к��ѵ�����������״̬	
-	LRESULT OnUpdateGMemberInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);	// ����Ⱥ��Ա��Ϣ
-	LRESULT OnUpdateGroupInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);		// ����Ⱥ��Ϣ
-	LRESULT OnUpdateBuddyHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam);	// ���º���ͷ��ͼƬ
-	LRESULT OnUpdateGMemberHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam);// ����Ⱥ��Աͷ��ͼƬ
-	LRESULT OnUpdateGroupHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam);	// ����Ⱥͷ��ͼƬ
-	LRESULT OnChangeStatusResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// �ı�����״̬������Ϣ
-	LRESULT OnSendAddFriendRequestResult(UINT uMsg, WPARAM wParam, LPARAM lParam);//�Ӻ����������������ĳɰܽ��
-	LRESULT OnRecvAddFriendRequest(UINT uMsg, WPARAM wParam, LPARAM lParam);// �յ��Ӻ��ѵ�����
-	LRESULT OnDeleteFriendResult(UINT message, WPARAM wParam, LPARAM lParam);//ɾ�����ѽ��
-	LRESULT OnSelfStatusChange(UINT message, WPARAM wParam, LPARAM lParam); //�Լ��������ն�������֪ͨ
+	LRESULT OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 登录返回消息
+	LRESULT OnLogoutResult(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 注销返回消息
+	LRESULT OnGoOffline(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 下线
+	LRESULT OnUpdateUserInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 更新用户信息
+	LRESULT OnUpdateBuddyList(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 更新好友列表消息
+	LRESULT OnUpdateGroupList(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 更新群列表消息
+	LRESULT OnUpdateRecentList(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新最近联系人列表消息
+	LRESULT OnBuddyMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 好友消息
+	LRESULT OnV2Contacts(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 通讯录应答(lParam=net::ContactsResult*，处理后 delete)
+	LRESULT OnV2Conversations(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 会话列表应答(lParam=net::ConversationsResult*，处理后 delete)
+	LRESULT OnV2CreateGroupResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 建群应答(lParam=net::CreateGroupResponse*，处理后 delete)
+	LRESULT OnV2GroupInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);			// v2 群资料应答(lParam=net::GroupInfoResult*，处理后 delete)
+	LRESULT OnV2GroupMembers(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 群成员应答(lParam=net::GroupMembersResult*，处理后 delete)
+	LRESULT OnV2GroupWriteResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 群写操作通用应答(置顶/免打扰/改群名片/退群)：wParam=code，lParam=std::string* msg(处理后 delete)
+	// v2 收藏设置应答（cmd_set_favorite）。lParam 为堆上的 net::SetFavoriteResult*，
+	// 本方法负责 delete。转交主面板：成功只记日志，失败要按应答里回带的
+	// ctype/cid/favorite 把那一条的乐观更新回滚掉。
+	LRESULT OnV2SetFavoriteResult(UINT uMsg, WPARAM wParam, LPARAM lParam);
+	// v2 设置好友备注名应答（cmd_set_friend_remark）。lParam 为堆上的
+	// net::SetFriendRemarkResult*，本方法负责 delete。转交主面板：成功只记日志
+	// （乐观更新在发起时已生效），失败要按应答里回带的 userid 把那一个人的备注退回去。
+	LRESULT OnV2SetRemarkResult(UINT uMsg, WPARAM wParam, LPARAM lParam);
+	LRESULT OnV2GroupFiles(UINT uMsg, WPARAM wParam, LPARAM lParam);			// v2 群文件列表应答(lParam=net::GetGroupFilesResult*，处理后 delete)
+	LRESULT OnV2GroupFilesChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 群文件变更推送(lParam=net::GroupFilesChangedNotify*，处理后 delete)
+	LRESULT OnV2GroupFileUploadResult(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 群文件上传结果(lParam=net::GroupFileUploadResult*，处理后 delete)
+	LRESULT OnV2GroupFileDownloadResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 群文件下载结果(lParam=net::GroupFileDownloadResult*，处理后 delete)
+	LRESULT OnV2GroupFileUploadProgress(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 群文件上传进度(lParam=net::GroupFileUploadProgress*，处理后 delete)
+	LRESULT OnV2GroupFileDownloadProgress(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 群文件下载进度(lParam=net::GroupFileDownloadProgress*，处理后 delete)
+	LRESULT OnV2UserGroups(UINT uMsg, WPARAM wParam, LPARAM lParam);			// v2 我的群列表应答(lParam=net::UserGroupsResult*，处理后 delete)
+	LRESULT OnV2SyncMessages(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 历史消息应答(lParam=net::SyncMessagesResult*，处理后 delete)
+	LRESULT OnV2ChangePwdResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 修改密码应答(lParam=net::ChangePasswordResponse*，处理后 delete)
+	LRESULT OnV2UpdateProfileResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 更新资料应答-个性签名(lParam=net::UpdateProfileResponse*，处理后 delete)
+	LRESULT OnV2ChangeAvatarResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 修改头像应答(lParam=net::UpdateProfileResponse*，处理后 delete)
+	LRESULT OnV2AvatarUploadResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 头像图片上传结果(lParam=net::AvatarUploadResult*，处理后 delete)
+	LRESULT OnV2AvatarDownloadResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 头像图片下载结果(lParam=net::AvatarDownloadResult*，处理后 delete)
+	LRESULT OnV2UserInfoChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 联系人资料变更推送(lParam=net::UserInfoChangedNotify*，处理后 delete)
+	LRESULT OnChangeMyPresence(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 切换我的在线状态(wParam=v2 presence)：据连接态走 GoOffline/GoOnline/SendChangePresence
+	LRESULT OnLogout(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 登出(wParam/lParam 均为 0)：二次确认后断开三条连接、关掉所有子窗口、销毁主面板并重新弹出登录窗
+	LRESULT OnV2RecallResult(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 撤回消息应答(lParam=net::RecallMessageResponse*，处理后 delete)
+	LRESULT OnV2MessageRecalled(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 消息被撤回推送(lParam=net::MessageRecalledNotify*，处理后 delete)
+	LRESULT OnV2PinResult(UINT uMsg, WPARAM wParam, LPARAM lParam);				// v2 Pin 消息应答(lParam=net::PinMessageResponse*，处理后 delete)：仅失败时据 code 提示原因
+	LRESULT OnV2MessagePinned(UINT uMsg, WPARAM wParam, LPARAM lParam);			// v2 消息被 Pin / 取消 Pin 推送(lParam=net::MessagePinnedNotify*，处理后 delete)
+	LRESULT OnV2Announcements(UINT uMsg, WPARAM wParam, LPARAM lParam);			// v2 平台公告列表应答(lParam=net::AnnouncementsResult*，处理后 delete)：转给主面板落本地库并刷角标
+	LRESULT OnV2AnnouncementNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 平台公告新发布 / 被撤回推送(lParam=net::AnnouncementNotify*，处理后 delete)
+	LRESULT OnV2AnnMarkReadResult(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 平台公告已读上报应答(lParam=net::AnnounceMarkReadResult*，处理后 delete)：成功不动界面
+	LRESULT OnV2PinnedMessages(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 被 Pin 消息全集应答(lParam=net::PinnedMessagesResult*，处理后 delete)
+	LRESULT OnV2ChangePresenceResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 修改在线状态应答(lParam=net::ChangePresenceResponse*，处理后 delete)
+	LRESULT OnV2PresenceChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 好友在线状态变更推送(lParam=net::PresenceChangedNotify*，处理后 delete)
+	// v2 被踢下线推送(cmd_kickout)。wParam=被踢原因(balloonmain::KickoutReasonValue)，lParam=0，无堆负载。
+	// 典型场景：同一账号在另一台 PC 上登录，本端被服务端顶下线。处理动作与用户主动选"离线"
+	// 完全一致(停重连定时器、断连接、状态胶囊与托盘转离线)，额外多弹一条托盘气泡说明原因。
+	LRESULT OnV2Kickout(UINT uMsg, WPARAM wParam, LPARAM lParam);
+	// 本机网络由断开恢复（wParam/lParam 均为 0，无堆负载）。要不要趁机连回服务器须过
+	// balloonmain::ShouldAutoReconnect 这道守卫：用户主动离线、被踢下线时一律不连。
+	LRESULT OnNetworkResumed(UINT uMsg, WPARAM wParam, LPARAM lParam);
+	LRESULT OnV2ConversationChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 会话属性多端同步推送(lParam=net::ConversationChangedNotify*，处理后 delete)
+	LRESULT OnV2GroupOpResult(UINT uMsg, WPARAM wParam, LPARAM lParam);			// v2 群管理写操作应答(wParam=cmd 协议号, lParam=net::GroupOpResult*，处理后 delete)
+	LRESULT OnV2GroupJoinRequests(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 待审批加群申请列表应答(lParam=net::GroupJoinRequestsResult*，处理后 delete)
+	LRESULT OnV2SensitiveWords(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 群敏感词库应答(lParam=net::SensitiveWordsResult*，处理后 delete)
+	LRESULT OnV2GroupAnnouncements(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 群公告列表应答(lParam=net::GroupAnnouncementsResult*，处理后 delete)
+	LRESULT OnV2AnnouncementChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 群公告变更推送(lParam=net::GroupAnnouncementNotify*，处理后 delete)
+	LRESULT OnV2GroupMemberChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 群成员变动推送(lParam=net::GroupMemberChangedNotify*，处理后 delete)
+	LRESULT OnV2GroupInfoChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 群资料变更推送(lParam=net::GroupInfoChangedNotify*，处理后 delete)
+	LRESULT OnV2JoinGroupRequest(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 有人申请加群推送(lParam=net::GroupJoinRequestItem*，处理后 delete)
+	LRESULT OnV2RecvChatMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 单聊收到新消息(lParam=net::MessageNotify*，处理后 delete)
+	LRESULT OnV2SendChatAck(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 单聊发送回执(lParam=net::SendMessageResponse*，处理后 delete)
+	LRESULT OnV2RdInviteAck(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 远程桌面邀请应答(lParam=net::RDInviteResponse*，处理后 delete)
+	LRESULT OnV2RdInviteNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 远程桌面邀请推送(lParam=net::RDInviteNotify*，处理后 delete)
+	LRESULT OnV2RdRelayInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 远程桌面中转参数(lParam=net::RDRelayInfo*，处理后 delete)
+	LRESULT OnV2RdStateNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 远程桌面状态推送(lParam=net::RDStateNotify*，处理后 delete)
+	LRESULT OnV2CallInviteAck(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 音视频通话邀请应答(lParam=net::CallInviteResponse*，处理后 delete)
+	LRESULT OnV2CallInviteNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 音视频通话邀请推送(lParam=net::CallInviteNotify*，处理后 delete)
+	LRESULT OnV2CallSignaling(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 音视频通话中转参数(lParam=net::CallSignalingInfo*，处理后 delete)
+	LRESULT OnV2CallStateNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);
+	LRESULT OnV2CallSwitchMediaResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 切换通话媒体应答(lParam=net::CallSwitchMediaResponse*，处理后 delete)
+	LRESULT OnV2CallMediaChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);
+	LRESULT OnCallStopMedia(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 通话窗关窗请求停媒体会话(wParam/lParam 均为 0)		// v2 通话媒体已变更推送(lParam=net::CallMediaChangedNotify*，处理后 delete)	// v2 音视频通话状态推送(lParam=net::CallStateNotify*，处理后 delete)
+	LRESULT OnCallStartInvite(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 单聊窗发起语音通话(wParam=对端userid，lParam=堆 std::wstring* peerName，处理后 delete)
+	LRESULT OnCallStartVideoInvite(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 单聊窗发起视频通话(wParam=对端userid，lParam=堆 std::wstring* peerName，处理后 delete)
+	LRESULT OnCallRelayEvent(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 通话中转会话事件(wParam=call::CallRelayEvent 事件码，lParam=序号；无堆指针)
+	LRESULT OnRdStartInvite(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 聊天窗发起远程桌面(wParam=对端userid，lParam=堆 std::wstring* peerName，处理后 delete)
+	LRESULT OnRdControlledEndByUser(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 被控端用户点受控条"结束控制"：发 cmd_rd_close + 停推流 + 关受控条(无参)
+	LRESULT OnV2ImageSendProgress(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 发图上传进度(lParam=net::ImageSendProgress*，处理后 delete)
+	LRESULT OnV2ImageSendResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 发图最终结果(lParam=net::ImageSendResult*，处理后 delete)
+	LRESULT OnV2ImageDownloadResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 收图下载结果(lParam=net::ImageDownloadResult*，处理后 delete)
+	LRESULT OnV2FileSendProgress(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 发文件上传进度(lParam=net::FileSendProgress*，处理后 delete)
+	LRESULT OnV2FileSendResult(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 发文件最终结果(lParam=net::FileSendResult*，处理后 delete)
+	LRESULT OnV2FileDownloadProgress(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 收文件下载进度(lParam=net::FileDownloadProgress*，处理后 delete)
+	LRESULT OnV2FileDownloadResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 收文件下载结果(lParam=net::FileDownloadResult*，处理后 delete)
+	LRESULT OnV2FileTransferAck(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 对方收取本端所发文件的状态(lParam=net::FileTransferAckNotify*，处理后 delete)
+	LRESULT OnV2TypingNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);			// v2 对端正在/停止输入(lParam=net::TypingNotify*，处理后 delete)
+	// v2 有应在托盘闪烁的新消息：把发送方记入 m_trayFlash 并启动托盘头像闪烁。
+	// lParam=堆上 TrayFlashData*（处理后 delete）。
+	LRESULT OnV2TrayFlash(UINT uMsg, WPARAM wParam, LPARAM lParam);
+	// v2 某会话已读：从 m_trayFlash 移除该会话；若再无未读则停闪并恢复默认托盘图标。
+	// wParam=ctype（1单聊 2群聊），lParam=堆上 long long* cid（处理后 delete）。
+	LRESULT OnV2TrayClear(UINT uMsg, WPARAM wParam, LPARAM lParam);
+	// 主面板最小化隐藏到托盘后弹一次气泡提示，告诉用户此后从托盘图标唤回。
+	// 由主面板判定"该账号是否已提示过"，本处收到即弹；无参。
+	LRESULT OnTrayMinimizeTip(UINT uMsg, WPARAM wParam, LPARAM lParam);
+	LRESULT OnGroupMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 群消息
+	LRESULT OnSessMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);				// 临时会话消息
+	LRESULT OnStatusChangeMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 好友状态改变消息
+	LRESULT OnKickMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);				// 被踢下线消息
+    LRESULT OnScreenshotMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 屏幕截图消息   
+	LRESULT OnSysGroupMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 群系统消息
+	LRESULT OnUpdateBuddyNumber(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新好友号码
+	LRESULT OnUpdateGMemberNumber(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新群成员号码_
+	LRESULT OnUpdateGroupNumber(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新群号码
+	LRESULT OnUpdateBuddySign(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 更新好友个性签名
+	LRESULT OnUpdateGMemberSign(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新群成员个性签名
+	LRESULT OnUpdateBuddyInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 更新好友信息
+	LRESULT OnUpdateChatDlgOnlineStatus(UINT uMsg, WPARAM wParam, LPARAM lParam);	////更新聊天窗口中好友的在线与离线状态	
+	LRESULT OnUpdateGMemberInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新群成员信息
+	LRESULT OnUpdateGroupInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 更新群信息
+	LRESULT OnUpdateBuddyHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新好友头像图片
+	LRESULT OnUpdateGMemberHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam);// 更新群成员头像图片
+	LRESULT OnUpdateGroupHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新群头像图片
+	LRESULT OnChangeStatusResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 改变在线状态返回消息
+	LRESULT OnSendAddFriendRequestResult(UINT uMsg, WPARAM wParam, LPARAM lParam);//加好友向服务器发请求的成败结果
+	LRESULT OnRecvAddFriendRequest(UINT uMsg, WPARAM wParam, LPARAM lParam);// 收到加好友的请求
+	LRESULT OnDeleteFriendResult(UINT message, WPARAM wParam, LPARAM lParam);//删除好友结果
+	LRESULT OnSelfStatusChange(UINT message, WPARAM wParam, LPARAM lParam); //自己在另外终端上下线通知
 	
 	LRESULT OnCloseDlg(UINT uMsg, WPARAM wParam, LPARAM lParam);
 	LRESULT OnShowOrCloseDlg(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -341,99 +449,176 @@ private:
 	void ShowSysGroupChatDlg(UINT nGroupCode, BOOL bShow);
 	void ShowBuddyInfoDlg(UINT nUTalkUin, BOOL bShow);
 																	 
-	void ShowUserInfoDlg(UINT nUTalkUin, BOOL bShow);						// ��ʾ���߹رո�����Ϣ�Ի���
+	void ShowUserInfoDlg(UINT nUTalkUin, BOOL bShow);						// 显示或者关闭个人信息对话框
 	void ShowGMemberInfoDlg(UINT nGroupCode, UINT nUTalkUin, BOOL bShow);
 	void ShowGroupInfoDlg(UINT nGroupCode, BOOL bShow);
 
-	void NotifyBuddyChatDlg(UINT nUTalkUin, UINT uMsg);						// ֪ͨ�������촰�ڸ���
-	void NotifyGroupChatDlg(UINT nGroupCode,								// ֪ͨȺ���촰�ڸ���
+	void NotifyBuddyChatDlg(UINT nUTalkUin, UINT uMsg);						// 通知好友聊天窗口更新
+	void NotifyGroupChatDlg(UINT nGroupCode,								// 通知群聊天窗口更新
 		UINT uMsg, WPARAM wParam, LPARAM lParam);
-	void NotifySessChatDlg(UINT nUTalkUin, UINT uMsg);						// ֪ͨ��ʱ�Ự���촰�ڸ���
-	void NotifyBuddyInfoDlg(UINT nUTalkUin, UINT uMsg);						// ֪ͨ������Ϣ���ڸ���
-	void NotifyGMemberInfoDlg(UINT nGroupCode, UINT nUTalkUin, UINT uMsg);	// ֪ͨȺ��Ա��Ϣ���ڸ���
-	void NotifyGroupInfoDlg(UINT nGroupCode, UINT uMsg);					// ֪ͨȺ��Ϣ���ڸ���
+	void NotifySessChatDlg(UINT nUTalkUin, UINT uMsg);						// 通知临时会话聊天窗口更新
+	void NotifyBuddyInfoDlg(UINT nUTalkUin, UINT uMsg);						// 通知好友信息窗口更新
+	void NotifyGMemberInfoDlg(UINT nGroupCode, UINT nUTalkUin, UINT uMsg);	// 通知群成员信息窗口更新
+	void NotifyGroupInfoDlg(UINT nGroupCode, UINT uMsg);					// 通知群信息窗口更新
 
-	void UpdateBuddyTreeCtrl(UINT uAccountID=0);
-	void BuddyListSortOnStaus();											//�������ߺ�����״̬���к����б�
-	void UpdateGroupTreeCtrl();
-	void UpdateRecentTreeCtrl();
+	void BuddyListSortOnStaus();											//根据在线和离线状态排列好友列表
 
 	void OnTrayIcon_LButtunUp();
 	void OnTrayIcon_RButtunUp();
 	void OnTrayIcon_MouseHover();
 	void OnTrayIcon_MouseLeave();
 
-	BOOL LoadAppIcon(long nStatus);
+	// 取"我当前的在线状态"（v2 presence_type，取值见 UserSessionData.h 的 MyPresenceValue）。
+	// 托盘右键菜单据它标出当前所处的那一项，托盘悬停提示据它显示状态文字。
+	//
+	// 主面板在时<u>以状态胶囊为准</u>：胶囊是当前状态在界面上的唯一呈现，托盘跟它取同一个
+	// 值，两处才不会一个说在线、一个说离线。
+	//
+	// 主面板不在（未登录 / 已销毁）时才退回按登录态判断。这里<u>不能</u>直接用
+	// CIUSocket::GetRecordOnlineStatus()：那个字段记的是"期望在线状态"，用户点"离线"走的
+	// 是 GoOffline()，它并不会把该字段改成 0（见 OnChangeMyPresence 与
+	// CFlamingoClient::GoOffline），所以单看它永远取不到"离线"。
+	//
+	// 返回：kMyPresenceOffline / kMyPresenceOnline / kMyPresenceAway / kMyPresenceBusy 之一。
+	int  GetCurrentPresence();
+
+	// 拼托盘图标的鼠标悬停提示文字："昵称 / 账号 / 当前在线状态"三行，状态取
+	// GetCurrentPresence()。返回值为拼好的字符串（值语义）。
+	CString BuildTrayTipText();
+
+	// 把托盘图标恢复成默认应用图标，并把它的悬停提示刷成 BuildTrayTipText() 的内容。
+	// 供"新消息闪烁结束"等几处恢复默认图标的地方复用（原先各处各写一份 Format，且都把
+	// 状态写死成"在线"）。无参数、无返回值；副作用是调用 m_TrayIcon.ModifyIcon。
+	//
+	// 注意：本方法<u>会覆盖当前托盘图标</u>。只想刷新提示文字（例如用户切换了在线状态）
+	// 时改用 m_TrayIcon.ModifyTip(BuildTrayTipText())，那条路不动图标，托盘正闪新消息
+	// 头像时也不会把闪烁打断。
+	void UpdateTrayIconTip();
+
+	// 与聊天服务器的连接是否已就绪（已连上且完成登录）。离线判定的另一半输入 ——
+	// 只看在线状态不够：用户选的是"在线"但连接还没建好（正从离线恢复 / 正在断线重连）
+	// 时，需要服务器的操作同样必须拦住。
+	bool IsServerConnected() const;
+
+	// 取当前界面连接态（在线 / 正在连接 / 离线），由在线状态与真实连接状态共同推导。
+	// 托盘图标、聊天窗提示条、各处功能门禁都据它决定表现。
+	// 返回值取值见 OnlineCapability.h 的 ConnectionUiState。
+	int  GetConnectionUiState();
+
+	// 把当前连接态（在线 / 正在连接 / 离线）广播给主面板与所有已打开的聊天窗，
+	// 由它们决定输入区是否置灰、顶部提示条显示什么。
+	// 状态发生任何变化时都要调用：主动离线、从离线恢复在线、登录成功、登录失败、掉线。
+	void BroadcastConnectionState();
+
+	// "从离线恢复在线"失败时的收尾：把上层状态、状态胶囊、托盘图标、界面门禁全部拨回
+	// 离线态，等同于用户从没点过恢复在线，然后按需提示。
+	//
+	// 与首次登录失败的区别在于<u>不弹登录窗</u>：用户只是想从离线切回在线，主面板还开着、
+	// 账号也还登录着，失败就该原地留在离线态让他稍后再试，而不是被踢回登录界面。
+	//   lpszReason：给用户看的失败原因；传 NULL 表示不弹提示（例如用户自己取消的）。
+	void ResumeOnlineFailed(LPCTSTR lpszReason);
+
+	// 把"当前应可见的主界面"唤到前台：登录前是登录窗 m_LoginDlg、登录后是
+	// 主面板 m_BalloonMainPanel。供托盘单击 / 双击、托盘菜单"打开主面板"复用。
+	// 关键点：窗口被最小化(iconic)时必须用 SW_RESTORE 还原，仅 SW_SHOW 还原不了。
+	void ShowLoginOrMainPanel();
+
+	// 按当前连接态加载托盘图标（真正在线才彩色，主动离线与连接未就绪都用灰色图标；
+	// 文件名由 OnlineCapability::GetTrayIconFileName 决定）。先销毁旧图标再加载，
+	// 成功返回 TRUE。
+	//   nConnUiState：界面连接态，取值见 OnlineCapability.h 的 ConnectionUiState。
+	BOOL LoadAppIcon(int nConnUiState);
 	void DestroyAppIcon();
+
+	// 按当前在线状态刷新系统托盘图标与提示文字（提示为"昵称（状态）"）。
+	// 登录成功、在线状态变化时调用，让托盘随状态显示对应图标。
+	void RefreshTrayIconForStatus();
 	BOOL LoadLoginIcon();
 	void DestroyLoginIcon();
 	BOOL LoadAddFriendIcon();
 	void DestroyAddFriendIcon();
 	void UpdateMsgIcon();
 
+	// 按 m_trayFlash 当前"最近一条"未读会话重建托盘闪烁图标 m_hMsgIcon —— 用
+	// monogram（头像首字 + 底色）按小图标尺寸生成 HICON。先销毁旧 m_hMsgIcon 再
+	// 重建；集合为空时把 m_hMsgIcon 置空。每次 PushUnread 或目标切换后调用，OnTimer
+	// 的闪烁分支据此在该头像与空白间切换。
+	void UpdateTrayFlashIcon();
+	// 停止托盘新消息闪烁：杀掉闪烁定时器、销毁 m_hMsgIcon、把托盘图标恢复成默认应用
+	// 图标（带"昵称 / 账号 / 在线"提示）。最后一条未读被读完、或注销时调用。
+	void StopTrayFlash();
+
+	// 托盘悬停未读提示浮窗的"选中会话行"回调跳板（userdata=CMainDlg this）。
+	static void OnTrayPopupPickConv(void* userdata, int ctype, long long cid);
+	// 打开托盘悬停提示里被点的会话：转交主面板 OpenConversation（其内部清未读 +
+	// 回投 FMG_MSG_TRAY_CLEAR 使托盘停闪）。
+	void OpenConvFromTrayPopup(int ctype, long long cid);
+
 	CString GetHeadPicFullName(UINT nGroupCode, UINT nUTalkUin);
 	void GetNumber(UINT nGroupCode, UINT nUTalkUin, UINT& nGroupNum, UINT& nUTalkNum);
 	HICON ExtractIcon(LPCTSTR lpszFileName);
 
-	void ShowPanel(BOOL bShow);												// ��ʾָ����庯��(bShow��TRUE��ʾ��ʾ����壬FALSE��ʾ��ʾ��¼���)
-	void ShowLockPanel();
 
-	long GetStatusFromMenuID(int nMenuID);									// �Ӳ˵�ID��ȡ��Ӧ��UTalk_STATUS
-	void StatusMenuBtn_SetIconPic(CSkinButton& btnStatus, long nStatus);	// ����ָ��״̬����״̬�˵���ť��ͼ��
+	long GetStatusFromMenuID(int nMenuID);									// 从菜单ID获取对应的UTalk_STATUS
 
-	void CreateEssentialDirectories();										//��¼�ɹ��Ժ󴴽������ļ���
+	void CreateEssentialDirectories();										//登录成功以后创建必需文件夹
 
-	void ShowAddFriendConfirmDlg();											//��ʾ�Ӻ�������Ի��� 
+	void ShowAddFriendConfirmDlg();											//显示加好友请求对话框 
 
-	BOOL InsertTeamMenuItem(CSkinMenu& popMenu);
 
-	void SaveCurrentLogonUserToFile();										//����ǰ��¼���˻����浽�ļ���
-	void DeleteCurrentUserFromFile();										//���ļ���ɾ����ǰ��¼���˻�
+	void SaveCurrentLogonUserToFile();										//将当前登录的账户保存到文件中
+	void DeleteCurrentUserFromFile();										//从文件中删除当前登录的账户
 
-	BOOL IsFilesTransferring();												//����Ի����Ƿ����ļ����ڽ��д���
+	BOOL IsFilesTransferring();												//聊天对话框是否有文件正在进行传输
 public:
-	BOOL m_bSideState;
 
 private:
 	CFlamingoClient			m_FMGClient;
 			
-	CSkinDialog				m_SkinDlg;										//����ܶԻ���
 	CLoginDlg				m_LoginDlg;
-	CFindFriendDlg*			m_pFindFriendDlg;								//���Һ��ѶԻ���
+	CBalloonMainPanel		m_BalloonMainPanel;								//登录后的新版 balloonui 主面板
+	CBalloonChatWindow		m_BalloonChatWindow;							//新版气泡式单聊窗口(调试入口预览用)
+	CBalloonGroupChatWindow	m_BalloonGroupChatWindow;						//新版气泡式群聊窗口(调试入口预览用)
+	CBalloonNetSettingsWindow	m_BalloonNetSettingsWindow;					//新版网络设置窗口(调试入口预览用)
+	CBalloonRegisterWindow	m_BalloonRegisterWindow;						//新版注册对话框(调试入口预览用)
+	CBalloonProfileWindow	m_BalloonProfileWindow;							//新版个人信息对话框(调试入口预览用)
+	CBalloonContactWindow	m_BalloonContactWindow;							//新版联系人资料对话框(调试入口预览用)
+	CBalloonGroupManageWindow	m_BalloonGroupManageWindow;					//新版群管理窗口(调试入口预览用)
+	CBalloonHistoryWindow		m_BalloonHistoryWindow;						//新版历史消息记录窗口(调试入口预览用)
+	CBalloonSystemSettingDlg	m_BalloonSystemSettingDlg;					//新版系统设置对话框(调试入口预览用)
+	CBalloonAboutDlg			m_BalloonAboutDlg;							//新版关于对话框(调试入口预览用)
+	balloonmain::CBalloonGroupInfoDlg	m_BalloonGroupInfoDlg;					//新版群资料对话框(调试入口 --groupinfo 预览用)
+	CBalloonImageViewerWindow	m_BalloonImageViewerWindow;					//新版聊天图片放大看图窗(调试入口预览用)
+	CRdSelfTestWindow			m_RdSelfTestWindow;							//远程桌面引擎自环测试窗(调试入口 --rdpselftest)
+	CBalloonRemoteDesktopDlg	m_rdDlg;									//远程桌面会话对话框(呼叫中/授权两用途,协调器持有)
+	CBalloonCallDlg				m_callDlg;									//音视频通话会话对话框(呼叫中/来电/通话中三态,协调器持有)
+	call::CallMediaSession		m_callMedia;								//通话中转会话(接通后连 imgserver 中转收发;第一期收发测试帧验证透传,第二期接音频管线)
+	int							m_callMediaType;							//当前/最近一次通话的媒体类型(net::call_media_audio/video);发起或接听时记下,signaling 回来时据此决定中转会话是否起视频
+	remotedesktop::RdControlledStreamer	m_rdStreamer;					//被控端推流器(本端=被控端时连中转抓屏推流)
+	CRdViewerWindow				m_rdViewer;									//控制端观看窗(本端=控制端时连中转收屏幕帧显示)
+	CRdControlledBar			m_rdControlledBar;							//被控端受控提示条(本端=被控端时屏幕顶部置顶提示"正在被控制"+结束按钮)
+	std::wstring				m_rdControlledPeerName;						//被控端记录的控制方昵称(授权时由 cmd_rd_invite_notify 带来,显示在受控条文案)
+	std::string					m_rdControlledSessionId;					//被控端记录的会话 id(用户主动结束时发 cmd_rd_close 用)
+	CFindFriendDlg*			m_pFindFriendDlg;								//查找好友对话框
 	CMsgTipDlg				m_MsgTipDlg;
+	// 托盘"新消息闪头像"状态机：记录哪些会话未读、最近一条（单击打开它）、闪烁状态。
+	// 由 v2 收消息回投的 FMG_MSG_TRAY_FLASH 填入、会话已读时移除；驱动 m_TrayIcon 的
+	// 头像闪烁与单击开窗。生命周期与本对话框一致。
+	balloonmain::CTrayFlashController	m_trayFlash;
+	// 托盘悬停弹出的未读消息提示浮窗（balloonui 重写，取代旧 SkinLib 版 m_MsgTipDlg）；
+	// 数据来自 m_trayFlash，点击行经 OpenConvFromTrayPopup 打开会话。
+	CTrayMsgTipPopup		m_trayMsgTipPopup;
 	CLogonUserInfoDlg       m_LogonUserInfoDlg;
 	CModifyPasswordDlg		m_ModifyPasswordDlg;
-	CMultiChatDlg			m_MultiChatDlg;									//Ⱥ����Ϣ����
-    CRemoteDesktopDlg*      m_pRemoteDesktopDlg;                            //Զ�����洰��
+	CMultiChatDlg			m_MultiChatDlg;									//群发消息窗口
+    CRemoteDesktopDlg*      m_pRemoteDesktopDlg;                            //远程桌面窗口
 
-	CSkinButton				m_btnMainMenu;
-	CSkinMenu				m_SkinMenu;										//���½Ǵ�ͷ��Ĳ˵�
-	CSkinButton				m_btnMultiChat;									//Ⱥ����ť
-	CSkinButton				m_btnFind;										//���Һ��Ѱ�ť
-	CSkinEdit				m_edtSign, m_edtSearch;
-	CSkinPictureBox			m_picHead;
-	
-	BOOL					m_bPicHeadPress;
-	CSkinStatic				m_staNickName;
-	CSkinButton				m_btnSign;
-
-	CSkinButton				m_btnMail;
-	
-	CSkinToolBar			m_tbTop,	m_tbBottom;
-	CSkinTabCtrl			m_TabCtrl;		
-	//CBuddyListCtrl			m_RecentListCtrl;
-	CRecentListCtrl			m_RecentListCtrl;
-	CBuddyListCtrl			m_BuddyListCtrl;
-	CBuddyListCtrl			m_GroupListCtrl;
-
-    CBuddyInfoFloatWnd      m_BuddyInfoFloatWnd;                //�����ں����б�������ʾ����ʾ����
 	
 
-	CSkinPictureBox			m_picLogining;
-	CSkinStatic				m_staUTalkNum;
-	CSkinStatic				m_staLogining;
-	CSkinButton				m_btnCancel;
-	CSkinButton				m_btnUnlock;									//������ť
+	
+
+	
+
 
 
 	std::map<UINT, CBuddyChatDlg*> m_mapBuddyChatDlg;
@@ -458,35 +643,36 @@ private:
 	HICON							m_hAddFriendIcon[2];
 	DWORD							m_dwLoginTimerId;
 	DWORD							m_dwMsgTimerId;
-	DWORD							m_dwAddFriendTimerId;					//�Ӻ���֪ͨ
-    DWORD                           m_dwReconnectTimerId;                   //����������ʱ��ID
-	//DWORD							m_dwExitAppTimerId;						//�������˳���ʱ��
+	DWORD							m_dwAddFriendTimerId;					//加好友通知
+    DWORD                           m_dwReconnectTimerId;                   //断线重连定时器ID
+	//DWORD							m_dwExitAppTimerId;						//检测程序退出计时器
 
-    bool                            m_bEnableReconnect;                     //�Ƿ��������
-    UINT                            m_uReconnectInterval;                   //����ʱ�������������0����λ����
+    bool                            m_bEnableReconnect;                     //是否断线重连
+    UINT                            m_uReconnectInterval;                   //重连时间间隔，必须大于0，单位毫秒
 
-    bool                            m_bAlreadySendReloginRequest;           //�����������Ƿ��Ѿ����͹���¼�����
+    // 被踢下线提示框是否正在显示。它是模态框、跑嵌套消息循环，期间托盘点击与重复的被踢
+    // 下线通知都要挡掉，否则会重入"回到登录界面"的收尾序列（见 OnV2Kickout）。
+    bool                            m_bKickoutNoticeShowing;
+
+    bool                            m_bAlreadySendReloginRequest;           //重连过程中是否已经发送过登录请求包
+    //本次登录是否由"从离线恢复在线"发起（用户在离线态下选了在线/离开/忙碌）。
+    //登录失败时 OnLoginResult 据它决定：恢复在线失败就退回离线态并提示，而不是像
+    //首次登录失败那样弹出登录窗把用户踢回登录界面。登录有结果（成功或失败）后复位。
+    //生命周期同本对话框。
+    bool                            m_bResumingOnline;
 
 	HICON							m_hDlgIcon, m_hDlgSmallIcon;
 	CLoginAccountList				m_LoginAccountList;
-	LOGIN_ACCOUNT_INFO				m_stAccountInfo;						//��ǰ����Ҫ��¼���˻���Ϣ
+	LOGIN_ACCOUNT_INFO				m_stAccountInfo;						//当前即将要登录的账户信息
 	CCascadeWinManager				m_CascadeWinManager;
 		
-	long							m_nYOffset;
-	long							m_bFold;
-	long							m_nBuddyListHeadPicStyle;				//�����б���ͷ����
-	BOOL							m_bShowBigHeadPicInSel;					//����Сͷ��ģʽʱ��ѡ����ʾ��ͷ��
-	BOOL							m_bPanelLocked;							//����崦������״̬
 
-	BOOL							m_bAlreadyLogin;				        //�Ƿ��Ѿ���¼��
+	BOOL							m_bAlreadyLogin;				        //是否已经登录过
 
-	HRGN							m_hHotRgn;
 
-	BOOL							m_bShowOnlineBuddyOnly;
 
 	CRect							m_rcTrayIconRect;
 
-	long							m_nCurSelIndexInMainTab;		//�����Tabѡ��������
 
-    MAINPANEL_STATUS                m_nMainPanelStatus;             //�����״̬
+    MAINPANEL_STATUS                m_nMainPanelStatus;             //主面板状态
 };

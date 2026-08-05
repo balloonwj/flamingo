@@ -1,0 +1,99 @@
+/**
+ *  ContactRemarkModel.cpp
+ *
+ *  联系人显示名解析与备注提交判定的实现。只做字符串运算（trim / 比较 / 长度），
+ *  不碰窗口、不碰网络，与 FlamingoUnit 测试工程共用、不 include stdafx.h，
+ *  PCH 设 NotUsing。
+ *
+ *  balloonwj@qq.com   2026-08-05
+ */
+#include "ContactRemarkModel.h"
+
+namespace balloonmain {
+
+namespace {
+
+//取 trim 后非空的那一个；s 去掉首尾空白后为空则返回 false。
+//服务端下发的昵称有可能是几个空格，直接判 IsEmpty 会让这种值蒙混过关、
+//界面上显示成一片空白，故一律按 trim 后的结果判定。
+bool PickNonBlank(const CString& s, CString& out)
+{
+    CString t = s;
+    t.Trim();
+    if (t.IsEmpty())
+    {
+        return false;
+    }
+    out = t;
+    return true;
+}
+
+} // anonymous namespace
+
+CString ResolveContactDisplayName(const CString& remark,
+                                  const CString& nickname,
+                                  const CString& username,
+                                  UINT userid)
+{
+    CString name;
+
+    //备注优先——这正是"改备注"这个功能的意义所在：本人给对方起的名字要盖过昵称。
+    if (PickNonBlank(remark, name))
+    {
+        return name;
+    }
+    if (PickNonBlank(nickname, name))
+    {
+        return name;
+    }
+    if (PickNonBlank(username, name))
+    {
+        return name;
+    }
+
+    //三者都没有：拼一个能让人对上号的兜底名，总好过显示空白。
+    name.Format(_T("用户%u"), userid);
+    return name;
+}
+
+RemarkCommitDecision DecideRemarkCommit(const CString& edited,
+                                        const CString& current,
+                                        bool online,
+                                        int maxLen)
+{
+    RemarkCommitDecision d;
+    d.m_trimmed = edited;
+    d.m_trimmed.Trim();   // 去首尾空白后再比较 / 判长
+
+    //先看有没有变化：用户点进编辑框又点出来、一个字没改时，即便当前离线也不该
+    //弹"网络不可用"来烦他。current 也 trim 一遍，免得历史脏数据带的首尾空白
+    //让"没改"被误判成"改了"。
+    CString cur = current;
+    cur.Trim();
+    if (d.m_trimmed == cur)
+    {
+        d.m_action = kRemarkCommitNoChange;
+        return d;
+    }
+
+    //确有变化但发不出去：拦截，由调用方提示并把界面还原成原值——不还原的话
+    //用户会以为改成了，下次刷新又变回去。
+    if (!online)
+    {
+        d.m_action = kRemarkCommitOffline;
+        return d;
+    }
+
+    //超长：拦截。库里是 VARCHAR(32)，放过去会被悄悄截断。
+    if (d.m_trimmed.GetLength() > maxLen)
+    {
+        d.m_action = kRemarkCommitTooLong;
+        return d;
+    }
+
+    //确有变化、在线、未超长：发送。trim 后可能为空串，即"清除备注"，是合法提交。
+    d.m_action = kRemarkCommitSend;
+    return d;
+}
+
+} // namespace balloonmain

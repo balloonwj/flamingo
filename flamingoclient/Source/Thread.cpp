@@ -1,5 +1,5 @@
-/**
-* Ïß³ÌÀà»ùÀà, Thread.cpp
+ï»¿/**
+* çº¿ç¨‹ç±»åŸºç±», Thread.cpp
 * zhangyl 2017.03.13
 **/
 #include "stdafx.h"

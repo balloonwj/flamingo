@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "resource.h"
 #include "SkinLib/SkinLib.h"
@@ -7,7 +7,7 @@
 
 class CFlamingoClient;
 
-//²éÕÒ»¹ÓĞ²¢Ìí¼ÓºÃÓÑ¶Ô»°¿ò
+//æŸ¥æ‰¾è¿˜æœ‰å¹¶æ·»åŠ å¥½å‹å¯¹è¯æ¡†
 class CCreateNewGroupDlg : public CDialogImpl<CCreateNewGroupDlg>, public CMessageFilter
 {
 public:
@@ -16,7 +16,7 @@ public:
 
 	virtual BOOL PreTranslateMessage(MSG* pMsg);
 
-	//ÔÚ×ÊÔ´ÎÄ¼şÀïÃæÔö¼Ó¶Ô»°¿ò×ÊÔ´Ä£°å
+	//åœ¨èµ„æºæ–‡ä»¶é‡Œé¢å¢åŠ å¯¹è¯æ¡†èµ„æºæ¨¡æ¿
 	enum { IDD = IDD_CREATENEWGROUP };
 
 	BEGIN_MSG_MAP_EX(CCreateNewGroupDlg)

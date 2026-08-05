@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "GifImage.h"
 
 CGifImage::CGifImage(void)
@@ -417,7 +417,7 @@ BOOL CGifImage::ReadGifInfo()
 
 	for (int i = 0; i < (int)m_nFrameCnt; i++)
 	{
-		m_pFrameDelay[i] = ((long*)pPropertyItem->value)[i]* 10;	// Ö¡ÇĞ»»ÑÓ³ÙÊ±¼ä£¬ÒÔ1/100ÃëÎªµ¥Î»
+		m_pFrameDelay[i] = ((long*)pPropertyItem->value)[i]* 10;	// å¸§åˆ‡æ¢å»¶è¿Ÿæ—¶é—´ï¼Œä»¥1/100ç§’ä¸ºå•ä½
 		if (m_pFrameDelay[i] < 100)
 			m_pFrameDelay[i] = 100;
 	}

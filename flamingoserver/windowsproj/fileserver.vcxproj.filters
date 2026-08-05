@@ -13,6 +13,9 @@
     <Filter Include="utils">
       <UniqueIdentifier>{84f3d3f1-22cb-4172-b155-a4a704aef0c0}</UniqueIdentifier>
     </Filter>
+    <Filter Include="jsoncpp">
+      <UniqueIdentifier>{6b2f1d83-9c4a-4e07-bb18-2a7d5e3f9061}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\net\Acceptor.cpp">
@@ -116,6 +119,21 @@
     </ClCompile>
     <ClCompile Include="..\net\ByteBuffer.cpp">
       <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\FrameCodec.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\FileToken.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp">
+      <Filter>jsoncpp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\jsoncpp1.9.0\json_value.cpp">
+      <Filter>jsoncpp</Filter>
+    </ClCompile>
+    <ClCompile Include="..\jsoncpp1.9.0\json_writer.cpp">
+      <Filter>jsoncpp</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -235,6 +253,15 @@
     </ClInclude>
     <ClInclude Include="..\net\ByteBuffer.h">
       <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\FrameCodec.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\Protocol.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\FileToken.h">
+      <Filter>utils</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

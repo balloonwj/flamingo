@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "MsgTipDlg.h"
 #include "UserSessionData.h"
 #include "FlamingoClient.h"
@@ -21,9 +21,9 @@ CMsgTipDlg::~CMsgTipDlg(void)
 
 BOOL CMsgTipDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 {
-	InitCtrls();			// ³õÊ¼»¯¿Ø¼þ
-	SetDlgAutoSize();		// ×Ô¶¯µ÷Õû¶Ô»°¿ò´óÐ¡
-	SetCtrlsAutoSize();		// ×Ô¶¯µ÷Õû¿Ø¼þ´óÐ¡
+	InitCtrls();			// åˆå§‹åŒ–æŽ§ä»¶
+	SetDlgAutoSize();		// è‡ªåŠ¨è°ƒæ•´å¯¹è¯æ¡†å¤§å°
+	SetCtrlsAutoSize();		// è‡ªåŠ¨è°ƒæ•´æŽ§ä»¶å¤§å°
 
 	ModifyStyleEx(WS_EX_APPWINDOW, WS_EX_TOOLWINDOW|WS_EX_NOACTIVATE);
 
@@ -89,7 +89,7 @@ void CMsgTipDlg::OnDestroy()
 {
 	SetMsgHandled(FALSE);
 
-	UnInitCtrls();			// ·´³õÊ¼»¯¿Ø¼þ
+	UnInitCtrls();			// ååˆå§‹åŒ–æŽ§ä»¶
 
 	if (m_dwTimerId != NULL)
 	{
@@ -173,14 +173,14 @@ LRESULT CMsgTipDlg::OnList_ItemChange(LPNMHDR pnmh)
 	return 0;
 }
 
-// ¡°È¡ÏûÉÁË¸¡±³¬Á´½Ó¿Ø¼þ
+// â€œå–æ¶ˆé—ªçƒâ€è¶…é“¾æŽ¥æŽ§ä»¶
 void CMsgTipDlg::OnLnk_CancelFlash(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	::PostMessage(m_hMainDlg, WM_CANCEL_FLASH, 0, 0);
 	//SendMessage(WM_CLOSE);
 }
 
-// ¡°ÏÔÊ¾È«²¿¡±³¬Á´½Ó¿Ø¼þ
+// â€œæ˜¾ç¤ºå…¨éƒ¨â€è¶…é“¾æŽ¥æŽ§ä»¶
 void CMsgTipDlg::OnLnk_ShowAll(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	int nCount = m_ListCtrl.GetItemCount();
@@ -265,8 +265,8 @@ void CMsgTipDlg::AddMsgSender(long nType, UINT nSenderId)
 	}
 	else
 	{
-		SetDlgAutoSize();		// ×Ô¶¯µ÷Õû¶Ô»°¿ò´óÐ¡
-		SetCtrlsAutoSize();		// ×Ô¶¯µ÷Õû¿Ø¼þ´óÐ¡
+		SetDlgAutoSize();		// è‡ªåŠ¨è°ƒæ•´å¯¹è¯æ¡†å¤§å°
+		SetCtrlsAutoSize();		// è‡ªåŠ¨è°ƒæ•´æŽ§ä»¶å¤§å°
 		_AddMsgSender(0, lpMsgSender);
 	}
 }
@@ -276,15 +276,15 @@ void CMsgTipDlg::DelMsgSender(long nType, UINT nSenderId)
 	int nItemIndex = FindMsgSender(nType, nSenderId);
 	if (nItemIndex != -1)
 		m_ListCtrl.DeleteItem(nItemIndex);
-	SetDlgAutoSize();	// ×Ô¶¯µ÷Õû¶Ô»°¿ò´óÐ¡
-	SetCtrlsAutoSize();		// ×Ô¶¯µ÷Õû¿Ø¼þ´óÐ¡
+	SetDlgAutoSize();	// è‡ªåŠ¨è°ƒæ•´å¯¹è¯æ¡†å¤§å°
+	SetCtrlsAutoSize();		// è‡ªåŠ¨è°ƒæ•´æŽ§ä»¶å¤§å°
 }
 
-// ³õÊ¼»¯¿Ø¼þ
+// åˆå§‹åŒ–æŽ§ä»¶
 BOOL CMsgTipDlg::InitCtrls()
 {
 	m_SkinDlg.SubclassWindow(m_hWnd);
-	tstring strFileName = Hootina::CPath::GetAppPath() + _T("Image\\MsgTipBg.png");	// ¼ÓÔØ±³¾°Í¼Æ¬
+	tstring strFileName = Hootina::CPath::GetAppPath() + _T("Image\\MsgTipBg.png");	// åŠ è½½èƒŒæ™¯å›¾ç‰‡
 	m_SkinDlg.SetBgPic(strFileName.c_str(), CRect(8,28,8,8));
 
 	HDC hDlgBgDC = m_SkinDlg.GetBgDC();
@@ -296,7 +296,7 @@ BOOL CMsgTipDlg::InitCtrls()
 	m_lnkCancelFlash.SetLinkColor(RGB(0,114,193));
 	m_lnkCancelFlash.SetHoverLinkColor(RGB(0,114,193));
 	m_lnkCancelFlash.SetVisitedLinkColor(RGB(0,114,193));
-	m_lnkCancelFlash.SetLabel(_T("È¡ÏûÉÁË¸"));
+	m_lnkCancelFlash.SetLabel(_T("å–æ¶ˆé—ªçƒ"));
 	m_lnkCancelFlash.SetHoverFont(hFont);
 
 	m_lnkShowAll.SubclassWindow(GetDlgItem(ID_LINK_SHOW_ALL));
@@ -304,7 +304,7 @@ BOOL CMsgTipDlg::InitCtrls()
 	m_lnkShowAll.SetLinkColor(RGB(0,114,193));
 	m_lnkShowAll.SetHoverLinkColor(RGB(0,114,193));
 	m_lnkShowAll.SetVisitedLinkColor(RGB(0,114,193));
-	m_lnkShowAll.SetLabel(_T("²é¿´È«²¿"));
+	m_lnkShowAll.SetLabel(_T("æŸ¥çœ‹å…¨éƒ¨"));
 	m_lnkShowAll.SetHoverFont(hFont);
 
 	m_ListCtrl.Create(m_hWnd, CRect(0,0,1,1), NULL, 
@@ -316,11 +316,11 @@ BOOL CMsgTipDlg::InitCtrls()
 	m_ListCtrl.SetHeadVisible(FALSE);
 	m_ListCtrl.SetItemImageSize(16, 16);
 
-//	m_ListCtrl.AddColumn(_T("¿Õ¸ñ"), NULL, DT_LEFT, 7);
-	m_ListCtrl.AddColumn(_T("Í¼±ê"), NULL, DT_LEFT, 30);
-	m_ListCtrl.AddColumn(_T("·¢ËÍÕß"), NULL, DT_LEFT, 136);
-	m_ListCtrl.AddColumn(_T("ÏûÏ¢Êý"), NULL, DT_RIGHT, 38);
-	m_ListCtrl.AddColumn(_T("ÀàÐÍ"), NULL, DT_RIGHT, 0);
+//	m_ListCtrl.AddColumn(_T("ç©ºæ ¼"), NULL, DT_LEFT, 7);
+	m_ListCtrl.AddColumn(_T("å›¾æ ‡"), NULL, DT_LEFT, 30);
+	m_ListCtrl.AddColumn(_T("å‘é€è€…"), NULL, DT_LEFT, 136);
+	m_ListCtrl.AddColumn(_T("æ¶ˆæ¯æ•°"), NULL, DT_RIGHT, 38);
+	m_ListCtrl.AddColumn(_T("ç±»åž‹"), NULL, DT_RIGHT, 0);
 
 	m_ListCtrl.DeleteAllItems();
 	if (m_lpFMGClient != NULL)
@@ -343,7 +343,7 @@ BOOL CMsgTipDlg::InitCtrls()
 	return TRUE;
 }
 
-// ·´³õÊ¼»¯¿Ø¼þ
+// ååˆå§‹åŒ–æŽ§ä»¶
 BOOL CMsgTipDlg::UnInitCtrls()
 {
 	if (m_ListCtrl.IsWindow())
@@ -358,7 +358,7 @@ BOOL CMsgTipDlg::UnInitCtrls()
 	return TRUE;
 }
 
-// ×Ô¶¯µ÷Õû¶Ô»°¿ò´óÐ¡
+// è‡ªåŠ¨è°ƒæ•´å¯¹è¯æ¡†å¤§å°
 void CMsgTipDlg::SetDlgAutoSize()
 {
 	int nMsgSenderCnt = 0;
@@ -382,28 +382,28 @@ void CMsgTipDlg::SetDlgAutoSize()
 
 	int nLeft, nTop;
 
-	if (rcTrayWnd.top == rcTrayWnd.left && rcTrayWnd.bottom > rcTrayWnd.right)	// ×ó±ß
+	if (rcTrayWnd.top == rcTrayWnd.left && rcTrayWnd.bottom > rcTrayWnd.right)	// å·¦è¾¹
 	{
 		nLeft = rcTrayWnd.right + 2;
 		nTop = m_rcTrayIcon.top - (cyDlg - m_rcTrayIcon.Width()) / 2;
 		if (nTop + cyDlg > cyScreen)
 			nTop = cyScreen - cyDlg;
 	}
-	else if (rcTrayWnd.top == rcTrayWnd.left && rcTrayWnd.bottom < rcTrayWnd.right)	// ÉÏ±ß
+	else if (rcTrayWnd.top == rcTrayWnd.left && rcTrayWnd.bottom < rcTrayWnd.right)	// ä¸Šè¾¹
 	{
 		nLeft = m_rcTrayIcon.left - (cxDlg - m_rcTrayIcon.Width()) / 2;
 		nTop = rcTrayWnd.bottom + 2;
 		if (nLeft + cxDlg > cxScreen)
 			nLeft = cxScreen - cxDlg;
 	}
-	else if (rcTrayWnd.top > rcTrayWnd.left)	// ÏÂ±ß
+	else if (rcTrayWnd.top > rcTrayWnd.left)	// ä¸‹è¾¹
 	{
 		nLeft = m_rcTrayIcon.left - (cxDlg - m_rcTrayIcon.Width()) / 2;
 		nTop = rcTrayWnd.top - cyDlg - 2;
 		if (nLeft + cxDlg > cxScreen)
 			nLeft = cxScreen - cxDlg;
 	}
-	else	// ÓÒ±ß
+	else	// å³è¾¹
 	{
 		nLeft = rcTrayWnd.left - cxDlg - 2;
 		nTop = m_rcTrayIcon.top - (cyDlg - m_rcTrayIcon.Width()) / 2;
@@ -415,7 +415,7 @@ void CMsgTipDlg::SetDlgAutoSize()
 	Invalidate();
 }
 
-// ×Ô¶¯µ÷Õû¿Ø¼þ´óÐ¡
+// è‡ªåŠ¨è°ƒæ•´æŽ§ä»¶å¤§å°
 void CMsgTipDlg::SetCtrlsAutoSize()
 {
 	CRect rcClient;
@@ -558,11 +558,11 @@ tstring CMsgTipDlg::GetHeadPicFullName(UINT nGroupCode, UINT nUTalkUin)
 	UINT nGroupNum, nUTalkNum;
 	GetNumber(nGroupCode, nUTalkUin, nGroupNum, nUTalkNum);
 
-	if (nGroupCode != 0 && nUTalkUin != 0)	// Èº³ÉÔ±
+	if (nGroupCode != 0 && nUTalkUin != 0)	// ç¾¤æˆå‘˜
 		return m_lpFMGClient->GetSessHeadPicFullName(nUTalkNum).c_str();
-	else if (nGroupCode != 0)			// Èº
+	else if (nGroupCode != 0)			// ç¾¤
 		return m_lpFMGClient->GetGroupHeadPicFullName(nGroupNum).c_str();
-	else								// ºÃÓÑ
+	else								// å¥½å‹
 		return m_lpFMGClient->GetBuddyHeadPicFullName(nUTalkNum).c_str();
 }
 

@@ -1,4 +1,4 @@
-#include "stdafx.h"
+Ôªø#include "stdafx.h"
 #include "MultiChatMemberSelectionDlg.h"
 #include "FlamingoClient.h"
 
@@ -14,7 +14,7 @@ CMultiChatMemberSelectionDlg::~CMultiChatMemberSelectionDlg()
 
 BOOL CMultiChatMemberSelectionDlg::PreTranslateMessage(MSG* pMsg)
 {
-	//÷ß≥÷Escπÿ±’∂‘ª∞øÚ
+	//ÊîØÊåÅEscÂÖ≥Èó≠ÂØπËØùÊ°Ü
 	if (pMsg->hwnd==m_hWnd && pMsg->message==WM_KEYDOWN && pMsg->wParam==VK_ESCAPE)
  	{
 		PostMessage(WM_CLOSE, 0, 0);
@@ -46,7 +46,7 @@ BOOL CMultiChatMemberSelectionDlg::InitUI()
 	m_SkinDlg.SetBgPic(_T("DlgBg\\GeneralBg.png"));
 	m_SkinDlg.SetCloseSysBtnPic(_T("SysBtn\\btn_close_normal.png"), _T("SysBtn\\btn_close_highlight.png"), _T("SysBtn\\btn_close_down.png"));
 	m_SkinDlg.SubclassWindow(m_hWnd);
-	m_SkinDlg.SetTitleText(_T("œ˚œ¢»∫∑¢"));
+	m_SkinDlg.SetTitleText(_T("Ê∂àÊÅØÁæ§Âèë"));
 	m_SkinDlg.MoveWindow(0, 0, 640, 430, TRUE);
 
 	HDC hDlgBgDC = m_SkinDlg.GetBgDC();
@@ -56,8 +56,8 @@ BOOL CMultiChatMemberSelectionDlg::InitUI()
 
 	m_listSelectedBuddyList.Attach(GetDlgItem(IDC_LIST_SELECTED));
 	//m_listSelectedBuddyList.ModifyStyle(0, LVS_REPORT|LVS_EX_GRIDLINES);
-	m_listSelectedBuddyList.AddColumn(_T("Í«≥∆"), 0);
-	m_listSelectedBuddyList.AddColumn(_T("Í«≥∆’À∫≈"), 1);
+	m_listSelectedBuddyList.AddColumn(_T("ÊòµÁß∞"), 0);
+	m_listSelectedBuddyList.AddColumn(_T("ÊòµÁß∞Ë¥¶Âè∑"), 1);
 	m_listSelectedBuddyList.SetColumnWidth(0, 110);
 	m_listSelectedBuddyList.SetColumnWidth(1, 140);
 	//m_listSelectedBuddyList.ModifyStyleEx(0, LVS_EX_FULLROWSELECT);
@@ -110,7 +110,7 @@ void CMultiChatMemberSelectionDlg::InitBuddyList()
 		}
 	}
 	
-	hTreeItemRoot = m_treeBuddyList.InsertItem(_T("Œ“µƒ»∫◊È"), 0, 0, NULL, hTreeItemRoot);
+	hTreeItemRoot = m_treeBuddyList.InsertItem(_T("ÊàëÁöÑÁæ§ÁªÑ"), 0, 0, NULL, hTreeItemRoot);
 	m_treeBuddyList.SetItemData(hTreeItemRoot, (DWORD_PTR)(-1)); 
 	const std::vector<CGroupInfo*>& arrGroupInfo = m_pFMGClient->m_UserMgr.m_GroupList.m_arrGroupInfo;
 	nSize = arrGroupInfo.size();
@@ -120,7 +120,7 @@ void CMultiChatMemberSelectionDlg::InitBuddyList()
 		pGroupInfo = arrGroupInfo[i];
 		if(pGroupInfo==NULL || pGroupInfo->m_strName.empty())
 			continue;
-		strTemp.Format(_T("»∫-%s(%s)"), pGroupInfo->m_strName.c_str(), pGroupInfo->m_strAccount.c_str());
+		strTemp.Format(_T("Áæ§-%s(%s)"), pGroupInfo->m_strName.c_str(), pGroupInfo->m_strAccount.c_str());
 		hTreeItem = m_treeBuddyList.InsertItem(strTemp, 0, 0, hTreeItemRoot, NULL);
 		m_treeBuddyList.SetItemData(hTreeItem, (DWORD_PTR)pGroupInfo->m_nGroupCode);
 	}

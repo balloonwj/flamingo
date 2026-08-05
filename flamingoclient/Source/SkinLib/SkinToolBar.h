@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "SkinManager.h"
 
@@ -8,8 +8,8 @@
 #define STBI_STYLE_DROPDOWN			0x0008
 #define STBI_STYLE_WHOLEDROPDOWN	0x0080
 
-// STBI_STYLE_WHOLEDROPDOWN²»ÒªºÍSTBI_STYLE_CHECKÒ»ÆğÓÃ
-// STBI_STYLE_DROPDOWN²»ÒªºÍSTBI_STYLE_WHOLEDROPDOWNÒ»ÆğÓÃ
+// STBI_STYLE_WHOLEDROPDOWNä¸è¦å’ŒSTBI_STYLE_CHECKä¸€èµ·ç”¨
+// STBI_STYLE_DROPDOWNä¸è¦å’ŒSTBI_STYLE_WHOLEDROPDOWNä¸€èµ·ç”¨
 
 class CSkinToolBarItem
 {
@@ -64,17 +64,17 @@ public:
 	END_MSG_MAP()
 
 public:
-	void SetLeftTop(int nLeft, int nTop);							//ÉèÖÃToolbarÖĞ°´Å¥µÄ×ÜÌå×ó±ß¾àºÍÉÏ±ß¾à
-	void SetAutoSize(BOOL bAutoSize);								//×¢Òâ£ºÕâ¸ö½Ó¿Ú²»Æğ×÷ÓÃ£¬²»ÒªÊ¹ÓÃ£¡
-	void SetTransparent(BOOL bTransparent, HDC hBgDC);				//Èç¹ûÉèÖÃÁËÍ¸Ã÷£¬ÔòtoolbarÏÂÃæµÄ´°¿ÚÄÚÈİ»áÏÔÊ¾³öÀ´
-	BOOL SetBgPic(LPCTSTR lpszFileName, const CRect& rcNinePart);	//ÉèÖÃÕûÌå±³¾°Í¼Æ¬ºÍÖÜ±ßÔ²½Ç·¶Î§,±³¾°Í¼Æ¬ÔÚÉèÖÃÁË±³¾°Í¸Ã÷Ê±²»ÉúĞ§
-    void SetBgColor(COLORREF clrBgColor);                           //±³¾°ÑÕÉ«ÔÚÉèÖÃÁË±³¾°Í¸Ã÷Ê±²»ÉúĞ§
+	void SetLeftTop(int nLeft, int nTop);							//è®¾ç½®Toolbarä¸­æŒ‰é’®çš„æ€»ä½“å·¦è¾¹è·å’Œä¸Šè¾¹è·
+	void SetAutoSize(BOOL bAutoSize);								//æ³¨æ„ï¼šè¿™ä¸ªæ¥å£ä¸èµ·ä½œç”¨ï¼Œä¸è¦ä½¿ç”¨ï¼
+	void SetTransparent(BOOL bTransparent, HDC hBgDC);				//å¦‚æœè®¾ç½®äº†é€æ˜ï¼Œåˆ™toolbarä¸‹é¢çš„çª—å£å†…å®¹ä¼šæ˜¾ç¤ºå‡ºæ¥
+	BOOL SetBgPic(LPCTSTR lpszFileName, const CRect& rcNinePart);	//è®¾ç½®æ•´ä½“èƒŒæ™¯å›¾ç‰‡å’Œå‘¨è¾¹åœ†è§’èŒƒå›´,èƒŒæ™¯å›¾ç‰‡åœ¨è®¾ç½®äº†èƒŒæ™¯é€æ˜æ—¶ä¸ç”Ÿæ•ˆ
+    void SetBgColor(COLORREF clrBgColor);                           //èƒŒæ™¯é¢œè‰²åœ¨è®¾ç½®äº†èƒŒæ™¯é€æ˜æ—¶ä¸ç”Ÿæ•ˆ
 
 	int AddItem(int nID, DWORD dwStyle);
 	void SetItemStyle(int nIndex, int dwStyle);
 	void SetItemID(int nIndex, int nID);
 	void SetItemSize(int nIndex, int nWidth, int nHeight, int nLeftWidth = 0, int nRightWidth = 0);
-	void SetItemPadding(int nIndex, int nPadding);					//ÆäÊµÊÇÉèÖÃÏîµÄ×ó¼äÏ¶
+	void SetItemPadding(int nIndex, int nPadding);					//å…¶å®æ˜¯è®¾ç½®é¡¹çš„å·¦é—´éš™
 	void SetItemMargin(int nIndex, int nLeftMargin, int nRightMargin);
 	void SetItemText(int nIndex, LPCTSTR lpszText);
 	void SetItemToolTipText(int nIndex, LPCTSTR lpszText);
@@ -113,14 +113,14 @@ private:
 	void DrawItem(HDC hDC, int nIndex);
 
 private:
-    BOOL                            m_bVertical;        //ÊÇ·ñÊÇ´¹Ö±toolbar£¬Ä¬ÈÏÊÇË®Æ½µÄ
+    BOOL                            m_bVertical;        //æ˜¯å¦æ˜¯å‚ç›´toolbarï¼Œé»˜è®¤æ˜¯æ°´å¹³çš„
     CToolTipCtrl					m_ToolTipCtrl;
 	std::vector<CSkinToolBarItem*>	m_arrItems;
 	CImageEx*						m_lpBgImg;
-    COLORREF                        m_clrBgColor;       //Ä¬ÈÏ±³¾°ÑÕÉ«Îª°×É«
+    COLORREF                        m_clrBgColor;       //é»˜è®¤èƒŒæ™¯é¢œè‰²ä¸ºç™½è‰²
 	int								m_nPressIndex; 
 	int								m_nHoverIndex;
-	BOOL							m_bPressLorR;       //ÔÚ×ó±ß»¹ÓĞÓÒ±ßĞ¡Èı½ÇÇøÓò
+	BOOL							m_bPressLorR;       //åœ¨å·¦è¾¹è¿˜æœ‰å³è¾¹å°ä¸‰è§’åŒºåŸŸ
 	BOOL							m_bHoverLorR;
 	BOOL							m_bMouseTracking;
 	int								m_nLeft;
@@ -128,5 +128,5 @@ private:
 	BOOL							m_bAutoSize;
 	BOOL							m_bTransparent;
 	HDC								m_hBgDC;
-    BOOL                            m_bUseGroup;        //ÊÇ·ñ°ÑtoolbarÖĞµÄ°´Å¥µ±³ÉÒ»×é£¬Èç¹ûµ±³ÉÒ»×é£¬Í¬Ò»Ê±¼äÖ»ÓĞÒ»¸ö±»Ñ¡ÖĞ£¬Ä¬ÈÏ²»¿ªÆô
+    BOOL                            m_bUseGroup;        //æ˜¯å¦æŠŠtoolbarä¸­çš„æŒ‰é’®å½“æˆä¸€ç»„ï¼Œå¦‚æœå½“æˆä¸€ç»„ï¼ŒåŒä¸€æ—¶é—´åªæœ‰ä¸€ä¸ªè¢«é€‰ä¸­ï¼Œé»˜è®¤ä¸å¼€å¯
 };

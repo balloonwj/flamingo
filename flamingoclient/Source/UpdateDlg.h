@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include "resource.h"
 #include "SkinLib/SkinLib.h"
 #include <vector>
@@ -6,7 +6,7 @@
 //class CIUProtocol;
 class CFlamingoClient;
 
-//×Ô¶¯½âÑ¹ÏÂÔØÏÂÀ´µÄÉı¼¶°üÎÄ¼ş£¬³É¹¦·µ»Øtrue£¬Ê§°Ü·µ»Øfalse
+//è‡ªåŠ¨è§£å‹ä¸‹è½½ä¸‹æ¥çš„å‡çº§åŒ…æ–‡ä»¶ï¼ŒæˆåŠŸè¿”å›trueï¼Œå¤±è´¥è¿”å›false
 bool Unzip();
 
 class CUpdateDlg : public CDialogImpl<CUpdateDlg>
@@ -30,15 +30,15 @@ private:
 	BOOL InitUI();
 	void UninitUI();
 	
-	void ParseFileInfo();	//½âÎöÉı¼¶°üÎÄ¼şĞÅÏ¢
+	void ParseFileInfo();	//è§£æå‡çº§åŒ…æ–‡ä»¶ä¿¡æ¯
 
 public:
 	CFlamingoClient*	     m_pFMGClient;
 	std::vector<CString>	 m_aryFileInfo;
 
-	std::vector<CString>	 m_aryFileDesc;		//Éı¼¶°üÖĞÎÄÃèÊö
-	std::vector<CString>	 m_aryFileName;		//Éı¼¶°üÃû
-	std::vector<CString>	 m_aryFileVersion;	//Éı¼¶°ü°æ±¾ºÅ
+	std::vector<CString>	 m_aryFileDesc;		//å‡çº§åŒ…ä¸­æ–‡æè¿°
+	std::vector<CString>	 m_aryFileName;		//å‡çº§åŒ…å
+	std::vector<CString>	 m_aryFileVersion;	//å‡çº§åŒ…ç‰ˆæœ¬å·
 	
 
 public:
@@ -48,7 +48,7 @@ public:
 	CSkinListCtrl		m_UpdateListCtrl;
 
 	HANDLE				m_hDownloadThread;
-	HANDLE				m_hExitEvent;					//¶Ô»°¿òÍË³öÊÂ¼ş
+	HANDLE				m_hExitEvent;					//å¯¹è¯æ¡†é€€å‡ºäº‹ä»¶
 
 	static	DWORD WINAPI DownloadThread(LPVOID lpParameter);
 };

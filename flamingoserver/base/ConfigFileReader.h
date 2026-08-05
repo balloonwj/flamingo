@@ -1,4 +1,4 @@
-/** 
+﻿/** 
  *  简单的配置文件读取类，ConfigFileReader.h
  *  zhangyl 2017.05.27
  */

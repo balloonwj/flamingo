@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "ThreadPool.h"
 
 CThreadPoolTask::CThreadPoolTask()
@@ -108,7 +108,7 @@ void CThreadPool::UnInit()
 
 	::SetEvent(m_hEvent_Exit);
 
-	::WaitForSingleObject(m_hEvent_ExitAll, 30*1000);	// µÈ´ıËùÓĞÏß³ÌÍË³öÍê±Ï£¬³¬Ê±Ê±¼äÉèÎª30Ãë
+	::WaitForSingleObject(m_hEvent_ExitAll, 30*1000);	// ç­‰å¾…æ‰€æœ‰çº¿ç¨‹é€€å‡ºå®Œæ¯•ï¼Œè¶…æ—¶æ—¶é—´è®¾ä¸º30ç§’
 
 	::EnterCriticalSection(&m_csThreadInfo);
 	for (int i = 0; i < (int)m_arrThreadInfo.size(); i++)
@@ -162,7 +162,7 @@ BOOL CThreadPool::AddTask(CThreadPoolTask* lpTask)
 	m_arrTask.push_back(lpTask);
 	::LeaveCriticalSection(&m_csTask);
 
-	::ReleaseSemaphore(m_hSemaphore_Task, 1, NULL);		// Ôö¼ÓÈÎÎñÍ¨ÖªĞÅºÅÁ¿
+	::ReleaseSemaphore(m_hSemaphore_Task, 1, NULL);		// å¢åŠ ä»»åŠ¡é€šçŸ¥ä¿¡å·é‡
 
 	return TRUE;
 }
@@ -176,7 +176,7 @@ BOOL CThreadPool::InsertTask(int nIndex, CThreadPoolTask* lpTask)
 	m_arrTask.insert(m_arrTask.begin() + nIndex, lpTask);
 	::LeaveCriticalSection(&m_csTask);
 
-	::ReleaseSemaphore(m_hSemaphore_Task, 1, NULL);		// Ôö¼ÓÈÎÎñÍ¨ÖªĞÅºÅÁ¿
+	::ReleaseSemaphore(m_hSemaphore_Task, 1, NULL);		// å¢åŠ ä»»åŠ¡é€šçŸ¥ä¿¡å·é‡
 
 	return TRUE;
 }
@@ -228,7 +228,7 @@ void CThreadPool::RemoveAllTask()
 	::LeaveCriticalSection(&m_csTask);
 }
 
-// Ïß³Ìº¯Êı
+// çº¿ç¨‹å‡½æ•°
 UINT CThreadPool::ThreadProc(LPVOID lpParam)
 {
 	TP_THREAD_INFO* lpThreadInfo;
@@ -245,7 +245,7 @@ UINT CThreadPool::ThreadProc(LPVOID lpParam)
 	if (NULL == lpThis)
 		return 0;
 
-	::InterlockedIncrement(&lpThis->m_lThreadNums);		// Ôö¼ÓÏß³Ì¼ÆÊı
+	::InterlockedIncrement(&lpThis->m_lThreadNums);		// å¢åŠ çº¿ç¨‹è®¡æ•°
 
 	hWaitEvent[0] = lpThis->m_hEvent_Exit;
 	hWaitEvent[1] = lpThis->m_hSemaphore_Task;
@@ -254,12 +254,12 @@ UINT CThreadPool::ThreadProc(LPVOID lpParam)
 	{
 		dwIndex = ::WaitForMultipleObjects(2, hWaitEvent, FALSE, INFINITE);
 
-		if (dwIndex == WAIT_OBJECT_0)	// ½Óµ½ÍË³öÏß³ÌÍ¨ÖªÊÂ¼ş
+		if (dwIndex == WAIT_OBJECT_0)	// æ¥åˆ°é€€å‡ºçº¿ç¨‹é€šçŸ¥äº‹ä»¶
 			break;
 
 		lpTask = NULL;
 
-		::EnterCriticalSection(&lpThis->m_csTask);	// È¡ÈÎÎñ
+		::EnterCriticalSection(&lpThis->m_csTask);	// å–ä»»åŠ¡
 		for (int i = 0; i < (int)lpThis->m_arrTask.size(); i++)
 		{
 			lpTempTask = lpThis->m_arrTask[i];
@@ -275,13 +275,13 @@ UINT CThreadPool::ThreadProc(LPVOID lpParam)
 		}
 		::LeaveCriticalSection(&lpThis->m_csTask);
 
-		if (lpTask != NULL)		// ÓĞÈÎÎñ
+		if (lpTask != NULL)		// æœ‰ä»»åŠ¡
 		{
-			::InterlockedIncrement(&lpThis->m_lRunningThreadNums);	// Ôö¼ÓÕıÔÚ¹¤×÷ÖĞÏß³Ì¼ÆÊı
+			::InterlockedIncrement(&lpThis->m_lRunningThreadNums);	// å¢åŠ æ­£åœ¨å·¥ä½œä¸­çº¿ç¨‹è®¡æ•°
 
 			lpTask->Run();
 			
-			::EnterCriticalSection(&lpThis->m_csTask);	// É¾³ıÈÎÎñ
+			::EnterCriticalSection(&lpThis->m_csTask);	// åˆ é™¤ä»»åŠ¡
 			for (int i = 0; i < (int)lpThis->m_arrTask.size(); i++)
 			{
 				lpTempTask = lpThis->m_arrTask[i];
@@ -294,13 +294,13 @@ UINT CThreadPool::ThreadProc(LPVOID lpParam)
 			lpTask->SetRunning(FALSE);
 			::LeaveCriticalSection(&lpThis->m_csTask);
 
-			::InterlockedDecrement(&lpThis->m_lRunningThreadNums);	// ¼õÉÙÕıÔÚ¹¤×÷ÖĞÏß³Ì¼ÆÊı
+			::InterlockedDecrement(&lpThis->m_lRunningThreadNums);	// å‡å°‘æ­£åœ¨å·¥ä½œä¸­çº¿ç¨‹è®¡æ•°
 		}
 	}
 
-	::InterlockedDecrement(&lpThis->m_lThreadNums);		// ¼õÉÙÏß³Ì¼ÆÊı
+	::InterlockedDecrement(&lpThis->m_lThreadNums);		// å‡å°‘çº¿ç¨‹è®¡æ•°
 
-	if (lpThis->m_lThreadNums <= 0)		// ËùÓĞÏß³Ì¶¼½áÊøÍê±Ï£¬ÖÃÊÂ¼ş¾ä±úÓĞĞÅºÅ
+	if (lpThis->m_lThreadNums <= 0)		// æ‰€æœ‰çº¿ç¨‹éƒ½ç»“æŸå®Œæ¯•ï¼Œç½®äº‹ä»¶å¥æŸ„æœ‰ä¿¡å·
 		::SetEvent(lpThis->m_hEvent_ExitAll);
 
 	return 0;

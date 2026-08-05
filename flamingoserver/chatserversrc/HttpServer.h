@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 聊天服务支持http请求, HttpServer.h
  * zhangyl 2018.05.16
  */

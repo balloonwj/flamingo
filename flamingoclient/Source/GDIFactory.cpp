@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "GDIFactory.h"
 
 std::map<long, HFONT> CGDIFactory::m_mapFontCache;
@@ -23,7 +23,7 @@ HFONT CGDIFactory::GetFont(long nSize)
 								 CLIP_DEFAULT_PRECIS,		// nClipPrecision 
 								 DEFAULT_QUALITY,			// nQuality 
 								 DEFAULT_PITCH | FF_SWISS,	// nPitchAndFamily 
-								 _T("Î¢ÈíÑÅºÚ"));
+								 _T("å¾®è½¯é›…é»‘"));
 
 	m_mapFontCache.insert(std::pair<long, HFONT>(nSize, hFont));
 
@@ -49,7 +49,7 @@ HFONT CGDIFactory::GetBoldFont(long nSize)
 								 CLIP_DEFAULT_PRECIS,		// nClipPrecision 
 								 DEFAULT_QUALITY,			// nQuality 
 								 DEFAULT_PITCH | FF_SWISS,	// nPitchAndFamily 
-								 _T("Î¢ÈíÑÅºÚ"));
+								 _T("å¾®è½¯é›…é»‘"));
 
 	m_mapBoldFontCache.insert(std::pair<long, HFONT>(nSize, hFont));
 

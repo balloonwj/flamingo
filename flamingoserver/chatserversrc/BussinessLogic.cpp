@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 即时通讯的业务逻辑都统一放在这里，BusinessLogic.cpp
  * zhangyl 2018.05.16
  */
@@ -48,7 +48,9 @@ void BussinessLogic::registerUser(const std::string& data, const std::shared_ptr
         retData = "{\"code\": 101, \"msg\": \"registered already\"}";
     else
     {
-        if (!Singleton<UserManager>::Instance().addUser(u))
+        //这是 v1 遗留的注册入口，不涉及企业归属，故企业ID传 0。
+        //带企业归属的注册走 v2 的 cmd_register（见 RegisterService::doRegister）。
+        if (!Singleton<UserManager>::Instance().addUser(u, 0))
             retData = "{\"code\": 100, \"msg\": \"register failed\"}";
         else
         {

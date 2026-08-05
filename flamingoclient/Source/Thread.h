@@ -1,5 +1,5 @@
-/** 
-* Ïß³ÌÀà»ùÀà, Thread.h
+ï»¿/** 
+* çº¿ç¨‹ç±»åŸºç±», Thread.h
 * zhangyl 2017.03.13
 **/
 #pragma once

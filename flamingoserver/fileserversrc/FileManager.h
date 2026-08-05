@@ -1,4 +1,4 @@
-/** 
+﻿/** 
  *  文件管理类, FileManager.h
  *  zhangyl 2017.03.17
  **/

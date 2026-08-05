@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include "resource.h"
 #include "SkinLib/SkinLib.h"
 #include "UserSessionData.h"
@@ -12,7 +12,7 @@ public:
 	virtual ~CRegisterDialog();
 
 	
-	//ÔÚ×ÊÔ´ÎÄ¼şÀïÃæÔö¼Ó¶Ô»°¿ò×ÊÔ´Ä£°å
+	//åœ¨èµ„æºæ–‡ä»¶é‡Œé¢å¢åŠ å¯¹è¯æ¡†èµ„æºæ¨¡æ¿
 	enum { IDD = IDD_REGISTER };
 
 	BEGIN_MSG_MAP_EX(CRegisterDialog)
@@ -32,8 +32,8 @@ private:
 	BOOL OnInitDialog(CWindow wndFocus, LPARAM lInitParam);
 	void OnClose();
 	void OnDestroy();
-	void OnBtn_Regist(UINT uNotifyCode, int nID, CWindow wndCtl);		// ¡°×¢²á¡±°´Å¥
-	void OnBtn_Cancel(UINT uNotifyCode, int nID, CWindow wndCtl);		// ¡°È¡Ïû×¢²á¡±°´Å¥
+	void OnBtn_Regist(UINT uNotifyCode, int nID, CWindow wndCtl);		// â€œæ³¨å†Œâ€æŒ‰é’®
+	void OnBtn_Cancel(UINT uNotifyCode, int nID, CWindow wndCtl);		// â€œå–æ¶ˆæ³¨å†Œâ€æŒ‰é’®
 	LRESULT OnRegisterResult(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &bHandled);
 
 	BOOL InitUI();

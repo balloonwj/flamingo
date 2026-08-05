@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "UserSessionData.h"
 #include "UserSessionData.h"
 #include "net/IUProtocolData.h"
@@ -7,13 +7,13 @@
 #include "Path.h"
 #include "Buffer.h"
 
-//Ö÷³ÌĞòÄ¿Â¼
+//ä¸»ç¨‹åºç›®å½•
 TCHAR g_szHomePath[MAX_PATH] = {0};
 char g_szHomePathAscii[MAX_PATH] = {0};
 
 std::wstring g_strAppTitle;
 
-//ÏµÍ³¿âÖĞÓÃ»§Í·ÏñµÄ¸öÊı
+//ç³»ç»Ÿåº“ä¸­ç”¨æˆ·å¤´åƒçš„ä¸ªæ•°
 const UINT USER_THUMB_COUNT = 36;
 
 CBuddyInfo::CBuddyInfo(void)
@@ -55,15 +55,15 @@ void CBuddyInfo::FillFakeData()
 {
     m_uUserID = 0;
     m_nTeamIndex = 0;
-    m_strNickName = _T("ËïÎò¿Õ");
+    m_strNickName = _T("å­™æ‚Ÿç©º");
     m_strMarkName = _T("");
     m_nFace = 0;
     m_nStatus = STATUS_OFFLINE;
-    m_strSign = _T("¹ÛºõÆäÉÏ,µÃºõÆäÖĞ,¹ÛºõÆäÖĞ,µÃºõÆäÏÂ¡£");
+    m_strSign = _T("è§‚ä¹å…¶ä¸Š,å¾—ä¹å…¶ä¸­,è§‚ä¹å…¶ä¸­,å¾—ä¹å…¶ä¸‹ã€‚");
     m_nBirthday = 0;
     m_strMobile = _T("");
     m_strEmail = _T("balloonwj@UTalk.com");
-    m_strAddress = _T("ÉÏº£ÊĞãÉĞĞÇø¶«´¨Â·555ºÅ");
+    m_strAddress = _T("ä¸Šæµ·å¸‚é—µè¡ŒåŒºä¸œå·è·¯555å·");
     m_uMsgID = 0;
     m_bUseCustomFace = FALSE;
     m_bCustomFaceAvailable = FALSE;
@@ -379,13 +379,13 @@ void CGroupInfo::Reset()
     DelAllMember();
 }
 
-// »ñÈ¡Èº³ÉÔ±×ÜÈËÊı
+// è·å–ç¾¤æˆå‘˜æ€»äººæ•°
 int CGroupInfo::GetMemberCount()
 {
     return (int)m_arrMember.size();
 }
 
-// »ñÈ¡Èº³ÉÔ±ÔÚÏßÈËÊı
+// è·å–ç¾¤æˆå‘˜åœ¨çº¿äººæ•°
 int CGroupInfo::GetOnlineMemberCount()
 {
     int nCount = 0;
@@ -398,7 +398,7 @@ int CGroupInfo::GetOnlineMemberCount()
     return nCount;
 }
 
-// ¸ù¾İË÷Òı»ñÈ¡Èº³ÉÔ±ĞÅÏ¢
+// æ ¹æ®ç´¢å¼•è·å–ç¾¤æˆå‘˜ä¿¡æ¯
 CBuddyInfo* CGroupInfo::GetMember(int nIndex)
 {
     if (nIndex < 0 || nIndex >= (int)m_arrMember.size())
@@ -407,7 +407,7 @@ CBuddyInfo* CGroupInfo::GetMember(int nIndex)
     return m_arrMember[nIndex];
 }
 
-// ¸ù¾İUTalkUin»ñÈ¡Èº³ÉÔ±ĞÅÏ¢
+// æ ¹æ®UTalkUinè·å–ç¾¤æˆå‘˜ä¿¡æ¯
 CBuddyInfo* CGroupInfo::GetMemberByUin(UINT nUTalkUin)
 {
     for (int i = 0; i < (int)m_arrMember.size(); i++)
@@ -419,7 +419,7 @@ CBuddyInfo* CGroupInfo::GetMemberByUin(UINT nUTalkUin)
     return NULL;
 }
 
-// ¸ù¾İUTalkNum»ñÈ¡Èº³ÉÔ±ĞÅÏ¢
+// æ ¹æ®UTalkNumè·å–ç¾¤æˆå‘˜ä¿¡æ¯
 CBuddyInfo* CGroupInfo::GetMemberByAccount(PCTSTR pszAccountName)
 {
     for (int i = 0; i < (int)m_arrMember.size(); i++)
@@ -431,7 +431,7 @@ CBuddyInfo* CGroupInfo::GetMemberByAccount(PCTSTR pszAccountName)
     return NULL;
 }
 
-// ¶ÔÈº³ÉÔ±ÁĞ±í°´ÔÚÏß×´Ì¬½øĞĞÅÅĞò
+// å¯¹ç¾¤æˆå‘˜åˆ—è¡¨æŒ‰åœ¨çº¿çŠ¶æ€è¿›è¡Œæ’åº
 void CGroupInfo::Sort()
 {
     CBuddyInfo* lpBuddyInfo1,*lpBuddyInfo2;
@@ -461,7 +461,7 @@ void CGroupInfo::Sort()
     }
 }
 
-// Ìí¼ÓÈº³ÉÔ±
+// æ·»åŠ ç¾¤æˆå‘˜
 BOOL CGroupInfo::AddMember(CBuddyInfo* lpBuddyInfo)
 {
     if (NULL == lpBuddyInfo)
@@ -470,7 +470,7 @@ BOOL CGroupInfo::AddMember(CBuddyInfo* lpBuddyInfo)
     return TRUE;
 }
 
-// É¾³ıËùÓĞÈº³ÉÔ±
+// åˆ é™¤æ‰€æœ‰ç¾¤æˆå‘˜
 BOOL CGroupInfo::DelAllMember()
 {
     for (int i = 0; i < (int)m_arrMember.size(); i++)
@@ -525,13 +525,13 @@ void CGroupList::Reset()
     m_arrGroupInfo.clear();
 }
 
-// »ñÈ¡Èº×ÜÊı
+// è·å–ç¾¤æ€»æ•°
 int CGroupList::GetGroupCount()
 {
     return (int)m_arrGroupInfo.size();
 }
 
-// »ñÈ¡ÈºĞÅÏ¢(¸ù¾İË÷Òı)
+// è·å–ç¾¤ä¿¡æ¯(æ ¹æ®ç´¢å¼•)
 CGroupInfo* CGroupList::GetGroup(int nIndex)
 {
     if (nIndex >= 0 && nIndex < (int)m_arrGroupInfo.size())
@@ -540,7 +540,7 @@ CGroupInfo* CGroupList::GetGroup(int nIndex)
         return NULL;
 }
 
-// »ñÈ¡ÈºĞÅÏ¢(¸ù¾İÈº´úÂë)
+// è·å–ç¾¤ä¿¡æ¯(æ ¹æ®ç¾¤ä»£ç )
 CGroupInfo* CGroupList::GetGroupByCode(UINT nGroupCode)
 {
     for (int i = 0; i < (int)m_arrGroupInfo.size(); i++)
@@ -552,7 +552,7 @@ CGroupInfo* CGroupList::GetGroupByCode(UINT nGroupCode)
     return NULL;
 }
 
-// »ñÈ¡ÈºĞÅÏ¢(¸ù¾İÈºId)
+// è·å–ç¾¤ä¿¡æ¯(æ ¹æ®ç¾¤Id)
 CGroupInfo* CGroupList::GetGroupById(UINT nGroupId)
 {
     for (int i = 0; i < (int)m_arrGroupInfo.size(); i++)
@@ -564,7 +564,7 @@ CGroupInfo* CGroupList::GetGroupById(UINT nGroupId)
     return NULL;
 }
 
-// ¸ù¾İÈº´úÂëºÍÈº³ÉÔ±UTalkUin»ñÈ¡Èº³ÉÔ±ĞÅÏ¢
+// æ ¹æ®ç¾¤ä»£ç å’Œç¾¤æˆå‘˜UTalkUinè·å–ç¾¤æˆå‘˜ä¿¡æ¯
 CBuddyInfo* CGroupList::GetGroupMemberByCode(UINT nGroupCode, UINT nUTalkUin)
 {
     CGroupInfo* lpGroupInfo = GetGroupByCode(nGroupCode);
@@ -574,7 +574,7 @@ CBuddyInfo* CGroupList::GetGroupMemberByCode(UINT nGroupCode, UINT nUTalkUin)
         return NULL;
 }
 
-// ¸ù¾İÈºIdºÍÈº³ÉÔ±UTalkUin»ñÈ¡Èº³ÉÔ±ĞÅÏ¢
+// æ ¹æ®ç¾¤Idå’Œç¾¤æˆå‘˜UTalkUinè·å–ç¾¤æˆå‘˜ä¿¡æ¯
 CBuddyInfo* CGroupList::GetGroupMemberById(UINT nGroupId, UINT nUTalkUin)
 {
     CGroupInfo* lpGroupInfo = GetGroupById(nGroupId);
@@ -584,7 +584,7 @@ CBuddyInfo* CGroupList::GetGroupMemberById(UINT nGroupId, UINT nUTalkUin)
         return NULL;
 }
 
-// Ìí¼ÓÈº
+// æ·»åŠ ç¾¤
 BOOL CGroupList::AddGroup(CGroupInfo* lpGroupInfo)
 {
     if (NULL == lpGroupInfo)
@@ -593,14 +593,14 @@ BOOL CGroupList::AddGroup(CGroupInfo* lpGroupInfo)
     return TRUE;
 }
 
-// ÓÉÈºId»ñÈ¡Èº´úÂë
+// ç”±ç¾¤Idè·å–ç¾¤ä»£ç 
 UINT CGroupList::GetGroupCodeById(UINT nGroupId)
 {
     CGroupInfo* lpGroupInfo = GetGroupById(nGroupId);
     return ((lpGroupInfo != NULL) ? lpGroupInfo->m_nGroupCode : 0);
 }
 
-// ÓÉÈº´úÂë»ñÈ¡ÈºId
+// ç”±ç¾¤ä»£ç è·å–ç¾¤Id
 UINT CGroupList::GetGroupIdByCode(UINT nGroupCode)
 {
     CGroupInfo* lpGroupInfo = GetGroupByCode(nGroupCode);
@@ -670,10 +670,10 @@ BOOL CRecentList::AddRecent(CRecentInfo* lpRecentInfo)
     if (NULL == lpRecentInfo)
         return FALSE;
 
-    //ÏÈÉ¾³ıÔ­À´µÄ×î½üÁªÏµÈËĞÅÏ¢
+    //å…ˆåˆ é™¤åŸæ¥çš„æœ€è¿‘è”ç³»äººä¿¡æ¯
     for (std::vector<CRecentInfo*>::iterator iter = m_arrRecentInfo.begin(); iter != m_arrRecentInfo.end(); ++iter)
     {
-        //TODO: ÕâÀïÓĞÎÊÌâ
+        //TODO: è¿™é‡Œæœ‰é—®é¢˜
         if (*iter == NULL)
             continue;
 
@@ -685,10 +685,10 @@ BOOL CRecentList::AddRecent(CRecentInfo* lpRecentInfo)
     }
 
 
-    //ÔÙ½«×îĞÂµÄ´æÈë½øÈ¥
+    //å†å°†æœ€æ–°çš„å­˜å…¥è¿›å»
     m_arrRecentInfo.push_back(lpRecentInfo);
 
-    //×î¶àÎåÊ®Ïî
+    //æœ€å¤šäº”åé¡¹
     if (m_arrRecentInfo.size() >= 50)
     {
         CRecentInfo* pLast = m_arrRecentInfo[m_arrRecentInfo.size() - 1];
@@ -775,8 +775,8 @@ BOOL CBuddyMessage::Parse(Json::Value& JsonValue)
     CString strTmp;
 
     CContent* pContent = new CContent;
-    //ÏÈ½âÎö×ÖÌåĞÅÏ¢
-    //×ÖÌåÃû
+    //å…ˆè§£æå­—ä½“ä¿¡æ¯
+    //å­—ä½“å
     if (!JsonValue["font"][(UINT)0].isNull())
     {
         strValue = JsonValue["font"][(UINT)0].asString();
@@ -785,33 +785,33 @@ BOOL CBuddyMessage::Parse(Json::Value& JsonValue)
         pContent->m_FontInfo.m_strName = strTmp.GetString();
     }
     else
-        pContent->m_FontInfo.m_strName = _T("Î¢ÈíÑÅºÚ");
+        pContent->m_FontInfo.m_strName = _T("å¾®è½¯é›…é»‘");
 
-    //×ÖÌå´óĞ¡
+    //å­—ä½“å¤§å°
     if (!JsonValue["font"][(UINT)1].isNull())
         pContent->m_FontInfo.m_nSize = JsonValue["font"][(UINT)1].asUInt();
     else
         pContent->m_FontInfo.m_nSize = 12;
 
-    //×ÖÌåÑÕÉ«
+    //å­—ä½“é¢œè‰²
     if (!JsonValue["font"][(UINT)2].isNull())
         pContent->m_FontInfo.m_clrText = JsonValue["font"][(UINT)2].asUInt();
     else
         pContent->m_FontInfo.m_clrText = RGB(0, 0, 0);
 
-    //ÊÇ·ñ´ÖÌå
+    //æ˜¯å¦ç²—ä½“
     if (!JsonValue["font"][(UINT)3].isNull())
         pContent->m_FontInfo.m_bBold = JsonValue["font"][(UINT)3].asInt() != 0 ? TRUE : FALSE;
     else
         pContent->m_FontInfo.m_bBold = FALSE;
 
-    //ÊÇ·ñĞ±Ìå
+    //æ˜¯å¦æ–œä½“
     if (!JsonValue["font"][(UINT)4].isNull())
         pContent->m_FontInfo.m_bItalic = JsonValue["font"][(UINT)4].asInt() != 0 ? TRUE : FALSE;
     else
         pContent->m_FontInfo.m_bItalic = FALSE;
 
-    //ÊÇ·ñÏÂ»®Ïß
+    //æ˜¯å¦ä¸‹åˆ’çº¿
     if (!JsonValue["font"][(UINT)5].isNull())
         pContent->m_FontInfo.m_bUnderLine = JsonValue["font"][(UINT)5].asInt() != 0 ? TRUE : FALSE;
     else
@@ -1003,7 +1003,7 @@ BOOL CGroupMessage::Parse(Json::Value& JsonValue)
         if (JsonValue["content"][i].isNull())
             continue;
 
-        if (JsonValue["content"][i].isString())		// ´¿ÎÄ±¾
+        if (JsonValue["content"][i].isString())		// çº¯æ–‡æœ¬
         {
             CContent* lpContent = new CContent;
             if (NULL == lpContent)
@@ -1011,7 +1011,7 @@ BOOL CGroupMessage::Parse(Json::Value& JsonValue)
 
             strValue = JsonValue["content"][i].asString();
 
-            if (i == nCount - 1)					// È¥³ıÏûÏ¢×îºó¶àÓàµÄÒ»¸ö¿Õ¸ñ
+            if (i == nCount - 1)					// å»é™¤æ¶ˆæ¯æœ€åå¤šä½™çš„ä¸€ä¸ªç©ºæ ¼
             {
                 nCount2 = strValue.size();
                 if (nCount2 > 0 && strValue[nCount2 - 1] == ' ')
@@ -1029,8 +1029,8 @@ BOOL CGroupMessage::Parse(Json::Value& JsonValue)
             if (JsonValue["content"][i][(UINT)0].isNull())
                 continue;
 
-            strValue = JsonValue["content"][i][(UINT)0].asString();	// ÄÚÈİÀàĞÍ
-            if (strValue == "font")			// ×ÖÌåĞÅÏ¢
+            strValue = JsonValue["content"][i][(UINT)0].asString();	// å†…å®¹ç±»å‹
+            if (strValue == "font")			// å­—ä½“ä¿¡æ¯
             {
                 CContent* lpContent = new CContent;
                 if (NULL == lpContent)
@@ -1038,25 +1038,25 @@ BOOL CGroupMessage::Parse(Json::Value& JsonValue)
 
                 lpContent->m_nType = CONTENT_TYPE_FONT_INFO;
 
-                if (!JsonValue["content"][i][(UINT)1]["size"].isNull())				// ×ÖÌå´óĞ¡
+                if (!JsonValue["content"][i][(UINT)1]["size"].isNull())				// å­—ä½“å¤§å°
                     lpContent->m_FontInfo.m_nSize = JsonValue["content"][i][(UINT)1]["size"].asInt();
 
-                if (!JsonValue["content"][i][(UINT)1]["color"].isNull())			// ×ÖÌåÑÕÉ«
+                if (!JsonValue["content"][i][(UINT)1]["color"].isNull())			// å­—ä½“é¢œè‰²
                 {
                     strValue = JsonValue["content"][i][(UINT)1]["color"].asString();
                     lpContent->m_FontInfo.m_clrText = HexStrToRGB(EncodeUtil::Utf8ToUnicode(strValue).c_str());
                 }
 
-                if (!JsonValue["content"][i][(UINT)1]["style"][(UINT)0].isNull())	// ×ÖÌå·ç¸ñ(¼Ó´Ö)
+                if (!JsonValue["content"][i][(UINT)1]["style"][(UINT)0].isNull())	// å­—ä½“é£æ ¼(åŠ ç²—)
                     lpContent->m_FontInfo.m_bBold = JsonValue["content"][i][(UINT)1]["style"][(UINT)0].asBool();
 
-                if (!JsonValue["content"][i][(UINT)1]["style"][(UINT)1].isNull())	// ×ÖÌå·ç¸ñ(ÇãĞ±)
+                if (!JsonValue["content"][i][(UINT)1]["style"][(UINT)1].isNull())	// å­—ä½“é£æ ¼(å€¾æ–œ)
                     lpContent->m_FontInfo.m_bItalic = JsonValue["content"][i][(UINT)1]["style"][(UINT)1].asBool();
 
-                if (!JsonValue["content"][i][(UINT)1]["style"][(UINT)2].isNull())	// ×ÖÌå·ç¸ñ(ÏÂ»®Ïß)
+                if (!JsonValue["content"][i][(UINT)1]["style"][(UINT)2].isNull())	// å­—ä½“é£æ ¼(ä¸‹åˆ’çº¿)
                     lpContent->m_FontInfo.m_bUnderLine = JsonValue["content"][i][(UINT)1]["style"][(UINT)2].asBool();
 
-                if (!JsonValue["content"][i][(UINT)1]["name"].isNull())				// ×ÖÌåÃû³Æ
+                if (!JsonValue["content"][i][(UINT)1]["name"].isNull())				// å­—ä½“åç§°
                 {
                     strValue = JsonValue["content"][i][(UINT)1]["name"].asString();
                     lpContent->m_FontInfo.m_strName = EncodeUtil::Utf8ToUnicode(strValue);
@@ -1064,7 +1064,7 @@ BOOL CGroupMessage::Parse(Json::Value& JsonValue)
 
                 m_arrContent.push_back(lpContent);
             }
-            else if (strValue == "face")	// ÏµÍ³±íÇé
+            else if (strValue == "face")	// ç³»ç»Ÿè¡¨æƒ…
             {
                 CContent* lpContent = new CContent;
                 if (NULL == lpContent)
@@ -1074,7 +1074,7 @@ BOOL CGroupMessage::Parse(Json::Value& JsonValue)
                     lpContent->m_nFaceId = JsonValue["content"][i][(UINT)1].asInt();
                 m_arrContent.push_back(lpContent);
             }
-            else if (strValue == "cface")	// ×Ô¶¨Òå±íÇé
+            else if (strValue == "cface")	// è‡ªå®šä¹‰è¡¨æƒ…
             {
                 CContent* lpContent = new CContent;
                 if (NULL == lpContent)
@@ -1105,7 +1105,7 @@ BOOL CGroupMessage::Parse(Json::Value& JsonValue)
                 }
                 m_arrContent.push_back(lpContent);
             }
-            else if (strValue == "cface_idx")	// Î´Öª
+            else if (strValue == "cface_idx")	// æœªçŸ¥
             {
 
             }
@@ -1190,7 +1190,7 @@ BOOL CSessMessage::Parse(Json::Value& JsonValue)
     if (!JsonValue["service_type"].isNull())
         m_nServiceType = JsonValue["service_type"].asUInt();
 
-    m_nFlags = 0;	// ´ı½âÎö("flags":{"text":1,"pic":1,"file":1,"audio":1,"video":1})
+    m_nFlags = 0;	// å¾…è§£æ("flags":{"text":1,"pic":1,"file":1,"audio":1,"video":1})
 
     nCount = (int)JsonValue["content"].size();
     for (int i = 0; i < nCount; ++i)
@@ -1198,7 +1198,7 @@ BOOL CSessMessage::Parse(Json::Value& JsonValue)
         if (JsonValue["content"][i].isNull())
             continue;
 
-        if (JsonValue["content"][i].isString())		// ´¿ÎÄ±¾
+        if (JsonValue["content"][i].isString())		// çº¯æ–‡æœ¬
         {
             CContent* lpContent = new CContent;
             if (NULL == lpContent)
@@ -1206,7 +1206,7 @@ BOOL CSessMessage::Parse(Json::Value& JsonValue)
 
             strValue = JsonValue["content"][i].asString();
 
-            if (i == nCount - 1)					// È¥³ıÏûÏ¢×îºó¶àÓàµÄÒ»¸ö¿Õ¸ñ
+            if (i == nCount - 1)					// å»é™¤æ¶ˆæ¯æœ€åå¤šä½™çš„ä¸€ä¸ªç©ºæ ¼
             {
                 nCount2 = strValue.size();
                 if (nCount2 > 0 && (strValue[nCount2 - 1] == ' '))
@@ -1224,8 +1224,8 @@ BOOL CSessMessage::Parse(Json::Value& JsonValue)
             if (JsonValue["content"][i][(UINT)0].isNull())
                 continue;
 
-            strValue = JsonValue["content"][i][(UINT)0].asString();	// ÄÚÈİÀàĞÍ
-            if (strValue == "font")		// ×ÖÌåĞÅÏ¢
+            strValue = JsonValue["content"][i][(UINT)0].asString();	// å†…å®¹ç±»å‹
+            if (strValue == "font")		// å­—ä½“ä¿¡æ¯
             {
                 CContent* lpContent = new CContent;
                 if (NULL == lpContent)
@@ -1233,32 +1233,32 @@ BOOL CSessMessage::Parse(Json::Value& JsonValue)
 
                 lpContent->m_nType = CONTENT_TYPE_FONT_INFO;
 
-                if (!JsonValue["content"][i][(UINT)1]["size"].isNull())				// ×ÖÌå´óĞ¡
+                if (!JsonValue["content"][i][(UINT)1]["size"].isNull())				// å­—ä½“å¤§å°
                     lpContent->m_FontInfo.m_nSize = JsonValue["content"][i][(UINT)1]["size"].asInt();
 
-                if (!JsonValue["content"][i][(UINT)1]["color"].isNull())			// ×ÖÌåÑÕÉ«
+                if (!JsonValue["content"][i][(UINT)1]["color"].isNull())			// å­—ä½“é¢œè‰²
                 {
                     strValue = JsonValue["content"][i][(UINT)1]["color"].asString();
                     lpContent->m_FontInfo.m_clrText = HexStrToRGB(EncodeUtil::Utf8ToUnicode(strValue).c_str());
                 }
 
-                if (!JsonValue["content"][i][(UINT)1]["style"][(UINT)0].isNull())	// ×ÖÌå·ç¸ñ(¼Ó´Ö)
+                if (!JsonValue["content"][i][(UINT)1]["style"][(UINT)0].isNull())	// å­—ä½“é£æ ¼(åŠ ç²—)
                     lpContent->m_FontInfo.m_bBold = JsonValue["content"][i][(UINT)1]["style"][(UINT)0].asBool();
 
-                if (!JsonValue["content"][i][(UINT)1]["style"][(UINT)1].isNull())	// ×ÖÌå·ç¸ñ(ÇãĞ±)
+                if (!JsonValue["content"][i][(UINT)1]["style"][(UINT)1].isNull())	// å­—ä½“é£æ ¼(å€¾æ–œ)
                     lpContent->m_FontInfo.m_bItalic = JsonValue["content"][i][(UINT)1]["style"][(UINT)1].asBool();
 
-                if (!JsonValue["content"][i][(UINT)1]["style"][(UINT)2].isNull())	// ×ÖÌå·ç¸ñ(ÏÂ»®Ïß)
+                if (!JsonValue["content"][i][(UINT)1]["style"][(UINT)2].isNull())	// å­—ä½“é£æ ¼(ä¸‹åˆ’çº¿)
                     lpContent->m_FontInfo.m_bUnderLine = JsonValue["content"][i][(UINT)1]["style"][(UINT)2].asBool();
 
-                if (!JsonValue["content"][i][(UINT)1]["name"].isNull())				// ×ÖÌåÃû³Æ
+                if (!JsonValue["content"][i][(UINT)1]["name"].isNull())				// å­—ä½“åç§°
                 {
                     strValue = JsonValue["content"][i][(UINT)1]["name"].asString();
                     lpContent->m_FontInfo.m_strName = EncodeUtil::Utf8ToUnicode(strValue);
                 }
                 m_arrContent.push_back(lpContent);
             }
-            else if (strValue == "face")	// ÏµÍ³±íÇé
+            else if (strValue == "face")	// ç³»ç»Ÿè¡¨æƒ…
             {
                 CContent* lpContent = new CContent;
                 if (NULL == lpContent)
@@ -1446,7 +1446,7 @@ BOOL CSysGroupMessage::Parse(Json::Value& JsonValue)
     }
 
     if (m_strSubType == _T("group_request_join_agree")
-        || m_strSubType == _T("group_request_join_deny"))		// ¼ÓÈºÍ¬ÒâÍ¨Öª»ò¾Ü¾ø¼ÓÈºÍ¨Öª
+        || m_strSubType == _T("group_request_join_deny"))		// åŠ ç¾¤åŒæ„é€šçŸ¥æˆ–æ‹’ç»åŠ ç¾¤é€šçŸ¥
     {
         if (!JsonValue["gcode"].isNull())
             m_nGroupCode = JsonValue["gcode"].asUInt();
@@ -1464,7 +1464,7 @@ BOOL CSysGroupMessage::Parse(Json::Value& JsonValue)
         }
         return TRUE;
     }
-    else if (m_strSubType == _T("group_leave"))	// ±»ÒÆ³öÈºÍ¨Öª
+    else if (m_strSubType == _T("group_leave"))	// è¢«ç§»å‡ºç¾¤é€šçŸ¥
     {
         if (!JsonValue["gcode"].isNull())
             m_nGroupCode = JsonValue["gcode"].asUInt();
@@ -1572,7 +1572,7 @@ CMessageSender::~CMessageSender(void)
     DelAllMsg();
 }
 
-// Ìí¼ÓÏûÏ¢
+// æ·»åŠ æ¶ˆæ¯
 BOOL CMessageSender::AddMsg(void* lpMsg)
 {
     if (NULL == lpMsg)
@@ -1581,7 +1581,7 @@ BOOL CMessageSender::AddMsg(void* lpMsg)
     return TRUE;
 }
 
-// É¾³ıÏûÏ¢(¸ù¾İË÷Òı)
+// åˆ é™¤æ¶ˆæ¯(æ ¹æ®ç´¢å¼•)
 BOOL CMessageSender::DelMsg(int nIndex)
 {
     if (nIndex >= 0 && nIndex < (int)m_arrMsg.size())
@@ -1593,7 +1593,7 @@ BOOL CMessageSender::DelMsg(int nIndex)
         return FALSE;
 }
 
-// É¾³ıÏûÏ¢(¸ù¾İÏûÏ¢Id)
+// åˆ é™¤æ¶ˆæ¯(æ ¹æ®æ¶ˆæ¯Id)
 BOOL CMessageSender::DelMsgById(UINT nMsgId)
 {
     for (int i = 0; i < (int)m_arrMsg.size(); i++)
@@ -1639,7 +1639,7 @@ BOOL CMessageSender::DelMsgById(UINT nMsgId)
     return FALSE;
 }
 
-// É¾³ıËùÓĞÏûÏ¢
+// åˆ é™¤æ‰€æœ‰æ¶ˆæ¯
 BOOL CMessageSender::DelAllMsg()
 {
     for (int i = 0; i < (int)m_arrMsg.size(); i++)
@@ -1665,19 +1665,19 @@ BOOL CMessageSender::DelAllMsg()
     return TRUE;
 }
 
-// »ñÈ¡ÏûÏ¢ÀàĞÍ
+// è·å–æ¶ˆæ¯ç±»å‹
 long CMessageSender::GetMsgType()
 {
     return m_nType;
 }
 
-// »ñÈ¡·¢ËÍÕßId
+// è·å–å‘é€è€…Id
 UINT CMessageSender::GetSenderId()
 {
     return m_nSenderId;
 }
 
-// »ñÈ¡ÏûÏ¢×ÜÊı
+// è·å–æ¶ˆæ¯æ€»æ•°
 int CMessageSender::GetDisplayMsgCount()
 {
     CBuddyMessage* pBuddyMessage = NULL;
@@ -1693,19 +1693,19 @@ int CMessageSender::GetDisplayMsgCount()
     return nMsgCount;
 }
 
-// »ñÈ¡ÏûÏ¢×ÜÊı
+// è·å–æ¶ˆæ¯æ€»æ•°
 int CMessageSender::GetMsgCount()
 {
     return (int)m_arrMsg.size();
 }
 
-// »ñÈ¡Èº´úÂë
+// è·å–ç¾¤ä»£ç 
 UINT CMessageSender::GetGroupCode()
 {
     return m_nGroupCode;
 }
 
-// »ñÈ¡ºÃÓÑÏûÏ¢(¸ù¾İË÷Òı)
+// è·å–å¥½å‹æ¶ˆæ¯(æ ¹æ®ç´¢å¼•)
 CBuddyMessage* CMessageSender::GetBuddyMsg(int nIndex)
 {
     if (m_nType != FMG_MSG_TYPE_BUDDY)
@@ -1717,7 +1717,7 @@ CBuddyMessage* CMessageSender::GetBuddyMsg(int nIndex)
         return NULL;
 }
 
-// »ñÈ¡ÈºÏûÏ¢(¸ù¾İË÷Òı)
+// è·å–ç¾¤æ¶ˆæ¯(æ ¹æ®ç´¢å¼•)
 CBuddyMessage* CMessageSender::GetGroupMsg(int nIndex)
 {
     if (m_nType != FMG_MSG_TYPE_GROUP)
@@ -1729,7 +1729,7 @@ CBuddyMessage* CMessageSender::GetGroupMsg(int nIndex)
         return NULL;
 }
 
-// »ñÈ¡ÁÙÊ±»á»°ÏûÏ¢(¸ù¾İË÷Òı)
+// è·å–ä¸´æ—¶ä¼šè¯æ¶ˆæ¯(æ ¹æ®ç´¢å¼•)
 CSessMessage* CMessageSender::GetSessMsg(int nIndex)
 {
     if (m_nType != FMG_MSG_TYPE_SESS)
@@ -1741,7 +1741,7 @@ CSessMessage* CMessageSender::GetSessMsg(int nIndex)
         return NULL;
 }
 
-// »ñÈ¡ºÃÓÑÏûÏ¢(¸ù¾İÏûÏ¢Id)
+// è·å–å¥½å‹æ¶ˆæ¯(æ ¹æ®æ¶ˆæ¯Id)
 CBuddyMessage* CMessageSender::GetBuddyMsgById(UINT nMsgId)
 {
     if (m_nType != FMG_MSG_TYPE_BUDDY)
@@ -1757,7 +1757,7 @@ CBuddyMessage* CMessageSender::GetBuddyMsgById(UINT nMsgId)
     return NULL;
 }
 
-// »ñÈ¡ÈºÏûÏ¢(¸ù¾İÏûÏ¢Id)
+// è·å–ç¾¤æ¶ˆæ¯(æ ¹æ®æ¶ˆæ¯Id)
 CBuddyMessage* CMessageSender::GetGroupMsgById(UINT nMsgId)
 {
     if (m_nType != FMG_MSG_TYPE_GROUP)
@@ -1773,7 +1773,7 @@ CBuddyMessage* CMessageSender::GetGroupMsgById(UINT nMsgId)
     return NULL;
 }
 
-// »ñÈ¡ÁÙÊ±»á»°ÏûÏ¢(¸ù¾İÏûÏ¢Id)
+// è·å–ä¸´æ—¶ä¼šè¯æ¶ˆæ¯(æ ¹æ®æ¶ˆæ¯Id)
 CSessMessage* CMessageSender::GetSessMsgById(UINT nMsgId)
 {
     if (m_nType != FMG_MSG_TYPE_SESS)
@@ -1789,7 +1789,7 @@ CSessMessage* CMessageSender::GetSessMsgById(UINT nMsgId)
     return NULL;
 }
 
-// »ñÈ¡ÈºÏµÍ³ÏûÏ¢(¸ù¾İÏûÏ¢Id)
+// è·å–ç¾¤ç³»ç»Ÿæ¶ˆæ¯(æ ¹æ®æ¶ˆæ¯Id)
 CSysGroupMessage* CMessageSender::GetSysGroupMsgById(UINT nMsgId)
 {
     //if (m_nType != FMG_MSG_TYPE_SYSGROUP)
@@ -1815,7 +1815,7 @@ CMessageList::~CMessageList(void)
     DelAllMsgSender();
 }
 
-// Ìí¼ÓÏûÏ¢
+// æ·»åŠ æ¶ˆæ¯
 BOOL CMessageList::AddMsg(long nType, UINT nSenderId,
     UINT nGroupCode, void* lpMsg)
 {
@@ -1835,7 +1835,7 @@ BOOL CMessageList::AddMsg(long nType, UINT nSenderId,
     return lpMsgSender->AddMsg(lpMsg);
 }
 
-// É¾³ıÏûÏ¢
+// åˆ é™¤æ¶ˆæ¯
 BOOL CMessageList::DelMsg(long nType, UINT nMsgId)
 {
     for (int i = 0; i < (int)m_arrMsgSender.size(); i++)
@@ -1850,7 +1850,7 @@ BOOL CMessageList::DelMsg(long nType, UINT nMsgId)
     return FALSE;
 }
 
-// É¾³ıÏûÏ¢·¢ËÍÕß(¸ù¾İË÷Òı)
+// åˆ é™¤æ¶ˆæ¯å‘é€è€…(æ ¹æ®ç´¢å¼•)
 BOOL CMessageList::DelMsgSender(int nIndex)
 {
     if (nIndex >= 0 && nIndex < (int)m_arrMsgSender.size())
@@ -1868,7 +1868,7 @@ BOOL CMessageList::DelMsgSender(int nIndex)
         return FALSE;
 }
 
-// É¾³ıÏûÏ¢·¢ËÍÕß(¸ù¾İÏûÏ¢ÀàĞÍºÍ·¢ËÍÕßId)
+// åˆ é™¤æ¶ˆæ¯å‘é€è€…(æ ¹æ®æ¶ˆæ¯ç±»å‹å’Œå‘é€è€…Id)
 BOOL CMessageList::DelMsgSender(long nType, UINT nSenderId)
 {
     for (int i = 0; i < (int)m_arrMsgSender.size(); i++)
@@ -1886,7 +1886,7 @@ BOOL CMessageList::DelMsgSender(long nType, UINT nSenderId)
     return FALSE;
 }
 
-// É¾³ıËùÓĞÏûÏ¢·¢ËÍÕß
+// åˆ é™¤æ‰€æœ‰æ¶ˆæ¯å‘é€è€…
 BOOL CMessageList::DelAllMsgSender()
 {
     for (int i = 0; i < (int)m_arrMsgSender.size(); i++)
@@ -1902,13 +1902,13 @@ BOOL CMessageList::DelAllMsgSender()
     return TRUE;
 }
 
-// »ñÈ¡ÏûÏ¢·¢ËÍÕß×ÜÊı
+// è·å–æ¶ˆæ¯å‘é€è€…æ€»æ•°
 int CMessageList::GetMsgSenderCount()
 {
     return (int)m_arrMsgSender.size();
 }
 
-// »ñÈ¡ÏûÏ¢·¢ËÍÕß(¸ù¾İË÷Òı)
+// è·å–æ¶ˆæ¯å‘é€è€…(æ ¹æ®ç´¢å¼•)
 CMessageSender* CMessageList::GetMsgSender(int nIndex)
 {
     if (nIndex >= 0 && nIndex < (int)m_arrMsgSender.size())
@@ -1917,7 +1917,7 @@ CMessageSender* CMessageList::GetMsgSender(int nIndex)
         return NULL;
 }
 
-// »ñÈ¡ÏûÏ¢·¢ËÍÕß(¸ù¾İÏûÏ¢ÀàĞÍºÍ·¢ËÍÕßId)
+// è·å–æ¶ˆæ¯å‘é€è€…(æ ¹æ®æ¶ˆæ¯ç±»å‹å’Œå‘é€è€…Id)
 CMessageSender* CMessageList::GetMsgSender(long nType, UINT nSenderId)
 {
     for (int i = 0; i < (int)m_arrMsgSender.size(); i++)
@@ -1932,7 +1932,7 @@ CMessageSender* CMessageList::GetMsgSender(long nType, UINT nSenderId)
     return NULL;
 }
 
-// »ñÈ¡×îºóÒ»¸ö·¢ËÍÏûÏ¢¹ıÀ´µÄ·¢ËÍÕß
+// è·å–æœ€åä¸€ä¸ªå‘é€æ¶ˆæ¯è¿‡æ¥çš„å‘é€è€…
 CMessageSender* CMessageList::GetLastMsgSender()
 {
     int nCount = m_arrMsgIdentity.size();
@@ -1944,7 +1944,7 @@ CMessageSender* CMessageList::GetLastMsgSender()
     return GetMsgSender(stMsgId.nType, stMsgId.nSenderId);
 }
 
-// »ñÈ¡ºÃÓÑÏûÏ¢(¸ù¾İÏûÏ¢Id)
+// è·å–å¥½å‹æ¶ˆæ¯(æ ¹æ®æ¶ˆæ¯Id)
 CBuddyMessage* CMessageList::GetBuddyMsg(UINT nMsgId)
 {
     for (int i = 0; i < (int)m_arrMsgSender.size(); i++)
@@ -1960,7 +1960,7 @@ CBuddyMessage* CMessageList::GetBuddyMsg(UINT nMsgId)
     return NULL;
 }
 
-// »ñÈ¡ÈºÏûÏ¢(¸ù¾İÏûÏ¢Id)
+// è·å–ç¾¤æ¶ˆæ¯(æ ¹æ®æ¶ˆæ¯Id)
 CBuddyMessage* CMessageList::GetGroupMsg(UINT nMsgId)
 {
     for (int i = 0; i < (int)m_arrMsgSender.size(); i++)
@@ -1976,7 +1976,7 @@ CBuddyMessage* CMessageList::GetGroupMsg(UINT nMsgId)
     return NULL;
 }
 
-// »ñÈ¡ÁÙÊ±»á»°ÏûÏ¢(¸ù¾İÏûÏ¢Id)
+// è·å–ä¸´æ—¶ä¼šè¯æ¶ˆæ¯(æ ¹æ®æ¶ˆæ¯Id)
 CSessMessage* CMessageList::GetSessMsg(UINT nMsgId)
 {
     for (int i = 0; i < (int)m_arrMsgSender.size(); i++)
@@ -1992,7 +1992,7 @@ CSessMessage* CMessageList::GetSessMsg(UINT nMsgId)
     return NULL;
 }
 
-// »ñÈ¡ºÃÓÑÏûÏ¢(¸ù¾İ·¢ËÍÕßIdºÍÏûÏ¢Id)
+// è·å–å¥½å‹æ¶ˆæ¯(æ ¹æ®å‘é€è€…Idå’Œæ¶ˆæ¯Id)
 CBuddyMessage* CMessageList::GetBuddyMsg(UINT nUTalkUin, UINT nMsgId)
 {
     CMessageSender* lpMsgSender = GetMsgSender(FMG_MSG_TYPE_BUDDY, nUTalkUin);
@@ -2002,7 +2002,7 @@ CBuddyMessage* CMessageList::GetBuddyMsg(UINT nUTalkUin, UINT nMsgId)
         return NULL;
 }
 
-// »ñÈ¡ÈºÏûÏ¢(¸ù¾İ·¢ËÍÕßIdºÍÏûÏ¢Id)
+// è·å–ç¾¤æ¶ˆæ¯(æ ¹æ®å‘é€è€…Idå’Œæ¶ˆæ¯Id)
 CBuddyMessage* CMessageList::GetGroupMsg(UINT nGroupCode, UINT nMsgId)
 {
     CMessageSender* lpMsgSender = GetMsgSender(FMG_MSG_TYPE_GROUP, nGroupCode);
@@ -2012,7 +2012,7 @@ CBuddyMessage* CMessageList::GetGroupMsg(UINT nGroupCode, UINT nMsgId)
         return NULL;
 }
 
-// »ñÈ¡ÁÙÊ±»á»°ÏûÏ¢(¸ù¾İ·¢ËÍÕßIdºÍÏûÏ¢Id)
+// è·å–ä¸´æ—¶ä¼šè¯æ¶ˆæ¯(æ ¹æ®å‘é€è€…Idå’Œæ¶ˆæ¯Id)
 CSessMessage* CMessageList::GetSessMsg(UINT nUTalkUin, UINT nMsgId)
 {
     CMessageSender* lpMsgSender = GetMsgSender(FMG_MSG_TYPE_SESS, nUTalkUin);
@@ -2065,7 +2065,7 @@ void CMessageList::DelMsgIdentity(long nType, UINT nSenderId)
 // 		return FALSE;
 // 
 // 	char* lpSql = "CREATE TABLE [tb_BuddyMsg] ([id] INTEGER PRIMARY KEY, [uin] INTEGER, [nickname] TEXT, [time] INTEGER, [sendflag] INTEGER, [content] TEXT)";
-// 	nRet = sqlite3_exec(conn, lpSql, 0, 0, &err_msg);	// ´´½¨ºÃÓÑÏûÏ¢±í
+// 	nRet = sqlite3_exec(conn, lpSql, 0, 0, &err_msg);	// åˆ›å»ºå¥½å‹æ¶ˆæ¯è¡¨
 // 	if (nRet != SQLITE_OK)
 // 	{
 // 		sqlite3_close(conn);
@@ -2073,7 +2073,7 @@ void CMessageList::DelMsgIdentity(long nType, UINT nSenderId)
 // 	}
 // 
 // 	lpSql = "CREATE TABLE [tb_GroupMsg] ([id] INTEGER PRIMARY KEY, [groupnum] INTEGER, [uin] INTEGER, [nickname] TEXT, [time] INTEGER, [content] TEXT)";
-// 	nRet = sqlite3_exec(conn, lpSql, 0, 0, &err_msg);	// ´´½¨ÈºÏûÏ¢±í
+// 	nRet = sqlite3_exec(conn, lpSql, 0, 0, &err_msg);	// åˆ›å»ºç¾¤æ¶ˆæ¯è¡¨
 // 	if (nRet != SQLITE_OK)
 // 	{
 // 		sqlite3_close(conn);
@@ -2081,7 +2081,7 @@ void CMessageList::DelMsgIdentity(long nType, UINT nSenderId)
 // 	}
 // 
 // 	lpSql = "CREATE TABLE [tb_SessMsg] ([id] INTEGER PRIMARY KEY, [uin] INTEGER, [nickname] TEXT, [time] INTEGER, [sendflag] INTEGER, [content] TEXT)";
-// 	nRet = sqlite3_exec(conn, lpSql, 0, 0, &err_msg);	// ´´½¨ÁÙÊ±»á»°(Èº³ÉÔ±)ÏûÏ¢±í
+// 	nRet = sqlite3_exec(conn, lpSql, 0, 0, &err_msg);	// åˆ›å»ºä¸´æ—¶ä¼šè¯(ç¾¤æˆå‘˜)æ¶ˆæ¯è¡¨
 // 	if (nRet != SQLITE_OK)
 // 	{
 // 		sqlite3_close(conn);

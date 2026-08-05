@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "SkinScrollBar.h"
 
 CSkinScrollBar::CSkinScrollBar(void)
@@ -532,17 +532,17 @@ void CSkinScrollBar::OnLButtonDown(UINT nFlags, CPoint point)
 	m_nScrollRepeatDelay = 0;
 	m_dwTimerId = ::SetTimer(m_hOwnerWnd, m_dwUseTimerId, 50, NULL);
 
-	if (::PtInRect(&m_rcLeftUpBtn, point))	// ×ó/ÉÏ¼ıÍ·
+	if (::PtInRect(&m_rcLeftUpBtn, point))	// å·¦/ä¸Šç®­å¤´
 	{
 		m_dwLeftUpBtnState |= UISTATE_PUSHED;
-		if (!m_bHorizontal)		// ´¹Ö±
+		if (!m_bHorizontal)		// å‚ç›´
 		{
 			if (::IsWindow(m_hOwnerWnd))
 				::SendMessage(m_hOwnerWnd, WM_VSCROLL, SB_LINEUP, m_nCtrlId);
 			else
 				SetScrollPos(m_nScrollPos - m_nLineSize);
 		}
-		else	// Ë®Æ½
+		else	// æ°´å¹³
 		{
 			if (::IsWindow(m_hOwnerWnd))
 				::SendMessage(m_hOwnerWnd, WM_HSCROLL, SB_LINELEFT, m_nCtrlId);
@@ -550,7 +550,7 @@ void CSkinScrollBar::OnLButtonDown(UINT nFlags, CPoint point)
 				SetScrollPos(m_nScrollPos - m_nLineSize);
 		}
 	}
-	else if (::PtInRect(&m_rcRightDownBtn, point))	// ÓÒ/ÏÂ¼ıÍ·
+	else if (::PtInRect(&m_rcRightDownBtn, point))	// å³/ä¸‹ç®­å¤´
 	{
 		m_dwRightDownBtnState |= UISTATE_PUSHED;
 		if (!m_bHorizontal)
@@ -568,7 +568,7 @@ void CSkinScrollBar::OnLButtonDown(UINT nFlags, CPoint point)
 				SetScrollPos(m_nScrollPos + m_nLineSize);
 		}
 	}
-	else if (::PtInRect(&m_rcThumb, point))	// »¬¿é
+	else if (::PtInRect(&m_rcThumb, point))	// æ»‘å—
 	{
 		m_dwThumbState |= (UISTATE_CAPTURED | UISTATE_PUSHED);
 		m_ptLastMouse = point;
@@ -576,16 +576,16 @@ void CSkinScrollBar::OnLButtonDown(UINT nFlags, CPoint point)
 	}
 	else
 	{
-		if (!m_bHorizontal)	// ´¹Ö±
+		if (!m_bHorizontal)	// å‚ç›´
 		{
-			if (point.y < m_rcThumb.top)	// ÉÏ¼ıÍ·ºÍ»¬¿éÖ®¼äÇøÓò
+			if (point.y < m_rcThumb.top)	// ä¸Šç®­å¤´å’Œæ»‘å—ä¹‹é—´åŒºåŸŸ
 			{
 				if (::IsWindow(m_hOwnerWnd))
 					::SendMessage(m_hOwnerWnd, WM_VSCROLL, SB_PAGEUP, m_nCtrlId);
 				else
 					SetScrollPos(m_nScrollPos + m_rcScrollBar.top - m_rcScrollBar.bottom);
 			}
-			else if (point.y > m_rcThumb.bottom)	// ÏÂ¼ıÍ·ºÍ»¬¿éÖ®¼äÇøÓò
+			else if (point.y > m_rcThumb.bottom)	// ä¸‹ç®­å¤´å’Œæ»‘å—ä¹‹é—´åŒºåŸŸ
 			{
 				if (::IsWindow(m_hOwnerWnd))
 					::SendMessage(m_hOwnerWnd, WM_VSCROLL, SB_PAGEDOWN, m_nCtrlId);
@@ -593,16 +593,16 @@ void CSkinScrollBar::OnLButtonDown(UINT nFlags, CPoint point)
 					SetScrollPos(m_nScrollPos - m_rcScrollBar.top + m_rcScrollBar.bottom);
 			}
 		}
-		else	// Ë®Æ½
+		else	// æ°´å¹³
 		{
-			if (point.x < m_rcThumb.left)	// ×ó¼ıÍ·ºÍ»¬¿éÖ®¼äÇøÓò
+			if (point.x < m_rcThumb.left)	// å·¦ç®­å¤´å’Œæ»‘å—ä¹‹é—´åŒºåŸŸ
 			{
 				if (::IsWindow(m_hOwnerWnd))
 					::SendMessage(m_hOwnerWnd, WM_HSCROLL, SB_PAGELEFT, m_nCtrlId);
 				else
 					SetScrollPos(m_nScrollPos + m_rcScrollBar.left - m_rcScrollBar.right);
 			}
-			else if (point.x > m_rcThumb.right)		// ÓÒ¼ıÍ·ºÍ»¬¿éÖ®¼äÇøÓò
+			else if (point.x > m_rcThumb.right)		// å³ç®­å¤´å’Œæ»‘å—ä¹‹é—´åŒºåŸŸ
 			{
 				if (::IsWindow(m_hOwnerWnd))
 					::SendMessage(m_hOwnerWnd, WM_HSCROLL, SB_PAGERIGHT, m_nCtrlId);
@@ -794,36 +794,36 @@ void CSkinScrollBar::OnTimer(UINT_PTR nIDEvent)
 	if (nIDEvent == m_dwTimerId)
 	{
 		++m_nScrollRepeatDelay;
-		if ((m_dwThumbState & UISTATE_CAPTURED) != 0)	// ÍÏ¶¯»¬¿é
+		if ((m_dwThumbState & UISTATE_CAPTURED) != 0)	// æ‹–åŠ¨æ»‘å—
 		{
-			if (!m_bHorizontal)	// ´¹Ö±
+			if (!m_bHorizontal)	// å‚ç›´
 			{
 				SetScrollPos(m_nLastScrollPos + m_nLastScrollOffset);
 				if (::IsWindow(m_hOwnerWnd))
-					::SendMessage(m_hOwnerWnd, WM_VSCROLL, SB_THUMBTRACK, m_nCtrlId);	// £¿
+					::SendMessage(m_hOwnerWnd, WM_VSCROLL, SB_THUMBTRACK, m_nCtrlId);	// ï¼Ÿ
 			}
 			else
 			{
 				SetScrollPos(m_nLastScrollPos + m_nLastScrollOffset);
 				if (::IsWindow(m_hOwnerWnd))
-					::SendMessage(m_hOwnerWnd, WM_HSCROLL, SB_THUMBTRACK, m_nCtrlId);	// £¿
+					::SendMessage(m_hOwnerWnd, WM_HSCROLL, SB_THUMBTRACK, m_nCtrlId);	// ï¼Ÿ
 			}
 
 			Invalidate();
 		}
-		else if((m_dwLeftUpBtnState & UISTATE_PUSHED) != 0)	// ³¤°´×ó/ÉÏ¼ıÍ·
+		else if((m_dwLeftUpBtnState & UISTATE_PUSHED) != 0)	// é•¿æŒ‰å·¦/ä¸Šç®­å¤´
 		{
 			if (m_nScrollRepeatDelay <= 5)
 				return;
 
-			if (!m_bHorizontal)		// ´¹Ö±
+			if (!m_bHorizontal)		// å‚ç›´
 			{
 				if (::IsWindow(m_hOwnerWnd))
 					::SendMessage(m_hOwnerWnd, WM_VSCROLL, SB_LINEUP, m_nCtrlId);
 				else
 					SetScrollPos(m_nScrollPos - m_nLineSize);
 			}
-			else	// Ë®Æ½
+			else	// æ°´å¹³
 			{
 				if (::IsWindow(m_hOwnerWnd))
 					::SendMessage(m_hOwnerWnd, WM_HSCROLL, SB_LINELEFT, m_nCtrlId);
@@ -831,7 +831,7 @@ void CSkinScrollBar::OnTimer(UINT_PTR nIDEvent)
 					SetScrollPos(m_nScrollPos - m_nLineSize);
 			}
 		}
-		else if((m_dwRightDownBtnState & UISTATE_PUSHED) != 0)	// ³¤°´ÓÒ/ÏÂ¼ıÍ·
+		else if((m_dwRightDownBtnState & UISTATE_PUSHED) != 0)	// é•¿æŒ‰å³/ä¸‹ç®­å¤´
 		{
 			if (m_nScrollRepeatDelay <= 5)
 				return;
@@ -860,16 +860,16 @@ void CSkinScrollBar::OnTimer(UINT_PTR nIDEvent)
 			::GetCursorPos(&pt);
 			::ScreenToClient(m_hOwnerWnd, &pt);
 
-			if (!m_bHorizontal)	// ´¹Ö±
+			if (!m_bHorizontal)	// å‚ç›´
 			{
-				if (pt.y < m_rcThumb.top)	// ÉÏ¼ıÍ·ºÍ»¬¿éÖ®¼äÇøÓò
+				if (pt.y < m_rcThumb.top)	// ä¸Šç®­å¤´å’Œæ»‘å—ä¹‹é—´åŒºåŸŸ
 				{
 					if (::IsWindow(m_hOwnerWnd))
 						::SendMessage(m_hOwnerWnd, WM_VSCROLL, SB_PAGEUP, m_nCtrlId);
 					else
 						SetScrollPos(m_nScrollPos + m_rcScrollBar.top - m_rcScrollBar.bottom);
 				}
-				else if (pt.y > m_rcThumb.bottom)	// ÏÂ¼ıÍ·ºÍ»¬¿éÖ®¼äÇøÓò
+				else if (pt.y > m_rcThumb.bottom)	// ä¸‹ç®­å¤´å’Œæ»‘å—ä¹‹é—´åŒºåŸŸ
 				{
 					if (::IsWindow(m_hOwnerWnd))
 						::SendMessage(m_hOwnerWnd, WM_VSCROLL, SB_PAGEDOWN, m_nCtrlId);
@@ -877,16 +877,16 @@ void CSkinScrollBar::OnTimer(UINT_PTR nIDEvent)
 						SetScrollPos(m_nScrollPos - m_rcScrollBar.top + m_rcScrollBar.bottom);
 				}
 			}
-			else	// Ë®Æ½
+			else	// æ°´å¹³
 			{
-				if (pt.x < m_rcThumb.left)	// ×ó¼ıÍ·ºÍ»¬¿éÖ®¼äÇøÓò
+				if (pt.x < m_rcThumb.left)	// å·¦ç®­å¤´å’Œæ»‘å—ä¹‹é—´åŒºåŸŸ
 				{
 					if (::IsWindow(m_hOwnerWnd))
 						::SendMessage(m_hOwnerWnd, WM_HSCROLL, SB_PAGELEFT, m_nCtrlId);
 					else
 						SetScrollPos(m_nScrollPos + m_rcScrollBar.left - m_rcScrollBar.right);
 				}
-				else if (pt.x > m_rcThumb.right)	// ÓÒ¼ıÍ·ºÍ»¬¿éÖ®¼äÇøÓò
+				else if (pt.x > m_rcThumb.right)	// å³ç®­å¤´å’Œæ»‘å—ä¹‹é—´åŒºåŸŸ
 				{
 					if (::IsWindow(m_hOwnerWnd))
 						::SendMessage(m_hOwnerWnd, WM_HSCROLL, SB_PAGERIGHT, m_nCtrlId);
@@ -1075,7 +1075,7 @@ BOOL CSkinScrollBar::Invalidate(BOOL bErase/* = TRUE*/)
 
 void CSkinScrollBar::CalcScrollBarData()
 {
-	if (m_bHorizontal)	// Ë®Æ½
+	if (m_bHorizontal)	// æ°´å¹³
 	{
 		int cx = m_rcScrollBar.Width();
 		int cy = m_rcScrollBar.Height();
@@ -1086,7 +1086,7 @@ void CSkinScrollBar::CalcScrollBarData()
 			cx -= cy;
 		if (cx > cy)
 		{
-			m_rcLeftUpBtn.left = m_rcScrollBar.left;	// ¼ÆËã×ó¼ıÍ·°´Å¥ÇøÓò
+			m_rcLeftUpBtn.left = m_rcScrollBar.left;	// è®¡ç®—å·¦ç®­å¤´æŒ‰é’®åŒºåŸŸ
 			m_rcLeftUpBtn.top = m_rcScrollBar.top;
 			if (m_bShowLeftUpBtn)
 			{
@@ -1099,7 +1099,7 @@ void CSkinScrollBar::CalcScrollBarData()
 				m_rcLeftUpBtn.bottom = m_rcLeftUpBtn.top;
 			}
 
-			m_rcRightDownBtn.top = m_rcScrollBar.top;	// ¼ÆËãÓÒ¼ıÍ·°´Å¥ÇøÓò
+			m_rcRightDownBtn.top = m_rcScrollBar.top;	// è®¡ç®—å³ç®­å¤´æŒ‰é’®åŒºåŸŸ
 			m_rcRightDownBtn.right = m_rcScrollBar.right;
 			if (m_bShowRightDownBtn)
 			{
@@ -1168,7 +1168,7 @@ void CSkinScrollBar::CalcScrollBarData()
 			memset(&m_rcThumb, 0, sizeof(m_rcThumb));
 		}
 	}
-	else	// ´¹Ö±
+	else	// å‚ç›´
 	{
 		int cx = m_rcScrollBar.Width();
 		int cy = m_rcScrollBar.Height();
@@ -1209,8 +1209,8 @@ void CSkinScrollBar::CalcScrollBarData()
 			m_rcThumb.right = m_rcScrollBar.left + cx;
 			if (m_nRange > 0)
 			{
-				// ¹ö¶¯Ìõ¸ß¶È* (ÏÔÊ¾´óĞ¡ / ×Ü´óĞ¡)
-				// ¹ö¶¯Ìõ¸ß¶È* ÏÔÊ¾´óĞ¡ / ×Ü´óĞ¡
+				// æ»šåŠ¨æ¡é«˜åº¦* (æ˜¾ç¤ºå¤§å° / æ€»å¤§å°)
+				// æ»šåŠ¨æ¡é«˜åº¦* æ˜¾ç¤ºå¤§å° / æ€»å¤§å°
 				int cyThumb = cy* m_rcScrollBar.Height() / (m_nRange + m_rcScrollBar.Height());
 				if (cyThumb < cx)
 					cyThumb = cx;

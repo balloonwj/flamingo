@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "IULog.h"
 //#include "Path.h"
 //#include "UserSessionData.h"
@@ -118,18 +118,18 @@ bool CIULog::Log(long nLevel, PCTSTR pszFmt, ...)
 
 	strDebugInfo += strLevel;
 
-    //µ±Ç°Ïß³ÌĞÅÏ¢
+    //å½“å‰çº¿ç¨‹ä¿¡æ¯
     char szThreadID[32] = { 0 };
     DWORD dwThreadID = ::GetCurrentThreadId();
     sprintf_s(szThreadID, ARRAYSIZE(szThreadID), "[ThreadID: %u]", dwThreadID);  
     strDebugInfo += szThreadID;
 
-    //logÕıÎÄ
+    //logæ­£æ–‡
     std::wstring strLogMsg;
     va_list ap;
     va_start(ap, pszFmt);
     int nLogMsgLength = _vsctprintf(pszFmt, ap);
-    //ÈİÁ¿±ØĞëËãÉÏ×îºóÒ»¸ö\0
+    //å®¹é‡å¿…é¡»ç®—ä¸Šæœ€åä¸€ä¸ª\0
     if ((int)strLogMsg.capacity() < nLogMsgLength + 1)
     {
         strLogMsg.resize(nLogMsgLength + 1);
@@ -137,11 +137,11 @@ bool CIULog::Log(long nLevel, PCTSTR pszFmt, ...)
     _vstprintf_s((TCHAR*)strLogMsg.data(), strLogMsg.capacity(), pszFmt, ap);
     va_end(ap);
 
-    //stringÄÚÈİÕıÈ·µ«length²»¶Ô£¬»Ö¸´Ò»ÏÂÆälength
+    //stringå†…å®¹æ­£ç¡®ä½†lengthä¸å¯¹ï¼Œæ¢å¤ä¸€ä¸‹å…¶length
     std::wstring strMsgFormal;
     strMsgFormal.append(strLogMsg.c_str(), nLogMsgLength);
 
-    //Èç¹ûÈÕÖ¾¿ªÆô½Ø¶Ï£¬³¤ÈÕÖ¾Ö»È¡Ç°MAX_LINE_LENGTH¸ö×Ö·û
+    //å¦‚æœæ—¥å¿—å¼€å¯æˆªæ–­ï¼Œé•¿æ—¥å¿—åªå–å‰MAX_LINE_LENGTHä¸ªå­—ç¬¦
     if (m_bTruncateLongLog)
         strMsgFormal = strMsgFormal.substr(0, MAX_LINE_LENGTH);
 
@@ -176,12 +176,12 @@ bool CIULog::Log(long nLevel, PCSTR pszFunctionSig, int nLineNo, PCTSTR pszFmt, 
     if (nLevel < m_nLogLevel)
         return false;
 
-	//Ê±¼ä
+	//æ—¶é—´
     char szTime[64] = { 0 };
     GetTime(szTime, ARRAYSIZE(szTime));
     std::string strDebugInfo(szTime);
 	
-	//´íÎó¼¶±ğ
+	//é”™è¯¯çº§åˆ«
 	std::string strLevel("[INFO]");
     if (nLevel == LOG_LEVEL_WARNING)
 		strLevel = "[Warning]";
@@ -190,23 +190,25 @@ bool CIULog::Log(long nLevel, PCSTR pszFunctionSig, int nLineNo, PCTSTR pszFmt, 
 
 	strDebugInfo += strLevel;
 	
-	//µ±Ç°Ïß³ÌĞÅÏ¢
+	//å½“å‰çº¿ç¨‹ä¿¡æ¯
 	char szThreadID[32] = {0};
 	DWORD dwThreadID = ::GetCurrentThreadId();
     sprintf_s(szThreadID, ARRAYSIZE(szThreadID), "[ThreadID: %u]", dwThreadID);
 	strDebugInfo += szThreadID;
 
-	//º¯ÊıÇ©Ãû
-    char szFuncSig[512] = { 0 };
-    sprintf_s(szFuncSig, "[%s:%d]", pszFunctionSig, nLineNo);
+	//å‡½æ•°ç­¾å
+    //ç¼“å†²æ”¾å¤§ + æ”¹ç”¨ _snprintf_s(_TRUNCATE)ï¼šå¸¦å¤šä¸ª std::string/wstring å‚æ•°çš„å‡½æ•°å…¶
+    //__FUNCSIG__ å±•å¼€å¯è¾¾æ•°ç™¾å­—ç¬¦ï¼Œæ—§çš„ 512 å›ºå®šç¼“å†² + sprintf_s ä¼šæº¢å‡ºæ–­è¨€å´©æºƒï¼›ç°åœ¨å†é•¿ä¹Ÿåªæˆªæ–­ã€‚
+    char szFuncSig[2048] = { 0 };
+    _snprintf_s(szFuncSig, sizeof(szFuncSig), _TRUNCATE, "[%s:%d]", pszFunctionSig, nLineNo);
     strDebugInfo += szFuncSig;
 
-	//logÕıÎÄ
+	//logæ­£æ–‡
     std::wstring strLogMsg;
     va_list ap;
     va_start(ap, pszFmt);
     int nLogMsgLength = _vsctprintf(pszFmt, ap);
-    //ÈİÁ¿±ØĞëËãÉÏ×îºóÒ»¸ö\0 
+    //å®¹é‡å¿…é¡»ç®—ä¸Šæœ€åä¸€ä¸ª\0 
     if ((int)strLogMsg.capacity() < nLogMsgLength + 1)
     {
         strLogMsg.resize(nLogMsgLength + 1);
@@ -214,11 +216,11 @@ bool CIULog::Log(long nLevel, PCSTR pszFunctionSig, int nLineNo, PCTSTR pszFmt, 
     _vstprintf_s((TCHAR*)strLogMsg.data(), strLogMsg.capacity(), pszFmt, ap);
     va_end(ap);
 
-    //stringÄÚÈİÕıÈ·µ«length²»¶Ô£¬»Ö¸´Ò»ÏÂÆälength
+    //stringå†…å®¹æ­£ç¡®ä½†lengthä¸å¯¹ï¼Œæ¢å¤ä¸€ä¸‹å…¶length
     std::wstring strMsgFormal;
     strMsgFormal.append(strLogMsg.c_str(), nLogMsgLength);
 
-    //Èç¹ûÈÕÖ¾¿ªÆô½Ø¶Ï£¬³¤ÈÕÖ¾Ö»È¡Ç°MAX_LINE_LENGTH¸ö×Ö·û
+    //å¦‚æœæ—¥å¿—å¼€å¯æˆªæ–­ï¼Œé•¿æ—¥å¿—åªå–å‰MAX_LINE_LENGTHä¸ªå­—ç¬¦
     if (m_bTruncateLongLog)
         strMsgFormal = strMsgFormal.substr(0, MAX_LINE_LENGTH);
 
@@ -253,12 +255,12 @@ bool CIULog::Log(long nLevel, PCSTR pszFunctionSig, int nLineNo, PCSTR pszFmt, .
     if (nLevel < m_nLogLevel)
         return false;
 
-	//Ê±¼ä
+	//æ—¶é—´
     char szTime[64] = { 0 };
     GetTime(szTime, ARRAYSIZE(szTime));
     std::string strDebugInfo(szTime);
 	
-	//´íÎó¼¶±ğ
+	//é”™è¯¯çº§åˆ«
 	std::string strLevel("[INFO]");
     if (nLevel == LOG_LEVEL_WARNING)
 		strLevel = "[Warning]";
@@ -267,23 +269,25 @@ bool CIULog::Log(long nLevel, PCSTR pszFunctionSig, int nLineNo, PCSTR pszFmt, .
 
 	strDebugInfo += strLevel;
 	
-	//µ±Ç°Ïß³ÌĞÅÏ¢
+	//å½“å‰çº¿ç¨‹ä¿¡æ¯
 	char szThreadID[32] = {0};
 	DWORD dwThreadID = ::GetCurrentThreadId();
 	sprintf_s(szThreadID, ARRAYSIZE(szThreadID), "[ThreadID: %u]", dwThreadID);
     strDebugInfo += szThreadID;
 
-    //º¯ÊıÇ©Ãû
-    char szFuncSig[512] = { 0 };
-    sprintf_s(szFuncSig, "[%s:%d]", pszFunctionSig, nLineNo);
+    //å‡½æ•°ç­¾å
+    //ç¼“å†²æ”¾å¤§ + æ”¹ç”¨ _snprintf_s(_TRUNCATE)ï¼šå¸¦å¤šä¸ª std::string/wstring å‚æ•°çš„å‡½æ•°å…¶
+    //__FUNCSIG__ å±•å¼€å¯è¾¾æ•°ç™¾å­—ç¬¦ï¼Œæ—§çš„ 512 å›ºå®šç¼“å†² + sprintf_s ä¼šæº¢å‡ºæ–­è¨€å´©æºƒï¼›ç°åœ¨å†é•¿ä¹Ÿåªæˆªæ–­ã€‚
+    char szFuncSig[2048] = { 0 };
+    _snprintf_s(szFuncSig, sizeof(szFuncSig), _TRUNCATE, "[%s:%d]", pszFunctionSig, nLineNo);
     strDebugInfo += szFuncSig;
 
-    //ÈÕÖ¾ÕıÎÄ
+    //æ—¥å¿—æ­£æ–‡
     std::string strLogMsg;
     va_list ap;
     va_start(ap, pszFmt);
     int nLogMsgLength = _vscprintf(pszFmt, ap);
-    //ÈİÁ¿±ØĞëËãÉÏ×îºóÒ»¸ö\0
+    //å®¹é‡å¿…é¡»ç®—ä¸Šæœ€åä¸€ä¸ª\0
     if ((int)strLogMsg.capacity() < nLogMsgLength + 1)
     {
         strLogMsg.resize(nLogMsgLength + 1);
@@ -291,11 +295,11 @@ bool CIULog::Log(long nLevel, PCSTR pszFunctionSig, int nLineNo, PCSTR pszFmt, .
     vsprintf_s((char*)strLogMsg.data(), strLogMsg.capacity(), pszFmt, ap);
     va_end(ap);
 
-    //stringÄÚÈİÕıÈ·µ«length²»¶Ô£¬»Ö¸´Ò»ÏÂÆälength
+    //stringå†…å®¹æ­£ç¡®ä½†lengthä¸å¯¹ï¼Œæ¢å¤ä¸€ä¸‹å…¶length
     std::string strMsgFormal;
     strMsgFormal.append(strLogMsg.c_str(), nLogMsgLength);
 
-    //Èç¹ûÈÕÖ¾¿ªÆô½Ø¶Ï£¬³¤ÈÕÖ¾Ö»È¡Ç°MAX_LINE_LENGTH¸ö×Ö·û
+    //å¦‚æœæ—¥å¿—å¼€å¯æˆªæ–­ï¼Œé•¿æ—¥å¿—åªå–å‰MAX_LINE_LENGTHä¸ªå­—ç¬¦
     if (m_bTruncateLongLog)
         strMsgFormal = strMsgFormal.substr(0, MAX_LINE_LENGTH);
 

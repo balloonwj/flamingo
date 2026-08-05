@@ -1,5 +1,5 @@
-/**
- * Ô¶³Ì×ÀÃæ´°¿Ú
+ï»¿/**
+ * è¿œç¨‹æ¡Œé¢çª—å£
  * zhangyl 2017.09.07
  */
 #pragma once
@@ -12,7 +12,7 @@
 
 class CFlamingoClient;
 
-//²éÕÒ»¹ÓĞ²¢Ìí¼ÓºÃÓÑ¶Ô»°¿ò
+//æŸ¥æ‰¾è¿˜æœ‰å¹¶æ·»åŠ å¥½å‹å¯¹è¯æ¡†
 class CRemoteDesktopDlg : public CDialogImpl<CRemoteDesktopDlg>, public CMessageFilter
 {
 public: 
@@ -21,7 +21,7 @@ public:
 
     virtual BOOL PreTranslateMessage(MSG* pMsg);
 
-    //ÔÚ×ÊÔ´ÎÄ¼şÀïÃæÔö¼Ó¶Ô»°¿ò×ÊÔ´Ä£°å
+    //åœ¨èµ„æºæ–‡ä»¶é‡Œé¢å¢åŠ å¯¹è¯æ¡†èµ„æºæ¨¡æ¿
     enum { IDD = IDD_REMOTEDESKTOP };
 
     BEGIN_MSG_MAP_EX(CRemoteDesktopDlg)
@@ -71,8 +71,8 @@ private:
     void DrawTipString(CString str);
     void ResetScreen();
     void DrawFirstScreen();
-    void DrawNextScreenDiff();	// ²îÒì·¨
-    void DrawNextScreenRect();	// ¸ôĞĞÉ¨Ãè·¨
+    void DrawNextScreenDiff();	// å·®å¼‚æ³•
+    void DrawNextScreenRect();	// éš”è¡Œæ‰«ææ³•
     void SendResetScreen(int nBitCount);
     void SendResetAlgorithm(UINT nAlgorithm);
     bool SaveSnapshot();

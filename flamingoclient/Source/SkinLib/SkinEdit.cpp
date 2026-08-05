@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "SkinEdit.h"
 
 CSkinEdit::CSkinEdit(void)
@@ -81,7 +81,7 @@ void CSkinEdit::SetDefaultTextMode(BOOL bIsDefText)
 	}
 }
 
-// ÉèÖÃÉÏÏÂ×óÓÒ±ß¾àº¯Êı
+// è®¾ç½®ä¸Šä¸‹å·¦å³è¾¹è·å‡½æ•°
 void CSkinEdit::SetMarginsEx(int nLeft, int nTop, int nRight, int nBottom)
 {
 	CRect rtClient;
@@ -95,7 +95,7 @@ void CSkinEdit::SetMarginsEx(int nLeft, int nTop, int nRight, int nBottom)
 void CSkinEdit::SetMultiLine(BOOL bMultiLine/* = TRUE*/)
 {
 	m_bMultiLine = bMultiLine;
-	if (!m_bMultiLine && IsWindow())		// µ¥ĞĞÄ£Ê½¾ÓÖĞ
+	if (!m_bMultiLine && IsWindow())		// å•è¡Œæ¨¡å¼å±…ä¸­
 		SetCenterInSingleLine();
 }
 
@@ -105,7 +105,7 @@ BOOL CSkinEdit::SubclassWindow(HWND hWnd)
 
 	SetDefaultText(m_strDefText);
 
-	if (!m_bMultiLine)	// µ¥ĞĞÄ£Ê½¾ÓÖĞ
+	if (!m_bMultiLine)	// å•è¡Œæ¨¡å¼å±…ä¸­
 		SetCenterInSingleLine();
 
 	return TRUE;
@@ -321,7 +321,7 @@ void CSkinEdit::OnSize(UINT nType, CSize size)
 {
 	DefWindowProc();
 
-	if (!m_bMultiLine)			// µ¥ĞĞÄ£Ê½¾ÓÖĞ
+	if (!m_bMultiLine)			// å•è¡Œæ¨¡å¼å±…ä¸­
 		SetCenterInSingleLine();
 }
 

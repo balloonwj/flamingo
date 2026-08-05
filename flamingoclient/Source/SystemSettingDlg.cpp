@@ -1,4 +1,4 @@
-#include "stdafx.h"
+Ôªø#include "stdafx.h"
 #include "SystemSettingDlg.h"
 #include "FlamingoClient.h"
 #include <assert.h>
@@ -63,7 +63,7 @@ BOOL CSystemSettingDlg::InitUI()
 	m_SkinDlg.SetBgPic(_T("DlgBg\\GeneralBg.png"));
 	m_SkinDlg.SetCloseSysBtnPic(_T("SysBtn\\btn_close_normal.png"), _T("SysBtn\\btn_close_highlight.png"), _T("SysBtn\\btn_close_down.png"));
 	m_SkinDlg.SubclassWindow(m_hWnd);
-	m_SkinDlg.SetTitleText(_T("œµÕ≥…Ë÷√"));
+	m_SkinDlg.SetTitleText(_T("Á≥ªÁªüËÆæÁΩÆ"));
 
 	HDC hDlgBgDC = m_SkinDlg.GetBgDC();
 
@@ -106,7 +106,7 @@ BOOL CSystemSettingDlg::InitUI()
 	::EnableWindow(GetDlgItem(IDC_DESTRORAFTERREADLABEL), m_btnDestroyAfterRead.GetCheck());
 	m_cboDurationRead.EnableWindow(m_btnDestroyAfterRead.GetCheck());
 	
-	const TCHAR szDuration[][8] = {_T("5√Î"), _T("6√Î"), _T("7√Î"), _T("8√Î"), _T("9√Î"), _T("10√Î")};
+	const TCHAR szDuration[][8] = {_T("5Áßí"), _T("6Áßí"), _T("7Áßí"), _T("8Áßí"), _T("9Áßí"), _T("10Áßí")};
 	for (long i = 0; i < ARRAYSIZE(szDuration); ++i)
 	{
 		m_cboDurationRead.InsertString(i, szDuration[i]);

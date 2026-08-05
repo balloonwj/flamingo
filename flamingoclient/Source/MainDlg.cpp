@@ -1,4 +1,4 @@
-// MainDlg.cpp : implementation of the CMainDlg class
+﻿// MainDlg.cpp : implementation of the CMainDlg class
 //
 /////////////////////////////////////////////////////////////////////////////
 
@@ -7,8 +7,35 @@
 
 #include "aboutdlg.h"
 #include "MainDlg.h"
+#include "BalloonMain/NotificationSound.h"   // 通话音效：回铃 / 来电铃声（循环）与接通 / 结束 / 忙音（一次性）
 #include "IniFile.h"
 #include "net/IUProtocolData.h"
+#include "net/IUSocket.h"                 // CIUSocket::RequestContacts（登录后拉取通讯录）
+#include "net/MessageProtocolClient.h"    // net::MessageNotify / net::SendMessageResponse
+#include "net/RemoteDesktopProtocolClient.h" // net::RDInviteResponse / RDInviteNotify / RDRelayInfo / RDStateNotify
+#include "net/CallProtocolClient.h"          // net::CallInviteResponse / CallInviteNotify / CallSignalingInfo / CallStateNotify
+#include "RemoteDesktop/RdRelaySelfTest.h"   // remotedesktop::RunRdRelaySelfTest（--rdrelayselftest 调试入口）
+#include "Call/CallMediaSession.h"           // call::CallMediaSession（接通后中转会话）/ call::CallRelayEvent
+#include "Call/CallRelaySelfTest.h"          // call::RunCallRelaySelfTest（--callrelayselftest 调试入口）
+#include "Call/AudioLoopback.h"              // call::RunAudioLoopbackDebug（--callaudioloop 调试入口）
+#include "Call/CameraPreviewDebug.h"         // call::RunCameraPreviewDebug（--camerapreview 调试入口）
+#include "Call/CameraDisplayTest.h"          // call::RunCameraDisplayTest（--cameratest 摄像头显示自包含测试）
+#include "Call/H264SelfTest.h"               // call::RunH264SelfTest（--h264selftest 调试入口）
+#include "Call/VideoLoopbackDebug.h"         // call::RunVideoLoopbackDebug（--videoloop 调试入口）
+#include "Call/CallVideoUiDebug.h"           // call::RunCallVideoUiDebug（--callvideoui 调试入口）
+#include "RemoteDesktop/DxgiScreenCapturer.h" // remotedesktop::CDxgiScreenCapturer（--dxgicap 调试入口）
+#include "RemoteDesktop/RdScreenCapturer.h"   // remotedesktop::RdScreenCapturer（--dxgipipe 闭环调试入口）
+#include "net/ContactsProtocolClient.h"   // net::ContactsResult
+#include "net/ConversationsProtocolClient.h" // net::ConversationsResult
+#include "net/GroupProtocolClient.h"        // net::CreateGroupResponse
+#include "net/GroupFileProtocolClient.h"    // net::GetGroupFilesResult / GroupFilesChangedNotify
+#include "net/AnnounceProtocolClient.h"     // net::AnnouncementsResult / AnnouncementNotify / AnnounceMarkReadResult（平台公告 = 消息盒子）
+#include "net/FriendProtocolClient.h"       // net::SetFriendRemarkResult（设置好友备注名应答）
+#include "net/FileTransfer.h"               // net::GroupFileUploadResult / GroupFileDownloadResult
+#include "net/AccountProtocolClient.h"      // net::ChangePasswordResponse
+#include "net/ProfileProtocolClient.h"      // net::UpdateProfileResponse（更新个性签名应答）
+#include "net/ImageTransfer.h"              // net::ImageSendProgress / net::ImageSendResult
+#include "net/FileTransfer.h"               // net::FileSendProgress / net::FileSendResult / net::FileDownload*
 #include "SystemSettingDlg.h"
 #include "ClosePromptDlg.h"
 #include "IULog.h"
@@ -16,9 +43,10 @@
 #include "UserSessionData.h"
 #include "ModifyMarkNameDlg.h"
 #include "TeamDlg.h"
-#include "BuddyChatDlg.h"
-#include "GroupChatDlg.h"
-#include "SessChatDlg.h"
+#include "BalloonChat/BalloonBuddyChatDlg.h"
+#include "BalloonChat/BalloonGroupChatDlg.h"
+#include "BalloonChat/BalloonSessChatDlg.h"
+#include "FontSelDlg.h"
 #include "BuddyInfoDlg.h"
 #include "GroupInfoDlg.h"
 #include "FindFriendDlg.h"
@@ -36,6 +64,17 @@
 #include "UIText.h"
 #include "PerformanceCounter.h"
 #include "net/Msg.h"
+#include <memory>                                          // std::unique_ptr（托盘菜单图标保活）
+#include "ImageEx.h"                                       // CImageEx（托盘菜单项图标）
+#include "BalloonMain/MainPanelTrayMenu.h"                 // BuildTrayMenuModel / TrayMenuId（托盘菜单行模型）
+#include "BalloonMain/MainPanelAvatar.h"                   // MakeMonogramIcon（托盘新消息闪烁的发送方头像图标）
+#include "BalloonMain/MainPanelMenuIcons.h"                // CreateMenuIconImage（托盘菜单项图标渲染）
+#include "BalloonMain/MainPanelStatusMenu.h"               // GetPresenceVisual（托盘悬停提示的状态文字）
+#include "BalloonMain/OnlineCapability.h"                  // 连接态推导 / 托盘图标选择 / 自动重连守卫
+#include "BalloonMain/KickoutNotice.h"                     // GetKickoutNoticeTitle / Text（被踢下线的提示文案）
+#include "BalloonMain/BalloonKickoutDlg.h"                  // CBalloonKickoutDlg（贴托盘弹出的被踢下线模态提示框）
+#include "BalloonMain/PopupMenuPlacement.h"                // ClampPopupMenuToWorkArea（保证菜单在桌面内）
+#include "../balloonui/balloonui/Controls/List/DuiMenu.h"  // balloonui 弹出菜单（重建托盘右键菜单）
 
 #pragma comment(lib, "winmm.lib")
 
@@ -47,2547 +86,1064 @@ extern HWND g_hwndOwner;
 #define EXITAPP_TIMER_ID		  4	
 #define RECONNECT_TIMER_ID        5
 
-//��������Ϣ�������ڿ��͸�
+//好友项信息浮动窗口宽和高
 #define BUDDYINFOFLOATWND_WIDTH   300
 #define BUDDYINFOFLOATWND_HEIGHT  150
 
-//���˵������Ӳ˵�������
+//主菜单各个子菜单索引号
 enum MAIN_PANEL_MEMU
 {
-	MAIN_PANEL_STATUS_SUBMENU_INDEX,
-	MAIN_PANEL_TRAYICON_SUBMENU_INDEX,
-	MAIN_PANEL_TRAYICON_SUBMENU2_INDEX,
-	MAIN_PANEL_RECENT_SUBMENU_INDEX,
-	MAIN_PANEL_BUDDYLIST_SUBMENU_INDEX,
-	MAIN_PANEL_GROUP_SUBMENU_INDEX,
-	MAIN_PANEL_BUDDYLIST_CONTEXT_SUBMENU_INDEX,
-	MAIN_PANEL_MAIN_SUBMENU_INDEX,
-	MAIN_PANEL_LOCK_SUBMENU_INDEX,
-	MAIN_PANEL_RECENTLIST_CONTEXT_SUBMENU_INDEX,
-	MAIN_PANEL_GROUPLIST_CONTEXT_SUBMENU_INDEX,
-	MAIN_PANEL_BUDDYLIST_TEAM_CONTEXT_SUBMENU_INDEX,
-	MAIN_PANEL_BUDDYLIST_BLANK_CONTEXT_SUBMENU_INDEX,
-	MAIN_PANEL_GROUPLIST_BLANK_CONTEXT_SUBMENU_INDEX
+    MAIN_PANEL_STATUS_SUBMENU_INDEX,
+    MAIN_PANEL_TRAYICON_SUBMENU_INDEX,
+    MAIN_PANEL_TRAYICON_SUBMENU2_INDEX,
+    MAIN_PANEL_RECENT_SUBMENU_INDEX,
+    MAIN_PANEL_BUDDYLIST_SUBMENU_INDEX,
+    MAIN_PANEL_GROUP_SUBMENU_INDEX,
+    MAIN_PANEL_BUDDYLIST_CONTEXT_SUBMENU_INDEX,
+    MAIN_PANEL_MAIN_SUBMENU_INDEX,
+    MAIN_PANEL_LOCK_SUBMENU_INDEX,
+    MAIN_PANEL_RECENTLIST_CONTEXT_SUBMENU_INDEX,
+    MAIN_PANEL_GROUPLIST_CONTEXT_SUBMENU_INDEX,
+    MAIN_PANEL_BUDDYLIST_TEAM_CONTEXT_SUBMENU_INDEX,
+    MAIN_PANEL_BUDDYLIST_BLANK_CONTEXT_SUBMENU_INDEX,
+    MAIN_PANEL_GROUPLIST_BLANK_CONTEXT_SUBMENU_INDEX
 };
 
 
 BOOL CMainDlg::PreTranslateMessage(MSG* pMsg)
 {
-	if (pMsg->hwnd == m_edtSign.m_hWnd)   
-	{
-		if (pMsg->message == WM_CHAR && pMsg->wParam == VK_RETURN) 
-		{
-			SetFocus();
-		} 
-	}
+    if (pMsg->message == WM_KEYDOWN && pMsg->wParam == VK_RETURN)
+    {
+        return FALSE;
+    }
 
- 	if (pMsg->message == WM_KEYDOWN && pMsg->wParam == VK_RETURN)
- 	{
- 		return FALSE;
- 	}
-
-	return CWindow::IsDialogMessage(pMsg);
+    return CWindow::IsDialogMessage(pMsg);
 }
 
 BOOL CMainDlg::OnIdle()
 {
-	return FALSE;
+    return FALSE;
 }
 
-CMainDlg::CMainDlg(void) : m_LoginDlg(&m_FMGClient)
+CMainDlg::CMainDlg(void) : m_LoginDlg(&m_FMGClient), m_BalloonMainPanel(&m_FMGClient),
+m_BalloonChatWindow(&m_FMGClient),
+m_BalloonGroupChatWindow(&m_FMGClient),
+m_BalloonNetSettingsWindow(&m_FMGClient),
+m_BalloonRegisterWindow(&m_FMGClient),
+m_BalloonProfileWindow(&m_FMGClient),
+m_BalloonContactWindow(&m_FMGClient),
+m_BalloonGroupManageWindow(&m_FMGClient),
+m_BalloonHistoryWindow(&m_FMGClient),
+m_BalloonSystemSettingDlg(&m_FMGClient)
 {
-	//m_BuddyChatDlg.m_lpFMGClient = &m_FMGClient;
-	m_nLastMsgType = FMG_MSG_TYPE_BUDDY;
-	m_nLastSenderId = 0;
-	m_bPicHeadPress = FALSE;
-	m_hAppIcon = NULL;
-	memset(m_hLoginIcon, 0, sizeof(m_hLoginIcon));
-	m_nCurLoginIcon = 0;
-	m_hMsgIcon = NULL;
-	m_dwLoginTimerId = 0;
-	m_dwMsgTimerId = 0;
-	m_dwAddFriendTimerId = 0;
+    //m_BuddyChatDlg.m_lpFMGClient = &m_FMGClient;
+    m_nLastMsgType = FMG_MSG_TYPE_BUDDY;
+    m_nLastSenderId = 0;
+    //当前通话媒体类型默认纯语音；发起 / 接听时按本次通话类型刷新（signaling 回来时据此决定是否起视频）
+    m_callMediaType = net::call_media_audio;
+    m_hAppIcon = NULL;
+    memset(m_hLoginIcon, 0, sizeof(m_hLoginIcon));
+    m_nCurLoginIcon = 0;
+    m_hMsgIcon = NULL;
+    m_dwLoginTimerId = 0;
+    m_dwMsgTimerId = 0;
+    m_dwAddFriendTimerId = 0;
     m_dwReconnectTimerId = 0;
 
     m_bAlreadySendReloginRequest = false;
 
+    //进程启动时不处于"从离线恢复在线"的过程中。
+    m_bResumingOnline = false;
 
     m_bEnableReconnect = true;
     m_uReconnectInterval = 3000;
 
-	memset(m_hAddFriendIcon, 0, sizeof(m_hAddFriendIcon));
+    memset(m_hAddFriendIcon, 0, sizeof(m_hAddFriendIcon));
 
-	m_hDlgIcon = m_hDlgSmallIcon = NULL;
-	memset(&m_stAccountInfo, 0, sizeof(m_stAccountInfo));
+    m_hDlgIcon = m_hDlgSmallIcon = NULL;
+    memset(&m_stAccountInfo, 0, sizeof(m_stAccountInfo));
 
-	m_pFindFriendDlg = new CFindFriendDlg();
+    m_pFindFriendDlg = new CFindFriendDlg();
     m_pRemoteDesktopDlg = new CRemoteDesktopDlg();
 
-	m_nYOffset = 0;
-	m_bFold = TRUE;
-	m_bSideState = TRUE;
+    m_bAlreadyLogin = FALSE;
 
-	m_hHotRgn = NULL;
-	m_nBuddyListHeadPicStyle = BLC_BIG_ICON_STYLE;
-	m_bShowBigHeadPicInSel = TRUE;
-	m_bPanelLocked = FALSE;
-	m_bAlreadyLogin = FALSE;
+    //进程启动时没有被踢下线提示框在显示。
+    m_bKickoutNoticeShowing = false;
 
-	m_bShowOnlineBuddyOnly = FALSE;
-
-	m_rcTrayIconRect.SetRectEmpty();
-
-	m_nCurSelIndexInMainTab = -1;
+    m_rcTrayIconRect.SetRectEmpty();
 
     m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
 }
 
 CMainDlg::~CMainDlg(void)
 {
-	delete m_pFindFriendDlg;
+    delete m_pFindFriendDlg;
     delete m_pRemoteDesktopDlg;
 }
 
 BOOL CMainDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 {
-	// set icons
-	m_hDlgIcon = AtlLoadIconImage(IDR_MAINFRAME, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXICON), ::GetSystemMetrics(SM_CYICON));
-	SetIcon(m_hDlgIcon, TRUE);
-	m_hDlgSmallIcon = AtlLoadIconImage(IDR_MAINFRAME, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
-	SetIcon(m_hDlgSmallIcon, FALSE);
+    // set icons
+    m_hDlgIcon = AtlLoadIconImage(IDR_MAINFRAME, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXICON), ::GetSystemMetrics(SM_CYICON));
+    SetIcon(m_hDlgIcon, TRUE);
+    m_hDlgSmallIcon = AtlLoadIconImage(IDR_MAINFRAME, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
+    SetIcon(m_hDlgSmallIcon, FALSE);
 
-	// register object for message filtering and idle updates
-	CMessageLoop* pLoop = _Module.GetMessageLoop();
-	ATLASSERT(pLoop != NULL);
-	pLoop->AddMessageFilter(this);
-	pLoop->AddIdleHandler(this);
+    // register object for message filtering and idle updates
+    CMessageLoop* pLoop = _Module.GetMessageLoop();
+    ATLASSERT(pLoop != NULL);
+    pLoop->AddMessageFilter(this);
+    pLoop->AddIdleHandler(this);
 
-	UIAddChildWindowContainer(m_hWnd);
-	
-	//ȥ����󻯰�ť
-	ModifyStyle(WS_MAXIMIZEBOX, 0);
-	InitUI();
+    UIAddChildWindowContainer(m_hWnd);
 
-	if(!m_FMGClient.InitProxyWnd())
-	{
-		::MessageBox(NULL, _T("��ʼ����������ʧ�ܣ�Flamingo�޷�������"), _T(""), MB_OK|MB_TOPMOST);
-		::ExitProcess(0);
-		return FALSE;
-	}
+    //去除最大化按钮
+    ModifyStyle(WS_MAXIMIZEBOX, 0);
+    //InitUI();
 
-	LoadAppIcon(m_FMGClient.GetStatus());
-	m_TrayIcon.AddIcon(m_hWnd, WM_TRAYICON_NOTIFY, 1, m_hAppIcon, _T("Flamingoδ��¼"));
+    if (!m_FMGClient.InitProxyWnd())
+    {
+        ::MessageBox(NULL, _T("初始化代理窗口失败，Flamingo无法启动！"), _T(""), MB_OK | MB_TOPMOST);
+        ::ExitProcess(0);
+        return FALSE;
+    }
 
-	//����UsersĿ¼
-	CString strAppPath(g_szHomePath);
-	CString strUsersDirectory(strAppPath);
-	strUsersDirectory += _T("Users");
-	if(!Hootina::CPath::IsDirectoryExist(strUsersDirectory))
-		Hootina::CPath::CreateDirectory(strUsersDirectory);
-	
-	// ����ϵͳ�����б�
-	tstring strFileName = Hootina::CPath::GetAppPath() + _T("Face\\FaceConfig.xml");
-	m_FaceList.LoadConfigFile(strFileName.c_str());
+    // 尚未登录，GetCurrentPresence 会返回离线 —— 托盘先挂灰色图标，登录成功后由
+    // OnLoginResult 里的 RefreshTrayIconForStatus 换成彩色。
+    LoadAppIcon(GetConnectionUiState());
+    m_TrayIcon.AddIcon(m_hWnd, WM_TRAYICON_NOTIFY, 1, m_hAppIcon, _T("Flamingo未登录"));
 
-	// ���ص�¼�ʺ��б�
-	strFileName = Hootina::CPath::GetAppPath()+_T("Users\\LoginAccountList.dat");
-	m_LoginAccountList.LoadFile(strFileName.c_str());
+    //创建Users目录
+    CString strAppPath(g_szHomePath);
+    CString strUsersDirectory(strAppPath);
+    strUsersDirectory += _T("Users");
+    if (!Hootina::CPath::IsDirectoryExist(strUsersDirectory))
+        Hootina::CPath::CreateDirectory(strUsersDirectory);
 
-	//���������������ʾ��¼�Ի���
-    //�����¼�Ի�������������¼,�����Ի���Ҳ��Ӧ�ô�������
+    // 加载系统表情列表
+    tstring strFileName = Hootina::CPath::GetAppPath() + _T("Face\\FaceConfig.xml");
+    m_FaceList.LoadConfigFile(strFileName.c_str());
+
+    // 加载登录帐号列表
+    strFileName = Hootina::CPath::GetAppPath() + _T("Users\\LoginAccountList.dat");
+    m_LoginAccountList.LoadFile(strFileName.c_str());
+
+#ifdef _DEBUG
+    // 调试入口：命令行带 --mainpanel 时跳过登录，直接用 mock 数据弹出
+    // 新版 balloonui 主面板，便于开发期截图核对主面板视觉。正式发布
+    // 构建（非 _DEBUG）不含此分支。
+    if (::_tcsstr(::GetCommandLine(), _T("--mainpanel")) != NULL)
+    {
+        m_BalloonMainPanel.CreateAndShow(m_hWnd);
+
+        // 再带 --connecting / --offline 时把对应连接态推给面板，便于截图核对
+        // "掉线重连中"与"用户主动离线"两种状态下的胶囊文字与头像置灰。不带则
+        // 保持默认的在线态（彩色头像 + "在线"胶囊）。
+        if (::_tcsstr(::GetCommandLine(), _T("--connecting")) != NULL)
+        {
+            m_BalloonMainPanel.ApplyConnectionState((int)balloonmain::kConnUiConnecting);
+        }
+        else if (::_tcsstr(::GetCommandLine(), _T("--offline")) != NULL)
+        {
+            m_BalloonMainPanel.ApplyConnectionState((int)balloonmain::kConnUiOffline);
+        }
+
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --chatwindow 时跳过登录，直接弹出新版气泡式
+    // 单聊窗口（mock 数据），便于开发期截图核对单聊窗视觉。
+    if (::_tcsstr(::GetCommandLine(), _T("--chatwindow")) != NULL)
+    {
+        m_BalloonChatWindow.CreateAndShow(m_hWnd);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --groupchatwindow 时跳过登录，直接弹出新版气泡式
+    // 群聊窗口（mock 数据），便于开发期截图核对群聊窗视觉。
+    if (::_tcsstr(::GetCommandLine(), _T("--groupchatwindow")) != NULL)
+    {
+        m_BalloonGroupChatWindow.CreateAndShow(m_hWnd);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+
+    // 调试入口：命令行带 --history 时跳过登录，直接弹出新版历史消息记录窗口
+    //（mock 数据），便于开发期核对消息记录窗视觉。
+    if (::_tcsstr(::GetCommandLine(), _T("--history")) != NULL)
+    {
+        m_BalloonHistoryWindow.CreateAndShow(m_hWnd);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --netsettings 时跳过登录，直接弹出新版网络设置
+    // 窗口（读写真实 flamingo.ini），便于开发期核对网络设置窗视觉与
+    // 三组服务器切换。
+    if (::_tcsstr(::GetCommandLine(), _T("--netsettings")) != NULL)
+    {
+        m_BalloonNetSettingsWindow.CreateAndShow(m_hWnd);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --register 时跳过登录，直接弹出新版注册对话框，
+    // 便于开发期核对注册窗（三步流程）视觉。
+    if (::_tcsstr(::GetCommandLine(), _T("--register")) != NULL)
+    {
+        m_BalloonRegisterWindow.CreateAndShow(m_hWnd);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --profile 时跳过登录，直接弹出新版个人信息
+    // 对话框（mock 数据），便于开发期核对个人信息窗视觉与查看/编辑切换。
+    if (::_tcsstr(::GetCommandLine(), _T("--profile")) != NULL)
+    {
+        m_BalloonProfileWindow.CreateAndShow(m_hWnd);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --contact 时跳过登录，直接弹出新版联系人资料
+    // 对话框（mock 数据），便于开发期核对联系人窗视觉。
+    if (::_tcsstr(::GetCommandLine(), _T("--contact")) != NULL)
+    {
+        m_BalloonContactWindow.CreateAndShow(m_hWnd);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --groupmanage 时跳过登录，直接弹出新版群管理
+    // 窗口（mock 数据），便于开发期核对群管理窗视觉与各页切换。
+    if (::_tcsstr(::GetCommandLine(), _T("--groupmanage")) != NULL)
+    {
+        m_BalloonGroupManageWindow.CreateAndShow(m_hWnd);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --syssettings 时跳过登录，直接弹出新版系统设置
+    // 对话框（配置取默认值），便于开发期核对系统设置窗视觉与三页切换。
+    if (::_tcsstr(::GetCommandLine(), _T("--syssettings")) != NULL)
+    {
+        m_BalloonSystemSettingDlg.OpenSettings(m_hWnd);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --about 时跳过登录，直接弹出新版关于对话框，
+    // 便于开发期核对关于窗视觉（品牌区 app 图标 + 标题栏进程 id + 五个功能行）。
+    if (::_tcsstr(::GetCommandLine(), _T("--about")) != NULL)
+    {
+        m_BalloonAboutDlg.OpenAbout(m_hWnd);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --kickout 时跳过登录，直接弹出"被踢下线"提示框，便于开发期
+    // 核对提示框视觉与落点（贴着托盘图标弹出）。原因默认取"异地登录"，可再带
+    // --reason=N 指定别的原因（N 取值见 BalloonMain/KickoutNotice.h 的 KickoutReasonValue），
+    // 用来核对各条文案的换行与窗口高度。关掉提示框即退出程序，不走回登录界面那条路。
+    if (::_tcsstr(::GetCommandLine(), _T("--kickout")) != NULL)
+    {
+        int nReason = balloonmain::kKickoutReasonOtherDevice;
+        LPCTSTR pszReason = ::_tcsstr(::GetCommandLine(), _T("--reason="));
+        if (pszReason != NULL)
+        {
+            nReason = ::_ttoi(pszReason + _tcslen(_T("--reason=")));
+        }
+
+        // 托盘图标此刻已经挂上（本函数前面 AddIcon 过），取得到它的位置，落点与实战一致。
+        RECT rcTrayIcon;
+        ::SetRectEmpty(&rcTrayIcon);
+        if (!m_TrayIcon.GetTrayIconRect(&rcTrayIcon))
+        {
+            ::SetRectEmpty(&rcTrayIcon);
+        }
+
+        ShowWindow(SW_HIDE);
+
+        CBalloonKickoutDlg dlg;
+        dlg.DoModal(m_hWnd, nReason, rcTrayIcon);
+
+        CloseDialog(IDOK);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --groupinfo 时跳过登录，直接弹出新版群资料对话框
+    // （假数据，对照 design/群资料.png），便于开发期核对版式、开关拨动、群名片
+    // 整行点击就地编辑等交互。
+    if (::_tcsstr(::GetCommandLine(), _T("--groupinfo")) != NULL)
+    {
+        balloonmain::GroupInfoViewData seed;
+        seed.groupid     = 700001;
+        seed.groupName   = _T("FlamingoIM 项目组");
+        seed.memberCount = 28;
+        seed.ownerName   = _T("谢知行");
+        seed.announcement= _T("v3.2 版本即将发布，全员准备。");
+        seed.myCard      = _T("林知夏");
+        seed.mute        = false;
+        seed.pinned      = true;
+        // 调试入口无宿主主面板：pHost 传 NULL，开关 / 退群退化为直接发协议、不更新缓存。
+        m_BalloonGroupInfoDlg.OpenForGroup(m_hWnd, &m_FMGClient, NULL, seed);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --imageviewer 时跳过登录，直接弹出新版聊天图片放大
+    // 看图窗（弹文件选择框挑一张本地图片），便于开发期核对看图窗视觉与缩放 /
+    // 旋转 / 平移交互。
+    if (::_tcsstr(::GetCommandLine(), _T("--imageviewer")) != NULL)
+    {
+        m_BalloonImageViewerWindow.CreateAndShow(m_hWnd);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --rdpselftest 时跳过登录，直接弹出远程桌面引擎自环
+    // 测试窗口（抓本机屏→编码→解码→绘制），便于开发期目视确认引擎闭环出画面。
+    if (::_tcsstr(::GetCommandLine(), _T("--rdpselftest")) != NULL)
+    {
+        m_RdSelfTestWindow.CreateAndShow(m_hWnd);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --rdrelayselftest 时跳过登录，进程内开两条 relay 连接连
+    // imgserver 中转端口(20003)，互发字节验证「连接→握手→双向透传」整条中转通路。
+    // 需 imgserver 在跑、且其 relaytokenkey 为 flamingo-relay-token-secret（见 imgserver.conf）。
+    if (::_tcsstr(::GetCommandLine(), _T("--rdrelayselftest")) != NULL)
+    {
+        bool selfTestOk = false;
+        std::string report = remotedesktop::RunRdRelaySelfTest(
+            "127.0.0.1", 20003, "flamingo-relay-token-secret", selfTestOk);
+        CString text(CA2W(report.c_str(), CP_UTF8));
+        ::MessageBox(m_hWnd, text, _T("远程桌面中转自环自测"),
+                     MB_OK | (selfTestOk ? MB_ICONINFORMATION : MB_ICONWARNING));
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --callrelayselftest 时跳过登录，进程内开两条 relay 连接（主叫 /
+    // 被叫，同 sessionid 相反 role）连 imgserver 中转端口(20003)，双向互发测试帧验证
+    // 「连接→握手→透传」整条通话中转通路。需 imgserver 在跑、且其 relaytokenkey 为
+    // flamingo-relay-token-secret（见 imgserver.conf）。
+    if (::_tcsstr(::GetCommandLine(), _T("--callrelayselftest")) != NULL)
+    {
+        bool selfTestOk = false;
+        std::string report = call::RunCallRelaySelfTest(
+            "127.0.0.1", 20003, "flamingo-relay-token-secret", selfTestOk);
+        CString text(CA2W(report.c_str(), CP_UTF8));
+        ::MessageBox(m_hWnd, text, _T("通话中转自环自测"),
+                     MB_OK | (selfTestOk ? MB_ICONINFORMATION : MB_ICONWARNING));
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --callaudioloop 时跳过登录，做本地音频回环自测：WASAPI 麦克风采集
+    // → Opus 编码 → 解码 → WASAPI 扬声器播放（对着麦克风说话应能听到自己）。弹框运行期间
+    // 回环持续运行，点确定停止。需默认麦克风/扬声器可用且采集率为 Opus 支持率（常 48kHz）。
+    if (::_tcsstr(::GetCommandLine(), _T("--callaudioloop")) != NULL)
+    {
+        call::RunAudioLoopbackDebug();
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --camerapreview 时跳过登录，打开默认摄像头，把采集到的画面实时
+    // 显示在预览窗口里（验证 MF 摄像头采集 + NV12→BGRA 显示这层）。关窗即停。需有摄像头。
+    if (::_tcsstr(::GetCommandLine(), _T("--camerapreview")) != NULL)
+    {
+        call::RunCameraPreviewDebug();
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --cameratest 时跳过登录，运行自包含的摄像头显示测试——全程打日志到
+    // E:\flamingo\cameratest.log，逐步定位「摄像头数据显示不出来」卡在哪一步（初始化/枚举/打开/
+    // 协商/取帧/绘制）。弹窗显示画面，关窗弹统计框。
+    if (::_tcsstr(::GetCommandLine(), _T("--cameratest")) != NULL)
+    {
+        call::RunCameraDisplayTest();
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --h264selftest 时跳过登录，做 H.264 编解码自测：合成 NV12 灰度
+    // 渐变 → MF H.264 编码 → 解码 → 首帧落 BMP（E:\flamingo\h264_selftest_decoded.bmp）。
+    // 不需要摄像头，验证 MF H.264 编解码 round-trip。
+    if (::_tcsstr(::GetCommandLine(), _T("--h264selftest")) != NULL)
+    {
+        call::RunH264SelfTest();
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --videoloop 时跳过登录，做本地视频回环：摄像头采集 → H.264 编码 →
+    // 回灌解码 → 首个解码帧落 BMP（E:\flamingo\videoloop_decoded.bmp），验证整条视频管线。
+    if (::_tcsstr(::GetCommandLine(), _T("--videoloop")) != NULL)
+    {
+        call::RunVideoLoopbackDebug();
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --callvideoui 时跳过登录，以"视频通话中"形态打开通话窗，并用本机
+    // 摄像头回环填充画面（本地预览=原始采集，远端区=自采→编码→解码后的画面），便于单机目检
+    // 通话窗的视频布局与画面渲染（无需服务器 / 第二台机器）。关窗即停。
+    if (::_tcsstr(::GetCommandLine(), _T("--callvideoui")) != NULL)
+    {
+        call::RunCallVideoUiDebug();
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --rdbar 时跳过登录，直接在屏幕顶部弹出被控端受控提示条，
+    // 便于开发期目视核对其外观 / 布局 / 结束按钮（点"结束控制"会关掉提示条）。
+    if (::_tcsstr(::GetCommandLine(), _T("--rdbar")) != NULL)
+    {
+        m_rdControlledBar.Show(L"张三", m_hWnd);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --rdtoolbar 时跳过登录，直接在主显示器顶部弹出控制端全屏
+    // 工具条，便于目视核对其外观 / 布局 / 两个按钮（实际运行时它只在观看窗全屏态出现）。
+    if (::_tcsstr(::GetCommandLine(), _T("--rdtoolbar")) != NULL)
+    {
+        //调试期单弹一个工具条实例看外观；用静态对象使其在函数返回后仍存活。命令消息传
+        //WM_NULL（点了按钮也只是给本窗口投递一条无副作用的空消息）。
+        static CRdViewerToolbar s_dbgToolbar;
+        HMONITOR mon = ::MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTOPRIMARY);
+        s_dbgToolbar.ShowOnMonitor(mon, m_hWnd, WM_NULL);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --dxgicap 时跳过登录，用 DXGI Desktop Duplication 抓一帧屏幕
+    // 存成 exe 同目录的 dxgicap.bmp，弹框报结果。用于在本机显卡上验证 DuplicateOutput
+    // 能否跑通（不同显卡 / 虚拟机 / RDP 下行为差异大，先探路）。
+    if (::_tcsstr(::GetCommandLine(), _T("--dxgicap")) != NULL)
+    {
+        wchar_t path[MAX_PATH] = { 0 };
+        ::GetModuleFileNameW(NULL, path, MAX_PATH);
+        wchar_t* slash = wcsrchr(path, L'\\');
+        if (slash != NULL)
+            wcscpy(slash + 1, L"dxgicap.bmp");
+        else
+            wcscpy(path, L"dxgicap.bmp");
+
+        std::wstring msg;
+        bool ok = remotedesktop::CDxgiScreenCapturer::DebugCaptureToBmp(path, msg);
+        ::MessageBoxW(m_hWnd, msg.c_str(), L"DXGI 抓屏自测",
+                      MB_OK | (ok ? MB_ICONINFORMATION : MB_ICONWARNING));
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --dxgipipegdi 时强制走 GDI 降级后端跑同一闭环，存 dxgipipegdi.bmp，
+    // 用于本地验证 GDI 抓取（增量3 写的降级后端，此前只跑过 DXGI 主路径）出图正确。
+    // 须在 --dxgipipe 之前判断（--dxgipipegdi 含 "--dxgipipe" 子串）。
+    if (::_tcsstr(::GetCommandLine(), _T("--dxgipipegdi")) != NULL)
+    {
+        wchar_t path[MAX_PATH] = { 0 };
+        ::GetModuleFileNameW(NULL, path, MAX_PATH);
+        wchar_t* slash = wcsrchr(path, L'\\');
+        if (slash != NULL)
+            wcscpy(slash + 1, L"dxgipipegdi.bmp");
+        else
+            wcscpy(path, L"dxgipipegdi.bmp");
+
+        std::wstring msg;
+        bool ok = remotedesktop::RdScreenCapturer::DebugPipelineToBmp(path, msg, true);   // 强制 GDI 后端
+        ::MessageBoxW(m_hWnd, msg.c_str(), L"GDI 降级抓屏链路闭环自测",
+                      MB_OK | (ok ? MB_ICONINFORMATION : MB_ICONWARNING));
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --dxgipipe 时跳过登录，本地走通整条抓屏链路（DXGI/GDI 抓 →
+    // 16 位编码 → DIFF → 解码 → 绘制）并把还原画面存成 exe 同目录的 dxgipipe.bmp，
+    // 不连服务器即可肉眼确认编码链路出图正确（方向 / 颜色 / 光标）。后端走 DXGI 还是
+    // 降级 GDI 看客户端日志。
+    if (::_tcsstr(::GetCommandLine(), _T("--dxgipipe")) != NULL)
+    {
+        wchar_t path[MAX_PATH] = { 0 };
+        ::GetModuleFileNameW(NULL, path, MAX_PATH);
+        wchar_t* slash = wcsrchr(path, L'\\');
+        if (slash != NULL)
+            wcscpy(slash + 1, L"dxgipipe.bmp");
+        else
+            wcscpy(path, L"dxgipipe.bmp");
+
+        std::wstring msg;
+        bool ok = remotedesktop::RdScreenCapturer::DebugPipelineToBmp(path, msg);
+        ::MessageBoxW(m_hWnd, msg.c_str(), L"DXGI 抓屏链路闭环自测",
+                      MB_OK | (ok ? MB_ICONINFORMATION : MB_ICONWARNING));
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+#endif
+
+    //在这个函数里面显示登录对话框
+    //如果登录对话框不是走正常登录,则主对话框也不应该创建出来
     if (!StartLogin(m_LoginAccountList.IsAutoLogin()))
         return TRUE;
 
-	//TODO: �����˻��������û�ͷ��
-	UINT nUTalkUin = _tcstoul(m_stAccountInfo.szUser, NULL, 10);
+    //TODO: 根据账户名设置用户头像
+    UINT nUTalkUin = _tcstoul(m_stAccountInfo.szUser, NULL, 10);
 
-	//����Ĭ��λ��
-	long cxScreen = ::GetSystemMetrics(SM_CXSCREEN);
-	cxScreen -= 110;
-	::SetWindowPos(m_hWnd, NULL, cxScreen-280, 78, 280, 675, SWP_SHOWWINDOW);
+    // PR7: CMainDlg 主窗口不再显示。
+    // 旧自绘 UI shell 已废弃,CMainDlg 退居幕后只作 IM 消息中枢
+    // (收发消息 / 托盘 / 重连 / 管理聊天窗) 。登录成功后由 OnLoginResult
+    // 创建并显示 BalloonMainPanel,后者成为唯一可见主面板。
+    ShowWindow(SW_HIDE);
+    ModifyStyleEx(WS_EX_APPWINDOW, 0);
 
-	ModifyStyle(0, WS_CLIPCHILDREN);
-	ModifyStyleEx(WS_EX_APPWINDOW, 0);
 
+    m_MultiChatDlg.m_lpFMGClient = &m_FMGClient;
+    m_MultiChatDlg.m_lpFaceList = &m_FaceList;
 
-	m_MultiChatDlg.m_lpFMGClient = &m_FMGClient;
-	m_MultiChatDlg.m_lpFaceList = &m_FaceList;
-	
-	return TRUE;
+    return TRUE;
 }
 
 void CMainDlg::OnSysCommand(UINT nID, CPoint pt)
 {
-	if (nID == SC_MINIMIZE)
-	{
-        m_BuddyInfoFloatWnd.ShowWindow(SW_HIDE);
+    if (nID == SC_MINIMIZE)
+    {
         ShowWindow(SW_HIDE);
-		return;
-	}
+        return;
+    }
 
-	SetMsgHandled(FALSE);
-}
-
-void CMainDlg::OnMeasureItem(int nIDCtl, LPMEASUREITEMSTRUCT lpMeasureItemStruct)
-{
-	m_SkinMenu.OnMeasureItem(nIDCtl, lpMeasureItemStruct);
-}
-
-void CMainDlg::OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct)
-{
-	m_SkinMenu.OnDrawItem(nIDCtl, lpDrawItemStruct);
-}
-
-void CMainDlg::OnGetMinMaxInfo(LPMINMAXINFO lpMMI)
-{
-	lpMMI->ptMinTrackSize.x = 280;
-	lpMMI->ptMinTrackSize.y = 520;
-
-	lpMMI->ptMaxTrackSize.x = 608;
-	lpMMI->ptMaxTrackSize.y = ::GetSystemMetrics(SM_CYSCREEN);
-}
-
-void CMainDlg::OnLButtonDown(UINT nFlags, CPoint point)
-{
-	if (GetFocus() == m_edtSign.m_hWnd)
-		SetFocus();
+    SetMsgHandled(FALSE);
 }
 
 void CMainDlg::OnTimer(UINT_PTR nIDEvent)
 {
-	m_TrayIcon.OnTimer(nIDEvent);
+    m_TrayIcon.OnTimer(nIDEvent);
 
-	if (nIDEvent == m_dwMsgTimerId)		// ����Ϣ��˸����
-	{
-		static BOOL bSwitch = FALSE;
+    if (nIDEvent == m_dwMsgTimerId)		// 来消息闪烁动画
+    {
+        static BOOL bSwitch = FALSE;
 
-		if (m_dwLoginTimerId != NULL)	// δ��¼�ɹ�
-			return;
+        if (m_dwLoginTimerId != NULL)	// 未登录成功
+            return;
 
-		bSwitch = !bSwitch;
-		if (bSwitch)
-			m_TrayIcon.ModifyIcon(NULL, _T(""));
-		else
-			m_TrayIcon.ModifyIcon(m_hMsgIcon, _T(""));
-	}
-	else if (nIDEvent == m_dwLoginTimerId)	// ��¼����
-	{
-		m_TrayIcon.ModifyIcon(m_hLoginIcon[m_nCurLoginIcon], _T(""));
-		m_nCurLoginIcon++;
-		if (m_nCurLoginIcon >= 6)
-			m_nCurLoginIcon = 0;
-	}
-	else if(nIDEvent == m_dwAddFriendTimerId)	//������Ӻ�����ʾ����
-	{
-		static BOOL bSwitch = FALSE;
+        bSwitch = !bSwitch;
+        if (bSwitch)
+            m_TrayIcon.ModifyIcon(NULL, _T(""));
+        else
+            m_TrayIcon.ModifyIcon(m_hMsgIcon, _T(""));
+    }
+    else if (nIDEvent == m_dwLoginTimerId)	// 登录动画
+    {
+        m_TrayIcon.ModifyIcon(m_hLoginIcon[m_nCurLoginIcon], _T(""));
+        m_nCurLoginIcon++;
+        if (m_nCurLoginIcon >= 6)
+            m_nCurLoginIcon = 0;
+    }
+    else if (nIDEvent == m_dwAddFriendTimerId)	//有申请加好友提示喇叭
+    {
+        static BOOL bSwitch = FALSE;
 
-		bSwitch = !bSwitch;
-		if (bSwitch)
-			m_TrayIcon.ModifyIcon(m_hAddFriendIcon[0], _T("�Ӻ�������"));
-		else
-			m_TrayIcon.ModifyIcon(m_hAddFriendIcon[1], _T("�Ӻ�������"));
-	}
+        bSwitch = !bSwitch;
+        if (bSwitch)
+            m_TrayIcon.ModifyIcon(m_hAddFriendIcon[0], _T("加好友请求"));
+        else
+            m_TrayIcon.ModifyIcon(m_hAddFriendIcon[1], _T("加好友请求"));
+    }
     else if (nIDEvent == m_dwReconnectTimerId)
     {
+        // 用户主动离线后必须停手。这里原先只看定时器在不在、不看登录态，于是"掉线
+        // 重连过程中用户选了离线"这条路上，定时器会一直把用户连回服务器 —— 与
+        // OnNetError 里的判断共用同一个守卫函数，避免再出现一处判了另一处没判。
+        const bool userWentOffline = (m_nMainPanelStatus == MAINPANEL_STATUS_USERGOOFFLINE);
+        if (!balloonmain::ShouldAutoReconnect(userWentOffline, m_bEnableReconnect))
+        {
+            LOG_INFO("重连定时器触发但不重连：userWentOffline=%d, enableReconnect=%d。",
+                userWentOffline ? 1 : 0, m_bEnableReconnect ? 1 : 0);
+            KillTimer(m_dwReconnectTimerId);
+            m_dwReconnectTimerId = 0;
+            return;
+        }
+
         if (!m_bAlreadySendReloginRequest)
         {
-            long nStatus = m_FMGClient.GetStatus();
-            LoadAppIcon(nStatus);
-            CString strIconInfo;
-            if (nStatus == STATUS_OFFLINE)
-                strIconInfo.Format(_T("%s\r\n%s\r\n"), m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.c_str(), m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
-
-            m_TrayIcon.ModifyIcon(m_hAppIcon, strIconInfo, 1, TRUE, _T("��ܰ��ʾ"), _T("���Ѿ����ߣ����ڰ�������......"), 3000);
+            // 重连期间托盘按当前状态取图标（此刻连接已断，图标为灰），并弹一次气泡提示。
+            LoadAppIcon(GetConnectionUiState());
+            m_TrayIcon.ModifyIcon(m_hAppIcon, BuildTrayTipText(), 1, TRUE,
+                _T("温馨提示"), _T("您已经掉线，正在帮您重连......"), 3000);
 
             m_FMGClient.Login();
         }
     }
 }
 
-//void CMainDlg::OnSize(UINT nType, CSize size)
-//{
-//	SetMsgHandled(FALSE);
-//
-//	CRect rcClient;
-//	GetClientRect(&rcClient);
-//	//HDWP hdwp = ::BeginDeferWindowPos(18);
-//	
-//	if(m_btnMainMenu.IsWindow())
-//		m_btnMainMenu.MoveWindow(6, rcClient.Height() - 28, 22, 20);
-//	
-//	if(m_btnMultiChat.IsWindow())
-//		m_btnMultiChat.MoveWindow(30, rcClient.Height() - 28, 22, 20, TRUE);
-//
-//	//if (m_btnSystemSet.IsWindow())
-//		//m_btnSystemSet.MoveWindow(28 + 6, rcClient.Height() - 28, 22, 20);
-//
-//	//if (m_btnMsgMgr.IsWindow())
-//	//	m_btnMsgMgr.MoveWindow(72, rcClient.Height()-30, 22, 22);
-//
-//	//if (m_btnSafe.IsWindow())
-//	//	m_btnSafe.MoveWindow(94, rcClient.Height()-30, 62, 22);
-//
-//	if(m_picHead.IsWindow())
-//		m_picHead.MoveWindow(10, 30, 64, 64, TRUE);
-//	
-//	if(m_staNickName.IsWindow())
-//		m_staNickName.MoveWindow(80, 34, 100, 20, FALSE);
-//
-//	if (m_btnFind.IsWindow())
-//		m_btnFind.MoveWindow(rcClient.right - 60, rcClient.bottom-29, 50, 20);
-//
-//	if (m_btnSign.IsWindow())
-//		m_btnSign.MoveWindow(80, 60, rcClient.Width()-102, 22);
-//
-//	if (m_edtSign.IsWindow())
-//		m_edtSign.MoveWindow(80, 60, rcClient.Width()-102, 22);
-//
-//	if (m_edtSearch.IsWindow())
-//		m_edtSearch.MoveWindow(0, 126, rcClient.Width(), 27);
-//
-//	//if (m_btnMsgBox.IsWindow())
-//	//	m_btnMsgBox.MoveWindow(rcClient.Width()-48, 80, 22, 20);
-//
-//	//if (m_btnChangeExterior.IsWindow())
-//	//	m_btnChangeExterior.MoveWindow(rcClient.Width()-26, 80, 20, 20);
-//
-//	//if (m_btnAppMgr.IsWindow())
-//	//	m_btnAppMgr.MoveWindow(rcClient.Width()-38, rcClient.bottom-60, 22, 22);
-//
-//	if (m_tbBottom.IsWindow())
-//		m_tbBottom.MoveWindow(46, rcClient.bottom-60, 212, 22);
-//
-//	if (m_TabCtrl.IsWindow())
-//	{
-//		int nCount = m_TabCtrl.GetItemCount();
-//		if (nCount > 0)
-//		{
-//			int nWidth = (rcClient.Width()-2) / nCount;
-//			int nRemainder = (rcClient.Width()-2) % nCount;
-//
-//			for (int i = 0; i < nCount; i++)
-//			{
-//				m_TabCtrl.SetItemSize(i, nWidth, 48, nWidth-19, 19);
-//			}
-//
-//			m_TabCtrl.SetItemSize(nCount-1, nWidth+nRemainder, 48, nWidth+nRemainder-19, 19);
-//		}
-//
-//		m_TabCtrl.MoveWindow(0, 153, rcClient.right, 49);
-//	}
-//
-//	if (m_BuddyListCtrl.IsWindow())
-//		m_BuddyListCtrl.MoveWindow(0, 200, rcClient.Width(), rcClient.Height()-236);
-//
-//	if (m_GroupListCtrl.IsWindow())
-//		m_GroupListCtrl.MoveWindow(0, 200, rcClient.Width(), rcClient.Height()-236);
-//
-//	if (m_RecentListCtrl.IsWindow())
-//		m_RecentListCtrl.MoveWindow(0, 200, rcClient.Width(), rcClient.Height()-236);
-//
-//	if (m_picLogining.IsWindow())
-//		m_picLogining.MoveWindow((rcClient.Width() - 220) / 2, 76, 220, 150);
-//	
-//	if (m_staUTalkNum.IsWindow())
-//		m_staUTalkNum.MoveWindow(rcClient.left, 226, rcClient.Width(), 14);
-//
-//	if (m_staLogining.IsWindow())
-//		m_staLogining.MoveWindow(rcClient.left, 240, rcClient.Width(), 16);
-//
-//	if (m_btnCancel.IsWindow())
-//		m_btnCancel.MoveWindow((rcClient.Width() - 86) / 2, 304, 86, 30);
-//
-//	if (m_btnUnlock.IsWindow())
-//		m_btnUnlock.MoveWindow((rcClient.Width() - 86) / 2, 304, 86, 30);
-//}
-
-//HBRUSH CSkinStatic::OnCtlColorStatic(CDCHandle dc, CStatic wndStatic)
-//{
-//	if(wndStatic == m_staNickName) 
-//		return (HBRUSH)::GetStockObject(NULL_BRUSH);
-//	return NULL;
-//}
-
 void CMainDlg::OnSize(UINT nType, CSize size)
 {
-	SetMsgHandled(FALSE);
-
-	//m_SkinDlg.SetBgPic(_T("main_panel_bg.png"), CRect(2, 280, 2, 127));	
-	//m_SkinDlg.InvalidateRect(NULL, TRUE);
-
-	CRect rcClient;
-	GetClientRect(&rcClient);
-	HDWP hdwp = ::BeginDeferWindowPos(18);
-	
-	if(m_btnMainMenu.IsWindow())
-		::DeferWindowPos(hdwp, m_btnMainMenu.m_hWnd, NULL, 6, rcClient.Height()-28, 22, 20, SWP_NOZORDER);
-		//m_btnMainMenu.MoveWindow(6, rcClient.Height() - 28, 22, 20);
-	
-	if(m_btnMultiChat.IsWindow())
-		::DeferWindowPos(hdwp, m_btnMultiChat.m_hWnd, NULL, 30, rcClient.Height()-28, 22, 20, SWP_NOZORDER);
-		//m_btnMultiChat.MoveWindow(30, rcClient.Height() - 28, 22, 20, TRUE);
-
-	if(m_picHead.IsWindow())
-		::DeferWindowPos(hdwp, m_picHead.m_hWnd, NULL, 10, 30, 64, 64, SWP_NOZORDER);
-		//m_picHead.MoveWindow(10, 30, 64, 64, TRUE);
-	
-	if(m_staNickName.IsWindow())
-		::DeferWindowPos(hdwp, m_staNickName.m_hWnd, NULL, 80, 34, rcClient.Width()-102, 20, SWP_NOZORDER);
-		//m_staNickName.MoveWindow(80, 34, 100, 20, FALSE);
-
-	if (m_btnFind.IsWindow())
-		::DeferWindowPos(hdwp, m_btnFind.m_hWnd, NULL, rcClient.right-60, rcClient.bottom-29, 50, 20, SWP_NOZORDER);
-		//m_btnFind.MoveWindow(rcClient.right - 60, rcClient.bottom-29, 50, 20);
-
-	if (m_btnSign.IsWindow())
-		::DeferWindowPos(hdwp, m_btnSign.m_hWnd, NULL, 80, 60, rcClient.Width()-102, 22, SWP_NOZORDER);
-		//m_btnSign.MoveWindow(80, 60, rcClient.Width()-102, 22);
-
-	if (m_edtSign.IsWindow())
-		::DeferWindowPos(hdwp, m_edtSign.m_hWnd, NULL, 80, 60, rcClient.Width()-102, 22, SWP_NOZORDER);
-		//m_edtSign.MoveWindow(80, 60, rcClient.Width()-102, 22);
-
-	if (m_edtSearch.IsWindow())
-		::DeferWindowPos(hdwp, m_edtSearch.m_hWnd, NULL, 0, 126, rcClient.Width(), 27, SWP_NOZORDER);
-		//m_edtSearch.MoveWindow(0, 126, rcClient.Width(), 27);
-
-	if (m_tbBottom.IsWindow())
-		::DeferWindowPos(hdwp, m_tbBottom.m_hWnd, NULL, 46, rcClient.bottom-60, 212, 22, SWP_NOZORDER);
-		//m_tbBottom.MoveWindow(46, rcClient.bottom-60, 212, 22);
-
-	if (m_TabCtrl.IsWindow())
-	{
-		int nCount = m_TabCtrl.GetItemCount();
-		if (nCount > 0)
-		{
-			int nWidth = (rcClient.Width()-2) / nCount;
-			int nRemainder = (rcClient.Width()-2) % nCount;
-
-			for (int i = 0; i < nCount; i++)
-			{
-				m_TabCtrl.SetItemSize(i, nWidth, 48, nWidth-19, 19);
-			}
-
-			m_TabCtrl.SetItemSize(nCount-1, nWidth+nRemainder, 48, nWidth+nRemainder-19, 19);
-		}
-		
-		::DeferWindowPos(hdwp, m_TabCtrl.m_hWnd, NULL, 0, 153, rcClient.right-2, 49, SWP_NOZORDER);
-		//m_TabCtrl.MoveWindow(0, 153, rcClient.right, 49);
-	}
-
-	if (m_BuddyListCtrl.IsWindow())
-		::DeferWindowPos(hdwp, m_BuddyListCtrl.m_hWnd, NULL, 0, 200, rcClient.Width(), rcClient.Height()-236, SWP_NOZORDER);
-		//m_BuddyListCtrl.MoveWindow(0, 200, rcClient.Width(), rcClient.Height()-236);
-
-	if (m_GroupListCtrl.IsWindow())
-		::DeferWindowPos(hdwp, m_GroupListCtrl.m_hWnd, NULL, 0, 200, rcClient.Width(), rcClient.Height()-236, SWP_NOZORDER);
-		//m_GroupListCtrl.MoveWindow(0, 200, rcClient.Width(), rcClient.Height()-236);
-
-	if (m_RecentListCtrl.IsWindow())
-		::DeferWindowPos(hdwp, m_RecentListCtrl.m_hWnd, NULL, 0, 200, rcClient.Width(), rcClient.Height()-236, SWP_NOZORDER);
-		//m_RecentListCtrl.MoveWindow(0, 200, rcClient.Width(), rcClient.Height()-236);
-
-	if (m_picLogining.IsWindow())
-		::DeferWindowPos(hdwp, m_picLogining.m_hWnd, NULL, (rcClient.Width() - 220) / 2, 76, 220, 150, SWP_NOZORDER);
-		//m_picLogining.MoveWindow((rcClient.Width() - 220) / 2, 76, 220, 150);
-	
-	if (m_staUTalkNum.IsWindow())
-		::DeferWindowPos(hdwp, m_staUTalkNum.m_hWnd, NULL, rcClient.left, 226, rcClient.Width(), 14, SWP_NOZORDER);
-		//m_staUTalkNum.MoveWindow(rcClient.left, 226, rcClient.Width(), 14);
-
-	if (m_staLogining.IsWindow())
-		::DeferWindowPos(hdwp, m_staLogining.m_hWnd, NULL, rcClient.left, 240, rcClient.Width(), 16, SWP_NOZORDER);
-		//m_staLogining.MoveWindow(rcClient.left, 240, rcClient.Width(), 16);
-
-	if (m_btnCancel.IsWindow())
-		::DeferWindowPos(hdwp, m_btnCancel.m_hWnd, NULL, (rcClient.Width() - 86) / 2, 304, 86, 30, SWP_NOZORDER);
-		//m_btnCancel.MoveWindow((rcClient.Width() - 86) / 2, 304, 86, 30);
-
-	if (m_btnUnlock.IsWindow())
-		::DeferWindowPos(hdwp, m_btnUnlock.m_hWnd, NULL, (rcClient.Width() - 86) / 2, 304, 86, 30, SWP_NOZORDER);
-		//m_btnUnlock.MoveWindow((rcClient.Width() - 86) / 2, 304, 86, 30);
-
-	::EndDeferWindowPos(hdwp);
-
-	//������������WS_CLIPCHILDREN��������ڲ����˽���ɫ���������ǩ����̬�ı�����Ҫ���»���һ�£��Է�ֹ��������
-	if(m_staNickName.IsWindow())
-		m_staNickName.Invalidate(FALSE);
+    // CMainDlg 主窗口已隐藏、退居幕后只作消息中枢；原先这里对旧自绘主面板各控件的
+    // DeferWindowPos 布局代码已随旧控件一并移除。保持 SetMsgHandled(FALSE) 走默认处理。
+    SetMsgHandled(FALSE);
 }
 
 void CMainDlg::OnHotKey(int nHotKeyID, UINT uModifiers, UINT uVirtKey)
 {
-	switch (nHotKeyID)
-	{
-	case 1001:
-		{
-			if(::IsWindowVisible(m_hWnd))
-				ShowWindow(SW_HIDE);
-			else
-				OnTrayIconNotify(WM_TRAYICON_NOTIFY, NULL, WM_LBUTTONUP);
-		}
-		break;
-	}
+    switch (nHotKeyID)
+    {
+    case 1001:
+    {
+        // PR7: 热键 Ctrl+Alt+D 切换主面板可见性。CMainDlg 主窗口始终隐藏,
+        // 改判 BalloonMainPanel 可见性,等价地切换该窗口。
+        if (m_BalloonMainPanel.IsWindow()
+            && ::IsWindowVisible(m_BalloonMainPanel.m_hWnd))
+        {
+            ::ShowWindow(m_BalloonMainPanel.m_hWnd, SW_HIDE);
+        }
+        else
+        {
+            OnTrayIconNotify(WM_TRAYICON_NOTIFY, NULL, WM_LBUTTONUP);
+        }
+    }
+    break;
+    }
 }
 
 void CMainDlg::OnClose()
 {
-	if(m_FMGClient.m_UserConfig.IsEnableExitPrompt())
-	{
-		CClosePromptDlg closePromptDlg;
-		closePromptDlg.m_pFMGClient = &m_FMGClient;
-		int nRet = closePromptDlg.DoModal(m_hWnd, NULL);
+    if (m_FMGClient.m_UserConfig.IsEnableExitPrompt())
+    {
+        CClosePromptDlg closePromptDlg;
+        closePromptDlg.m_pFMGClient = &m_FMGClient;
+        int nRet = closePromptDlg.DoModal(m_hWnd, NULL);
 
-		if(nRet == IDC_EXIT)
-		{
-			CloseDialog(IDOK);
-		}
-		else if(nRet == IDC_MINIMIZE)
-		{
-			ShowWindow(SW_HIDE);
-		}
-	}
-	else
-	{
-		if(m_FMGClient.m_UserConfig.IsEnableExitWhenCloseMainDlg())
-			CloseDialog(IDOK);
-		else
-			ShowWindow(SW_HIDE);
-	}
+        if (nRet == IDC_EXIT)
+        {
+            CloseDialog(IDOK);
+        }
+        else if (nRet == IDC_MINIMIZE)
+        {
+            ShowWindow(SW_HIDE);
+        }
+    }
+    else
+    {
+        if (m_FMGClient.m_UserConfig.IsEnableExitWhenCloseMainDlg())
+            CloseDialog(IDOK);
+        else
+            ShowWindow(SW_HIDE);
+    }
 }
 
 void CMainDlg::OnDestroy()
-{	
-	CRect rcWindow;
-	GetWindowRect(&rcWindow);
-	m_FMGClient.m_UserConfig.SetMainDlgX(rcWindow.left);
-	m_FMGClient.m_UserConfig.SetMainDlgY(rcWindow.top);
-	m_FMGClient.m_UserConfig.SetMainDlgWidth(rcWindow.Width());
-	m_FMGClient.m_UserConfig.SetMainDlgHeight(rcWindow.Height());
-	
-	m_FMGClient.m_UserConfig.SetBuddyListHeadPicStyle(m_nBuddyListHeadPicStyle);
-	m_FMGClient.m_UserConfig.EnableBuddyListShowBigHeadPicInSel(m_bShowBigHeadPicInSel);
-	m_FMGClient.m_UserConfig.SetFaceID(m_FMGClient.m_UserMgr.m_UserInfo.m_nFace);
-	m_FMGClient.m_UserConfig.SetCustomFace(m_FMGClient.m_UserMgr.m_UserInfo.m_strCustomFace.c_str());
-	m_FMGClient.SaveUserConfig();
-	
-	//�洢�û���Ϣ
-	m_FMGClient.m_UserMgr.SaveBuddyInfo();
-	//�洢���ѷ�����Ϣ
-	m_FMGClient.m_UserMgr.StoreTeamInfo();
-	//�洢�����ϵ���б�
-	m_FMGClient.m_UserMgr.StoreRecentList();
-
-
-	m_FMGClient.Uninit();
-
-	UninitUI();
-
-	//m_btnSystemSet.DestroyWindow();
-	//m_TrayIcon.RemoveIcon();
-	m_SkinMenu.DestroyMenu();
-	//if (m_BuddyChatDlg.IsWindow())
-	//	m_BuddyChatDlg.DestroyWindow();
-	//if (m_GroupChatDlg.IsWindow())
-	//	m_GroupChatDlg.DestroyWindow();
-
-	DestroyAppIcon();
-	DestroyLoginIcon();
-	DestroyAddFriendIcon();
-
-	if (m_hMsgIcon != NULL)
-	{
-		::DestroyIcon(m_hMsgIcon);
-		m_hMsgIcon = NULL;
-	}
-
-	if (m_hDlgIcon != NULL)
-	{
-		::DestroyIcon(m_hDlgIcon);
-		m_hDlgIcon = NULL;
-	}
-
-	if (m_hDlgSmallIcon != NULL)
-	{
-		::DestroyIcon(m_hDlgSmallIcon);
-		m_hDlgSmallIcon = NULL;
-	}
-
-	::UnregisterHotKey(m_hWnd, 1001);	// ��ע����ȡ��Ϣ�ȼ�
-
-	// ������������
-	//tstring strFileName = m_FMGClient.GetPersonalFolder()+_T("MiscConfig.xml");
-	//SaveMiscConfig(strFileName.c_str());
-	
-	CMessageLoop* pLoop = _Module.GetMessageLoop();
-	ATLASSERT(pLoop != NULL);
-	pLoop->RemoveMessageFilter(this);
-	pLoop->RemoveIdleHandler(this);
-
-	CGDIFactory::Uninit();
-}
-
-void CMainDlg::OnAppAbout(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
-	CAboutDlg dlg;
-	dlg.DoModal(m_hWnd, NULL);
+    CRect rcWindow;
+    GetWindowRect(&rcWindow);
+    m_FMGClient.m_UserConfig.SetMainDlgX(rcWindow.left);
+    m_FMGClient.m_UserConfig.SetMainDlgY(rcWindow.top);
+    m_FMGClient.m_UserConfig.SetMainDlgWidth(rcWindow.Width());
+    m_FMGClient.m_UserConfig.SetMainDlgHeight(rcWindow.Height());
+
+    m_FMGClient.m_UserConfig.SetFaceID(m_FMGClient.m_UserMgr.m_UserInfo.m_nFace);
+    m_FMGClient.m_UserConfig.SetCustomFace(m_FMGClient.m_UserMgr.m_UserInfo.m_strCustomFace.c_str());
+    m_FMGClient.SaveUserConfig();
+
+    //存储用户信息
+    m_FMGClient.m_UserMgr.SaveBuddyInfo();
+    //存储好友分组信息
+    m_FMGClient.m_UserMgr.StoreTeamInfo();
+    //存储最近联系人列表
+    m_FMGClient.m_UserMgr.StoreRecentList();
+
+
+    m_FMGClient.Uninit();
+
+    // 旧自绘 UI shell 已移除：原先这里的 UninitUI() 与 m_SkinMenu.DestroyMenu()
+    // 随旧主窗口控件一并删除，CMainDlg 退居幕后只作消息中枢，无旧 UI 可销毁。
+    //m_TrayIcon.RemoveIcon();
+    //if (m_BuddyChatDlg.IsWindow())
+    //	m_BuddyChatDlg.DestroyWindow();
+    //if (m_GroupChatDlg.IsWindow())
+    //	m_GroupChatDlg.DestroyWindow();
+
+    DestroyAppIcon();
+    DestroyLoginIcon();
+    DestroyAddFriendIcon();
+
+    if (m_hMsgIcon != NULL)
+    {
+        ::DestroyIcon(m_hMsgIcon);
+        m_hMsgIcon = NULL;
+    }
+
+    if (m_hDlgIcon != NULL)
+    {
+        ::DestroyIcon(m_hDlgIcon);
+        m_hDlgIcon = NULL;
+    }
+
+    if (m_hDlgSmallIcon != NULL)
+    {
+        ::DestroyIcon(m_hDlgSmallIcon);
+        m_hDlgSmallIcon = NULL;
+    }
+
+    ::UnregisterHotKey(m_hWnd, 1001);	// 反注册提取消息热键
+
+    // 保存杂项配置
+    //tstring strFileName = m_FMGClient.GetPersonalFolder()+_T("MiscConfig.xml");
+    //SaveMiscConfig(strFileName.c_str());
+
+    CMessageLoop* pLoop = _Module.GetMessageLoop();
+    ATLASSERT(pLoop != NULL);
+    pLoop->RemoveMessageFilter(this);
+    pLoop->RemoveIdleHandler(this);
+
+    CGDIFactory::Uninit();
 }
 
 void CMainDlg::CloseDialog(int nVal)
 {
-	if(IsFilesTransferring())
-	{
-		if(IDNO == ::MessageBox(m_hWnd, _T("�������ļ����ڴ��䣬ȷ��Ҫ�˳�Flamingo��"), g_strAppTitle.c_str(), MB_YESNO|MB_ICONQUESTION))
-			return;
-	}
-	
-	if (m_dwLoginTimerId != NULL)
-	{
-		KillTimer(m_dwLoginTimerId);
-		m_dwLoginTimerId = NULL;
-	}
-	if (m_dwMsgTimerId != NULL)
-	{
-		KillTimer(m_dwMsgTimerId);
-		m_dwMsgTimerId = NULL;
-	}
-
-	if(m_LogonUserInfoDlg.IsWindow())
-		m_LogonUserInfoDlg.DestroyWindow();
-
-	if(m_ModifyPasswordDlg.IsWindow())
-		m_ModifyPasswordDlg.DestroyWindow();
-
-
-	m_TrayIcon.RemoveIcon();
-	CloseAllDlg();
-	m_CascadeWinManager.Clear();
-	//ShowWindow(SW_HIDE);
-
-	//if (m_FMGClient.GetStatus() != STATUS_OFFLINE)
-	//{
-	//	m_FMGClient.Logout();
-	//}
-	//else
-	//{
-		DestroyWindow();
-		::PostQuitMessage(nVal);
-	//}
-}
-
-// ��ʼ��Top������
-BOOL CMainDlg::InitTopToolBar()
-{
-	int nIndex = m_tbTop.AddItem(101, STBI_STYLE_BUTTON);
-	//m_tbTop.SetItemSize(nIndex, 35, 20);
-	//m_tbTop.SetItemText(nIndex, _T("10"));
-	//m_tbTop.SetItemToolTipText(nIndex, _T("UTalk�ռ���Ϣ����\r\n  ���Ѷ�̬(10+)"));
-	//m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbTop.SetItemIconPic(nIndex, _T("MainTopToolBar\\qzone.png"));
-
-	//nIndex = m_tbTop.AddItem(102, STBI_STYLE_BUTTON);
-	//m_tbTop.SetItemSize(nIndex, 22, 20);
-	//m_tbTop.SetItemToolTipText(nIndex, _T("��Ѷ΢��"));
-	//m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbTop.SetItemIconPic(nIndex, _T("MainTopToolBar\\wblog.png"));
-
-	//nIndex = m_tbTop.AddItem(103, STBI_STYLE_BUTTON);
-	//m_tbTop.SetItemSize(nIndex, 35, 20);
-	//m_tbTop.SetItemText(nIndex, _T("99"));
-	//m_tbTop.SetItemToolTipText(nIndex, _T("UTalk����\r\n  �ռ���(84)\r\n  Ⱥ�ʼ�(20)\r\n  Ư��ƿ(1)"));
-	//m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbTop.SetItemIconPic(nIndex, _T("MainTopToolBar\\mail.png"));
-
-	//nIndex = m_tbTop.AddItem(104, STBI_STYLE_BUTTON);
-	//m_tbTop.SetItemSize(nIndex, 22, 20);
-	//m_tbTop.SetItemToolTipText(nIndex, _T("������"));
-	//m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbTop.SetItemIconPic(nIndex, _T("MainTopToolBar\\friend.png"));
-
-	//nIndex = m_tbTop.AddItem(105, STBI_STYLE_BUTTON);
-	//m_tbTop.SetItemSize(nIndex, 22, 20);
-	//m_tbTop.SetItemToolTipText(nIndex, _T("��Ѷ����"));
-	//m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbTop.SetItemIconPic(nIndex, _T("MainTopToolBar\\paipai.png"));
-
-	//nIndex = m_tbTop.AddItem(106, STBI_STYLE_BUTTON);
-	//m_tbTop.SetItemSize(nIndex, 22, 20);
-	//m_tbTop.SetItemToolTipText(nIndex, _T("UTalkǮ��"));
-	//m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbTop.SetItemIconPic(nIndex, _T("MainTopToolBar\\purse.png"));
-
-	//nIndex = m_tbTop.AddItem(107, STBI_STYLE_BUTTON);
-	//m_tbTop.SetItemSize(nIndex, 22, 20);
-	//m_tbTop.SetItemToolTipText(nIndex, _T("���Ѹ�������\r\n  ��������������μ���������"));
-	//m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbTop.SetItemIconPic(nIndex, _T("MainTopToolBar\\soso.png"));
-
-	//nIndex = m_tbTop.AddItem(108, STBI_STYLE_BUTTON);
-	//m_tbTop.SetItemSize(nIndex, 22, 20);
-	//m_tbTop.SetItemToolTipText(nIndex, _T("��Ѷ���ҵ���Ѷ"));
-	//m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbTop.SetItemIconPic(nIndex, _T("MainTopToolBar\\Today.png"));
-
-	m_tbTop.SetLeftTop(2, 0);
-	m_tbTop.SetTransparent(TRUE, m_SkinDlg.GetBgDC());
-
-	CRect rcTopToolBar(4, 80, 4+210, 80+20);
-	m_tbTop.Create(m_hWnd, rcTopToolBar, NULL, WS_CHILD|WS_VISIBLE, NULL, ID_TOOLBAR_TOP);
-
-	return TRUE;
-}
-
-// ��ʼ��Bottom������
-BOOL CMainDlg::InitBottomToolBar()
-{
-	int nIndex = m_tbBottom.AddItem(201, STBI_STYLE_BUTTON);
-	//m_tbBottom.SetItemSize(nIndex, 22, 22);
-	//m_tbBottom.SetItemPadding(nIndex, 5);
-	//m_tbBottom.SetItemToolTipText(nIndex, _T("�ֻ�����"));
-	//m_tbBottom.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbBottom.SetItemIconPic(nIndex, _T("MainBottomToolBar\\WirelessLive.png"));
-
-	//nIndex = m_tbBottom.AddItem(202, STBI_STYLE_BUTTON);
-	//m_tbBottom.SetItemSize(nIndex, 22, 22);
-	//m_tbBottom.SetItemPadding(nIndex, 5);
-	//m_tbBottom.SetItemToolTipText(nIndex, _T("UTalk��Ϸ"));
-	//m_tbBottom.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbBottom.SetItemIconPic(nIndex, _T("MainBottomToolBar\\UTalkGame.png"));
-
-	//nIndex = m_tbBottom.AddItem(203, STBI_STYLE_BUTTON);
-	//m_tbBottom.SetItemSize(nIndex, 22, 22);
-	//m_tbBottom.SetItemPadding(nIndex, 5);
-	//m_tbBottom.SetItemToolTipText(nIndex, _T("UTalk����"));
-	//m_tbBottom.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbBottom.SetItemIconPic(nIndex, _T("MainBottomToolBar\\UTalkPet.png"));
-
-	//nIndex = m_tbBottom.AddItem(204, STBI_STYLE_BUTTON);
-	//m_tbBottom.SetItemSize(nIndex, 22, 22);
-	//m_tbBottom.SetItemPadding(nIndex, 5);
-	//m_tbBottom.SetItemToolTipText(nIndex, _T("UTalk����"));
-	//m_tbBottom.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbBottom.SetItemIconPic(nIndex, _T("MainBottomToolBar\\UTalkMusic.png"));
-
-	//nIndex = m_tbBottom.AddItem(205, STBI_STYLE_BUTTON);
-	//m_tbBottom.SetItemSize(nIndex, 22, 22);
-	//m_tbBottom.SetItemPadding(nIndex, 5);
-	//m_tbBottom.SetItemToolTipText(nIndex, _T("��Ѷ��Ƶ"));
-	//m_tbBottom.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbBottom.SetItemIconPic(nIndex, _T("MainBottomToolBar\\UTalkLive.png"));
-
-	//nIndex = m_tbBottom.AddItem(206, STBI_STYLE_BUTTON);
-	//m_tbBottom.SetItemSize(nIndex, 22, 22);
-	//m_tbBottom.SetItemPadding(nIndex, 5);
-	//m_tbBottom.SetItemToolTipText(nIndex, _T("UTalk����"));
-	//m_tbBottom.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbBottom.SetItemIconPic(nIndex, _T("MainBottomToolBar\\Tourism.png"));
-
-	//nIndex = m_tbBottom.AddItem(207, STBI_STYLE_BUTTON);
-	//m_tbBottom.SetItemSize(nIndex, 22, 22);
-	//m_tbBottom.SetItemPadding(nIndex, 5);
-	//m_tbBottom.SetItemToolTipText(nIndex, _T("UTalk���Թܼ�"));
-	//m_tbBottom.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbBottom.SetItemIconPic(nIndex, _T("MainBottomToolBar\\UTalkPCMgr.png"));
-
-	//nIndex = m_tbBottom.AddItem(208, STBI_STYLE_BUTTON);
-	//m_tbBottom.SetItemSize(nIndex, 22, 22);
-	//m_tbBottom.SetItemPadding(nIndex, 5);
-	//m_tbBottom.SetItemToolTipText(nIndex, _T("���Ĺ���"));
-	//m_tbBottom.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
-	//	_T("aio_toolbar_down.png"), CRect(3,3,3,3));
-	//m_tbBottom.SetItemIconPic(nIndex, _T("MainBottomToolBar\\PaiPai.png"));
-
-	m_tbBottom.SetTransparent(TRUE, m_SkinDlg.GetBgDC());
-
-	CRect rcClient;
-	GetClientRect(&rcClient);
-
-	CRect rcBottomToolBar(46, rcClient.bottom-60, 46+212, (rcClient.bottom-60)+22);
-	m_tbBottom.Create(m_hWnd, rcBottomToolBar, NULL, WS_CHILD|WS_VISIBLE, NULL, ID_TOOLBAR_BOTTOM);
-
-	return TRUE;
-}
-
-// ��ʼ��Tab��
-BOOL CMainDlg::InitTabCtrl()
-{
-	CRect rcClient;
-	GetClientRect(&rcClient);
-
-	int nWidth = (rcClient.Width()-2) / 3;
-	int nRemainder = (rcClient.Width()-2) % 3;
-
-	int nIndex = m_TabCtrl.AddItem(301, STCI_STYLE_DROPDOWN);
-	m_TabCtrl.SetItemSize(nIndex, nWidth+nRemainder, 48, nWidth+nRemainder-19, 19);
-	m_TabCtrl.SetItemToolTipText(nIndex, _T("�����ϵ��"));
-	m_TabCtrl.SetItemIconPic(nIndex, _T("MainTabCtrl\\icon_last_normal.png"), _T("MainTabCtrl\\icon_last_selected.png"));
-
-	nIndex = m_TabCtrl.AddItem(302, STCI_STYLE_DROPDOWN);
-	m_TabCtrl.SetItemSize(nIndex, nWidth, 48, nWidth-19, 19);
-	m_TabCtrl.SetItemToolTipText(nIndex, _T("��ϵ��"));
-	m_TabCtrl.SetItemIconPic(nIndex, _T("MainTabCtrl\\icon_contacts_normal.png"), _T("MainTabCtrl\\icon_contacts_selected.png"));
-
-	nIndex = m_TabCtrl.AddItem(303, STCI_STYLE_DROPDOWN);
-	m_TabCtrl.SetItemSize(nIndex, nWidth, 48, nWidth-19, 19);
-	m_TabCtrl.SetItemToolTipText(nIndex, _T("Ⱥ/������"));
-	m_TabCtrl.SetItemIconPic(nIndex, _T("MainTabCtrl\\icon_group_normal.png"), _T("MainTabCtrl\\icon_group_selected.png"));
-
-	
-
-	//nIndex = m_TabCtrl.AddItem(302, STCI_STYLE_DROPDOWN);
-	//m_TabCtrl.SetItemSize(nIndex, nWidth, 34, nWidth-19, 19);
-	//m_TabCtrl.SetItemToolTipText(nIndex, _T("����"));
-	//m_TabCtrl.SetItemIconPic(nIndex, _T("MainTabCtrl\\FriendSocial_TabBtn_Normal.png"),
-	//	_T("MainTabCtrl\\FriendSocial_TabBtn_Focus.png"));
-
-	
-
-	//nIndex = m_TabCtrl.AddItem(304, STCI_STYLE_BUTTON);
-	//m_TabCtrl.SetItemSize(nIndex, nWidth, 34, nWidth-19, 19);
-	//m_TabCtrl.SetItemToolTipText(nIndex, _T("΢��"));
-	//m_TabCtrl.SetItemIconPic(nIndex, _T("MainTabCtrl\\WBlog_TabBtn_Normal_Msg.png"),
-	//	_T("MainTabCtrl\\WBlog_TabBtn_Focus.png"));
-
-	
-	m_TabCtrl.SetBgPic(_T("MainTabCtrl\\main_tab_bkg.png"), CRect(5,1,5,1));
-	m_TabCtrl.SetItemsBgPic(NULL, _T("MainTabCtrl\\main_tab_highlight.png"), _T("MainTabCtrl\\main_tab_check.png"), CRect(5,1,5,1));
-	m_TabCtrl.SetItemsArrowPic(_T("MainTabCtrl\\main_tabbtn_highlight.png"), _T("MainTabCtrl\\main_tabbtn_down.png"));
-
-	CRect rcTabCtrl(0, 154, rcClient.right, 154+48);
-	m_TabCtrl.Create(m_hWnd, rcTabCtrl, NULL, WS_CHILD | WS_VISIBLE, NULL, ID_TABCTRL_MAIN, NULL);
-
-	m_TabCtrl.SetCurSel(1);
-
-	return TRUE;
-}
-
-// ��ʼ�������б��ؼ�
-BOOL CMainDlg::InitBuddyListCtrl()
-{
-	m_BuddyListCtrl.SetMargin(CRect(2,0,2,0));
-	m_BuddyListCtrl.SetBgPic(_T("BuddyList\\Bg.png"));
-	m_BuddyListCtrl.SetBuddyTeamHotBgPic(_T("BuddyList\\BuddyTeamHotBg.png"));
-	m_BuddyListCtrl.SetBuddyItemHotBgPic(_T("BuddyList\\BuddyItemHotBg.png"), CRect(1,1,1,1));
-	m_BuddyListCtrl.SetBuddyItemSelBgPic(_T("BuddyList\\BuddyItemSelBg.png"), CRect(1,1,1,1));
-	m_BuddyListCtrl.SetHeadFramePic(_T("BuddyList\\Padding4Select.png"), CRect(6,6,6,6));
-	m_BuddyListCtrl.SetNormalArrowPic(_T("BuddyList\\MainPanel_FolderNode_collapseTexture.png"));
-	m_BuddyListCtrl.SetHotArrowPic(_T("BuddyList\\MainPanel_FolderNode_collapseTextureHighlight.png"));
-	m_BuddyListCtrl.SetSelArrowPic(_T("BuddyList\\MainPanel_FolderNode_collapseTextureHighlight.png"));
-	m_BuddyListCtrl.SetNormalExpArrowPic(_T("BuddyList\\MainPanel_FolderNode_expandTexture.png"));
-	m_BuddyListCtrl.SetHotExpArrowPic(_T("BuddyList\\MainPanel_FolderNode_expandTextureHighlight.png"));
-	m_BuddyListCtrl.SetSelExpArrowPic(_T("BuddyList\\MainPanel_FolderNode_expandTextureHighlight.png"));
-	m_BuddyListCtrl.SetStdGGHeadPic(_T("BuddyList\\trad_boy.png"));
-	m_BuddyListCtrl.SetStdMMHeadPic(_T("BuddyList\\trad_girl.png"));
-	m_BuddyListCtrl.SetStyle(BLC_STANDARD_ICON_STYLE);
-	m_BuddyListCtrl.SetShowBigIconInSel(TRUE);
-	m_BuddyListCtrl.SetBuddyTeamHeight(24);
-	m_BuddyListCtrl.SetBuddyItemHeightInBigIcon(54);
-	m_BuddyListCtrl.SetBuddyItemHeightInSmallIcon(28);
-	m_BuddyListCtrl.SetBuddyItemHeightInStandardIcon(26);
-	m_BuddyListCtrl.SetBuddyItemPadding(1);
-
-	CRect rcClient;
-	GetClientRect(&rcClient);
-
-	CRect rcListCtrl(0, 200, rcClient.Width(), 200+rcClient.Height()-236);
-	m_BuddyListCtrl.Create(m_hWnd, rcListCtrl, NULL, WS_CHILD|WS_VISIBLE, NULL, ID_LISTCTRL_BUDDY);
-
-	return TRUE;
-}
-
-// ��ʼ��Ⱥ�б��ؼ�
-BOOL CMainDlg::InitGroupListCtrl()
-{
-	m_GroupListCtrl.SetMargin(CRect(2,0,2,0));
-	m_GroupListCtrl.SetBgPic(_T("BuddyList\\Bg.png"));
-	m_GroupListCtrl.SetBuddyTeamHotBgPic(_T("BuddyList\\BuddyTeamHotBg.png"));
-	m_GroupListCtrl.SetBuddyItemHotBgPic(_T("BuddyList\\BuddyItemHotBg.png"), CRect(1,1,1,1));
-	m_GroupListCtrl.SetBuddyItemSelBgPic(_T("BuddyList\\BuddyItemSelBg.png"), CRect(1,1,1,1));
-	m_GroupListCtrl.SetHeadFramePic(_T("BuddyList\\Padding4Select.png"), CRect(6,6,6,6));
-	m_GroupListCtrl.SetNormalArrowPic(_T("BuddyList\\MainPanel_FolderNode_collapseTexture.png"));
-	m_GroupListCtrl.SetHotArrowPic(_T("BuddyList\\MainPanel_FolderNode_collapseTextureHighlight.png"));
-	m_GroupListCtrl.SetSelArrowPic(_T("BuddyList\\MainPanel_FolderNode_collapseTextureHighlight.png"));
-	m_GroupListCtrl.SetNormalExpArrowPic(_T("BuddyList\\MainPanel_FolderNode_expandTexture.png"));
-	m_GroupListCtrl.SetHotExpArrowPic(_T("BuddyList\\MainPanel_FolderNode_expandTextureHighlight.png"));
-	m_GroupListCtrl.SetSelExpArrowPic(_T("BuddyList\\MainPanel_FolderNode_expandTextureHighlight.png"));
-	m_GroupListCtrl.SetStdGGHeadPic(_T("BuddyList\\trad_boy.png"));
-	m_GroupListCtrl.SetStdMMHeadPic(_T("BuddyList\\trad_girl.png"));
-	m_GroupListCtrl.SetStyle(BLC_BIG_ICON_STYLE);
-	m_GroupListCtrl.SetShowBigIconInSel(TRUE);
-	m_GroupListCtrl.SetBuddyTeamHeight(24);
-	m_GroupListCtrl.SetBuddyItemHeightInBigIcon(54);
-	m_GroupListCtrl.SetBuddyItemHeightInSmallIcon(28);
-	m_GroupListCtrl.SetBuddyItemHeightInStandardIcon(26);
-	m_GroupListCtrl.SetBuddyItemPadding(1);
-
-	CRect rcClient;
-	GetClientRect(&rcClient);
-
-	CRect rcListCtrl(0, 200, rcClient.Width(), 200+rcClient.Height());
-	m_GroupListCtrl.Create(m_hWnd, rcListCtrl, NULL, WS_CHILD, NULL, ID_LISTCTRL_GROUP);
-
-	return TRUE;
-}
-
-// ��ʼ�������ϵ���б��ؼ�
-BOOL CMainDlg::InitRecentListCtrl()
-{
-	m_RecentListCtrl.SetMargin(CRect(2,0,2,0));
-	m_RecentListCtrl.SetBgPic(_T("BuddyList\\Bg.png"));
-	//m_RecentListCtrl.SetBuddyTeamHotBgPic(_T("BuddyList\\BuddyTeamHotBg.png"));
-	m_RecentListCtrl.SetBuddyItemHotBgPic(_T("BuddyList\\BuddyItemHotBg.png"), CRect(1,1,1,1));
-	m_RecentListCtrl.SetBuddyItemSelBgPic(_T("BuddyList\\BuddyItemSelBg.png"), CRect(1,1,1,1));
-	m_RecentListCtrl.SetHeadFramePic(_T("BuddyList\\Padding4Select.png"), CRect(6,6,6,6));
-	//m_RecentListCtrl.AddBuddyItemSmallIcon(int nID, LPCTSTR lpszToolTipText, LPCTSTR lpszFileName);
-	//m_RecentListCtrl.SetNormalArrowPic(_T("BuddyList\\MainPanel_FolderNode_collapseTexture.png"));
-	//m_RecentListCtrl.SetHotArrowPic(_T("BuddyList\\MainPanel_FolderNode_collapseTextureHighlight.png"));
-	//m_RecentListCtrl.SetSelArrowPic(_T("BuddyList\\MainPanel_FolderNode_collapseTextureHighlight.png"));
-	//m_RecentListCtrl.SetNormalExpArrowPic(_T("BuddyList\\MainPanel_FolderNode_expandTexture.png"));
-	//m_RecentListCtrl.SetHotExpArrowPic(_T("BuddyList\\MainPanel_FolderNode_expandTextureHighlight.png"));
-	//m_RecentListCtrl.SetSelExpArrowPic(_T("BuddyList\\MainPanel_FolderNode_expandTextureHighlight.png"));
-	m_RecentListCtrl.SetStdGGHeadPic(_T("BuddyList\\trad_boy.png"));
-	m_RecentListCtrl.SetStdMMHeadPic(_T("BuddyList\\trad_girl.png"));
-	//m_RecentListCtrl.SetStyle(BLC_BIG_ICON_STYLE);
-	m_RecentListCtrl.SetShowBigIconInSel(TRUE);
-	//m_RecentListCtrl.SetBuddyTeamHeight(24);
-	m_RecentListCtrl.SetBuddyTeamHeight(0);
-	m_RecentListCtrl.SetBuddyItemHeightInBigIcon(54);
-	m_RecentListCtrl.SetBuddyItemHeightInSmallIcon(28);
-	m_RecentListCtrl.SetBuddyItemHeightInStandardIcon(26);
-	m_RecentListCtrl.SetBuddyItemPadding(1);
-	m_RecentListCtrl.SetBuddyTeamExpand(0, TRUE);
-	//m_RecentListCtrl.SetTransparent(TRUE, m_SkinDlg.GetBgDC());
-
-	CRect rcClient;
-	GetClientRect(&rcClient);
-
-	CRect rcListCtrl(0, 200, rcClient.Width(), 200+rcClient.Height()-236);
-	m_RecentListCtrl.Create(m_hWnd, rcListCtrl, NULL, WS_CHILD, NULL, ID_LISTCTRL_RECENT);
-
-	return TRUE;
-}
-
-BOOL CMainDlg::InitUI()
-{
-	m_SkinDlg.SetBgPic(_T("main_panel_bg.png"), CRect(2, 280, 2, 127));	
-	m_SkinDlg.SetBgColor(RGB(255, 255, 255));
-	m_SkinDlg.SetMinSysBtnPic(_T("SysBtn\\btn_mini_normal.png"), _T("SysBtn\\btn_mini_highlight.png"), _T("SysBtn\\btn_mini_down.png"));
-	m_SkinDlg.SetCloseSysBtnPic(_T("SysBtn\\btn_close_normal.png"), _T("SysBtn\\btn_close_highlight.png"), _T("SysBtn\\btn_close_down.png"));
-	m_SkinDlg.SubclassWindow(m_hWnd);
-	m_SkinDlg.SetTitleText(_T(""));
-
-
-	HDC hDlgBgDC = m_SkinDlg.GetBgDC();
-	
-	CRect rcClient;
-	GetClientRect(&rcClient);
-
-	m_btnMainMenu.SetButtonType(SKIN_PUSH_BUTTON);
-	m_btnMainMenu.SetTransparent(TRUE, hDlgBgDC);
-	m_btnMainMenu.SetBgPic(_T("menu_btn_normal.png"), 
-		_T("menu_btn_highlight.png"), _T("menu_btn_highlight.png"), _T("menu_btn_normal.png"));
-	m_btnMainMenu.SubclassWindow(GetDlgItem(ID_BTN_MAIN_MENU));
-	//long nMainDlgLeft = m_FMGClient.m_UserMgr.m_MainDlgConfig.GetLeft();
-	m_btnMainMenu.MoveWindow(6, rcClient.Height() - 28, 22, 20, TRUE);
-	m_btnMainMenu.SetToolTipText(_T("���˵�"));
-
-	m_btnMultiChat.SetButtonType(SKIN_PUSH_BUTTON);
-	m_btnMultiChat.SetTransparent(TRUE, hDlgBgDC);
-	m_btnMultiChat.SetBgPic(_T("multichat_btn_normal.png"), 
-		_T("multichat_btn_highlight.png"), _T("multichat_btn_highlight.png"), _T("multichat_btn_normal.png"));
-	m_btnMultiChat.SubclassWindow(GetDlgItem(ID_BTN_MULTI_CHAT));
-	//long nMainDlgLeft = m_FMGClient.m_UserMgr.m_MainDlgConfig.GetLeft();
-
-	m_btnMultiChat.MoveWindow(30, rcClient.Height() - 28, 22, 20, TRUE);
-	m_btnMultiChat.SetToolTipText(_T("��ϢȺ��"));
-
-	//m_btnSystemSet.SetButtonType(SKIN_ICON_BUTTON);
-	//m_btnSystemSet.SetButtonType(SKIN_PUSH_BUTTON);
-	//m_btnSystemSet.SetTransparent(TRUE, hDlgBgDC);
-	//m_btnSystemSet.SetBgPic(NULL, _T("allbtn_highlight.png"), _T("allbtn_down.png"), NULL);
-	//m_btnSystemSet.SetBgPic(_T("SystemSet_normal.png"), _T("SystemSet_highlight.png"), _T("SystemSet_highlight.png"), _T("SystemSet_normal.png"));
-	//m_btnSystemSet.SetIconPic(_T("SystemSet.png"));
-	//m_btnSystemSet.SubclassWindow(GetDlgItem(ID_BTN_SYSTEM_SET));
-	//m_btnSystemSet.MoveWindow(28 + 6, rcClient.Height() - 28, 22, 20, TRUE);
-	//m_btnSystemSet.SetToolTipText(_T("��ϵͳ����"));
-
-	//m_btnMsgMgr.SetButtonType(SKIN_ICON_BUTTON);
-	//m_btnMsgMgr.SetTransparent(TRUE, hDlgBgDC);
-	//m_btnMsgMgr.SetBgPic(NULL, _T("allbtn_highlight.png"), _T("allbtn_down.png"), NULL);
-	//m_btnMsgMgr.SetIconPic(_T("message.png"));
-	//m_btnMsgMgr.SubclassWindow(GetDlgItem(ID_BTN_MSG_MGR));
-	//m_btnMsgMgr.MoveWindow(72, rcClient.Height()-30, 22, 22, TRUE);
-	//m_btnMsgMgr.SetToolTipText(_T("����Ϣ������"));
-
-	//m_btnSafe.SetButtonType(SKIN_ICON_BUTTON);
-	//m_btnSafe.SetTransparent(TRUE, hDlgBgDC);
-	//m_btnSafe.SetBgPic(NULL, _T("allbtn_highlight2.png"), _T("allbtn_down2.png"), NULL);
-	//m_btnSafe.SetIconPic(_T("UTalkSafe.png"));
-	//m_btnSafe.SubclassWindow(GetDlgItem(ID_BTN_SAFE));
-	//m_btnSafe.MoveWindow(94, rcClient.Height()-30, 62, 22, TRUE);
-	//m_btnSafe.SetToolTipText(_T("�򿪰�ȫ�ſ�"));
-
-	//m_btnFind.SetButtonType(SKIN_FIND_BUTTON);
-	m_btnFind.SetTransparent(TRUE, hDlgBgDC);
-	m_btnFind.SetBgPic(_T("���Ӻ���_Ĭ��״̬.png"), _T("���Ӻ���_���״̬.png"), _T("���Ӻ���_���״̬.png"), _T("���Ӻ���_���״̬.png"));
-	//m_btnFind.SetIconPic(_T("find.png"));
-	m_btnFind.SubclassWindow(GetDlgItem(ID_BTN_FIND));
-	m_btnFind.MoveWindow(rcClient.right - 60, rcClient.bottom-29, 50, 20, FALSE);
-	m_btnFind.SetWindowText(_T("     ����"));
-	m_btnFind.SetToolTipText(_T("������ϵ�˺�Ⱥ��"));
-
-	m_picHead.SetTransparent(TRUE, hDlgBgDC);
-	m_picHead.SetShowCursor(TRUE);
-	m_picHead.SetBgPic(_T("HeadCtrl\\Padding4Normal.png"), _T("HeadCtrl\\Padding4Hot.png"), _T("HeadCtrl\\Padding4Hot.png"));
-	m_picHead.SubclassWindow(GetDlgItem(ID_PIC_HEAD));
-	m_picHead.MoveWindow(10, 30, 64, 64, FALSE);
-	m_picHead.SetToolTipText(_T("����޸ĸ�������"));
-
-
-	m_staNickName.SetTransparent(TRUE, hDlgBgDC);
-	m_staNickName.SetTextColor(RGB(255, 255, 255));
-	m_staNickName.SubclassWindow(GetDlgItem(ID_STATIC_NICKNAME));
-	m_staNickName.SetWindowText(_T("�û��ǳ�"));
-	HFONT hFontNickName = CGDIFactory::GetBoldFont(20);
-	m_staNickName.SetFont(hFontNickName);
-	m_staNickName.MoveWindow(80, 60, rcClient.Width()-102, 20, TRUE);
-
-	m_btnSign.SetButtonType(SKIN_ICON_BUTTON);
-	m_btnSign.SetTransparent(TRUE, hDlgBgDC);
-	m_btnSign.SetBgPic(NULL, _T("allbtn_highlight2.png"), _T("allbtn_down2.png"), NULL, CRect(3,0,3,0));
-	m_btnSign.SetTextAlign(DT_LEFT);
-	m_btnSign.SubclassWindow(GetDlgItem(ID_BTN_SIGN));
-	m_btnSign.MoveWindow(80, 60, rcClient.Width()-102, 22, TRUE);
-	m_btnSign.SetWindowText(_T("��һ����,ʲô��û�����¡�"));
-	m_btnSign.SetToolTipText(_T("��һ����,ʲô��û�����¡�"));
-
-	HFONT hFontSign = CGDIFactory::GetFont(19); 
-	m_btnSign.SetFont(hFontSign);
-	m_edtSign.SetBgNormalPic(_T("SignEditBg.png"), CRect(1,1,1,1));
-	m_edtSign.SubclassWindow(GetDlgItem(ID_EDIT_SIGN));
-	m_edtSign.MoveWindow(80, 60, rcClient.Width()-102, 22, TRUE);
-	m_edtSign.ShowWindow(SW_HIDE);
-	m_edtSign.SetFont(hFontSign);
-
-	m_SkinMenu.SetBgPic(_T("Menu\\menu_left_bg.png"), _T("Menu\\menu_right_bg.png"));
-	m_SkinMenu.SetSelectedPic(_T("Menu\\menu_selected.png"));
-	m_SkinMenu.SetSepartorPic(_T("Menu\\menu_separtor.png"));
-	m_SkinMenu.SetArrowPic(_T("Menu\\menu_arrow.png"));
-	m_SkinMenu.SetCheckPic(_T("Menu\\menu_check.png"));
-	m_SkinMenu.SetTextColor(RGB(0, 20, 35));
-	m_SkinMenu.SetSelTextColor(RGB(254, 254, 254));
-	m_SkinMenu.LoadMenu(ID_MENU_MAIN_PANEL);
-
-	DWORD dwMenuIDs[] = {ID_MENU_IMONLINE, ID_MENU_QME, ID_MENU_AWAY, 
-		ID_MENU_BUSY, ID_MENU_MUTE, ID_MENU_INVISIBLE, ID_MENU_IMOFFLINE, 
-		ID_MENU_LOCK, ID_MENU_GROUP_HOMEPAGE};
-	CString strFileNames[] = {_T("Status\\imonline.png"), _T("Status\\Qme.png"), 
-		_T("Status\\away.png"), _T("Status\\busy.png"), _T("Status\\mute.png"), 
-		_T("Status\\invisible.png"), _T("Status\\imoffline.png"), _T("lock20.png"),
-		_T("groupmainpage.png")};
-
-	CSkinMenu PopupMenu = m_SkinMenu.GetSubMenu(MAIN_PANEL_STATUS_SUBMENU_INDEX);
-	for (int i = 0; i < 9; i++)
-	{
-		PopupMenu.SetIcon(dwMenuIDs[i], FALSE, strFileNames[i], strFileNames[i]);
-	}
-
-	PopupMenu = m_SkinMenu.GetSubMenu(MAIN_PANEL_TRAYICON_SUBMENU2_INDEX);
-	for (int i = 0; i < 9; i++)
-	{
-		PopupMenu.SetIcon(dwMenuIDs[i], FALSE, strFileNames[i], strFileNames[i]);
-	}
-
-	PopupMenu = m_SkinMenu.GetSubMenu(3);
-	PopupMenu.SetIcon(0, TRUE, _T("modehead.png"), _T("modehead.png"));
-	PopupMenu = m_SkinMenu.GetSubMenu(4);
-	PopupMenu.SetIcon(0, TRUE, _T("modehead.png"), _T("modehead.png"));
-	PopupMenu = m_SkinMenu.GetSubMenu(5);
-	PopupMenu.SetIcon(0, TRUE, _T("modehead.png"), _T("modehead.png"));
-	PopupMenu = m_SkinMenu.GetSubMenu(6);
-	PopupMenu.SetIcon(0, TRUE, _T("modehead.png"), _T("modehead.png"));
-
-	//PopupMenu = m_SkinMenu.GetSubMenu(0);
-
-	//m_btnStatus.SetButtonType(SKIN_MENU_BUTTON);
-	//m_btnStatus.SetTransparent(TRUE, hDlgBgDC);
-	//m_btnStatus.SetBgPic(NULL, _T("menubtn_highlight.png"), _T("menubtn_highlight.png"), NULL);
-	//m_btnStatus.SetArrowPic(_T("MainPanel_FolderNode_expandTexture.png"));
-	//m_btnStatus.SetIconPic(_T("Status\\imonline.png"));
-	//m_btnStatus.SubclassWindow(GetDlgItem(ID_BTN_STATUS));
-	//m_btnStatus.MoveWindow(54, 30, 35, 22, TRUE);
-	//m_btnStatus.SetMenu(PopupMenu.m_hMenu);
-
-	m_edtSearch.SetBgNormalPic(_T("SearchBar\\bg.png"), CRect(0,0,0,0));
-	m_edtSearch.SetIconPic(_T("SearchBar\\main_search_normal.png"));
-	m_edtSearch.SetDefaultText(_T("��������ϵ�ˡ������顢Ⱥ"));
-	m_edtSearch.SubclassWindow(GetDlgItem(ID_EDIT_SEARCH));
-	m_edtSearch.MoveWindow(0, 126, rcClient.Width(), 28, FALSE);
-
-	m_btnMail.SetButtonType(SKIN_ICON_BUTTON);
-	m_btnMail.SetTransparent(TRUE, hDlgBgDC);
-	m_btnMail.SetBgPic(NULL, _T("allbtn_highlight.png"), _T("allbtn_down.png"), NULL);
-	m_btnMail.SetIconPic(_T("MidToolBar\\aio_quickbar_msglog.png"));
-	m_btnMail.SubclassWindow(GetDlgItem(IDC_BTN_MAIL));
-	m_btnMail.MoveWindow(10, 100, 22, 20, TRUE);
-
-    CIniFile iniFile;
-    CString strIniFile;
-    strIniFile.Format(_T("%sconfig\\flamingo.ini"), g_szHomePath);
-    TCHAR szMyWebsiteLinkTooltip[32];
-    memset(szMyWebsiteLinkTooltip, 0, sizeof(szMyWebsiteLinkTooltip));
-    iniFile.ReadString(_T("ui"), _T("mywebsitetooltiptext"), UI_DEFAULT_MYWEBSITE_TOOLTIP, szMyWebsiteLinkTooltip, ARRAYSIZE(szMyWebsiteLinkTooltip), strIniFile);
-    m_btnMail.SetToolTipText(szMyWebsiteLinkTooltip);
-	
-	//m_btnMsgBox.SetButtonType(SKIN_ICON_BUTTON);
-	//m_btnMsgBox.SetTransparent(TRUE, hDlgBgDC);
-	//m_btnMsgBox.SetBgPic(NULL, _T("allbtn_highlight.png"), _T("allbtn_down.png"), NULL);
-	//m_btnMsgBox.SetIconPic(_T("MsgBox.png"));
-	//m_btnMsgBox.SubclassWindow(GetDlgItem(ID_BTN_MSG_BOX));
-	//m_btnMsgBox.MoveWindow(rcClient.Width()-48, 80, 22, 20, TRUE);
-	//m_btnMsgBox.SetToolTipText(_T("����Ϣ����"));
-
-	//m_btnChangeExterior.SetButtonType(SKIN_ICON_BUTTON);
-	//m_btnChangeExterior.SetTransparent(TRUE, hDlgBgDC);
-	//m_btnChangeExterior.SetBgPic(NULL, _T("allbtn_highlight.png"), _T("allbtn_down.png"), NULL);
-	//m_btnChangeExterior.SetIconPic(_T("colour.png"));
-	//m_btnChangeExterior.SubclassWindow(GetDlgItem(ID_BTN_CHANGE_EXTERIOR));
-	//m_btnChangeExterior.MoveWindow(rcClient.Width()-26, 80, 20, 20, TRUE);
-	//m_btnChangeExterior.SetToolTipText(_T("�������"));
-
-	//m_btnAppMgr.SetButtonType(SKIN_ICON_BUTTON);
-	//m_btnAppMgr.SetTransparent(TRUE, hDlgBgDC);
-	//m_btnAppMgr.SetBgPic(NULL, _T("allbtn_highlight.png"), _T("allbtn_down.png"), NULL);
-	//m_btnAppMgr.SetIconPic(_T("appbox_mgr_btn.png"));
-	//m_btnAppMgr.SubclassWindow(GetDlgItem(ID_BTN_APP_MGR));
-	//m_btnAppMgr.MoveWindow(rcClient.Width()-38, rcClient.bottom-60, 22, 22, TRUE);
-	//m_btnAppMgr.SetToolTipText(_T("��Ӧ�ù�����"));
-
-	m_picLogining.SetTransparent(TRUE, hDlgBgDC);
-	m_picLogining.SubclassWindow(GetDlgItem(ID_PIC_LOGINING));
-	m_picLogining.MoveWindow((rcClient.Width() - 220) / 2, 76, 220, 150, TRUE);
-
-	m_staUTalkNum.SetTransparent(TRUE, hDlgBgDC);
-	m_staUTalkNum.SubclassWindow(GetDlgItem(ID_STATIC_UTalkNUM));
-	m_staUTalkNum.MoveWindow(rcClient.left, 226, rcClient.Width(), 14, FALSE);
-
-	m_staLogining.SetTransparent(TRUE, hDlgBgDC);
-	m_staLogining.SubclassWindow(GetDlgItem(ID_STATIC_LOGINING));
-	m_staLogining.MoveWindow(rcClient.left, 240, rcClient.Width(), 16, FALSE);
-
-	m_btnCancel.SetButtonType(SKIN_PUSH_BUTTON);
-	m_btnCancel.SetTransparent(TRUE, hDlgBgDC);
-	m_btnCancel.SetBgPic(_T("Button\\login_btn_normal.png"), _T("Button\\login_btn_highlight.png"),
-		_T("Button\\login_btn_down.png"), _T("Button\\login_btn_focus.png"));
-	//m_btnCancel.SetRound(4, 4);
-	m_btnCancel.SubclassWindow(GetDlgItem(ID_BTN_CANCEL));
-	m_btnCancel.MoveWindow((rcClient.Width() - 86) / 2, 304, 86, 30, TRUE);
-	
-	m_btnUnlock.SetButtonType(SKIN_PUSH_BUTTON);
-	m_btnUnlock.SetTransparent(TRUE, hDlgBgDC);
-	m_btnUnlock.SetBgPic(_T("Button\\login_btn_normal.png"), _T("Button\\login_btn_highlight.png"),_T("Button\\login_btn_down.png"), _T("Button\\login_btn_focus.png"));
-	m_btnUnlock.SubclassWindow(GetDlgItem(IDC_UNLOCK));
-	m_btnUnlock.MoveWindow((rcClient.Width() - 86) / 2, 304, 86, 30, TRUE);
-
-	//InitTopToolBar();		// ��ʼ��Top������
-	//InitBottomToolBar();	// ��ʼ��Bottom������
-	InitTabCtrl();			// ��ʼ��Tab��
-	InitBuddyListCtrl();	// ��ʼ�������б��ؼ�
-	InitGroupListCtrl();	// ��ʼ��Ⱥ�б��ؼ�
-	InitRecentListCtrl();	// ��ʼ�������ϵ���б��ؼ�
-
-    CRect rcBuddyInfoFloatWnd(0, 0, BUDDYINFOFLOATWND_WIDTH, BUDDYINFOFLOATWND_HEIGHT);
-    m_BuddyInfoFloatWnd.Create(m_hWnd, rcBuddyInfoFloatWnd, NULL, WS_POPUP);
-
-	return TRUE;
-}
-
-void CMainDlg::UninitUI()
-{
-	if(m_picHead.IsWindow())
-		m_picHead.DestroyWindow();
-
-	if (m_staNickName.IsWindow())
-		m_staNickName.DestroyWindow();
-
+    if (IsFilesTransferring())
+    {
+        if (IDNO == ::MessageBox(m_hWnd, _T("您还有文件正在传输，确认要退出Flamingo？"), g_strAppTitle.c_str(), MB_YESNO | MB_ICONQUESTION))
+            return;
+    }
+
+    if (m_dwLoginTimerId != NULL)
+    {
+        KillTimer(m_dwLoginTimerId);
+        m_dwLoginTimerId = NULL;
+    }
+    if (m_dwMsgTimerId != NULL)
+    {
+        KillTimer(m_dwMsgTimerId);
+        m_dwMsgTimerId = NULL;
+    }
+
+    if (m_LogonUserInfoDlg.IsWindow())
+        m_LogonUserInfoDlg.DestroyWindow();
+
+    if (m_ModifyPasswordDlg.IsWindow())
+        m_ModifyPasswordDlg.DestroyWindow();
+
+
+    m_TrayIcon.RemoveIcon();
+    CloseAllDlg();
+    m_CascadeWinManager.Clear();
+
+    // 退出前显式销毁 CMainDlg 持有的所有 ATL 窗口对象成员。balloonui 的 DuiHost /
+    // DuiFrameWindow 都是 CWindowImpl<...> 派生（见 DuiHost.h），CDialogImpl 同理；
+    // 它们多是独立顶层窗口，DestroyWindow(CMainDlg) 不会连带销毁。若不在此销毁，
+    // dlgMain 析构时这些成员仍持有有效 HWND，会触发 ATL CWindowImplRoot 的析构断言
+    // （atlwin.h:3238 "Object deleted before window was destroyed"），表现为退出崩溃。
+    // 所有退出路径都汇到本函数（OnMenu_Exit / OnClose / 面板关闭→OnCloseDlg），在此
+    // 统一收尾。注意 m_trayMsgTipPopup（托盘悬停未读提示浮窗）平时只 HidePopup 不
+    // 销毁，是登录后右键托盘退出时最容易残留触发断言的那个。
+    //
+    // 诊断日志：记录退出时各窗口对象是否仍持有 HWND（1=有窗口）。若退出仍崩，看本行
+    // 即可定位残留的是哪个窗口；若某项为 1 而本函数又没有对应销毁，即为漏网者。
+    LOG_INFO("CloseDialog teardown alive: trayMsgTip=%d panel=%d msgTip=%d multiChat=%d "
+        "remoteDesktop=%d chatWin=%d groupChatWin=%d netSet=%d reg=%d profile=%d contact=%d "
+        "groupMgr=%d sysSet=%d imgViewer=%d.",
+        (int)m_trayMsgTipPopup.IsWindow(), (int)m_BalloonMainPanel.IsWindow(),
+        (int)m_MsgTipDlg.IsWindow(), (int)m_MultiChatDlg.IsWindow(),
+        (int)(m_pRemoteDesktopDlg != NULL && m_pRemoteDesktopDlg->IsWindow()),
+        (int)m_BalloonChatWindow.IsWindow(), (int)m_BalloonGroupChatWindow.IsWindow(),
+        (int)m_BalloonNetSettingsWindow.IsWindow(), (int)m_BalloonRegisterWindow.IsWindow(),
+        (int)m_BalloonProfileWindow.IsWindow(), (int)m_BalloonContactWindow.IsWindow(),
+        (int)m_BalloonGroupManageWindow.IsWindow(), (int)m_BalloonSystemSettingDlg.IsWindow(),
+        (int)m_BalloonImageViewerWindow.IsWindow());
+
+    if (m_trayMsgTipPopup.IsWindow())
+        m_trayMsgTipPopup.DestroyWindow();
+    if (m_BalloonMainPanel.IsWindow())
+        m_BalloonMainPanel.DestroyWindow();
+    if (m_BalloonChatWindow.IsWindow())
+        m_BalloonChatWindow.DestroyWindow();
+    if (m_BalloonGroupChatWindow.IsWindow())
+        m_BalloonGroupChatWindow.DestroyWindow();
+    if (m_BalloonNetSettingsWindow.IsWindow())
+        m_BalloonNetSettingsWindow.DestroyWindow();
+    if (m_BalloonRegisterWindow.IsWindow())
+        m_BalloonRegisterWindow.DestroyWindow();
+    if (m_BalloonProfileWindow.IsWindow())
+        m_BalloonProfileWindow.DestroyWindow();
+    if (m_BalloonContactWindow.IsWindow())
+        m_BalloonContactWindow.DestroyWindow();
+    if (m_BalloonGroupManageWindow.IsWindow())
+        m_BalloonGroupManageWindow.DestroyWindow();
+    if (m_BalloonSystemSettingDlg.IsWindow())
+        m_BalloonSystemSettingDlg.DestroyWindow();
+    if (m_BalloonGroupInfoDlg.IsWindow())
+        m_BalloonGroupInfoDlg.DestroyWindow();
+    if (m_BalloonImageViewerWindow.IsWindow())
+        m_BalloonImageViewerWindow.DestroyWindow();
+    if (m_MsgTipDlg.IsWindow())
+        m_MsgTipDlg.DestroyWindow();
     if (m_MultiChatDlg.IsWindow())
         m_MultiChatDlg.DestroyWindow();
+    if (m_pRemoteDesktopDlg != NULL && m_pRemoteDesktopDlg->IsWindow())
+        m_pRemoteDesktopDlg->DestroyWindow();
+    //ShowWindow(SW_HIDE);
+
+    //if (m_FMGClient.GetStatus() != STATUS_OFFLINE)
+    //{
+    //	m_FMGClient.Logout();
+    //}
+    //else
+    //{
+    DestroyWindow();
+    ::PostQuitMessage(nVal);
+    //}
 }
 
-// ��ʾָ����庯��(bShow��TRUE��ʾ��ʾ����壬FALSE��ʾ��ʾ��¼���)
-void CMainDlg::ShowPanel(BOOL bShow)
-{
-	int nShow = bShow ? SW_HIDE : SW_SHOW;
-	m_picLogining.ShowWindow(nShow);
-	m_staUTalkNum.ShowWindow(nShow);
-	m_staLogining.ShowWindow(nShow);
-	m_btnCancel.ShowWindow(nShow);
-
-
-    nShow = bShow ? SW_SHOW : SW_HIDE;
-	m_btnMail.ShowWindow(nShow);
-
-	m_btnMainMenu.ShowWindow(nShow);
-
-	m_btnMultiChat.ShowWindow(nShow);
-
-	//m_btnSystemSet.ShowWindow(nShow);
-	//m_btnMsgMgr.ShowWindow(nShow);
-	//m_btnSafe.ShowWindow(nShow);
-	m_btnFind.ShowWindow(nShow);
-	//m_btnStatus.ShowWindow(nShow);
-	m_edtSearch.ShowWindow(nShow);
-	m_picHead.ShowWindow(nShow);
-	m_staNickName.ShowWindow(nShow);
-	m_btnSign.ShowWindow(nShow);
-	//m_tbTop.ShowWindow(nShow);
-	//m_tbBottom.ShowWindow(nShow);
-	//m_btnMsgBox.ShowWindow(nShow);
-	//m_btnChangeExterior.ShowWindow(nShow);
-	//m_btnAppMgr.ShowWindow(nShow);;
-	m_TabCtrl.ShowWindow(nShow);
-	m_BuddyListCtrl.ShowWindow(nShow);
-
-
-	m_btnUnlock.ShowWindow(SW_HIDE);
-	
-	RECT rtWindow;
-	HRGN hTemp = NULL;
-	if (bShow)	// ��ʾ�����
-	{
-		m_SkinDlg.SetBgPic(_T("main_panel_bg.png"), CRect(2, 135, 2, 67));
-		m_picLogining.SetBitmap(NULL, TRUE);
-		//StatusMenuBtn_SetIconPic(m_btnStatus, m_FMGClient.GetStatus());
-
-		//::SetTimer(m_hWnd, ID_TIMER_DETECT_CLOSE_TO_SIDE, 500, NULL);
-		//�����ȵ�����
-		m_picHead.GetClientRect(&rtWindow);
-		m_hHotRgn = ::CreateRectRgnIndirect(&rtWindow);
-
-		m_edtSearch.GetClientRect(&rtWindow);
-		hTemp = ::CreateRectRgnIndirect(&rtWindow);
-		::CombineRgn(m_hHotRgn, m_hHotRgn, hTemp, RGN_AND);
-		::DeleteObject(hTemp);
-		
-		m_staNickName.GetClientRect(&rtWindow);
-		hTemp = ::CreateRectRgnIndirect(&rtWindow);
-		::CombineRgn(m_hHotRgn, m_hHotRgn, hTemp, RGN_AND);
-		::DeleteObject(hTemp);
-
-		m_btnSign.GetClientRect(&rtWindow);
-		hTemp = ::CreateRectRgnIndirect(&rtWindow);
-		::CombineRgn(m_hHotRgn, m_hHotRgn, hTemp, RGN_AND);
-		::DeleteObject(hTemp);
-
-		m_TabCtrl.GetClientRect(&rtWindow);
-		hTemp = ::CreateRectRgnIndirect(&rtWindow);
-		::CombineRgn(m_hHotRgn, m_hHotRgn, hTemp, RGN_AND);
-		::DeleteObject(hTemp);
-
-		m_BuddyListCtrl.GetClientRect(&rtWindow);
-		hTemp = ::CreateRectRgnIndirect(&rtWindow);
-		::CombineRgn(m_hHotRgn, m_hHotRgn, hTemp, RGN_AND);
-		::DeleteObject(hTemp);
-
-		m_GroupListCtrl.GetClientRect(&rtWindow);
-		hTemp = ::CreateRectRgnIndirect(&rtWindow);
-		::CombineRgn(m_hHotRgn, m_hHotRgn, hTemp, RGN_AND);
-		::DeleteObject(hTemp);
-
-		m_RecentListCtrl.GetClientRect(&rtWindow);
-		hTemp = ::CreateRectRgnIndirect(&rtWindow);
-		::CombineRgn(m_hHotRgn, m_hHotRgn, hTemp, RGN_AND);
-		::DeleteObject(hTemp);
-
-		m_btnFind.GetClientRect(&rtWindow);
-		hTemp = ::CreateRectRgnIndirect(&rtWindow);
-		::CombineRgn(m_hHotRgn, m_hHotRgn, hTemp, RGN_AND);
-		::DeleteObject(hTemp);
-		
-	}
-	else		// ��ʾ��¼���
-	{
-		m_SkinDlg.SetBgPic(_T("LoginPanel_window_windowBkg.png"), CRect(4, 65, 4, 4));
-
-		tstring strFileName = Hootina::CPath::GetAppPath() + _T("Image\\Logining.png");
-		m_picLogining.SetBitmap(strFileName.c_str(), TRUE);
-
-		m_staUTalkNum.SetWindowText(m_stAccountInfo.szUser);
-		m_staLogining.SetWindowText(_T("���ڵ�¼"));
-		m_staLogining.SetFocus();
-
-		m_btnCancel.GetClientRect(&rtWindow);
-		m_hHotRgn = ::CreateRectRgnIndirect(&rtWindow);
-	}
-
-	InvalidateRect(NULL, TRUE);
-	
-	m_SkinDlg.SetHotRegion(m_hHotRgn);
-
-	ModifyStyleEx(WS_EX_APPWINDOW, 0);
-
-	m_bPanelLocked = FALSE;
-}
-
-void CMainDlg::ShowLockPanel()
-{
-	//��ʾ���д���
-	m_SkinDlg.SetBgPic(_T("LoginPanel_window_windowBkg.png"), CRect(4, 65, 4, 4));
-	tstring strFileName = Hootina::CPath::GetAppPath() + _T("Image\\Logining.png");
-	m_picLogining.SetBitmap(strFileName.c_str(), TRUE);
-	m_picLogining.ShowWindow(SW_SHOW);
-	m_btnUnlock.ShowWindow(SW_SHOW);
-	m_staUTalkNum.ShowWindow(SW_SHOW);
-	m_staLogining.ShowWindow(SW_SHOW);
-
-	m_staUTalkNum.SetWindowText(m_stAccountInfo.szUser);
-	m_staLogining.SetWindowText(_T("������"));
-	
-	
-	//�������д���
-	m_btnCancel.ShowWindow(SW_HIDE);
-	m_btnMainMenu.ShowWindow(SW_HIDE);
-	//m_btnSystemSet.ShowWindow(SW_HIDE);
-	m_btnFind.ShowWindow(SW_HIDE);
-	m_edtSearch.ShowWindow(SW_HIDE);
-	m_picHead.ShowWindow(SW_HIDE);
-	m_staNickName.ShowWindow(SW_HIDE);
-	m_btnSign.ShowWindow(SW_HIDE);
-	m_edtSign.ShowWindow(SW_HIDE);
-    m_btnMultiChat.ShowWindow(SW_HIDE);
-
-    m_btnMail.ShowWindow(SW_HIDE);
-
-	m_TabCtrl.ShowWindow(SW_HIDE);
-	m_RecentListCtrl.ShowWindow(SW_HIDE);
-	m_BuddyListCtrl.ShowWindow(SW_HIDE);
-	m_GroupListCtrl.ShowWindow(SW_HIDE);
-
-	if(m_pFindFriendDlg!=NULL && m_pFindFriendDlg->IsWindow())
-		m_pFindFriendDlg->ShowWindow(SW_HIDE);
-
-	if(m_MsgTipDlg.IsWindow())
-	{
-		m_MsgTipDlg.ShowWindow(SW_HIDE);
-	}
-	std::map<UINT, CBuddyChatDlg*>::iterator iter = m_mapBuddyChatDlg.begin();
-	for(;iter!=m_mapBuddyChatDlg.end(); ++iter)
-	{
-		if(iter->second!=NULL && iter->second->IsWindow())
-			iter->second->ShowWindow(SW_HIDE);
-	}
-
-	std::map<UINT, CGroupChatDlg*>::iterator iter2 = m_mapGroupChatDlg.begin();
-	for(;iter2!=m_mapGroupChatDlg.end(); ++iter2)
-	{
-		if(iter2->second!=NULL && iter2->second->IsWindow())
-			iter2->second->ShowWindow(SW_HIDE);
-	}
-
-	std::map<UINT, CSessChatDlg*>::iterator iter3 = m_mapSessChatDlg.begin();
-	for(;iter3!=m_mapSessChatDlg.end(); ++iter3)
-	{
-		if(iter3->second!=NULL && iter3->second->IsWindow())
-			iter3->second->ShowWindow(SW_HIDE);
-	}
-
-
-	InvalidateRect(NULL, TRUE);
-
-	m_bPanelLocked = TRUE;
-}
-
-
+// 初始化Top工具栏
 bool CMainDlg::StartLogin(BOOL bAutoLogin/* = FALSE*/)
 {
-	m_FMGClient.SetCallBackWnd(m_hWnd);
-	if (bAutoLogin)
-	{
-//���԰�Ͳ�Ҫ������
+    m_FMGClient.SetCallBackWnd(m_hWnd);
+    if (bAutoLogin)
+    {
+        //调试版就不要升级啦
 #ifndef _DEBUG
         Updater updater(&m_FMGClient.m_FileTask);
-		//updater.m_lpProcotol = &m_FMGClient.m_IUProtocol;
+        //updater.m_lpProcotol = &m_FMGClient.m_IUProtocol;
 
-		//��Ҫ����
-		if(CheckOnlyOneInstance() && updater.IsNeedUpdate())
-		{
-			if(IDYES == ::MessageBox(m_hWnd, _T("��⵽�°汾���Ƿ����ھ�������"), _T("�°汾��ʾ"), MB_YESNO|MB_ICONQUESTION|MB_TOPMOST))
-			{
-				CUpdateDlg updateDlg;
-				updateDlg.m_pFMGClient =  &m_FMGClient;
-				updateDlg.m_aryFileInfo = updater.m_aryUpdateFileList;
-				//updateDlg.m_lpProtocol = &m_FMGClient.m_IUProtocol;
-				updateDlg.DoModal(m_hWnd, NULL);
-			}
-		}
+        //需要升级
+        if (CheckOnlyOneInstance() && updater.IsNeedUpdate())
+        {
+            if (IDYES == ::MessageBox(m_hWnd, _T("检测到新版本，是否现在就升级？"), _T("新版本提示"), MB_YESNO | MB_ICONQUESTION | MB_TOPMOST))
+            {
+                CUpdateDlg updateDlg;
+                updateDlg.m_pFMGClient = &m_FMGClient;
+                updateDlg.m_aryFileInfo = updater.m_aryUpdateFileList;
+                //updateDlg.m_lpProtocol = &m_FMGClient.m_IUProtocol;
+                updateDlg.DoModal(m_hWnd, NULL);
+            }
+        }
 #endif
-		
-		BOOL bRet = m_LoginAccountList.GetLastLoginAccountInfo(&m_stAccountInfo);
-		if (!bRet)
-			return true;
+
+        BOOL bRet = m_LoginAccountList.GetLastLoginAccountInfo(&m_stAccountInfo);
+        if (!bRet)
+            return true;
 
         m_LoginDlg.SetLoginAccountInfo(&m_stAccountInfo);
         m_LoginDlg.DoLogin();
-	}
-	else
-	{
-		ShowWindow(SW_HIDE);
-		LoadAppIcon(m_FMGClient.GetStatus());
-		m_TrayIcon.AddIcon(m_hWnd, WM_TRAYICON_NOTIFY, 1, m_hAppIcon, _T("Flamingoδ��¼"));
+    }
+    else
+    {
+        ShowWindow(SW_HIDE);
+        // 尚未登录：GetConnectionUiState 为离线，托盘先挂灰色图标。
+        LoadAppIcon(GetConnectionUiState());
+        m_TrayIcon.AddIcon(m_hWnd, WM_TRAYICON_NOTIFY, 1, m_hAppIcon, _T("Flamingo未登录"));
 
-		//ShowWindow(SW_HIDE);
-		//ShowWindow(SW_SHOW);
+        //ShowWindow(SW_HIDE);
+        //ShowWindow(SW_SHOW);
 
-		m_LoginDlg.m_lpFMGClient = &m_FMGClient;
-		m_LoginDlg.m_pLoginAccountList = &m_LoginAccountList;
-		m_LoginDlg.SetDefaultAccount(m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
-		m_LoginDlg.SetDefaultPassword(m_FMGClient.m_UserMgr.m_UserInfo.m_strPassword.c_str());
-		if (m_LoginDlg.DoModal(g_hwndOwner) != IDOK)	// ��ʾ��¼�Ի���
-		{
-			CloseDialog(IDOK);
-			return false;
-		}
-		m_LoginDlg.GetLoginAccountInfo(&m_stAccountInfo);
-	}
+        m_LoginDlg.m_lpFMGClient = &m_FMGClient;
+        m_LoginDlg.m_pLoginAccountList = &m_LoginAccountList;
+        m_LoginDlg.SetDefaultAccount(m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
+        m_LoginDlg.SetDefaultPassword(m_FMGClient.m_UserMgr.m_UserInfo.m_strPassword.c_str());
+        if (m_LoginDlg.DoModal(g_hwndOwner) != IDOK)	// 显示登录对话框
+        {
+            CloseDialog(IDOK);
+            return false;
+        }
+        m_LoginDlg.GetLoginAccountInfo(&m_stAccountInfo);
+    }
 
     m_nMainPanelStatus = MAINPANEL_STATUS_LOGINING;
-    
-    ShowPanel(FALSE);		// ��ʾ��¼���
-	ShowWindow(SW_SHOW);
 
-	LoadLoginIcon();
-	m_dwLoginTimerId = SetTimer(LOGIN_TIMER_ID, 200, NULL);
+    // PR7: 不再显示旧的 "正在登录" 进度面板。CMainDlg 主窗口始终隐藏。
+    // 服务器响应到达前的短暂中间态由托盘图标动画 (m_dwLoginTimerId) 提示。
 
-	m_FMGClient.SetUser(m_stAccountInfo.szUser, m_stAccountInfo.szPwd);
-	
-    //�Ѿ��ĳ�ͬ����¼��
-	//m_FMGClient.Login();
+    LoadLoginIcon();
+    m_dwLoginTimerId = SetTimer(LOGIN_TIMER_ID, 200, NULL);
+
+    m_FMGClient.SetUser(m_stAccountInfo.szUser, m_stAccountInfo.szPwd);
+
+    //已经改成同步登录了
+    //m_FMGClient.Login();
 
     return true;
 }
 
 LRESULT CMainDlg::OnTrayIconNotify(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	// wParamΪuID, lParamΪ�����Ϣ
-	m_TrayIcon.OnTrayIconNotify(wParam, lParam);
+    // wParam为uID, lParam为鼠标消息
+    m_TrayIcon.OnTrayIconNotify(wParam, lParam);
 
 
-	UINT uID = (UINT)wParam;
-	UINT uIconMsg = (UINT)lParam;
+    UINT uID = (UINT)wParam;
+    UINT uIconMsg = (UINT)lParam;
 
-	switch (uIconMsg)
-	{
-	case WM_LBUTTONUP:
-		OnTrayIcon_LButtunUp();
-		break;
-	case WM_RBUTTONUP:
-		OnTrayIcon_RButtunUp();
-		break;
-	case WM_MOUSEHOVER:
-		OnTrayIcon_MouseHover();
-		break;
-	case WM_MOUSELEAVE:
-		OnTrayIcon_MouseLeave();
-		break;
-	}
-	return 0;
+    // 被踢下线提示框正在显示时，托盘的点击一律不受理：那个框是模态的，它跑的嵌套消息
+    // 循环照常分发托盘消息，若放行，用户从托盘右键菜单里点"登出"会重入回登录界面的收尾
+    // 序列（销毁主面板 + 再进一层登录窗模态循环），栈就叠乱了。
+    if (m_bKickoutNoticeShowing)
+    {
+        return 0;
+    }
+
+    switch (uIconMsg)
+    {
+    case WM_LBUTTONUP:
+        OnTrayIcon_LButtunUp();
+        break;
+    case WM_LBUTTONDBLCLK:
+        // 双击托盘图标：直接唤出登录窗(登录前) / 主面板(登录后)，含最小化还原。
+        ShowLoginOrMainPanel();
+        break;
+    case WM_RBUTTONUP:
+        OnTrayIcon_RButtunUp();
+        break;
+    case WM_MOUSEHOVER:
+        OnTrayIcon_MouseHover();
+        break;
+    case WM_MOUSELEAVE:
+        OnTrayIcon_MouseLeave();
+        break;
+    }
+    return 0;
 }
 
 void CMainDlg::OnMenu_ShowMainPanel(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
-	if (m_LoginDlg.IsWindow())
-	{
-		m_LoginDlg.ShowWindow(SW_SHOW);
-		m_LoginDlg.SetFocus();
-	}
-	else if (IsWindow())
-	{
-		ShowWindow(SW_SHOW);
-		SetFocus();
-	}
+    // 托盘菜单"打开主面板"：登录前唤登录窗、登录后唤主面板（与托盘单/双击同逻辑）。
+    ShowLoginOrMainPanel();
 }
 
-void CMainDlg::OnMenu_LockPanel(UINT uNotifyCode, int nID, CWindow wndCtl)
+void CMainDlg::ShowLoginOrMainPanel()
 {
-	ShowLockPanel();
+    // 选目标：登录成功且主面板存在 -> 主面板；否则（登录前 / 登录中）-> 登录窗。
+    HWND hTarget = NULL;
+    if (m_bAlreadyLogin && m_BalloonMainPanel.IsWindow())
+        hTarget = m_BalloonMainPanel.m_hWnd;
+    else if (m_LoginDlg.IsWindow())
+        hTarget = m_LoginDlg.m_hWnd;
+
+    LOG_INFO("ShowLoginOrMainPanel: alreadyLogin=%d, loginDlgIsWnd=%d, panelIsWnd=%d, "
+        "targetIconic=%d, target=%p.",
+        (int)m_bAlreadyLogin, (int)m_LoginDlg.IsWindow(), (int)m_BalloonMainPanel.IsWindow(),
+        (hTarget != NULL ? (int)::IsIconic(hTarget) : -1), (void*)hTarget);
+
+    if (hTarget == NULL)
+        return;
+
+    // 关键：窗口被最小化(iconic)时只有 SW_RESTORE 能还原，SW_SHOW 对最小化窗口无效
+    // （会"看上去没反应"）。主面板标题栏最小化按钮走 WM_SYSCOMMAND/SC_MINIMIZE
+    // （见 balloonui DuiFrameWindow），故此处必须按是否最小化分别处理。
+    if (::IsIconic(hTarget))
+        ::ShowWindow(hTarget, SW_RESTORE);
+    else
+        ::ShowWindow(hTarget, SW_SHOW);
+
+    ::SetForegroundWindow(hTarget);
+    ::SetFocus(hTarget);
 }
 
 void CMainDlg::OnMenu_Exit(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
-	if (m_LoginDlg.IsWindow())
-		m_LoginDlg.PostMessage(WM_CLOSE);
-	else if (IsWindow())
-	{
-		//PostMessage(WM_CLOSE);
-		CloseDialog(IDOK);
-	}
+    if (m_LoginDlg.IsWindow())
+        m_LoginDlg.PostMessage(WM_CLOSE);
+    else if (IsWindow())
+    {
+        //PostMessage(WM_CLOSE);
+        CloseDialog(IDOK);
+    }
 }
 
 void CMainDlg::OnMenu_Mute(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
+    // 托盘右键"关闭所有声音"：翻转静音位。它与系统设置"提示音"开关写的是同一个 m_bMute，
+    // 收消息 / 好友上线的提示音都据此门控。改完立刻持久化到该账号的 .cfg，和系统设置页一致，
+    // 重启后保持（否则切了静音、重启又会按配置文件里的旧值复位）。
     m_FMGClient.m_UserConfig.EnableMute(!m_FMGClient.m_UserConfig.IsEnableMute());
+    m_FMGClient.SaveUserConfig();
 }
 
-//������ĸ���ǩ��
-void CMainDlg::OnBtn_Sign(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	CString strText;
-	m_btnSign.GetWindowText(strText);
-	m_edtSign.SetWindowText(strText);
-
-	m_btnSign.ShowWindow(SW_HIDE);
-	m_edtSign.ShowWindow(SW_SHOW);
-
-	m_edtSign.SetSel(0, -1);
-	m_edtSign.SetFocus();
-}
-
-void CMainDlg::OnBtn_UnlockPanel(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	ShowPanel(TRUE);
-	//�ָ�ԭ���Ĳ˵�
-}
-
-// ���˵���ťѹ��
-void CMainDlg::OnBtn_MainMenu(UINT uNotifyCode, int nId, CWindow wndCtl)
-{
-	CSkinMenu PopupMenu;
-	CRect rcItem;
-	GetClientRect(&rcItem);
-
-	PopupMenu = m_SkinMenu.GetSubMenu(MAIN_PANEL_MAIN_SUBMENU_INDEX);
-	if (PopupMenu.IsMenu())
-	{
-		m_SkinDlg.ClientToScreen(&rcItem);
-		PopupMenu.TrackPopupMenu(TPM_LEFTALIGN | TPM_LEFTBUTTON | TPM_VERTICAL, 
-			rcItem.right-rcItem.Width(), rcItem.bottom - 100, m_hWnd, &rcItem);
-	}
-}
-
+//点击更改个性签名
 void CMainDlg::OnBtn_MultiChat(UINT uNotifyCode, int nId, CWindow wndCtl)
 {
-	CMultiChatMemberSelectionDlg multiChatMemberSelectionDlg;
-	multiChatMemberSelectionDlg.m_pFMGClient = &m_FMGClient;
-	if(multiChatMemberSelectionDlg.DoModal(NULL, NULL) != IDOK)
-		return;
+    CMultiChatMemberSelectionDlg multiChatMemberSelectionDlg;
+    multiChatMemberSelectionDlg.m_pFMGClient = &m_FMGClient;
+    if (multiChatMemberSelectionDlg.DoModal(NULL, NULL) != IDOK)
+        return;
 
-	//����Ⱥ�����촰��
-	if(multiChatMemberSelectionDlg.m_setSelectedIDs.empty())
-		return;
+    //弹出群发聊天窗口
+    if (multiChatMemberSelectionDlg.m_setSelectedIDs.empty())
+        return;
 
-	if(m_MultiChatDlg.IsWindow())
-	{
-		m_MultiChatDlg.DestroyWindow();	
-	}
-	m_MultiChatDlg.m_setTargetIDs = multiChatMemberSelectionDlg.m_setSelectedIDs;
-	m_MultiChatDlg.Create(NULL);
-	m_MultiChatDlg.ShowWindow(SW_NORMAL);
-	::SetForegroundWindow(m_MultiChatDlg.m_hWnd);
-	m_MultiChatDlg.SetFocus();
+    if (m_MultiChatDlg.IsWindow())
+    {
+        m_MultiChatDlg.DestroyWindow();
+    }
+    m_MultiChatDlg.m_setTargetIDs = multiChatMemberSelectionDlg.m_setSelectedIDs;
+    m_MultiChatDlg.Create(NULL);
+    m_MultiChatDlg.ShowWindow(SW_NORMAL);
+    ::SetForegroundWindow(m_MultiChatDlg.m_hWnd);
+    m_MultiChatDlg.SetFocus();
 }
 
-//�������Ӻ��ѶԻ���
-void CMainDlg::OnBtn_ShowAddFriendDlg(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	// ��ʾ���Һ��ѶԻ���
-	if(m_pFindFriendDlg == NULL)
-		return;
-	if(m_pFindFriendDlg->IsWindow())
-	{
-		m_pFindFriendDlg->ShowWindow(SW_SHOWNORMAL);	
-		m_pFindFriendDlg->SetFocus();
-	}
-	else
-	{
-		m_pFindFriendDlg->m_pFMGClient = &m_FMGClient;
-		if (m_pFindFriendDlg->Create(m_hWnd, NULL) == NULL)
-			return;
-		m_pFindFriendDlg->ShowWindow(SW_SHOWNORMAL);	
-	}
-
-	//if(m_pAddFriendConfirmDlg == NULL)
-	//	return;
-	//if(m_pAddFriendConfirmDlg->IsWindow())
-	//{
-	//	m_pAddFriendConfirmDlg->ShowWindow(SW_SHOWNORMAL);	
-	//	m_pAddFriendConfirmDlg->SetFocus();
-	//}
-	//else
-	//{
-	//	m_pAddFriendConfirmDlg->m_pFMGClient = &m_FMGClient;
-	//	if (m_pAddFriendConfirmDlg->Create(m_hWnd, NULL) == NULL)
-	//		return;
-	//	m_pAddFriendConfirmDlg->ShowWindow(SW_SHOWNORMAL);	
-	//}
-}
-
+//弹出添加好友对话框
 void CMainDlg::OnBtn_ShowSystemSettingDlg(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
-	CSystemSettingDlg systemSettingDlg;
-	systemSettingDlg.m_pFMGClient = &m_FMGClient;
+    CSystemSettingDlg systemSettingDlg;
+    systemSettingDlg.m_pFMGClient = &m_FMGClient;
 
-	systemSettingDlg.DoModal(m_hWnd, NULL);
+    systemSettingDlg.DoModal(m_hWnd, NULL);
 }
 
-void CMainDlg::OnBtn_OpenMail(UINT uNotifyCode, int nID, CWindow wndCtl)
+// 网络设置 —— 登录后主面板系统菜单"网络设置"项经 WM_COMMAND 转发到此，
+// 复用新版网络设置窗（读写真实 flamingo.ini，与登录前 --netsettings 入口同一窗口）。
+void CMainDlg::OnMenu_NetSettings(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
-    CIniFile iniFile;
-    CString strIniFile;
-    strIniFile.Format(_T("%sconfig\\flamingo.ini"), g_szHomePath);
-    TCHAR szMyWebsiteLink[512];
-    memset(szMyWebsiteLink, 0, sizeof(szMyWebsiteLink));
-    iniFile.ReadString(_T("ui"), _T("mywebsitelink"), UI_DEFAULT_MYWEBSITE, szMyWebsiteLink, ARRAYSIZE(szMyWebsiteLink), strIniFile);
+    // 已经开着就前置，不重复 Create —— ATL 的 CWindowImpl::Create 断言 m_hWnd 为空，
+    // 对同一个成员窗口再建一次会在 Debug 下断言、Release 下丢掉旧句柄。
+    if (m_BalloonNetSettingsWindow.IsWindow())
+    {
+        m_BalloonNetSettingsWindow.ShowWindow(SW_SHOW);
+        ::SetForegroundWindow(m_BalloonNetSettingsWindow.m_hWnd);
+        return;
+    }
 
-    ::ShellExecute(NULL, _T("open"), szMyWebsiteLink, NULL, NULL, SW_SHOWNORMAL);
+    // hMainDlg 传 NULL：关闭网络设置窗只销毁它自己，不退出程序。
+    // 该参数只为 --netsettings 调试入口而设 —— 那条路径下本窗口是唯一可见窗口，
+    // 关闭它就该结束进程，于是窗口在 WM_CLOSE 里往 hMainDlg 投 WM_CLOSE_MAINDLG
+    // （见 CBalloonNetSettingsWindow::OnCloseMsg）。登录后从主面板系统菜单打开时
+    // 必须传 NULL，否则关掉这个小窗会把整个程序一起带走。与主面板开群管理窗 /
+    // 资料窗的口径一致（见 CBalloonMainPanel 里的 CreateAndShow(NULL)）。
+    m_BalloonNetSettingsWindow.CreateAndShow(NULL);
 }
 
 void CMainDlg::OnBtn_ModifyPassword(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
-	m_ModifyPasswordDlg.m_pFMGClient = &m_FMGClient;
-	if(!m_ModifyPasswordDlg.IsWindow())
-		m_ModifyPasswordDlg.Create(NULL);
-	
-	m_ModifyPasswordDlg.ShowWindow(SW_SHOW);
-	::SetForegroundWindow(m_ModifyPasswordDlg.m_hWnd);
-	m_ModifyPasswordDlg.SetFocus();
+    m_ModifyPasswordDlg.m_pFMGClient = &m_FMGClient;
+    if (!m_ModifyPasswordDlg.IsWindow())
+        m_ModifyPasswordDlg.Create(NULL);
+
+    m_ModifyPasswordDlg.ShowWindow(SW_SHOW);
+    ::SetForegroundWindow(m_ModifyPasswordDlg.m_hWnd);
+    m_ModifyPasswordDlg.SetFocus();
 }
 
-
-LRESULT CMainDlg::OnTabCtrlDropDown(LPNMHDR pnmh)
-{
-	CSkinMenu PopupMenu;
-	CRect rcItem;
-	int nCurSel, nIndex;
-
-	nCurSel = m_TabCtrl.GetCurSel();
-
-	switch (nCurSel)
-	{
-	case 0:
-		nIndex = MAIN_PANEL_RECENT_SUBMENU_INDEX;
-		break;
-
-	case 1:
-		nIndex = MAIN_PANEL_BUDDYLIST_SUBMENU_INDEX;
-		break;
-
-	case 2:
-		nIndex = MAIN_PANEL_GROUP_SUBMENU_INDEX;
-		break;
-
-	case 4:
-		nIndex = 6;
-		break;
-
-	default:
-		return 0;
-	}
-
-	PopupMenu = m_SkinMenu.GetSubMenu(nIndex);
-	if (!PopupMenu.IsMenu())
-		return 0;
-
-	m_TabCtrl.GetItemRectByIndex(nCurSel, rcItem);
-	m_TabCtrl.ClientToScreen(&rcItem);
-	
-	if(m_nBuddyListHeadPicStyle == BLC_BIG_ICON_STYLE)
-	{
-		PopupMenu.CheckMenuItem(ID_MENU_BIGHEADPIC, MF_CHECKED|MF_BYCOMMAND);
-		PopupMenu.CheckMenuItem(ID_MENU_SMALLHEADPIC, MF_UNCHECKED|MF_BYCOMMAND);
-		PopupMenu.CheckMenuItem(ID_MENU_STDHEADPIC, MF_UNCHECKED|MF_BYCOMMAND);
-	}
-	else if(m_nBuddyListHeadPicStyle == BLC_SMALL_ICON_STYLE)
-	{
-		PopupMenu.CheckMenuItem(ID_MENU_BIGHEADPIC, MF_UNCHECKED|MF_BYCOMMAND);
-		PopupMenu.CheckMenuItem(ID_MENU_SMALLHEADPIC, MF_CHECKED|MF_BYCOMMAND);
-		PopupMenu.CheckMenuItem(ID_MENU_STDHEADPIC, MF_UNCHECKED|MF_BYCOMMAND);
-	}
-	else if(m_nBuddyListHeadPicStyle == BLC_STANDARD_ICON_STYLE)
-	{
-		PopupMenu.CheckMenuItem(ID_MENU_BIGHEADPIC, MF_UNCHECKED|MF_BYCOMMAND);
-		PopupMenu.CheckMenuItem(ID_MENU_SMALLHEADPIC, MF_UNCHECKED|MF_BYCOMMAND);
-		PopupMenu.CheckMenuItem(ID_MENU_STDHEADPIC, MF_CHECKED|MF_BYCOMMAND);
-	}
-	
-	if(m_bShowBigHeadPicInSel)
-		PopupMenu.CheckMenuItem(ID_MENU_SHOWBIGHEADPICINSEL, MF_CHECKED|MF_BYCOMMAND);
-	else
-		PopupMenu.CheckMenuItem(ID_MENU_SHOWBIGHEADPICINSEL, MF_UNCHECKED|MF_BYCOMMAND);
-
-	//��ʾ�ǳƺ��˻�����ʾ�ǳơ���ʾ�˻������Ӳ˵���
-	long nNameStyle = m_FMGClient.m_UserConfig.GetNameStyle();
-	if(nNameStyle == NAME_STYLE_SHOW_NICKNAME_AND_ACCOUNT)
-	{
-		PopupMenu.CheckMenuItem(ID_32911, MF_CHECKED|MF_BYCOMMAND);
-		PopupMenu.CheckMenuItem(ID_32912, MF_UNCHECKED|MF_BYCOMMAND);
-		PopupMenu.CheckMenuItem(ID_32913, MF_UNCHECKED|MF_BYCOMMAND);
-	}
-	else if(nNameStyle == NAME_STYLE_SHOW_NICKNAME)
-	{
-		PopupMenu.CheckMenuItem(ID_32911, MF_UNCHECKED|MF_BYCOMMAND);
-		PopupMenu.CheckMenuItem(ID_32912, MF_CHECKED|MF_BYCOMMAND);
-		PopupMenu.CheckMenuItem(ID_32913, MF_UNCHECKED|MF_BYCOMMAND);
-	}
-	else
-	{	
-		PopupMenu.CheckMenuItem(ID_32911, MF_UNCHECKED|MF_BYCOMMAND);
-		PopupMenu.CheckMenuItem(ID_32912, MF_UNCHECKED|MF_BYCOMMAND);
-		PopupMenu.CheckMenuItem(ID_32913, MF_CHECKED|MF_BYCOMMAND);
-	}
-	
-	//��ʾ��ˬ���ϲ˵���
-	PopupMenu.CheckMenuItem(ID_32914, (m_FMGClient.m_UserConfig.IsEnableSimpleProfile()?MF_CHECKED:MF_UNCHECKED)|MF_BYCOMMAND);
-	
-	//��ʾ������ϵ��
-	PopupMenu.CheckMenuItem(IDM_SHOW_ONLINEBUDDY_ONLY, (m_bShowOnlineBuddyOnly?MF_CHECKED:MF_UNCHECKED)|MF_BYCOMMAND);
-	
-	
-	PopupMenu.TrackPopupMenu(TPM_LEFTALIGN | TPM_LEFTBUTTON | TPM_VERTICAL, 
-		rcItem.right-19, rcItem.bottom + 4, m_hWnd, &rcItem);
-	
-
-	return 0;
-}
-
-LRESULT CMainDlg::OnBuddyListDblClk(LPNMHDR pnmh)
-{
-	int nTeamIndex, nIndex;
-	m_BuddyListCtrl.GetCurSelIndex(nTeamIndex, nIndex);
-	
-	//::MessageBox(m_hWnd, _T("������������Ի���"), _T(""), MB_OK);
-	if (nTeamIndex != -1 && nIndex != -1)
-	{
-		UINT nUTalkUin = m_BuddyListCtrl.GetBuddyItemID(nTeamIndex, nIndex);
-		SendMessage(WM_SHOW_BUDDYCHATDLG, 0, nUTalkUin);
-	}	
-	return 0;
-}
-
-LRESULT CMainDlg::OnBuddyListRButtonUp(LPNMHDR pnmh)
-{
-	CPoint pt;
-	GetCursorPos(&pt);
-
-	//::SetForegroundWindow(m_hWnd);
-    BLNMHDREx* hdr = (BLNMHDREx*)pnmh;
-	CSkinMenu PopupMenu;
-	if(hdr->nPostionFlag == POSITION_ON_ITEM)
-	{
-		PopupMenu = m_SkinMenu.GetSubMenu(MAIN_PANEL_BUDDYLIST_CONTEXT_SUBMENU_INDEX);
-		if(m_FMGClient.m_UserMgr.m_BuddyList.GetBuddyTeamCount() > 1)
-		{
-			PopupMenu.EnableMenuItem(IDM_MOVEITEM, MF_ENABLED|MF_BYCOMMAND);
-			InsertTeamMenuItem(PopupMenu);
-		}
-		else
-		{
-			//TODO: �������治֧��MF_BYCOMMAND���ò˵�
-			PopupMenu.EnableMenuItem(8, MF_GRAYED|MF_BYPOSITION);
-		}
-	}
-	else if(hdr->nPostionFlag == POSITION_ON_TEAM)
-	{
-		PopupMenu = m_SkinMenu.GetSubMenu(MAIN_PANEL_BUDDYLIST_TEAM_CONTEXT_SUBMENU_INDEX);
-	}
-	else if(hdr->nPostionFlag == POSITION_ON_BLANK)
-	{
-		PopupMenu = m_SkinMenu.GetSubMenu(MAIN_PANEL_BUDDYLIST_BLANK_CONTEXT_SUBMENU_INDEX);
-	}
-
-	PopupMenu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON, pt.x, pt.y, m_hWnd);
-
-	return 1;
-}
-
-LRESULT CMainDlg::OnBuddyListHover(LPNMHDR pnmh)
-{
-    RECT rtBuddyInfoFloatWnd;
-    ::GetWindowRect(m_BuddyInfoFloatWnd.m_hWnd, &rtBuddyInfoFloatWnd);
-    
-    BLNMHDREx* hdr = (BLNMHDREx*)pnmh;
-    if (hdr == NULL || hdr->nTeamIndex < 0 || hdr->nItemIndex < 0)
-    {
-        //��겻�ں����б��ϣ��Ҳ��ڸ�����Ϣ�����ϲ����ظ�����Ϣ����
-        POINT ptCursor;
-        ::GetCursorPos(&ptCursor);
-        //�������ұ߾��rect
-        RECT rtBuddyInfoFloatWndPlusGap;
-        rtBuddyInfoFloatWndPlusGap.top = rtBuddyInfoFloatWnd.top;
-        rtBuddyInfoFloatWndPlusGap.bottom = rtBuddyInfoFloatWnd.bottom;
-        rtBuddyInfoFloatWndPlusGap.left = rtBuddyInfoFloatWnd.left;
-        rtBuddyInfoFloatWndPlusGap.right = rtBuddyInfoFloatWnd.right + 15;
-        if (!::PtInRect(&rtBuddyInfoFloatWndPlusGap, ptCursor))
-        {
-            m_BuddyInfoFloatWnd.ShowWindow(SW_HIDE);
-            return 0;
-        }
-      
-        return 0;
-    }
-
-    RECT rtMainDlg;
-    ::GetWindowRect(m_hWnd, &rtMainDlg);
-    if (!m_BuddyInfoFloatWnd.IsWindowVisible())
-        m_BuddyInfoFloatWnd.ShowWindow(SW_SHOW);   
-
-    int xLeftBuddyInfoFloatWnd = rtMainDlg.left - rtBuddyInfoFloatWnd.right + rtBuddyInfoFloatWnd.left;
-    //���������̫������Ļ��ߣ���Ϣ���ڽ���ʾ�������ڵ��ұ�
-    if (rtMainDlg.left < BUDDYINFOFLOATWND_WIDTH)
-        xLeftBuddyInfoFloatWnd = rtMainDlg.right;
-
-    CString strHeadImg = m_BuddyListCtrl.GetBuddyItemHeadPic(hdr->nTeamIndex, hdr->nItemIndex);
-    UINT nBuddyID = m_BuddyListCtrl.GetBuddyItemID(hdr->nTeamIndex, hdr->nItemIndex);
-    m_BuddyInfoFloatWnd.SetHeadImg(strHeadImg);
-    if (nBuddyID >= 0)
-    {
-        CBuddyInfo* pBuddyInfo = m_FMGClient.m_UserMgr.m_BuddyList.GetBuddy(nBuddyID);
-        if (pBuddyInfo != NULL)
-        {
-            m_BuddyInfoFloatWnd.SetDataText(pBuddyInfo->m_strNickName.c_str(),
-                pBuddyInfo->m_strSign.c_str(),
-                pBuddyInfo->m_strEmail.c_str(),
-                pBuddyInfo->m_strAddress.c_str());
-        }      
-    }
-
-    POINT itemStart;
-    itemStart.x = hdr->rtItem.left;
-    itemStart.y = hdr->rtItem.top;
-    ::ClientToScreen(m_BuddyListCtrl.m_hWnd, &itemStart);
-
-    //TODO: ����߶�25���б���߶�55����д��,����ĳɸ����б���ʾģʽ�¼������
-    //::SetWindowPos(m_BuddyInfoFloatWnd.m_hWnd,
-    //               m_hWnd,
-    //               xLeftBuddyInfoFloatWnd,
-    //               rtMainDlg.top + 200 + (hdr->nTeamIndex + 1) * 25 + hdr->nItemIndex * 55,
-    //               0,
-    //               0,
-    //               SWP_NOSIZE | SWP_SHOWWINDOW);
-
-    ::SetWindowPos(m_BuddyInfoFloatWnd.m_hWnd,
-        m_hWnd,
-        xLeftBuddyInfoFloatWnd,
-        itemStart.y,
-        0,
-        0,
-        SWP_NOSIZE | SWP_SHOWWINDOW);
-
-
-
-
-    return 1;
-}
-
-LRESULT CMainDlg::OnGroupListDblClk(LPNMHDR pnmh)
-{
-	int nTeamIndex, nIndex;
-	m_GroupListCtrl.GetCurSelIndex(nTeamIndex, nIndex);
-
-	if (nTeamIndex != -1 && nIndex != -1)
-	{
-		UINT nGroupCode = m_GroupListCtrl.GetBuddyItemID(nTeamIndex, nIndex);
-		SendMessage(WM_SHOW_GROUPCHATDLG, nGroupCode, 0);
-	}	
-	return 0;
-}
-
-LRESULT CMainDlg::OnGroupListRButtonUp(LPNMHDR pnmh)
-{
-	CPoint pt;
-	GetCursorPos(&pt);
-
-	//::SetForegroundWindow(m_hWnd);
-    BLNMHDREx* hdr = (BLNMHDREx*)pnmh;
-	if(hdr->nPostionFlag == POSITION_ON_ITEM)
-	{
-		CSkinMenu PopupMenu = m_SkinMenu.GetSubMenu(MAIN_PANEL_GROUPLIST_CONTEXT_SUBMENU_INDEX);
-		PopupMenu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON, pt.x, pt.y, m_hWnd);
-	}
-	else if(hdr->nPostionFlag==POSITION_ON_TEAM || hdr->nPostionFlag==POSITION_ON_BLANK)
-	{
-		CSkinMenu PopupMenu = m_SkinMenu.GetSubMenu(MAIN_PANEL_GROUPLIST_BLANK_CONTEXT_SUBMENU_INDEX);
-		PopupMenu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON, pt.x, pt.y, m_hWnd);
-	}
-
-
-	return (LRESULT)1;
-}
-
-LRESULT CMainDlg::OnRecentListDblClk(LPNMHDR pnmh)
-{
-	int nTeamIndex, nIndex;
-	m_RecentListCtrl.GetCurSelIndex(nTeamIndex, nIndex);
-
-	//::MessageBox(m_hWnd, _T("������������Ի���"), _T(""), MB_OK);
-	if (nTeamIndex != -1 && nIndex != -1)
-	{
-		UINT nUTalkUin = m_RecentListCtrl.GetBuddyItemID(nTeamIndex, nIndex);
-		if(IsGroupTarget(nUTalkUin))
-		{
-			SendMessage(WM_SHOW_GROUPCHATDLG, (WPARAM)nUTalkUin, 0);
-		}
-		else
-		{
-			if(!m_FMGClient.m_UserMgr.IsFriend(nUTalkUin))
-			{
-				tstring strNickName = m_RecentListCtrl.GetBuddyItemNickName(nTeamIndex, nIndex);
-				CString strInfo;
-				strInfo.Format(_T("%s�Ѿ��������ĺ��ѣ����ȼӶԷ�Ϊ���Ѻ������졣"), strNickName.c_str());
-				::MessageBox(m_hWnd, strInfo, g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
-				return 1;
-			}
-			
-			SendMessage(WM_SHOW_BUDDYCHATDLG, 0, nUTalkUin);
-		}
-	}	
-	return 0;
-
-	//int nTeamIndex, nIndex;
-	//m_RecentListCtrl.GetCurSelIndex(nTeamIndex, nIndex);
-
-	//if (nTeamIndex != -1 && nIndex != -1)
-	//{
-	//	int nIndex2 = m_RecentListCtrl.GetBuddyItemID(nTeamIndex, nIndex);
-
-	//	CRecentList* lpRecentList = m_FMGClient.GetRecentList();
-	//	if (lpRecentList != NULL)
-	//	{
-	//		CRecentInfo* lpRecentInfo = lpRecentList->GetRecent(nIndex2);
-	//		if (lpRecentInfo != NULL)
-	//		{
-	//			if (0 == lpRecentInfo->m_nType)			// ����
-	//			{
-	//				SendMessage(WM_SHOW_BUDDYCHATDLG, 0, lpRecentInfo->m_nUTalkUin);
-	//			}
-	//			else if (1 == lpRecentInfo->m_nType)	// Ⱥ
-	//			{
-	//				CGroupList* lpGroupList = m_FMGClient.GetGroupList();
-	//				if (lpGroupList != NULL)
-	//				{
-	//					CGroupInfo* lpGroupInfo = lpGroupList->GetGroupById(lpRecentInfo->m_nUTalkUin);
-	//					if (lpGroupInfo != NULL)
-	//					{
-	//						SendMessage(WM_SHOW_GROUPCHATDLG, lpGroupInfo->m_nGroupCode, 0);
-	//					}
-	//				}
-	//			}
-	//		}
-	//	}
-	//}
-	//return 0;
-}
-
-LRESULT CMainDlg::OnRecentListRButtonUp(LPNMHDR pnmh)
-{
-	CPoint pt;
-	GetCursorPos(&pt);
-
-	//::SetForegroundWindow(m_hWnd);
-
-	CSkinMenu PopupMenu = m_SkinMenu.GetSubMenu(MAIN_PANEL_RECENTLIST_CONTEXT_SUBMENU_INDEX);
-	PopupMenu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON, pt.x, pt.y, m_hWnd);
-
-	return (LRESULT)1;
-}
-
-LRESULT CMainDlg::OnTabCtrlSelChange(LPNMHDR pnmh)
-{
-	int nCurSel = m_TabCtrl.GetCurSel();
-	switch (nCurSel)
-	{
-	case 0:
-		m_RecentListCtrl.ShowWindow(SW_SHOW);
-		m_BuddyListCtrl.ShowWindow(SW_HIDE);
-		m_GroupListCtrl.ShowWindow(SW_HIDE);
-		m_RecentListCtrl.SetBuddyTeamExpand(0, TRUE);
-		//m_RecentListCtrl.SetBuddyListCtrlType(BUDDY_LIST_TYPE_RECENT);
-		m_RecentListCtrl.SetFocus();
-		break;
-
-	case 1:
-		m_RecentListCtrl.ShowWindow(SW_HIDE);
-		m_BuddyListCtrl.ShowWindow(SW_SHOW);
-		m_GroupListCtrl.ShowWindow(SW_HIDE);
-		m_BuddyListCtrl.SetFocus();
-		break;
-
-	case 2:
-		m_RecentListCtrl.ShowWindow(SW_HIDE);
-		m_BuddyListCtrl.ShowWindow(SW_HIDE);	
-		m_GroupListCtrl.ShowWindow(SW_SHOW);
-		m_GroupListCtrl.SetFocus();
-		break;
-	}
-
-	m_nCurSelIndexInMainTab = nCurSel;
-
-	return 0;
-}
-
-void CMainDlg::OnRefreshBuddyList(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	//m_FMGClient.StartGetUserInfoTask(USER_INFO_TYPE_SELF);
-	m_FMGClient.GetFriendList();
-}
-
-void CMainDlg::OnShowOnlineBuddyOnly(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	m_bShowOnlineBuddyOnly = !m_bShowOnlineBuddyOnly;
-	::SendMessage(m_hWnd, FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
-}
 
 void CMainDlg::OnMainMenu_About(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 
 }
 
-// ��ȡ������ť(ȡ����¼)
-void CMainDlg::OnBtn_Cancel(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	m_FMGClient.CancelLogin();
-	CloseDialog(IDCANCEL);
-	CString strMainExe = g_szHomePath;
-	strMainExe.Format(_T("%sFlamingo.exe"), g_szHomePath);
-	if((int)::ShellExecute(NULL, NULL, strMainExe.GetString(), NULL, NULL, SW_SHOW) <= 32)
-	{
-		::MessageBox(NULL, _T("��ʾ��¼�Ի���ʧ�ܣ�"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
-	}
-	//CLoginDlg LoginDlg;
-	//if (LoginDlg.DoModal() != IDOK)	// ��ʾ��¼�Ի���
-	//{
-	//	EndDialog(LoginDlg.m_hWnd, IDOK);
-	//	return;
-	//}
-}
-
-// ���û�ͷ�񡱿ؼ�
-void CMainDlg::OnPic_Clicked_Head(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	m_LogonUserInfoDlg.m_pFMGClient = &m_FMGClient;
-	if(!m_LogonUserInfoDlg.IsWindow())
-		m_LogonUserInfoDlg.Create(NULL);
-	
-	m_LogonUserInfoDlg.ShowWindow(SW_SHOW);
-	::SetForegroundWindow(m_LogonUserInfoDlg.m_hWnd);
-}
-
-// ����ͷ�񡱲˵�
-void CMainDlg::OnMenu_BigHeadPic(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	int nCurSel, nIndex;
-	CBuddyListCtrl* lpBuddyListCtrl = NULL;
-
-	nCurSel = m_TabCtrl.GetCurSel();
-	if (0 == nCurSel)
-	{
-		nIndex = 3;
-		lpBuddyListCtrl = &m_GroupListCtrl;
-	}
-	else if (1 == nCurSel)
-	{
-		nIndex = 4;
-		lpBuddyListCtrl = &m_BuddyListCtrl;
-	}
-	else if (2 == nCurSel)
-	{
-		nIndex = 5;
-		//lpBuddyListCtrl = &m_RecentListCtrl;
-	}
-
-	if (NULL == lpBuddyListCtrl || lpBuddyListCtrl->GetStyle() == BLC_BIG_ICON_STYLE)
-		return;
-
-	CSkinMenu PopupMenu = m_SkinMenu.GetSubMenu(nIndex);
-	PopupMenu.CheckMenuRadioItem(ID_MENU_BIGHEADPIC, ID_MENU_STDHEADPIC, ID_MENU_BIGHEADPIC, MF_BYCOMMAND);
-	PopupMenu.CheckMenuItem(ID_MENU_SHOWBIGHEADPICINSEL, MF_UNCHECKED|MF_BYCOMMAND);
-	PopupMenu.EnableMenuItem(ID_MENU_SHOWBIGHEADPICINSEL, MF_GRAYED|MF_BYCOMMAND);
-
-	lpBuddyListCtrl->SetStyle(BLC_BIG_ICON_STYLE);
-	m_nBuddyListHeadPicStyle = BLC_BIG_ICON_STYLE;
-	lpBuddyListCtrl->Invalidate();
-}
-
-// ��Сͷ�񡱲˵�
-void CMainDlg::OnMenu_SmallHeadPic(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	int nCurSel, nIndex;
-	UINT nCheck;
-	CBuddyListCtrl* lpBuddyListCtrl = NULL;
-
-	nCurSel = m_TabCtrl.GetCurSel();
-	if (0 == nCurSel)
-	{
-		nIndex = 3;
-		lpBuddyListCtrl = &m_GroupListCtrl;
-	}
-	else if (1 == nCurSel)
-	{
-		nIndex = 4;
-		lpBuddyListCtrl = &m_BuddyListCtrl;
-	}
-	else if (4 == nCurSel)
-	{
-		nIndex = 5;
-		//lpBuddyListCtrl = &m_RecentListCtrl;
-	}
-
-	if (NULL == lpBuddyListCtrl || lpBuddyListCtrl->GetStyle() == BLC_SMALL_ICON_STYLE)
-		return;
-
-	nCheck = lpBuddyListCtrl->IsShowBigIconInSel() ? MF_CHECKED : MF_UNCHECKED;
-
-	CSkinMenu PopupMenu = m_SkinMenu.GetSubMenu(nIndex);
-	PopupMenu.CheckMenuRadioItem(ID_MENU_BIGHEADPIC, 
-		ID_MENU_STDHEADPIC, ID_MENU_SMALLHEADPIC, MF_BYCOMMAND);
-	PopupMenu.EnableMenuItem(ID_MENU_SHOWBIGHEADPICINSEL, MF_ENABLED|MF_BYCOMMAND);
-	PopupMenu.CheckMenuItem(ID_MENU_SHOWBIGHEADPICINSEL, nCheck|MF_BYCOMMAND);
-
-	lpBuddyListCtrl->SetStyle(BLC_SMALL_ICON_STYLE);
-	m_nBuddyListHeadPicStyle = BLC_SMALL_ICON_STYLE;
-	lpBuddyListCtrl->Invalidate();
-}
-
-// ����׼ͷ�񡱲˵�
-void CMainDlg::OnMenu_StdHeadPic(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	int nCurSel, nIndex;
-	CBuddyListCtrl* lpBuddyListCtrl = NULL;
-
-	nCurSel = m_TabCtrl.GetCurSel();
-	if (0 == nCurSel)
-	{
-		nIndex = 3;
-		lpBuddyListCtrl = &m_GroupListCtrl;
-	}
-	else if (1 == nCurSel)
-	{
-		nIndex = 4;
-		lpBuddyListCtrl = &m_BuddyListCtrl;
-	}
-	else if (2 == nCurSel)
-	{
-		nIndex = 5;
-		//lpBuddyListCtrl = &m_RecentListCtrl;
-	}
-
-	if (NULL == lpBuddyListCtrl || lpBuddyListCtrl->GetStyle() == BLC_STANDARD_ICON_STYLE)
-		return;
-
-	CSkinMenu PopupMenu = m_SkinMenu.GetSubMenu(nIndex);
-	PopupMenu.CheckMenuRadioItem(ID_MENU_BIGHEADPIC, ID_MENU_STDHEADPIC, ID_MENU_STDHEADPIC, MF_BYCOMMAND);
-	PopupMenu.CheckMenuItem(ID_MENU_SHOWBIGHEADPICINSEL, MF_UNCHECKED|MF_BYCOMMAND);
-	PopupMenu.EnableMenuItem(ID_MENU_SHOWBIGHEADPICINSEL, MF_GRAYED|MF_BYCOMMAND);
-
-	lpBuddyListCtrl->SetStyle(BLC_STANDARD_ICON_STYLE);
-	m_nBuddyListHeadPicStyle = BLC_STANDARD_ICON_STYLE;
-	lpBuddyListCtrl->Invalidate();
-}
-
-// ��ѡ��ʱ��ʾ��ͷ�񡱲˵�
-void CMainDlg::OnMenu_ShowBigHeadPicInSel(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	int nCurSel, nIndex;
-	CBuddyListCtrl* lpBuddyListCtrl = NULL;
-
-	nCurSel = m_TabCtrl.GetCurSel();
-	if (0 == nCurSel)
-	{
-		nIndex = 3;
-		lpBuddyListCtrl = &m_GroupListCtrl;
-	}
-	else if (1 == nCurSel)
-	{
-		nIndex = 4;
-		lpBuddyListCtrl = &m_BuddyListCtrl;
-	}
-	else if (2 == nCurSel)
-	{
-		nIndex = 5;
-		//lpBuddyListCtrl = &m_RecentListCtrl;
-	}
-
-	if (NULL == lpBuddyListCtrl)
-		return;
-
-	CSkinMenu PopupMenu = m_SkinMenu.GetSubMenu(nIndex);
-	UINT nState = PopupMenu.GetMenuState(ID_MENU_SHOWBIGHEADPICINSEL, MF_BYCOMMAND);
-	if (nState & MF_CHECKED)
-	{
-		PopupMenu.CheckMenuItem(ID_MENU_SHOWBIGHEADPICINSEL, MF_UNCHECKED|MF_BYCOMMAND);
-		lpBuddyListCtrl->SetShowBigIconInSel(FALSE);
-		m_bShowBigHeadPicInSel = FALSE;
-	}
-	else
-	{
-		PopupMenu.CheckMenuItem(ID_MENU_SHOWBIGHEADPICINSEL, MF_CHECKED|MF_BYCOMMAND);
-		lpBuddyListCtrl->SetShowBigIconInSel(TRUE);
-		m_bShowBigHeadPicInSel = TRUE;
-	}
-	lpBuddyListCtrl->Invalidate();
-}
-
-// ������ǩ�����༭�ı���
-void CMainDlg::OnEdit_Sign_KillFocus(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	CString strOldText, strNewText;
-	m_btnSign.GetWindowText(strOldText);
-	m_edtSign.GetWindowText(strNewText);
-
-	strNewText.Trim();
-	if(strNewText.GetLength() > 127)
-	{
-		::MessageBox(m_hWnd, _T("����ǩ�����ܳ���127���ַ���"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
-		return;
-	}
-	
-	BOOL bModify = TRUE;
-	if(m_FMGClient.IsOffline())
-	{
-		::MessageBox(m_hWnd, _T("����ǰ��������״̬���޷��޸ĸ���ǩ���������ߺ����ԡ�"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
-	}
-	else
-	{
-		if(!strOldText.IsEmpty() && strNewText.IsEmpty())
-		{
-			if(::MessageBox(m_hWnd, _T("ȷ��Ҫ���ĸ���ǩ����"), g_strAppTitle.c_str(), MB_YESNO|MB_ICONQUESTION) != IDYES)
-			{
-				bModify = FALSE;
-			}
-		}
-
-		if(bModify && strOldText!=strNewText)
-		{
-			m_FMGClient.ModifyUTalkSign(strNewText);
-			m_btnSign.SetWindowText(strNewText);
-		}
-	}
-
-	if(!bModify)
-		m_btnSign.SetWindowText(strOldText);
-	
-	m_edtSign.ShowWindow(SW_HIDE);
-	m_btnSign.ShowWindow(SW_SHOW);
-}
-
-// ���û�����״̬���˵�
+// “取消”按钮(取消登录)
 void CMainDlg::OnMenu_Status(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
-	long nNewStatus = GetStatusFromMenuID(nID);
-	//�����Ҫ���ĵ�Ŀ��״̬�뵱ǰ״̬һ����������
-	if (nNewStatus == m_FMGClient.GetStatus())	
-		return;
+    long nNewStatus = GetStatusFromMenuID(nID);
+    //如果需要更改的目标状态与当前状态一样，不处理
+    if (nNewStatus == m_FMGClient.GetStatus())
+        return;
 
 
-	//m_FMGClient.ChangeStatus(nNewStatus);
+    //m_FMGClient.ChangeStatus(nNewStatus);
 
     if (nNewStatus == STATUS_OFFLINE)
     {
         m_FMGClient.GoOffline();
-        //������־����
+        //重连标志清零
         m_nMainPanelStatus = MAINPANEL_STATUS_USERGOOFFLINE;
     }
-	else if(nNewStatus == STATUS_ONLINE)
-		m_FMGClient.GoOnline();
+    else if (nNewStatus == STATUS_ONLINE)
+        m_FMGClient.GoOnline();
 
-	//StatusMenuBtn_SetIconPic(m_btnStatus, nNewStatus);	
-}
-
-void CMainDlg::OnBuddyListAddTeam(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	if(m_FMGClient.m_UserMgr.m_BuddyList.GetBuddyTeamCount() > 20)
-	{
-		::MessageBox(m_hWnd, _T("�����������ܳ���20����"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
-		return;
-	}
-	
-	CTeamDlg newTeamDlg;
-	newTeamDlg.SetType(TEAM_OPERATION_ADDTEAM);
-	newTeamDlg.m_pFMGClient = &m_FMGClient;
-	if(newTeamDlg.DoModal(m_hWnd, NULL) != IDOK)
-		return;
-
-	::PostMessage(m_hWnd, FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
-}
-
-void CMainDlg::OnBuddyListDeleteTeam(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	int nTeamIndex, nBuddyIndex;
-	m_BuddyListCtrl.GetCurSelIndex(nTeamIndex, nBuddyIndex);
-	if(nTeamIndex<0 || nBuddyIndex>0)
-		return;
-
-	if(m_FMGClient.m_UserMgr.m_BuddyList.GetBuddyTeamCount() <= 1)
-	{
-		::MessageBox(m_hWnd, _T("���ٵ���һ�����顣"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
-		return;
-	}
-
-    CString strTeamName = m_BuddyListCtrl.GetBuddyTeamName(nTeamIndex);
-    if (strTeamName == DEFAULT_TEAMNAME)
-    {
-        ::MessageBox(m_hWnd, _T("Ĭ�Ϸ��鲻��ɾ����"), g_strAppTitle.c_str(), MB_ICONINFORMATION | MB_OK);
-        return;
-    }
-
-	if(IDYES != ::MessageBox(m_hWnd, _T("ɾ���÷����Ժ󣬸����µĺ��ѽ�����Ĭ�Ϸ����С�\nȷ��Ҫɾ���÷�����"), g_strAppTitle.c_str(), MB_YESNO|MB_ICONQUESTION))
-		return;
-
-    m_FMGClient.DeleteTeam(strTeamName);   
-}
-
-void CMainDlg::OnBuddyListModifyTeamName(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	int nTeamIndex, nBuddyIndex;
-	m_BuddyListCtrl.GetCurSelIndex(nTeamIndex, nBuddyIndex);
-	if(nTeamIndex<0 || nBuddyIndex>0)
-		return;
-
-	CTeamDlg newTeamDlg;
-	newTeamDlg.SetType(TEAM_OPERATION_MODIFYTEAMNAME);
-	newTeamDlg.m_pFMGClient = &m_FMGClient;
-	newTeamDlg.m_nTeamIndex = nTeamIndex;
-	if(newTeamDlg.DoModal(m_hWnd, NULL) != IDOK)
-		return;
-
-	::PostMessage(m_hWnd, FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
-}
-
-void CMainDlg::OnMoveBuddyToTeam(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	int nTeamIndex;
-	int nIndex;
-	m_BuddyListCtrl.GetCurSelIndex(nTeamIndex, nIndex);
-	if(nTeamIndex<0 || nIndex<0)
-		return;
-
-	UINT uUserID = (UINT)m_BuddyListCtrl.GetBuddyItemID(nTeamIndex, nIndex);
-	if(uUserID == 0)
-		return;
-
-	CBuddyInfo* pBuddyInfo = NULL;
-	CBuddyTeamInfo* pTeamInfo = m_FMGClient.m_UserMgr.m_BuddyList.GetBuddyTeamByIndex(nTeamIndex);
-	if(pTeamInfo == NULL)
-		return;
-
-    CString strOldTeamName;
-	//��ȡԭ������
-	for(std::vector<CBuddyInfo*>::iterator iter=pTeamInfo->m_arrBuddyInfo.begin(); iter!=pTeamInfo->m_arrBuddyInfo.end(); ++iter)
-	{
-		pBuddyInfo =*iter;
-		if(pBuddyInfo!=NULL && pBuddyInfo->m_uUserID == uUserID)
-		{
-            strOldTeamName = pTeamInfo->m_strName.c_str();
-			break;
-		}
-	}
-	
-	//��ȡĿ�������
-	long nTargetIndex = nID-TEAM_MENU_ITEM_BASE;
-	CBuddyTeamInfo* pTargetTeamInfo = m_FMGClient.m_UserMgr.m_BuddyList.GetBuddyTeamByIndex(nTargetIndex);
-	if(pTargetTeamInfo == NULL)
-		return;
-    CString strNewTeamName = pTargetTeamInfo->m_strName.c_str();
-	
-    m_FMGClient.MoveFriendToOtherTeam(uUserID, strOldTeamName, strNewTeamName);
-}
-
-//�Ҽ��˵�ɾ������
-void CMainDlg::OnMenu_DeleteFriend(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-
-	int nTeamIndex, nBuddyIndex;
-	m_BuddyListCtrl.GetCurSelIndex(nTeamIndex, nBuddyIndex);
-	if(nTeamIndex==-1 || nBuddyIndex==-1)
-	{
-		::MessageBox(m_hWnd, _T("������Ҫɾ���ĺ����ϰ����Ҽ��˵���"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
-		return;
-	}
-
-	CString strNickName(m_BuddyListCtrl.GetBuddyItemNickName(nTeamIndex, nBuddyIndex));
-	CString strMarkName(m_BuddyListCtrl.GetBuddyItemMarkName(nTeamIndex, nBuddyIndex));
-
-	CString strInfo;
-	strInfo.Format(_T("ȷ��Ҫɾ��%s(%s)��"), strMarkName, strNickName);
-	int nRet = ::MessageBox(m_hWnd, strInfo, g_strAppTitle.c_str(), MB_YESNO|MB_ICONQUESTION);
-	if (IDNO == nRet)
-		return;
-
-	UINT uUserID = (UINT)m_BuddyListCtrl.GetBuddyItemID(nTeamIndex, nBuddyIndex);	
-	m_FMGClient.DeleteFriend(uUserID);
-}
-
-void CMainDlg::OnClearAllRecentList(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	int nRet = ::MessageBox(m_hWnd, _T("��ջỰ�б����޷��ָ���ȷ��Ҫ��ջỰ�б���"), g_strAppTitle.c_str(), MB_YESNO|MB_ICONWARNING);
-	if(nRet != IDYES)
-		return;
-
-	m_FMGClient.m_UserMgr.ClearRecentList();
-	::PostMessage(m_hWnd, FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
-}
-
-void CMainDlg::OnDeleteRecentItem(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	int nTeamIndex, nRecentIndex;
-	m_RecentListCtrl.GetCurSelIndex(nTeamIndex, nRecentIndex);
-	if(nTeamIndex==-1 || nRecentIndex==-1)
-	{
-		::MessageBox(m_hWnd, _T("������Ҫɾ���ĻỰ�ϰ����Ҽ��˵���"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
-		return;
-	}
-
-	int nRet = ::MessageBox(m_hWnd, _T("ȷ��Ҫɾ���ûỰ��"), g_strAppTitle.c_str(), MB_YESNO|MB_ICONQUESTION);
-	if (IDNO == nRet)
-		return;
-
-	UINT uUserID = (UINT)m_RecentListCtrl.GetBuddyItemID(nTeamIndex, nRecentIndex);	
-	m_FMGClient.m_UserMgr.DeleteRecentItem(uUserID);
-	::PostMessage(m_hWnd, FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
-}
-
-void CMainDlg::OnMenu_SendBuddyMessage(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	OnBuddyListDblClk(NULL);
-}
-
-void CMainDlg::OnMenu_SendBuddyMessageFromRecentList(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	OnRecentListDblClk(NULL);
-}
-
-void CMainDlg::OnMenu_ViewBuddyInfo(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	int nTeamIndex, nIndex;
-	m_BuddyListCtrl.GetCurSelIndex(nTeamIndex, nIndex);
-	if (nTeamIndex<0 || nIndex<0)
-		return;
-
-	UINT nUTalkUin = m_BuddyListCtrl.GetBuddyItemID(nTeamIndex, nIndex);
-	::PostMessage(m_hWnd, WM_SHOW_BUDDYINFODLG, NULL, nUTalkUin);
-}
-
-void CMainDlg::OnMenu_ViewBuddyInfoFromRecentList(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	int nTeamIndex, nIndex;
-	m_RecentListCtrl.GetCurSelIndex(nTeamIndex, nIndex);
-	if (nTeamIndex<0 || nIndex<0)
-		return;
-
-	UINT nUTalkUin = m_RecentListCtrl.GetBuddyItemID(nTeamIndex, nIndex);
-	::PostMessage(m_hWnd, WM_SHOW_BUDDYINFODLG, NULL, nUTalkUin);
-}
-
-void CMainDlg::OnMenu_ModifyBuddyMarkName(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	int nTeamIndex, nIndex;
-	m_BuddyListCtrl.GetCurSelIndex(nTeamIndex, nIndex);
-	if (nTeamIndex<0 || nIndex<0)
-		return;
-
-	UINT uUserID = m_BuddyListCtrl.GetBuddyItemID(nTeamIndex, nIndex);
-	if(uUserID == 0)
-		return;
-
-	CModifyMarkNameDlg modifyMarkNameDlg;
-	modifyMarkNameDlg.m_uUserID = uUserID;
-	modifyMarkNameDlg.m_pFMGClient = &m_FMGClient;
-	if(modifyMarkNameDlg.DoModal(m_hWnd, NULL) != IDOK)
-		return;
-
-	::PostMessage(m_hWnd, FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
-}
-
-void CMainDlg::OnMenu_ShowNameChoice(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	switch(nID)
-	{
-	//��ʾ�ǳƺ��˺�
-	case ID_32911:
-		m_FMGClient.m_UserConfig.SetNameStyle(NAME_STYLE_SHOW_NICKNAME_AND_ACCOUNT);
-		break;
-	//��ʾ�ǳ�
-	case ID_32912:
-		m_FMGClient.m_UserConfig.SetNameStyle(NAME_STYLE_SHOW_NICKNAME);
-		break;
-	//��ʾ�˺�
-	case ID_32913:
-		m_FMGClient.m_UserConfig.SetNameStyle(NAME_STYLE_SHOW_ACCOUNT);
-		break;
-	
-	//��ʾ��ˬ����
-	case ID_32914:
-		m_FMGClient.m_UserConfig.EnableSimpleProfile(!m_FMGClient.m_UserConfig.IsEnableSimpleProfile());
-		break;
-
-	default:
-		break;
-	}
-
-	::PostMessage(m_hWnd, FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
-}
-
-void CMainDlg::OnMenu_SendGroupMessage(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	OnGroupListDblClk(NULL);
-}
-
-void CMainDlg::OnMenu_ViewGroupInfo(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	int nTeamIndex, nIndex;
-	m_GroupListCtrl.GetCurSelIndex(nTeamIndex, nIndex);
-
-	if (nTeamIndex != -1 && nIndex != -1)
-	{
-		UINT nGroupCode = m_GroupListCtrl.GetBuddyItemID(nTeamIndex, nIndex);
-		::PostMessage(m_hWnd, WM_SHOW_GROUPINFODLG, nGroupCode, NULL);
-	}		
-}
-
-void CMainDlg::OnMenu_ExitGroup(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	int nTeamIndex, nIndex;
-	m_GroupListCtrl.GetCurSelIndex(nTeamIndex, nIndex);
-
-	if (nTeamIndex != -1 && nIndex != -1)
-	{
-		UINT nGroupCode = m_GroupListCtrl.GetBuddyItemID(nTeamIndex, nIndex);
-		CString strPromptInfo;
-		strPromptInfo.Format(_T("ȷʵҪ�˳�Ⱥ[%s(%s)]��"), m_GroupListCtrl.GetBuddyItemMarkName(nTeamIndex, nIndex), m_GroupListCtrl.GetBuddyItemNickName(nTeamIndex, nIndex));
-		if(IDNO == ::MessageBox(m_hWnd, strPromptInfo, g_strAppTitle.c_str(), MB_YESNO|MB_ICONQUESTION))
-			return;
-
-		m_FMGClient.DeleteFriend(nGroupCode);
-	}		
-}
-
-void CMainDlg::OnMenu_CreateNewGroup(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-	CCreateNewGroupDlg dlg;
-	dlg.m_pFMGClient = &m_FMGClient;
-	if(IDOK != dlg.DoModal(NULL, NULL))
-		return;
+    //StatusMenuBtn_SetIconPic(m_btnStatus, nNewStatus);	
 }
 
 LRESULT CMainDlg::OnNetError(UINT uMsg, WPARAM wParam, LPARAM lParam)
-{        
-    //������ʱ���Ѿ�������ֱ���˳��������ظ�����
+{
+    LOG_INFO("MainDlg::OnNetError: panelStatus=%d, reconnectTimer=%u, "
+        "enableReconnect=%d.",
+        m_nMainPanelStatus, (unsigned int)m_dwReconnectTimerId,
+        m_bEnableReconnect ? 1 : 0);
+
+    //重连定时器已经开启，直接退出，避免重复开启
     if (m_dwReconnectTimerId != 0)
         return 0;
-    
+
     m_FMGClient.m_UserMgr.ResetToOfflineStatus();
 
     ::SendMessage(m_FMGClient.m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_BUDDY_INFO, 0, (LPARAM)(m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID));
@@ -2595,519 +1151,2192 @@ LRESULT CMainDlg::OnNetError(UINT uMsg, WPARAM wParam, LPARAM lParam)
     ::SendMessage(m_FMGClient.m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
     ::SendMessage(m_FMGClient.m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_GROUP_LIST, 0, 0);
 
-    //û�п������������û���������Ҳ��Ҫ����
-    if (m_bEnableReconnect && m_nMainPanelStatus != MAINPANEL_STATUS_USERGOOFFLINE)
+    //没有开启重连或者用户主动下线都不要重连（守卫与 OnTimer 的重连分支共用同一函数）。
+    const bool userWentOffline = (m_nMainPanelStatus == MAINPANEL_STATUS_USERGOOFFLINE);
+    if (balloonmain::ShouldAutoReconnect(userWentOffline, m_bEnableReconnect))
     {
         m_nMainPanelStatus = MAINPANEL_STATUS_RECONNECTING;
-        m_dwReconnectTimerId = SetTimer(RECONNECT_TIMER_ID, m_uReconnectInterval, NULL);   
+        m_dwReconnectTimerId = SetTimer(RECONNECT_TIMER_ID, m_uReconnectInterval, NULL);
     }
-    
+
+    //连接已断：托盘图标转灰，界面进入"正在连接"（重连中）或"离线"（用户主动下线）态，
+    //聊天窗输入区据此置灰、弹出提示条。
+    RefreshTrayIconForStatus();
+    BroadcastConnectionState();
+
     return 1;
 }
 
-// ��¼������Ϣ
+// v2 被踢下线推送（cmd_kickout）：账号在其他同类型设备登录（顶号）、被管理员停用、
+// 服务器维护、密码已改、被本人在另一设备踢掉，都会走到这里。
+//
+// 流程：先断连接、压住自动重连，再贴着托盘图标弹一个<u>模态</u>提示框说明原因；用户关掉
+// 提示框后走与登出相同的收尾（关所有窗口、销毁主面板、清登录态），重新弹出登录窗。
+//
+// 为什么是模态提示框而不是托盘气泡：气泡容易被忽略（用户反馈"效果不明显"），而被顶下线
+// 是必须被看见的事 —— 尤其"异地登录"那一条还带着"密码可能已泄露"的安全提醒。
+//
+// 压住自动重连是这里的另一件要紧事：网络层收到推送后会关掉 socket，而关 socket 会被
+// OnNetError 当成掉线、起重连定时器把客户端连回服务器重新登录，登录又会把刚在另一台机器
+// 上登上去的那一端顶下来，两端来回顶号没完。
+LRESULT CMainDlg::OnV2Kickout(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/)
+{
+    const int nReason = (int)wParam;
+
+    LOG_INFO("MainDlg::OnV2Kickout: 收到被踢下线推送。reason=%d, panelStatus=%d, "
+        "reconnectTimer=%u, alreadyLogin=%d.",
+        nReason, m_nMainPanelStatus, (unsigned int)m_dwReconnectTimerId,
+        m_bAlreadyLogin ? 1 : 0);
+
+    //【0】重入保护：提示框跑的是嵌套消息循环，期间其它消息照常分发。万一又来一条被踢
+    //     下线通知（理论上不会：连接已经关了），不能再叠一个框、更不能重入下面的收尾序列。
+    if (m_bKickoutNoticeShowing)
+    {
+        LOG_INFO("MainDlg::OnV2Kickout: 提示框正在显示，忽略重复的被踢下线通知。");
+        return 0;
+    }
+
+    //【1】先置"离线且不再重连"态。OnNetError 与重连定时器都据这个标志决定要不要连回去
+    //     （见 balloonmain::ShouldAutoReconnect）。
+    m_nMainPanelStatus = MAINPANEL_STATUS_USERGOOFFLINE;
+
+    //【2】已经在跑的重连定时器就地停掉。掉线事件（FMG_MSG_NET_ERROR）与本消息都由网络
+    //     线程投递，本消息虽然投得更早，但这里不指望它一定先被处理：万一 OnNetError 抢先
+    //     把定时器起了，这一刀补上，不留"标志已置离线、定时器还在跑"的中间态。
+    if (m_dwReconnectTimerId != 0)
+    {
+        KillTimer(m_dwReconnectTimerId);
+        m_dwReconnectTimerId = 0;
+        LOG_INFO("MainDlg::OnV2Kickout: 被踢下线，已停掉正在运行的重连定时器。");
+    }
+
+    //【3】真正下线：立起网络层离线闸门、丢弃排队中的帧、断开 chat / file / img 三条连接。
+    //     闸门在网络线程收到推送时已经立过一次（见 CIUSocket::HandleV2Frame 的 cmd_kickout
+    //     分支），这里是幂等的补齐，同时把另外两条连接与排队数据一并收拾干净。
+    m_FMGClient.GoOffline();
+
+    //【4】提示框弹出期间主面板还在它背后，界面不能还写着"在线"：胶囊改离线、托盘图标转灰、
+    //     聊天窗输入区置灰。这几步很快就会随主面板一起销毁，但那是用户关掉提示框<u>之后</u>
+    //     的事，中间这段时间界面得是自洽的。
+    if (m_BalloonMainPanel.IsWindow())
+    {
+        m_BalloonMainPanel.ApplyPresenceOptimistic(kMyPresenceOffline);
+    }
+    RefreshTrayIconForStatus();
+    BroadcastConnectionState();
+
+    //【5】取托盘图标位置，供提示框贴着它弹出。必须赶在下面收尾序列里的 RemoveIcon 之前
+    //     取 —— 图标摘掉之后就再也问不出它在哪儿了。取不到时给空矩形，提示框自会退回
+    //     桌面右下角（见 balloonmain::ComputeTrayAnchoredOrigin）。
+    RECT rcTrayIcon;
+    ::SetRectEmpty(&rcTrayIcon);
+    if (!m_TrayIcon.GetTrayIconRect(&rcTrayIcon))
+    {
+        ::SetRectEmpty(&rcTrayIcon);
+    }
+
+    //【6】弹模态提示框。owner 取主面板；主面板不在（已销毁 / 未创建）时退回隐藏的 CMainDlg。
+    //     模态期间 owner 被禁用，托盘的点击也一并挡住（见 OnTrayIconNotify 里的守卫），
+    //     免得用户从托盘菜单里点"登出"造成收尾序列重入。
+    HWND hOwner = m_hWnd;
+    if (m_BalloonMainPanel.IsWindow())
+    {
+        hOwner = m_BalloonMainPanel.m_hWnd;
+    }
+
+    m_bKickoutNoticeShowing = true;
+    {
+        CBalloonKickoutDlg dlg;
+        dlg.DoModal(hOwner, nReason, rcTrayIcon);
+    }
+    m_bKickoutNoticeShowing = false;
+
+    LOG_INFO("MainDlg::OnV2Kickout: 用户已关闭提示框，回到登录界面。");
+
+    //【7】与登出相同的收尾：关掉所有窗口、销毁主面板、清空登录态，重新弹出登录窗。
+    ReturnToLoginWindow();
+    return 0;
+}
+
+// 本机网络由断开恢复（CCheckNetworkStatusTask 每 3 秒探测一次本机联网状况，状态发生
+// 跳变时经 CFlamingoClient::OnNetworkStatusChange 转投到这里）。
+//
+// 这是自动重连守卫的第三个调用点，另外两个是掉线事件(OnNetError)与重连定时器(OnTimer)。
+// 原先这条路径压根不判登录态，网络一恢复就直接 GoOnline() 重新登录 —— 于是"用户选了
+// 离线"和"账号在别处登录被顶下线"之后，只要网线拔一下再插上，客户端就自己连回服务器，
+// 把前面那个"别再连了"的决定作废（被踢那一路还会把刚在别处登上去的那一端又顶下来）。
+// 三处共用 balloonmain::ShouldAutoReconnect 之后，不会再出现一处判了另一处没判。
+LRESULT CMainDlg::OnNetworkResumed(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/)
+{
+    // 主动离线与被踢下线都会把面板状态置成 MAINPANEL_STATUS_USERGOOFFLINE，两者对
+    // "要不要连回去"的答案一样，故用同一个判据。
+    const bool userWentOffline = (m_nMainPanelStatus == MAINPANEL_STATUS_USERGOOFFLINE);
+
+    LOG_INFO("MainDlg::OnNetworkResumed: 本机网络已恢复。panelStatus=%d, "
+        "userWentOffline=%d, enableReconnect=%d, alreadyLogin=%d.",
+        m_nMainPanelStatus, userWentOffline ? 1 : 0,
+        m_bEnableReconnect ? 1 : 0, m_bAlreadyLogin ? 1 : 0);
+
+    if (!balloonmain::ShouldAutoReconnect(userWentOffline, m_bEnableReconnect))
+    {
+        LOG_INFO("MainDlg::OnNetworkResumed: 处于离线态（或配置关闭了自动重连），"
+            "不自动连回服务器，等用户自己选\"在线\"。");
+        return 0;
+    }
+
+    // 未登录时也不要自己连回去。这条判断只在本调用点需要：另外两个调用点（掉线事件、
+    // 重连定时器）只可能在登录后触发，而"网络恢复"在停在登录窗时照样会来。
+    // 不判的后果是实打实的：被顶下线回到登录界面后，账号与密码仍留在 m_UserInfo 里供
+    // 登录窗预填（见 ReturnToLoginWindow），CFlamingoClient::Login 正是读这两个字段，
+    // 于是网络一恢复就会拿旧账号悄悄登回去，把别处刚登上的那一端又顶下来。
+    if (!m_bAlreadyLogin)
+    {
+        LOG_INFO("MainDlg::OnNetworkResumed: 当前未登录（停在登录界面），不自动登录。");
+        return 0;
+    }
+
+    LOG_INFO("MainDlg::OnNetworkResumed: 非离线态，网络恢复后重新登录。");
+    m_FMGClient.GoOnline();
+    return 0;
+}
+
+// 登录返回消息
 LRESULT CMainDlg::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     long nCode = (long)lParam;
-    
-    //�������ɹ�������Է��͵�¼�������ʶ���ٴη���������¼���ݰ�
+
+    LOG_INFO("MainDlg::OnLoginResult: code=%ld (0=SUCCESS 1=FAILED 2=UNREG "
+        "3=PWD_ERR), panelStatus=%d (0=NOTLOGIN 1=LOGINING 2=LOGIN "
+        "3=RECONNECTING 4=USERGOOFFLINE).",
+        nCode, m_nMainPanelStatus);
+
+    //重连不成功，清除以发送登录请求包标识，再次发送重连登录数据包
     if (m_nMainPanelStatus == MAINPANEL_STATUS_RECONNECTING && nCode != LOGIN_SUCCESS)
     {
         m_bAlreadySendReloginRequest = false;
         return 0;
     }
-    
- 	KillTimer(m_dwLoginTimerId);
- 	m_dwLoginTimerId = NULL;
 
-	long nStatus = m_FMGClient.GetStatus();
+    KillTimer(m_dwLoginTimerId);
+    m_dwLoginTimerId = NULL;
 
- 	LoadAppIcon(nStatus);
-	
-	switch (nCode)
-	{
-	case LOGIN_SUCCESS:				// ��¼�ɹ�
-		{
-            if (m_dwReconnectTimerId != 0)
-            {
-                KillTimer(m_dwReconnectTimerId);
-                m_dwReconnectTimerId = 0;
-            }
-        
-            ShowPanel(TRUE);
-			ShowWindow(SW_SHOW);
-			Invalidate();
+    // 此刻 m_bAlreadyLogin 还没置真（成功分支下面才置），GetConnectionUiState 会算成
+    // "连接未就绪"、取灰色图标；登录成功分支末尾会再调一次 RefreshTrayIconForStatus
+    // 换成彩色。这样登录失败时托盘自然停在灰色，无需另行处理。
+    LoadAppIcon(GetConnectionUiState());
 
-            m_FMGClient.InitNetThreads();
+    // 本次登录是不是"从离线恢复在线"发起的。下面各分支要用，取完即复位：无论成功还是
+    // 失败，这一轮恢复流程到此为止。
+    const bool bResuming = m_bResumingOnline;
+    m_bResumingOnline = false;
 
-            //��ȡ����ʱ����
-            CIniFile iniFile;
-            CString strIniFile;
-            strIniFile.Format(_T("%sconfig\\flamingo.ini"), g_szHomePath);
+    switch (nCode)
+    {
+    case LOGIN_SUCCESS:				// 登录成功
+    {
+        if (m_dwReconnectTimerId != 0)
+        {
+            KillTimer(m_dwReconnectTimerId);
+            m_dwReconnectTimerId = 0;
+        }
 
-            if (iniFile.ReadInt(_T("server"), _T("enablereconnect"), 1, strIniFile) != 0)
-                m_bEnableReconnect = true;
-            else
-                m_bEnableReconnect = false;
+        // PR7: 旧自绘 UI 不再显示。新 BalloonMainPanel 由本函数末尾
+        // CreateAndShow,CMainDlg 主窗口保持隐藏。
 
-            //���������������û��Ҫ��ȡ����ʱ������
-            if (m_bEnableReconnect)
-            {
-                m_uReconnectInterval = iniFile.ReadInt(_T("server"), _T("reconnectinterval"), 5000, strIniFile);
-                if (m_uReconnectInterval <= 0)
-                    m_uReconnectInterval = 5000;
-            }
+        m_FMGClient.InitNetThreads();
 
-			CreateEssentialDirectories();
-			
-			//��¼�ɹ��Ժ󣬻�ȡ������ʱ��
-			//m_FMGClient.RequestServerTime();
+        //读取重连时间间隔
+        CIniFile iniFile;
+        CString strIniFile;
+        strIniFile.Format(_T("%sconfig\\flamingo.ini"), g_szHomePath);
 
-            
-            //TODO: �������ʱ�������߳�һ������������
-            m_FMGClient.GetFriendList();
-			m_FMGClient.StartCheckNetworkStatusTask();
-			//m_FMGClient.StartHeartbeatTask();
+        if (iniFile.ReadInt(_T("server"), _T("enablereconnect"), 1, strIniFile) != 0)
+            m_bEnableReconnect = true;
+        else
+            m_bEnableReconnect = false;
 
-			// �����¼�ʺ��б�
-			LOGIN_ACCOUNT_INFO* lpAccount = m_LoginAccountList.Find(m_stAccountInfo.szUser);
-			if (lpAccount != NULL)
-				memcpy(lpAccount, &m_stAccountInfo, sizeof(LOGIN_ACCOUNT_INFO));
-			else
-				m_LoginAccountList.Add(m_stAccountInfo.szUser, m_stAccountInfo.szPwd,
-					m_stAccountInfo.nStatus, m_stAccountInfo.bRememberPwd, m_stAccountInfo.bAutoLogin);
-			m_LoginAccountList.SetLastLoginUser(m_stAccountInfo.szUser);
-			tstring strFileName = Hootina::CPath::GetAppPath()+_T("Users\\LoginAccountList.dat");
-			m_LoginAccountList.SaveFile(strFileName.c_str());
+        //如果都不重连，就没必要读取重连时间间隔了
+        if (m_bEnableReconnect)
+        {
+            m_uReconnectInterval = iniFile.ReadInt(_T("server"), _T("reconnectinterval"), 5000, strIniFile);
+            if (m_uReconnectInterval <= 0)
+                m_uReconnectInterval = 5000;
+        }
 
-			// ������������
-			//strFileName = m_FMGClient.GetPersonalFolder()+_T("MiscConfig.xml");
-			//LoadMiscConfig(strFileName.c_str());
+        CreateEssentialDirectories();
 
-			// ע����ȡ��Ϣ�ȼ�(Ctrl+Alt+D)
-			::RegisterHotKey(m_hWnd, 1001, MOD_CONTROL|MOD_ALT, g_cHotKey);
+        //登录成功以后，获取服务器时间
+        //m_FMGClient.RequestServerTime();
 
-			//Ϊ�˵��Է��㣬���԰�Ͳ��������������- -��
+
+        //TODO: 这里调用时，网络线程一定都启动了吗？
+        m_FMGClient.GetFriendList();
+        m_FMGClient.StartCheckNetworkStatusTask();
+        //m_FMGClient.StartHeartbeatTask();
+
+        // 保存登录帐号列表
+        LOGIN_ACCOUNT_INFO* lpAccount = m_LoginAccountList.Find(m_stAccountInfo.szUser);
+        if (lpAccount != NULL)
+            memcpy(lpAccount, &m_stAccountInfo, sizeof(LOGIN_ACCOUNT_INFO));
+        else
+            m_LoginAccountList.Add(m_stAccountInfo.szUser, m_stAccountInfo.szPwd,
+                m_stAccountInfo.nStatus, m_stAccountInfo.bRememberPwd, m_stAccountInfo.bAutoLogin);
+
+        // 记下本账号的姓名(昵称) —— 登录窗下次切到这个账号时，在头像下方
+        // 显示姓名而不是账号。昵称此刻已由 CFlamingoClient::OnLoginResult 从
+        // 登录应答的 profile 填进 m_UserInfo（它先于本消息被调用）。
+        //
+        // 必须放在上面的 memcpy 之后：m_stAccountInfo 是登录窗采集来的，只有
+        // 账号 / 密码 / 勾选项，没有姓名，直接 memcpy 会把已存下的姓名冲掉。
+        m_LoginAccountList.SetNickName(m_stAccountInfo.szUser,
+            m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.c_str());
+        LOG_INFO(_T("save login account: account=%s, nickname=%s."),
+            m_stAccountInfo.szUser, m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.c_str());
+
+        m_LoginAccountList.SetLastLoginUser(m_stAccountInfo.szUser);
+        SaveLoginAccountListFile();
+
+        // 加载杂项配置
+        //strFileName = m_FMGClient.GetPersonalFolder()+_T("MiscConfig.xml");
+        //LoadMiscConfig(strFileName.c_str());
+
+        // 注册提取消息热键(Ctrl+Alt+D)
+        ::RegisterHotKey(m_hWnd, 1001, MOD_CONTROL | MOD_ALT, g_cHotKey);
+
+        //为了调试方便，调试版就不开启这个功能了- -！
 //#ifndef _DEBUG
-			//�洢��ǰ��¼�˺��������ļ�
-			//SaveCurrentLogonUserToFile();
+            //存储当前登录账号至本地文件
+            //SaveCurrentLogonUserToFile();
 //#endif
-			
-			//���ؼӺ���֪ͨIcon
-			LoadAddFriendIcon();
 
-			m_FMGClient.LoadUserConfig();
-			//����ͷ������Ϣ
-			m_nBuddyListHeadPicStyle = m_FMGClient.m_UserConfig.GetBuddyListHeadPicStyle();
-			m_BuddyListCtrl.SetStyle((BLCTRL_STYLE)m_nBuddyListHeadPicStyle);
-			m_bShowBigHeadPicInSel = m_FMGClient.m_UserConfig.IsEnableBuddyListShowBigHeadPicInSel(); 
-			m_BuddyListCtrl.SetShowBigIconInSel(m_bShowBigHeadPicInSel);
+            //加载加好友通知Icon
+        LoadAddFriendIcon();
 
-            //�����ɹ��󣬱���������ԭ����λ��
-            if (m_nMainPanelStatus != MAINPANEL_STATUS_RECONNECTING)
-            {
-                SetWindowPos(NULL,
-                    m_FMGClient.m_UserConfig.GetMainDlgX(),
-                    m_FMGClient.m_UserConfig.GetMainDlgY(),
-                    m_FMGClient.m_UserConfig.GetMainDlgWidth(),
-                    m_FMGClient.m_UserConfig.GetMainDlgHeight(),
-                    SWP_SHOWWINDOW);
-            }
-	
+        m_FMGClient.LoadUserConfig();
+        // 旧好友列表头像风格成员(m_nBuddyListHeadPicStyle / m_bShowBigHeadPicInSel)已随
+        // 旧主窗口一并移除；对应用户配置仍保留在 UserConfig 中，Phase 2 由
+        // BalloonMainPanel 接管列表样式时直接从 UserConfig 读取即可。
 
-			m_FMGClient.m_UserMgr.LoadTeamInfo();
-			m_FMGClient.m_UserMgr.LoadBuddyInfo();
-			//���������ϵ���б�
-			m_FMGClient.m_UserMgr.LoadRecentList();
-			if(m_FMGClient.m_UserMgr.GetRecentListCount()>0 && m_nCurSelIndexInMainTab<0)
-			{
-				
-				m_TabCtrl.SetCurSel(0);
-				OnTabCtrlSelChange(NULL);
-				//TODO: ����û�к���ʱ�������ϵ�˲���ʾ������bug��
-				//::PostMessage(m_hWnd, FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
-			}
-			else
-			{
-				if(m_nCurSelIndexInMainTab < 0)
-					m_TabCtrl.SetCurSel(1);
-				else
-					m_TabCtrl.SetCurSel(m_nCurSelIndexInMainTab);
-				OnTabCtrlSelChange(NULL);
-			}
+        // PR7: 不再 SetWindowPos 还原 CMainDlg 窗口位置 —— 主窗口始终隐藏。
+        // 窗口位置/尺寸的持久化(OnDestroy 中写回 UserConfig)对 CMainDlg
+        // 已无意义,但保留为无害空操作; Phase 2 由 BalloonMainPanel 自持其
+        // 位置与尺寸。
 
-			::SetForegroundWindow(m_hWnd);
-			::SetFocus(m_hWnd);
-			m_bAlreadyLogin = TRUE;
+        m_FMGClient.m_UserMgr.LoadTeamInfo();
+        m_FMGClient.m_UserMgr.LoadBuddyInfo();
+        //加载最近联系人列表
+        m_FMGClient.m_UserMgr.LoadRecentList();
+        // PR7: 不再切换旧 TabCtrl 选项 —— 旧 UI 已废弃,BalloonMainPanel
+        // 在 CreateAndShow 时自行决定默认 Tab。
 
-            m_nMainPanelStatus = MAINPANEL_STATUS_LOGIN;
+        m_bAlreadyLogin = TRUE;
 
-            //��¼�ɹ�Ҳ����ñ�־λ���Ա��´�����
-            m_bAlreadySendReloginRequest = false;
-		}
-		break;
+        m_nMainPanelStatus = MAINPANEL_STATUS_LOGIN;
 
-	case LOGIN_FAILED:				// ��¼ʧ��
-		{
-			MessageBox(_T("������ϣ���¼ʧ�ܣ�"), g_strAppTitle.c_str(), MB_OK);
-			StartLogin();
+        //登录成功也清除该标志位，以便下次重连
+        m_bAlreadySendReloginRequest = false;
 
-            m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
-		}
-		break;
+        // 显示新版 balloonui 主面板。CMainDlg 主窗口本就隐藏,故 CreateAndShow
+        // 后直接把焦点 / 前台窗口指向 BalloonMainPanel。
+        // 注意:本分支在"重新登录"时也会走到 —— 用户主动下线后再上线(状态菜单/托盘选
+        // 在线)走 GoOnline → 重新登录 → 这里;断线重连成功也会到这里。这些场景下主面板
+        // 早已创建且未销毁(去离线只关 socket、不销毁窗口),<u>不能再 CreateAndShow</u>:
+        // CWindowImplBaseT::Create 断言 m_hWnd==NULL,二次创建会触发断言崩溃。故仅在面板
+        // 尚未创建时创建;已存在则只重新显示 / 前置,数据由下面 RequestContacts /
+        // RequestConversations / RequestUserGroups 重新拉取刷新。
+        if (!m_BalloonMainPanel.IsWindow())
+        {
+            m_BalloonMainPanel.CreateAndShow(m_hWnd);
+        }
+        if (m_BalloonMainPanel.IsWindow())
+        {
+            ::ShowWindow(m_BalloonMainPanel.m_hWnd, SW_SHOW);
+            ::SetForegroundWindow(m_BalloonMainPanel.m_hWnd);
+            ::SetFocus(m_BalloonMainPanel.m_hWnd);
+        }
 
-	case LOGIN_UNREGISTERED:
-		{						
-			MessageBox(_T("�û���δע�ᣡ"), g_strAppTitle.c_str(), MB_OK);
-			StartLogin();
-            m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
-		}
-		break;
+        //登录成功后拉取一次 v2 通讯录，应答经 FMG_MSG_V2_CONTACTS 异步回投，
+        //在 OnV2Contacts 里填充联系人面板（让联系人树由 mock 变真实）。
+        CIUSocket::GetInstance().RequestContacts();
 
-	case LOGIN_PASSWORD_ERROR:		// �������
-		{
-			MessageBox(_T("�������"), g_strAppTitle.c_str(), MB_OK);
-			StartLogin();
-            m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
-		}
-		break;
-	
-	case LOGIN_SERVER_REFUSED:
-		{
-			ShowPanel(FALSE);		// ��ʾ��¼���
-			MessageBox(_T("�������ܾ����ĵ�¼����"), g_strAppTitle.c_str(), MB_OK);
-			StartLogin();
-            m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
-		}
+        //登录成功后再拉取一次 v2 最近会话列表，应答经 FMG_MSG_V2_CONVERSATIONS
+        //异步回投，在 OnV2Conversations 里填充"消息"页（让会话列表由 mock 变真实）。
+        CIUSocket::GetInstance().RequestConversations();
 
-	case LOGIN_USER_CANCEL_LOGIN:	// �û�ȡ����¼
-		{
-			StartLogin();
-            m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
-		}
-		break;
-	}
+        //登录成功后拉取本人加入的全部群列表（含无消息空群），应答经
+        //FMG_MSG_V2_USER_GROUPS 回投，在 OnUserGroupsArrived 里填"群"Tab。
+        CIUSocket::GetInstance().RequestUserGroups();
 
-	return 0;
+        //登录成功后拉取发给本人的平台公告（主面板 Banner 上的「消息盒子」），应答经
+        //FMG_MSG_V2_ANNOUNCEMENTS 回投，在 OnAnnouncementsArrived 里落本地库并刷角标。
+        //这一条走主面板而不是直接调 CIUSocket：增量游标要从主面板持有的本地公告库里取，
+        //本机已有的那些不必再拉一遍。
+        m_BalloonMainPanel.RequestAnnouncements();
+
+        //登录成功：托盘图标转回彩色、提示文字刷新。
+        RefreshTrayIconForStatus();
+
+        //连接已就绪：广播上线，聊天窗收起离线提示条、输入区恢复可用，其余联网入口解禁。
+        //从离线恢复在线这条路走到这里，界面才算真正回到可用状态。
+        BroadcastConnectionState();
+    }
+    break;
+
+    case LOGIN_FAILED:				// 登录失败
+    {
+        //"从离线恢复在线"失败时不能走下面那套（弹提示 + StartLogin 把用户踢回登录窗）：
+        //用户只是想从离线切回在线，主面板还开着、账号也还登录着，失败就该原地退回离线态，
+        //让他稍后再试。ResumeOnlineFailed 负责退回并提示。
+        if (bResuming)
+        {
+            ResumeOnlineFailed(_T("网络故障，恢复在线失败，仍保持离线状态。"));
+            break;
+        }
+
+        MessageBox(_T("网络故障，登录失败！"), g_strAppTitle.c_str(), MB_OK);
+        StartLogin();
+
+        m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
+    }
+    break;
+
+    case LOGIN_UNREGISTERED:
+    {
+        if (bResuming)
+        {
+            ResumeOnlineFailed(_T("恢复在线失败：该账号未注册，仍保持离线状态。"));
+            break;
+        }
+        MessageBox(_T("用户名未注册！"), g_strAppTitle.c_str(), MB_OK);
+        StartLogin();
+        m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
+    }
+    break;
+
+    case LOGIN_PASSWORD_ERROR:		// 密码错误
+    {
+        if (bResuming)
+        {
+            ResumeOnlineFailed(_T("恢复在线失败：密码错误，仍保持离线状态。"));
+            break;
+        }
+        MessageBox(_T("密码错误！"), g_strAppTitle.c_str(), MB_OK);
+        StartLogin();
+        m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
+    }
+    break;
+
+    case LOGIN_SERVER_REFUSED:
+    {
+        if (bResuming)
+        {
+            ResumeOnlineFailed(_T("恢复在线失败：服务器拒绝了登录请求，仍保持离线状态。"));
+            break;
+        }
+        // PR7: 不再切到旧"正在登录"面板 —— 主窗口始终隐藏。
+        MessageBox(_T("服务器拒绝您的登录请求！"), g_strAppTitle.c_str(), MB_OK);
+        StartLogin();
+        m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
+    }
+    break;
+
+    case LOGIN_USER_CANCEL_LOGIN:	// 用户取消登录
+    {
+        if (bResuming)
+        {
+            ResumeOnlineFailed(NULL);   // 用户自己取消的，不必再弹提示
+            break;
+        }
+        StartLogin();
+        m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
+    }
+    break;
+    }
+
+    return 0;
 }
 
-// ע��������Ϣ
+// 注销返回消息
 LRESULT CMainDlg::OnLogoutResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	CloseDialog(IDOK);
-	return 0;
+    CloseDialog(IDOK);
+    return 0;
 }
 
-// �����û���Ϣ
+// 更新用户信息
 LRESULT CMainDlg::OnUpdateUserInfo(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	//CBuddyInfoResult* lpBuddyInfoResult = (CBuddyInfoResult*)lParam;
-	//if (NULL == lpBuddyInfoResult)
-	//	return 0;
-	////m_FMGClient.OnUpdateBuddyInfo(lpBuddyInfoResult);
-	//delete lpBuddyInfoResult;
+    //CBuddyInfoResult* lpBuddyInfoResult = (CBuddyInfoResult*)lParam;
+    //if (NULL == lpBuddyInfoResult)
+    //	return 0;
+    ////m_FMGClient.OnUpdateBuddyInfo(lpBuddyInfoResult);
+    //delete lpBuddyInfoResult;
 
-	return 0;
+    return 0;
 }
 
-// ���º����б���Ϣ
+// 更新好友列表消息
 LRESULT CMainDlg::OnUpdateBuddyList(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT uAccountID = (UINT)wParam;
+    // 按在线状态对好友列表数据排序（在线靠前）。这是对共享数据模型
+    // m_FMGClient.m_UserMgr.m_BuddyList 的排序，新版 BalloonMainPanel 刷新
+    // 联系人时依赖此顺序，必须保留。旧自绘列表控件 m_BuddyListCtrl 已废弃，
+    // 不再填充，故原先的 UpdateBuddyTreeCtrl(uAccountID) 调用已移除。
+    BuddyListSortOnStaus();
 
-	BuddyListSortOnStaus();
-	
-	UpdateBuddyTreeCtrl(uAccountID);		// ���º����б��ؼ�
-
-    //TODO: ���ڷŵ����������ϵ�˺�Ⱥ���б�֮��
+    //TODO: 后期放到更新最近联系人和群组列表之后
     m_FMGClient.m_RecvMsgThread.EnableUI(true);
 
-	return 1;
+    // #20:转发到 BalloonMainPanel,刷新联系人 Tab。同时刷新会话 Tab ——
+    // 单聊会话的"对方在线状态点"颜色随好友状态变化。
+    m_BalloonMainPanel.RefreshContacts();
+    m_BalloonMainPanel.RefreshMessages();
+
+    return 1;
 }
 
-// ����Ⱥ�б���Ϣ
+// 更新群列表消息
 LRESULT CMainDlg::OnUpdateGroupList(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	//BOOL bSuccess = (BOOL)lParam;
-	//if (!bSuccess)
-	//	return 0;
+    //BOOL bSuccess = (BOOL)lParam;
+    //if (!bSuccess)
+    //	return 0;
 
-	UpdateGroupTreeCtrl();		// ����Ⱥ�б��ؼ�
+    // 旧自绘群列表控件 m_GroupListCtrl 已废弃，不再填充，原 UpdateGroupTreeCtrl() 调用已移除。
+    // #20:转发到 BalloonMainPanel,刷新群 Tab。
+    m_BalloonMainPanel.RefreshGroups();
 
-
-	return 0;
+    return 0;
 }
 
-// ���������ϵ���б���Ϣ
+// 更新最近联系人列表消息
 LRESULT CMainDlg::OnUpdateRecentList(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
+    // 旧自绘最近联系人控件 m_RecentListCtrl 已废弃，不再填充，原 UpdateRecentTreeCtrl() 调用已移除。
+    // #20:转发到 BalloonMainPanel,刷新会话 Tab。
+    m_BalloonMainPanel.RefreshMessages();
 
-	UpdateRecentTreeCtrl();		// ���������ϵ���б��ؼ�
-
-	return 0;
+    return 0;
 }
 
-// ������Ϣ
+// 好友消息
+LRESULT CMainDlg::OnV2Contacts(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::ContactsResult，处理后须 delete。
+    net::ContactsResult* pResult = (net::ContactsResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    if (pResult->m_code == 0)
+        m_BalloonMainPanel.OnContactsArrived(*pResult);
+    else
+        LOG_ERROR("v2 contacts response error, code=%d, msg=%s.",
+                  pResult->m_code, pResult->m_msg.c_str());
+    delete pResult;
+    return 0;
+}
+
+// v2 最近会话列表应答：填充"消息"页
+LRESULT CMainDlg::OnV2Conversations(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::ConversationsResult，处理后须 delete。
+    net::ConversationsResult* pResult = (net::ConversationsResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    if (pResult->m_code == 0)
+        m_BalloonMainPanel.OnConversationsArrived(*pResult);
+    else
+        LOG_ERROR("v2 conversations response error, code=%d, msg=%s.",
+                  pResult->m_code, pResult->m_msg.c_str());
+    delete pResult;
+    return 0;
+}
+
+// v2 建群应答：交主面板提示建群结果（成功关闭对话框并提示；失败提示错误）
+LRESULT CMainDlg::OnV2CreateGroupResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::CreateGroupResponse，处理后须 delete。
+    net::CreateGroupResponse* pResp = (net::CreateGroupResponse*)lParam;
+    if (pResp == NULL)
+        return 0;
+    m_BalloonMainPanel.OnCreateGroupResult(*pResp);
+    delete pResp;
+    return 0;
+}
+
+// v2 修改密码应答：转发到主面板（再转发给改密对话框提示结果）
+LRESULT CMainDlg::OnV2ChangePwdResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::ChangePasswordResponse，处理后须 delete。
+    net::ChangePasswordResponse* pResp = (net::ChangePasswordResponse*)lParam;
+    if (pResp == NULL)
+        return 0;
+    m_BalloonMainPanel.OnChangePwdResult(*pResp);
+    delete pResp;
+    return 0;
+}
+
+// v2 更新资料应答（当前用于个性签名）：交主面板据 code 保留乐观更新或回退提示
+LRESULT CMainDlg::OnV2UpdateProfileResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::UpdateProfileResponse，处理后须 delete。
+    net::UpdateProfileResponse* pResp = (net::UpdateProfileResponse*)lParam;
+    if (pResp == NULL)
+        return 0;
+    m_BalloonMainPanel.OnUpdateProfileResult(*pResp);
+    delete pResp;
+
+    //资料更新走的是"乐观更新 + 失败回退"（见 CBalloonProfileDlg::OnSaveResult），
+    //上面这一路处理完之后 m_UserInfo 里的昵称就是最终生效的值。若它和历史登录
+    //列表里存的姓名对不上（用户刚改了昵称），写回并落盘，使下次在登录窗切到本
+    //账号时头像下方显示的是新姓名。没变则不写，避免每次改签名都动一次文件。
+    SyncNickNameToLoginAccountList();
+    return 0;
+}
+
+// 把当前登录账号的昵称同步进历史登录账号列表（有变化才写盘）
+void CMainDlg::SyncNickNameToLoginAccountList()
+{
+    LOGIN_ACCOUNT_INFO* lpAccount = m_LoginAccountList.Find(m_stAccountInfo.szUser);
+    if (lpAccount == NULL)
+        return;
+
+    const tstring& strNickName = m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName;
+    if (strNickName == lpAccount->szNickName)
+        return;
+
+    LOG_INFO(_T("nickname changed, update login account list: account=%s, nickname=%s."),
+        m_stAccountInfo.szUser, strNickName.c_str());
+    m_LoginAccountList.SetNickName(m_stAccountInfo.szUser, strNickName.c_str());
+    SaveLoginAccountListFile();
+}
+
+// 把历史登录账号列表写回磁盘
+void CMainDlg::SaveLoginAccountListFile()
+{
+    tstring strFileName = Hootina::CPath::GetAppPath() + _T("Users\\LoginAccountList.dat");
+    if (!m_LoginAccountList.SaveFile(strFileName.c_str()))
+    {
+        LOG_ERROR(_T("save login account list failed, file=%s."), strFileName.c_str());
+    }
+}
+
+// v2 修改头像应答：交修改头像对话框据 code 提示成功/失败，成功则刷新本端头像
+LRESULT CMainDlg::OnV2ChangeAvatarResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::UpdateProfileResponse（修改头像应答体为
+    //通用 {code,msg}，复用此结构承载），处理后须 delete。
+    net::UpdateProfileResponse* pResp = (net::UpdateProfileResponse*)lParam;
+    if (pResp == NULL)
+        return 0;
+    m_BalloonMainPanel.OnChangeAvatarResult(*pResp);
+    delete pResp;
+    return 0;
+}
+
+// v2 头像图片上传结果：交修改头像对话框（成功则接着发 cmd_change_avatar；失败提示）
+LRESULT CMainDlg::OnV2AvatarUploadResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 ImageTransfer 工作线程堆分配的 net::AvatarUploadResult，处理后须 delete。
+    net::AvatarUploadResult* pResult = (net::AvatarUploadResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    m_BalloonMainPanel.OnAvatarUploadResult(*pResult);
+    delete pResult;
+    return 0;
+}
+
+// v2 头像图片下载结果：交主面板按 fileid 刷新对应联系人 / 会话节点头像
+LRESULT CMainDlg::OnV2AvatarDownloadResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 ImageTransfer 工作线程堆分配的 net::AvatarDownloadResult，处理后须 delete。
+    net::AvatarDownloadResult* pResult = (net::AvatarDownloadResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    m_BalloonMainPanel.OnAvatarDownloadResult(*pResult);
+    delete pResult;
+    return 0;
+}
+
+// v2 联系人资料变更推送：交主面板更新通讯录缓存里该 userid 的头像并实时重画
+LRESULT CMainDlg::OnV2UserInfoChanged(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::UserInfoChangedNotify，处理后须 delete。
+    net::UserInfoChangedNotify* pNotify = (net::UserInfoChangedNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+    m_BalloonMainPanel.OnUserInfoChanged(*pNotify);
+    delete pNotify;
+    return 0;
+}
+
+// 切换我的在线状态（主面板状态菜单触发）。wParam = 目标 v2 presence（见 MyPresenceValue，
+// 与 net/Protocol.h presence_type 同值）。据当前连接 / 登录态分三路处理。
+LRESULT CMainDlg::OnChangeMyPresence(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/)
+{
+    int presence = (int)wParam;
+    LOG_INFO("MainDlg::OnChangeMyPresence: target presence=%d, panelStatus=%d, alreadyLogin=%d.",
+        presence, m_nMainPanelStatus, m_bAlreadyLogin ? 1 : 0);
+
+    //先把主面板的状态胶囊乐观更新成目标状态。这一步必须放在这里而不是各个发起点：
+    //切换在线状态有两个入口（主面板状态菜单、系统托盘右键菜单），两者都汇到本函数，
+    //只有放在这里，从托盘切状态时胶囊才会跟着变。
+    //（原先这步写在 CBalloonMainPanel::ShowStatusMenu 里，托盘那条路走不到，表现为
+    // "从托盘切了状态，主面板上的状态没变"。）
+    if (m_BalloonMainPanel.IsWindow())
+    {
+        m_BalloonMainPanel.ApplyPresenceOptimistic(presence);
+    }
+
+    //托盘悬停提示的第三行也跟着刷新，否则切完状态去悬停托盘看到的还是旧状态。
+    //这里用 ModifyTip 而不是 UpdateTrayIconTip：前者只换提示文字、不动图标，托盘正在
+    //闪新消息头像时刷新提示不会把闪烁打断。
+    m_TrayIcon.ModifyTip(BuildTrayTipText());
+
+    if (presence == kMyPresenceOffline)
+    {
+        //【1】先置"用户主动下线"态，再断连接。顺序不能反：OnNetError 据这个标志决定
+        //     要不要起自动重连，而关 socket 会引发掉线事件；虽然该事件目前是 PostMessage
+        //     投递（处理时本函数已返回），但依赖投递方式是脆的 —— 与 OnLogout 的写法对齐。
+        m_nMainPanelStatus = MAINPANEL_STATUS_USERGOOFFLINE;
+
+        //【2】已经在跑的重连定时器必须就地停掉。这是"主动离线"最容易漏的一环：
+        //     OnTimer 的重连分支只看定时器在不在，不看登录态，掉线重连过程中选离线的话，
+        //     定时器会继续把用户连回服务器（见 OnTimer 里的 ShouldAutoReconnect 守卫）。
+        if (m_dwReconnectTimerId != 0)
+        {
+            KillTimer(m_dwReconnectTimerId);
+            m_dwReconnectTimerId = 0;
+            LOG_INFO("MainDlg::OnChangeMyPresence: 用户主动离线，已停掉正在运行的重连定时器。");
+        }
+
+        //【3】真正下线：立起网络层离线闸门、丢弃排队中的帧、断开 chat/file/img 三条连接。
+        m_FMGClient.GoOffline();
+
+        //【4】托盘图标换成灰色的离线图标，提示文字同步。
+        RefreshTrayIconForStatus();
+
+        //【5】广播离线态：聊天窗输入区置灰、顶部弹出离线提示条，其余需要联网的入口一并拦住。
+        BroadcastConnectionState();
+
+        LOG_INFO("MainDlg::OnChangeMyPresence: 已进入主动离线态。");
+        return 0;
+    }
+
+    //目标为在线 / 离开 / 勿扰。
+    if (m_bAlreadyLogin && m_nMainPanelStatus == MAINPANEL_STATUS_LOGIN)
+    {
+        //已登录且连接正常：直接发 cmd_change_presence 改状态，服务端向好友广播。
+        //SendChangePresence 内部会把期望在线状态记入 m_nRecordOnlineStatus，供后续重连沿用。
+        CIUSocket::GetInstance().SendChangePresence(presence);
+        //状态变了，托盘图标与提示同步（在线三态目前共用彩色图标，但提示文字要换）。
+        RefreshTrayIconForStatus();
+    }
+    else
+    {
+        //当前离线 / 未登录 / 重连中：先记下期望在线状态，再重新上线 —— CFlamingoClient::Login
+        //会读取它作为登录 presence（见 FlamingoClient.cpp 的 Login）。
+        CIUSocket::GetInstance().SetRecordOnlineStatus(presence);
+
+        //标记"这次登录是从离线恢复在线"。登录失败时 OnLoginResult 据此决定退回离线态、
+        //而不是像首次登录失败那样弹出登录窗把用户踢回登录界面（见 OnLoginResult）。
+        m_bResumingOnline = true;
+
+        //此刻连接尚未建立，界面进入"正在连接"中间态：提示条改成正在连接、各项功能仍然
+        //拦住（胶囊已经乐观显示成在线，但消息这会儿发出去也到不了服务器）。
+        BroadcastConnectionState();
+
+        LOG_INFO("MainDlg::OnChangeMyPresence: 从离线恢复在线，重新登录中，目标 presence=%d。",
+            presence);
+        m_FMGClient.GoOnline();
+    }
+    return 0;
+}
+
+// 登出（托盘菜单 / 主面板系统菜单触发，经 FMG_MSG_LOGOUT 投递而来）。
+//
+// 与"离线"(OnChangeMyPresence 的 kMyPresenceOffline)的区别：离线只关三条连接、主面板
+// 留在屏幕上，随时可以再上线；登出还要关掉所有子窗口、销毁主面板并重新弹出登录窗，
+// 等于回到程序刚启动的状态。整条序列与"账号在别处登录被踢下线"(OnSelfStatusChange)
+// 走的是同一套动作，区别仅在于这里由用户主动发起、且不弹那条被迫下线的通知。
+//
+// 本处理器<u>必须</u>由 PostMessage 投递进来（见 FMG_MSG_LOGOUT 的定义）：它要销毁主面板、
+// 并在 StartLogin 内进入登录窗的模态循环，不能跑在菜单 TrackPopup 返回后的调用栈上，
+// 否则等于在消息处理函数里嵌套模态循环并顺手销毁消息来源窗口。
+LRESULT CMainDlg::OnLogout(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/)
+{
+    LOG_INFO("MainDlg::OnLogout: 收到登出请求。panelStatus=%d, alreadyLogin=%d.",
+        m_nMainPanelStatus, m_bAlreadyLogin ? 1 : 0);
+
+    //二次确认：登出会断开连接并关掉所有聊天窗，误点代价不小。确认框挂在主面板上；
+    //主面板尚未创建或已销毁时退回挂到隐藏的 CMainDlg。
+    HWND hOwner = m_hWnd;
+    if (m_BalloonMainPanel.IsWindow())
+        hOwner = m_BalloonMainPanel.m_hWnd;
+
+    if (::MessageBox(hOwner,
+                     _T("确定要登出当前账号吗？\r\n登出后将断开连接并关闭所有聊天窗口。"),
+                     g_strAppTitle.c_str(),
+                     MB_YESNO | MB_ICONQUESTION) != IDYES)
+    {
+        LOG_INFO("MainDlg::OnLogout: 用户在确认框取消，登出中止。");
+        return 0;
+    }
+
+    //收尾与"被踢下线"完全相同，共用同一个序列（见 ReturnToLoginWindow）。
+    ReturnToLoginWindow();
+    return 0;
+}
+
+// 断开连接、关掉所有窗口、清空登录态，并重新弹出登录窗 —— 用户主动登出（OnLogout）与
+// 账号在别处登录被顶下线（OnV2Kickout）共用的收尾序列。
+//
+// 两条路径此前各写了一份几乎相同的代码，改一处漏一处的风险很实在（v1 时期就漏过复位
+// m_bAlreadyLogin，导致回到登录界面后托盘右键弹的还是已登录那套菜单），故合并到这里。
+//
+// 调用方须保证自己跑在一个干净的消息调用栈上（由 PostMessage 投递而来）：本函数要销毁
+// 主面板、并在 StartLogin 内进入登录窗的模态循环，不能跑在菜单 TrackPopup 返回后的栈上。
+void CMainDlg::ReturnToLoginWindow()
+{
+    //先置"用户主动下线"态再关连接，压制 OnNetError 里的自动重连 —— 否则关 socket 会被
+    //当成掉线触发重连（见 OnNetError 对 MAINPANEL_STATUS_USERGOOFFLINE 的判断）。
+    m_nMainPanelStatus = MAINPANEL_STATUS_USERGOOFFLINE;
+
+    //断开 chat / file / img 三条连接，再关掉所有聊天窗等子窗口。
+    //（被踢下线那条路径已经 GoOffline 过一次，这里再来一次是幂等的。）
+    //
+    //这里<u>不能</u>调 m_FMGClient.Uninit()：那是<u>退出进程</u>时才做的整体拆除，在"回登录
+    //界面"这条路上调它，下一次登录就再也登不进去了。两个原因，各自都足以致命：
+    //  · Uninit 头一件事是 DestroyProxyWnd()，把进程级的消息代理窗口销毁、m_hProxyWnd
+    //    置 NULL。而登录线程正是把登录结果 PostMessage 给这个句柄的（见
+    //    CBalloonLoginDlg::LoginThreadProc）。窗口没了，登录其实已经成功、服务器也回了
+    //    code=0，但结果消息投不到 UI，界面就一直卡在"登录中"，用户看到的就是"登不上"。
+    //  · Uninit 还会 Stop + Join 掉收发消息线程，而它们基于 CThread —— Start() 只在线程
+    //    指针为空时才创建，Join() 之后指针并不置空、m_bStop 也仍是 true（见 Thread.cpp）。
+    //    也就是说这套线程<u>停掉就再也起不来</u>，后续 InitNetThreads() 是个空操作。
+    //
+    //正确做法就是这里的写法：只断连接、不拆线程。收发线程在连接关闭期间自然空转
+    //（收线程见 IsClosed 就短睡，发线程阻塞在条件变量上），下次登录 Connect 成功后
+    //它们照常接着干活，与"掉线 / 主动离线后再上线"走的是同一条路。
+    m_FMGClient.GoOffline();
+    CloseAllDlg();
+
+    //销毁主面板，避免它残留在屏幕上。下面 StartLogin 重新走登录流程，登录成功后由
+    //OnLoginResult 重新 CreateAndShow 一个新的主面板。
+    if (m_BalloonMainPanel.IsWindow())
+        m_BalloonMainPanel.DestroyWindow();
+
+    //账号与密码要在登录窗里回填（登出 / 被踢后两者都保留），而紧接着的 ClearUserInfo /
+    //Reset 会把 m_UserInfo 整个清空，故先留存、清完再写回 —— StartLogin 正是从这两个
+    //字段取登录窗的默认账号与默认密码。
+    tstring strAccount  = m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount;
+    tstring strPassword = m_FMGClient.m_UserMgr.m_UserInfo.m_strPassword;
+
+    m_FMGClient.m_UserMgr.ClearUserInfo();
+    m_FMGClient.m_UserMgr.m_UserInfo.Reset();
+    m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount  = strAccount;
+    m_FMGClient.m_UserMgr.m_UserInfo.m_strPassword = strPassword;
+
+    //回到未登录态。m_bAlreadyLogin 必须复位：托盘菜单据它选形态，不复位的话回到登录界面
+    //后托盘右键仍会弹出"在线 / 离线 / 登出"那套已登录菜单。
+    m_bAlreadyLogin    = FALSE;
+    m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
+
+    //托盘图标先摘掉，StartLogin(FALSE) 内部会重新挂上"Flamingo未登录"那只。
+    m_TrayIcon.RemoveIcon();
+
+    LOG_INFO("MainDlg::ReturnToLoginWindow: 连接已断开、主面板已销毁，重新弹出登录窗。");
+
+    //重新走登录流程（登录窗为模态）。用户直接关掉登录窗时 StartLogin 返回 false 并已
+    //在内部 CloseDialog 退出程序，此处无需再处理其返回值。
+    StartLogin(FALSE);
+}
+
+// v2 撤回消息应答：只处理失败分支。撤回成功时界面改动统一等服务端随后推来的
+// cmd_message_recalled_notify 再做（见 OnV2MessageRecalled），这样本端、对端与多端
+// 走的是同一条路径，结果必然一致，也避免应答与推送各改一次造成重复处理。
+LRESULT CMainDlg::OnV2RecallResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::RecallMessageResponse，处理后须 delete。
+    net::RecallMessageResponse* pResp = (net::RecallMessageResponse*)lParam;
+    if (pResp == NULL)
+        return 0;
+
+    if (pResp->m_code != 0)
+    {
+        //按服务端返回的 error_code 给出具体原因，别让用户面对一句笼统的"撤回失败"。
+        LPCTSTR pszTip = _T("撤回失败，请稍后重试。");
+        if (pResp->m_code == kRecallErrTimeout)
+            pszTip = _T("该消息发出已超过 2 分钟，无法撤回。");
+        else if (pResp->m_code == kRecallErrNotAllowed)
+            pszTip = _T("你没有权限撤回这条消息。");
+        else if (pResp->m_code == kRecallErrMessageNotExist)
+            pszTip = _T("该消息不存在或已被撤回。");
+
+        LOG_ERROR("v2 recall message failed, code=%d, msg=%s.", pResp->m_code, pResp->m_msg.c_str());
+
+        //提示框挂在主面板上；主面板不在时退回隐藏的 CMainDlg。
+        HWND hOwner = m_BalloonMainPanel.IsWindow() ? m_BalloonMainPanel.m_hWnd : m_hWnd;
+        ::MessageBox(hOwner, pszTip, g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+    }
+
+    delete pResp;
+    return 0;
+}
+
+// v2 某条消息被撤回的推送：转交主面板统一处理（把对应气泡改成提示行、刷新会话列表
+// 预览、把本地消息库该条标记为已撤回）。撤回者本人也会收到本推送。
+LRESULT CMainDlg::OnV2MessageRecalled(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::MessageRecalledNotify，处理后须 delete。
+    net::MessageRecalledNotify* pNotify = (net::MessageRecalledNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+
+    m_BalloonMainPanel.OnMessageRecalled(*pNotify);
+    delete pNotify;
+    return 0;
+}
+
+// v2 Pin 消息应答：与撤回同口径 —— 成功时什么都不做（界面改动等 cmd_message_pinned_notify
+// 推送），只在失败时据 code 给出具体原因。
+LRESULT CMainDlg::OnV2PinResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::PinMessageResponse，处理后须 delete。
+    net::PinMessageResponse* pResp = (net::PinMessageResponse*)lParam;
+    if (pResp == NULL)
+        return 0;
+
+    if (pResp->m_code != 0)
+    {
+        //按服务端返回的 error_code 给出具体原因，别让用户面对一句笼统的"操作失败"。
+        //文案要分清"钉"与"取消"两个方向 —— 同一个失败码在两个方向下读起来完全不同。
+        const bool bPinning = (pResp->m_pin == 1);
+        LPCTSTR pszTip = bPinning ? _T("Pin 失败，请稍后重试。") : _T("取消 Pin 失败，请稍后重试。");
+        if (pResp->m_code == kPinErrNotAllowed)
+            pszTip = _T("只有钉住这条消息的人和群主 / 管理员才能取消它。");
+        else if (pResp->m_code == kPinErrMessageNotExist)
+            pszTip = _T("该消息不存在或已被撤回。");
+        else if (pResp->m_code == kPinErrNotGroupMember)
+            pszTip = _T("你已不在该群聊中。");
+
+        LOG_ERROR("v2 pin message failed, code=%d, msg=%s, ctype=%d, cid=%lld, msgid=%lld, pin=%d.",
+                  pResp->m_code, pResp->m_msg.c_str(), pResp->m_ctype,
+                  (long long)pResp->m_cid, (long long)pResp->m_msgid, pResp->m_pin);
+
+        //提示框挂在主面板上；主面板不在时退回隐藏的 CMainDlg。
+        HWND hOwner = m_BalloonMainPanel.IsWindow() ? m_BalloonMainPanel.m_hWnd : m_hWnd;
+        ::MessageBox(hOwner, pszTip, g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+    }
+
+    delete pResp;
+    return 0;
+}
+
+// v2 某条消息被 Pin / 取消 Pin 的推送：转交主面板统一处理（落本地消息库标记、刷新
+// 消息记录窗；本地没有这条消息时再向服务端补拉一次消息体）。操作者本人也会收到本推送。
+LRESULT CMainDlg::OnV2MessagePinned(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::MessagePinnedNotify，处理后须 delete。
+    net::MessagePinnedNotify* pNotify = (net::MessagePinnedNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+
+    m_BalloonMainPanel.OnMessagePinned(*pNotify);
+    delete pNotify;
+    return 0;
+}
+
+// v2 被 Pin 消息全集应答：转交主面板把本地库缺的消息补齐，并与这一份对账。
+LRESULT CMainDlg::OnV2PinnedMessages(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::PinnedMessagesResult，处理后须 delete。
+    net::PinnedMessagesResult* pResult = (net::PinnedMessagesResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+
+    m_BalloonMainPanel.OnPinnedMessagesArrived(*pResult);
+    delete pResult;
+    return 0;
+}
+
+// v2 平台公告列表应答：交主面板逐条落本地库 announce.db 并刷新铃铛角标。
+// 注意与群公告的 OnV2GroupAnnouncements 不是一回事——那个属于某个群，这个属于整个平台。
+LRESULT CMainDlg::OnV2Announcements(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::AnnouncementsResult，处理后须 delete。
+    net::AnnouncementsResult* pResult = (net::AnnouncementsResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+
+    m_BalloonMainPanel.OnAnnouncementsArrived(*pResult);
+    delete pResult;
+    return 0;
+}
+
+// v2 平台公告新发布 / 被撤回推送：交主面板落本地库、刷铃铛角标、刷消息盒子窗。
+LRESULT CMainDlg::OnV2AnnouncementNotify(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::AnnouncementNotify，处理后须 delete。
+    net::AnnouncementNotify* pNotify = (net::AnnouncementNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+
+    m_BalloonMainPanel.OnAnnouncementNotify(*pNotify);
+    delete pNotify;
+    return 0;
+}
+
+// v2 平台公告已读上报应答：成功时界面不需要动（已读在发起时就乐观落了本地库），
+// 交主面板仅在失败时留痕，便于日后排查「读过的公告在别的设备上仍显示未读」。
+LRESULT CMainDlg::OnV2AnnMarkReadResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::AnnounceMarkReadResult，处理后须 delete。
+    net::AnnounceMarkReadResult* pResult = (net::AnnounceMarkReadResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+
+    m_BalloonMainPanel.OnAnnounceMarkReadResult(*pResult);
+    delete pResult;
+    return 0;
+}
+
+// v2 修改在线状态应答：交主面板据 code 保留乐观更新的胶囊或回退提示
+LRESULT CMainDlg::OnV2ChangePresenceResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::ChangePresenceResponse，处理后须 delete。
+    net::ChangePresenceResponse* pResp = (net::ChangePresenceResponse*)lParam;
+    if (pResp == NULL)
+        return 0;
+    m_BalloonMainPanel.OnChangePresenceResult(*pResp);
+    delete pResp;
+    return 0;
+}
+
+// v2 好友在线状态变更推送：交主面板更新通讯录缓存并实时刷新联系人树该好友的状态点
+LRESULT CMainDlg::OnV2PresenceChanged(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::PresenceChangedNotify，处理后须 delete。
+    net::PresenceChangedNotify* pNotify = (net::PresenceChangedNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+    m_BalloonMainPanel.OnPresenceChanged(pNotify->m_userid, pNotify->m_presence);
+    delete pNotify;
+    return 0;
+}
+
+// v2 会话属性多端同步推送：交主面板按新状态刷新会话列表（置顶 / 免打扰 / 删除）
+LRESULT CMainDlg::OnV2ConversationChanged(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::ConversationChangedNotify，处理后须 delete。
+    net::ConversationChangedNotify* pNotify = (net::ConversationChangedNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+    m_BalloonMainPanel.OnConversationChanged(*pNotify);
+    delete pNotify;
+    return 0;
+}
+
+// v2 群管理写操作应答：全部转交主面板，由它按 wParam 里的协议号决定失败提示文案
+LRESULT CMainDlg::OnV2GroupOpResult(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::GroupOpResult，处理后须 delete。
+    net::GroupOpResult* pResult = (net::GroupOpResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    m_BalloonMainPanel.OnGroupOpResult((int)wParam, *pResult);
+    delete pResult;
+    return 0;
+}
+
+// v2 待审批加群申请列表应答：交主面板填进群管理窗口的审批页
+LRESULT CMainDlg::OnV2GroupJoinRequests(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    net::GroupJoinRequestsResult* pResult = (net::GroupJoinRequestsResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    m_BalloonMainPanel.OnGroupJoinRequests(*pResult);
+    delete pResult;
+    return 0;
+}
+
+// v2 群敏感词库应答：交主面板填进群权限页的词库管理
+LRESULT CMainDlg::OnV2SensitiveWords(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    net::SensitiveWordsResult* pResult = (net::SensitiveWordsResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    m_BalloonMainPanel.OnSensitiveWords(*pResult);
+    delete pResult;
+    return 0;
+}
+
+// v2 群公告列表应答：交主面板分给群管理窗的公告页与群聊窗的公告边栏
+LRESULT CMainDlg::OnV2GroupAnnouncements(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    net::GroupAnnouncementsResult* pResult = (net::GroupAnnouncementsResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    m_BalloonMainPanel.OnGroupAnnouncements(*pResult);
+    delete pResult;
+    return 0;
+}
+
+// v2 群公告变更推送：交主面板刷新公告界面；新发布时还要弹一次提示
+LRESULT CMainDlg::OnV2AnnouncementChanged(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    net::GroupAnnouncementNotify* pNotify = (net::GroupAnnouncementNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+    m_BalloonMainPanel.OnAnnouncementChanged(*pNotify);
+    delete pNotify;
+    return 0;
+}
+
+// v2 群成员变动推送：交主面板刷新群管理窗口、群聊窗成员边栏与会话列表
+LRESULT CMainDlg::OnV2GroupMemberChanged(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    net::GroupMemberChangedNotify* pNotify = (net::GroupMemberChangedNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+    m_BalloonMainPanel.OnGroupMemberChanged(*pNotify);
+    delete pNotify;
+    return 0;
+}
+
+// v2 群资料变更推送：交主面板刷新群名与各页；群已解散时关掉相关窗口
+LRESULT CMainDlg::OnV2GroupInfoChanged(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    net::GroupInfoChangedNotify* pNotify = (net::GroupInfoChangedNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+    m_BalloonMainPanel.OnGroupInfoChanged(*pNotify);
+    delete pNotify;
+    return 0;
+}
+
+// v2 有人申请加群推送：交主面板让审批入口出现待处理红点
+LRESULT CMainDlg::OnV2JoinGroupRequest(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    net::GroupJoinRequestItem* pNotify = (net::GroupJoinRequestItem*)lParam;
+    if (pNotify == NULL)
+        return 0;
+    m_BalloonMainPanel.OnJoinGroupRequestNotify(*pNotify);
+    delete pNotify;
+    return 0;
+}
+
+// v2 群资料应答：交主面板写群信息缓存并刷新群名
+LRESULT CMainDlg::OnV2GroupInfo(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::GroupInfoResult，处理后须 delete。
+    net::GroupInfoResult* pResult = (net::GroupInfoResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    if (pResult->m_code == 0)
+        m_BalloonMainPanel.OnGroupInfoArrived(*pResult);
+    else
+        LOG_ERROR("v2 group-info response error, code=%d, msg=%s.",
+                  pResult->m_code, pResult->m_msg.c_str());
+    delete pResult;
+    return 0;
+}
+
+// v2 群成员应答：交主面板路由到对应群聊窗填成员侧栏
+LRESULT CMainDlg::OnV2GroupMembers(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::GroupMembersResult，处理后须 delete。
+    net::GroupMembersResult* pResult = (net::GroupMembersResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    if (pResult->m_code == 0)
+        m_BalloonMainPanel.OnGroupMembersArrived(*pResult);
+    else
+        LOG_ERROR("v2 group-members response error, code=%d, msg=%s.",
+                  pResult->m_code, pResult->m_msg.c_str());
+    delete pResult;
+    return 0;
+}
+
+// v2 群写操作通用应答（置顶/免打扰/改群名片/退群）：wParam=code，lParam=堆上 std::string* msg。
+// 改群名片(SET_MEMBER_CARD)交群资料对话框处理（成功无动作；失败从快照回退我的群名片 +
+// 弹提示，这才是用户要的"修改失败再还原"）。其余两个（置顶/免打扰、退群）乐观更新已在
+// 发起端生效，这里只记日志、失败给通用提示（应答不带 id，无法精确回滚，下次同步会纠正）。
+LRESULT CMainDlg::OnV2SetFavoriteResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    net::SetFavoriteResult* pResult = (net::SetFavoriteResult*)lParam;
+    if (pResult == NULL)
+    {
+        return 0;
+    }
+
+    LOG_INFO("MainDlg::OnV2SetFavoriteResult: code=%d, ctype=%d, cid=%lld, favorite=%d.",
+        pResult->m_code, pResult->m_ctype, (long long)pResult->m_cid, pResult->m_favorite);
+
+    //转交主面板：成功什么都不用做（乐观更新已经生效），失败要回滚并提示。
+    if (m_BalloonMainPanel.IsWindow())
+    {
+        m_BalloonMainPanel.OnSetFavoriteResult(*pResult);
+    }
+
+    delete pResult;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2SetRemarkResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    net::SetFriendRemarkResult* pResult = (net::SetFriendRemarkResult*)lParam;
+    if (pResult == NULL)
+    {
+        return 0;
+    }
+
+    //备注名可能含用户隐私，日志只记结果码与目标，不记内容。
+    LOG_INFO("MainDlg::OnV2SetRemarkResult: code=%d, userid=%lld.",
+        pResult->m_code, (long long)pResult->m_userid);
+
+    //转交主面板：成功什么都不用做（乐观更新已经生效），失败要回滚并提示。
+    if (m_BalloonMainPanel.IsWindow())
+    {
+        m_BalloonMainPanel.OnSetFriendRemarkResult(*pResult);
+    }
+
+    delete pResult;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2GroupWriteResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    int code = (int)wParam;
+    std::string* pMsg = (std::string*)lParam;
+    std::string msg = (pMsg != NULL) ? *pMsg : std::string();
+    delete pMsg;
+
+    // 改群名片：转交群资料对话框做"成功保持 / 失败回退"。
+    if (uMsg == FMG_MSG_V2_SET_MEMBER_CARD_RESULT)
+    {
+        CString wmsg;
+        if (!msg.empty())
+        {
+            int n = ::MultiByteToWideChar(CP_UTF8, 0, msg.c_str(), -1, NULL, 0);
+            if (n > 0)
+            {
+                ::MultiByteToWideChar(CP_UTF8, 0, msg.c_str(), -1, wmsg.GetBuffer(n), n);
+                wmsg.ReleaseBuffer();
+            }
+        }
+        m_BalloonMainPanel.OnGroupCardSaveResult(code, wmsg);
+        return 0;
+    }
+
+    if (code == 0)
+    {
+        LOG_INFO("v2 group write-op ok, uiMsg=%u.", uMsg);
+        return 0;
+    }
+
+    LOG_ERROR("v2 group write-op failed, uiMsg=%u, code=%d, msg=%s.", uMsg, code, msg.c_str());
+    ::MessageBox(m_hWnd, _T("操作未能完成，请稍后重试。"), _T("FlamingoIM"),
+                 MB_OK | MB_ICONWARNING);
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2GroupFiles(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::GetGroupFilesResult，处理后须 delete。
+    //无论成功失败都交主面板按 groupid 路由到群聊窗（失败时群聊窗据 code 收尾本次拉取）。
+    net::GetGroupFilesResult* pResult = (net::GetGroupFilesResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    m_BalloonMainPanel.OnGroupFilesArrived(*pResult);
+    delete pResult;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2GroupFilesChanged(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::GroupFilesChangedNotify，处理后须 delete。
+    net::GroupFilesChangedNotify* pNotify = (net::GroupFilesChangedNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+    m_BalloonMainPanel.OnGroupFilesChanged(*pNotify);
+    delete pNotify;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2GroupFileUploadResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 FileTransfer 工作线程堆分配的 net::GroupFileUploadResult，处理后须 delete。
+    net::GroupFileUploadResult* pResult = (net::GroupFileUploadResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    m_BalloonMainPanel.OnGroupFileUploadResult(*pResult);
+    delete pResult;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2GroupFileDownloadResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 FileTransfer 工作线程堆分配的 net::GroupFileDownloadResult，处理后须 delete。
+    net::GroupFileDownloadResult* pResult = (net::GroupFileDownloadResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    m_BalloonMainPanel.OnGroupFileDownloadResult(*pResult);
+    delete pResult;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2GroupFileUploadProgress(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 FileTransfer 工作线程堆分配的 net::GroupFileUploadProgress，处理后须 delete。
+    net::GroupFileUploadProgress* pProg = (net::GroupFileUploadProgress*)lParam;
+    if (pProg == NULL)
+        return 0;
+    m_BalloonMainPanel.OnGroupFileUploadProgress(*pProg);
+    delete pProg;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2GroupFileDownloadProgress(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 FileTransfer 工作线程堆分配的 net::GroupFileDownloadProgress，处理后须 delete。
+    net::GroupFileDownloadProgress* pProg = (net::GroupFileDownloadProgress*)lParam;
+    if (pProg == NULL)
+        return 0;
+    m_BalloonMainPanel.OnGroupFileDownloadProgress(*pProg);
+    delete pProg;
+    return 0;
+}
+
+// v2 我的群列表应答：交主面板填"群"Tab（含无消息空群）
+LRESULT CMainDlg::OnV2UserGroups(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::UserGroupsResult，处理后须 delete。
+    net::UserGroupsResult* pResult = (net::UserGroupsResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    if (pResult->m_code == 0)
+        m_BalloonMainPanel.OnUserGroupsArrived(*pResult);
+    else
+        LOG_ERROR("v2 user-groups response error, code=%d, msg=%s.",
+                  pResult->m_code, pResult->m_msg.c_str());
+    delete pResult;
+    return 0;
+}
+
+// v2 历史消息应答：交主面板按 (ctype,cid) 路由到对应聊天窗渲染历史
+LRESULT CMainDlg::OnV2SyncMessages(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::SyncMessagesResult，处理后须 delete。
+    net::SyncMessagesResult* pResult = (net::SyncMessagesResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    if (pResult->m_code == 0)
+        m_BalloonMainPanel.OnSyncMessagesArrived(*pResult);
+    else
+        LOG_ERROR("v2 sync-messages response error, code=%d.", pResult->m_code);
+    delete pResult;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2RecvChatMsg(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 net::MessageNotify，路由到对应单聊窗后须 delete。
+    net::MessageNotify* pNotify = (net::MessageNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+    m_BalloonMainPanel.OnRecvChatMessage(*pNotify);
+    delete pNotify;
+    return 0;
+}
+
+// v2 有应在托盘闪烁的新消息：把发送方会话记入 m_trayFlash，重建当前最近一条的
+// 头像图标，并（必要时）启动闪烁定时器。lParam 为主面板堆分配的 TrayFlashData。
+LRESULT CMainDlg::OnV2TrayFlash(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    TrayFlashData* pData = (TrayFlashData*)lParam;
+    if (pData == NULL)
+        return 0;
+
+    m_trayFlash.PushUnread(pData->ctype, pData->cid, pData->displayName,
+                           pData->preview, pData->avatarText, pData->avatarColor);
+    delete pData;
+
+    // 重建"最近一条"会话的 monogram 头像图标，供 OnTimer 闪烁切换使用。
+    UpdateTrayFlashIcon();
+
+    // 闪烁定时器未起则起一个（复用收消息闪烁定时器 id）。已在闪则沿用，避免重复 SetTimer。
+    if (0 == m_dwMsgTimerId)
+        m_dwMsgTimerId = SetTimer(RECVCHATMSG_TIMER_ID, ::GetCaretBlinkTime(), NULL);
+
+    return 0;
+}
+
+// v2 某会话已读（被打开 / 在列表里点开）：从 m_trayFlash 移除该会话。若仍有别的未读，
+// 目标可能切到次新，重建头像图标继续闪；若再无未读，则停闪并恢复默认托盘图标。
+LRESULT CMainDlg::OnV2TrayClear(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam)
+{
+    int        nCtype = (int)wParam;
+    long long* pCid   = (long long*)lParam;
+    if (pCid == NULL)
+        return 0;
+
+    long long nCid = *pCid;
+    delete pCid;
+
+    bool bStillFlashing = m_trayFlash.ClearConversation(nCtype, (int64_t)nCid);
+    if (bStillFlashing)
+        UpdateTrayFlashIcon();      // 目标可能已切换，重建图标继续闪
+    else
+        StopTrayFlash();            // 再无未读：停闪并恢复默认图标
+
+    return 0;
+}
+
+// "已最小化到托盘"气泡提示的停留时长（毫秒）。比掉线提示（3 秒）略长一点，
+// 因为这条提示要让用户看清"去托盘找它"这句话。Vista 及以后系统会按自己的
+// 策略统一控制实际停留时间，这个值只作参考。
+static const UINT kTrayMinimizeTipTimeoutMs = 5000;
+
+// 主面板最小化隐藏到托盘：弹一次气泡告诉用户主面板去哪儿了、怎么唤回。
+// "该账号是否已经提示过"由主面板据 CUserConfig 判定并落盘，本处收到即弹。
+// 用 ShowBalloonTip 而非 ModifyIcon：只弹气泡不动图标，托盘正在闪新消息头像时
+// 也不会打断闪烁。
+LRESULT CMainDlg::OnTrayMinimizeTip(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/)
+{
+    m_TrayIcon.ShowBalloonTip(_T("温馨提示"),
+        _T("FlamingoIM 已最小化到托盘，单击托盘图标可重新打开主面板。"),
+        kTrayMinimizeTipTimeoutMs);
+
+    LOG_INFO("Tray balloon tip shown: main panel minimized to tray.");
+    return 0;
+}
+
+LRESULT CMainDlg::OnCallStartInvite(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam)
+{
+    //单聊窗"语音通话"按钮发起：wParam=对端 userid，lParam=堆 std::wstring* peerName。
+    //发起纯语音呼叫并弹"呼叫中"对话框；会话 id 待邀请应答回来后回填。
+    int64_t peerId = (int64_t)(UINT)wParam;
+    std::wstring* pName = (std::wstring*)lParam;
+    CString peerName = (pName != NULL) ? pName->c_str() : _T("");
+    if (pName != NULL)
+        delete pName;
+
+    if (peerId == 0)
+        return 0;
+
+    //本端发起纯语音呼叫：记下本次通话媒体类型，供接通后 signaling 决定中转会话是否起视频
+    m_callMediaType = net::call_media_audio;
+    CIUSocket::GetInstance().SendCallInvite(peerId, net::call_media_audio);
+    //告知对话框本次是纯语音（标题栏与提示文字据此措辞；也清掉上一通视频通话留下的标志）
+    m_callDlg.SetVideoCall(false);
+    m_callDlg.OpenCalling(NULL, peerName, peerId);
+    return 0;
+}
+
+LRESULT CMainDlg::OnCallStartVideoInvite(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam)
+{
+    //单聊窗"视频通话"按钮发起：wParam=对端 userid，lParam=堆 std::wstring* peerName。
+    //发起音视频呼叫并弹"呼叫中"对话框；接通后 signaling 据 m_callMediaType 起视频引擎。
+    int64_t peerId = (int64_t)(UINT)wParam;
+    std::wstring* pName = (std::wstring*)lParam;
+    CString peerName = (pName != NULL) ? pName->c_str() : _T("");
+    if (pName != NULL)
+        delete pName;
+
+    if (peerId == 0)
+        return 0;
+
+    //本端发起视频呼叫：记下媒体类型为视频，发 cmd_call_invite(media=video)
+    m_callMediaType = net::call_media_video;
+    CIUSocket::GetInstance().SendCallInvite(peerId, net::call_media_video);
+    //告知对话框本次是视频通话：呼叫中的标题栏与提示文字据此写成"视频通话"
+    m_callDlg.SetVideoCall(true);
+    m_callDlg.OpenCalling(NULL, peerName, peerId);
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2CallInviteAck(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //邀请应答：成功把会话 id 回填给"呼叫中"对话框（取消时要用）；失败则关对话框并提示。
+    net::CallInviteResponse* pResp = (net::CallInviteResponse*)lParam;
+    if (pResp == NULL)
+        return 0;
+
+    bool bMuted = m_FMGClient.m_UserConfig.IsEnableMute() ? true : false;
+
+    if (pResp->m_code == 0)
+    {
+        m_callDlg.SetSessionId(pResp->m_sessionId);
+        //服务端已受理呼叫、对方开始响铃：本端起回铃音，循环到接通 / 被拒 / 超时 / 取消。
+        //
+        //只在呼叫窗还在时才起：铃声的停止统一挂在通话窗销毁上（见 BalloonCallDlg::OnDestroyMsg），
+        //窗口已经没了还起铃声，就再没有任何路径会去停它。用户在 ack 回来之前就关掉呼叫窗时
+        //会走到这里 —— 那时 sessionId 还没回填，关窗连取消信令都发不出去。
+        if (m_callDlg.IsWindow())
+            balloonmain::StartLoopSound(balloonmain::kNotifySoundCallOutgoing, bMuted);
+        else
+            LOG_INFO("v2 call invite ack arrived after dialog closed, skip ringback.");
+    }
+    else
+    {
+        //呼叫没起来：停掉可能已经起的回铃，播一声忙音。
+        balloonmain::StopLoopSound();
+        balloonmain::PlayNotifySound(balloonmain::kNotifySoundCallBusy, bMuted);
+        m_callDlg.CloseDlg();
+        ::MessageBox(m_hWnd, _T("对方当前无法接听（不在线或正在通话中）。"),
+                     _T("语音通话"), MB_OK | MB_ICONINFORMATION);
+    }
+    delete pResp;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2CallInviteNotify(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //被叫收到来电：弹来电对话框（接听 / 拒绝由对话框直接发 cmd_call_response）。
+    //昵称以 UTF-8 传来，转成宽字符再显示。
+    net::CallInviteNotify* pNotify = (net::CallInviteNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+
+    //记下来电的媒体类型：被叫接通后 signaling 据此决定中转会话是否起视频
+    m_callMediaType = pNotify->m_media;
+    CString fromName(CA2W(pNotify->m_fromName.c_str(), CP_UTF8));
+    //告知对话框本次来电是视频还是纯语音：被叫在接听前就能从提示文字看出对方约的是视频通话
+    //（视频通话接听后会打开摄像头）
+    m_callDlg.SetVideoCall(pNotify->m_media == net::call_media_video);
+    m_callDlg.OpenIncoming(NULL, fromName, pNotify->m_sessionId, pNotify->m_fromId);
+    //来电铃声：循环到接听 / 拒绝 / 对方取消 / 超时。
+    balloonmain::StartLoopSound(balloonmain::kNotifySoundCallIncoming,
+                                m_FMGClient.m_UserConfig.IsEnableMute() ? true : false);
+    delete pNotify;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2CallSignaling(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //中转参数下发：双方接通。切到"通话中"形态，并据下发的中转地址 / 令牌 / 角色启动
+    //中转会话连上 imgserver 中转通道。第一期中转会话在通道上收发测试帧验证字节透传，
+    //连通 / 透传校验 / 失败 / 断开等结果经 FMG_MSG_CALL_RELAY_EVENT 回报；第二期此处
+    //承载真实音频采集 / 编码 / 播放管线。
+    net::CallSignalingInfo* pInfo = (net::CallSignalingInfo*)lParam;
+    if (pInfo == NULL)
+        return 0;
+
+    //据本次通话媒体类型决定中转会话是否起视频（视频通话才开摄像头采集 + H.264 编解码 + 视频解码线程）
+    bool enableVideo = (m_callMediaType == net::call_media_video);
+
+    //视频通话：先告知通话窗用视频布局（须在 OpenConnected 前），再把通话窗作为视频帧显示去向
+    //注入中转会话（远端 / 本端帧解出后经它画到通话窗）。
+    m_callDlg.SetVideoCall(enableVideo);
+    //接通：停掉回铃 / 来电铃声，播一声接通提示。
+    balloonmain::StopLoopSound();
+    balloonmain::PlayNotifySound(balloonmain::kNotifySoundCallConnected,
+                                 m_FMGClient.m_UserConfig.IsEnableMute() ? true : false);
+    m_callDlg.OpenConnected(NULL);
+    if (enableVideo)
+        m_callMedia.SetVideoDisplaySink(m_callDlg.GetVideoDisplaySink());
+
+    m_callMedia.Start(pInfo->m_relayIp, pInfo->m_relayPort, pInfo->m_token,
+                      pInfo->m_role, pInfo->m_sessionId, m_hWnd, FMG_MSG_CALL_RELAY_EVENT,
+                      enableVideo);
+
+    delete pInfo;
+    return 0;
+}
+
+// 通话窗关窗时请求停掉媒体会话。
+//
+// 为什么需要这条消息：通话窗自己不持有 CallMediaSession（持有者是 CMainDlg），用户点
+// 通话窗标题栏关闭按钮时它只发挂断信令 + 销毁自身，媒体会话仍在跑 —— 采集线程不停，
+// 摄像头灯就一直亮着。正常挂断另有一条路径（服务端回推 ended，OnV2CallStateNotify 里
+// 停会话），但那依赖推送按时到达；网络异常或推送延迟时就漏掉了。本消息把"关窗即停采集"
+// 变成不依赖网络的确定行为。
+//
+// CallMediaSession::Stop 自身幂等（m_running.exchange 保证），故与 ended 推送那条路径
+// 重复调用无害。
+LRESULT CMainDlg::OnCallStopMedia(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/)
+{
+    LOG_INFO("MainDlg::OnCallStopMedia: 通话窗关窗，停掉媒体会话释放摄像头 / 麦克风。");
+    //关窗兜底：铃声停不下来比多调一次糟得多，这里再停一次（无声在播时是空操作）。
+    balloonmain::StopLoopSound();
+    m_callMedia.Stop();
+    return 0;
+}
+
+// v2 切换通话媒体类型的应答：只处理失败分支。成功时界面与引擎改动统一等服务端随后
+// 推来的 cmd_call_media_changed_notify 再做（见 OnV2CallMediaChanged），这样本端与对端
+// 走同一条路径，媒体类型必然一致。
+LRESULT CMainDlg::OnV2CallSwitchMediaResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::CallSwitchMediaResponse，处理后须 delete。
+    net::CallSwitchMediaResponse* pResp = (net::CallSwitchMediaResponse*)lParam;
+    if (pResp == NULL)
+        return 0;
+
+    if (pResp->m_code != 0)
+    {
+        //按服务端返回的 error_code 给出具体原因，别让用户面对一句笼统的"切换失败"。
+        LPCTSTR pszTip = _T("切换失败，请稍后重试。");
+        if (pResp->m_code == kCallErrNotExist)
+            pszTip = _T("通话已结束，无法切换。");
+        else if (pResp->m_code == kCallErrNotMember)
+            pszTip = _T("你不是本次通话的参与方。");
+        else if (pResp->m_code == kCallErrStateInvalid)
+            pszTip = _T("通话尚未接通，接通后才能切换。");
+
+        LOG_ERROR("v2 call switch media failed, code=%d, msg=%s.",
+                  pResp->m_code, pResp->m_msg.c_str());
+
+        HWND hOwner = m_callDlg.IsWindow() ? m_callDlg.m_hWnd : m_hWnd;
+        ::MessageBox(hOwner, pszTip, g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+    }
+
+    delete pResp;
+    return 0;
+}
+
+// v2 通话媒体类型已变更的推送：双方（含发起切换者本人）都会收到，本端据此落地。
+//
+// 按已定交互模型（见 docs/音视频通话-媒体切换方案.md 第 3.1 节）：升级到视频时，
+// <u>只有发起方自动打开摄像头</u>，另一方进入视频界面但摄像头保持关闭，由其自己决定
+// 何时开启；降级回语音时双方摄像头都关。
+LRESULT CMainDlg::OnV2CallMediaChanged(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::CallMediaChangedNotify，处理后须 delete。
+    net::CallMediaChangedNotify* pNotify = (net::CallMediaChangedNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+
+    //推送可能晚于通话结束到达（如切换在途时对端挂断）：此时通话窗已关，直接丢弃，
+    //不能去改一个已经不存在的窗口。挂断优先于切换。
+    if (!m_callDlg.IsWindow() || m_callDlg.GetSessionId() != pNotify->m_sessionId)
+    {
+        LOG_INFO("v2 call media changed ignored (dialog closed or session mismatch), session=%s.",
+                 pNotify->m_sessionId.c_str());
+        delete pNotify;
+        return 0;
+    }
+
+    bool bVideo  = (pNotify->m_media == net::call_media_video);
+    UINT selfId  = m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID;
+    bool bIsSelf = (selfId != 0 && (UINT)pNotify->m_operator == selfId);
+    //升级到视频时只有发起方自动开摄像头；降级回语音时两端都不开。
+    bool bOpenCamera = bVideo && bIsSelf;
+
+    LOG_INFO("v2 call media changed: session=%s, media=%d, operator=%lld, isSelf=%d, openCamera=%d.",
+             pNotify->m_sessionId.c_str(), pNotify->m_media,
+             (long long)pNotify->m_operator, bIsSelf ? 1 : 0, bOpenCamera ? 1 : 0);
+
+    //先切引擎再切界面：引擎启停可能失败（摄像头被占用），据其结果决定界面呈现，
+    //避免出现"界面已是视频态、实际没有画面且无提示"的不一致。
+    bool bEngineOk = m_callMedia.EnableVideo(bVideo && bOpenCamera);
+    if (bVideo && bOpenCamera && !bEngineOk)
+    {
+        //摄像头拿不到：仍进入视频界面（对端可能已在推流），但本端摄像头保持关闭并提示。
+        LOG_ERROR("v2 call switch to video: local camera unavailable, keep camera off.");
+        bOpenCamera = false;
+    }
+
+    m_callDlg.ApplyMediaMode(bVideo, bOpenCamera);
+
+    delete pNotify;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2CallStateNotify(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //通话状态推送：接通态由 signaling 驱动；其余状态关对话框并据 state 提示。
+    net::CallStateNotify* pState = (net::CallStateNotify*)lParam;
+    if (pState == NULL)
+        return 0;
+
+    // 接通态在下面的分支里不做收尾，但铃声必须停 —— 原先只在 OnV2CallSignaling 里停，
+    // 而那条路径并非每次接通都会走到（实测日志里收到 state=connected 却没有 signaling），
+    // 于是回铃 / 来电铃声在接通后仍在响。这里无条件先停一次，最可靠。
+    balloonmain::StopLoopSound();
+
+    if (pState->m_state != net::call_state_connected)
+    {
+        //通话非接通态（结束 / 拒绝 / 取消 / 离线 / 超时 / 忙）：先停中转会话再关对话框。
+        //本端挂断也走这里——挂断按钮发 cmd_call_hangup，服务端回推 state(已结束)。
+        //
+        //关窗前先把对端 userid 与通话时长取出来：CloseDlg 会销毁窗口，之后这两个值就没了。
+
+        UINT    peerId       = (UINT)m_callDlg.GetPeerUserId();
+        CString durationText = m_callDlg.GetCallDurationText();
+
+        m_callMedia.Stop();
+        m_callDlg.CloseDlg();
+
+        //提示不再用 MessageBox 打断用户，改为在与对端的聊天窗里留一条居中系统提示 ——
+        //通话结果本就属于两人之间的会话记录，留在聊天里可回溯，也不必点一下"确定"。
+        CString tip;
+        switch (pState->m_state)
+        {
+        case net::call_state_rejected:
+            tip = _T("对方拒绝了通话");
+            break;
+        case net::call_state_canceled:
+            tip = _T("对方已取消通话");
+            break;
+        case net::call_state_peer_offline:
+            tip = _T("对方不在线");
+            break;
+        case net::call_state_timeout:
+            tip = _T("对方无应答");
+            break;
+        case net::call_state_busy:
+            tip = _T("对方正在通话中");
+            break;
+        case net::call_state_ended:
+            //正常结束：接通过就带上时长（"通话结束 05:23"），没接通过只写"通话结束"。
+            tip = _T("通话结束");
+            if (!durationText.IsEmpty())
+            {
+                tip += _T(" ");
+                tip += durationText;
+            }
+            break;
+        default:
+            break;
+        }
+
+        //一次性音效：正常结束播挂断音，其余异常结束（被拒 / 无应答 / 忙 / 离线 / 取消）播忙音。
+        bool bMutedNow = m_FMGClient.m_UserConfig.IsEnableMute() ? true : false;
+        if (pState->m_state == net::call_state_ended)
+            balloonmain::PlayNotifySound(balloonmain::kNotifySoundCallEnded, bMutedNow);
+        else
+            balloonmain::PlayNotifySound(balloonmain::kNotifySoundCallBusy, bMutedNow);
+
+        if (!tip.IsEmpty())
+        {
+            LOG_INFO("通话结束提示写入聊天窗: peer=%u, state=%d.", peerId, pState->m_state);
+            m_BalloonMainPanel.AppendCallTipToChat(peerId, tip);
+        }
+    }
+    delete pState;
+    return 0;
+}
+
+LRESULT CMainDlg::OnCallRelayEvent(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam)
+{
+    //通话中转会话事件（来自 call::CallMediaSession 接收线程，已 PostMessage 转投本 UI 线程）。
+    //第一期主要用于日志与端到端联调核对：接通态 UI 由 signaling 驱动，这里不改 UI、也不弹窗
+    //打扰；中转失败 / 断开仅记日志（信令侧仍由挂断 / 状态推送收尾）。第二期可据此驱动通话窗
+    //的媒体状态指示。
+    int eventCode = (int)wParam;
+    switch (eventCode)
+    {
+    case call::call_relay_connected:
+        //本端已连上中转并握手成功、发出首帧测试帧
+        LOG_INFO("Call relay connected: local channel ready.");
+        break;
+    case call::call_relay_test_ok:
+        //收到对端测试帧且逐字节校验一致：字节透传端到端验证通过
+        LOG_INFO("Call relay transport verified: test frame seq=%u.", (unsigned)lParam);
+        break;
+    case call::call_relay_failed:
+        //中转连接 / 握手失败：通道未建立
+        LOG_ERROR("Call relay connect/handshake failed.");
+        break;
+    case call::call_relay_closed:
+        //中转异常断开：通话期间通道中断
+        LOG_INFO("Call relay channel closed unexpectedly.");
+        break;
+    case call::call_relay_camera_unavailable:
+        //本端摄像头不可用（没有设备 / 打不开 / 采集中途被别的程序抢走）：通话不中断，
+        //只在通话窗本端那一路画面上给一句提示，免得用户对着黑屏猜。lParam 是失败原因。
+        LOG_ERROR("Call local camera unavailable, reason=%d.", (int)lParam);
+        m_callDlg.SetCameraUnavailable((int)lParam);
+        break;
+    default:
+        break;
+    }
+    return 0;
+}
+
+LRESULT CMainDlg::OnRdStartInvite(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam)
+{
+    //聊天窗显示器按钮发起：wParam=对端 userid，lParam=堆 std::wstring* peerName。
+    //协调器统一发 cmd_rd_invite 并弹"呼叫中"对话框；会话 id 待邀请应答回来后回填。
+    int64_t peerId = (int64_t)(UINT)wParam;
+    std::wstring* pName = (std::wstring*)lParam;
+    CString peerName = (pName != NULL) ? pName->c_str() : _T("");
+    if (pName != NULL)
+        delete pName;
+
+    if (peerId == 0)
+        return 0;
+
+    CIUSocket::GetInstance().SendRemoteDesktopInvite(peerId);
+    m_rdDlg.OpenCalling(NULL, peerName, peerId);
+    return 0;
+}
+
+LRESULT CMainDlg::OnRdControlledEndByUser(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/)
+{
+    //被控端用户点受控提示条"结束控制"：主动发 cmd_rd_close 结束会话（服务端会广播
+    //cmd_rd_state_notify 给控制端收尾），随后停本端推流、关受控条、清会话 id。与服务端
+    //推来的 state_notify 收尾走同一组动作，重复调用幂等。
+    //远程桌面会话收尾是关键路径，留一条日志便于排查
+    LOG_INFO("远程桌面：被控端用户主动结束控制，sessionId=%s。", m_rdControlledSessionId.c_str());
+    if (!m_rdControlledSessionId.empty())
+        CIUSocket::GetInstance().SendRemoteDesktopClose(m_rdControlledSessionId);
+    m_rdStreamer.Stop();
+    m_rdControlledBar.Hide();
+    m_rdControlledSessionId.clear();
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2RdInviteAck(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //邀请应答：成功把会话 id 回填给"呼叫中"对话框（取消时要用）；失败则关对话框并提示。
+    net::RDInviteResponse* pResp = (net::RDInviteResponse*)lParam;
+    if (pResp == NULL)
+        return 0;
+
+    if (pResp->m_code == 0)
+    {
+        m_rdDlg.SetSessionId(pResp->m_sessionId);
+    }
+    else
+    {
+        m_rdDlg.CloseDlg();
+        ::MessageBox(m_hWnd, _T("对方当前无法接受远程桌面请求。"),
+                     _T("远程桌面"), MB_OK | MB_ICONINFORMATION);
+    }
+    delete pResp;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2RdInviteNotify(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //被控端收到邀请：弹授权对话框（接受 / 拒绝由对话框直接发 cmd_rd_response）。
+    //昵称以 UTF-8 传来，转成宽字符再显示。
+    net::RDInviteNotify* pNotify = (net::RDInviteNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+
+    CString fromName(CA2W(pNotify->m_fromName.c_str(), CP_UTF8));
+    //记下控制方昵称：若本端接受授权、随后成为被控端，受控提示条用它显示"正在被 XXX 控制"
+    m_rdControlledPeerName = (LPCTSTR)fromName;
+    m_rdDlg.OpenAuth(NULL, fromName, pNotify->m_sessionId, pNotify->m_fromId);
+    delete pNotify;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2RdRelayInfo(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //中转参数下发：双方建立成功。关呼叫 / 授权对话框，按本端角色启动：被控端连中转
+    //抓屏推流，控制端开观看窗连中转收画面显示。
+    net::RDRelayInfo* pInfo = (net::RDRelayInfo*)lParam;
+    if (pInfo == NULL)
+        return 0;
+
+    m_rdDlg.CloseDlg();
+
+    if (pInfo->m_role == net::rd_role_controlled)
+    {
+        //本端=被控端：先停上次残留，再连中转抓屏推流
+        m_rdStreamer.Stop();
+        if (!m_rdStreamer.Start(pInfo->m_relayIp, pInfo->m_relayPort, pInfo->m_token))
+        {
+            ::MessageBox(m_hWnd, _T("启动屏幕推流失败。"), _T("远程桌面"),
+                         MB_OK | MB_ICONWARNING);
+        }
+        else
+        {
+            //推流已起：记下会话 id（被控方主动结束时发 cmd_rd_close 用），并在屏幕顶部
+            //弹出受控提示条，让被控方随时知情、可随手终止远程控制
+            m_rdControlledSessionId = pInfo->m_sessionId;
+            m_rdControlledBar.Show(m_rdControlledPeerName, m_hWnd);
+        }
+    }
+    else if (pInfo->m_role == net::rd_role_controller)
+    {
+        //本端=控制端：先关上次残留，再开观看窗连中转收画面
+        m_rdViewer.CloseViewer();
+        m_rdViewer.Start(pInfo->m_relayIp, pInfo->m_relayPort, pInfo->m_token, pInfo->m_sessionId);
+    }
+
+    delete pInfo;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2RdStateNotify(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //状态推送：关对话框并据 state 提示（拒绝 / 取消 / 对方离线 / 超时 / 断开）。
+    net::RDStateNotify* pState = (net::RDStateNotify*)lParam;
+    if (pState == NULL)
+        return 0;
+
+    //会话结束：关呼叫 / 授权对话框，停被控端推流并关受控提示条、关控制端观看窗
+    //（远程桌面会话状态收尾是关键路径，留一条日志）
+    LOG_INFO("远程桌面：会话状态收尾，state=%d。", pState->m_state);
+    m_rdDlg.CloseDlg();
+    m_rdStreamer.Stop();
+    m_rdControlledBar.Hide();
+    m_rdControlledSessionId.clear();
+    m_rdViewer.CloseViewer();
+
+    //据状态提示；disconnected（正常断开）静默，避免与观看窗 / 推流器自身的断开提示重复
+    LPCTSTR tip = NULL;
+    switch (pState->m_state)
+    {
+    case net::rd_state_rejected:
+        tip = _T("对方拒绝了远程桌面请求。");
+        break;
+    case net::rd_state_canceled:
+        tip = _T("对方取消了远程桌面请求。");
+        break;
+    case net::rd_state_peer_offline:
+        tip = _T("对方当前不在线。");
+        break;
+    case net::rd_state_timeout:
+        tip = _T("远程桌面请求超时。");
+        break;
+    default:
+        break;
+    }
+    if (tip != NULL)
+        ::MessageBox(m_hWnd, tip, _T("远程桌面"), MB_OK | MB_ICONINFORMATION);
+
+    delete pState;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2SendChatAck(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 net::SendMessageResponse，处理后须 delete。
+    net::SendMessageResponse* pResp = (net::SendMessageResponse*)lParam;
+    if (pResp == NULL)
+        return 0;
+    m_BalloonMainPanel.OnSendChatAck(*pResp);
+    delete pResp;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2ImageSendProgress(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 net::ImageSendProgress，路由后须 delete。
+    net::ImageSendProgress* pProg = (net::ImageSendProgress*)lParam;
+    if (pProg == NULL)
+        return 0;
+    m_BalloonMainPanel.OnImageSendProgress(*pProg);
+    delete pProg;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2ImageSendResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 net::ImageSendResult，路由后须 delete。
+    net::ImageSendResult* pResult = (net::ImageSendResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    m_BalloonMainPanel.OnImageSendResult(*pResult);
+    delete pResult;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2ImageDownloadResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 net::ImageDownloadResult，路由后须 delete。
+    net::ImageDownloadResult* pResult = (net::ImageDownloadResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    m_BalloonMainPanel.OnImageDownloadResult(*pResult);
+    delete pResult;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2FileSendProgress(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 net::FileSendProgress，路由后须 delete。
+    net::FileSendProgress* pProg = (net::FileSendProgress*)lParam;
+    if (pProg == NULL)
+        return 0;
+    m_BalloonMainPanel.OnFileSendProgress(*pProg);
+    delete pProg;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2FileSendResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 net::FileSendResult，路由后须 delete。
+    net::FileSendResult* pResult = (net::FileSendResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    m_BalloonMainPanel.OnFileSendResult(*pResult);
+    delete pResult;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2FileDownloadProgress(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 net::FileDownloadProgress，路由后须 delete。
+    net::FileDownloadProgress* pProg = (net::FileDownloadProgress*)lParam;
+    if (pProg == NULL)
+        return 0;
+    m_BalloonMainPanel.OnFileDownloadProgress(*pProg);
+    delete pProg;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2FileDownloadResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 net::FileDownloadResult，路由后须 delete。
+    net::FileDownloadResult* pResult = (net::FileDownloadResult*)lParam;
+    if (pResult == NULL)
+        return 0;
+    m_BalloonMainPanel.OnFileDownloadResult(*pResult);
+    delete pResult;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2FileTransferAck(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 net::FileTransferAckNotify，路由后须 delete。
+    net::FileTransferAckNotify* pNotify = (net::FileTransferAckNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+    //这一环原先没有日志，出问题时无法判断消息是断在窗口消息映射还是断在主面板，
+    //补一条使整条链路（收帧 → 转发 → 主面板 → 聊天窗）每一跳都可追。
+    LOG_INFO("路由对方收取文件状态: msgid=%lld, state=%d.",
+             (long long)pNotify->m_msgid, pNotify->m_state);
+    m_BalloonMainPanel.OnFileTransferAck(*pNotify);
+    delete pNotify;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2TypingNotify(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 net::TypingNotify，路由后须 delete。
+    net::TypingNotify* pNotify = (net::TypingNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+    //与文件收取状态同理：这一跳留一条日志，出问题时能判断消息断在哪一层。
+    LOG_INFO("路由对端正在输入状态: cid=%lld, state=%d.",
+             (long long)pNotify->m_cid, pNotify->m_state);
+    m_BalloonMainPanel.OnTypingNotify(*pNotify);
+    delete pNotify;
+    return 0;
+}
+
 LRESULT CMainDlg::OnBuddyMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	CBuddyMessage* pBuddyMessage = (CBuddyMessage*)lParam;
-	if(pBuddyMessage == NULL)
-		return 0;
-	BOOL bShakeWindowMsg = pBuddyMessage->IsShakeWindowMsg();
-	BOOL bSynchronizeMsg = FALSE;
-	
-	UINT nUTalkUin = 0;
-	UINT nSenderID = pBuddyMessage->m_nFromUin;
-	//���ƽ̨��ͬ����������Ϣ
-	if(nSenderID == m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID)
-		bSynchronizeMsg = TRUE;
-	
-	if(bSynchronizeMsg)
-		nUTalkUin = pBuddyMessage->m_nToUin;
-	//�������ѷ�������Ϣ
-	else
-		nUTalkUin = (UINT)wParam;
+    CBuddyMessage* pBuddyMessage = (CBuddyMessage*)lParam;
+    if (pBuddyMessage == NULL)
+        return 0;
+    BOOL bShakeWindowMsg = pBuddyMessage->IsShakeWindowMsg();
+    BOOL bSynchronizeMsg = FALSE;
 
-	UINT nMsgID = pBuddyMessage->m_nMsgId;;
-	if (nUTalkUin<=0/* || nMsgID<=0*/)
-		return 0;
+    UINT nUTalkUin = 0;
+    UINT nSenderID = pBuddyMessage->m_nFromUin;
+    //别的平台上同步过来的消息
+    if (nSenderID == m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID)
+        bSynchronizeMsg = TRUE;
 
-	//����Ǵ��ڶ�����Ϣ��ֱ�ӵ������촰�ڲ����Ŷ���������������Ƕ�����Ϣ����״̬����������
-	if(bShakeWindowMsg)
-	{
-		ShowBuddyChatDlg(nUTalkUin, TRUE, TRUE, nMsgID);
-		return 0;
-	}
-	else
-	{
-        //�Ƿ����þ���
+    if (bSynchronizeMsg)
+        nUTalkUin = pBuddyMessage->m_nToUin;
+    //正常好友发来的消息
+    else
+        nUTalkUin = (UINT)wParam;
+
+    UINT nMsgID = pBuddyMessage->m_nMsgId;;
+    if (nUTalkUin <= 0/* || nMsgID<=0*/)
+        return 0;
+
+    //如果是窗口抖动消息，直接弹出聊天窗口并播放抖动动画，如果不是抖动消息则在状态栏进行闪动
+    if (bShakeWindowMsg)
+    {
+        ShowBuddyChatDlg(nUTalkUin, TRUE, TRUE, nMsgID);
+        return 0;
+    }
+    else
+    {
+        //是否启用静音
         if (!m_FMGClient.m_UserConfig.IsEnableMute())
         {
-            tstring strFileName = Hootina::CPath::GetAppPath() + _T("Sound\\msg.wav");	// ��������Ϣ��ʾ��
+            tstring strFileName = Hootina::CPath::GetAppPath() + _T("Sound\\msg.wav");	// 播放来消息提示音
             ::sndPlaySound(strFileName.c_str(), SND_ASYNC);
         }
-	}
+    }
 
-	std::map<UINT, CBuddyChatDlg*>::iterator iter;
-	iter = m_mapBuddyChatDlg.find(nUTalkUin);
+    std::map<UINT, CBuddyChatDlg*>::iterator iter;
+    iter = m_mapBuddyChatDlg.find(nUTalkUin);
 
-	if (iter != m_mapBuddyChatDlg.end())
-	{
-		CBuddyChatDlg* lpBuddyDlg = iter->second;
-		if (lpBuddyDlg != NULL && lpBuddyDlg->IsWindow())
-		{
-			if(bSynchronizeMsg)
-				lpBuddyDlg->OnRecvMsg(nSenderID, nMsgID);
-			else
-				lpBuddyDlg->OnRecvMsg(nUTalkUin, nMsgID);
-			return 0;
-		}
-	}
+    if (iter != m_mapBuddyChatDlg.end())
+    {
+        CBuddyChatDlg* lpBuddyDlg = iter->second;
+        if (lpBuddyDlg != NULL && lpBuddyDlg->IsWindow())
+        {
+            if (bSynchronizeMsg)
+                lpBuddyDlg->OnRecvMsg(nSenderID, nMsgID);
+            else
+                lpBuddyDlg->OnRecvMsg(nUTalkUin, nMsgID);
+            return 0;
+        }
+    }
 
-	//�����豸ͬ����������Ϣ
-	if(bSynchronizeMsg)
-	{
-		CMessageList* lpMsgList = m_FMGClient.GetMessageList();
-		if (lpMsgList != NULL)
-		{
-			CMessageSender* lpMsgSender = lpMsgList->GetMsgSender(FMG_MSG_TYPE_BUDDY, nSenderID);
-			if (lpMsgSender != NULL)
-			{
-				lpMsgSender->DelMsgById(nMsgID);
-				
-				if (lpMsgSender->GetMsgCount() <= 0)
-					lpMsgList->DelMsgSender(FMG_MSG_TYPE_BUDDY, nSenderID);
-			}
-		}
+    //其它设备同步过来的消息
+    if (bSynchronizeMsg)
+    {
+        CMessageList* lpMsgList = m_FMGClient.GetMessageList();
+        if (lpMsgList != NULL)
+        {
+            CMessageSender* lpMsgSender = lpMsgList->GetMsgSender(FMG_MSG_TYPE_BUDDY, nSenderID);
+            if (lpMsgSender != NULL)
+            {
+                lpMsgSender->DelMsgById(nMsgID);
 
-		return 1;
-	}
+                if (lpMsgSender->GetMsgCount() <= 0)
+                    lpMsgList->DelMsgSender(FMG_MSG_TYPE_BUDDY, nSenderID);
+            }
+        }
 
-	int nTeamIndex, nIndex;
-	m_BuddyListCtrl.GetItemIndexByID(nUTalkUin, nTeamIndex, nIndex);
-	m_BuddyListCtrl.SetBuddyItemHeadFlashAnim(nTeamIndex, nIndex, TRUE);
+        return 1;
+    }
 
-	UpdateMsgIcon();
+    UpdateMsgIcon();
 
-	if (m_MsgTipDlg.IsWindow())
-		m_MsgTipDlg.AddMsgSender(FMG_MSG_TYPE_BUDDY, nUTalkUin);
+    if (m_MsgTipDlg.IsWindow())
+        m_MsgTipDlg.AddMsgSender(FMG_MSG_TYPE_BUDDY, nUTalkUin);
 
-	if (0 == m_dwMsgTimerId)
-		m_dwMsgTimerId = SetTimer(RECVCHATMSG_TIMER_ID, ::GetCaretBlinkTime(), NULL);
-		
-	return 0;
+    if (0 == m_dwMsgTimerId)
+        m_dwMsgTimerId = SetTimer(RECVCHATMSG_TIMER_ID, ::GetCaretBlinkTime(), NULL);
+
+    return 0;
 }
 
-// Ⱥ��Ϣ
+// 群消息
 LRESULT CMainDlg::OnGroupMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT nGroupCode = (UINT)wParam;
-	UINT nMsgId = (UINT)lParam;
-	if (0 == nGroupCode/* || 0 == nMsgId*/)
-		return 0;
+    UINT nGroupCode = (UINT)wParam;
+    UINT nMsgId = (UINT)lParam;
+    if (0 == nGroupCode/* || 0 == nMsgId*/)
+        return 0;
 
-	std::map<UINT, CGroupChatDlg*>::iterator iter;
-	iter = m_mapGroupChatDlg.find(nGroupCode);
-	if (iter != m_mapGroupChatDlg.end())
-	{
-		CGroupChatDlg* lpGroupDlg = iter->second;
-		if (lpGroupDlg != NULL && lpGroupDlg->IsWindow())
-		{
-			lpGroupDlg->OnRecvMsg(nGroupCode, nMsgId);
-			return 0;
-		}
-	}
+    std::map<UINT, CGroupChatDlg*>::iterator iter;
+    iter = m_mapGroupChatDlg.find(nGroupCode);
+    if (iter != m_mapGroupChatDlg.end())
+    {
+        CGroupChatDlg* lpGroupDlg = iter->second;
+        if (lpGroupDlg != NULL && lpGroupDlg->IsWindow())
+        {
+            lpGroupDlg->OnRecvMsg(nGroupCode, nMsgId);
+            return 0;
+        }
+    }
 
-	CMessageList* lpMsgList = m_FMGClient.GetMessageList();
-	if (lpMsgList != NULL)
-	{
-		CMessageSender* lpMsgSender = lpMsgList->GetMsgSender(FMG_MSG_TYPE_GROUP, nGroupCode);
-		if (lpMsgSender != NULL)
-		{
-			if (lpMsgSender->GetMsgCount() == 1)
-			{
-                //�Ƿ����þ���
+    CMessageList* lpMsgList = m_FMGClient.GetMessageList();
+    if (lpMsgList != NULL)
+    {
+        CMessageSender* lpMsgSender = lpMsgList->GetMsgSender(FMG_MSG_TYPE_GROUP, nGroupCode);
+        if (lpMsgSender != NULL)
+        {
+            if (lpMsgSender->GetMsgCount() == 1)
+            {
+                //是否启用静音
                 if (!m_FMGClient.m_UserConfig.IsEnableMute())
                 {
-                    tstring strFileName = Hootina::CPath::GetAppPath() + _T("Sound\\msg.wav");	// ��������Ϣ��ʾ��
+                    tstring strFileName = Hootina::CPath::GetAppPath() + _T("Sound\\msg.wav");	// 播放来消息提示音
                     ::sndPlaySound(strFileName.c_str(), SND_ASYNC);
-                }               
-			}
-		}
-	}
+                }
+            }
+        }
+    }
 
-	int nTeamIndex, nIndex;
-	m_GroupListCtrl.GetItemIndexByID(nGroupCode, nTeamIndex, nIndex);
-	m_GroupListCtrl.SetBuddyItemHeadFlashAnim(nTeamIndex, nIndex, TRUE);
+    UpdateMsgIcon();
 
-	UpdateMsgIcon();
+    if (m_MsgTipDlg.IsWindow())
+        m_MsgTipDlg.AddMsgSender(FMG_MSG_TYPE_GROUP, nGroupCode);
 
-	if (m_MsgTipDlg.IsWindow())
-		m_MsgTipDlg.AddMsgSender(FMG_MSG_TYPE_GROUP, nGroupCode);
+    if (NULL == m_dwMsgTimerId)
+        m_dwMsgTimerId = SetTimer(2, ::GetCaretBlinkTime(), NULL);
 
-	if (NULL == m_dwMsgTimerId)
-		m_dwMsgTimerId = SetTimer(2, ::GetCaretBlinkTime(), NULL);
-
-	return 0;
+    return 0;
 }
 
-// ��ʱ�Ự��Ϣ
+// 临时会话消息
 LRESULT CMainDlg::OnSessMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT nUTalkUin = (UINT)wParam;
-	UINT nMsgId = (UINT)lParam;
-	if (0 == nUTalkUin || 0 == nMsgId)
-		return 0;
+    UINT nUTalkUin = (UINT)wParam;
+    UINT nMsgId = (UINT)lParam;
+    if (0 == nUTalkUin || 0 == nMsgId)
+        return 0;
 
-    // �Ƿ����þ���
+    // 是否启用静音
     if (!m_FMGClient.m_UserConfig.IsEnableMute())
     {
-        tstring strFileName = Hootina::CPath::GetAppPath() + _T("Sound\\msg.wav");	// ��������Ϣ��ʾ��
+        tstring strFileName = Hootina::CPath::GetAppPath() + _T("Sound\\msg.wav");	// 播放来消息提示音
         ::sndPlaySound(strFileName.c_str(), SND_ASYNC);
     }
 
-	std::map<UINT, CSessChatDlg*>::iterator iter;
-	iter = m_mapSessChatDlg.find(nUTalkUin);
-	if (iter != m_mapSessChatDlg.end())
-	{
-		CSessChatDlg* lpSessChatDlg = iter->second;
-		if (lpSessChatDlg != NULL && lpSessChatDlg->IsWindow())
-		{
-			lpSessChatDlg->OnRecvMsg(nUTalkUin, nMsgId);
-			return 0;
-		}
-	}
+    std::map<UINT, CSessChatDlg*>::iterator iter;
+    iter = m_mapSessChatDlg.find(nUTalkUin);
+    if (iter != m_mapSessChatDlg.end())
+    {
+        CSessChatDlg* lpSessChatDlg = iter->second;
+        if (lpSessChatDlg != NULL && lpSessChatDlg->IsWindow())
+        {
+            lpSessChatDlg->OnRecvMsg(nUTalkUin, nMsgId);
+            return 0;
+        }
+    }
 
-	UpdateMsgIcon();
+    UpdateMsgIcon();
 
-	if (m_MsgTipDlg.IsWindow())
-		m_MsgTipDlg.AddMsgSender(FMG_MSG_TYPE_SESS, nUTalkUin);
+    if (m_MsgTipDlg.IsWindow())
+        m_MsgTipDlg.AddMsgSender(FMG_MSG_TYPE_SESS, nUTalkUin);
 
-	if (NULL == m_dwMsgTimerId)
-		m_dwMsgTimerId = SetTimer(2, ::GetCaretBlinkTime(), NULL);
+    if (NULL == m_dwMsgTimerId)
+        m_dwMsgTimerId = SetTimer(2, ::GetCaretBlinkTime(), NULL);
 
-	return 0;
+    return 0;
 }
 
-// ����״̬�ı���Ϣ
+// 好友状态改变消息
 LRESULT CMainDlg::OnStatusChangeMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT nUTalkUin = (UINT)lParam;
-	if (0 == nUTalkUin)
-		return 0;
+    UINT nUTalkUin = (UINT)lParam;
+    if (0 == nUTalkUin)
+        return 0;
 
-	CBuddyList* lpBuddyList = m_FMGClient.GetBuddyList();
-	if (NULL == lpBuddyList)
-		return 0;
+    CBuddyList* lpBuddyList = m_FMGClient.GetBuddyList();
+    if (NULL == lpBuddyList)
+        return 0;
 
-	CBuddyInfo* lpBuddyInfo = lpBuddyList->GetBuddy(nUTalkUin);
-	if (NULL == lpBuddyInfo)
-		return 0;
+    CBuddyInfo* lpBuddyInfo = lpBuddyList->GetBuddy(nUTalkUin);
+    if (NULL == lpBuddyInfo)
+        return 0;
 
-	CBuddyTeamInfo* lpBuddyTeam = lpBuddyList->GetBuddyTeam(lpBuddyInfo->m_nTeamIndex);
-	if (NULL == lpBuddyTeam)
-		return 0;
+    BOOL bOnline = TRUE;
+    if (lpBuddyInfo->m_nStatus == STATUS_OFFLINE || lpBuddyInfo->m_nStatus == STATUS_INVISIBLE)
+        bOnline = FALSE;
 
-	int nOnlineCnt = lpBuddyTeam->GetOnlineBuddyCount();
-	BOOL bOnline = TRUE;
-	if(lpBuddyInfo->m_nStatus==STATUS_OFFLINE || lpBuddyInfo->m_nStatus==STATUS_INVISIBLE)
-		bOnline = FALSE;
-
-	if (bOnline)	// ���ź�����������
-	{
-        // �Ƿ����þ���
+    if (bOnline)	// 播放好友上线声音
+    {
+        // 是否启用静音
         if (!m_FMGClient.m_UserConfig.IsEnableMute())
         {
             tstring strFileName = Hootina::CPath::GetAppPath() + _T("Sound\\Global.wav");
             ::sndPlaySound(strFileName.c_str(), SND_ASYNC);
         }
-	}
+    }
 
-	int nTeamIndex, nIndex;	// ��ȡ����������
-	m_BuddyListCtrl.GetItemIndexByID(nUTalkUin, nTeamIndex, nIndex);
-
-	// ���º��ѷ�����������
-	m_BuddyListCtrl.SetBuddyTeamCurCnt(nTeamIndex, nOnlineCnt);
-
-	// ���º���ͷ��
-	CString strThumbPath;
-	if(lpBuddyInfo->m_bUseCustomFace && lpBuddyInfo->m_bCustomFaceAvailable)
-	{
-		strThumbPath.Format(_T("%s%d.png"), m_FMGClient.m_UserMgr.GetCustomUserThumbFolder().c_str(), lpBuddyInfo->m_uUserID);
-		if(!Hootina::CPath::IsFileExist(strThumbPath))
-			strThumbPath.Format(_T("%sImage\\UserThumbs\\%d.png"), g_szHomePath, lpBuddyInfo->m_nFace);
-	}
-	else
-		strThumbPath.Format(_T("%sImage\\UserThumbs\\%d.png"), g_szHomePath, lpBuddyInfo->m_nFace);
-	m_BuddyListCtrl.SetBuddyItemHeadPic(nTeamIndex, nIndex, strThumbPath, !bOnline);
-
-	// ���ú�������״̬���������߶���
-	m_BuddyListCtrl.SetBuddyItemOnline(nTeamIndex, nIndex, bOnline, TRUE);
-
-    if (lpBuddyInfo->m_nStatus == online_type_android_cellular || lpBuddyInfo->m_nStatus == online_type_android_wifi)
-	{
-		strThumbPath.Format(_T("%sImage\\mobile_online.png"), g_szHomePath);
-		m_BuddyListCtrl.SetBuddyItemMobilePic(nTeamIndex, nIndex, strThumbPath, TRUE);
-	}
-    else if (lpBuddyInfo->m_nStatus == online_type_offline || lpBuddyInfo->m_nStatus == online_type_pc_invisible)
-	{
-		strThumbPath.Format(_T("%sImage\\mobile_online.png"), g_szHomePath);
-		m_BuddyListCtrl.SetBuddyItemMobilePic(nTeamIndex, nIndex, strThumbPath, FALSE);
-	}
-
-
-	m_BuddyListCtrl.Invalidate();	// ˢ�º����б��ؼ�
-
-	return 0;
+    // 旧自绘好友列表控件已移除，原先这里对 m_BuddyListCtrl 的分组在线人数 / 头像 /
+    // 在线状态更新已一并删除；新版 BalloonMainPanel 的联系人在线状态由
+    // OnUpdateBuddyList -> RefreshContacts 统一刷新。
+    return 0;
 }
 
-// ����������Ϣ
+// 被踢下线消息
 LRESULT CMainDlg::OnKickMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	LPCTSTR lpszReason = _T("�������ߣ�");
-	MessageBox(lpszReason, _T("��ʾ"), MB_OK);
-	PostMessage(WM_CLOSE);
-	return 0;
+    LPCTSTR lpszReason = _T("被踢下线！");
+    MessageBox(lpszReason, _T("提示"), MB_OK);
+    PostMessage(WM_CLOSE);
+    return 0;
 }
 
 LRESULT CMainDlg::OnScreenshotMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -3115,14 +3344,14 @@ LRESULT CMainDlg::OnScreenshotMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
     //CScreenshotInfo* pScreenshotInfo = (CScreenshotInfo*)lParam;
     //if (pScreenshotInfo == NULL)
     //    return 0;
-    
+
     if (!m_pRemoteDesktopDlg->IsWindow())
     {
         m_pRemoteDesktopDlg->m_pFMGClient = &m_FMGClient;
-        m_pRemoteDesktopDlg->Create(m_hWnd, 0);       
+        m_pRemoteDesktopDlg->Create(m_hWnd, 0);
     }
 
-    
+
 
     //BITMAPINFOHEADER*	bmpHeader = (BITMAPINFOHEADER*)pScreenshotInfo->m_strBmpHeader.c_str();
 
@@ -3132,7 +3361,7 @@ LRESULT CMainDlg::OnScreenshotMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
     return 0;
 
     //HDC hdc = ::GetDC(m_pRemoteDesktopDlg->m_hWnd);
-    //BITMAPINFO* bmpinfo = (BITMAPINFO*)bmpHeader;//λͼ��Ϣ 
+    //BITMAPINFO* bmpinfo = (BITMAPINFO*)bmpHeader;//位图信息 
     //HBITMAP hbitmap = CreateDIBitmap(hdc, bmpHeader, CBM_INIT, bmpbuf, bmpinfo, DIB_RGB_COLORS);
 
     //PBITMAPINFO bmpInf = (PBITMAPINFO)pScreenshotInfo->m_strBmpHeader.c_str();
@@ -3148,7 +3377,7 @@ LRESULT CMainDlg::OnScreenshotMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
     //int nOffset;
     //BYTE r, g, b;
     //int nWidth = bmpInf->bmiHeader.biWidth*bmpInf->bmiHeader.biBitCount / 8;
-    //nWidth = ((nWidth + 3) / 4) * 4; //4�ֽڶ���
+    //nWidth = ((nWidth + 3) / 4) * 4; //4字节对齐
 
     ////if (bmpInf->bmiHeader.biBitCount == 8)
     ////{
@@ -3158,7 +3387,7 @@ LRESULT CMainDlg::OnScreenshotMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
     ////        {
     ////            RGBQUAD rgbQ;
     ////            rgbQ = bmpInf->bmiColors[buf[i*nWidth + j]];
-    ////            dc.SetPixel(j, bm.bmHeight - i, RGB(rgbQ.rgbRed, rgbQ.rgbGreen, rgbQ.rgbBlue)); //������ʾ
+    ////            dc.SetPixel(j, bm.bmHeight - i, RGB(rgbQ.rgbRed, rgbQ.rgbGreen, rgbQ.rgbBlue)); //测试显示
     ////        }
     ////    }
     ////}
@@ -3178,7 +3407,7 @@ LRESULT CMainDlg::OnScreenshotMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
     ////            b *= 8;
     ////            g *= 8;
 
-    ////            dc.SetPixel(j, bm.bmHeight - i, RGB(r, g, b)); //������ʾ
+    ////            dc.SetPixel(j, bm.bmHeight - i, RGB(r, g, b)); //测试显示
     ////        }
     ////    }
     ////}
@@ -3193,7 +3422,7 @@ LRESULT CMainDlg::OnScreenshotMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
     ////            g = buf[nOffset + j * 3 + 1];
     ////            r = buf[nOffset + j * 3 + 2];
 
-    ////            dc.SetPixel(j, bm.bmHeight - i, RGB(r, g, b)); //������ʾ
+    ////            dc.SetPixel(j, bm.bmHeight - i, RGB(r, g, b)); //测试显示
     ////        }
     ////    }
     ////}
@@ -3208,7 +3437,7 @@ LRESULT CMainDlg::OnScreenshotMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
     //            g = buf[nOffset + j * 4 + 1];
     //            r = buf[nOffset + j * 4 + 2];
 
-    //            dc.SetPixel(j, bmpInf->bmiHeader.biHeight - i, RGB(r, g, b)); //������ʾ
+    //            dc.SetPixel(j, bmpInf->bmiHeader.biHeight - i, RGB(r, g, b)); //测试显示
     //        }
     //    }
     //}
@@ -3216,274 +3445,252 @@ LRESULT CMainDlg::OnScreenshotMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
     //return 0;
 }
 
-// Ⱥϵͳ��Ϣ
+// 群系统消息
 LRESULT CMainDlg::OnSysGroupMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	//UINT nGroupCode = (UINT)lParam;
-	//if (0 == nGroupCode)
-	//	return 0;
+    //UINT nGroupCode = (UINT)lParam;
+    //if (0 == nGroupCode)
+    //	return 0;
 
-	//tstring strFileName = Hootina::CPath::GetAppPath() + _T("Sound\\system.wav");	// ������ϵͳ��Ϣ��ʾ��
-	//::sndPlaySound(strFileName.c_str(), SND_ASYNC);
+    //tstring strFileName = Hootina::CPath::GetAppPath() + _T("Sound\\system.wav");	// 播放来系统消息提示音
+    //::sndPlaySound(strFileName.c_str(), SND_ASYNC);
 
-	//UpdateMsgIcon();
+    //UpdateMsgIcon();
 
-	//if (m_MsgTipDlg.IsWindow())
-	//	m_MsgTipDlg.AddMsgSender(long_SYSGROUP, nGroupCode);
+    //if (m_MsgTipDlg.IsWindow())
+    //	m_MsgTipDlg.AddMsgSender(long_SYSGROUP, nGroupCode);
 
-	//if (NULL == m_dwMsgTimerId)
-	//	m_dwMsgTimerId = SetTimer(2, ::GetCaretBlinkTime(), NULL);
+    //if (NULL == m_dwMsgTimerId)
+    //	m_dwMsgTimerId = SetTimer(2, ::GetCaretBlinkTime(), NULL);
 
-	return 0;
+    return 0;
 }
 
-// ���º��Ѻ���
+// 更新好友号码
 LRESULT CMainDlg::OnUpdateBuddyNumber(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT nUTalkUin = (UINT)lParam;
-	if (0 == nUTalkUin)
-		return 0;
+    UINT nUTalkUin = (UINT)lParam;
+    if (0 == nUTalkUin)
+        return 0;
 
- 	NotifyBuddyChatDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_NUMBER);		// ֪ͨ�������촰�ڸ���
- 	NotifyBuddyInfoDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_NUMBER);		// ֪ͨ������Ϣ���ڸ���
+    NotifyBuddyChatDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_NUMBER);		// 通知好友聊天窗口更新
+    NotifyBuddyInfoDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_NUMBER);		// 通知好友信息窗口更新
 
-	return 0;
+    return 0;
 }
 
-// ����Ⱥ��Ա����
+// 更新群成员号码
 LRESULT CMainDlg::OnUpdateGMemberNumber(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT nGroupCode = (UINT)wParam;
-	UINT nUTalkUin = (UINT)lParam;
-	if (0 == nGroupCode || 0 == nUTalkUin)
-		return 0;
+    UINT nGroupCode = (UINT)wParam;
+    UINT nUTalkUin = (UINT)lParam;
+    if (0 == nGroupCode || 0 == nUTalkUin)
+        return 0;
 
- 	NotifyGroupChatDlg(nGroupCode, FMG_MSG_UPDATE_GMEMBER_NUMBER, wParam, lParam);// ֪ͨȺ���촰�ڸ���
-	NotifyGMemberInfoDlg(nGroupCode, nUTalkUin, FMG_MSG_UPDATE_GMEMBER_NUMBER);	// ֪ͨȺ��Ա��Ϣ���ڸ���
-	NotifySessChatDlg(nUTalkUin, FMG_MSG_UPDATE_GMEMBER_NUMBER);				// ֪ͨȺ��Ա���촰�ڸ���
+    NotifyGroupChatDlg(nGroupCode, FMG_MSG_UPDATE_GMEMBER_NUMBER, wParam, lParam);// 通知群聊天窗口更新
+    NotifyGMemberInfoDlg(nGroupCode, nUTalkUin, FMG_MSG_UPDATE_GMEMBER_NUMBER);	// 通知群成员信息窗口更新
+    NotifySessChatDlg(nUTalkUin, FMG_MSG_UPDATE_GMEMBER_NUMBER);				// 通知群成员聊天窗口更新
 
-	return 0;
+    return 0;
 }
 
-// ����Ⱥ����
+// 更新群号码
 LRESULT CMainDlg::OnUpdateGroupNumber(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT nGroupCode = (UINT)lParam;
-	if (0 == nGroupCode)
-		return 0;
+    UINT nGroupCode = (UINT)lParam;
+    if (0 == nGroupCode)
+        return 0;
 
- 	NotifyGroupChatDlg(nGroupCode, FMG_MSG_UPDATE_GROUP_NUMBER, 0, 0);// ֪ͨȺ���촰�ڸ���
- 	NotifyGroupInfoDlg(nGroupCode, FMG_MSG_UPDATE_GROUP_NUMBER);		// ֪ͨȺ��Ϣ���ڸ���
+    NotifyGroupChatDlg(nGroupCode, FMG_MSG_UPDATE_GROUP_NUMBER, 0, 0);// 通知群聊天窗口更新
+    NotifyGroupInfoDlg(nGroupCode, FMG_MSG_UPDATE_GROUP_NUMBER);		// 通知群信息窗口更新
 
-	return 0;
+    return 0;
 }
 
-// ���º��Ѹ���ǩ��
+// 更新好友个性签名
 LRESULT CMainDlg::OnUpdateBuddySign(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT nUTalkUin = lParam;
-	if (0 == nUTalkUin)
-		return 0;
+    UINT nUTalkUin = lParam;
+    if (0 == nUTalkUin)
+        return 0;
 
-	CBuddyInfo* lpBuddyInfo = m_FMGClient.GetUserInfo(nUTalkUin);
-	if (lpBuddyInfo == NULL)
-		return 0;
+    CBuddyInfo* lpBuddyInfo = m_FMGClient.GetUserInfo(nUTalkUin);
+    if (lpBuddyInfo == NULL)
+        return 0;
 
-	if (m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID == nUTalkUin)	// �����û�����ǩ��
-	{
-		if (!lpBuddyInfo->m_strSign.empty())
-		{
-			m_btnSign.SetWindowText(lpBuddyInfo->m_strSign.c_str());
-			m_btnSign.SetToolTipText(lpBuddyInfo->m_strSign.c_str());
-		}
-		else
-		{
-			m_btnSign.SetWindowText(_T(""));
-			m_btnSign.SetToolTipText(_T("����޸ĸ���ǩ��"));
-		}
-	}
-	else	// ���º��Ѹ���ǩ��
-	{
-		CBuddyList* lpBuddyList = m_FMGClient.GetBuddyList();		// ���º����б��ؼ��ĸ���ǩ��
-		if (lpBuddyList != NULL)
-		{
-			CBuddyInfo* lpBuddyInfo = lpBuddyList->GetBuddy(nUTalkUin);
-			if (lpBuddyInfo != NULL)
-			{
-				int nTeamIndex, nIndex;
-				m_BuddyListCtrl.GetItemIndexByID(nUTalkUin, nTeamIndex, nIndex);
-				m_BuddyListCtrl.SetBuddyItemSign(nTeamIndex, nIndex, lpBuddyInfo->m_strSign.c_str());
-			}
-		}
+    // 自己的个性签名展示已迁到 BalloonMainPanel（旧自绘 m_btnSign 已移除）；这里只在
+    // 更新的是好友（非自己）时通知相关聊天窗 / 信息窗，让其同步显示新签名。
+    // 旧好友列表控件 m_BuddyListCtrl 的签名更新已一并删除。
+    if (m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID != nUTalkUin)
+    {
+        NotifyBuddyChatDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_SIGN);		// 通知好友聊天窗口更新
+        NotifyBuddyInfoDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_SIGN);		// 通知好友信息窗口更新
+    }
 
-		NotifyBuddyChatDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_SIGN);		// ֪ͨ�������촰�ڸ���
-		NotifyBuddyInfoDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_SIGN);		// ֪ͨ������Ϣ���ڸ���
-	}
-
-	return 0;
+    return 0;
 }
 
-// ����Ⱥ��Ա����ǩ��
+// 更新群成员个性签名
 LRESULT CMainDlg::OnUpdateGMemberSign(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT nGroupCode = (UINT)wParam;
-	UINT nUTalkUin = (UINT)lParam;
-	if (0 == nGroupCode || 0 == nUTalkUin)
-		return 0;
+    UINT nGroupCode = (UINT)wParam;
+    UINT nUTalkUin = (UINT)lParam;
+    if (0 == nGroupCode || 0 == nUTalkUin)
+        return 0;
 
-	NotifyGMemberInfoDlg(nGroupCode, nUTalkUin, FMG_MSG_UPDATE_GMEMBER_SIGN);	// ֪ͨȺ��Ա��Ϣ���ڸ���
+    NotifyGMemberInfoDlg(nGroupCode, nUTalkUin, FMG_MSG_UPDATE_GMEMBER_SIGN);	// 通知群成员信息窗口更新
 
-	return 0;
+    return 0;
 }
 
-// �����û���Ϣ
+// 更新用户信息
 LRESULT CMainDlg::OnUpdateBuddyInfo(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT nUTalkUin = lParam;
-	if (0 == nUTalkUin)
-		return 0;
-	
- 	CBuddyInfo* lpBuddyInfo = m_FMGClient.GetUserInfo(nUTalkUin);
- 	if (lpBuddyInfo == NULL)	// �����û��ǳ�
-		return 0;
-	if(lpBuddyInfo->m_uUserID == m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID)
-	{
-		//����ǳ�Ϊ�գ�����ʾ�˻���
-		if(lpBuddyInfo->m_strNickName.empty())
-			m_staNickName.SetWindowText(lpBuddyInfo->m_strAccount.c_str());
-		else
-			m_staNickName.SetWindowText(lpBuddyInfo->m_strNickName.c_str());	
-
-		//m_staNickName.Invalidate(FALSE);
-
-		long nStatus = m_FMGClient.GetStatus();
-		LoadAppIcon(nStatus);
-		CString strIconInfo;
-		if(nStatus == STATUS_OFFLINE)
-			strIconInfo.Format(_T("%s\r\n%s\r\n����"), m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.c_str(), m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
-		else
-			strIconInfo.Format(_T("%s\r\n%s\r\n����"), m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.c_str(), m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
-		
-		m_TrayIcon.ModifyIcon(m_hAppIcon, strIconInfo);
-	}
-	else
-	{
-		int nTeamIndex, nIndex;	// ��ȡ����������
-		m_BuddyListCtrl.GetItemIndexByID(nUTalkUin, nTeamIndex, nIndex);
-		m_BuddyListCtrl.SetBuddyItemMarkName(nTeamIndex, nIndex, lpBuddyInfo->m_strMarkName.c_str());
-		m_BuddyListCtrl.SetBuddyItemNickName(nTeamIndex, nIndex, lpBuddyInfo->m_strNickName.c_str());
-		m_BuddyListCtrl.Invalidate(FALSE);
-	}
-
-
-	//ͬʱ����ͷ����Ϣ 
-	PostMessage(FMG_MSG_UPDATE_BUDDY_NUMBER, 0, (LPARAM)nUTalkUin);
-	PostMessage(FMG_MSG_UPDATE_BUDDY_HEADPIC, 0, (LPARAM)nUTalkUin);
-	PostMessage(FMG_MSG_UPDATE_BUDDY_SIGN, 0, (LPARAM)nUTalkUin);
-	
-	//֪ͨȺ�Ĵ��ڸ���
-	for(const auto& iter : m_FMGClient.m_UserMgr.m_GroupList.m_arrGroupInfo)
-	{
-		if(iter->IsMember(nUTalkUin))
-			PostMessage(FMG_MSG_UPDATE_GROUP_INFO, nUTalkUin, 0);
-	}
-	// ֪ͨ������Ϣ���ڸ���
-	NotifyBuddyInfoDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_INFO);		
-	
-#ifdef _DEBUG
-	static long i = 0;
-	AtlTrace(_T("Update Buddy Info: %d.\n"), i);
-	i++;
-#endif
-	return 0;
+    //    UINT nUTalkUin = lParam;
+    //    if (0 == nUTalkUin)
+    //        return 0;
+    //
+    //    CBuddyInfo* lpBuddyInfo = m_FMGClient.GetUserInfo(nUTalkUin);
+    //    if (lpBuddyInfo == NULL)	// 更新用户昵称
+    //        return 0;
+    //    if (lpBuddyInfo->m_uUserID == m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID)
+    //    {
+    //        //如果昵称为空，则显示账户名
+    //        if (lpBuddyInfo->m_strNickName.empty())
+    //            m_staNickName.SetWindowText(lpBuddyInfo->m_strAccount.c_str());
+    //        else
+    //            m_staNickName.SetWindowText(lpBuddyInfo->m_strNickName.c_str());
+    //
+    //        //m_staNickName.Invalidate(FALSE);
+    //
+    //        long nStatus = m_FMGClient.GetStatus();
+    //        LoadAppIcon(nStatus);
+    //        CString strIconInfo;
+    //        if (nStatus == STATUS_OFFLINE)
+    //            strIconInfo.Format(_T("%s\r\n%s\r\n离线"), m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.c_str(), m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
+    //        else
+    //            strIconInfo.Format(_T("%s\r\n%s\r\n在线"), m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.c_str(), m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
+    //
+    //        m_TrayIcon.ModifyIcon(m_hAppIcon, strIconInfo);
+    //    }
+    //    else
+    //    {
+    //        int nTeamIndex, nIndex;	// 获取好友项索引
+    //        m_BuddyListCtrl.GetItemIndexByID(nUTalkUin, nTeamIndex, nIndex);
+    //        m_BuddyListCtrl.SetBuddyItemMarkName(nTeamIndex, nIndex, lpBuddyInfo->m_strMarkName.c_str());
+    //        m_BuddyListCtrl.SetBuddyItemNickName(nTeamIndex, nIndex, lpBuddyInfo->m_strNickName.c_str());
+    //        m_BuddyListCtrl.Invalidate(FALSE);
+    //    }
+    //
+    //
+    //    //同时更新头像信息 
+    //    PostMessage(FMG_MSG_UPDATE_BUDDY_NUMBER, 0, (LPARAM)nUTalkUin);
+    //    PostMessage(FMG_MSG_UPDATE_BUDDY_HEADPIC, 0, (LPARAM)nUTalkUin);
+    //    PostMessage(FMG_MSG_UPDATE_BUDDY_SIGN, 0, (LPARAM)nUTalkUin);
+    //
+    //    //通知群聊窗口更新
+    //    for (const auto& iter : m_FMGClient.m_UserMgr.m_GroupList.m_arrGroupInfo)
+    //    {
+    //        if (iter->IsMember(nUTalkUin))
+    //            PostMessage(FMG_MSG_UPDATE_GROUP_INFO, nUTalkUin, 0);
+    //    }
+    //    // 通知好友信息窗口更新
+    //    NotifyBuddyInfoDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_INFO);
+    //
+    //#ifdef _DEBUG
+    //    static long i = 0;
+    //    AtlTrace(_T("Update Buddy Info: %d.\n"), i);
+    //    i++;
+    //#endif
+    return 0;
 }
 
 LRESULT CMainDlg::OnUpdateChatDlgOnlineStatus(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT uAccountID = (UINT)wParam;
-	//long nStatus = (long)lParam;
-	std::map<UINT, CBuddyChatDlg*>::iterator iter;
-	iter = m_mapBuddyChatDlg.find(uAccountID);
-	if (iter != m_mapBuddyChatDlg.end())
-	{
-		CBuddyChatDlg* pBuddyChatDlg = iter->second;
+    UINT uAccountID = (UINT)wParam;
+    //long nStatus = (long)lParam;
+    std::map<UINT, CBuddyChatDlg*>::iterator iter;
+    iter = m_mapBuddyChatDlg.find(uAccountID);
+    if (iter != m_mapBuddyChatDlg.end())
+    {
+        CBuddyChatDlg* pBuddyChatDlg = iter->second;
 #ifndef _DEBUG
-		if(pBuddyChatDlg == NULL)
-		{
-			LOG_ERROR("Why 0x%08x is null pointer of a chat dlg��", pBuddyChatDlg);
-			return 0;
-		}
-#endif
-															
-		pBuddyChatDlg->OnUpdateBuddyNumber();
-		pBuddyChatDlg->OnUpdateBuddySign();		// ���º���ǩ��֪ͨ
-		pBuddyChatDlg->OnUpdateBuddyHeadPic();
-		//pBuddyChatDlg->OnUpdateBuddyHeadPic();
-#ifndef _DEBUG
-		if(!pBuddyChatDlg->IsWindow())
-		{
-			LOG_ERROR("Why 0x%08x is a invalid window of a chat dlg��", pBuddyChatDlg);
-			return 0;
-		}
+        if (pBuddyChatDlg == NULL)
+        {
+            LOG_ERROR("Why 0x%08x is null pointer of a chat dlg？", pBuddyChatDlg);
+            return 0;
+        }
 #endif
 
-		pBuddyChatDlg->Invalidate(FALSE);
-	}
+        pBuddyChatDlg->OnUpdateBuddyNumber();
+        pBuddyChatDlg->OnUpdateBuddySign();		// 更新好友签名通知
+        pBuddyChatDlg->OnUpdateBuddyHeadPic();
+        //pBuddyChatDlg->OnUpdateBuddyHeadPic();
+#ifndef _DEBUG
+        if (!pBuddyChatDlg->IsWindow())
+        {
+            LOG_ERROR("Why 0x%08x is a invalid window of a chat dlg？", pBuddyChatDlg);
+            return 0;
+        }
+#endif
 
-	return 1;
+        pBuddyChatDlg->Invalidate(FALSE);
+    }
+
+    return 1;
 }
 
-// ����Ⱥ��Ա��Ϣ
+// 更新群成员信息
 LRESULT CMainDlg::OnUpdateGMemberInfo(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT nGroupCode = (UINT)wParam;
-	UINT nUTalkUin = (UINT)lParam;
-	if (0 == nGroupCode || 0 == nUTalkUin)
-		return 0;
+    UINT nGroupCode = (UINT)wParam;
+    UINT nUTalkUin = (UINT)lParam;
+    if (0 == nGroupCode || 0 == nUTalkUin)
+        return 0;
 
-	NotifyGMemberInfoDlg(nGroupCode, nUTalkUin, FMG_MSG_UPDATE_GMEMBER_INFO);	// ֪ͨȺ��Ա��Ϣ���ڸ���
+    NotifyGMemberInfoDlg(nGroupCode, nUTalkUin, FMG_MSG_UPDATE_GMEMBER_INFO);	// 通知群成员信息窗口更新
 
-	return 0;
+    return 0;
 }
 
-// ����Ⱥ��Ϣ
+// 更新群信息
 LRESULT CMainDlg::OnUpdateGroupInfo(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT uAccountID = (UINT)wParam;
+    UINT uAccountID = (UINT)wParam;
 
- 	NotifyGroupChatDlg(uAccountID, FMG_MSG_UPDATE_GROUP_INFO, 0, 0);	// ֪ͨȺ���촰�ڸ���
- 	NotifyGroupInfoDlg(uAccountID, FMG_MSG_UPDATE_GROUP_INFO);		// ֪ͨȺ��Ϣ���ڸ���
-//	CGroupInfo* pGroupInfo = NULL;
-//	CBuddyInfo* pBuddyInfo = NULL;
-//	std::map<UINT, CGroupChatDlg*>::iterator iterGroupChatDlg;
-//	UINT nGroupCode = 0;
-//	for(const auto& iter : m_FMGClient.m_UserMgr.m_GroupList.m_arrGroupInfo)
-//	{
-//		pGroupInfo = iter;
-//		if(pGroupInfo == NULL)
-//			continue;
-//
-//		pBuddyInfo = pGroupInfo->GetMemberByUin(uAccountID);
-//		if(pBuddyInfo == NULL)
-//			continue;
-//		
-//		nGroupCode = pGroupInfo->m_nGroupCode;
-//		iterGroupChatDlg = m_mapGroupChatDlg.find(nGroupCode);
-//		if(iterGroupChatDlg != m_mapGroupChatDlg.end())
-//		{
-//#ifndef _DEBUG
-//			if(iterGroupChatDlg->second->IsWindow())
-//			{
-//#endif
-//				iterGroupChatDlg->second->OnUpdateGroupInfo();
-//#ifndef _DEBUG
-//			}
-//#endif
-//		}
-//		
-//	}
+    NotifyGroupChatDlg(uAccountID, FMG_MSG_UPDATE_GROUP_INFO, 0, 0);	// 通知群聊天窗口更新
+    NotifyGroupInfoDlg(uAccountID, FMG_MSG_UPDATE_GROUP_INFO);		// 通知群信息窗口更新
+    //	CGroupInfo* pGroupInfo = NULL;
+    //	CBuddyInfo* pBuddyInfo = NULL;
+    //	std::map<UINT, CGroupChatDlg*>::iterator iterGroupChatDlg;
+    //	UINT nGroupCode = 0;
+    //	for(const auto& iter : m_FMGClient.m_UserMgr.m_GroupList.m_arrGroupInfo)
+    //	{
+    //		pGroupInfo = iter;
+    //		if(pGroupInfo == NULL)
+    //			continue;
+    //
+    //		pBuddyInfo = pGroupInfo->GetMemberByUin(uAccountID);
+    //		if(pBuddyInfo == NULL)
+    //			continue;
+    //		
+    //		nGroupCode = pGroupInfo->m_nGroupCode;
+    //		iterGroupChatDlg = m_mapGroupChatDlg.find(nGroupCode);
+    //		if(iterGroupChatDlg != m_mapGroupChatDlg.end())
+    //		{
+    //#ifndef _DEBUG
+    //			if(iterGroupChatDlg->second->IsWindow())
+    //			{
+    //#endif
+    //				iterGroupChatDlg->second->OnUpdateGroupInfo();
+    //#ifndef _DEBUG
+    //			}
+    //#endif
+    //		}
+    //		
+    //	}
 
-	return 0;
+    return 0;
 }
 
 // HTREEITEM CMainDlg::FindTreeItemByUTalkUin(CTreeViewCtrl& treeCtrl, UINT nUTalkUin)
@@ -3528,2139 +3735,1843 @@ LRESULT CMainDlg::OnUpdateGroupInfo(UINT uMsg, WPARAM wParam, LPARAM lParam)
 // 	return  (nUTalkUin2 == nUTalkUin) ? hItem : NULL;
 // }
 
-// ���º���ͷ��ͼƬ
+// 更新好友头像图片
 LRESULT CMainDlg::OnUpdateBuddyHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT nUTalkUin = (UINT)lParam;
-	if(nUTalkUin == 0)
-		return 0;
+    UINT nUTalkUin = (UINT)lParam;
+    if (nUTalkUin == 0)
+        return 0;
 
-	CBuddyInfo* lpBuddyInfo = m_FMGClient.GetUserInfo(nUTalkUin);
-	if(lpBuddyInfo == NULL)
-		return 0;
+    CBuddyInfo* lpBuddyInfo = m_FMGClient.GetUserInfo(nUTalkUin);
+    if (lpBuddyInfo == NULL)
+        return 0;
 
-	CString strThumbPath;
-	if(lpBuddyInfo->m_bUseCustomFace  && lpBuddyInfo->m_bCustomFaceAvailable)
-	{
-		strThumbPath.Format(_T("%s%d.png"), m_FMGClient.m_UserMgr.GetCustomUserThumbFolder().c_str(), lpBuddyInfo->m_uUserID);
-		if(!Hootina::CPath::IsFileExist(strThumbPath))
-			strThumbPath.Format(_T("%sImage\\UserThumbs\\%d.png"), g_szHomePath, lpBuddyInfo->m_nFace);
-	}
-	else
-		strThumbPath.Format(_T("%sImage\\UserThumbs\\%d.png"), g_szHomePath, lpBuddyInfo->m_nFace);
-	
-	//�����Լ���ͷ��
-	if (m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID == nUTalkUin)	// �����û�ͷ��
-	{
-		BOOL bGray = m_FMGClient.GetStatus()!=STATUS_OFFLINE ? FALSE : TRUE;
-		m_picHead.SetBitmapWithoutCache(strThumbPath, FALSE, bGray);
-		m_picHead.Invalidate();
-		return 0;
-	}
+    //更新自己的头像（已迁到 BalloonMainPanel 头部，旧自绘 m_picHead 已移除）；
+    //好友 / 最近联系人列表头像随旧控件一并移除，新版面板由联系人 / 会话刷新统一处理。
+    if (m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID == nUTalkUin)
+        return 0;
 
-	// ���º����б�ͷ��
-	UINT nUTalkNum = 0;
-	BOOL bGray = FALSE;
-	CBuddyList* lpBuddyList = m_FMGClient.GetBuddyList();
-	if (lpBuddyList != NULL)
-	{
-		CBuddyInfo* lpBuddyInfo = lpBuddyList->GetBuddy(nUTalkUin);
-		if (lpBuddyInfo != NULL)
-		{
-			nUTalkNum = lpBuddyInfo->m_uUserID;
-			bGray = lpBuddyInfo->m_nStatus != STATUS_OFFLINE ? FALSE : TRUE;
-		}
-	}
+    NotifyBuddyChatDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_HEADPIC);		// 通知已打开的好友聊天窗同步头像
 
-	int nTeamIndex, nIndex;
-	m_BuddyListCtrl.GetItemIndexByID(nUTalkUin, nTeamIndex, nIndex);
-	m_BuddyListCtrl.SetBuddyItemHeadPic(nTeamIndex, nIndex, strThumbPath, bGray);
-
-	// ���������ϵ���б�ͷ��
-	int nItemCnt = m_RecentListCtrl.GetBuddyItemCount(0);
-	for (int i = 0; i < nItemCnt; i++)
-	{
-		int nIndex = m_RecentListCtrl.GetBuddyItemID(0, i);
-
-		CRecentList* lpRecentList = m_FMGClient.GetRecentList();
-		if (lpRecentList != NULL)
-		{
-			CRecentInfo* lpRecentInfo = lpRecentList->GetRecent(nIndex);
-			if (lpRecentInfo != NULL)
-			{
-				if (0 == lpRecentInfo->m_nType)			// ����
-				{
-					if (nUTalkUin == lpRecentInfo->m_uUserID)
-					{
-						m_RecentListCtrl.GetItemIndexByID(nIndex, nTeamIndex, nIndex);
-						m_RecentListCtrl.SetBuddyItemHeadPic(nTeamIndex, nIndex, strThumbPath, bGray);
-						break;
-					}
-				}
-			}
-		}
-	}
-
-	NotifyBuddyChatDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_HEADPIC);		// ֪ͨ�������촰�ڸ���
-
-	return 0;
+    return 0;
 }
 
-// ����Ⱥ��Աͷ��ͼƬ
+// 更新群成员头像图片
 LRESULT CMainDlg::OnUpdateGMemberHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT nGroupCode = (UINT)wParam;
-	UINT nUTalkUin = (UINT)lParam;
+    UINT nGroupCode = (UINT)wParam;
+    UINT nUTalkUin = (UINT)lParam;
 
-	NotifyGroupChatDlg(nGroupCode, FMG_MSG_UPDATE_GMEMBER_HEADPIC, wParam, lParam);	// ֪ͨȺ���촰�ڸ���
-	NotifySessChatDlg(nUTalkUin, FMG_MSG_UPDATE_GMEMBER_HEADPIC);						// ֪ͨȺ��Ա���촰�ڸ���
+    NotifyGroupChatDlg(nGroupCode, FMG_MSG_UPDATE_GMEMBER_HEADPIC, wParam, lParam);	// 通知群聊天窗口更新
+    NotifySessChatDlg(nUTalkUin, FMG_MSG_UPDATE_GMEMBER_HEADPIC);						// 通知群成员聊天窗口更新
 
-	return 0;
+    return 0;
 }
 
-// ����Ⱥͷ��ͼƬ
+// 更新群头像图片
 LRESULT CMainDlg::OnUpdateGroupHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT nGroupCode = (UINT)wParam;
+    UINT nGroupCode = (UINT)wParam;
 
-	// ����Ⱥ�б�ͷ��
-	UINT nGroupNum = 0;
-	CGroupList* lpGroupList = m_FMGClient.GetGroupList();
-	if (lpGroupList != NULL)
-	{
-		CGroupInfo* lpGroupInfo = lpGroupList->GetGroupByCode(nGroupCode);
-		if (lpGroupInfo != NULL)
-			nGroupNum = lpGroupInfo->m_nGroupNumber;
-	}
+    // 旧自绘群列表 / 最近联系人列表头像更新已随旧控件移除；群头像在新版面板由群列表 /
+    // 会话刷新统一处理。这里只通知已打开的群聊窗同步头像。
+    NotifyGroupChatDlg(nGroupCode, FMG_MSG_UPDATE_GROUP_HEADPIC, wParam, lParam);// 通知群聊天窗口更新
 
-	tstring strFileName = m_FMGClient.GetGroupHeadPicFullName(nGroupNum);
-	if (!Hootina::CPath::IsFileExist(strFileName.c_str()))
-		strFileName = Hootina::CPath::GetAppPath() + _T("Image\\DefGroupHeadPic.png");
-	int nTeamIndex, nIndex;
-	m_GroupListCtrl.GetItemIndexByID(nGroupCode, nTeamIndex, nIndex);
-	m_GroupListCtrl.SetBuddyItemHeadPic(nTeamIndex, nIndex, strFileName.c_str(), FALSE);
-
-	// ���������ϵ���б�ͷ��
-	int nItemCnt = m_RecentListCtrl.GetBuddyItemCount(0);
-	for (int i = 0; i < nItemCnt; i++)
-	{
-		int nIndex = m_RecentListCtrl.GetBuddyItemID(0, i);
-
-		CRecentList* lpRecentList = m_FMGClient.GetRecentList();
-		if (lpRecentList != NULL)
-		{
-			CRecentInfo* lpRecentInfo = lpRecentList->GetRecent(nIndex);
-			if (lpRecentInfo != NULL)
-			{
-				if (1 == lpRecentInfo->m_nType)	// Ⱥ
-				{
-					CGroupList* lpGroupList = m_FMGClient.GetGroupList();
-					if (lpGroupList != NULL)
-					{
-						CGroupInfo* lpGroupInfo = lpGroupList->GetGroupById(lpRecentInfo->m_uUserID);
-						if (lpGroupInfo != NULL && nGroupCode == lpGroupInfo->m_nGroupCode)
-						{
-							m_RecentListCtrl.GetItemIndexByID(nIndex, nTeamIndex, nIndex);
-							m_RecentListCtrl.SetBuddyItemHeadPic(nTeamIndex, nIndex, strFileName.c_str(), FALSE);
-							break;
-						}
-					}
-				}
-			}
-		}
-	}
-
-	NotifyGroupChatDlg(nGroupCode, FMG_MSG_UPDATE_GROUP_HEADPIC, wParam, lParam);// ֪ͨȺ���촰�ڸ���
-
-	return 0;
+    return 0;
 }
 
-// �ı�����״̬������Ϣ
+// 改变在线状态返回消息
 LRESULT CMainDlg::OnChangeStatusResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	BOOL bSuccess = (BOOL)wParam;
-	long nNewStatus = lParam;
-	if (!bSuccess)
-		MessageBox(_T("�ı�����״̬ʧ�ܣ�"));
-	return 0;
+    BOOL bSuccess = (BOOL)wParam;
+    long nNewStatus = lParam;
+    if (!bSuccess)
+    {
+        MessageBox(_T("改变在线状态失败！"));
+        return 0;
+    }
+    //状态改变成功：托盘图标随新状态更新。
+    RefreshTrayIconForStatus();
+    return 0;
 }
 
 LRESULT CMainDlg::OnSendAddFriendRequestResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	if(wParam == ADD_FRIEND_FAILED)
-	{
-		::MessageBox(m_hWnd, _T("������ϣ����ͼӺ�������ʧ�ܣ����Ժ����ԣ�"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
-	}
+    if (wParam == ADD_FRIEND_FAILED)
+    {
+        ::MessageBox(m_hWnd, _T("网络故障，发送加好友请求失败，请稍后重试！"), g_strAppTitle.c_str(), MB_OK | MB_ICONERROR);
+    }
 
-	return 1;
+    return 1;
 }
 
 LRESULT CMainDlg::OnRecvAddFriendRequest(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	COperateFriendResult* pResult = (COperateFriendResult*)lParam;
-	if(pResult == NULL)
-		return (LRESULT)0;
+    COperateFriendResult* pResult = (COperateFriendResult*)lParam;
+    if (pResult == NULL)
+        return (LRESULT)0;
 
-	//���˺����Լ���ID��cmdΪApply���˻����ǳ�Ϊ��ʱ�����Լ�������������ĳɹ�Ӧ�𣬺��Ե�
-	if(pResult->m_uCmd==Apply && pResult->m_uAccountID==m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID &&*(pResult->m_szAccountName)==0 &&*(pResult->m_szNickName)==0)
-	{
-		delete pResult;
-		return 0;
-	}
-	
-	AddFriendInfo* pAddFriendInfo = new AddFriendInfo();
-	pAddFriendInfo->nCmd = pResult->m_uCmd;
-	pAddFriendInfo->uAccountID = pResult->m_uAccountID;
+    //当账号是自己的ID，cmd为Apply，账户和昵称为空时，是自己主动发送申请的成功应答，忽略掉
+    if (pResult->m_uCmd == Apply && pResult->m_uAccountID == m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID && *(pResult->m_szAccountName) == 0 && *(pResult->m_szNickName) == 0)
+    {
+        delete pResult;
+        return 0;
+    }
 
-	TCHAR szData[64] = {0};
+    AddFriendInfo* pAddFriendInfo = new AddFriendInfo();
+    pAddFriendInfo->nCmd = pResult->m_uCmd;
+    pAddFriendInfo->uAccountID = pResult->m_uAccountID;
+
+    TCHAR szData[64] = { 0 };
     EncodeUtil::Utf8ToUnicode(pResult->m_szAccountName, szData, ARRAYSIZE(szData));
-	_tcscpy_s(pAddFriendInfo->szAccountName, ARRAYSIZE(pAddFriendInfo->szAccountName), szData);
+    _tcscpy_s(pAddFriendInfo->szAccountName, ARRAYSIZE(pAddFriendInfo->szAccountName), szData);
 
-	memset(szData, 0, sizeof(szData));
+    memset(szData, 0, sizeof(szData));
     EncodeUtil::Utf8ToUnicode(pResult->m_szNickName, szData, ARRAYSIZE(szData));
-	_tcscpy_s(pAddFriendInfo->szNickName, ARRAYSIZE(pAddFriendInfo->szNickName), szData);
-	
-	if(pAddFriendInfo->nCmd == Agree)
-	{
-		m_FMGClient.m_UserMgr.AddFriend(pAddFriendInfo->uAccountID, pAddFriendInfo->szAccountName, pAddFriendInfo->szNickName);
-		PostMessage(FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
-		//���»�ȡ�º����б�������
+    _tcscpy_s(pAddFriendInfo->szNickName, ARRAYSIZE(pAddFriendInfo->szNickName), szData);
+
+    if (pAddFriendInfo->nCmd == Agree)
+    {
+        m_FMGClient.m_UserMgr.AddFriend(pAddFriendInfo->uAccountID, pAddFriendInfo->szAccountName, pAddFriendInfo->szNickName);
+        PostMessage(FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
+        //重新获取下好友列表并更新
         m_FMGClient.GetFriendList();
-	}
-	
-	delete pResult;
+    }
 
-	m_FMGClient.m_aryAddFriendInfo.push_back(pAddFriendInfo);
+    delete pResult;
 
-    // �Ƿ����þ���
+    m_FMGClient.m_aryAddFriendInfo.push_back(pAddFriendInfo);
+
+    // 是否启用静音
     if (!m_FMGClient.m_UserConfig.IsEnableMute())
     {
-        tstring strFileName(Hootina::CPath::GetAppPath() + _T("Sound\\system.wav"));	// ���żӺ�����ʾ��
+        tstring strFileName(Hootina::CPath::GetAppPath() + _T("Sound\\system.wav"));	// 播放加好友提示音
         ::sndPlaySound(strFileName.c_str(), SND_ASYNC);
     }
-	
-	m_dwAddFriendTimerId = SetTimer(ADDFRIENDREQUEST_TIMER_ID, ::GetCaretBlinkTime(), NULL);
-	
-	return 1;
+
+    m_dwAddFriendTimerId = SetTimer(ADDFRIENDREQUEST_TIMER_ID, ::GetCaretBlinkTime(), NULL);
+
+    return 1;
 }
 
 LRESULT CMainDlg::OnDeleteFriendResult(UINT message, WPARAM wParam, LPARAM lParam)
 {
-	UINT uAccountID = (UINT)lParam;
-	if(!IsGroupTarget(uAccountID))
-	{
-		if(wParam == DELETE_FRIEND_FAILED)
-			::MessageBox(m_hWnd, _T("���������⣬ɾ������ʧ�ܣ����Ժ����ԣ�"), g_strAppTitle.c_str(), MB_OK|MB_ICONWARNING);
-		else if(wParam == DELETE_FRIEND_SUCCESS)
-		{
-			//ɾ��֮���Ѿ�û�к����ˣ�����������������б�
+    UINT uAccountID = (UINT)lParam;
+    if (!IsGroupTarget(uAccountID))
+    {
+        if (wParam == DELETE_FRIEND_FAILED)
+            ::MessageBox(m_hWnd, _T("因网络问题，删除好友失败，请稍后重试！"), g_strAppTitle.c_str(), MB_OK | MB_ICONWARNING);
+        else if (wParam == DELETE_FRIEND_SUCCESS)
+        {
+            //删完之后已经没有好友了，则不用重新请求好友列表
             if (m_FMGClient.m_UserMgr.m_BuddyList.GetBuddyTotalCount() == 0)
                 ::SendMessage(m_hWnd, FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
             else
-                //ɾ�����ѳɹ��Ժ���º����б�
+                //删除好友成功以后更新好友列表
                 m_FMGClient.GetFriendList();
 
-			//ɾ���ɹ�֮�󣬹ر�֮ǰ��ú��ѵ����촰��
-			ShowBuddyChatDlg(lParam, FALSE);
+            //删除成功之后，关闭之前与该好友的聊天窗口
+            ShowBuddyChatDlg(lParam, FALSE);
 
-            //::MessageBox(m_hWnd, _T("ɾ�����ѳɹ���"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
-		}
-	}
-	else
-	{
-		::MessageBox(m_hWnd, _T("��Ⱥ�ɹ���"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
-		ShowGroupChatDlg(uAccountID, FALSE);
+            //::MessageBox(m_hWnd, _T("删除好友成功！"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+        }
+    }
+    else
+    {
+        ::MessageBox(m_hWnd, _T("退群成功！"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+        ShowGroupChatDlg(uAccountID, FALSE);
         m_FMGClient.GetFriendList();
-		::PostMessage(m_hWnd, FMG_MSG_UPDATE_GROUP_LIST, 0, 0);
-	}
-	
-	//���������е���Ϣ��Ȼ������������
-	//TODO: ��δ��������⣺
-	//��ɾ��ĳ��������Ϣ�ĺ���ʱ����Ⱥ��ʱ������һ������Ϣ��Ⱥ����Ȼ��˸��������һ������Ϣ�ĺ��ѾͲ���˸�ˣ���
-	int nTeamIndex, nIndex;
-	int nCount = m_FMGClient.m_UserMgr.m_MsgList.GetMsgSenderCount();
-	UINT nUTalkUin = 0;
-	CMessageSender* pSender = NULL;
-	for(int i=0; i<nCount; ++i)
-	{
-		pSender = m_FMGClient.m_UserMgr.m_MsgList.GetMsgSender(i);
-		if(pSender != NULL)
-		{
-			nUTalkUin = pSender->GetSenderId();
-			if(nUTalkUin > 0)
-			{
-				if(!IsGroupTarget(nUTalkUin))
-				{
-					m_BuddyListCtrl.GetItemIndexByID(nUTalkUin, nTeamIndex, nIndex);
-					m_BuddyListCtrl.SetBuddyItemHeadFlashAnim(nTeamIndex, nIndex, TRUE);
-					//m_BuddyListCtrl.Invalidate(FALSE);
-				}
-				else
-				{
-					m_GroupListCtrl.GetItemIndexByID(nUTalkUin, nTeamIndex, nIndex);
-					m_GroupListCtrl.SetBuddyItemHeadFlashAnim(nTeamIndex, nIndex, TRUE);
-				}
-			}
-		}
-	}
-	
-	
-	return (LRESULT)1;
+        ::PostMessage(m_hWnd, FMG_MSG_UPDATE_GROUP_LIST, 0, 0);
+    }
+
+    // 旧自绘好友 / 群列表的"未读消息头像闪烁"已随旧控件移除（新版改由托盘
+    // m_trayFlash 状态机闪烁发送方头像）。原先这里重新点亮其余未读会话闪动的
+    // 循环已一并删除。
+    return (LRESULT)1;
 }
 
 LRESULT CMainDlg::OnSelfStatusChange(UINT message, WPARAM wParam, LPARAM lParam)
 {
-	//UINT uAccountID = (UINT)wParam;
-	//if(uAccountID != m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID)
-	//	return (LRESULT)0;
+    //UINT uAccountID = (UINT)wParam;
+    //if(uAccountID != m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID)
+    //	return (LRESULT)0;
 
-	long nStatus = (long)lParam;
-	
-	//�Լ��������PC������
-    //��������״̬�����Է��������͵�����֪ͨ
+    long nStatus = (long)lParam;
+
+    //自己在另外的PC端上线
+    //处于重连状态，忽略服务器推送的下线通知
     if (m_nMainPanelStatus != MAINPANEL_STATUS_RECONNECTING && nStatus != STATUS_MOBILE_ONLINE && nStatus != STATUS_MOBILE_OFFLINE)
-	{
-		m_FMGClient.GoOffline();
+    {
+        m_FMGClient.GoOffline();
         m_FMGClient.Uninit();
-        //ShowPanel(FALSE);
-		CloseAllDlg();
-		
-		ShowWindow(SW_SHOW);
-		CString strInfo;
-		strInfo.Format(_T("�𾴵�%s(%s)\r\n    �����˺�����һ̨�����ϵ�¼���㱻�����ߡ�����ⲻ���㱾�����Բ������������޸����룡"), m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.c_str(),  m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
-		
-		CMobileStatusDlg dlg;
-		dlg.SetWindowTitle(_T("����֪ͨ"));
-		dlg.SetInfoText(strInfo);
-		dlg.EnableAutoDisappear(FALSE);
-		dlg.DoModal(m_hWnd, NULL);
+        CloseAllDlg();
 
-		m_FMGClient.m_UserMgr.ClearUserInfo();
-		m_FMGClient.m_UserMgr.m_UserInfo.Reset();
+        // PR7: 不再 ShowWindow(SW_SHOW) 显示 CMainDlg 主窗口 —— 它始终隐藏。
+        // 被踢下线后须先销毁新版 balloonui 主面板,避免它残留在屏幕上;
+        // 紧接其后的 StartLogin(FALSE) 会重新走登录流程。
+        if (m_BalloonMainPanel.IsWindow())
+            m_BalloonMainPanel.DestroyWindow();
 
-		m_TrayIcon.RemoveIcon();
-		memset(&m_stAccountInfo, 0, sizeof(LOGIN_ACCOUNT_INFO));
-		StartLogin(FALSE);
+        CString strInfo;
+        strInfo.Format(_T("尊敬的%s(%s)\r\n    您的账号在另一台机器上登录，你被迫下线。如果这不是你本人亲自操作，建议你修改密码！"), m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.c_str(), m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
 
-		return (LRESULT)1;
-	}
-	else if(nStatus==STATUS_MOBILE_ONLINE)
-	{
-		CString strInfo;
-		strInfo.Format(_T("�𾴵�%s(%s)\r\n    �����˺����ֻ������ߡ�\r\n    ����ⲻ���㱾�����Բ������������޸����롣"), m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.c_str(),  m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
-		CMobileStatusDlg dlg;
-		
-		dlg.SetWindowTitle(_T("�ֻ�������ʾ"));
-		dlg.SetInfoText(strInfo);
-		dlg.EnableAutoDisappear(TRUE);
-		dlg.DoModal(NULL, NULL);
-		return (LRESULT)1;
-	}
-	//else if(nStatus==STATUS_MOBILE_OFFLINE)
-	//{
-	//	::MessageBox(m_hWnd, _T("�����˺����ƶ���Flamingo���ߡ�\r\n����ⲻ���㱾�����Բ������������޸����룡"), _T("��ܰ��ʾ"), MB_OK|MB_ICONINFORMATION);
-	//	return (LRESULT)1;
-	//}
+        CMobileStatusDlg dlg;
+        dlg.SetWindowTitle(_T("下线通知"));
+        dlg.SetInfoText(strInfo);
+        dlg.EnableAutoDisappear(FALSE);
+        dlg.DoModal(m_hWnd, NULL);
 
-	return (LRESULT)1;
+        m_FMGClient.m_UserMgr.ClearUserInfo();
+        m_FMGClient.m_UserMgr.m_UserInfo.Reset();
+
+        m_TrayIcon.RemoveIcon();
+        memset(&m_stAccountInfo, 0, sizeof(LOGIN_ACCOUNT_INFO));
+
+        //复位登录态。此前这里漏了这两行，导致被踢下线、登录窗弹出期间程序仍自认为
+        //"已登录"，进而有两个可见后果：
+        //  · 右键托盘弹出的仍是已登录那套菜单（在线 / 离线 / 登出 …），见
+        //    OnTrayIcon_RButtunUp 里据 m_bAlreadyLogin 选形态的分支；
+        //  · 在该菜单里选"在线 / 离开 / 忙碌"会命中 OnChangeMyPresence 中
+        //    "m_bAlreadyLogin && m_nMainPanelStatus == MAINPANEL_STATUS_LOGIN" 这一路，
+        //    对着一条已经关掉的连接发 cmd_change_presence。
+        //与用户主动登出(OnLogout)复位的是同两个字段，两条路径保持一致。
+        m_bAlreadyLogin    = FALSE;
+        m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
+
+        StartLogin(FALSE);
+
+        return (LRESULT)1;
+    }
+    else if (nStatus == STATUS_MOBILE_ONLINE)
+    {
+        CString strInfo;
+        strInfo.Format(_T("尊敬的%s(%s)\r\n    您的账号在手机端上线。\r\n    如果这不是你本人亲自操作，建议你修改密码。"), m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.c_str(), m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
+        CMobileStatusDlg dlg;
+
+        dlg.SetWindowTitle(_T("手机上线提示"));
+        dlg.SetInfoText(strInfo);
+        dlg.EnableAutoDisappear(TRUE);
+        dlg.DoModal(NULL, NULL);
+        return (LRESULT)1;
+    }
+    //else if(nStatus==STATUS_MOBILE_OFFLINE)
+    //{
+    //	::MessageBox(m_hWnd, _T("您的账号在移动端Flamingo下线。\r\n如果这不是你本人亲自操作，建议你修改密码！"), _T("温馨提示"), MB_OK|MB_ICONINFORMATION);
+    //	return (LRESULT)1;
+    //}
+
+    return (LRESULT)1;
 }
 
 LRESULT CMainDlg::OnShowOrCloseDlg(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	UINT nGroupCode = (UINT)wParam;
-	UINT nUTalkUin = (UINT)lParam;
+    UINT nGroupCode = (UINT)wParam;
+    UINT nUTalkUin = (UINT)lParam;
 
-	if(nUTalkUin == m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID)
-	{
-		PostMessage(WM_COMMAND, (WPARAM)ID_PIC_HEAD, 0);
-		return 1;
-	}
+    if (nUTalkUin == m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID)
+    {
+        PostMessage(WM_COMMAND, (WPARAM)ID_PIC_HEAD, 0);
+        return 1;
+    }
 
-	switch (uMsg)
-	{
-	case WM_SHOW_BUDDYCHATDLG:
-		ShowBuddyChatDlg(nUTalkUin, TRUE);
-		break;
-	case WM_SHOW_GROUPCHATDLG:
-		ShowGroupChatDlg(nGroupCode, TRUE);
-		break;
-	case WM_SHOW_SESSCHATDLG:
-		ShowSessChatDlg(nGroupCode, nUTalkUin, TRUE);
-		break;
-	case WM_SHOW_SYSGROUPCHATDLG:
-		ShowSysGroupChatDlg(nGroupCode, TRUE);
-		break;
-	case WM_SHOW_BUDDYINFODLG:
-		ShowBuddyInfoDlg(nUTalkUin, TRUE);
-		break;
-	case WM_SHOW_GMEMBERINFODLG:
-		ShowGMemberInfoDlg(nGroupCode, nUTalkUin, TRUE);
-		break;
-	case WM_SHOW_GROUPINFODLG:
-		ShowGroupInfoDlg(nGroupCode, TRUE);
-		break;
-	case WM_CLOSE_BUDDYCHATDLG:
-		ShowBuddyChatDlg(nUTalkUin, FALSE);
-		break;
-	case WM_CLOSE_GROUPCHATDLG:
-		ShowGroupChatDlg(nGroupCode, FALSE);
-		break;
-	case WM_CLOSE_SESSCHATDLG:
-		ShowSessChatDlg(nGroupCode, nUTalkUin, FALSE);
-		break;
-	case WM_CLOSE_SYSGROUPCHATDLG:
-		ShowSysGroupChatDlg(nGroupCode, FALSE);
-		break;
-	case WM_CLOSE_BUDDYINFODLG:
-		ShowBuddyInfoDlg(nUTalkUin, FALSE);
-		break;
-	case WM_CLOSE_GMEMBERINFODLG:
-		ShowGMemberInfoDlg(nGroupCode, nUTalkUin, FALSE);
-		break;
-	case WM_CLOSE_GROUPINFODLG:
-		ShowGroupInfoDlg(nGroupCode, FALSE);
-		break;
-	case WM_SHOW_USERINFODLG:
-		ShowUserInfoDlg(nUTalkUin, TRUE);
-	case WM_CLOSE_USERINFODLG:
-		ShowUserInfoDlg(nUTalkUin, FALSE);
-	}
-	return 0;
+    switch (uMsg)
+    {
+    case WM_SHOW_BUDDYCHATDLG:
+        ShowBuddyChatDlg(nUTalkUin, TRUE);
+        break;
+    case WM_SHOW_GROUPCHATDLG:
+        ShowGroupChatDlg(nGroupCode, TRUE);
+        break;
+    case WM_SHOW_SESSCHATDLG:
+        ShowSessChatDlg(nGroupCode, nUTalkUin, TRUE);
+        break;
+    case WM_SHOW_SYSGROUPCHATDLG:
+        ShowSysGroupChatDlg(nGroupCode, TRUE);
+        break;
+    case WM_SHOW_BUDDYINFODLG:
+        ShowBuddyInfoDlg(nUTalkUin, TRUE);
+        break;
+    case WM_SHOW_GMEMBERINFODLG:
+        ShowGMemberInfoDlg(nGroupCode, nUTalkUin, TRUE);
+        break;
+    case WM_SHOW_GROUPINFODLG:
+        ShowGroupInfoDlg(nGroupCode, TRUE);
+        break;
+    case WM_CLOSE_BUDDYCHATDLG:
+        ShowBuddyChatDlg(nUTalkUin, FALSE);
+        break;
+    case WM_CLOSE_GROUPCHATDLG:
+        ShowGroupChatDlg(nGroupCode, FALSE);
+        break;
+    case WM_CLOSE_SESSCHATDLG:
+        ShowSessChatDlg(nGroupCode, nUTalkUin, FALSE);
+        break;
+    case WM_CLOSE_SYSGROUPCHATDLG:
+        ShowSysGroupChatDlg(nGroupCode, FALSE);
+        break;
+    case WM_CLOSE_BUDDYINFODLG:
+        ShowBuddyInfoDlg(nUTalkUin, FALSE);
+        break;
+    case WM_CLOSE_GMEMBERINFODLG:
+        ShowGMemberInfoDlg(nGroupCode, nUTalkUin, FALSE);
+        break;
+    case WM_CLOSE_GROUPINFODLG:
+        ShowGroupInfoDlg(nGroupCode, FALSE);
+        break;
+    case WM_SHOW_USERINFODLG:
+        ShowUserInfoDlg(nUTalkUin, TRUE);
+    case WM_CLOSE_USERINFODLG:
+        ShowUserInfoDlg(nUTalkUin, FALSE);
+    }
+    return 0;
 }
 
 LRESULT CMainDlg::OnCloseDlg(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	CloseDialog(IDOK);
-	return (LRESULT)1;
+    CloseDialog(IDOK);
+    return (LRESULT)1;
 }
 
 LRESULT CMainDlg::OnDelMsgSender(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	long nType = (long)wParam;
-	UINT nSenderId = (UINT)lParam;
+    long nType = (long)wParam;
+    UINT nSenderId = (UINT)lParam;
 
-	if (m_MsgTipDlg.IsWindow())
-		m_MsgTipDlg.DelMsgSender(nType, nSenderId);
+    if (m_MsgTipDlg.IsWindow())
+        m_MsgTipDlg.DelMsgSender(nType, nSenderId);
 
-	if (nType == FMG_MSG_TYPE_BUDDY)
-	{
-		int nTeamIndex, nIndex;
-		m_BuddyListCtrl.GetItemIndexByID(nSenderId, nTeamIndex, nIndex);
-		m_BuddyListCtrl.SetBuddyItemHeadFlashAnim(nTeamIndex, nIndex, FALSE);
-		//���������ϵ��������Ϣ����Ŀ
-		SendMessage(FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
-	}
-	else if (nType == FMG_MSG_TYPE_GROUP)
-	{
-		int nTeamIndex, nIndex;
-		m_GroupListCtrl.GetItemIndexByID(nSenderId, nTeamIndex, nIndex);
-		m_GroupListCtrl.SetBuddyItemHeadFlashAnim(nTeamIndex, nIndex, FALSE);
-		//���������ϵ��������Ϣ����Ŀ
-		SendMessage(FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
-	}
+    // 旧自绘好友 / 群列表的头像灭闪已随旧控件移除；仍转发刷新最近联系人（会话）列表。
+    if (nType == FMG_MSG_TYPE_BUDDY || nType == FMG_MSG_TYPE_GROUP)
+    {
+        //更新最近联系人中新消息的数目
+        SendMessage(FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
+    }
 
-	UpdateMsgIcon();
-	
-	//TODO: ���´���ŵ�UpdateMsgIcon��ȥ
-	CMessageList* lpMsgList = m_FMGClient.GetMessageList();
-	if (lpMsgList != NULL && lpMsgList->GetMsgSenderCount() <= 0)
-	{
-		if (m_MsgTipDlg.IsWindow())
-			m_MsgTipDlg.DestroyWindow();
-		KillTimer(m_dwMsgTimerId);
-		m_dwMsgTimerId = NULL;
-		m_nLastMsgType = FMG_MSG_TYPE_BUDDY;
-		m_nLastSenderId = 0;
+    UpdateMsgIcon();
 
-		CString strIconInfo;
-		strIconInfo.Format(_T("%s\r\n%s\r\n����"), m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.c_str(), m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
-		m_TrayIcon.ModifyIcon(m_hAppIcon, strIconInfo);
-	}
+    //TODO: 以下代码放到UpdateMsgIcon中去
+    CMessageList* lpMsgList = m_FMGClient.GetMessageList();
+    if (lpMsgList != NULL && lpMsgList->GetMsgSenderCount() <= 0)
+    {
+        if (m_MsgTipDlg.IsWindow())
+            m_MsgTipDlg.DestroyWindow();
+        KillTimer(m_dwMsgTimerId);
+        m_dwMsgTimerId = NULL;
+        m_nLastMsgType = FMG_MSG_TYPE_BUDDY;
+        m_nLastSenderId = 0;
 
-	return 0;
+        UpdateTrayIconTip();
+    }
+
+    return 0;
 }
 
 LRESULT CMainDlg::OnCancelFlash(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	if(m_MsgTipDlg.IsWindow())
-		::PostMessage(m_MsgTipDlg.m_hWnd, WM_CLOSE, 0, 0);
-	
-	KillTimer(m_dwMsgTimerId);
-	m_dwMsgTimerId = NULL;
-	//�Ƚ�������ͼ��ָ�������״̬
-	CString strIconInfo;
-	strIconInfo.Format(_T("%s\r\n%s\r\n����"), 
-						m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.data(),				
-						m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.data());
-						
-	m_TrayIcon.ModifyIcon(m_hAppIcon, strIconInfo);
-	return 0;
+    if (m_MsgTipDlg.IsWindow())
+        ::PostMessage(m_MsgTipDlg.m_hWnd, WM_CLOSE, 0, 0);
+
+    KillTimer(m_dwMsgTimerId);
+    m_dwMsgTimerId = NULL;
+    //先将任务栏图标恢复成正常状态
+    UpdateTrayIconTip();
+    return 0;
 }
 
 void CMainDlg::ShowBuddyChatDlg(UINT nUTalkUin, BOOL bShow, BOOL bShakeWindowMsg, UINT nMsgID)
 {
-	if (nUTalkUin == 0)
-		return;
+    if (nUTalkUin == 0)
+        return;
 
-	if (bShow)
-	{
-		std::map<UINT, CBuddyChatDlg*>::iterator iter;
-		iter = m_mapBuddyChatDlg.find(nUTalkUin);
-		if (iter != m_mapBuddyChatDlg.end())
-		{
-			CBuddyChatDlg* lpBuddyChatDlg = iter->second;
-			if (lpBuddyChatDlg != NULL)
-			{
-				if (!lpBuddyChatDlg->IsWindow())
-					lpBuddyChatDlg->Create(NULL);
-				//lpBuddyChatDlg->ShowWindow(SW_SHOW);
-				lpBuddyChatDlg->ShowWindow(SW_RESTORE);
-				::SetForegroundWindow(lpBuddyChatDlg->m_hWnd);
-				if(bShakeWindowMsg)
-				{
-					::Sleep(3000);
-					ShakeWindow(lpBuddyChatDlg->m_hWnd, 1);
-					lpBuddyChatDlg->OnRecvMsg(nUTalkUin, nMsgID);
-				}
-			}
-		}
-		else
-		{
-			//�״�������߼�
-			CBuddyChatDlg* lpBuddyChatDlg = new CBuddyChatDlg;
-			if (lpBuddyChatDlg != NULL)
-			{
-				long nLastWidth = m_FMGClient.m_UserConfig.GetChatDlgWidth();
-				long nLastHeight = m_FMGClient.m_UserConfig.GetChatDlgHeight();
-				lpBuddyChatDlg->m_lpFMGClient = &m_FMGClient;
-				lpBuddyChatDlg->m_lpFaceList = &m_FaceList;
-				lpBuddyChatDlg->m_lpCascadeWinManager = &m_CascadeWinManager;
-				lpBuddyChatDlg->m_hMainDlg = m_hWnd;
-				lpBuddyChatDlg->m_nUTalkUin = nUTalkUin;
+    if (bShow)
+    {
+        std::map<UINT, CBuddyChatDlg*>::iterator iter;
+        iter = m_mapBuddyChatDlg.find(nUTalkUin);
+        if (iter != m_mapBuddyChatDlg.end())
+        {
+            CBuddyChatDlg* lpBuddyChatDlg = iter->second;
+            if (lpBuddyChatDlg != NULL)
+            {
+                if (!lpBuddyChatDlg->IsWindow())
+                {
+                    // DuiFrameWindow（CWindowImpl）需显式给出窗口风格，
+                    // 否则得到 style=0 的不可用窗口；Create 后须 InitChatUi
+                    // 重建客户区控件树。
+                    lpBuddyChatDlg->Create(NULL, CWindow::rcDefault, NULL, WS_OVERLAPPEDWINDOW);
+                    lpBuddyChatDlg->InitChatUi();
+                }
+                //lpBuddyChatDlg->ShowWindow(SW_SHOW);
+                lpBuddyChatDlg->ShowWindow(SW_RESTORE);
+                ::SetForegroundWindow(lpBuddyChatDlg->m_hWnd);
+                if (bShakeWindowMsg)
+                {
+                    ::Sleep(3000);
+                    ShakeWindow(lpBuddyChatDlg->m_hWnd, 1);
+                    lpBuddyChatDlg->OnRecvMsg(nUTalkUin, nMsgID);
+                }
+            }
+        }
+        else
+        {
+            //首次走这个逻辑
+            CBuddyChatDlg* lpBuddyChatDlg = new CBuddyChatDlg;
+            if (lpBuddyChatDlg != NULL)
+            {
+                long nLastWidth = m_FMGClient.m_UserConfig.GetChatDlgWidth();
+                long nLastHeight = m_FMGClient.m_UserConfig.GetChatDlgHeight();
+                lpBuddyChatDlg->m_lpFMGClient = &m_FMGClient;
+                lpBuddyChatDlg->m_lpFaceList = &m_FaceList;
+                lpBuddyChatDlg->m_lpCascadeWinManager = &m_CascadeWinManager;
+                lpBuddyChatDlg->m_hMainDlg = m_hWnd;
+                lpBuddyChatDlg->m_nUTalkUin = nUTalkUin;
                 lpBuddyChatDlg->m_UserId = nUTalkUin;
                 lpBuddyChatDlg->m_LoginUserId = m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID;
-				m_mapBuddyChatDlg[nUTalkUin] = lpBuddyChatDlg;
-				lpBuddyChatDlg->Create(NULL);
-				lpBuddyChatDlg->ShowWindow(SW_SHOW);
-				lpBuddyChatDlg->SetWindowPos(NULL, 0, 0, nLastWidth, nLastHeight, SWP_NOMOVE|SWP_NOZORDER|SWP_SHOWWINDOW);
-				SendMessage(lpBuddyChatDlg->m_hWnd, WM_SIZE, (WPARAM)SIZE_RESTORED, (LPARAM)MAKELONG(nLastWidth, nLastHeight));
-				::SetForegroundWindow(lpBuddyChatDlg->m_hWnd);
-				if(bShakeWindowMsg)
-				{
-					ShakeWindow(lpBuddyChatDlg->m_hWnd, 1);
-					lpBuddyChatDlg->OnRecvMsg(nUTalkUin, nMsgID);
-				}
-			}
-		}
-	}
-	else
-	{
-		std::map<UINT, CBuddyChatDlg*>::iterator iter;
-		iter = m_mapBuddyChatDlg.find(nUTalkUin);
-		if (iter != m_mapBuddyChatDlg.end())
-		{
-			CBuddyChatDlg* lpBuddyChatDlg = iter->second;
-			if (lpBuddyChatDlg != NULL)
-			{
-				if (lpBuddyChatDlg->IsWindow())
-				{
-					lpBuddyChatDlg->DestroyWindow();
-					delete lpBuddyChatDlg;
-				}
-				
-			}
-			m_mapBuddyChatDlg.erase(iter);
-		}
-		
-	}
+                m_mapBuddyChatDlg[nUTalkUin] = lpBuddyChatDlg;
+                lpBuddyChatDlg->Create(NULL, CWindow::rcDefault, NULL, WS_OVERLAPPEDWINDOW);
+                lpBuddyChatDlg->InitChatUi();
+                lpBuddyChatDlg->ShowWindow(SW_SHOW);
+                lpBuddyChatDlg->SetWindowPos(NULL, 0, 0, nLastWidth, nLastHeight, SWP_NOMOVE | SWP_NOZORDER | SWP_SHOWWINDOW);
+                SendMessage(lpBuddyChatDlg->m_hWnd, WM_SIZE, (WPARAM)SIZE_RESTORED, (LPARAM)MAKELONG(nLastWidth, nLastHeight));
+                ::SetForegroundWindow(lpBuddyChatDlg->m_hWnd);
+                if (bShakeWindowMsg)
+                {
+                    ShakeWindow(lpBuddyChatDlg->m_hWnd, 1);
+                    lpBuddyChatDlg->OnRecvMsg(nUTalkUin, nMsgID);
+                }
+            }
+        }
+    }
+    else
+    {
+        std::map<UINT, CBuddyChatDlg*>::iterator iter;
+        iter = m_mapBuddyChatDlg.find(nUTalkUin);
+        if (iter != m_mapBuddyChatDlg.end())
+        {
+            CBuddyChatDlg* lpBuddyChatDlg = iter->second;
+            if (lpBuddyChatDlg != NULL)
+            {
+                if (lpBuddyChatDlg->IsWindow())
+                {
+                    lpBuddyChatDlg->DestroyWindow();
+                    delete lpBuddyChatDlg;
+                }
+
+            }
+            m_mapBuddyChatDlg.erase(iter);
+        }
+
+    }
 }
 
 void CMainDlg::ShowGroupChatDlg(UINT nGroupCode, BOOL bShow)
 {
-	if (nGroupCode == 0)
-		return;
+    if (nGroupCode == 0)
+        return;
 
-	if (bShow)
-	{
-		std::map<UINT, CGroupChatDlg*>::iterator iter;
-		iter = m_mapGroupChatDlg.find(nGroupCode);
-		if (iter != m_mapGroupChatDlg.end())
-		{
-			CGroupChatDlg* lpGroupChatDlg = iter->second;
-			if (lpGroupChatDlg != NULL)
-			{
-				if (!lpGroupChatDlg->IsWindow())
-					lpGroupChatDlg->Create(NULL);
-				lpGroupChatDlg->ShowWindow(SW_RESTORE);
-				::SetForegroundWindow(lpGroupChatDlg->m_hWnd);
-			}
-		}
-		else
-		{
-			CGroupChatDlg* lpGroupChatDlg = new CGroupChatDlg;
-			if (lpGroupChatDlg != NULL)
-			{
-				long nLastWidth = m_FMGClient.m_UserConfig.GetGroupDlgWidth();
-				long nLastHeight = m_FMGClient.m_UserConfig.GetGroupDlgHeight();
-				lpGroupChatDlg->m_lpFMGClient = &m_FMGClient;
-				lpGroupChatDlg->m_lpFaceList = &m_FaceList;
-				lpGroupChatDlg->m_lpCascadeWinManager = &m_CascadeWinManager;
-				lpGroupChatDlg->m_hMainDlg = m_hWnd;
-				lpGroupChatDlg->m_nGroupCode = nGroupCode;
-				m_mapGroupChatDlg[nGroupCode] = lpGroupChatDlg;
-				lpGroupChatDlg->Create(NULL);
-				lpGroupChatDlg->ShowWindow(SW_SHOW);
-				lpGroupChatDlg->SetWindowPos(NULL, 0, 0, nLastWidth, nLastHeight, SWP_NOMOVE|SWP_NOZORDER|SWP_SHOWWINDOW);
-				SendMessage(lpGroupChatDlg->m_hWnd, WM_SIZE, (WPARAM)SIZE_RESTORED, (LPARAM)MAKELONG(nLastWidth, nLastHeight));
-				::SetForegroundWindow(lpGroupChatDlg->m_hWnd);
-			}
-		}
-	}
-	else
-	{
-		std::map<UINT, CGroupChatDlg*>::iterator iter;
-		iter = m_mapGroupChatDlg.find(nGroupCode);
-		if (iter != m_mapGroupChatDlg.end())
-		{
-			CGroupChatDlg* lpGroupChatDlg = iter->second;
-			if (lpGroupChatDlg != NULL)
-			{
-				if (lpGroupChatDlg->IsWindow())
-					lpGroupChatDlg->DestroyWindow();
-				delete lpGroupChatDlg;
-			}
-			m_mapGroupChatDlg.erase(iter);
-		}
-	}
+    if (bShow)
+    {
+        std::map<UINT, CGroupChatDlg*>::iterator iter;
+        iter = m_mapGroupChatDlg.find(nGroupCode);
+        if (iter != m_mapGroupChatDlg.end())
+        {
+            CGroupChatDlg* lpGroupChatDlg = iter->second;
+            if (lpGroupChatDlg != NULL)
+            {
+                if (!lpGroupChatDlg->IsWindow())
+                {
+                    lpGroupChatDlg->Create(NULL, CWindow::rcDefault, NULL, WS_OVERLAPPEDWINDOW);
+                    lpGroupChatDlg->InitChatUi();
+                }
+                lpGroupChatDlg->ShowWindow(SW_RESTORE);
+                ::SetForegroundWindow(lpGroupChatDlg->m_hWnd);
+            }
+        }
+        else
+        {
+            CGroupChatDlg* lpGroupChatDlg = new CGroupChatDlg;
+            if (lpGroupChatDlg != NULL)
+            {
+                long nLastWidth = m_FMGClient.m_UserConfig.GetGroupDlgWidth();
+                long nLastHeight = m_FMGClient.m_UserConfig.GetGroupDlgHeight();
+                lpGroupChatDlg->m_lpFMGClient = &m_FMGClient;
+                lpGroupChatDlg->m_lpFaceList = &m_FaceList;
+                lpGroupChatDlg->m_lpCascadeWinManager = &m_CascadeWinManager;
+                lpGroupChatDlg->m_hMainDlg = m_hWnd;
+                lpGroupChatDlg->m_nGroupCode = nGroupCode;
+                m_mapGroupChatDlg[nGroupCode] = lpGroupChatDlg;
+                lpGroupChatDlg->Create(NULL, CWindow::rcDefault, NULL, WS_OVERLAPPEDWINDOW);
+                lpGroupChatDlg->InitChatUi();
+                lpGroupChatDlg->ShowWindow(SW_SHOW);
+                lpGroupChatDlg->SetWindowPos(NULL, 0, 0, nLastWidth, nLastHeight, SWP_NOMOVE | SWP_NOZORDER | SWP_SHOWWINDOW);
+                SendMessage(lpGroupChatDlg->m_hWnd, WM_SIZE, (WPARAM)SIZE_RESTORED, (LPARAM)MAKELONG(nLastWidth, nLastHeight));
+                ::SetForegroundWindow(lpGroupChatDlg->m_hWnd);
+            }
+        }
+    }
+    else
+    {
+        std::map<UINT, CGroupChatDlg*>::iterator iter;
+        iter = m_mapGroupChatDlg.find(nGroupCode);
+        if (iter != m_mapGroupChatDlg.end())
+        {
+            CGroupChatDlg* lpGroupChatDlg = iter->second;
+            if (lpGroupChatDlg != NULL)
+            {
+                if (lpGroupChatDlg->IsWindow())
+                    lpGroupChatDlg->DestroyWindow();
+                delete lpGroupChatDlg;
+            }
+            m_mapGroupChatDlg.erase(iter);
+        }
+    }
 }
 
 void CMainDlg::ShowSessChatDlg(UINT nGroupCode, UINT nUTalkUin, BOOL bShow)
 {
-	if (nUTalkUin == 0)
-		return;
+    if (nUTalkUin == 0)
+        return;
 
-	if (bShow)
-	{
-		std::map<UINT, CSessChatDlg*>::iterator iter;
-		iter = m_mapSessChatDlg.find(nUTalkUin);
-		if (iter != m_mapSessChatDlg.end())
-		{
-			CSessChatDlg* lpSessChatDlg = iter->second;
-			if (lpSessChatDlg != NULL)
-			{
-				if (!lpSessChatDlg->IsWindow())
-					lpSessChatDlg->Create(NULL);
-				lpSessChatDlg->ShowWindow(SW_SHOW);
-				::SetForegroundWindow(lpSessChatDlg->m_hWnd);
-			}
-		}
-		else
-		{
-			CSessChatDlg* lpSessChatDlg = new CSessChatDlg;
-			if (lpSessChatDlg != NULL)
-			{
-				lpSessChatDlg->m_lpFMGClient = &m_FMGClient;
-				lpSessChatDlg->m_lpFaceList = &m_FaceList;
-				lpSessChatDlg->m_lpCascadeWinManager = &m_CascadeWinManager;
-				lpSessChatDlg->m_hMainDlg = m_hWnd;
-				lpSessChatDlg->m_nGroupCode = nGroupCode;
-				lpSessChatDlg->m_nUTalkUin = nUTalkUin;
-				m_mapSessChatDlg[nUTalkUin] = lpSessChatDlg;
-				lpSessChatDlg->Create(NULL);
-				lpSessChatDlg->ShowWindow(SW_SHOW);
-				::SetForegroundWindow(lpSessChatDlg->m_hWnd);
-			}
-		}
-	}
-	else
-	{
-		std::map<UINT, CSessChatDlg*>::iterator iter;
-		iter = m_mapSessChatDlg.find(nUTalkUin);
-		if (iter != m_mapSessChatDlg.end())
-		{
-			CSessChatDlg* lpSessChatDlg = iter->second;
-			if (lpSessChatDlg != NULL)
-			{
-				if (lpSessChatDlg->IsWindow())
-					lpSessChatDlg->DestroyWindow();
-				delete lpSessChatDlg;
-			}
-			m_mapSessChatDlg.erase(iter);
-		}
-	}
+    if (bShow)
+    {
+        std::map<UINT, CSessChatDlg*>::iterator iter;
+        iter = m_mapSessChatDlg.find(nUTalkUin);
+        if (iter != m_mapSessChatDlg.end())
+        {
+            CSessChatDlg* lpSessChatDlg = iter->second;
+            if (lpSessChatDlg != NULL)
+            {
+                if (!lpSessChatDlg->IsWindow())
+                    lpSessChatDlg->Create(NULL);
+                lpSessChatDlg->ShowWindow(SW_SHOW);
+                ::SetForegroundWindow(lpSessChatDlg->m_hWnd);
+            }
+        }
+        else
+        {
+            CSessChatDlg* lpSessChatDlg = new CSessChatDlg;
+            if (lpSessChatDlg != NULL)
+            {
+                lpSessChatDlg->m_lpFMGClient = &m_FMGClient;
+                lpSessChatDlg->m_lpFaceList = &m_FaceList;
+                lpSessChatDlg->m_lpCascadeWinManager = &m_CascadeWinManager;
+                lpSessChatDlg->m_hMainDlg = m_hWnd;
+                lpSessChatDlg->m_nGroupCode = nGroupCode;
+                lpSessChatDlg->m_nUTalkUin = nUTalkUin;
+                m_mapSessChatDlg[nUTalkUin] = lpSessChatDlg;
+                lpSessChatDlg->Create(NULL);
+                lpSessChatDlg->ShowWindow(SW_SHOW);
+                ::SetForegroundWindow(lpSessChatDlg->m_hWnd);
+            }
+        }
+    }
+    else
+    {
+        std::map<UINT, CSessChatDlg*>::iterator iter;
+        iter = m_mapSessChatDlg.find(nUTalkUin);
+        if (iter != m_mapSessChatDlg.end())
+        {
+            CSessChatDlg* lpSessChatDlg = iter->second;
+            if (lpSessChatDlg != NULL)
+            {
+                if (lpSessChatDlg->IsWindow())
+                    lpSessChatDlg->DestroyWindow();
+                delete lpSessChatDlg;
+            }
+            m_mapSessChatDlg.erase(iter);
+        }
+    }
 }
 
 void CMainDlg::ShowSysGroupChatDlg(UINT nGroupCode, BOOL bShow)
 {
-	/*CString strText, strGroupName, strAdminName, strAdminUin, strMsg;
-	UINT nGroupNumber;
+    /*CString strText, strGroupName, strAdminName, strAdminUin, strMsg;
+    UINT nGroupNumber;
 
-	CGroupList* lpGroupList = m_FMGClient.GetGroupList();
-	CMessageList* lpMsgList = m_FMGClient.GetMessageList();
-	if (NULL == lpGroupList || NULL == lpMsgList)
-		return;
+    CGroupList* lpGroupList = m_FMGClient.GetGroupList();
+    CMessageList* lpMsgList = m_FMGClient.GetMessageList();
+    if (NULL == lpGroupList || NULL == lpMsgList)
+        return;
 
-	CGroupInfo* lpGroupInfo = lpGroupList->GetGroupByCode(nGroupCode);
-	CMessageSender* lpMsgSender = lpMsgList->GetMsgSender(long_SYSGROUP, nGroupCode);
-	if (NULL == lpMsgSender)
-		return;
+    CGroupInfo* lpGroupInfo = lpGroupList->GetGroupByCode(nGroupCode);
+    CMessageSender* lpMsgSender = lpMsgList->GetMsgSender(long_SYSGROUP, nGroupCode);
+    if (NULL == lpMsgSender)
+        return;
 
-	if (lpGroupInfo != NULL)
-		strGroupName = lpGroupInfo->m_strName.c_str();
+    if (lpGroupInfo != NULL)
+        strGroupName = lpGroupInfo->m_strName.c_str();
 
-	int nMsgCnt = lpMsgSender->GetMsgCount();
-	for (int i = 0; i < nMsgCnt; i++)
-	{
-		CSysGroupMessage* lpSysGroupMsg = lpMsgSender->GetSysGroupMsg(i);
-		if (lpSysGroupMsg != NULL)
-		{
-			strAdminName = lpSysGroupMsg->m_strAdminNickName.c_str();
-			strAdminUin = lpSysGroupMsg->m_strAdminUin.c_str();
-			strMsg = lpSysGroupMsg->m_strMsg.c_str();
-			nGroupNumber = lpSysGroupMsg->m_nGroupNumber;
+    int nMsgCnt = lpMsgSender->GetMsgCount();
+    for (int i = 0; i < nMsgCnt; i++)
+    {
+        CSysGroupMessage* lpSysGroupMsg = lpMsgSender->GetSysGroupMsg(i);
+        if (lpSysGroupMsg != NULL)
+        {
+            strAdminName = lpSysGroupMsg->m_strAdminNickName.c_str();
+            strAdminUin = lpSysGroupMsg->m_strAdminUin.c_str();
+            strMsg = lpSysGroupMsg->m_strMsg.c_str();
+            nGroupNumber = lpSysGroupMsg->m_nGroupNumber;
 
-			if (lpSysGroupMsg->m_strSubType == _T("group_request_join_agree"))
-			{
-				LPCTSTR lpFmt = _T("����Ա��ͬ��������Ⱥ%s(%u)");
-				strText.Format(lpFmt, strGroupName, nGroupNumber);
-				MessageBox(strText, _T("��ʾ"), MB_OK);
-			}
-			else if (lpSysGroupMsg->m_strSubType == _T("group_request_join_deny"))
-			{
-				LPCTSTR lpFmt = _T("����Ա�Ѿܾ�������Ⱥ%s(%u)���ܾ����ɣ�%s");
-				strText.Format(lpFmt, strGroupName, nGroupNumber, strMsg);
-				MessageBox(strText, _T("��ʾ"), MB_OK);
-			}
-			else if (lpSysGroupMsg->m_strSubType == _T("group_leave"))
-			{
-				LPCTSTR lpFmt = _T("%s(%u)����Ա%s(%s)�ѽ����Ƴ�����Ⱥ��");
-				strText.Format(lpFmt, strGroupName, nGroupNumber, strAdminName, strAdminUin);
-				MessageBox(strText, _T("��ʾ"), MB_OK);
-			}
-		}
-	}*/
-	//lpMsgList->DelMsgSender(long_SYSGROUP, nGroupCode);
-	//OnDelMsgSender(NULL, long_SYSGROUP, nGroupCode);
+            if (lpSysGroupMsg->m_strSubType == _T("group_request_join_agree"))
+            {
+                LPCTSTR lpFmt = _T("管理员已同意您加入群%s(%u)");
+                strText.Format(lpFmt, strGroupName, nGroupNumber);
+                MessageBox(strText, _T("提示"), MB_OK);
+            }
+            else if (lpSysGroupMsg->m_strSubType == _T("group_request_join_deny"))
+            {
+                LPCTSTR lpFmt = _T("管理员已拒绝您加入群%s(%u)。拒绝理由：%s");
+                strText.Format(lpFmt, strGroupName, nGroupNumber, strMsg);
+                MessageBox(strText, _T("提示"), MB_OK);
+            }
+            else if (lpSysGroupMsg->m_strSubType == _T("group_leave"))
+            {
+                LPCTSTR lpFmt = _T("%s(%u)管理员%s(%s)已将您移除出该群。");
+                strText.Format(lpFmt, strGroupName, nGroupNumber, strAdminName, strAdminUin);
+                MessageBox(strText, _T("提示"), MB_OK);
+            }
+        }
+    }*/
+    //lpMsgList->DelMsgSender(long_SYSGROUP, nGroupCode);
+    //OnDelMsgSender(NULL, long_SYSGROUP, nGroupCode);
 }
 
 void CMainDlg::ShowUserInfoDlg(UINT nUTalkUin, BOOL bShow)
 {
-	if (nUTalkUin == 0)
-	{
-		return;
-	}
+    if (nUTalkUin == 0)
+    {
+        return;
+    }
 
-	if (!bShow)
-	{
-		DestroyWindow();
-	}
+    if (!bShow)
+    {
+        DestroyWindow();
+    }
 }
 
 void CMainDlg::ShowBuddyInfoDlg(UINT nUTalkUin, BOOL bShow)
 {
-	if (nUTalkUin == 0)
-		return;
+    if (nUTalkUin == 0)
+        return;
 
-	if (bShow)
-	{
-		std::map<UINT, CBuddyInfoDlg*>::iterator iter;
-		iter = m_mapBuddyInfoDlg.find(nUTalkUin);
-		if (iter != m_mapBuddyInfoDlg.end())
-		{
-			CBuddyInfoDlg* lpBuddyInfoDlg = iter->second;
-			if (lpBuddyInfoDlg != NULL)
-			{
-				if (!lpBuddyInfoDlg->IsWindow())
-					lpBuddyInfoDlg->Create(NULL);
-				lpBuddyInfoDlg->ShowWindow(SW_SHOW);
-				::SetForegroundWindow(lpBuddyInfoDlg->m_hWnd);
-			}
-		}
-		else
-		{
-			CBuddyInfoDlg* lpBuddyInfoDlg = new CBuddyInfoDlg;
-			// �������϶Ի���
-			if (nUTalkUin != m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID)
-			{
-				tstring strFriendNickName(m_FMGClient.m_UserMgr.GetNickName(nUTalkUin));
-				strFriendNickName += _T("������");
-				lpBuddyInfoDlg->SetWindowTitle(strFriendNickName.c_str());
-			}
+    if (bShow)
+    {
+        std::map<UINT, CBuddyInfoDlg*>::iterator iter;
+        iter = m_mapBuddyInfoDlg.find(nUTalkUin);
+        if (iter != m_mapBuddyInfoDlg.end())
+        {
+            CBuddyInfoDlg* lpBuddyInfoDlg = iter->second;
+            if (lpBuddyInfoDlg != NULL)
+            {
+                if (!lpBuddyInfoDlg->IsWindow())
+                    lpBuddyInfoDlg->Create(NULL);
+                lpBuddyInfoDlg->ShowWindow(SW_SHOW);
+                ::SetForegroundWindow(lpBuddyInfoDlg->m_hWnd);
+            }
+        }
+        else
+        {
+            CBuddyInfoDlg* lpBuddyInfoDlg = new CBuddyInfoDlg;
+            // 好友资料对话框
+            if (nUTalkUin != m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID)
+            {
+                tstring strFriendNickName(m_FMGClient.m_UserMgr.GetNickName(nUTalkUin));
+                strFriendNickName += _T("的资料");
+                lpBuddyInfoDlg->SetWindowTitle(strFriendNickName.c_str());
+            }
 
-			if (lpBuddyInfoDlg != NULL)
-			{
-				m_mapBuddyInfoDlg[nUTalkUin] = lpBuddyInfoDlg;
-				lpBuddyInfoDlg->m_lpFMGClient = &m_FMGClient;
-				lpBuddyInfoDlg->m_nUTalkUin = nUTalkUin;
-				lpBuddyInfoDlg->Create(NULL);
-				lpBuddyInfoDlg->ShowWindow(SW_SHOW);
-				::SetForegroundWindow(lpBuddyInfoDlg->m_hWnd);
-			}
-		}
-	}
-	else
-	{
-		std::map<UINT, CBuddyInfoDlg*>::iterator iter;
-		iter = m_mapBuddyInfoDlg.find(nUTalkUin);
-		if (iter != m_mapBuddyInfoDlg.end())
-		{
-			CBuddyInfoDlg* lpBuddyInfoDlg = iter->second;
-			if (lpBuddyInfoDlg != NULL)
-			{
-				if (lpBuddyInfoDlg->IsWindow())
-					lpBuddyInfoDlg->DestroyWindow();
-				delete lpBuddyInfoDlg;
-			}
-			m_mapBuddyInfoDlg.erase(iter);
-		}
-	}
+            if (lpBuddyInfoDlg != NULL)
+            {
+                m_mapBuddyInfoDlg[nUTalkUin] = lpBuddyInfoDlg;
+                lpBuddyInfoDlg->m_lpFMGClient = &m_FMGClient;
+                lpBuddyInfoDlg->m_nUTalkUin = nUTalkUin;
+                lpBuddyInfoDlg->Create(NULL);
+                lpBuddyInfoDlg->ShowWindow(SW_SHOW);
+                ::SetForegroundWindow(lpBuddyInfoDlg->m_hWnd);
+            }
+        }
+    }
+    else
+    {
+        std::map<UINT, CBuddyInfoDlg*>::iterator iter;
+        iter = m_mapBuddyInfoDlg.find(nUTalkUin);
+        if (iter != m_mapBuddyInfoDlg.end())
+        {
+            CBuddyInfoDlg* lpBuddyInfoDlg = iter->second;
+            if (lpBuddyInfoDlg != NULL)
+            {
+                if (lpBuddyInfoDlg->IsWindow())
+                    lpBuddyInfoDlg->DestroyWindow();
+                delete lpBuddyInfoDlg;
+            }
+            m_mapBuddyInfoDlg.erase(iter);
+        }
+    }
 }
 
 void CMainDlg::ShowGMemberInfoDlg(UINT nGroupCode, UINT nUTalkUin, BOOL bShow)
 {
-	if (0 == nGroupCode || 0 == nUTalkUin)
-		return;
+    if (0 == nGroupCode || 0 == nUTalkUin)
+        return;
 
-	if (bShow)
-	{
-		CGMemberInfoMapKey key;
-		key.m_nGroupCode = nGroupCode;
-		key.m_nUTalkUin = nUTalkUin;
-		std::map<CGMemberInfoMapKey, CBuddyInfoDlg*>::iterator iter;
-		iter = m_mapGMemberInfoDlg.find(key);
-		if (iter != m_mapGMemberInfoDlg.end())
-		{
-			CBuddyInfoDlg* lpBuddyInfoDlg = iter->second;
-			if (lpBuddyInfoDlg != NULL)
-			{
-				if (!lpBuddyInfoDlg->IsWindow())
-					lpBuddyInfoDlg->Create(NULL);
-				lpBuddyInfoDlg->ShowWindow(SW_SHOW);
-				::SetForegroundWindow(lpBuddyInfoDlg->m_hWnd);
-			}
-		}
-		else
-		{
-			CBuddyInfoDlg* lpBuddyInfoDlg = new CBuddyInfoDlg;
-			if (lpBuddyInfoDlg != NULL)
-			{
-				m_mapGMemberInfoDlg[key] = lpBuddyInfoDlg;
-				lpBuddyInfoDlg->m_lpFMGClient = &m_FMGClient;
-				//lpBuddyInfoDlg->m_hMainDlg = m_hWnd;
-				lpBuddyInfoDlg->m_nUTalkUin = nUTalkUin;
-				//lpBuddyInfoDlg->m_bIsGMember = TRUE;
-				//lpBuddyInfoDlg->m_nGroupCode = nGroupCode;
-				lpBuddyInfoDlg->Create(NULL);
-				lpBuddyInfoDlg->ShowWindow(SW_SHOW);
-				::SetForegroundWindow(lpBuddyInfoDlg->m_hWnd);
-			}
-		}
-	}
-	else
-	{
-		CGMemberInfoMapKey key;
-		key.m_nGroupCode = nGroupCode;
-		key.m_nUTalkUin = nUTalkUin;
-		std::map<CGMemberInfoMapKey, CBuddyInfoDlg*>::iterator iter;
-		iter = m_mapGMemberInfoDlg.find(key);
-		if (iter != m_mapGMemberInfoDlg.end())
-		{
-			CBuddyInfoDlg* lpBuddyInfoDlg = iter->second;
-			if (lpBuddyInfoDlg != NULL)
-			{
-				if (lpBuddyInfoDlg->IsWindow())
-					lpBuddyInfoDlg->DestroyWindow();
-				delete lpBuddyInfoDlg;
-			}
-			m_mapGMemberInfoDlg.erase(iter);
-		}
-	}
+    if (bShow)
+    {
+        CGMemberInfoMapKey key;
+        key.m_nGroupCode = nGroupCode;
+        key.m_nUTalkUin = nUTalkUin;
+        std::map<CGMemberInfoMapKey, CBuddyInfoDlg*>::iterator iter;
+        iter = m_mapGMemberInfoDlg.find(key);
+        if (iter != m_mapGMemberInfoDlg.end())
+        {
+            CBuddyInfoDlg* lpBuddyInfoDlg = iter->second;
+            if (lpBuddyInfoDlg != NULL)
+            {
+                if (!lpBuddyInfoDlg->IsWindow())
+                    lpBuddyInfoDlg->Create(NULL);
+                lpBuddyInfoDlg->ShowWindow(SW_SHOW);
+                ::SetForegroundWindow(lpBuddyInfoDlg->m_hWnd);
+            }
+        }
+        else
+        {
+            CBuddyInfoDlg* lpBuddyInfoDlg = new CBuddyInfoDlg;
+            if (lpBuddyInfoDlg != NULL)
+            {
+                m_mapGMemberInfoDlg[key] = lpBuddyInfoDlg;
+                lpBuddyInfoDlg->m_lpFMGClient = &m_FMGClient;
+                //lpBuddyInfoDlg->m_hMainDlg = m_hWnd;
+                lpBuddyInfoDlg->m_nUTalkUin = nUTalkUin;
+                //lpBuddyInfoDlg->m_bIsGMember = TRUE;
+                //lpBuddyInfoDlg->m_nGroupCode = nGroupCode;
+                lpBuddyInfoDlg->Create(NULL);
+                lpBuddyInfoDlg->ShowWindow(SW_SHOW);
+                ::SetForegroundWindow(lpBuddyInfoDlg->m_hWnd);
+            }
+        }
+    }
+    else
+    {
+        CGMemberInfoMapKey key;
+        key.m_nGroupCode = nGroupCode;
+        key.m_nUTalkUin = nUTalkUin;
+        std::map<CGMemberInfoMapKey, CBuddyInfoDlg*>::iterator iter;
+        iter = m_mapGMemberInfoDlg.find(key);
+        if (iter != m_mapGMemberInfoDlg.end())
+        {
+            CBuddyInfoDlg* lpBuddyInfoDlg = iter->second;
+            if (lpBuddyInfoDlg != NULL)
+            {
+                if (lpBuddyInfoDlg->IsWindow())
+                    lpBuddyInfoDlg->DestroyWindow();
+                delete lpBuddyInfoDlg;
+            }
+            m_mapGMemberInfoDlg.erase(iter);
+        }
+    }
 }
 
 void CMainDlg::ShowGroupInfoDlg(UINT nGroupCode, BOOL bShow)
 {
-	if (0 == nGroupCode)
-		return;
+    if (0 == nGroupCode)
+        return;
 
-	if (bShow)
-	{
-		std::map<UINT, CGroupInfoDlg*>::iterator iter;
-		iter = m_mapGroupInfoDlg.find(nGroupCode);
-		if (iter != m_mapGroupInfoDlg.end())
-		{
-			CGroupInfoDlg* lpGroupInfoDlg = iter->second;
-			if (lpGroupInfoDlg != NULL)
-			{
-				if (!lpGroupInfoDlg->IsWindow())
-					lpGroupInfoDlg->Create(NULL);
-				lpGroupInfoDlg->ShowWindow(SW_SHOW);
-				::SetForegroundWindow(lpGroupInfoDlg->m_hWnd);
-			}
-		}
-		else
-		{
-			CGroupInfoDlg* lpGroupInfoDlg = new CGroupInfoDlg;
-			if (lpGroupInfoDlg != NULL)
-			{
-				m_mapGroupInfoDlg[nGroupCode] = lpGroupInfoDlg;
-				lpGroupInfoDlg->m_lpFMGClient = &m_FMGClient;
-				lpGroupInfoDlg->m_hMainDlg = m_hWnd;
-				lpGroupInfoDlg->m_nGroupCode = nGroupCode;
-				lpGroupInfoDlg->Create(NULL);
-				lpGroupInfoDlg->ShowWindow(SW_SHOW);
-				::SetForegroundWindow(lpGroupInfoDlg->m_hWnd);
-			}
-		}
-	}
-	else
-	{
-		std::map<UINT, CGroupInfoDlg*>::iterator iter;
-		iter = m_mapGroupInfoDlg.find(nGroupCode);
-		if (iter != m_mapGroupInfoDlg.end())
-		{
-			CGroupInfoDlg* lpGroupInfoDlg = iter->second;
-			if (lpGroupInfoDlg != NULL)
-			{
-				if (lpGroupInfoDlg->IsWindow())
-					lpGroupInfoDlg->DestroyWindow();
-				delete lpGroupInfoDlg;
-			}
-			m_mapGroupInfoDlg.erase(iter);
-		}
-	}
+    if (bShow)
+    {
+        std::map<UINT, CGroupInfoDlg*>::iterator iter;
+        iter = m_mapGroupInfoDlg.find(nGroupCode);
+        if (iter != m_mapGroupInfoDlg.end())
+        {
+            CGroupInfoDlg* lpGroupInfoDlg = iter->second;
+            if (lpGroupInfoDlg != NULL)
+            {
+                if (!lpGroupInfoDlg->IsWindow())
+                    lpGroupInfoDlg->Create(NULL);
+                lpGroupInfoDlg->ShowWindow(SW_SHOW);
+                ::SetForegroundWindow(lpGroupInfoDlg->m_hWnd);
+            }
+        }
+        else
+        {
+            CGroupInfoDlg* lpGroupInfoDlg = new CGroupInfoDlg;
+            if (lpGroupInfoDlg != NULL)
+            {
+                m_mapGroupInfoDlg[nGroupCode] = lpGroupInfoDlg;
+                lpGroupInfoDlg->m_lpFMGClient = &m_FMGClient;
+                lpGroupInfoDlg->m_hMainDlg = m_hWnd;
+                lpGroupInfoDlg->m_nGroupCode = nGroupCode;
+                lpGroupInfoDlg->Create(NULL);
+                lpGroupInfoDlg->ShowWindow(SW_SHOW);
+                ::SetForegroundWindow(lpGroupInfoDlg->m_hWnd);
+            }
+        }
+    }
+    else
+    {
+        std::map<UINT, CGroupInfoDlg*>::iterator iter;
+        iter = m_mapGroupInfoDlg.find(nGroupCode);
+        if (iter != m_mapGroupInfoDlg.end())
+        {
+            CGroupInfoDlg* lpGroupInfoDlg = iter->second;
+            if (lpGroupInfoDlg != NULL)
+            {
+                if (lpGroupInfoDlg->IsWindow())
+                    lpGroupInfoDlg->DestroyWindow();
+                delete lpGroupInfoDlg;
+            }
+            m_mapGroupInfoDlg.erase(iter);
+        }
+    }
 }
 
-// ֪ͨ�������촰�ڸ���
+// 通知好友聊天窗口更新
 void CMainDlg::NotifyBuddyChatDlg(UINT nUTalkUin, UINT uMsg)
 {
-	std::map<UINT, CBuddyChatDlg*>::iterator iter;
-	iter = m_mapBuddyChatDlg.find(nUTalkUin);
-	if (iter != m_mapBuddyChatDlg.end())
-	{
-		CBuddyChatDlg* lpBuddyChatDlg = iter->second;
-		if (lpBuddyChatDlg != NULL && lpBuddyChatDlg->IsWindow())
-		{
-			switch (uMsg)
-			{
-			case FMG_MSG_UPDATE_BUDDY_NUMBER:
-				lpBuddyChatDlg->OnUpdateBuddyNumber();
-				break;
+    std::map<UINT, CBuddyChatDlg*>::iterator iter;
+    iter = m_mapBuddyChatDlg.find(nUTalkUin);
+    if (iter != m_mapBuddyChatDlg.end())
+    {
+        CBuddyChatDlg* lpBuddyChatDlg = iter->second;
+        if (lpBuddyChatDlg != NULL && lpBuddyChatDlg->IsWindow())
+        {
+            switch (uMsg)
+            {
+            case FMG_MSG_UPDATE_BUDDY_NUMBER:
+                lpBuddyChatDlg->OnUpdateBuddyNumber();
+                break;
 
-			case FMG_MSG_UPDATE_BUDDY_SIGN:
-				lpBuddyChatDlg->OnUpdateBuddySign();
-				break;
+            case FMG_MSG_UPDATE_BUDDY_SIGN:
+                lpBuddyChatDlg->OnUpdateBuddySign();
+                break;
 
-			case FMG_MSG_UPDATE_BUDDY_HEADPIC:
-				lpBuddyChatDlg->OnUpdateBuddyHeadPic();
-				break;
-			}
-		}
-	}
+            case FMG_MSG_UPDATE_BUDDY_HEADPIC:
+                lpBuddyChatDlg->OnUpdateBuddyHeadPic();
+                break;
+            }
+        }
+    }
 }
 
-// ֪ͨȺ���촰�ڸ���
+// 通知群聊天窗口更新
 void CMainDlg::NotifyGroupChatDlg(UINT nGroupCode, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-	std::map<UINT, CGroupChatDlg*>::iterator iter;
-	iter = m_mapGroupChatDlg.find(nGroupCode);
-	if (iter != m_mapGroupChatDlg.end())
-	{
-		CGroupChatDlg* lpGroupChatDlg = iter->second;
-		if (lpGroupChatDlg != NULL && lpGroupChatDlg->IsWindow())
-		{
-			switch (uMsg)
-			{
-			case FMG_MSG_UPDATE_GROUP_INFO:
-				lpGroupChatDlg->OnUpdateGroupInfo();
-				break;
+    std::map<UINT, CGroupChatDlg*>::iterator iter;
+    iter = m_mapGroupChatDlg.find(nGroupCode);
+    if (iter != m_mapGroupChatDlg.end())
+    {
+        CGroupChatDlg* lpGroupChatDlg = iter->second;
+        if (lpGroupChatDlg != NULL && lpGroupChatDlg->IsWindow())
+        {
+            switch (uMsg)
+            {
+            case FMG_MSG_UPDATE_GROUP_INFO:
+                lpGroupChatDlg->OnUpdateGroupInfo();
+                break;
 
-			case FMG_MSG_UPDATE_GROUP_NUMBER:
-				lpGroupChatDlg->OnUpdateGroupNumber();
-				break;
+            case FMG_MSG_UPDATE_GROUP_NUMBER:
+                lpGroupChatDlg->OnUpdateGroupNumber();
+                break;
 
-			case FMG_MSG_UPDATE_GROUP_HEADPIC:
-				lpGroupChatDlg->OnUpdateGroupHeadPic();
-				break;
+            case FMG_MSG_UPDATE_GROUP_HEADPIC:
+                lpGroupChatDlg->OnUpdateGroupHeadPic();
+                break;
 
-			case FMG_MSG_UPDATE_GMEMBER_NUMBER:
-				lpGroupChatDlg->OnUpdateGMemberNumber(wParam, lParam);
-				break;
+            case FMG_MSG_UPDATE_GMEMBER_NUMBER:
+                lpGroupChatDlg->OnUpdateGMemberNumber(wParam, lParam);
+                break;
 
-			case FMG_MSG_UPDATE_GMEMBER_HEADPIC:
-				lpGroupChatDlg->OnUpdateGMemberHeadPic(wParam, lParam);
-				break;
-			}
-		}
-	}
+            case FMG_MSG_UPDATE_GMEMBER_HEADPIC:
+                lpGroupChatDlg->OnUpdateGMemberHeadPic(wParam, lParam);
+                break;
+            }
+        }
+    }
 }
 
-// ֪ͨ��ʱ�Ự���촰�ڸ���
+// 通知临时会话聊天窗口更新
 void CMainDlg::NotifySessChatDlg(UINT nUTalkUin, UINT uMsg)
 {
-	std::map<UINT, CSessChatDlg*>::iterator iter;
-	iter = m_mapSessChatDlg.find(nUTalkUin);
-	if (iter != m_mapSessChatDlg.end())
-	{
-		CSessChatDlg* lpSessChatDlg = iter->second;
-		if (lpSessChatDlg != NULL && lpSessChatDlg->IsWindow())
-		{
- 			switch (uMsg)
- 			{
-			case FMG_MSG_UPDATE_GMEMBER_NUMBER:
-				lpSessChatDlg->OnUpdateGMemberNumber();
-				break;
- 			case FMG_MSG_UPDATE_GMEMBER_HEADPIC:
- 				lpSessChatDlg->OnUpdateGMemberHeadPic();
- 				break;
- 			}
-		}
-	}
+    std::map<UINT, CSessChatDlg*>::iterator iter;
+    iter = m_mapSessChatDlg.find(nUTalkUin);
+    if (iter != m_mapSessChatDlg.end())
+    {
+        CSessChatDlg* lpSessChatDlg = iter->second;
+        if (lpSessChatDlg != NULL && lpSessChatDlg->IsWindow())
+        {
+            switch (uMsg)
+            {
+            case FMG_MSG_UPDATE_GMEMBER_NUMBER:
+                lpSessChatDlg->OnUpdateGMemberNumber();
+                break;
+            case FMG_MSG_UPDATE_GMEMBER_HEADPIC:
+                lpSessChatDlg->OnUpdateGMemberHeadPic();
+                break;
+            }
+        }
+    }
 }
 
-// ֪ͨ������Ϣ���ڸ���
+// 通知好友信息窗口更新
 void CMainDlg::NotifyBuddyInfoDlg(UINT nUTalkUin, UINT uMsg)
 {
-	if(nUTalkUin == m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID)
-	{
-		if(m_LogonUserInfoDlg.IsWindow())
-			m_LogonUserInfoDlg.UpdateCtrlData();
+    if (nUTalkUin == m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID)
+    {
+        if (m_LogonUserInfoDlg.IsWindow())
+            m_LogonUserInfoDlg.UpdateCtrlData();
 
-		return;
-	}
-	
-	std::map<UINT, CBuddyInfoDlg*>::iterator iter;
-	iter = m_mapBuddyInfoDlg.find(nUTalkUin);
-	if (iter != m_mapBuddyInfoDlg.end())
-	{
-		CBuddyInfoDlg* lpBuddyInfoDlg = iter->second;
-		if (lpBuddyInfoDlg != NULL && lpBuddyInfoDlg->IsWindow())
-		{
-			switch (uMsg)
-			{
-			case FMG_MSG_UPDATE_BUDDY_INFO:
-				lpBuddyInfoDlg->UpdateCtrls();
-				break;
+        return;
+    }
 
-			case FMG_MSG_UPDATE_BUDDY_NUMBER:
-				//lpBuddyInfoDlg->OnUpdateBuddyNumber();
-				break;
+    std::map<UINT, CBuddyInfoDlg*>::iterator iter;
+    iter = m_mapBuddyInfoDlg.find(nUTalkUin);
+    if (iter != m_mapBuddyInfoDlg.end())
+    {
+        CBuddyInfoDlg* lpBuddyInfoDlg = iter->second;
+        if (lpBuddyInfoDlg != NULL && lpBuddyInfoDlg->IsWindow())
+        {
+            switch (uMsg)
+            {
+            case FMG_MSG_UPDATE_BUDDY_INFO:
+                lpBuddyInfoDlg->UpdateCtrls();
+                break;
 
-			case FMG_MSG_UPDATE_BUDDY_SIGN:
-				//lpBuddyInfoDlg->OnUpdateBuddySign();
-				break;
-			}
-		}
-	}
+            case FMG_MSG_UPDATE_BUDDY_NUMBER:
+                //lpBuddyInfoDlg->OnUpdateBuddyNumber();
+                break;
+
+            case FMG_MSG_UPDATE_BUDDY_SIGN:
+                //lpBuddyInfoDlg->OnUpdateBuddySign();
+                break;
+            }
+        }
+    }
 }
 
-// ֪ͨȺ��Ա��Ϣ���ڸ���
+// 通知群成员信息窗口更新
 void CMainDlg::NotifyGMemberInfoDlg(UINT nGroupCode, UINT nUTalkUin, UINT uMsg)
 {
-	CGMemberInfoMapKey key;
-	key.m_nGroupCode = nGroupCode;
-	key.m_nUTalkUin = nUTalkUin;
-	std::map<CGMemberInfoMapKey, CBuddyInfoDlg*>::iterator iter;
-	iter = m_mapGMemberInfoDlg.find(key);
-	if (iter != m_mapGMemberInfoDlg.end())
-	{
-		CBuddyInfoDlg* lpBuddyInfoDlg = iter->second;
-		if (lpBuddyInfoDlg != NULL && lpBuddyInfoDlg->IsWindow())
-		{
-			switch (uMsg)
-			{
-			case FMG_MSG_UPDATE_GMEMBER_INFO:
-				//lpBuddyInfoDlg->OnUpdateBuddyInfo();
-				break;
+    CGMemberInfoMapKey key;
+    key.m_nGroupCode = nGroupCode;
+    key.m_nUTalkUin = nUTalkUin;
+    std::map<CGMemberInfoMapKey, CBuddyInfoDlg*>::iterator iter;
+    iter = m_mapGMemberInfoDlg.find(key);
+    if (iter != m_mapGMemberInfoDlg.end())
+    {
+        CBuddyInfoDlg* lpBuddyInfoDlg = iter->second;
+        if (lpBuddyInfoDlg != NULL && lpBuddyInfoDlg->IsWindow())
+        {
+            switch (uMsg)
+            {
+            case FMG_MSG_UPDATE_GMEMBER_INFO:
+                //lpBuddyInfoDlg->OnUpdateBuddyInfo();
+                break;
 
-			case FMG_MSG_UPDATE_GMEMBER_NUMBER:
-				//lpBuddyInfoDlg->OnUpdateBuddyNumber();
-				break;
+            case FMG_MSG_UPDATE_GMEMBER_NUMBER:
+                //lpBuddyInfoDlg->OnUpdateBuddyNumber();
+                break;
 
-			case FMG_MSG_UPDATE_GMEMBER_SIGN:
-				//lpBuddyInfoDlg->OnUpdateBuddySign();
-				break;
-			}
-		}
-	}
+            case FMG_MSG_UPDATE_GMEMBER_SIGN:
+                //lpBuddyInfoDlg->OnUpdateBuddySign();
+                break;
+            }
+        }
+    }
 }
 
-// ֪ͨȺ��Ϣ���ڸ���
+// 通知群信息窗口更新
 void CMainDlg::NotifyGroupInfoDlg(UINT nGroupCode, UINT uMsg)
 {
-	std::map<UINT, CGroupInfoDlg*>::iterator iter;
-	iter = m_mapGroupInfoDlg.find(nGroupCode);
-	if (iter != m_mapGroupInfoDlg.end())
-	{
-		CGroupInfoDlg* lpGroupInfoDlg = iter->second;
-		if (lpGroupInfoDlg != NULL && lpGroupInfoDlg->IsWindow())
-		{
-			switch (uMsg)
-			{
-			case FMG_MSG_UPDATE_GROUP_INFO:
-				lpGroupInfoDlg->OnUpdateGroupInfo();
-				break;
+    std::map<UINT, CGroupInfoDlg*>::iterator iter;
+    iter = m_mapGroupInfoDlg.find(nGroupCode);
+    if (iter != m_mapGroupInfoDlg.end())
+    {
+        CGroupInfoDlg* lpGroupInfoDlg = iter->second;
+        if (lpGroupInfoDlg != NULL && lpGroupInfoDlg->IsWindow())
+        {
+            switch (uMsg)
+            {
+            case FMG_MSG_UPDATE_GROUP_INFO:
+                lpGroupInfoDlg->OnUpdateGroupInfo();
+                break;
 
-			case FMG_MSG_UPDATE_GROUP_NUMBER:
-				lpGroupInfoDlg->OnUpdateGroupNumber();
-				break;
-			}
-		}
-	}
-}
-
-void CMainDlg::UpdateBuddyTreeCtrl(UINT uAccountID/*=0*/)
-{
-	CBuddyList* lpBuddyList = m_FMGClient.GetBuddyList();
-	if (NULL == lpBuddyList)
-		return;
-
-	int nBuddyTeamCount = lpBuddyList->GetBuddyTeamCount();
-	//��¼��һ�κ��ѷ���ؼ��Ǵ���������չ��״̬
-	std::vector<BOOL> aryTeamExpandStatus;
-	aryTeamExpandStatus.resize(nBuddyTeamCount);
-	for(long i=0; i<nBuddyTeamCount; ++i)
-		aryTeamExpandStatus[i] = m_BuddyListCtrl.IsBuddyTeamExpand(i);
-
-	m_BuddyListCtrl.DelAllItems();
-
-	BOOL bShowSimpleProfile = m_FMGClient.m_UserConfig.IsEnableSimpleProfile();
-	long nNameStyle = m_FMGClient.m_UserConfig.GetNameStyle();
-					
-
-	//�û�ͷ��
-	CString strThumbPath;
-	BOOL bMale = TRUE;
-	int nBuddyCount = 0;
-	int nValidBuddyCount = 0;
-	int nOnlineBuddyCount = 0;
-	int nTeamIndex = 0;
-
-	for (int i = 0; i < nBuddyTeamCount; i++)
-	{
-        nValidBuddyCount = 0;
-        nBuddyCount = lpBuddyList->GetBuddyCount(i);
-		nOnlineBuddyCount = lpBuddyList->GetOnlineBuddyCount(i);
-		nTeamIndex = 0;
-
-		CBuddyTeamInfo* lpBuddyTeamInfo = lpBuddyList->GetBuddyTeam(i);
-		if (lpBuddyTeamInfo != NULL)
-		{
-			nTeamIndex = m_BuddyListCtrl.AddBuddyTeam(i);
-			m_BuddyListCtrl.SetBuddyTeamName(nTeamIndex, lpBuddyTeamInfo->m_strName.c_str());
-			//ATLTRACE(_T("nBuddyCount: %d.\n"), nBuddyCount);
-			//m_BuddyListCtrl.SetBuddyTeamMaxCnt(nTeamIndex, nBuddyCount);
-			m_BuddyListCtrl.SetBuddyTeamCurCnt(nTeamIndex, nOnlineBuddyCount);
-			m_BuddyListCtrl.SetBuddyTeamExpand(nTeamIndex, aryTeamExpandStatus[i]);
-		}
-
-		for (int j = 0; j < nBuddyCount; j++)
-		{
-			CBuddyInfo* lpBuddyInfo = lpBuddyList->GetBuddy(i, j);
-			if (lpBuddyInfo != NULL)
-			{
-				if(lpBuddyInfo->m_uUserID==0)
-					continue;
-
-				if(lpBuddyInfo->m_strAccount.empty())
-					continue;
-
-				if(m_bShowOnlineBuddyOnly)
-				{
-					if(lpBuddyInfo->m_nStatus==STATUS_OFFLINE || lpBuddyInfo->m_nStatus==STATUS_INVISIBLE /*|| lpBuddyInfo->m_nStatus==STATUS_MOBILE_OFFLINE*/)
-						continue;
-				}
-				
-				CString strUTalkNum;
-				//strUTalkNum.Format(_T("%u"),lpBuddyInfo->m_nUTalkNum);
-				strUTalkNum.Format(_T("%s"), lpBuddyInfo->m_strAccount.c_str());
-
-				bMale = lpBuddyInfo->m_nGender!=0 ? FALSE : TRUE;
-				BOOL bGray = FALSE;
-                if (lpBuddyInfo->m_nStatus == online_type_offline || lpBuddyInfo->m_nStatus == online_type_pc_invisible)
-					bGray = TRUE;
-				BOOL bOnlineFlash = FALSE;
-				if(uAccountID == lpBuddyInfo->m_uUserID)
-					bOnlineFlash = TRUE;
-
-				/* = m_FMGClient.GetBuddyHeadPicFullName(lpBuddyInfo->m_nUTalkNum)*/;
-				//if (!Hootina::CPath::IsFileExist(strFileName.c_str()))
-				if(lpBuddyInfo->m_nFace >= (UINT)USER_THUMB_COUNT)
-					lpBuddyInfo->m_nFace = 0;
-				if(lpBuddyInfo->m_bUseCustomFace && lpBuddyInfo->m_bCustomFaceAvailable)
-				{
-					strThumbPath.Format(_T("%s%d.png"), m_FMGClient.m_UserMgr.GetCustomUserThumbFolder().c_str(), lpBuddyInfo->m_uUserID);
-					if(!Hootina::CPath::IsFileExist(strThumbPath))
-						strThumbPath.Format(_T("%sImage\\UserThumbs\\%d.png"), g_szHomePath, lpBuddyInfo->m_nFace);
-				}
-				else
-					strThumbPath.Format(_T("%sImage\\UserThumbs\\%d.png"), g_szHomePath, lpBuddyInfo->m_nFace);
-
-				//int nIndex = m_BuddyListCtrl.AddBuddyItem(nTeamIndex, lpBuddyInfo->m_nUTalkUin);
-				int nIndex = m_BuddyListCtrl.AddBuddyItem(nTeamIndex, lpBuddyInfo->m_uUserID);
-				m_BuddyListCtrl.SetBuddyItemUTalkNum(nTeamIndex, nIndex, strUTalkNum);
-				m_BuddyListCtrl.SetBuddyItemNickName(nTeamIndex, nIndex, lpBuddyInfo->m_strNickName.c_str());
-				m_BuddyListCtrl.SetBuddyItemMarkName(nTeamIndex, nIndex, lpBuddyInfo->m_strMarkName.c_str());
-
-    //            BEGIN_PERFORMANCECOUNTER
-				//LOG_INFO(_T("AccountID=%u, AccountName=%s, NickName=%s, MarkName=%s."), 
-				//			lpBuddyInfo->m_uUserID,
-				//			lpBuddyInfo->m_strAccount.c_str(),
-				//			lpBuddyInfo->m_strNickName.c_str(),
-				//			lpBuddyInfo->m_strMarkName.c_str());
-    //            END_PERFORMANCECOUNTER
-				
-				if(nNameStyle == NAME_STYLE_SHOW_NICKNAME)
-				{
-					m_BuddyListCtrl.SetBuddyItemMode(nTeamIndex, nIndex, BLCTRL_DISPLAY_SHOW_NICKNAME);
-				}
-				else if(nNameStyle == NAME_STYLE_SHOW_ACCOUNT)
-				{
-					m_BuddyListCtrl.SetBuddyItemMode(nTeamIndex, nIndex, BLCTRL_DISPLAY_SHOW_ACCOUNT);
-				}
-				else
-				{
-					m_BuddyListCtrl.SetBuddyItemMode(nTeamIndex, nIndex, BLCTRL_DISPLAY_SHOW_NICKNAME_ACCOUNT);
-				}
-				
-				//��ˬ���ϲ���ʾ����ǩ��
-				if(bShowSimpleProfile)
-					m_BuddyListCtrl.SetBuddyItemSign(nTeamIndex, nIndex, lpBuddyInfo->m_strSign.c_str(), FALSE);
-				else
-					m_BuddyListCtrl.SetBuddyItemSign(nTeamIndex, nIndex, lpBuddyInfo->m_strSign.c_str(), TRUE);
-				
-				m_BuddyListCtrl.SetBuddyItemGender(nTeamIndex, nIndex, bMale);
-				m_BuddyListCtrl.SetBuddyItemHeadPic(nTeamIndex, nIndex, strThumbPath, bGray);
-				
-				//SetBuddyItemOnline���һ�����������߶���
-				m_BuddyListCtrl.SetBuddyItemOnline(nTeamIndex, nIndex, !bGray, bOnlineFlash);
-                if (lpBuddyInfo->m_nStatus == online_type_android_cellular || lpBuddyInfo->m_nStatus == online_type_android_wifi)
-				{
-					strThumbPath.Format(_T("%sImage\\mobile_online.png"), g_szHomePath);
-					m_BuddyListCtrl.SetBuddyItemMobilePic(nTeamIndex, nIndex, strThumbPath, TRUE);
-				}
-                else if (lpBuddyInfo->m_nStatus == online_type_offline || lpBuddyInfo->m_nStatus == online_type_pc_invisible)
-                {
-                    strThumbPath.Format(_T("%sImage\\mobile_online.png"), g_szHomePath);
-                    m_BuddyListCtrl.SetBuddyItemMobilePic(nTeamIndex, nIndex, strThumbPath, FALSE);
-                }
-                    
-				++nValidBuddyCount;
-			}
-		}
-		m_BuddyListCtrl.SetBuddyTeamMaxCnt(nTeamIndex, nValidBuddyCount);
-	}
-
-	if (m_BuddyListCtrl.IsWindowVisible())
-		m_BuddyListCtrl.Invalidate();
-}
-
-void CMainDlg::UpdateGroupTreeCtrl()
-{
-	CGroupList* lpGroupList = m_FMGClient.GetGroupList();
-	if (NULL == lpGroupList)
-		return;
-
-	m_GroupListCtrl.DelAllItems();
-
-	int nTeamIndex = m_GroupListCtrl.AddBuddyTeam(0);
-	m_GroupListCtrl.SetBuddyTeamName(nTeamIndex, _T("�ҵ�Ⱥ"));
-	m_GroupListCtrl.SetBuddyTeamExpand(nTeamIndex, TRUE);
-
-	int nActualGroupCount = 0;
-	int nGroupCount = lpGroupList->GetGroupCount();
-	for (int i = 0; i < nGroupCount; i++)
-	{
-		CGroupInfo* lpGroupInfo = lpGroupList->GetGroup(i);
-		if(lpGroupInfo==NULL || lpGroupInfo->m_strName.empty())
-			continue;
-
-		tstring strFileName = m_FMGClient.GetGroupHeadPicFullName(lpGroupInfo->m_nGroupNumber);
-		if (!Hootina::CPath::IsFileExist(strFileName.c_str()))
-			strFileName = Hootina::CPath::GetAppPath() + _T("Image\\DefGroupHeadPic.png");
-
-		int nIndex = m_GroupListCtrl.AddBuddyItem(nTeamIndex, lpGroupInfo->m_nGroupCode);
-		m_GroupListCtrl.SetBuddyItemNickName(nTeamIndex, nIndex, lpGroupInfo->m_strAccount.c_str());
-		m_GroupListCtrl.SetBuddyItemMarkName(nTeamIndex, nIndex, lpGroupInfo->m_strName.c_str());
-		m_GroupListCtrl.SetBuddyItemHeadPic(nTeamIndex, nIndex, strFileName.c_str(), FALSE);
-
-		//LOG_INFO(_T("GroupID=%u, GroupName=%s, GroupName=%s."), 
-		//			lpGroupInfo->m_nGroupCode,
-		//			lpGroupInfo->m_strAccount.c_str(),
-		//			lpGroupInfo->m_strName.c_str());
-
-		++nActualGroupCount;
-		
-	}
-
-	m_GroupListCtrl.SetBuddyTeamMaxCnt(nTeamIndex, nActualGroupCount);
-	m_GroupListCtrl.SetBuddyTeamCurCnt(nTeamIndex, nActualGroupCount);
-
-	if (m_GroupListCtrl.IsWindowVisible())
-		m_GroupListCtrl.Invalidate();
-}
-
-void CMainDlg::UpdateRecentTreeCtrl()
-{
-	CRecentList* lpRecentList = m_FMGClient.GetRecentList();
-	if (NULL == lpRecentList)
-		return;
-
-	m_RecentListCtrl.DelAllItems();
-
-	//TODO: Ŀǰֻ��һ�������ϵ��
-	int nTeamIndex = m_RecentListCtrl.AddBuddyTeam(-1);
-	//m_RecentListCtrl.SetBuddyTeamName(nTeamIndex, _T("�����ϵ��"));
-	m_RecentListCtrl.SetBuddyTeamName(nTeamIndex, _T(""));
-	m_RecentListCtrl.SetBuddyTeamExpand(nTeamIndex, TRUE);
-
-	int nCount = 0;
-	CString strUserID;
-	UINT uFaceID = 0;
-	CString strThumbPath;
-	TCHAR szTime[8];
-	long nNewMsgCount;
-	CMessageSender* pMessageSender = NULL;
-
-	int nRecentCount = lpRecentList->GetRecentCount();
-	for (int i=nRecentCount-1; i >=0 ; --i)
-	{
-		CRecentInfo* lpRecentInfo = lpRecentList->GetRecent(i);
-		if (lpRecentInfo == NULL)
-			continue;
-		
-		if (FMG_MSG_TYPE_BUDDY == lpRecentInfo->m_nType)			// ����
-		{
-			CBuddyList* lpBuddyList = m_FMGClient.GetBuddyList();
-			//�������������ѣ�����ݺ�����Ϣ��ʾ
-			if (lpBuddyList != NULL)
-			{
-				CBuddyInfo* lpBuddyInfo = lpBuddyList->GetBuddy(lpRecentInfo->m_uUserID);
-				if (lpBuddyInfo != NULL)
-				{
-					BOOL bGray = TRUE;
-					if(lpBuddyInfo->m_nStatus!=STATUS_OFFLINE && lpBuddyInfo->m_nStatus!=STATUS_INVISIBLE)
-						bGray = FALSE;
-
-                    if (lpBuddyInfo->m_bUseCustomFace&& lpBuddyInfo->m_bCustomFaceAvailable)
-					{
-						strThumbPath.Format(_T("%s%d.png"), m_FMGClient.m_UserMgr.GetCustomUserThumbFolder().c_str(), lpBuddyInfo->m_uUserID);
-						if(!Hootina::CPath::IsFileExist(strThumbPath))
-							strThumbPath.Format(_T("%sImage\\UserThumbs\\%d.png"), g_szHomePath, lpBuddyInfo->m_nFace);
-					}
-					else
-						strThumbPath.Format(_T("%sImage\\UserThumbs\\%d.png"), g_szHomePath, lpBuddyInfo->m_nFace);
-
-					int nIndex = m_RecentListCtrl.AddBuddyItem(nTeamIndex, i);
-					strUserID.Format(_T("%u"), lpBuddyInfo->m_uUserID);
-					m_RecentListCtrl.SetBuddyItemID(nTeamIndex, nIndex, lpBuddyInfo->m_uUserID);
-					m_RecentListCtrl.SetBuddyItemAccountID(nTeamIndex, nIndex, lpBuddyInfo->m_uUserID);
-
-					m_RecentListCtrl.SetBuddyItemNickName(nTeamIndex, nIndex, lpBuddyInfo->m_strNickName.c_str());
-					//m_RecentListCtrl.SetBuddyItemGender(nTeamIndex, nIndex, bGender);
-					m_RecentListCtrl.SetBuddyItemHeadPic(nTeamIndex, nIndex, strThumbPath, bGray);
-					m_RecentListCtrl.SetBuddyItemLastMsg(nTeamIndex, nIndex, lpRecentInfo->m_szLastMsgText);
-					if(lpBuddyInfo->m_nStatus == STATUS_MOBILE_ONLINE)
-					{
-						strThumbPath.Format(_T("%sImage\\mobile_online.png"), g_szHomePath);
-						m_RecentListCtrl.SetBuddyItemMobilePic(nTeamIndex, nIndex, strThumbPath);
-					}
-					
-					memset(szTime, 0, sizeof(szTime));
-					if(IsToday(lpRecentInfo->m_MsgTime))	
-						FormatTime(lpRecentInfo->m_MsgTime, _T("%H:%M"), szTime, ARRAYSIZE(szTime));
-					else
-						FormatTime(lpRecentInfo->m_MsgTime, _T("%m-%d"), szTime, ARRAYSIZE(szTime));
-					m_RecentListCtrl.SetBuddyItemDate(nTeamIndex, nIndex, szTime);
-
-					pMessageSender = m_FMGClient.m_UserMgr.m_MsgList.GetMsgSender(FMG_MSG_TYPE_BUDDY,  lpBuddyInfo->m_uUserID);
-					if(pMessageSender != NULL)
-						nNewMsgCount = pMessageSender->GetDisplayMsgCount();
-					else
-						nNewMsgCount = 0;
-					m_RecentListCtrl.SetBuddyItemNewMsgCount(nTeamIndex, nIndex, nNewMsgCount);
-
-					nCount++;
-				}
-				//����Ѿ����Ǻ����ˣ�����������ϵ���е���Ϣ��ʾ
-				//else
-				//{
-				//	uFaceID = lpRecentInfo->m_uFaceID;
-				//	if(uFaceID > USER_THUMB_COUNT)
-				//		uFaceID = 0;
-
-				//	strThumbPath.Format(_T("%sImage\\UserThumbs\\%d.png"), g_szHomePath, uFaceID);
-
-				//	int nIndex = m_RecentListCtrl.AddBuddyItem(nTeamIndex, i);
-				//	strUserID.Format(_T("%u"), lpRecentInfo->m_uUserID);
-				//	m_RecentListCtrl.SetBuddyItemAccountID(nTeamIndex, nIndex, lpRecentInfo->m_uUserID);
-				//	m_RecentListCtrl.SetBuddyItemID(nTeamIndex, nIndex, lpRecentInfo->m_uUserID);
-
-				//	m_RecentListCtrl.SetBuddyItemNickName(nTeamIndex, nIndex, lpRecentInfo->m_szName);
-				//	//m_RecentListCtrl.SetBuddyItemGender(nTeamIndex, nIndex, bGender);
-				//	m_RecentListCtrl.SetBuddyItemHeadPic(nTeamIndex, nIndex, strThumbPath, TRUE);
-				//	m_RecentListCtrl.SetBuddyItemLastMsg(nTeamIndex, nIndex, lpRecentInfo->m_szLastMsgText);
-				//	
-				//	memset(szTime, 0, sizeof(szTime));
-				//	if(IsToday(lpRecentInfo->m_MsgTime))	
-				//		FormatTime(lpRecentInfo->m_MsgTime, _T("%H:%M"), szTime, ARRAYSIZE(szTime));
-				//	else
-				//		FormatTime(lpRecentInfo->m_MsgTime, _T("%m-%d"), szTime, ARRAYSIZE(szTime));
-				//	m_RecentListCtrl.SetBuddyItemDate(nTeamIndex, nIndex, szTime);
-
-				//	nCount++;
-				//}
-			}	
-		}
-		else if (FMG_MSG_TYPE_GROUP == lpRecentInfo->m_nType)	// Ⱥ
-		{
-			CGroupList* lpGroupList = m_FMGClient.GetGroupList();
-			if (lpGroupList != NULL)
-			{
-				CGroupInfo* lpGroupInfo = lpGroupList->GetGroupByCode(lpRecentInfo->m_uUserID);
-				if (lpGroupInfo != NULL)
-				{
-					
-					strThumbPath.Format(_T("%sImage\\DefGroupHeadPic.png"), g_szHomePath);
-
-					int nIndex = m_RecentListCtrl.AddBuddyItem(nTeamIndex, i);
-					m_RecentListCtrl.SetBuddyItemID(nTeamIndex, nIndex, lpGroupInfo->m_nGroupCode);
-					m_RecentListCtrl.SetBuddyItemNickName(nTeamIndex, nIndex, lpGroupInfo->m_strName.c_str());
-					m_RecentListCtrl.SetBuddyItemHeadPic(nTeamIndex, nIndex, strThumbPath, FALSE);
-					m_RecentListCtrl.SetBuddyItemLastMsg(nTeamIndex, nIndex, lpRecentInfo->m_szLastMsgText);
-
-					memset(szTime, 0, sizeof(szTime));
-					if(IsToday(lpRecentInfo->m_MsgTime))	
-						FormatTime(lpRecentInfo->m_MsgTime, _T("%H:%M"), szTime, ARRAYSIZE(szTime));
-					else
-						FormatTime(lpRecentInfo->m_MsgTime, _T("%m-%d"), szTime, ARRAYSIZE(szTime));
-					m_RecentListCtrl.SetBuddyItemDate(nTeamIndex, nIndex, szTime);
-
-					pMessageSender = m_FMGClient.m_UserMgr.m_MsgList.GetMsgSender(FMG_MSG_TYPE_GROUP,  lpRecentInfo->m_uUserID);
-					if(pMessageSender != NULL)
-						nNewMsgCount = pMessageSender->GetDisplayMsgCount();	
-					else
-						nNewMsgCount = 0;	
-					m_RecentListCtrl.SetBuddyItemNewMsgCount(nTeamIndex, nIndex, nNewMsgCount);
-
-					nCount++;
-				}
-			}
-		}
-		else if (FMG_MSG_TYPE_SESS == lpRecentInfo->m_nType)	// ������������
-		{
-		}
-		
-	}// end for-loop
-
-	m_RecentListCtrl.SetBuddyTeamMaxCnt(nTeamIndex, nCount);
-	m_RecentListCtrl.SetBuddyTeamCurCnt(nTeamIndex, nCount);
-
-	if (m_RecentListCtrl.IsWindowVisible())
-		m_RecentListCtrl.Invalidate();
+            case FMG_MSG_UPDATE_GROUP_NUMBER:
+                lpGroupInfoDlg->OnUpdateGroupNumber();
+                break;
+            }
+        }
+    }
 }
 
 void CMainDlg::OnTrayIcon_LButtunUp()
 {
-	if (m_dwMsgTimerId != NULL)
-	{
-		CMessageList* lpMsgList = m_FMGClient.GetMessageList();
-		if (lpMsgList != NULL && lpMsgList->GetMsgSenderCount() > 0)
-		{
-			CMessageSender* lpMsgSender = lpMsgList->GetLastMsgSender();
-			if (lpMsgSender != NULL)
-			{			
-				long nType = lpMsgSender->GetMsgType();
-				UINT nSenderId = lpMsgSender->GetSenderId();
-				UINT nGroupCode = lpMsgSender->GetGroupCode();
+    // v2：托盘正在闪新消息头像 —— 单击打开"最近一条"未读会话。开窗 + 清未读交给
+    // 主面板 OpenConversation 完成，它内部 MarkConversationRead 会回投 FMG_MSG_TRAY_CLEAR，
+    // 由 OnV2TrayClear 统一停闪 / 切目标 / 恢复默认托盘图标，故本分支不再自行恢复图标、直接返回。
+    if (m_trayFlash.IsFlashing())
+    {
+        balloonmain::TrayFlashEntry target;
+        if (m_trayFlash.GetTarget(target) && m_BalloonMainPanel.IsWindow())
+            m_BalloonMainPanel.OpenConversation(target.m_ctype, target.m_cid);
+        return;
+    }
+    else if (m_dwAddFriendTimerId != 0)
+    {
+        KillTimer(m_dwAddFriendTimerId);
+        m_dwAddFriendTimerId = 0;
 
+        ShowAddFriendConfirmDlg();
+    }
+    else
+    {
+        // 托盘左键单击默认行为：唤出登录窗(登录前) / 主面板(登录后)，含最小化还原。
+        ShowLoginOrMainPanel();
+    }
 
-				switch (nType)
-				{
-				case FMG_MSG_TYPE_BUDDY:
-					ShowBuddyChatDlg(nSenderId, TRUE);
-					break;
-				case FMG_MSG_TYPE_GROUP:
-					ShowGroupChatDlg(nSenderId, TRUE);
-					break;
-				case FMG_MSG_TYPE_SESS:
-					ShowSessChatDlg(nGroupCode, nSenderId, TRUE);
-					break;
-				}
-			}
-		}
-	}
-	else if(m_dwAddFriendTimerId != 0)
-	{
-		KillTimer(m_dwAddFriendTimerId);
-		m_dwAddFriendTimerId = 0;
+    //先将任务栏图标恢复成正常状态
+    UpdateTrayIconTip();
+}
 
-		ShowAddFriendConfirmDlg();
-	}
-	else
-	{
-		if (m_LoginDlg.IsWindow())
-		{
-			m_LoginDlg.ShowWindow(SW_SHOW);
-			::SetForegroundWindow(m_LoginDlg.m_hWnd);
-		}
-		else if (IsWindow())
-		{
-			ShowWindow(SW_SHOW);
-			::SetForegroundWindow(m_hWnd);
-		}
-	}
+// 托盘菜单图标尺寸 / 颜色 —— 与左下角汉堡系统菜单（CBalloonMainPanel）同口径，
+// 保证两处 DuiMenu 视觉统一。DuiMenu 以源矩形 (0,0,16,16) 采样图标，故尺寸取 16。
+static const int      kTrayMenuIconSize  = 16;                     // 图标位图边长（像素）
+static const COLORREF kTrayMenuIconColor = RGB(0x5B, 0x5B, 0x5B);  // 图标描边色（深灰）
 
-	//�Ƚ�������ͼ��ָ�������״̬
-	CString strIconInfo;
-	strIconInfo.Format(_T("%s\r\n%s\r\n����"), 
-						m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.data(),				
-						m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.data());
-						
-	m_TrayIcon.ModifyIcon(m_hAppIcon, strIconInfo);
+bool CMainDlg::IsServerConnected() const
+{
+    // 两个条件缺一不可：socket 还连着（IsClosed 取反），且已经登录成功。只连上没登录
+    // 时业务帧发过去也会被服务端拒掉，对用户而言同样是"还不能用"。
+    if (!m_bAlreadyLogin)
+    {
+        return false;
+    }
+    return !CIUSocket::GetInstance().IsClosed();
+}
+
+void CMainDlg::ResumeOnlineFailed(LPCTSTR lpszReason)
+{
+    LOG_INFO("MainDlg::ResumeOnlineFailed: 恢复在线失败，退回离线态。");
+
+    // 连接已经断了（登录没成功），这里把上层状态一并拨回离线，等同于用户从没点过
+    // "恢复在线"：压制自动重连、重新立起网络层的离线闸门、丢弃排队中的帧。
+    m_nMainPanelStatus = MAINPANEL_STATUS_USERGOOFFLINE;
+    CIUSocket::GetInstance().SetUserOffline(true);
+    CIUSocket::GetInstance().ClearPendingSendData();
+
+    // 状态胶囊退回离线 —— 点"在线"时它已经被乐观更新成在线了，不退回的话会出现
+    // "胶囊显示在线、实际离线且不会重连"的自相矛盾。
+    if (m_BalloonMainPanel.IsWindow())
+    {
+        m_BalloonMainPanel.ApplyPresenceOptimistic(kMyPresenceOffline);
+    }
+
+    // 托盘图标保持灰色、提示文字回到离线，界面门禁回到离线态（提示条重新变成
+    // "点此恢复在线"，而不是停在"正在连接"）。
+    RefreshTrayIconForStatus();
+    BroadcastConnectionState();
+
+    if (lpszReason == NULL)
+    {
+        return;   // 用户自己取消的，不必再弹提示
+    }
+
+    // 提示框挂在主面板上；主面板不在时退回挂到隐藏的 CMainDlg。
+    HWND hOwner = m_hWnd;
+    if (m_BalloonMainPanel.IsWindow())
+    {
+        hOwner = m_BalloonMainPanel.m_hWnd;
+    }
+    ::MessageBox(hOwner, lpszReason, g_strAppTitle.c_str(), MB_OK | MB_ICONWARNING);
+}
+
+int CMainDlg::GetConnectionUiState()
+{
+    return (int)balloonmain::ComputeConnectionUiState(GetCurrentPresence(), IsServerConnected());
+}
+
+void CMainDlg::BroadcastConnectionState()
+{
+    const int state = GetConnectionUiState();
+
+    LOG_INFO("MainDlg::BroadcastConnectionState: presence=%d, connected=%d, uiState=%d "
+        "(0=在线 1=正在连接 2=离线)。",
+        GetCurrentPresence(), IsServerConnected() ? 1 : 0, state);
+
+    // 主面板负责把状态转发给它持有的各个聊天窗（单聊 / 群聊），并按需禁用自己这边
+    // 需要联网的入口（加好友、建群、改资料等）。
+    if (m_BalloonMainPanel.IsWindow())
+    {
+        m_BalloonMainPanel.ApplyConnectionState(state);
+    }
+}
+
+CString CMainDlg::BuildTrayTipText()
+{
+    // 第三行的状态文字与主面板胶囊三处同源。原先这里把状态写死成"在线"，用户切到
+    // 离开 / 忙碌 / 离线后悬停托盘看到的仍是"在线"。
+    //
+    // 走 GetConnectionPresenceVisual 而<u>不是</u>只看 GetCurrentPresence()：后者是
+    // "用户选了什么状态"，掉线时用户并没有改状态，于是它照旧给"在线"，而上一行取
+    // 图标的 GetConnectionUiState() 已经按连接态转灰了 —— 同一次 ModifyIcon 里
+    // 图标和文字各说各话，正是"图标灰了、提示还写着在线"的由来。
+    CString strIconInfo;
+    strIconInfo.Format(_T("%s\r\n%s\r\n%s"),
+        m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.c_str(),
+        m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str(),
+        balloonmain::GetConnectionPresenceVisual(GetCurrentPresence(),
+                                                 GetConnectionUiState()).text);
+    return strIconInfo;
+}
+
+void CMainDlg::UpdateTrayIconTip()
+{
+    m_TrayIcon.ModifyIcon(m_hAppIcon, BuildTrayTipText());
+}
+
+int CMainDlg::GetCurrentPresence()
+{
+    // 主面板在时以状态胶囊为准 —— 托盘菜单标记的当前项、托盘悬停提示的状态文字，
+    // 与用户在主面板上看到的胶囊必然是同一个值。
+    if (m_BalloonMainPanel.IsWindow())
+    {
+        return m_BalloonMainPanel.GetPresence();
+    }
+
+    // 主面板不在（未登录 / 登出后已销毁），或用户主动点了"离线"：都按"离线"呈现。
+    if (!m_bAlreadyLogin || m_nMainPanelStatus == MAINPANEL_STATUS_USERGOOFFLINE)
+    {
+        return kMyPresenceOffline;
+    }
+
+    // 其余情形（含登录中 / 重连中）退回期望在线状态。
+    return CIUSocket::GetInstance().GetRecordOnlineStatus();
 }
 
 void CMainDlg::OnTrayIcon_RButtunUp()
 {
-	if (m_MsgTipDlg.IsWindow())
-		m_MsgTipDlg.DestroyWindow();
+    if (m_MsgTipDlg.IsWindow())
+        m_MsgTipDlg.DestroyWindow();
 
-	int nPos = MAIN_PANEL_TRAYICON_SUBMENU_INDEX;		//��¼ǰ�����̲˵�����
-	
-	if(!m_bAlreadyLogin)
-		nPos = MAIN_PANEL_TRAYICON_SUBMENU_INDEX;
-	else
-	{
-		if(m_bPanelLocked)
-			nPos = MAIN_PANEL_LOCK_SUBMENU_INDEX;		//�������ʱ�����̲˵�����
-		else
-			nPos = MAIN_PANEL_TRAYICON_SUBMENU2_INDEX;		//�������������̲˵�����
-	}
+    // 右键弹菜单前先收起悬停未读提示浮窗（否则要等它自己的轮询定时器才消失）。
+    m_trayMsgTipPopup.HidePopup();
 
+    // 选托盘菜单形态：未登录 / 已登录。锁定功能已随旧主窗口移除，不再有"锁定"形态。
+    balloonmain::TrayMenuKind kind = balloonmain::kTrayBeforeLogin;
+    if (m_bAlreadyLogin)
+        kind = balloonmain::kTrayNormal;
 
-	CPoint pt;
-	GetCursorPos(&pt);
+    // 按行模型装配 DuiMenu。图标用 CreateMenuIconImage 即时渲染，存进局部 icons
+    // 数组保活到 TrackPopup 返回（TrackPopup 同步阻塞，局部即可）—— DuiMenu 只
+    // 借用图标指针、不持有所有权。
+    //
+    // 当前在线状态传给行模型，由它把对应那一项标成"当前"（带外环的圆点 +
+    // "（当前）"后缀），否则四个状态项长得一模一样，用户看不出自己现在是哪个。
+    bool bMuted = m_FMGClient.m_UserConfig.IsEnableMute() ? true : false;
+    int  nCurrentPresence = GetCurrentPresence();
+    std::vector<balloonmain::TrayMenuEntry> model =
+        balloonmain::BuildTrayMenuModel(kind, bMuted, nCurrentPresence);
 
-	::SetForegroundWindow(m_hWnd);
+    balloonwjui::DuiMenu menu;
+    std::vector<std::unique_ptr<CImageEx> > icons;
+    icons.reserve(model.size());
 
-	CSkinMenu PopupMenu = m_SkinMenu.GetSubMenu(nPos);
-    //�����Ƿ��Ѿ��������޸ġ��ر�����������ѡ��
-    if (m_FMGClient.m_UserConfig.IsEnableMute())
-        PopupMenu.ModifyMenu(ID_MENU_MUTE, MF_BYCOMMAND | MF_STRING /*| MF_POPUP*/, ID_MENU_MUTE, _T("�ر���������(�ѹر�)"));
-    else
-        PopupMenu.ModifyMenu(ID_MENU_MUTE, MF_BYCOMMAND | MF_STRING /*| MF_POPUP*/, ID_MENU_MUTE, _T("�ر���������"));
-	PopupMenu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON, pt.x, pt.y, m_hWnd);
+    for (size_t i = 0; i < model.size(); ++i)
+    {
+        const balloonmain::TrayMenuEntry& e = model[i];
+        if (e.isSeparator)
+        {
+            menu.AppendSeparator();
+            continue;
+        }
 
-	// BUGFIX: See "PRB: Menus for Notification Icons Don't Work Correctly"
-	::PostMessage(m_hWnd, WM_NULL, 0, 0);
+        CImageEx* icon = NULL;
+        if (e.iconKind >= 0)
+        {
+            // 在线状态项(dotColor!=0)用其状态色渲染圆点(在线绿/离开橙/忙碌红/离线灰)，
+            // 与主面板状态菜单观感一致；其余项用默认单色。
+            COLORREF iconColor = (e.dotColor != 0) ? e.dotColor : kTrayMenuIconColor;
+            icon = balloonmain::CreateMenuIconImage(
+                e.iconKind, iconColor, kTrayMenuIconSize);
+        }
+        icons.push_back(std::unique_ptr<CImageEx>(icon));   // icon 可能为 NULL，AppendItem 容忍
+        menu.AppendItem(e.id, e.label, icon);
+
+        if (!e.enabled)
+            menu.SetEnabled(e.id, false);
+    }
+
+    // 在光标处弹出。DuiMenu 的内部 popup 窗口自己抓前台 / 焦点来检测点击外部
+    // 关闭，故无需老 CSkinMenu 那套 SetForegroundWindow + WM_NULL 的托盘菜单
+    // hack；owner 仍传隐藏的 CMainDlg（菜单关掉后焦点回这里）。
+    //
+    // 托盘图标在任务栏，光标通常贴着屏幕底 / 右边缘；DuiMenu 不自动翻转，必须
+    // 先把落点夹进显示器工作区，否则菜单会落到桌面外看不见（见 PopupMenuPlacement.h）。
+    CPoint pt;
+    GetCursorPos(&pt);
+    POINT anchor = { pt.x, pt.y };
+    SIZE  menuSize = menu.MeasureSize();
+    RECT  area = balloonmain::GetMenuPlacementArea(anchor);          // 已排除任务栏并留缝
+    POINT pos = balloonmain::ClampMenuOriginToRect(anchor, menuSize, area);
+
+    // 关键路径日志：记录托盘菜单的光标、菜单尺寸、可放置区与最终落点，便于排查
+    // "被任务栏遮挡 / 越界"类问题（例如任务栏自动隐藏会让工作区不排除任务栏）。
+    LOG_INFO(_T("托盘菜单落点：光标(%d,%d) 菜单(%dx%d) 可放置区(%d,%d,%d,%d) 弹出(%d,%d) 底边=%d")
+             _T(" 当前状态presence=%d"),
+        anchor.x, anchor.y, (int)menuSize.cx, (int)menuSize.cy,
+        (int)area.left, (int)area.top, (int)area.right, (int)area.bottom,
+        pos.x, pos.y, pos.y + (int)menuSize.cy, nCurrentPresence);
+
+    UINT chosen = menu.TrackPopup(pos.x, pos.y, m_hWnd);   // 同步阻塞
+
+    // 选中的就是当前所处的状态：什么都不做，避免重复发包、无谓的断开或重连。
+    // 与主面板状态菜单的处理一致（见 CBalloonMainPanel::ShowStatusMenu）。
+    for (size_t i = 0; i < model.size(); ++i)
+    {
+        if (model[i].id == chosen && model[i].isCurrent)
+        {
+            LOG_INFO(_T("托盘菜单：选中的就是当前状态(presence=%d)，不做处理。"),
+                nCurrentPresence);
+            return;
+        }
+    }
+
+    // 按选中项分发 —— 直接复用现成的 OnMenu_* 命令处理函数（这些函数对菜单命令
+    // 只用 nID，uNotifyCode / wndCtl 传 0 / NULL 即可）。
+    switch (chosen)
+    {
+    // 四个在线状态统一走 v2 在线状态切换（OnChangeMyPresence）：与主面板状态菜单同一套
+    // 行为——离线=真正断开(GoOffline)，在线/离开/忙碌=改状态(在线态发 cmd_change_presence、
+    // 离线态走 GoOnline 带上目标状态)。wParam 取 v2 presence(MyPresenceValue 与 presence_type 同值)。
+    case balloonmain::kTrayMenuOnline:
+        OnChangeMyPresence(0, (WPARAM)kMyPresenceOnline, 0);
+        break;
+
+    case balloonmain::kTrayMenuAway:
+        OnChangeMyPresence(0, (WPARAM)kMyPresenceAway, 0);
+        break;
+
+    case balloonmain::kTrayMenuBusy:
+        OnChangeMyPresence(0, (WPARAM)kMyPresenceBusy, 0);
+        break;
+
+    case balloonmain::kTrayMenuOffline:
+        OnChangeMyPresence(0, (WPARAM)kMyPresenceOffline, 0);
+        break;
+
+    case balloonmain::kTrayMenuMute:
+        OnMenu_Mute(0, 0, NULL);
+        break;
+
+    case balloonmain::kTrayMenuOpenPanel:
+        OnMenu_ShowMainPanel(0, 0, NULL);
+        break;
+
+    case balloonmain::kTrayMenuLogout:
+        // 登出不能在这里同步做：它要销毁主面板并进入登录窗的模态循环，而此刻还站在
+        // 托盘消息处理 + TrackPopup 返回后的调用栈上。投递给自己，等消息循环下一轮
+        // 在干净的栈上执行（见 OnLogout）。
+        PostMessage(FMG_MSG_LOGOUT, 0, 0);
+        break;
+
+    case balloonmain::kTrayMenuExit:
+        OnMenu_Exit(0, 0, NULL);
+        break;
+
+    case 0:
+    default:
+        break;   // 未选中（失焦 / ESC）
+    }
 }
 
 void CMainDlg::OnTrayIcon_MouseHover()
 {
-	if (m_dwMsgTimerId != NULL)
-	{
-		CMessageList* lpMsgList = m_FMGClient.GetMessageList();
-		if (lpMsgList != NULL && lpMsgList->GetMsgSenderCount() > 0)
-		{
-			CRect rcTrayIcon(0, 0, 0, 0);
-			
-			//Win7ϵͳ���ܲ�ȡ���ַ�ʽ��ȡ����������ͼ���λ��
-			if(!RunTimeHelper::IsVista())
-				m_TrayIcon.GetTrayIconRect(&rcTrayIcon);
-			
-			//TODO: Ȩ��֮�ƣ�����Ҫ�Ӹ����Ͻ��λ�ò��Ե�����
-			if((rcTrayIcon.left==0 && rcTrayIcon.right==0) || (rcTrayIcon.top==0 && rcTrayIcon.bottom==0))
-			{	
-				POINT pt;
-				::GetCursorPos(&pt);
-				rcTrayIcon.left   = pt.x-80;
-				rcTrayIcon.top    = pt.y-90;
-				rcTrayIcon.right  = pt.x+20;
-				rcTrayIcon.bottom = pt.y+10;
-			}
-			m_rcTrayIconRect = rcTrayIcon; 
-			m_MsgTipDlg.m_rcTrayIcon2 = rcTrayIcon;
-			m_MsgTipDlg.m_lpFMGClient = &m_FMGClient;
-			m_MsgTipDlg.m_hMainDlg = m_hWnd;
-			m_MsgTipDlg.m_rcTrayIcon = rcTrayIcon;
-			if (!m_MsgTipDlg.IsWindow())
-			{
-				m_MsgTipDlg.Create(m_hWnd);
-			}
-			
-			m_MsgTipDlg.ShowWindow(SW_SHOWNOACTIVATE);	
-		}
-	}
-	//::OutputDebugString(_T("WM_MOUSEHOVER\n"));
+    // 仅在托盘正闪新消息时弹出未读提示列表（无未读不弹）。
+    if (!m_trayFlash.IsFlashing())
+        return;
+
+    // 托盘图标定位：现代 Windows 上读其它进程托盘工具栏取图标矩形并不可靠（曾导致
+    // 弹窗跑到屏幕左上角），改用悬停瞬间的光标位置作锚点 —— 光标此刻正压在托盘图标上，
+    // 即等于"托盘图标处"。以光标为中心取一个小框：既作落点锚点（弹窗对准它正上方、
+    // 紧挨任务栏），也作自动隐藏的命中判断区。
+    POINT pt;
+    ::GetCursorPos(&pt);
+    const int kTrayAnchorHalf = 24;   // 锚点小框半边长（像素）
+    CRect rcTrayIcon(pt.x - kTrayAnchorHalf, pt.y - kTrayAnchorHalf,
+                     pt.x + kTrayAnchorHalf, pt.y + kTrayAnchorHalf);
+    m_rcTrayIconRect = rcTrayIcon;
+
+    // 注册行点击回调（幂等），按托盘闪烁集合在托盘上方弹出。浮窗自管自动隐藏。
+    m_trayMsgTipPopup.SetPickCallback(&CMainDlg::OnTrayPopupPickConv, this);
+    m_trayMsgTipPopup.ShowForEntries(m_trayFlash.GetEntries(), m_rcTrayIconRect);
 }
 
 void CMainDlg::OnTrayIcon_MouseLeave()
 {
-	if (m_MsgTipDlg.IsWindow())
-	{
-		CRect rcWindow;
-		m_MsgTipDlg.GetWindowRect(&rcWindow);
-
-		POINT pt = {0};
-		::GetCursorPos(&pt);
-
-		if (!::PtInRect(&rcWindow, pt) && !::PtInRect(&m_rcTrayIconRect, pt))
-		{
-			m_MsgTipDlg.DestroyWindow();
-			//m_MsgTipDlg.ShowWindow(SW_HIDE);
-		}
-		else
-			m_MsgTipDlg.StartTrackMouseLeave();
-	}
-	//::OutputDebugString(_T("WM_MOUSELEAVE\n"));
+    // 新版未读提示浮窗自带"光标离开弹窗 ∪ 托盘则隐藏"的轮询，这里无需处理 —— 若在此
+    // 主动隐藏，反而会在光标从托盘移到弹窗上的瞬间把它收起，导致点不到。故留空。
 }
 
-BOOL CMainDlg::LoadAppIcon(long nStatus)
+// 托盘悬停未读提示行点击回调跳板：转交本对话框打开会话。
+void CMainDlg::OnTrayPopupPickConv(void* userdata, int ctype, long long cid)
 {
-	DestroyAppIcon();
+    CMainDlg* pSelf = (CMainDlg*)userdata;
+    if (pSelf != NULL)
+        pSelf->OpenConvFromTrayPopup(ctype, cid);
+}
 
-	tstring strFileName;
-	switch (nStatus)
-	{
-	case STATUS_ONLINE:
-		strFileName = Hootina::CPath::GetAppPath() + _T("Image\\imonline.ico");
-		break;
-	case STATUS_OFFLINE:
-		strFileName = Hootina::CPath::GetAppPath() + _T("Image\\offline.ico");
-		break;
-	}
-	m_hAppIcon = AtlLoadIconImage(strFileName.c_str(), LR_DEFAULTCOLOR|LR_LOADFROMFILE, 
-		::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
-	return m_hAppIcon != NULL ? TRUE : FALSE;
+void CMainDlg::OpenConvFromTrayPopup(int ctype, long long cid)
+{
+    // 转交主面板打开会话；OpenConversation 内部清未读并回投 FMG_MSG_TRAY_CLEAR，
+    // 由 OnV2TrayClear 把该会话移出托盘闪烁集合、必要时停闪。
+    if (m_BalloonMainPanel.IsWindow())
+        m_BalloonMainPanel.OpenConversation(ctype, (int64_t)cid);
+}
+
+BOOL CMainDlg::LoadAppIcon(int nConnUiState)
+{
+    DestroyAppIcon();
+
+    // 图标文件名由 OnlineCapability 决定（真正在线才彩色，离线与连接未就绪都灰），
+    // 与"离线时哪些功能可用"同一个判定口径；日后为离开 / 忙碌各配一只图标时只改那一处。
+    tstring strFileName = Hootina::CPath::GetAppPath() + _T("Image\\");
+    strFileName += balloonmain::GetTrayIconFileName(nConnUiState);
+
+    m_hAppIcon = AtlLoadIconImage(strFileName.c_str(), LR_DEFAULTCOLOR | LR_LOADFROMFILE,
+        ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
+    if (m_hAppIcon == NULL)
+    {
+        LOG_ERROR(_T("加载托盘图标失败：%s"), strFileName.c_str());
+        return FALSE;
+    }
+    return TRUE;
+}
+
+void CMainDlg::RefreshTrayIconForStatus()
+{
+    // 图标与提示都按 v2 在线状态（GetCurrentPresence）取，与托盘菜单标出的"当前项"、
+    // 主面板状态胶囊三处同源。
+    //
+    // 注意这里<u>不再</u>读 v1 的 m_FMGClient.GetStatus()：v2 改状态并不更新那个字段，
+    // 只有掉线时的 ResetToOfflineStatus 会把它置成 STATUS_OFFLINE，据它取图标会取错。
+    //
+    // 提示文字统一走 BuildTrayTipText（昵称 / 账号 / 状态三行），与其它几处刷新托盘
+    // 提示的地方保持同一种格式 —— 原先这里用的是"昵称（状态）"单行格式，两种格式会
+    // 互相覆盖，用户看到的提示取决于最后是谁刷的。
+    LoadAppIcon(GetConnectionUiState());
+    m_TrayIcon.ModifyIcon(m_hAppIcon, BuildTrayTipText());
 }
 
 void CMainDlg::DestroyAppIcon()
 {
-	if (m_hAppIcon != NULL)
-	{
-		::DestroyIcon(m_hAppIcon);
-		m_hAppIcon = NULL;
-	}
+    if (m_hAppIcon != NULL)
+    {
+        ::DestroyIcon(m_hAppIcon);
+        m_hAppIcon = NULL;
+    }
 }
 
 BOOL CMainDlg::LoadLoginIcon()
 {
-	DestroyLoginIcon();
+    DestroyLoginIcon();
 
-	CString strFileName;
-	for (int i = 0; i < 6; i++)
-	{
-		strFileName.Format(_T("%sImage\\Loading_%d.ico"), Hootina::CPath::GetAppPath().c_str(), i+1);
-		m_hLoginIcon[i] = AtlLoadIconImage((LPCTSTR)strFileName, LR_DEFAULTCOLOR|LR_LOADFROMFILE, 
-			::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
-	}
+    CString strFileName;
+    for (int i = 0; i < 6; i++)
+    {
+        strFileName.Format(_T("%sImage\\Loading_%d.ico"), Hootina::CPath::GetAppPath().c_str(), i + 1);
+        m_hLoginIcon[i] = AtlLoadIconImage((LPCTSTR)strFileName, LR_DEFAULTCOLOR | LR_LOADFROMFILE,
+            ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
+    }
 
-	return TRUE;
+    return TRUE;
 }
 
 void CMainDlg::DestroyLoginIcon()
 {
-	for (int i = 0; i < 6; i++)
-	{
-		if (m_hLoginIcon[i] != NULL)
-		{
-			::DestroyIcon(m_hLoginIcon[i]);
-			m_hLoginIcon[i] = NULL;
-		}
-	}
+    for (int i = 0; i < 6; i++)
+    {
+        if (m_hLoginIcon[i] != NULL)
+        {
+            ::DestroyIcon(m_hLoginIcon[i]);
+            m_hLoginIcon[i] = NULL;
+        }
+    }
 }
 
 BOOL CMainDlg::LoadAddFriendIcon()
 {
-	DestroyAddFriendIcon();
+    DestroyAddFriendIcon();
 
-	CString strFileName;
-	for (int i = 0; i < ARRAYSIZE(m_hAddFriendIcon); i++)
-	{
-		strFileName.Format(_T("%sImage\\speaker_%d.ico"), Hootina::CPath::GetAppPath().c_str(), i+1);
-		m_hAddFriendIcon[i] = AtlLoadIconImage((LPCTSTR)strFileName, LR_DEFAULTCOLOR|LR_LOADFROMFILE, 
-			::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
-	}
+    CString strFileName;
+    for (int i = 0; i < ARRAYSIZE(m_hAddFriendIcon); i++)
+    {
+        strFileName.Format(_T("%sImage\\speaker_%d.ico"), Hootina::CPath::GetAppPath().c_str(), i + 1);
+        m_hAddFriendIcon[i] = AtlLoadIconImage((LPCTSTR)strFileName, LR_DEFAULTCOLOR | LR_LOADFROMFILE,
+            ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
+    }
 
-	return TRUE;
+    return TRUE;
 }
 
 void CMainDlg::DestroyAddFriendIcon()
 {
-	for (int i = 0; i < ARRAYSIZE(m_hAddFriendIcon); i++)
-	{
-		if (m_hAddFriendIcon[i] != NULL)
-		{
-			::DestroyIcon(m_hAddFriendIcon[i]);
-			m_hAddFriendIcon[i] = NULL;
-		}
-	}
+    for (int i = 0; i < ARRAYSIZE(m_hAddFriendIcon); i++)
+    {
+        if (m_hAddFriendIcon[i] != NULL)
+        {
+            ::DestroyIcon(m_hAddFriendIcon[i]);
+            m_hAddFriendIcon[i] = NULL;
+        }
+    }
+}
+
+void CMainDlg::UpdateTrayFlashIcon()
+{
+    // 先销毁旧图标，避免每次重建泄漏 HICON。
+    if (m_hMsgIcon != NULL)
+    {
+        ::DestroyIcon(m_hMsgIcon);
+        m_hMsgIcon = NULL;
+    }
+
+    // 取"最近一条"未读会话；集合为空（无未读）时 m_hMsgIcon 保持空，OnTimer 不会闪。
+    balloonmain::TrayFlashEntry target;
+    if (!m_trayFlash.GetTarget(target))
+        return;
+
+    // 按系统小图标尺寸生成 monogram 头像图标（首字 + 底色，与会话列表头像同口径）。
+    int nIconSize = ::GetSystemMetrics(SM_CXSMICON);
+    m_hMsgIcon = balloonmain::MakeMonogramIcon(target.m_avatarText.c_str(),
+                                               target.m_avatarColor, nIconSize);
+}
+
+void CMainDlg::StopTrayFlash()
+{
+    // 杀掉闪烁定时器。
+    if (m_dwMsgTimerId != NULL)
+    {
+        KillTimer(m_dwMsgTimerId);
+        m_dwMsgTimerId = NULL;
+    }
+
+    // 销毁闪烁头像图标。
+    if (m_hMsgIcon != NULL)
+    {
+        ::DestroyIcon(m_hMsgIcon);
+        m_hMsgIcon = NULL;
+    }
+
+    // 恢复默认托盘图标（带"昵称 / 账号 / 当前状态"提示），与 OnDelMsgSender / OnCancelFlash 同口径。
+    UpdateTrayIconTip();
 }
 
 void CMainDlg::UpdateMsgIcon()
 {
-	CMessageList* lpMsgList = m_FMGClient.GetMessageList();
-	if (NULL == lpMsgList)
-		return;
+    CMessageList* lpMsgList = m_FMGClient.GetMessageList();
+    if (NULL == lpMsgList)
+        return;
 
-	CMessageSender* lpMsgSender = lpMsgList->GetLastMsgSender();
-	if (NULL == lpMsgSender)
-		return;
-	
-	long nMsgType = lpMsgSender->GetMsgType();
-	UINT nSenderId = lpMsgSender->GetSenderId();
-	UINT nGroupCode = lpMsgSender->GetGroupCode();
+    CMessageSender* lpMsgSender = lpMsgList->GetLastMsgSender();
+    if (NULL == lpMsgSender)
+        return;
 
-	if (m_nLastMsgType != nMsgType || m_nLastSenderId != nSenderId)
-	{
-		m_nLastMsgType = nMsgType;
-		m_nLastSenderId = nSenderId;
+    long nMsgType = lpMsgSender->GetMsgType();
+    UINT nSenderId = lpMsgSender->GetSenderId();
+    UINT nGroupCode = lpMsgSender->GetGroupCode();
 
-		if (m_hMsgIcon != NULL)
-		{
-			::DestroyIcon(m_hMsgIcon);
-			m_hMsgIcon = NULL;
-		}
+    if (m_nLastMsgType != nMsgType || m_nLastSenderId != nSenderId)
+    {
+        m_nLastMsgType = nMsgType;
+        m_nLastSenderId = nSenderId;
 
-		CString strHeadPicFileName;
+        if (m_hMsgIcon != NULL)
+        {
+            ::DestroyIcon(m_hMsgIcon);
+            m_hMsgIcon = NULL;
+        }
 
-		if (FMG_MSG_TYPE_BUDDY == nMsgType)
-		{
-			//strHeadPicFileName = GetHeadPicFullName(0, nSenderId);
-			strHeadPicFileName.Format(_T("%sUsers\\%s\\UserThumb\\%d.png"), g_szHomePath, m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str(), nSenderId);
-			if(!Hootina::CPath::IsFileExist(strHeadPicFileName))
-				strHeadPicFileName.Format(_T("%sImage\\UserThumbs\\%d.png"), g_szHomePath, m_FMGClient.m_UserMgr.GetFaceID(nSenderId));
-		}
-		else if (FMG_MSG_TYPE_GROUP == nMsgType)
-			strHeadPicFileName = GetHeadPicFullName(nSenderId, 0);
-		else if (FMG_MSG_TYPE_SESS == nMsgType)
-			strHeadPicFileName = GetHeadPicFullName(nGroupCode, nSenderId);
-// 		else if (long_SYSGROUP == nMsgType)
-// 			strHeadPicFileName = Hootina::CPath::GetAppPath() + _T("Image\\DefSysHeadPic.ico");
+        CString strHeadPicFileName;
 
-		m_hMsgIcon = ExtractIcon(strHeadPicFileName);
-		if (NULL == m_hMsgIcon)
-		{
-			if (FMG_MSG_TYPE_BUDDY == nMsgType || FMG_MSG_TYPE_SESS == nMsgType)
-				m_hMsgIcon = AtlLoadIconImage(IDI_BUDDY, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
-			else if (FMG_MSG_TYPE_GROUP == nMsgType)
-				m_hMsgIcon = AtlLoadIconImage(IDI_GROUPCHATDLG_16, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
-			//else if (long_SYSGROUP == nMsgType)
-			//	m_hMsgIcon = AtlLoadIconImage(IDI_SYS, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
-		}
-	}
+        if (FMG_MSG_TYPE_BUDDY == nMsgType)
+        {
+            //strHeadPicFileName = GetHeadPicFullName(0, nSenderId);
+            strHeadPicFileName.Format(_T("%sUsers\\%s\\UserThumb\\%d.png"), g_szHomePath, m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str(), nSenderId);
+            if (!Hootina::CPath::IsFileExist(strHeadPicFileName))
+                strHeadPicFileName.Format(_T("%sImage\\UserThumbs\\%d.png"), g_szHomePath, m_FMGClient.m_UserMgr.GetFaceID(nSenderId));
+        }
+        else if (FMG_MSG_TYPE_GROUP == nMsgType)
+            strHeadPicFileName = GetHeadPicFullName(nSenderId, 0);
+        else if (FMG_MSG_TYPE_SESS == nMsgType)
+            strHeadPicFileName = GetHeadPicFullName(nGroupCode, nSenderId);
+        // 		else if (long_SYSGROUP == nMsgType)
+        // 			strHeadPicFileName = Hootina::CPath::GetAppPath() + _T("Image\\DefSysHeadPic.ico");
+
+        m_hMsgIcon = ExtractIcon(strHeadPicFileName);
+        if (NULL == m_hMsgIcon)
+        {
+            if (FMG_MSG_TYPE_BUDDY == nMsgType || FMG_MSG_TYPE_SESS == nMsgType)
+                m_hMsgIcon = AtlLoadIconImage(IDI_BUDDY, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
+            else if (FMG_MSG_TYPE_GROUP == nMsgType)
+                m_hMsgIcon = AtlLoadIconImage(IDI_GROUPCHATDLG_16, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
+            //else if (long_SYSGROUP == nMsgType)
+            //	m_hMsgIcon = AtlLoadIconImage(IDI_SYS, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
+        }
+    }
 }
 
 CString CMainDlg::GetHeadPicFullName(UINT nGroupCode, UINT nUTalkUin)
 {
-	
-	
-	//UINT nGroupNum, nUTalkNum;
-	//GetNumber(nGroupCode, nUTalkUin, nGroupNum, nUTalkNum);
 
-	//if (nGroupCode != 0 && nUTalkUin != 0)	// Ⱥ��Ա
-	//	return m_FMGClient.GetSessHeadPicFullName(nUTalkNum).c_str();
-	//else if (nGroupCode != 0)			// Ⱥ
-	//	return m_FMGClient.GetGroupHeadPicFullName(nGroupNum).c_str();
-	//else								// ����
-	//	return m_FMGClient.GetBuddyHeadPicFullName(nUTalkUin).c_str();
 
-	return _T("");
+    //UINT nGroupNum, nUTalkNum;
+    //GetNumber(nGroupCode, nUTalkUin, nGroupNum, nUTalkNum);
+
+    //if (nGroupCode != 0 && nUTalkUin != 0)	// 群成员
+    //	return m_FMGClient.GetSessHeadPicFullName(nUTalkNum).c_str();
+    //else if (nGroupCode != 0)			// 群
+    //	return m_FMGClient.GetGroupHeadPicFullName(nGroupNum).c_str();
+    //else								// 好友
+    //	return m_FMGClient.GetBuddyHeadPicFullName(nUTalkUin).c_str();
+
+    return _T("");
 }
 
 void CMainDlg::GetNumber(UINT nGroupCode, UINT nUTalkUin, UINT& nGroupNum, UINT& nUTalkNum)
 {
-	/*nGroupNum = nUTalkNum = 0;
+    /*nGroupNum = nUTalkNum = 0;
 
-	if (nGroupCode != 0 && nUTalkUin != 0)
-	{
-		CGroupList* lpGroupList = m_FMGClient.GetGroupList();
-		if (lpGroupList != NULL)
-		{
-			CBuddyInfo* lpBuddyInfo = lpGroupList->GetGroupMemberByCode(nGroupCode, nUTalkUin);
-			if (lpBuddyInfo != NULL)
-				nUTalkNum = lpBuddyInfo->m_nUTalkNum;
-		}
-	}
-	else if (nGroupCode != 0)
-	{
-		CGroupList* lpGroupList = m_FMGClient.GetGroupList();
-		if (lpGroupList != NULL)
-		{
-			CGroupInfo* lpGroupInfo = lpGroupList->GetGroupByCode(nGroupCode);
-			if (lpGroupInfo != NULL)
-				nGroupNum = lpGroupInfo->m_nGroupNumber;
-		}
-	}
-	else if (nUTalkUin != 0)
-	{
-		CBuddyList* lpBuddyList = m_FMGClient.GetBuddyList();
-		if (lpBuddyList != NULL)
-		{
-			CBuddyInfo* lpBuddyInfo = lpBuddyList->GetBuddy(nUTalkUin);
-			if (lpBuddyInfo != NULL)
-				nUTalkNum = lpBuddyInfo->m_nUTalkNum;
-		}
-	}*/
+    if (nGroupCode != 0 && nUTalkUin != 0)
+    {
+        CGroupList* lpGroupList = m_FMGClient.GetGroupList();
+        if (lpGroupList != NULL)
+        {
+            CBuddyInfo* lpBuddyInfo = lpGroupList->GetGroupMemberByCode(nGroupCode, nUTalkUin);
+            if (lpBuddyInfo != NULL)
+                nUTalkNum = lpBuddyInfo->m_nUTalkNum;
+        }
+    }
+    else if (nGroupCode != 0)
+    {
+        CGroupList* lpGroupList = m_FMGClient.GetGroupList();
+        if (lpGroupList != NULL)
+        {
+            CGroupInfo* lpGroupInfo = lpGroupList->GetGroupByCode(nGroupCode);
+            if (lpGroupInfo != NULL)
+                nGroupNum = lpGroupInfo->m_nGroupNumber;
+        }
+    }
+    else if (nUTalkUin != 0)
+    {
+        CBuddyList* lpBuddyList = m_FMGClient.GetBuddyList();
+        if (lpBuddyList != NULL)
+        {
+            CBuddyInfo* lpBuddyInfo = lpBuddyList->GetBuddy(nUTalkUin);
+            if (lpBuddyInfo != NULL)
+                nUTalkNum = lpBuddyInfo->m_nUTalkNum;
+        }
+    }*/
 }
 
 HICON CMainDlg::ExtractIcon(LPCTSTR lpszFileName)
 {
-	if (NULL == lpszFileName || NULL ==*lpszFileName)
-		return NULL;
+    if (NULL == lpszFileName || NULL == *lpszFileName)
+        return NULL;
 
-	int cx = 16, cy = 16;
-	HBITMAP hBmp = NULL;
+    int cx = 16, cy = 16;
+    HBITMAP hBmp = NULL;
 
-	Gdiplus::Bitmap imgHead(lpszFileName);
-	if (imgHead.GetLastStatus() != Gdiplus::Ok)
-		return NULL;
+    Gdiplus::Bitmap imgHead(lpszFileName);
+    if (imgHead.GetLastStatus() != Gdiplus::Ok)
+        return NULL;
 
-	if (imgHead.GetWidth() != cx || imgHead.GetHeight() != cy)
-	{
-		Gdiplus::Bitmap* pThumbnail = (Gdiplus::Bitmap*)imgHead.GetThumbnailImage(cx, cy, NULL, NULL);
-		if (pThumbnail != NULL)
-		{
-			pThumbnail->GetHBITMAP(Gdiplus::Color(255,255,255), &hBmp);
-			delete pThumbnail;
-		}
-	}
-	else
-	{
-		imgHead.GetHBITMAP(Gdiplus::Color(255,255,255), &hBmp);
-	}
+    if (imgHead.GetWidth() != cx || imgHead.GetHeight() != cy)
+    {
+        Gdiplus::Bitmap* pThumbnail = (Gdiplus::Bitmap*)imgHead.GetThumbnailImage(cx, cy, NULL, NULL);
+        if (pThumbnail != NULL)
+        {
+            pThumbnail->GetHBITMAP(Gdiplus::Color(255, 255, 255), &hBmp);
+            delete pThumbnail;
+        }
+    }
+    else
+    {
+        imgHead.GetHBITMAP(Gdiplus::Color(255, 255, 255), &hBmp);
+    }
 
-	if (NULL == hBmp)
-		return NULL;
+    if (NULL == hBmp)
+        return NULL;
 
-	HICON hIcon = NULL;
+    HICON hIcon = NULL;
 
-	CImageList imgList;
-	BOOL bRet = imgList.Create(cx, cy, TRUE | ILC_COLOR32, 1, 1);
-	if (bRet)
-	{
-		imgList.SetBkColor(RGB(255,255,255));
-		imgList.Add(hBmp);
-		hIcon = imgList.ExtractIcon(0);
-	}
-	::DeleteObject(hBmp);
-	imgList.Destroy();
+    CImageList imgList;
+    BOOL bRet = imgList.Create(cx, cy, TRUE | ILC_COLOR32, 1, 1);
+    if (bRet)
+    {
+        imgList.SetBkColor(RGB(255, 255, 255));
+        imgList.Add(hBmp);
+        hIcon = imgList.ExtractIcon(0);
+    }
+    ::DeleteObject(hBmp);
+    imgList.Destroy();
 
-	return hIcon;
+    return hIcon;
 }
 
 void CMainDlg::CloseAllDlg()
 {
-	{
-		std::map<UINT, CBuddyChatDlg*>::iterator iter;
-		for (iter = m_mapBuddyChatDlg.begin(); iter != m_mapBuddyChatDlg.end(); iter++)
-		{
-			CBuddyChatDlg* lpBuddyChatDlg = iter->second;
-			if (lpBuddyChatDlg != NULL)
-			{
-				if (lpBuddyChatDlg->IsWindow())
-					lpBuddyChatDlg->DestroyWindow();
+    {
+        std::map<UINT, CBuddyChatDlg*>::iterator iter;
+        for (iter = m_mapBuddyChatDlg.begin(); iter != m_mapBuddyChatDlg.end(); iter++)
+        {
+            CBuddyChatDlg* lpBuddyChatDlg = iter->second;
+            if (lpBuddyChatDlg != NULL)
+            {
+                if (lpBuddyChatDlg->IsWindow())
+                    lpBuddyChatDlg->DestroyWindow();
 
-				delete lpBuddyChatDlg;
-			}
-		}
-		m_mapBuddyChatDlg.clear();
-	}
+                delete lpBuddyChatDlg;
+            }
+        }
+        m_mapBuddyChatDlg.clear();
+    }
 
-	{
-		std::map<UINT, CGroupChatDlg*>::iterator iter;
-		for (iter = m_mapGroupChatDlg.begin(); iter != m_mapGroupChatDlg.end(); iter++)
-		{
-			CGroupChatDlg* lpGroupChatDlg = iter->second;
-			if (lpGroupChatDlg != NULL)
-			{
-				if (lpGroupChatDlg->IsWindow())
-					lpGroupChatDlg->DestroyWindow();
-				delete lpGroupChatDlg;
-			}
-		}
-		m_mapGroupChatDlg.clear();
-	}
+    {
+        std::map<UINT, CGroupChatDlg*>::iterator iter;
+        for (iter = m_mapGroupChatDlg.begin(); iter != m_mapGroupChatDlg.end(); iter++)
+        {
+            CGroupChatDlg* lpGroupChatDlg = iter->second;
+            if (lpGroupChatDlg != NULL)
+            {
+                if (lpGroupChatDlg->IsWindow())
+                    lpGroupChatDlg->DestroyWindow();
+                delete lpGroupChatDlg;
+            }
+        }
+        m_mapGroupChatDlg.clear();
+    }
 
-	{
-		std::map<UINT, CSessChatDlg*>::iterator iter;
-		for (iter = m_mapSessChatDlg.begin(); iter != m_mapSessChatDlg.end(); iter++)
-		{
-			CSessChatDlg* lpSessChatDlg = iter->second;
-			if (lpSessChatDlg != NULL)
-			{
-				if (lpSessChatDlg->IsWindow())
-					lpSessChatDlg->DestroyWindow();
-				delete lpSessChatDlg;
-			}
-		}
-		m_mapSessChatDlg.clear();
-	}
+    {
+        std::map<UINT, CSessChatDlg*>::iterator iter;
+        for (iter = m_mapSessChatDlg.begin(); iter != m_mapSessChatDlg.end(); iter++)
+        {
+            CSessChatDlg* lpSessChatDlg = iter->second;
+            if (lpSessChatDlg != NULL)
+            {
+                if (lpSessChatDlg->IsWindow())
+                    lpSessChatDlg->DestroyWindow();
+                delete lpSessChatDlg;
+            }
+        }
+        m_mapSessChatDlg.clear();
+    }
 
-	{
-		std::map<UINT, CBuddyInfoDlg*>::iterator iter;
-		for (iter = m_mapBuddyInfoDlg.begin(); iter != m_mapBuddyInfoDlg.end(); iter++)
-		{
-			CBuddyInfoDlg* lpBuddyInfoDlg = iter->second;
-			if (lpBuddyInfoDlg != NULL)
-			{
-				if (lpBuddyInfoDlg->IsWindow())
-					lpBuddyInfoDlg->DestroyWindow();
-				delete lpBuddyInfoDlg;
-			}
-		}
-		m_mapBuddyInfoDlg.clear();
-	}
+    {
+        std::map<UINT, CBuddyInfoDlg*>::iterator iter;
+        for (iter = m_mapBuddyInfoDlg.begin(); iter != m_mapBuddyInfoDlg.end(); iter++)
+        {
+            CBuddyInfoDlg* lpBuddyInfoDlg = iter->second;
+            if (lpBuddyInfoDlg != NULL)
+            {
+                if (lpBuddyInfoDlg->IsWindow())
+                    lpBuddyInfoDlg->DestroyWindow();
+                delete lpBuddyInfoDlg;
+            }
+        }
+        m_mapBuddyInfoDlg.clear();
+    }
 
-	{
-		std::map<CGMemberInfoMapKey, CBuddyInfoDlg*>::iterator iter;
-		for (iter = m_mapGMemberInfoDlg.begin(); iter != m_mapGMemberInfoDlg.end(); iter++)
-		{
-			CBuddyInfoDlg* lpBuddyInfoDlg = iter->second;
-			if (lpBuddyInfoDlg != NULL)
-			{
-				if (lpBuddyInfoDlg->IsWindow())
-					lpBuddyInfoDlg->DestroyWindow();
-				delete lpBuddyInfoDlg;
-			}
-		}
-		m_mapGMemberInfoDlg.clear();
-	}
+    {
+        std::map<CGMemberInfoMapKey, CBuddyInfoDlg*>::iterator iter;
+        for (iter = m_mapGMemberInfoDlg.begin(); iter != m_mapGMemberInfoDlg.end(); iter++)
+        {
+            CBuddyInfoDlg* lpBuddyInfoDlg = iter->second;
+            if (lpBuddyInfoDlg != NULL)
+            {
+                if (lpBuddyInfoDlg->IsWindow())
+                    lpBuddyInfoDlg->DestroyWindow();
+                delete lpBuddyInfoDlg;
+            }
+        }
+        m_mapGMemberInfoDlg.clear();
+    }
 
-	{
-		std::map<UINT, CGroupInfoDlg*>::iterator iter;
-		for (iter = m_mapGroupInfoDlg.begin(); iter != m_mapGroupInfoDlg.end(); iter++)
-		{
-			CGroupInfoDlg* lpGroupInfoDlg = iter->second;
-			if (lpGroupInfoDlg != NULL)
-			{
-				if (lpGroupInfoDlg->IsWindow())
-					lpGroupInfoDlg->DestroyWindow();
-				delete lpGroupInfoDlg;
-			}
-		}
-		m_mapGroupInfoDlg.clear();
-	}
+    {
+        std::map<UINT, CGroupInfoDlg*>::iterator iter;
+        for (iter = m_mapGroupInfoDlg.begin(); iter != m_mapGroupInfoDlg.end(); iter++)
+        {
+            CGroupInfoDlg* lpGroupInfoDlg = iter->second;
+            if (lpGroupInfoDlg != NULL)
+            {
+                if (lpGroupInfoDlg->IsWindow())
+                    lpGroupInfoDlg->DestroyWindow();
+                delete lpGroupInfoDlg;
+            }
+        }
+        m_mapGroupInfoDlg.clear();
+    }
 
-	//���ٲ��Һ��ѶԻ���
-	if(m_pFindFriendDlg!=NULL && m_pFindFriendDlg->IsWindow())
-		m_pFindFriendDlg->DestroyWindow();
+    //销毁查找好友对话框
+    if (m_pFindFriendDlg != NULL && m_pFindFriendDlg->IsWindow())
+        m_pFindFriendDlg->DestroyWindow();
 
-	//�����ҵ����϶Ի���
-	if(m_LogonUserInfoDlg.IsWindow())
-		m_LogonUserInfoDlg.DestroyWindow();
-
-    //������Ϣ����
-    if (m_BuddyInfoFloatWnd.IsWindow())
-        m_BuddyInfoFloatWnd.DestroyWindow();
+    //销毁我的资料对话框
+    if (m_LogonUserInfoDlg.IsWindow())
+        m_LogonUserInfoDlg.DestroyWindow();
 }
 
-// �Ӳ˵�ID��ȡ��Ӧ��UTalk_STATUS
+// 从菜单ID获取对应的UTalk_STATUS
 long CMainDlg::GetStatusFromMenuID(int nMenuID)
 {
-	switch (nMenuID)
-	{
-	case ID_MENU_IMONLINE:
-		return STATUS_ONLINE;
-	case ID_MENU_IMOFFLINE:
-		return STATUS_OFFLINE;
-	default:
-		return STATUS_OFFLINE;
-	}
+    switch (nMenuID)
+    {
+    case ID_MENU_IMONLINE:
+        return STATUS_ONLINE;
+    case ID_MENU_IMOFFLINE:
+        return STATUS_OFFLINE;
+    default:
+        return STATUS_OFFLINE;
+    }
 }
 
-// ����ָ��״̬����״̬�˵���ť��ͼ��
-void CMainDlg::StatusMenuBtn_SetIconPic(CSkinButton& btnStatus, long nStatus)
-{
-	LPCTSTR lpszFileName;
-
-	switch (nStatus)
-	{
-	case STATUS_ONLINE:
-		lpszFileName = _T("Status\\imonline.png");
-		break;
-	case STATUS_OFFLINE:
-		lpszFileName = _T("Status\\imoffline.png");
-		break;
-	default:
-		return;
-	}
-
-	btnStatus.SetIconPic(lpszFileName);
-	btnStatus.Invalidate();
-}
-
-//��������״̬�Ժ����б�����������������ǰ�棬�������ں���
+// 根据指定状态设置状态菜单按钮的图标
 void CMainDlg::BuddyListSortOnStaus()
 {
-	long nTeamCount = m_FMGClient.m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.size();
-	for(long i=0; i<nTeamCount; ++i)
-	{
-		m_FMGClient.m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo[i]->Sort();
-	}
+    long nTeamCount = m_FMGClient.m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.size();
+    for (long i = 0; i < nTeamCount; ++i)
+    {
+        m_FMGClient.m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo[i]->Sort();
+    }
 }
 
 void CMainDlg::ShowAddFriendConfirmDlg()
-{	
-	size_t nCount = m_FMGClient.m_aryAddFriendInfo.size();
-	if(nCount == 0)
-		return;
-
-	AddFriendInfo* pAddFriendInfo = m_FMGClient.m_aryAddFriendInfo[nCount-1];
-	if(pAddFriendInfo == NULL)
-		return;
-
-	CString strWindowTitle;
-	CString strInfo;
-	CAddFriendConfirmDlg AddFriendConfirmDlg;
-	AddFriendConfirmDlg.m_pFMGClient = &m_FMGClient;
-
-	//���˼��Լ�
-	if(pAddFriendInfo->nCmd==Apply)
-	{
-		strWindowTitle = _T("�Ӻ�������");
-		strInfo.Format(_T("%s(%s)����������Ϊ���ѣ��Ƿ�ͬ�⣿"), pAddFriendInfo->szNickName, pAddFriendInfo->szAccountName);
-		AddFriendConfirmDlg.ShowAgreeButton(TRUE);
-		AddFriendConfirmDlg.ShowRefuseButton(TRUE);
-		AddFriendConfirmDlg.ShowOKButton(FALSE);
-	}
-	//�Լ������ܾ����˻��߱����˾ܾ�
-	else if(pAddFriendInfo->nCmd==Refuse)
-	{
-		strWindowTitle = g_strAppTitle.c_str();
-		strInfo.Format(_T("�����߶Է�(%s(%s))�ܾ��˼Ӻ�������"), pAddFriendInfo->szNickName, pAddFriendInfo->szAccountName);
-		AddFriendConfirmDlg.ShowAgreeButton(FALSE);
-		AddFriendConfirmDlg.ShowRefuseButton(FALSE);
-		AddFriendConfirmDlg.ShowOKButton(TRUE);
-	}
-	//�Լ����߱���ͬ���˼Ӻ�������
-	else if(pAddFriendInfo->nCmd==Agree)
-	{		
-		strWindowTitle = g_strAppTitle.c_str();
-        //Ⱥ�Ŵ���0xFFFFFFF
-        if (pAddFriendInfo->uAccountID < 0xFFFFFFF)
-			strInfo.Format(_T("����%s(%s)�Ѿ��Ǻ���������ʼ����ɡ�"), pAddFriendInfo->szNickName, pAddFriendInfo->szAccountName);
-		else
-			strInfo.Format(_T("���Ѿ��ɹ�����Ⱥ��%s(%s)��������ʼ����ɡ�"), pAddFriendInfo->szNickName, pAddFriendInfo->szAccountName);
-		AddFriendConfirmDlg.ShowAgreeButton(FALSE);
-		AddFriendConfirmDlg.ShowRefuseButton(FALSE);
-		AddFriendConfirmDlg.ShowOKButton(TRUE);
-		
-		//m_FMGClient.m_UserMgr.AddFriend(pAddFriendInfo->uAccountID, pAddFriendInfo->szAccountName, pAddFriendInfo->szNickName);
-		//PostMessage(FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
-		//���»�ȡ�º����б�������
-        m_FMGClient.GetFriendList();
-	}
-	
-	AddFriendConfirmDlg.SetWindowInfo(strInfo);
-	AddFriendConfirmDlg.SetWindowTitle(strWindowTitle);
-
-	int nRet = AddFriendConfirmDlg.DoModal(m_hWnd, NULL);
-	
-	if(nRet==ID_ADDCONFIRM_REFUSE || nRet==ID_ADDCONFIRM_AGREE)
-	{		
-		UINT uCmd = (nRet==ID_ADDCONFIRM_AGREE ? Agree : Refuse);
-		m_FMGClient.ResponseAddFriendApply(pAddFriendInfo->uAccountID, uCmd);
-	}
-	
-	DELETE_PTR(pAddFriendInfo);
-	m_FMGClient.m_aryAddFriendInfo.erase(m_FMGClient.m_aryAddFriendInfo.end()-1);
-}
-
-BOOL CMainDlg::InsertTeamMenuItem(CSkinMenu& popMenu)
 {
-	//if(popMenu.GetMenuItemCount() >= 5)
-	//	return TRUE;
-	
-	int nTeamIndex = -1;
-	int nItemIndex = -1;
-	m_BuddyListCtrl.GetCurSelIndex(nTeamIndex, nItemIndex);
-	if(nTeamIndex<0 || nItemIndex<0)
-		return FALSE;
+    size_t nCount = m_FMGClient.m_aryAddFriendInfo.size();
+    if (nCount == 0)
+        return;
 
-	CSkinMenu* subMenu = new CSkinMenu();
-	subMenu->CreatePopupMenu();
+    AddFriendInfo* pAddFriendInfo = m_FMGClient.m_aryAddFriendInfo[nCount - 1];
+    if (pAddFriendInfo == NULL)
+        return;
 
+    CString strWindowTitle;
+    CString strInfo;
+    CAddFriendConfirmDlg AddFriendConfirmDlg;
+    AddFriendConfirmDlg.m_pFMGClient = &m_FMGClient;
 
-	size_t nCount = m_FMGClient.m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.size();
-	for(size_t i=0; i<nCount; ++i)
-	{
-		if(i == nTeamIndex)
-			continue;
-		
-		subMenu->AppendMenu(MF_STRING|MF_BYPOSITION, TEAM_MENU_ITEM_BASE+i, m_FMGClient.m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo[i]->m_strName.c_str());
-	}
+    //别人加自己
+    if (pAddFriendInfo->nCmd == Apply)
+    {
+        strWindowTitle = _T("加好友请求");
+        strInfo.Format(_T("%s(%s)请求您添加为好友，是否同意？"), pAddFriendInfo->szNickName, pAddFriendInfo->szAccountName);
+        AddFriendConfirmDlg.ShowAgreeButton(TRUE);
+        AddFriendConfirmDlg.ShowRefuseButton(TRUE);
+        AddFriendConfirmDlg.ShowOKButton(FALSE);
+    }
+    //自己主动拒绝别人或者被别人拒绝
+    else if (pAddFriendInfo->nCmd == Refuse)
+    {
+        strWindowTitle = g_strAppTitle.c_str();
+        strInfo.Format(_T("您或者对方(%s(%s))拒绝了加好友请求。"), pAddFriendInfo->szNickName, pAddFriendInfo->szAccountName);
+        AddFriendConfirmDlg.ShowAgreeButton(FALSE);
+        AddFriendConfirmDlg.ShowRefuseButton(FALSE);
+        AddFriendConfirmDlg.ShowOKButton(TRUE);
+    }
+    //自己或者别人同意了加好友请求
+    else if (pAddFriendInfo->nCmd == Agree)
+    {
+        strWindowTitle = g_strAppTitle.c_str();
+        //群号大于0xFFFFFFF
+        if (pAddFriendInfo->uAccountID < 0xFFFFFFF)
+            strInfo.Format(_T("您和%s(%s)已经是好友啦，开始聊天吧。"), pAddFriendInfo->szNickName, pAddFriendInfo->szAccountName);
+        else
+            strInfo.Format(_T("您已经成功加入群【%s(%s)】啦，开始聊天吧。"), pAddFriendInfo->szNickName, pAddFriendInfo->szAccountName);
+        AddFriendConfirmDlg.ShowAgreeButton(FALSE);
+        AddFriendConfirmDlg.ShowRefuseButton(FALSE);
+        AddFriendConfirmDlg.ShowOKButton(TRUE);
 
-	popMenu.ModifyMenu(8, MF_POPUP|MF_BYPOSITION, (UINT_PTR)subMenu->m_hMenu, NULL);
+        //m_FMGClient.m_UserMgr.AddFriend(pAddFriendInfo->uAccountID, pAddFriendInfo->szAccountName, pAddFriendInfo->szNickName);
+        //PostMessage(FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
+        //重新获取下好友列表并更新
+        m_FMGClient.GetFriendList();
+    }
 
-	return TRUE;
+    AddFriendConfirmDlg.SetWindowInfo(strInfo);
+    AddFriendConfirmDlg.SetWindowTitle(strWindowTitle);
+
+    int nRet = AddFriendConfirmDlg.DoModal(m_hWnd, NULL);
+
+    if (nRet == ID_ADDCONFIRM_REFUSE || nRet == ID_ADDCONFIRM_AGREE)
+    {
+        UINT uCmd = (nRet == ID_ADDCONFIRM_AGREE ? Agree : Refuse);
+        m_FMGClient.ResponseAddFriendApply(pAddFriendInfo->uAccountID, uCmd);
+    }
+
+    DELETE_PTR(pAddFriendInfo);
+    m_FMGClient.m_aryAddFriendInfo.erase(m_FMGClient.m_aryAddFriendInfo.end() - 1);
 }
 
 void CMainDlg::SaveCurrentLogonUserToFile()
-{	
-	CIniFile iniFile;
-	CString strIniFile;
-	strIniFile.Format(_T("%sconfig\\flamingo.ini"), g_szHomePath);
-	CString strAccountList;
-	iniFile.ReadString(_T("LogonUserList"), _T("AccountName"), _T(""), strAccountList.GetBuffer(256), 256, strIniFile);
-	strAccountList.ReleaseBuffer();
-	strAccountList += m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str();
-	strAccountList +=_T(";");
-	iniFile.WriteString(_T("LogonUserList"), _T("AccountName"), strAccountList, strIniFile);
+{
+    CIniFile iniFile;
+    CString strIniFile;
+    strIniFile.Format(_T("%sconfig\\flamingo.ini"), g_szHomePath);
+    CString strAccountList;
+    iniFile.ReadString(_T("LogonUserList"), _T("AccountName"), _T(""), strAccountList.GetBuffer(256), 256, strIniFile);
+    strAccountList.ReleaseBuffer();
+    strAccountList += m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str();
+    strAccountList += _T(";");
+    iniFile.WriteString(_T("LogonUserList"), _T("AccountName"), strAccountList, strIniFile);
 }
 
 void CMainDlg::DeleteCurrentUserFromFile()
-{	
-	CIniFile iniFile;
-	CString strIniFile;
-	strIniFile.Format(_T("%sconfig\\flamingo.ini"), g_szHomePath);
-	CString strAccountList;
-	iniFile.ReadString(_T("LogonUserList"), _T("AccountName"), _T(""), strAccountList.GetBuffer(256), 256, strIniFile);
-	strAccountList.ReleaseBuffer();
-	
-	CString strCurrentAccount;
-	strCurrentAccount.Format(_T("%s;"), m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
-	strAccountList.Replace(strCurrentAccount, _T(""));
-	iniFile.WriteString(_T("LogonUserList"), _T("AccountName"), strAccountList, strIniFile);
+{
+    CIniFile iniFile;
+    CString strIniFile;
+    strIniFile.Format(_T("%sconfig\\flamingo.ini"), g_szHomePath);
+    CString strAccountList;
+    iniFile.ReadString(_T("LogonUserList"), _T("AccountName"), _T(""), strAccountList.GetBuffer(256), 256, strIniFile);
+    strAccountList.ReleaseBuffer();
+
+    CString strCurrentAccount;
+    strCurrentAccount.Format(_T("%s;"), m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
+    strAccountList.Replace(strCurrentAccount, _T(""));
+    iniFile.WriteString(_T("LogonUserList"), _T("AccountName"), strAccountList, strIniFile);
 }
 
 BOOL CMainDlg::IsFilesTransferring()
 {
-	std::map<UINT, CBuddyChatDlg*>::iterator iter;
-	for (iter = m_mapBuddyChatDlg.begin(); iter != m_mapBuddyChatDlg.end(); iter++)
-	{
-		CBuddyChatDlg* lpBuddyChatDlg = iter->second;
-		if (lpBuddyChatDlg == NULL)
-			continue;
-		if(lpBuddyChatDlg->IsFilesTransferring())
-			return TRUE;
-	}
-	
-	return FALSE;
+    std::map<UINT, CBuddyChatDlg*>::iterator iter;
+    for (iter = m_mapBuddyChatDlg.begin(); iter != m_mapBuddyChatDlg.end(); iter++)
+    {
+        CBuddyChatDlg* lpBuddyChatDlg = iter->second;
+        if (lpBuddyChatDlg == NULL)
+            continue;
+        if (lpBuddyChatDlg->IsFilesTransferring())
+            return TRUE;
+    }
+
+    return FALSE;
 }
 
 void CMainDlg::CreateEssentialDirectories()
 {
-	CString strAppPath(g_szHomePath);
-	
-	CString strUsersDirectory(strAppPath);
-	strUsersDirectory += _T("Users");
-	if(!Hootina::CPath::IsDirectoryExist(strUsersDirectory))
-		Hootina::CPath::CreateDirectory(strUsersDirectory);
+    CString strAppPath(g_szHomePath);
 
-	CString strCurrentUserDirectory;
-	strCurrentUserDirectory.Format(_T("%s\\%s"), strUsersDirectory, m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
+    CString strUsersDirectory(strAppPath);
+    strUsersDirectory += _T("Users");
+    if (!Hootina::CPath::IsDirectoryExist(strUsersDirectory))
+        Hootina::CPath::CreateDirectory(strUsersDirectory);
 
-	if(!Hootina::CPath::IsDirectoryExist(strCurrentUserDirectory))
-		Hootina::CPath::CreateDirectory(strCurrentUserDirectory);
+    CString strCurrentUserDirectory;
+    strCurrentUserDirectory.Format(_T("%s\\%s"), strUsersDirectory, m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
 
-	CString strChatImagesDirectory;
-	strChatImagesDirectory.Format(_T("%s\\ChatImage\\"), strCurrentUserDirectory);
-	if(!Hootina::CPath::IsDirectoryExist(strChatImagesDirectory))
-		Hootina::CPath::CreateDirectory(strChatImagesDirectory);
+    if (!Hootina::CPath::IsDirectoryExist(strCurrentUserDirectory))
+        Hootina::CPath::CreateDirectory(strCurrentUserDirectory);
 
-	CString strUserThumbDirectory;
-	strUserThumbDirectory.Format(_T("%s\\UserThumb\\"), strCurrentUserDirectory);
-	if(!Hootina::CPath::IsDirectoryExist(strUserThumbDirectory))
-		Hootina::CPath::CreateDirectory(strUserThumbDirectory);
+    CString strChatImagesDirectory;
+    strChatImagesDirectory.Format(_T("%s\\ChatImage\\"), strCurrentUserDirectory);
+    if (!Hootina::CPath::IsDirectoryExist(strChatImagesDirectory))
+        Hootina::CPath::CreateDirectory(strChatImagesDirectory);
+
+    CString strUserThumbDirectory;
+    strUserThumbDirectory.Format(_T("%s\\UserThumb\\"), strCurrentUserDirectory);
+    if (!Hootina::CPath::IsDirectoryExist(strUserThumbDirectory))
+        Hootina::CPath::CreateDirectory(strUserThumbDirectory);
 
 }

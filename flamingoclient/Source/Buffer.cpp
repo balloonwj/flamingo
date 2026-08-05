@@ -1,4 +1,4 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "Buffer.h"
 
 CBuffer::CBuffer()
@@ -38,7 +38,7 @@ void CBuffer::SetSize(DWORD dwNewSize)
 	else
 	{
 		dwNewSize += 8;
-		if (dwNewSize > m_dwMaxSize)			// ʣ��ռ䲻��,���·���ռ�
+		if (dwNewSize > m_dwMaxSize)			// 剩余空间不足,重新分配空间
 		{
 			ReAlloc(dwNewSize);
 		}
@@ -79,7 +79,7 @@ BOOL CBuffer::Add(const char* lpData, DWORD dwSize)
 		return FALSE;
 
 	DWORD dwNeedSize = m_dwSize + dwSize + 8;
-	if (dwNeedSize > m_dwMaxSize)			// ʣ��ռ䲻��,���·���ռ�
+	if (dwNeedSize > m_dwMaxSize)			// 剩余空间不足,重新分配空间
 	{
 		BOOL bRet = ReAlloc(dwNeedSize);
 		if (!bRet)

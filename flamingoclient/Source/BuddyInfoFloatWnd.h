@@ -1,5 +1,5 @@
-/** 
- * ÓÃ»§ĞÅÏ¢¸¡¶¯´°¿Ú£¬BuddyInfoFloatWnd.h
+ï»¿/** 
+ * ç”¨æˆ·ä¿¡æ¯æµ®åŠ¨çª—å£ï¼ŒBuddyInfoFloatWnd.h
  * zhangyl 2017.09.30
  */
 #pragma once
@@ -73,7 +73,7 @@ private:
 	CSkinScrollBar			m_VScrollBar;
 
 	CImageEx*				m_lpBgImg;
-    CImageEx*               m_lpHeadImg;            //Í·Ïñ
+    CImageEx*               m_lpHeadImg;            //å¤´åƒ
 	
 	BOOL					m_bTransparent;
 

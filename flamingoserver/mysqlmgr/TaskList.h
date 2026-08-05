@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "MysqlTask.h"
 #include <stdint.h>
@@ -11,12 +11,12 @@ public:
     CTaskList();
     ~CTaskList(void);
 
-    bool push(IMysqlTask* poTask);                  // Âß¼­Ïß³ÌĞŞ¸Ä 
-    IMysqlTask* pop();				                // Êı¾İ¿âÏß³ÌĞŞ¸Ä 
+    bool push(IMysqlTask* poTask);                  // é€»è¾‘çº¿ç¨‹ä¿®æ”¹ 
+    IMysqlTask* pop();				                // æ•°æ®åº“çº¿ç¨‹ä¿®æ”¹ 
 
 private:
-	uint16_t            m_uReadIndex;               // Êı¾İ¿âÏß³ÌĞŞ¸Ä 
-	uint16_t            m_uWriteIndex;              // Âß¼­Ïß³ÌĞŞ¸Ä   
+	uint16_t            m_uReadIndex;               // æ•°æ®åº“çº¿ç¨‹ä¿®æ”¹ 
+	uint16_t            m_uWriteIndex;              // é€»è¾‘çº¿ç¨‹ä¿®æ”¹   
 	IMysqlTask*         m_pTaskNode[MAX_TASK_NUM];
 };
 

@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <set>
 #include "resource.h"
@@ -7,7 +7,7 @@
 
 class CFlamingoClient;
 
-//Èº·¢³ÉÔ±Ñ¡Ôñ¶Ô»°¿ò
+//ç¾¤å‘æˆå‘˜é€‰æ‹©å¯¹è¯æ¡†
 class CMultiChatMemberSelectionDlg : public CDialogImpl<CMultiChatMemberSelectionDlg>, public CMessageFilter
 {
 public:

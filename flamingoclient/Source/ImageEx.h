@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <atlimage.h>
 
@@ -18,10 +18,10 @@ public:
 	void SetNinePart(const RECT* lpNinePart);
 	BOOL Draw2(HDC hDestDC, const RECT& rectDest);
 
-	void GrayScale();	// ͼ��ҶȻ�
+	void GrayScale();	// 图像灰度化
 
 private:
-	BOOL AlphaPremultiplication();	// AlphaԤ��
+	BOOL AlphaPremultiplication();	// Alpha预乘
 	BOOL DrawNinePartImage(int pleft, int ptop, int pright, int pbottom,
 		HDC hDC, int height, int width, int left, int top, int right, int bottom);
 	BOOL DrawNinePartImage(HDC hDC, int x, int y, int cx, int cy, 

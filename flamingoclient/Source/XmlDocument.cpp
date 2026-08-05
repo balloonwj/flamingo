@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "XmlDocument.h"
 
 CXmlNode::CXmlNode(void)
@@ -384,15 +384,15 @@ BOOL CXmlDocument::Load(LPCTSTR pPath)
 	if (FAILED(hr))
 		return FALSE;
 
-	hr = m_pXMLDoc->put_async(VARIANT_FALSE);	// ¹Ø±ÕÒì²½µ÷ÓÃ
+	hr = m_pXMLDoc->put_async(VARIANT_FALSE);	// å…³é—­å¼‚æ­¥è°ƒç”¨
 	if (FAILED(hr))
 		goto Ret0;
 
-	hr = m_pXMLDoc->put_resolveExternals(VARIANT_FALSE);	// ÊÇ·ñÆôÓÃÍâ²¿DTD·ÖÎö
+	hr = m_pXMLDoc->put_resolveExternals(VARIANT_FALSE);	// æ˜¯å¦å¯ç”¨å¤–éƒ¨DTDåˆ†æ
 	if (FAILED(hr))
 		goto Ret0;
 
-	hr = m_pXMLDoc->put_validateOnParse(VARIANT_FALSE);		// ÊÇ·ñÔÊĞíÎÄµµÑéÖ¤
+	hr = m_pXMLDoc->put_validateOnParse(VARIANT_FALSE);		// æ˜¯å¦å…è®¸æ–‡æ¡£éªŒè¯
 	if (FAILED(hr))
 		goto Ret0;
 
@@ -430,15 +430,15 @@ BOOL CXmlDocument::LoadXml(LPCTSTR pXml)
 	if (FAILED(hr))
 		return FALSE;
 
-	hr = m_pXMLDoc->put_async(VARIANT_FALSE);	// ¹Ø±ÕÒì²½µ÷ÓÃ
+	hr = m_pXMLDoc->put_async(VARIANT_FALSE);	// å…³é—­å¼‚æ­¥è°ƒç”¨
 	if (FAILED(hr))
 		goto Ret0;
 
-	hr = m_pXMLDoc->put_resolveExternals(VARIANT_FALSE);	// ÊÇ·ñÆôÓÃÍâ²¿DTD·ÖÎö
+	hr = m_pXMLDoc->put_resolveExternals(VARIANT_FALSE);	// æ˜¯å¦å¯ç”¨å¤–éƒ¨DTDåˆ†æ
 	if (FAILED(hr))
 		goto Ret0;
 
-	hr = m_pXMLDoc->put_validateOnParse(VARIANT_FALSE);		// ÊÇ·ñÔÊĞíÎÄµµÑéÖ¤
+	hr = m_pXMLDoc->put_validateOnParse(VARIANT_FALSE);		// æ˜¯å¦å…è®¸æ–‡æ¡£éªŒè¯
 	if (FAILED(hr))
 		goto Ret0;
 

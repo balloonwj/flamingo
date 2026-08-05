@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "Utils.h"
 #include "Path.h"
 #include <Iphlpapi.h>
@@ -57,7 +57,7 @@ BOOL StrToHex(const CHAR* lpStr, CHAR* lpHex, int nLen)
 	return TRUE;
 }
 
-// 16Î»ÕûĞÍÊı¾İÍøÂç×Ö½ÚĞòÓëÕı³£×Ö½ÚĞò×ª»»
+// 16ä½æ•´å‹æ•°æ®ç½‘ç»œå­—èŠ‚åºä¸æ­£å¸¸å­—èŠ‚åºè½¬æ¢
 u_short Swap16(u_short nValue)
 {
 	u_short nRetValue = (u_short)((nValue & 0xff00) >> 0x08);
@@ -66,7 +66,7 @@ u_short Swap16(u_short nValue)
 
 }
 
-// 32Î»ÕûĞÍÊı¾İÍøÂç×Ö½ÚĞòÓëÕı³£×Ö½ÚĞò×ª»»
+// 32ä½æ•´å‹æ•°æ®ç½‘ç»œå­—èŠ‚åºä¸æ­£å¸¸å­—èŠ‚åºè½¬æ¢
 u_long Swap32(u_long nValue)
 {
 	u_long nRetValue = ((nValue & 0xff000000) >> 0x18);
@@ -119,7 +119,7 @@ BOOL IsToday(time_t lTime)
 	//	return FALSE;
 }
 
-//½«ÈÕÆÚ×ª»»³ÉUTCÃëÊı
+//å°†æ—¥æœŸè½¬æ¢æˆUTCç§’æ•°
 time_t DateToUTCSeconds(long nYear, long nMonth, long nDay)
 {
 	struct tm  T = {0};
@@ -159,7 +159,7 @@ BOOL IsToday(SYSTEMTIME* lpTime)
 		return FALSE;
 }
 
-// »ñÈ¡ÎÄ¼ş×îºóĞŞ¸ÄÊ±¼ä
+// è·å–æ–‡ä»¶æœ€åä¿®æ”¹æ—¶é—´
 BOOL GetFileLastWriteTime(LPCTSTR lpszFileName, SYSTEMTIME* lpSysTime)
 {
 	BOOL bRet = FALSE;
@@ -186,7 +186,7 @@ BOOL GetFileLastWriteTime(LPCTSTR lpszFileName, SYSTEMTIME* lpSysTime)
 	return bRet;
 }
 
-// ¶ÁÈ¡Õû¸öÎÄ¼ş
+// è¯»å–æ•´ä¸ªæ–‡ä»¶
 BOOL File_ReadAll(const TCHAR* lpszFileName, CHAR**lpData, LONG*lSize)
 {
 	if (NULL == lpData || NULL == lSize)
@@ -229,19 +229,19 @@ BOOL File_ReadAll(const TCHAR* lpszFileName, CHAR**lpData, LONG*lSize)
 	}
 }
 
-// ¼ì²âÖ¸¶¨×Ö·ûÊÇ·ñÊÇ×ÖÄ¸(A-Z£¬a-z)»òÊı×Ö(0-9)
+// æ£€æµ‹æŒ‡å®šå­—ç¬¦æ˜¯å¦æ˜¯å­—æ¯(A-Zï¼Œa-z)æˆ–æ•°å­—(0-9)
 BOOL my_isalnum(unsigned char cChar)
 {
 	return ((cChar | 0x20) - 'a') < 26u  || (cChar - '0') < 10u;
 }
 
-// ¼ì²âÖ¸¶¨×Ö·ûÊÇ·ñÊÇ×ÖÄ¸(A-Z£¬a-z)»òÊı×Ö(0-9)
+// æ£€æµ‹æŒ‡å®šå­—ç¬¦æ˜¯å¦æ˜¯å­—æ¯(A-Zï¼Œa-z)æˆ–æ•°å­—(0-9)
 BOOL my_isalnum(wchar_t cChar)
 {
 	return ((cChar | 0x20) - L'a') < 26u  || (cChar - L'0') < 10u;
 }
 
-// Ã¶¾ÙÏµÍ³×ÖÌå»Øµ÷º¯Êı
+// æšä¸¾ç³»ç»Ÿå­—ä½“å›è°ƒå‡½æ•°
 int CALLBACK EnumSysFontProc(const LOGFONT*lpelf, const TEXTMETRIC*lpntm, DWORD dwFontType, LPARAM lParam)
 {
 	if (dwFontType & TRUETYPE_FONTTYPE)
@@ -261,7 +261,7 @@ int CALLBACK EnumSysFontProc(const LOGFONT*lpelf, const TEXTMETRIC*lpntm, DWORD 
 	return TRUE;
 }
 
-// Ã¶¾ÙÏµÍ³×ÖÌå
+// æšä¸¾ç³»ç»Ÿå­—ä½“
 BOOL EnumSysFont(std::vector<tstring>* arrSysFont)
 {
 	if (NULL == arrSysFont)
@@ -274,7 +274,7 @@ BOOL EnumSysFont(std::vector<tstring>* arrSysFont)
 	return TRUE;
 }
 
-// ÉÁË¸´°¿Ú±êÌâÀ¸
+// é—ªçƒçª—å£æ ‡é¢˜æ 
 BOOL FlashWindowEx(HWND hWnd, int nCount)
 {
 	FLASHWINFO stFlashInfo = {0};
@@ -286,7 +286,7 @@ BOOL FlashWindowEx(HWND hWnd, int nCount)
 	return ::FlashWindowEx(&stFlashInfo);
 }
 
-// »ñÈ¡ÏµÍ³ÈÎÎñÀ¸ÇøÓò
+// è·å–ç³»ç»Ÿä»»åŠ¡æ åŒºåŸŸ
 BOOL GetTrayWndRect(RECT* lpRect)
 {
 	if (NULL == lpRect)
@@ -375,7 +375,7 @@ void ToUpper(std::wstring& strText)
 		*i = ToUpper(*i);
 }
 
-// ±àÂëHtmlÌØÊâ×Ö·û
+// ç¼–ç Htmlç‰¹æ®Šå­—ç¬¦
 void EncodeHtmlSpecialChars(std::wstring& strText)
 {
 	Replace(strText, _T("&"), _T("&amp;"));
@@ -386,7 +386,7 @@ void EncodeHtmlSpecialChars(std::wstring& strText)
 	Replace(strText, _T(" "), _T("&nbsp;"));
 }
 
-// ½âÂëHtmlÌØÊâ×Ö·û
+// è§£ç Htmlç‰¹æ®Šå­—ç¬¦
 void DecodeHtmlSpecialChars(std::wstring& strText)
 {
 	Replace(strText, _T("&#39;"), _T("'"));
@@ -859,13 +859,13 @@ time_t httpdate_parse(const TCHAR*date)
     return tmp;
 }
 
-//Ö»Ó°ÏìÍ¬Ò»Ä¿Â¼ÏÂµÄ³ÌĞòÎÄ¼ş£¬²»Ó°Ïì²»Í¬Ä¿Â¼ÏÂµÄ³ÌĞòÎÄ¼ş
-//ËùÒÔÕâÀïÎªÁË±£Ö¤Î¨Ò»ĞÔÊ¹ÓÃ³ÌĞòÈ«ÊÎÂ·¾¶À´×÷Îª»¥³âÌåµÄÃû×Ö
+//åªå½±å“åŒä¸€ç›®å½•ä¸‹çš„ç¨‹åºæ–‡ä»¶ï¼Œä¸å½±å“ä¸åŒç›®å½•ä¸‹çš„ç¨‹åºæ–‡ä»¶
+//æ‰€ä»¥è¿™é‡Œä¸ºäº†ä¿è¯å”¯ä¸€æ€§ä½¿ç”¨ç¨‹åºå…¨é¥°è·¯å¾„æ¥ä½œä¸ºäº’æ–¥ä½“çš„åå­—
 BOOL CheckOnlyOneInstance()
 {
 	//TCHAR szModulePath[MAX_PATH] = {0};
 	//::GetModuleFileName(NULL, szModulePath, MAX_PATH);
-	////½«Â·¾¶ÖĞ·´Ğ±¸Ü»»³ÉÁ¬×Ö·û-
+	////å°†è·¯å¾„ä¸­åæ–œæ æ¢æˆè¿å­—ç¬¦-
 	//for(long i=_tcslen(szModulePath)-1; i>=0; --i)
 	//{
 	//	if(szModulePath[i] == _T('\\') || szModulePath[i] == _T(':') || szModulePath[i] == _T('.'))
@@ -887,18 +887,18 @@ long GetFileCountOfSpecifiDirectory(PCSTR pszDirectoryName, PCTSTR pszFileExtens
 
 	/*WIN32_FIND_DATA findData = {0};
 	HANDLE hFind = ::FindFirstFile(pszDirectoryName,&findData);
-¡¡¡¡if(INVALID_HANDLE_VALUE == hFind)¡¡¡¡
+ã€€ã€€if(INVALID_HANDLE_VALUE == hFind)ã€€ã€€
 		return 0;
 
 	long nCount = 0;
-  ¡¡while(TRUE)
+  ã€€while(TRUE)
 	{
 		if(findData.dwFileAttributes & FILE_ATTRIBUTE_NORMAL)
 		{
 			if(_tcsstr(findData.cFileName
-			  ¡¡¡¡¡¡
-			if(!FindNextFile(hFind, &findData))¡¡¡¡break;
-	¡¡¡¡}
+			  ã€€ã€€ã€€
+			if(!FindNextFile(hFind, &findData))ã€€ã€€break;
+	ã€€ã€€}
    }
 	
    ::FindClose(hFind);*/
@@ -921,7 +921,7 @@ void SplitString(const CString& strSource, PCTSTR pszDelimiter, std::vector<CStr
 		nIndex = strSrc.Find(pszDelimiter);
 		if(nIndex<0 && !strSrc.IsEmpty())
 		{
-			aryStringArray.push_back(strSrc);	//½«×îºóÊ£Óà²¿·Ö¼Ó½øÈ¥
+			aryStringArray.push_back(strSrc);	//å°†æœ€åå‰©ä½™éƒ¨åˆ†åŠ è¿›å»
 			break;
 		}
 		else if(nIndex<0 && strSrc.IsEmpty())
@@ -939,7 +939,7 @@ void SplitString(const CString& strSource, PCTSTR pszDelimiter, std::vector<CStr
 	} while (TRUE);
 }
 
-//»ñÈ¡±¾»úÍø¿¨µØÖ·
+//è·å–æœ¬æœºç½‘å¡åœ°å€
 DWORD GetNetcard(BYTE Address[8][6])
 {
 	char __local_ipaddress__[8][16]={0};
@@ -953,10 +953,10 @@ DWORD GetNetcard(BYTE Address[8][6])
 		IP_ADDR_STRING* pIPAddr = NULL;
 		if(GetAdaptersInfo(pAdapterInfo,&ulAdapterInfoSize)==ERROR_SUCCESS)
 		{
-			do	//±éÀúËùÓĞÊÊÅäÆ÷
+			do	//éå†æ‰€æœ‰é€‚é…å™¨
 			{
 				if(pAdapterInfo->Type==MIB_IF_TYPE_ETHERNET||
-					pAdapterInfo->Type==IF_TYPE_IEEE80211)//ÅĞ¶ÏÊÇ·ñÎªÒÔÌ«Íø½Ó¿Ú
+					pAdapterInfo->Type==IF_TYPE_IEEE80211)//åˆ¤æ–­æ˜¯å¦ä¸ºä»¥å¤ªç½‘æ¥å£
 				{
 					if(pAdapterInfo->AddressLength==6&&
 						memcmp(pAdapterInfo->Address,null_card,6))
@@ -1039,8 +1039,8 @@ BOOL GetImageWidthAndHeight(LPCTSTR lpszFileName, long& nWidth, long& nHeight)
 BOOL IUIsNetworkAlive()  
 {  
 
-	DWORD   dwFlags;			//ÉÏÍø·½Ê½   
-	BOOL    bAlive = TRUE;		//ÊÇ·ñÔÚÏß    
+	DWORD   dwFlags;			//ä¸Šç½‘æ–¹å¼   
+	BOOL    bAlive = TRUE;		//æ˜¯å¦åœ¨çº¿    
 
 	bAlive = ::IsNetworkAlive(&dwFlags);     
 	
@@ -1049,8 +1049,8 @@ BOOL IUIsNetworkAlive()
 
 BOOL IUGetConnectedState()
 {
-	DWORD  dwFlags;				//ÉÏÍø·½Ê½   
-	BOOL   bAlive = TRUE;		//ÊÇ·ñÔÚÏß    
+	DWORD  dwFlags;				//ä¸Šç½‘æ–¹å¼   
+	BOOL   bAlive = TRUE;		//æ˜¯å¦åœ¨çº¿    
 
 	bAlive = ::InternetGetConnectedState(&dwFlags, 0);
 	if(bAlive && (dwFlags&INTERNET_CONNECTION_MODEM_BUSY)==0)
@@ -1060,7 +1060,7 @@ BOOL IUGetConnectedState()
 	return FALSE;
 }
 
-//·µ»ØÖµÊÇÈÎÎñÀ¸µÄ¸ß¶ÈºÍ·½Ïò, -1±íÊ¾³ö´í
+//è¿”å›å€¼æ˜¯ä»»åŠ¡æ çš„é«˜åº¦å’Œæ–¹å‘, -1è¡¨ç¤ºå‡ºé”™
 long GetTaskbarDirectionAndRect(CRect& rtTaskbar)
 {
 	long cxScreen = ::GetSystemMetrics(SM_CXSCREEN);
@@ -1072,12 +1072,12 @@ long GetTaskbarDirectionAndRect(CRect& rtTaskbar)
 		nDirection = -1;
 	
 	if(rtWorkarea.left > 0)
-		nDirection = 0;			//×ó±ß
+		nDirection = 0;			//å·¦è¾¹
 	else if(rtWorkarea.Width() < cxScreen)
-		nDirection = 1;			//ÓÒ±ß
+		nDirection = 1;			//å³è¾¹
 	else if(rtWorkarea.top > 0)
-		nDirection = 2;			//ÉÏ±ß
-	else if(rtWorkarea.Height() < cyScreen) //ÏÂ±ß
+		nDirection = 2;			//ä¸Šè¾¹
+	else if(rtWorkarea.Height() < cyScreen) //ä¸‹è¾¹
 		nDirection = 3;
 
 	if(nDirection == 3)
@@ -1098,7 +1098,7 @@ long GetTaskbarDirectionAndRect(CRect& rtTaskbar)
 	return nDirection;
 }
 
-//½«Í¼Æ¬×ª»»³ÉÖ¸¶¨´óĞ¡ºÍÖ¸¶¨¸ñÊ½
+//å°†å›¾ç‰‡è½¬æ¢æˆæŒ‡å®šå¤§å°å’ŒæŒ‡å®šæ ¼å¼
 int  TransformImage(PCTSTR lpSrcFile, PCTSTR lpDstExt, long nDestWidth, long nDestHeight, CString& strDstFile)           
 {   
 	if(!Hootina::CPath::IsFileExist(lpSrcFile))

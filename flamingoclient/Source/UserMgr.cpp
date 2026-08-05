@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "UserMgr.h"
 #include "net/IUProtocolData.h"
 #include "MiniBuffer.h"
@@ -23,7 +23,7 @@ CUserMgr::~CUserMgr(void)
 {
 }
 
-// »ñÈ¡ÓÃ»§ÎÄ¼ş¼Ğ´æ·ÅÂ·¾¶
+// è·å–ç”¨æˆ·æ–‡ä»¶å¤¹å­˜æ”¾è·¯å¾„
 tstring CUserMgr::GetUserFolder()
 {
 	tstring strPath(g_szHomePath);
@@ -32,7 +32,7 @@ tstring CUserMgr::GetUserFolder()
 	return strPath;
 }
 
-// »ñÈ¡¸öÈËÎÄ¼ş¼Ğ´æ·ÅÂ·¾¶
+// è·å–ä¸ªäººæ–‡ä»¶å¤¹å­˜æ”¾è·¯å¾„
 tstring CUserMgr::GetPersonalFolder()
 {
 	tstring strPath(GetUserFolder());
@@ -42,7 +42,7 @@ tstring CUserMgr::GetPersonalFolder()
 	return strPath;
 }
 
-// »ñÈ¡ÁÄÌìÍ¼Æ¬´æ·ÅÂ·¾¶
+// è·å–èŠå¤©å›¾ç‰‡å­˜æ”¾è·¯å¾„
 tstring CUserMgr::GetChatPicFolder()
 {
 	return GetPersonalFolder()+_T("ChatImage\\");
@@ -53,7 +53,7 @@ tstring CUserMgr::GetCustomUserThumbFolder()
 	return  GetPersonalFolder()+_T("UserThumb\\");
 }
 
-// »ñÈ¡ÓÃ»§Í·ÏñÍ¼Æ¬È«Â·¾¶ÎÄ¼şÃû
+// è·å–ç”¨æˆ·å¤´åƒå›¾ç‰‡å…¨è·¯å¾„æ–‡ä»¶å
 tstring CUserMgr::GetUserHeadPicFullName(UINT uFace)
 {
 	TCHAR szPath[MAX_PATH] = {0};
@@ -63,13 +63,13 @@ tstring CUserMgr::GetUserHeadPicFullName(UINT uFace)
 	return strPath;
 }
 
-// »ñÈ¡ºÃÓÑÍ·ÏñÍ¼Æ¬È«Â·¾¶ÎÄ¼şÃû
+// è·å–å¥½å‹å¤´åƒå›¾ç‰‡å…¨è·¯å¾„æ–‡ä»¶å
 tstring CUserMgr::GetBuddyHeadPicFullName(UINT uFace)
 {
 	return GetUserHeadPicFullName(uFace);
 }
 
-// »ñÈ¡ÈºÍ·ÏñÍ¼Æ¬È«Â·¾¶ÎÄ¼şÃû
+// è·å–ç¾¤å¤´åƒå›¾ç‰‡å…¨è·¯å¾„æ–‡ä»¶å
 tstring CUserMgr::GetGroupHeadPicFullName(UINT nGroupNum)
 {
 	//TCHAR szPath[MAX_PATH] = {0};
@@ -80,7 +80,7 @@ tstring CUserMgr::GetGroupHeadPicFullName(UINT nGroupNum)
 	return _T("");
 }
 
-// »ñÈ¡Èº³ÉÔ±Í·ÏñÍ¼Æ¬È«Â·¾¶ÎÄ¼şÃû
+// è·å–ç¾¤æˆå‘˜å¤´åƒå›¾ç‰‡å…¨è·¯å¾„æ–‡ä»¶å
 tstring CUserMgr::GetSessHeadPicFullName(UINT nUTalkNum)
 {
 	//TCHAR szPath[MAX_PATH] = {0};
@@ -91,7 +91,7 @@ tstring CUserMgr::GetSessHeadPicFullName(UINT nUTalkNum)
 	return _T("");
 }
 
-// »ñÈ¡ÁÄÌìÍ¼Æ¬È«Â·¾¶ÎÄ¼şÃû
+// è·å–èŠå¤©å›¾ç‰‡å…¨è·¯å¾„æ–‡ä»¶å
 tstring CUserMgr::GetChatPicFullName(LPCTSTR lpszFileName)
 {
 	if (NULL == lpszFileName || NULL ==*lpszFileName)
@@ -99,7 +99,7 @@ tstring CUserMgr::GetChatPicFullName(LPCTSTR lpszFileName)
 	return GetChatPicFolder()+lpszFileName;
 }
 
-// »ñÈ¡ÏûÏ¢¼ÇÂ¼È«Â·¾¶ÎÄ¼şÃû
+// è·å–æ¶ˆæ¯è®°å½•å…¨è·¯å¾„æ–‡ä»¶å
 tstring CUserMgr::GetMsgLogFullName()
 {
 	return GetPersonalFolder()+_T("ChatLog\\msg.db");
@@ -107,12 +107,23 @@ tstring CUserMgr::GetMsgLogFullName()
 
 tstring CUserMgr::GetDefaultRecvFilePath()
 {
-	TCHAR szMyDocumentPath[MAX_PATH] = {0};
-	::SHGetSpecialFolderPath(NULL, szMyDocumentPath, CSIDL_MYDOCUMENTS, TRUE);
+	tstring strRecvFilePath;
 
-	tstring strRecvFilePath(szMyDocumentPath);
-	strRecvFilePath += _T("\\Flamingo\\FileRecv\\");
-	strRecvFilePath += m_UserInfo.m_strAccount;
+	// ä¼˜å…ˆç”¨ç”¨æˆ·åœ¨ç³»ç»Ÿè®¾ç½®é‡Œé€‰çš„è‡ªå®šä¹‰æ¥æ”¶ç›®å½•ï¼›æœªè®¾ç½®æ—¶é€€å›é»˜è®¤æ¨å¯¼è·¯å¾„
+	// ï¼ˆæˆ‘çš„æ–‡æ¡£\Flamingo\FileRecv\è´¦å·ï¼‰ã€‚
+	if (!m_strCustomRecvPath.empty())
+	{
+		strRecvFilePath = m_strCustomRecvPath;
+	}
+	else
+	{
+		TCHAR szMyDocumentPath[MAX_PATH] = {0};
+		::SHGetSpecialFolderPath(NULL, szMyDocumentPath, CSIDL_MYDOCUMENTS, TRUE);
+
+		strRecvFilePath = szMyDocumentPath;
+		strRecvFilePath += _T("\\Flamingo\\FileRecv\\");
+		strRecvFilePath += m_UserInfo.m_strAccount;
+	}
 
 	if(!Hootina::CPath::IsDirectoryExist(strRecvFilePath.c_str()))
 	{
@@ -123,7 +134,12 @@ tstring CUserMgr::GetDefaultRecvFilePath()
 	return strRecvFilePath;
 }
 
-// ÅĞ¶ÏÊÇ·ñĞèÒª¸üĞÂºÃÓÑÍ·Ïñ
+void CUserMgr::SetCustomRecvFilePath(PCTSTR pszPath)
+{
+	m_strCustomRecvPath = (pszPath != NULL) ? pszPath : _T("");
+}
+
+// åˆ¤æ–­æ˜¯å¦éœ€è¦æ›´æ–°å¥½å‹å¤´åƒ
 BOOL CUserMgr::IsNeedUpdateBuddyHeadPic(UINT nUTalkNum)
 {
 	tstring strFullName = GetBuddyHeadPicFullName(0);
@@ -137,7 +153,7 @@ BOOL CUserMgr::IsNeedUpdateBuddyHeadPic(UINT nUTalkNum)
 	return ((!IsToday(&stLastWriteTime)) ? TRUE : FALSE);
 }
 
-// ÅĞ¶ÏÊÇ·ñĞèÒª¸üĞÂÈºÍ·Ïñ
+// åˆ¤æ–­æ˜¯å¦éœ€è¦æ›´æ–°ç¾¤å¤´åƒ
 BOOL CUserMgr::IsNeedUpdateGroupHeadPic(UINT nGroupNum)
 {
 	tstring strFullName = GetGroupHeadPicFullName(nGroupNum);
@@ -151,7 +167,7 @@ BOOL CUserMgr::IsNeedUpdateGroupHeadPic(UINT nGroupNum)
 	return ((!IsToday(&stLastWriteTime)) ? TRUE : FALSE);
 }
 
-// ÅĞ¶ÏÊÇ·ñĞèÒª¸üĞÂÈº³ÉÔ±Í·Ïñ
+// åˆ¤æ–­æ˜¯å¦éœ€è¦æ›´æ–°ç¾¤æˆå‘˜å¤´åƒ
 BOOL CUserMgr::IsNeedUpdateSessHeadPic(UINT nUTalkNum)
 {
 	tstring strFullName = GetSessHeadPicFullName(nUTalkNum);
@@ -485,7 +501,7 @@ BOOL CUserMgr::AddFriend(UINT uAccountID, PCTSTR pszAccountName, PCTSTR pszNickN
 	pBuddyInfo->m_strAccount = pszAccountName;
 	pBuddyInfo->m_strNickName = pszNickName;
 	
-	//TODO: Ä¿Ç°Ö»ÓĞÒ»¸ö·Ö×é
+	//TODO: ç›®å‰åªæœ‰ä¸€ä¸ªåˆ†ç»„
 	size_t nTeamCount = m_BuddyList.m_arrBuddyTeamInfo.size();
 	if(nTeamCount == 0)
 		return FALSE;
@@ -863,7 +879,7 @@ BOOL CUserMgr::StoreRecentList()
 	CString strRecentFilePath;
 	strRecentFilePath.Format(_T("%sUsers\\%s\\RecentSessionList.rsl"), g_szHomePath, m_UserInfo.m_strAccount.c_str());
 	long nCount = m_RecentList.GetRecentCount();
-	//Èç¹û×î½üÁªÏµÈË¸öÊıÎª0£¬É¾³ı×î½üÁªÏµÈËÎÄ¼ş
+	//å¦‚æœæœ€è¿‘è”ç³»äººä¸ªæ•°ä¸º0ï¼Œåˆ é™¤æœ€è¿‘è”ç³»äººæ–‡ä»¶
 	if(nCount <= 0)
 	{
 		::DeleteFile(strRecentFilePath);
@@ -887,7 +903,7 @@ BOOL CUserMgr::StoreRecentList()
 	}
 
 	CFile RecentFile;
-    //FIXME: ½«int64_tÇ¿ÖÆ×ª»»³Éint32¿ÉÄÜ»áÓĞÎÊÌâ
+    //FIXME: å°†int64_tå¼ºåˆ¶è½¬æ¢æˆint32å¯èƒ½ä¼šæœ‰é—®é¢˜
 	if(!RecentFile.Open(strRecentFilePath, TRUE) || !RecentFile.Write(miniBuffer.GetBuffer(), (int)miniBuffer.GetSize()))
 		return FALSE;
 
@@ -975,7 +991,7 @@ BOOL CUserMgr::StoreTeamInfo()
 	CString strTeamInfoFilePath;
 	strTeamInfoFilePath.Format(_T("%sUsers\\%s\\BuddyTeamInfo.bti"), g_szHomePath, m_UserInfo.m_strAccount.c_str());
 	CFile file;
-    //FIXME: ½«int64_tÇ¿ÖÆ×ª»»³Éint32¿ÉÄÜ»áÓĞÎÊÌâ
+    //FIXME: å°†int64_tå¼ºåˆ¶è½¬æ¢æˆint32å¯èƒ½ä¼šæœ‰é—®é¢˜
 	if(!file.Open(strTeamInfoFilePath, TRUE) || !file.Write(miniBuffer.GetBuffer(), (int)miniBuffer.GetSize()))
 		return FALSE;
 
@@ -1016,7 +1032,7 @@ BOOL CUserMgr::LoadBuddyInfo()
 
 BOOL CUserMgr::SaveBuddyInfo()
 {
-	//ÏÈÊÍ·ÅÄÚ´æ
+	//å…ˆé‡Šæ”¾å†…å­˜
 	BuddyInfo* pbi = NULL;
 	std::map<UINT, BuddyInfo*>::iterator iter;
 	while(!m_mapLocalBuddyInfo.empty())
@@ -1064,7 +1080,7 @@ BOOL CUserMgr::SaveBuddyInfo()
 	CString strBuddyInfoFilePath;
 	strBuddyInfoFilePath.Format(_T("%sUsers\\%s\\BuddyInfo.bi"), g_szHomePath, m_UserInfo.m_strAccount.c_str());
 	CFile file;
-    //FIXME: ½«int64_tÇ¿ÖÆ×ª»»³Éint32¿ÉÄÜ»áÓĞÎÊÌâ
+    //FIXME: å°†int64_tå¼ºåˆ¶è½¬æ¢æˆint32å¯èƒ½ä¼šæœ‰é—®é¢˜
 	if(!file.Open(strBuddyInfoFilePath, TRUE) || !file.Write(miniBuffer.GetBuffer(), (int)miniBuffer.GetSize()))
 		return FALSE;
 
@@ -1112,11 +1128,11 @@ void CUserMgr::ClearUserInfo()
 		if(pBuddyTeamInfo != NULL)
 			delete pBuddyTeamInfo;
 		
-		//É¾³ı×îºóÒ»¸öÔªËØ
+		//åˆ é™¤æœ€åä¸€ä¸ªå…ƒç´ 
 		m_BuddyList.m_arrBuddyTeamInfo.pop_back();
 	}
 
-	//Çå³ıÈº×éĞÅÏ¢
+	//æ¸…é™¤ç¾¤ç»„ä¿¡æ¯
 	m_GroupList.Reset();
 }
 
@@ -1134,7 +1150,7 @@ long CUserMgr::GetTotalBuddyCount()
 	}
 	
 	nCount += m_BuddyList.GetBuddyTotalCount();
-	//ËãÉÏ×Ô¼º
+	//ç®—ä¸Šè‡ªå·±
 	nCount += 1;
 
 	return nCount;

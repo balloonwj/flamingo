@@ -1,11 +1,10 @@
-#pragma once
+﻿#pragma once
 
 #include <Windows.h>
 #include <string>
 #include <vector>
-#include "SQLite 3.7.17/sqlite3.h"	// ʹ��sqlite3��Ҫ������ͷ�ļ�
+#include "sqlite3.h"	// 使用sqlite3需要包含的头文件
 
-#pragma comment(lib, "sqlite3.lib")
 
 #if defined(UNICODE) || defined(_UNICODE)
 	typedef std::wstring tstring;
@@ -13,9 +12,9 @@
 	typedef std::string tstring;
 #endif
 
-struct BUDDY_MSG_LOG		// ������Ϣ��¼
+struct BUDDY_MSG_LOG		// 好友消息记录
 {
-	UINT		nID;		//TODO: ���ID��ʲô�ã�
+	UINT		nID;		//TODO: 这个ID做什么用？
 	UINT		nUTalkNum;
 	tstring		strNickName;
 	UINT64		nTime;
@@ -23,7 +22,7 @@ struct BUDDY_MSG_LOG		// ������Ϣ��¼
 	tstring		strContent;
 };
 
-struct GROUP_MSG_LOG		// Ⱥ��Ϣ��¼
+struct GROUP_MSG_LOG		// 群消息记录
 {
 	UINT nID;
 	UINT nGroupNum;
@@ -33,7 +32,7 @@ struct GROUP_MSG_LOG		// Ⱥ��Ϣ��¼
 	tstring strContent;
 };
 
-struct SESS_MSG_LOG			// ��ʱ�Ự(Ⱥ��Ա)��Ϣ��¼
+struct SESS_MSG_LOG			// 临时会话(群成员)消息记录
 {
 	UINT nID;
 	UINT nUTalkNum;
@@ -52,54 +51,54 @@ public:
 	~CMessageLogger(void);
 
 public:
-	tstring GetMsgLogFileName();								// ��ȡ��Ϣ��¼�ļ�����
-	void SetMsgLogFileName(LPCTSTR lpszFileName);				// ������Ϣ��¼�ļ�����
+	tstring GetMsgLogFileName();								// 获取消息记录文件名称
+	void SetMsgLogFileName(LPCTSTR lpszFileName);				// 设置消息记录文件名称
 
-	BOOL IsMsgLogFileValid();									// �ж���Ϣ��¼�ļ��Ƿ���Ч
-	BOOL CreateMsgLogFile();									// ������Ϣ��¼�ļ�
+	BOOL IsMsgLogFileValid();									// 判断消息记录文件是否有效
+	BOOL CreateMsgLogFile();									// 创建消息记录文件
 
-	BOOL WriteBuddyMsgLog(UINT nUTalkNum, LPCTSTR lpNickName,	// д��һ��������Ϣ��¼
+	BOOL WriteBuddyMsgLog(UINT nUTalkNum, LPCTSTR lpNickName,	// 写入一条好友消息记录
 		UINT64 nTime, BOOL bSendFlag, LPCTSTR lpContent);
-	BOOL WriteGroupMsgLog(UINT nGroupNum, UINT nUTalkNum,		// д��һ��Ⱥ��Ϣ��¼
+	BOOL WriteGroupMsgLog(UINT nGroupNum, UINT nUTalkNum,		// 写入一条群消息记录
 		LPCTSTR lpNickName, UINT64 nTime, LPCTSTR lpContent);
-	BOOL WriteSessMsgLog(UINT nUTalkNum, LPCTSTR lpNickName,	// д��һ����ʱ�Ự(Ⱥ��Ա)��Ϣ��¼
+	BOOL WriteSessMsgLog(UINT nUTalkNum, LPCTSTR lpNickName,	// 写入一条临时会话(群成员)消息记录
 		UINT64 nTime, BOOL bSendFlag, LPCTSTR lpContent);
 
-	BOOL WriteBuddyMsgLog(BUDDY_MSG_LOG* lpMsgLog);			// д��һ��������Ϣ��¼
-	BOOL WriteGroupMsgLog(GROUP_MSG_LOG* lpMsgLog);			// д��һ��Ⱥ��Ϣ��¼
-	BOOL WriteSessMsgLog(SESS_MSG_LOG* lpMsgLog);				// д��һ����ʱ�Ự(Ⱥ��Ա)��Ϣ��¼
+	BOOL WriteBuddyMsgLog(BUDDY_MSG_LOG* lpMsgLog);			// 写入一条好友消息记录
+	BOOL WriteGroupMsgLog(GROUP_MSG_LOG* lpMsgLog);			// 写入一条群消息记录
+	BOOL WriteSessMsgLog(SESS_MSG_LOG* lpMsgLog);				// 写入一条临时会话(群成员)消息记录
 
-	UINT ReadBuddyMsgLog(UINT nUTalkNum, UINT nOffset,			// ����һ�������������Ϣ��¼
+	UINT ReadBuddyMsgLog(UINT nUTalkNum, UINT nOffset,			// 读出一条或多条好友消息记录
 		UINT nRows, std::vector<BUDDY_MSG_LOG*>& arrMsgLog);
-	UINT ReadGroupMsgLog(UINT nGroupNum, UINT nOffset,			// ����һ�������Ⱥ��Ϣ��¼
+	UINT ReadGroupMsgLog(UINT nGroupNum, UINT nOffset,			// 读出一条或多条群消息记录
 		UINT nRows, std::vector<GROUP_MSG_LOG*>& arrMsgLog);
-	UINT ReadSessMsgLog(UINT nUTalkNum, UINT nOffset,			// ����һ���������ʱ�Ự(Ⱥ��Ա)��Ϣ��¼
+	UINT ReadSessMsgLog(UINT nUTalkNum, UINT nOffset,			// 读出一条或多条临时会话(群成员)消息记录
 		UINT nRows, std::vector<SESS_MSG_LOG*>& arrMsgLog);
 
-	UINT GetBuddyMsgLogCount(UINT nUTalkNum);					// ��ȡ������Ϣ��¼��
-	UINT GetGroupMsgLogCount(UINT nGroupNum);					// ��ȡȺ��Ϣ��¼��
-	UINT GetSessMsgLogCount(UINT nUTalkNum);					// ��ȡ��ʱ�Ự(Ⱥ��Ա)��Ϣ��¼��
+	UINT GetBuddyMsgLogCount(UINT nUTalkNum);					// 获取好友消息记录数
+	UINT GetGroupMsgLogCount(UINT nGroupNum);					// 获取群消息记录数
+	UINT GetSessMsgLogCount(UINT nUTalkNum);					// 获取临时会话(群成员)消息记录数
 
-	BOOL DelAllBuddyMsgLog();									// ɾ�����к�����Ϣ��¼
-	BOOL DelAllGroupMsgLog();									// ɾ������Ⱥ��Ϣ��¼
-	BOOL DelAllSessMsgLog();									// ɾ��������ʱ�Ự(Ⱥ��Ա)��Ϣ��¼
+	BOOL DelAllBuddyMsgLog();									// 删除所有好友消息记录
+	BOOL DelAllGroupMsgLog();									// 删除所有群消息记录
+	BOOL DelAllSessMsgLog();									// 删除所有临时会话(群成员)消息记录
 
-	BOOL DelBuddyMsgLog(UINT nUTalkNum);						// ɾ��ָ�����ѵ�������Ϣ��¼
-	BOOL DelGroupMsgLog(UINT nGroupNum);						// ɾ��ָ��Ⱥ��������Ϣ��¼
-	BOOL DelSessMsgLog(UINT nUTalkNum);							// ɾ��ָ����ʱ�Ự(Ⱥ��Ա)��������Ϣ��¼
+	BOOL DelBuddyMsgLog(UINT nUTalkNum);						// 删除指定好友的所有消息记录
+	BOOL DelGroupMsgLog(UINT nGroupNum);						// 删除指定群的所有消息记录
+	BOOL DelSessMsgLog(UINT nUTalkNum);							// 删除指定临时会话(群成员)的所有消息记录
 
-	UINT DelBuddyMsgLogByText(LPCTSTR lpStr);					// ��ȡ��ϢIDͨ����Ϣ�ı�
+	UINT DelBuddyMsgLogByText(LPCTSTR lpStr);					// 获取消息ID通过消息文本
 
-	BOOL DelBuddyMsgLogByID(UINT nID);							// ɾ��ָ��ID�ĺ�����Ϣ��¼
-	BOOL DelGroupMsgLogByID(UINT nID);							// ɾ��ָ��ID��Ⱥ��Ϣ��¼
-	BOOL DelSessMsgLogByID(UINT nID);							// ɾ��ָ��ID����ʱ�Ự(Ⱥ��Ա)��Ϣ��¼
+	BOOL DelBuddyMsgLogByID(UINT nID);							// 删除指定ID的好友消息记录
+	BOOL DelGroupMsgLogByID(UINT nID);							// 删除指定ID的群消息记录
+	BOOL DelSessMsgLogByID(UINT nID);							// 删除指定ID的临时会话(群成员)消息记录
 
-	void Lock();												// ��������
-	void UnLock();												// ��������
+	void Lock();												// 加锁函数
+	void UnLock();												// 解锁函数
 
-	// �����ӽӿڣ�
-	// 1������ĳ��ʱ�䡢ָ�����ݶ�����Ϣ��¼
-	// 2������ĳ��ʱ��ɾ����Ϣ��¼
+	// 待添加接口：
+	// 1、根据某段时间、指定内容读出消息记录
+	// 2、根据某段时间删除消息记录
 
 private:
 	UINT ReadBuddyMsgLogCount(UINT nUTalkNum, UINT nOffset, UINT nRows);

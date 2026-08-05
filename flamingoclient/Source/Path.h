@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <string>
 
@@ -17,25 +17,25 @@ public:
 	CPath(void);
 	~CPath(void);
 
-	static tstring GetAppPath();												// »ñÈ¡Ó¦ÓÃ³ÌĞòÖ´ĞĞÂ·¾¶
-	static std::string GetAppPathAscii();										// »ñÈ¡Ó¦ÓÃ³ÌĞòÖ´ĞĞÂ·¾¶
-	static tstring GetCurDir();													// »ñÈ¡Ó¦ÓÃ³ÌĞòµ±Ç°Ä¿Â¼
-	static tstring GetTempPath();												// »ñÈ¡µ±Ç°ÏµÍ³µÄÁÙÊ±ÎÄ¼ş¼ĞµÄÂ·¾¶
-	static tstring GetTempFileName(LPCTSTR lpszFileName);						// »ñÈ¡µ±Ç°ÏµÍ³µÄÁÙÊ±ÎÄ¼ş¼ĞµÄÂ·¾¶ÏÂµÄÎ¨Ò»ÃüÃûµÄÁÙÊ±ÎÄ¼şÃû(È«Â·¾¶)
-	static tstring GetRandomFileName(LPCTSTR lpszPath, LPCTSTR lpszFileName);	// »ñÈ¡Ëæ»úÎÄ¼şÃû(È«Â·¾¶)
+	static tstring GetAppPath();												// è·å–åº”ç”¨ç¨‹åºæ‰§è¡Œè·¯å¾„
+	static std::string GetAppPathAscii();										// è·å–åº”ç”¨ç¨‹åºæ‰§è¡Œè·¯å¾„
+	static tstring GetCurDir();													// è·å–åº”ç”¨ç¨‹åºå½“å‰ç›®å½•
+	static tstring GetTempPath();												// è·å–å½“å‰ç³»ç»Ÿçš„ä¸´æ—¶æ–‡ä»¶å¤¹çš„è·¯å¾„
+	static tstring GetTempFileName(LPCTSTR lpszFileName);						// è·å–å½“å‰ç³»ç»Ÿçš„ä¸´æ—¶æ–‡ä»¶å¤¹çš„è·¯å¾„ä¸‹çš„å”¯ä¸€å‘½åçš„ä¸´æ—¶æ–‡ä»¶å(å…¨è·¯å¾„)
+	static tstring GetRandomFileName(LPCTSTR lpszPath, LPCTSTR lpszFileName);	// è·å–éšæœºæ–‡ä»¶å(å…¨è·¯å¾„)
 
-	static BOOL IsDirectory(LPCTSTR lpszPath);									// ¼ì²âÖ¸¶¨Â·¾¶ÊÇ·ñÄ¿Â¼
-	static BOOL IsFileExist(LPCTSTR lpszFileName);								// ¼ì²âÖ¸¶¨ÎÄ¼şÊÇ·ñ´æÔÚ
-	static BOOL IsDirectoryExist(LPCTSTR lpszPath);								// ¼ì²âÖ¸¶¨Ä¿Â¼ÊÇ·ñ´æÔÚ
+	static BOOL IsDirectory(LPCTSTR lpszPath);									// æ£€æµ‹æŒ‡å®šè·¯å¾„æ˜¯å¦ç›®å½•
+	static BOOL IsFileExist(LPCTSTR lpszFileName);								// æ£€æµ‹æŒ‡å®šæ–‡ä»¶æ˜¯å¦å­˜åœ¨
+	static BOOL IsDirectoryExist(LPCTSTR lpszPath);								// æ£€æµ‹æŒ‡å®šç›®å½•æ˜¯å¦å­˜åœ¨
 	static BOOL CreateDirectory(LPCTSTR lpPathName, LPSECURITY_ATTRIBUTES lpSecurityAttributes=NULL);
 
-	static tstring GetPathRoot(LPCTSTR lpszPath);								// »ñÈ¡Ö¸¶¨Â·¾¶µÄ¸ùÄ¿Â¼ĞÅÏ¢
-	static tstring GetDirectoryName(LPCTSTR lpszPath);							// ·µ»ØÖ¸¶¨Â·¾¶×Ö·û´®µÄÄ¿Â¼ĞÅÏ¢
-	static tstring GetFileName(LPCTSTR lpszPath);								// ·µ»ØÖ¸¶¨Â·¾¶×Ö·û´®µÄÎÄ¼şÃûºÍÀ©Õ¹Ãû
-	static tstring GetFileNameWithoutExtension(LPCTSTR lpszPath);				// ·µ»Ø²»¾ßÓĞÀ©Õ¹ÃûµÄÂ·¾¶×Ö·û´®µÄÎÄ¼şÃû
-	static tstring GetExtension(LPCTSTR lpszPath);								// ·µ»ØÖ¸¶¨µÄÂ·¾¶×Ö·û´®µÄÀ©Õ¹Ãû
-	static tstring GetFullPath(LPCTSTR lpszPath);								// ¸ù¾İÖ¸¶¨µÄÏà¶ÔÂ·¾¶»ñÈ¡¾ø¶ÔÂ·¾¶
-	static long    GetFileSize(LPCTSTR lpszPath);								// »ñÈ¡ÎÄ¼ş´óĞ¡
+	static tstring GetPathRoot(LPCTSTR lpszPath);								// è·å–æŒ‡å®šè·¯å¾„çš„æ ¹ç›®å½•ä¿¡æ¯
+	static tstring GetDirectoryName(LPCTSTR lpszPath);							// è¿”å›æŒ‡å®šè·¯å¾„å­—ç¬¦ä¸²çš„ç›®å½•ä¿¡æ¯
+	static tstring GetFileName(LPCTSTR lpszPath);								// è¿”å›æŒ‡å®šè·¯å¾„å­—ç¬¦ä¸²çš„æ–‡ä»¶åå’Œæ‰©å±•å
+	static tstring GetFileNameWithoutExtension(LPCTSTR lpszPath);				// è¿”å›ä¸å…·æœ‰æ‰©å±•åçš„è·¯å¾„å­—ç¬¦ä¸²çš„æ–‡ä»¶å
+	static tstring GetExtension(LPCTSTR lpszPath);								// è¿”å›æŒ‡å®šçš„è·¯å¾„å­—ç¬¦ä¸²çš„æ‰©å±•å
+	static tstring GetFullPath(LPCTSTR lpszPath);								// æ ¹æ®æŒ‡å®šçš„ç›¸å¯¹è·¯å¾„è·å–ç»å¯¹è·¯å¾„
+	static long    GetFileSize(LPCTSTR lpszPath);								// è·å–æ–‡ä»¶å¤§å°
 };
 
 }

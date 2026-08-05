@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "LogonUserInfoDlg.h"
 #include "ChangePicHeadDlg.h"
 #include "FlamingoClient.h"
@@ -26,7 +26,7 @@ CLogonUserInfoDlg::~CLogonUserInfoDlg(void)
 
 BOOL CLogonUserInfoDlg::PreTranslateMessage(MSG* pMsg)
 {
-	//Ö§³ÖEsc¹Ø±Õ¶Ô»°¿ò
+	//æ”¯æŒEscå…³é—­å¯¹è¯æ¡†
 	if (pMsg->hwnd==m_hWnd && pMsg->message==WM_KEYDOWN && pMsg->wParam==VK_ESCAPE)
  	{
 		PostMessage(WM_CLOSE, 0, 0);
@@ -74,7 +74,7 @@ void CLogonUserInfoDlg::OnDestroy()
 {
 	SetMsgHandled(FALSE);
 
-	UnInit();	// ·´³õÊ¼»¯
+	UnInit();	// ååˆå§‹åŒ–
 
 	if (m_hDlgIcon != NULL)
 	{
@@ -93,7 +93,7 @@ void CLogonUserInfoDlg::OnDestroy()
 	pLoop->RemoveMessageFilter(this);
 }
 
-// ¡°¸ü¸ÄÓÃ»§Í·Ïñ¡±¿Ø¼ş
+// â€œæ›´æ”¹ç”¨æˆ·å¤´åƒâ€æ§ä»¶
 void CLogonUserInfoDlg::OnSysHead(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	CChangePicHeadDlg changePicHeadDlg;
@@ -120,15 +120,15 @@ void CLogonUserInfoDlg::OnCustomHead(UINT uNotifyCode, int nID, CWindow wndCtl)
 	LPCTSTR lpszDefExt = NULL;
 	LPCTSTR lpszFileName = NULL;
 	DWORD dwFlags = OFN_HIDEREADONLY|OFN_OVERWRITEPROMPT|OFN_NOCHANGEDIR|OFN_EXTENSIONDIFFERENT;
-	LPCTSTR lpszFilter = _T("Í¼ÏñÎÄ¼ş(*.bmp;*.jpg;*.jpeg;*.gif;*.png)\0*.bmp;*.jpg;*.jpeg;*.gif;*.png\0\0");
+	LPCTSTR lpszFilter = _T("å›¾åƒæ–‡ä»¶(*.bmp;*.jpg;*.jpeg;*.gif;*.png)\0*.bmp;*.jpg;*.jpeg;*.gif;*.png\0\0");
 	HWND hWndParent = m_hWnd;
 
 	CFileDialog fileDlg(bOpenFileDialog, lpszDefExt, lpszFileName, dwFlags, lpszFilter, hWndParent);
-	fileDlg.m_ofn.lpstrTitle = _T("Ñ¡ÔñÍ¼Æ¬");
+	fileDlg.m_ofn.lpstrTitle = _T("é€‰æ‹©å›¾ç‰‡");
 	if (fileDlg.DoModal() != IDOK)
 		return;
 	
-    //ÔİÇÒ½«Í·Ïñ¸ñÊ½¶¼×ª»»³Éjpg
+    //æš‚ä¸”å°†å¤´åƒæ ¼å¼éƒ½è½¬æ¢æˆjpg
 	CString strDestPath;
 	CString strDumyPath;
 	strDestPath.Format(_T("%s%u.png"), m_pFMGClient->m_UserMgr.GetCustomUserThumbFolder().c_str(), m_pFMGClient->m_UserMgr.m_UserInfo.m_uUserID);
@@ -136,7 +136,7 @@ void CLogonUserInfoDlg::OnCustomHead(UINT uNotifyCode, int nID, CWindow wndCtl)
 	TransformImage(strDestPath, _T(".png"), 64, 64, strDumyPath);
 	
 	_tcscpy_s(m_szCustomFacePath, ARRAYSIZE(m_szCustomFacePath), strDestPath);
-	//ÉÏ´«×Ô¶¨ÒåÍ·Ïñ
+	//ä¸Šä¼ è‡ªå®šä¹‰å¤´åƒ
 	CFileItemRequest* pFileItemRequest = new CFileItemRequest();
 	_tcscpy_s(pFileItemRequest->m_szFilePath, ARRAYSIZE(pFileItemRequest->m_szFilePath), strDestPath);
 	pFileItemRequest->m_nFileType = FILE_ITEM_UPLOAD_USER_THUMB;
@@ -146,7 +146,7 @@ void CLogonUserInfoDlg::OnCustomHead(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_btnCancel.EnableWindow(FALSE);
 	m_btnSysHead.EnableWindow(FALSE);
 	m_btnCustomHead.EnableWindow(FALSE);
-	m_SkinDlg.SetTitleText(_T("ÎÒµÄ×ÊÁÏ(ÕıÔÚÉÏ´«Í·Ïñ£¬ÇëÉÔµÈ...)"));
+	m_SkinDlg.SetTitleText(_T("æˆ‘çš„èµ„æ–™(æ­£åœ¨ä¸Šä¼ å¤´åƒï¼Œè¯·ç¨ç­‰...)"));
 }
 
 void CLogonUserInfoDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
@@ -156,7 +156,7 @@ void CLogonUserInfoDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strNickName.Trim();
 	if(strNickName.GetLength()<=0 || strNickName.GetLength()>16)
 	{
-		::MessageBox(m_hWnd, _T("êÇ³Æ±ØĞëÔÚ1¡«16¸ö×Ö·ûÖ®¼ä¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("æ˜µç§°å¿…é¡»åœ¨1ï½16ä¸ªå­—ç¬¦ä¹‹é—´ã€‚"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
@@ -165,7 +165,7 @@ void CLogonUserInfoDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strSignature.Trim();
 	if(strSignature.GetLength()>128)
 	{
-		::MessageBox(m_hWnd, _T("¸öĞÔÇ©Ãû±ØĞëÔÚ0¡«128¸ö×Ö·ûÖ®¼ä¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("ä¸ªæ€§ç­¾åå¿…é¡»åœ¨0ï½128ä¸ªå­—ç¬¦ä¹‹é—´ã€‚"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
@@ -175,7 +175,7 @@ void CLogonUserInfoDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_dtpBirthday.GetSystemTime(&st);
 	if(st.wYear < 1900)
 	{
-		::MessageBox(m_hWnd, _T("ÉúÈÕÄê·İ±ØĞë´óÓÚ1990Äê¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("ç”Ÿæ—¥å¹´ä»½å¿…é¡»å¤§äº1990å¹´ã€‚"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 	long nBirthday = st.wYear*10000 + st.wMonth*100 + st.wDay;
@@ -185,7 +185,7 @@ void CLogonUserInfoDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strAddress.Trim();
 	if(strAddress.GetLength() > 32)
 	{
-		::MessageBox(m_hWnd, _T("µØÖ·³¤¶È²»ÄÜ³¬¹ı32Î»¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("åœ°å€é•¿åº¦ä¸èƒ½è¶…è¿‡32ä½ã€‚"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
@@ -194,12 +194,12 @@ void CLogonUserInfoDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strPhone.Trim();
 	if(strPhone.GetLength() > 16)
 	{
-		::MessageBox(m_hWnd, _T("µç»°³¤¶È²»ÄÜ³¬¹ı16Î»¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("ç”µè¯é•¿åº¦ä¸èƒ½è¶…è¿‡16ä½ã€‚"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 	if(strPhone.GetLength()>0 && !ValidatePhone(strPhone))
 	{
-		::MessageBox(m_hWnd, _T("µç»°ºÅÂë±ØĞëÊÇÊı×Ö¡¢-ºÍ+¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("ç”µè¯å·ç å¿…é¡»æ˜¯æ•°å­—ã€-å’Œ+ã€‚"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
@@ -208,7 +208,7 @@ void CLogonUserInfoDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strMail.Trim();
 	if(strMail.GetLength() >= 24)
 	{
-		::MessageBox(m_hWnd, _T("ÓÊÏä³¤¶È²»ÄÜ³¬¹ı23Î»¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("é‚®ç®±é•¿åº¦ä¸èƒ½è¶…è¿‡23ä½ã€‚"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
@@ -229,7 +229,7 @@ LRESULT CLogonUserInfoDlg::OnUploadUserThumbResult(UINT uMsg, WPARAM wParam, LPA
 	m_btnCancel.EnableWindow(TRUE);
 	m_btnSysHead.EnableWindow(TRUE);
 	m_btnCustomHead.EnableWindow(TRUE);
-	m_SkinDlg.SetTitleText(_T("ÎÒµÄ×ÊÁÏ"));
+	m_SkinDlg.SetTitleText(_T("æˆ‘çš„èµ„æ–™"));
 	
 	CUploadFileResult* pResult = (CUploadFileResult*)lParam;
 	if(pResult == NULL)
@@ -237,7 +237,7 @@ LRESULT CLogonUserInfoDlg::OnUploadUserThumbResult(UINT uMsg, WPARAM wParam, LPA
 	
 	if(wParam == UPLOAD_USER_THUMB_RESULT_FAILED)
 	{
-		::MessageBox(m_hWnd, _T("ÉÏ´«Í·ÏñÊ§°Ü£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
+		::MessageBox(m_hWnd, _T("ä¸Šä¼ å¤´åƒå¤±è´¥ï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
 		
 	}
 	else if(wParam == UPLOAD_USER_THUMB_RESULT_SUCCESS)
@@ -257,7 +257,7 @@ LRESULT CLogonUserInfoDlg::OnUploadUserThumbResult(UINT uMsg, WPARAM wParam, LPA
 
 void CLogonUserInfoDlg::UpdateCtrlData()
 {
-	//ÕË»§Ãû
+	//è´¦æˆ·å
 	SetDlgItemText(IDC_ACCOUNTNAME, m_pFMGClient->m_UserMgr.m_UserInfo.m_strAccount.c_str());
 	
 	m_bUseCustomThumb = m_pFMGClient->m_UserMgr.m_UserInfo.m_bUseCustomFace;
@@ -340,7 +340,7 @@ BOOL CLogonUserInfoDlg::ValidatePhone(const CString& strPhone)
 	return TRUE;
 }
 
-// ³õÊ¼»¯
+// åˆå§‹åŒ–
 BOOL CLogonUserInfoDlg::Init()
 {
 	m_SkinDlg.SetBgPic(_T("DlgBg\\GeneralBg.png"), CRect(4, 69, 4, 33));
@@ -348,13 +348,13 @@ BOOL CLogonUserInfoDlg::Init()
 		_T("SysBtn\\btn_close_highlight.png"), _T("SysBtn\\btn_close_down.png"));
 	m_SkinDlg.SubclassWindow(m_hWnd);
 	m_SkinDlg.MoveWindow(0, 0, 420, 420, FALSE);
-	m_SkinDlg.SetTitleText(_T("ÎÒµÄ×ÊÁÏ"));
+	m_SkinDlg.SetTitleText(_T("æˆ‘çš„èµ„æ–™"));
 
 	HDC hDlgBgDC = m_SkinDlg.GetBgDC();
 
 	m_picHead.SubclassWindow(GetDlgItem(IDC_HEAD));
 	m_picHead.SetTransparent(TRUE, hDlgBgDC);
-	m_picHead.SetToolTipText(_T("µ±Ç°Í·Ïñ"));
+	m_picHead.SetToolTipText(_T("å½“å‰å¤´åƒ"));
 
 	m_btnSysHead.SetButtonType(SKIN_PUSH_BUTTON);
 	m_btnSysHead.SetTransparent(TRUE, hDlgBgDC);
@@ -418,7 +418,7 @@ BOOL CLogonUserInfoDlg::Init()
 	return TRUE;
 }
 
-// ·´³õÊ¼»¯
+// ååˆå§‹åŒ–
 void CLogonUserInfoDlg::UnInit()
 {
 	if(m_edtNickName.IsWindow())

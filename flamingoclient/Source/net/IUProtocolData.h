@@ -1,4 +1,4 @@
-//Э�鼰״̬����
+﻿//协议及状态常量
 
 #pragma once
 #include <stdint.h>
@@ -9,7 +9,7 @@
 
 #define DEFAULT_TEAMNAME _T("My Friends")
 
-//�ͻ�������
+//客户端类型
 enum CLIENT_TYPE
 {
 	CLIENT_TYPE_UNKNOWN = 0,
@@ -18,17 +18,17 @@ enum CLIENT_TYPE
 	CLIENT_TYPE_ANDROID = 3
 };
 
-//����״̬
+//在线状态
 enum ONLINE_STATUS
 {
-	STATUS_OFFLINE		  = 0,			//����
-	STATUS_ONLINE		  = 1,			//����
-	STATUS_INVISIBLE	  = 2,			//����
-	STATUS_BUSY			  = 3,			//æµ
-	STATUS_AWAY			  = 4,			//�뿪
-	STATUS_MOBILE_ONLINE  = 5,			//�ƶ�������
-	STATUS_MOBILE_OFFLINE = 6,			//�ƶ�������
-	STATUS_BOTH			  = 7			//�ֻ��͵���ͬʱ����
+	STATUS_OFFLINE		  = 0,			//离线
+	STATUS_ONLINE		  = 1,			//在线
+	STATUS_INVISIBLE	  = 2,			//隐身
+	STATUS_BUSY			  = 3,			//忙碌
+	STATUS_AWAY			  = 4,			//离开
+	STATUS_MOBILE_ONLINE  = 5,			//移动版在线
+	STATUS_MOBILE_OFFLINE = 6,			//移动版下线
+	STATUS_BOTH			  = 7			//手机和电脑同时在线
 };
 
 enum ONLINE_CLIENT_TYPE
@@ -42,36 +42,36 @@ enum ONLINE_CLIENT_TYPE
 
 enum LOGIN_TYPE
 {
-	LOGIN_USE_MOBILE_NUMBER = 0,	//ʹ���ֻ��ŵ�¼
-	LOGIN_USE_ACCOUNT		= 1,	//ʹ���˺ŵ�¼
+	LOGIN_USE_MOBILE_NUMBER = 0,	//使用手机号登录
+	LOGIN_USE_ACCOUNT		= 1,	//使用账号登录
 };
 
-enum LOGIN_RESULT_CODE	// ��¼�������
+enum LOGIN_RESULT_CODE	// 登录结果代码
 {
-	LOGIN_SUCCESS,				// ��¼�ɹ�
-	LOGIN_FAILED,				// ��¼ʧ��
-	LOGIN_UNREGISTERED,			// �û�δע��
-	LOGIN_PASSWORD_ERROR,		// �������
-	LOGIN_USER_CANCEL_LOGIN,	// �û�ȡ����¼
-	LOGIN_SERVER_REFUSED,		// �������ܾ�
-	LOGIN_SERVER_NOT_RESPONSE	// ������δ��Ӧ
+	LOGIN_SUCCESS,				// 登录成功
+	LOGIN_FAILED,				// 登录失败
+	LOGIN_UNREGISTERED,			// 用户未注册
+	LOGIN_PASSWORD_ERROR,		// 密码错误
+	LOGIN_USER_CANCEL_LOGIN,	// 用户取消登录
+	LOGIN_SERVER_REFUSED,		// 服务器拒绝
+	LOGIN_SERVER_NOT_RESPONSE	// 服务器未响应
 };
 
-enum REGISTER_RESULT_CODE	//ע��������
+enum REGISTER_RESULT_CODE	//注册结果代码
 {
-	REGISTER_SUCCESS,				//ע��ɹ�
-	REGISTER_EXIST,					//�˺��Ѿ�����
-	REGISTER_FAILED,				//ע��ʧ��
-	REGISTER_SERVER_NOT_RESPONSE	//������δ��Ӧ
+	REGISTER_SUCCESS,				//注册成功
+	REGISTER_EXIST,					//账号已经存在
+	REGISTER_FAILED,				//注册失败
+	REGISTER_SERVER_NOT_RESPONSE	//服务器未响应
 };
 
 enum HEARTBEAT_RESULT_CODE
 {
-	HEARTBEAT_ALIVE,				//��Ȼ��������
-	HEARTBEAT_DEAD,					//�Ѿ��Ͽ�����
+	HEARTBEAT_ALIVE,				//仍然保持连接
+	HEARTBEAT_DEAD,					//已经断开连接
 };
 
-//�Ӻ���״̬
+//加好友状态
 enum OPERATE_FRIEND
 {
     Apply,
@@ -80,7 +80,7 @@ enum OPERATE_FRIEND
     Delete
 };
 
-enum ADD_FRIEND_RESULT	//���Ӻ��ѽ��
+enum ADD_FRIEND_RESULT	//添加好友结果
 {
 	FIND_FRIEND_NOT_FOUND,
 	FIND_FRIEND_FOUND,
@@ -96,12 +96,12 @@ enum DELETE_FRIEND_RESULT
 	DELETE_FRIEND_FAILED
 };
 
-enum SEND_CHAT_MSG_RESULT		//����������Ϣ���
+enum SEND_CHAT_MSG_RESULT		//发送聊天消息结果
 {
 	SEND_MSG_SUCESS,
-	SEND_WHOLE_MSG_FAILED,		//����������Ϣʧ��
-	SEND_IMGAE_FAILED,			//����ͼƬʧ��
-	//SEND_FILE_FAILED			//�����ļ�ʧ��
+	SEND_WHOLE_MSG_FAILED,		//发送整个消息失败
+	SEND_IMGAE_FAILED,			//发送图片失败
+	//SEND_FILE_FAILED			//发送文件失败
 };
 
 enum UPLOAD_USER_THUMB_RESULT
@@ -132,19 +132,19 @@ enum GET_USER_INFO_TYPE
 
 struct FindUserOrGroupResult
 {
-	long		nType;			//���˻���Ⱥ��
+	long		nType;			//个人还是群组
 	UINT		uAccountID;
 	TCHAR		szAccountName[32];
 	TCHAR		szNickName[32];
 };
 
-//��¼��ǰ���Ӻ��ѵ�״̬��Ϣ
+//记录当前添加好友的状态信息
 struct AddFriendInfo
 {
-	UCHAR	nCmd;				//�������ͣ�Apply/Agree/Refuse��
-	UINT	uAccountID;			//�˻�ID
-	TCHAR	szAccountName[32];	//�˻���
-	TCHAR	szNickName[32];		//�ǳ�
+	UCHAR	nCmd;				//操作类型（Apply/Agree/Refuse）
+	UINT	uAccountID;			//账户ID
+	TCHAR	szAccountName[32];	//账户名
+	TCHAR	szNickName[32];		//昵称
 };
 
 enum CHAT_MSG_TYPE
@@ -152,7 +152,7 @@ enum CHAT_MSG_TYPE
 	FMG_MSG_TYPE_UNKNOWN,
 	FMG_MSG_TYPE_BUDDY,
 	FMG_MSG_TYPE_GROUP,
-	FMG_MSG_TYPE_MULTI,		//Ⱥ����Ϣ
+	FMG_MSG_TYPE_MULTI,		//群发消息
 	FMG_MSG_TYPE_SESS
 };
 
@@ -165,8 +165,8 @@ struct UserBasicInfo
     char  szSignature[256];
     char  szAddress[51225];
 	UINT  uFaceID;
-    int   nStatus;              //����״̬
-    int   clientType;           //�ͻ�������
+    int   nStatus;              //在线状态
+    int   clientType;           //客户端类型
     char  customFace[64];
     int   nGender;
     int   nBirthday;
@@ -183,21 +183,21 @@ struct UserExtendInfo
 	UINT    uBlood;
 	UINT	uBirthday;
 
-	char	szCountry[32];			// ����
-	char	szProvince[32];			// ʡ��
-	char	szCity[32];				// ����
-	char	szPhone[32];			// �绰
-	char	szMobile[32];			// �ֻ�
-	char	szOccupation[32];		// ְҵ
-	char	szCollege[32];			// ��ҵԺУ
-	char	szEmail[48];			// ����
-	char	szHomepage[64];			// ������ҳ
-	char	szSignature[256];		// ����ǩ��
-	char	szPersonal[512];		// ����˵��	
-	char    szCustomFace[MAX_PATH];	// �Զ���ͷ����
+	char	szCountry[32];			// 国家
+	char	szProvince[32];			// 省份
+	char	szCity[32];				// 城市
+	char	szPhone[32];			// 电话
+	char	szMobile[32];			// 手机
+	char	szOccupation[32];		// 职业
+	char	szCollege[32];			// 毕业院校
+	char	szEmail[48];			// 邮箱
+	char	szHomepage[64];			// 个人主页
+	char	szSignature[256];		// 个性签名
+	char	szPersonal[512];		// 个人说明	
+	char    szCustomFace[MAX_PATH];	// 自定义头像名
 };
 
-//�ļ��ϴ���������
+//文件上传下载类型
 enum FILE_ITEM_TYPE
 {
 	FILE_ITEM_UNKNOWN,
@@ -210,23 +210,23 @@ enum FILE_ITEM_TYPE
 	FILE_ITEM_DOWNLOAD_USER_THUMB,
 };
 
-//�ļ����ط��ؽ����
+//文件下载返回结果码
 enum FILE_DOWNLOAD_RETCODE
 {
 	FILE_DOWNLOAD_FAILED,
 	FILE_DOWNLOAD_SUCCESS,
-	FILE_DOWNLOAD_USERCANCEL	//�û�ȡ������
+	FILE_DOWNLOAD_USERCANCEL	//用户取消下载
 };
 
-//�ļ��ϴ����ؽ����
+//文件上传返回结果码
 enum FILE_UPLOAD_RETCODE
 {
 	FILE_UPLOAD_FAILED,
 	FILE_UPLOAD_SUCCESS,
-	FILE_UPLOAD_USERCANCEL		//�û�ȡ���ϴ�
+	FILE_UPLOAD_USERCANCEL		//用户取消上传
 };
 
-//��ȡ�ļ�md5ֵ�����
+//获取文件md5值结果码
 enum GET_FILE_MD5_RETCODE
 {
 	GET_FILE_MD5_FAILED,
@@ -234,7 +234,7 @@ enum GET_FILE_MD5_RETCODE
 	GET_FILE_MD5_USERCANCEL
 };
 
-//�޸ĸ�����Ϣ����
+//修改个人信息详情
 enum MODIFY_USER_INFO_TYPE
 {
 	MODIFY_NICKNAME = 0x0001,
@@ -249,8 +249,8 @@ enum MODIFY_USER_INFO_TYPE
 
 enum CHAT_CONFIRM_TYPE
 {
-	CHAT_CONFIRM_TYPE_SINGLE,		//���ģ�����Ⱥ�飩ȷ����Ϣ����
-	CHAT_CONFIRM_TYPE_MULTI			//Ⱥ��ȷ����Ϣ����
+	CHAT_CONFIRM_TYPE_SINGLE,		//单聊（包括群组）确认消息类型
+	CHAT_CONFIRM_TYPE_MULTI			//群发确认消息类型
 };
 
 enum NET_DATA_TYPE
@@ -265,7 +265,7 @@ enum NET_DATA_TYPE
 	NET_DATA_FRIENDS_ID,
 	NET_DATA_FRIENDS_STATUS,
 	NET_DATA_CHAT_MSG,
-	NET_DATA_CHAT_CONFIRM_IMAGE_MSG,	//���췢����ͼƬ��׷�ӵ�ȷ����Ϣ
+	NET_DATA_CHAT_CONFIRM_IMAGE_MSG,	//聊天发送完图片后追加的确认信息
 	NET_DATA_FIND_FRIEND,
 	NET_DATA_OPERATE_FRIEND,
 	NET_DATA_HEARTBEAT,
@@ -273,9 +273,9 @@ enum NET_DATA_TYPE
 	NET_DATA_TARGET_INFO_CHANGE,
 	NET_DATA_MODIFY_PASSWORD,
 	NET_DATA_CREATE_NEW_GROUP,
-    NET_DATA_OPERATE_TEAM,              //�����µĺ��ѷ���
-    NET_DATA_MODIFY_FRIEND_MARKNAME,    //�޸ĺ��ѱ�ע��
-    NET_DATA_MOVE_FRIEND,               //�ƶ���������������
+    NET_DATA_OPERATE_TEAM,              //添加新的好友分组
+    NET_DATA_MODIFY_FRIEND_MARKNAME,    //修改好友备注名
+    NET_DATA_MOVE_FRIEND,               //移动好友至其他分组
 
 	NET_DATA_FILE
 };
@@ -286,8 +286,8 @@ public:
 	CNetData();
 	virtual ~CNetData();
 public:
-	UINT		m_uType;		//��������
-	long		m_nRetryTimes;	//����Ϊ����������ʱ���Դ�����
+	UINT		m_uType;		//数据类型
+	long		m_nRetryTimes;	//当作为发送数据项时重试次数。
 };
 
 class CRegisterRequest : public CNetData
@@ -324,7 +324,7 @@ public:
 	char		m_szAccountName[64];
 	char		m_szPassword[64];
 	long		m_nStatus;
-	LOGIN_TYPE	m_nLoginType;	//��¼���ͣ�0��ʾʹ���ֻ��ŵ��룬1��ʾʹ���˺ŵ���
+	LOGIN_TYPE	m_nLoginType;	//登录类型：0表示使用手机号登入，1表示使用账号登入
 };
 
 class CLoginResult : public CNetData
@@ -365,7 +365,7 @@ public:
 	~CUserBasicInfoResult();
 
 public:
-    //key�Ƿ�������֣�value�Ǹ�����ѵļ���
+    //key是分组的名字，value是该组好友的集合
 	std::map<std::string, std::list<UserBasicInfo*>> m_mapUserBasicInfo;
 };
 
@@ -462,7 +462,7 @@ public:
 
 public:
 	char m_szAccountName[64];
-	long m_nType;				//��������
+	long m_nType;				//查找类型
 };
 
 class CFindFriendResult : public CNetData
@@ -509,7 +509,7 @@ public:
     ~CAddTeamInfoRequest();
 
 public:
-    int          m_opType;          //��������
+    int          m_opType;          //操作类型
     std::wstring m_strNewTeamName;
     std::wstring m_strOldTeamName;  
 };
@@ -521,7 +521,7 @@ public:
     ~CAddTeamInfoResult();
 
 public:
-    int          m_opType;          //��������  
+    int          m_opType;          //操作类型  
 };
 
 class CMoveFriendRequest : public CNetData
@@ -531,7 +531,7 @@ public:
     ~CMoveFriendRequest();
 
 public:
-    int          m_nFriendID;          //��������
+    int          m_nFriendID;          //操作类型
     std::wstring m_strNewTeamName;
     std::wstring m_strOldTeamName;
 };
@@ -559,7 +559,7 @@ public:
 	CHAT_CONFIRM_TYPE	m_nType;
 	HWND				m_hwndChat;
 	char*				m_pszConfirmBody;
-	UINT				m_uConfirmBodySize;		//��Ϣ��ĳ��ȣ��������ĩβ������\0
+	UINT				m_uConfirmBodySize;		//消息体的长度，包括最后末尾结束的\0
 	UINT				m_uSenderID;
 	std::set<UINT>		m_setTargetIDs;
 	//UINT	  m_uTargetID;
@@ -573,11 +573,11 @@ public:
 	~CRecvChatMessage();
 
 public:
-	UINT  m_uMsgID;			//��ϢID
-	UINT  m_uSenderID;		//������ID
-	UINT  m_uTargetID;		//������ID
-	UINT  m_uMsgBodySize;	//��Ϣ�������ݳ���
-	char* m_pszMsgBody;		//��Ϣ��������
+	UINT  m_uMsgID;			//消息ID
+	UINT  m_uSenderID;		//发送人ID
+	UINT  m_uTargetID;		//接收者ID
+	UINT  m_uMsgBodySize;	//消息正文内容长度
+	char* m_pszMsgBody;		//消息正文内容
 };
 
 class CModifyPasswordRequest : public CNetData
@@ -681,7 +681,7 @@ public:
 	char    m_szMail[48];
 	UINT	m_uFaceID;
 	TCHAR   m_szCustomFace[MAX_PATH];
-	BOOL    m_bUseCustomThumb;				//�Ƿ�ʹ���Զ���ͷ��
+	BOOL    m_bUseCustomThumb;				//是否使用自定义头像
 };
 
 //class CUpdateLogonUserInfoResult
@@ -731,7 +731,7 @@ public:
 
 /////////////////////////////////////////////////////
 /////////////////////////////////////////////////////
-// �ļ���������
+// 文件传输内容
 /////////////////////////////////////////////////////
 class CBuddyMessage;
 class CFileItemRequest : public CNetData
@@ -742,17 +742,17 @@ public:
 
 public:
 	long			m_nID;
-	char			m_szUtfFilePath[MAX_PATH];	//�ļ�utf8·�����������أ�����ʱ���
-	TCHAR			m_szFilePath[MAX_PATH];		//�ļ�ȫ��·���������ϴ����ϴ�ʱ����, ����ʱ��ΪĿ���ļ�·����
-	HWND			m_hwndReflection;			//							 (�Ǳ����ֶ�)
-	HANDLE			m_hCancelEvent;				// ȡ���¼�					 (�Ǳ����ֶ�)
+	char			m_szUtfFilePath[MAX_PATH];	//文件utf8路径（用于下载，下载时必填）
+	TCHAR			m_szFilePath[MAX_PATH];		//文件全饰路径（用于上传，上传时必填, 下载时作为目标文件路径）
+	HWND			m_hwndReflection;			//							 (非必须字段)
+	HANDLE			m_hCancelEvent;				// 取消事件					 (非必须字段)
 	UINT			m_uSenderID;
 	std::set<UINT>	m_setTargetIDs;
-	UINT			m_uAccountID;				//�˻�id����������ͷ��
-	long			m_nFileType;				//Ŀǰ������ͼƬ�������ļ����Զ���ͷ����������
+	UINT			m_uAccountID;				//账户id，用于下载头像
+	long			m_nFileType;				//目前有聊天图片、离线文件和自定义头像三种类型
 	CBuddyMessage*  m_pBuddyMsg;
 
-	BOOL			m_bPending;					//�������Ѿ������ػ����ϴ�ΪFALSE����֮ΪTRUE
+	BOOL			m_bPending;					//当该项已经在下载或者上传为FALSE，反之为TRUE
 };
 
 class CUploadFileResult
@@ -766,12 +766,12 @@ public:
 
 public:
 	long			m_nFileType;
-	BOOL			m_bSuccessful;					//�Ƿ��ϴ��ɹ�
-	int64_t			m_nFileSize;					//�ļ���С
-	TCHAR			m_szLocalName[MAX_PATH];		//�����ļ���
+	BOOL			m_bSuccessful;					//是否上传成功
+	int64_t			m_nFileSize;					//文件大小
+	TCHAR			m_szLocalName[MAX_PATH];		//本地文件名
 						
-	char			m_szMd5[64];					//�ļ���md5ֵ
-	char			m_szRemoteName[MAX_PATH];		//�ϴ��ɹ��Ժ��ļ��ڷ������ϵ�·����
+	char			m_szMd5[64];					//文件的md5值
+	char			m_szRemoteName[MAX_PATH];		//上传成功以后文件在服务器上的路径名
 
 	UINT			m_uSenderID;
 	std::set<UINT>	m_setTargetIDs;
@@ -781,8 +781,8 @@ public:
 struct FileProgress
 {
 	TCHAR szDestPath[MAX_PATH];
-	long  nPercent;				//�ٷֱȣ�0��100֮��(ֵΪ-1ʱ��Ϊ��ȡ�ļ�md5ֵ)
-	long  nVerificationPercent;	//��ȡmd5ֵ���ȣ�0��100��
+	long  nPercent;				//百分比，0～100之间(值为-1时，为获取文件md5值)
+	long  nVerificationPercent;	//获取md5值进度（0～100）
 };
 
 

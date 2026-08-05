@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <string>
 #include "Utils.h"
@@ -32,24 +32,24 @@ void RichEdit_ReplaceSel(HWND hWnd, LPCTSTR lpszNewText, BOOL bCanUndo = FALSE);
 void RichEdit_GetSel(HWND hWnd, LONG& nStartChar, LONG& nEndChar);
 int RichEdit_SetSel(HWND hWnd, LONG nStartChar, LONG nEndChar);
 
-void RichEdit_SetDefFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize,	// ÉèÖÃÄ¬ÈÏ×ÖÌå
+void RichEdit_SetDefFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize,	// è®¾ç½®é»˜è®¤å­—ä½“
 						 COLORREF clrText, BOOL bBold, BOOL bItalic, 
 						 BOOL bUnderLine, BOOL bIsLink);
-void RichEdit_SetDefFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize);	// ÉèÖÃÄ¬ÈÏ×ÖÌåÃû³ÆºÍ´óĞ¡
-void RichEdit_SetDefTextColor(HWND hWnd, COLORREF clrText);				// ÉèÖÃÄ¬ÈÏ×ÖÌåÑÕÉ«
-void RichEdit_SetDefLinkText(HWND hWnd, BOOL bEnable);					// ÉèÖÃÄ¬ÈÏ³¬Á´½Ó
-void RichEdit_SetFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize,		// ÉèÖÃ×ÖÌå
+void RichEdit_SetDefFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize);	// è®¾ç½®é»˜è®¤å­—ä½“åç§°å’Œå¤§å°
+void RichEdit_SetDefTextColor(HWND hWnd, COLORREF clrText);				// è®¾ç½®é»˜è®¤å­—ä½“é¢œè‰²
+void RichEdit_SetDefLinkText(HWND hWnd, BOOL bEnable);					// è®¾ç½®é»˜è®¤è¶…é“¾æ¥
+void RichEdit_SetFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize,		// è®¾ç½®å­—ä½“
 					  COLORREF clrText, BOOL bBold, BOOL bItalic, 
 					  BOOL bUnderLine, BOOL bIsLink);	
-void RichEdit_SetFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize);	// ÉèÖÃ×ÖÌåÃû³ÆºÍ´óĞ¡
-void RichEdit_SetTextColor(HWND hWnd, COLORREF clrText);				// ÉèÖÃ×ÖÌåÑÕÉ«
-void RichEdit_SetLinkText(HWND hWnd, BOOL bEnable);						// ÉèÖÃ³¬Á´½Ó
-BOOL RichEdit_SetStartIndent(HWND hWnd, int nSize);						// ÉèÖÃ×óËõ½ø(µ¥Î»:ç¾)
-BOOL RichEdit_InsertFace(HWND hWnd, LPCTSTR lpszFileName, int nFaceId,	// ²åÈë±íÇéÍ¼Æ¬
+void RichEdit_SetFont(HWND hWnd, LPCTSTR lpFontName, int nFontSize);	// è®¾ç½®å­—ä½“åç§°å’Œå¤§å°
+void RichEdit_SetTextColor(HWND hWnd, COLORREF clrText);				// è®¾ç½®å­—ä½“é¢œè‰²
+void RichEdit_SetLinkText(HWND hWnd, BOOL bEnable);						// è®¾ç½®è¶…é“¾æ¥
+BOOL RichEdit_SetStartIndent(HWND hWnd, int nSize);						// è®¾ç½®å·¦ç¼©è¿›(å•ä½:ç¼‡)
+BOOL RichEdit_InsertFace(HWND hWnd, LPCTSTR lpszFileName, int nFaceId,	// æ’å…¥è¡¨æƒ…å›¾ç‰‡
 						 int nFaceIndex, COLORREF clrBg, BOOL bAutoScale, int nReservedWidth);
-void RichEdit_GetText(HWND hWnd, tstring& strText);						// »ñÈ¡ÎÄ±¾
+void RichEdit_GetText(HWND hWnd, tstring& strText);						// è·å–æ–‡æœ¬
 void RichEdit_GetImageInfo(HWND hWnd, std::vector<ImageInfo*>& arrImageInfo);
-void RichEdit_ReplaceSel(HWND hWnd, LPCTSTR lpszNewText, LPCTSTR lpFontName,	// Ìæ»»Ñ¡ÖĞÎÄ±¾
+void RichEdit_ReplaceSel(HWND hWnd, LPCTSTR lpszNewText, LPCTSTR lpFontName,	// æ›¿æ¢é€‰ä¸­æ–‡æœ¬
 						 int nFontSize,	COLORREF clrText, BOOL bBold, BOOL bItalic, 
 						 BOOL bUnderLine, BOOL bIsLink, int nStartIndent, BOOL bCanUndo = FALSE);
 BOOL RichEdit_GetImageOle(HWND hWnd, POINT pt, IImageOle** pImageOle);
@@ -69,17 +69,17 @@ void RichEdit_ReplaceSel(ITextServices* pTextServices, LPCTSTR lpszNewText, BOOL
 void RichEdit_GetSel(ITextServices* pTextServices, LONG& nStartChar, LONG& nEndChar);
 int RichEdit_SetSel(ITextServices* pTextServices, LONG nStartChar, LONG nEndChar);
 
-void RichEdit_SetDefFont(ITextServices* pTextServices, LPCTSTR lpFontName,		// ÉèÖÃÄ¬ÈÏ×ÖÌå
+void RichEdit_SetDefFont(ITextServices* pTextServices, LPCTSTR lpFontName,		// è®¾ç½®é»˜è®¤å­—ä½“
 						 int nFontSize,	COLORREF clrText, BOOL bBold, 
 						 BOOL bItalic, BOOL bUnderLine, BOOL bIsLink);
-void RichEdit_SetFont(ITextServices* pTextServices, LPCTSTR lpFontName, int nFontSize,	// ÉèÖÃ×ÖÌå
+void RichEdit_SetFont(ITextServices* pTextServices, LPCTSTR lpFontName, int nFontSize,	// è®¾ç½®å­—ä½“
 					  COLORREF clrText, BOOL bBold, BOOL bItalic, BOOL bUnderLine, BOOL bIsLink);
-BOOL RichEdit_SetStartIndent(ITextServices* pTextServices, int nSize);			// ÉèÖÃ×óËõ½ø(µ¥Î»:ç¾)
-BOOL RichEdit_InsertFace(ITextServices*pTextServices, ITextHost*pTextHost,	// ²åÈë±íÇéÍ¼Æ¬
+BOOL RichEdit_SetStartIndent(ITextServices* pTextServices, int nSize);			// è®¾ç½®å·¦ç¼©è¿›(å•ä½:ç¼‡)
+BOOL RichEdit_InsertFace(ITextServices*pTextServices, ITextHost*pTextHost,	// æ’å…¥è¡¨æƒ…å›¾ç‰‡
 						 LPCTSTR lpszFileName, int nFaceId,	int nFaceIndex, 
-						 COLORREF clrBg, BOOL bAutoScale, int nReservedWidth,  long cxImage=0, long cyImage=0);	//cxImageºÍcyImageµ¥Î»Îªç¾
-void RichEdit_GetText(ITextServices* pTextServices, tstring& strText);			// »ñÈ¡ÎÄ±¾
-void RichEdit_ReplaceSel(ITextServices* pTextServices, LPCTSTR lpszNewText,	// Ìæ»»Ñ¡ÖĞÎÄ±¾
+						 COLORREF clrBg, BOOL bAutoScale, int nReservedWidth,  long cxImage=0, long cyImage=0);	//cxImageå’ŒcyImageå•ä½ä¸ºç¼‡
+void RichEdit_GetText(ITextServices* pTextServices, tstring& strText);			// è·å–æ–‡æœ¬
+void RichEdit_ReplaceSel(ITextServices* pTextServices, LPCTSTR lpszNewText,	// æ›¿æ¢é€‰ä¸­æ–‡æœ¬
 						 LPCTSTR lpFontName, int nFontSize,	COLORREF clrText, 
 						 BOOL bBold, BOOL bItalic, BOOL bUnderLine, BOOL bIsLink, 
 						 int nStartIndent, BOOL bCanUndo = FALSE);

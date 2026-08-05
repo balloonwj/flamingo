@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "MobileStatusDlg.h"
 #include "Utils.h"
 #include "GDIFactory.h"
@@ -42,7 +42,7 @@ BOOL CMobileStatusDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	if(m_bEnableAutoDisappear)
 	{
 		m_TimerID = SetTimer(ID_AUTO_DISAPPEAR_TIMER_ID, 10000, NULL);
-		//ĞŞ¸Ä·ç¸ñÊ¹µÃËû²»ÔÚÈÎÎñÀ¸ÏÔÊ¾
+		//ä¿®æ”¹é£æ ¼ä½¿å¾—ä»–ä¸åœ¨ä»»åŠ¡æ æ˜¾ç¤º
 		ModifyStyleEx(WS_EX_APPWINDOW, WS_EX_TOOLWINDOW);
 	}
 

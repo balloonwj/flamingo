@@ -1,15 +1,15 @@
-#pragma once
+ï»¿#pragma once
 
 #include "resource.h"
 #include "SkinLib/SkinLib.h"
 
-//²éÕÒÁªÏµÈË»òÕßÈºÊ±µ¯³öµÄÓÃ»§¿ìÕÕĞÅÏ¢¶Ô»°¿ò
+//æŸ¥æ‰¾è”ç³»äººæˆ–è€…ç¾¤æ—¶å¼¹å‡ºçš„ç”¨æˆ·å¿«ç…§ä¿¡æ¯å¯¹è¯æ¡†
 class CUserSnapInfoDlg : public CDialogImpl<CUserSnapInfoDlg>
 {
 public:
 	CUserSnapInfoDlg();
 	~CUserSnapInfoDlg();
-	//ÔÚ×ÊÔ´ÎÄ¼şÀïÃæÔö¼Ó¶Ô»°¿ò×ÊÔ´Ä£°å
+	//åœ¨èµ„æºæ–‡ä»¶é‡Œé¢å¢åŠ å¯¹è¯æ¡†èµ„æºæ¨¡æ¿
 	enum { IDD = IDD_USERSNAPINFO };
 
 	BEGIN_MSG_MAP_EX(CUserSnapInfoDlg)
@@ -44,7 +44,7 @@ private:
 	CSkinPictureBox		m_picUserThumb;
 	CSkinStatic			m_staUserAccountName;
 	CSkinStatic			m_staUserNickName;
-	CSkinStatic			m_staOperationDesc;		//²Ù×÷ÃèÊö
+	CSkinStatic			m_staOperationDesc;		//æ“ä½œæè¿°
 
 	CSkinButton			m_btnOK;
 	CSkinButton			m_btnCancel;

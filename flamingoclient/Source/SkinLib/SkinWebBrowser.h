@@ -1,5 +1,5 @@
-/**
- * ¿ÉÏÔÊ¾ÍøÒ³µÄ¿Ø¼ş£¬SkinWebBrowser.h
+ï»¿/**
+ * å¯æ˜¾ç¤ºç½‘é¡µçš„æ§ä»¶ï¼ŒSkinWebBrowser.h
  * zhangyl 2017.08.02
  */
 #pragma once
@@ -36,7 +36,7 @@ private:
 private:
     CAxWindow               m_WinContainer;
     CComPtr<IWebBrowser2>   m_spWebBrowser;
-    BOOL                    m_bInitOK;      //ÊÇ·ñ³õÊ¼»¯³É¹¦
+    BOOL                    m_bInitOK;      //æ˜¯å¦åˆå§‹åŒ–æˆåŠŸ
 
     VARIANT                 m_URL;
 };

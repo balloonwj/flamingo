@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "TrayIcon.h"
 
 struct TRAYDATA  
@@ -79,6 +79,40 @@ BOOL CTrayIcon::ModifyIcon(HICON hIcon, LPCTSTR lpszTip/* = NULL*/, UINT uID/*=1
 	return ::Shell_NotifyIcon(NIM_MODIFY, &m_stNotifyIconData);
 }
 
+BOOL CTrayIcon::ShowBalloonTip(LPCTSTR lpszBalloonInfoTitle, LPCTSTR lpszBalloonInfo,
+                               UINT uTimeout/* = 3000*/, UINT uID/* = 1*/)
+{
+    if (lpszBalloonInfo == NULL || lpszBalloonInfo[0] == _T('\0'))
+        return FALSE;
+
+    // åªç½® NIF_INFOï¼šä¸å¸¦ NIF_ICON / NIF_TIPï¼Œç³»ç»Ÿå°±åªå¼¹æ°”æ³¡ã€ä¸åŠ¨å›¾æ ‡å’Œæ‚¬åœæ–‡å­—ã€‚
+    m_stNotifyIconData.uFlags = NIF_INFO;
+    m_stNotifyIconData.uID = uID;
+    m_stNotifyIconData.uTimeout = uTimeout;
+    _tcscpy_s(m_stNotifyIconData.szInfo, ARRAYSIZE(m_stNotifyIconData.szInfo), lpszBalloonInfo);
+    if (lpszBalloonInfoTitle != NULL && lpszBalloonInfoTitle[0] != _T('\0'))
+        _tcscpy_s(m_stNotifyIconData.szInfoTitle, ARRAYSIZE(m_stNotifyIconData.szInfoTitle), lpszBalloonInfoTitle);
+    else
+        m_stNotifyIconData.szInfoTitle[0] = _T('\0');
+
+    return ::Shell_NotifyIcon(NIM_MODIFY, &m_stNotifyIconData);
+}
+
+BOOL CTrayIcon::ModifyTip(LPCTSTR lpszTip, UINT uID/* = 1*/)
+{
+    if (lpszTip == NULL)
+        return FALSE;
+
+    // åªç½® NIF_TIPï¼šä¸å¸¦ NIF_ICON / NIF_INFOï¼Œç³»ç»Ÿå°±åªæ¢æ‚¬åœæ–‡å­—ã€ä¸åŠ¨å›¾æ ‡ä¹Ÿä¸å¼¹æ°”æ³¡ã€‚
+    m_stNotifyIconData.uFlags = NIF_TIP;
+    m_stNotifyIconData.uID = uID;
+    // ç”¨ _TRUNCATEï¼šszTip å®¹é‡æœ‰é™ï¼ˆ128 å­—ç¬¦ï¼‰ï¼Œæ˜µç§°è¿‡é•¿æ—¶æˆªæ–­è€Œä¸æ˜¯æº¢å‡º / è§¦å‘æ–­è¨€ã€‚
+    _tcsncpy_s(m_stNotifyIconData.szTip, ARRAYSIZE(m_stNotifyIconData.szTip),
+        lpszTip, _TRUNCATE);
+
+    return ::Shell_NotifyIcon(NIM_MODIFY, &m_stNotifyIconData);
+}
+
 BOOL CTrayIcon::RemoveIcon()
 {
 	return ::Shell_NotifyIcon(NIM_DELETE, &m_stNotifyIconData);
@@ -127,7 +161,7 @@ void CTrayIcon::OnTimer(UINT_PTR nIDEvent)
 	}
 }
 
-// »ñÈ¡ÍĞÅÌÍ¼±êÇøÓòÎ»ÖÃ
+// è·å–æ‰˜ç›˜å›¾æ ‡åŒºåŸŸä½ç½®
 BOOL CTrayIcon::GetTrayIconRect(RECT* lpRect)
 {
 	if (NULL == lpRect)
@@ -138,9 +172,9 @@ BOOL CTrayIcon::GetTrayIconRect(RECT* lpRect)
 	HWND hWnd = FindTrayNotifyWnd();
 	if (hWnd!=NULL && IsWindow(hWnd) )
 	{
-		if (!EnumNotifyWindow(hWnd,*lpRect))		// Èç¹ûÃ»ÔÚÆÕÍ¨ÍĞÅÌÇø
+		if (!EnumNotifyWindow(hWnd,*lpRect))		// å¦‚æœæ²¡åœ¨æ™®é€šæ‰˜ç›˜åŒº
 		{
-			hWnd = FindNotifyIconOverflowWindow();	// ÔÚÒç³öÇø£¨win7£©
+			hWnd = FindNotifyIconOverflowWindow();	// åœ¨æº¢å‡ºåŒºï¼ˆwin7ï¼‰
 			if (hWnd!=NULL && IsWindow(hWnd))
 			{
 				EnumNotifyWindow(hWnd,*lpRect);
@@ -164,7 +198,7 @@ BOOL CTrayIcon::GetTrayIconRect(RECT* lpRect)
 //    return 0 != Shell_NotifyIcon(NIM_MODIFY, &m_nid);
 //}
 
-// Ã¶¾Ù»ñÈ¡ÍĞÅÌÍ¼±êÇøÓòÎ»ÖÃ
+// æšä¸¾è·å–æ‰˜ç›˜å›¾æ ‡åŒºåŸŸä½ç½®
 BOOL CTrayIcon::EnumNotifyWindow(HWND hWnd, RECT &rect)
 {
 	BOOL bSuc = FALSE;
@@ -189,25 +223,25 @@ BOOL CTrayIcon::EnumNotifyWindow(HWND hWnd, RECT &rect)
 	lpBuffer = ::VirtualAllocEx(hProcess, 0, 1024, MEM_COMMIT, PAGE_READWRITE);
 	if (lpBuffer != NULL)
 	{
-		nButtons = ::SendMessage(hWnd, TB_BUTTONCOUNT, 0, 0);	// »ñÈ¡ÍĞÅÌÍ¼±êÊıÁ¿
+		nButtons = ::SendMessage(hWnd, TB_BUTTONCOUNT, 0, 0);	// è·å–æ‰˜ç›˜å›¾æ ‡æ•°é‡
 		for (int i = 0; i < nButtons; i++)
 		{
 			RECT rc = {0}; 
 			TBBUTTON stButton = {0};
 			TRAYDATA stTrayData = {0};
 
-			::SendMessage(hWnd, TB_GETBUTTON, i, (LPARAM)lpBuffer);	// »ñÈ¡µÚi¸öÍĞÅÌÍ¼±êĞÅÏ¢
+			::SendMessage(hWnd, TB_GETBUTTON, i, (LPARAM)lpBuffer);	// è·å–ç¬¬iä¸ªæ‰˜ç›˜å›¾æ ‡ä¿¡æ¯
 			BOOL bRet = ::ReadProcessMemory(hProcess, lpBuffer, &stButton, sizeof(TBBUTTON), 0);
-			///TODO: ½â¾öÕâ¸öÎÊÌâ
-			//Õâ¸öº¯ÊıÖ´ĞĞÊ§°Üµ¼ÖÂ£¬´íÎóÂë£º0x0000012b ½öÍê³É²¿·ÖµÄ ReadProcessMemory »ò WriteProcessMemory ÇëÇó¡£
+			///TODO: è§£å†³è¿™ä¸ªé—®é¢˜
+			//è¿™ä¸ªå‡½æ•°æ‰§è¡Œå¤±è´¥å¯¼è‡´ï¼Œé”™è¯¯ç ï¼š0x0000012b ä»…å®Œæˆéƒ¨åˆ†çš„ ReadProcessMemory æˆ– WriteProcessMemory è¯·æ±‚ã€‚
 			//see: http://bbs.csdn.net/topics/90433523
 			long nOffset = (long)(&stButton.dwData) - (long)&stButton;
 			char* pDest = (char*)lpBuffer+nOffset;
 			bRet = ::ReadProcessMemory(hProcess, (LPVOID)pDest, &stTrayData, sizeof(TRAYDATA), 0);
 			if (bRet != 0 && stTrayData.hwnd == m_stNotifyIconData.hWnd)
 			{
-				::SendMessage(hWnd, TB_GETITEMRECT, (WPARAM)i, (LPARAM)lpBuffer); // »ñÈ¡µÚi¸öÍĞÅÌÍ¼±êÇøÓò
-				bRet = ::ReadProcessMemory(hProcess, lpBuffer, &rc, sizeof(rc),0);  // ¶ÁÈ¡ÍĞÅÌÍ¼±êÇøÓò
+				::SendMessage(hWnd, TB_GETITEMRECT, (WPARAM)i, (LPARAM)lpBuffer); // è·å–ç¬¬iä¸ªæ‰˜ç›˜å›¾æ ‡åŒºåŸŸ
+				bRet = ::ReadProcessMemory(hProcess, lpBuffer, &rc, sizeof(rc),0);  // è¯»å–æ‰˜ç›˜å›¾æ ‡åŒºåŸŸ
 				if (bRet != 0)
 				{
 					::ClientToScreen(hWnd, (LPPOINT)&rc);
@@ -227,7 +261,7 @@ BOOL CTrayIcon::EnumNotifyWindow(HWND hWnd, RECT &rect)
 	return bSuc;
 }
 
-// »ñÈ¡ÆÕÍ¨ÍĞÅÌÇø´°¿Ú¾ä±ú
+// è·å–æ™®é€šæ‰˜ç›˜åŒºçª—å£å¥æŸ„
 HWND CTrayIcon::FindTrayNotifyWnd()
 {
 	HWND hWnd = ::FindWindow(_T("Shell_TrayWnd"), NULL);
@@ -246,7 +280,7 @@ HWND CTrayIcon::FindTrayNotifyWnd()
 	return hWnd;
 }
 
-// »ñÈ¡Òç³öÍĞÅÌÇø´°¿Ú¾ä±ú
+// è·å–æº¢å‡ºæ‰˜ç›˜åŒºçª—å£å¥æŸ„
 HWND CTrayIcon::FindNotifyIconOverflowWindow()
 {
 	HWND hWnd = ::FindWindow(_T("NotifyIconOverflowWindow"), NULL);

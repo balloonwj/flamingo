@@ -1,4 +1,4 @@
-#pragma once
+Ôªø#pragma once
 
 class CBuffer
 {
@@ -26,7 +26,7 @@ private:
 private:
 	char        m_cFixData[1024* 4];
 	char*       m_lpData;
-	void*       m_Extra;		//∂ÓÕ‚ ˝æ›
+	void*       m_Extra;		//È¢ùÂ§ñÊï∞ÊçÆ
 	DWORD       m_dwSize;
 	DWORD       m_dwMaxSize;
 	DWORD       m_dwGrowBy;

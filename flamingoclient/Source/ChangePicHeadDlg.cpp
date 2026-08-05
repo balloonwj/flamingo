@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "ChangePicHeadDlg.h"
 #include "UserSessionData.h"
 
@@ -48,7 +48,7 @@ BOOL CChangePicHeadDlg::Init()
 	m_SkinDlg.SetCloseSysBtnPic(_T("SysBtn\\btn_close_normal.png"), 
 		_T("SysBtn\\btn_close_highlight.png"), _T("SysBtn\\btn_close_down.png"));
 	m_SkinDlg.SubclassWindow(m_hWnd);
-	m_SkinDlg.SetTitleText(_T("Í·ÏñÐÞ¸Ä"));
+	m_SkinDlg.SetTitleText(_T("å¤´åƒä¿®æ”¹"));
 
 	HDC hDlgBgDC = m_SkinDlg.GetBgDC();
 
@@ -66,7 +66,7 @@ BOOL CChangePicHeadDlg::Init()
 	m_btnCancel.SubclassWindow(GetDlgItem(IDCANCEL));
 	m_btnCancel.MoveWindow(470, 420, 80, 28, FALSE);
 
-	//³õÊ¼»¯Í·Ïñ´°¿Ú
+	//åˆå§‹åŒ–å¤´åƒçª—å£
 	InitThumbImages();
 
 	return 1;
@@ -74,7 +74,7 @@ BOOL CChangePicHeadDlg::Init()
 
 BOOL CChangePicHeadDlg::InitThumbImages()
 {
-	//TODO: ºóÆÚ¸Ä³É×Ô¶¯ÅÐ¶Ï\Image\UserThumbs\ÎÄ¼þ¼ÐÀïÃæÍ·ÏñÎÄ¼þµÄ¸öÊý
+	//TODO: åŽæœŸæ”¹æˆè‡ªåŠ¨åˆ¤æ–­\Image\UserThumbs\æ–‡ä»¶å¤¹é‡Œé¢å¤´åƒæ–‡ä»¶çš„ä¸ªæ•°
 	const long THUMB_NUM = 36;
 
 	CString strThumbPath;
@@ -101,11 +101,11 @@ BOOL CChangePicHeadDlg::InitThumbImages()
 			pSkinPictureBox->SetBitmap(strThumbPath);
 			pSkinPictureBox->SetTransparent(TRUE, hDlgBgDC);
 			pSkinPictureBox->SetShowCursor(TRUE);
-			//×¢Òâ£ºskinLibµÄSkinPictureBoxÓÃCreateWindow´´½¨³öÀ´±ØÐë¼ÓÉÏSS_NOTIFY²ÅÄÜÏìÓ¦Êó±êÊÂ¼þ
+			//æ³¨æ„ï¼šskinLibçš„SkinPictureBoxç”¨CreateWindowåˆ›å»ºå‡ºæ¥å¿…é¡»åŠ ä¸ŠSS_NOTIFYæ‰èƒ½å“åº”é¼ æ ‡äº‹ä»¶
 			pSkinPictureBox->Create(m_hWnd, rtThumb, NULL, WS_CHILD|WS_VISIBLE|SS_NOTIFY, NULL, THUMB_WINDOW_BASE_ID+j+i*6, NULL);
 			pSkinPictureBox->ShowWindow(SW_SHOW);
 			pSkinPictureBox->SetBgPic(_T("HeadCtrl\\Padding4Normal.png"), _T("HeadCtrl\\Padding4Hot.png"), _T("HeadCtrl\\Padding4Hot.png"));
-			strThumbDesc.Format(_T("Í·Ïñ%d"), 1+j+i*6);
+			strThumbDesc.Format(_T("å¤´åƒ%d"), 1+j+i*6);
 			pSkinPictureBox->SetToolTipText(strThumbDesc);
 			m_aryThumbWindows[j+i*6] = pSkinPictureBox;
 		}
@@ -152,10 +152,10 @@ void CChangePicHeadDlg::OnSelectThumb(UINT uNotifyCode, int nID, CWindow wndCtl)
 	if(nIndex<0 || nIndex>=(long)m_aryThumbWindows.size())
 		return;
 	
-	//ÏÈÈ¡ÏûÇ°Ò»¸öÑ¡ÖÐÏî
+	//å…ˆå–æ¶ˆå‰ä¸€ä¸ªé€‰ä¸­é¡¹
 	if(m_LastSelectedIndex>=0)
 		m_aryThumbWindows[m_LastSelectedIndex]->SetSelectedStatus(FALSE);
-	//ÔÙÑ¡ÖÐµ±Ç°Ïî
+	//å†é€‰ä¸­å½“å‰é¡¹
 	m_aryThumbWindows[nIndex]->SetSelectedStatus(TRUE);
 	m_SelectedIndex = nIndex;
 	m_LastSelectedIndex = nIndex;

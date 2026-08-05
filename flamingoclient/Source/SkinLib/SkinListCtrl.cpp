@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "SkinListCtrl.h"
 
 void Gray(Gdiplus::Bitmap* lpSrcBmp)
@@ -53,7 +53,7 @@ CLVItem::CLVItem(void)
 {
     m_lpImage = NULL;
     m_clrColor = RGB(0, 0, 0);
-    //Ä¬ÈÏ¾ÓÖĞÏÔÊ¾
+    //é»˜è®¤å±…ä¸­æ˜¾ç¤º
     m_dwFmt = DT_CENTER;
     m_lParam = 0;
 }
@@ -316,7 +316,7 @@ CSkinListCtrl::~CSkinListCtrl(void)
     DeleteAllColumns();
 }
 
-// ÉèÖÃÁĞ±í±³¾°Í¼Æ¬
+// è®¾ç½®åˆ—è¡¨èƒŒæ™¯å›¾ç‰‡
 BOOL CSkinListCtrl::SetBgPic(LPCTSTR lpszFileName)
 {
     CSkinManager::GetInstance()->ReleaseImage(m_lpBgImg);
@@ -334,7 +334,7 @@ void CSkinListCtrl::SetBodyBgColor(COLORREF clrBgColor)
     m_clrBodyBgColor = clrBgColor;
 }
 
-// ÉèÖÃ±íÍ··Ö¸ô·ûÍ¼Æ¬
+// è®¾ç½®è¡¨å¤´åˆ†éš”ç¬¦å›¾ç‰‡
 BOOL CSkinListCtrl::SetHeadSeparatedPic(LPCTSTR lpszFileName)
 {
     CSkinManager::GetInstance()->ReleaseImage(m_lpHeadSeparatedImg);
@@ -342,7 +342,7 @@ BOOL CSkinListCtrl::SetHeadSeparatedPic(LPCTSTR lpszFileName)
     return (m_lpHeadSeparatedImg != NULL) ? TRUE : FALSE;
 }
 
-// ÉèÖÃ±íÍ·±³¾°Í¼Æ¬(ÆÕÍ¨×´Ì¬)
+// è®¾ç½®è¡¨å¤´èƒŒæ™¯å›¾ç‰‡(æ™®é€šçŠ¶æ€)
 BOOL CSkinListCtrl::SetHeadNormalPic(LPCTSTR lpszFileName)
 {
     CSkinManager::GetInstance()->ReleaseImage(m_lpHeadImgN);
@@ -350,7 +350,7 @@ BOOL CSkinListCtrl::SetHeadNormalPic(LPCTSTR lpszFileName)
     return (m_lpHeadImgN != NULL) ? TRUE : FALSE;
 }
 
-// ÉèÖÃ±íÍ·±³¾°Í¼Æ¬(¸ßÁÁ×´Ì¬)
+// è®¾ç½®è¡¨å¤´èƒŒæ™¯å›¾ç‰‡(é«˜äº®çŠ¶æ€)
 BOOL CSkinListCtrl::SetHeadHotPic(LPCTSTR lpszFileName)
 {
     CSkinManager::GetInstance()->ReleaseImage(m_lpHeadImgH);
@@ -358,7 +358,7 @@ BOOL CSkinListCtrl::SetHeadHotPic(LPCTSTR lpszFileName)
     return (m_lpHeadImgH != NULL) ? TRUE : FALSE;
 }
 
-// ÉèÖÃ±íÍ·±³¾°Í¼Æ¬(°´ÏÂ×´Ì¬)
+// è®¾ç½®è¡¨å¤´èƒŒæ™¯å›¾ç‰‡(æŒ‰ä¸‹çŠ¶æ€)
 BOOL CSkinListCtrl::SetHeadPushedPic(LPCTSTR lpszFileName)
 {
     CSkinManager::GetInstance()->ReleaseImage(m_lpHeadImgP);
@@ -366,25 +366,25 @@ BOOL CSkinListCtrl::SetHeadPushedPic(LPCTSTR lpszFileName)
     return (m_lpHeadImgP != NULL) ? TRUE : FALSE;
 }
 
-// ÉèÖÃÍø¸ñÏßÊÇ·ñ¿É¼û£¬Ä¬ÈÏ²»¿É¼û
+// è®¾ç½®ç½‘æ ¼çº¿æ˜¯å¦å¯è§ï¼Œé»˜è®¤ä¸å¯è§
 void CSkinListCtrl::SetGridLineVisible(BOOL bVisible)
 {
     m_bGridLineVisible = bVisible;
 }
 
-// ÉèÖÃÍø¸ñÏß´ÖÏ¸£¬Ä¬ÈÏ1px
+// è®¾ç½®ç½‘æ ¼çº¿ç²—ç»†ï¼Œé»˜è®¤1px
 void CSkinListCtrl::SetGridLineWidth(int nWidth)
 {
     m_nGridLineWidth = nWidth;
 }
 
-// ÉèÖÃÍø¸ñÏßÑÕÉ«£¬Ä¬ÈÏÑÕÉ«#9fc5e6£¨À¶É«£©
+// è®¾ç½®ç½‘æ ¼çº¿é¢œè‰²ï¼Œé»˜è®¤é¢œè‰²#9fc5e6ï¼ˆè“è‰²ï¼‰
 void CSkinListCtrl::SetGridLineColor(COLORREF clr)
 {
     m_clrGridLine = clr;
 }
 
-// ÉèÖÃÆæĞĞ±³¾°Í¼Æ¬(ÆÕÍ¨×´Ì¬)
+// è®¾ç½®å¥‡è¡ŒèƒŒæ™¯å›¾ç‰‡(æ™®é€šçŠ¶æ€)
 BOOL CSkinListCtrl::SetOddItemBgPic(LPCTSTR lpszFileName)
 {
     CSkinManager::GetInstance()->ReleaseImage(m_lpOddItemBgImgN);
@@ -392,7 +392,7 @@ BOOL CSkinListCtrl::SetOddItemBgPic(LPCTSTR lpszFileName)
     return (m_lpOddItemBgImgN != NULL) ? TRUE : FALSE;
 }
 
-// ÉèÖÃË«ĞĞ±³¾°Í¼Æ¬(ÆÕÍ¨×´Ì¬)
+// è®¾ç½®åŒè¡ŒèƒŒæ™¯å›¾ç‰‡(æ™®é€šçŠ¶æ€)
 BOOL CSkinListCtrl::SetEvenItemBgPic(LPCTSTR lpszFileName)
 {
     CSkinManager::GetInstance()->ReleaseImage(m_lpEvenItemBgImgN);
@@ -400,7 +400,7 @@ BOOL CSkinListCtrl::SetEvenItemBgPic(LPCTSTR lpszFileName)
     return (m_lpEvenItemBgImgN != NULL) ? TRUE : FALSE;
 }
 
-// ÉèÖÃĞĞ±³¾°Í¼Æ¬(¸ßÁÁ×´Ì¬)
+// è®¾ç½®è¡ŒèƒŒæ™¯å›¾ç‰‡(é«˜äº®çŠ¶æ€)
 BOOL CSkinListCtrl::SetItemHoverBgPic(LPCTSTR lpszFileName)
 {
     CSkinManager::GetInstance()->ReleaseImage(m_lpItemBgImgH);
@@ -408,7 +408,7 @@ BOOL CSkinListCtrl::SetItemHoverBgPic(LPCTSTR lpszFileName)
     return (m_lpItemBgImgH != NULL) ? TRUE : FALSE;
 }
 
-// ÉèÖÃĞĞ±³¾°Í¼Æ¬(Ñ¡ÖĞ×´Ì¬)
+// è®¾ç½®è¡ŒèƒŒæ™¯å›¾ç‰‡(é€‰ä¸­çŠ¶æ€)
 BOOL CSkinListCtrl::SetItemSelBgPic(LPCTSTR lpszFileName)
 {
     CSkinManager::GetInstance()->ReleaseImage(m_lpItemBgImgS);
@@ -416,45 +416,45 @@ BOOL CSkinListCtrl::SetItemSelBgPic(LPCTSTR lpszFileName)
     return (m_lpItemBgImgS != NULL) ? TRUE : FALSE;
 }
 
-// ÉèÖÃÁĞ±í±³¾°ÊÇ·ñÍ¸Ã÷
+// è®¾ç½®åˆ—è¡¨èƒŒæ™¯æ˜¯å¦é€æ˜
 void CSkinListCtrl::SetTransparent(BOOL bTransparent, HDC hBgDC)
 {
     m_bTransparent = bTransparent;
     m_hBgDC = hBgDC;
 }
 
-// ÉèÖÃ±íÍ·ÊÇ·ñ¿É¼û
+// è®¾ç½®è¡¨å¤´æ˜¯å¦å¯è§
 void CSkinListCtrl::SetHeadVisible(BOOL bVisible)
 {
     m_bHeadVisible = bVisible;
 }
 
-// ÅĞ¶Ï±íÍ·ÊÇ·ñ¿É¼û
+// åˆ¤æ–­è¡¨å¤´æ˜¯å¦å¯è§
 BOOL CSkinListCtrl::IsHeadVisible()
 {
     return m_bHeadVisible;
 }
 
-// ÉèÖÃ±íÍ·¸ß¶È
+// è®¾ç½®è¡¨å¤´é«˜åº¦
 void CSkinListCtrl::SetHeadHeight(int nHeight)
 {
     m_nHeadHeight = nHeight;
 }
 
-// ÉèÖÃĞĞ¸ß¶È
+// è®¾ç½®è¡Œé«˜åº¦
 void CSkinListCtrl::SetItemHeight(int nHeight)
 {
     m_nRowHeight = nHeight;
 }
 
-// ÉèÖÃĞĞÍ¼Ïñ´óĞ¡
+// è®¾ç½®è¡Œå›¾åƒå¤§å°
 void CSkinListCtrl::SetItemImageSize(int cx, int cy)
 {
     m_szItemImage.cx = cx;
     m_szItemImage.cy = cy;
 }
 
-// Ìí¼ÓÁĞ
+// æ·»åŠ åˆ—
 int CSkinListCtrl::AddColumn(LPCTSTR lpszText, LPCTSTR lpszImage, DWORD dwFmt, int nWidth)
 {
     CLVColumn* lpCol = new CLVColumn;
@@ -477,7 +477,7 @@ int CSkinListCtrl::AddColumn(LPCTSTR lpszText, LPCTSTR lpszImage, DWORD dwFmt, i
     return m_arrCols.size() - 1;
 }
 
-// ²åÈëÁĞ
+// æ’å…¥åˆ—
 int CSkinListCtrl::InsertColumn(int nCol, LPCTSTR lpszText, LPCTSTR lpszImage, DWORD dwFmt, int nWidth)
 {
     if (nCol < 0)
@@ -503,7 +503,7 @@ int CSkinListCtrl::InsertColumn(int nCol, LPCTSTR lpszText, LPCTSTR lpszImage, D
     return nCol;
 }
 
-// É¾³ıÁĞ
+// åˆ é™¤åˆ—
 BOOL CSkinListCtrl::DeleteColumn(int nCol)
 {
     if (nCol < 0 || nCol >= (int)m_arrCols.size())
@@ -527,14 +527,14 @@ BOOL CSkinListCtrl::DeleteColumn(int nCol)
     return TRUE;
 }
 
-// Ìí¼ÓĞĞ
+// æ·»åŠ è¡Œ
 int CSkinListCtrl::AddItem(LPCTSTR lpszText, LPCTSTR lpszImage, BOOL bGray, DWORD dwFmt, LPARAM lParam)
 {
     int nItemCnt = GetItemCount();
     return InsertItem(nItemCnt, lpszText, lpszImage, bGray, dwFmt, lParam);
 }
 
-// ²åÈëĞĞ
+// æ’å…¥è¡Œ
 int CSkinListCtrl::InsertItem(int nItem, LPCTSTR lpszText, LPCTSTR lpszImage,
     BOOL bGray, DWORD dwFmt, LPARAM lParam)
 {
@@ -562,7 +562,7 @@ int CSkinListCtrl::InsertItem(int nItem, LPCTSTR lpszText, LPCTSTR lpszImage,
     return nItem;
 }
 
-// É¾³ıĞĞ
+// åˆ é™¤è¡Œ
 BOOL CSkinListCtrl::DeleteItem(int nItem)
 {
     if (nItem < 0 || nItem >= (int)m_arrRows.size())
@@ -588,13 +588,13 @@ BOOL CSkinListCtrl::DeleteItem(int nItem)
     return TRUE;
 }
 
-// »ñÈ¡×ÜÁĞÊı
+// è·å–æ€»åˆ—æ•°
 int CSkinListCtrl::GetColumnCount()
 {
     return (int)m_arrCols.size();
 }
 
-// É¾³ıËùÓĞÁĞ
+// åˆ é™¤æ‰€æœ‰åˆ—
 BOOL CSkinListCtrl::DeleteAllColumns()
 {
     DeleteAllItems();
@@ -611,13 +611,13 @@ BOOL CSkinListCtrl::DeleteAllColumns()
     return TRUE;
 }
 
-// »ñÈ¡×ÜĞĞÊı
+// è·å–æ€»è¡Œæ•°
 int CSkinListCtrl::GetItemCount()
 {
     return (int)m_arrRows.size();
 }
 
-// É¾³ıËùÓĞĞĞ
+// åˆ é™¤æ‰€æœ‰è¡Œ
 BOOL CSkinListCtrl::DeleteAllItems()
 {
     for (int i = 0; i < (int)m_arrRows.size(); i++)
@@ -633,7 +633,7 @@ BOOL CSkinListCtrl::DeleteAllItems()
     return TRUE;
 }
 
-// ÉèÖÃÁĞÎÄ±¾
+// è®¾ç½®åˆ—æ–‡æœ¬
 BOOL CSkinListCtrl::SetColumnText(int nCol, LPCTSTR lpszText)
 {
     CLVColumn* lpCol = GetColumn(nCol);
@@ -645,7 +645,7 @@ BOOL CSkinListCtrl::SetColumnText(int nCol, LPCTSTR lpszText)
     return TRUE;
 }
 
-// ÉèÖÃÁĞÍ¼Ïñ
+// è®¾ç½®åˆ—å›¾åƒ
 BOOL CSkinListCtrl::SetColumnImage(int nCol, LPCTSTR lpszImage)
 {
     CLVColumn* lpCol = GetColumn(nCol);
@@ -658,7 +658,7 @@ BOOL CSkinListCtrl::SetColumnImage(int nCol, LPCTSTR lpszImage)
     return TRUE;
 }
 
-// ÉèÖÃÁĞ¸ñÊ½
+// è®¾ç½®åˆ—æ ¼å¼
 BOOL CSkinListCtrl::SetColumnFormat(int nCol, DWORD dwFmt)
 {
     CLVColumn* lpCol = GetColumn(nCol);
@@ -670,7 +670,7 @@ BOOL CSkinListCtrl::SetColumnFormat(int nCol, DWORD dwFmt)
     return TRUE;
 }
 
-// ÉèÖÃÁĞ¿í¶È
+// è®¾ç½®åˆ—å®½åº¦
 BOOL CSkinListCtrl::SetColumnWidth(int nCol, int nWidth)
 {
     CLVColumn* lpCol = GetColumn(nCol);
@@ -682,28 +682,28 @@ BOOL CSkinListCtrl::SetColumnWidth(int nCol, int nWidth)
     return TRUE;
 }
 
-// »ñÈ¡ÁĞÎÄ±¾
+// è·å–åˆ—æ–‡æœ¬
 CString CSkinListCtrl::GetColumnText(int nCol)
 {
     CLVColumn* lpCol = GetColumn(nCol);
     return (NULL == lpCol) ? _T("") : lpCol->m_strText;
 }
 
-// »ñÈ¡ÁĞ¸ñÊ½
+// è·å–åˆ—æ ¼å¼
 DWORD CSkinListCtrl::GetColumnFormat(int nCol)
 {
     CLVColumn* lpCol = GetColumn(nCol);
     return (NULL == lpCol) ? 0 : lpCol->m_dwFmt;
 }
 
-// »ñÈ¡ÁĞ¿í¶È
+// è·å–åˆ—å®½åº¦
 int CSkinListCtrl::GetColumnWidth(int nCol)
 {
     CLVColumn* lpCol = GetColumn(nCol);
     return (NULL == lpCol) ? 0 : lpCol->m_nWidth;
 }
 
-// ÉèÖÃĞĞÎÄ±¾
+// è®¾ç½®è¡Œæ–‡æœ¬
 BOOL CSkinListCtrl::SetItemText(int nItem, int nSubItem, LPCTSTR lpszText)
 {
     CLVRow* lpRow = GetItem(nItem);
@@ -732,7 +732,7 @@ BOOL CSkinListCtrl::SetCellTextColor(int nItem, int nSubItem, COLORREF clrColor)
     return bRet;
 }
 
-// ÉèÖÃĞĞÍ¼Ïñ
+// è®¾ç½®è¡Œå›¾åƒ
 BOOL CSkinListCtrl::SetItemImage(int nItem, int nSubItem, LPCTSTR lpszImage, BOOL bGray/* = FALSE*/)
 {
     CLVRow* lpRow = GetItem(nItem);
@@ -747,7 +747,7 @@ BOOL CSkinListCtrl::SetItemImage(int nItem, int nSubItem, LPCTSTR lpszImage, BOO
     return bRet;
 }
 
-// ÉèÖÃĞĞ¸ñÊ½
+// è®¾ç½®è¡Œæ ¼å¼
 BOOL CSkinListCtrl::SetItemFormat(int nItem, int nSubItem, DWORD dwFmt)
 {
     CLVRow* lpRow = GetItem(nItem);
@@ -777,7 +777,7 @@ BOOL CSkinListCtrl::SetItemFormat(int nItem, int nSubItem, DWORD dwFmt)
 //    return 1;
 //}
 
-// ÉèÖÃĞĞÊı¾İ
+// è®¾ç½®è¡Œæ•°æ®
 BOOL CSkinListCtrl::SetItemData(int nItem, int nSubItem, LPARAM lParam)
 {
     CLVRow* lpRow = GetItem(nItem);
@@ -786,46 +786,46 @@ BOOL CSkinListCtrl::SetItemData(int nItem, int nSubItem, LPARAM lParam)
     return lpRow->SetItemData(nSubItem, lParam);
 }
 
-// »ñÈ¡ĞĞÎÄ±¾
+// è·å–è¡Œæ–‡æœ¬
 CString CSkinListCtrl::GetItemText(int nItem, int nSubItem)
 {
     CLVRow* lpRow = GetItem(nItem);
     return (NULL == lpRow) ? _T("") : lpRow->GetItemText(nSubItem);
 }
 
-// »ñÈ¡ĞĞ¸ñÊ½
+// è·å–è¡Œæ ¼å¼
 DWORD CSkinListCtrl::GetItemFormat(int nItem, int nSubItem)
 {
     CLVRow* lpRow = GetItem(nItem);
     return (NULL == lpRow) ? 0 : lpRow->GetItemFormat(nSubItem);
 }
 
-// »ñÈ¡ĞĞÊı¾İ
+// è·å–è¡Œæ•°æ®
 LPARAM CSkinListCtrl::GetItemData(int nItem, int nSubItem)
 {
     CLVRow* lpRow = GetItem(nItem);
     return (NULL == lpRow) ? 0 : lpRow->GetItemData(nSubItem);
 }
 
-//ÉèÖÃµ±Ç°ËùÑ¡Ïî
+//è®¾ç½®å½“å‰æ‰€é€‰é¡¹
 void CSkinListCtrl::SetCurSelIndex(int nIndex)
 {
     m_nSelItemIndex = nIndex;
 }
 
-// »ñÈ¡µ±Ç°Ñ¡ÖĞĞĞË÷Òı
+// è·å–å½“å‰é€‰ä¸­è¡Œç´¢å¼•
 int CSkinListCtrl::GetCurSelItemIndex()
 {
     return m_nSelItemIndex;
 }
 
-// ÉèÖÃĞĞÎÄ±¾ÑÕÉ«(ÆÕÍ¨×´Ì¬)
+// è®¾ç½®è¡Œæ–‡æœ¬é¢œè‰²(æ™®é€šçŠ¶æ€)
 void CSkinListCtrl::SetItemTextColor(COLORREF clr)
 {
     m_clrItemText = clr;
 }
 
-// ĞĞÎÄ±¾ÑÕÉ«(Ñ¡ÖĞ×´Ì¬)
+// è¡Œæ–‡æœ¬é¢œè‰²(é€‰ä¸­çŠ¶æ€)
 void CSkinListCtrl::SetSelItemTextColor(COLORREF clr)
 {
     m_clrSelItemText = clr;
@@ -993,7 +993,7 @@ void CSkinListCtrl::OnLButtonDblClk(UINT nFlags, CPoint point)
         EnsureVisible(m_nSelItemIndex);
         Invalidate();
 
-        NMHDR stNmhdr = { m_hWnd, GetDlgCtrlID(), NM_DBLCLK };	// Êó±ê×ó¼üË«»÷ÊÂ¼ş
+        NMHDR stNmhdr = { m_hWnd, GetDlgCtrlID(), NM_DBLCLK };	// é¼ æ ‡å·¦é”®åŒå‡»äº‹ä»¶
         ::SendMessage(::GetParent(m_hWnd), WM_NOTIFY, GetDlgCtrlID(), (LPARAM)&stNmhdr);
     }
 }
@@ -1025,7 +1025,7 @@ void CSkinListCtrl::OnLButtonDown(UINT nFlags, CPoint point)
             NMHDREx stNmhdr;
             stNmhdr.hdr.hwndFrom = m_hWnd;
             stNmhdr.hdr.idFrom = GetDlgCtrlID();
-            stNmhdr.hdr.code = LVN_ITEMCHANGED; // ĞĞÑ¡Ôñ¸Ä±äÊÂ¼ş
+            stNmhdr.hdr.code = LVN_ITEMCHANGED; // è¡Œé€‰æ‹©æ”¹å˜äº‹ä»¶
             stNmhdr.lParam = m_nSelItemIndex;
             ::SendMessage(::GetParent(m_hWnd), WM_NOTIFY, GetDlgCtrlID(), (LPARAM)&stNmhdr);
         }
@@ -1067,7 +1067,7 @@ void CSkinListCtrl::OnLButtonUp(UINT nFlags, CPoint point)
     {
         if (HeadHitTest(point) == m_nPressHeadIndex)
         {
-            // ±íÍ·µã»÷ÊÂ¼ş
+            // è¡¨å¤´ç‚¹å‡»äº‹ä»¶
         }
         m_nPressHeadIndex = -1;
         Invalidate();
@@ -1076,7 +1076,7 @@ void CSkinListCtrl::OnLButtonUp(UINT nFlags, CPoint point)
     {
         if (ItemHitTest(point) == m_nPressItemIndex)
         {
-            // ĞĞµã»÷ÊÂ¼ş
+            // è¡Œç‚¹å‡»äº‹ä»¶
         }
         m_nPressItemIndex = -1;
         Invalidate();
@@ -1105,7 +1105,7 @@ void CSkinListCtrl::OnRButtonDown(UINT nFlags, CPoint point)
         EnsureVisible(m_nSelItemIndex);
         Invalidate();
 
-        NMHDR stNmhdr = { m_hWnd, GetDlgCtrlID(), NM_RCLICK };	// Êó±êÓÒ¼üµ¥»÷ÊÂ¼ş
+        NMHDR stNmhdr = { m_hWnd, GetDlgCtrlID(), NM_RCLICK };	// é¼ æ ‡å³é”®å•å‡»äº‹ä»¶
         ::SendMessage(::GetParent(m_hWnd), WM_NOTIFY, GetDlgCtrlID(), (LPARAM)&stNmhdr);
     }
 }
@@ -1232,7 +1232,7 @@ void CSkinListCtrl::OnVScroll(UINT nSBCode, UINT nPos, CScrollBar pScrollBar)
     int nPageSize = rcItemPart.Height();
     switch (nSBCode)
     {
-        //µ¥»÷»¬µÀ¶¥²¿
+        //å•å‡»æ»‘é“é¡¶éƒ¨
     case SB_LINEUP:
         Scroll(0, -nLineSize);
         break;
@@ -1286,7 +1286,7 @@ void CSkinListCtrl::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 
     switch (nChar)
     {
-    case VK_UP:	// ÏòÉÏ¹â±ê¼ü
+    case VK_UP:	// å‘ä¸Šå…‰æ ‡é”®
     {
         if (0 == m_nSelItemIndex)
             return;
@@ -1295,7 +1295,7 @@ void CSkinListCtrl::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
     }
         break;
 
-    case VK_DOWN:	// ÏòÏÂ¹â±ê¼ü
+    case VK_DOWN:	// å‘ä¸‹å…‰æ ‡é”®
     {
         if (GetItemCount() - 1 == m_nSelItemIndex)
             return;
@@ -1304,41 +1304,41 @@ void CSkinListCtrl::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
     }
         break;
 
-    case VK_LEFT:	// Ïò×ó¹â±ê¼ü
+    case VK_LEFT:	// å‘å·¦å…‰æ ‡é”®
     {
 
     }
         break;
 
-    case VK_RIGHT:	// ÏòÓÒ¹â±ê¼ü
+    case VK_RIGHT:	// å‘å³å…‰æ ‡é”®
     {
 
     }
         break;
 
-    case VK_PRIOR:	// PgUp¼ü
+    case VK_PRIOR:	// PgUpé”®
     {
 
     }
         return;
 
-    case VK_NEXT:	// PgDn¼ü
+    case VK_NEXT:	// PgDné”®
     {
     }
         return;
 
-    case VK_HOME:	// Home¼ü
+    case VK_HOME:	// Homeé”®
     {
     }
         break;
 
-    case VK_END:	// End¼ü
+    case VK_END:	// Endé”®
     {
 
     }
         break;
 
-    case VK_RETURN:	// »Ø³µ¼ü
+    case VK_RETURN:	// å›è½¦é”®
     {
 
     }
@@ -1420,7 +1420,7 @@ void CSkinListCtrl::DrawParentWndBg(HDC hDC)
     ::BitBlt(hDC, 0, 0, rcWindow.Width(), rcWindow.Height(), m_hBgDC, rcWindow.left, rcWindow.top, SRCCOPY);
 }
 
-//»æÖÆ·½Ïò´Ó×óÍùÓÒ
+//ç»˜åˆ¶æ–¹å‘ä»å·¦å¾€å³
 void CSkinListCtrl::DrawHeader(HDC hDC)
 {
     if (!IsHeadVisible())
@@ -1429,7 +1429,7 @@ void CSkinListCtrl::DrawHeader(HDC hDC)
     CRect rect;
     GetHeaderRect(rect);
 
-    //TODO: ¿ÉÒÔ·ÅÔÚÊµ¼ÊĞèÒª»­ÏßµÄµØ·½ÔÙÑ¡ÈëÉè±¸DC
+    //TODO: å¯ä»¥æ”¾åœ¨å®é™…éœ€è¦ç”»çº¿çš„åœ°æ–¹å†é€‰å…¥è®¾å¤‡DC
     HPEN hGridLinePen = ::CreatePen(PS_SOLID, m_nGridLineWidth, m_clrGridLine);
     HPEN hOldPen = (HPEN)::SelectObject(hDC, hGridLinePen);
     int nMode = ::SetBkMode(hDC, TRANSPARENT);
@@ -1447,7 +1447,7 @@ void CSkinListCtrl::DrawHeader(HDC hDC)
                     CLIP_DEFAULT_PRECIS,		// nClipPrecision 
                     DEFAULT_QUALITY,			// nQuality 
                     DEFAULT_PITCH | FF_SWISS,	// nPitchAndFamily 
-                    _T("Î¢ÈíÑÅºÚ"));
+                    _T("å¾®è½¯é›…é»‘"));
 
 
     HFONT hOldFont = (HFONT)::SelectObject(hDC, hFont);
@@ -1550,7 +1550,7 @@ void CSkinListCtrl::DrawTopFixedRow(HDC hDC)
     }
 
     BOOL bUseGuiFont = TRUE;
-    //TODO: ¿ÉÒÔ·ÅÔÚÊµ¼ÊĞèÒª»­ÏßµÄµØ·½ÔÙÑ¡ÈëÉè±¸DC
+    //TODO: å¯ä»¥æ”¾åœ¨å®é™…éœ€è¦ç”»çº¿çš„åœ°æ–¹å†é€‰å…¥è®¾å¤‡DC
     HPEN hGridLinePen = ::CreatePen(PS_SOLID, m_nGridLineWidth, m_clrGridLine);
     HPEN hOldPen = (HPEN)::SelectObject(hDC, hGridLinePen);
     int nMode = ::SetBkMode(hDC, TRANSPARENT);
@@ -1572,7 +1572,7 @@ void CSkinListCtrl::DrawTopFixedRow(HDC hDC)
         if (pRow == NULL)
             continue;
 
-        //»­Ñ¡ÖĞĞĞ±³¾°£¬Èç¹ûÉèÖÃÁË»°
+        //ç”»é€‰ä¸­è¡ŒèƒŒæ™¯ï¼Œå¦‚æœè®¾ç½®äº†è¯
         if (j == m_nSelItemIndex)
         {
             /*if (m_lpItemBgImgS != NULL)
@@ -1580,13 +1580,13 @@ void CSkinListCtrl::DrawTopFixedRow(HDC hDC)
             else
                 ::FillRect(hDC, &rcRow, hSelItemBkBrush);*/
         }
-        //»­hoverĞĞ±³¾°£¬Èç¹ûÉèÖÃÁË»°
+        //ç”»hoverè¡ŒèƒŒæ™¯ï¼Œå¦‚æœè®¾ç½®äº†è¯
         else if (j == m_nHoverItemIndex)
         {
             /*if (m_lpItemBgImgH != NULL)
                 m_lpItemBgImgH->Draw2(hDC, rcRow);*/
         }
-        //»­ÆæÊıĞĞ»òÕßÅ¼ÊıĞĞÑÕÉ«£¬Èç¹ûÉèÖÃÁË»°
+        //ç”»å¥‡æ•°è¡Œæˆ–è€…å¶æ•°è¡Œé¢œè‰²ï¼Œå¦‚æœè®¾ç½®äº†è¯
         else
         {
             /*if (i % 2 == 0)
@@ -1671,7 +1671,7 @@ void CSkinListCtrl::DrawBody(HDC hDC)
         CLIP_DEFAULT_PRECIS,		// nClipPrecision 
         DEFAULT_QUALITY,			// nQuality 
         DEFAULT_PITCH | FF_SWISS,	// nPitchAndFamily 
-        _T("Î¢ÈíÑÅºÚ"));
+        _T("å¾®è½¯é›…é»‘"));
     //if (NULL == hFont)
     //    hFont = (HFONT)::GetStockObject(DEFAULT_GUI_FONT);
     HFONT hOldFont = (HFONT)::SelectObject(hDC, hFont);
@@ -1693,7 +1693,7 @@ void CSkinListCtrl::DrawBody(HDC hDC)
     nTop = (m_nTop + nStart* m_nRowHeight) + rcBodyPart.top;
     int nMode = ::SetBkMode(hDC, TRANSPARENT);
 
-    //»­µ¥Ôª¸ñÖĞÎÄ±¾
+    //ç”»å•å…ƒæ ¼ä¸­æ–‡æœ¬
     Gdiplus::Graphics graphics(hDC);
     int nItemCount = 0;
     Gdiplus::Bitmap* lpImage = NULL;
@@ -1705,7 +1705,7 @@ void CSkinListCtrl::DrawBody(HDC hDC)
     CLVRow* lpRow;    
     if (nStart < m_nTopFixedRow)
         nStart = m_nTopFixedRow;
-    //»­¹ö¶¯ĞĞ
+    //ç”»æ»šåŠ¨è¡Œ
 
     //m_nStartVisibleIndex = nStart;
     for (int i = nStart; i < nRowCount; i++)
@@ -1716,17 +1716,17 @@ void CSkinListCtrl::DrawBody(HDC hDC)
 
         nLeft = 0;
 
-        //¼ÆËãĞĞÇøÓò
+        //è®¡ç®—è¡ŒåŒºåŸŸ
         rcRow = CRect(nLeft, nTop, nLeft + nRowWidth, nTop + m_nRowHeight);
-        //²»ÔÚÏÔÊ¾ÇøÓòµÄÖ±½ÓÌø¹ı
+        //ä¸åœ¨æ˜¾ç¤ºåŒºåŸŸçš„ç›´æ¥è·³è¿‡
         if (!::RectVisible(hDC, &rcRow))
         {
-            ////¼ÇÂ¼ÏÂµ±Ç°ÆÁÄ»¿ÉÏÔÊ¾µÄ×îºóÒ»ĞĞË÷Òı
+            ////è®°å½•ä¸‹å½“å‰å±å¹•å¯æ˜¾ç¤ºçš„æœ€åä¸€è¡Œç´¢å¼•
             //m_nEndVisibleIndex = i;
             break;
         }
 
-        //»­Ñ¡ÖĞĞĞ±³¾°£¬Èç¹ûÉèÖÃÁË»°
+        //ç”»é€‰ä¸­è¡ŒèƒŒæ™¯ï¼Œå¦‚æœè®¾ç½®äº†è¯
         if (i == m_nSelItemIndex)
         {
             if (m_lpItemBgImgS != NULL)
@@ -1734,13 +1734,13 @@ void CSkinListCtrl::DrawBody(HDC hDC)
             else
                 ::FillRect(hDC, &rcRow, hSelItemBkBrush);
         }
-        //»­hoverĞĞ±³¾°£¬Èç¹ûÉèÖÃÁË»°
+        //ç”»hoverè¡ŒèƒŒæ™¯ï¼Œå¦‚æœè®¾ç½®äº†è¯
         else if (i == m_nHoverItemIndex)
         {
             if (m_lpItemBgImgH != NULL)
                 m_lpItemBgImgH->Draw2(hDC, rcRow);
         }
-        //»­ÆæÊıĞĞ»òÕßÅ¼ÊıĞĞÑÕÉ«£¬Èç¹ûÉèÖÃÁË»°
+        //ç”»å¥‡æ•°è¡Œæˆ–è€…å¶æ•°è¡Œé¢œè‰²ï¼Œå¦‚æœè®¾ç½®äº†è¯
         else
         {
             if (i % 2 == 0)
@@ -1757,17 +1757,17 @@ void CSkinListCtrl::DrawBody(HDC hDC)
 
         nLeft = m_nLeft;
         nItemCount = (int)lpRow->GetItemCount();
-        //»­¾ßÌåµÄµ¥Ôª¸ñ
+        //ç”»å…·ä½“çš„å•å…ƒæ ¼
         for (int j = 0; j < nItemCount; j++)
         {
             CLVColumn* lpCol = m_arrCols[j];
             if (lpCol == NULL)
                 continue;
 
-            //¼ÆËãµ¥Ôª¸ñÇøÓò
+            //è®¡ç®—å•å…ƒæ ¼åŒºåŸŸ
             rcCell = CRect(nLeft, nTop, nLeft + lpCol->m_nWidth, nTop + m_nRowHeight);
 
-            //»­µ¥Ôª¸ñ±³¾°
+            //ç”»å•å…ƒæ ¼èƒŒæ™¯
             lpImage = lpRow->GetItemImage(j);
             if (lpImage != NULL)
             {
@@ -1782,7 +1782,7 @@ void CSkinListCtrl::DrawBody(HDC hDC)
                 graphics.DrawImage(lpImage, rcImage.left, rcImage.top, rcImage.Width(), rcImage.Height());
             }
 
-            //»­µ¥Ôª¸ñ±ß¿òÏß
+            //ç”»å•å…ƒæ ¼è¾¹æ¡†çº¿
             if (m_bGridLineVisible)
             {
                 ::MoveToEx(hDC, rcCell.left, rcCell.top, NULL);
@@ -1797,7 +1797,7 @@ void CSkinListCtrl::DrawBody(HDC hDC)
                 rcText.left += rcImage.right + 2;
             rcText.right -= 4;
 
-            //»­µ¥Ôª¸ñÎÄ×Ö
+            //ç”»å•å…ƒæ ¼æ–‡å­—
             nFormat = lpRow->GetItemFormat(j) | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS;
 
             if (i == m_nSelItemIndex)
@@ -1817,7 +1817,7 @@ void CSkinListCtrl::DrawBody(HDC hDC)
         nTop += m_nRowHeight;
     }// end outer for-loop
 
-    //TODO: ÊÇ·ñĞèÒªÊÍ·ÅHDC
+    //TODO: æ˜¯å¦éœ€è¦é‡Šæ”¾HDC
     graphics.ReleaseHDC(hDC);
 
     ::SelectObject(hDC, hOldFont);
@@ -1904,7 +1904,7 @@ BOOL CSkinListCtrl::GetBodyRect(CRect& rect)
         rect.bottom -= rcHScrollBar.Height();
     }
 
-    //¼ÓÉÏ¹Ì¶¨ĞĞ
+    //åŠ ä¸Šå›ºå®šè¡Œ
     CRect rtTopFixedRow;
     GetTopFixedRowRect(rtTopFixedRow);
     rect.top += rtTopFixedRow.Height();
@@ -1958,7 +1958,7 @@ int CSkinListCtrl::HeadHitTest(POINT pt)
     CRect rcCol;
     int nLeft = 0, nTop = 0;
 
-    //ËãÉÏË®Æ½¹ö¶¯ÌõÎ»ÖÃµÄÊó±êµã
+    //ç®—ä¸Šæ°´å¹³æ»šåŠ¨æ¡ä½ç½®çš„é¼ æ ‡ç‚¹
     POINT ptPlus;
     ptPlus.x = pt.x + ::abs(m_nLeft);
     ptPlus.y = pt.y;
@@ -2056,12 +2056,12 @@ void CSkinListCtrl::CheckScrollBarStatus()
     if (!IsWindow())
         return;
 
-    CRect rcBodyPart;								// »ñÈ¡ÏÔÊ¾ÊÓÍ¼¿í¸ß
+    CRect rcBodyPart;								// è·å–æ˜¾ç¤ºè§†å›¾å®½é«˜
     GetBodyRect(rcBodyPart);
     int cxDisplayView = rcBodyPart.Width();
     int cyDisplayView = rcBodyPart.Height();
 
-    int cxContentView = GetColumnsWidth();			// »ñÈ¡ÄÚÈİÊÓÍ¼¿í¸ß
+    int cxContentView = GetColumnsWidth();			// è·å–å†…å®¹è§†å›¾å®½é«˜
     int cyContentView = GetItemCount()* m_nRowHeight;
 
     CRect rcVScrollBar;
@@ -2170,14 +2170,14 @@ void CSkinListCtrl::Scroll(int cx, int cy)
         m_VScrollBar.SetScrollPos(nPos + cy);
         nPos = m_VScrollBar.GetScrollPos();
         m_nTop = 0 - nPos;
-        ////½«m_nTopÈ¡Õû£¬·ÀÖ¹¹ö¶¯Ìõµ½µ×²¿³öÏÖ°ë¸öĞĞ¸ßµÄÏÖÏó
+        ////å°†m_nTopå–æ•´ï¼Œé˜²æ­¢æ»šåŠ¨æ¡åˆ°åº•éƒ¨å‡ºç°åŠä¸ªè¡Œé«˜çš„ç°è±¡
         //if (::abs(m_nTop) % m_nRowHeight != 0)
         //{
         //    m_nTop = -((::abs(m_nTop) / m_nRowHeight) + 1) * m_nRowHeight;
         //}
         ////m_nTop = m_nTopFixedRow * m_nHeadHeight - nPos;
         //ATLTRACE(_T("m_nTop=%d\n"), m_nTop);
-        ////¼õÈ¥¹Ì¶¨ĞĞµÄ¸ß¶È
+        ////å‡å»å›ºå®šè¡Œçš„é«˜åº¦
         //m_nTop -= m_nTopFixedRow * m_nHeadHeight;
 
         if (m_bEnablePostVScrollBarPos)
@@ -2244,28 +2244,28 @@ void CSkinListCtrl::DrawHeaderItemSortStyle(int nSortStyleIndex)
     {
         if (nSortStyleIndex == i)
         {
-            //TODO: ĞèÒªÓÅ»¯µÄ´úÂë
-            if (m_arrCols[i]->m_strText.ReverseFind(_T('¡ü')) != -1)
+            //TODO: éœ€è¦ä¼˜åŒ–çš„ä»£ç 
+            if (m_arrCols[i]->m_strText.ReverseFind(_T('â†‘')) != -1)
             {
-                m_arrCols[i]->m_strText.Replace(_T("¡ü"), _T("¡ı"));
+                m_arrCols[i]->m_strText.Replace(_T("â†‘"), _T("â†“"));
             }
-            else if (m_arrCols[i]->m_strText.ReverseFind(_T('¡ı')) != -1)
+            else if (m_arrCols[i]->m_strText.ReverseFind(_T('â†“')) != -1)
             {
-                m_arrCols[i]->m_strText.Replace(_T("¡ı"), _T("¡ü"));
+                m_arrCols[i]->m_strText.Replace(_T("â†“"), _T("â†‘"));
             }
             else
             {
-                m_arrCols[i]->m_strText += _T("¡ü");
+                m_arrCols[i]->m_strText += _T("â†‘");
             }
         }
         else
         {
-            m_arrCols[i]->m_strText.Replace(_T("¡ı"), _T(""));
-            m_arrCols[i]->m_strText.Replace(_T("¡ü"), _T(""));
+            m_arrCols[i]->m_strText.Replace(_T("â†“"), _T(""));
+            m_arrCols[i]->m_strText.Replace(_T("â†‘"), _T(""));
         }
     }
 
-    //½«´¹Ö±¹ö¶¯ÌõÖØÖÃµ½³õÊ¼Î»ÖÃ
+    //å°†å‚ç›´æ»šåŠ¨æ¡é‡ç½®åˆ°åˆå§‹ä½ç½®
     if (m_VScrollBar.IsVisible())
     {
         m_VScrollBar.SetScrollPos(0);
@@ -2275,7 +2275,7 @@ void CSkinListCtrl::DrawHeaderItemSortStyle(int nSortStyleIndex)
     NMHDREx stNmhdr;
     stNmhdr.hdr.hwndFrom = m_hWnd;
     stNmhdr.hdr.idFrom = GetDlgCtrlID();
-    stNmhdr.hdr.code = LVN_COLUMNCLICK; // ±íÍ·Ïî±»µã»÷
+    stNmhdr.hdr.code = LVN_COLUMNCLICK; // è¡¨å¤´é¡¹è¢«ç‚¹å‡»
     stNmhdr.lParam = m_nPressHeadIndex;
     ::SendMessage(::GetParent(m_hWnd), WM_NOTIFY, GetDlgCtrlID(), (LPARAM)&stNmhdr);
 }

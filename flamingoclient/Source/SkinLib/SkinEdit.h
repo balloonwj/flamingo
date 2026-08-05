@@ -1,10 +1,10 @@
-#pragma once
+ï»¿#pragma once
 
 #include "SkinManager.h"
 
-// ²»Ö§³Ö¹ö¶¯ÌõÆ¤·ô
-// Í¼Æ¬±³¾°Ö§³Ö²»ÍêÕû
-// Edit¿Ø¼ş±ØĞëÊÇES_MULTILINE·ç¸ñ£¬SetMarginsEx²ÅÄÜÉúĞ§£¬ES_MULTILINE·ç¸ñºÃÏñ²»ÄÜ¶¯Ì¬ĞŞ¸Ä£¬Ö»ÄÜÔÚÉú³É¿Ø¼şÊ±Ö¸¶¨
+// ä¸æ”¯æŒæ»šåŠ¨æ¡çš®è‚¤
+// å›¾ç‰‡èƒŒæ™¯æ”¯æŒä¸å®Œæ•´
+// Editæ§ä»¶å¿…é¡»æ˜¯ES_MULTILINEé£æ ¼ï¼ŒSetMarginsExæ‰èƒ½ç”Ÿæ•ˆï¼ŒES_MULTILINEé£æ ¼å¥½åƒä¸èƒ½åŠ¨æ€ä¿®æ”¹ï¼Œåªèƒ½åœ¨ç”Ÿæˆæ§ä»¶æ—¶æŒ‡å®š
 
 class CSkinEdit : public CWindowImpl<CSkinEdit, CEdit>
 {
@@ -37,7 +37,7 @@ public:
 	void SetDefaultText(LPCTSTR lpszText);
 	BOOL IsDefaultText();
 	void SetDefaultTextMode(BOOL bIsDefText);
-	void SetMarginsEx(int nLeft, int nTop, int nRight, int nBottom);	// ÉèÖÃÉÏÏÂ×óÓÒ±ß¾àº¯Êı
+	void SetMarginsEx(int nLeft, int nTop, int nRight, int nBottom);	// è®¾ç½®ä¸Šä¸‹å·¦å³è¾¹è·å‡½æ•°
 	void SetMultiLine(BOOL bMultiLine = TRUE);
 	BOOL SubclassWindow(HWND hWnd);
 

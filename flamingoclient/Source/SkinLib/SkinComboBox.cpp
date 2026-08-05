@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "SkinComboBox.h"
 
 CSkinComboBox_Edit::CSkinComboBox_Edit(void)
@@ -147,7 +147,7 @@ BOOL CSkinComboBox_Edit::StartTrackMouseLeave()
 	return _TrackMouseEvent(&tme);
 }
 
-// ÉèÖÃÉÏÏÂ×óÓÒ±ß¾àº¯Êı
+// è®¾ç½®ä¸Šä¸‹å·¦å³è¾¹è·å‡½æ•°
 void CSkinComboBox_Edit::SetMarginsEx(int nLeft, int nTop, int nRight, int nBottom)
 {
 	CRect rtClient;
@@ -263,7 +263,7 @@ BOOL CSkinComboBox::IsDefaultText()
 	return m_Edit.IsDefaultText();
 }
 
-// ÉèÖÃÉÏÏÂ×óÓÒ±ß¾àº¯Êı
+// è®¾ç½®ä¸Šä¸‹å·¦å³è¾¹è·å‡½æ•°
 void CSkinComboBox::SetMarginsEx(int nLeft, int nTop, int nRight, int nBottom)
 {
 // 	CRect rtClient;

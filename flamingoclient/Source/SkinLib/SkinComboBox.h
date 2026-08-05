@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "SkinManager.h"
 
@@ -40,7 +40,7 @@ private:
 	//HBRUSH OnCtlColor(CDCHandle dc, CEdit edit);
 
 	BOOL StartTrackMouseLeave();
-	void SetMarginsEx(int nLeft, int nTop, int nRight, int nBottom);	// ÉèÖÃÉÏÏÂ×óÓÒ±ß¾àº¯Êı
+	void SetMarginsEx(int nLeft, int nTop, int nRight, int nBottom);	// è®¾ç½®ä¸Šä¸‹å·¦å³è¾¹è·å‡½æ•°
 
 private:
 	HWND m_hOwnerWnd;
@@ -84,7 +84,7 @@ private:
 	//HBRUSH OnCtlColor(CDCHandle dc, CEdit edit);
 
 	BOOL StartTrackMouseLeave();
-	void SetMarginsEx(int nLeft, int nTop, int nRight, int nBottom);	// ÉèÖÃÉÏÏÂ×óÓÒ±ß¾àº¯Êı
+	void SetMarginsEx(int nLeft, int nTop, int nRight, int nBottom);	// è®¾ç½®ä¸Šä¸‹å·¦å³è¾¹è·å‡½æ•°
 
 private:
 	HWND m_hOwnerWnd;
@@ -114,7 +114,7 @@ private:
 	HWND m_hOwnerWnd;
 };
 
-//TODO: m_comboProxyType.AddString()·½·¨Ä¬ÈÏ»áÅÅĞò£¬ĞèÒª¸Äµô
+//TODO: m_comboProxyType.AddString()æ–¹æ³•é»˜è®¤ä¼šæ’åºï¼Œéœ€è¦æ”¹æ‰
 class CSkinComboBox : public CWindowImpl<CSkinComboBox, CComboBox>
 {
 public:
@@ -147,7 +147,7 @@ public:
 	void SetDefaultText(LPCTSTR lpszText);
 	void SetDefaultTextMode(BOOL bDefaultMode);
 	BOOL IsDefaultText();
-	void SetMarginsEx(int nLeft, int nTop, int nRight, int nBottom);	// ÉèÖÃÉÏÏÂ×óÓÒ±ß¾àº¯Êı
+	void SetMarginsEx(int nLeft, int nTop, int nRight, int nBottom);	// è®¾ç½®ä¸Šä¸‹å·¦å³è¾¹è·å‡½æ•°
 	void SetArrowWidth(int nWidth);
 	BOOL SubclassWindow(HWND hWnd);
 	void SetReadOnly(BOOL bReadOnly);

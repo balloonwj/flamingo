@@ -1,4 +1,4 @@
-/**
+﻿/**
  * http协议格式类, HttpMsg.h
  * zhangyl 2018.05.16
  */

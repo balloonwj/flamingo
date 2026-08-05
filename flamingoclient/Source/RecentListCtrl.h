@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <vector>
 #include "SkinLib/SkinLib.h"
@@ -10,11 +10,11 @@
 	p=NULL;				\
 	}
 
-//enum BLCTRL_STYLE					// ºÃÓÑÁĞ±í¿Ø¼ş·ç¸ñ
+//enum BLCTRL_STYLE					// å¥½å‹åˆ—è¡¨æ§ä»¶é£æ ¼
 //{
-//	BLC_BIG_ICON_STYLE,				// ´óÍ·Ïñ·ç¸ñ
-//	BLC_SMALL_ICON_STYLE,			// Ğ¡Í·Ïñ·ç¸ñ
-//	BLC_STANDARD_ICON_STYLE			// ±ê×¼Í·Ïñ·ç¸ñ
+//	BLC_BIG_ICON_STYLE,				// å¤§å¤´åƒé£æ ¼
+//	BLC_SMALL_ICON_STYLE,			// å°å¤´åƒé£æ ¼
+//	BLC_STANDARD_ICON_STYLE			// æ ‡å‡†å¤´åƒé£æ ¼
 //};
 //
 //enum BLCTRL_TYPE
@@ -26,9 +26,9 @@
 
 enum RLCTRL_STATUS_TYPE
 {
-	RCLCTRL_STATUS_TYPE_PC,			//µçÄÔÔÚÏß
-	RCLCTRL_STATUS_TYPE_MOBILE,		//ÊÖ»úÔÚÏß
-	RCLCTRL_STATUS_TYPE_OFFLINE		//ÀëÏß
+	RCLCTRL_STATUS_TYPE_PC,			//ç”µè„‘åœ¨çº¿
+	RCLCTRL_STATUS_TYPE_MOBILE,		//æ‰‹æœºåœ¨çº¿
+	RCLCTRL_STATUS_TYPE_OFFLINE		//ç¦»çº¿
 };
 
 class CRecentItem
@@ -38,15 +38,15 @@ public:
 	~CRecentItem(void);
 
 public:
-	long					m_nID;					// ÏîID
-	UINT					m_uAccountID;			// ÕË»§ID
-	CString					m_strNickName;			// êÇ³Æ
-	CString					m_strDate;				// ÈÕÆÚ
-	CString					m_strLastMsg;			// ×îºóÒ»ÌõÏûÏ¢ÄÚÈİ
-	RLCTRL_STATUS_TYPE		m_nOnlineStatus;		// ÊÇ·ñÔÚÏß±êÖ¾
-	CImageEx*				m_lpHeadImg;			// Í·ÏñÍ¼Æ¬
-	CImageEx*				m_lpMobileImg;			// ÊÖ»úÍ¼±ê
-	long					m_nNewMsgCount;			// ĞÂÏûÏ¢¸öÊı
+	long					m_nID;					// é¡¹ID
+	UINT					m_uAccountID;			// è´¦æˆ·ID
+	CString					m_strNickName;			// æ˜µç§°
+	CString					m_strDate;				// æ—¥æœŸ
+	CString					m_strLastMsg;			// æœ€åä¸€æ¡æ¶ˆæ¯å†…å®¹
+	RLCTRL_STATUS_TYPE		m_nOnlineStatus;		// æ˜¯å¦åœ¨çº¿æ ‡å¿—
+	CImageEx*				m_lpHeadImg;			// å¤´åƒå›¾ç‰‡
+	CImageEx*				m_lpMobileImg;			// æ‰‹æœºå›¾æ ‡
+	long					m_nNewMsgCount;			// æ–°æ¶ˆæ¯ä¸ªæ•°
 };
 
 class CRecentTeamItem
@@ -56,14 +56,14 @@ public:
 	~CRecentTeamItem(void);
 
 public:
-	int			m_nID;								// ÏîID
-	CString		m_strName;							// ºÃÓÑ·Ö×éÃû³Æ
-	int			m_nCurCnt;							// µ±Ç°ÔÚÏßºÃÓÑÊı
-	int			m_nMaxCnt;							// ¸ÃºÃÓÑ·Ö×éµÄºÃÓÑÊı
-	BOOL		m_bExpand;							// ÊÇ·ñÕ¹¿ª±êÖ¾
-	int			m_nHeadFlashAnim;					// Í·ÏñÉÁË¸¶¯»­±êÖ¾
-	int			m_nHeadFlashAnimState;				// Í·ÏñÉÁË¸¶¯»­×´Ì¬
-	std::vector<CRecentItem*> m_arrBuddys;			// ¸ÃºÃÓÑ·Ö×éµÄºÃÓÑÏî
+	int			m_nID;								// é¡¹ID
+	CString		m_strName;							// å¥½å‹åˆ†ç»„åç§°
+	int			m_nCurCnt;							// å½“å‰åœ¨çº¿å¥½å‹æ•°
+	int			m_nMaxCnt;							// è¯¥å¥½å‹åˆ†ç»„çš„å¥½å‹æ•°
+	BOOL		m_bExpand;							// æ˜¯å¦å±•å¼€æ ‡å¿—
+	int			m_nHeadFlashAnim;					// å¤´åƒé—ªçƒåŠ¨ç”»æ ‡å¿—
+	int			m_nHeadFlashAnimState;				// å¤´åƒé—ªçƒåŠ¨ç”»çŠ¶æ€
+	std::vector<CRecentItem*> m_arrBuddys;			// è¯¥å¥½å‹åˆ†ç»„çš„å¥½å‹é¡¹
 };
 
 class CRecentListCtrl : public CWindowImpl<CRecentListCtrl, CWindow>
@@ -213,9 +213,9 @@ private:
 	void EnsureVisible(int nTeamIndex, int nIndex);
 
 	void SortBuddyTeam(int nTeamIndex, int nIndex);
-	void OnTimer_HeadFlashAnim(UINT_PTR nIDEvent);	// Í·ÏñÉÁ¶¯¶¯»­
-	void OnTimer_OnlineAnim(UINT_PTR nIDEvent);		// ÉÏÏß¶¯»­
-	void OnTimer_OfflineAnim(UINT_PTR nIDEvent);	// ÏÂÏß¶¯»­
+	void OnTimer_HeadFlashAnim(UINT_PTR nIDEvent);	// å¤´åƒé—ªåŠ¨åŠ¨ç”»
+	void OnTimer_OnlineAnim(UINT_PTR nIDEvent);		// ä¸Šçº¿åŠ¨ç”»
+	void OnTimer_OfflineAnim(UINT_PTR nIDEvent);	// ä¸‹çº¿åŠ¨ç”»
 
 private:
 	CToolTipCtrl			m_ToolTipCtrl;
@@ -240,7 +240,7 @@ private:
 	int						m_nHoverSmallIconIndex;
 	int						m_nPressTeamIndex, m_nPressIndex;
 	int						m_nLeft, m_nTop;
-	//BLCTRL_TYPE				m_nType;		// ºÃÓÑÁĞ±í£¬ÈºÁĞ±í£¬×î½üÁªÏµÈËÁĞ±íÀàĞÍ±êÊ¶
+	//BLCTRL_TYPE				m_nType;		// å¥½å‹åˆ—è¡¨ï¼Œç¾¤åˆ—è¡¨ï¼Œæœ€è¿‘è”ç³»äººåˆ—è¡¨ç±»å‹æ ‡è¯†
 	BOOL					m_bMouseTracking;
 	BOOL					m_bTransparent;
 	HDC						m_hBgDC;
@@ -253,9 +253,9 @@ private:
 	int						m_nBuddyTeamPadding;
 	int						m_nBuddyItemPadding;
 	CRect					m_rcMargin;
-	DWORD					m_dwOnlineAnimTimerId;		// ÉÏÏß¶¯»­¼ÆÊ±Æ÷
-	DWORD					m_dwOfflineAnimTimerId;		// ÏÂÏß¶¯»­¼ÆÊ±Æ÷
-	DWORD					m_dwHeadFlashAnimTimerId;	// Í·ÏñÉÁ¶¯¶¯»­¼ÆÊ±Æ÷
+	DWORD					m_dwOnlineAnimTimerId;		// ä¸Šçº¿åŠ¨ç”»è®¡æ—¶å™¨
+	DWORD					m_dwOfflineAnimTimerId;		// ä¸‹çº¿åŠ¨ç”»è®¡æ—¶å™¨
+	DWORD					m_dwHeadFlashAnimTimerId;	// å¤´åƒé—ªåŠ¨åŠ¨ç”»è®¡æ—¶å™¨
 
 	std::vector<CRecentTeamItem*>	m_arrBuddyTeamItems;
 	std::vector<CRecentItem*>		m_arrRecentItems;

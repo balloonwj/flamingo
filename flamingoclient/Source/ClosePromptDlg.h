@@ -1,18 +1,18 @@
-#pragma once
+ï»¿#pragma once
 
 #include "resource.h"
 #include "SkinLib/SkinLib.h"
 
 class CFlamingoClient;
 
-//ÍË³öÌáÊ¾¶Ô»°¿ò
+//é€€å‡ºæç¤ºå¯¹è¯æ¡†
 class CClosePromptDlg : public CDialogImpl<CClosePromptDlg>
 {
 public:
 	CClosePromptDlg();
 	virtual ~CClosePromptDlg();
 
-	//ÔÚ×ÊÔ´ÎÄ¼şÀïÃæÔö¼Ó¶Ô»°¿ò×ÊÔ´Ä£°å
+	//åœ¨èµ„æºæ–‡ä»¶é‡Œé¢å¢åŠ å¯¹è¯æ¡†èµ„æºæ¨¡æ¿
 	enum { IDD = IDD_CLOSEPROMPT };
 
 	BEGIN_MSG_MAP_EX(CClosePromptDlg)

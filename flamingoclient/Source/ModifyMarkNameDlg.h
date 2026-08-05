@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "resource.h"
 #include "SkinLib/SkinLib.h"
@@ -6,14 +6,14 @@
 
 class CFlamingoClient;
 
-//ĞŞ¸Ä±¸×¢¶Ô»°¿ò
+//ä¿®æ”¹å¤‡æ³¨å¯¹è¯æ¡†
 class CModifyMarkNameDlg : public CDialogImpl<CModifyMarkNameDlg>
 {
 public:
 	CModifyMarkNameDlg();
 	virtual ~CModifyMarkNameDlg();
 
-	//ÔÚ×ÊÔ´ÎÄ¼şÀïÃæÔö¼Ó¶Ô»°¿ò×ÊÔ´Ä£°å
+	//åœ¨èµ„æºæ–‡ä»¶é‡Œé¢å¢åŠ å¯¹è¯æ¡†èµ„æºæ¨¡æ¿
 	enum { IDD = IDD_MODIFYMARKNAME };
 
 	BEGIN_MSG_MAP_EX(CModifyMarkNameDlg)

@@ -1,11 +1,11 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "CreateNewGroupDlg.h"
 #include "FlamingoClient.h"
 #include "net/IUProtocolData.h"
 #include "EncodeUtil.h"
 #include "UIText.h"
 
-// CCreateNewGroupDlgÊµÏÖ´úÂë
+// CCreateNewGroupDlgå®žçŽ°ä»£ç 
 CCreateNewGroupDlg::CCreateNewGroupDlg()
 {
 	m_pFMGClient = NULL;
@@ -17,7 +17,7 @@ CCreateNewGroupDlg::~CCreateNewGroupDlg()
 
 BOOL CCreateNewGroupDlg::PreTranslateMessage(MSG* pMsg)
 {
-	//Ö§³Ö»Ø³µ¼ü²éÕÒ
+	//æ”¯æŒå›žè½¦é”®æŸ¥æ‰¾
 	if (pMsg->hwnd==m_hWnd && pMsg->message==WM_KEYDOWN && pMsg->wParam==VK_RETURN)
  	{
 		PostMessage(WM_COMMAND, (WPARAM)IDOK, 0);
@@ -49,7 +49,7 @@ BOOL CCreateNewGroupDlg::InitUI()
 	m_SkinDlg.SetBgPic(_T("DlgBg\\CreateNewGroupBg.png"));
 	m_SkinDlg.SetCloseSysBtnPic(_T("SysBtn\\btn_close_normal.png"), _T("SysBtn\\btn_close_highlight.png"), _T("SysBtn\\btn_close_down.png"));
 	m_SkinDlg.SubclassWindow(m_hWnd);
-	m_SkinDlg.SetTitleText(_T("´´½¨Èº"));	
+	m_SkinDlg.SetTitleText(_T("åˆ›å»ºç¾¤"));	
 	m_SkinDlg.MoveWindow(0, 0, 360, 255, TRUE);
 
 
@@ -82,7 +82,7 @@ void CCreateNewGroupDlg::OnOK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strGroupName.Trim();
 	if(strGroupName.IsEmpty() || strGroupName.GetLength()<=0 || strGroupName.GetLength()>=16)
 	{
-		::MessageBox(m_hWnd, _T("ÈºÃû³Æ±ØÐëÔÚ1¡«16¸ö×Ö·ûÖ®¼ä¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("ç¾¤åç§°å¿…é¡»åœ¨1ï½ž16ä¸ªå­—ç¬¦ä¹‹é—´ã€‚"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_edtGroupName.SetFocus();
 		return;
 	}
@@ -91,7 +91,7 @@ void CCreateNewGroupDlg::OnOK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_pFMGClient->CreateNewGroup(strGroupName);
 	m_edtGroupName.EnableWindow(FALSE);
 	m_btnOK.EnableWindow(FALSE);
-	m_SkinDlg.SetTitleText(_T("´´½¨Èº£¨ÕýÔÚÏò·þÎñÆ÷·¢ËÍÊý¾Ý£¬ÇëÉÔºò...£©"));
+	m_SkinDlg.SetTitleText(_T("åˆ›å»ºç¾¤ï¼ˆæ­£åœ¨å‘æœåŠ¡å™¨å‘é€æ•°æ®ï¼Œè¯·ç¨å€™...ï¼‰"));
 }
 
 void CCreateNewGroupDlg::OnCancel(UINT uNotifyCode, int nID, CWindow wndCtl)
@@ -107,7 +107,7 @@ LRESULT CCreateNewGroupDlg::OnCreateNewGroupResult(UINT uMsg, WPARAM wParam, LPA
 	CCreateNewGroupResult* pResult = (CCreateNewGroupResult*)lParam;
 	if(pResult==NULL || pResult->m_uError!=0)
 	{
-		::MessageBox(m_hWnd, _T("´´½¨ÈºÊ§°Ü¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("åˆ›å»ºç¾¤å¤±è´¥ã€‚"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 	}
 	else
 	{
@@ -116,13 +116,13 @@ LRESULT CCreateNewGroupDlg::OnCreateNewGroupResult(UINT uMsg, WPARAM wParam, LPA
 		//TCHAR szAccountName[64] = {0};
 		//EncodeUtil::Utf8ToUnicode(pResult->m_szAccount, szAccountName, ARRAYSIZE(szAccountName));
 		CString strInfo;
-        strInfo.Format(_T("³É¹¦´´½¨Èº[%s], ÈººÅÊÇ[%d]¡£\r\nÄãÏÖÔÚ¿ÉÒÔÑûÇëÆäËûÈË¼ÓÈëÁË¡£"), szGroupName, pResult->m_uAccountID);
+        strInfo.Format(_T("æˆåŠŸåˆ›å»ºç¾¤[%s], ç¾¤å·æ˜¯[%d]ã€‚\r\nä½ çŽ°åœ¨å¯ä»¥é‚€è¯·å…¶ä»–äººåŠ å…¥äº†ã€‚"), szGroupName, pResult->m_uAccountID);
 		::MessageBox(m_hWnd, strInfo, g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 
 		EndDialog(IDOK);
 	}
 	
-	m_SkinDlg.SetTitleText(_T("´´½¨Èº"));
+	m_SkinDlg.SetTitleText(_T("åˆ›å»ºç¾¤"));
 	delete pResult;
 		
 	return (LRESULT)1;

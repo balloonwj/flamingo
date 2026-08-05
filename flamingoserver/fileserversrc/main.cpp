@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  文件服务程序入口函数
  *  zhangyl 2017.03.09
  **/
@@ -18,6 +18,7 @@
 #endif 
 
 #include "FileServer.h"
+#include "FileMsg.h"
 
 using namespace net;
 
@@ -101,11 +102,16 @@ int main(int argc, char* argv[])
     CAsyncLog::init(logFileFullPath.c_str());
 
     const char* filecachedir = config.getConfigName("filecachedir");
-    Singleton<FileManager>::Instance().init(filecachedir);   
+    Singleton<FileManager>::Instance().init(filecachedir);
+
+    //上传 / 下载令牌的 HMAC 校验密钥，须与 chatserver.conf 的 filetokenkey 一致
+    const char* filetokenkey = config.getConfigName("filetokenkey");
 
     const char* listenip = config.getConfigName("listenip");
     short listenport = (short)atol(config.getConfigName("listenport"));
-    Singleton<FileServer>::Instance().init(listenip, listenport, &g_mainLoop, filecachedir);
+    //fileserver 以 file_server_kind_file 启动，只放行聊天文件 / 群文件场景
+    Singleton<FileServer>::Instance().init(listenip, listenport, &g_mainLoop,
+                                           filecachedir, filetokenkey, file_server_kind_file);
 
     LOGI("fileserver initialization completed, now you can use client to connect it.");
     

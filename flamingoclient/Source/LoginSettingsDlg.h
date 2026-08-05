@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include "resource.h"
 #include "SkinLib/SkinLib.h"
 
@@ -14,7 +14,7 @@ public:
 	virtual ~CLoginSettingsDlg();
 
 	virtual BOOL PreTranslateMessage(MSG* pMsg);
-	//ÔÚ×ÊÔ´ÎÄ¼şÀïÃæÔö¼Ó¶Ô»°¿ò×ÊÔ´Ä£°å
+	//åœ¨èµ„æºæ–‡ä»¶é‡Œé¢å¢åŠ å¯¹è¯æ¡†èµ„æºæ¨¡æ¿
 	enum { IDD = IDD_LOGSETDLG };
 
 	BEGIN_MSG_MAP_EX(CLoginSettingsDlg)
@@ -24,7 +24,7 @@ public:
 		COMMAND_ID_HANDLER_EX(IDC_COMBO_PROTYPE, OnComboBox_Select)
 		COMMAND_ID_HANDLER_EX(ID_LOGINSETTING, OnBtn_OK)
 		COMMAND_ID_HANDLER_EX(ID_LOGINSETTINGCANCEL, OnBtn_Cancel)
-		//REFLECT_NOTIFICATIONS()      // ÏûÏ¢·´ÉäÍ¨Öªºê
+		//REFLECT_NOTIFICATIONS()      // æ¶ˆæ¯åå°„é€šçŸ¥å®
 	END_MSG_MAP()
 
 protected:

@@ -1,5 +1,5 @@
-/**
- *  Ò»¸öÇ¿´óµÄĞ­ÒéÀà, protocolstream.h
+ï»¿/**
+ *  ä¸€ä¸ªå¼ºå¤§çš„åè®®ç±», protocolstream.h
  *  zhangyl 2017.05.27
  */
 
@@ -12,7 +12,7 @@
 #include <sstream>
 #include <stdint.h>
 
- //¶ş½øÖÆĞ­ÒéµÄ´ò°ü½â°üÀà£¬ÄÚ²¿µÄ·şÎñÆ÷Ö®¼äÍ¨Ñ¶£¬Í³Ò»²ÉÓÃÕâĞ©Àà
+ //äºŒè¿›åˆ¶åè®®çš„æ‰“åŒ…è§£åŒ…ç±»ï¼Œå†…éƒ¨çš„æœåŠ¡å™¨ä¹‹é—´é€šè®¯ï¼Œç»Ÿä¸€é‡‡ç”¨è¿™äº›ç±»
 namespace net
 {
     enum
@@ -25,22 +25,22 @@ namespace net
         TEXT_PACKLEN_LEN_2 = 6,
         TEXT_PACKAGE_MAXLEN_2 = 0xffffff,
 
-        BINARY_PACKLEN_LEN_2 = 4,               //4×Ö½ÚÍ·³¤¶È
-        BINARY_PACKAGE_MAXLEN_2 = 0x10000000,   //°ü×î´ó³¤¶ÈÊÇ256M,×ã¹»ÁË
+        BINARY_PACKLEN_LEN_2 = 4,               //4å­—èŠ‚å¤´é•¿åº¦
+        BINARY_PACKAGE_MAXLEN_2 = 0x10000000,   //åŒ…æœ€å¤§é•¿åº¦æ˜¯256M,è¶³å¤Ÿäº†
 
         CHECKSUM_LEN = 2,
     };
 
-    //¼ÆËãĞ£ÑéºÍ
+    //è®¡ç®—æ ¡éªŒå’Œ
     unsigned short checksum(const unsigned short* buffer, int size);
-    //½«Ò»¸ö4×Ö½ÚµÄÕûĞÍÊıÖµÑ¹Ëõ³É1~5¸ö×Ö½Ú
+    //å°†ä¸€ä¸ª4å­—èŠ‚çš„æ•´å‹æ•°å€¼å‹ç¼©æˆ1~5ä¸ªå­—èŠ‚
     void write7BitEncoded(uint32_t value, std::string& buf);
-    //½«Ò»¸ö8×Ö½ÚµÄÕûĞÍÖµ±àÂë³É1~10¸ö×Ö½Ú
+    //å°†ä¸€ä¸ª8å­—èŠ‚çš„æ•´å‹å€¼ç¼–ç æˆ1~10ä¸ªå­—èŠ‚
     void write7BitEncoded(uint64_t value, std::string& buf);
 
-    //½«Ò»¸ö1~5¸ö×Ö½ÚµÄ×Ö·ûÊı×éÖµ»¹Ô­³É4×Ö½ÚµÄÕûĞÍÖµ
+    //å°†ä¸€ä¸ª1~5ä¸ªå­—èŠ‚çš„å­—ç¬¦æ•°ç»„å€¼è¿˜åŸæˆ4å­—èŠ‚çš„æ•´å‹å€¼
     void read7BitEncoded(const char* buf, uint32_t len, uint32_t& value);
-    //½«Ò»¸ö1~10¸ö×Ö½ÚµÄÖµ»¹Ô­³É4×Ö½ÚµÄÕûĞÍÖµ
+    //å°†ä¸€ä¸ª1~10ä¸ªå­—èŠ‚çš„å€¼è¿˜åŸæˆ4å­—èŠ‚çš„æ•´å‹å€¼
     void read7BitEncoded(const char* buf, uint32_t len, uint64_t& value);
 
     class BinaryStreamReader final

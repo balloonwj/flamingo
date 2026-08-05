@@ -1,11 +1,11 @@
-#pragma once
+ï»¿#pragma once
 
 #include "ThreadPool.h"
 
 class CIUProtocol;
 class CFlamingoClient;
 
-//ĞÄÌø°üÈÎÎñ
+//å¿ƒè·³åŒ…ä»»åŠ¡
 class CCheckNetworkStatusTask : public CThreadPoolTask
 {
 public:

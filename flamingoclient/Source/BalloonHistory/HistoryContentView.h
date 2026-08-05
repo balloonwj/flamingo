@@ -1,0 +1,209 @@
+/**
+ *  「消息记录」列表行里的多行内容块，HistoryContentView.h
+ *
+ *  一行消息的正文由本控件渲染：文字与系统表情图文混排、按可用宽度折行、
+ *  搜索命中的字符区间铺一层淡黄底色、长文默认折叠成最多 5 行。
+ *
+ *  典型用法（列表行构建处）：
+ *      std::unique_ptr<HistoryContentView> content(new HistoryContentView());
+ *      content->SetContent(fullText);                        // 含 /f["<id>"] 的正文原文
+ *      content->SetHighlightRanges(FindHighlightRanges(...));// 见 HistoryView.h
+ *      content->SetExpanded(model.IsExpanded(msgid));
+ *      row->AddChild(std::move(content));
+ *  行高由外部先问一句：
+ *      const int h = content->MeasureHeight(availWidth);
+ *
+ *  存在理由 —— 它取代的是 HistoryHighlightLabel（DuiLabel 子类，单行定高）。那条路上
+ *  长文被省略号截成一句、表情只能显示成字面量「[表情]」，信息量太低（见
+ *  docs/消息记录内容交互方案.md §2.1 / §2.2）。DuiLabel 画不出「文字与图混排」，
+ *  balloonui 里也没有现成能干这事的控件，故按仓库 UI 约定走「末选：自绘 DuiControl
+ *  子类」这一档 —— 但排版与绘制本身<u>不自己造</u>，整套复用聊天气泡那边抽出来的
+ *  balloonchatwnd::LayoutInlineContent / DrawInlineContent，两处渲染口径完全一致。
+ *
+ *  测量与绘制共用同一套参数（字体、表情格边长、行数上限），由本类的三个私有函数
+ *  统一给出 —— 一旦两处漂移，量出来的行高与画出来的内容就会对不上，列表要么被截
+ *  一截、要么下面留一条空白。
+ *
+ *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL（用到 CString）。
+ *
+ *  balloonwj@qq.com   2026-08-05
+ */
+#pragma once
+
+#include <vector>
+
+#include "../../balloonui/balloonui/DuiControl.h"
+#include "../BalloonChat/BalloonChatMsgFormat.h"   // balloonchat::ChatSegment
+#include "../BalloonChatWnd/ChatInlineText.h"      // 排版 / 绘制引擎与 InlinePlaced
+#include "HistoryView.h"                           // HighlightRange
+
+namespace balloonhistory {
+
+//折叠态最多画几行。取 5 是 docs/消息记录内容交互方案.md §10-1 与用户对齐后的决定：
+//再多，一页八条里只要有两三条长消息就会把整页撑得很长；再少，两三行的日常消息也会
+//被折起来，反倒每条都得点一下「展开」。
+constexpr int kHistoryCollapsedMaxLines = 5;
+
+//正文默认字号（像素）。与消息记录列表原先那个预览标签同档，换到多行之后不改观感。
+constexpr int kHistoryContentDefaultFontPx = 14;
+
+/**
+ *  HistoryContentView —— 支持多行折行、内联表情、关键字高亮、折叠 / 展开的内容块。
+ *
+ *  字符口径：对外暴露的所有字符下标（高亮区间）都按<u>扁平文本</u>算 —— 全文按
+ *  UTF-16 字符计数，<u>一个内联表情占一个字符位</u>（与 ChatTextSelection.h 一致）。
+ *  这与调用方拿正文原文（`/f["5"]` 占 7 个字符）去数下标<u>不是</u>一回事，区间须由
+ *  调用方按同一口径算好再传进来。
+ */
+class HistoryContentView : public balloonwjui::DuiControl
+{
+public:
+    HistoryContentView();
+
+    /**
+     *  设置要显示的正文。
+     *    fullText：正文原文，含 `/f["<id>"]` 形式的系统表情标记；可为空串。
+     *  内部一次性解析成段序列缓存下来（绘制时不再重复解析），并作废已有的高度测量
+     *  缓存。副作用：触发重绘。
+     */
+    void SetContent(const CString& fullText);
+
+    /**
+     *  设置搜索命中要高亮的字符区间。
+     *    ranges：区间列表（扁平文本字符口径，见类注释）；传空表示不高亮。
+     *            越界或长度非正的区间由本类忽略，不必由调用方预先过滤。
+     *  高亮不改变内容尺寸，故<u>不</u>作废高度测量缓存。副作用：触发重绘。
+     */
+    void SetHighlightRanges(const std::vector<HighlightRange>& ranges);
+
+    /**
+     *  设置折叠 / 展开态。
+     *    expanded：true=画全；false=最多画 kHistoryCollapsedMaxLines 行，
+     *              内容画不下时末行以省略号收尾。
+     *  副作用：触发重绘。状态变了行高也会变，调用方须重新问一次 MeasureHeight
+     *  并让父容器重新布局。
+     */
+    void SetExpanded(bool expanded);
+
+    //当前是否处于展开态。
+    bool IsExpanded() const { return m_expanded; }
+
+    /**
+     *  设置正文颜色。默认深灰 RGB(0x33, 0x33, 0x33)，与聊天气泡正文同色。
+     *    color：文字颜色。
+     *  副作用：触发重绘。
+     */
+    void SetTextColor(COLORREF color);
+
+    /**
+     *  设置正文字号。
+     *    px：字号（像素，取值须为正；<= 0 一律忽略，保持原值）。
+     *        默认 kHistoryContentDefaultFontPx。
+     *  字号变了折行结果与行高都会变，故会作废高度测量缓存。副作用：触发重绘。
+     */
+    void SetFontPixelSize(int px);
+
+    /**
+     *  按<u>当前折叠 / 展开态</u>算这块内容需要多高。列表行高就是靠它定的。
+     *
+     *  与 OnPaint 共用同一套排版参数（同一支字体、同一个表情格边长、同一个行数
+     *  上限），量出来的和画出来的必然一致。
+     *
+     *  <u>本函数自建一个内存 DC 来量</u>（CreateCompatibleDC(NULL) + 选入自建字体），
+     *  不要求调用方给 HDC —— 行高是在布局阶段问的，那时控件既未必已经进树、也拿不到
+     *  宿主窗的 DC；而字体度量与"画在哪个 DC 上"无关，内存 DC 量出来的与屏幕一致。
+     *
+     *    availWidth：可用宽度（像素，不含内外边距）；<= 0 时按 1 处理。
+     *  @return 内容所需高度（像素，<u>不含</u>任何内边距，恒 > 0：空正文也占一行）。
+     *          宽度与折叠态都没变时直接返回上次的结果，不重新排版。
+     */
+    int MeasureHeight(int availWidth) const;
+
+    /**
+     *  内容是否多到了折叠态放不下 —— 即旁边该不该画那枚「展开 / 收起」链接。
+     *
+     *  判据恒按<u>折叠态</u>算，<u>与当前是折叠还是展开无关</u>：展开之后它仍然返回
+     *  true，否则「收起」链接会在展开的一瞬间消失，用户就再也收不回去了。
+     *
+     *    availWidth：可用宽度（像素）；<= 0 时按 1 处理。
+     *  @return 内容超过 kHistoryCollapsedMaxLines 行返回 true。
+     */
+    bool NeedsExpandLink(int availWidth) const;
+
+    /**
+     *  DuiControl 覆写：先铺高亮底色，再画文字与表情；折叠态内容没画完时，
+     *  在末行末尾补一个省略号。
+     */
+    void OnPaint(HDC hdc, const RECT& rcDirty) override;
+
+private:
+    //建一支绘制 / 测量共用的字体（微软雅黑，字号取 m_fontPx）。与
+    //DrawInlineContent 内部建的那支参数一致，两处量出来的字宽才对得上。
+    //@return 字体句柄，<u>调用方负责 DeleteObject</u>；建失败返回 NULL。
+    HFONT CreateContentFont() const;
+
+    //当前该给排版引擎传的行数上限：折叠态为 kHistoryCollapsedMaxLines，
+    //展开态为 0（排版引擎里 0 表示不限行）。
+    int EffectiveMaxLines() const;
+
+    //当前该给排版引擎传的表情格边长：正文里确实有表情时为 kFaceDisplayPx（28），
+    //没有表情时为 0。
+    //
+    //为什么不恒传 28：排版引擎的行高取 max(字体行高, faceSize)，恒传 28 会让纯文字
+    //的行也占 28px（14px 字体的行高才 19px 上下），一屏结果凭空高出一截。聊天气泡
+    //那边是靠 MessageTextHasFace 分走原生 DrawText 快路径来回避这一点的，本类只有
+    //一条渲染路径，于是改用"没表情就把格子边长置 0"达成同样的行高。
+    int EffectiveFaceSize() const;
+
+    //按 availWidth 与当前折叠态把高度和"要不要展开链接"一起算出来，填进缓存。
+    //缓存命中（宽度与折叠态都没变）时直接返回，不重新排版。
+    void EnsureMeasured(int availWidth) const;
+
+    //作废高度测量缓存（内容 / 字号变了必须调，否则行高还是按旧内容算的）。
+    void InvalidateMeasureCache();
+
+    //把各高亮区间画成底色矩形。placed 是本次绘制用的排版结果，rc 为本控件矩形。
+    void PaintHighlights(HDC hdc, const RECT& rc,
+                         const std::vector<balloonchatwnd::InlinePlaced>& placed);
+
+    //折叠态内容没画完时，在末行末尾画一个省略号（与正文同字体同颜色）。
+    void PaintCollapsedEllipsis(HDC hdc, const RECT& rc,
+                                const std::vector<balloonchatwnd::InlinePlaced>& placed);
+
+private:
+    //正文解析出的段序列（文字段 + 表情段），SetContent 时一次性解析好。
+    //绘制与测量都直接吃它，不再重复解析正文。
+    std::vector<balloonchat::ChatSegment> m_segs;
+
+    //m_segs 里是否至少有一个表情段。决定 EffectiveFaceSize 给 0 还是 28。
+    bool m_hasFace;
+
+    //待高亮的字符区间（扁平文本口径）；空表示不高亮。
+    std::vector<HighlightRange> m_ranges;
+
+    //正文颜色。
+    COLORREF m_textColor;
+
+    //正文字号（像素）。
+    int m_fontPx;
+
+    //折叠 / 展开态；true=画全。
+    bool m_expanded;
+
+    // ---- 高度测量缓存（生命周期同本控件；内容 / 字号变化时由 InvalidateMeasureCache 作废）----
+
+    //上次测量用的可用宽度（像素）；-1 表示尚未测量过 / 缓存已作废。
+    mutable int m_measuredWidth;
+
+    //上次测量时的折叠态。它与 m_measuredWidth 一起构成缓存键 —— 展开与折叠是两个
+    //不同的高度，只按宽度做键的话切换折叠态会拿到上一态的行高。
+    mutable bool m_measuredExpanded;
+
+    //上次测出来的内容高度（像素）。
+    mutable int m_measuredHeight;
+
+    //上次测出来的"折叠态放不下"标志，即 NeedsExpandLink 的返回值。
+    mutable bool m_measuredNeedExpand;
+};
+
+} // namespace balloonhistory

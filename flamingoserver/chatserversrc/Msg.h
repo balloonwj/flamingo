@@ -1,4 +1,4 @@
-/** 
+﻿/** 
  * 聊天协议类型定义,Msg.h
  * zhangyl 2017.03.02
  **/
@@ -34,6 +34,12 @@ enum msg_type
     msg_type_updateteaminfo,       //更新用户好友分组信息
     msg_type_modifyfriendmarkname, //更新好友备注信息
     msg_type_movefriendtootherteam, //移动好友至
+
+    //==== 企业组织结构（1200 系列）====
+    msg_type_getorgstructure = 1200, //拉取企业组织架构（部门树 + 各部门成员）
+    msg_type_operatedepartment,      //部门操作：新建/修改/删除/移动，由 operationtype 区分（1201）
+    msg_type_operatedeptmember,      //部门成员操作：添加/修改/移除/移动，由 operationtype 区分（1202）
+    msg_type_orgstructurenotify,     //组织架构变更通知：服务器在结构变化后推送给在线客户端（1203）
 };
 
 //在线类型
@@ -93,6 +99,50 @@ enum updateteaminfo_operation_type
     updateteaminfo_operation_modify
 };
 
+//部门操作类型（msg_type_operatedepartment 报文的 operationtype 字段取值）
+enum department_operation_type
+{
+    //新建部门：请求需带 parentdeptid、deptname；应答回传服务器分配的 deptid
+    department_operation_create = 1,
+    //修改部门：改 deptname/deptdesc/leaderuserid/deptorder（值为 2）
+    department_operation_update,
+    //删除部门：软删除（置为停用），要求其下无在用子部门与在职成员（值为 3）
+    department_operation_delete,
+    //移动部门：改父部门，需校验目标父部门不在自身子树内以防成环（值为 4）
+    department_operation_move
+};
+
+//部门成员操作类型（msg_type_operatedeptmember 报文的 operationtype 字段取值）
+enum deptmember_operation_type
+{
+    //添加成员：把 userid 挂到 deptid 下
+    deptmember_operation_add = 1,
+    //修改成员：改 position/isprimary/memberorder（值为 2）
+    deptmember_operation_update,
+    //移除成员：把 userid 从 deptid 移出，软删除（值为 3）
+    deptmember_operation_remove,
+    //移动成员：把 userid 从 deptid 移到 newdeptid（值为 4）
+    deptmember_operation_move
+};
+
+//部门状态（对应数据库 t_department.f_status）
+enum department_status
+{
+    //正常：在用、对客户端可见
+    department_status_normal = 0,
+    //停用：软删除，保留历史数据，不下发给普通客户端
+    department_status_disabled = 1
+};
+
+//部门成员状态（对应数据库 t_department_member.f_status）
+enum deptmember_status
+{
+    //在职：有效的部门归属关系
+    deptmember_status_active = 0,
+    //已移出/离职：软删除，保留历史数据，不下发给普通客户端
+    deptmember_status_removed = 1
+};
+
 /** 
  *  错误码
  *  0   成功
@@ -106,6 +156,15 @@ enum updateteaminfo_operation_type
  *  105 修改密码失败
  *  106 创建群失败
  *  107 客户端版本太旧，需要升级成新版本
+ *  108 修改备注失败
+ *  109 分组已经存在
+ *  110 部门不存在
+ *  111 同级已存在同名部门
+ *  112 部门下仍有在用子部门或在职成员，不能删除
+ *  113 非法父部门（不存在，或会使部门树成环）
+ *  114 该用户已在此部门
+ *  115 该用户不在此部门
+ *  116 无操作企业组织架构的权限
  */
 //TODO: 其他的地方改成这个错误码
 enum error_code
@@ -123,6 +182,16 @@ enum error_code
     error_code_toooldversion        = 107,
     error_code_modifymarknamefail   = 108,
     error_code_teamname_exist       = 109, //分组已经存在
+    error_code_dept_notexist         = 110, //部门不存在
+    error_code_dept_nameexist        = 111, //同级已存在同名部门
+    error_code_dept_hassub           = 112, //部门下仍有在用子部门或在职成员，不能删除
+    error_code_dept_invalidparent    = 113, //非法父部门：不存在，或会使部门树成环
+    error_code_deptmember_exist      = 114, //该用户已在此部门
+    error_code_deptmember_notexist   = 115, //该用户不在此部门
+    error_code_dept_permissiondenied = 116, //无操作企业组织架构的权限
+    error_code_account_disabled      = 117, //账号被 admin 控制台管理员停用，禁止登录任何客户端
+    error_code_dept_isroot           = 118, //目标部门是代表企业本身的"公司根部门"，不允许删除或移动
+    error_code_enterprise_nameexist  = 119, //企业全称已被占用；admin 控制台新建企业或给企业改名时重名会返回它
 };
 
 /**
@@ -367,17 +436,84 @@ cmd = 1010, seq = 0, {"code":0, "msg": "ok", "groupid": 12345678,
     服务器应答： cmd = 1003, seq = 0, data: {"code": 0, "msg": ok}
 */
 
-
-
-////////////////////////
-//定制信息
-////////////////////////
-/* 上传设备信息
-    cmd = 2000, seq = 0, data(设备信息json), 设备id(int32)，信息类型classtype(int32), 上传时间(int64， UTC时间)
-    cmd = 2000, seq = 0, data: {"code": 0, "msg": "ok"}    
-**/
-
+/**
+ *  拉取企业组织架构（部门树 + 各部门成员）
+ **/
 /*
-    cmd = 2001, seq = 0, data(空)，设备id(int32)，信息类型classtype(int32), 上传时间(int64, UTC时间)
-    cmd = 2001, seq = 0, data: {具体的设备信息json}
+    //请求体为空；应答的 departments 为扁平部门数组，客户端按 parentdeptid 自行还原成树
+    //仅下发正常部门(department_status_normal)与在职成员(deptmember_status_active)
+    //成员对象中 position/isprimary/memberorder 为部门归属字段，其余为展示字段
+    //只挂子部门不挂人的部门，其 members 为 []
+    客户端请求： cmd = 1200, seq = 0, {}
+    服务器应答： cmd = 1200, seq = 0,
+    {
+        "code": 0, "msg": "ok",
+        "departments": [
+            {
+                "deptid": 1001, "deptname": "总公司", "parentdeptid": 0,
+                "deptlevel": 1, "deptorder": 0, "leaderuserid": 8, "deptdesc": "",
+                "members": [
+                    {"userid": 8, "username": "ceo", "nickname": "张总", "facetype": 0,
+                     "customface": "", "status": 1, "clienttype": 1,
+                     "position": "CEO", "isprimary": 1, "memberorder": 0}
+                ]
+            },
+            {
+                "deptid": 1005, "deptname": "技术部", "parentdeptid": 1001,
+                "deptlevel": 2, "deptorder": 0, "leaderuserid": 12, "deptdesc": "负责研发",
+                "members": [
+                    {"userid": 12, "username": "dev1", "nickname": "李工", "facetype": 0,
+                     "customface": "", "status": 1, "clienttype": 1,
+                     "position": "后端工程师", "isprimary": 1, "memberorder": 0}
+                ]
+            }
+        ]
+    }
 **/
+
+/**
+ *  部门操作：新建 / 修改 / 删除 / 移动
+ **/
+/*
+    //operationtype: 1新建 2修改 3删除 4移动（取值见 enum department_operation_type）
+    //新建部门：应答回传服务器分配的 deptid
+    客户端请求： cmd = 1201, seq = 0, {"operationtype": 1, "parentdeptid": 1001, "deptname": "测试部", "deptdesc": "", "leaderuserid": 0, "deptorder": 0}
+    服务器应答： cmd = 1201, seq = 0, {"code": 0, "msg": "ok", "operationtype": 1, "deptid": 1009}
+    //修改部门：改名称/描述/负责人/排序
+    客户端请求： cmd = 1201, seq = 0, {"operationtype": 2, "deptid": 1009, "deptname": "测试部", "deptdesc": "xx", "leaderuserid": 12, "deptorder": 1}
+    服务器应答： cmd = 1201, seq = 0, {"code": 0, "msg": "ok", "operationtype": 2, "deptid": 1009}
+    //删除部门：软删除（置停用）；其下若有在用子部门或在职成员则返回 code=112
+    客户端请求： cmd = 1201, seq = 0, {"operationtype": 3, "deptid": 1009}
+    服务器应答： cmd = 1201, seq = 0, {"code": 0, "msg": "ok", "operationtype": 3, "deptid": 1009}
+    //移动部门：改父部门；newparentdeptid 不能是自身或自身子孙，否则返回 code=113
+    客户端请求： cmd = 1201, seq = 0, {"operationtype": 4, "deptid": 1009, "newparentdeptid": 1005}
+    服务器应答： cmd = 1201, seq = 0, {"code": 0, "msg": "ok", "operationtype": 4, "deptid": 1009}
+*/
+
+/**
+ *  部门成员操作：添加 / 修改 / 移除 / 移动
+ **/
+/*
+    //operationtype: 1添加 2修改 3移除 4移动（取值见 enum deptmember_operation_type）
+    //添加成员到部门
+    客户端请求： cmd = 1202, seq = 0, {"operationtype": 1, "deptid": 1005, "userid": 20, "position": "工程师", "isprimary": 0, "memberorder": 0}
+    服务器应答： cmd = 1202, seq = 0, {"code": 0, "msg": "ok", "operationtype": 1, "deptid": 1005, "userid": 20}
+    //修改成员：改职位/是否主部门/排序
+    客户端请求： cmd = 1202, seq = 0, {"operationtype": 2, "deptid": 1005, "userid": 20, "position": "高级工程师", "isprimary": 1, "memberorder": 2}
+    服务器应答： cmd = 1202, seq = 0, {"code": 0, "msg": "ok", "operationtype": 2, "deptid": 1005, "userid": 20}
+    //从部门移除成员：软删除
+    客户端请求： cmd = 1202, seq = 0, {"operationtype": 3, "deptid": 1005, "userid": 20}
+    服务器应答： cmd = 1202, seq = 0, {"code": 0, "msg": "ok", "operationtype": 3, "deptid": 1005, "userid": 20}
+    //把成员从一个部门移动到另一个部门
+    客户端请求： cmd = 1202, seq = 0, {"operationtype": 4, "deptid": 1005, "userid": 20, "newdeptid": 1006}
+    服务器应答： cmd = 1202, seq = 0, {"code": 0, "msg": "ok", "operationtype": 4, "userid": 20, "newdeptid": 1006}
+*/
+
+/**
+ *  组织架构变更通知（服务器主动推送给在线客户端）
+ **/
+/*
+    //组织架构发生变更后服务器推送此通知，客户端收到后用 cmd=1200 重新拉取全量
+    //changetype: 1部门结构变更 2成员归属变更；deptid 为受影响部门，仅作提示
+    服务器推送： cmd = 1203, seq = 0, {"changetype": 1, "deptid": 1009}
+*/

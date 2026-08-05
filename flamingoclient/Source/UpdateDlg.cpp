@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "UpdateDlg.h"
 #include "UserSessionData.h"
 #include "FlamingoClient.h"
@@ -39,7 +39,7 @@ BOOL CUpdateDlg::InitUI()
 	m_SkinDlg.SetBgPic(_T("DlgBg\\GeneralBg.png"));
 	m_SkinDlg.SetCloseSysBtnPic(_T("SysBtn\\btn_close_normal.png"), _T("SysBtn\\btn_close_highlight.png"), _T("SysBtn\\btn_close_down.png"));
 	m_SkinDlg.SubclassWindow(m_hWnd);
-	m_SkinDlg.SetTitleText(_T("FlamingoÉı¼¶³ÌĞò"));
+	m_SkinDlg.SetTitleText(_T("Flamingoå‡çº§ç¨‹åº"));
 	m_SkinDlg.MoveWindow(0, 0, 550, 350, TRUE);
 
 	
@@ -64,8 +64,8 @@ BOOL CUpdateDlg::InitUI()
 	
 	RECT rtListCtrl = {0};
 	::GetClientRect(m_UpdateListCtrl.m_hWnd, &rtListCtrl);
-	m_UpdateListCtrl.AddColumn(_T("ÎÄ¼şÃû³Æ"), NULL, DT_CENTER, 100);
-	m_UpdateListCtrl.AddColumn(_T("Éı¼¶½ø¶È"), NULL, DT_RIGHT, 350);
+	m_UpdateListCtrl.AddColumn(_T("æ–‡ä»¶åç§°"), NULL, DT_CENTER, 100);
+	m_UpdateListCtrl.AddColumn(_T("å‡çº§è¿›åº¦"), NULL, DT_RIGHT, 350);
 	//m_UpdateListCtrl.SetColumnFormat(0, LVS_EX_GRIDLINES);
 	//m_UpdateListCtrl.SetColumnFormat(1, LVS_EX_GRIDLINES);
 
@@ -74,7 +74,7 @@ BOOL CUpdateDlg::InitUI()
 	{
 		m_UpdateListCtrl.AddItem( _T(""), NULL, FALSE, DT_CENTER, 0);
 		m_UpdateListCtrl.SetItemText(i, 0, m_aryFileDesc[i]);
-		m_UpdateListCtrl.SetItemText(i, 1, _T("µÈ´ıÏÂÔØ"));
+		m_UpdateListCtrl.SetItemText(i, 1, _T("ç­‰å¾…ä¸‹è½½"));
 		m_UpdateListCtrl.SetItemFormat(i, 1, DT_RIGHT);
 	}
 
@@ -90,7 +90,7 @@ void CUpdateDlg::ParseFileInfo()
 	size_t nSize = m_aryFileInfo.size();
 	if(nSize < 2)
 	{
-		::MessageBox(m_hWnd, _T("Éı¼¶ÅäÖÃÎÄ¼ş½âÎö³ö´í£¬Éı¼¶ÖÕÖ¹£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
+		::MessageBox(m_hWnd, _T("å‡çº§é…ç½®æ–‡ä»¶è§£æå‡ºé”™ï¼Œå‡çº§ç»ˆæ­¢ï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
 		EndDialog(IDCANCEL);
 		return;
 	}
@@ -146,7 +146,7 @@ DWORD WINAPI CUpdateDlg::DownloadThread(LPVOID lpParameter)
 	long nSize = pDlg->m_aryFileName.size();
 	if(nSize <= 0)
 	{
-		::MessageBox(pDlg->m_hWnd, _T("½âÎö°æ±¾ºÅÎÄ¼ş´íÎó£¬Éı¼¶Ê§°Ü£¬ÇëÏÂ´ÎÖØÊÔ£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONEXCLAMATION);
+		::MessageBox(pDlg->m_hWnd, _T("è§£æç‰ˆæœ¬å·æ–‡ä»¶é”™è¯¯ï¼Œå‡çº§å¤±è´¥ï¼Œè¯·ä¸‹æ¬¡é‡è¯•ï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONEXCLAMATION);
 		pDlg->OnClose();
 		return 0;
 	}
@@ -160,7 +160,7 @@ DWORD WINAPI CUpdateDlg::DownloadThread(LPVOID lpParameter)
 	_stprintf_s(szPercent, _T("%d%%"), nShowRate);
 	pDlg->m_UpdateRate.SetWindowText(szPercent);
 
-	//ËùÓĞµÄÎÄ¼ş¾ùÏÂÔØ³É¹¦ÎªTRUE,·´Ö®ÎªFALSE.
+	//æ‰€æœ‰çš„æ–‡ä»¶å‡ä¸‹è½½æˆåŠŸä¸ºTRUE,åä¹‹ä¸ºFALSE.
 	BOOL bAllSuccess = TRUE;
 	for(long i=0; i<nSize; ++i)
 	{
@@ -170,7 +170,7 @@ DWORD WINAPI CUpdateDlg::DownloadThread(LPVOID lpParameter)
 		
 		pDlg->m_UpdateListCtrl.SetCurSelIndex(i);
 		
-		//µÈ´ı1Ãë
+		//ç­‰å¾…1ç§’
 		if(WaitForSingleObject(pDlg->m_hExitEvent, 1000) == WAIT_OBJECT_0)
 			return 1;
 		
@@ -179,18 +179,18 @@ DWORD WINAPI CUpdateDlg::DownloadThread(LPVOID lpParameter)
         if (!pDlg->m_pFMGClient->m_FileTask.DownloadFileSynchronously(szUtf8FileName, strFilePath, TRUE))
 		{
 			strErrorInfo = strFileName;
-			strErrorInfo += _T("ÏÂÔØÊ§°Ü");
+			strErrorInfo += _T("ä¸‹è½½å¤±è´¥");
 			pDlg->m_UpdateFileName.SetWindowText(strErrorInfo.c_str());
-			pDlg->m_UpdateListCtrl.SetItemText(i, 1, _T("ÏÂÔØÊ§°Ü"));
+			pDlg->m_UpdateListCtrl.SetItemText(i, 1, _T("ä¸‹è½½å¤±è´¥"));
 
 			bAllSuccess = FALSE;
-			::MessageBox(pDlg->m_hWnd, _T("Éı¼¶Ê§°Ü£¬ÇëÏÂ´ÎÖØÊÔ£¡"), g_strAppTitle.c_str(), MB_OK | MB_ICONEXCLAMATION);
+			::MessageBox(pDlg->m_hWnd, _T("å‡çº§å¤±è´¥ï¼Œè¯·ä¸‹æ¬¡é‡è¯•ï¼"), g_strAppTitle.c_str(), MB_OK | MB_ICONEXCLAMATION);
 			pDlg->OnClose();
 			return 0;		
 		}
 		else
 		{
-			pDlg->m_UpdateListCtrl.SetItemText(i, 1, _T("ÏÂÔØÍê³É"));
+			pDlg->m_UpdateListCtrl.SetItemText(i, 1, _T("ä¸‹è½½å®Œæˆ"));
 			nShowRate += nRate;
 			_stprintf_s(szPercent, _T("%d%%"), nShowRate);
 			pDlg->m_UpdateRate.SetWindowText(szPercent);
@@ -206,14 +206,14 @@ DWORD WINAPI CUpdateDlg::DownloadThread(LPVOID lpParameter)
 	
 	if(bAllSuccess)
 	{
-		//::MessageBox(pDlg->m_hWnd, _T("Éı¼¶Íê³É£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONEXCLAMATION);
+		//::MessageBox(pDlg->m_hWnd, _T("å‡çº§å®Œæˆï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONEXCLAMATION);
         if (Unzip())
         {
             ::SendMessage(pDlg->m_pFMGClient->m_UserMgr.m_hCallBackWnd, WM_CLOSE_MAINDLG, 0, 0);
             ::ExitProcess(0);
         }
         else
-            ::MessageBox(pDlg->m_hWnd, _T("Éı¼¶Ê§°Ü£¬ÇëÏÂ´ÎÖØÊÔ£¡"), g_strAppTitle.c_str(), MB_OK | MB_ICONEXCLAMATION);
+            ::MessageBox(pDlg->m_hWnd, _T("å‡çº§å¤±è´¥ï¼Œè¯·ä¸‹æ¬¡é‡è¯•ï¼"), g_strAppTitle.c_str(), MB_OK | MB_ICONEXCLAMATION);
 	}		
 	else
 	{
@@ -233,7 +233,7 @@ DWORD WINAPI CUpdateDlg::DownloadThread(LPVOID lpParameter)
 		if(!file2.Open(strVersionFile.c_str(), TRUE) || !file2.Write(pBuffer, file.GetSize()))
 			return 0;
 
-		::MessageBox(pDlg->m_hWnd, _T("Éı¼¶Ê§°Ü£¬ÇëÏÂ´ÎÖØÊÔ£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONEXCLAMATION);
+		::MessageBox(pDlg->m_hWnd, _T("å‡çº§å¤±è´¥ï¼Œè¯·ä¸‹æ¬¡é‡è¯•ï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONEXCLAMATION);
 
 	}
 	
@@ -261,7 +261,7 @@ bool Unzip()
 	if(!::PathFileExists(szUpdatePath))
 	{
 		::MessageBox(NULL, 
-					 _T("ÕÒ²»µ½½âÑ¹¹¤¾ßiUpdateAuto.exe£¬ÇëÊÖ¶¯½âÑ¹UpdateÄ¿Â¼ÏÂÑ¹Ëõ°üÖÁ³ÌĞò¸ùÄ¿Â¼ÏÂ¡£"), 
+					 _T("æ‰¾ä¸åˆ°è§£å‹å·¥å…·iUpdateAuto.exeï¼Œè¯·æ‰‹åŠ¨è§£å‹Updateç›®å½•ä¸‹å‹ç¼©åŒ…è‡³ç¨‹åºæ ¹ç›®å½•ä¸‹ã€‚"), 
 					 g_strAppTitle.c_str(),
 					 MB_OK|MB_TOPMOST|MB_ICONERROR);
 
@@ -276,7 +276,7 @@ bool Unzip()
 	//OSVERSIONINFO osvi={0};
 	//osvi.dwOSVersionInfoSize=sizeof(OSVERSIONINFO); 
 	//GetVersionEx(&osvi);
-	//VistaÒÔÏÂÏµÍ³²»´æÔÚ¹ÜÀíÔ±È¨ÏŞÔËĞĞ³ÌĞòµÄ·½Ê½
+	//Vistaä»¥ä¸‹ç³»ç»Ÿä¸å­˜åœ¨ç®¡ç†å‘˜æƒé™è¿è¡Œç¨‹åºçš„æ–¹å¼
     if (!IsWindowsXPOrGreater())
 	{
 		STARTUPINFO si={0};
@@ -285,7 +285,7 @@ bool Unzip()
         if (!::CreateProcess(szUpdatePath, szCmdLine, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
         {
             TCHAR szErrorInfo[64] = { 0 };
-            _stprintf_s(szErrorInfo, ARRAYSIZE(szErrorInfo), _T("Éı¼¶Ê§°Ü£¬ÎŞ·¨Æô¶¯iUpdateAuto.exe¡£\r\n´íÎóÂë£º %u"), ::GetLastError());
+            _stprintf_s(szErrorInfo, ARRAYSIZE(szErrorInfo), _T("å‡çº§å¤±è´¥ï¼Œæ— æ³•å¯åŠ¨iUpdateAuto.exeã€‚\r\né”™è¯¯ç ï¼š %u"), ::GetLastError());
             ::MessageBox(NULL, szErrorInfo, g_strAppTitle.c_str(), MB_OK | MB_TOPMOST | MB_ICONERROR);
 
             //bRunAutoUpdateSuccess = false;
@@ -304,7 +304,7 @@ bool Unzip()
         if (!::ShellExecuteEx(&sei))
         {
             TCHAR szErrorInfo[64] = { 0 };
-            _stprintf_s(szErrorInfo, ARRAYSIZE(szErrorInfo), _T("Éı¼¶Ê§°Ü£¬ÎŞ·¨Æô¶¯iUpdateAuto.exe¡£\r\n´íÎóÂë£º %u"), ::GetLastError());
+            _stprintf_s(szErrorInfo, ARRAYSIZE(szErrorInfo), _T("å‡çº§å¤±è´¥ï¼Œæ— æ³•å¯åŠ¨iUpdateAuto.exeã€‚\r\né”™è¯¯ç ï¼š %u"), ::GetLastError());
             ::MessageBox(NULL, szErrorInfo, g_strAppTitle.c_str(), MB_OK | MB_TOPMOST | MB_ICONERROR);
 
             //bRunAutoUpdateSuccess = false;
@@ -317,7 +317,7 @@ bool Unzip()
     //if (!bRunAutoUpdateSuccess)
     //    return false;
 
-    ////Æô¶¯½âÑ¹³ÌĞò³É¹¦ÒÔºó£¬Ñ°ÕÒ½âÑ¹³ÌĞò½ø³Ì£¬²¢ÇÒµÈ´ı¸Ã½ø³ÌÍË³ö£¬µÈ´ıÎåÃë
+    ////å¯åŠ¨è§£å‹ç¨‹åºæˆåŠŸä»¥åï¼Œå¯»æ‰¾è§£å‹ç¨‹åºè¿›ç¨‹ï¼Œå¹¶ä¸”ç­‰å¾…è¯¥è¿›ç¨‹é€€å‡ºï¼Œç­‰å¾…äº”ç§’
 
     //PROCESSENTRY32 pe32 = {0};
     //pe32.dwSize = sizeof(PROCESSENTRY32);
@@ -346,7 +346,7 @@ bool Unzip()
 
     //CloseHandle(hProcessSnap);
 
-    ////½âÑ¹½ø³ÌÒÑ¾­ÍËµô£¬ÔòÈÏÎªÉı¼¶³É¹¦
+    ////è§£å‹è¿›ç¨‹å·²ç»é€€æ‰ï¼Œåˆ™è®¤ä¸ºå‡çº§æˆåŠŸ
     //if (dwAutoUpdateProcessID == 0)
     //    return true;
 

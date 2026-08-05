@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "resource.h"
 #include "CustomMsgDef.h"
@@ -43,13 +43,13 @@ private:
 	void OnDestroy();
 	LRESULT OnList_Click(LPNMHDR pnmh);
 	LRESULT OnList_ItemChange(LPNMHDR pnmh);
-	void OnLnk_CancelFlash(UINT uNotifyCode, int nID, CWindow wndCtl);// ¡°È¡ÏûÉÁË¸¡±³¬Á´½Ó¿Ø¼ş
-	void OnLnk_ShowAll(UINT uNotifyCode, int nID, CWindow wndCtl);// ¡°ÏÔÊ¾È«²¿¡±³¬Á´½Ó¿Ø¼ş
+	void OnLnk_CancelFlash(UINT uNotifyCode, int nID, CWindow wndCtl);// â€œå–æ¶ˆé—ªçƒâ€è¶…é“¾æ¥æ§ä»¶
+	void OnLnk_ShowAll(UINT uNotifyCode, int nID, CWindow wndCtl);// â€œæ˜¾ç¤ºå…¨éƒ¨â€è¶…é“¾æ¥æ§ä»¶
 
-	BOOL InitCtrls();			// ³õÊ¼»¯¿Ø¼ş
-	BOOL UnInitCtrls();			// ·´³õÊ¼»¯¿Ø¼ş
-	void SetDlgAutoSize();		// ×Ô¶¯µ÷Õû¶Ô»°¿ò´óĞ¡
-	void SetCtrlsAutoSize();	// ×Ô¶¯µ÷Õû¿Ø¼ş´óĞ¡
+	BOOL InitCtrls();			// åˆå§‹åŒ–æ§ä»¶
+	BOOL UnInitCtrls();			// ååˆå§‹åŒ–æ§ä»¶
+	void SetDlgAutoSize();		// è‡ªåŠ¨è°ƒæ•´å¯¹è¯æ¡†å¤§å°
+	void SetCtrlsAutoSize();	// è‡ªåŠ¨è°ƒæ•´æ§ä»¶å¤§å°
 	void _AddMsgSender(int nIndex, CMessageSender* lpMsgSender);
 	tstring GetHeadPicFullName(UINT nGroupCode, UINT nUTalkUin);
 	void GetNumber(UINT nGroupCode, UINT nUTalkUin, UINT& nGroupNum, UINT& nUTalkNum);
@@ -58,7 +58,7 @@ public:
 	CFlamingoClient*	m_lpFMGClient;
 	HWND			m_hMainDlg;
 	CRect			m_rcTrayIcon;
-	CRect			m_rcTrayIcon2;		//Íâ²¿´«½øÀ´µÄÈÎÎñÀ¸Í¼±êÇøÓò
+	CRect			m_rcTrayIcon2;		//å¤–éƒ¨ä¼ è¿›æ¥çš„ä»»åŠ¡æ å›¾æ ‡åŒºåŸŸ
 
 private:
 	CSkinDialog m_SkinDlg;

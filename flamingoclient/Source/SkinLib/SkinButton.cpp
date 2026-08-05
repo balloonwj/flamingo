@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "SkinButton.h"
 
 CSkinButton::CSkinButton(void)
@@ -129,7 +129,7 @@ void CSkinButton::SetMenu(HMENU hMenu)
 
 void CSkinButton::SetToolTipText(LPCTSTR lpszText)
 {
-	if (!IsWindow())		// SetToolTipTextº¯Êý±ØÐëÔÚ´´½¨°´Å¥´°¿Úºó²ÅÄÜµ÷ÓÃ
+	if (!IsWindow())		// SetToolTipTextå‡½æ•°å¿…é¡»åœ¨åˆ›å»ºæŒ‰é’®çª—å£åŽæ‰èƒ½è°ƒç”¨
 		return;
 
 	if (!m_ToolTipCtrl.IsWindow())
@@ -364,7 +364,7 @@ LRESULT CSkinButton::OnMouseMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 void CSkinButton::OnDestroy()
 {
-	if (m_ToolTipCtrl.IsWindow())	// ToolTipCtrlÔçÔÚÖ®Ç°µÄ²»ÖªµÀÊ²Ã´µØ·½ÒÑÏú»Ù£¬ÕâÀïÏÔÊ½ÖÃ¿Õm_hWnd
+	if (m_ToolTipCtrl.IsWindow())	// ToolTipCtrlæ—©åœ¨ä¹‹å‰çš„ä¸çŸ¥é“ä»€ä¹ˆåœ°æ–¹å·²é”€æ¯ï¼Œè¿™é‡Œæ˜¾å¼ç½®ç©ºm_hWnd
 		m_ToolTipCtrl.DestroyWindow();
 	m_ToolTipCtrl.m_hWnd = NULL;
 
@@ -409,22 +409,22 @@ void CSkinButton::DrawPushButton(HDC hDC)
 	CRect rcClient;
 	GetClientRect(&rcClient);
 
-	if (m_bPress)	// Êó±ê×ó¼ü°´ÏÂ×´Ì¬
+	if (m_bPress)	// é¼ æ ‡å·¦é”®æŒ‰ä¸‹çŠ¶æ€
 	{
 		if (m_lpBgImgD != NULL && !m_lpBgImgD->IsNull())
 			m_lpBgImgD->Draw(hDC, rcClient);
 	}
-	else if (m_bHover)	// Êó±êÐüÍ£×´Ì¬
+	else if (m_bHover)	// é¼ æ ‡æ‚¬åœçŠ¶æ€
 	{
 		if (m_lpBgImgH != NULL && !m_lpBgImgH->IsNull())
 			m_lpBgImgH->Draw(hDC, rcClient);
 	}
-	else if (m_bFocus)	// ½¹µã×´Ì¬
+	else if (m_bFocus)	// ç„¦ç‚¹çŠ¶æ€
 	{
 		if (m_lpBgImgF != NULL && !m_lpBgImgF->IsNull())
 			m_lpBgImgF->Draw(hDC, rcClient);
 	}
-	else	// ÆÕÍ¨×´Ì¬
+	else	// æ™®é€šçŠ¶æ€
 	{
 		if (m_lpBgImgN != NULL && !m_lpBgImgN->IsNull())
 			m_lpBgImgN->Draw(hDC, rcClient);
@@ -446,7 +446,7 @@ void CSkinButton::DrawPushButton(HDC hDC)
 
 	::SetTextColor(hDC, m_clrText);
 
-	if (bHasIcon && bHasText)	// ´øÍ¼±êºÍÎÄ×Ö
+	if (bHasIcon && bHasText)	// å¸¦å›¾æ ‡å’Œæ–‡å­—
 	{
 		int cxIcon = m_lpIconImg->GetWidth();
 		int cyIcon = m_lpIconImg->GetHeight();
@@ -455,7 +455,7 @@ void CSkinButton::DrawPushButton(HDC hDC)
 		HFONT hFont = (HFONT)SendMessage(WM_GETFONT, 0, 0);
 		HFONT hOldFont = (HFONT)::SelectObject(hDC, hFont);
 
-		CRect rcText(0,0,0,0);	// ¼ÆËãÎÄ×Ö¿í¸ß
+		CRect rcText(0,0,0,0);	// è®¡ç®—æ–‡å­—å®½é«˜
 		::DrawText(hDC, strText, strText.GetLength(), &rcText, DT_SINGLELINE | DT_CALCRECT);
 
 		int cx = cxIcon+3+rcText.Width();
@@ -474,7 +474,7 @@ void CSkinButton::DrawPushButton(HDC hDC)
 		::SelectObject(hDC, hOldFont);
 		::SetBkMode(hDC, nMode);
 	}
-	else if (bHasIcon)	// ½öÍ¼±ê
+	else if (bHasIcon)	// ä»…å›¾æ ‡
 	{
 		int cxIcon = m_lpIconImg->GetWidth();
 		int cyIcon = m_lpIconImg->GetHeight();
@@ -484,7 +484,7 @@ void CSkinButton::DrawPushButton(HDC hDC)
 
 		m_lpIconImg->Draw(hDC, rcIcon);
 	}
-	else if (bHasText)	// ½öÎÄ×Ö
+	else if (bHasText)	// ä»…æ–‡å­—
 	{
 		UINT nFormat = m_dwTextAlign | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS;
 
@@ -534,7 +534,7 @@ void CSkinButton::DrawCheckBox(HDC hDC)
 
 	BOOL bChecked = (GetCheck() == 1) ? TRUE : FALSE;
 
-	if (m_bHover)	// Êó±êÐüÍ£×´Ì¬
+	if (m_bHover)	// é¼ æ ‡æ‚¬åœçŠ¶æ€
 	{
 		if (bChecked)
 		{
@@ -547,7 +547,7 @@ void CSkinButton::DrawCheckBox(HDC hDC)
 				m_lpCheckBoxImgH->Draw(hDC, rcCheck);
 		}
 	}
-	else	// ÆÕÍ¨×´Ì¬
+	else	// æ™®é€šçŠ¶æ€
 	{
 		if (bChecked)
 		{
@@ -595,12 +595,12 @@ void CSkinButton::DrawIconButton(HDC hDC)
 	CRect rcClient;
 	GetClientRect(&rcClient);
 
-	if (m_bPress)	// Êó±ê×ó¼ü°´ÏÂ×´Ì¬
+	if (m_bPress)	// é¼ æ ‡å·¦é”®æŒ‰ä¸‹çŠ¶æ€
 	{
 		if (m_lpBgImgD != NULL && !m_lpBgImgD->IsNull())
 			m_lpBgImgD->Draw2(hDC, rcClient);
 	}
-	else if (m_bHover)	// Êó±êÐüÍ£×´Ì¬
+	else if (m_bHover)	// é¼ æ ‡æ‚¬åœçŠ¶æ€
 	{
 		if (m_lpBgImgH != NULL && !m_lpBgImgH->IsNull())
 			m_lpBgImgH->Draw2(hDC, rcClient);
@@ -620,7 +620,7 @@ void CSkinButton::DrawIconButton(HDC hDC)
 	if (m_lpIconImg != NULL && !m_lpIconImg->IsNull())
 		bHasIcon = TRUE;
 
-	if (bHasIcon && bHasText)	// ´øÍ¼±êºÍÎÄ×Ö
+	if (bHasIcon && bHasText)	// å¸¦å›¾æ ‡å’Œæ–‡å­—
 	{
 		int cxIcon = m_lpIconImg->GetWidth();
 		int cyIcon = m_lpIconImg->GetHeight();
@@ -629,7 +629,7 @@ void CSkinButton::DrawIconButton(HDC hDC)
 		HFONT hFont = (HFONT)SendMessage(WM_GETFONT, 0, 0);
 		HFONT hOldFont = (HFONT)::SelectObject(hDC, hFont);
 
-		CRect rcText(0,0,0,0);	// ¼ÆËãÎÄ×Ö¿í¸ß
+		CRect rcText(0,0,0,0);	// è®¡ç®—æ–‡å­—å®½é«˜
 		::DrawText(hDC, strText, strText.GetLength(), &rcText, DT_SINGLELINE | DT_CALCRECT);
 
 		int cx = cxIcon+3+rcText.Width();
@@ -648,7 +648,7 @@ void CSkinButton::DrawIconButton(HDC hDC)
 		::SelectObject(hDC, hOldFont);
 		::SetBkMode(hDC, nMode);
 	}
-	else if (bHasIcon)	// ½öÍ¼±ê
+	else if (bHasIcon)	// ä»…å›¾æ ‡
 	{
 		int cxIcon = m_lpIconImg->GetWidth();
 		int cyIcon = m_lpIconImg->GetHeight();
@@ -658,7 +658,7 @@ void CSkinButton::DrawIconButton(HDC hDC)
 
 		m_lpIconImg->Draw(hDC, rcIcon);
 	}
-	else if (bHasText)	// ½öÎÄ×Ö
+	else if (bHasText)	// ä»…æ–‡å­—
 	{
 		CRect rcText(rcClient);
 		rcText.left += 2;
@@ -683,12 +683,12 @@ void CSkinButton::DrawMenuButton(HDC hDC)
 	CRect rcClient;
 	GetClientRect(&rcClient);
 
-	if (m_bPress)	// Êó±ê×ó¼ü°´ÏÂ×´Ì¬
+	if (m_bPress)	// é¼ æ ‡å·¦é”®æŒ‰ä¸‹çŠ¶æ€
 	{
 		if (m_lpBgImgD != NULL && !m_lpBgImgD->IsNull())
 			m_lpBgImgD->Draw(hDC, rcClient);
 	}
-	else if (m_bHover)	// Êó±êÐüÍ£×´Ì¬
+	else if (m_bHover)	// é¼ æ ‡æ‚¬åœçŠ¶æ€
 	{
 		if (m_lpBgImgH != NULL && !m_lpBgImgH->IsNull())
 			m_lpBgImgH->Draw(hDC, rcClient);

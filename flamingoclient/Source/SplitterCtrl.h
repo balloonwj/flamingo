@@ -1,6 +1,6 @@
-#pragma once
+О╩©#pragma once
 
-//╦ц╢╟©зсцсзадлЛ╢╟©зжпмов╖╥╒кмнд╠╬©Р
+//Х╞╔Г╙≈Е▐ёГ■╗Д╨▌Х│┼Е╓╘Г╙≈Е▐ёД╦╜Ф▀√Ф▀╫Е▐▒И─│Ф√┤Ф°╛Ф║├
 class CSplitterCtrl : public CWindowImpl<CSplitterCtrl, CWindow>
 {
 public:
@@ -27,5 +27,5 @@ protected:
 	BOOL OnSetCursor(CWindow wnd, UINT nHitTest, UINT message);
 
 private:
-	HCURSOR		m_hCursorNS;		//иообмов╖╣д╪Щм╥
+	HCURSOR		m_hCursorNS;		//Д╦┼Д╦▀Ф▀√Ф▀╫Г └Г╝╜Е╓╢
 };

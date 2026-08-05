@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "ChatTabMgr.h"
 #include "GDIFactory.h"
 
@@ -80,15 +80,15 @@ void CChatTabMgr::Active(HWND hwndItem)
 
 int CChatTabMgr::OnCreate(LPCREATESTRUCT lpCreateStruct)
 {
-	//TODO: ²âÊÔÊı¾İ
+	//TODO: æµ‹è¯•æ•°æ®
 	//TAB_WINDOW_INFO twi = {0};
-	//_tcscpy_s(twi.szTitle, ARRAYSIZE(twi.szTitle), _T("ÏûÏ¢¼ÇÂ¼"));
+	//_tcscpy_s(twi.szTitle, ARRAYSIZE(twi.szTitle), _T("æ¶ˆæ¯è®°å½•"));
 	//m_arrWindowInfo.push_back(twi);
 
-	//_tcscpy_s(twi.szTitle, ARRAYSIZE(twi.szTitle), _T("´«ËÍÎÄ¼ş(0/1)"));
+	//_tcscpy_s(twi.szTitle, ARRAYSIZE(twi.szTitle), _T("ä¼ é€æ–‡ä»¶(0/1)"));
 	//m_arrWindowInfo.push_back(twi);
 
-	//_tcscpy_s(twi.szTitle, ARRAYSIZE(twi.szTitle), _T("µ¥ÉíµÄÎÒÒÔÎª¿ÉÒÔÒ»±²×Ó²»¿¿Ë­"));
+	//_tcscpy_s(twi.szTitle, ARRAYSIZE(twi.szTitle), _T("å•èº«çš„æˆ‘ä»¥ä¸ºå¯ä»¥ä¸€è¾ˆå­ä¸é è°"));
 	//m_arrWindowInfo.push_back(twi);
 
 	CRect rcClient;
@@ -102,7 +102,7 @@ void CChatTabMgr::OnPaint(CDCHandle dc)
 	CPaintDC PaintDC(m_hWnd);
 	CMemoryDC MemDC(PaintDC.m_hDC, m_rtClient);
 	
-	//»­°×É«±³¾°
+	//ç”»ç™½è‰²èƒŒæ™¯
 	HBRUSH hBrush = ::CreateSolidBrush(RGB(245, 251, 255));
 	HBRUSH hOldBrush = (HBRUSH)::SelectObject(MemDC.m_hDC, hBrush);
 	::PatBlt(MemDC.m_hDC, m_rtClient.left, m_rtClient.top, m_rtClient.Width(), m_rtClient.Height(), PATCOPY);
@@ -132,13 +132,13 @@ void CChatTabMgr::DrawTabItem(HDC hDC, size_t nIndex)
 		::SetTextColor(hDC, RGB(128, 128, 128));
 	CRect rtRect(0, 0, 0, 0);
 	long nLength =  _tcslen(m_arrWindowInfo[nIndex].szTitle);
-	//ÏÈ¼ÆËãÎÄ×ÖµÄ³¤¶È
+	//å…ˆè®¡ç®—æ–‡å­—çš„é•¿åº¦
 	::DrawText(hDC, m_arrWindowInfo[nIndex].szTitle, nLength, &rtRect, DT_SINGLELINE|DT_CALCRECT);
 	rtRect.bottom = m_rtClient.Height();
 	rtRect.left += m_nLeft;
 	rtRect.right += m_nLeft;
 	
-	//»­±ß¿ò
+	//ç”»è¾¹æ¡†
 	CRect rtBorder;
 	if(m_arrWindowInfo[nIndex].bEnableClose)
 		::SetRect(&rtBorder, rtRect.left, rtRect.top, rtRect.right+22, rtRect.bottom);
@@ -153,11 +153,11 @@ void CChatTabMgr::DrawTabItem(HDC hDC, size_t nIndex)
 		::LineTo(hDC, rtBorder.right+300, rtBorder.bottom-1);
 	}
 	
-	//»­±êÇ©ÎÄ×Ö
+	//ç”»æ ‡ç­¾æ–‡å­—
 	CRect rtText(rtRect.left+5, rtRect.top, rtRect.right+5, rtRect.bottom);
 	::DrawText(hDC, m_arrWindowInfo[nIndex].szTitle, nLength, &rtText, DT_LEFT|DT_SINGLELINE|DT_VCENTER|DT_END_ELLIPSIS);
 	
-	//»­¹Ø±Õ°´Å¥
+	//ç”»å…³é—­æŒ‰é’®
 	HPEN hPenClose = NULL;
 	if(m_arrWindowInfo[nIndex].bHover)
 		hPenClose = ::CreatePen(PS_SOLID, 1, RGB(255, 0, 0));

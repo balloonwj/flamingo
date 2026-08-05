@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <vector>
 #include <string>
@@ -33,27 +33,27 @@
 BOOL ToHexStr(const CHAR* lpStr, int nSrcLen, CHAR* lpHex, int nDestLen);
 BOOL StrToHex(const CHAR* lpStr, CHAR* lpHex, int nLen);
 
-u_short Swap16(u_short nValue);		// 16Î»ÕûĞÍÊı¾İÍøÂç×Ö½ÚĞòÓëÕı³£×Ö½ÚĞò×ª»»
-u_long Swap32(u_long nValue);		// 32Î»ÕûĞÍÊı¾İÍøÂç×Ö½ÚĞòÓëÕı³£×Ö½ÚĞò×ª»»
+u_short Swap16(u_short nValue);		// 16ä½æ•´å‹æ•°æ®ç½‘ç»œå­—èŠ‚åºä¸æ­£å¸¸å­—èŠ‚åºè½¬æ¢
+u_long Swap32(u_long nValue);		// 32ä½æ•´å‹æ•°æ®ç½‘ç»œå­—èŠ‚åºä¸æ­£å¸¸å­—èŠ‚åºè½¬æ¢
 
 COLORREF HexStrToRGB(LPCTSTR lpszStr);
 void RGBToHexStr(COLORREF color, TCHAR* lpBuf, int nLen);
 
-time_t DateToUTCSeconds(long nYear, long nMonth, long nDay);				//½«ÈÕÆÚ×ª»»³ÉUTCÃëÊı
+time_t DateToUTCSeconds(long nYear, long nMonth, long nDay);				//å°†æ—¥æœŸè½¬æ¢æˆUTCç§’æ•°
 void FormatTime(time_t lTime, LPCTSTR lpFmt, TCHAR* lpBuf, int nLen);
 BOOL IsToday(time_t lTime);
 
 BOOL IsToday(SYSTEMTIME* lpTime);
-BOOL GetFileLastWriteTime(LPCTSTR lpszFileName, SYSTEMTIME* lpSysTime);	// »ñÈ¡ÎÄ¼ş×îºóĞŞ¸ÄÊ±¼ä
+BOOL GetFileLastWriteTime(LPCTSTR lpszFileName, SYSTEMTIME* lpSysTime);	// è·å–æ–‡ä»¶æœ€åä¿®æ”¹æ—¶é—´
 
-BOOL File_ReadAll(const TCHAR* lpszFileName, CHAR**lpData, LONG*lSize);	// ¶ÁÈ¡Õû¸öÎÄ¼ş
+BOOL File_ReadAll(const TCHAR* lpszFileName, CHAR**lpData, LONG*lSize);	// è¯»å–æ•´ä¸ªæ–‡ä»¶
 
-BOOL my_isalnum(unsigned char cChar);		// ¼ì²âÖ¸¶¨×Ö·ûÊÇ·ñÊÇ×ÖÄ¸(A-Z£¬a-z)»òÊı×Ö(0-9)
-BOOL my_isalnum(wchar_t cChar);				// ¼ì²âÖ¸¶¨×Ö·ûÊÇ·ñÊÇ×ÖÄ¸(A-Z£¬a-z)»òÊı×Ö(0-9)
+BOOL my_isalnum(unsigned char cChar);		// æ£€æµ‹æŒ‡å®šå­—ç¬¦æ˜¯å¦æ˜¯å­—æ¯(A-Zï¼Œa-z)æˆ–æ•°å­—(0-9)
+BOOL my_isalnum(wchar_t cChar);				// æ£€æµ‹æŒ‡å®šå­—ç¬¦æ˜¯å¦æ˜¯å­—æ¯(A-Zï¼Œa-z)æˆ–æ•°å­—(0-9)
 
-BOOL EnumSysFont(std::vector<tstring>* arrSysFont);	// Ã¶¾ÙÏµÍ³×ÖÌå
-BOOL FlashWindowEx(HWND hWnd, int nCount);				// ÉÁË¸´°¿Ú±êÌâÀ¸
-BOOL GetTrayWndRect(RECT* lpRect);						// »ñÈ¡ÏµÍ³ÈÎÎñÀ¸ÇøÓò
+BOOL EnumSysFont(std::vector<tstring>* arrSysFont);	// æšä¸¾ç³»ç»Ÿå­—ä½“
+BOOL FlashWindowEx(HWND hWnd, int nCount);				// é—ªçƒçª—å£æ ‡é¢˜æ 
+BOOL GetTrayWndRect(RECT* lpRect);						// è·å–ç³»ç»Ÿä»»åŠ¡æ åŒºåŸŸ
 
 BOOL IsDigit(const WCHAR* lpStr);
 void Replace(std::string& strText, const CHAR* lpOldStr, const CHAR* lpNewStr);
@@ -64,8 +64,8 @@ void ToLower(std::wstring& strText);
 WCHAR ToUpper(WCHAR c);
 void ToUpper(WCHAR* lpText);
 void ToUpper(std::wstring& strText);
-void EncodeHtmlSpecialChars(std::wstring& strText);		// ±àÂëHtmlÌØÊâ×Ö·û
-void DecodeHtmlSpecialChars(std::wstring& strText);		// ½âÂëHtmlÌØÊâ×Ö·û
+void EncodeHtmlSpecialChars(std::wstring& strText);		// ç¼–ç Htmlç‰¹æ®Šå­—ç¬¦
+void DecodeHtmlSpecialChars(std::wstring& strText);		// è§£ç Htmlç‰¹æ®Šå­—ç¬¦
 
 tstring GetBetweenString(const TCHAR* pStr, TCHAR cStart, TCHAR cEnd);
 int GetBetweenInt(const TCHAR* pStr, TCHAR cStart, TCHAR cEnd, int nDefValue = 0);
@@ -85,32 +85,32 @@ CLSID GetEncoderClsidByMimeType(const WCHAR* lpMimeType);
 
 time_t httpdate_parse(const TCHAR*date);
 
-BOOL CheckOnlyOneInstance();			//¼ì²â³ÌĞòÔËĞĞÊµÀı
+BOOL CheckOnlyOneInstance();			//æ£€æµ‹ç¨‹åºè¿è¡Œå®ä¾‹
 
-long GetFileCountOfSpecifiDirectory(PCSTR pszDirectoryName, PCTSTR pszFileExtension);	//»ñÈ¡Ö¸¶¨ÎÄ¼şÖĞÄ³ÖÖÀàĞÍÎÄ¼ş¸öÊı
+long GetFileCountOfSpecifiDirectory(PCSTR pszDirectoryName, PCTSTR pszFileExtension);	//è·å–æŒ‡å®šæ–‡ä»¶ä¸­æŸç§ç±»å‹æ–‡ä»¶ä¸ªæ•°
 
 void SplitString(const CString& strSource, PCTSTR pszDelimiter, std::vector<CString>& aryStringArray);
 
-DWORD GetNetcard(BYTE Address[8][6]);	//»ñÈ¡±¾»úÍø¿¨
+DWORD GetNetcard(BYTE Address[8][6]);	//è·å–æœ¬æœºç½‘å¡
 
 HICON ExtractIcon(LPCTSTR lpszFileName, long nSize);
 
 BOOL GetImageWidthAndHeight(LPCTSTR lpszFileName, long& nWidth, long& nHeight);
 
-//¼ì²âµ±Ç°ÍøÂç×´Ì¬µÄº¯Êı
+//æ£€æµ‹å½“å‰ç½‘ç»œçŠ¶æ€çš„å‡½æ•°
 BOOL IUIsNetworkAlive();
 BOOL IUGetConnectedState();
 
 
-//·µ»ØÖµÊÇÈÎÎñÀ¸µÄ¸ß¶ÈºÍ·½Ïò
+//è¿”å›å€¼æ˜¯ä»»åŠ¡æ çš„é«˜åº¦å’Œæ–¹å‘
 long GetTaskbarDirectionAndRect(CRect& rtTaskbar);
 
-//½«Í¼Æ¬×ª»»³ÉÖ¸¶¨¸ñÊ½
+//å°†å›¾ç‰‡è½¬æ¢æˆæŒ‡å®šæ ¼å¼
 int TransformImage(PCTSTR lpSrcFile, PCTSTR lpDstExt, long nDestWidth, long nDestHeight, CString& strDstFile);
 BOOL GetImageCLSID(PCTSTR format, CLSID* pCLSID);
 
 BOOL CenterWindow2(HWND hTargetWnd, HWND hWndCenter = NULL);
-//½«Ò»¸öÆÁÄ»Î»ÖÃ×ª»»³É´°¿ÚÎ»ÖÃ
+//å°†ä¸€ä¸ªå±å¹•ä½ç½®è½¬æ¢æˆçª—å£ä½ç½®
 void ScreenToClient(HWND hwnd, RECT& rt);
 
 BOOL IsMobileNumber(PCTSTR pszNumber);

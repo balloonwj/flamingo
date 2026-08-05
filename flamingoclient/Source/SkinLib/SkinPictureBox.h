@@ -1,12 +1,12 @@
-#pragma once
+ï»¿#pragma once
 
 #include "SkinManager.h"
 #include "../GifImage.h"
 
-enum DRAW_MODE	// »æÍ¼Ä£Ê½
+enum DRAW_MODE	// ç»˜å›¾æ¨¡å¼
 {
-	DRAW_MODE_STRETCH,	// À­Éì
-	DRAW_MODE_CENTER	// ¾ÓÖĞ
+	DRAW_MODE_STRETCH,	// æ‹‰ä¼¸
+	DRAW_MODE_CENTER	// å±…ä¸­
 };
 
 class CSkinPictureBox : public CWindowImpl<CSkinPictureBox, CStatic>
@@ -32,7 +32,7 @@ public:
 
 public:
 	BOOL SetBgPic(LPCTSTR lpNormal, LPCTSTR lpHighlight, LPCTSTR lpDown);
-	BOOL SetBitmap(LPCTSTR lpszFileName, BOOL bIsGif = FALSE, BOOL bGray=FALSE);	// ÉèÖÃGifĞèÒª¾ø¶ÔÂ·¾¶
+	BOOL SetBitmap(LPCTSTR lpszFileName, BOOL bIsGif = FALSE, BOOL bGray=FALSE);	// è®¾ç½®Giféœ€è¦ç»å¯¹è·¯å¾„
 	BOOL SetBitmapWithoutCache(LPCTSTR lpszFileName, BOOL bIsGif = FALSE, BOOL bGray=FALSE);
 	BOOL SetBitmap(const BYTE* lpData, DWORD dwSize);
 	BOOL SetMobileBitmap(LPCTSTR lpszFileName, BOOL bShow = FALSE);
@@ -43,7 +43,7 @@ public:
 
 	BOOL SubclassWindow(HWND hWnd);
 	inline BOOL GetPress() { return m_bPress; }
-	void   SetSelectedStatus(BOOL bSelectedStatus);					//ÉèÖÃÑ¡ÖĞ×´Ì¬
+	void   SetSelectedStatus(BOOL bSelectedStatus);					//è®¾ç½®é€‰ä¸­çŠ¶æ€
 
 private:
 	BOOL OnEraseBkgnd(CDCHandle dc);
@@ -78,7 +78,7 @@ private:
 
 	BOOL			m_bSelectedStatus;
 
-	BOOL			m_bGray;			//Í¼Æ¬ÊÇ·ñÒÔ»Ò¶ÈÄ£Ê½ÏÔÊ¾(Ö»¶Ô¾²Ì¬Í¼ĞÎÆğ×÷ÓÃ£¬²»ÄÜÕë¶ÔgifÍ¼Ïñ)
+	BOOL			m_bGray;			//å›¾ç‰‡æ˜¯å¦ä»¥ç°åº¦æ¨¡å¼æ˜¾ç¤º(åªå¯¹é™æ€å›¾å½¢èµ·ä½œç”¨ï¼Œä¸èƒ½é’ˆå¯¹gifå›¾åƒ)
 	BOOL			m_bUseCache;
 	BOOL			m_bShowMobileImage;
 

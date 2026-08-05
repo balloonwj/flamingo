@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
-//±£´æÁÄÌìÍ¼Æ¬µÄÎÄ¼şÃû
+//ä¿å­˜èŠå¤©å›¾ç‰‡çš„æ–‡ä»¶å
 void GenerateChatImageSavedName(CString& strFileName);

@@ -1,25 +1,25 @@
-#pragma once
+ï»¿#pragma once
 
 #include <vector>
 
-struct CASCADE_WIN_INFO			// ²ãµş´°¿ÚĞÅÏ¢
+struct CASCADE_WIN_INFO			// å±‚å çª—å£ä¿¡æ¯
 {
-	HWND hWnd;					// ´°¿Ú¾ä±ú
-	POINT pt;					// ´°¿Ú×óÉÏ½Ç×ø±ê
+	HWND hWnd;					// çª—å£å¥æŸ„
+	POINT pt;					// çª—å£å·¦ä¸Šè§’åæ ‡
 };
 
-class CCascadeWinManager		// ²ãµş´°¿Ú¹ÜÀíÆ÷
+class CCascadeWinManager		// å±‚å çª—å£ç®¡ç†å™¨
 {
 public:
 	CCascadeWinManager(void);
 	~CCascadeWinManager(void);
 
 public:
-	BOOL Add(HWND hWnd, int cx, int cy);				// Ìí¼Ó´°¿Ú£¬²¢²ãµşÏÔÊ¾
-	void Del(HWND hWnd);								// É¾³ı´°¿Ú
-	BOOL SetPos(HWND hWnd, int x, int y);				// ÉèÖÃ´°¿ÚÎ»ÖÃ
-	void Clear();										// Çå³ıËùÓĞ´°¿Ú
+	BOOL Add(HWND hWnd, int cx, int cy);				// æ·»åŠ çª—å£ï¼Œå¹¶å±‚å æ˜¾ç¤º
+	void Del(HWND hWnd);								// åˆ é™¤çª—å£
+	BOOL SetPos(HWND hWnd, int x, int y);				// è®¾ç½®çª—å£ä½ç½®
+	void Clear();										// æ¸…é™¤æ‰€æœ‰çª—å£
 
 private:
-	std::vector<CASCADE_WIN_INFO*> m_arrWinInfo;		// ´°¿ÚĞÅÏ¢Êı×é
+	std::vector<CASCADE_WIN_INFO*> m_arrWinInfo;		// çª—å£ä¿¡æ¯æ•°ç»„
 };

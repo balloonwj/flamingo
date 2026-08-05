@@ -1,10 +1,10 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "SkinDialog.h"
 
 
 #ifdef DrawEclosionText
 
-// »æÖÆÓğ»¯ÎÄ×Ö
+// ç»˜åˆ¶ç¾½åŒ–æ–‡å­—
 void DrawEclosionText(HDC hDC, LPCTSTR lpszText, LPCTSTR lpszFontName, int nFontSize)
 {
 	int nWidth = 56, nHeight = 16;
@@ -235,7 +235,7 @@ BOOL CSkinDialog::SubclassWindow(HWND hWnd)
 	dwStyle &= ~WS_CAPTION;
 	dwStyle &= ~DS_3DLOOK;
 	dwStyle &= ~DS_FIXEDSYS;
-	dwStyle &= ~WS_CLIPCHILDREN;	// WS_CLIPCHILDREN£º²Ã¼ô×Ó´°¿ÚÑùÊ½£¬Èç¹ûÉèÖÃÁË¸ÃÑùÊ½£¬ÔÚ¸¸´°¿ÚÖØ»æÊ±¾Í²»»á»æÖÆ×Ó´°¿ÚÇøÓò
+	dwStyle &= ~WS_CLIPCHILDREN;	// WS_CLIPCHILDRENï¼šè£å‰ªå­çª—å£æ ·å¼ï¼Œå¦‚æœè®¾ç½®äº†è¯¥æ ·å¼ï¼Œåœ¨çˆ¶çª—å£é‡ç»˜æ—¶å°±ä¸ä¼šç»˜åˆ¶å­çª—å£åŒºåŸŸ
 //	dwStyle |= WS_CLIPCHILDREN|WS_CLIPSIBLINGS;
 	SetWindowLong(GWL_STYLE, dwStyle);
 
@@ -430,17 +430,17 @@ void CSkinDialog::OnPaint(CDCHandle dc)
     MemDC.FillSolidRect(&rcClient, m_clrBg);
 
 	//m_clrBg = RGB(255, 0, 0);
-	if (m_lpBgImg != NULL && !m_lpBgImg->IsNull())	// Ìî³ä±³¾°Í¼Æ¬
+	if (m_lpBgImg != NULL && !m_lpBgImg->IsNull())	// å¡«å……èƒŒæ™¯å›¾ç‰‡
 	{
 		MemDC.FillSolidRect(&rcClient, m_clrBg);
 		m_lpBgImg->Draw2(MemDC.m_hDC, rcClient);
 	}
-	//else	// Ìî³ä±³¾°ÑÕÉ«
+	//else	// å¡«å……èƒŒæ™¯é¢œè‰²
 	//{
 	//	;
 	//}
 
-	if (m_lpTitleBarBgImg != NULL && !m_lpTitleBarBgImg->IsNull())	// Ìî³ä±êÌâÀ¸±³¾°Í¼Æ¬
+	if (m_lpTitleBarBgImg != NULL && !m_lpTitleBarBgImg->IsNull())	// å¡«å……æ ‡é¢˜æ èƒŒæ™¯å›¾ç‰‡
 	{
 		m_lpTitleBarBgImg->Draw2(MemDC.m_hDC, m_rcTitleBar);
 	}
@@ -454,7 +454,7 @@ void CSkinDialog::OnPaint(CDCHandle dc)
 // 	MemDC.SelectBrush(hOldBrush);
 // 	::DeleteObject(hPen);
 
-	if (m_bHasMinBtn)	// »æÖÆ×îĞ¡»¯°´Å¥
+	if (m_bHasMinBtn)	// ç»˜åˆ¶æœ€å°åŒ–æŒ‰é’®
 	{
 		if (m_bMinBtnPress)
 		{
@@ -473,9 +473,9 @@ void CSkinDialog::OnPaint(CDCHandle dc)
 		}
 	}
 
-	if (m_bHasMaxBtn)	// »æÖÆ×î´ó»¯°´Å¥
+	if (m_bHasMaxBtn)	// ç»˜åˆ¶æœ€å¤§åŒ–æŒ‰é’®
 	{
-		if (IsZoomed())		// ´°¿Ú×î´ó»¯±êÖ¾
+		if (IsZoomed())		// çª—å£æœ€å¤§åŒ–æ ‡å¿—
 		{
 			if (m_bMaxBtnPress)
 			{
@@ -513,7 +513,7 @@ void CSkinDialog::OnPaint(CDCHandle dc)
 		}
 	}
 
-	if (m_bHasCloseBtn)	// »æÖÆ¹Ø±Õ°´Å¥
+	if (m_bHasCloseBtn)	// ç»˜åˆ¶å…³é—­æŒ‰é’®
 	{
 		if (m_bCloseBtnPress)
 		{
@@ -535,12 +535,12 @@ void CSkinDialog::OnPaint(CDCHandle dc)
 	int nTitleTextLen = m_strTitleText.GetLength();
 	if (nTitleTextLen > 0)
 	{
-		//DrawEclosionText(MemDC.m_hDC, m_strTitleText, _T("Î¢ÈíÑÅºÚ"), 12);
+		//DrawEclosionText(MemDC.m_hDC, m_strTitleText, _T("å¾®è½¯é›…é»‘"), 12);
 
  		CRect rcText(m_rcTitleBar);
  		rcText.left += 8;
  
- 		NONCLIENTMETRICS nif;						//´´½¨±êÌâÀ¸×ÖÌå¶ÔÏó
+ 		NONCLIENTMETRICS nif;						//åˆ›å»ºæ ‡é¢˜æ å­—ä½“å¯¹è±¡
  		nif.cbSize = sizeof(nif);
  		::SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(NONCLIENTMETRICS), &nif, 0);
  		HFONT hFont = ::CreateFontIndirect(&nif.lfSmCaptionFont);
@@ -673,7 +673,7 @@ void CSkinDialog::OnMouseMove(UINT nFlags, CPoint point)
 					m_bCloseBtnHover = FALSE;
 					InvalidateRect(&rcSysBtn);
 
-					UpdateTooltip(FALSE, _T("×îĞ¡»¯"));
+					UpdateTooltip(FALSE, _T("æœ€å°åŒ–"));
 				}
 			}
 			else if (nHitTest == HTMAXBUTTON)
@@ -686,9 +686,9 @@ void CSkinDialog::OnMouseMove(UINT nFlags, CPoint point)
 					InvalidateRect(&rcSysBtn);
 
 					if(IsZoomed())
-						UpdateTooltip(FALSE, _T("»¹Ô­"));
+						UpdateTooltip(FALSE, _T("è¿˜åŸ"));
 					else
-						UpdateTooltip(FALSE, _T("×î´ó»¯"));
+						UpdateTooltip(FALSE, _T("æœ€å¤§åŒ–"));
 				}
 			}
 			else if (nHitTest == HTCLOSE)
@@ -700,7 +700,7 @@ void CSkinDialog::OnMouseMove(UINT nFlags, CPoint point)
 					m_bCloseBtnHover = TRUE;
 					InvalidateRect(&rcSysBtn);
 
-					UpdateTooltip(FALSE, _T("¹Ø±Õ"));
+					UpdateTooltip(FALSE, _T("å…³é—­"));
 				}
 			}
 		}
@@ -813,7 +813,7 @@ void CSkinDialog::OnSize(UINT nType, CSize size)
 
 void CSkinDialog::OnDestroy()
 {
-	if (m_ToolTipCtrl.IsWindow())	//TODO: ToolTipCtrlÔçÔÚÖ®Ç°µÄ²»ÖªµÀÊ²Ã´µØ·½ÒÑÏú»Ù£¬ÕâÀïÏÔÊ½ÖÃ¿Õm_hWnd
+	if (m_ToolTipCtrl.IsWindow())	//TODO: ToolTipCtrlæ—©åœ¨ä¹‹å‰çš„ä¸çŸ¥é“ä»€ä¹ˆåœ°æ–¹å·²é”€æ¯ï¼Œè¿™é‡Œæ˜¾å¼ç½®ç©ºm_hWnd
 		m_ToolTipCtrl.DestroyWindow();
 	m_ToolTipCtrl.m_hWnd = NULL;
 	
@@ -947,7 +947,7 @@ void CSkinDialog::UpdateTooltip(BOOL bRemove, PCTSTR lpszTipText)
 	if (m_ToolTipCtrl.GetToolCount() <= 0)
 	{
 		m_ToolTipCtrl.Activate(TRUE);
-		//TODO: Ã²ËÆm_rcTitleBar¸ù±¾²»Æğ×÷ÓÃ£¬ÎŞÂÛÉèÖÃm_rcTitleBarÎª¶à´ó£¬tooltip¾ù»áÏÔÊ¾ÔÚÏÂ·½
+		//TODO: è²Œä¼¼m_rcTitleBaræ ¹æœ¬ä¸èµ·ä½œç”¨ï¼Œæ— è®ºè®¾ç½®m_rcTitleBarä¸ºå¤šå¤§ï¼Œtooltipå‡ä¼šæ˜¾ç¤ºåœ¨ä¸‹æ–¹
 		m_ToolTipCtrl.AddTool(m_hWnd, lpszTipText, &m_rcTitleBar, 1);
 	}
 	else

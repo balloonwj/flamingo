@@ -10,6 +10,15 @@
     <Filter Include="base">
       <UniqueIdentifier>{25dd53c6-6062-45bb-a73f-96de33c45a2b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="dbapi">
+      <UniqueIdentifier>{6b1c9f4a-3d27-4a51-9c8e-2f7b5a0d81c3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sqliteapi">
+      <UniqueIdentifier>{9d4e7c21-5a83-42b6-b0f7-1e6c8d3a90f5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sqlite3">
+      <UniqueIdentifier>{3f8a62d5-7b19-4e0c-8d24-5c9f1b7e46a8}</UniqueIdentifier>
+    </Filter>
     <Filter Include="mysqlapi">
       <UniqueIdentifier>{1f037ea0-8622-4ceb-8f00-caab409c8398}</UniqueIdentifier>
     </Filter>
@@ -25,9 +34,222 @@
     <Filter Include="chatserversrc">
       <UniqueIdentifier>{d9196d7f-1f47-46ce-aa16-ea105de881c4}</UniqueIdentifier>
     </Filter>
+    <Filter Include="chatserversrc\core">
+      <UniqueIdentifier>{cd15beb5-6b80-4c4e-9d6b-d7c793339659}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="chatserversrc\admin">
+      <UniqueIdentifier>{426cf0c0-6fad-4ed0-bcf7-be0c17e9d2a3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="chatserversrc\app">
+      <UniqueIdentifier>{3281e529-1d00-423c-a92a-d359142f8e8c}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\base\AsyncLog.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\ConfigFileReader.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\CountDownLatch.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\Platform.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\Timestamp.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\BussinessLogic.cpp">
+      <Filter>chatserversrc\core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\ChatServer.cpp">
+      <Filter>chatserversrc\core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\ChatSession.cpp">
+      <Filter>chatserversrc\core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\LoginProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\ContactsProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\ProfileProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\RegisterProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\SmsCodeManager.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\FriendProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\MessageProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\RemoteDesktopProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\RemoteDesktopManager.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\CallProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\CallManager.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\MessageManager.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\MessagePinManager.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\GroupProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\GroupPermission.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\GroupManager.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\CardProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\CardManager.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\FileProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\FileStoreManager.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\GroupFileProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\GroupFileManager.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\FileToken.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\RelayToken.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\FrameCodec.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\PasswordHasher.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\DepartmentManager.cpp">
+      <Filter>chatserversrc\admin</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\DepartmentMsg.cpp">
+      <Filter>chatserversrc\admin</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\DepartmentPath.cpp">
+      <Filter>chatserversrc\admin</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\AdminManager.cpp">
+      <Filter>chatserversrc\admin</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\EnterpriseManager.cpp">
+      <Filter>chatserversrc\admin</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\EmployeeManager.cpp">
+      <Filter>chatserversrc\admin</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\AnnouncementManager.cpp">
+      <Filter>chatserversrc\admin</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\ServiceAccountManager.cpp">
+      <Filter>chatserversrc\admin</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\HttpServer.cpp">
+      <Filter>chatserversrc\admin</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\HttpSession.cpp">
+      <Filter>chatserversrc\admin</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\main.cpp">
+      <Filter>chatserversrc\core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\MonitorServer.cpp">
+      <Filter>chatserversrc\core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\MonitorSession.cpp">
+      <Filter>chatserversrc\core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\TcpSession.cpp">
+      <Filter>chatserversrc\core</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\UserManager.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp">
+      <Filter>jsoncpp1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\jsoncpp1.9.0\json_value.cpp">
+      <Filter>jsoncpp1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\jsoncpp1.9.0\json_writer.cpp">
+      <Filter>jsoncpp1.9.0</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mysqlapi\DatabaseMysql.cpp">
+      <Filter>mysqlapi</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dbapi\Field.cpp">
+      <Filter>dbapi</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dbapi\QueryResult.cpp">
+      <Filter>dbapi</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dbapi\DbConfig.cpp">
+      <Filter>dbapi</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dbapi\DbFactory.cpp">
+      <Filter>dbapi</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mysqlapi\MysqlQueryResult.cpp">
+      <Filter>mysqlapi</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sqliteapi\DatabaseSqlite.cpp">
+      <Filter>sqliteapi</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sqliteapi\SqliteQueryResult.cpp">
+      <Filter>sqliteapi</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sqliteapi\SqliteFunctions.cpp">
+      <Filter>sqliteapi</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sqliteapi\SqliteSqlTranslator.cpp">
+      <Filter>sqliteapi</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sqlite3\sqlite3.c">
+      <Filter>sqlite3</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mysqlmgr\MysqlManager.cpp">
+      <Filter>mysqlmgr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mysqlmgr\MysqlThrd.cpp">
+      <Filter>mysqlmgr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mysqlmgr\MysqlThrdMgr.cpp">
+      <Filter>mysqlmgr</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mysqlmgr\TaskList.cpp">
+      <Filter>mysqlmgr</Filter>
+    </ClCompile>
     <ClCompile Include="..\net\Acceptor.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\ByteBuffer.cpp">
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="..\net\Channel.cpp">
@@ -81,51 +303,6 @@
     <ClCompile Include="..\net\TimerQueue.cpp">
       <Filter>net</Filter>
     </ClCompile>
-    <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClCompile>
-    <ClCompile Include="..\jsoncpp1.9.0\json_value.cpp">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClCompile>
-    <ClCompile Include="..\jsoncpp1.9.0\json_writer.cpp">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClCompile>
-    <ClCompile Include="..\base\AsyncLog.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\base\ConfigFileReader.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\base\CountDownLatch.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\base\Platform.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\base\Timestamp.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\mysqlapi\DatabaseMysql.cpp">
-      <Filter>mysqlapi</Filter>
-    </ClCompile>
-    <ClCompile Include="..\mysqlapi\Field.cpp">
-      <Filter>mysqlapi</Filter>
-    </ClCompile>
-    <ClCompile Include="..\mysqlapi\QueryResult.cpp">
-      <Filter>mysqlapi</Filter>
-    </ClCompile>
-    <ClCompile Include="..\mysqlmgr\MysqlManager.cpp">
-      <Filter>mysqlmgr</Filter>
-    </ClCompile>
-    <ClCompile Include="..\mysqlmgr\MysqlThrd.cpp">
-      <Filter>mysqlmgr</Filter>
-    </ClCompile>
-    <ClCompile Include="..\mysqlmgr\MysqlThrdMgr.cpp">
-      <Filter>mysqlmgr</Filter>
-    </ClCompile>
-    <ClCompile Include="..\mysqlmgr\TaskList.cpp">
-      <Filter>mysqlmgr</Filter>
-    </ClCompile>
     <ClCompile Include="..\utils\DaemonRun.cpp">
       <Filter>utils</Filter>
     </ClCompile>
@@ -136,6 +313,9 @@
       <Filter>utils</Filter>
     </ClCompile>
     <ClCompile Include="..\utils\URLEncodeUtil.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\UUIDGenerator.cpp">
       <Filter>utils</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\adler32.c">
@@ -189,48 +369,258 @@
     <ClCompile Include="..\zlib1.2.11\zutil.c">
       <Filter>zlib1.2.11</Filter>
     </ClCompile>
-    <ClCompile Include="..\chatserversrc\BussinessLogic.cpp">
-      <Filter>chatserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\chatserversrc\ChatServer.cpp">
-      <Filter>chatserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\chatserversrc\ChatSession.cpp">
-      <Filter>chatserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\chatserversrc\HttpServer.cpp">
-      <Filter>chatserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\chatserversrc\HttpSession.cpp">
-      <Filter>chatserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\chatserversrc\main.cpp">
-      <Filter>chatserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\chatserversrc\MonitorServer.cpp">
-      <Filter>chatserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\chatserversrc\MonitorSession.cpp">
-      <Filter>chatserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\chatserversrc\MsgCacheManager.cpp">
-      <Filter>chatserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\chatserversrc\TcpSession.cpp">
-      <Filter>chatserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\chatserversrc\UserManager.cpp">
-      <Filter>chatserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\utils\UUIDGenerator.cpp">
-      <Filter>utils</Filter>
-    </ClCompile>
-    <ClCompile Include="..\net\ByteBuffer.cpp">
-      <Filter>net</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\base\AsyncLog.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\ConfigFileReader.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\CountDownLatch.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\Platform.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\RAIIWrapper.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\Singleton.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\Timestamp.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\BussinessLogic.h">
+      <Filter>chatserversrc\core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\ChatServer.h">
+      <Filter>chatserversrc\core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\ChatSession.h">
+      <Filter>chatserversrc\core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\LoginProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\ContactsProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\ProfileProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\RegisterProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\SmsCodeManager.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\FriendProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\MessageProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\RemoteDesktopProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\RemoteDesktopManager.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\CallProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\CallManager.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\MessageManager.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\MessagePinManager.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\GroupProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\GroupPermission.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\GroupManager.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\CardProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\CardManager.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\FileProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\FileStoreManager.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\GroupFileProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\GroupFileManager.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\FileToken.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\RelayToken.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\Protocol.h">
+      <Filter>chatserversrc\core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\FrameCodec.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\PasswordHasher.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\DepartmentManager.h">
+      <Filter>chatserversrc\admin</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\DepartmentMsg.h">
+      <Filter>chatserversrc\admin</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\DepartmentPath.h">
+      <Filter>chatserversrc\admin</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\AdminManager.h">
+      <Filter>chatserversrc\admin</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\EnterpriseManager.h">
+      <Filter>chatserversrc\admin</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\EmployeeManager.h">
+      <Filter>chatserversrc\admin</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\AnnouncementManager.h">
+      <Filter>chatserversrc\admin</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\ServiceAccountManager.h">
+      <Filter>chatserversrc\admin</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\HttpMsg.h">
+      <Filter>chatserversrc\admin</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\HttpServer.h">
+      <Filter>chatserversrc\admin</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\HttpSession.h">
+      <Filter>chatserversrc\admin</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\MonitorServer.h">
+      <Filter>chatserversrc\core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\MonitorSession.h">
+      <Filter>chatserversrc\core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\Msg.h">
+      <Filter>chatserversrc\core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\TcpSession.h">
+      <Filter>chatserversrc\core</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\UserManager.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\jsoncpp1.9.0\allocator.h">
+      <Filter>jsoncpp1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="..\jsoncpp1.9.0\assertions.h">
+      <Filter>jsoncpp1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="..\jsoncpp1.9.0\autolink.h">
+      <Filter>jsoncpp1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="..\jsoncpp1.9.0\config.h">
+      <Filter>jsoncpp1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="..\jsoncpp1.9.0\features.h">
+      <Filter>jsoncpp1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="..\jsoncpp1.9.0\forwards.h">
+      <Filter>jsoncpp1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="..\jsoncpp1.9.0\json.h">
+      <Filter>jsoncpp1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="..\jsoncpp1.9.0\json_tool.h">
+      <Filter>jsoncpp1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="..\jsoncpp1.9.0\reader.h">
+      <Filter>jsoncpp1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="..\jsoncpp1.9.0\value.h">
+      <Filter>jsoncpp1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="..\jsoncpp1.9.0\version.h">
+      <Filter>jsoncpp1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="..\jsoncpp1.9.0\writer.h">
+      <Filter>jsoncpp1.9.0</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mysqlapi\DatabaseMysql.h">
+      <Filter>mysqlapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dbapi\Field.h">
+      <Filter>dbapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dbapi\QueryResult.h">
+      <Filter>dbapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dbapi\IDatabase.h">
+      <Filter>dbapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dbapi\DbConfig.h">
+      <Filter>dbapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dbapi\DbFactory.h">
+      <Filter>dbapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mysqlapi\MysqlQueryResult.h">
+      <Filter>mysqlapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sqliteapi\DatabaseSqlite.h">
+      <Filter>sqliteapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sqliteapi\SqliteQueryResult.h">
+      <Filter>sqliteapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sqliteapi\SqliteFunctions.h">
+      <Filter>sqliteapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sqliteapi\SqliteSqlTranslator.h">
+      <Filter>sqliteapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sqlite3\sqlite3.h">
+      <Filter>sqlite3</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mysqlmgr\MysqlManager.h">
+      <Filter>mysqlmgr</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mysqlmgr\MysqlTask.h">
+      <Filter>mysqlmgr</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mysqlmgr\MysqlThrd.h">
+      <Filter>mysqlmgr</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mysqlmgr\MysqlThrdMgr.h">
+      <Filter>mysqlmgr</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mysqlmgr\TaskList.h">
+      <Filter>mysqlmgr</Filter>
+    </ClInclude>
     <ClInclude Include="..\net\Acceptor.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\ByteBuffer.h">
       <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="..\net\Callbacks.h">
@@ -293,87 +683,6 @@
     <ClInclude Include="..\net\TimerQueue.h">
       <Filter>net</Filter>
     </ClInclude>
-    <ClInclude Include="..\jsoncpp1.9.0\allocator.h">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClInclude>
-    <ClInclude Include="..\jsoncpp1.9.0\assertions.h">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClInclude>
-    <ClInclude Include="..\jsoncpp1.9.0\autolink.h">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClInclude>
-    <ClInclude Include="..\jsoncpp1.9.0\config.h">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClInclude>
-    <ClInclude Include="..\jsoncpp1.9.0\features.h">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClInclude>
-    <ClInclude Include="..\jsoncpp1.9.0\forwards.h">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClInclude>
-    <ClInclude Include="..\jsoncpp1.9.0\json.h">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClInclude>
-    <ClInclude Include="..\jsoncpp1.9.0\json_tool.h">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClInclude>
-    <ClInclude Include="..\jsoncpp1.9.0\reader.h">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClInclude>
-    <ClInclude Include="..\jsoncpp1.9.0\value.h">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClInclude>
-    <ClInclude Include="..\jsoncpp1.9.0\version.h">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClInclude>
-    <ClInclude Include="..\jsoncpp1.9.0\writer.h">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\AsyncLog.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\ConfigFileReader.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\CountDownLatch.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\Platform.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\RAIIWrapper.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\Singleton.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\Timestamp.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\mysqlapi\DatabaseMysql.h">
-      <Filter>mysqlapi</Filter>
-    </ClInclude>
-    <ClInclude Include="..\mysqlapi\Field.h">
-      <Filter>mysqlapi</Filter>
-    </ClInclude>
-    <ClInclude Include="..\mysqlapi\QueryResult.h">
-      <Filter>mysqlapi</Filter>
-    </ClInclude>
-    <ClInclude Include="..\mysqlmgr\MysqlManager.h">
-      <Filter>mysqlmgr</Filter>
-    </ClInclude>
-    <ClInclude Include="..\mysqlmgr\MysqlTask.h">
-      <Filter>mysqlmgr</Filter>
-    </ClInclude>
-    <ClInclude Include="..\mysqlmgr\MysqlThrd.h">
-      <Filter>mysqlmgr</Filter>
-    </ClInclude>
-    <ClInclude Include="..\mysqlmgr\MysqlThrdMgr.h">
-      <Filter>mysqlmgr</Filter>
-    </ClInclude>
-    <ClInclude Include="..\mysqlmgr\TaskList.h">
-      <Filter>mysqlmgr</Filter>
-    </ClInclude>
     <ClInclude Include="..\utils\DaemonRun.h">
       <Filter>utils</Filter>
     </ClInclude>
@@ -384,6 +693,9 @@
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="..\utils\URLEncodeUtil.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\UUIDGenerator.h">
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.2.11\crc32.h">
@@ -421,48 +733,6 @@
     </ClInclude>
     <ClInclude Include="..\zlib1.2.11\zutil.h">
       <Filter>zlib1.2.11</Filter>
-    </ClInclude>
-    <ClInclude Include="..\chatserversrc\BussinessLogic.h">
-      <Filter>chatserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\chatserversrc\ChatServer.h">
-      <Filter>chatserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\chatserversrc\ChatSession.h">
-      <Filter>chatserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\chatserversrc\HttpMsg.h">
-      <Filter>chatserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\chatserversrc\HttpServer.h">
-      <Filter>chatserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\chatserversrc\HttpSession.h">
-      <Filter>chatserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\chatserversrc\MonitorServer.h">
-      <Filter>chatserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\chatserversrc\MonitorSession.h">
-      <Filter>chatserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\chatserversrc\Msg.h">
-      <Filter>chatserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\chatserversrc\MsgCacheManager.h">
-      <Filter>chatserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\chatserversrc\TcpSession.h">
-      <Filter>chatserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\chatserversrc\UserManager.h">
-      <Filter>chatserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\utils\UUIDGenerator.h">
-      <Filter>utils</Filter>
-    </ClInclude>
-    <ClInclude Include="..\net\ByteBuffer.h">
-      <Filter>net</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

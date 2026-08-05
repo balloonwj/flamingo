@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "File2.h"
 #include "MD5Sum.h"
 #include "MiniBuffer.h"
@@ -8,14 +8,14 @@
 #include "UserSessionData.h"
 #include <stdint.h>
 
-//´ò¿ªÒ»¸öÎÄ¼ş²¢»ñµÃ¸ÃÎÄ¼şµÄ¾ä±ú
+//æ‰“å¼€ä¸€ä¸ªæ–‡ä»¶å¹¶è·å¾—è¯¥æ–‡ä»¶çš„å¥æŸ„
 HANDLE GetFileHandle(PCTSTR pszFileName)
 {
 	HANDLE hFile = ::CreateFile(pszFileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
 	return hFile;
 }
-//»ñÈ¡ÎÄ¼ş´óĞ¡
+//è·å–æ–‡ä»¶å¤§å°
 DWORD IUGetFileSize(PCTSTR pszFileName)
 {
 	HANDLE hFile = GetFileHandle(pszFileName);
@@ -50,7 +50,7 @@ UINT64 IUGetFileSize2(PCTSTR pszFileName)
 	return (((UINT64)fd.nFileSizeHigh) << 32) + (UINT64)fd.nFileSizeLow;
 }
 
-//»ñÈ¡ÎÄ¼şmd5Öµ
+//è·å–æ–‡ä»¶md5å€¼
 long GetFileMd5ValueA(PCTSTR pszFileName, char* pszMd5, long nMd5Length, int64_t& nFileSize, HWND hwndReflection/*=NULL*/, HANDLE hCancelEvent/*=NULL*/)
 {
     nFileSize = 0;
@@ -62,21 +62,21 @@ long GetFileMd5ValueA(PCTSTR pszFileName, char* pszMd5, long nMd5Length, int64_t
 	CAutoFileHandle autoFile(hFile);
     DWORD dwFileSizeHigh;
     DWORD dwFileSizeLow = ::GetFileSize(hFile, &dwFileSizeHigh);
-    //»ñÈ¡ÎÄ¼şÊ§°Ü»òÕß0×Ö½ÚµÄÎÄ¼ş²»ÄÜÉÏ´«
+    //è·å–æ–‡ä»¶å¤±è´¥æˆ–è€…0å­—èŠ‚çš„æ–‡ä»¶ä¸èƒ½ä¸Šä¼ 
     if (dwFileSizeLow == INVALID_FILE_SIZE || (dwFileSizeLow == 0 && dwFileSizeHigh == 0))
 		return GET_FILE_MD5_FAILED;
 
 	BOOL bError = FALSE;
 
     nFileSize = (((int64_t)(((int64_t)dwFileSizeHigh) << 32)) + (int64_t)dwFileSizeLow);
-	//Ã¿´Î×î¶à¶ÁÈ¡500k´óĞ¡
+	//æ¯æ¬¡æœ€å¤šè¯»å–500kå¤§å°
 	int64_t nSizeEachRead = 500*1024;
     if (nFileSize <= nSizeEachRead)
         nSizeEachRead = nFileSize;
 
 	int64_t nFileOffset = 0;
 	BOOL bRet = 0;
-	//¶ÁÈ¡µÄ×Ö½ÚÊı
+	//è¯»å–çš„å­—èŠ‚æ•°
     DWORD dwFileRead = 0;
 	MD5_CTX ctx;
     MD5Init(&ctx);
@@ -89,7 +89,7 @@ long GetFileMd5ValueA(PCTSTR pszFileName, char* pszMd5, long nMd5Length, int64_t
 			return GET_FILE_MD5_USERCANCEL;
 		}
 		
-		//Èç¹ûÊ£ÏÂµÄÎÄ¼ş´óĞ¡ÒÑ¾­²»×ãÒ»¸önSizeEachRead
+		//å¦‚æœå‰©ä¸‹çš„æ–‡ä»¶å¤§å°å·²ç»ä¸è¶³ä¸€ä¸ªnSizeEachRead
         if (nFileOffset + nSizeEachRead > nFileSize)
 			nSizeEachRead = nFileSize-nFileOffset;
 		
@@ -157,7 +157,7 @@ BOOL GetFileMd5ValueW(PCTSTR pszFileName, TCHAR* pszMd5, long nMd5Length)
 	return EncodeUtil::AnsiToUnicode(szMd5, pszMd5, nMd5Length);
 }
 
-//»ñÈ¡ÎÄ¼şµÄÉÏ´«Ãû³Æ£º´óĞ¡|md5Öµ
+//è·å–æ–‡ä»¶çš„ä¸Šä¼ åç§°ï¼šå¤§å°|md5å€¼
 BOOL GetFileUploadName(PCTSTR pszFileName, char* pszUploadName, long nUploadNameLength)
 {
 	char szMd5[40] = {0};
@@ -168,7 +168,7 @@ BOOL GetFileUploadName(PCTSTR pszFileName, char* pszUploadName, long nUploadName
 	sprintf_s(pszUploadName, nUploadNameLength, "%s.%s", szMd5, (char*)Hootina::CPath::GetExtension(pszFileName).c_str());
 	return TRUE;
 }
-//»ñÈ¡ÎÄ¼şÖ¸¶¨²¿·Ö
+//è·å–æ–‡ä»¶æŒ‡å®šéƒ¨åˆ†
 BOOL GetFileData(HANDLE hFile, DWORD dwOffset, DWORD dwLength, char* buffer)
 {
 	::SetFilePointer(hFile, dwOffset, NULL, FILE_BEGIN);
@@ -287,20 +287,20 @@ BOOL CFile::Write(const char* pBuffer, long nSize)
 	DWORD dwBytesWritten = 0;
 	DWORD dwBytesTotal = 0;
 	DWORD dwSizeToWriteEachTime = 4*1024;
-	//Ğ´ÎÄ¼şµÄ´ÎÊı
+	//å†™æ–‡ä»¶çš„æ¬¡æ•°
 	if((DWORD)nSize <= dwSizeToWriteEachTime)
 		dwSizeToWriteEachTime = nSize;
 	
 	do 
 	{
-		//ÎªÁË·ÀÖ¹ÎÄ¼ş½Ï´óÒ»´ÎĞÔĞ´Ê§°Ü£¬ÕâÀïÃ¿´ÎÖ»Ğ´4K
+		//ä¸ºäº†é˜²æ­¢æ–‡ä»¶è¾ƒå¤§ä¸€æ¬¡æ€§å†™å¤±è´¥ï¼Œè¿™é‡Œæ¯æ¬¡åªå†™4K
 		if(!::WriteFile(m_hFile, pBuffer+dwBytesTotal, dwSizeToWriteEachTime, &dwBytesWritten, NULL) || dwBytesWritten!=dwSizeToWriteEachTime)
 			return FALSE;
 
 		dwBytesTotal += dwBytesWritten;
 		if(dwBytesTotal >= (DWORD)nSize)
 			break;
-		else if(nSize-dwBytesTotal <  dwSizeToWriteEachTime)		//Ê£ÏÂµÄ×Ö½ÚÊıÒÑ¾­Ğ¡ÓÚ4K
+		else if(nSize-dwBytesTotal <  dwSizeToWriteEachTime)		//å‰©ä¸‹çš„å­—èŠ‚æ•°å·²ç»å°äº4K
 			dwSizeToWriteEachTime = nSize-dwBytesTotal;
 
 		::SetFilePointer(m_hFile, dwBytesTotal, NULL, FILE_BEGIN);

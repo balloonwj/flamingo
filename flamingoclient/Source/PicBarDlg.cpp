@@ -1,4 +1,4 @@
-#include "stdafx.h"
+Ôªø#include "stdafx.h"
 #include "PicBarDlg.h"
 #include "Path.h"
 
@@ -17,7 +17,7 @@ BOOL CPicBarDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	int nIndex = m_ToolBar.AddItem(301, STBI_STYLE_BUTTON);
 	m_ToolBar.SetItemSize(nIndex, 22, 20);
 	m_ToolBar.SetItemPadding(nIndex, 2);
-	m_ToolBar.SetItemToolTipText(nIndex, _T("µ„ª˜ÃÌº”±Ì«È"));
+	m_ToolBar.SetItemToolTipText(nIndex, _T("ÁÇπÂáªÊ∑ªÂä†Ë°®ÊÉÖ"));
 	m_ToolBar.SetItemBgPic(nIndex, NULL, strCurDir+_T("Image\\FaceEditTipBtn_selected.png"), 
 		strCurDir+_T("Image\\FaceEditTipBtn_selected.png"), CRect(0,0,0,0));
 	m_ToolBar.SetItemIconPic(nIndex, strCurDir+_T("Image\\face_add.png"));
@@ -25,7 +25,7 @@ BOOL CPicBarDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	nIndex = m_ToolBar.AddItem(302, STBI_STYLE_BUTTON);
 	m_ToolBar.SetItemSize(nIndex, 22, 20);
 	m_ToolBar.SetItemPadding(nIndex, 2);
-	m_ToolBar.SetItemToolTipText(nIndex, _T("µ„ª˜¡Ì¥ÊŒ™..."));
+	m_ToolBar.SetItemToolTipText(nIndex, _T("ÁÇπÂáªÂè¶Â≠ò‰∏∫..."));
 	m_ToolBar.SetItemBgPic(nIndex, NULL, strCurDir+_T("Image\\FaceEditTipBtn_selected.png"), 
 		strCurDir+_T("Image\\FaceEditTipBtn_selected.png"), CRect(0,0,0,0));
 	m_ToolBar.SetItemIconPic(nIndex, strCurDir+_T("Image\\save_16.png"));
@@ -33,7 +33,7 @@ BOOL CPicBarDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	nIndex = m_ToolBar.AddItem(303, STBI_STYLE_BUTTON);
 	m_ToolBar.SetItemSize(nIndex, 22, 20);
 	m_ToolBar.SetItemPadding(nIndex, 2);
-	m_ToolBar.SetItemToolTipText(nIndex, _T("µ„ª˜Õø—ª±‡º≠±Ì«È"));
+	m_ToolBar.SetItemToolTipText(nIndex, _T("ÁÇπÂáªÊ∂ÇÈ∏¶ÁºñËæëË°®ÊÉÖ"));
 	m_ToolBar.SetItemBgPic(nIndex, NULL, strCurDir+_T("Image\\FaceEditTipBtn_selected.png"), 
 		strCurDir+_T("Image\\FaceEditTipBtn_selected.png"), CRect(0,0,0,0));
 	m_ToolBar.SetItemIconPic(nIndex, strCurDir+_T("Image\\emotionEdit_20.png"));
@@ -41,7 +41,7 @@ BOOL CPicBarDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	nIndex = m_ToolBar.AddItem(304, STBI_STYLE_BUTTON);
 	m_ToolBar.SetItemSize(nIndex, 22, 20);
 	m_ToolBar.SetItemPadding(nIndex, 2);
-	m_ToolBar.SetItemToolTipText(nIndex, _T("À—À˜œ‡πÿ±Ì«È"));
+	m_ToolBar.SetItemToolTipText(nIndex, _T("ÊêúÁ¥¢Áõ∏ÂÖ≥Ë°®ÊÉÖ"));
 	m_ToolBar.SetItemBgPic(nIndex, NULL, strCurDir+_T("Image\\FaceEditTipBtn_selected.png"), 
 		strCurDir+_T("Image\\FaceEditTipBtn_selected.png"), CRect(0,0,0,0));
 	m_ToolBar.SetItemIconPic(nIndex, strCurDir+_T("Image\\search.png"));
@@ -49,7 +49,7 @@ BOOL CPicBarDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	nIndex = m_ToolBar.AddItem(305, STBI_STYLE_BUTTON);
 	m_ToolBar.SetItemSize(nIndex, 22, 20);
 	m_ToolBar.SetItemPadding(nIndex, 2);
-	m_ToolBar.SetItemToolTipText(nIndex, _T("∑÷œÌµΩø’º‰ªÚ’ﬂŒ¢≤©"));
+	m_ToolBar.SetItemToolTipText(nIndex, _T("ÂàÜ‰∫´Âà∞Á©∫Èó¥ÊàñËÄÖÂæÆÂçö"));
 	m_ToolBar.SetItemBgPic(nIndex, NULL, strCurDir+_T("Image\\FaceEditTipBtn_selected.png"), 
 		strCurDir+_T("Image\\FaceEditTipBtn_selected.png"), CRect(0,0,0,0));
 	m_ToolBar.SetItemIconPic(nIndex, strCurDir+_T("Image\\qzonewb.png"));

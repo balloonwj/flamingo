@@ -1,10 +1,10 @@
-#pragma once
+ï»¿#pragma once
 
 #include <vector>
 #include "SkinManager.h"
 #include "SkinScrollBar.h"
 
-//¹ö¶¯ÌõÎ»ÖÃ
+//æ»šåŠ¨æ¡ä½ç½®
 #define WM_SCROLLBAR_POS    WM_USER + 0x00FF
 
 struct NMHDREx
@@ -20,9 +20,9 @@ public:
 	~CLVColumn(void);
 
 public:
-	CString     m_strText;  //ÁĞÍ·ÎÄ×Ö
+	CString     m_strText;  //åˆ—å¤´æ–‡å­—
 	CImageEx*   m_lpImage;
-	DWORD       m_dwFmt;    //¿ÉÈ¡Öµ£ºDT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS
+	DWORD       m_dwFmt;    //å¯å–å€¼ï¼šDT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS
 	int         m_nWidth;
 };
 
@@ -54,7 +54,7 @@ public:
 	BOOL SetItem(int nCol, LPCTSTR lpszText, LPCTSTR lpszImage, 
 		int cx, int cy, BOOL bGray, DWORD dwFmt, LPARAM lParam);
 
-    //TODO: º¯ÊıÃû³ÆÒª¸Ä£¡£¡
+    //TODO: å‡½æ•°åç§°è¦æ”¹ï¼ï¼
 	BOOL SetItemText(int nCol,  LPCTSTR lpszText);
     BOOL SetItemColor(int nCol, COLORREF clrColor);
 	BOOL SetItemImage(int nCol,  LPCTSTR lpszImage, int cx, int cy, BOOL bGray = FALSE);
@@ -108,87 +108,87 @@ public:
 	END_MSG_MAP()
 
 public:
-	BOOL SetBgPic(LPCTSTR lpszFileName);				// ÉèÖÃÁĞ±í±³¾°Í¼Æ¬, ±³¾°Í¼Æ¬ÔÚ±³¾°Í¸Ã÷Ê±²»ÉúĞ§
-    void SetHeaderBgColor(COLORREF clrBgColor);         // ÉèÖÃÁĞ±í±íÍ·±³¾°ÑÕÉ«£¬Ä¬ÈÏÑÕÉ«Îª°×É«£¬ÉèÖÃ±³¾°Í¸Ã÷Ê±£¬±³¾°ÑÕÉ«²»ÉúĞ§
-    void SetBodyBgColor(COLORREF clrBgColor);           // ÉèÖÃÁĞ±í±íÌå±³¾°ÑÕÉ«£¬Ä¬ÈÏÑÕÉ«Îª°×É«£¬ÉèÖÃ±³¾°Í¸Ã÷Ê±£¬±³¾°ÑÕÉ«²»ÉúĞ§
-	BOOL SetHeadSeparatedPic(LPCTSTR lpszFileName);		// ÉèÖÃ±íÍ··Ö¸ô·ûÍ¼Æ¬
+	BOOL SetBgPic(LPCTSTR lpszFileName);				// è®¾ç½®åˆ—è¡¨èƒŒæ™¯å›¾ç‰‡, èƒŒæ™¯å›¾ç‰‡åœ¨èƒŒæ™¯é€æ˜æ—¶ä¸ç”Ÿæ•ˆ
+    void SetHeaderBgColor(COLORREF clrBgColor);         // è®¾ç½®åˆ—è¡¨è¡¨å¤´èƒŒæ™¯é¢œè‰²ï¼Œé»˜è®¤é¢œè‰²ä¸ºç™½è‰²ï¼Œè®¾ç½®èƒŒæ™¯é€æ˜æ—¶ï¼ŒèƒŒæ™¯é¢œè‰²ä¸ç”Ÿæ•ˆ
+    void SetBodyBgColor(COLORREF clrBgColor);           // è®¾ç½®åˆ—è¡¨è¡¨ä½“èƒŒæ™¯é¢œè‰²ï¼Œé»˜è®¤é¢œè‰²ä¸ºç™½è‰²ï¼Œè®¾ç½®èƒŒæ™¯é€æ˜æ—¶ï¼ŒèƒŒæ™¯é¢œè‰²ä¸ç”Ÿæ•ˆ
+	BOOL SetHeadSeparatedPic(LPCTSTR lpszFileName);		// è®¾ç½®è¡¨å¤´åˆ†éš”ç¬¦å›¾ç‰‡
 
-	BOOL SetHeadNormalPic(LPCTSTR lpszFileName);		// ÉèÖÃ±íÍ·±³¾°Í¼Æ¬(ÆÕÍ¨×´Ì¬)
-	BOOL SetHeadHotPic(LPCTSTR lpszFileName);			// ÉèÖÃ±íÍ·±³¾°Í¼Æ¬(¸ßÁÁ×´Ì¬)
-	BOOL SetHeadPushedPic(LPCTSTR lpszFileName);		// ÉèÖÃ±íÍ·±³¾°Í¼Æ¬(°´ÏÂ×´Ì¬)
+	BOOL SetHeadNormalPic(LPCTSTR lpszFileName);		// è®¾ç½®è¡¨å¤´èƒŒæ™¯å›¾ç‰‡(æ™®é€šçŠ¶æ€)
+	BOOL SetHeadHotPic(LPCTSTR lpszFileName);			// è®¾ç½®è¡¨å¤´èƒŒæ™¯å›¾ç‰‡(é«˜äº®çŠ¶æ€)
+	BOOL SetHeadPushedPic(LPCTSTR lpszFileName);		// è®¾ç½®è¡¨å¤´èƒŒæ™¯å›¾ç‰‡(æŒ‰ä¸‹çŠ¶æ€)
 
-    void SetGridLineVisible(BOOL bVisible);             // Íø¸ñÏßÊÇ·ñ¿É¼û£¬Ä¬ÈÏ²»¿É¼û
-    void SetGridLineWidth(int nWidth);                  // ÉèÖÃÍø¸ñÏß´ÖÏ¸£¬Ä¬ÈÏ1px
-    void SetGridLineColor(COLORREF clr);                // ÉèÖÃÍø¸ñÏßÑÕÉ«£¬Ä¬ÈÏ
+    void SetGridLineVisible(BOOL bVisible);             // ç½‘æ ¼çº¿æ˜¯å¦å¯è§ï¼Œé»˜è®¤ä¸å¯è§
+    void SetGridLineWidth(int nWidth);                  // è®¾ç½®ç½‘æ ¼çº¿ç²—ç»†ï¼Œé»˜è®¤1px
+    void SetGridLineColor(COLORREF clr);                // è®¾ç½®ç½‘æ ¼çº¿é¢œè‰²ï¼Œé»˜è®¤
 
-	BOOL SetOddItemBgPic(LPCTSTR lpszFileName);			// ÉèÖÃÆæĞĞ±³¾°Í¼Æ¬(ÆÕÍ¨×´Ì¬)
-	BOOL SetEvenItemBgPic(LPCTSTR lpszFileName);		// ÉèÖÃË«ĞĞ±³¾°Í¼Æ¬(ÆÕÍ¨×´Ì¬)
-	BOOL SetItemHoverBgPic(LPCTSTR lpszFileName);		// ÉèÖÃĞĞ±³¾°Í¼Æ¬(¸ßÁÁ×´Ì¬)
-	BOOL SetItemSelBgPic(LPCTSTR lpszFileName);			// ÉèÖÃĞĞ±³¾°Í¼Æ¬(Ñ¡ÖĞ×´Ì¬)
+	BOOL SetOddItemBgPic(LPCTSTR lpszFileName);			// è®¾ç½®å¥‡è¡ŒèƒŒæ™¯å›¾ç‰‡(æ™®é€šçŠ¶æ€)
+	BOOL SetEvenItemBgPic(LPCTSTR lpszFileName);		// è®¾ç½®åŒè¡ŒèƒŒæ™¯å›¾ç‰‡(æ™®é€šçŠ¶æ€)
+	BOOL SetItemHoverBgPic(LPCTSTR lpszFileName);		// è®¾ç½®è¡ŒèƒŒæ™¯å›¾ç‰‡(é«˜äº®çŠ¶æ€)
+	BOOL SetItemSelBgPic(LPCTSTR lpszFileName);			// è®¾ç½®è¡ŒèƒŒæ™¯å›¾ç‰‡(é€‰ä¸­çŠ¶æ€)
 
-	void SetTransparent(BOOL bTransparent, HDC hBgDC);	// ÉèÖÃÁĞ±í±³¾°ÊÇ·ñÍ¸Ã÷
-	void SetHeadVisible(BOOL bVisible);					// ÉèÖÃ±íÍ·ÊÇ·ñ¿É¼û
-	BOOL IsHeadVisible();								// ÅĞ¶Ï±íÍ·ÊÇ·ñ¿É¼û
-	void SetHeadHeight(int nHeight);					// ÉèÖÃ±íÍ·¸ß¶È
-	void SetItemHeight(int nHeight);					// ÉèÖÃĞĞ¸ß¶È
-	void SetItemImageSize(int cx, int cy);				// ÉèÖÃĞĞÍ¼Ïñ´óĞ¡
+	void SetTransparent(BOOL bTransparent, HDC hBgDC);	// è®¾ç½®åˆ—è¡¨èƒŒæ™¯æ˜¯å¦é€æ˜
+	void SetHeadVisible(BOOL bVisible);					// è®¾ç½®è¡¨å¤´æ˜¯å¦å¯è§
+	BOOL IsHeadVisible();								// åˆ¤æ–­è¡¨å¤´æ˜¯å¦å¯è§
+	void SetHeadHeight(int nHeight);					// è®¾ç½®è¡¨å¤´é«˜åº¦
+	void SetItemHeight(int nHeight);					// è®¾ç½®è¡Œé«˜åº¦
+	void SetItemImageSize(int cx, int cy);				// è®¾ç½®è¡Œå›¾åƒå¤§å°
 
-	int AddColumn(LPCTSTR lpszText,						// Ìí¼ÓÁĞ£¬Ïàµ±ÓÚ¸øËùÓĞĞĞÔö¼ÓÒ»¸öµ¥Ôª¸ñ
+	int AddColumn(LPCTSTR lpszText,						// æ·»åŠ åˆ—ï¼Œç›¸å½“äºç»™æ‰€æœ‰è¡Œå¢åŠ ä¸€ä¸ªå•å…ƒæ ¼
 		LPCTSTR lpszImage, DWORD dwFmt, int nWidth);
     //int AddColumns()
-	int InsertColumn(int nCol, LPCTSTR lpszText,		// ²åÈëÁĞ£¬Ô­ÀíÍ¬ÉÏ
+	int InsertColumn(int nCol, LPCTSTR lpszText,		// æ’å…¥åˆ—ï¼ŒåŸç†åŒä¸Š
 		LPCTSTR lpszImage, DWORD dwFmt, int nWidth);
-	BOOL DeleteColumn(int nCol);						// É¾³ıÁĞ£¬Ô­ÀíÍ¬ÉÏ
+	BOOL DeleteColumn(int nCol);						// åˆ é™¤åˆ—ï¼ŒåŸç†åŒä¸Š
 
-	int AddItem(LPCTSTR lpszText,						// Ìí¼ÓĞĞ£¬Í¬Ê±ÉèÖÃ¸ÃĞĞµÚÒ»¸öµ¥Ôª¸ñµÄÎÄ×Ö
+	int AddItem(LPCTSTR lpszText,						// æ·»åŠ è¡Œï¼ŒåŒæ—¶è®¾ç½®è¯¥è¡Œç¬¬ä¸€ä¸ªå•å…ƒæ ¼çš„æ–‡å­—
 		LPCTSTR lpszImage, BOOL bGray, DWORD dwFmt, LPARAM lParam);
-	int InsertItem(int nItem, LPCTSTR lpszText,			// ²åÈëĞĞ£¬Í¬Ê±ÉèÖÃ¸ÃĞĞµÚÒ»¸öµ¥Ôª¸ñµÄÎÄ×Ö£¬nItem±êÊ¶µÄÇ°Ò»ĞĞ±ØĞëÒÑ¾­´æÔÚ£¬·ñÔò³ÌĞò»á³ö´í
+	int InsertItem(int nItem, LPCTSTR lpszText,			// æ’å…¥è¡Œï¼ŒåŒæ—¶è®¾ç½®è¯¥è¡Œç¬¬ä¸€ä¸ªå•å…ƒæ ¼çš„æ–‡å­—ï¼ŒnItemæ ‡è¯†çš„å‰ä¸€è¡Œå¿…é¡»å·²ç»å­˜åœ¨ï¼Œå¦åˆ™ç¨‹åºä¼šå‡ºé”™
 		LPCTSTR lpszImage, BOOL bGray, DWORD dwFmt, LPARAM lParam);
-	BOOL DeleteItem(int nItem);							// É¾³ıĞĞ
+	BOOL DeleteItem(int nItem);							// åˆ é™¤è¡Œ
 
-	int GetColumnCount();								// »ñÈ¡×ÜÁĞÊı
-	BOOL DeleteAllColumns();							// É¾³ıËùÓĞÁĞ
-	int GetItemCount();									// »ñÈ¡×ÜĞĞÊı
-	BOOL DeleteAllItems();								// É¾³ıËùÓĞĞĞ
+	int GetColumnCount();								// è·å–æ€»åˆ—æ•°
+	BOOL DeleteAllColumns();							// åˆ é™¤æ‰€æœ‰åˆ—
+	int GetItemCount();									// è·å–æ€»è¡Œæ•°
+	BOOL DeleteAllItems();								// åˆ é™¤æ‰€æœ‰è¡Œ
 
-	BOOL SetColumnText(int nCol, LPCTSTR lpszText);		// ÉèÖÃÁĞÍ·ÎÄ±¾
-	BOOL SetColumnImage(int nCol, LPCTSTR lpszImage);	// ÉèÖÃÁĞÍ·Í¼Ïñ
-	BOOL SetColumnFormat(int nCol, DWORD dwFmt);		// ÉèÖÃÁĞÎÄ×Ö¸ñÊ½
-	BOOL SetColumnWidth(int nCol, int nWidth);			// ÉèÖÃÁĞ¿í¶È
+	BOOL SetColumnText(int nCol, LPCTSTR lpszText);		// è®¾ç½®åˆ—å¤´æ–‡æœ¬
+	BOOL SetColumnImage(int nCol, LPCTSTR lpszImage);	// è®¾ç½®åˆ—å¤´å›¾åƒ
+	BOOL SetColumnFormat(int nCol, DWORD dwFmt);		// è®¾ç½®åˆ—æ–‡å­—æ ¼å¼
+	BOOL SetColumnWidth(int nCol, int nWidth);			// è®¾ç½®åˆ—å®½åº¦
 
-	CString GetColumnText(int nCol);					// »ñÈ¡ÁĞÎÄ±¾
-	DWORD GetColumnFormat(int nCol);					// »ñÈ¡ÁĞ¸ñÊ½
-	int GetColumnWidth(int nCol);						// »ñÈ¡ÁĞ¿í¶È
+	CString GetColumnText(int nCol);					// è·å–åˆ—æ–‡æœ¬
+	DWORD GetColumnFormat(int nCol);					// è·å–åˆ—æ ¼å¼
+	int GetColumnWidth(int nCol);						// è·å–åˆ—å®½åº¦
 
-	BOOL SetItemText(int nItem, int nSubItem, LPCTSTR lpszText);	// ÉèÖÃĞĞÎÄ±¾£¬Èç¹û¶ÔÓ¦µÄµ¥Ôª¸ñ²»´æÔÚ£¬Ôò²»»á²úÉúÈÎºÎĞ§¹û
-    BOOL SetCellTextColor(int nItem, int nSubItem, COLORREF clrColor);	// ÉèÖÃµ¥Ôª¸ñÎÄ±¾ÑÕÉ«£¬Èç¹û¶ÔÓ¦µÄµ¥Ôª¸ñ²»´æÔÚ£¬Ôò²»»á²úÉúÈÎºÎĞ§¹û
-	BOOL SetItemImage(int nItem, int nSubItem,						// ÉèÖÃĞĞÍ¼Ïñ
+	BOOL SetItemText(int nItem, int nSubItem, LPCTSTR lpszText);	// è®¾ç½®è¡Œæ–‡æœ¬ï¼Œå¦‚æœå¯¹åº”çš„å•å…ƒæ ¼ä¸å­˜åœ¨ï¼Œåˆ™ä¸ä¼šäº§ç”Ÿä»»ä½•æ•ˆæœ
+    BOOL SetCellTextColor(int nItem, int nSubItem, COLORREF clrColor);	// è®¾ç½®å•å…ƒæ ¼æ–‡æœ¬é¢œè‰²ï¼Œå¦‚æœå¯¹åº”çš„å•å…ƒæ ¼ä¸å­˜åœ¨ï¼Œåˆ™ä¸ä¼šäº§ç”Ÿä»»ä½•æ•ˆæœ
+	BOOL SetItemImage(int nItem, int nSubItem,						// è®¾ç½®è¡Œå›¾åƒ
 		LPCTSTR lpszImage, BOOL bGray = FALSE);
-	BOOL SetItemFormat(int nItem, int nSubItem, DWORD dwFmt);		// ÉèÖÃĞĞ¸ñÊ½
-    //BOOL SetRowFormat(int nItem, DWORD dwFmt);		                // ÉèÖÃĞĞ¸ñÊ½, TODO: Õâ¸öº¯ÊıÒªÓÅ»¯(Ì«Âı£¡£¡)
-	BOOL SetItemData(int nItem, int nSubItem, LPARAM lParam);		// ÉèÖÃĞĞÊı¾İ
+	BOOL SetItemFormat(int nItem, int nSubItem, DWORD dwFmt);		// è®¾ç½®è¡Œæ ¼å¼
+    //BOOL SetRowFormat(int nItem, DWORD dwFmt);		                // è®¾ç½®è¡Œæ ¼å¼, TODO: è¿™ä¸ªå‡½æ•°è¦ä¼˜åŒ–(å¤ªæ…¢ï¼ï¼)
+	BOOL SetItemData(int nItem, int nSubItem, LPARAM lParam);		// è®¾ç½®è¡Œæ•°æ®
 
-	CString GetItemText(int nItem, int nSubItem);		// »ñÈ¡ĞĞÎÄ±¾
-	DWORD GetItemFormat(int nItem, int nSubItem);		// »ñÈ¡ĞĞ¸ñÊ½
-	LPARAM GetItemData(int nItem, int nSubItem);		// »ñÈ¡ĞĞÊı¾İ
+	CString GetItemText(int nItem, int nSubItem);		// è·å–è¡Œæ–‡æœ¬
+	DWORD GetItemFormat(int nItem, int nSubItem);		// è·å–è¡Œæ ¼å¼
+	LPARAM GetItemData(int nItem, int nSubItem);		// è·å–è¡Œæ•°æ®
 
 
-    //TODO: ÕâĞ©º¯ÊıÃû³ÆÒª¸Ä£¬Ã÷Ã÷ÊÇÉèÖÃĞĞ²»ÊÇÉèÖÃµ¥Ôª¸ñ
+    //TODO: è¿™äº›å‡½æ•°åç§°è¦æ”¹ï¼Œæ˜æ˜æ˜¯è®¾ç½®è¡Œä¸æ˜¯è®¾ç½®å•å…ƒæ ¼
 	void SetCurSelIndex(int nIndex);
-	int GetCurSelItemIndex();							// »ñÈ¡µ±Ç°Ñ¡ÖĞĞĞË÷Òı
-	void SetItemTextColor(COLORREF clr);				// ÉèÖÃĞĞÎÄ±¾ÑÕÉ«(ÆÕÍ¨×´Ì¬)
-	void SetSelItemTextColor(COLORREF clr);				// ĞĞÎÄ±¾ÑÕÉ«(Ñ¡ÖĞ×´Ì¬)
-    void SetSelItemBkColor(COLORREF clr);               // ĞĞÑ¡ÖĞ×´Ì¬±³¾°ÑÕÉ«
+	int GetCurSelItemIndex();							// è·å–å½“å‰é€‰ä¸­è¡Œç´¢å¼•
+	void SetItemTextColor(COLORREF clr);				// è®¾ç½®è¡Œæ–‡æœ¬é¢œè‰²(æ™®é€šçŠ¶æ€)
+	void SetSelItemTextColor(COLORREF clr);				// è¡Œæ–‡æœ¬é¢œè‰²(é€‰ä¸­çŠ¶æ€)
+    void SetSelItemBkColor(COLORREF clr);               // è¡Œé€‰ä¸­çŠ¶æ€èƒŒæ™¯é¢œè‰²
 
-    //ÉèÖÃ¹ö¶¯ÌõµÄÎ»ÖÃ
+    //è®¾ç½®æ»šåŠ¨æ¡çš„ä½ç½®
     void SetVScrollBarPos(int nPos);
     void SetHScrollBarPos(int nPos);
 
-    //ÊÇ·ñ¿ªÆôÏò¸¸´°¿Ú»ã±¨ÊµÊ±´¹Ö±¹ö¶¯ÌõµÄÎ»ÖÃ
+    //æ˜¯å¦å¼€å¯å‘çˆ¶çª—å£æ±‡æŠ¥å®æ—¶å‚ç›´æ»šåŠ¨æ¡çš„ä½ç½®
     void EnableVScrollBarRealPostion(BOOL bEnable);
-    //ÊÇ·ñ¿ªÆôµã»÷±íÍ·ÏÔÊ¾ÅÅĞò
+    //æ˜¯å¦å¼€å¯ç‚¹å‡»è¡¨å¤´æ˜¾ç¤ºæ’åº
     void EnableClickHeaderSort(BOOL bEnable);
-    //ÊÇ·ñ¿ªÆô±í¸ñĞĞ¿ÉÑ¡Ä£Ê½
+    //æ˜¯å¦å¼€å¯è¡¨æ ¼è¡Œå¯é€‰æ¨¡å¼
     void EnableRowSelectable(BOOL bEnable);
 
 private:
@@ -219,11 +219,11 @@ private:
     void DrawTopFixedRow(HDC hDC);
     void DrawBody(HDC hDC);
 
-    //»ñÈ¡ÁĞ±íÍ·²¿ÇøÓò´óĞ¡
+    //è·å–åˆ—è¡¨å¤´éƒ¨åŒºåŸŸå¤§å°
 	BOOL GetHeaderRect(CRect& rect);
-    //»ñÈ¡¶¥²¿¹Ì¶¨ĞĞµÄÎ»ÖÃ
+    //è·å–é¡¶éƒ¨å›ºå®šè¡Œçš„ä½ç½®
     BOOL GetTopFixedRowRect(CRect& rect);
-    //»ñÈ¡ÁĞ±í±íÌå²¿·ÖÇøÓò£¬Èç¹ûÓĞ¹ö¶¯ÌõÔò¼õÈ¥¹ö¶¯Ìõ¶ÔÓ¦µÄ¿í»ò¸ß
+    //è·å–åˆ—è¡¨è¡¨ä½“éƒ¨åˆ†åŒºåŸŸï¼Œå¦‚æœæœ‰æ»šåŠ¨æ¡åˆ™å‡å»æ»šåŠ¨æ¡å¯¹åº”çš„å®½æˆ–é«˜
 	BOOL GetBodyRect(CRect& rect);
 	BOOL GetItemRect(int nIndex, CRect& rect);
 	int HeadHitTest(POINT pt);
@@ -235,9 +235,9 @@ private:
 	void EnsureVisible(int nIndex);
 	int GetColumnsWidth();
 
-    //·¢ËÍ´¹Ö±¹ö¶¯ÌõÊµÊ±Î»ÖÃÖÁ¸¸´°¿Ú
+    //å‘é€å‚ç›´æ»šåŠ¨æ¡å®æ—¶ä½ç½®è‡³çˆ¶çª—å£
     void PostVScrollBarRealPostion(int nVScrollBarPos);
-    //»­±íÍ·ÉÏÏÂÅÅĞòÑùÊ½¼ıÍ·
+    //ç”»è¡¨å¤´ä¸Šä¸‹æ’åºæ ·å¼ç®­å¤´
     void DrawHeaderItemSortStyle(int nSortStyleIndex);
 
 	BOOL Init();
@@ -251,47 +251,47 @@ private:
 	std::vector<CLVColumn*> m_arrCols;
 	std::vector<CLVRow*>    m_arrRows;
 
-	CImageEx*               m_lpBgImg;					// ÁĞ±í±³¾°Í¼Æ¬
-    COLORREF                m_clrHeaderBgColor;         // ±íÍ·±³¾°ÑÕÉ«
-    COLORREF                m_clrBodyBgColor;           // ±íÌå±³¾°ÑÕÉ«
-	CImageEx*               m_lpHeadSeparatedImg;		// ±íÍ··Ö¸ô·ûÍ¼Æ¬
-	CImageEx*               m_lpHeadImgN;				// ±íÍ·±³¾°Í¼Æ¬(ÆÕÍ¨×´Ì¬)
-	CImageEx*               m_lpHeadImgH;				// ±íÍ·±³¾°Í¼Æ¬(¸ßÁÁ×´Ì¬)
-	CImageEx*               m_lpHeadImgP;				// ±íÍ·±³¾°Í¼Æ¬(°´ÏÂ×´Ì¬)
-	CImageEx*               m_lpOddItemBgImgN;			// ÆæĞĞ±³¾°Í¼Æ¬(ÆÕÍ¨×´Ì¬)
-	CImageEx*               m_lpEvenItemBgImgN;			// Ë«ĞĞ±³¾°Í¼Æ¬(ÆÕÍ¨×´Ì¬)
-	CImageEx*               m_lpItemBgImgH;				// ĞĞ±³¾°Í¼Æ¬(¸ßÁÁ×´Ì¬)
-	CImageEx*               m_lpItemBgImgS;				// ĞĞ±³¾°Í¼Æ¬(Ñ¡ÖĞ×´Ì¬)
+	CImageEx*               m_lpBgImg;					// åˆ—è¡¨èƒŒæ™¯å›¾ç‰‡
+    COLORREF                m_clrHeaderBgColor;         // è¡¨å¤´èƒŒæ™¯é¢œè‰²
+    COLORREF                m_clrBodyBgColor;           // è¡¨ä½“èƒŒæ™¯é¢œè‰²
+	CImageEx*               m_lpHeadSeparatedImg;		// è¡¨å¤´åˆ†éš”ç¬¦å›¾ç‰‡
+	CImageEx*               m_lpHeadImgN;				// è¡¨å¤´èƒŒæ™¯å›¾ç‰‡(æ™®é€šçŠ¶æ€)
+	CImageEx*               m_lpHeadImgH;				// è¡¨å¤´èƒŒæ™¯å›¾ç‰‡(é«˜äº®çŠ¶æ€)
+	CImageEx*               m_lpHeadImgP;				// è¡¨å¤´èƒŒæ™¯å›¾ç‰‡(æŒ‰ä¸‹çŠ¶æ€)
+	CImageEx*               m_lpOddItemBgImgN;			// å¥‡è¡ŒèƒŒæ™¯å›¾ç‰‡(æ™®é€šçŠ¶æ€)
+	CImageEx*               m_lpEvenItemBgImgN;			// åŒè¡ŒèƒŒæ™¯å›¾ç‰‡(æ™®é€šçŠ¶æ€)
+	CImageEx*               m_lpItemBgImgH;				// è¡ŒèƒŒæ™¯å›¾ç‰‡(é«˜äº®çŠ¶æ€)
+	CImageEx*               m_lpItemBgImgS;				// è¡ŒèƒŒæ™¯å›¾ç‰‡(é€‰ä¸­çŠ¶æ€)
 
-	BOOL                    m_bTransparent;			    // ÁĞ±í±³¾°ÊÇ·ñÍ¸Ã÷±êÖ¾
-	HDC                     m_hBgDC;					// ¸¸´°¿Ú±³¾°DC
-	BOOL                    m_bMouseTracking;			// Êó±ê¸ú×Ù±êÖ¾
-	BOOL                    m_bHeadVisible;				// ±íÍ·ÊÇ·ñ¿É¼û±êÖ¾
-	int                     m_nHeadHeight;				// ±íÍ·¸ß¶È
-	int                     m_nRowHeight;				// ĞĞ¸ß¶È
-	CSize                   m_szItemImage;				// ĞĞÍ¼Ïñ´óĞ¡
-    BOOL                    m_bGridLineVisible;         // ÊÇ·ñ»­Íø¸ñÏß
-    int                     m_nGridLineWidth;           // Íø¸ñÏßµÄ¿í¶È
+	BOOL                    m_bTransparent;			    // åˆ—è¡¨èƒŒæ™¯æ˜¯å¦é€æ˜æ ‡å¿—
+	HDC                     m_hBgDC;					// çˆ¶çª—å£èƒŒæ™¯DC
+	BOOL                    m_bMouseTracking;			// é¼ æ ‡è·Ÿè¸ªæ ‡å¿—
+	BOOL                    m_bHeadVisible;				// è¡¨å¤´æ˜¯å¦å¯è§æ ‡å¿—
+	int                     m_nHeadHeight;				// è¡¨å¤´é«˜åº¦
+	int                     m_nRowHeight;				// è¡Œé«˜åº¦
+	CSize                   m_szItemImage;				// è¡Œå›¾åƒå¤§å°
+    BOOL                    m_bGridLineVisible;         // æ˜¯å¦ç”»ç½‘æ ¼çº¿
+    int                     m_nGridLineWidth;           // ç½‘æ ¼çº¿çš„å®½åº¦
 
-	int                     m_nPressHeadIndex;			// Êó±ê°´ÏÂ±íÍ·ÏîË÷Òı
-	int                     m_nHoverHeadIndex;			// Êó±êĞüÍ£±íÍ·ÏîË÷Òı
+	int                     m_nPressHeadIndex;			// é¼ æ ‡æŒ‰ä¸‹è¡¨å¤´é¡¹ç´¢å¼•
+	int                     m_nHoverHeadIndex;			// é¼ æ ‡æ‚¬åœè¡¨å¤´é¡¹ç´¢å¼•
 
-	int                     m_nPressItemIndex;			// Êó±ê°´ÏÂĞĞÏîË÷Òı
-	int                     m_nHoverItemIndex;			// Êó±êĞüÍ£ĞĞÏîË÷Òı
-	int                     m_nSelItemIndex;			// Êó±êÑ¡ÖĞĞĞÏîË÷Òı
+	int                     m_nPressItemIndex;			// é¼ æ ‡æŒ‰ä¸‹è¡Œé¡¹ç´¢å¼•
+	int                     m_nHoverItemIndex;			// é¼ æ ‡æ‚¬åœè¡Œé¡¹ç´¢å¼•
+	int                     m_nSelItemIndex;			// é¼ æ ‡é€‰ä¸­è¡Œé¡¹ç´¢å¼•
 
-	int                     m_nLeft, m_nTop;			// ÊÓÍ¼Ô­µã×ø±ê
+	int                     m_nLeft, m_nTop;			// è§†å›¾åŸç‚¹åæ ‡
 
-	COLORREF                m_clrItemText;				// ĞĞÎÄ±¾ÑÕÉ«(ÆÕÍ¨×´Ì¬)
-	COLORREF                m_clrSelItemText;           // Ñ¡ÖĞĞĞÎÄ±¾ÑÕÉ«
-    COLORREF                m_clrSelItemBkColor;        // Ñ¡ÖĞĞĞ±³¾°ÑÕÉ«
-    COLORREF                m_clrGridLine;              // Íø¸ñÏßÑÕÉ«
+	COLORREF                m_clrItemText;				// è¡Œæ–‡æœ¬é¢œè‰²(æ™®é€šçŠ¶æ€)
+	COLORREF                m_clrSelItemText;           // é€‰ä¸­è¡Œæ–‡æœ¬é¢œè‰²
+    COLORREF                m_clrSelItemBkColor;        // é€‰ä¸­è¡ŒèƒŒæ™¯é¢œè‰²
+    COLORREF                m_clrGridLine;              // ç½‘æ ¼çº¿é¢œè‰²
 
-    int                     m_nTopFixedRow;             //¶¥²¿¹Ì¶¨ĞĞ
+    int                     m_nTopFixedRow;             //é¡¶éƒ¨å›ºå®šè¡Œ
 
-    int                     m_nStartVisibleIndex;       //TODO: ±äÁ¿Ãû³ÆÒª¸Ä
-    int                     m_nEndVisibleIndex;         //TODO: ±äÁ¿Ãû³ÆÒª¸Ä
-    BOOL                    m_bEnablePostVScrollBarPos; //ÊÇ·ñÏò¸¸´°¿Ú±¨¸æÊµÊ±¹ö¶¯ÌõÎ»ÖÃ£¬Ä¬ÈÏÎªFALSE
-    BOOL                    m_bEnableClickHeaderSort;   //µã»÷±íÍ·£¬ÊÇ·ñÖ§³ÖÅÅĞò£¬Ä¬ÈÏ²»¿ªÆô£¨FALSE£©
-    BOOL                    m_bEnableRowSelectable;     //±í¸ñĞĞÊÇ·ñ¿ÉÒÔÑ¡ÖĞ£¬Ä¬ÈÏ¿ÉÒÔ£¨TRUE£©
+    int                     m_nStartVisibleIndex;       //TODO: å˜é‡åç§°è¦æ”¹
+    int                     m_nEndVisibleIndex;         //TODO: å˜é‡åç§°è¦æ”¹
+    BOOL                    m_bEnablePostVScrollBarPos; //æ˜¯å¦å‘çˆ¶çª—å£æŠ¥å‘Šå®æ—¶æ»šåŠ¨æ¡ä½ç½®ï¼Œé»˜è®¤ä¸ºFALSE
+    BOOL                    m_bEnableClickHeaderSort;   //ç‚¹å‡»è¡¨å¤´ï¼Œæ˜¯å¦æ”¯æŒæ’åºï¼Œé»˜è®¤ä¸å¼€å¯ï¼ˆFALSEï¼‰
+    BOOL                    m_bEnableRowSelectable;     //è¡¨æ ¼è¡Œæ˜¯å¦å¯ä»¥é€‰ä¸­ï¼Œé»˜è®¤å¯ä»¥ï¼ˆTRUEï¼‰
 };

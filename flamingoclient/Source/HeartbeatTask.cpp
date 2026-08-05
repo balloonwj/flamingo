@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "HeartbeatTask.h"
 #include "FlamingoClient.h"
 #include <assert.h>
@@ -35,7 +35,7 @@ int CHeartbeatTask::Run()
 			return 1;
 		}
 
-		//·¢ËÍÖ®Ç°ÏÈ½«ĞÄÌø×´Ì¬¸´Î»
+		//å‘é€ä¹‹å‰å…ˆå°†å¿ƒè·³çŠ¶æ€å¤ä½
 		SetAlive(FALSE);
 		
 		//for(long i=0; i<5; ++i)

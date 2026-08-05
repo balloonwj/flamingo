@@ -1,4 +1,4 @@
-#include "stdafx.h"
+Ôªø#include "stdafx.h"
 #include "FileTransferCtrl.h"
 #include "GDIFactory.h"
 #include "net/IUProtocolData.h"
@@ -443,7 +443,7 @@ void CFileTransferCtrl::OnPaint(CDCHandle dc)
 	//if (m_lpBgImg != NULL && !m_lpBgImg->IsNull())
 	//	m_lpBgImg->Draw2(MemDC.m_hDC, rcClient);
 
-	//TODO: º”…œπˆ∂ØÃı
+	//TODO: Âä†‰∏äÊªöÂä®Êù°
 	HFONT hFontBtn = CGDIFactory::GetFont(17);	
 	HFONT hOldFont = (HFONT)::SelectObject(MemDC.m_hDC, hFontBtn);
 	
@@ -477,7 +477,7 @@ void CFileTransferCtrl::OnLButtonUp(UINT nFlags, CPoint point)
 	::SendMessage(::GetParent(m_hWnd), WM_NOTIFY, GetDlgCtrlID(), (LPARAM)&stNmdhdrEx);
 
 	
-	//TODO: ∫Û∆⁄º”…œπˆ∂ØÃı
+	//TODO: ÂêéÊúüÂä†‰∏äÊªöÂä®Êù°
 	//m_VScrollBar.OnLButtonUp(nFlags, point);
 }
 
@@ -636,7 +636,7 @@ void CFileTransferCtrl::DrawItem(HDC hDC, size_t nIndex)
 	
 	UINT nFormat = DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS;
 	
-	//Œƒº˛√˚≥§∂»¥Û”⁄25µƒ ±∫Ú£¨÷ªœ‘ æŒƒº˛√˚ ◊Œ≤£¨÷–º‰”√ °¬‘∫≈¥˙ÃÊ
+	//Êñá‰ª∂ÂêçÈïøÂ∫¶Â§ß‰∫é25ÁöÑÊó∂ÂÄôÔºåÂè™ÊòæÁ§∫Êñá‰ª∂ÂêçÈ¶ñÂ∞æÔºå‰∏≠Èó¥Áî®ÁúÅÁï•Âè∑‰ª£Êõø
 	CString strTempFileName;
 	if(pItem->m_strFileName.GetLength() > 15)
 	{
@@ -648,21 +648,21 @@ void CFileTransferCtrl::DrawItem(HDC hDC, size_t nIndex)
 	CRect rcFileDesc;
 	CString strFileDesc;
 	if(pItem->m_nProgressPercent == -1)
-		strFileDesc.Format(_T("%s(–£—ÈŒƒº˛%d%%)"), strTempFileName, pItem->m_nVerificationPercent);
+		strFileDesc.Format(_T("%s(Ê†°È™åÊñá‰ª∂%d%%)"), strTempFileName, pItem->m_nVerificationPercent);
     else
     {
         if (pItem->m_nTargetType == SEND_TYPE)
         {
-            strFileDesc.Format(_T("%s(∑¢ÀÕ%d%%)"), strTempFileName, pItem->m_nProgressPercent);
+            strFileDesc.Format(_T("%s(ÂèëÈÄÅ%d%%)"), strTempFileName, pItem->m_nProgressPercent);
         }
         else
         {
-            strFileDesc.Format(_T("%s(Ω” ’%d%%)"), strTempFileName, pItem->m_nProgressPercent);
+            strFileDesc.Format(_T("%s(Êé•Êî∂%d%%)"), strTempFileName, pItem->m_nProgressPercent);
         }
     }
 	long nFileDescLength = strFileDesc.GetLength();
 	
-	CRect rcText(0,0,0,0);	// º∆À„Œƒ◊÷øÌ∏ﬂ
+	CRect rcText(0,0,0,0);	// ËÆ°ÁÆóÊñáÂ≠óÂÆΩÈ´ò
 	::DrawText(hDC, strFileDesc, nFileDescLength, &rcText, DT_SINGLELINE | DT_CALCRECT);
 
 	rcFileDesc.left = rcImageFileType.right + 10;
@@ -678,7 +678,7 @@ void CFileTransferCtrl::DrawItem(HDC hDC, size_t nIndex)
     ::SetBkMode(hDC, nOldMode);
 	
 
-	//ª≠Ω¯∂»Ãı
+	//ÁîªËøõÂ∫¶Êù°
 	CRect rtProgress;
 	rtProgress.left = rcItem.left + 60;
 	rtProgress.right = rtProgress.left + 250;
@@ -700,10 +700,10 @@ void CFileTransferCtrl::DrawItem(HDC hDC, size_t nIndex)
 	::SelectObject(hDC, hOldBrush);
 	::DeleteObject(hBrushProgressRect);
 	
-	//ªÊ÷∆∑¢ÀÕ∑Ω∞¥≈•
+	//ÁªòÂà∂ÂèëÈÄÅÊñπÊåâÈíÆ
 	if(pItem->m_nTargetType == SEND_TYPE)
 	{
-		//◊™¿Îœﬂ/‘⁄œﬂ∑¢ÀÕ∞¥≈•
+		//ËΩ¨Á¶ªÁ∫ø/Âú®Á∫øÂèëÈÄÅÊåâÈíÆ
 		CRect rtChangeMethodBtn;
 		rtChangeMethodBtn.left = rcItem.left + 190;
 		rtChangeMethodBtn.right = rtChangeMethodBtn.left + 70;
@@ -712,9 +712,9 @@ void CFileTransferCtrl::DrawItem(HDC hDC, size_t nIndex)
 		//::Rectangle(hDC, rtChangeMethodBtn.left, rtChangeMethodBtn.top, rtChangeMethodBtn.right, rtChangeMethodBtn.bottom);
 		CRect rtChangeMethodBtnLabel(rtChangeMethodBtn.left+2, rtChangeMethodBtn.top+2, rtChangeMethodBtn.right-2, rtChangeMethodBtn.bottom-2);
 #ifdef _DEBUG		
-		::DrawText(hDC, _T("◊™‘⁄œﬂ∑¢ÀÕ"), _tcslen(_T("◊™‘⁄œﬂ∑¢ÀÕ")), &rtChangeMethodBtnLabel, DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+		::DrawText(hDC, _T("ËΩ¨Âú®Á∫øÂèëÈÄÅ"), _tcslen(_T("ËΩ¨Âú®Á∫øÂèëÈÄÅ")), &rtChangeMethodBtnLabel, DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
 #endif	
-		//»°œ˚∞¥≈•
+		//ÂèñÊ∂àÊåâÈíÆ
 		CRect rtCancelBtn(rtChangeMethodBtn.right+5, rtChangeMethodBtn.top, rtChangeMethodBtn.right+50, rtChangeMethodBtn.bottom);
 		//::Rectangle(hDC, rtCancelBtn.left, rtCancelBtn.top, rtCancelBtn.right, rtCancelBtn.bottom);
 		CRect rtCancelBtnLabel(rtCancelBtn.left+2, rtCancelBtn.top+2, rtCancelBtn.right-2, rtCancelBtn.bottom-2);
@@ -722,12 +722,12 @@ void CFileTransferCtrl::DrawItem(HDC hDC, size_t nIndex)
 		if(m_bHoverOnCancelBtn && pItem->m_nID==m_nCurrentHoverID)
 			clrText = RGB(38, 156, 236);
 		::SetTextColor(hDC, clrText);
-		::DrawText(hDC, _T("»°œ˚"), _tcslen(_T("»°œ˚")), &rtCancelBtnLabel, DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+		::DrawText(hDC, _T("ÂèñÊ∂à"), _tcslen(_T("ÂèñÊ∂à")), &rtCancelBtnLabel, DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
 	}
-	//ªÊ÷∆Ω” ’∑Ω∞¥≈•
+	//ÁªòÂà∂Êé•Êî∂ÊñπÊåâÈíÆ
 	else if(pItem->m_nTargetType == RECV_TYPE)
 	{
-		//Ω” ‹∞¥≈•
+		//Êé•ÂèóÊåâÈíÆ
 		CRect rtAcceptBtn;
 		rtAcceptBtn.left = rcItem.left + 165;
 		rtAcceptBtn.right = rtAcceptBtn.left + 45;
@@ -740,9 +740,9 @@ void CFileTransferCtrl::DrawItem(HDC hDC, size_t nIndex)
 			clrText = RGB(38, 156, 236);
 		::SetTextColor(hDC, clrText);
 		if(pItem->m_bAcceptBtnVisible)
-			::DrawText(hDC, _T("Ω” ‹"), _tcslen(_T("Ω” ‹")), &rtAcceptBtnLabel, DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+			::DrawText(hDC, _T("Êé•Âèó"), _tcslen(_T("Êé•Âèó")), &rtAcceptBtnLabel, DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
 	
-		//¡Ì¥ÊŒ™∞¥≈•
+		//Âè¶Â≠ò‰∏∫ÊåâÈíÆ
 		CRect rtSaveAsBtn(rtAcceptBtn.right+5, rtAcceptBtn.top, rtAcceptBtn.right+50, rtAcceptBtn.bottom);
 		//::Rectangle(hDC, rtSaveAsBtn.left, rtSaveAsBtn.top, rtSaveAsBtn.right, rtSaveAsBtn.bottom);
 		CRect rtSaveAsBtnLabel(rtSaveAsBtn.left+2, rtSaveAsBtn.top+2, rtSaveAsBtn.right-2, rtSaveAsBtn.bottom-2);
@@ -752,9 +752,9 @@ void CFileTransferCtrl::DrawItem(HDC hDC, size_t nIndex)
 			clrText = RGB(0, 0, 0);
 		::SetTextColor(hDC, clrText);
 		if(pItem->m_bSaveAsBtnVisible)
-			::DrawText(hDC, _T("¡Ì¥ÊŒ™"), _tcslen(_T("¡Ì¥ÊŒ™")), &rtSaveAsBtnLabel, DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+			::DrawText(hDC, _T("Âè¶Â≠ò‰∏∫"), _tcslen(_T("Âè¶Â≠ò‰∏∫")), &rtSaveAsBtnLabel, DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
 
-		//»°œ˚∞¥≈•
+		//ÂèñÊ∂àÊåâÈíÆ
 		CRect rtCancelBtn(rtSaveAsBtn.right+5, rtSaveAsBtn.top, rtSaveAsBtn.right+50, rtSaveAsBtn.bottom);
 		//::Rectangle(hDC, rtCancelBtn.left, rtCancelBtn.top, rtCancelBtn.right, rtCancelBtn.bottom);
 		CRect rtCancelBtnLabel(rtCancelBtn.left+2, rtCancelBtn.top+2, rtCancelBtn.right-2, rtCancelBtn.bottom-2);
@@ -764,7 +764,7 @@ void CFileTransferCtrl::DrawItem(HDC hDC, size_t nIndex)
 			clrText = RGB(0, 0, 0);
 		::SetTextColor(hDC, clrText);
 		if(pItem->m_bCancelBtnVisible)
-			::DrawText(hDC, _T("»°œ˚"), _tcslen(_T("»°œ˚")), &rtCancelBtnLabel, DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+			::DrawText(hDC, _T("ÂèñÊ∂à"), _tcslen(_T("ÂèñÊ∂à")), &rtCancelBtnLabel, DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
 	}
 }
 

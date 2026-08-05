@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  聊天图片服务程序入口函数
  *  zhangyl 2017.03.09
  **/
@@ -12,6 +12,8 @@
 #include "../net/EventLoop.h"
 #include "../fileserversrc/FileManager.h"
 #include "../fileserversrc/FileServer.h"
+#include "../fileserversrc/FileMsg.h"
+#include "RelayServer.h"
 
 #ifndef WIN32
 #include <string.h>
@@ -33,6 +35,7 @@ void prog_exit(int signo)
     std::cout << "program recv signal [" << signo << "] to exit." << std::endl;
 
     Singleton<FileServer>::Instance().uninit();
+    Singleton<RelayServer>::Instance().uninit();
     g_mainLoop.quit();
 }
 #endif
@@ -71,7 +74,7 @@ int main(int argc, char* argv[])
 
     std::string logFileFullPath;
 
-#ifndef WIN32
+
     const char* logfilepath = config.getConfigName("logfiledir");
     if (logfilepath == NULL)
     {
@@ -79,6 +82,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+#ifndef WIN32
     //如果log目录不存在则创建之
     DIR* dp = opendir(logfilepath);
     if (dp == NULL)
@@ -91,23 +95,43 @@ int main(int argc, char* argv[])
     }
     closedir(dp);
 
-    logFileFullPath = logfilepath;
 #endif
+
+    logFileFullPath = logfilepath;
 
     const char* logfilename = config.getConfigName("logfilename");
     logFileFullPath += logfilename;
 
+#ifdef _DEBUG
+    CAsyncLog::init();
+#else
     CAsyncLog::init(logFileFullPath.c_str());
+#endif
 
     const char* filecachedir = config.getConfigName("imgcachedir");
     Singleton<FileManager>::Instance().init(filecachedir);
 
+    //上传 / 下载令牌的 HMAC 校验密钥，须与 chatserver.conf 的 filetokenkey 一致
+    const char* filetokenkey = config.getConfigName("filetokenkey");
+
     const char* listenip = config.getConfigName("listenip");
     short listenport = (short)atol(config.getConfigName("listenport"));
-    Singleton<FileServer>::Instance().init(listenip, listenport, &g_mainLoop, filecachedir);
+    //imgserver 以 file_server_kind_image 启动，只放行头像 / 图片消息场景
+    Singleton<FileServer>::Instance().init(listenip, listenport, &g_mainLoop,
+        filecachedir, filetokenkey, file_server_kind_image);
+
+    //远程桌面中转：在独立端口起 RelayServer，令牌密钥须与 chatserver.conf 的 relaytokenkey 一致
+    const char* relaytokenkey = config.getConfigName("relaytokenkey");
+    const char* relaylistenip = config.getConfigName("relaylistenip");
+    const char* relaylistenportStr = config.getConfigName("relaylistenport");
+    short relaylistenport = (relaylistenportStr != NULL) ? (short)atol(relaylistenportStr) : 0;
+    Singleton<RelayServer>::Instance().init(
+        relaylistenip != NULL ? relaylistenip : "0.0.0.0",
+        relaylistenport, &g_mainLoop,
+        relaytokenkey != NULL ? relaytokenkey : "");
 
     LOGI("imgserver initialization complete, now you can use client to connect it.");
-    
+
     g_mainLoop.loop();
 
     LOGI("exit imgserver.");

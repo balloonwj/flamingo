@@ -1,0 +1,167 @@
+/**
+ *  BalloonSystemSettingDlg.h
+ *
+ *  "系统设置"对话框 —— 对照 design/系统设置1.png ~ 系统设置7.png。基于 balloonui
+ *  DuiFrameWindow。布局为左侧圆角胶囊竖向导航（CSettingsNavList，复用
+ *  DuiVirtualList）+ 右侧随选中项切换的 7 个分页内容区。同一时刻只显示一页，
+ *  靠对各分页容器 SetVisible + ForceLayout 实现（DuiVBox 布局自动跳过隐藏子）。
+ *
+ *  本期（阶段 1）只搭外壳 + 导航 + 切页 + 接入系统菜单，各页为占位；后续阶段
+ *  逐页填入真实设置项（通用 / 消息通知 / 聊天三页先行）。
+ *
+ *  与主面板的关系：主面板系统菜单"系统设置"项点击时，由 CBalloonMainPanel 持有
+ *  并调用本对话框的 OpenSettings（与"修改密码"对话框同套路）。老的 MFC
+ *  CSystemSettingDlg 保留但本菜单不再指向它。
+ *
+ *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL。
+ *
+ *  balloonwj@qq.com   2026-06-03
+ */
+
+#pragma once
+
+#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../balloonui/balloonui/DuiNotify.h"
+
+#include <vector>
+
+class CFlamingoClient;
+
+namespace balloonwjui { class DuiVBox; class DuiControl; class DuiLabel; }
+namespace balloonsettings { class CSettingsNavList; struct SettingsNavEntry; }
+
+/**
+ *  CBalloonSystemSettingDlg —— 系统设置对话框（非模态浮窗，owner = 主面板）。
+ */
+class CBalloonSystemSettingDlg : public balloonwjui::DuiFrameWindow
+{
+public:
+    /**
+     *  构造函数。
+     *    pFMGClient：所属客户端对象（消息中枢 / 用户配置 m_UserConfig 的来源），
+     *                本类只引用、不持有。本期仅作后续接配置用，外壳阶段未使用。
+     */
+    explicit CBalloonSystemSettingDlg(CFlamingoClient* pFMGClient);
+    ~CBalloonSystemSettingDlg();
+
+    /**
+     *  创建并显示对话框（已创建则前置显示）。
+     *    owner：owner 窗口句柄（主面板）；内部 Create 传 NULL 让子控件通知自路由
+     *           回本对话框（与修改密码 / 新建群对话框同处理），owner 仅作语义留存。
+     */
+    void OpenSettings(HWND owner);
+
+    BEGIN_MSG_MAP(CBalloonSystemSettingDlg)
+        MESSAGE_HANDLER(WM_CLOSE, OnCloseMsg)
+        MESSAGE_HANDLER(WM_TIMER, OnTimerMsg)
+        MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
+        CHAIN_MSG_MAP(balloonwjui::DuiFrameWindow)
+    END_MSG_MAP()
+
+private:
+    LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    // 动画 pulse 定时器：周期性驱动 DuiAnimMgr::TickAll，让开关等动画控件的滑动中间帧
+    // 真正推进（否则开关点了不动，详见 .cpp 顶部 kAnimTickTimerId 注释）。非本定时器
+    // 的 WM_TIMER 放行 chain，交给 DuiFrameWindow / 其它处理。
+    LRESULT OnTimerMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnDuiNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // 构建一次静态骨架（左导航 + 右内容区 7 个分页）。
+    void BuildUiOnce();
+
+    // 按导航行模型造一个占位分页（页标题 + 提示）。本期未落地的四页用它。
+    //   entry：该页的行模型（提供标题与 implemented 标记）。
+    //   返回：分页容器（DuiVBox），所有权移交调用方。
+    std::unique_ptr<balloonwjui::DuiVBox> BuildPlaceholderPage(
+        const balloonsettings::SettingsNavEntry& entry);
+
+    // 三页真实内容构建（通用 / 消息通知 / 聊天）。初始值从 CUserConfig（与开机
+    // 自启动注册表）读取。返回分页容器，所有权移交调用方。
+    std::unique_ptr<balloonwjui::DuiVBox> BuildGeneralPage();
+    std::unique_ptr<balloonwjui::DuiVBox> BuildNotifyPage();
+    std::unique_ptr<balloonwjui::DuiVBox> BuildChatPage();
+
+    // 另四页内容构建（音视频 / 快捷键 / 存储 / 账号安全）。返回分页容器，所有权移交调用方。
+    //   音视频：真实枚举麦克风/扬声器设备 + 摄像头占位 + 回声消除 + 麦克风测试按钮（占位）。
+    //   快捷键：只读键帽展示（发送/换行随聊天页设置联动，其余为文档默认值）。
+    //   存储：真实文件保存路径 + 占用量分段条（按本地数据目录扫描）+ 清理缓存（占位）。
+    //   账号安全：修改密码（复用面板改密对话框）+ 二次验证开关 + 其余按钮占位。
+    std::unique_ptr<balloonwjui::DuiVBox> BuildAudioVideoPage();
+    std::unique_ptr<balloonwjui::DuiVBox> BuildShortcutPage();
+    std::unique_ptr<balloonwjui::DuiVBox> BuildStoragePage();
+    std::unique_ptr<balloonwjui::DuiVBox> BuildAccountPage();
+
+    // 造一行的左侧"标题 + 可选副标题"文字块（整体垂直居中）。
+    //   title：行标题（必填）。
+    //   subtitle：副标题（灰色小字），为 NULL 或空串时不画。
+    //   返回：文字块容器（DuiVBox），所有权移交调用方。
+    std::unique_ptr<balloonwjui::DuiVBox> BuildRowTextBlock(LPCTSTR title, LPCTSTR subtitle);
+
+    // 往页里追加一条 1px 行分隔线。
+    void AddRowDivider(balloonwjui::DuiVBox* page);
+
+    // 往页里追加一行"开关行"（左标题/副标题，右 DuiSwitch）。
+    //   ctrlId：开关控件 id（用于 OnDuiNotify 分发）。
+    //   on：开关初始状态。
+    //   addDivider：是否在行下追加分隔线（末行传 false）。
+    void AddSwitchRow(balloonwjui::DuiVBox* page, LPCTSTR title, LPCTSTR subtitle,
+                      UINT ctrlId, bool on, bool addDivider);
+
+    // 往页里追加一行"下拉行"（左标题/副标题，右 DuiComboBox）。
+    //   options/count：下拉选项文本表首元素指针与项数。
+    //   selIndex：初始选中索引。
+    void AddComboRow(balloonwjui::DuiVBox* page, LPCTSTR title, LPCTSTR subtitle,
+                     UINT ctrlId, const wchar_t* const* options, int count, int selIndex,
+                     bool addDivider);
+
+    // 往页里追加一行"按钮行"（左标题/副标题，右 DuiButton）。
+    //   ctrlId：按钮控件 id；btnText：按钮文字；danger：true 用危险红样式（如"注销"）。
+    void AddButtonRow(balloonwjui::DuiVBox* page, LPCTSTR title, LPCTSTR subtitle,
+                      UINT ctrlId, LPCTSTR btnText, bool danger, bool addDivider);
+
+    // 往页里追加一行"只读取值行"（左标题/副标题，右灰色取值文本，如文件保存路径）。
+    void AddValueRow(balloonwjui::DuiVBox* page, LPCTSTR title, LPCTSTR subtitle,
+                     LPCTSTR value, bool addDivider);
+
+    // 往页里追加一行"键帽行"（左快捷键名，右 DuiBadge 键帽 chip，只读）。
+    void AddKeyCapRow(balloonwjui::DuiVBox* page, LPCTSTR title, LPCTSTR keyText, bool addDivider);
+
+    // 把某个设置控件的新值写回 CUserConfig（开机自启动写注册表）并即时持久化。
+    //   ctrlId：触发变更的控件 id。
+    //   value：新值（开关取 1/0；下拉取选中索引）。
+    //   返回：是否为本对话框已知的设置项（true 表示已处理）。
+    bool ApplySettingChange(UINT ctrlId, int value);
+
+    // 处理设置页里各按钮的点击（修改密码 / 设备管理 / 清理缓存 / 注销等）。
+    //   ctrlId：被点按钮的控件 id。
+    //   返回：是否为本对话框已知的按钮（true 表示已处理）。
+    bool HandleButtonClick(UINT ctrlId);
+
+    // 算"文件保存位置"当前生效路径：配置里设了自定义目录则用它，否则用默认推导路径
+    //（我的文档\Flamingo\FileRecv\账号）。仅用于显示。
+    CString EffectiveRecvPath();
+
+    // "更改"按钮：弹系统选目录框；选中后写回配置并即时生效（同步给 UserMgr），刷新显示。
+    void ChooseRecvPath();
+
+    // 仅切换各分页的可见性 + 更新 m_curPage，不触发重新布局（建窗期用）。
+    //   index：要显示的页索引（会经夹取）。
+    void ApplyPageVisibility(int index);
+
+    // 运行期切页：切换可见性后强制重排内容容器（让新显示页拿到完整矩形）并重绘。
+    //   index：要显示的页索引（与当前页相同则无操作）。
+    void ShowPage(int index);
+
+private:
+    CFlamingoClient* m_lpFMGClient;   // 所属客户端（配置 / 消息源），引用不持有
+
+    bool m_built;                     // 骨架是否已构建（避免重复构建）
+    int  m_curPage;                   // 当前显示页索引；初值 -1 表示尚未定页
+    HWND m_ownerHwnd;                 // 打开本对话框的宿主（主面板）HWND；"修改密码"按钮据此转发
+
+    // 控件指针（借用，控件树持有所有权）：切页 / 重排时用。
+    balloonsettings::CSettingsNavList* m_pNav;          // 左侧导航
+    balloonwjui::DuiVBox*              m_pContentHost;  // 右侧内容容器（承载 7 分页）
+    std::vector<balloonwjui::DuiControl*> m_pages;      // 7 个分页容器，按页序号索引
+    balloonwjui::DuiLabel*             m_pRecvPathLabel; // 存储页"文件保存位置"路径标签（借用），改路径后就地刷新
+};

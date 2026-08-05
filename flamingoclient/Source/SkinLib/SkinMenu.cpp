@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "SkinMenu.h"
 
 CSkinMenu::CSkinMenu(HMENU hMenu/* = NULL*/)
@@ -116,19 +116,19 @@ BOOL CSkinMenu::SetIcon(UINT nItem, BOOL bByPosition, LPCTSTR lpszIconN, LPCTSTR
 	return FALSE;
 }
 
-// ÉèÖÃÆÕÍ¨²Ëµ¥ÎÄ±¾ÑÕÉ«
+// è®¾ç½®æ™®é€šèœå•æ–‡æœ¬é¢œè‰²
 void CSkinMenu::SetTextColor(COLORREF clrText)
 {
 	m_clrText = clrText;
 }
 
-// ÉèÖÃÑ¡ÖÐ²Ëµ¥ÎÄ±¾ÑÕÉ«
+// è®¾ç½®é€‰ä¸­èœå•æ–‡æœ¬é¢œè‰²
 void CSkinMenu::SetSelTextColor(COLORREF clrSelText)
 {
 	m_clrSelText = clrSelText;
 }
 
-// ÉèÖÃ»Ò»¯²Ëµ¥ÎÄ±¾ÑÕÉ«
+// è®¾ç½®ç°åŒ–èœå•æ–‡æœ¬é¢œè‰²
 void CSkinMenu::SetGrayedTextColor(COLORREF clrGrayedText)
 {
 	m_clrGrayedText = clrGrayedText;
@@ -238,7 +238,7 @@ void CSkinMenu::OnMeasureItem(int nIDCtl, LPMEASUREITEMSTRUCT lpMeasureItemStruc
 	if (NULL == lpSkinMenuItemInfo || lpSkinMenuItemInfo->nMagic != SKIN_MENU_MAGIC)
 		return;
 
-	if (lpSkinMenuItemInfo->nType & MFT_SEPARATOR)		// ·Ö¸ô·û
+	if (lpSkinMenuItemInfo->nType & MFT_SEPARATOR)		// åˆ†éš”ç¬¦
 	{
 		lpms->itemWidth = 0;
 		if (m_lpSepartorImg != NULL && !m_lpSepartorImg->IsNull())
@@ -250,13 +250,13 @@ void CSkinMenu::OnMeasureItem(int nIDCtl, LPMEASUREITEMSTRUCT lpMeasureItemStruc
 	{
 		sz = GetTextExtent(lpSkinMenuItemInfo->szText);
 
-		lpms->itemWidth = m_nLMargin + 8 + sz.cx + 8;	// ×ó±ßÀ¸¿í¶È+²Ëµ¥ÎÄ±¾×ó±ß8ÏñËØ+²Ëµ¥ÎÄ±¾¿í¶È+²Ëµ¥ÎÄ±¾ÓÒ±ß8ÏñËØ
-		lpms->itemHeight = 5 + sz.cy + 5;				// ²Ëµ¥ÎÄ±¾ÉÏ±ß5ÏñËØ+²Ëµ¥ÎÄ±¾¸ß¶È+²Ëµ¥ÎÄ±¾ÏÂ±ß5ÏñËØ
+		lpms->itemWidth = m_nLMargin + 8 + sz.cx + 8;	// å·¦è¾¹æ å®½åº¦+èœå•æ–‡æœ¬å·¦è¾¹8åƒç´ +èœå•æ–‡æœ¬å®½åº¦+èœå•æ–‡æœ¬å³è¾¹8åƒç´ 
+		lpms->itemHeight = 5 + sz.cy + 5;				// èœå•æ–‡æœ¬ä¸Šè¾¹5åƒç´ +èœå•æ–‡æœ¬é«˜åº¦+èœå•æ–‡æœ¬ä¸‹è¾¹5åƒç´ 
 
-		if (lpSkinMenuItemInfo->hSubMenu != NULL)		// Èç¹ûÊÇ×Ó²Ëµ¥
+		if (lpSkinMenuItemInfo->hSubMenu != NULL)		// å¦‚æžœæ˜¯å­èœå•
 		{
 			if (m_lpArrowImg != NULL && !m_lpArrowImg->IsNull())
-				lpms->itemWidth += m_lpArrowImg->GetWidth() + 8;	// Ô­À´µÄ¿í¶È + ¼ýÍ·Í¼±ê¿í¶È + ¼ýÍ·Í¼±êÓÒ±ß8ÏñËØ
+				lpms->itemWidth += m_lpArrowImg->GetWidth() + 8;	// åŽŸæ¥çš„å®½åº¦ + ç®­å¤´å›¾æ ‡å®½åº¦ + ç®­å¤´å›¾æ ‡å³è¾¹8åƒç´ 
 			else
 				lpms->itemWidth += 5 + 8;
 		}
@@ -303,33 +303,33 @@ void CSkinMenu::OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct)
 	hMemBmp = ::CreateCompatibleBitmap(hDC, rcItem.Width(), rcItem.Height());
 	hOldBmp = (HBITMAP)::SelectObject(hMemDC, hMemBmp);
 
-	DrawBg(hMemDC, rcItem);					// »æÖÆ±³¾°
+	DrawBg(hMemDC, rcItem);					// ç»˜åˆ¶èƒŒæ™¯
 
-	if (bIsSeparator)						// »æÖÆ·Ö¸ô·û
+	if (bIsSeparator)						// ç»˜åˆ¶åˆ†éš”ç¬¦
 	{
 		DrawSepartor(hMemDC, rcItem);
 	}
 	else
 	{
 		if (bSelected && !bGrayed)
-			DrawSelRect(hMemDC, rcItem);	// »æÖÆÑ¡ÖÐÇøÓò
+			DrawSelRect(hMemDC, rcItem);	// ç»˜åˆ¶é€‰ä¸­åŒºåŸŸ
 
-		if (bChecked)						// »æÖÆCheck×´Ì¬
+		if (bChecked)						// ç»˜åˆ¶CheckçŠ¶æ€
 		{
 			DrawCheckState(hMemDC, rcItem);
 		}
 		else
 		{
 			if (bSelected)
-				DrawIcon(hMemDC, rcItem, lpIconImgH);	// »æÖÆÑ¡ÖÐÍ¼±ê
+				DrawIcon(hMemDC, rcItem, lpIconImgH);	// ç»˜åˆ¶é€‰ä¸­å›¾æ ‡
 			else
-				DrawIcon(hMemDC, rcItem, lpIconImgN);	// »æÖÆ·ÇÑ¡ÖÐÍ¼±ê
+				DrawIcon(hMemDC, rcItem, lpIconImgN);	// ç»˜åˆ¶éžé€‰ä¸­å›¾æ ‡
 		}
 
 		DrawText(hMemDC, rcItem, bGrayed, bSelected, 
-			(BOOL)lpSkinMenuItemInfo->hSubMenu, lpSkinMenuItemInfo->szText);	// »æÖÆ²Ëµ¥ÎÄ±¾
+			(BOOL)lpSkinMenuItemInfo->hSubMenu, lpSkinMenuItemInfo->szText);	// ç»˜åˆ¶èœå•æ–‡æœ¬
 
-		if (lpSkinMenuItemInfo->hSubMenu != NULL)	// »æÖÆ×Ó²Ëµ¥µÄÓÒÈý½Ç¼ýÍ·
+		if (lpSkinMenuItemInfo->hSubMenu != NULL)	// ç»˜åˆ¶å­èœå•çš„å³ä¸‰è§’ç®­å¤´
 			DrawArrow(hMemDC, rcItem);
 	}
 
@@ -337,7 +337,7 @@ void CSkinMenu::OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct)
 
 	::BitBlt(hDC, rcItem.left, rcItem.top, rcItem.Width(), rcItem.Height(), hMemDC, 0, 0, SRCCOPY);
 
-	if (lpSkinMenuItemInfo->hSubMenu != NULL)	// ²»ÈÃÏµÍ³»æÖÆµ¯³öÊ½²Ëµ¥¼ýÍ·
+	if (lpSkinMenuItemInfo->hSubMenu != NULL)	// ä¸è®©ç³»ç»Ÿç»˜åˆ¶å¼¹å‡ºå¼èœå•ç®­å¤´
 		::ExcludeClipRect(hDC, rcItem.left, rcItem.top, rcItem.right, rcItem.bottom);
 
 	::SelectObject(hMemDC, hOldBmp);
@@ -441,7 +441,7 @@ BOOL CSkinMenu::AppendMenu(UINT nFlags, UINT_PTR nIDNewItem/* = 0*/,
 
 			lpSkinMenuItemInfo->nMagic = SKIN_MENU_MAGIC;
 
-			if (nFlags & MF_POPUP)				// µ¯³ö²Ëµ¥
+			if (nFlags & MF_POPUP)				// å¼¹å‡ºèœå•
 			{
 				lpSkinMenuItemInfo->hSubMenu = (HMENU)nIDNewItem;
 				if (lpszNewItem != NULL && _tcslen(lpszNewItem) > 0)
@@ -453,12 +453,12 @@ BOOL CSkinMenu::AppendMenu(UINT nFlags, UINT_PTR nIDNewItem/* = 0*/,
 			}
 			else
 			{
-				if (nFlags & MF_SEPARATOR)		// ·Ö¸ô·û
+				if (nFlags & MF_SEPARATOR)		// åˆ†éš”ç¬¦
 				{
 					lpSkinMenuItemInfo->nID = 0;
 					lpSkinMenuItemInfo->nType = MFT_SEPARATOR;
 				}
-				else							// ²Ëµ¥Ïî
+				else							// èœå•é¡¹
 				{
 					lpSkinMenuItemInfo->nID = nIDNewItem;
 					if (lpszNewItem != NULL && _tcslen(lpszNewItem) > 0)
@@ -601,7 +601,7 @@ BOOL CSkinMenu::InsertMenu(UINT nPosition, UINT nFlags,
 			memset(lpSkinMenuItemInfo, 0, sizeof(SKIN_MENU_ITEM_INFO));
 
 			lpSkinMenuItemInfo->nMagic = SKIN_MENU_MAGIC;
-			if (nFlags & MF_POPUP)				// µ¯³ö²Ëµ¥
+			if (nFlags & MF_POPUP)				// å¼¹å‡ºèœå•
 			{
 				lpSkinMenuItemInfo->hSubMenu = (HMENU)nIDNewItem;
 				if (lpszNewItem != NULL && _tcslen(lpszNewItem) > 0)
@@ -614,12 +614,12 @@ BOOL CSkinMenu::InsertMenu(UINT nPosition, UINT nFlags,
 			}
 			else
 			{
-				if (nFlags & MF_SEPARATOR)		// ·Ö¸ô·û
+				if (nFlags & MF_SEPARATOR)		// åˆ†éš”ç¬¦
 				{
 					lpSkinMenuItemInfo->nID = 0;
 					lpSkinMenuItemInfo->nType = MFT_SEPARATOR;
 				}
-				else if (nFlags & MF_STRING)	// ²Ëµ¥Ïî
+				else if (nFlags & MF_STRING)	// èœå•é¡¹
 				{
 					lpSkinMenuItemInfo->nID = nIDNewItem;
 					if (lpszNewItem != NULL && _tcslen(lpszNewItem) > 0)
@@ -654,12 +654,12 @@ BOOL CSkinMenu::ModifyMenu(UINT nPosition, UINT nFlags,
 		bRet = ::ModifyMenu(m_hMenu, nPosition, nFlags, nIDNewItem, lpszNewItem);
 		if (bRet)
 		{
-			if (nFlags & MF_SEPARATOR)		// ·Ö¸ô·û
+			if (nFlags & MF_SEPARATOR)		// åˆ†éš”ç¬¦
 			{
 				lpSkinMenuItemInfo->nID = 0;
 				lpSkinMenuItemInfo->nType = MFT_SEPARATOR;
 			}
-			else							// ²Ëµ¥Ïî
+			else							// èœå•é¡¹
 			{
 				lpSkinMenuItemInfo->nID = nIDNewItem;
 				if (lpszNewItem != NULL && _tcslen(lpszNewItem) > 0)
@@ -778,7 +778,7 @@ BOOL CSkinMenu::EnableOwnerDraw(HMENU hMenu, BOOL bEnable)
 			if (stMenuItemInfo.hSubMenu != NULL)
 				EnableOwnerDraw(stMenuItemInfo.hSubMenu, bEnable);
 
-			if (!(stMenuItemInfo.fType & MFT_OWNERDRAW))	// Î´ÆðÓÃ²Ëµ¥×Ô»æ
+			if (!(stMenuItemInfo.fType & MFT_OWNERDRAW))	// æœªèµ·ç”¨èœå•è‡ªç»˜
 			{
 				lpSkinMenuItemInfo = (SKIN_MENU_ITEM_INFO*)stMenuItemInfo.dwItemData;
 				if (lpSkinMenuItemInfo != NULL && SKIN_MENU_MAGIC == lpSkinMenuItemInfo->nMagic)
@@ -859,7 +859,7 @@ SIZE CSkinMenu::GetTextExtent(LPCTSTR lpszText)
 	return sz;
 }
 
-// »æÖÆ²Ëµ¥¶¥±³¾°
+// ç»˜åˆ¶èœå•é¡¶èƒŒæ™¯
 void CSkinMenu::DrawBg(HDC hDC, CRect& rect)
 {
 	if (m_lpBgImgL != NULL && !m_lpBgImgL->IsNull())
@@ -877,7 +877,7 @@ void CSkinMenu::DrawBg(HDC hDC, CRect& rect)
 	}
 }
 
-// »æÖÆ·Ö¸ô·û
+// ç»˜åˆ¶åˆ†éš”ç¬¦
 void CSkinMenu::DrawSepartor(HDC hDC, CRect& rect)
 {
 	if (m_lpSepartorImg != NULL && !m_lpSepartorImg->IsNull())
@@ -888,14 +888,14 @@ void CSkinMenu::DrawSepartor(HDC hDC, CRect& rect)
 	}
 }
 
-// Ìî³äÑ¡ÖÐÇøÓò
+// å¡«å……é€‰ä¸­åŒºåŸŸ
 void CSkinMenu::DrawSelRect(HDC hDC, CRect& rect)
 {
 	if (m_lpSelectedImg != NULL && !m_lpSelectedImg->IsNull())
 		m_lpSelectedImg->Draw(hDC, rect);
 }
 
-// »æÖÆ²Ëµ¥Í¼±ê
+// ç»˜åˆ¶èœå•å›¾æ ‡
 void CSkinMenu::DrawIcon(HDC hDC, CRect& rect, CImageEx* lpIconImg)
 {
 	if (lpIconImg != NULL && !lpIconImg->IsNull())
@@ -914,13 +914,13 @@ void CSkinMenu::DrawIcon(HDC hDC, CRect& rect, CImageEx* lpIconImg)
 	}
 }
 
-// »æÖÆCheck×´Ì¬
+// ç»˜åˆ¶CheckçŠ¶æ€
 void CSkinMenu::DrawCheckState(HDC hDC, CRect& rect)
 {
 	DrawIcon(hDC, rect, m_lpCheckImg);
 }
 
-// »æÖÆ²Ëµ¥ÎÄ±¾
+// ç»˜åˆ¶èœå•æ–‡æœ¬
 void CSkinMenu::DrawText(HDC hDC, CRect& rect, BOOL bGrayed, 
 						 BOOL bSelected, BOOL bIsSubMenu, LPCTSTR lpText)
 {
@@ -961,7 +961,7 @@ void CSkinMenu::DrawText(HDC hDC, CRect& rect, BOOL bGrayed,
 	::SetBkMode(hDC, nMode);
 }
 
-// »æÖÆµ¯³öÊ½²Ëµ¥¼ýÍ·
+// ç»˜åˆ¶å¼¹å‡ºå¼èœå•ç®­å¤´
 void CSkinMenu::DrawArrow(HDC hDC, CRect& rect)
 {
 	if (m_lpArrowImg != NULL && !m_lpArrowImg->IsNull())

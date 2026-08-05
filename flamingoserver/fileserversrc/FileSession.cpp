@@ -1,379 +1,580 @@
 ﻿/**
- * FileSession.cpp
- * zhangyl, 2017.03.17
- **/
+ *  文件 / 图片传输会话实现，FileSession.cpp
+ *  balloonwj@qq.com   2026-05-22
+ */
 #include "FileSession.h"
 #include <string.h>
-#include <sstream>
-#include <list>
+#include <time.h>
+#include <stdio.h>
+#include <fstream>
+#include <vector>
 #include "../net/TcpConnection.h"
-#include "../net/ProtocolStream.h"
+#include "../net/FrameCodec.h"
 #include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
+#include "../utils/FileToken.h"
+#include "../utils/MD5.h"
+#include "../jsoncpp1.9.0/json.h"
 #include "FileMsg.h"
 #include "FileManager.h"
 
 using namespace net;
 
-//文件服务器最大的包50M
-#define MAX_PACKAGE_SIZE    50 * 1024 * 1024
+//以 64 位偏移定位文件读写位置。标准 fseek 的偏移参数是 long——Windows 上 long 恒为
+//32 位（x64 目标亦然），32 位 Linux 同样如此，故文件一旦超过 2 GiB，偏移就会溢出
+//截断，造成上传续传位点错乱、下载读到错误位置。聊天文件与群文件都不限大小，因此
+//所有文件定位一律走各平台的 64 位版本。
+//参数 fp 为已打开的文件句柄（调用方持有所有权，本函数不关闭）；offset 为字节偏移，
+//可为负（配合 SEEK_CUR / SEEK_END）；origin 取 SEEK_SET / SEEK_CUR / SEEK_END。
+//返回 true 表示定位成功，false 表示失败（此时文件位置未定义，调用方须放弃本次读写）。
+static bool seekFile64(FILE* fp, int64_t offset, int origin)
+{
+#ifdef _WIN32
+    return _fseeki64(fp, offset, origin) == 0;
+#else
+    return fseeko(fp, static_cast<off_t>(offset), origin) == 0;
+#endif
+}
 
-FileSession::FileSession(const std::shared_ptr<TcpConnection>& conn, const char* filebasedir) :
-    TcpSession(conn),
-    m_id(0),
-    m_seq(0),
-    m_strFileBaseDir(filebasedir),
-    m_bFileUploading(false)
+//取文件当前读写位置（64 位）。溢出理由同 seekFile64——标准 ftell 返回 long，大文件
+//下会截断成错误值。参数 fp 为已打开的文件句柄（调用方持有所有权）。
+//返回当前位置的字节偏移；失败返回 -1，调用方须自行兜底、不可把 -1 当作有效位点。
+static int64_t tellFile64(FILE* fp)
+{
+#ifdef _WIN32
+    return _ftelli64(fp);
+#else
+    return static_cast<int64_t>(ftello(fp));
+#endif
+}
+
+//把 Json::Value 序列化为紧凑 JSON 文本
+static std::string writeCompact(const Json::Value& v)
+{
+    Json::StreamWriterBuilder wb;
+    wb["indentation"] = "";
+    return Json::writeString(wb, v);
+}
+
+//构造 { code, msg } 错误应答 JSON 文本
+static std::string buildErrorJson(int code, const std::string& msg)
+{
+    Json::Value root;
+    root["code"] = code;
+    root["msg"]  = msg;
+    return writeCompact(root);
+}
+
+//判断某文件场景是否允许在本服务器收发：图片服务器只收图片类场景（头像 /
+//图片消息），文件服务器只收文件类场景（聊天文件 / 群文件）。令牌的 scene
+//由 chatserver 签发，本校验是防御性的对称兜底，防止令牌被拿到错误的服务器用。
+static bool isSceneAllowedOnServer(int serverKind, int scene)
+{
+    if (serverKind == file_server_kind_image)
+        return FileToken::isImageScene(scene);
+    if (serverKind == file_server_kind_file)
+        return FileToken::isFileScene(scene);
+    //未知服务器种类：保守拒绝
+    return false;
+}
+
+//把 UTF-8 JSON 文本解析为 Json::Value；解析失败或非对象返回 false
+static bool parseJsonObject(const std::string& json, Json::Value& root)
+{
+    Json::CharReaderBuilder b;
+    JSONCPP_STRING errs;
+    Json::CharReader* reader = b.newCharReader();
+    bool ok = reader->parse(json.c_str(), json.c_str() + json.size(), &root, &errs);
+    delete reader;
+    return ok && errs.empty() && root.isObject();
+}
+
+//取 JSON 字符串字段；缺失或非字符串返回空串
+static std::string jsonString(const Json::Value& root, const char* key)
+{
+    if (!root[key].isString())
+        return std::string();
+    return root[key].asString();
+}
+
+//取 JSON 整型字段；同时兼容数字与字符串两种写法，缺失返回 0
+static int64_t jsonInt64(const Json::Value& root, const char* key)
+{
+    const Json::Value& v = root[key];
+    if (v.isNumeric())
+        return v.asInt64();
+    if (v.isString())
+        return static_cast<int64_t>(atoll(v.asString().c_str()));
+    return 0;
+}
+
+//把字符串转为小写，用于 MD5 大小写无关比较
+static std::string toLower(const std::string& s)
+{
+    std::string r = s;
+    for (size_t i = 0; i < r.size(); ++i)
+    {
+        if (r[i] >= 'A' && r[i] <= 'Z')
+            r[i] = static_cast<char>(r[i] - 'A' + 'a');
+    }
+    return r;
+}
+
+//计算磁盘文件内容的 MD5（小写十六进制）；打开失败返回空串
+static std::string computeFileMd5(const std::string& path)
+{
+    std::ifstream in(path.c_str(), std::ios::binary);
+    if (!in)
+        return std::string();
+    MD5 md5(in);
+    return md5.toString();
+}
+
+FileSession::FileSession(const std::shared_ptr<TcpConnection>& conn, const char* filebasedir,
+                         const std::string& tokenkey, int serverkind)
+    : TcpSession(conn),
+      m_strFileBaseDir(filebasedir),
+      m_tokenKey(tokenkey),
+      m_serverKind(serverkind),
+      m_mode(mode_idle),
+      m_fp(NULL),
+      m_expectSize(0),
+      m_uploadOffset(0)
 {
 }
 
 FileSession::~FileSession()
 {
-
+    //会话销毁时，未完成的上传留下 .part 临时文件（可由后续续传复用或清理）
+    if (m_fp != NULL)
+        fclose(m_fp);
 }
 
 void FileSession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer* pBuffer, Timestamp receivTime)
 {
+    (void)receivTime;
     while (true)
     {
-        //不够一个包头大小
-        if (pBuffer->readableBytes() < (size_t)sizeof(file_msg_header))
-        {
-            //LOGI << "buffer is not enough for a package header, pBuffer->readableBytes()=" << pBuffer->readableBytes() << ", sizeof(msg)=" << sizeof(file_msg);
+        frame_header header;
+        std::string framebody;
+        size_t consumed = 0;
+        frame_decode_result r = decodeFrame(pBuffer->peek(), pBuffer->readableBytes(),
+                                            header, framebody, consumed, MAX_BODY_FILESERVER);
+        //数据不足一个完整帧，等待后续字节
+        if (r == frame_decode_need_more)
             return;
-        }
-
-        //不够一个整包大小
-        file_msg_header header;
-        memcpy(&header, pBuffer->peek(), sizeof(file_msg_header));
-
-        //包头有错误，立即关闭连接
-        if (header.packagesize <= 0 || header.packagesize > MAX_PACKAGE_SIZE)
+        //协议错误（魔数 / 版本 / 长度 / CRC 非法），关闭连接
+        if (r == frame_decode_error)
         {
-            //客户端发非法数据包，服务器主动关闭之
-            LOGE("Illegal package header size: %lld, close TcpConnection, client: %s", header.packagesize, conn->peerAddress().toIpPort().c_str());
-            LOG_DEBUG_BIN((unsigned char*)&header, sizeof(header));
+            LOGE("decodeFrame error, close connection, client: %s",
+                 conn->peerAddress().toIpPort().c_str());
             conn->forceClose();
             return;
         }
 
-        if (pBuffer->readableBytes() < (size_t)header.packagesize + sizeof(file_msg_header))
-            return;
-
-        pBuffer->retrieve(sizeof(file_msg_header));
-        std::string inbuf;
-        inbuf.append(pBuffer->peek(), header.packagesize);
-        pBuffer->retrieve(header.packagesize);
-        if (!process(conn, inbuf.c_str(), inbuf.length()))
+        //成功解出一帧，前移读指针并分发
+        pBuffer->retrieve(consumed);
+        if (!processFrame(conn, header.cmd, header.seq, framebody))
         {
-            LOGE("Process error, close TcpConnection, client: %s", conn->peerAddress().toIpPort().c_str());
+            LOGE("process frame error, close connection, client: %s",
+                 conn->peerAddress().toIpPort().c_str());
             conn->forceClose();
+            return;
         }
-    }// end while-loop
-
+    }
 }
 
-bool FileSession::process(const std::shared_ptr<TcpConnection>& conn, const char* inbuf, size_t length)
+bool FileSession::processFrame(const std::shared_ptr<TcpConnection>& conn,
+                               uint16_t cmd, uint32_t seq, const std::string& body)
 {
-    BinaryStreamReader readStream(inbuf, length);
-    int32_t cmd;
-    if (!readStream.ReadInt32(cmd))
-    {
-        LOGE("read cmd error, client: %s", conn->peerAddress().toIpPort().c_str());
-        return false;
-    }
-
-    //int seq;
-    if (!readStream.ReadInt32(m_seq))
-    {
-        LOGE("read seq error, client: %s", conn->peerAddress().toIpPort().c_str());
-        return false;
-    }
-
-    std::string filemd5;
-    size_t md5length;
-    if (!readStream.ReadString(&filemd5, 0, md5length) || md5length == 0)
-    {
-        LOGE("read filemd5 error, client: ", conn->peerAddress().toIpPort().c_str());
-        return false;
-    }
-
-    int64_t offset;
-    if (!readStream.ReadInt64(offset))
-    {
-        LOGE("read offset error, client: %s", conn->peerAddress().toIpPort().c_str());
-        return false;
-    }
-
-    int64_t filesize;
-    if (!readStream.ReadInt64(filesize))
-    {
-        LOGE("read filesize error, client: %s", conn->peerAddress().toIpPort().c_str());
-        return false;
-    }
-
-    string filedata;
-    size_t filedatalength;
-    if (!readStream.ReadString(&filedata, 0, filedatalength))
-    {
-        LOGE("read filedata error, client: %s", conn->peerAddress().toIpPort().c_str());
-        return false;
-    }
-
-    LOGI("Request from client: cmd: %d, seq: %d, filemd5: %s, md5length: %d, offset: %lld, filesize: %lld, filedata length: %lld, header.packagesize: %lld, client: %s",
-        cmd, m_seq, filemd5.c_str(), md5length, offset, filesize, (int64_t)filedata.length(), (int64_t)length, conn->peerAddress().toIpPort().c_str());
-
-    //LOG_DEBUG_BIN((unsigned char*)filedata.c_str(), filedatalength);
-
     switch (cmd)
     {
-        //客户端文件上传
-    case msg_type_upload_req:
-        return onUploadFileResponse(filemd5, offset, filesize, filedata, conn);
+    case cmd_file_upload:
+        return onUploadChunk(conn, seq, body);
 
-        //客户端文件下载
-    case msg_type_download_req:
-    {
-        int32_t clientNetType;
-        if (!readStream.ReadInt32(clientNetType))
-        {
-            LOGE("read clientNetType error, client: %s", conn->peerAddress().toIpPort().c_str());
-            return false;
-        }
-
-        //对于下载，客户端不知道文件大小， 所以值是0
-        //if (filedatalength != 0)
-        //    return false;
-        return onDownloadFileResponse(filemd5, clientNetType, conn);
-    }
-
+    case cmd_file_download:
+        return onDownloadChunk(conn, seq, body);
 
     default:
-        //pBuffer->retrieveAll();
-        LOGE("unsupport cmd, cmd: %d, client: %s", cmd, conn->peerAddress().toIpPort().c_str());
-        //conn->forceClose();
-        return false;
-    }// end switch
-
-    ++m_seq;
-
-    return true;
-}
-
-bool FileSession::onUploadFileResponse(const std::string& filemd5, int64_t offset, int64_t filesize, const std::string& filedata, const std::shared_ptr<TcpConnection>& conn)
-{
-    if (filemd5.empty())
-    {
-        LOGE("Empty filemd5, client: %s", conn->peerAddress().toIpPort().c_str());
+        LOGE("unsupported cmd: %u, client: %s",
+             static_cast<unsigned>(cmd), conn->peerAddress().toIpPort().c_str());
         return false;
     }
+}
 
-    //服务器上已经存在该文件，直接返回(如果该文件是处于打开状态说明处于正在上传的状态)
-    if (Singleton<FileManager>::Instance().isFileExsit(filemd5.c_str()) && !m_bFileUploading)
+bool FileSession::onUploadChunk(const std::shared_ptr<TcpConnection>& conn,
+                                uint32_t seq, const std::string& body)
+{
+    //拆出附件包体：描述符 JSON + 分片二进制
+    std::string descriptor;
+    size_t binoff = 0;
+    size_t binlen = 0;
+    if (!decodeAttachmentBody(body.data(), body.size(), descriptor, binoff, binlen))
     {
-        offset = filesize;
-        string dummyfiledata;
-        send(msg_type_upload_resp, m_seq, file_msg_error_complete, filemd5, offset, filesize, dummyfiledata);
+        LOGE("upload: decodeAttachmentBody failed, client: %s",
+             conn->peerAddress().toIpPort().c_str());
+        return false;
+    }
+    const char* binptr = body.data() + binoff;
 
+    //解析描述符
+    Json::Value desc;
+    if (!parseJsonObject(descriptor, desc))
+    {
+        LOGE("upload: bad descriptor, client: %s", conn->peerAddress().toIpPort().c_str());
+        return false;
+    }
+    std::string token  = jsonString(desc, "uploadtoken");
+    int64_t     offset = jsonInt64(desc, "offset");
 
-        LOGI("Response to client: cmd=msg_type_upload_resp, errorcode: file_msg_error_complete, filemd5: %s, offset: %lld, filesize: %lld, client: %s",
-            filemd5.c_str(), offset, filesize, conn->peerAddress().toIpPort().c_str());
-
+    //校验上传令牌
+    FileTokenPayload payload;
+    int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
+    if (!FileToken::verify(token, m_tokenKey, now, payload)
+        || payload.type != FileToken::token_type_upload)
+    {
+        LOGE("upload: invalid token, client: %s", conn->peerAddress().toIpPort().c_str());
+        sendJsonResponse(cmd_file_upload, seq,
+            buildErrorJson(error_code_invalid_file_token, "invalid upload token"));
+        return true;
+    }
+    //场景与服务器种类须匹配：图片服务器只收图片类场景，文件服务器只收文件类场景
+    if (!isSceneAllowedOnServer(m_serverKind, payload.scene))
+    {
+        sendJsonResponse(cmd_file_upload, seq,
+            buildErrorJson(error_code_permission_denied, "scene not allowed on this server"));
         return true;
     }
 
-    if (offset == 0)
-    {
-        std::string filename = m_strFileBaseDir;
-        filename += filemd5;
-        //这个地方我开始使用的是“w”模式，这在Linux平台没问题，但在Windows上因为是文本模式，fwrite函数在遇到文件中有0x0A时，会自动补上0x0D，造成文件内容出错
-        //所以改成wb，使用二进制模式
-        m_fp = fopen(filename.c_str(), "wb");
-        if (m_fp == NULL)
-        {
-            LOGE("fopen file error, filemd5: %s, client: %s", filemd5.c_str(), conn->peerAddress().toIpPort().c_str());
-            return false;
-        }
+    const std::string& md5 = payload.md5;
+    int64_t expectSize = payload.size;
 
-        //标识该文件正在上传中
-        m_bFileUploading = true;
-    } else
-    {
-        if (m_fp == NULL)
-        {
-            resetFile();
-            LOGE("file pointer should not be null, filemd5: %s, offset: %d, client: %s", filemd5.c_str(), offset, conn->peerAddress().toIpPort().c_str());
-            return false;
-        }
-    }
-
-    if (fseek(m_fp, offset, SEEK_SET) == -1)
-    {
-        LOGE("fseek error, filemd5: %s, errno: %d, errinfo: %s, filedata.length(): %lld, m_fp: 0x%x, buffer size is 512*1024, client: %s",
-            filemd5.c_str(), errno, strerror(errno), filedata.length(), m_fp, conn->peerAddress().toIpPort().c_str());
-
-        resetFile();
-        return false;
-    }
-
-    if (fwrite((char*)filedata.c_str(), 1, filedata.length(), m_fp) != filedata.length())
-    {
-        resetFile();
-        LOGE("fwrite error, filemd5: %s, errno: %d, errinfo: %s, filedata.length(): %lld, m_fp: 0x%x, buffer size is 512*1024, client: %s",
-            filemd5.c_str(), errno, strerror(errno), filedata.length(), m_fp, conn->peerAddress().toIpPort().c_str());
-        return false;
-    }
-
-    //将文件内容刷到磁盘上去
-    if (fflush(m_fp) != 0)
-    {
-        LOGE("fflush error, filemd5: %s, errno: %d, errinfo: %s, filedata.length(): %lld, m_fp: 0x%x, buffer size is 512*1024, client: %s",
-            filemd5.c_str(), errno, strerror(errno), filedata.length(), m_fp, conn->peerAddress().toIpPort().c_str());
-
-        return false;
-    }
-
-    int32_t errorcode = file_msg_error_progress;
-
-    //文件上传成功
-    int64_t filedataLength = static_cast<int64_t>(filedata.length());
-    if (offset + filedataLength == filesize)
-    {
-        offset = filesize;
-        errorcode = file_msg_error_complete;
-        Singleton<FileManager>::Instance().addFile(filemd5.c_str());
-        resetFile();
-    }
-
-    string dummyfiledatax;
-    send(msg_type_upload_resp, m_seq, errorcode, filemd5, offset, filesize, dummyfiledatax);
-
-    std::string errorcodestr = "file_msg_error_progress";
-    if (errorcode == file_msg_error_complete)
-        errorcodestr = "file_msg_error_complete";
-
-    LOGI("Response to client: cmd=msg_type_upload_resp, errorcode: %s, filemd5: %s, offset: %lld, filedataLength: %lld, filesize: %lld, upload percent: %d%%, client: %s",
-        errorcodestr.c_str(), filemd5.c_str(), offset, filedataLength, filesize, (int32_t)(offset * 100 / filesize), conn->peerAddress().toIpPort().c_str());
-
-    return true;
-}
-
-bool FileSession::onDownloadFileResponse(const std::string& filemd5, int32_t clientNetType, const std::shared_ptr<TcpConnection>& conn)
-{
-    if (filemd5.empty())
-    {
-        LOGE("Empty filemd5, client: %s", conn->peerAddress().toIpPort().c_str());
-        return false;
-    }
-
-    if (!Singleton<FileManager>::Instance().isFileExsit(filemd5.c_str()))
-    {
-        //客户端下载不存在的文件，告诉客户端不存在该文件
-        string dummyfiledata;
-        //文件不存在,则设置应答中偏移量offset和文件大小filesize均设置为0
-        int64_t notExsitFileOffset = 0;
-        int64_t notExsitFileSize = 0;
-        send(msg_type_download_resp, m_seq, file_msg_error_not_exist, filemd5, notExsitFileOffset, notExsitFileSize, dummyfiledata);
-        LOGE("filemd5 not exsit, filemd5: %s, clientNetType: %d, client: %s", filemd5.c_str(), clientNetType, conn->peerAddress().toIpPort().c_str());
-        std::ostringstream os;
-        os << "Response to client: cmd=msg_type_download_resp, errorcode=file_msg_error_not_exist "
-            << ", filemd5: " << filemd5 << ", clientNetType: " << clientNetType
-            << ", offset: 0"
-            << ", filesize: 0"
-            << ", filedataLength: 0"
-            << ", client:" << conn->peerAddress().toIpPort();
-        LOGI(os.str().c_str());
-        return true;
-    }
-
-    //文件还未打开,则先打开
+    //首次处理该文件：判断秒传、打开 .part 临时文件
     if (m_fp == NULL)
     {
-        string filename = m_strFileBaseDir;
-        filename += filemd5;
-        m_fp = fopen(filename.c_str(), "rb+");
+        //最终文件已在磁盘——秒传命中，无需写入，直接回完成
+        if (Singleton<FileManager>::Instance().isFileExsit(md5.c_str()))
+        {
+            Json::Value done;
+            done["code"]       = error_code_ok;
+            done["done"]       = true;
+            done["nextoffset"] = static_cast<Json::Int64>(expectSize);
+            sendJsonResponse(cmd_file_upload, seq, writeCompact(done));
+            LOGI("upload hit instant-transfer, md5: %s, client: %s",
+                 md5.c_str(), conn->peerAddress().toIpPort().c_str());
+            return true;
+        }
+
+        m_curMd5     = md5;
+        m_expectSize = expectSize;
+        m_partPath   = m_strFileBaseDir + md5 + ".part";
+
+        //.part 已存在则续传（rb+），否则新建（wb）
+        m_fp = fopen(m_partPath.c_str(), "rb+");
+        if (m_fp != NULL)
+        {
+            //以 .part 的现有长度作续传位点；取长度失败则从头重传，
+            //绝不能把 -1 当位点用，否则后续偏移计算全错
+            seekFile64(m_fp, 0, SEEK_END);
+            m_uploadOffset = tellFile64(m_fp);
+            if (m_uploadOffset < 0)
+                m_uploadOffset = 0;
+        }
+        else
+        {
+            m_fp = fopen(m_partPath.c_str(), "wb");
+            m_uploadOffset = 0;
+        }
         if (m_fp == NULL)
         {
-            LOGE("fopen file error, filemd5: %s, clientNetType: %d, client: %s", filemd5.c_str(), clientNetType, conn->peerAddress().toIpPort().c_str());
-            return false;
+            LOGE("upload: open part file failed: %s", m_partPath.c_str());
+            sendJsonResponse(cmd_file_upload, seq,
+                buildErrorJson(error_code_server_internal, "open file failed"));
+            return true;
         }
-
-        if (fseek(m_fp, 0, SEEK_END) == -1)
-        {
-            LOGE("fseek error, m_filesize: %lld, errno: %d, filemd5: %s, clientNetType: %d, client: %s", m_currentDownloadFileSize, errno, filemd5.c_str(), clientNetType, conn->peerAddress().toIpPort().c_str());
-            return false;
-        }
-
-        m_currentDownloadFileSize = ftell(m_fp);
-        if (m_currentDownloadFileSize <= 0)
-        {
-            LOGE("m_filesize: %lld, errno: %d, filemd5: %s, clientNetType: %d, client: %s", m_currentDownloadFileSize, errno, filemd5.c_str(), clientNetType, conn->peerAddress().toIpPort().c_str());
-            return false;
-        }
-
-        if (fseek(m_fp, 0, SEEK_SET) == -1)
-        {
-
-            LOGE("fseek error, m_filesize: %lld, errno: %d, filemd5: %s, clientNetType: %d, client: %s", m_currentDownloadFileSize, errno, filemd5.c_str(), clientNetType, conn->peerAddress().toIpPort().c_str());
-            return false;
-        }
+        m_mode = mode_uploading;
     }
-
-    string filedata;
-
-    //m_offset += offset;
-    int64_t currentSendSize = 512 * 1024;
-    //移动网络，每次传送64k
-    if (clientNetType == client_net_type_cellular)
-        currentSendSize = 64 * 1024;
-
-    char buffer[512 * 1024] = { 0 };
-    if (m_currentDownloadFileSize <= m_currentDownloadFileOffset + currentSendSize)
+    //已在上传中：必须与首片同一文件
+    else if (md5 != m_curMd5)
     {
-        currentSendSize = m_currentDownloadFileSize - m_currentDownloadFileOffset;
+        LOGE("upload: md5 mismatch within one session, client: %s",
+             conn->peerAddress().toIpPort().c_str());
+        return false;
     }
 
-    //TODO: 这个fread()调用时可能会出现崩溃,待排查
-    if (currentSendSize <= 0 || fread(buffer, currentSendSize, 1, m_fp) != 1)
+    //分片落盘：仅当 offset 与权威续传位点对齐时才写
+    if (offset == m_uploadOffset && binlen > 0)
     {
-        std::ostringstream os;
-        os << "fread error, filemd5: " << filemd5 << ", clientNetType: " << clientNetType
-            << ", errno: " << errno << ", errinfo: " << strerror(errno)
-            << ", currentSendSize: " << currentSendSize
-            << ", m_fp: " << m_fp
-            << ", buffer size is " << currentSendSize
-            << ", connection name:" << conn->peerAddress().toIpPort();
-        LOGE(os.str().c_str());
+        //防御：写入后总量不得超过期望大小
+        if (m_uploadOffset + static_cast<int64_t>(binlen) > m_expectSize)
+        {
+            LOGE("upload: size overrun, md5: %s", m_curMd5.c_str());
+            abortUpload();
+            sendJsonResponse(cmd_file_upload, seq,
+                buildErrorJson(error_code_upload_fail, "upload size overrun"));
+            return true;
+        }
+        //定位失败就此终止本次上传：继续 fwrite 会写到错误位置、污染 .part 文件
+        if (!seekFile64(m_fp, m_uploadOffset, SEEK_SET))
+        {
+            LOGE("upload: fseek failed, offset: %lld, md5: %s",
+                 static_cast<long long>(m_uploadOffset), m_curMd5.c_str());
+            abortUpload();
+            sendJsonResponse(cmd_file_upload, seq,
+                buildErrorJson(error_code_server_internal, "seek file failed"));
+            return true;
+        }
+        if (fwrite(binptr, 1, binlen, m_fp) != binlen)
+        {
+            LOGE("upload: fwrite failed, md5: %s", m_curMd5.c_str());
+            abortUpload();
+            sendJsonResponse(cmd_file_upload, seq,
+                buildErrorJson(error_code_server_internal, "write file failed"));
+            return true;
+        }
+        fflush(m_fp);
+        m_uploadOffset += static_cast<int64_t>(binlen);
     }
+    //出现空洞：不写入，回当前权威位点让客户端从此续传
+    else if (offset > m_uploadOffset)
+    {
+        Json::Value prog;
+        prog["code"]       = error_code_ok;
+        prog["done"]       = false;
+        prog["nextoffset"] = static_cast<Json::Int64>(m_uploadOffset);
+        sendJsonResponse(cmd_file_upload, seq, writeCompact(prog));
+        return true;
+    }
+    //offset < m_uploadOffset：客户端重发了已有数据，忽略写入，照常走收尾判断
 
-    //将要发送的偏移量
-    int sendoffset = m_currentDownloadFileOffset;
-    m_currentDownloadFileOffset += currentSendSize;
-    filedata.append(buffer, currentSendSize);
+    //是否已收齐：以累计写入量是否达到期望大小为准
+    if (m_uploadOffset >= m_expectSize)
+    {
+        fclose(m_fp);
+        m_fp = NULL;
 
-    int errorcode = file_msg_error_progress;
-    //文件已经下载完成
-    if (m_currentDownloadFileOffset == m_currentDownloadFileSize)
-        errorcode = file_msg_error_complete;
+        //校验文件内容 MD5（大小写无关）
+        std::string actualMd5 = computeFileMd5(m_partPath);
+        if (toLower(actualMd5) != toLower(m_curMd5))
+        {
+            LOGE("upload: md5 mismatch, expect: %s, actual: %s",
+                 m_curMd5.c_str(), actualMd5.c_str());
+            remove(m_partPath.c_str());
+            resetFile();
+            sendJsonResponse(cmd_file_upload, seq,
+                buildErrorJson(error_code_md5_mismatch, "md5 mismatch"));
+            return true;
+        }
 
-    send(msg_type_download_resp, m_seq, errorcode, filemd5, sendoffset, m_currentDownloadFileSize, filedata);
+        //把 .part 转正为最终文件
+        std::string finalPath = m_strFileBaseDir + m_curMd5;
+        int64_t total = m_uploadOffset;
+        if (Singleton<FileManager>::Instance().isFileExsit(m_curMd5.c_str()))
+        {
+            //并发情形下他方已先行完成同一文件：丢弃本端 .part
+            remove(m_partPath.c_str());
+        }
+        else if (rename(m_partPath.c_str(), finalPath.c_str()) != 0)
+        {
+            LOGE("upload: rename part to final failed: %s", finalPath.c_str());
+            remove(m_partPath.c_str());
+            resetFile();
+            sendJsonResponse(cmd_file_upload, seq,
+                buildErrorJson(error_code_server_internal, "finalize file failed"));
+            return true;
+        }
+        else
+        {
+            Singleton<FileManager>::Instance().addFile(m_curMd5.c_str());
+        }
 
-    std::ostringstream os2;
-    os2 << "Response to client: cmd=msg_type_download_resp, errorcode: " << (errorcode == file_msg_error_progress ? "file_msg_error_progress" : "file_msg_error_complete")
-        << ", filemd5: " << filemd5 << ", clientNetType: " << clientNetType
-        << ", sendoffset: " << sendoffset
-        << ", filesize: " << m_currentDownloadFileSize
-        << ", filedataLength: " << filedata.length()
-        << ", download percent: " << (m_currentDownloadFileOffset * 100 / m_currentDownloadFileSize) << "%"
-        << ", client:" << conn->peerAddress().toIpPort();
-
-    LOGI(os2.str().c_str());
-
-    //文件下载成功,重置文件状态
-    if (errorcode == file_msg_error_complete)
+        LOGI("upload complete, md5: %s, size: %lld, client: %s",
+             m_curMd5.c_str(), static_cast<long long>(total),
+             conn->peerAddress().toIpPort().c_str());
         resetFile();
 
+        Json::Value done;
+        done["code"]       = error_code_ok;
+        done["done"]       = true;
+        done["nextoffset"] = static_cast<Json::Int64>(total);
+        sendJsonResponse(cmd_file_upload, seq, writeCompact(done));
+        return true;
+    }
+
+    //尚未收齐：回当前进度
+    Json::Value prog;
+    prog["code"]       = error_code_ok;
+    prog["done"]       = false;
+    prog["nextoffset"] = static_cast<Json::Int64>(m_uploadOffset);
+    sendJsonResponse(cmd_file_upload, seq, writeCompact(prog));
     return true;
+}
+
+bool FileSession::onDownloadChunk(const std::shared_ptr<TcpConnection>& conn,
+                                  uint32_t seq, const std::string& body)
+{
+    //下载请求帧为普通 JSON 包体（无附件）
+    Json::Value desc;
+    if (!parseJsonObject(body, desc))
+    {
+        LOGE("download: bad request body, client: %s", conn->peerAddress().toIpPort().c_str());
+        return false;
+    }
+    std::string token  = jsonString(desc, "downloadtoken");
+    int64_t     offset = jsonInt64(desc, "offset");
+
+    //校验下载令牌
+    FileTokenPayload payload;
+    int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
+    if (!FileToken::verify(token, m_tokenKey, now, payload)
+        || payload.type != FileToken::token_type_download)
+    {
+        LOGE("download: invalid token, client: %s", conn->peerAddress().toIpPort().c_str());
+        sendDownloadError(seq, error_code_invalid_file_token, "invalid download token");
+        return true;
+    }
+    //场景与服务器种类须匹配：图片服务器只收图片类场景，文件服务器只收文件类场景
+    if (!isSceneAllowedOnServer(m_serverKind, payload.scene))
+    {
+        sendDownloadError(seq, error_code_permission_denied, "scene not allowed on this server");
+        return true;
+    }
+
+    const std::string& md5 = payload.md5;
+
+    //打开目标文件（首次下载、或切换到另一文件时重新打开）
+    if (m_fp == NULL || m_curMd5 != md5)
+    {
+        if (m_fp != NULL)
+            resetFile();
+
+        std::string path = m_strFileBaseDir + md5;
+        m_fp = fopen(path.c_str(), "rb");
+        if (m_fp == NULL)
+        {
+            LOGE("download: file not exist, md5: %s", md5.c_str());
+            sendDownloadError(seq, error_code_file_not_exist, "file not exist");
+            return true;
+        }
+        //以文件实际长度作下载总长；取长度失败视同文件不可用，避免用 -1 参与偏移计算
+        seekFile64(m_fp, 0, SEEK_END);
+        m_expectSize = tellFile64(m_fp);
+        if (m_expectSize < 0)
+        {
+            LOGE("download: get file size failed, md5: %s", md5.c_str());
+            resetFile();
+            sendDownloadError(seq, error_code_server_internal, "get file size failed");
+            return true;
+        }
+        m_curMd5     = md5;
+        m_mode       = mode_downloading;
+    }
+
+    int64_t totalsize = m_expectSize;
+    //offset 越界判定
+    if (offset < 0 || offset > totalsize)
+    {
+        LOGE("download: bad offset %lld, totalsize: %lld",
+             static_cast<long long>(offset), static_cast<long long>(totalsize));
+        sendDownloadError(seq, error_code_bad_request, "bad offset");
+        return true;
+    }
+
+    //本片字节数：不超过分片上限，且不越过文件尾
+    int64_t remain   = totalsize - offset;
+    int64_t chunklen = (remain < static_cast<int64_t>(FILE_CHUNK_SIZE))
+                           ? remain : static_cast<int64_t>(FILE_CHUNK_SIZE);
+    std::string chunk;
+    if (chunklen > 0)
+    {
+        std::vector<char> buf(static_cast<size_t>(chunklen));
+        //定位失败就不要读了：否则会把文件里另一处的内容当成本片发出去
+        if (!seekFile64(m_fp, offset, SEEK_SET))
+        {
+            LOGE("download: fseek failed, offset: %lld, md5: %s",
+                 static_cast<long long>(offset), md5.c_str());
+            sendDownloadError(seq, error_code_server_internal, "seek file failed");
+            return true;
+        }
+        size_t rd = fread(&buf[0], 1, static_cast<size_t>(chunklen), m_fp);
+        if (rd != static_cast<size_t>(chunklen))
+        {
+            LOGE("download: fread failed, md5: %s", md5.c_str());
+            sendDownloadError(seq, error_code_server_internal, "read file failed");
+            return true;
+        }
+        chunk.assign(&buf[0], static_cast<size_t>(chunklen));
+    }
+    bool done = (offset + chunklen >= totalsize);
+
+    //描述符：本片偏移、文件总大小、是否末片
+    Json::Value d;
+    d["code"]      = error_code_ok;
+    d["offset"]    = static_cast<Json::Int64>(offset);
+    d["totalsize"] = static_cast<Json::Int64>(totalsize);
+    d["done"]      = done;
+
+    std::string attBody;
+    if (!encodeAttachmentBody(writeCompact(d), chunk.data(),
+                              static_cast<uint32_t>(chunk.size()), attBody))
+    {
+        LOGE("download: encodeAttachmentBody failed, md5: %s", md5.c_str());
+        return false;
+    }
+    sendFrame(cmd_file_download, seq, frame_flag_has_attachment, attBody);
+
+    LOGI("download chunk, md5: %s, offset: %lld, chunklen: %lld, done: %d, client: %s",
+         md5.c_str(), static_cast<long long>(offset), static_cast<long long>(chunklen),
+         done ? 1 : 0, conn->peerAddress().toIpPort().c_str());
+
+    //末片发送完毕，关闭文件
+    if (done)
+        resetFile();
+    return true;
+}
+
+void FileSession::sendFrame(uint16_t cmd, uint32_t seq, uint8_t flags, const std::string& body)
+{
+    std::string out;
+    if (!encodeFrame(cmd, seq, flags, body.data(),
+                     static_cast<uint32_t>(body.size()),
+                     static_cast<uint32_t>(body.size()), out))
+    {
+        LOGE("encodeFrame failed, cmd: %u, bodylen: %u",
+             static_cast<unsigned>(cmd), static_cast<unsigned>(body.size()));
+        return;
+    }
+    sendData(out.data(), out.size());
+}
+
+void FileSession::sendJsonResponse(uint16_t cmd, uint32_t seq, const std::string& json)
+{
+    //上传应答为普通 JSON 帧，不带附件
+    sendFrame(cmd, seq, 0, json);
+}
+
+void FileSession::sendDownloadError(uint32_t seq, int code, const std::string& msg)
+{
+    //下载应答统一为附件帧；错误时描述符带错误码、二进制段为空
+    Json::Value d;
+    d["code"] = code;
+    d["msg"]  = msg;
+
+    std::string attBody;
+    encodeAttachmentBody(writeCompact(d), NULL, 0, attBody);
+    sendFrame(cmd_file_download, seq, frame_flag_has_attachment, attBody);
+}
+
+void FileSession::abortUpload()
+{
+    if (m_fp != NULL)
+    {
+        fclose(m_fp);
+        m_fp = NULL;
+    }
+    if (!m_partPath.empty())
+        remove(m_partPath.c_str());
+    resetFile();
 }
 
 void FileSession::resetFile()
@@ -381,9 +582,11 @@ void FileSession::resetFile()
     if (m_fp != NULL)
     {
         fclose(m_fp);
-        m_currentDownloadFileOffset = 0;
-        m_currentDownloadFileSize = 0;
         m_fp = NULL;
-        m_bFileUploading = false;
     }
+    m_mode         = mode_idle;
+    m_curMd5.clear();
+    m_partPath.clear();
+    m_expectSize   = 0;
+    m_uploadOffset = 0;
 }

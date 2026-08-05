@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "resource.h"
 #include "CustomMsgDef.h"
@@ -50,10 +50,10 @@ public:
 		COMMAND_ID_HANDLER_EX(ID_BTN_SEND, OnBtn_Send)
 		COMMAND_HANDLER_EX(ID_BTN_ARROW, BN_CLICKED, OnBtn_Arrow)
 
-		COMMAND_ID_HANDLER_EX(ID_32901, OnPressEnterMenuItem)					//»Ø³µ¼ü·¢ËÍÏûÏ¢
-		COMMAND_ID_HANDLER_EX(ID_32902, OnPressCtrlEnterMenuItem)				//Ctrl+»Ø³µ·¢ËÍÏûÏ¢
+		COMMAND_ID_HANDLER_EX(ID_32901, OnPressEnterMenuItem)					//å›è½¦é”®å‘é€æ¶ˆæ¯
+		COMMAND_ID_HANDLER_EX(ID_32902, OnPressCtrlEnterMenuItem)				//Ctrl+å›è½¦å‘é€æ¶ˆæ¯
 
-		COMMAND_RANGE_HANDLER_EX(IDC_FIRSTMSGLOG, IDC_LASTMSGLOG, OnMsgLogPage) //ÏûÏ¢¼ÇÂ¼×îÇ°Ò»Ìõ£¬ÉÏÒ»Ìõ£¬ÏÂÒ»Ìõ£¬×îºóÒ»ÌõËÄ¸ö°´Å¥
+		COMMAND_RANGE_HANDLER_EX(IDC_FIRSTMSGLOG, IDC_LASTMSGLOG, OnMsgLogPage) //æ¶ˆæ¯è®°å½•æœ€å‰ä¸€æ¡ï¼Œä¸Šä¸€æ¡ï¼Œä¸‹ä¸€æ¡ï¼Œæœ€åä¸€æ¡å››ä¸ªæŒ‰é’®
 
 		NOTIFY_HANDLER_EX(ID_TOOLBAR_TOP, TBN_DROPDOWN, OnToolbarDropDown)
 		NOTIFY_HANDLER_EX(ID_TOOLBAR_MID, TBN_DROPDOWN, OnToolbarDropDown)
@@ -76,8 +76,8 @@ public:
 		COMMAND_ID_HANDLER_EX(ID_MENU_VIEW_INFO, OnMenu_ViewInfo)
 		COMMAND_ID_HANDLER_EX(ID_MENU_SEND_MSG, OnMenu_SendMsg)
 
-		COMMAND_ID_HANDLER_EX(IDM_CLEARMSGLOG, OnMenu_ClearMsgLog)				//É¾³ıËùÓĞÏûÏ¢¼ÇÂ¼
-		COMMAND_ID_HANDLER_EX(IDM_DELETESELECTMSGLOG, OnMenu_DeleteSelectMsgLog)//É¾³ıÑ¡ÖĞÏûÏ¢¼ÇÂ¼
+		COMMAND_ID_HANDLER_EX(IDM_CLEARMSGLOG, OnMenu_ClearMsgLog)				//åˆ é™¤æ‰€æœ‰æ¶ˆæ¯è®°å½•
+		COMMAND_ID_HANDLER_EX(IDM_DELETESELECTMSGLOG, OnMenu_DeleteSelectMsgLog)//åˆ é™¤é€‰ä¸­æ¶ˆæ¯è®°å½•
 
 		MESSAGE_HANDLER_EX(FMG_MSG_SENDCHATMSG_RESULT, OnSendChatMsgResult)	
 
@@ -88,12 +88,12 @@ public:
 	END_MSG_MAP()
 
 public:
-	void OnRecvMsg(UINT nGroupCode, UINT nMsgId);				// ½ÓÊÕÈºÏûÏ¢
-	void OnUpdateGroupInfo();									// ¸üĞÂÈºĞÅÏ¢
-	void OnUpdateGroupNumber();									// ¸üĞÂÈººÅÂë
-	void OnUpdateGroupHeadPic();								// ¸üĞÂÈºÍ·Ïñ
-	void OnUpdateGMemberNumber(WPARAM wParam, LPARAM lParam);	// ¸üĞÂÈº³ÉÔ±ºÅÂë
-	void OnUpdateGMemberHeadPic(WPARAM wParam, LPARAM lParam);	// ¸üĞÂÈº³ÉÔ±Í·Ïñ
+	void OnRecvMsg(UINT nGroupCode, UINT nMsgId);				// æ¥æ”¶ç¾¤æ¶ˆæ¯
+	void OnUpdateGroupInfo();									// æ›´æ–°ç¾¤ä¿¡æ¯
+	void OnUpdateGroupNumber();									// æ›´æ–°ç¾¤å·ç 
+	void OnUpdateGroupHeadPic();								// æ›´æ–°ç¾¤å¤´åƒ
+	void OnUpdateGMemberNumber(WPARAM wParam, LPARAM lParam);	// æ›´æ–°ç¾¤æˆå‘˜å·ç 
+	void OnUpdateGMemberHeadPic(WPARAM wParam, LPARAM lParam);	// æ›´æ–°ç¾¤æˆå‘˜å¤´åƒ
 
 private:
 	BOOL OnInitDialog(CWindow wndFocus, LPARAM lInitParam);
@@ -109,45 +109,45 @@ private:
 	void OnClose();
 	void OnDestroy();
 
-	void OnLnk_GroupName(UINT uNotifyCode, int nID, CWindow wndCtl);// ¡°ÈºÃû³Æ¡±³¬Á´½Ó¿Ø¼ş
-	void OnBtn_Font(UINT uNotifyCode, int nID, CWindow wndCtl);		// ¡°×ÖÌåÑ¡Ôñ¹¤¾ßÀ¸¡±°´Å¥
-	void OnBtn_Face(UINT uNotifyCode, int nID, CWindow wndCtl);		// ¡°±íÇé¡±°´Å¥
-	void OnBtn_Image(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°·¢ËÍÍ¼Æ¬¡±°´Å¥
-	void OnBtn_MsgNotPrompt(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°À´ÏûÏ¢²»ÌáÊ¾¡±°´Å¥
-	void OnBtn_ScreenShot(UINT uNotifyCode, int nID, CWindow wndCtl);	// ½ØÍ¼¹¤¾ß
-	void OnBtn_MsgLog(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°ÏûÏ¢¼ÇÂ¼¡±°´Å¥
-	void OnBtn_SaveAs(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°µã»÷Áí´æÎª¡±°´Å¥
+	void OnLnk_GroupName(UINT uNotifyCode, int nID, CWindow wndCtl);// â€œç¾¤åç§°â€è¶…é“¾æ¥æ§ä»¶
+	void OnBtn_Font(UINT uNotifyCode, int nID, CWindow wndCtl);		// â€œå­—ä½“é€‰æ‹©å·¥å…·æ â€æŒ‰é’®
+	void OnBtn_Face(UINT uNotifyCode, int nID, CWindow wndCtl);		// â€œè¡¨æƒ…â€æŒ‰é’®
+	void OnBtn_Image(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œå‘é€å›¾ç‰‡â€æŒ‰é’®
+	void OnBtn_MsgNotPrompt(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œæ¥æ¶ˆæ¯ä¸æç¤ºâ€æŒ‰é’®
+	void OnBtn_ScreenShot(UINT uNotifyCode, int nID, CWindow wndCtl);	// æˆªå›¾å·¥å…·
+	void OnBtn_MsgLog(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œæ¶ˆæ¯è®°å½•â€æŒ‰é’®
+	void OnBtn_SaveAs(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œç‚¹å‡»å¦å­˜ä¸ºâ€æŒ‰é’®
 
-	void OnBtn_Close(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°¹Ø±Õ¡±°´Å¥
-	void OnBtn_Send(UINT uNotifyCode, int nID, CWindow wndCtl);		// ¡°·¢ËÍ¡±°´Å¥
-	void OnBtn_Arrow(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°¼ıÍ·¡±°´Å¥
+	void OnBtn_Close(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œå…³é—­â€æŒ‰é’®
+	void OnBtn_Send(UINT uNotifyCode, int nID, CWindow wndCtl);		// â€œå‘é€â€æŒ‰é’®
+	void OnBtn_Arrow(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œç®­å¤´â€æŒ‰é’®
 
 	LRESULT OnToolbarDropDown(LPNMHDR pnmh);
 
-	void OnMsgLogPage(UINT uNotifyCode, int nID, CWindow wndCtl);		// ÏûÏ¢¼ÇÂ¼·­Ò³°´Å¥
+	void OnMsgLogPage(UINT uNotifyCode, int nID, CWindow wndCtl);		// æ¶ˆæ¯è®°å½•ç¿»é¡µæŒ‰é’®
 
-	LRESULT OnUpdateFontInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);	// ¸üĞÂ×ÖÌåĞÅÏ¢
-	LRESULT OnFaceCtrlSel(UINT uMsg, WPARAM wParam, LPARAM lParam);		// ¡°±íÇé¡±¿Ø¼şÑ¡È¡ÏûÏ¢
-	LRESULT OnSetDlgInitFocus(UINT uMsg, WPARAM wParam, LPARAM lParam);	// ÉèÖÃ¶Ô»°¿ò³õÊ¼½¹µã
+	LRESULT OnUpdateFontInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);	// æ›´æ–°å­—ä½“ä¿¡æ¯
+	LRESULT OnFaceCtrlSel(UINT uMsg, WPARAM wParam, LPARAM lParam);		// â€œè¡¨æƒ…â€æ§ä»¶é€‰å–æ¶ˆæ¯
+	LRESULT OnSetDlgInitFocus(UINT uMsg, WPARAM wParam, LPARAM lParam);	// è®¾ç½®å¯¹è¯æ¡†åˆå§‹ç„¦ç‚¹
 	
-	LRESULT OnRichEdit_Recv_Link(LPNMHDR pnmh);						//	¡°½ÓÊÕÏûÏ¢¡±¸»ÎÄ±¾¿òÁ´½Óµã»÷ÏûÏ¢
+	LRESULT OnRichEdit_Recv_Link(LPNMHDR pnmh);						//	â€œæ¥æ”¶æ¶ˆæ¯â€å¯Œæ–‡æœ¬æ¡†é“¾æ¥ç‚¹å‡»æ¶ˆæ¯
 	LRESULT OnRichEdit_Send_Paste(LPNMHDR pnmh);
-	LRESULT OnGMemberList_DblClick(LPNMHDR pnmh);					// ¡°Èº³ÉÔ±¡±ÁĞ±íË«»÷ÏûÏ¢
-	LRESULT OnGMemberList_RClick(LPNMHDR pnmh);						// ¡°Èº³ÉÔ±¡±ÁĞ±íÓÒ¼üµ¥»÷ÏûÏ¢
-	void OnMenu_Cut(UINT uNotifyCode, int nID, CWindow wndCtl);		// ¡°¼ôÇĞ¡±²Ëµ¥
-	void OnMenu_Copy(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°¸´ÖÆ¡±²Ëµ¥
-	void OnMenu_Paste(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°Õ³Ìù¡±²Ëµ¥
-	void OnMenu_SelAll(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°È«²¿Ñ¡Ôñ¡±²Ëµ¥
-	void OnMenu_Clear(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°ÇåÆÁ¡±²Ëµ¥
-	void OnMenu_ZoomRatio(UINT uNotifyCode, int nID, CWindow wndCtl);// ¡°ÏÔÊ¾±ÈÀı¡±²Ëµ¥
-	void OnMenu_SaveAs(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°Áí´æÎª¡±²Ëµ¥
-	void OnMenu_ViewInfo(UINT uNotifyCode, int nID, CWindow wndCtl);// ¡°²é¿´×ÊÁÏ¡±²Ëµ¥
-	void OnMenu_SendMsg(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°·¢ËÍÏûÏ¢¡±²Ëµ¥
-	void OnMenu_DeleteSelectMsgLog(UINT uNotifyCode, int nID, CWindow wndCtl);//¡°É¾³ıÑ¡ÖĞÏûÏ¢¼ÇÂ¼¡±²Ëµ¥
-	void OnMenu_ClearMsgLog(UINT uNotifyCode, int nID, CWindow wndCtl); //¡°Çå¿ÕÏûÏ¢¼ÇÂ¼¡±²Ëµ¥
+	LRESULT OnGMemberList_DblClick(LPNMHDR pnmh);					// â€œç¾¤æˆå‘˜â€åˆ—è¡¨åŒå‡»æ¶ˆæ¯
+	LRESULT OnGMemberList_RClick(LPNMHDR pnmh);						// â€œç¾¤æˆå‘˜â€åˆ—è¡¨å³é”®å•å‡»æ¶ˆæ¯
+	void OnMenu_Cut(UINT uNotifyCode, int nID, CWindow wndCtl);		// â€œå‰ªåˆ‡â€èœå•
+	void OnMenu_Copy(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œå¤åˆ¶â€èœå•
+	void OnMenu_Paste(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œç²˜è´´â€èœå•
+	void OnMenu_SelAll(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œå…¨éƒ¨é€‰æ‹©â€èœå•
+	void OnMenu_Clear(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œæ¸…å±â€èœå•
+	void OnMenu_ZoomRatio(UINT uNotifyCode, int nID, CWindow wndCtl);// â€œæ˜¾ç¤ºæ¯”ä¾‹â€èœå•
+	void OnMenu_SaveAs(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œå¦å­˜ä¸ºâ€èœå•
+	void OnMenu_ViewInfo(UINT uNotifyCode, int nID, CWindow wndCtl);// â€œæŸ¥çœ‹èµ„æ–™â€èœå•
+	void OnMenu_SendMsg(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œå‘é€æ¶ˆæ¯â€èœå•
+	void OnMenu_DeleteSelectMsgLog(UINT uNotifyCode, int nID, CWindow wndCtl);//â€œåˆ é™¤é€‰ä¸­æ¶ˆæ¯è®°å½•â€èœå•
+	void OnMenu_ClearMsgLog(UINT uNotifyCode, int nID, CWindow wndCtl); //â€œæ¸…ç©ºæ¶ˆæ¯è®°å½•â€èœå•
 
-	void OnPressEnterMenuItem(UINT uNotifyCode, int nID, CWindow wndCtl);		//»Ø³µ¼ü·¢ËÍÏûÏ¢
-	void OnPressCtrlEnterMenuItem(UINT uNotifyCode, int nID, CWindow wndCtl);	//Ctrl+»Ø³µ·¢ËÍÏûÏ¢
+	void OnPressEnterMenuItem(UINT uNotifyCode, int nID, CWindow wndCtl);		//å›è½¦é”®å‘é€æ¶ˆæ¯
+	void OnPressCtrlEnterMenuItem(UINT uNotifyCode, int nID, CWindow wndCtl);	//Ctrl+å›è½¦å‘é€æ¶ˆæ¯
 
 	LRESULT OnSendChatMsgResult(UINT uMsg, WPARAM wParam, LPARAM lParam);
 
@@ -156,26 +156,26 @@ private:
 	LRESULT OnRecvFileProgress(UINT uMsg, WPARAM wParam, LPARAM lParam);
 	LRESULT OnRecvFileResult(UINT uMsg, WPARAM wParam, LPARAM lParam);
 	
-	BOOL OnRichEdit_MouseMove(MSG* pMsg);		// ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êÒÆ¶¯ÏûÏ¢
-	BOOL OnRichEdit_LBtnDblClk(MSG* pMsg);		// ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êË«»÷ÏûÏ¢
-	BOOL OnRichEdit_RBtnDown(MSG* pMsg);		// ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êÓÒ¼ü°´ÏÂÏûÏ¢
+	BOOL OnRichEdit_MouseMove(MSG* pMsg);		// å‘é€/æ¥æ”¶æ–‡æœ¬æ¡†çš„é¼ æ ‡ç§»åŠ¨æ¶ˆæ¯
+	BOOL OnRichEdit_LBtnDblClk(MSG* pMsg);		// å‘é€/æ¥æ”¶æ–‡æœ¬æ¡†çš„é¼ æ ‡åŒå‡»æ¶ˆæ¯
+	BOOL OnRichEdit_RBtnDown(MSG* pMsg);		// å‘é€/æ¥æ”¶æ–‡æœ¬æ¡†çš„é¼ æ ‡å³é”®æŒ‰ä¸‹æ¶ˆæ¯
 
-	CGroupInfo* GetGroupInfoPtr();				// »ñÈ¡ÈºĞÅÏ¢Ö¸Õë
-	CBuddyInfo* GetGMemberInfoPtr(UINT nUTalkUin);// »ñÈ¡Èº³ÉÔ±ĞÅÏ¢Ö¸Õë
-	CBuddyInfo* GetUserInfoPtr();				// »ñÈ¡ÓÃ»§ĞÅÏ¢Ö¸Õë
+	CGroupInfo* GetGroupInfoPtr();				// è·å–ç¾¤ä¿¡æ¯æŒ‡é’ˆ
+	CBuddyInfo* GetGMemberInfoPtr(UINT nUTalkUin);// è·å–ç¾¤æˆå‘˜ä¿¡æ¯æŒ‡é’ˆ
+	CBuddyInfo* GetUserInfoPtr();				// è·å–ç”¨æˆ·ä¿¡æ¯æŒ‡é’ˆ
 
-	void UpdateData();					// ¸üĞÂĞÅÏ¢
-	void UpdateDlgTitle();				// ¸üĞÂ¶Ô»°¿ò±êÌâÀ¸
-	BOOL UpdateGroupNameCtrl();			// ¸üĞÂÈºÃû³Æ¿Ø¼ş
-	BOOL UpdateGroupMemo();				// ¸üĞÂÈº¹«¸æ
-	BOOL UpdateGroupMemberList();		// ¸üĞÂÈº³ÉÔ±ÁĞ±í
+	void UpdateData();					// æ›´æ–°ä¿¡æ¯
+	void UpdateDlgTitle();				// æ›´æ–°å¯¹è¯æ¡†æ ‡é¢˜æ 
+	BOOL UpdateGroupNameCtrl();			// æ›´æ–°ç¾¤åç§°æ§ä»¶
+	BOOL UpdateGroupMemo();				// æ›´æ–°ç¾¤å…¬å‘Š
+	BOOL UpdateGroupMemberList();		// æ›´æ–°ç¾¤æˆå‘˜åˆ—è¡¨
 
-	BOOL InitTopToolBar();				// ³õÊ¼»¯Top¹¤¾ßÀ¸
-	BOOL InitMidToolBar();				// ³õÊ¼»¯Middle¹¤¾ßÀ¸
-	BOOL InitRichEditOleCallback();		// ³õÊ¼»¯IRichEditOleCallback½Ó¿Ú
+	BOOL InitTopToolBar();				// åˆå§‹åŒ–Topå·¥å…·æ 
+	BOOL InitMidToolBar();				// åˆå§‹åŒ–Middleå·¥å…·æ 
+	BOOL InitRichEditOleCallback();		// åˆå§‹åŒ–IRichEditOleCallbackæ¥å£
 
-	BOOL Init();						// ³õÊ¼»¯
-	BOOL UnInit();						// ·´³õÊ¼»¯
+	BOOL Init();						// åˆå§‹åŒ–
+	BOOL UnInit();						// ååˆå§‹åŒ–
 
 	void ShowMsgLogButtons(BOOL bShow);
 
@@ -202,8 +202,8 @@ private:
 
 	void ShowLastMsgInRecvRichEdit();
 
-	void OpenMsgLogBrowser();			// ´ò¿ªÏûÏ¢¼ÇÂ¼ä¯ÀÀ´°¿Ú
-	void CloseMsgLogBrowser();			// ¹Ø±ÕÏûÏ¢¼ÇÂ¼ä¯ÀÀ´°¿Ú
+	void OpenMsgLogBrowser();			// æ‰“å¼€æ¶ˆæ¯è®°å½•æµè§ˆçª—å£
+	void CloseMsgLogBrowser();			// å…³é—­æ¶ˆæ¯è®°å½•æµè§ˆçª—å£
 
 	void AddMsgToMsgLogEdit(std::vector<GROUP_MSG_LOG*>& arrMsgLog);
 	void AnalyseContent(tstring& strContent, HWND hRichWnd=NULL);
@@ -214,7 +214,7 @@ private:
 	BOOL InitRightTabWindow();
 
 	void ResizeImageInRecvRichEdit();
-	BOOL GetImageDisplaySizeInRichEdit(PCTSTR pszFileName, HWND hWnd, long& nWidth, long& nHeight);	//°´´°¿Ú³ß´çÀ´Ëõ·ÅÍ¼Æ¬´óĞ¡
+	BOOL GetImageDisplaySizeInRichEdit(PCTSTR pszFileName, HWND hWnd, long& nWidth, long& nHeight);	//æŒ‰çª—å£å°ºå¯¸æ¥ç¼©æ”¾å›¾ç‰‡å¤§å°
 
     void SendConfirmMessage(const CUploadFileResult* pUploadFileResult);
 
@@ -242,7 +242,7 @@ private:
 	CFaceSelDlg				m_FaceSelDlg;
 	CPicBarDlg				m_PicBarDlg;
 	CSkinRichEdit			m_richRecv, m_richSend, m_richMsgLog;
-	CSkinTabCtrl			m_RightTabCtrl;							//ÁÄÌì´°¿ÚÓÒ±ßµÄTab´°¿Ú
+	CSkinTabCtrl			m_RightTabCtrl;							//èŠå¤©çª—å£å³è¾¹çš„Tabçª—å£
 	CSkinListCtrl			m_ListCtrl;
 
 	CSkinButton				m_btnFirstMsgLog, m_btnPrevMsgLog, m_btnNextMsgLog, m_btnLastMsgLog;
@@ -267,19 +267,19 @@ private:
 
 	HRGN					m_HotRgn;
 
-	std::map<CString, long>	m_mapSendFileInfo;		//·¢ËÍÎÄ¼ş¶ÓÁĞ£¬¼üÊÇÎÄ¼şÃû£¬Èç¹û¼üÖµÎª-1ÔòÊÇÎÄ¼ş£»Èç¹û¼üÖµ´óÓÚ0ÔòÊÇÍ¼Æ¬ÔÚ´°¿ÚÎ»ÖÃµÄË÷Òı
-	std::map<CString, long>	m_mapRecvFileInfo;		//½ÓÊÕÎÄ¼ş¶ÓÁĞ£¬¼üÊÇÎÄ¼şÏÔÊ¾Ãû£¬¼üÖµÎª-1ÊÇÊÕÈ¡µÄÀëÏßÎÄ¼ş£»¼üÖµ´óÓÚ1ÊÇÊÕÈ¡µÄÁÄÌìÍ¼Æ¬Ó¦²åÈëµÄÎ»ÖÃË÷Òı
+	std::map<CString, long>	m_mapSendFileInfo;		//å‘é€æ–‡ä»¶é˜Ÿåˆ—ï¼Œé”®æ˜¯æ–‡ä»¶åï¼Œå¦‚æœé”®å€¼ä¸º-1åˆ™æ˜¯æ–‡ä»¶ï¼›å¦‚æœé”®å€¼å¤§äº0åˆ™æ˜¯å›¾ç‰‡åœ¨çª—å£ä½ç½®çš„ç´¢å¼•
+	std::map<CString, long>	m_mapRecvFileInfo;		//æ¥æ”¶æ–‡ä»¶é˜Ÿåˆ—ï¼Œé”®æ˜¯æ–‡ä»¶æ˜¾ç¤ºåï¼Œé”®å€¼ä¸º-1æ˜¯æ”¶å–çš„ç¦»çº¿æ–‡ä»¶ï¼›é”®å€¼å¤§äº1æ˜¯æ”¶å–çš„èŠå¤©å›¾ç‰‡åº”æ’å…¥çš„ä½ç½®ç´¢å¼•
 
-	BOOL					m_bPressEnterToSendMessage;	//TRUE°´»Ø³µ¼ü·¢ËÍÏûÏ¢, FALSE°´Ctrl+Enter·¢ËÍÏûÏ¢
+	BOOL					m_bPressEnterToSendMessage;	//TRUEæŒ‰å›è½¦é”®å‘é€æ¶ˆæ¯, FALSEæŒ‰Ctrl+Enterå‘é€æ¶ˆæ¯
 
 	BOOL					m_bMsgLogWindowVisible;
 	long					m_nMsgLogIndexInToolbar;
-	CMessageLogger			m_MsgLogger;				// ÏûÏ¢¼ÇÂ¼
-	long					m_nMsgLogRecordOffset;		//µ±Ç°ÏûÏ¢¼ÇÂ¼µÄÆ«ÒÆÁ¿+1
-	long					m_nMsgLogCurrentPageIndex;	//ÏûÏ¢¼ÇÂ¼µ±Ç°Ò³Âë
+	CMessageLogger			m_MsgLogger;				// æ¶ˆæ¯è®°å½•
+	long					m_nMsgLogRecordOffset;		//å½“å‰æ¶ˆæ¯è®°å½•çš„åç§»é‡+1
+	long					m_nMsgLogCurrentPageIndex;	//æ¶ˆæ¯è®°å½•å½“å‰é¡µç 
 
 
-	BOOL					m_bDraged;					//ÓÃ»§ÊÇ·ñÍÏ×§¹ı·¢ËÍÎÄ±¾¿òµÄ³ß´ç
+	BOOL					m_bDraged;					//ç”¨æˆ·æ˜¯å¦æ‹–æ‹½è¿‡å‘é€æ–‡æœ¬æ¡†çš„å°ºå¯¸
 	RECT					m_rtRichRecv;
 	RECT					m_rtMidToolBar;
 	RECT					m_rtSplitter;

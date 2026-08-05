@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "UserSessionData.h"
 #include <Dbghelp.h>
 
@@ -15,7 +15,7 @@ public:
 	}
 	static LONG WINAPI AutoUnhandleExceptionFilter::MyUnhandledExceptionFilter(struct _EXCEPTION_POINTERS* ExceptionInfo)
 	{
-		if(IDYES == ::MessageBox(NULL, _T("³ÌĞòÓöµ½Ò»¸öÖÂÃüµÄÎÊÌâ£¬ĞèÒª¹Ø±Õ£¬ÎÒÃÇ¶Ô´Ë±íÊ¾·Ç³£µÄ±§Ç¸¡£ÎÒÃÇ½«°ïÄúÖØÆô£¬ÏÖÔÚ¾ÍÖØĞÂÆô¶¯Âğ£¿"), _T("³ÌĞò³ö´í"), MB_YESNO|MB_ICONERROR|MB_SYSTEMMODAL))
+		if(IDYES == ::MessageBox(NULL, _T("ç¨‹åºé‡åˆ°ä¸€ä¸ªè‡´å‘½çš„é—®é¢˜ï¼Œéœ€è¦å…³é—­ï¼Œæˆ‘ä»¬å¯¹æ­¤è¡¨ç¤ºéå¸¸çš„æŠ±æ­‰ã€‚æˆ‘ä»¬å°†å¸®æ‚¨é‡å¯ï¼Œç°åœ¨å°±é‡æ–°å¯åŠ¨å—ï¼Ÿ"), _T("ç¨‹åºå‡ºé”™"), MB_YESNO|MB_ICONERROR|MB_SYSTEMMODAL))
 		{
 			::ShellExecute(NULL,NULL, _T("Flamingo.exe"), NULL, g_szHomePath, SW_SHOW);
 		}
@@ -43,5 +43,5 @@ public:
 	}
 };
 
-//±ØĞëÉêÃ÷Õâ¸öÈ«¾Ö±äÁ¿
+//å¿…é¡»ç”³æ˜è¿™ä¸ªå…¨å±€å˜é‡
 AutoUnhandleExceptionFilter autoUnhandleExceptionFilter;

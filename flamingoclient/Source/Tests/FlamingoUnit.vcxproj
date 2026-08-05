@@ -1,0 +1,496 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FlamingoUnit.vcxproj — Flamingo 客户端单元测试工程
+  balloonwj@qq.com   2026.05.21
+
+  控制台测试 exe，用 Catch2 v3（amalgamated 形态）作框架。覆盖客户端
+  UI 布局的"控件点名契约"，以及 v2 net/协议层（FrameCodec / Sha256 /
+  LoginProtocolClient）的纯逻辑。
+
+  关键约束：
+   · CharacterSet=Unicode —— 必须与 balloonui_static 一致，否则 CString
+     (CStringA vs CStringW) ABI 不匹配。
+   · CRT 静态（Debug /MTd、Release /MT）—— 必须与 balloonui_static 一致，
+     否则 _ITERATOR_DEBUG_LEVEL / RuntimeLibrary 链接冲突。
+   · 通过 <ProjectReference> 引用 balloonui_static，MSBuild 自动按依赖
+     先编 balloonui_static.lib 再链接进来。
+   · 每个 (Configuration, Platform) 独立 OutDir / IntDir，互不覆盖。
+-->
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A7C3E1F2-9D84-4B6E-8F25-1C3A5D7E9B40}</ProjectGuid>
+    <RootNamespace>FlamingoUnit</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseDebugLibraries>true</UseDebugLibraries>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings"></ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>..\..\Bin\Tests\Win32\Debug\</OutDir>
+    <IntDir>Unit_Debug_Win32\</IntDir>
+    <TargetName>FlamingoUnit</TargetName>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>..\..\Bin\Tests\Win32\Release\</OutDir>
+    <IntDir>Unit_Release_Win32\</IntDir>
+    <TargetName>FlamingoUnit</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>..\..\Bin\Tests\x64\Debug\</OutDir>
+    <IntDir>Unit_Debug_x64\</IntDir>
+    <TargetName>FlamingoUnit</TargetName>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>..\..\Bin\Tests\x64\Release\</OutDir>
+    <IntDir>Unit_Release_x64\</IntDir>
+    <TargetName>FlamingoUnit</TargetName>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\..\balloonui\wtl9.0;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <!-- /utf-8：源码（含中文 TEST_CASE 名 / 注释）按 UTF-8 解析。
+           /bigobj：Catch2 amalgamated 单 TU 较大，放开段数上限。 -->
+      <AdditionalOptions>/utf-8 /bigobj /FS %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\..\balloonui\wtl9.0;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <!-- /utf-8：源码（含中文 TEST_CASE 名 / 注释）按 UTF-8 解析。
+           /bigobj：Catch2 amalgamated 单 TU 较大，放开段数上限。 -->
+      <AdditionalOptions>/utf-8 /bigobj /FS %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\..\balloonui\wtl9.0;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <!-- /utf-8：源码（含中文 TEST_CASE 名 / 注释）按 UTF-8 解析。
+           /bigobj：Catch2 amalgamated 单 TU 较大，放开段数上限。 -->
+      <AdditionalOptions>/utf-8 /bigobj /FS %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <AdditionalIncludeDirectories>$(ProjectDir);..\..\balloonui\wtl9.0;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <ExceptionHandling>Sync</ExceptionHandling>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <!-- /utf-8：源码（含中文 TEST_CASE 名 / 注释）按 UTF-8 解析。
+           /bigobj：Catch2 amalgamated 单 TU 较大，放开段数上限。 -->
+      <AdditionalOptions>/utf-8 /bigobj /FS %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalDependencies>gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="AboutDlgModelTests.cpp" />
+    <ClCompile Include="AccountProtocolTests.cpp" />
+    <ClCompile Include="AnnotationModelTests.cpp" />
+    <ClCompile Include="AnnouncePopupPolicyTests.cpp" />
+    <ClCompile Include="AnnounceProtocolTests.cpp" />
+    <ClCompile Include="AnnounceStoreTests.cpp" />
+    <ClCompile Include="AnnounceBoxLayoutTests.cpp" />
+    <ClCompile Include="AudioPcmUtilsTests.cpp" />
+    <ClCompile Include="AvatarGrayTests.cpp" />
+    <ClCompile Include="AvatarImageUtilTests.cpp" />
+    <ClCompile Include="AvatarSpecTests.cpp" />
+    <ClCompile Include="BadgeRenderTests.cpp" />
+    <ClCompile Include="BalloonChangePwdValidateTests.cpp" />
+    <ClCompile Include="BalloonChatLayoutTests.cpp" />
+    <ClCompile Include="BalloonChatMsgFormatTests.cpp" />
+    <ClCompile Include="BalloonGroupInfoLayoutTests.cpp" />
+    <ClCompile Include="BalloonLoginLayoutTests.cpp" />
+    <ClCompile Include="BalloonMainLayoutTests.cpp" />
+    <ClCompile Include="BalloonProfileLayoutTests.cpp" />
+    <ClCompile Include="CallActionBarModelTests.cpp" />
+    <ClCompile Include="CallDlgLayoutTests.cpp" />
+    <ClCompile Include="CallMediaFramingTests.cpp" />
+    <ClCompile Include="CallProtocolTests.cpp" />
+    <ClCompile Include="CallRelayTestFrameTests.cpp" />
+    <ClCompile Include="CaptureFallbackPolicyTests.cpp" />
+    <ClCompile Include="catch_amalgamated.cpp" />
+    <ClCompile Include="ChatBubbleBackfillRepaintTests.cpp" />
+    <ClCompile Include="ChatFileLocationTests.cpp" />
+    <ClCompile Include="ChatFileStateModelTests.cpp" />
+    <ClCompile Include="ChatFontMapTests.cpp" />
+    <ClCompile Include="ChatHistoryPagingTests.cpp" />
+    <ClCompile Include="ChatInlineTextTests.cpp" />
+    <ClCompile Include="ChatImageMenuTests.cpp" />
+    <ClCompile Include="ChatMessageListMeasureTests.cpp" />
+    <ClCompile Include="ChatQuoteModelTests.cpp" />
+    <ClCompile Include="ChatRichContentSplitTests.cpp" />
+    <ClCompile Include="ChatTextSelectionTests.cpp" />
+    <ClCompile Include="ChatTransferCancelRegistryTests.cpp" />
+    <ClCompile Include="ChatWindowLayoutTests.cpp" />
+    <ClCompile Include="ClosePromptDecisionTests.cpp" />
+    <ClCompile Include="ContactMatchTests.cpp" />
+    <ClCompile Include="ContactRemarkModelTests.cpp" />
+    <ClCompile Include="ContactsOrgStatsTests.cpp" />
+    <ClCompile Include="ContactsProtocolTests.cpp" />
+    <ClCompile Include="ContactTests.cpp" />
+    <ClCompile Include="ConversationListOpsTests.cpp" />
+    <ClCompile Include="ConversationsProtocolTests.cpp" />
+    <ClCompile Include="DuiButtonFocusRectTests.cpp" />
+    <ClCompile Include="FavoritesModelTests.cpp" />
+    <ClCompile Include="FileBubbleFormatTests.cpp" />
+    <ClCompile Include="FileLocalStoreTests.cpp" />
+    <ClCompile Include="FileProtocolClientTests.cpp" />
+    <ClCompile Include="FileStreamTransferTests.cpp" />
+    <ClCompile Include="FrameCodecTests.cpp" />
+    <ClCompile Include="FriendProtocolClientTests.cpp" />
+    <ClCompile Include="GroupChatWindowLayoutTests.cpp" />
+    <ClCompile Include="GroupFileLibraryTests.cpp" />
+    <ClCompile Include="GroupFileProtocolClientTests.cpp" />
+    <ClCompile Include="GroupFileUploadTrackerTests.cpp" />
+    <ClCompile Include="GroupManageLayoutTests.cpp" />
+    <ClCompile Include="GroupManageMappingTests.cpp" />
+    <ClCompile Include="GroupMemberOrderTests.cpp" />
+    <ClCompile Include="GroupMentionInteractionTests.cpp" />
+    <ClCompile Include="GroupMentionTests.cpp" />
+    <ClCompile Include="GroupProtocolTests.cpp" />
+    <ClCompile Include="GroupRowTextTests.cpp" />
+    <ClCompile Include="GroupTransferQueueTests.cpp" />
+    <ClCompile Include="HistoryContentViewTests.cpp" />
+    <ClCompile Include="HistoryRowMenuTests.cpp" />
+    <ClCompile Include="HistoryModelTests.cpp" />
+    <ClCompile Include="HistoryViewTests.cpp" />
+    <ClCompile Include="HistoryWindowLayoutTests.cpp" />
+    <ClCompile Include="ImageDownloadDriverTests.cpp" />
+    <ClCompile Include="ImageUploadDriverTests.cpp" />
+    <ClCompile Include="ImageViewerGeometryTests.cpp" />
+    <ClCompile Include="KickoutNoticeTests.cpp" />
+    <ClCompile Include="LoginAccountListTests.cpp" />
+    <ClCompile Include="LoginProtocolTests.cpp" />
+    <ClCompile Include="MainPanelContactMenuTests.cpp" />
+    <ClCompile Include="MainPanelConversationMenuTests.cpp" />
+    <ClCompile Include="MainPanelStatusMenuTests.cpp" />
+    <ClCompile Include="MainPanelSystemMenuTests.cpp" />
+    <ClCompile Include="MainPanelTrayMenuTests.cpp" />
+    <ClCompile Include="MainPanelUserDataTests.cpp" />
+    <ClCompile Include="MemberPickerTreeModelTests.cpp" />
+    <ClCompile Include="MessageProtocolTests.cpp" />
+    <ClCompile Include="NetSettingsTests.cpp" />
+    <ClCompile Include="NotificationSoundTests.cpp" />
+    <ClCompile Include="OnlineCapabilityTests.cpp" />
+    <ClCompile Include="OpusAudioCodecTests.cpp" />
+    <ClCompile Include="OverlayScrollBarGeometryTests.cpp" />
+    <ClCompile Include="PanelDragZoneTests.cpp" />
+    <ClCompile Include="PinyinFullTests.cpp" />
+    <ClCompile Include="PinyinInitialsTests.cpp" />
+    <ClCompile Include="PopupMenuPlacementTests.cpp" />
+    <ClCompile Include="ProfileProtocolClientTests.cpp" />
+    <ClCompile Include="ProfileTests.cpp" />
+    <ClCompile Include="RdInputTests.cpp" />
+    <ClCompile Include="RdRelayFramingTests.cpp" />
+    <ClCompile Include="RdScreenDecoderTests.cpp" />
+    <ClCompile Include="RdScreenEncoderTests.cpp" />
+    <ClCompile Include="RegisterTests.cpp" />
+    <ClCompile Include="RemoteDesktopProtocolTests.cpp" />
+    <ClCompile Include="ReplyQuoteProtocolTests.cpp" />
+    <ClCompile Include="ScreenshotGeometryTests.cpp" />
+    <ClCompile Include="SettingsBindingTests.cpp" />
+    <ClCompile Include="SettingsPageModelTests.cpp" />
+    <ClCompile Include="Sha256Tests.cpp" />
+    <ClCompile Include="ShakeRateLimiterTests.cpp" />
+    <ClCompile Include="SideTabTextTests.cpp" />
+    <ClCompile Include="SignatureEditModelTests.cpp" />
+    <ClCompile Include="SpeexAudioProcessorTests.cpp" />
+    <ClCompile Include="SpeexResamplerTests.cpp" />
+    <ClCompile Include="TransferOwnerRegistryTests.cpp" />
+    <ClCompile Include="TrayFlashControllerTests.cpp" />
+    <ClCompile Include="TypingIndicatorTests.cpp" />
+    <ClCompile Include="V2MsgQueryTests.cpp" />
+    <ClCompile Include="V2MsgStoreTests.cpp" />
+    <ClCompile Include="VideoFrameConvertTests.cpp" />
+    <ClCompile Include="..\EncodeUtil.cpp" />
+    <ClCompile Include="..\GroupRoleRules.cpp" />
+    <ClCompile Include="..\IULog.cpp" />
+    <ClCompile Include="..\LoginAccountList.cpp" />
+    <ClCompile Include="..\MD5Sum.cpp" />
+    <ClCompile Include="..\BalloonAuth\AuthBanner.cpp" />
+    <ClCompile Include="..\BalloonAuth\AuthButtons.cpp" />
+    <ClCompile Include="..\BalloonAuth\AuthInputField.cpp" />
+    <ClCompile Include="..\BalloonAuth\BalloonLoginLayout.cpp" />
+    <ClCompile Include="..\BalloonChat\BalloonChatLayout.cpp" />
+    <ClCompile Include="..\BalloonChat\BalloonChatMsgFormat.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatBannerLabel.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatBubble.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatInlineText.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatFileLocation.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatFileStateModel.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatFileVisual.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatFontMap.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatHeaderInfo.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatHistoryPaging.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatIconButton.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatIcons.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatImageCache.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatMessageList.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatMessageMenu.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatMockData.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatQuoteModel.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatRichContentSplit.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatRootPanel.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatSendButton.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatTextSelection.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatWindowLayout.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\FileBubbleFormat.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\GroupChatHeaderInfo.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\GroupChatWindowLayout.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\GroupFileItem.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\GroupFileLibrary.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\GroupFileList.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\GroupFileUploadTracker.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\GroupMemberItem.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\GroupMemberList.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\GroupMemberOrder.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\GroupMentionButton.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\GroupMentionMenu.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\GroupMentionModel.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\GroupSideTab.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\SideTabText.cpp" />
+    <ClCompile Include="..\BalloonContact\ContactIcons.cpp" />
+    <ClCompile Include="..\BalloonContact\ContactLayout.cpp" />
+    <ClCompile Include="..\BalloonContact\ContactModel.cpp" />
+    <ClCompile Include="..\BalloonContact\TagChip.cpp" />
+    <ClCompile Include="..\BalloonGroupManage\AnnouncePopupPolicy.cpp" />
+    <ClCompile Include="..\BalloonGroupManage\GroupManageButton.cpp" />
+    <ClCompile Include="..\BalloonGroupManage\GroupManageIcons.cpp" />
+    <ClCompile Include="..\BalloonGroupManage\GroupManageLayout.cpp" />
+    <ClCompile Include="..\BalloonGroupManage\GroupManageMapping.cpp" />
+    <ClCompile Include="..\BalloonGroupManage\GroupManageModel.cpp" />
+    <ClCompile Include="..\BalloonGroupManage\GroupManageNavItem.cpp" />
+    <ClCompile Include="..\BalloonGroupManage\GroupManagePaint.cpp" />
+    <ClCompile Include="..\BalloonHistory\AnnounceStore.cpp" />
+    <ClCompile Include="..\BalloonHistory\FileLocalStore.cpp" />
+    <ClCompile Include="..\BalloonHistory\HistoryHighlightLabel.cpp" />
+    <ClCompile Include="..\BalloonHistory\HistoryModel.cpp" />
+    <ClCompile Include="..\BalloonHistory\HistoryContentView.cpp" />
+    <ClCompile Include="..\BalloonHistory\HistoryRowMenu.cpp" />
+    <ClCompile Include="..\BalloonHistory\HistoryRow.cpp" />
+    <ClCompile Include="..\BalloonAnnounce\AnnounceRow.cpp" />
+    <ClCompile Include="..\BalloonAnnounce\AnnounceBoxLayout.cpp" />
+    <ClCompile Include="..\BalloonHistory\HistoryView.cpp" />
+    <ClCompile Include="..\BalloonHistory\HistoryWindowLayout.cpp" />
+    <ClCompile Include="..\BalloonHistory\V2MsgQuery.cpp" />
+    <ClCompile Include="..\BalloonHistory\V2MsgStore.cpp" />
+    <ClCompile Include="..\BalloonImageViewer\ImageViewerGeometry.cpp" />
+    <ClCompile Include="..\BalloonMain\AboutDlgModel.cpp" />
+    <ClCompile Include="..\BalloonMain\AvatarGray.cpp" />
+    <ClCompile Include="..\BalloonMain\AvatarImageUtil.cpp" />
+    <ClCompile Include="..\BalloonMain\AvatarPickerTile.cpp" />
+    <ClCompile Include="..\BalloonMain\BadgeRender.cpp" />
+    <ClCompile Include="..\BalloonMain\BalloonChangePwdValidate.cpp" />
+    <ClCompile Include="..\BalloonMain\BalloonGroupInfoLayout.cpp" />
+    <ClCompile Include="..\BalloonMain\BalloonMainLayout.cpp" />
+    <ClCompile Include="..\BalloonMain\BalloonProfileLayout.cpp" />
+    <ClCompile Include="..\BalloonMain\ClosePromptDecision.cpp" />
+    <ClCompile Include="..\BalloonMain\ContactRemarkModel.cpp" />
+    <ClCompile Include="..\BalloonMain\ContactsOrgStats.cpp" />
+    <ClCompile Include="..\BalloonMain\ConversationListOps.cpp" />
+    <ClCompile Include="..\BalloonMain\FavoritesModel.cpp" />
+    <ClCompile Include="..\BalloonMain\GroupRowText.cpp" />
+    <ClCompile Include="..\BalloonMain\KickoutNotice.cpp" />
+    <ClCompile Include="..\BalloonMain\MainPanelButtons.cpp" />
+    <ClCompile Include="..\BalloonMain\MainPanelContactMenu.cpp" />
+    <ClCompile Include="..\BalloonMain\MainPanelConversationMenu.cpp" />
+    <ClCompile Include="..\BalloonMain\MainPanelHeader.cpp" />
+    <ClCompile Include="..\BalloonMain\MainPanelIcons.cpp" />
+    <ClCompile Include="..\BalloonMain\MainPanelListItem.cpp" />
+    <ClCompile Include="..\BalloonMain\MainPanelMockData.cpp" />
+    <ClCompile Include="..\BalloonMain\MainPanelScrollView.cpp" />
+    <ClCompile Include="..\BalloonMain\MainPanelSectionHeader.cpp" />
+    <ClCompile Include="..\BalloonMain\MainPanelStatusMenu.cpp" />
+    <ClCompile Include="..\BalloonMain\MainPanelSystemMenu.cpp" />
+    <ClCompile Include="..\BalloonMain\MainPanelTab.cpp" />
+    <ClCompile Include="..\BalloonMain\MainPanelTrayMenu.cpp" />
+    <ClCompile Include="..\BalloonMain\MainPanelTreeView.cpp" />
+    <ClCompile Include="..\BalloonMain\MainPanelUserData.cpp" />
+    <ClCompile Include="..\BalloonMain\MemberPickerRow.cpp" />
+    <ClCompile Include="..\BalloonMain\MemberPickerTreeModel.cpp" />
+    <ClCompile Include="..\BalloonMain\MemberPickerTreeView.cpp" />
+    <ClCompile Include="..\BalloonMain\NotificationSound.cpp" />
+    <ClCompile Include="..\BalloonMain\OnlineCapability.cpp" />
+    <ClCompile Include="..\BalloonMain\OverlayScrollBarGeometry.cpp" />
+    <ClCompile Include="..\BalloonMain\PanelDragZone.cpp" />
+    <ClCompile Include="..\BalloonMain\PopupMenuPlacement.cpp" />
+    <ClCompile Include="..\BalloonMain\SignatureEditModel.cpp" />
+    <ClCompile Include="..\BalloonMain\TrayFlashController.cpp" />
+    <ClCompile Include="..\BalloonNetSettings\NetServerCard.cpp" />
+    <ClCompile Include="..\BalloonNetSettings\NetSettingsLayout.cpp" />
+    <ClCompile Include="..\BalloonNetSettings\NetSettingsModel.cpp" />
+    <ClCompile Include="..\BalloonProfile\ProfileLayout.cpp" />
+    <ClCompile Include="..\BalloonProfile\ProfileModel.cpp" />
+    <ClCompile Include="..\BalloonRegister\RegisterIcons.cpp" />
+    <ClCompile Include="..\BalloonRegister\RegisterLayout.cpp" />
+    <ClCompile Include="..\BalloonRegister\RegisterModel.cpp" />
+    <ClCompile Include="..\BalloonScreenshot\AnnotationModel.cpp" />
+    <ClCompile Include="..\BalloonScreenshot\ScreenshotGeometry.cpp" />
+    <ClCompile Include="..\BalloonSearch\ContactMatch.cpp" />
+    <ClCompile Include="..\BalloonSearch\PinyinFull.cpp" />
+    <ClCompile Include="..\BalloonSearch\PinyinInitials.cpp" />
+    <ClCompile Include="..\BalloonSettings\SettingsBinding.cpp" />
+    <ClCompile Include="..\BalloonSettings\SettingsPageModel.cpp" />
+    <ClCompile Include="..\Call\AudioPcmUtils.cpp" />
+    <ClCompile Include="..\Call\CallDlgLayout.cpp" />
+    <ClCompile Include="..\Call\CallMediaFraming.cpp" />
+    <ClCompile Include="..\Call\CallRelayTestFrame.cpp" />
+    <ClCompile Include="..\Call\OpusAudioCodec.cpp" />
+    <ClCompile Include="..\Call\SpeexAudioProcessor.cpp" />
+    <ClCompile Include="..\Call\SpeexResampler.cpp" />
+    <ClCompile Include="..\Call\VideoFrameConvert.cpp" />
+    <ClCompile Include="..\jsoncpp-1.9.0\json_reader.cpp" />
+    <ClCompile Include="..\jsoncpp-1.9.0\json_value.cpp" />
+    <ClCompile Include="..\jsoncpp-1.9.0\json_writer.cpp" />
+    <ClCompile Include="..\net\AccountProtocolClient.cpp" />
+    <ClCompile Include="..\net\AnnounceProtocolClient.cpp" />
+    <ClCompile Include="..\net\CallProtocolClient.cpp" />
+    <ClCompile Include="..\net\ChatTransferCancelRegistry.cpp" />
+    <ClCompile Include="..\net\ContactsProtocolClient.cpp" />
+    <ClCompile Include="..\net\ConversationsProtocolClient.cpp" />
+    <ClCompile Include="..\net\FavoriteProtocolClient.cpp" />
+    <ClCompile Include="..\net\FileProtocolClient.cpp" />
+    <ClCompile Include="..\net\FileStreamTransfer.cpp" />
+    <ClCompile Include="..\net\FrameCodec.cpp" />
+    <ClCompile Include="..\net\FriendProtocolClient.cpp" />
+    <ClCompile Include="..\net\GroupFileProtocolClient.cpp" />
+    <ClCompile Include="..\net\GroupProtocolClient.cpp" />
+    <ClCompile Include="..\net\GroupTransferQueue.cpp" />
+    <ClCompile Include="..\net\ImageDownloadDriver.cpp" />
+    <ClCompile Include="..\net\ImageUploadDriver.cpp" />
+    <ClCompile Include="..\net\LoginProtocolClient.cpp" />
+    <ClCompile Include="..\net\MessageProtocolClient.cpp" />
+    <ClCompile Include="..\net\ProfileProtocolClient.cpp" />
+    <ClCompile Include="..\net\RegisterProtocolClient.cpp" />
+    <ClCompile Include="..\net\RemoteDesktopProtocolClient.cpp" />
+    <ClCompile Include="..\net\Sha256.cpp" />
+    <ClCompile Include="..\net\TransferOwnerRegistry.cpp" />
+    <ClCompile Include="..\RemoteDesktop\CaptureFallbackPolicy.cpp" />
+    <ClCompile Include="..\RemoteDesktop\RdInputEncoder.cpp" />
+    <ClCompile Include="..\RemoteDesktop\RdInputInjector.cpp" />
+    <ClCompile Include="..\RemoteDesktop\RdRelayFraming.cpp" />
+    <ClCompile Include="..\RemoteDesktop\RdScreenDecoder.cpp" />
+    <ClCompile Include="..\RemoteDesktop\ScreenFrameEncoder.cpp" />
+    <ClCompile Include="..\..\..\third-party\sqlite-src-3530100\sqlite3.c" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\balloonui\balloonui\balloonui_static.vcxproj">
+      <Project>{e5f9b2a1-6c84-4de3-9c75-3b8a4d2e7f60}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\third-party\opus-1.5.2\opus_static.vcxproj">
+      <Project>{b1e2c3d4-0a1b-4c2d-9e3f-0a1b2c3d4e5f}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\third-party\speexdsp-1.2.1\speexdsp_static.vcxproj">
+      <Project>{c2d3e4f5-1b2c-4d3e-af40-1b2c3d4e5f60}</Project>
+    </ProjectReference>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets"></ImportGroup>
+</Project>

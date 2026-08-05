@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "PerformanceCounter.h"
 #include "EncodeUtil.h"
 #include <tchar.h>
@@ -102,25 +102,25 @@ void CPerformanceCounter::Uninit()
 bool CPerformanceCounter::Begin(PCSTR pszFunctionSig, int nLineNo)
 {
 #ifdef PERFORMANCE_OUTPUT  
-    //Ê±¼ä
+    //æ—¶é—´
     char szTime[64] = { 0 };
     SYSTEMTIME st = { 0 };
     ::GetLocalTime(&st);
     sprintf_s(szTime, ARRAYSIZE(szTime), "[%04d-%02d-%02d %02d:%02d:%02d:%04d]", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
     std::string strDebugInfo(szTime);
 
-    //µ±Ç°Ïß³ÌĞÅÏ¢
+    //å½“å‰çº¿ç¨‹ä¿¡æ¯
     char szThreadID[32] = { 0 };
     DWORD dwThreadID = ::GetCurrentThreadId();
     sprintf_s(szThreadID, ARRAYSIZE(szThreadID), "[ThreadID: %u]", dwThreadID);
     strDebugInfo += szThreadID;
 
-    //º¯ÊıÇ©Ãû
+    //å‡½æ•°ç­¾å
     char szFuncSig[512] = { 0 };
     sprintf_s(szFuncSig, "[%s:%d]", pszFunctionSig, nLineNo);
     strDebugInfo += szFuncSig;
 
-    //ÕıÎÄ
+    //æ­£æ–‡
     strDebugInfo += "Performance counter begin:\r\n";
 
     if (m_bToFile)
@@ -149,28 +149,28 @@ bool CPerformanceCounter::End(PCSTR pszFunctionSig, int nLineNo)
 
     ::QueryPerformanceCounter(&m_liEnd);
 
-    //Ê±¼ä
+    //æ—¶é—´
     char szTime[64] = { 0 };
     SYSTEMTIME st = { 0 };
     ::GetLocalTime(&st);
     sprintf_s(szTime, ARRAYSIZE(szTime), "[%04d-%02d-%02d %02d:%02d:%02d:%04d]", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
     std::string strDebugInfo(szTime);
 
-    //µ±Ç°Ïß³ÌĞÅÏ¢
+    //å½“å‰çº¿ç¨‹ä¿¡æ¯
     char szThreadID[32] = { 0 };
     DWORD dwThreadID = ::GetCurrentThreadId();
     sprintf_s(szThreadID, ARRAYSIZE(szThreadID), "[ThreadID: %u]", dwThreadID);
     strDebugInfo += szThreadID;
 
-    //º¯ÊıÇ©Ãû
+    //å‡½æ•°ç­¾å
     char szFuncSig[512] = { 0 };
     sprintf_s(szFuncSig, "[%s:%d]", pszFunctionSig, nLineNo);
     strDebugInfo += szFuncSig;
 
-    //ÕıÎÄ
+    //æ­£æ–‡
     double dbInterval = (double)(LONGLONG)((LONGLONG)m_liEnd.QuadPart - (LONGLONG)m_liBegin.QuadPart) / (double)m_liFreq.QuadPart;
     char szInterval[64] = { 0 };
-    //¾«È·µ½ÄÉÃë
+    //ç²¾ç¡®åˆ°çº³ç§’
     sprintf_s(szInterval, ARRAYSIZE(szInterval), "Performance counter end: %2.12fms", (dbInterval * 1000));
 
     strDebugInfo += szInterval;

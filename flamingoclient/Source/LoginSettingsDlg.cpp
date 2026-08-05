@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "UserSessionData.h"
 #include "FlamingoClient.h"
 #include "../IniFile.h"
@@ -35,8 +35,8 @@ CLoginSettingsDlg::~CLoginSettingsDlg()
 
 BOOL CLoginSettingsDlg::PreTranslateMessage(MSG* pMsg)
 {
-	//TODO: Ææ¹ÖÎªÊ²Ã´Ö»ÓĞ½¹µãÔÚ¿Ø¼şÉÏ²Å×ßÕâ¸öÂß¼­£¿
-	//Ö§³ÖEsc¼ü¹Ø±Õ¶Ô»°¿ò
+	//TODO: å¥‡æ€ªä¸ºä»€ä¹ˆåªæœ‰ç„¦ç‚¹åœ¨æ§ä»¶ä¸Šæ‰èµ°è¿™ä¸ªé€»è¾‘ï¼Ÿ
+	//æ”¯æŒEscé”®å…³é—­å¯¹è¯æ¡†
 	if (pMsg->message == WM_KEYDOWN && pMsg->wParam==VK_ESCAPE)
  	{
 		PostMessage(WM_COMMAND, (WPARAM)ID_LOGINSETTINGCANCEL, 0);
@@ -66,7 +66,7 @@ BOOL CLoginSettingsDlg::InitUI()
 	m_SkinDlg.SetBgPic(_T("DlgBg\\LoginSettingDlgBg.png"));
 	m_SkinDlg.SetCloseSysBtnPic(_T("SysBtn\\btn_close_normal.png"), _T("SysBtn\\btn_close_highlight.png"), _T("SysBtn\\btn_close_down.png"));
 	m_SkinDlg.SubclassWindow(m_hWnd);
-	m_SkinDlg.SetTitleText(_T("ÍøÂçÉèÖÃ"));
+	m_SkinDlg.SetTitleText(_T("ç½‘ç»œè®¾ç½®"));
 	m_SkinDlg.MoveWindow(0, 0, 550, 380, TRUE);
 	
 
@@ -91,10 +91,10 @@ BOOL CLoginSettingsDlg::InitUI()
 	m_comboProxyType.SubclassWindow(GetDlgItem(IDC_COMBO_PROTYPE));
 	const TCHAR szProxyType[][10] = 
 	{
-		_T("²»Ê¹ÓÃ´úÀí"),
-		_T("Ê¹ÓÃä¯ÀÀÆ÷ÉèÖÃ"),
-		_T("HTTP´úÀí"),
-		_T("SOCKS5´úÀí")	
+		_T("ä¸ä½¿ç”¨ä»£ç†"),
+		_T("ä½¿ç”¨æµè§ˆå™¨è®¾ç½®"),
+		_T("HTTPä»£ç†"),
+		_T("SOCKS5ä»£ç†")	
 	};
 	for(long i=0; i<ARRAYSIZE(szProxyType); ++i)
 	{
@@ -111,7 +111,7 @@ BOOL CLoginSettingsDlg::InitUI()
 	m_comboProxyType.SetTransparent(TRUE, hDlgBgDC);
 	//m_comboProxyType.MoveWindow(55, 180, 127, 30, FALSE);
 	m_comboProxyType.SetItemHeight(-1, 26);
-	//TODO: ÉèÎªÖ»¶ÁÒÔºó±³¾°ÉÏ¾Í»á³öÏÖÒ»¸öÕËºÅ£¨Ææ¹ÖµÄbug£¡£©
+	//TODO: è®¾ä¸ºåªè¯»ä»¥åèƒŒæ™¯ä¸Šå°±ä¼šå‡ºç°ä¸€ä¸ªè´¦å·ï¼ˆå¥‡æ€ªçš„bugï¼ï¼‰
 	//m_comboProxyType.SetReadOnly(TRUE);
 
 	CIniFile iniFile;
@@ -129,7 +129,7 @@ BOOL CLoginSettingsDlg::InitUI()
 	m_editSrvAddr.SubclassWindow(GetDlgItem(IDC_EDIT_SERADDRESS));
 	//m_editSrvAddr.MoveWindow(55, 90, 127, 30, TRUE);
 	CString strTemp;
-	iniFile.ReadString(_T("server"), _T("server"), _T("flamingo.hootina.org"), strTemp.GetBuffer(64), 64, strIniPath);
+	iniFile.ReadString(_T("server"), _T("server"), _T("127.0.0.1"), strTemp.GetBuffer(64), 64, strIniPath);
 	strTemp.ReleaseBuffer();
 	m_editSrvAddr.SetWindowText(strTemp);
 
@@ -137,7 +137,7 @@ BOOL CLoginSettingsDlg::InitUI()
 	m_editFileSrvAddr.SetBgHotPic(_T("frameBorderEffect_mouseDownDraw.png"), CRect(2,2,2,2));
 	m_editFileSrvAddr.SetTransparent(TRUE, hDlgBgDC);
 	m_editFileSrvAddr.SubclassWindow(GetDlgItem(IDC_EDIT_FILESERVER));
-	iniFile.ReadString(_T("server"), _T("fileserver"), _T("flamingo.hootina.org"), strTemp.GetBuffer(64), 64, strIniPath);
+	iniFile.ReadString(_T("server"), _T("fileserver"), _T("127.0.0.1"), strTemp.GetBuffer(64), 64, strIniPath);
 	strTemp.ReleaseBuffer();
 	m_editFileSrvAddr.SetWindowText(strTemp);
 
@@ -145,7 +145,7 @@ BOOL CLoginSettingsDlg::InitUI()
     m_editImgSrvAddr.SetBgHotPic(_T("frameBorderEffect_mouseDownDraw.png"), CRect(2, 2, 2, 2));
     m_editImgSrvAddr.SetTransparent(TRUE, hDlgBgDC);
     m_editImgSrvAddr.SubclassWindow(GetDlgItem(IDC_EDIT_IMGSERVER));
-    iniFile.ReadString(_T("server"), _T("imgserver"), _T("flamingo.hootina.org"), strTemp.GetBuffer(64), 64, strIniPath);
+    iniFile.ReadString(_T("server"), _T("imgserver"), _T("127.0.0.1"), strTemp.GetBuffer(64), 64, strIniPath);
     strTemp.ReleaseBuffer();
     m_editImgSrvAddr.SetWindowText(strTemp);
 
@@ -267,7 +267,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_editSrvAddr.GetWindowText(m_szSrvAddr, MAX_SRV_ADDR);
 	if(m_szSrvAddr[0]==NULL || m_szSrvAddr[0]==_T(' '))
 	{
-		::MessageBox(m_hWnd, _T("ÁÄÌì·şÎñµØÖ·²»ÄÜÎª¿Õ£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("èŠå¤©æœåŠ¡åœ°å€ä¸èƒ½ä¸ºç©ºï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_editSrvAddr.SetFocus();
 		return;
 	}
@@ -275,7 +275,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_editFileSrvAddr.GetWindowText(m_szFileSrvAddr, MAX_SRV_ADDR);
 	if(m_szFileSrvAddr[0]==NULL || m_szFileSrvAddr[0]==_T(' '))
 	{
-		::MessageBox(m_hWnd, _T("ÎÄ¼ş·şÎñµØÖ·²»ÄÜÎª¿Õ£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("æ–‡ä»¶æœåŠ¡åœ°å€ä¸èƒ½ä¸ºç©ºï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_editFileSrvAddr.SetFocus();
 		return;
 	}
@@ -283,7 +283,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
     m_editImgSrvAddr.GetWindowText(m_szImgSrvAddr, MAX_SRV_ADDR);
     if (m_szImgSrvAddr[0] == NULL || m_szImgSrvAddr[0] == _T(' '))
     {
-        ::MessageBox(m_hWnd, _T("Í¼Æ¬·şÎñµØÖ·²»ÄÜÎª¿Õ£¡"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(m_hWnd, _T("å›¾ç‰‡æœåŠ¡åœ°å€ä¸èƒ½ä¸ºç©ºï¼"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
         m_editImgSrvAddr.SetFocus();
         return;
     }
@@ -291,7 +291,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_editSrvPort.GetWindowText(m_szSrvPort, MAX_SRV_PORT);
 	if(m_szSrvPort[0]==NULL || m_szSrvPort[0]==_T(' '))
 	{
-		::MessageBox(m_hWnd, _T("ÁÄÌì·şÎñ¶Ë¿ÚºÅ²»ÄÜÎª¿Õ£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("èŠå¤©æœåŠ¡ç«¯å£å·ä¸èƒ½ä¸ºç©ºï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_editSrvPort.SetFocus();
 		return;
 	}
@@ -299,7 +299,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_editFilePort.GetWindowText(m_szFilePort, MAX_SRV_PORT);
 	if(m_szFilePort[0]==NULL || m_szFilePort[0]==_T(' '))
 	{
-		::MessageBox(m_hWnd, _T("ÎÄ¼ş·şÎñ¶Ë¿ÚºÅ²»ÄÜÎª¿Õ£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("æ–‡ä»¶æœåŠ¡ç«¯å£å·ä¸èƒ½ä¸ºç©ºï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		m_editFilePort.SetFocus();
 		return;
 	}
@@ -307,7 +307,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
     m_editImgPort.GetWindowText(m_szImgPort, MAX_SRV_PORT);
     if (m_szImgPort[0] == NULL || m_szImgPort[0] == _T(' '))
     {
-        ::MessageBox(m_hWnd, _T("Í¼Æ¬·şÎñ¶Ë¿ÚºÅ²»ÄÜÎª¿Õ£¡"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(m_hWnd, _T("å›¾ç‰‡æœåŠ¡ç«¯å£å·ä¸èƒ½ä¸ºç©ºï¼"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
         m_editImgPort.SetFocus();
         return;
     }
@@ -318,7 +318,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 		m_editProxyAddr.GetWindowText(m_szProxyAddr, MAX_SRV_ADDR);
 		if(m_szProxyAddr[0]==NULL || m_szProxyAddr[0]==_T(' '))
 		{
-			::MessageBox(m_hWnd, _T("´úÀí·şÎñÆ÷µØÖ·²»ÄÜÎª¿Õ£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+			::MessageBox(m_hWnd, _T("ä»£ç†æœåŠ¡å™¨åœ°å€ä¸èƒ½ä¸ºç©ºï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 			m_editProxyAddr.SetFocus();
 			return;
 		}
@@ -326,7 +326,7 @@ void CLoginSettingsDlg::OnBtn_OK(UINT uNotifyCode, int nID, CWindow wndCtl)
 		m_editProxyPort.GetWindowText(m_szProxyPort, MAX_SRV_PORT);
 		if(m_szProxyPort[0]==NULL || m_szProxyPort[0]==_T(' '))
 		{
-			::MessageBox(m_hWnd, _T("´úÀí¶Ë¿ÚºÅ²»ÄÜÎª¿Õ£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+			::MessageBox(m_hWnd, _T("ä»£ç†ç«¯å£å·ä¸èƒ½ä¸ºç©ºï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 			m_editProxyPort.SetFocus();
 			return;
 		}

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * URL编解码工具，URLEncodeUtil.h
  * zhangyl 2018.05.16
  */

@@ -1,5 +1,5 @@
-/**
- * WindowsÆ½Ì¨ÓÃ±àÂë¸ñÊ½Ïà»¥×ª»»Àà, EncodingUtil.cpp
+ï»¿/**
+ * Windowså¹³å°ç”¨ç¼–ç æ ¼å¼ç›¸äº’è½¬æ¢ç±», EncodingUtil.cpp
  * zhangyl 2017.03.29
  **/
 #include "stdafx.h"
@@ -395,29 +395,29 @@ std::wstring EncodeUtil::Utf8ToUnicode(const std::string& strUtf8)
 //    if (NULL == srcstr)
 //        return -1;
 //
-//    //Ê×ÏÈÏÈ½«gbk±àÂë×ª»»Îªunicode±àÂë
-//    if (NULL == setlocale(LC_ALL, "zh_CN.gbk"))//ÉèÖÃ×ª»»ÎªunicodeÇ°µÄÂë,µ±Ç°Îªgbk±àÂë
+//    //é¦–å…ˆå…ˆå°†gbkç¼–ç è½¬æ¢ä¸ºunicodeç¼–ç 
+//    if (NULL == setlocale(LC_ALL, "zh_CN.gbk"))//è®¾ç½®è½¬æ¢ä¸ºunicodeå‰çš„ç ,å½“å‰ä¸ºgbkç¼–ç 
 //        return -1;
 //
-//    int unicodelen = mbstowcs(NULL, srcstr, 0);//¼ÆËã×ª»»ºóµÄ³¤¶È
+//    int unicodelen = mbstowcs(NULL, srcstr, 0);//è®¡ç®—è½¬æ¢åçš„é•¿åº¦
 //    if (unicodelen <= 0)
 //        return -1;
 //
 //    wchar_t* unicodestr = (wchar_t *)calloc(sizeof(wchar_t), unicodelen + 1);
-//    mbstowcs(unicodestr, srcstr, strlen(srcstr));//½«gbk×ª»»Îªunicode
+//    mbstowcs(unicodestr, srcstr, strlen(srcstr));//å°†gbkè½¬æ¢ä¸ºunicode
 //
-//    //½«unicode±àÂë×ª»»Îªutf8±àÂë
-//    if (NULL == setlocale(LC_ALL, "zh_CN.utf8"))//ÉèÖÃunicode×ª»»ºóµÄÂë,µ±Ç°Îªutf8
+//    //å°†unicodeç¼–ç è½¬æ¢ä¸ºutf8ç¼–ç 
+//    if (NULL == setlocale(LC_ALL, "zh_CN.utf8"))//è®¾ç½®unicodeè½¬æ¢åçš„ç ,å½“å‰ä¸ºutf8
 //        return -1;
 //
-//    int utflen = wcstombs(NULL, unicodestr, 0);//¼ÆËã×ª»»ºóµÄ³¤¶È
+//    int utflen = wcstombs(NULL, unicodestr, 0);//è®¡ç®—è½¬æ¢åçš„é•¿åº¦
 //    if (utflen <= 0)
 //        return -1;
-//    else if (utflen >= maxutfstrlen)//ÅĞ¶Ï¿Õ¼äÊÇ·ñ×ã¹»
+//    else if (utflen >= maxutfstrlen)//åˆ¤æ–­ç©ºé—´æ˜¯å¦è¶³å¤Ÿ
 //        return -1;
 //
 //    wcstombs(utfstr, unicodestr, utflen);
-//    utfstr[utflen] = 0;//Ìí¼Ó½áÊø·û
+//    utfstr[utflen] = 0;//æ·»åŠ ç»“æŸç¬¦
 //    free(unicodestr);
 //
 //    return utflen;

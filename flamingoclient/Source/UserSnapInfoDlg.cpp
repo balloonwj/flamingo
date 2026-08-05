@@ -1,4 +1,4 @@
-#include "stdafx.h"
+Ôªø#include "stdafx.h"
 #include "UserSnapInfoDlg.h"
 #include "UserSessionData.h"
 #include "UserMgr.h"
@@ -66,9 +66,9 @@ BOOL CUserSnapInfoDlg::InitUI()
 	m_SkinDlg.SetCloseSysBtnPic(_T("SysBtn\\btn_close_normal.png"), _T("SysBtn\\btn_close_highlight.png"), _T("SysBtn\\btn_close_down.png"));
 	m_SkinDlg.SubclassWindow(m_hWnd);
 	if(bGroup)
-		m_SkinDlg.SetTitleText(_T("»∫–≈œ¢"));
+		m_SkinDlg.SetTitleText(_T("Áæ§‰ø°ÊÅØ"));
 	else
-		m_SkinDlg.SetTitleText(_T("”√ªß–≈œ¢"));
+		m_SkinDlg.SetTitleText(_T("Áî®Êà∑‰ø°ÊÅØ"));
 	m_SkinDlg.MoveWindow(0, 0, 340, 300, FALSE);
 
 	HDC hDlgBgDC = m_SkinDlg.GetBgDC();
@@ -114,7 +114,7 @@ BOOL CUserSnapInfoDlg::InitUI()
 	m_btnCancel.SetBgPic(_T("Button\\btn_normal.png"), _T("Button\\btn_focus.png"),_T("Button\\btn_focus.png"), _T("Button\\btn_focus.png"));
 	m_btnCancel.SetTextColor(RGB(0, 0, 0));
 	m_btnCancel.SubclassWindow(GetDlgItem(IDCANCEL));
-	m_btnCancel.SetWindowText(_T("πÿ±’"));
+	m_btnCancel.SetWindowText(_T("ÂÖ≥Èó≠"));
 
 	return TRUE;
 }

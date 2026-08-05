@@ -53,6 +53,11 @@
     <ClCompile Include="..\utils\StringUtil.cpp" />
     <ClCompile Include="..\utils\URLEncodeUtil.cpp" />
     <ClCompile Include="..\utils\UUIDGenerator.cpp" />
+    <ClCompile Include="..\net\FrameCodec.cpp" />
+    <ClCompile Include="..\utils\FileToken.cpp" />
+    <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp" />
+    <ClCompile Include="..\jsoncpp1.9.0\json_value.cpp" />
+    <ClCompile Include="..\jsoncpp1.9.0\json_writer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\base\AsyncLog.h" />
@@ -94,9 +99,12 @@
     <ClInclude Include="..\utils\StringUtil.h" />
     <ClInclude Include="..\utils\URLEncodeUtil.h" />
     <ClInclude Include="..\utils\UUIDGenerator.h" />
+    <ClInclude Include="..\net\FrameCodec.h" />
+    <ClInclude Include="..\utils\FileToken.h" />
+    <ClInclude Include="..\chatserversrc\Protocol.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <VCProjectVersion>16.0</VCProjectVersion>
+    <VCProjectVersion>17.0</VCProjectVersion>
     <ProjectGuid>{0D052D8C-DF79-4483-9CDA-E41E72FE8D57}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
     <RootNamespace>fileserver</RootNamespace>

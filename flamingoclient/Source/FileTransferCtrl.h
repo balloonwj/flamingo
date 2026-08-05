@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <vector>
 #include "SkinLib/SkinLib.h"
@@ -7,8 +7,8 @@ class CFileItemRequest;
 
 enum FILE_TARGET_TYPE
 {
-	SEND_TYPE,		//·¢ËÍ·½
-	RECV_TYPE		//½ÓÊÕ·½
+	SEND_TYPE,		//å‘é€æ–¹
+	RECV_TYPE		//æ¥æ”¶æ–¹
 };
 
 enum HITTEST_BTN_AREA
@@ -37,26 +37,26 @@ public:
 
 public:
 	long					m_nID;
-	CString					m_strFileName;			//ÎÄ¼şÏÔÊ¾Ãû³Æ
-	CStringA				m_strFileDownloadName;	//ÎÄ¼şÏÂÔØÃû
-	CString					m_strFullName;			//ÎÄ¼şÈ«ÊÎÃû
-	CString					m_strFileSaveName;		//ÏÂÔØÎÄ¼şÊ±µÄ´æ´¢Ãû
+	CString					m_strFileName;			//æ–‡ä»¶æ˜¾ç¤ºåç§°
+	CStringA				m_strFileDownloadName;	//æ–‡ä»¶ä¸‹è½½å
+	CString					m_strFullName;			//æ–‡ä»¶å…¨é¥°å
+	CString					m_strFileSaveName;		//ä¸‹è½½æ–‡ä»¶æ—¶çš„å­˜å‚¨å
 	CString					m_strFilePath;
 	CString					m_strFileType;
 	DWORD					m_nFileSize;
 	BOOL					m_bOfflineSent;
 	CImageEx*				m_pImgFileType;
 	long					m_nProgressPercent;
-	long					m_nVerificationPercent;	//Ğ£ÑéÎÄ¼ş½ø¶È
-	FILE_TARGET_TYPE		m_nTargetType;			//µ½µ×ÊÇ·¢ËÍ·½»¹ÊÇ½ÓÊÕ·½
+	long					m_nVerificationPercent;	//æ ¡éªŒæ–‡ä»¶è¿›åº¦
+	FILE_TARGET_TYPE		m_nTargetType;			//åˆ°åº•æ˜¯å‘é€æ–¹è¿˜æ˜¯æ¥æ”¶æ–¹
 
-	CFileItemRequest*		m_pFileItemRequest;		//Óë¸ÃÏîÏàÆ¥ÅäµÄÎÄ¼ş´«Êä¶ÓÁĞÏî
+	CFileItemRequest*		m_pFileItemRequest;		//ä¸è¯¥é¡¹ç›¸åŒ¹é…çš„æ–‡ä»¶ä¼ è¾“é˜Ÿåˆ—é¡¹
 
 	BOOL					m_bAcceptBtnVisible;
 	BOOL					m_bSaveAsBtnVisible;
 	BOOL					m_bCancelBtnVisible;
 
-	//TODO:×ªÀëÏß·¢ËÍºÍ×ªÔÚÏß·¢ËÍÁ½¸ö°´Å¥¿É¼ûĞÔ
+	//TODO:è½¬ç¦»çº¿å‘é€å’Œè½¬åœ¨çº¿å‘é€ä¸¤ä¸ªæŒ‰é’®å¯è§æ€§
 };
 
 class CFileTransferCtrl : public CWindowImpl<CFileTransferCtrl, CWindow>
@@ -92,7 +92,7 @@ public:
 
 	long GetItemCount() const;
 	
-	long AddItem();					//·µ»ØÖµÎªIDºÅ£¬¸ÃIDºÅÎ¨Ò»±êÊ¶ÁË¸ÃÎÄ¼şÏî
+	long AddItem();					//è¿”å›å€¼ä¸ºIDå·ï¼Œè¯¥IDå·å”¯ä¸€æ ‡è¯†äº†è¯¥æ–‡ä»¶é¡¹
 	BOOL RemoveItemByID(long nID);
 
 	BOOL SetItemFileTypePicByID(long nID, LPCTSTR lpszFileName);

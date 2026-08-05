@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "RecentListCtrl.h"
 #include "GDIFactory.h"
 #include <Gdiplus.h>
@@ -323,7 +323,7 @@ void CRecentListCtrl::SetBuddyTeamMaxCnt(int nTeamIndex, int nMaxCnt)
 	if (lpItem != NULL)
 		lpItem->m_nMaxCnt = nMaxCnt;
 }
-// ¸üĞÂºÃÓÑÁĞ±íÔÚÏßÈËÊı
+// æ›´æ–°å¥½å‹åˆ—è¡¨åœ¨çº¿äººæ•°
 void CRecentListCtrl::SetBuddyTeamCurCnt(int nTeamIndex, int nCurCnt)
 {
 	CRecentTeamItem* lpItem = GetBuddyTeamByIndex(nTeamIndex);
@@ -516,7 +516,7 @@ void CRecentListCtrl::SetBuddyItemHeadFlashAnim(int nTeamIndex, int nIndex, BOOL
 	//		lpBuddyTeam->m_nHeadFlashAnim++;
 	//	}
 
-	//	if (NULL == m_dwHeadFlashAnimTimerId)	// Æô¶¯Í·ÏñÉÁ¶¯¶¯»­¼ÆÊ±Æ÷
+	//	if (NULL == m_dwHeadFlashAnimTimerId)	// å¯åŠ¨å¤´åƒé—ªåŠ¨åŠ¨ç”»è®¡æ—¶å™¨
 	//		m_dwHeadFlashAnimTimerId = SetTimer(2, 250, NULL);
 	//}
 	//else
@@ -884,7 +884,7 @@ void CRecentListCtrl::OnLButtonUp(UINT nFlags, CPoint point)
 	{
 		m_nSelTeamIndex = nTeamIndex;
 		m_nSelIndex = nIndex;
-		if (-1 == nIndex)		// µã»÷µÄÊÇºÃÓÑ·Ö×éÏî
+		if (-1 == nIndex)		// ç‚¹å‡»çš„æ˜¯å¥½å‹åˆ†ç»„é¡¹
 		{
 			BOOL bExpand = IsBuddyTeamExpand(nTeamIndex);
 			SetBuddyTeamExpand(nTeamIndex, !bExpand);
@@ -966,15 +966,15 @@ void CRecentListCtrl::OnTimer(UINT_PTR nIDEvent)
 {
 	m_VScrollBar.OnTimer(nIDEvent);
 
-	//if (nIDEvent == m_dwHeadFlashAnimTimerId)		// Í·ÏñÉÁ¶¯¶¯»­
+	//if (nIDEvent == m_dwHeadFlashAnimTimerId)		// å¤´åƒé—ªåŠ¨åŠ¨ç”»
 	//{
 	//	OnTimer_HeadFlashAnim(nIDEvent);
 	//}
-	//else if (nIDEvent == m_dwOnlineAnimTimerId)		// ÉÏÏß¶¯»­
+	//else if (nIDEvent == m_dwOnlineAnimTimerId)		// ä¸Šçº¿åŠ¨ç”»
 	//{
 	//	OnTimer_OnlineAnim(nIDEvent);
 	//}
-	//else if (nIDEvent == m_dwOfflineAnimTimerId)	// ÏÂÏß¶¯»­
+	//else if (nIDEvent == m_dwOfflineAnimTimerId)	// ä¸‹çº¿åŠ¨ç”»
 	//{
 	//	OnTimer_OfflineAnim(nIDEvent);
 	//}
@@ -1037,7 +1037,7 @@ void CRecentListCtrl::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 
 	switch (nChar)
 	{
-	case VK_UP:	// ÏòÉÏ¹â±ê¼ü
+	case VK_UP:	// å‘ä¸Šå…‰æ ‡é”®
 		{
 			if (-1 == m_nSelIndex)
 			{
@@ -1064,7 +1064,7 @@ void CRecentListCtrl::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 		}
 		break;
 
-	case VK_DOWN:	// ÏòÏÂ¹â±ê¼ü
+	case VK_DOWN:	// å‘ä¸‹å…‰æ ‡é”®
 		{
 			if (-1 == m_nSelIndex)
 			{
@@ -1098,7 +1098,7 @@ void CRecentListCtrl::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 		}
 		break;
 
-	case VK_LEFT:	// Ïò×ó¹â±ê¼ü
+	case VK_LEFT:	// å‘å·¦å…‰æ ‡é”®
 		{
 			if (-1 == m_nSelIndex)	// 
 			{
@@ -1110,7 +1110,7 @@ void CRecentListCtrl::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 		}
 		break;
 
-	case VK_RIGHT:	// ÏòÓÒ¹â±ê¼ü
+	case VK_RIGHT:	// å‘å³å…‰æ ‡é”®
 		{
 			if (-1 == m_nSelIndex)
 			{
@@ -1122,7 +1122,7 @@ void CRecentListCtrl::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 		}
 		break;
 
-	case VK_PRIOR:	// PgUp¼ü
+	case VK_PRIOR:	// PgUpé”®
 		{
 			CRect rcClient;
 			GetClientRect(&rcClient);
@@ -1131,7 +1131,7 @@ void CRecentListCtrl::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 		}
 		return;
 
-	case VK_NEXT:	// PgDn¼ü
+	case VK_NEXT:	// PgDné”®
 		{
 			CRect rcClient;
 			GetClientRect(&rcClient);
@@ -1140,14 +1140,14 @@ void CRecentListCtrl::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 		}
 		return;
 
-	case VK_HOME:	// Home¼ü
+	case VK_HOME:	// Homeé”®
 		{
 			m_nSelTeamIndex = 0;
 			m_nSelIndex = -1;
 		}
 		break;
 
-	case VK_END:	// End¼ü
+	case VK_END:	// Endé”®
 		{
 			int TeamCnt = GetBuddyTeamCount();
 
@@ -1159,7 +1159,7 @@ void CRecentListCtrl::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
 		}
 		break;
 
-	case VK_RETURN:	// »Ø³µ¼ü
+	case VK_RETURN:	// å›è½¦é”®
 		{
 			
 		}
@@ -1209,7 +1209,7 @@ void CRecentListCtrl::OnDestroy()
 		m_dwHeadFlashAnimTimerId = NULL;
 	}
 
-	if (m_ToolTipCtrl.IsWindow())	// ToolTipCtrlÔçÔÚÖ®Ç°µÄ²»ÖªµÀÊ²Ã´µØ·½ÒÑÏú»Ù£¬ÕâÀïÏÔÊ½ÖÃ¿Õm_hWnd
+	if (m_ToolTipCtrl.IsWindow())	// ToolTipCtrlæ—©åœ¨ä¹‹å‰çš„ä¸çŸ¥é“ä»€ä¹ˆåœ°æ–¹å·²é”€æ¯ï¼Œè¿™é‡Œæ˜¾å¼ç½®ç©ºm_hWnd
 		m_ToolTipCtrl.DestroyWindow();
 	m_ToolTipCtrl.m_hWnd = NULL;
 
@@ -1396,10 +1396,10 @@ void CRecentListCtrl::DrawBuddyItemInBigIcon(HDC hDC, int nTeamIndex, int nIndex
 	HPEN hPenLine = ::CreatePen(PS_SOLID, 0, RGB(232,235,227));
 	HPEN hOldPen = (HPEN)::SelectObject(hDC, (HGDIOBJ)hPenLine);
 
-	//»æÖÆÉÏ·Ö¸îÏß
+	//ç»˜åˆ¶ä¸Šåˆ†å‰²çº¿
 	//::MoveToEx(hDC, rcItem.left, rcItem.top, NULL);
 	//::LineTo(hDC, rcItem.right, rcItem.top);
-	//»æÖÆÏÂ·Ö¸îÏß
+	//ç»˜åˆ¶ä¸‹åˆ†å‰²çº¿
 	::MoveToEx(hDC, rcItem.left, rcItem.bottom, NULL);
 	::LineTo(hDC, rcItem.right, rcItem.bottom);
 
@@ -1416,12 +1416,12 @@ void CRecentListCtrl::DrawBuddyItemInBigIcon(HDC hDC, int nTeamIndex, int nIndex
 	int nHeadRight = rcHead.right;
 
 	
-	if (m_nSelTeamIndex == nTeamIndex && m_nSelIndex == nIndex)				// Ñ¡ÖĞ×´Ì¬
+	if (m_nSelTeamIndex == nTeamIndex && m_nSelIndex == nIndex)				// é€‰ä¸­çŠ¶æ€
 	{
 		if (m_lpBuddyItemBgImgS != NULL && !m_lpBuddyItemBgImgS->IsNull())
 			m_lpBuddyItemBgImgS->Draw2(hDC, rcItem);
 	}
-	else if (m_nHoverTeamIndex == nTeamIndex && m_nHoverIndex == nIndex)	// ¸ßÁÁ×´Ì¬
+	else if (m_nHoverTeamIndex == nTeamIndex && m_nHoverIndex == nIndex)	// é«˜äº®çŠ¶æ€
 	{
 		if (m_lpBuddyItemBgImgH != NULL && !m_lpBuddyItemBgImgH->IsNull())
 			m_lpBuddyItemBgImgH->Draw2(hDC, rcItem);
@@ -1431,11 +1431,11 @@ void CRecentListCtrl::DrawBuddyItemInBigIcon(HDC hDC, int nTeamIndex, int nIndex
 
 	}
 
-	if (lpItem->m_lpHeadImg != NULL && !lpItem->m_lpHeadImg->IsNull())	// »æÖÆÍ·Ïñ
+	if (lpItem->m_lpHeadImg != NULL && !lpItem->m_lpHeadImg->IsNull())	// ç»˜åˆ¶å¤´åƒ
 		lpItem->m_lpHeadImg->Draw2(hDC, rcHead);
 
 	
-	if (lpItem->m_lpMobileImg != NULL && !lpItem->m_lpMobileImg->IsNull())	// »æÖÆÊÖ»úÍ¼±ê
+	if (lpItem->m_lpMobileImg != NULL && !lpItem->m_lpMobileImg->IsNull())	// ç»˜åˆ¶æ‰‹æœºå›¾æ ‡
 	{
 		rcMobile.right = rcHead.right;
 		rcMobile.left = rcMobile.right-16;
@@ -1453,7 +1453,7 @@ void CRecentListCtrl::DrawBuddyItemInBigIcon(HDC hDC, int nTeamIndex, int nIndex
 		rcHeadFrame.top -= 3;
 		rcHeadFrame.bottom += 3;
 
-		if (m_lpHeadFrameImg != NULL && !m_lpHeadFrameImg->IsNull())	// »æÖÆÍ·Ïñ½¹µã¿ò
+		if (m_lpHeadFrameImg != NULL && !m_lpHeadFrameImg->IsNull())	// ç»˜åˆ¶å¤´åƒç„¦ç‚¹æ¡†
 			m_lpHeadFrameImg->Draw2(hDC, rcHeadFrame);
 	}
 
@@ -1477,8 +1477,8 @@ void CRecentListCtrl::DrawBuddyItemInBigIcon(HDC hDC, int nTeamIndex, int nIndex
 	if(lpItem->m_strNickName.IsEmpty())
 		lpItem->m_strNickName = _T(" ");
 	
-	//»­êÇ³Æ
-	CRect rcText0(0,0,0,0);	// ¼ÆËãÎÄ×Ö¿í¸ß
+	//ç”»æ˜µç§°
+	CRect rcText0(0,0,0,0);	// è®¡ç®—æ–‡å­—å®½é«˜
 	hOldFont = (HFONT)::SelectObject(hDC, hFontNickName);
 	::DrawText(hDC, lpItem->m_strNickName, lpItem->m_strNickName.GetLength(), &rcText0, DT_SINGLELINE | DT_CALCRECT);
 
@@ -1494,8 +1494,8 @@ void CRecentListCtrl::DrawBuddyItemInBigIcon(HDC hDC, int nTeamIndex, int nIndex
 	
 	if(lpItem->m_strDate.IsEmpty())
 		lpItem->m_strDate = _T(" ");
-	//»­ÈÕÆÚ
-	CRect rcText1(0,0,0,0);	// ¼ÆËãÎÄ×Ö¿í¸ß
+	//ç”»æ—¥æœŸ
+	CRect rcText1(0,0,0,0);	// è®¡ç®—æ–‡å­—å®½é«˜
 	hOldFont = (HFONT)::SelectObject(hDC, hFontDate);
 	::DrawText(hDC, lpItem->m_strDate, lpItem->m_strDate.GetLength(), &rcText1, DT_SINGLELINE | DT_CALCRECT);
 	
@@ -1508,8 +1508,8 @@ void CRecentListCtrl::DrawBuddyItemInBigIcon(HDC hDC, int nTeamIndex, int nIndex
 
 	if(lpItem->m_strLastMsg.IsEmpty())
 		lpItem->m_strDate = _T(" ");
-	//»­×î½üÒ»ÌõÏûÏ¢
-	CRect rcText2(0,0,0,0);	// ¼ÆËãÎÄ×Ö¿í¸ß
+	//ç”»æœ€è¿‘ä¸€æ¡æ¶ˆæ¯
+	CRect rcText2(0,0,0,0);	// è®¡ç®—æ–‡å­—å®½é«˜
 	hOldFont = (HFONT)::SelectObject(hDC, hFontLastMsg);
 	::DrawText(hDC, lpItem->m_strLastMsg, lpItem->m_strLastMsg.GetLength(), &rcText2, DT_SINGLELINE | DT_CALCRECT);
 
@@ -1523,7 +1523,7 @@ void CRecentListCtrl::DrawBuddyItemInBigIcon(HDC hDC, int nTeamIndex, int nIndex
 	::SetTextColor(hDC, RGB(127, 127, 127));
 	::DrawText(hDC, lpItem->m_strLastMsg, lpItem->m_strLastMsg.GetLength(), &rcLastMsg, nFormat);
 
-	//»­ĞÂÏûÏ¢¸öÊı
+	//ç”»æ–°æ¶ˆæ¯ä¸ªæ•°
 	if(lpItem->m_nNewMsgCount > 0)
 	{
 		rcNewMsgCount.left = rcItem.right-26;
@@ -1769,19 +1769,19 @@ void CRecentListCtrl::EnsureVisible(int nTeamIndex, int nIndex)
 
 void CRecentListCtrl::SortBuddyTeam(int nTeamIndex, int nIndex)
 {
-	//CRecentTeamItem* lpBuddyTeam = GetBuddyTeamByIndex(nTeamIndex);			// »ñÈ¡ÒªÅÅĞòµÄ·Ö×é
+	//CRecentTeamItem* lpBuddyTeam = GetBuddyTeamByIndex(nTeamIndex);			// è·å–è¦æ’åºçš„åˆ†ç»„
 	//if (NULL == lpBuddyTeam)
 	//	return;
 
-	//int nItemCnt = (int)lpBuddyTeam->m_arrBuddys.size();					// ·Ö×éµÄºÃÓÑÊıĞ¡ÓÚ2Ôò²»ÓÃÔÙÅÅĞò
+	//int nItemCnt = (int)lpBuddyTeam->m_arrBuddys.size();					// åˆ†ç»„çš„å¥½å‹æ•°å°äº2åˆ™ä¸ç”¨å†æ’åº
 	//if (nItemCnt < 2)
 	//	return;
 
-	//CRecentItem* lpBuddyItem1 = GetBuddyItemByIndex(nTeamIndex, nIndex);	// »ñÈ¡ÒªÅÅĞòµÄºÃÓÑ
+	//CRecentItem* lpBuddyItem1 = GetBuddyItemByIndex(nTeamIndex, nIndex);	// è·å–è¦æ’åºçš„å¥½å‹
 	//if (NULL == lpBuddyItem1)
 	//	return;
 
-	//lpBuddyTeam->m_arrBuddys.erase(lpBuddyTeam->m_arrBuddys.begin()+nIndex);// ÏÈÉ¾³ı
+	//lpBuddyTeam->m_arrBuddys.erase(lpBuddyTeam->m_arrBuddys.begin()+nIndex);// å…ˆåˆ é™¤
 
 	//nItemCnt = (int)lpBuddyTeam->m_arrBuddys.size();
 

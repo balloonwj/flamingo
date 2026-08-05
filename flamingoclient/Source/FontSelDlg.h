@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "resource.h"
 #include "SkinLib/SkinLib.h"
@@ -8,11 +8,11 @@
 
 #define		WM_UPDATE_FONTINFO		WM_USER + 2
 
-extern CFontInfo g_fontInfo;				// ×ÖÌåĞÅÏ¢
-extern TCHAR g_cHotKey;						// ÌáÈ¡ÏûÏ¢ÈÈ¼ü
+extern CFontInfo g_fontInfo;				// å­—ä½“ä¿¡æ¯
+extern TCHAR g_cHotKey;						// æå–æ¶ˆæ¯çƒ­é”®
 
-//BOOL LoadMiscConfig(LPCTSTR lpszFileName);	// ¼ÓÔØÔÓÏîÅäÖÃ
-//BOOL SaveMiscConfig(LPCTSTR lpszFileName);	// ±£´æÔÓÏîÅäÖÃ
+//BOOL LoadMiscConfig(LPCTSTR lpszFileName);	// åŠ è½½æ‚é¡¹é…ç½®
+//BOOL SaveMiscConfig(LPCTSTR lpszFileName);	// ä¿å­˜æ‚é¡¹é…ç½®
 
 
 class CFontSelDlg : public CDialogImpl<CFontSelDlg>
@@ -38,29 +38,29 @@ public:
 	END_MSG_MAP()
 
 public:
-	CFontInfo& GetPublicFontInfo();		// »ñÈ¡È«¾Ö×ÖÌåĞÅÏ¢
-	CFontInfo& GetFontInfo();			// »ñÈ¡×ÖÌåĞÅÏ¢
+	CFontInfo& GetPublicFontInfo();		// è·å–å…¨å±€å­—ä½“ä¿¡æ¯
+	CFontInfo& GetFontInfo();			// è·å–å­—ä½“ä¿¡æ¯
 
 private:
 	BOOL OnInitDialog(CWindow wndFocus, LPARAM lInitParam);
 	void OnClose();
 	void OnDestroy();
-	void OnBtn_SysFont(UINT uNotifyCode, int nID, CWindow wndCtl);		// ¡°ÏµÍ³×ÖÌå¡±°´Å¥
-	void OnBtn_MemberFont(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°»áÔ±ìÅ²Ê×Ö¡±°´Å¥
-	void OnCbo_SelChange_FontName(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°×ÖÌåÃû³Æ¡±×éºÏ¿ò
-	void OnCbo_SelChange_FontSize(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°×ÖÌå´óĞ¡¡±×éºÏ¿ò
-	void OnBtn_Bold(UINT uNotifyCode, int nID, CWindow wndCtl);			// ¡°¼Ó´Ö¡±°´Å¥
-	void OnBtn_Italic(UINT uNotifyCode, int nID, CWindow wndCtl);		// ¡°ÇãĞ±¡±°´Å¥
-	void OnBtn_UnderLine(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°ÏÂ»®Ïß¡±°´Å¥
-	void OnBtn_Color(UINT uNotifyCode, int nID, CWindow wndCtl);		// ¡°ÑÕÉ«¡±°´Å¥
+	void OnBtn_SysFont(UINT uNotifyCode, int nID, CWindow wndCtl);		// â€œç³»ç»Ÿå­—ä½“â€æŒ‰é’®
+	void OnBtn_MemberFont(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œä¼šå‘˜ç‚«å½©å­—â€æŒ‰é’®
+	void OnCbo_SelChange_FontName(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œå­—ä½“åç§°â€ç»„åˆæ¡†
+	void OnCbo_SelChange_FontSize(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œå­—ä½“å¤§å°â€ç»„åˆæ¡†
+	void OnBtn_Bold(UINT uNotifyCode, int nID, CWindow wndCtl);			// â€œåŠ ç²—â€æŒ‰é’®
+	void OnBtn_Italic(UINT uNotifyCode, int nID, CWindow wndCtl);		// â€œå€¾æ–œâ€æŒ‰é’®
+	void OnBtn_UnderLine(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œä¸‹åˆ’çº¿â€æŒ‰é’®
+	void OnBtn_Color(UINT uNotifyCode, int nID, CWindow wndCtl);		// â€œé¢œè‰²â€æŒ‰é’®
 
-	BOOL InitFontClassToolBar();	// ³õÊ¼»¯×ÖÌå·ÖÀà¹¤¾ßÀ¸
-	BOOL InitFontNameComboBox();	// ³õÊ¼»¯×ÖÌåÃû³Æ×éºÏ¿ò
-	BOOL InitFontSizeComboBox();	// ³õÊ¼»¯×ÖÌå´óĞ¡×éºÏ¿ò
-	BOOL InitFontAttrToolBar();		// ³õÊ¼»¯×ÖÌåÊôĞÔ¹¤¾ßÀ¸
+	BOOL InitFontClassToolBar();	// åˆå§‹åŒ–å­—ä½“åˆ†ç±»å·¥å…·æ 
+	BOOL InitFontNameComboBox();	// åˆå§‹åŒ–å­—ä½“åç§°ç»„åˆæ¡†
+	BOOL InitFontSizeComboBox();	// åˆå§‹åŒ–å­—ä½“å¤§å°ç»„åˆæ¡†
+	BOOL InitFontAttrToolBar();		// åˆå§‹åŒ–å­—ä½“å±æ€§å·¥å…·æ 
 
-	BOOL Init();					// ³õÊ¼»¯
-	void UnInit();					// ·´³õÊ¼»¯
+	BOOL Init();					// åˆå§‹åŒ–
+	void UnInit();					// ååˆå§‹åŒ–
 
 public:
 	CFlamingoClient*		m_pFMGClient;

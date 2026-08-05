@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "UserMgr.h"
 #include "UserConfig.h"
@@ -22,9 +22,9 @@ public:
 	~CFlamingoClient(void);
 
 public:
-	bool InitProxyWnd();										// ³õÊ¼»¯´úÀí´°¿Ú
-    bool InitNetThreads();                                      // ³õÊ¼»¯ÍøÂçÏß³Ì
-	void Uninit();												// ·´³õÊ¼»¯¿Í»§¶Ë
+	bool InitProxyWnd();										// åˆå§‹åŒ–ä»£ç†çª—å£
+    bool InitNetThreads();                                      // åˆå§‹åŒ–ç½‘ç»œçº¿ç¨‹
+	void Uninit();												// ååˆå§‹åŒ–å®¢æˆ·ç«¯
 
 	void SetServer(PCTSTR pszServer);
     void SetFileServer(PCTSTR pszServer);
@@ -33,35 +33,35 @@ public:
 	void SetFilePort(short port);
     void SetImgPort(short port);
 
-	void SetUser(LPCTSTR lpUserAccount, LPCTSTR lpUserPwd);		// ÉèÖÃUTalkºÅÂëºÍÃÜÂë
-	void SetLoginStatus(long nStatus);							// ÉèÖÃµÇÂ¼×´Ì¬
-	void SetCallBackWnd(HWND hCallBackWnd);						// ÉèÖÃ»Øµ÷´°¿Ú¾ä±ú
-	void SetRegisterWindow(HWND hwndRegister);					// ÉèÖÃ×¢²á½á¹ûµÄ·´À¡´°¿Ú
-	void SetModifyPasswordWindow(HWND hwndModifyPassword);		// ÉèÖÃĞŞ¸ÄÃÜÂë½á¹û·´À¡´°¿Ú
-	void SetCreateNewGroupWindow(HWND hwndCreateNewGroup);		// ÉèÖÃ´´½¨Èº×é½á¹û·´À¡´°¿Ú
-	void SetFindFriendWindow(HWND hwndFindFriend);				// ÉèÖÃ²éÕÒÓÃ»§½á¹û·´À¡´°¿Ú
+	void SetUser(LPCTSTR lpUserAccount, LPCTSTR lpUserPwd);		// è®¾ç½®UTalkå·ç å’Œå¯†ç 
+	void SetLoginStatus(long nStatus);							// è®¾ç½®ç™»å½•çŠ¶æ€
+	void SetCallBackWnd(HWND hCallBackWnd);						// è®¾ç½®å›è°ƒçª—å£å¥æŸ„
+	void SetRegisterWindow(HWND hwndRegister);					// è®¾ç½®æ³¨å†Œç»“æœçš„åé¦ˆçª—å£
+	void SetModifyPasswordWindow(HWND hwndModifyPassword);		// è®¾ç½®ä¿®æ”¹å¯†ç ç»“æœåé¦ˆçª—å£
+	void SetCreateNewGroupWindow(HWND hwndCreateNewGroup);		// è®¾ç½®åˆ›å»ºç¾¤ç»„ç»“æœåé¦ˆçª—å£
+	void SetFindFriendWindow(HWND hwndFindFriend);				// è®¾ç½®æŸ¥æ‰¾ç”¨æˆ·ç»“æœåé¦ˆçª—å£
 
 	void StartCheckNetworkStatusTask();							
-	//void StartGetUserInfoTask(long nType);					//»ñÈ¡ºÃÓÑ
+	//void StartGetUserInfoTask(long nType);					//è·å–å¥½å‹
 	void StartHeartbeatTask();
 
 	void Register(PCTSTR pszAccountName, PCTSTR pszNickName, PCTSTR pszPassword);
-    void Login(int nStatus = STATUS_ONLINE);				    // µÇÂ¼
-	BOOL Logout();												// ×¢Ïú
-	void CancelLogin();											// È¡ÏûµÇÂ¼
-    void GetFriendList();                                       // »ñÈ¡ºÃÓÑÁĞ±í
-    void GetGroupMembers(int32_t groupid);                      // »ñÈ¡Èº³ÉÔ±
-    void ChangeStatus(int32_t nNewStatus);                      // ¸ü¸Ä×Ô¼ºµÄµÇÂ¼×´Ì¬        
+    void Login(int nStatus = STATUS_ONLINE);				    // ç™»å½•
+	BOOL Logout();												// æ³¨é”€
+	void CancelLogin();											// å–æ¶ˆç™»å½•
+    void GetFriendList();                                       // è·å–å¥½å‹åˆ—è¡¨
+    void GetGroupMembers(int32_t groupid);                      // è·å–ç¾¤æˆå‘˜
+    void ChangeStatus(int32_t nNewStatus);                      // æ›´æ”¹è‡ªå·±çš„ç™»å½•çŠ¶æ€        
 
-	BOOL FindFriend(PCTSTR pszAccountName, long nType, HWND hReflectionWnd);                // ²éÕÒºÃÓÑ
+	BOOL FindFriend(PCTSTR pszAccountName, long nType, HWND hReflectionWnd);                // æŸ¥æ‰¾å¥½å‹
 	BOOL AddFriend(UINT uAccountToAdd);
-	void ResponseAddFriendApply(UINT uAccountID, UINT uCmd);	                            //»ØÓ¦¼ÓºÃÓÑÇëÇóÈÎÎñ
-	BOOL DeleteFriend(UINT uAccountID);							                            // É¾³ıºÃÓÑ
+	void ResponseAddFriendApply(UINT uAccountID, UINT uCmd);	                            //å›åº”åŠ å¥½å‹è¯·æ±‚ä»»åŠ¡
+	BOOL DeleteFriend(UINT uAccountID);							                            // åˆ é™¤å¥½å‹
         
-    bool AddNewTeam(PCTSTR pszNewTeamName);                                                 //Ìí¼ÓĞÂ·Ö×é
-    bool DeleteTeam(PCTSTR pszOldTeamName);                                                 //É¾³ı·Ö×é
-    bool ModifyTeamName(PCTSTR pszNewTeamName, PCTSTR pszOldTeamName);                      //ĞŞ¸Ä·Ö×éÃû³Æ
-    bool MoveFriendToOtherTeam(UINT uUserID, PCTSTR pszOldTeamName, PCTSTR pszNewTeamName); //ÒÆ¶¯ºÃÓÑÖÁÆäËû·Ö×é
+    bool AddNewTeam(PCTSTR pszNewTeamName);                                                 //æ·»åŠ æ–°åˆ†ç»„
+    bool DeleteTeam(PCTSTR pszOldTeamName);                                                 //åˆ é™¤åˆ†ç»„
+    bool ModifyTeamName(PCTSTR pszNewTeamName, PCTSTR pszOldTeamName);                      //ä¿®æ”¹åˆ†ç»„åç§°
+    bool MoveFriendToOtherTeam(UINT uUserID, PCTSTR pszOldTeamName, PCTSTR pszNewTeamName); //ç§»åŠ¨å¥½å‹è‡³å…¶ä»–åˆ†ç»„
 
 	BOOL UpdateLogonUserInfo(PCTSTR pszNickName, 
 							 PCTSTR pszSignature,
@@ -78,72 +78,72 @@ public:
 	void ModifyPassword(PCTSTR pszOldPassword, PCTSTR pszNewPassword);
 	void CreateNewGroup(PCTSTR pszGroupName);
     void ModifyFriendMarkName(UINT friendID, PCTSTR pszNewMarkName);
-	void ChangeStatus(long nStatus);							// ¸Ä±äÔÚÏß×´Ì¬
-	void UpdateBuddyList();										// ¸üĞÂºÃÓÑÁĞ±í
-	void UpdateGroupList();										// ¸üĞÂÈºÁĞ±í
-	void UpdateRecentList();									// ¸üĞÂ×î½üÁªÏµÈËÁĞ±í
-	void UpdateBuddyInfo(UINT nUTalkUin);						// ¸üĞÂºÃÓÑĞÅÏ¢
-	void UpdateGroupMemberInfo(UINT nGroupCode, UINT nUTalkUin);// ¸üĞÂÈº³ÉÔ±ĞÅÏ¢
-	void UpdateGroupInfo(UINT nGroupCode);						// ¸üĞÂÈºĞÅÏ¢
-	void UpdateBuddyNum(UINT nUTalkUin);						// ¸üĞÂºÃÓÑºÅÂë
-	void UpdateGroupMemberNum(UINT nGroupCode, UINT nUTalkUin);	// ¸üĞÂÈº³ÉÔ±ºÅÂë
-	void UpdateGroupMemberNum(UINT nGroupCode, std::vector<UINT>* arrUTalkUin);	// ¸üĞÂÈº³ÉÔ±ºÅÂë
-	void UpdateGroupNum(UINT nGroupCode);											// ¸üĞÂÈººÅÂë
-	void UpdateBuddySign(UINT nUTalkUin);											// ¸üĞÂºÃÓÑ¸öĞÔÇ©Ãû
-	void UpdateGroupMemberSign(UINT nGroupCode, UINT nUTalkUin);					// ¸üĞÂÈº³ÉÔ±¸öĞÔÇ©Ãû
-	void ModifyUTalkSign(LPCTSTR lpSign);											// ĞŞ¸ÄUTalk¸öĞÔÇ©Ãû
-	void UpdateBuddyHeadPic(UINT nUTalkUin, UINT nUTalkNum);						// ¸üĞÂºÃÓÑÍ·Ïñ
-	void UpdateGroupMemberHeadPic(UINT nGroupCode, UINT nUTalkUin, UINT nUTalkNum);	// ¸üĞÂÈº³ÉÔ±Í·Ïñ
-	void UpdateGroupHeadPic(UINT nGroupCode, UINT nGroupNum);						// ¸üĞÂÈºÍ·Ïñ
-	void UpdateGroupFaceSignal();													// ¸üĞÂÈº±íÇéĞÅÁî
+	void ChangeStatus(long nStatus);							// æ”¹å˜åœ¨çº¿çŠ¶æ€
+	void UpdateBuddyList();										// æ›´æ–°å¥½å‹åˆ—è¡¨
+	void UpdateGroupList();										// æ›´æ–°ç¾¤åˆ—è¡¨
+	void UpdateRecentList();									// æ›´æ–°æœ€è¿‘è”ç³»äººåˆ—è¡¨
+	void UpdateBuddyInfo(UINT nUTalkUin);						// æ›´æ–°å¥½å‹ä¿¡æ¯
+	void UpdateGroupMemberInfo(UINT nGroupCode, UINT nUTalkUin);// æ›´æ–°ç¾¤æˆå‘˜ä¿¡æ¯
+	void UpdateGroupInfo(UINT nGroupCode);						// æ›´æ–°ç¾¤ä¿¡æ¯
+	void UpdateBuddyNum(UINT nUTalkUin);						// æ›´æ–°å¥½å‹å·ç 
+	void UpdateGroupMemberNum(UINT nGroupCode, UINT nUTalkUin);	// æ›´æ–°ç¾¤æˆå‘˜å·ç 
+	void UpdateGroupMemberNum(UINT nGroupCode, std::vector<UINT>* arrUTalkUin);	// æ›´æ–°ç¾¤æˆå‘˜å·ç 
+	void UpdateGroupNum(UINT nGroupCode);											// æ›´æ–°ç¾¤å·ç 
+	void UpdateBuddySign(UINT nUTalkUin);											// æ›´æ–°å¥½å‹ä¸ªæ€§ç­¾å
+	void UpdateGroupMemberSign(UINT nGroupCode, UINT nUTalkUin);					// æ›´æ–°ç¾¤æˆå‘˜ä¸ªæ€§ç­¾å
+	void ModifyUTalkSign(LPCTSTR lpSign);											// ä¿®æ”¹UTalkä¸ªæ€§ç­¾å
+	void UpdateBuddyHeadPic(UINT nUTalkUin, UINT nUTalkNum);						// æ›´æ–°å¥½å‹å¤´åƒ
+	void UpdateGroupMemberHeadPic(UINT nGroupCode, UINT nUTalkUin, UINT nUTalkNum);	// æ›´æ–°ç¾¤æˆå‘˜å¤´åƒ
+	void UpdateGroupHeadPic(UINT nGroupCode, UINT nGroupNum);						// æ›´æ–°ç¾¤å¤´åƒ
+	void UpdateGroupFaceSignal();													// æ›´æ–°ç¾¤è¡¨æƒ…ä¿¡ä»¤
 
 
-    BOOL SendBuddyMsg(UINT nFromUin, const tstring& strFromNickName, UINT nToUin, const tstring& strToNickName, time_t nTime, const tstring& strChatMsg, HWND hwndFrom = NULL);// ·¢ËÍºÃÓÑÏûÏ¢
-	BOOL SendGroupMsg(UINT nGroupId, time_t nTime, LPCTSTR lpMsg, HWND hwndFrom);	// ·¢ËÍÈºÏûÏ¢
-	BOOL SendSessMsg(UINT nGroupId, UINT nToUin, time_t nTime, LPCTSTR lpMsg);		// ·¢ËÍÁÙÊ±»á»°ÏûÏ¢
-	BOOL SendMultiChatMsg(const std::set<UINT> setAccountID, time_t nTime, LPCTSTR lpMsg, HWND hwndFrom=NULL);//Èº·¢ÏûÏ¢
+    BOOL SendBuddyMsg(UINT nFromUin, const tstring& strFromNickName, UINT nToUin, const tstring& strToNickName, time_t nTime, const tstring& strChatMsg, HWND hwndFrom = NULL);// å‘é€å¥½å‹æ¶ˆæ¯
+	BOOL SendGroupMsg(UINT nGroupId, time_t nTime, LPCTSTR lpMsg, HWND hwndFrom);	// å‘é€ç¾¤æ¶ˆæ¯
+	BOOL SendSessMsg(UINT nGroupId, UINT nToUin, time_t nTime, LPCTSTR lpMsg);		// å‘é€ä¸´æ—¶ä¼šè¯æ¶ˆæ¯
+	BOOL SendMultiChatMsg(const std::set<UINT> setAccountID, time_t nTime, LPCTSTR lpMsg, HWND hwndFrom=NULL);//ç¾¤å‘æ¶ˆæ¯
 
-	BOOL IsOffline();											// ÊÇ·ñÀëÏß×´Ì¬
+	BOOL IsOffline();											// æ˜¯å¦ç¦»çº¿çŠ¶æ€
 
 
-	long GetStatus();											// »ñÈ¡ÔÚÏß×´Ì¬
-	BOOL GetVerifyCodePic(const BYTE*& lpData, DWORD& dwSize);	// »ñÈ¡ÑéÖ¤ÂëÍ¼Æ¬
+	long GetStatus();											// è·å–åœ¨çº¿çŠ¶æ€
+	BOOL GetVerifyCodePic(const BYTE*& lpData, DWORD& dwSize);	// è·å–éªŒè¯ç å›¾ç‰‡
 	void SetBuddyListAvailable(BOOL bAvailable);
 	BOOL IsBuddyListAvailable();
 
-	CBuddyInfo* GetUserInfo(UINT uAccountID=0);			// »ñÈ¡ÓÃ»§ĞÅÏ¢
-	CBuddyList* GetBuddyList();						// »ñÈ¡ºÃÓÑÁĞ±í
-	CGroupList* GetGroupList();						// »ñÈ¡ÈºÁĞ±í
-	CRecentList* GetRecentList();						// »ñÈ¡×î½üÁªÏµÈËÁĞ±í
-	CMessageList* GetMessageList();					// »ñÈ¡ÏûÏ¢ÁĞ±í
-	CMessageLogger* GetMsgLogger();					// »ñÈ¡ÏûÏ¢¼ÇÂ¼¹ÜÀíÆ÷
+	CBuddyInfo* GetUserInfo(UINT uAccountID=0);			// è·å–ç”¨æˆ·ä¿¡æ¯
+	CBuddyList* GetBuddyList();						// è·å–å¥½å‹åˆ—è¡¨
+	CGroupList* GetGroupList();						// è·å–ç¾¤åˆ—è¡¨
+	CRecentList* GetRecentList();						// è·å–æœ€è¿‘è”ç³»äººåˆ—è¡¨
+	CMessageList* GetMessageList();					// è·å–æ¶ˆæ¯åˆ—è¡¨
+	CMessageLogger* GetMsgLogger();					// è·å–æ¶ˆæ¯è®°å½•ç®¡ç†å™¨
 
-	tstring GetUserFolder();							// »ñÈ¡ÓÃ»§ÎÄ¼ş¼Ğ´æ·ÅÂ·¾¶
+	tstring GetUserFolder();							// è·å–ç”¨æˆ·æ–‡ä»¶å¤¹å­˜æ”¾è·¯å¾„
 
-	tstring GetPersonalFolder(UINT nUserNum = 0);		// »ñÈ¡¸öÈËÎÄ¼ş¼Ğ´æ·ÅÂ·¾¶
-	tstring GetChatPicFolder(UINT nUserNum = 0);		// »ñÈ¡ÁÄÌìÍ¼Æ¬´æ·ÅÂ·¾¶
+	tstring GetPersonalFolder(UINT nUserNum = 0);		// è·å–ä¸ªäººæ–‡ä»¶å¤¹å­˜æ”¾è·¯å¾„
+	tstring GetChatPicFolder(UINT nUserNum = 0);		// è·å–èŠå¤©å›¾ç‰‡å­˜æ”¾è·¯å¾„
 
-	tstring GetUserHeadPicFullName(UINT nUserNum = 0);	// »ñÈ¡ÓÃ»§Í·ÏñÍ¼Æ¬È«Â·¾¶ÎÄ¼şÃû
-	tstring GetBuddyHeadPicFullName(UINT nUTalkNum);	// »ñÈ¡ºÃÓÑÍ·ÏñÍ¼Æ¬È«Â·¾¶ÎÄ¼şÃû
-	tstring GetGroupHeadPicFullName(UINT nGroupNum);	// »ñÈ¡ÈºÍ·ÏñÍ¼Æ¬È«Â·¾¶ÎÄ¼şÃû
-	tstring GetSessHeadPicFullName(UINT nUTalkNum);		// »ñÈ¡Èº³ÉÔ±Í·ÏñÍ¼Æ¬È«Â·¾¶ÎÄ¼şÃû
-	tstring GetChatPicFullName(LPCTSTR lpszFileName);	// »ñÈ¡ÁÄÌìÍ¼Æ¬È«Â·¾¶ÎÄ¼şÃû
-	tstring GetMsgLogFullName(UINT nUserNum = 0);		// »ñÈ¡ÏûÏ¢¼ÇÂ¼È«Â·¾¶ÎÄ¼şÃû
+	tstring GetUserHeadPicFullName(UINT nUserNum = 0);	// è·å–ç”¨æˆ·å¤´åƒå›¾ç‰‡å…¨è·¯å¾„æ–‡ä»¶å
+	tstring GetBuddyHeadPicFullName(UINT nUTalkNum);	// è·å–å¥½å‹å¤´åƒå›¾ç‰‡å…¨è·¯å¾„æ–‡ä»¶å
+	tstring GetGroupHeadPicFullName(UINT nGroupNum);	// è·å–ç¾¤å¤´åƒå›¾ç‰‡å…¨è·¯å¾„æ–‡ä»¶å
+	tstring GetSessHeadPicFullName(UINT nUTalkNum);		// è·å–ç¾¤æˆå‘˜å¤´åƒå›¾ç‰‡å…¨è·¯å¾„æ–‡ä»¶å
+	tstring GetChatPicFullName(LPCTSTR lpszFileName);	// è·å–èŠå¤©å›¾ç‰‡å…¨è·¯å¾„æ–‡ä»¶å
+	tstring GetMsgLogFullName(UINT nUserNum = 0);		// è·å–æ¶ˆæ¯è®°å½•å…¨è·¯å¾„æ–‡ä»¶å
 
-	BOOL IsNeedUpdateBuddyHeadPic(UINT nUTalkNum);		// ÅĞ¶ÏÊÇ·ñĞèÒª¸üĞÂºÃÓÑÍ·Ïñ
-	BOOL IsNeedUpdateGroupHeadPic(UINT nGroupNum);		// ÅĞ¶ÏÊÇ·ñĞèÒª¸üĞÂÈºÍ·Ïñ
-	BOOL IsNeedUpdateSessHeadPic(UINT nUTalkNum);		// ÅĞ¶ÏÊÇ·ñĞèÒª¸üĞÂÈº³ÉÔ±Í·Ïñ
+	BOOL IsNeedUpdateBuddyHeadPic(UINT nUTalkNum);		// åˆ¤æ–­æ˜¯å¦éœ€è¦æ›´æ–°å¥½å‹å¤´åƒ
+	BOOL IsNeedUpdateGroupHeadPic(UINT nGroupNum);		// åˆ¤æ–­æ˜¯å¦éœ€è¦æ›´æ–°ç¾¤å¤´åƒ
+	BOOL IsNeedUpdateSessHeadPic(UINT nUTalkNum);		// åˆ¤æ–­æ˜¯å¦éœ€è¦æ›´æ–°ç¾¤æˆå‘˜å¤´åƒ
 
-	void RequestServerTime();							// »ñÈ¡·şÎñÆ÷Ê±¼ä
-	time_t GetCurrentTime();							// »ñÈ¡µ±Ç°Ê±¼ä(ÒÔ·şÎñÆ÷Ê±¼äÎª»ù×¼)
-	void LoadUserConfig();								// ¼ÓÔØÓÃ»§ÉèÖÃĞÅÏ¢
-	void SaveUserConfig();								// ±£´æÓÃ»§ÉèÖÃĞÅÏ¢
+	void RequestServerTime();							// è·å–æœåŠ¡å™¨æ—¶é—´
+	time_t GetCurrentTime();							// è·å–å½“å‰æ—¶é—´(ä»¥æœåŠ¡å™¨æ—¶é—´ä¸ºåŸºå‡†)
+	void LoadUserConfig();								// åŠ è½½ç”¨æˆ·è®¾ç½®ä¿¡æ¯
+	void SaveUserConfig();								// ä¿å­˜ç”¨æˆ·è®¾ç½®ä¿¡æ¯
 
 	void GoOnline();									
-	void GoOffline();									// µôÏß»òÕßÏÂÏß
+	void GoOffline();									// æ‰çº¿æˆ–è€…ä¸‹çº¿
 
-	long ParseBuddyStatus(long nFlag);					// ½âÎöÓÃ»§ÔÚÏß×´Ì¬
-	void CacheBuddyStatus();							// »º´æÓÃ»§ÔÚÏß×´Ì¬
+	long ParseBuddyStatus(long nFlag);					// è§£æç”¨æˆ·åœ¨çº¿çŠ¶æ€
+	void CacheBuddyStatus();							// ç¼“å­˜ç”¨æˆ·åœ¨çº¿çŠ¶æ€
 	BOOL SetBuddyStatus(UINT uAccountID, long nStatus);
     BOOL SetBuddyClientType(UINT uAccountID, long nNewClientType);
 
@@ -192,8 +192,8 @@ private:
 	void OnInternal_GetGMemberData(UINT message, WPARAM wParam, LPARAM lParam);
 	UINT OnInternal_GroupId2Code(UINT message, WPARAM wParam, LPARAM lParam);
 
-	BOOL CreateProxyWnd();		// ´´½¨´úÀí´°¿Ú
-	BOOL DestroyProxyWnd();		// Ïú»Ù´úÀí´°¿Ú
+	BOOL CreateProxyWnd();		// åˆ›å»ºä»£ç†çª—å£
+	BOOL DestroyProxyWnd();		// é”€æ¯ä»£ç†çª—å£
 	static LRESULT CALLBACK ProxyWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
 public:
@@ -210,21 +210,21 @@ public:
 	std::vector<AddFriendInfo*>		m_aryAddFriendInfo;
 
 private:
-	time_t							m_ServerTime;			//·şÎñÆ÷Ê±¼ä
-	DWORD							m_StartTime;			//¿ªÊ¼¼ÆÊ±µÄÊ±¼ä
+	time_t							m_ServerTime;			//æœåŠ¡å™¨æ—¶é—´
+	DWORD							m_StartTime;			//å¼€å§‹è®¡æ—¶çš„æ—¶é—´
 
-	BOOL							m_bNetworkAvailable;	//ÍøÂçÊÇ·ñ¿ÉÓÃ
+	BOOL							m_bNetworkAvailable;	//ç½‘ç»œæ˜¯å¦å¯ç”¨
 
-	HWND							m_hwndRegister;			//×¢²á´°¿Ú
-	HWND							m_hwndFindFriend;		//²éÕÒºÃÓÑ´°¿Ú
-	HWND							m_hwndModifyPassword;	//ĞŞ¸ÄÃÜÂë´°¿Ú
-	HWND							m_hwndCreateNewGroup;	//´´½¨Èº×é´°¿Ú
+	HWND							m_hwndRegister;			//æ³¨å†Œçª—å£
+	HWND							m_hwndFindFriend;		//æŸ¥æ‰¾å¥½å‹çª—å£
+	HWND							m_hwndModifyPassword;	//ä¿®æ”¹å¯†ç çª—å£
+	HWND							m_hwndCreateNewGroup;	//åˆ›å»ºç¾¤ç»„çª—å£
 
-	BOOL							m_bBuddyIDsAvailable;	//ÓÃ»§ºÃÓÑIDÊÇ·ñ¿ÉÓÃ
-	BOOL							m_bBuddyListAvailable;	//ÓÃ»§ºÃÓÑÁĞ±íĞÅÏ¢ÊÇ·ñ¿ÉÓÃ
+	BOOL							m_bBuddyIDsAvailable;	//ç”¨æˆ·å¥½å‹IDæ˜¯å¦å¯ç”¨
+	BOOL							m_bBuddyListAvailable;	//ç”¨æˆ·å¥½å‹åˆ—è¡¨ä¿¡æ¯æ˜¯å¦å¯ç”¨
 
-	std::map<UINT, long>			m_mapUserStatusCache;	//ºÃÓÑÔÚÏß×´Ì¬»º´æ£ºkeyÊÇÕË»§ID£¬valueÊÇ×´Ì¬Âë
-	std::map<UINT, UINT>			m_mapAddFriendCache;	//¼ÓºÃÓÑ²Ù×÷»º´æ: keyÊÇÕË»§ID£¬valueÊÇ²Ù×÷Âë
+	std::map<UINT, long>			m_mapUserStatusCache;	//å¥½å‹åœ¨çº¿çŠ¶æ€ç¼“å­˜ï¼škeyæ˜¯è´¦æˆ·IDï¼Œvalueæ˜¯çŠ¶æ€ç 
+	std::map<UINT, UINT>			m_mapAddFriendCache;	//åŠ å¥½å‹æ“ä½œç¼“å­˜: keyæ˜¯è´¦æˆ·IDï¼Œvalueæ˜¯æ“ä½œç 
 
 	long							m_nGroupCount;
 	BOOL							m_bGroupInfoAvailable;

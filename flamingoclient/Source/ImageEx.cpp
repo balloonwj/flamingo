@@ -1,4 +1,4 @@
-#include "stdafx.h"
+Ôªø#include "stdafx.h"
 #include "ImageEx.h"
 
 CImageEx::CImageEx(void)
@@ -167,7 +167,7 @@ BOOL CImageEx::Draw2(HDC hDestDC, const RECT& rectDest)
 	return Draw(hDestDC, rectDest);
 }
 
-// ÕºœÒª“∂»ªØ
+// ÂõæÂÉèÁÅ∞Â∫¶Âåñ
 void CImageEx::GrayScale()
 {
 	int nWidth = GetWidth();
@@ -183,16 +183,16 @@ void CImageEx::GrayScale()
 		{
 			int grayVal = (BYTE)(((*(pArray + nPitch* i + j* nBitCount)* 306)
 				+ (*(pArray + nPitch* i + j* nBitCount + 1)* 601)
-				+ (*(pArray + nPitch* i + j* nBitCount + 2)* 117) + 512 ) >> 10);	// º∆À„ª“∂»÷µ
+				+ (*(pArray + nPitch* i + j* nBitCount + 2)* 117) + 512 ) >> 10);	// ËÆ°ÁÆóÁÅ∞Â∫¶ÂÄº
 
-			*(pArray + nPitch* i + j* nBitCount) = grayVal;							// ∏≥ª“∂»÷µ
+			*(pArray + nPitch* i + j* nBitCount) = grayVal;							// ËµãÁÅ∞Â∫¶ÂÄº
 			*(pArray + nPitch* i + j* nBitCount + 1) = grayVal;
 			*(pArray + nPitch* i + j* nBitCount + 2) = grayVal;
 		}
 	}
 }
 
-// Alpha‘§≥À
+// AlphaÈ¢Ñ‰πò
 BOOL CImageEx::AlphaPremultiplication()
 {
 	LPVOID pBitsSrc = NULL;
@@ -228,7 +228,7 @@ BOOL CImageEx::AlphaPremultiplication()
 BOOL CImageEx::DrawNinePartImage(int pleft, int ptop, int pright, int pbottom,
 					   HDC hDC, int height, int width, int left, int top, int right, int bottom)
 {
-	// ◊Û…œ
+	// Â∑¶‰∏ä
 	{
 		CRect rcDest(pleft, ptop, pleft+left, ptop+top);
 		CRect rcSrc(0, 0, left, top);
@@ -236,7 +236,7 @@ BOOL CImageEx::DrawNinePartImage(int pleft, int ptop, int pright, int pbottom,
 			Draw(hDC, rcDest, rcSrc);
 	}
 
-	// ◊Û±ﬂ
+	// Â∑¶Ëæπ
 	{
 		CRect rcDest(pleft, top+ptop, pleft+left, top+(height-top-bottom-ptop-pbottom));
 		CRect rcSrc(0, top, left, top+(GetHeight()-top-bottom));
@@ -244,7 +244,7 @@ BOOL CImageEx::DrawNinePartImage(int pleft, int ptop, int pright, int pbottom,
 			Draw(hDC, rcDest, rcSrc);
 	}
 
-	// …œ±ﬂ
+	// ‰∏äËæπ
 	{
 		CRect rcDest(left+pleft, ptop, (left+pleft)+(width-left-right-pleft-pright), ptop+top);
 		CRect rcSrc(left, 0, left+(GetWidth()-left-right), top);
@@ -252,7 +252,7 @@ BOOL CImageEx::DrawNinePartImage(int pleft, int ptop, int pright, int pbottom,
 			Draw(hDC, rcDest, rcSrc);
 	}
 
-	// ”“…œ
+	// Âè≥‰∏ä
 	{
 		CRect rcDest(width- right-pright, ptop, (width- right-pright)+right, ptop+top);
 		CRect rcSrc(GetWidth()-right, 0, (GetWidth()-right)+right, top);
@@ -260,7 +260,7 @@ BOOL CImageEx::DrawNinePartImage(int pleft, int ptop, int pright, int pbottom,
 			Draw(hDC, rcDest, rcSrc);
 	}
 
-	// ”“±ﬂ
+	// Âè≥Ëæπ
 	{
 		CRect rcDest(width-right-pright, top+ptop, (width-right-pright)+right, (top+ptop)+(height-top-bottom-ptop-pbottom));
 		CRect rcSrc(GetWidth()-right, top, (GetWidth()-right)+right, top+(GetHeight()-top-bottom));
@@ -268,7 +268,7 @@ BOOL CImageEx::DrawNinePartImage(int pleft, int ptop, int pright, int pbottom,
 			Draw(hDC, rcDest, rcSrc);
 	}
 
-	// œ¬±ﬂ
+	// ‰∏ãËæπ
 	{
 		CRect rcDest(left+pleft, height-bottom-pbottom, (left+pleft)+(width-left-right-pleft-pright), (height-bottom-pbottom)+bottom);
 		CRect rcSrc(left, GetHeight()-bottom, left+(GetWidth()-left-right), (GetHeight()-bottom)+bottom);
@@ -276,7 +276,7 @@ BOOL CImageEx::DrawNinePartImage(int pleft, int ptop, int pright, int pbottom,
 			Draw(hDC, rcDest, rcSrc);
 	}
 
-	// ”“œ¬
+	// Âè≥‰∏ã
 	{
 		CRect rcDest(width-right-pright, height-bottom-pbottom, (width-right-pright)+right, (height-bottom-pbottom)+bottom);
 		CRect rcSrc(GetWidth()-right, GetHeight()-bottom, (GetWidth()-right)+right, (GetHeight()-bottom)+bottom);
@@ -284,7 +284,7 @@ BOOL CImageEx::DrawNinePartImage(int pleft, int ptop, int pright, int pbottom,
 			Draw(hDC, rcDest, rcSrc);
 	}
 
-	// ◊Ûœ¬
+	// Â∑¶‰∏ã
 	{
 		CRect rcDest(pleft, height-bottom-pbottom, pleft+left, (height-bottom-pbottom)+bottom);
 		CRect rcSrc(0, GetHeight()-bottom, left, (GetHeight()-bottom)+bottom);
@@ -292,7 +292,7 @@ BOOL CImageEx::DrawNinePartImage(int pleft, int ptop, int pright, int pbottom,
 			Draw(hDC, rcDest, rcSrc);
 	}
 
-	// ÷–º‰
+	// ‰∏≠Èó¥
 	{
 		CRect rcDest(left+pleft, top+ptop, (left+pleft)+(width-left-right-pleft-pright), (top+ptop)+(height-top-bottom-ptop-pbottom));
 		CRect rcSrc(left, top, left+(GetWidth()-left-right), top+(GetHeight()-top-bottom));
@@ -309,7 +309,7 @@ BOOL CImageEx::DrawNinePartImage(HDC hDC, int x, int y, int cx, int cy,
 	int cxImage = GetWidth();
 	int cyImage = GetHeight();
 
-	// ◊Û…œ
+	// Â∑¶‰∏ä
 	{
 		RECT rcDest = {x, y, x+nLeft, y+nTop};
 		RECT rcSrc = {0, 0, nLeft, nTop};
@@ -317,7 +317,7 @@ BOOL CImageEx::DrawNinePartImage(HDC hDC, int x, int y, int cx, int cy,
 			Draw(hDC, rcDest, rcSrc);
 	}
 
-	// ◊Û±ﬂ
+	// Â∑¶Ëæπ
 	{
 		RECT rcDest = {x, y+nTop, x+nLeft, (y+nTop)+(cy-nTop-nBottom)};
 		RECT rcSrc = {0, nTop, nLeft, nTop+(cyImage-nTop-nBottom)};
@@ -325,7 +325,7 @@ BOOL CImageEx::DrawNinePartImage(HDC hDC, int x, int y, int cx, int cy,
 			Draw(hDC, rcDest, rcSrc);
 	}
 
-	// …œ±ﬂ
+	// ‰∏äËæπ
 	{
 		RECT rcDest = {x+nLeft, y, (x+nLeft)+(cx-nLeft-nRight), y+nTop};
 		RECT rcSrc = {nLeft, 0, nLeft+(cxImage-nLeft-nRight), nTop};
@@ -333,7 +333,7 @@ BOOL CImageEx::DrawNinePartImage(HDC hDC, int x, int y, int cx, int cy,
 			Draw(hDC, rcDest, rcSrc);
 	}
 
-	// ”“…œ
+	// Âè≥‰∏ä
 	{
 		RECT rcDest = {x+(cx-nRight), y, (x+(cx-nRight))+nRight, y+nTop};
 		RECT rcSrc = {cxImage-nRight, 0, (cxImage-nRight)+nRight, nTop};
@@ -341,7 +341,7 @@ BOOL CImageEx::DrawNinePartImage(HDC hDC, int x, int y, int cx, int cy,
 			Draw(hDC, rcDest, rcSrc);
 	}
 
-	// ”“±ﬂ
+	// Âè≥Ëæπ
 	{
 		RECT rcDest = {x+(cx-nRight), y+nTop, (x+(cx-nRight))+nRight, (y+nTop)+(cy-nTop-nBottom)};
 		RECT rcSrc = {cxImage-nRight, nTop, (cxImage-nRight)+nRight, nTop+(cyImage-nTop-nBottom)};
@@ -349,7 +349,7 @@ BOOL CImageEx::DrawNinePartImage(HDC hDC, int x, int y, int cx, int cy,
 			Draw(hDC, rcDest, rcSrc);
 	}
 
-	// œ¬±ﬂ
+	// ‰∏ãËæπ
 	{
 		RECT rcDest = {x+nLeft, y+(cy-nBottom), (x+nLeft)+(cx-nLeft-nRight), (y+(cy-nBottom))+nBottom};
 		RECT rcSrc = {nLeft, cyImage-nBottom, nLeft+(cxImage-nLeft-nRight), (cyImage-nBottom)+nBottom};
@@ -357,7 +357,7 @@ BOOL CImageEx::DrawNinePartImage(HDC hDC, int x, int y, int cx, int cy,
 			Draw(hDC, rcDest, rcSrc);
 	}
 
-	// ”“œ¬
+	// Âè≥‰∏ã
 	{
 		RECT rcDest = {x+(cx-nRight), y+(cy-nBottom), (x+(cx-nRight))+nRight, (y+(cy-nBottom))+nBottom};
 		RECT rcSrc = {cxImage-nRight, cyImage-nBottom, (cxImage-nRight)+nRight, (cyImage-nBottom)+nBottom};
@@ -365,7 +365,7 @@ BOOL CImageEx::DrawNinePartImage(HDC hDC, int x, int y, int cx, int cy,
 			Draw(hDC, rcDest, rcSrc);
 	}
 
-	// ◊Ûœ¬
+	// Â∑¶‰∏ã
 	{
 		RECT rcDest = {x, y+(cy-nBottom), x+nLeft, (y+(cy-nBottom))+nBottom};
 		RECT rcSrc = {0, cyImage-nBottom, nLeft, (cyImage-nBottom)+nBottom};
@@ -373,7 +373,7 @@ BOOL CImageEx::DrawNinePartImage(HDC hDC, int x, int y, int cx, int cy,
 			Draw(hDC, rcDest, rcSrc);
 	}
 
-	// ÷–º‰
+	// ‰∏≠Èó¥
 	{
 		RECT rcDest = {x+nLeft, y+nTop, (x+nLeft)+(cx-nLeft-nRight), (y+nTop)+(cy-nTop-nBottom)};
 		RECT rcSrc = {nLeft, nTop, nLeft+(cxImage-nLeft-nRight), nTop+(cyImage-nTop-nBottom)};
@@ -384,7 +384,7 @@ BOOL CImageEx::DrawNinePartImage(HDC hDC, int x, int y, int cx, int cy,
 	return TRUE;
 }
 
-//ªÒ»°Œƒº˛¿‡–Õ(Õ®π˝Œƒº˛Õ∑º∏∏ˆ◊÷Ω⁄ªÒ»°)
+//Ëé∑ÂèñÊñá‰ª∂Á±ªÂûã(ÈÄöËøáÊñá‰ª∂Â§¥Âá†‰∏™Â≠óËäÇËé∑Âèñ)
 int CImageEx::GetFileType(LPCTSTR lpszFileName)
 {
 	unsigned char png_head[8] = {0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};

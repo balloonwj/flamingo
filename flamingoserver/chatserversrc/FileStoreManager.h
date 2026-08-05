@@ -1,0 +1,140 @@
+﻿/**
+ *  文件元数据存储管理器，FileStoreManager.h
+ *
+ *  负责 v2 文件元数据表 t_file 的落库与查询，并持有文件域的运行配置：
+ *  令牌密钥、目标 fileserver / imgserver 的地址。每次数据库操作单独建立
+ *  一条连接（与 MessageManager / GroupManager / CardManager 同一风格），
+ *  不在内存缓存。
+ *
+ *  命名说明：fileserver / imgserver 进程内另有一个同义但不同职责的
+ *  fileserversrc/FileManager（管理磁盘文件），二者分属不同可执行程序、
+ *  从不在同一进程内链接，故不冲突；本类只服务 chatserver。
+ *
+ *  典型用法：main.cpp 启动时 init(...) + configure(...)；会话层在
+ *  cmd_request_upload / cmd_request_download 处理中调用。
+ *
+ *  balloonwj@qq.com   2026-05-22
+ */
+#pragma once
+
+#include <stdint.h>
+#include <string>
+
+//t_file.f_status 取值：文件记录已建、字节尚未传完
+const int file_status_pending   = 0;
+//t_file.f_status 取值：文件已上传完成，可被秒传命中、可下载
+const int file_status_completed = 1;
+
+//一条文件元数据，对应数据库 t_file 的一行
+struct FileRecord
+{
+    int64_t      fileid;      //文件ID，即 t_file 自增主键，对外的 fileid
+    std::string  md5;         //文件内容MD5（小写十六进制，32位），磁盘文件名依据
+    std::string  name;        //上传时的原始文件名
+    std::string  ext;         //扩展名，不含点
+    int64_t      size;        //文件总字节数
+    int          scene;       //用途场景，取值见 enum file_scene
+    int64_t      uploaderid;  //上传者用户userid
+    int          status;      //状态，取值见 file_status_*
+    int64_t      createtime;  //记录创建时间，Unix毫秒
+
+    FileRecord()
+        : fileid(0), size(0), scene(0), uploaderid(0),
+          status(file_status_pending), createtime(0)
+    {
+    }
+};
+
+//文件元数据存储管理器；全局单例，经 Singleton<FileStoreManager> 访问
+class FileStoreManager final
+{
+public:
+    FileStoreManager();
+    ~FileStoreManager();
+
+    FileStoreManager(const FileStoreManager& rhs) = delete;
+    FileStoreManager& operator=(const FileStoreManager& rhs) = delete;
+
+    /**
+     *  初始化（文件元数据不预加载到内存）。
+     *  @return 恒返回 true
+     */
+    bool init();
+
+    /**
+     *  配置文件域运行参数；main.cpp 读取配置文件后调用。
+     *  @param tokenKey  上传 / 下载令牌的 HMAC 密钥，与 fileserver/imgserver 共享
+     *  @param imgHost   imgserver 对客户端公布的主机地址
+     *  @param imgPort   imgserver 端口
+     *  @param imgTls    imgserver 是否启用 TLS
+     *  @param fileHost  fileserver 对客户端公布的主机地址
+     *  @param filePort  fileserver 端口
+     *  @param fileTls   fileserver 是否启用 TLS
+     */
+    void configure(const std::string& tokenKey,
+                   const std::string& imgHost, int imgPort, bool imgTls,
+                   const std::string& fileHost, int filePort, bool fileTls);
+
+    /**
+     *  取令牌 HMAC 密钥。
+     */
+    const std::string& getTokenKey() const;
+
+    /**
+     *  按文件场景取应连接的目标服务器地址。
+     *  @param scene 文件场景，取值见 enum file_scene
+     *  @param host  [出参] 目标服务器主机
+     *  @param port  [出参] 目标服务器端口
+     *  @param tls   [出参] 目标服务器是否启用 TLS
+     */
+    void getServerForScene(int scene, std::string& host, int& port, bool& tls) const;
+
+    /**
+     *  按 MD5 查找一条已完成的文件记录，用于秒传判断。
+     *  @param md5 文件内容MD5
+     *  @param out [出参] 命中时回填文件记录
+     *  @return 找到已完成记录返回 true；无命中或数据库出错返回 false
+     */
+    bool findCompletedByMd5(const std::string& md5, FileRecord& out);
+
+    /**
+     *  新建一条待上传（status=pending）的文件记录。
+     *  @param md5        文件内容MD5
+     *  @param name       原始文件名
+     *  @param ext        扩展名，不含点
+     *  @param size       文件总字节数
+     *  @param scene      用途场景，取值见 enum file_scene
+     *  @param uploaderid 上传者用户userid
+     *  @param now        创建时间，Unix毫秒
+     *  @return 新记录的 fileid；数据库出错返回 0
+     */
+    int64_t createPendingFile(const std::string& md5, const std::string& name,
+                              const std::string& ext, int64_t size, int scene,
+                              int64_t uploaderid, int64_t now);
+
+    /**
+     *  按 fileid 查文件记录。
+     *  @param fileid 文件ID
+     *  @param out    [出参] 找到时回填
+     *  @return 找到返回 true
+     */
+    bool getFileById(int64_t fileid, FileRecord& out);
+
+    /**
+     *  把文件记录标记为已完成（status=completed）。
+     *  客户端首次以该 fileid 发消息 / 更新头像时惰性调用，使后续可秒传命中。
+     *  @param fileid 文件ID
+     *  @return 数据库访问成功返回 true
+     */
+    bool markCompleted(int64_t fileid);
+
+private:
+
+    std::string m_tokenKey;       //上传/下载令牌 HMAC 密钥
+    std::string m_imgHost;        //imgserver 对外主机地址
+    int         m_imgPort;        //imgserver 端口
+    bool        m_imgTls;         //imgserver 是否启用 TLS
+    std::string m_fileHost;       //fileserver 对外主机地址
+    int         m_filePort;       //fileserver 端口
+    bool        m_fileTls;        //fileserver 是否启用 TLS
+};

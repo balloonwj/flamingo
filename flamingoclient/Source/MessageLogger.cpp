@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "MessageLogger.h"
 
 void CloneStr(const wchar_t* src, wchar_t** dest, UINT* destlen)
@@ -36,13 +36,13 @@ CMessageLogger::~CMessageLogger(void)
 	}
 }
 
-// »ñÈ¡ÏûÏ¢¼ÇÂ¼ÎÄ¼şÃû³Æ
+// è·å–æ¶ˆæ¯è®°å½•æ–‡ä»¶åç§°
 tstring CMessageLogger::GetMsgLogFileName()
 {
 	return m_strFileName;
 }
 
-// ÉèÖÃÏûÏ¢¼ÇÂ¼ÎÄ¼şÃû³Æ
+// è®¾ç½®æ¶ˆæ¯è®°å½•æ–‡ä»¶åç§°
 void CMessageLogger::SetMsgLogFileName(LPCTSTR lpszFileName)
 {
 	if (NULL == lpszFileName || NULL ==*lpszFileName)
@@ -63,25 +63,25 @@ void CMessageLogger::SetMsgLogFileName(LPCTSTR lpszFileName)
 	if (NULL == m_hMutex)
 	{
 		m_hMutex = ::CreateMutex(NULL, FALSE, strMutexName.c_str());
-		if (NULL == m_hMutex)	// ´´½¨»¥³âÁ¿Ê§°Ü
+		if (NULL == m_hMutex)	// åˆ›å»ºäº’æ–¥é‡å¤±è´¥
 		{
-			::MessageBox(NULL, _T("´´½¨»¥³âÁ¿Ê§°Ü£¡"), _T("ÌáÊ¾"), 0);
+			::MessageBox(NULL, _T("åˆ›å»ºäº’æ–¥é‡å¤±è´¥ï¼"), _T("æç¤º"), 0);
 			return;
 		}
 	}
 }
 
-// ÅĞ¶ÏÏûÏ¢¼ÇÂ¼ÎÄ¼şÊÇ·ñÓĞĞ§
+// åˆ¤æ–­æ¶ˆæ¯è®°å½•æ–‡ä»¶æ˜¯å¦æœ‰æ•ˆ
 BOOL CMessageLogger::IsMsgLogFileValid()
 {
-	if (m_strFileName.empty())	// ÎÄ¼şÃûÎª¿Õ
+	if (m_strFileName.empty())	// æ–‡ä»¶åä¸ºç©º
 		return FALSE;
 
-	if(::GetFileAttributes(m_strFileName.c_str()) == 0xFFFFFFFF)	// ÎÄ¼ş²»´æÔÚ
+	if(::GetFileAttributes(m_strFileName.c_str()) == 0xFFFFFFFF)	// æ–‡ä»¶ä¸å­˜åœ¨
 		return FALSE;
 
 	sqlite3*conn = NULL;
-	int nRet = sqlite3_open16(m_strFileName.c_str(), &conn);		// ´ò¿ªÎÄ¼şÊ§°Ü
+	int nRet = sqlite3_open16(m_strFileName.c_str(), &conn);		// æ‰“å¼€æ–‡ä»¶å¤±è´¥
 	if (nRet != SQLITE_OK)
 		return FALSE;
 	
@@ -89,7 +89,7 @@ BOOL CMessageLogger::IsMsgLogFileValid()
 	return TRUE;
 }
 
-// ´´½¨ÏûÏ¢¼ÇÂ¼ÎÄ¼ş
+// åˆ›å»ºæ¶ˆæ¯è®°å½•æ–‡ä»¶
 BOOL CMessageLogger::CreateMsgLogFile()
 {
 	sqlite3*conn = NULL;
@@ -102,7 +102,7 @@ BOOL CMessageLogger::CreateMsgLogFile()
 		return FALSE;
 
 	lpSql = "CREATE TABLE IF NOT EXISTS [tb_BuddyMsg] ([id] INTEGER PRIMARY KEY AUTOINCREMENT, [uin] INTEGER, [nickname] TEXT, [time] INTEGER, [sendflag] INTEGER, [content] TEXT)";
-	nRet = sqlite3_exec(conn, lpSql, 0, 0, &err_msg);	// ´´½¨ºÃÓÑÏûÏ¢±í
+	nRet = sqlite3_exec(conn, lpSql, 0, 0, &err_msg);	// åˆ›å»ºå¥½å‹æ¶ˆæ¯è¡¨
 	if (nRet != SQLITE_OK)
 	{
 		sqlite3_close(conn);
@@ -111,7 +111,7 @@ BOOL CMessageLogger::CreateMsgLogFile()
 	}
 
 	lpSql = "CREATE TABLE IF NOT EXISTS [tb_GroupMsg] ([id] INTEGER PRIMARY KEY AUTOINCREMENT, [groupnum] INTEGER, [uin] INTEGER, [nickname] TEXT, [time] INTEGER, [content] TEXT)";
-	nRet = sqlite3_exec(conn, lpSql, 0, 0, &err_msg);	// ´´½¨ÈºÏûÏ¢±í
+	nRet = sqlite3_exec(conn, lpSql, 0, 0, &err_msg);	// åˆ›å»ºç¾¤æ¶ˆæ¯è¡¨
 	if (nRet != SQLITE_OK)
 	{
 		sqlite3_close(conn);
@@ -120,7 +120,7 @@ BOOL CMessageLogger::CreateMsgLogFile()
 	}
 
 	lpSql = "CREATE TABLE IF NOT EXISTS [tb_SessMsg] ([id] INTEGER PRIMARY KEY AUTOINCREMENT, [uin] INTEGER, [nickname] TEXT, [time] INTEGER, [sendflag] INTEGER, [content] TEXT)";
-	nRet = sqlite3_exec(conn, lpSql, 0, 0, &err_msg);	// ´´½¨ÁÙÊ±»á»°(Èº³ÉÔ±)ÏûÏ¢±í
+	nRet = sqlite3_exec(conn, lpSql, 0, 0, &err_msg);	// åˆ›å»ºä¸´æ—¶ä¼šè¯(ç¾¤æˆå‘˜)æ¶ˆæ¯è¡¨
 	if (nRet != SQLITE_OK)
 	{
 		sqlite3_close(conn);
@@ -132,7 +132,7 @@ BOOL CMessageLogger::CreateMsgLogFile()
 	return TRUE;
 }
 
-// Ğ´ÈëÒ»ÌõºÃÓÑÏûÏ¢¼ÇÂ¼
+// å†™å…¥ä¸€æ¡å¥½å‹æ¶ˆæ¯è®°å½•
 BOOL CMessageLogger::WriteBuddyMsgLog(UINT nUTalkNum, LPCTSTR lpNickName,
 									  UINT64 nTime, BOOL bSendFlag, LPCTSTR lpContent)
 {
@@ -147,7 +147,7 @@ BOOL CMessageLogger::WriteBuddyMsgLog(UINT nUTalkNum, LPCTSTR lpNickName,
 	return WriteBuddyMsgLog(&stMsgLog);
 }
 
-// Ğ´ÈëÒ»ÌõÈºÏûÏ¢¼ÇÂ¼
+// å†™å…¥ä¸€æ¡ç¾¤æ¶ˆæ¯è®°å½•
 BOOL CMessageLogger::WriteGroupMsgLog(UINT nGroupNum, UINT nUTalkNum,
 									  LPCTSTR lpNickName, UINT64 nTime, LPCTSTR lpContent)
 {
@@ -162,7 +162,7 @@ BOOL CMessageLogger::WriteGroupMsgLog(UINT nGroupNum, UINT nUTalkNum,
 	return WriteGroupMsgLog(&stMsgLog);
 }
 
-// Ğ´ÈëÒ»ÌõÁÙÊ±»á»°(Èº³ÉÔ±)ÏûÏ¢¼ÇÂ¼
+// å†™å…¥ä¸€æ¡ä¸´æ—¶ä¼šè¯(ç¾¤æˆå‘˜)æ¶ˆæ¯è®°å½•
 BOOL CMessageLogger::WriteSessMsgLog(UINT nUTalkNum, LPCTSTR lpNickName,
 									 UINT64 nTime, BOOL bSendFlag, LPCTSTR lpContent)
 {
@@ -177,7 +177,7 @@ BOOL CMessageLogger::WriteSessMsgLog(UINT nUTalkNum, LPCTSTR lpNickName,
 	return WriteSessMsgLog(&stMsgLog);
 }
 
-// Ğ´ÈëÒ»ÌõºÃÓÑÏûÏ¢¼ÇÂ¼
+// å†™å…¥ä¸€æ¡å¥½å‹æ¶ˆæ¯è®°å½•
 BOOL CMessageLogger::WriteBuddyMsgLog(BUDDY_MSG_LOG* lpMsgLog)
 {
 	sqlite3*conn = NULL;
@@ -202,7 +202,7 @@ BOOL CMessageLogger::WriteBuddyMsgLog(BUDDY_MSG_LOG* lpMsgLog)
 
 	sqlite3_bind_int(stmt, 1, lpMsgLog->nUTalkNum);
 	sqlite3_bind_text16(stmt, 2, lpMsgLog->strNickName.c_str(), -1, SQLITE_STATIC);
-	//ÔİÇÒÕâÃ´×ª»»Ò»ÏÂ,lpMsgLog->nTime¿ÉÄÜ²»¶Ô£¡
+	//æš‚ä¸”è¿™ä¹ˆè½¬æ¢ä¸€ä¸‹,lpMsgLog->nTimeå¯èƒ½ä¸å¯¹ï¼
 	sqlite3_bind_int64(stmt, 3, lpMsgLog->nTime);
 	sqlite3_bind_int(stmt, 4, lpMsgLog->bSendFlag);
 	sqlite3_bind_text16(stmt, 5, lpMsgLog->strContent.c_str(), -1, SQLITE_STATIC);
@@ -215,7 +215,7 @@ BOOL CMessageLogger::WriteBuddyMsgLog(BUDDY_MSG_LOG* lpMsgLog)
 	return (nRet != SQLITE_DONE) ? FALSE : TRUE;
 }
 
-// Ğ´ÈëÒ»ÌõÈºÏûÏ¢¼ÇÂ¼
+// å†™å…¥ä¸€æ¡ç¾¤æ¶ˆæ¯è®°å½•
 BOOL CMessageLogger::WriteGroupMsgLog(GROUP_MSG_LOG* lpMsgLog)
 {
 	sqlite3*conn = NULL;
@@ -241,7 +241,7 @@ BOOL CMessageLogger::WriteGroupMsgLog(GROUP_MSG_LOG* lpMsgLog)
 	sqlite3_bind_int(stmt, 1, lpMsgLog->nGroupNum);
 	sqlite3_bind_int(stmt, 2, lpMsgLog->nUTalkNum);
 	sqlite3_bind_text16(stmt, 3, lpMsgLog->strNickName.c_str(), -1, SQLITE_STATIC);
-	//ÔİÇÒÕâÃ´×ª»»Ò»ÏÂ,lpMsgLog->nTime¿ÉÄÜ²»¶Ô£¡
+	//æš‚ä¸”è¿™ä¹ˆè½¬æ¢ä¸€ä¸‹,lpMsgLog->nTimeå¯èƒ½ä¸å¯¹ï¼
 	sqlite3_bind_int64(stmt, 4, lpMsgLog->nTime);
 	sqlite3_bind_text16(stmt, 5, lpMsgLog->strContent.c_str(), -1, SQLITE_STATIC);
 
@@ -253,7 +253,7 @@ BOOL CMessageLogger::WriteGroupMsgLog(GROUP_MSG_LOG* lpMsgLog)
 	return (nRet != SQLITE_DONE) ? FALSE : TRUE;
 }
 
-// Ğ´ÈëÒ»ÌõÁÙÊ±»á»°(Èº³ÉÔ±)ÏûÏ¢¼ÇÂ¼
+// å†™å…¥ä¸€æ¡ä¸´æ—¶ä¼šè¯(ç¾¤æˆå‘˜)æ¶ˆæ¯è®°å½•
 BOOL CMessageLogger::WriteSessMsgLog(SESS_MSG_LOG* lpMsgLog)
 {
 	sqlite3*conn = NULL;
@@ -278,7 +278,7 @@ BOOL CMessageLogger::WriteSessMsgLog(SESS_MSG_LOG* lpMsgLog)
 
 	sqlite3_bind_int(stmt, 1, lpMsgLog->nUTalkNum);
 	sqlite3_bind_text16(stmt, 2, lpMsgLog->strNickName.c_str(), -1, SQLITE_STATIC);
-	//ÔİÇÒÕâÃ´×ª»»Ò»ÏÂ,lpMsgLog->nTime¿ÉÄÜ²»¶Ô£¡
+	//æš‚ä¸”è¿™ä¹ˆè½¬æ¢ä¸€ä¸‹,lpMsgLog->nTimeå¯èƒ½ä¸å¯¹ï¼
 	sqlite3_bind_int64(stmt, 3, lpMsgLog->nTime);
 	sqlite3_bind_int(stmt, 4, lpMsgLog->bSendFlag);
 	sqlite3_bind_text16(stmt, 5, lpMsgLog->strContent.c_str(), -1, SQLITE_STATIC);
@@ -291,7 +291,7 @@ BOOL CMessageLogger::WriteSessMsgLog(SESS_MSG_LOG* lpMsgLog)
 	return (nRet != SQLITE_DONE) ? FALSE : TRUE;
 }
 
-// ¶Á³öÒ»Ìõ»ò¶àÌõºÃÓÑÏûÏ¢¼ÇÂ¼
+// è¯»å‡ºä¸€æ¡æˆ–å¤šæ¡å¥½å‹æ¶ˆæ¯è®°å½•
 UINT CMessageLogger::ReadBuddyMsgLog(UINT nUTalkNum, UINT nOffset, UINT nRows, 
 									 std::vector<BUDDY_MSG_LOG*>& arrMsgLog)
 {
@@ -360,7 +360,7 @@ UINT CMessageLogger::ReadBuddyMsgLog(UINT nUTalkNum, UINT nOffset, UINT nRows,
 	return arrMsgLog.size();
 }
 
-// ¶Á³öÒ»Ìõ»ò¶àÌõÈºÏûÏ¢¼ÇÂ¼
+// è¯»å‡ºä¸€æ¡æˆ–å¤šæ¡ç¾¤æ¶ˆæ¯è®°å½•
 UINT CMessageLogger::ReadGroupMsgLog(UINT nGroupNum, UINT nOffset, UINT nRows, 
 									 std::vector<GROUP_MSG_LOG*>& arrMsgLog)
 {
@@ -429,7 +429,7 @@ UINT CMessageLogger::ReadGroupMsgLog(UINT nGroupNum, UINT nOffset, UINT nRows,
 	return arrMsgLog.size();
 }
 
-// ¶Á³öÒ»Ìõ»ò¶àÌõÁÙÊ±»á»°(Èº³ÉÔ±)ÏûÏ¢¼ÇÂ¼
+// è¯»å‡ºä¸€æ¡æˆ–å¤šæ¡ä¸´æ—¶ä¼šè¯(ç¾¤æˆå‘˜)æ¶ˆæ¯è®°å½•
 UINT CMessageLogger::ReadSessMsgLog(UINT nUTalkNum, UINT nOffset, UINT nRows, 
 									std::vector<SESS_MSG_LOG*>& arrMsgLog)
 {
@@ -498,7 +498,7 @@ UINT CMessageLogger::ReadSessMsgLog(UINT nUTalkNum, UINT nOffset, UINT nRows,
 	return arrMsgLog.size();
 }
 
-// »ñÈ¡ºÃÓÑÏûÏ¢¼ÇÂ¼Êı
+// è·å–å¥½å‹æ¶ˆæ¯è®°å½•æ•°
 UINT CMessageLogger::GetBuddyMsgLogCount(UINT nUTalkNum)
 {
 	sqlite3*conn = NULL;
@@ -536,7 +536,7 @@ UINT CMessageLogger::GetBuddyMsgLogCount(UINT nUTalkNum)
 	return nCount;
 }
 
-// »ñÈ¡ÈºÏûÏ¢¼ÇÂ¼Êı
+// è·å–ç¾¤æ¶ˆæ¯è®°å½•æ•°
 UINT CMessageLogger::GetGroupMsgLogCount(UINT nGroupNum)
 {
 	sqlite3*conn = NULL;
@@ -574,7 +574,7 @@ UINT CMessageLogger::GetGroupMsgLogCount(UINT nGroupNum)
 	return nCount;
 }
 
-// »ñÈ¡ÁÙÊ±»á»°(Èº³ÉÔ±)ÏûÏ¢¼ÇÂ¼Êı
+// è·å–ä¸´æ—¶ä¼šè¯(ç¾¤æˆå‘˜)æ¶ˆæ¯è®°å½•æ•°
 UINT CMessageLogger::GetSessMsgLogCount(UINT nUTalkNum)
 {
 	sqlite3*conn = NULL;
@@ -612,7 +612,7 @@ UINT CMessageLogger::GetSessMsgLogCount(UINT nUTalkNum)
 	return nCount;
 }
 
-// É¾³ıËùÓĞºÃÓÑÏûÏ¢¼ÇÂ¼
+// åˆ é™¤æ‰€æœ‰å¥½å‹æ¶ˆæ¯è®°å½•
 BOOL CMessageLogger::DelAllBuddyMsgLog()
 {
 	sqlite3*conn = NULL;
@@ -631,7 +631,7 @@ BOOL CMessageLogger::DelAllBuddyMsgLog()
 	return ((nRet != SQLITE_OK) ? FALSE : TRUE);
 }
 
-// É¾³ıËùÓĞÈºÏûÏ¢¼ÇÂ¼
+// åˆ é™¤æ‰€æœ‰ç¾¤æ¶ˆæ¯è®°å½•
 BOOL CMessageLogger::DelAllGroupMsgLog()
 {
 	sqlite3*conn = NULL;
@@ -650,7 +650,7 @@ BOOL CMessageLogger::DelAllGroupMsgLog()
 	return ((nRet != SQLITE_OK) ? FALSE : TRUE);
 }
 
-// É¾³ıËùÓĞÁÙÊ±»á»°(Èº³ÉÔ±)ÏûÏ¢¼ÇÂ¼
+// åˆ é™¤æ‰€æœ‰ä¸´æ—¶ä¼šè¯(ç¾¤æˆå‘˜)æ¶ˆæ¯è®°å½•
 BOOL CMessageLogger::DelAllSessMsgLog()
 {
 	sqlite3*conn = NULL;
@@ -669,7 +669,7 @@ BOOL CMessageLogger::DelAllSessMsgLog()
 	return ((nRet != SQLITE_OK) ? FALSE : TRUE);
 }
 
-// É¾³ıÖ¸¶¨ºÃÓÑµÄËùÓĞÏûÏ¢¼ÇÂ¼
+// åˆ é™¤æŒ‡å®šå¥½å‹çš„æ‰€æœ‰æ¶ˆæ¯è®°å½•
 BOOL CMessageLogger::DelBuddyMsgLog(UINT nUTalkNum)
 {
 	sqlite3*conn = NULL;
@@ -699,7 +699,7 @@ BOOL CMessageLogger::DelBuddyMsgLog(UINT nUTalkNum)
 	return ((nRet != SQLITE_DONE) ? FALSE : TRUE);
 }
 
-// É¾³ıÖ¸¶¨ÈºµÄËùÓĞÏûÏ¢¼ÇÂ¼
+// åˆ é™¤æŒ‡å®šç¾¤çš„æ‰€æœ‰æ¶ˆæ¯è®°å½•
 BOOL CMessageLogger::DelGroupMsgLog(UINT nGroupNum)
 {
 	sqlite3*conn = NULL;
@@ -729,7 +729,7 @@ BOOL CMessageLogger::DelGroupMsgLog(UINT nGroupNum)
 	return ((nRet != SQLITE_DONE) ? FALSE : TRUE);
 }
 
-// É¾³ıÖ¸¶¨ÁÙÊ±»á»°(Èº³ÉÔ±)µÄËùÓĞÏûÏ¢¼ÇÂ¼
+// åˆ é™¤æŒ‡å®šä¸´æ—¶ä¼šè¯(ç¾¤æˆå‘˜)çš„æ‰€æœ‰æ¶ˆæ¯è®°å½•
 BOOL CMessageLogger::DelSessMsgLog(UINT nUTalkNum)
 {
 	sqlite3*conn = NULL;
@@ -759,7 +759,7 @@ BOOL CMessageLogger::DelSessMsgLog(UINT nUTalkNum)
 	return ((nRet != SQLITE_DONE) ? FALSE : TRUE);
 }
 
-// »ñÈ¡ÏûÏ¢IDÍ¨¹ıÏûÏ¢ÎÄ±¾
+// è·å–æ¶ˆæ¯IDé€šè¿‡æ¶ˆæ¯æ–‡æœ¬
 UINT CMessageLogger::DelBuddyMsgLogByText(LPCTSTR lpStr)
 {
 	sqlite3*conn = NULL;
@@ -789,7 +789,7 @@ UINT CMessageLogger::DelBuddyMsgLogByText(LPCTSTR lpStr)
 
 	return nRet;
 }
-// É¾³ıÖ¸¶¨IDµÄºÃÓÑÏûÏ¢¼ÇÂ¼
+// åˆ é™¤æŒ‡å®šIDçš„å¥½å‹æ¶ˆæ¯è®°å½•
 BOOL CMessageLogger::DelBuddyMsgLogByID(UINT nID)
 {
 	sqlite3*conn = NULL;
@@ -819,7 +819,7 @@ BOOL CMessageLogger::DelBuddyMsgLogByID(UINT nID)
 	return ((nRet != SQLITE_DONE) ? FALSE : TRUE);
 }
 
-// É¾³ıÖ¸¶¨IDµÄÈºÏûÏ¢¼ÇÂ¼
+// åˆ é™¤æŒ‡å®šIDçš„ç¾¤æ¶ˆæ¯è®°å½•
 BOOL CMessageLogger::DelGroupMsgLogByID(UINT nID)
 {
 	sqlite3*conn = NULL;
@@ -849,7 +849,7 @@ BOOL CMessageLogger::DelGroupMsgLogByID(UINT nID)
 	return ((nRet != SQLITE_DONE) ? FALSE : TRUE);
 }
 
-// É¾³ıÖ¸¶¨IDµÄÁÙÊ±»á»°(Èº³ÉÔ±)ÏûÏ¢¼ÇÂ¼
+// åˆ é™¤æŒ‡å®šIDçš„ä¸´æ—¶ä¼šè¯(ç¾¤æˆå‘˜)æ¶ˆæ¯è®°å½•
 BOOL CMessageLogger::DelSessMsgLogByID(UINT nID)
 {
 	sqlite3*conn = NULL;
@@ -879,13 +879,13 @@ BOOL CMessageLogger::DelSessMsgLogByID(UINT nID)
 	return ((nRet != SQLITE_DONE) ? FALSE : TRUE);
 }
 
-// ¼ÓËøº¯Êı
+// åŠ é”å‡½æ•°
 void CMessageLogger::Lock()
 {
 	::WaitForSingleObject(m_hMutex, INFINITE);
 }
 
-// ½âËøº¯Êı
+// è§£é”å‡½æ•°
 void CMessageLogger::UnLock()
 {
 	::ReleaseMutex(m_hMutex);

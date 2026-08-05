@@ -1,5 +1,5 @@
-/** 
- * µ¥ÈËÁÄÌì´°¿Ú, BuddyChatDlg.h
+ï»¿/** 
+ * å•äººèŠå¤©çª—å£, BuddyChatDlg.h
  * zhangyl 2017.05.26
  */
 #pragma once
@@ -42,21 +42,21 @@ public:
 		MSG_WM_CLOSE(OnClose)
 		MSG_WM_DESTROY(OnDestroy)
 
-		COMMAND_HANDLER_EX(ID_PIC_HEAD, BN_CLICKED, OnLnk_BuddyName)			//µã»÷Í·Ïñ°´Å¥
+		COMMAND_HANDLER_EX(ID_PIC_HEAD, BN_CLICKED, OnLnk_BuddyName)			//ç‚¹å‡»å¤´åƒæŒ‰é’®
 		COMMAND_HANDLER_EX(ID_LINK_BUDDYNAME, BN_CLICKED, OnLnk_BuddyName)
         COMMAND_ID_HANDLER_EX(104, OnBtn_RemoteDesktop)
 		COMMAND_ID_HANDLER_EX(201, OnBtn_Font)
 		COMMAND_ID_HANDLER_EX(202, OnBtn_Face)
-		COMMAND_ID_HANDLER_EX(204, OnShakeWindow)								//´°¿Ú¶¶¶¯
+		COMMAND_ID_HANDLER_EX(204, OnShakeWindow)								//çª—å£æŠ–åŠ¨
 		COMMAND_ID_HANDLER_EX(208, OnBtn_Image)
-		COMMAND_ID_HANDLER_EX(211, OnBtn_ScreenShot)							//½ØÍ¼¹¤¾ß
-		COMMAND_ID_HANDLER_EX(214, OnBtn_MsgLog)								//ÏûÏ¢¼ÇÂ¼
+		COMMAND_ID_HANDLER_EX(211, OnBtn_ScreenShot)							//æˆªå›¾å·¥å…·
+		COMMAND_ID_HANDLER_EX(214, OnBtn_MsgLog)								//æ¶ˆæ¯è®°å½•
 		COMMAND_ID_HANDLER_EX(302, OnBtn_SaveAs)
 
-		COMMAND_RANGE_HANDLER_EX(IDC_FIRSTMSGLOG, IDC_LASTMSGLOG, OnMsgLogPage) //ÏûÏ¢¼ÇÂ¼×îÇ°Ò»Ìõ£¬ÉÏÒ»Ìõ£¬ÏÂÒ»Ìõ£¬×îºóÒ»ÌõËÄ¸ö°´Å¥
+		COMMAND_RANGE_HANDLER_EX(IDC_FIRSTMSGLOG, IDC_LASTMSGLOG, OnMsgLogPage) //æ¶ˆæ¯è®°å½•æœ€å‰ä¸€æ¡ï¼Œä¸Šä¸€æ¡ï¼Œä¸‹ä¸€æ¡ï¼Œæœ€åä¸€æ¡å››ä¸ªæŒ‰é’®
 		
-		COMMAND_ID_HANDLER_EX(ID_32852, OnPressEnterMenuItem)					//»Ø³µ¼ü·¢ËÍÏûÏ¢
-		COMMAND_ID_HANDLER_EX(ID_32853, OnPressCtrlEnterMenuItem)				//Ctrl+»Ø³µ·¢ËÍÏûÏ¢
+		COMMAND_ID_HANDLER_EX(ID_32852, OnPressEnterMenuItem)					//å›è½¦é”®å‘é€æ¶ˆæ¯
+		COMMAND_ID_HANDLER_EX(ID_32853, OnPressCtrlEnterMenuItem)				//Ctrl+å›è½¦å‘é€æ¶ˆæ¯
 		COMMAND_ID_HANDLER_EX(IDM_AUTOREPLY, OnAutoReply);
 
 		COMMAND_HANDLER_EX(ID_BTN_CLOSE, BN_CLICKED, OnBtn_Close)
@@ -77,8 +77,8 @@ public:
 		MESSAGE_HANDLER_EX(FACE_CTRL_SEL, OnFaceCtrlSel)
 		MESSAGE_HANDLER_EX(WM_SETDLGINITFOCUS, OnSetDlgInitFocus)
 
-		MESSAGE_HANDLER_EX(FMG_MSG_SENDCHATMSG_RESULT, OnSendChatMsgResult)	//¸øºÃÓÑ·¢ÏûÏ¢µÄ·´À¡½á¹û
-		//MESSAGE_HANDLER_EX(FMG_MSG_RECVFILE_REQUEST, OnRequestRecvFile)		//ÇëÇó½ÓÊÜÎÄ¼ş
+		MESSAGE_HANDLER_EX(FMG_MSG_SENDCHATMSG_RESULT, OnSendChatMsgResult)	//ç»™å¥½å‹å‘æ¶ˆæ¯çš„åé¦ˆç»“æœ
+		//MESSAGE_HANDLER_EX(FMG_MSG_RECVFILE_REQUEST, OnRequestRecvFile)		//è¯·æ±‚æ¥å—æ–‡ä»¶
 		MESSAGE_HANDLER_EX(FMG_MSG_SEND_FILE_PROGRESS, OnSendFileProgress)
 		MESSAGE_HANDLER_EX(FMG_MSG_SEND_FILE_RESULT, OnSendFileResult)
 		MESSAGE_HANDLER_EX(FMG_MSG_RECV_FILE_PROGRESS, OnRecvFileProgress)
@@ -94,23 +94,23 @@ public:
 		COMMAND_ID_HANDLER_EX(ID_MENU_CLEAR, OnMenu_Clear)
 		COMMAND_RANGE_HANDLER_EX(ID_MENU_ZOOMRATIO_400, ID_MENU_ZOOMRATIO_50, OnMenu_ZoomRatio)
 		COMMAND_ID_HANDLER_EX(ID_MENU_SAVEAS, OnMenu_SaveAs)
-		COMMAND_ID_HANDLER_EX(IDM_EXPORT_MSGLOG, OnMenu_ExportMsgLog)			//µ¼³öÏûÏ¢¼ÇÂ¼
-		COMMAND_ID_HANDLER_EX(IDM_FINDINMSGLOG, OnMenu_FindInMsgLog)			//²éÕÒÏûÏ¢¼ÇÂ¼
-		COMMAND_ID_HANDLER_EX(IDM_CLEARMSGLOG, OnMenu_ClearMsgLog)				//Çå³ıÏûÏ¢¼ÇÂ¼
-		COMMAND_ID_HANDLER_EX(IDM_DELETESELECTMSGLOG, OnMenu_DeleteSelectMsgLog)//É¾³ıÑ¡ÖĞÏûÏ¢¼ÇÂ¼
-		COMMAND_ID_HANDLER_EX(IDM_SENDFILE, OnMenu_SendFile)					//·¢ËÍÎÄ¼ş
-		COMMAND_ID_HANDLER_EX(IDM_SENDOFFLINEFILE, OnMenu_SendOfflineFile)		//·¢ËÍÀëÏßÎÄ¼ş
-		COMMAND_ID_HANDLER_EX(IDM_SENDDIRECTORY, OnMenu_SendDirectory)			//·¢ËÍÎÄ¼ş¼Ğ
-		COMMAND_ID_HANDLER_EX(IDM_SENDFILESETTINGS, OnMenu_SendFileSettings)	//·¢ËÍÎÄ¼şÉèÖÃ
+		COMMAND_ID_HANDLER_EX(IDM_EXPORT_MSGLOG, OnMenu_ExportMsgLog)			//å¯¼å‡ºæ¶ˆæ¯è®°å½•
+		COMMAND_ID_HANDLER_EX(IDM_FINDINMSGLOG, OnMenu_FindInMsgLog)			//æŸ¥æ‰¾æ¶ˆæ¯è®°å½•
+		COMMAND_ID_HANDLER_EX(IDM_CLEARMSGLOG, OnMenu_ClearMsgLog)				//æ¸…é™¤æ¶ˆæ¯è®°å½•
+		COMMAND_ID_HANDLER_EX(IDM_DELETESELECTMSGLOG, OnMenu_DeleteSelectMsgLog)//åˆ é™¤é€‰ä¸­æ¶ˆæ¯è®°å½•
+		COMMAND_ID_HANDLER_EX(IDM_SENDFILE, OnMenu_SendFile)					//å‘é€æ–‡ä»¶
+		COMMAND_ID_HANDLER_EX(IDM_SENDOFFLINEFILE, OnMenu_SendOfflineFile)		//å‘é€ç¦»çº¿æ–‡ä»¶
+		COMMAND_ID_HANDLER_EX(IDM_SENDDIRECTORY, OnMenu_SendDirectory)			//å‘é€æ–‡ä»¶å¤¹
+		COMMAND_ID_HANDLER_EX(IDM_SENDFILESETTINGS, OnMenu_SendFileSettings)	//å‘é€æ–‡ä»¶è®¾ç½®
 
 
 	END_MSG_MAP()
 
 public:
-	void OnRecvMsg(UINT nUTalkUin, UINT nMsgId);								// ½ÓÊÕºÃÓÑÏûÏ¢
-	void OnUpdateBuddyNumber();													// ¸üĞÂºÃÓÑºÅÂëÍ¨Öª
-	void OnUpdateBuddySign();													// ¸üĞÂºÃÓÑÇ©ÃûÍ¨Öª
-	void OnUpdateBuddyHeadPic();												// ¸üĞÂºÃÓÑÍ·ÏñÍ¨Öª
+	void OnRecvMsg(UINT nUTalkUin, UINT nMsgId);								// æ¥æ”¶å¥½å‹æ¶ˆæ¯
+	void OnUpdateBuddyNumber();													// æ›´æ–°å¥½å‹å·ç é€šçŸ¥
+	void OnUpdateBuddySign();													// æ›´æ–°å¥½å‹ç­¾åé€šçŸ¥
+	void OnUpdateBuddyHeadPic();												// æ›´æ–°å¥½å‹å¤´åƒé€šçŸ¥
 
 	BOOL IsFilesTransferring();
 
@@ -128,33 +128,33 @@ private:
 	void OnClose();
 	void OnDestroy();
 
-	void OnLnk_BuddyName(UINT uNotifyCode, int nID, CWindow wndCtl);			// ¡°ºÃÓÑÃû³Æ¡±³¬Á´½Ó¿Ø¼ş
+	void OnLnk_BuddyName(UINT uNotifyCode, int nID, CWindow wndCtl);			// â€œå¥½å‹åç§°â€è¶…é“¾æ¥æ§ä»¶
     void OnBtn_RemoteDesktop(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnBtn_Font(UINT uNotifyCode, int nID, CWindow wndCtl);					// ¡°×ÖÌåÑ¡Ôñ¹¤¾ßÀ¸¡±°´Å¥
-	void OnBtn_Face(UINT uNotifyCode, int nID, CWindow wndCtl);					// ¡°±íÇé¡±°´Å¥
-	void OnShakeWindow(UINT uNotifyCode, int nID, CWindow wndCtl);				// ¡°´°¿Ú¶¶¶¯¡±°´Å¥
-	void OnBtn_Image(UINT uNotifyCode, int nID, CWindow wndCtl);				// ¡°·¢ËÍÍ¼Æ¬¡±°´Å¥
-	void OnBtn_ScreenShot(UINT uNotifyCode, int nID, CWindow wndCtl);			// ½ØÍ¼¹¤¾ß
-	void OnBtn_MsgLog(UINT uNotifyCode, int nID, CWindow wndCtl);				// ¡°ÏûÏ¢¼ÇÂ¼¡±°´Å¥
-	void OnBtn_SaveAs(UINT uNotifyCode, int nID, CWindow wndCtl);				// ¡°µã»÷Áí´æÎª¡±°´Å¥
+	void OnBtn_Font(UINT uNotifyCode, int nID, CWindow wndCtl);					// â€œå­—ä½“é€‰æ‹©å·¥å…·æ â€æŒ‰é’®
+	void OnBtn_Face(UINT uNotifyCode, int nID, CWindow wndCtl);					// â€œè¡¨æƒ…â€æŒ‰é’®
+	void OnShakeWindow(UINT uNotifyCode, int nID, CWindow wndCtl);				// â€œçª—å£æŠ–åŠ¨â€æŒ‰é’®
+	void OnBtn_Image(UINT uNotifyCode, int nID, CWindow wndCtl);				// â€œå‘é€å›¾ç‰‡â€æŒ‰é’®
+	void OnBtn_ScreenShot(UINT uNotifyCode, int nID, CWindow wndCtl);			// æˆªå›¾å·¥å…·
+	void OnBtn_MsgLog(UINT uNotifyCode, int nID, CWindow wndCtl);				// â€œæ¶ˆæ¯è®°å½•â€æŒ‰é’®
+	void OnBtn_SaveAs(UINT uNotifyCode, int nID, CWindow wndCtl);				// â€œç‚¹å‡»å¦å­˜ä¸ºâ€æŒ‰é’®
 
-	void OnMsgLogPage(UINT uNotifyCode, int nID, CWindow wndCtl);				// ÏûÏ¢¼ÇÂ¼·­Ò³°´Å¥
+	void OnMsgLogPage(UINT uNotifyCode, int nID, CWindow wndCtl);				// æ¶ˆæ¯è®°å½•ç¿»é¡µæŒ‰é’®
 
-	void OnBtn_Close(UINT uNotifyCode, int nID, CWindow wndCtl);				// ¡°¹Ø±Õ¡±°´Å¥
-	void OnBtn_Send(UINT uNotifyCode, int nID, CWindow wndCtl);					// ¡°·¢ËÍ¡±°´Å¥
-	void OnBtn_Arrow(UINT uNotifyCode, int nID, CWindow wndCtl);				// ¡°¼ıÍ·¡±°´Å¥
+	void OnBtn_Close(UINT uNotifyCode, int nID, CWindow wndCtl);				// â€œå…³é—­â€æŒ‰é’®
+	void OnBtn_Send(UINT uNotifyCode, int nID, CWindow wndCtl);					// â€œå‘é€â€æŒ‰é’®
+	void OnBtn_Arrow(UINT uNotifyCode, int nID, CWindow wndCtl);				// â€œç®­å¤´â€æŒ‰é’®
 
-	void OnOpenTransferFileItem(UINT uNotifyCode, int nID, CWindow wndCtl);		// ½ÓÊÜÎÄ¼ş³É¹¦ÒÔºóµÄ¡°´ò¿ª¡±Óë¡°´ò¿ªÎÄ¼ş¼Ğ¡±²Ëµ¥Ïî
+	void OnOpenTransferFileItem(UINT uNotifyCode, int nID, CWindow wndCtl);		// æ¥å—æ–‡ä»¶æˆåŠŸä»¥åçš„â€œæ‰“å¼€â€ä¸â€œæ‰“å¼€æ–‡ä»¶å¤¹â€èœå•é¡¹
 	
-	void OnPressEnterMenuItem(UINT uNotifyCode, int nID, CWindow wndCtl);		//»Ø³µ¼ü·¢ËÍÏûÏ¢
-	void OnPressCtrlEnterMenuItem(UINT uNotifyCode, int nID, CWindow wndCtl);	//Ctrl+»Ø³µ·¢ËÍÏûÏ¢
-	void OnAutoReply(UINT uNotifyCode, int nID, CWindow wndCtl);				// ×Ô¶¯»Ø¸´²Ëµ¥
+	void OnPressEnterMenuItem(UINT uNotifyCode, int nID, CWindow wndCtl);		//å›è½¦é”®å‘é€æ¶ˆæ¯
+	void OnPressCtrlEnterMenuItem(UINT uNotifyCode, int nID, CWindow wndCtl);	//Ctrl+å›è½¦å‘é€æ¶ˆæ¯
+	void OnAutoReply(UINT uNotifyCode, int nID, CWindow wndCtl);				// è‡ªåŠ¨å›å¤èœå•
 	
 	LRESULT OnToolbarDropDown(LPNMHDR pnmh);
 
-	LRESULT OnUpdateFontInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);			// ¸üĞÂ×ÖÌåĞÅÏ¢
-	LRESULT OnFaceCtrlSel(UINT uMsg, WPARAM wParam, LPARAM lParam);				// ¡°±íÇé¡±¿Ø¼şÑ¡È¡ÏûÏ¢
-	LRESULT OnSetDlgInitFocus(UINT uMsg, WPARAM wParam, LPARAM lParam);			// ÉèÖÃ¶Ô»°¿ò³õÊ¼½¹µã
+	LRESULT OnUpdateFontInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);			// æ›´æ–°å­—ä½“ä¿¡æ¯
+	LRESULT OnFaceCtrlSel(UINT uMsg, WPARAM wParam, LPARAM lParam);				// â€œè¡¨æƒ…â€æ§ä»¶é€‰å–æ¶ˆæ¯
+	LRESULT OnSetDlgInitFocus(UINT uMsg, WPARAM wParam, LPARAM lParam);			// è®¾ç½®å¯¹è¯æ¡†åˆå§‹ç„¦ç‚¹
 
 	LRESULT OnSendChatMsgResult(UINT uMsg, WPARAM wParam, LPARAM lParam);
 	LRESULT OnSendFileProgress(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -165,54 +165,54 @@ private:
 	LRESULT OnTabCtrlSelChange(LPNMHDR pnmh);
 	LRESULT OnClickTabMgr(LPNMHDR pnmh);
 	LRESULT OnBtn_FileTransfer(LPNMHDR pnmh);
- 	LRESULT OnRichEdit_Recv_Link(LPNMHDR pnmh);						//	¡°½ÓÊÕÏûÏ¢¡±¸»ÎÄ±¾¿òÁ´½Óµã»÷ÏûÏ¢
+ 	LRESULT OnRichEdit_Recv_Link(LPNMHDR pnmh);						//	â€œæ¥æ”¶æ¶ˆæ¯â€å¯Œæ–‡æœ¬æ¡†é“¾æ¥ç‚¹å‡»æ¶ˆæ¯
 	LRESULT OnRichEdit_Send_Paste(LPNMHDR pnmh);
- 	void OnMenu_Cut(UINT uNotifyCode, int nID, CWindow wndCtl);		// ¡°¼ôÇĞ¡±²Ëµ¥
- 	void OnMenu_Copy(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°¸´ÖÆ¡±²Ëµ¥
- 	void OnMenu_Paste(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°Õ³Ìù¡±²Ëµ¥
- 	void OnMenu_SelAll(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°È«²¿Ñ¡Ôñ¡±²Ëµ¥
- 	void OnMenu_Clear(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°ÇåÆÁ¡±²Ëµ¥
-	void OnMenu_ZoomRatio(UINT uNotifyCode, int nID, CWindow wndCtl);// ¡°ÏÔÊ¾±ÈÀı¡±²Ëµ¥
-	void OnMenu_SaveAs(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°Áí´æÎª¡±²Ëµ¥
-	void OnMenu_ExportMsgLog(UINT uNotifyCode, int nID, CWindow wndCtl);//¡°µ¼³öÏûÏ¢¼ÇÂ¼¡±²Ëµ¥
-	void OnMenu_FindInMsgLog(UINT uNotifyCode, int nID, CWindow wndCtl); //¡°²éÕÒÏûÏ¢¼ÇÂ¼¡±²Ëµ¥
-	void OnMenu_DeleteSelectMsgLog(UINT uNotifyCode, int nID, CWindow wndCtl);//¡°É¾³ıÑ¡ÖĞÏûÏ¢¼ÇÂ¼¡±²Ëµ¥
-	void OnMenu_ClearMsgLog(UINT uNotifyCode, int nID, CWindow wndCtl); //¡°Çå¿ÕÏûÏ¢¼ÇÂ¼¡±²Ëµ¥
+ 	void OnMenu_Cut(UINT uNotifyCode, int nID, CWindow wndCtl);		// â€œå‰ªåˆ‡â€èœå•
+ 	void OnMenu_Copy(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œå¤åˆ¶â€èœå•
+ 	void OnMenu_Paste(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œç²˜è´´â€èœå•
+ 	void OnMenu_SelAll(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œå…¨éƒ¨é€‰æ‹©â€èœå•
+ 	void OnMenu_Clear(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œæ¸…å±â€èœå•
+	void OnMenu_ZoomRatio(UINT uNotifyCode, int nID, CWindow wndCtl);// â€œæ˜¾ç¤ºæ¯”ä¾‹â€èœå•
+	void OnMenu_SaveAs(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œå¦å­˜ä¸ºâ€èœå•
+	void OnMenu_ExportMsgLog(UINT uNotifyCode, int nID, CWindow wndCtl);//â€œå¯¼å‡ºæ¶ˆæ¯è®°å½•â€èœå•
+	void OnMenu_FindInMsgLog(UINT uNotifyCode, int nID, CWindow wndCtl); //â€œæŸ¥æ‰¾æ¶ˆæ¯è®°å½•â€èœå•
+	void OnMenu_DeleteSelectMsgLog(UINT uNotifyCode, int nID, CWindow wndCtl);//â€œåˆ é™¤é€‰ä¸­æ¶ˆæ¯è®°å½•â€èœå•
+	void OnMenu_ClearMsgLog(UINT uNotifyCode, int nID, CWindow wndCtl); //â€œæ¸…ç©ºæ¶ˆæ¯è®°å½•â€èœå•
 	
-	void OnMenu_SendFile(UINT uNotifyCode, int nID, CWindow wndCtl); //¡°·¢ËÍÎÄ¼ş¡±²Ëµ¥
-	void OnMenu_SendOfflineFile(UINT uNotifyCode, int nID, CWindow wndCtl); //¡°·¢ËÍÀëÏßÎÄ¼ş¡±²Ëµ¥
-	void OnMenu_SendDirectory(UINT uNotifyCode, int nID, CWindow wndCtl); //¡°·¢ËÍÎÄ¼ş¼Ğ¡±²Ëµ¥
-	void OnMenu_SendFileSettings(UINT uNotifyCode, int nID, CWindow wndCtl); //¡°·¢ËÍÎÄ¼şÉèÖÃ¡±²Ëµ¥
+	void OnMenu_SendFile(UINT uNotifyCode, int nID, CWindow wndCtl); //â€œå‘é€æ–‡ä»¶â€èœå•
+	void OnMenu_SendOfflineFile(UINT uNotifyCode, int nID, CWindow wndCtl); //â€œå‘é€ç¦»çº¿æ–‡ä»¶â€èœå•
+	void OnMenu_SendDirectory(UINT uNotifyCode, int nID, CWindow wndCtl); //â€œå‘é€æ–‡ä»¶å¤¹â€èœå•
+	void OnMenu_SendFileSettings(UINT uNotifyCode, int nID, CWindow wndCtl); //â€œå‘é€æ–‡ä»¶è®¾ç½®â€èœå•
 
 
 
-	BOOL OnRichEdit_MouseMove(MSG* pMsg);		// ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êÒÆ¶¯ÏûÏ¢
-	BOOL OnRichEdit_LBtnDblClk(MSG* pMsg);		// ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êË«»÷ÏûÏ¢
-	BOOL OnRichEdit_RBtnDown(MSG* pMsg);		// ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êÓÒ¼ü°´ÏÂÏûÏ¢
+	BOOL OnRichEdit_MouseMove(MSG* pMsg);		// å‘é€/æ¥æ”¶æ–‡æœ¬æ¡†çš„é¼ æ ‡ç§»åŠ¨æ¶ˆæ¯
+	BOOL OnRichEdit_LBtnDblClk(MSG* pMsg);		// å‘é€/æ¥æ”¶æ–‡æœ¬æ¡†çš„é¼ æ ‡åŒå‡»æ¶ˆæ¯
+	BOOL OnRichEdit_RBtnDown(MSG* pMsg);		// å‘é€/æ¥æ”¶æ–‡æœ¬æ¡†çš„é¼ æ ‡å³é”®æŒ‰ä¸‹æ¶ˆæ¯
 
-	CBuddyInfo* GetBuddyInfoPtr();		// »ñÈ¡ºÃÓÑĞÅÏ¢Ö¸Õë
-	CBuddyInfo* GetUserInfoPtr();		// »ñÈ¡ÓÃ»§ĞÅÏ¢Ö¸Õë
+	CBuddyInfo* GetBuddyInfoPtr();		// è·å–å¥½å‹ä¿¡æ¯æŒ‡é’ˆ
+	CBuddyInfo* GetUserInfoPtr();		// è·å–ç”¨æˆ·ä¿¡æ¯æŒ‡é’ˆ
 
-	void UpdateData();					// ¸üĞÂÊı¾İ
-	void UpdateDlgTitle();				// ¸üĞÂ¶Ô»°¿ò±êÌâÀ¸
-	void UpdateBuddyNameCtrl();			// ¸üĞÂºÃÓÑÃû³Æ¿Ø¼ş
-	void UpdateBuddySignCtrl();			// ¸üĞÂºÃÓÑÇ©Ãû¿Ø¼ş
+	void UpdateData();					// æ›´æ–°æ•°æ®
+	void UpdateDlgTitle();				// æ›´æ–°å¯¹è¯æ¡†æ ‡é¢˜æ 
+	void UpdateBuddyNameCtrl();			// æ›´æ–°å¥½å‹åç§°æ§ä»¶
+	void UpdateBuddySignCtrl();			// æ›´æ–°å¥½å‹ç­¾åæ§ä»¶
 
-	BOOL InitTopToolBar();				// ³õÊ¼»¯Top¹¤¾ßÀ¸
-	BOOL InitMidToolBar();				// ³õÊ¼»¯Middle¹¤¾ßÀ¸
-	BOOL InitRightTabWindow();			// ³õÊ¼»¯ÓÒ±ß°üº¬ÏûÏ¢¼ÇÂ¼ºÍ·¢ËÍÎÄ¼ş¹¦ÄÜµÄ´°¿Ú
-	BOOL InitRichEditOleCallback();		// ³õÊ¼»¯IRichEditOleCallback½Ó¿Ú
+	BOOL InitTopToolBar();				// åˆå§‹åŒ–Topå·¥å…·æ 
+	BOOL InitMidToolBar();				// åˆå§‹åŒ–Middleå·¥å…·æ 
+	BOOL InitRightTabWindow();			// åˆå§‹åŒ–å³è¾¹åŒ…å«æ¶ˆæ¯è®°å½•å’Œå‘é€æ–‡ä»¶åŠŸèƒ½çš„çª—å£
+	BOOL InitRichEditOleCallback();		// åˆå§‹åŒ–IRichEditOleCallbackæ¥å£
 
 	void ShowMsgLogButtons(BOOL bShow);
 
-	void InitFileTransferCtrl();		// ³õÊ¼»¯ÎÄ¼ş·¢ËÍÏµÁĞ¿Ø¼ş
-	void ShowFileTransferCtrl(BOOL bShow);//ÏÔÊ¾»òÒş²ØÎÄ¼ş´«Êä¿Ø¼ş
-	void DestroyFileTransferCtrl();		// Ïú»ÙÎÄ¼ş·¢ËÍÏµÁĞ¿Ø¼ş
+	void InitFileTransferCtrl();		// åˆå§‹åŒ–æ–‡ä»¶å‘é€ç³»åˆ—æ§ä»¶
+	void ShowFileTransferCtrl(BOOL bShow);//æ˜¾ç¤ºæˆ–éšè—æ–‡ä»¶ä¼ è¾“æ§ä»¶
+	void DestroyFileTransferCtrl();		// é”€æ¯æ–‡ä»¶å‘é€ç³»åˆ—æ§ä»¶
 
-	BOOL Init();						// ³õÊ¼»¯
-	BOOL UnInit();						// ·´³õÊ¼»¯
+	BOOL Init();						// åˆå§‹åŒ–
+	BOOL UnInit();						// ååˆå§‹åŒ–
 	//void CalcTitleBarRect();
-	void SetHotRgn();					//ÉèÖÃÈÈµãÇøÓò
+	void SetHotRgn();					//è®¾ç½®çƒ­ç‚¹åŒºåŸŸ
 
 	void _RichEdit_ReplaceSel(HWND hWnd, LPCTSTR lpszNewText);
 	BOOL _RichEdit_InsertFace(HWND hWnd, LPCTSTR lpszFileName, int nFaceId, int nFaceIndex);
@@ -230,11 +230,11 @@ private:
 
 	void InsertAutoReplyContent();
 
-	void OpenMsgLogBrowser();			// ´ò¿ªÏûÏ¢¼ÇÂ¼ä¯ÀÀ´°¿Ú
-	void CloseMsgLogBrowser();			// ¹Ø±ÕÏûÏ¢¼ÇÂ¼ä¯ÀÀ´°¿Ú
+	void OpenMsgLogBrowser();			// æ‰“å¼€æ¶ˆæ¯è®°å½•æµè§ˆçª—å£
+	void CloseMsgLogBrowser();			// å…³é—­æ¶ˆæ¯è®°å½•æµè§ˆçª—å£
 	void CalculateMsgLogCountAndOffset();
 
-	BOOL GetImageDisplaySizeInRichEdit(PCTSTR pszFileName, HWND hWnd, long& nWidth, long& nHeight);	//»ñÈ¡¸»ÎÄ±¾¿Ø¼şÖĞÍ¼Æ¬µÄÏÔÊ¾µÄ³ß´ç
+	BOOL GetImageDisplaySizeInRichEdit(PCTSTR pszFileName, HWND hWnd, long& nWidth, long& nHeight);	//è·å–å¯Œæ–‡æœ¬æ§ä»¶ä¸­å›¾ç‰‡çš„æ˜¾ç¤ºçš„å°ºå¯¸
 	void ResizeImageInRecvRichEdit();
 
 	void DisplayFileTransfer(BOOL bShow);
@@ -249,7 +249,7 @@ private:
 	BOOL HandleFileDragResult(PCTSTR lpszFileName);
 	BOOL SendOfflineFile(PCTSTR pszFileName);
 	BOOL RecvOfflineFile(PCTSTR lpszDownloadName, PCTSTR pszFileName, long nFileSize);
-	BOOL ShowRequestRecvFile(BOOL bOnlineFile, PCTSTR lpszDownloadName, PCTSTR pszFileName, long nFileSize);	//½ÓÊÕÎÄ¼şÇëÇó
+	BOOL ShowRequestRecvFile(BOOL bOnlineFile, PCTSTR lpszDownloadName, PCTSTR pszFileName, long nFileSize);	//æ¥æ”¶æ–‡ä»¶è¯·æ±‚
 
     void SendConfirmMessage(const CUploadFileResult* pUploadFileResult);
 
@@ -266,8 +266,8 @@ public:
 	CCascadeWinManager* m_lpCascadeWinManager;
 	HWND				m_hMainDlg;
 	int				    m_nUTalkUin;                
-    int                 m_UserId;                   //µ±Ç°ÁÄÌìºÃÓÑid
-    int                 m_LoginUserId;              //µÇÂ¼ÓÃ»§id
+    int                 m_UserId;                   //å½“å‰èŠå¤©å¥½å‹id
+    int                 m_LoginUserId;              //ç™»å½•ç”¨æˆ·id
 
 private:
 	CSkinDialog			m_SkinDlg;							
@@ -285,18 +285,18 @@ private:
 	CPicBarDlg			m_PicBarDlg;
 	CSkinRichEdit		m_richRecv, m_richSend;
 	CChatTabMgr			m_TabMgr;
-	CSkinTabCtrl		m_RightTabCtrl;				//ÁÄÌì´°¿ÚÓÒ±ßµÄTab´°¿Ú
-	CSkinRichEdit		m_richMsgLog;				//ÏûÏ¢¼ÇÂ¼¸»ÎÄ±¾¿Ø¼ş
+	CSkinTabCtrl		m_RightTabCtrl;				//èŠå¤©çª—å£å³è¾¹çš„Tabçª—å£
+	CSkinRichEdit		m_richMsgLog;				//æ¶ˆæ¯è®°å½•å¯Œæ–‡æœ¬æ§ä»¶
 	CSplitterCtrl		m_SplitterCtrl;
 
-	CSkinStatic			m_staPicUploadProgress;		//Í¼Æ¬ÉÏ´«½ø¶È¿Ø¼ş
+	CSkinStatic			m_staPicUploadProgress;		//å›¾ç‰‡ä¸Šä¼ è¿›åº¦æ§ä»¶
 
-	//ÎÄ¼ş´«Êä¡°´°¿Ú¡±¿Ø¼ş
-	CSkinPictureBox		m_SendFileThumbPicture;		//ÎÄ¼şÍ¼±ê
-	CSkinStatic			m_staSendFileDesc;			//ÎÄ¼şÃèÊö£¨ÎÄ¼şÃû+´óĞ¡£©
-	CProgressBarCtrl	m_ProgressSendFile;			//ÎÄ¼ş½ø¶ÈÌõ
-	CSkinHyperLink		m_lnkSendOffline;			//×ªÀëÏß·¢ËÍ°´Å¥
-	CSkinHyperLink		m_lnkSendFileCancel;		//È¡Ïû·¢ËÍ°´Å¥
+	//æ–‡ä»¶ä¼ è¾“â€œçª—å£â€æ§ä»¶
+	CSkinPictureBox		m_SendFileThumbPicture;		//æ–‡ä»¶å›¾æ ‡
+	CSkinStatic			m_staSendFileDesc;			//æ–‡ä»¶æè¿°ï¼ˆæ–‡ä»¶å+å¤§å°ï¼‰
+	CProgressBarCtrl	m_ProgressSendFile;			//æ–‡ä»¶è¿›åº¦æ¡
+	CSkinHyperLink		m_lnkSendOffline;			//è½¬ç¦»çº¿å‘é€æŒ‰é’®
+	CSkinHyperLink		m_lnkSendFileCancel;		//å–æ¶ˆå‘é€æŒ‰é’®
 
 	CFileTransferCtrl	m_FileTransferCtrl;
 
@@ -305,8 +305,8 @@ private:
 	CRect				m_rcMinBtn, m_rcMaxBtn, m_rcCloseBtn;
 	
 	CAccelerator		m_Accelerator;
-	BOOL				m_bPressEnterToSendMessage;	//TRUE°´»Ø³µ¼ü·¢ËÍÏûÏ¢, FALSE°´Ctrl+Enter·¢ËÍÏûÏ¢
-	BOOL				m_bMsgLogWindowVisible;		//ÁÄÌì¼ÇÂ¼´°¿Úµ±Ç°ÊÇ·ñ¿É¼û
+	BOOL				m_bPressEnterToSendMessage;	//TRUEæŒ‰å›è½¦é”®å‘é€æ¶ˆæ¯, FALSEæŒ‰Ctrl+Enterå‘é€æ¶ˆæ¯
+	BOOL				m_bMsgLogWindowVisible;		//èŠå¤©è®°å½•çª—å£å½“å‰æ˜¯å¦å¯è§
 	BOOL				m_bFileTransferVisible;
 
 	HICON				m_hDlgIcon, m_hDlgSmallIcon;
@@ -314,9 +314,9 @@ private:
 	POINT				m_ptRBtnDown;
 	IImageOle*			m_pLastImageOle;
 	int					m_cxPicBarDlg, m_cyPicBarDlg;
-	int					m_nMsgLogIndexInToolbar;	//ÏûÏ¢¼ÇÂ¼ÔÚtoolbarÉÏµÄË÷Òı
+	int					m_nMsgLogIndexInToolbar;	//æ¶ˆæ¯è®°å½•åœ¨toolbarä¸Šçš„ç´¢å¼•
 
-	CMessageLogger		m_MsgLogger;				// ÏûÏ¢¼ÇÂ¼
+	CMessageLogger		m_MsgLogger;				// æ¶ˆæ¯è®°å½•
 	UINT				m_nUTalkNumber;
 	UINT				m_nUserNumber;
 	CString				m_strBuddyName;
@@ -329,18 +329,18 @@ private:
 
 	BOOL				m_bEnableAutoReply;
 
-	long				m_nMsgLogRecordOffset;		//µ±Ç°ÏûÏ¢¼ÇÂ¼µÄÆ«ÒÆÁ¿+1
-	long				m_nMsgLogCurrentPageIndex;	//ÏûÏ¢¼ÇÂ¼µ±Ç°Ò³Âë
+	long				m_nMsgLogRecordOffset;		//å½“å‰æ¶ˆæ¯è®°å½•çš„åç§»é‡+1
+	long				m_nMsgLogCurrentPageIndex;	//æ¶ˆæ¯è®°å½•å½“å‰é¡µç 
 
-	std::map<CString, long>	m_mapSendFileInfo;		//·¢ËÍÎÄ¼ş¶ÓÁĞ£¬¼üÊÇÎÄ¼şÃû£¬Èç¹û¼üÖµÎª-1ÔòÊÇÎÄ¼ş£»Èç¹û¼üÖµ´óÓÚ0ÔòÊÇÍ¼Æ¬ÔÚ´°¿ÚÎ»ÖÃµÄË÷Òı
-	std::map<CString, long>	m_mapRecvFileInfo;		//½ÓÊÕÎÄ¼ş¶ÓÁĞ£¬¼üÊÇÎÄ¼şÏÔÊ¾Ãû£¬¼üÖµÎª-1ÊÇÊÕÈ¡µÄÀëÏßÎÄ¼ş£»¼üÖµ´óÓÚ1ÊÇÊÕÈ¡µÄÁÄÌìÍ¼Æ¬Ó¦²åÈëµÄÎ»ÖÃË÷Òı
+	std::map<CString, long>	m_mapSendFileInfo;		//å‘é€æ–‡ä»¶é˜Ÿåˆ—ï¼Œé”®æ˜¯æ–‡ä»¶åï¼Œå¦‚æœé”®å€¼ä¸º-1åˆ™æ˜¯æ–‡ä»¶ï¼›å¦‚æœé”®å€¼å¤§äº0åˆ™æ˜¯å›¾ç‰‡åœ¨çª—å£ä½ç½®çš„ç´¢å¼•
+	std::map<CString, long>	m_mapRecvFileInfo;		//æ¥æ”¶æ–‡ä»¶é˜Ÿåˆ—ï¼Œé”®æ˜¯æ–‡ä»¶æ˜¾ç¤ºåï¼Œé”®å€¼ä¸º-1æ˜¯æ”¶å–çš„ç¦»çº¿æ–‡ä»¶ï¼›é”®å€¼å¤§äº1æ˜¯æ”¶å–çš„èŠå¤©å›¾ç‰‡åº”æ’å…¥çš„ä½ç½®ç´¢å¼•
 
 
-	BOOL				m_bDraged;					//ÓÃ»§ÊÇ·ñÍÏ×§¹ı·¢ËÍÎÄ±¾¿òµÄ³ß´ç
+	BOOL				m_bDraged;					//ç”¨æˆ·æ˜¯å¦æ‹–æ‹½è¿‡å‘é€æ–‡æœ¬æ¡†çš„å°ºå¯¸
 	RECT				m_rtRichRecv;
 	RECT				m_rtMidToolBar;
 	RECT				m_rtSplitter;
 	RECT				m_rtRichSend;
 
-    time_t              m_nLastSendShakeWindowTime; //×î½üÒ»´Î·¢ËÍ´°¿Ú¶¶¶¯µÄµÄÊ±¼ä
+    time_t              m_nLastSendShakeWindowTime; //æœ€è¿‘ä¸€æ¬¡å‘é€çª—å£æŠ–åŠ¨çš„çš„æ—¶é—´
 };

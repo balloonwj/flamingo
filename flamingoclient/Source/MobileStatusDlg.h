@@ -1,4 +1,4 @@
-#pragma once 
+ï»¿#pragma once 
 #include "resource.h"
 #include "SkinLib/SkinLib.h"
 
@@ -39,6 +39,6 @@ private:
 	TCHAR				m_szWindowTitle[32];
 	TCHAR				m_szInfoText[128];
 
-	BOOL				m_bEnableAutoDisappear;		//ÊÇ·ñ×Ô¶¯ÏûÊ§
+	BOOL				m_bEnableAutoDisappear;		//æ˜¯å¦è‡ªåŠ¨æ¶ˆå¤±
 	UINT_PTR			m_TimerID;
 };

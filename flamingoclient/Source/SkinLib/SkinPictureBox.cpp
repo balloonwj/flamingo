@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "SkinPictureBox.h"
 
 CSkinPictureBox::CSkinPictureBox(void)
@@ -207,7 +207,7 @@ BOOL CSkinPictureBox::SetMobileBitmap(LPCTSTR lpszFileName, BOOL bShow/* = FALSE
 
 void CSkinPictureBox::SetToolTipText(LPCTSTR lpszText)
 {
-	if (!IsWindow())		// SetToolTipTextº¯Êı±ØĞëÔÚ´´½¨°´Å¥´°¿Úºó²ÅÄÜµ÷ÓÃ
+	if (!IsWindow())		// SetToolTipTextå‡½æ•°å¿…é¡»åœ¨åˆ›å»ºæŒ‰é’®çª—å£åæ‰èƒ½è°ƒç”¨
 		return;
 
 	if (!m_ToolTipCtrl.IsWindow())
@@ -351,17 +351,17 @@ void CSkinPictureBox::OnPaint(CDCHandle dc)
 		if (m_lpBgImgD != NULL && !m_lpBgImgD->IsNull())
 			m_lpBgImgD->Draw(MemDC.m_hDC, rcClient);
 	}
-	if (m_bPress)	// Êó±ê×ó¼ü°´ÏÂ×´Ì¬
+	if (m_bPress)	// é¼ æ ‡å·¦é”®æŒ‰ä¸‹çŠ¶æ€
 	{
 		if (m_lpBgImgD != NULL && !m_lpBgImgD->IsNull())
 			m_lpBgImgD->Draw(MemDC.m_hDC, rcClient);
 	}
-	else if (m_bHover)	// Êó±êĞüÍ£×´Ì¬
+	else if (m_bHover)	// é¼ æ ‡æ‚¬åœçŠ¶æ€
 	{
 		if (m_lpBgImgH != NULL && !m_lpBgImgH->IsNull())
 			m_lpBgImgH->Draw(MemDC.m_hDC, rcClient);
 	}
-	else	// ÆÕÍ¨×´Ì¬
+	else	// æ™®é€šçŠ¶æ€
 	{
 		if (m_lpBgImgN != NULL && !m_lpBgImgN->IsNull())
 			m_lpBgImgN->Draw(MemDC.m_hDC, rcClient);
@@ -471,7 +471,7 @@ void CSkinPictureBox::OnDestroy()
 		m_hCursor = NULL;
 	}
 
-	if (m_ToolTipCtrl.IsWindow())	// ToolTipCtrlÔçÔÚÖ®Ç°µÄ²»ÖªµÀÊ²Ã´µØ·½ÒÑÏú»Ù£¬ÕâÀïÏÔÊ½ÖÃ¿Õm_hWnd
+	if (m_ToolTipCtrl.IsWindow())	// ToolTipCtrlæ—©åœ¨ä¹‹å‰çš„ä¸çŸ¥é“ä»€ä¹ˆåœ°æ–¹å·²é”€æ¯ï¼Œè¿™é‡Œæ˜¾å¼ç½®ç©ºm_hWnd
 		m_ToolTipCtrl.DestroyWindow();
 	m_ToolTipCtrl.m_hWnd = NULL;
 

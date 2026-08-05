@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 #include <vector>
 
 struct TAB_WINDOW_INFO
@@ -6,8 +6,8 @@ struct TAB_WINDOW_INFO
 	BOOL	bEnableClose;
 	HWND	hwndItem;
 	BOOL	bHover;
-	RECT	rtArea;			//·Ç¹Ø±ÕÇøÓò
-	RECT	rtClose;		//¹Ø±Õ°´Å¥ÇøÓò
+	RECT	rtArea;			//éå…³é—­åŒºåŸŸ
+	RECT	rtClose;		//å…³é—­æŒ‰é’®åŒºåŸŸ
 	TCHAR	szTitle[64];
 };
 

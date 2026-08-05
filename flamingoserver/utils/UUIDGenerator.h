@@ -1,4 +1,4 @@
-/** 
+﻿/** 
  * 全局唯一的UUID生成工具类，Windows上实际使用的是GUID, UUIDGenerator.h
  * zhangyl 20190710
  */

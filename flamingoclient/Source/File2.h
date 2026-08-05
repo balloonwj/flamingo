@@ -1,23 +1,23 @@
-#pragma once
+О╩©#pragma once
 #include "Buffer.h"
 #include <stdint.h>
 
 ////////////////////////////////////
-//нд╪Чо╣ап╣д╨╞йЩ
+//Ф√┤Д╩╤ГЁ╩Е┬≈Г └Е┤╫Ф∙╟
 ////////////////////////////////////
-//╢Р©╙р╩╦Жнд╪Ч╡╒╩Я╣ц╦цнд╪Ч╣д╬Д╠З
+//Ф┴⌠Е╪─Д╦─Д╦╙Ф√┤Д╩╤Е╧╤Х▌╥Е╬≈Х╞╔Ф√┤Д╩╤Г └Е▐╔Ф÷└
 HANDLE GetFileHandle(PCTSTR pszFileName);
-//╩Ях║нд╪Ч╢Сп║
-DWORD IUGetFileSize(PCTSTR pszFileName);		//╡╩ж╖ЁжЁ╛╧Щ4G╣днд╪Ч
-DWORD IUGetFileSize(HANDLE hFile);				//╡╩ж╖ЁжЁ╛╧Щ4G╣днд╪Ч
-UINT64 IUGetFileSize2(PCTSTR pszFileName);		//ж╖ЁжЁ╛╧Щ4G╣днд╪Ч
+//Х▌╥Е▐√Ф√┤Д╩╤Е╓╖Е╟▐
+DWORD IUGetFileSize(PCTSTR pszFileName);		//Д╦█Ф■╞Ф▄│Х╤┘Х©┤4GГ └Ф√┤Д╩╤
+DWORD IUGetFileSize(HANDLE hFile);				//Д╦█Ф■╞Ф▄│Х╤┘Х©┤4GГ └Ф√┤Д╩╤
+UINT64 IUGetFileSize2(PCTSTR pszFileName);		//Ф■╞Ф▄│Х╤┘Х©┤4GГ └Ф√┤Д╩╤
 
-//╩Ях║нд╪Чmd5ж╣
+//Х▌╥Е▐√Ф√┤Д╩╤md5Е─╪
 long GetFileMd5ValueA(PCTSTR pszFileName, char* pszMd5, long nMd5Length, int64_t& nFileSize, HWND hwndReflection=NULL, HANDLE hCancelEvent=NULL);
 BOOL GetFileMd5ValueW(PCTSTR pszFileName, TCHAR* pszMd5, long nMd5Length);
-//╩Ях║нд╪Ч╣дио╢╚цШЁфё╨╢Сп║|md5ж╣
+//Х▌╥Е▐√Ф√┤Д╩╤Г └Д╦┼Д╪═Е░█Г╖╟О╪ Е╓╖Е╟▐|md5Е─╪
 BOOL GetFileUploadName(PCTSTR pszFileName, char* pszUploadName, long nUploadNameLength);
-//╩Ях║нд╪Чж╦╤╗╡©╥ж
+//Х▌╥Е▐√Ф√┤Д╩╤Ф▄┤Е╝ И┐╗Е┬├
 BOOL GetFileData(HANDLE hFile, DWORD dwOffset, DWORD dwLength, char* buffer);
 BOOL GetFileData(PCTSTR pszFileName, DWORD dwOffset, DWORD dwLength, char* buffer);
 

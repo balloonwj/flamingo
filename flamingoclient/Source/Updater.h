@@ -1,9 +1,9 @@
-#pragma once
+ï»¿#pragma once
 #include <vector>
 #include "Path.h"
 
 class CFileTaskThread;
-//×Ô¶¯Éı¼¶Àà
+//è‡ªåŠ¨å‡çº§ç±»
 class Updater
 {
 public:

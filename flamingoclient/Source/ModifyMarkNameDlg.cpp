@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "ModifyMarkNameDlg.h"
 #include "FlamingoClient.h"
 #include "UIText.h"
@@ -28,7 +28,7 @@ BOOL CModifyMarkNameDlg::InitUI()
 	m_SkinDlg.SetBgPic(_T("DlgBg\\AddFriendDlgBg.png"));
 	m_SkinDlg.SetCloseSysBtnPic(_T("SysBtn\\btn_close_normal.png"), _T("SysBtn\\btn_close_highlight.png"), _T("SysBtn\\btn_close_down.png"));
 	m_SkinDlg.SubclassWindow(m_hWnd);
-	m_SkinDlg.SetTitleText(_T("ĞŞ¸Ä±¸×¢ĞÕÃû"));	
+	m_SkinDlg.SetTitleText(_T("ä¿®æ”¹å¤‡æ³¨å§“å"));	
 	m_SkinDlg.MoveWindow(0, 0, 300, 135, TRUE);
 
 	HDC hDlgBgDC = m_SkinDlg.GetBgDC();
@@ -90,12 +90,12 @@ void CModifyMarkNameDlg::OnOK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strMarkName.Trim();
 	if(strMarkName.IsEmpty())
 	{
-		::MessageBox(m_hWnd, _T("±¸×¢ĞÕÃû²»ÄÜÎª¿Õ¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("å¤‡æ³¨å§“åä¸èƒ½ä¸ºç©ºã€‚"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 	else if(strMarkName.GetLength() >= 16)
 	{
-		::MessageBox(m_hWnd, _T("±¸×¢ĞÕÃû²»ÄÜ³¬¹ı15¸ö×Ö·û¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("å¤‡æ³¨å§“åä¸èƒ½è¶…è¿‡15ä¸ªå­—ç¬¦ã€‚"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 	

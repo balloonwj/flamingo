@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "TeamDlg.h"
 #include "FlamingoClient.h"
 #include "UIText.h"
@@ -35,11 +35,11 @@ BOOL CTeamDlg::InitUI()
 	m_SkinDlg.SubclassWindow(m_hWnd);
 	if(m_nOperationType == TEAM_OPERATION_ADDTEAM)
 	{
-		m_SkinDlg.SetTitleText(_T("ÐÂ½¨·Ö×é"));	
+		m_SkinDlg.SetTitleText(_T("æ–°å»ºåˆ†ç»„"));	
 	}
 	else if(m_nOperationType == TEAM_OPERATION_MODIFYTEAMNAME)
 	{
-		m_SkinDlg.SetTitleText(_T("ÐÞ¸Ä·Ö×éÃû³Æ"));	
+		m_SkinDlg.SetTitleText(_T("ä¿®æ”¹åˆ†ç»„åç§°"));	
 	}
 	m_SkinDlg.MoveWindow(0, 0, 250, 135, TRUE);
 
@@ -49,11 +49,11 @@ BOOL CTeamDlg::InitUI()
 	m_staTeamName.SubclassWindow(GetDlgItem(IDC_STATIC_TEAMNAME));
 	if(m_nOperationType == TEAM_OPERATION_ADDTEAM)
 	{
-		m_staTeamName.SetWindowText(_T("ÐÂ·Ö×éÃû³Æ"));
+		m_staTeamName.SetWindowText(_T("æ–°åˆ†ç»„åç§°"));
 	}
 	else if(m_nOperationType == TEAM_OPERATION_MODIFYTEAMNAME)
 	{
-		m_SkinDlg.SetTitleText(_T("·Ö×éÐÂÃû³Æ"));	
+		m_SkinDlg.SetTitleText(_T("åˆ†ç»„æ–°åç§°"));	
 	}
 
 	m_edtTeamName.SetBgNormalPic(_T("frameBorderEffect_normalDraw.png"), CRect(2,2,2,2));
@@ -121,28 +121,28 @@ void CTeamDlg::OnOK(UINT uNotifyCode, int nID, CWindow wndCtl)
 	strTeamName.Trim();
     if (strTeamName == DEFAULT_TEAMNAME)
     {
-        ::MessageBox(m_hWnd, _T("[My Friends]ÊÇÄ¬ÈÏ·Ö×é£¬²»ÄÜÐÞ¸Ä¡£"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+        ::MessageBox(m_hWnd, _T("[My Friends]æ˜¯é»˜è®¤åˆ†ç»„ï¼Œä¸èƒ½ä¿®æ”¹ã€‚"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
         return;
     }
 
 	if(strTeamName.IsEmpty())
 	{
-		::MessageBox(m_hWnd, _T("·Ö×éÃû²»ÄÜÎª¿Õ¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("åˆ†ç»„åä¸èƒ½ä¸ºç©ºã€‚"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 	else if(strTeamName.GetLength() >= 16)
 	{
-		::MessageBox(m_hWnd, _T("·Ö×éÃû²»ÄÜ³¬¹ý15¸ö×Ö·û¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("åˆ†ç»„åä¸èƒ½è¶…è¿‡15ä¸ªå­—ç¬¦ã€‚"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
 	if(m_pFMGClient->m_UserMgr.m_BuddyList.IsTeamNameExist(strTeamName))
 	{
-		::MessageBox(m_hWnd, _T("·Ö×éÃûÒÑ¾­´æÔÚ£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("åˆ†ç»„åå·²ç»å­˜åœ¨ï¼"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 		return;
 	}
 
-	//Ìí¼Ó·Ö×é
+	//æ·»åŠ åˆ†ç»„
 	if(m_nOperationType == TEAM_OPERATION_ADDTEAM)
 	{
         m_pFMGClient->AddNewTeam(strTeamName);

@@ -1,9 +1,9 @@
-// Copyright 2007-2010 Baptiste Lepilleur and The JsonCpp Authors
+Ôªø// Copyright 2007-2010 Baptiste Lepilleur and The JsonCpp Authors
 // Distributed under MIT license, or public domain if desired and
 // recognized in your jurisdiction.
 // See file LICENSE for detail or copy at http://jsoncpp.sourceforge.net/LICENSE
 
-//¥˙¬Î¿¥‘¥£∫https://github.com/open-source-parsers/jsoncpp
+//‰ª£Á†ÅÊù•Ê∫êÔºöhttps://github.com/open-source-parsers/jsoncpp
 
 #ifndef JSON_JSON_H_INCLUDED
 #define JSON_JSON_H_INCLUDED

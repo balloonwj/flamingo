@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "SkinTabCtrl.h"
 
 CSkinTabCtrlItem::CSkinTabCtrlItem(void)
@@ -511,7 +511,7 @@ void CSkinTabCtrl::OnDestroy()
 {
 	SetMsgHandled(FALSE);
 
-	if (m_ToolTipCtrl.IsWindow())	// ToolTipCtrlÔçÔÚÖ®Ç°µÄ²»ÖªµÀÊ²Ã´µØ·½ÒÑÏú»Ù£¬ÕâÀïÏÔÊ½ÖÃ¿Õm_hWnd
+	if (m_ToolTipCtrl.IsWindow())	// ToolTipCtrlæ—©åœ¨ä¹‹å‰çš„ä¸çŸ¥é“ä»€ä¹ˆåœ°æ–¹å·²é”€æ¯ï¼Œè¿™é‡Œæ˜¾å¼ç½®ç©ºm_hWnd
 		m_ToolTipCtrl.DestroyWindow();
 	m_ToolTipCtrl.m_hWnd = NULL;
 
@@ -660,7 +660,7 @@ void CSkinTabCtrl::DrawItem(HDC hDC, int nIndex)
 	if (lpIconImg != NULL && !lpIconImg->IsNull())
 		bHasIcon = TRUE;
 
-	if (bHasIcon && bHasText)	// ´øÍ¼±êºÍÎÄ×Ö
+	if (bHasIcon && bHasText)	// å¸¦å›¾æ ‡å’Œæ–‡å­—
 	{
 		int cxIcon = lpIconImg->GetWidth();
 		int cyIcon = lpIconImg->GetHeight();
@@ -671,7 +671,7 @@ void CSkinTabCtrl::DrawItem(HDC hDC, int nIndex)
 			hFont = (HFONT)::GetStockObject(DEFAULT_GUI_FONT);
 		HFONT hOldFont = (HFONT)::SelectObject(hDC, hFont);
 
-		CRect rcText(0,0,0,0);	// ¼ÆËãÎÄ×Ö¿í¸ß
+		CRect rcText(0,0,0,0);	// è®¡ç®—æ–‡å­—å®½é«˜
 		::DrawText(hDC, lpItem->m_strText, lpItem->m_strText.GetLength(), &rcText, DT_SINGLELINE | DT_CALCRECT);
 
 		int cx = cxIcon+1+rcText.Width();
@@ -690,7 +690,7 @@ void CSkinTabCtrl::DrawItem(HDC hDC, int nIndex)
 		::SelectObject(hDC, hOldFont);
 		::SetBkMode(hDC, nMode);
 	}
-	else if (bHasIcon)	// ½öÍ¼±ê
+	else if (bHasIcon)	// ä»…å›¾æ ‡
 	{
 		int cxIcon = lpIconImg->GetWidth();
 		int cyIcon = lpIconImg->GetHeight();
@@ -700,7 +700,7 @@ void CSkinTabCtrl::DrawItem(HDC hDC, int nIndex)
 
 		lpIconImg->Draw2(hDC, rcIcon);
 	}
-	else if (bHasText)	// ½öÎÄ×Ö
+	else if (bHasText)	// ä»…æ–‡å­—
 	{
 		UINT nFormat = DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS;
 

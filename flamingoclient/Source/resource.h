@@ -316,6 +316,7 @@
 #define ID_1_32797                      32797
 #define ID_MENU_SHOW_MAIN_PANEL         32798
 #define ID_MENU_EXIT                    32799
+#define ID_MENU_NETSETTINGS             33123
 #define ID_32800                        32800
 #define ID_32801                        32801
 #define ID_32802                        32802
@@ -637,7 +638,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        253
-#define _APS_NEXT_COMMAND_VALUE         33123
+#define _APS_NEXT_COMMAND_VALUE         33124
 #define _APS_NEXT_CONTROL_VALUE         1187
 #define _APS_NEXT_SYMED_VALUE           101
 #endif

@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include <gdiplus.h>
 
@@ -37,8 +37,8 @@ private:
 	BOOL ReadGifInfo();
 
 private:
-	Gdiplus::Image* m_pImage;		// Í¼Æ¬¶ÔÏóÖ¸Õë
-	UINT m_nFrameCnt;				// GIF¶¯»­×ÜÖ¡Êı
-	UINT m_nFramePos;				// µ±Ç°Ö¡
-	long*m_pFrameDelay;			// Ã¿Ö¡ÇĞ»»ÑÓÊ±Ê±¼ä
+	Gdiplus::Image* m_pImage;		// å›¾ç‰‡å¯¹è±¡æŒ‡é’ˆ
+	UINT m_nFrameCnt;				// GIFåŠ¨ç”»æ€»å¸§æ•°
+	UINT m_nFramePos;				// å½“å‰å¸§
+	long*m_pFrameDelay;			// æ¯å¸§åˆ‡æ¢å»¶æ—¶æ—¶é—´
 };

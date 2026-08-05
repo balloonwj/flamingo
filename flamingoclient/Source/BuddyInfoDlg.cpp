@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "BuddyInfoDlg.h"
 #include "ChangePicHeadDlg.h"
 #include <assert.h>
@@ -18,7 +18,7 @@ CBuddyInfoDlg::~CBuddyInfoDlg(void)
 
 BOOL CBuddyInfoDlg::PreTranslateMessage(MSG* pMsg)
 {
-	//Ö§³Ö»Ø³µ¼ü²éÕÒ
+	//æ”¯æŒå›è½¦é”®æŸ¥æ‰¾
 	if (pMsg->message == WM_KEYDOWN && (pMsg->wParam==VK_RETURN || pMsg->wParam==VK_ESCAPE))
  	{
 		PostMessage(WM_CLOSE, 0, 0);
@@ -39,7 +39,7 @@ BOOL CBuddyInfoDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	m_hDlgSmallIcon = AtlLoadIconImage(IDR_MAINFRAME, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
 	SetIcon(m_hDlgSmallIcon, FALSE);
 
-	Init();		// ³õÊ¼»¯
+	Init();		// åˆå§‹åŒ–
 
 	UpdateCtrls();
 	CenterWindow();
@@ -62,7 +62,7 @@ void CBuddyInfoDlg::OnDestroy()
 {
 	SetMsgHandled(FALSE);
 
-	UnInit();	// ·´³õÊ¼»¯
+	UnInit();	// ååˆå§‹åŒ–
 
 	if (m_hDlgIcon != NULL)
 	{
@@ -96,19 +96,19 @@ void CBuddyInfoDlg::UpdateCtrls()
 	SetDlgItemText(IDC_NICKNAME, pBuddyInfo->m_strNickName.c_str());
 	SetDlgItemText(IDC_SIGNATURE, pBuddyInfo->m_strSign.c_str());
 	if(pBuddyInfo->m_nGender != 0)
-		SetDlgItemText(IDC_GENDER, _T("Å®"));
+		SetDlgItemText(IDC_GENDER, _T("å¥³"));
 	else
-		SetDlgItemText(IDC_GENDER, _T("ÄĞ"));
+		SetDlgItemText(IDC_GENDER, _T("ç”·"));
 
 	long nYear = pBuddyInfo->m_nBirthday/10000;
 	long nMonth = (pBuddyInfo->m_nBirthday-nYear*10000)/100;
 	long nDay = pBuddyInfo->m_nBirthday-nYear*10000-nMonth*100;
 	TCHAR szBirthday[16] = {0};
 	if(nYear<1900 || nMonth<=0 || nMonth>12 || nDay<=0 || nDay>31)
-		_tcscpy_s(szBirthday, ARRAYSIZE(szBirthday), _T("1990Äê6ÔÂ9ÈÕ"));
+		_tcscpy_s(szBirthday, ARRAYSIZE(szBirthday), _T("1990å¹´6æœˆ9æ—¥"));
 	else
 	{
-		_stprintf_s(szBirthday, ARRAYSIZE(szBirthday), _T("%dÄê%dÔÂ%dÈÕ"), nYear, nMonth, nDay);
+		_stprintf_s(szBirthday, ARRAYSIZE(szBirthday), _T("%då¹´%dæœˆ%dæ—¥"), nYear, nMonth, nDay);
 	}
 	SetDlgItemText(IDC_BIRTHDAY, szBirthday);
 
@@ -118,7 +118,7 @@ void CBuddyInfoDlg::UpdateCtrls()
 	SetDlgItemText(IDC_MAIL, pBuddyInfo->m_strEmail.c_str());
 }
 
-// ³õÊ¼»¯
+// åˆå§‹åŒ–
 BOOL CBuddyInfoDlg::Init()
 {	
 	m_SkinDlg.SetBgPic(_T("LoginPanel_window_windowBkg.png"), CRect(4, 69, 4, 33));
@@ -141,7 +141,7 @@ BOOL CBuddyInfoDlg::Init()
 	return TRUE;
 }
 
-// ·´³õÊ¼»¯
+// ååˆå§‹åŒ–
 void CBuddyInfoDlg::UnInit()
 {	
 	if (m_btnOK.IsWindow())

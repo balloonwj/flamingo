@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "resource.h"
 #include "SkinLib/SkinLib.h"
@@ -16,7 +16,7 @@ public:
 	void ShowRefuseButton(BOOL bShow);
 	void ShowOKButton(BOOL bShow);
 
-	//ÔÚ×ÊÔ´ÎÄ¼şÀïÃæÔö¼Ó¶Ô»°¿ò×ÊÔ´Ä£°å
+	//åœ¨èµ„æºæ–‡ä»¶é‡Œé¢å¢åŠ å¯¹è¯æ¡†èµ„æºæ¨¡æ¿
 	enum { IDD = IDD_ADDFRIENDCONFIRMDLG };
 
 	BEGIN_MSG_MAP_EX(CFindFriendDlg)

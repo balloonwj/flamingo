@@ -139,7 +139,7 @@ BOOL CRemoteDesktopDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
     SetIcon(m_hIcon, TRUE);			// Set big icon
     SetIcon(m_hIcon, FALSE);		// Set small icon
 
-    SetClassLong(m_hWnd, GCL_HCURSOR, (LONG)LoadCursor(NULL, IDC_NO));
+    SetClassLongPtr(m_hWnd, GCLP_HCURSOR, (LONG_PTR)LoadCursor(NULL, IDC_NO));
     HMENU hSysMenu = GetSystemMenu(FALSE);
     if (hSysMenu != NULL)
     {
@@ -314,7 +314,7 @@ void CRemoteDesktopDlg::OnClose()
         delete m_lpbmi;
     if (m_lpbmi_rect)
         delete m_lpbmi_rect;
-    SetClassLong(m_hWnd, GCL_HCURSOR, (LONG)LoadCursor(NULL, IDC_ARROW));
+    SetClassLongPtr(m_hWnd, GCLP_HCURSOR, (LONG_PTR)LoadCursor(NULL, IDC_ARROW));
 
     m_bIsCtrl = false;
 
@@ -522,7 +522,7 @@ void CRemoteDesktopDlg::DrawNextScreenDiff()
     //{
     //    bIsReDraw = true;
     //    if (m_bIsCtrl && !m_bIsTraceCursor)
-    //        SetClassLong(m_hWnd, GCL_HCURSOR, (LONG)m_CursorInfo.getCursorHandle(m_bCursorIndex == (BYTE)-1 ? 1 : m_bCursorIndex));
+    //        SetClassLongPtr(m_hWnd, GCLP_HCURSOR, (LONG_PTR)m_CursorInfo.getCursorHandle(m_bCursorIndex == (BYTE)-1 ? 1 : m_bCursorIndex));
     //}
 
     //// 屏幕是否变化
@@ -585,7 +585,7 @@ void CRemoteDesktopDlg::DrawNextScreenRect()
     {
         bIsReDraw = true;
         if (m_bIsCtrl && !m_bIsTraceCursor)
-            SetClassLong(m_hWnd, GCL_HCURSOR, (LONG)m_CursorInfo.getCursorHandle(m_bCursorIndex == (BYTE)-1 ? 1 : m_bCursorIndex));
+            SetClassLongPtr(m_hWnd, GCLP_HCURSOR, (LONG_PTR)m_CursorInfo.getCursorHandle(m_bCursorIndex == (BYTE)-1 ? 1 : m_bCursorIndex));
     }
 
     // 判断鼠标所在区域是否发生变化
@@ -731,12 +731,12 @@ void CRemoteDesktopDlg::OnSysCommand(UINT nID, CPoint point)
     //    if (m_bIsCtrl)
     //    {
     //        if (m_bIsTraceCursor)
-    //            SetClassLong(m_hWnd, GCL_HCURSOR, (LONG)AfxGetApp()->LoadCursor(IDC_DOT));
+    //            SetClassLongPtr(m_hWnd, GCLP_HCURSOR, (LONG_PTR)AfxGetApp()->LoadCursor(IDC_DOT));
     //        else
-    //            SetClassLong(m_hWnd, GCL_HCURSOR, (LONG)m_hRemoteCursor);
+    //            SetClassLongPtr(m_hWnd, GCLP_HCURSOR, (LONG_PTR)m_hRemoteCursor);
     //    }
     //    else
-    //        SetClassLong(m_hWnd, GCL_HCURSOR, (LONG)LoadCursor(NULL, IDC_NO));
+    //        SetClassLongPtr(m_hWnd, GCLP_HCURSOR, (LONG_PTR)LoadCursor(NULL, IDC_NO));
     //}
     //break;
     //case IDM_SEND_CTRL_ALT_DEL:
@@ -752,9 +752,9 @@ void CRemoteDesktopDlg::OnSysCommand(UINT nID, CPoint point)
     //    if (m_bIsCtrl)
     //    {
     //        if (!m_bIsTraceCursor)
-    //            SetClassLong(m_hWnd, GCL_HCURSOR, (LONG)m_hRemoteCursor);
+    //            SetClassLongPtr(m_hWnd, GCLP_HCURSOR, (LONG_PTR)m_hRemoteCursor);
     //        else
-    //            SetClassLong(m_hWnd, GCL_HCURSOR, (LONG)AfxGetApp()->LoadCursor(IDC_DOT));
+    //            SetClassLongPtr(m_hWnd, GCLP_HCURSOR, (LONG_PTR)AfxGetApp()->LoadCursor(IDC_DOT));
     //    }
     //    // 重绘消除或显示鼠标
     //    OnPaint();

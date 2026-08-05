@@ -1,5 +1,5 @@
-/** 
-* ³ÌĞòÈë¿Úº¯Êı
+ï»¿/**
+* ç¨‹åºå…¥å£å‡½æ•°
 * zhangyl 2017.03.16
 **/
 
@@ -23,66 +23,71 @@
 
 CAppModule _Module;
 
-//¹ØÓÚg_hwndOwnerµÄËµÃ÷£º
-//Ö®ËùÒÔ´´½¨Õâ¸ö´°¿ÚÎªÎªÁË²úÉúÖ÷´°¿ÚºÍµÇÂ¼¶Ô»°¿ò²»ÔÚÈÎÎñÀ¸ÏÔÊ¾µÄĞ§¹û£¬
-//Èç¹ûµ¥´¿µØ½«´°¿Ú·ç¸ñÓÉWS_EX_APPWINDOWÉèÖÃÎªWS_EX_TOOLWINDOWºó£¬´ËÖÖ·ç¸ñµÄ´°¿Ú
-//»áÔÚÊ§È¥½¹µãºóÄ¬ÈÏZÖá±äÎª0£¬ÕâµãÌØ±ğÌÖÑá¡£
-HWND	   g_hwndOwner = NULL;	
+//å…³äºg_hwndOwnerçš„è¯´æ˜ï¼š
+//ä¹‹æ‰€ä»¥åˆ›å»ºè¿™ä¸ªçª—å£ä¸ºä¸ºäº†äº§ç”Ÿä¸»çª—å£å’Œç™»å½•å¯¹è¯æ¡†ä¸åœ¨ä»»åŠ¡æ æ˜¾ç¤ºçš„æ•ˆæœï¼Œ
+//å¦‚æœå•çº¯åœ°å°†çª—å£é£æ ¼ç”±WS_EX_APPWINDOWè®¾ç½®ä¸ºWS_EX_TOOLWINDOWåï¼Œæ­¤ç§é£æ ¼çš„çª—å£
+//ä¼šåœ¨å¤±å»ç„¦ç‚¹åé»˜è®¤Zè½´å˜ä¸º0ï¼Œè¿™ç‚¹ç‰¹åˆ«è®¨åŒã€‚
+HWND	   g_hwndOwner = NULL;
 
 HWND CreateOwnerWindow()
 {
-	PCTSTR pszOwnerWindowClass = _T("__Flamingo_Owner__");
-	HINSTANCE hInstance = ::GetModuleHandle(NULL);
-	WNDCLASSEX wcex;
-	wcex.cbSize = sizeof(WNDCLASSEX);
-	wcex.style = CS_HREDRAW | CS_VREDRAW;
-	wcex.lpfnWndProc = DefWindowProc;
-	wcex.cbClsExtra = 0;
-	wcex.cbWndExtra = 0;
-	wcex.hInstance = hInstance;
-	wcex.hIcon = NULL;
-	wcex.hCursor = NULL;
-	wcex.hbrBackground = NULL;
-	wcex.lpszMenuName = NULL;
-	wcex.lpszClassName = pszOwnerWindowClass;
-	wcex.hIconSm = NULL;
+    PCTSTR pszOwnerWindowClass = _T("__Flamingo_Owner__");
+    HINSTANCE hInstance = ::GetModuleHandle(NULL);
+    WNDCLASSEX wcex;
+    wcex.cbSize = sizeof(WNDCLASSEX);
+    wcex.style = CS_HREDRAW | CS_VREDRAW;
+    wcex.lpfnWndProc = DefWindowProc;
+    wcex.cbClsExtra = 0;
+    wcex.cbWndExtra = 0;
+    wcex.hInstance = hInstance;
+    wcex.hIcon = NULL;
+    wcex.hCursor = NULL;
+    wcex.hbrBackground = NULL;
+    wcex.lpszMenuName = NULL;
+    wcex.lpszClassName = pszOwnerWindowClass;
+    wcex.hIconSm = NULL;
 
-	if (!::RegisterClassEx(&wcex))
-		return NULL;
+    if (!::RegisterClassEx(&wcex))
+        return NULL;
 
-	HWND hOwnerWindow = ::CreateWindow(pszOwnerWindowClass, NULL, WS_OVERLAPPEDWINDOW, 
-									   CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, hInstance, NULL);
-	
-	return hOwnerWindow;
+    HWND hOwnerWindow = ::CreateWindow(pszOwnerWindowClass, NULL, WS_OVERLAPPEDWINDOW,
+        CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, hInstance, NULL);
+
+    return hOwnerWindow;
 }
 
 int Run(LPTSTR /*lpstrCmdLine = NULL*/, int nCmdShow/* = SW_SHOWDEFAULT*/)
 {
-	CMessageLoop theLoop;
-	_Module.AddMessageLoop(&theLoop);
+    CMessageLoop theLoop;
+    _Module.AddMessageLoop(&theLoop);
 
-	CMainDlg dlgMain;
-	
-	g_hwndOwner = CreateOwnerWindow();
-	if(dlgMain.Create(g_hwndOwner) == NULL)
-	{
-		ATLTRACE(_T("Main dialog creation failed!\n"));
-		return 0;
-	}
+    CMainDlg dlgMain;
 
-	dlgMain.ShowWindow(nCmdShow);
+    g_hwndOwner = CreateOwnerWindow();
+    if (dlgMain.Create(g_hwndOwner) == NULL)
+    {
+        ATLTRACE(_T("Main dialog creation failed!\n"));
+        return 0;
+    }
 
-	int nRet = theLoop.Run();
+    // CMainDlg æ˜¯éšè—çš„ IM æ¶ˆæ¯ä¸­æ¢ï¼Œä¸å†ä½œä¸ºå¯è§ä¸»çª—å£ï¼ˆæ—§è‡ªç»˜ä¸»ç•Œé¢å·²ç§»é™¤ï¼‰ã€‚
+    // OnInitDialog çš„ç™»å½•æµç¨‹å·²æŠŠå®ƒéšè—ï¼›è¿™é‡Œä¸èƒ½å†ç”¨ nCmdShow æŠŠå®ƒæ˜¾ç¤ºå‡ºæ¥ï¼Œ
+    // å¦åˆ™ç™»å½•åä¼šå†’å‡ºä¸€ä¸ªç©ºç™½çš„æ—§ä¸»ç•Œé¢å¯¹è¯æ¡†ã€‚å§‹ç»ˆä¿æŒéšè—ï¼šç™»å½•å¯¹è¯æ¡†ç”±
+    // StartLogin å¼¹å‡ºï¼Œç™»å½•æˆåŠŸåçš„ä¸»é¢æ¿ç”± OnLoginResult åˆ›å»ºå¹¶æ˜¾ç¤º BalloonMainPanelã€‚
+    UNREFERENCED_PARAMETER(nCmdShow);
+    dlgMain.ShowWindow(SW_HIDE);
 
-	_Module.RemoveMessageLoop();
-	return nRet;
+    int nRet = theLoop.Run();
+
+    _Module.RemoveMessageLoop();
+    return nRet;
 }
 
 void ClearExpiredLog(PCTSTR pszFileSuffixName)
-{    
+{
     if (pszFileSuffixName == NULL)
         return;
-    
+
     WIN32_FIND_DATA win32FindData = { 0 };
     TCHAR szLogFilePath[MAX_PATH] = { 0 };
     _stprintf_s(szLogFilePath, MAX_PATH, _T("%sLogs\\*.%s"), g_szHomePath, pszFileSuffixName);
@@ -97,7 +102,7 @@ void ClearExpiredLog(PCTSTR pszFileSuffixName)
         {
             memset(szLogFilePath, 0, sizeof(szLogFilePath));
             _stprintf_s(szLogFilePath, MAX_PATH, _T("%sLogs\\%s"), g_szHomePath, win32FindData.cFileName);
-            //ÕâÀï²»ÓÃ¼ì²âÊÇ·ñÉ¾³ı³É¹¦,ÒòÎª×îĞÂµÄÒ»¸ölogÊÇÎÒÃÇĞèÒªµÄ,²»ÄÜÉ¾³ı,ËüÕı±»´Ë½ø³ÌÕ¼ÓÃ×Å,ËùÒÔÉ¾²»µô
+            //è¿™é‡Œä¸ç”¨æ£€æµ‹æ˜¯å¦åˆ é™¤æˆåŠŸ,å› ä¸ºæœ€æ–°çš„ä¸€ä¸ªlogæ˜¯æˆ‘ä»¬éœ€è¦çš„,ä¸èƒ½åˆ é™¤,å®ƒæ­£è¢«æ­¤è¿›ç¨‹å ç”¨ç€,æ‰€ä»¥åˆ ä¸æ‰
             ::DeleteFile(szLogFilePath);
         }
 
@@ -112,11 +117,11 @@ void ClearExpiredLog(PCTSTR pszFileSuffixName)
 
 BOOL InitSocket()
 {
-	WORD wVersionRequested = MAKEWORD(2, 2);
-	WSADATA wsaData;
-	int nErrorID = ::WSAStartup(wVersionRequested, &wsaData);
-	if(nErrorID != 0)
-		return FALSE;
+    WORD wVersionRequested = MAKEWORD(2, 2);
+    WSADATA wsaData;
+    int nErrorID = ::WSAStartup(wVersionRequested, &wsaData);
+    if (nErrorID != 0)
+        return FALSE;
 
     if (LOBYTE(wsaData.wVersion) != 2 || HIBYTE(wsaData.wVersion) != 2)
     {
@@ -124,37 +129,37 @@ BOOL InitSocket()
         return FALSE;
     }
 
-	return TRUE;
+    return TRUE;
 }
 
 void UnInitSocket()
 {
-	::WSACleanup();
+    ::WSACleanup();
 }
 
 int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lpstrCmdLine, int nCmdShow)
 {
 #ifdef _DEBUG
-	_CrtSetDebugFillThreshold( 0 );
+    _CrtSetDebugFillThreshold(0);
 #endif
-	_tcscpy_s(g_szHomePath, MAX_PATH, Hootina::CPath::GetAppPath().c_str());
-	strcpy_s(g_szHomePathAscii, MAX_PATH, Hootina::CPath::GetAppPathAscii().c_str());
+    _tcscpy_s(g_szHomePath, MAX_PATH, Hootina::CPath::GetAppPath().c_str());
+    strcpy_s(g_szHomePathAscii, MAX_PATH, Hootina::CPath::GetAppPathAscii().c_str());
 
-	SYSTEMTIME st = {0};
-	::GetLocalTime(&st);
+    SYSTEMTIME st = { 0 };
+    ::GetLocalTime(&st);
 
-    //¼ÓÉÏPID£¬±ãÓÚÍ¬Ò»¸öÄ¿Â¼Æô¶¯¶à¸ö½ø³ÌÇø·ÖÊÇÄÄ¸ö³ÌĞòµÄÈÕÖ¾
+    //åŠ ä¸ŠPIDï¼Œä¾¿äºåŒä¸€ä¸ªç›®å½•å¯åŠ¨å¤šä¸ªè¿›ç¨‹åŒºåˆ†æ˜¯å“ªä¸ªç¨‹åºçš„æ—¥å¿—
     DWORD dwProcessId = ::GetCurrentProcessId();
-	TCHAR szLogFileName[MAX_PATH] = {0};
-	_stprintf_s(szLogFileName, MAX_PATH, _T("%s\\Logs\\%04d%02d%02d%02d%02d%02d_%d.log"), g_szHomePath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, (int32_t)dwProcessId);
-	CIULog::Init(true, false, szLogFileName);
+    TCHAR szLogFileName[MAX_PATH] = { 0 };
+    _stprintf_s(szLogFileName, MAX_PATH, _T("%s\\Logs\\%04d%02d%02d%02d%02d%02d_%d.log"), g_szHomePath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, (int32_t)dwProcessId);
+    CIULog::Init(true, false, szLogFileName);
 
-    //³õÊ¼»¯ĞÔÄÜ¼ÆÊıÆ÷
+    //åˆå§‹åŒ–æ€§èƒ½è®¡æ•°å™¨
     TCHAR szPerformanceFileName[MAX_PATH] = { 0 };
     _stprintf_s(szPerformanceFileName, MAX_PATH, _T("%s\\Logs\\%04d%02d%02d%02d%02d%02d_%d.perf"), g_szHomePath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, (int32_t)dwProcessId);
     CPerformanceCounter::Init(true, szPerformanceFileName);
 
-    //TODO: Í³Ò»µ½AppConfigÀàÖĞÈ¥
+    //TODO: ç»Ÿä¸€åˆ°AppConfigç±»ä¸­å»
     CIniFile iniFile;
     CString strIniFilePath(g_szHomePath);
     strIniFilePath += _T("config\\flamingo.ini");
@@ -164,67 +169,67 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
 
     if (bNeedClear)
     {
-        //ÇåÀí¹ıÆÚµÄÈÕÖ¾ÎÄ¼ş
+        //æ¸…ç†è¿‡æœŸçš„æ—¥å¿—æ–‡ä»¶
         ClearExpiredLog(_T("log"));
         ClearExpiredLog(_T("perf"));
     }
 
-    //ÈÕÖ¾¼¶±ğ
+    //æ—¥å¿—çº§åˆ«
     int nLogLevel = iniFile.ReadInt(_T("app"), _T("loglevel"), 0, strIniFilePath);
     CIULog::SetLevel((LOG_LEVEL)nLogLevel);
-    
-	if(!InitSocket())
-		return 0;
 
-    //¼ÓÔØÅäÖÃµÄ³ÌĞò±êÌâ
+    if (!InitSocket())
+        return 0;
+
+    //åŠ è½½é…ç½®çš„ç¨‹åºæ ‡é¢˜
     TCHAR szAppTitle[128] = { 0 };
     iniFile.ReadString(_T("ui"), _T("apptitle"), UI_APP_TITLE, szAppTitle, ARRAYSIZE(szAppTitle), strIniFilePath);
     g_strAppTitle = szAppTitle;
 
-	tstring strFileName = Hootina::CPath::GetAppPath() + _T("richFace.dll");
-	BOOL bRet = DllRegisterServer(strFileName.c_str());	// ×¢²áCOM×é¼ş
-	if (!bRet)
-	{
-		::MessageBox(NULL, _T("COM×é¼ş×¢²áÊ§°Ü£¬Ó¦ÓÃ³ÌĞòÎŞ·¨Íê³É³õÊ¼»¯²Ù×÷£¡"), _T("ÌáÊ¾"), MB_OK);
-		return 0;
-	}
+    //tstring strFileName = Hootina::CPath::GetAppPath() + _T("richFace.dll");
+    //BOOL bRet = DllRegisterServer(strFileName.c_str());	// æ³¨å†ŒCOMç»„ä»¶
+    //if (!bRet)
+    //{
+    //	::MessageBox(NULL, _T("COMç»„ä»¶æ³¨å†Œå¤±è´¥ï¼Œåº”ç”¨ç¨‹åºæ— æ³•å®Œæˆåˆå§‹åŒ–æ“ä½œï¼"), _T("æç¤º"), MB_OK);
+    //	return 0;
+    //}
 
-	HRESULT hRes = ::OleInitialize(NULL);
-	ATLASSERT(SUCCEEDED(hRes));
+    HRESULT hRes = ::OleInitialize(NULL);
+    ATLASSERT(SUCCEEDED(hRes));
 
-	// this resolves ATL window thunking problem when Microsoft Layer for Unicode (MSLU) is used
-	::DefWindowProc(NULL, 0, 0, 0L);
+    // this resolves ATL window thunking problem when Microsoft Layer for Unicode (MSLU) is used
+    ::DefWindowProc(NULL, 0, 0, 0L);
 
-	AtlInitCommonControls(ICC_BAR_CLASSES);	// add flags to support other controls
-	HMODULE hRichEditDll = ::LoadLibrary(CRichEditCtrl::GetLibraryName());	// ¼ÓÔØRichEdit¿Ø¼şDLL
+    AtlInitCommonControls(ICC_BAR_CLASSES);	// add flags to support other controls
+    HMODULE hRichEditDll = ::LoadLibrary(CRichEditCtrl::GetLibraryName());	// åŠ è½½RichEditæ§ä»¶DLL
 
-	hRes = _Module.Init(NULL, hInstance);
-	ATLASSERT(SUCCEEDED(hRes));
+    hRes = _Module.Init(NULL, hInstance);
+    ATLASSERT(SUCCEEDED(hRes));
 
-	CSkinManager::Init();	// ³õÊ¼»¯Æ¤·ô¹ÜÀíÆ÷
-	
-	tstring strSkinPath = Hootina::CPath::GetAppPath() + _T("Skins\\");	// ÉèÖÃÆ¤·ôÎÄ¼ş¼ĞÂ·¾¶
-	CSkinManager::GetInstance()->SetSkinPath(strSkinPath.c_str());
-	
-	CSkinManager::GetInstance()->LoadConfigXml();	// ¼ÓÔØÆ¤·ôÁĞ±íÅäÖÃÎÄ¼ş
+    CSkinManager::Init();	// åˆå§‹åŒ–çš®è‚¤ç®¡ç†å™¨
 
-	int nRet = Run(lpstrCmdLine, nCmdShow);
+    tstring strSkinPath = Hootina::CPath::GetAppPath() + _T("Skins\\");	// è®¾ç½®çš®è‚¤æ–‡ä»¶å¤¹è·¯å¾„
+    CSkinManager::GetInstance()->SetSkinPath(strSkinPath.c_str());
 
-	CSkinManager::UnInit();	// ·´³õÊ¼»¯Æ¤·ô¹ÜÀíÆ÷
+    CSkinManager::GetInstance()->LoadConfigXml();	// åŠ è½½çš®è‚¤åˆ—è¡¨é…ç½®æ–‡ä»¶
 
-	if (hRichEditDll != NULL)		// Ğ¶ÔØRichEdit¿Ø¼şDLL
-	{
-		::FreeLibrary(hRichEditDll);
-		hRichEditDll = NULL;
-	}
+    int nRet = Run(lpstrCmdLine, nCmdShow);
 
-	_Module.Term();
+    CSkinManager::UnInit();	// ååˆå§‹åŒ–çš®è‚¤ç®¡ç†å™¨
 
-	UnInitSocket();
+    if (hRichEditDll != NULL)		// å¸è½½RichEditæ§ä»¶DLL
+    {
+        ::FreeLibrary(hRichEditDll);
+        hRichEditDll = NULL;
+    }
 
-	CIULog::Uninit();
-	
-	::OleUninitialize();
+    _Module.Term();
 
-	return nRet;
+    UnInitSocket();
+
+    CIULog::Uninit();
+
+    ::OleUninitialize();
+
+    return nRet;
 }

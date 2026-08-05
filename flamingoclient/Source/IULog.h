@@ -1,4 +1,4 @@
-#ifndef __LOG_H__
+ï»¿#ifndef __LOG_H__
 #define __LOG_H__
 
 //#ifdef LOG_EXPORTS
@@ -16,7 +16,7 @@ enum LOG_LEVEL
     LOG_LEVEL_ERROR
 };
 
-//×¢Òâ£ºÈç¹û´òÓ¡µÄÈÕÖ¾ĞÅÏ¢ÖĞÓĞÖĞÎÄ£¬Ôò¸ñÊ½»¯×Ö·û´®ÒªÓÃ_T()ºê°ü¹üÆğÀ´£¬
+//æ³¨æ„ï¼šå¦‚æœæ‰“å°çš„æ—¥å¿—ä¿¡æ¯ä¸­æœ‰ä¸­æ–‡ï¼Œåˆ™æ ¼å¼åŒ–å­—ç¬¦ä¸²è¦ç”¨_T()å®åŒ…è£¹èµ·æ¥ï¼Œ
 //e.g. LOG_INFO(_T("GroupID=%u, GroupName=%s, GroupName=%s."), lpGroupInfo->m_nGroupCode, lpGroupInfo->m_strAccount.c_str(), lpGroupInfo->m_strName.c_str());
 #define LOG_INFO(...)     CIULog::Log(LOG_LEVEL_INFO, __FUNCSIG__,__LINE__, __VA_ARGS__)
 #define LOG_WARNING(...)    CIULog::Log(LOG_LEVEL_WARNING, __FUNCSIG__, __LINE__,__VA_ARGS__)
@@ -30,10 +30,10 @@ public:
 
     static void SetLevel(LOG_LEVEL nLevel);
 	
-	//²»Êä³öÏß³ÌIDºÅºÍËùÔÚº¯ÊıÇ©Ãû¡¢ĞĞºÅ
+	//ä¸è¾“å‡ºçº¿ç¨‹IDå·å’Œæ‰€åœ¨å‡½æ•°ç­¾åã€è¡Œå·
 	static bool Log(long nLevel, PCTSTR pszFmt, ...);
-	//Êä³öÏß³ÌIDºÅºÍËùÔÚº¯ÊıÇ©Ãû¡¢ĞĞºÅ
-	static bool Log(long nLevel, PCSTR pszFunctionSig, int nLineNo, PCTSTR pszFmt, ...);		//×¢Òâ:pszFunctionSig²ÎÊıÎªAnsic°æ±¾
+	//è¾“å‡ºçº¿ç¨‹IDå·å’Œæ‰€åœ¨å‡½æ•°ç­¾åã€è¡Œå·
+	static bool Log(long nLevel, PCSTR pszFunctionSig, int nLineNo, PCTSTR pszFmt, ...);		//æ³¨æ„:pszFunctionSigå‚æ•°ä¸ºAnsicç‰ˆæœ¬
     static bool Log(long nLevel, PCSTR pszFunctionSig, int nLineNo, PCSTR pszFmt, ...);
 private:
     CIULog() = delete;
@@ -45,10 +45,10 @@ private:
     static void GetTime(char* pszTime, int nTimeStrLength);
 	
 private:
-	static bool		        m_bToFile;			    //ÈÕÖ¾Ğ´ÈëÎÄ¼ş»¹ÊÇĞ´µ½¿ØÖÆÌ¨  
+	static bool		        m_bToFile;			    //æ—¥å¿—å†™å…¥æ–‡ä»¶è¿˜æ˜¯å†™åˆ°æ§åˆ¶å°  
 	static HANDLE	        m_hLogFile;
-    static bool             m_bTruncateLongLog;     //³¤ÈÕÖ¾ÊÇ·ñ½Ø¶Ï
-    static LOG_LEVEL        m_nLogLevel;            //ÈÕÖ¾¼¶±ğ
+    static bool             m_bTruncateLongLog;     //é•¿æ—¥å¿—æ˜¯å¦æˆªæ–­
+    static LOG_LEVEL        m_nLogLevel;            //æ—¥å¿—çº§åˆ«
 };
 
 #endif // !__LOG_H__

@@ -1,60 +1,21 @@
-/** 
- * 文件传输协议类型定义, FileMsg.h
- * zhangyl 2017.03.17
- **/
+﻿/**
+ *  文件 / 图片服务器进程内部定义，FileMsg.h
+ *
+ *  v2 文件传输的「字节流」段（cmd_file_upload / cmd_file_download）在
+ *  fileserver / imgserver 连接上收发，复用 net/FrameCodec 的 24 字节帧头
+ *  与 §11.1 的附件包体布局，协议常量与消息类型统一在 chatserversrc/Protocol.h，
+ *  本文件只保留 fileserver / imgserver 进程自身需要的少量定义。
+ *
+ *  旧版 v1 的 file_msg_header / file_msg_type 等定义已随 v2 改造移除。
+ *
+ *  balloonwj@qq.com   2026-05-22
+ */
 #pragma once
 
-#include <stdint.h>
-
-enum file_msg_type
+//服务器种类：fileserver 与 imgserver 共用 fileserversrc 代码，仅放行的
+//文件场景（scene）不同，借此区分。
+enum file_server_kind
 {
-    file_msg_type_unknown,
-    msg_type_upload_req,
-    msg_type_upload_resp,
-    msg_type_download_req,
-    msg_type_download_resp,
+    file_server_kind_file  = 1,   //文件服务器：放行 scene=1 聊天文件 / scene=2 群文件
+    file_server_kind_image = 2,   //图片服务器：放行 scene=3 头像 / scene=4 图片消息
 };
-
-enum file_msg_error_code
-{
-    file_msg_error_unknown,        //未知错误
-    file_msg_error_progress,       //文件上传或者下载进行中
-    file_msg_error_complete,       //文件上传或者下载完成
-    file_msg_error_not_exist       //文件不存在
-};
-
-//客户端网络类型
-enum client_net_type
-{
-    client_net_type_broadband,    //宽带
-    client_net_type_cellular      //移动网络
-};
-
-#pragma pack(push, 1)
-//协议头
-struct file_msg_header
-{
-    int64_t  packagesize;       //指定包体的大小
-};
-
-#pragma pack(pop)
-
-/** 
- *  文件上传
- */
-/**
-    //filemd5为整个文件内容的md5值，offset为每次文件上传的偏移量, filesize为文件大小，filedata为每次上传的文件字节内容
-    客户端：cmd = msg_type_upload_req(int32), seq(int32), filemd5(string, 长度是32), offset(int64) ,filesize(int64), filedata(string)
-    服务器应答： cmd = msg_type_upload_resp(int32), seq(int32), errorcode(int32), filemd5(string, 长度是32), offset(int64), filesize(int64)
- **/
-
-/** 
- *  文件下载
- */
-/** 
-    //filemd5为整个文件内容的md5值，offset为每次文件上传的偏移量, filesize为文件大小，filedata为每次上传的文件字节内容, 
-    //clientNetType(客户端网络类型，宽带或者Wifi传0，3G/4G/5G传1）
-    客户端：cmd = msg_type_download_req, seq(int32), filemd5(string, 长度是32), offset(int64) ,filesize(int64), filedata(string), clientNetType(int32)
-    服务器: cmd = msg_type_download_resp(int32), seq(int32), errorcode(int32), filemd5(string, 长度是32), offset(int64), filesize(int64)
- **/
-

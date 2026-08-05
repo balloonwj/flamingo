@@ -1,11 +1,11 @@
-#pragma once
+ï»¿#pragma once
 
 typedef struct 
 {
 	unsigned ( __stdcall *start_address )( void * );
 	void	*arglist;
-	bool	bInteractive; // ÊÇ·ñÖ§³Ö½»»¥×ÀÃæ
-	HANDLE	hEventTransferArg;  //±£Ö¤Ïß³ÌÒ»¶¨ÆğÆğÀ´µÄÊÂ¼ş
+	bool	bInteractive; // æ˜¯å¦æ”¯æŒäº¤äº’æ¡Œé¢
+	HANDLE	hEventTransferArg;  //ä¿è¯çº¿ç¨‹ä¸€å®šèµ·èµ·æ¥çš„äº‹ä»¶
 }THREAD_ARGLIST, *LPTHREAD_ARGLIST;
 
 unsigned int __stdcall ThreadLoader(LPVOID param);
@@ -28,5 +28,5 @@ BOOL SelectHDESK(HDESK new_desktop);
 BOOL SelectDesktop(TCHAR *name);
 BOOL SimulateCtrlAltDel();
 bool http_get(LPCTSTR szURL, LPCTSTR szFileName);
-//void EncryptData(unsigned char* szRec, unsigned long nLen, unsigned long key);//½âÃÜ
-void EncryptData(TCHAR* szRec, unsigned long nLen, unsigned long key);//½âÃÜ
+//void EncryptData(unsigned char* szRec, unsigned long nLen, unsigned long key);//è§£å¯†
+void EncryptData(TCHAR* szRec, unsigned long nLen, unsigned long key);//è§£å¯†

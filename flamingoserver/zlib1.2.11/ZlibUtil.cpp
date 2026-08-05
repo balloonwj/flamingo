@@ -1,12 +1,12 @@
-/*
- *  Ñ¹Ëõ¹¤¾ßÀà£¬ZlibUtil.cpp
+ï»¿/*
+ *  å‹ç¼©å·¥å…·ç±»ï¼ŒZlibUtil.cpp
  *  zhangyl 2018.03.09
  */
 #include "../zlib1.2.11/zlib.h"
 #include <string.h>
 #include "ZlibUtil.h"
 
- //×î´óÖ§³ÖÑ¹Ëõ10M
+ //æœ€å¤§æ”¯æŒå‹ç¼©10M
 #define MAX_COMPRESS_BUF_SIZE 10*1024*1024
 
 bool ZlibUtil::compressBuf(const char* pSrcBuf, size_t nSrcBufLength, char* pDestBuf, size_t & nDestBufLength)
@@ -15,11 +15,11 @@ bool ZlibUtil::compressBuf(const char* pSrcBuf, size_t nSrcBufLength, char* pDes
     if (pSrcBuf == NULL || nSrcBufLength == 0 || nSrcBufLength > MAX_COMPRESS_BUF_SIZE || pDestBuf == NULL)
         return false;
 
-    //¼ÆËã»º³åÇø´óĞ¡£¬²¢ÎªÆä·ÖÅäÄÚ´æ
-    //Ñ¹ËõºóµÄ³¤¶ÈÊÇ²»»á³¬¹ınDestBufLengthµÄ
+    //è®¡ç®—ç¼“å†²åŒºå¤§å°ï¼Œå¹¶ä¸ºå…¶åˆ†é…å†…å­˜
+    //å‹ç¼©åçš„é•¿åº¦æ˜¯ä¸ä¼šè¶…è¿‡nDestBufLengthçš„
     nDestBufLength = compressBound(nSrcBufLength);
 
-    //Ñ¹Ëõ
+    //å‹ç¼©
     int ret = compress((Bytef*)pDestBuf, (uLongf*)& nDestBufLength, (const Bytef*)pSrcBuf, nSrcBufLength);
     if (ret != Z_OK)
         return false;
@@ -43,7 +43,7 @@ bool ZlibUtil::compressBuf(const std::string& strSrcBuf, std::string& strDestBuf
     char* pDestBuf = new char[nDestBufLength];
     memset(pDestBuf, 0, nDestBufLength * sizeof(char));
 
-    //Ñ¹Ëõ
+    //å‹ç¼©
     int ret = compress((Bytef*)pDestBuf, (uLongf*)& nDestBufLength, (const Bytef*)strSrcBuf.c_str(), nSrcLength);
     if (ret != Z_OK)
     {
@@ -62,7 +62,7 @@ bool ZlibUtil::uncompressBuf(const std::string& strSrcBuf, std::string& strDestB
     char* pDestBuf = new char[nDestBufLength];
     memset(pDestBuf, 0, nDestBufLength * sizeof(char));
     int nPrevDestBufLength = nDestBufLength;
-    //½âÑ¹Ëõ
+    //è§£å‹ç¼©
     int ret = uncompress((Bytef*)pDestBuf, (uLongf*)& nDestBufLength, (const Bytef*)strSrcBuf.c_str(), strSrcBuf.length());
     if (ret != Z_OK)
     {
@@ -121,7 +121,7 @@ bool ZlibUtil::deflate(const std::string& strSrc, std::string& strDest)
             {
                 // Finish up
                 int kerr = ::deflateEnd(&zS);
-                //²»¹ØĞÄ·µ»Ø½á¹û
+                //ä¸å…³å¿ƒè¿”å›ç»“æœ
                 //if (err != Z_OK)
                 //{
                 //    //TRACE_UNZIP("; Error: end stream failed: %d\n", err);
@@ -151,7 +151,7 @@ bool ZlibUtil::deflate(const std::string& strSrc, std::string& strDest)
                 strDest.append((const char*)bytesOut, OUTPUT_BUF_SIZE - zS.avail_out);
 
                 int kerr = ::deflateEnd(&zS);
-                //²»¹ØĞÄ½á¹û
+                //ä¸å…³å¿ƒç»“æœ
                 //if (err != Z_OK)
                 //{
                 //    //TRACE_UNZIP("; Error: end stream failed: %d\n", err);
@@ -174,7 +174,7 @@ bool ZlibUtil::deflate(const std::string& strSrc, std::string& strDest)
 
     if (err == Z_OK)
     {
-        //¼õÈ¥4ÊÇÎªÁËÈ¥µôdeflatº¯Êı¼ÓÔÚÄ©Î²¶àÓàµÄ00 00 ff ff
+        //å‡å»4æ˜¯ä¸ºäº†å»æ‰deflatå‡½æ•°åŠ åœ¨æœ«å°¾å¤šä½™çš„00 00 ff ff
         strDest = strDest.substr(0, strDest.length() - 4);
         return true;
     }
@@ -223,7 +223,7 @@ bool ZlibUtil::inflate(const std::string& strSrc, std::string& strDest)
             {
                 // Finish up
                 int kerr = ::inflateEnd(&zS);
-                //²»¹ØĞÄ·µ»Ø½á¹û
+                //ä¸å…³å¿ƒè¿”å›ç»“æœ
                 //if (err != Z_OK)
                 //{
                 //    //TRACE_UNZIP("; Error: end stream failed: %d\n", err);
@@ -253,7 +253,7 @@ bool ZlibUtil::inflate(const std::string& strSrc, std::string& strDest)
                 strDest.append((const char*)bytesOut, OUTPUT_BUF_SIZE - zS.avail_out);
 
                 int kerr = ::inflateEnd(&zS);
-                //²»¹ØĞÄ½á¹û
+                //ä¸å…³å¿ƒç»“æœ
                 //if (err != Z_OK)
                 //{
                 //    //TRACE_UNZIP("; Error: end stream failed: %d\n", err);

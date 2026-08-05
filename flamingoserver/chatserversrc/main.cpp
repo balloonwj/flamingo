@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  聊天服务程序入口函数
  *  zhangyl 2017.03.09
  **/
@@ -11,7 +11,14 @@
 #include "../base/AsyncLog.h"
 #include "../net/EventLoop.h"
 #include "../net/EventLoopThreadPool.h"
+#include "../dbapi/DbConfig.h"
+#include "../sqliteapi/SqliteManager.h"
+
+//FLAMINGO_NO_MYSQL 由 CMake 在 -DWITH_MYSQL=OFF 时定义，
+//用于编出一份不依赖 libmysqlclient 的纯本地版本，见 CMakeLists.txt 顶部的说明
+#ifndef FLAMINGO_NO_MYSQL
 #include "../mysqlmgr/MysqlManager.h"
+#endif
 
 #ifndef WIN32
 #include <string.h>
@@ -19,6 +26,21 @@
 #endif 
 
 #include "UserManager.h"
+#include "MessageManager.h"
+#include "MessagePinManager.h"
+#include "GroupManager.h"
+#include "CardManager.h"
+#include "FileStoreManager.h"
+#include "GroupFileManager.h"
+#include "RemoteDesktopManager.h"
+#include "CallManager.h"
+#include "CallProtocol.h"
+#include "DepartmentManager.h"
+#include "AdminManager.h"
+#include "EnterpriseManager.h"
+#include "EmployeeManager.h"
+#include "AnnouncementManager.h"
+#include "ServiceAccountManager.h"
 #include "ChatServer.h"
 #include "MonitorServer.h"
 #include "HttpServer.h"
@@ -31,6 +53,27 @@ NetworkInitializer windowsNetworkInitializer;
 #endif
 
 EventLoop g_mainLoop;
+
+/**
+ *  定时公告调度器的一轮工作：把到点的定时公告转为「已发布」，并把它们推给在线受众。
+ *
+ *  由 main() 注册为 EventLoop 的周期任务（周期见 ANNOUNCEMENT_SCHEDULER_INTERVAL_US）。
+ *  写成具名函数而不是 lambda，一来符合本仓库的代码约定，二来这段逻辑不再是一行。
+ *
+ *  <u>推送这一步很容易漏</u>：定时发布是批量的、没有请求上下文，不像管理员点「立即发布」
+ *  那样有个明确的 HTTP 入口摆在那里。漏掉的表现是「定时公告到点了，客户端要等下次登录
+ *  才看得到」，不容易被发现。
+ */
+static void PublishDueAnnouncementsTick()
+{
+    std::vector<int64_t> publishedIds;
+    Singleton<AnnouncementManager>::Instance().publishDueScheduled(&publishedIds);
+
+    for (size_t i = 0; i < publishedIds.size(); ++i)
+    {
+        Singleton<ChatServer>::Instance().broadcastAnnouncementPublished(publishedIds[i]);
+    }
+}
 
 #ifndef WIN32
 void prog_exit(int signo)
@@ -127,15 +170,176 @@ int main(int argc, char* argv[])
     const char* dbuser = config.getConfigName("dbuser");
     const char* dbpassword = config.getConfigName("dbpassword");
     const char* dbname = config.getConfigName("dbname");
-    if (!Singleton<CMysqlManager>::Instance().init(dbserver, dbuser, dbpassword, dbname))
+    //dbtype / dbpath 是本地 SQLite 模式引入的新配置项。老配置文件里没有这两项，
+    //getConfigName 会返回 NULL，CDbConfig::init 据此回落到 mysql，行为与改造前一致。
+    const char* dbtype = config.getConfigName("dbtype");
+    const char* dbpath = config.getConfigName("dbpath");
+    //全局数据库配置必须在任何一个 Manager 初始化之前灌好：
+    //它们建连接时都走 DbFactory，而工厂的连接参数就取自这里。
+    CDbConfig& dbConfig = Singleton<CDbConfig>::Instance();
+    dbConfig.init(dbtype, dbserver, dbuser, dbpassword, dbname, dbpath);
+
+    //建库建表引导。两种后端的引导流程完全不同：MySQL 要先连上服务器、必要时 CREATE DATABASE，
+    //再逐表 desc 比对；SQLite 的库就是一个文件，打开即建，只需执行建表语句再补列。
+    //所以这里必须按类型分支，不能两个都跑——SQLite 模式下跑 MySQL 引导会连不上库而报错
+    if (dbConfig.getDbType() == DB_TYPE_SQLITE)
     {
-        LOGF("Init mysql failed, please check your database config..............");
+        if (!Singleton<CSqliteManager>::Instance().init(dbConfig.getDbPath().c_str()))
+        {
+            LOGF("Init sqlite failed, please check your database config..............");
+        }
+    }
+    else
+    {
+#ifdef FLAMINGO_NO_MYSQL
+        //本次构建关掉了 MySQL 后端，配置却写着 dbtype=mysql，属于配置与构建不匹配，
+        //此时接着往下跑只会在每次数据库调用时报错，不如直接停在这里
+        LOGF("dbtype is mysql but this build has no mysql backend (built with WITH_MYSQL=OFF), "
+             "please set dbtype=sqlite in etc/chatserver.conf");
+#else
+        //CMysqlManager 仍然显式收参：它要先用「不指定库名」的方式连上服务器判断库是否存在、
+        //必要时 CREATE DATABASE，这套流程是 MySQL 专属的，与各业务 Manager 的连接方式不同
+        if (!Singleton<CMysqlManager>::Instance().init(dbserver, dbuser, dbpassword, dbname))
+        {
+            LOGF("Init mysql failed, please check your database config..............");
+        }
+#endif
     }
 
-    if (!Singleton<UserManager>::Instance().init(dbserver, dbuser, dbpassword, dbname))
+    if (!Singleton<UserManager>::Instance().init())
     {
         LOGF("Init UserManager failed, please check your database config..............");
     }
+
+    //初始化消息存储管理器：v2 单聊消息 t_chatmsg 表的落库与查询
+    if (!Singleton<MessageManager>::Instance().init())
+    {
+        LOGF("Init MessageManager failed, please check your database config..............");
+    }
+
+    //初始化消息 Pin 管理器：t_message_pin 表的落库与查询（会话内共享的消息 Pin 状态）
+    if (!Singleton<MessagePinManager>::Instance().init())
+    {
+        LOGF("Init MessagePinManager failed, please check your database config..............");
+    }
+
+    //初始化群组管理器：v2 群组 t_group / t_group_member 表的落库与查询
+    if (!Singleton<GroupManager>::Instance().init())
+    {
+        LOGF("Init GroupManager failed, please check your database config..............");
+    }
+
+    //初始化群互动卡片管理器：v2 t_card_interaction 表的落库与查询
+    if (!Singleton<CardManager>::Instance().init())
+    {
+        LOGF("Init CardManager failed, please check your database config..............");
+    }
+
+    //初始化文件元数据管理器：v2 t_file 表的落库与查询
+    if (!Singleton<FileStoreManager>::Instance().init())
+    {
+        LOGF("Init FileStoreManager failed, please check your database config..............");
+    }
+    {
+        //文件令牌密钥与目标 fileserver / imgserver 地址来自配置文件；
+        //缺项时取空串 / 0，configure 仍可调用，仅文件功能不可用
+        const char* filetokenkey   = config.getConfigName("filetokenkey");
+        const char* imgserverhost  = config.getConfigName("imgserverhost");
+        const char* imgserverport  = config.getConfigName("imgserverport");
+        const char* fileserverhost = config.getConfigName("fileserverhost");
+        const char* fileserverport = config.getConfigName("fileserverport");
+        //本期暂不启用 TLS（帧标志 frame_flag_encrypted 保留不实现），故 tls 恒为 false
+        Singleton<FileStoreManager>::Instance().configure(
+            filetokenkey != NULL ? filetokenkey : "",
+            imgserverhost != NULL ? imgserverhost : "",
+            imgserverport != NULL ? atoi(imgserverport) : 0, false,
+            fileserverhost != NULL ? fileserverhost : "",
+            fileserverport != NULL ? atoi(fileserverport) : 0, false);
+    }
+    {
+        //远程桌面：relay 令牌密钥来自 relaytokenkey；中转通道主机复用 imgserverhost、
+        //端口用独立的 relayport（对应 imgserver 的 RelayServer 监听端口）。缺项时取空串 / 0，
+        //仅远程桌面功能不可用，不影响其它功能
+        const char* relaytokenkey  = config.getConfigName("relaytokenkey");
+        const char* imgserverhost  = config.getConfigName("imgserverhost");
+        const char* relayport      = config.getConfigName("relayport");
+        Singleton<RemoteDesktopManager>::Instance().configure(
+            relaytokenkey != NULL ? relaytokenkey : "",
+            imgserverhost != NULL ? imgserverhost : "",
+            relayport != NULL ? atoi(relayport) : 0);
+
+        //音视频通话复用同一套中转配置：与远程桌面共用 imgserver 的 RelayServer 与令牌密钥
+        Singleton<CallManager>::Instance().configure(
+            relaytokenkey != NULL ? relaytokenkey : "",
+            imgserverhost != NULL ? imgserverhost : "",
+            relayport != NULL ? atoi(relayport) : 0);
+    }
+
+    //初始化群文件存储管理器：v2 t_group_file 表的落库与查询
+    if (!Singleton<GroupFileManager>::Instance().init())
+    {
+        LOGF("Init GroupFileManager failed, please check your database config..............");
+    }
+
+    //初始化企业部门管理器：从数据库加载组织架构（部门树 + 成员归属）
+    if (!Singleton<DepartmentManager>::Instance().init())
+    {
+        LOGF("Init DepartmentManager failed, please check your database config..............");
+    }
+
+    //初始化控制台管理员管理器：admin HTTP 接口的登录鉴权与审计
+    if (!Singleton<AdminManager>::Instance().init())
+    {
+        LOGF("Init AdminManager failed, please check your database config..............");
+    }
+
+    //初始化企业租户管理器：admin 企业管理模块
+    if (!Singleton<EnterpriseManager>::Instance().init())
+    {
+        LOGF("Init EnterpriseManager failed, please check your database config..............");
+    }
+
+    //初始化控制台员工管理器：admin 员工/用户管理模块
+    if (!Singleton<EmployeeManager>::Instance().init())
+    {
+        LOGF("Init EmployeeManager failed, please check your database config..............");
+    }
+
+    //初始化平台公告管理器：admin 公告管理模块
+    if (!Singleton<AnnouncementManager>::Instance().init())
+    {
+        LOGF("Init AnnouncementManager failed, please check your database config..............");
+    }
+
+    //初始化企业服务号管理器：admin 服务号管理模块
+    if (!Singleton<ServiceAccountManager>::Instance().init())
+    {
+        LOGF("Init ServiceAccountManager failed, please check your database config..............");
+    }
+
+    //注册定时公告调度器：在主循环上周期性扫描并自动发布到期的定时公告，
+    //随后把新发布的那几条推给在线受众（见 PublishDueAnnouncementsTick 的说明）。
+    g_mainLoop.runEvery(ANNOUNCEMENT_SCHEDULER_INTERVAL_US, PublishDueAnnouncementsTick);
+
+    //注册音视频通话超时清理：周期扫描响铃超时（无人接听）的呼叫会话，清理之并给仍在线的
+    //双方推送 call_state_timeout。扫描间隔 10 秒（微秒单位）。
+    const int64_t CALL_TIMEOUT_SCAN_INTERVAL_US = 10LL * 1000 * 1000;
+    g_mainLoop.runEvery(CALL_TIMEOUT_SCAN_INTERVAL_US,
+        []()
+        {
+            int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
+            std::vector<CallSessionInfo> timedOut;
+            Singleton<CallManager>::Instance().reapTimedOutSessions(now, timedOut);
+            for (size_t i = 0; i < timedOut.size(); ++i)
+            {
+                std::vector<int64_t> users;
+                users.push_back(timedOut[i].callerId);
+                users.push_back(timedOut[i].calleeId);
+                Singleton<ChatServer>::Instance().pushToUsers(
+                    users, cmd_call_state_notify,
+                    CallProtocol::buildStateNotify(timedOut[i].sessionid, call_state_timeout, "timeout"));
+            }
+        });
 
     const char* listenip = config.getConfigName("listenip");
     short listenport = (short)atol(config.getConfigName("listenport"));

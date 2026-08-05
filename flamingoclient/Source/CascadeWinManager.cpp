@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "CascadeWinManager.h"
 
 CCascadeWinManager::CCascadeWinManager(void)
@@ -10,7 +10,7 @@ CCascadeWinManager::~CCascadeWinManager(void)
 	Clear();
 }
 
-// Ìí¼Ó´°¿Ú£¬²¢²ãµşÏÔÊ¾
+// æ·»åŠ çª—å£ï¼Œå¹¶å±‚å æ˜¾ç¤º
 BOOL CCascadeWinManager::Add(HWND hWnd, int cx, int cy)
 {
 	::SetWindowPos(hWnd, NULL, 0, 0, cx, cy, SWP_NOMOVE);
@@ -63,7 +63,7 @@ BOOL CCascadeWinManager::Add(HWND hWnd, int cx, int cy)
 	return TRUE;
 }
 
-// É¾³ı´°¿Ú
+// åˆ é™¤çª—å£
 void CCascadeWinManager::Del(HWND hWnd)
 {
 	for (int i = 0; i < (int)m_arrWinInfo.size(); i++)
@@ -77,10 +77,10 @@ void CCascadeWinManager::Del(HWND hWnd)
 	}
 }
 
-// ÉèÖÃ´°¿ÚÎ»ÖÃ
+// è®¾ç½®çª—å£ä½ç½®
 BOOL CCascadeWinManager::SetPos(HWND hWnd, int x, int y)
 {
-	if (::IsIconic(hWnd))	// ÅĞ¶Ï´°¿ÚÊÇ·ñ×îĞ¡»¯£¬ÊÇÔò²»¸üĞÂ´°¿ÚÎ»ÖÃ
+	if (::IsIconic(hWnd))	// åˆ¤æ–­çª—å£æ˜¯å¦æœ€å°åŒ–ï¼Œæ˜¯åˆ™ä¸æ›´æ–°çª—å£ä½ç½®
 		return FALSE;
 
 	for (int i = 0; i < (int)m_arrWinInfo.size(); i++)
@@ -96,7 +96,7 @@ BOOL CCascadeWinManager::SetPos(HWND hWnd, int x, int y)
 	return FALSE;
 }
 
-// Çå³ıËùÓĞ´°¿Ú
+// æ¸…é™¤æ‰€æœ‰çª—å£
 void CCascadeWinManager::Clear()
 {
 	for (int i = 0; i < (int)m_arrWinInfo.size(); i++)

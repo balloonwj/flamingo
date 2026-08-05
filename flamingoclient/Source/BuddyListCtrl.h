@@ -1,13 +1,13 @@
-#pragma once
+ï»¿#pragma once
 
 #include <vector>
 #include "SkinLib/SkinLib.h"
 
-enum BLCTRL_STYLE					// ºÃÓÑÁĞ±í¿Ø¼ş·ç¸ñ
+enum BLCTRL_STYLE					// å¥½å‹åˆ—è¡¨æ§ä»¶é£æ ¼
 {
-	BLC_BIG_ICON_STYLE,				// ´óÍ·Ïñ·ç¸ñ
-	BLC_SMALL_ICON_STYLE,			// Ğ¡Í·Ïñ·ç¸ñ
-	BLC_STANDARD_ICON_STYLE			// ±ê×¼Í·Ïñ·ç¸ñ
+	BLC_BIG_ICON_STYLE,				// å¤§å¤´åƒé£æ ¼
+	BLC_SMALL_ICON_STYLE,			// å°å¤´åƒé£æ ¼
+	BLC_STANDARD_ICON_STYLE			// æ ‡å‡†å¤´åƒé£æ ¼
 };
 
 enum BLCTRL_TYPE
@@ -19,16 +19,16 @@ enum BLCTRL_TYPE
 
 enum BLCTRL_DISPLAY_MODE
 {
-	BLCTRL_DISPLAY_SHOW_NICKNAME_ACCOUNT,			//ÏÔÊ¾êÇ³ÆºÍÕËºÅ
-	BLCTRL_DISPLAY_SHOW_NICKNAME,					//ÏÔÊ¾êÇ³Æ
-	BLCTRL_DISPLAY_SHOW_ACCOUNT						//ÏÔÊ¾ÕËºÅ
+	BLCTRL_DISPLAY_SHOW_NICKNAME_ACCOUNT,			//æ˜¾ç¤ºæ˜µç§°å’Œè´¦å·
+	BLCTRL_DISPLAY_SHOW_NICKNAME,					//æ˜¾ç¤ºæ˜µç§°
+	BLCTRL_DISPLAY_SHOW_ACCOUNT						//æ˜¾ç¤ºè´¦å·
 };
 
 enum POSITION_FLAG
 {
-	POSITION_ON_ITEM,			//ÔÚÏîÉÏ
-	POSITION_ON_TEAM,			//ÔÚ·Ö×éÉÏ
-	POSITION_ON_BLANK			//ÔÚ¿Õ°×´¦
+	POSITION_ON_ITEM,			//åœ¨é¡¹ä¸Š
+	POSITION_ON_TEAM,			//åœ¨åˆ†ç»„ä¸Š
+	POSITION_ON_BLANK			//åœ¨ç©ºç™½å¤„
 };
 
 struct BLNMHDREx
@@ -47,24 +47,24 @@ public:
 	~CBuddyItem(void);
 
 public:
-	int			m_nID;					// ÏîID
-	CString		m_strUTalkNum;			// UTalkºÅÂë
-	CString		m_strNickName;			// êÇ³Æ
-	CString		m_strMarkName;			// ±¸×¢
-	BLCTRL_DISPLAY_MODE		m_nDisplayMode;			// ÏÔÊ¾Ä£Ê½
-	CString		m_strSign;				// Ç©Ãû
-	BOOL		m_bShowSign;			// ÊÇ·ñÏÔÊ¾Ç©Ãû
-	BOOL		m_bOnline;				// ÊÇ·ñÔÚÏß±êÖ¾
-	BOOL		m_bOnlineAnim;			// ÉÏÏß¶¯»­±êÖ¾
-	int			m_nOnlineAnimState;		// ÉÏÏß¶¯»­×´Ì¬
-	BOOL		m_bOfflineAnim;			// ÏÂÏß¶¯»­±êÖ¾
-	BOOL		m_bHeadFlashAnim;		// Í·ÏñÉÁ¶¯¶¯»­±êÖ¾
-	int			m_nHeadFlashAnimState;	// Í·ÏñÉÁ¶¯¶¯»­×´Ì¬
-	CImageEx*	m_lpHeadImg;			// Í·ÏñÍ¼Æ¬
-    CString     m_strHeadImgName;       // Í·ÏñÍ¼Æ¬Â·¾¶
-	BOOL		m_bGender;				// ĞÔ±ğ
-	BOOL		m_bMobile;				// ÊÇ·ñÊÖ»úÔÚÏß
-	CImageEx*	m_lpMobileImg;			// ÊÖ»úÍ¼±ê
+	int			m_nID;					// é¡¹ID
+	CString		m_strUTalkNum;			// UTalkå·ç 
+	CString		m_strNickName;			// æ˜µç§°
+	CString		m_strMarkName;			// å¤‡æ³¨
+	BLCTRL_DISPLAY_MODE		m_nDisplayMode;			// æ˜¾ç¤ºæ¨¡å¼
+	CString		m_strSign;				// ç­¾å
+	BOOL		m_bShowSign;			// æ˜¯å¦æ˜¾ç¤ºç­¾å
+	BOOL		m_bOnline;				// æ˜¯å¦åœ¨çº¿æ ‡å¿—
+	BOOL		m_bOnlineAnim;			// ä¸Šçº¿åŠ¨ç”»æ ‡å¿—
+	int			m_nOnlineAnimState;		// ä¸Šçº¿åŠ¨ç”»çŠ¶æ€
+	BOOL		m_bOfflineAnim;			// ä¸‹çº¿åŠ¨ç”»æ ‡å¿—
+	BOOL		m_bHeadFlashAnim;		// å¤´åƒé—ªåŠ¨åŠ¨ç”»æ ‡å¿—
+	int			m_nHeadFlashAnimState;	// å¤´åƒé—ªåŠ¨åŠ¨ç”»çŠ¶æ€
+	CImageEx*	m_lpHeadImg;			// å¤´åƒå›¾ç‰‡
+    CString     m_strHeadImgName;       // å¤´åƒå›¾ç‰‡è·¯å¾„
+	BOOL		m_bGender;				// æ€§åˆ«
+	BOOL		m_bMobile;				// æ˜¯å¦æ‰‹æœºåœ¨çº¿
+	CImageEx*	m_lpMobileImg;			// æ‰‹æœºå›¾æ ‡
 };
 
 class CBuddyTeamItem
@@ -74,14 +74,14 @@ public:
 	~CBuddyTeamItem(void);
 
 public:
-	int m_nID;									// ÏîID
-	CString m_strName;							// ºÃÓÑ·Ö×éÃû³Æ
-	int m_nCurCnt;								// µ±Ç°ÔÚÏßºÃÓÑÊı
-	int m_nMaxCnt;								// ¸ÃºÃÓÑ·Ö×éµÄºÃÓÑÊı
-	BOOL m_bExpand;								// ÊÇ·ñÕ¹¿ª±êÖ¾
-	int m_nHeadFlashAnim;						// Í·ÏñÉÁË¸¶¯»­±êÖ¾
-	int m_nHeadFlashAnimState;					// Í·ÏñÉÁË¸¶¯»­×´Ì¬
-	std::vector<CBuddyItem*> m_arrBuddys;		// ¸ÃºÃÓÑ·Ö×éµÄºÃÓÑÏî
+	int m_nID;									// é¡¹ID
+	CString m_strName;							// å¥½å‹åˆ†ç»„åç§°
+	int m_nCurCnt;								// å½“å‰åœ¨çº¿å¥½å‹æ•°
+	int m_nMaxCnt;								// è¯¥å¥½å‹åˆ†ç»„çš„å¥½å‹æ•°
+	BOOL m_bExpand;								// æ˜¯å¦å±•å¼€æ ‡å¿—
+	int m_nHeadFlashAnim;						// å¤´åƒé—ªçƒåŠ¨ç”»æ ‡å¿—
+	int m_nHeadFlashAnimState;					// å¤´åƒé—ªçƒåŠ¨ç”»çŠ¶æ€
+	std::vector<CBuddyItem*> m_arrBuddys;		// è¯¥å¥½å‹åˆ†ç»„çš„å¥½å‹é¡¹
 };
 
 class CBuddyListCtrl : public CWindowImpl<CBuddyListCtrl, CWindow>
@@ -230,9 +230,9 @@ private:
 	void EnsureVisible(int nTeamIndex, int nIndex);
 
 	void SortBuddyTeam(int nTeamIndex, int nIndex);
-	void OnTimer_HeadFlashAnim(UINT_PTR nIDEvent);	// Í·ÏñÉÁ¶¯¶¯»­
-	void OnTimer_OnlineAnim(UINT_PTR nIDEvent);		// ÉÏÏß¶¯»­
-	void OnTimer_OfflineAnim(UINT_PTR nIDEvent);	// ÏÂÏß¶¯»­
+	void OnTimer_HeadFlashAnim(UINT_PTR nIDEvent);	// å¤´åƒé—ªåŠ¨åŠ¨ç”»
+	void OnTimer_OnlineAnim(UINT_PTR nIDEvent);		// ä¸Šçº¿åŠ¨ç”»
+	void OnTimer_OfflineAnim(UINT_PTR nIDEvent);	// ä¸‹çº¿åŠ¨ç”»
 
 private:
 	CToolTipCtrl			m_ToolTipCtrl;
@@ -257,7 +257,7 @@ private:
 	int						m_nHoverSmallIconIndex;
 	int						m_nPressTeamIndex, m_nPressIndex;
 	int						m_nLeft, m_nTop;
-	BLCTRL_TYPE				m_nType;		// ºÃÓÑÁĞ±í£¬ÈºÁĞ±í£¬×î½üÁªÏµÈËÁĞ±íÀàĞÍ±êÊ¶
+	BLCTRL_TYPE				m_nType;		// å¥½å‹åˆ—è¡¨ï¼Œç¾¤åˆ—è¡¨ï¼Œæœ€è¿‘è”ç³»äººåˆ—è¡¨ç±»å‹æ ‡è¯†
 	BOOL					m_bMouseTracking;
 	BOOL					m_bTransparent;
 	HDC						m_hBgDC;
@@ -270,9 +270,9 @@ private:
 	int						m_nBuddyTeamPadding;
 	int						m_nBuddyItemPadding;
 	CRect					m_rcMargin;
-	DWORD					m_dwOnlineAnimTimerId;		// ÉÏÏß¶¯»­¼ÆÊ±Æ÷
-	DWORD					m_dwOfflineAnimTimerId;		// ÏÂÏß¶¯»­¼ÆÊ±Æ÷
-	DWORD					m_dwHeadFlashAnimTimerId;	// Í·ÏñÉÁ¶¯¶¯»­¼ÆÊ±Æ÷
+	DWORD					m_dwOnlineAnimTimerId;		// ä¸Šçº¿åŠ¨ç”»è®¡æ—¶å™¨
+	DWORD					m_dwOfflineAnimTimerId;		// ä¸‹çº¿åŠ¨ç”»è®¡æ—¶å™¨
+	DWORD					m_dwHeadFlashAnimTimerId;	// å¤´åƒé—ªåŠ¨åŠ¨ç”»è®¡æ—¶å™¨
 
 	std::vector<CBuddyTeamItem*> m_arrBuddyTeamItems;
 };

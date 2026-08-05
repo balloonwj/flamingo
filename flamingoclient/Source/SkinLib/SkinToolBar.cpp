@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "SkinToolBar.h"
 
 CSkinToolBarItem::CSkinToolBarItem(void)
@@ -306,11 +306,11 @@ BOOL CSkinToolBar::GetItemRectByIndex(int nIndex, CRect& rect)
 				return TRUE;
 			}
 
-            //¼ÆËã´¹Ö±²¼¾Ö
+            //è®¡ç®—åž‚ç›´å¸ƒå±€
             if (m_bVertical)
             {
                 nTop += lpItem->m_nHeight;
-                //TODO: ¼ÓÉÏtopPaddingºÍÉÏÏÂmargin
+                //TODO: åŠ ä¸ŠtopPaddingå’Œä¸Šä¸‹margin
                 nTop += lpItem->m_nPadding;
                 //nLeft += lpItem->m_nLeftMargin;
                 //nLeft += lpItem->m_nRightMargin;
@@ -445,7 +445,7 @@ void CSkinToolBar::OnLButtonDown(UINT nFlags, CPoint point)
 			{
 				lpItem->m_bChecked = !lpItem->m_bChecked;
 
-                //ÆôÓÃ×éÑ¡ÏîÖ®ºó£¬Ò»¸öÑ¡ÖÐÆäËüµÄ¾ÍÒª±»È¡ÏûÑ¡ÖÐ
+                //å¯ç”¨ç»„é€‰é¡¹ä¹‹åŽï¼Œä¸€ä¸ªé€‰ä¸­å…¶å®ƒçš„å°±è¦è¢«å–æ¶ˆé€‰ä¸­
                 if (lpItem->m_bChecked && m_bUseGroup)
                 {
                     CSkinToolBarItem* lpOtherItem = NULL;
@@ -550,7 +550,7 @@ void CSkinToolBar::OnLButtonUp(UINT nFlags, CPoint point)
 		}
 	}
 	
-	//»Ö¸´°´ÏÂÖ®Ç°µÄ×´Ì¬
+	//æ¢å¤æŒ‰ä¸‹ä¹‹å‰çš„çŠ¶æ€
 	if (m_nPressIndex != -1)
 	{
 		m_nPressIndex = -1;
@@ -660,7 +660,7 @@ void CSkinToolBar::OnDestroy()
 {
 	SetMsgHandled(FALSE);
 
-	if (m_ToolTipCtrl.IsWindow())	// ToolTipCtrlÔçÔÚÖ®Ç°µÄ²»ÖªµÀÊ²Ã´µØ·½ÒÑÏú»Ù£¬ÕâÀïÏÔÊ½ÖÃ¿Õm_hWnd
+	if (m_ToolTipCtrl.IsWindow())	// ToolTipCtrlæ—©åœ¨ä¹‹å‰çš„ä¸çŸ¥é“ä»€ä¹ˆåœ°æ–¹å·²é”€æ¯ï¼Œè¿™é‡Œæ˜¾å¼ç½®ç©ºm_hWnd
 		m_ToolTipCtrl.DestroyWindow();
 	m_ToolTipCtrl.m_hWnd = NULL;
 
@@ -744,7 +744,7 @@ int CSkinToolBar::HitTest(POINT pt)
             {
                 nTop += lpItem->m_nHeight;
 
-                //TODO: ºóÃæ¼ÓÉÏÉÏÏÂpaddingºÍÉÏÏÂ¼ä¾à
+                //TODO: åŽé¢åŠ ä¸Šä¸Šä¸‹paddingå’Œä¸Šä¸‹é—´è·
                 nTop += lpItem->m_nPadding;
                 //nLeft += lpItem->m_nLeftMargin;
                 //nLeft += lpItem->m_nRightMargin;
@@ -892,7 +892,7 @@ void CSkinToolBar::DrawItem(HDC hDC, int nIndex)
 				}
 			}
 		}
-        //»­Õý³£×´Ì¬ÏÂµÄ±³¾°Í¼Æ¬
+        //ç”»æ­£å¸¸çŠ¶æ€ä¸‹çš„èƒŒæ™¯å›¾ç‰‡
         else
         {
             if (lpItem->m_lpBgImgN != NULL && !lpItem->m_lpBgImgN->IsNull())
@@ -912,7 +912,7 @@ void CSkinToolBar::DrawItem(HDC hDC, int nIndex)
 		|| lpItem->m_dwStyle & STBI_STYLE_WHOLEDROPDOWN))
 		rcLeft = rcItem;
 
-	if (bHasIcon && bHasText)	// ´øÍ¼±êºÍÎÄ×Ö
+	if (bHasIcon && bHasText)	// å¸¦å›¾æ ‡å’Œæ–‡å­—
 	{
 		int cxIcon = lpItem->m_lpIconImg->GetWidth();
 		int cyIcon = lpItem->m_lpIconImg->GetHeight();
@@ -923,7 +923,7 @@ void CSkinToolBar::DrawItem(HDC hDC, int nIndex)
 			hFont = (HFONT)::GetStockObject(DEFAULT_GUI_FONT);
 		HFONT hOldFont = (HFONT)::SelectObject(hDC, hFont);
 
-		CRect rcText(0,0,0,0);	// ¼ÆËãÎÄ×Ö¿í¸ß
+		CRect rcText(0,0,0,0);	// è®¡ç®—æ–‡å­—å®½é«˜
 		::DrawText(hDC, lpItem->m_strText, lpItem->m_strText.GetLength(), &rcText, DT_SINGLELINE | DT_CALCRECT);
 
 		int cx = cxIcon+1+rcText.Width();
@@ -942,7 +942,7 @@ void CSkinToolBar::DrawItem(HDC hDC, int nIndex)
 		::SelectObject(hDC, hOldFont);
 		::SetBkMode(hDC, nMode);
 	}
-	else if (bHasIcon)	// ½öÍ¼±ê
+	else if (bHasIcon)	// ä»…å›¾æ ‡
 	{
 		int cxIcon = lpItem->m_lpIconImg->GetWidth();
 		int cyIcon = lpItem->m_lpIconImg->GetHeight();
@@ -952,7 +952,7 @@ void CSkinToolBar::DrawItem(HDC hDC, int nIndex)
 
 		lpItem->m_lpIconImg->Draw2(hDC, rcIcon);
 	}
-	else if (bHasText)	// ½öÎÄ×Ö
+	else if (bHasText)	// ä»…æ–‡å­—
 	{
 		UINT nFormat = DT_CENTER | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS;
 

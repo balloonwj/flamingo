@@ -1,16 +1,23 @@
-/**
- * TcpSession.h
- * zhangyl 2017.03.09
- **/
-
+﻿/**
+ *  fileserver / imgserver 会话基类，TcpSession.h
+ *
+ *  只承载连接生命周期相关的通用逻辑：持有 TcpConnection 的弱引用、提供
+ *  取连接与发送字节的接口。具体的 v2 文件传输业务在子类 FileSession。
+ *
+ *  TcpSession 引用 TcpConnection 必须用弱指针——TcpConnection 可能因网络
+ *  出错先行销毁，此时 TcpSession 也应随之失效。
+ *
+ *  balloonwj@qq.com   2026-05-22
+ */
 #pragma once
 
 #include <memory>
+#include <stddef.h>
 #include "../net/TcpConnection.h"
 
 using namespace net;
 
-//为了让业务与逻辑分开，实际应该新增一个子类继承自TcpSession，让TcpSession中只有逻辑代码，其子类存放业务代码
+//fileserver / imgserver 会话基类
 class TcpSession
 {
 public:
@@ -18,23 +25,26 @@ public:
     ~TcpSession();
 
     TcpSession(const TcpSession& rhs) = delete;
-    TcpSession& operator =(const TcpSession& rhs) = delete;
+    TcpSession& operator=(const TcpSession& rhs) = delete;
 
+    //取当前连接的 shared_ptr；连接已销毁时返回空指针
     std::shared_ptr<TcpConnection> getConnectionPtr()
     {
         if (tmpConn_.expired())
             return NULL;
-        
+
         return tmpConn_.lock();
     }
 
-    void send(int32_t cmd, int32_t seq, int32_t errorcode, const std::string& filemd5, int64_t offset, int64_t filesize, const std::string& filedata);
-
-private:
-    //支持大文件，用int64_t来存储包长，记得梳理一下文件上传于下载逻辑
-    void sendPackage(const char* body, int64_t bodylength);
+protected:
+    /**
+     *  把一段已编码好的字节（通常是一个完整 v2 帧）发送到对端连接。
+     *  @param data 待发送字节起始地址
+     *  @param len  待发送字节数
+     */
+    void sendData(const char* data, size_t len);
 
 protected:
-    //TcpSession引用TcpConnection类必须是弱指针，因为TcpConnection可能会因网络出错自己销毁，此时TcpSession应该也要销毁
-    std::weak_ptr<TcpConnection>    tmpConn_;
+    //对 TcpConnection 的弱引用，见类注释
+    std::weak_ptr<TcpConnection> tmpConn_;
 };

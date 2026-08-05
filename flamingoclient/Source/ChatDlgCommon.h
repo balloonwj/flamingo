@@ -1,6 +1,6 @@
-#pragma once
+О╩©#pragma once
 
-//╥ежцадлЛ╤т╩╟©Р╧╚сцЁёсц╨м╨╞йЩ
+//Ф■╬Г╫╝Х│┼Е╓╘Е╞╧Х╞²Ф║├Е┘╛Г■╗Е╦╦Г■╗Е▓▄Е┤╫Ф∙╟
 
 
 #define CHATDLG_TOP_FIXED_HEIGHT			100

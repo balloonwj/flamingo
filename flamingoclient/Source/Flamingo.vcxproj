@@ -71,13 +71,15 @@
     </Midl>
     <ClCompile>
       <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>..\balloonui\balloonui;..\..\third-party\sqlite-src-3530100;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <PreprocessorDefinitions>WIN32;_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessToFile>false</PreprocessToFile>
       <PreprocessSuppressLineNumbers>false</PreprocessSuppressLineNumbers>
       <MinimalRebuild>
       </MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
-      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -88,7 +90,7 @@
       <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>RichEd20.Lib;version.lib;odbc32.lib;odbccp32.lib;IMM32.lib;ws2_32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>RichEd20.Lib;version.lib;odbc32.lib;odbccp32.lib;IMM32.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <OutputFile>..\Bin\$(ProjectName).exe</OutputFile>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
@@ -132,7 +134,6 @@
   <ItemGroup>
     <ClCompile Include="AboutDlg.cpp" />
     <ClCompile Include="AddFriendConfirmDlg.cpp" />
-    <ClCompile Include="BuddyChatDlg.cpp" />
     <ClCompile Include="BuddyInfoDlg.cpp" />
     <ClCompile Include="BuddyInfoFloatWnd.cpp" />
     <ClCompile Include="BuddyListCtrl.cpp" />
@@ -155,28 +156,27 @@
     <ClCompile Include="FileTaskThread.cpp" />
     <ClCompile Include="FileTransferCtrl.cpp" />
     <ClCompile Include="FindFriendDlg.cpp" />
+    <ClCompile Include="FlamingoClient.cpp" />
     <ClCompile Include="FontSelDlg.cpp" />
     <ClCompile Include="GDIFactory.cpp" />
     <ClCompile Include="GifImage.cpp" />
-    <ClCompile Include="GroupChatDlg.cpp" />
     <ClCompile Include="GroupInfoDlg.cpp" />
+    <ClCompile Include="GroupRoleRules.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="HeartbeatTask.cpp" />
     <ClCompile Include="ImageEx.cpp" />
     <ClCompile Include="ImageTaskThread.cpp" />
     <ClCompile Include="IniFile.cpp" />
     <ClCompile Include="IULog.cpp" />
-    <ClCompile Include="jsoncpp-1.9.0\json_reader.cpp" />
-    <ClCompile Include="jsoncpp-1.9.0\json_value.cpp" />
-    <ClCompile Include="jsoncpp-1.9.0\json_writer.cpp" />
-    <ClCompile Include="LoginAccountList.cpp" />
-    <ClCompile Include="LoginDlg.cpp" />
+    <ClCompile Include="LoginAccountList.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="LoginSettingsDlg.cpp" />
     <ClCompile Include="LogonUserInfoDlg.cpp" />
-    <ClCompile Include="MainDlg.cpp">
-      <PreprocessToFile Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</PreprocessToFile>
-      <PreprocessSuppressLineNumbers Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</PreprocessSuppressLineNumbers>
-      <PreprocessKeepComments Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</PreprocessKeepComments>
-    </ClCompile>
+    <ClCompile Include="MainDlg.cpp" />
     <ClCompile Include="MD5.cpp" />
     <ClCompile Include="MD5Sum.cpp" />
     <ClCompile Include="MessageLogger.cpp" />
@@ -185,11 +185,7 @@
     <ClCompile Include="ModifyMarkNameDlg.cpp" />
     <ClCompile Include="ModifyPasswordDlg.cpp" />
     <ClCompile Include="MsgTipDlg.cpp" />
-    <ClCompile Include="MultiChatDlg.cpp" />
     <ClCompile Include="MultiChatMemberSelectionDlg.cpp" />
-    <ClCompile Include="net\IUProtocolData.cpp" />
-    <ClCompile Include="net\IUSocket.cpp" />
-    <ClCompile Include="net\ProtocolStream.cpp" />
     <ClCompile Include="Path.cpp" />
     <ClCompile Include="PerformanceCounter.cpp" />
     <ClCompile Include="PicBarDlg.cpp" />
@@ -197,28 +193,8 @@
     <ClCompile Include="RecvMsgThread.cpp" />
     <ClCompile Include="RegisterDialog.cpp" />
     <ClCompile Include="RemoteDesktopDlg.cpp" />
-    <ClCompile Include="RemoteDesktop\ScreenManager.cpp" />
-    <ClCompile Include="RemoteDesktop\ScreenSpy.cpp" />
-    <ClCompile Include="RemoteDesktop\until.cpp" />
     <ClCompile Include="RichEditUtil.cpp" />
     <ClCompile Include="SendMsgThread.cpp" />
-    <ClCompile Include="SessChatDlg.cpp" />
-    <ClCompile Include="SkinLib\SkinButton.cpp" />
-    <ClCompile Include="SkinLib\SkinComboBox.cpp" />
-    <ClCompile Include="SkinLib\SkinDialog.cpp" />
-    <ClCompile Include="SkinLib\SkinEdit.cpp" />
-    <ClCompile Include="SkinLib\SkinHyperLink.cpp" />
-    <ClCompile Include="SkinLib\SkinListCtrl.cpp" />
-    <ClCompile Include="SkinLib\SkinManager.cpp" />
-    <ClCompile Include="SkinLib\SkinMenu.cpp" />
-    <ClCompile Include="SkinLib\SkinMessageBox.cpp" />
-    <ClCompile Include="SkinLib\SkinPictureBox.cpp" />
-    <ClCompile Include="SkinLib\SkinRichEdit.cpp" />
-    <ClCompile Include="SkinLib\SkinScrollBar.cpp" />
-    <ClCompile Include="SkinLib\SkinStatic.cpp" />
-    <ClCompile Include="SkinLib\SkinTabCtrl.cpp" />
-    <ClCompile Include="SkinLib\SkinToolBar.cpp" />
-    <ClCompile Include="SkinLib\SkinWebBrowser.cpp" />
     <ClCompile Include="SplitterCtrl.cpp" />
     <ClCompile Include="Startup.cpp" />
     <ClCompile Include="stdafx.cpp">
@@ -233,16 +209,805 @@
     <ClCompile Include="TrayIcon.cpp" />
     <ClCompile Include="UpdateDlg.cpp" />
     <ClCompile Include="Updater.cpp" />
-    <ClCompile Include="UserConfig.cpp">
-      <PreprocessToFile Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</PreprocessToFile>
-      <PreprocessSuppressLineNumbers Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</PreprocessSuppressLineNumbers>
-    </ClCompile>
+    <ClCompile Include="UserConfig.cpp" />
+    <ClCompile Include="UserMgr.cpp" />
     <ClCompile Include="UserSessionData.cpp" />
     <ClCompile Include="UserSnapInfoDlg.cpp" />
-    <ClCompile Include="FlamingoClient.cpp" />
-    <ClCompile Include="UserMgr.cpp" />
     <ClCompile Include="Utils.cpp" />
     <ClCompile Include="XmlDocument.cpp" />
+    <ClCompile Include="ZlibUtil.cpp" />
+    <ClCompile Include="BalloonAnnounce\AnnounceBoxLayout.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonAnnounce\AnnounceRow.cpp" />
+    <ClCompile Include="BalloonAnnounce\BalloonAnnounceBoxWindow.cpp" />
+    <ClCompile Include="BalloonAuth\AuthBanner.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonAuth\AuthButtons.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonAuth\AuthInputField.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonAuth\BalloonLoginDlg.cpp" />
+    <ClCompile Include="BalloonAuth\BalloonLoginLayout.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChat\BalloonBuddyChatDlg.cpp" />
+    <ClCompile Include="BalloonChat\BalloonChatLayout.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChat\BalloonChatMsgFormat.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChat\BalloonGroupChatDlg.cpp" />
+    <ClCompile Include="BalloonChat\BalloonMultiChatDlg.cpp" />
+    <ClCompile Include="BalloonChat\BalloonSessChatDlg.cpp" />
+    <ClCompile Include="BalloonChatWnd\BalloonChatWindow.cpp" />
+    <ClCompile Include="BalloonChatWnd\BalloonGroupChatWindow.cpp" />
+    <ClCompile Include="BalloonChatWnd\ChatAvatarResolve.cpp" />
+    <ClCompile Include="BalloonChatWnd\ChatBannerLabel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatInlineText.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatBubble.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatFileLocation.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatFileStateModel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatFileVisual.cpp" />
+    <ClCompile Include="BalloonChatWnd\ChatFontMap.cpp" />
+    <ClCompile Include="BalloonChatWnd\ChatFontUtil.cpp" />
+    <ClCompile Include="BalloonChatWnd\ChatHeaderInfo.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatHistoryPaging.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatIconButton.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatIcons.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatImageCache.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatImageSaveAs.cpp" />
+    <ClCompile Include="BalloonChatWnd\ChatInputKeyFilter.cpp" />
+    <ClCompile Include="BalloonChatWnd\ChatInputScrollBar.cpp" />
+    <ClCompile Include="BalloonChatWnd\ChatMessageList.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatMessageMenu.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatMockData.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatQuoteModel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatRichContentSplit.cpp" />
+    <ClCompile Include="BalloonChatWnd\ChatRootPanel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatSendButton.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatSendMode.cpp" />
+    <ClCompile Include="BalloonChatWnd\ChatTextSelection.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatTitleIcon.cpp" />
+    <ClCompile Include="BalloonChatWnd\ChatWindowLayout.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\EmojiPickerPopup.cpp" />
+    <ClCompile Include="BalloonChatWnd\FaceImagePickerPopup.cpp" />
+    <ClCompile Include="BalloonChatWnd\FileBubbleFormat.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\FontSettingPopup.cpp" />
+    <ClCompile Include="BalloonChatWnd\GroupAtDropdown.cpp" />
+    <ClCompile Include="BalloonChatWnd\GroupChatHeaderInfo.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\GroupChatWindowLayout.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\GroupFileItem.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\GroupFileLibrary.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\GroupFileList.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\GroupFileUploadTracker.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\GroupMemberItem.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\GroupMemberList.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\GroupMemberOrder.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\GroupMentionButton.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\GroupMentionMenu.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\GroupMentionModel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\GroupSideTab.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\SideTabText.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonContact\BalloonContactWindow.cpp" />
+    <ClCompile Include="BalloonContact\ContactIcons.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonContact\ContactLayout.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonContact\ContactModel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonContact\TagChip.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonGroupManage\AnnouncePopupPolicy.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonGroupManage\BalloonAnnouncePopupDlg.cpp" />
+    <ClCompile Include="BalloonGroupManage\BalloonGroupManageWindow.cpp" />
+    <ClCompile Include="BalloonGroupManage\GroupManageButton.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonGroupManage\GroupManageIcons.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonGroupManage\GroupManageLayout.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonGroupManage\GroupManageMapping.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonGroupManage\GroupManageModel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonGroupManage\GroupManageNavItem.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonGroupManage\GroupManagePaint.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonGroupManage\GroupManageWindowData.cpp" />
+    <ClCompile Include="BalloonHistory\AnnounceStore.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonHistory\BalloonHistoryWindow.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonHistory\FileLocalStore.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonHistory\HistoryHighlightLabel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonHistory\HistoryModel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonHistory\HistoryContentView.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonHistory\HistoryRowMenu.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonHistory\HistoryRow.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonHistory\HistoryView.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonHistory\HistoryWindowLayout.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonHistory\V2MsgQuery.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonHistory\V2MsgStore.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonImageViewer\BalloonImageViewerWindow.cpp" />
+    <ClCompile Include="BalloonImageViewer\ImageCanvas.cpp" />
+    <ClCompile Include="BalloonImageViewer\ImageViewerGeometry.cpp" />
+    <ClCompile Include="BalloonImageViewer\ImageViewerToolbar.cpp" />
+    <ClCompile Include="BalloonMain\AboutDlgModel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\AvatarGray.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\AvatarImageUtil.cpp" />
+    <ClCompile Include="BalloonMain\AvatarPickerTile.cpp" />
+    <ClCompile Include="BalloonMain\BadgeRender.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\BalloonAboutDlg.cpp" />
+    <ClCompile Include="BalloonMain\BalloonChangePwdDlg.cpp" />
+    <ClCompile Include="BalloonMain\BalloonChangePwdValidate.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\BalloonClosePromptDlg.cpp" />
+    <ClCompile Include="BalloonMain\BalloonContactTreeAdapter.cpp" />
+    <ClCompile Include="BalloonMain\BalloonGroupInfoDlg.cpp" />
+    <ClCompile Include="BalloonMain\BalloonGroupInfoLayout.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\BalloonKickoutDlg.cpp" />
+    <ClCompile Include="BalloonMain\BalloonMainLayout.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\BalloonMainPanel.cpp" />
+    <ClCompile Include="BalloonMain\BalloonModifyAvatarDlg.cpp" />
+    <ClCompile Include="BalloonMain\BalloonProfileDlg.cpp" />
+    <ClCompile Include="BalloonMain\BalloonProfileLayout.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\ClosePromptDecision.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\ContactRemarkModel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\ContactsOrgStats.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\ConversationListOps.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\CreateGroupDlg.cpp" />
+    <ClCompile Include="BalloonMain\FavoritesModel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\GroupRowText.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\KickoutNotice.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MainPanelAvatar.cpp" />
+    <ClCompile Include="BalloonMain\MainPanelButtons.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MainPanelContactMenu.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MainPanelConversationMenu.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MainPanelHeader.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MainPanelIcons.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MainPanelListItem.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MainPanelMenuIcons.cpp" />
+    <ClCompile Include="BalloonMain\MainPanelMockData.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MainPanelScrollView.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MainPanelSectionHeader.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MainPanelStatusMenu.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MainPanelSystemMenu.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MainPanelTab.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MainPanelTrayMenu.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MainPanelTreeView.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MainPanelUserData.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MemberPickerRow.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MemberPickerTreeModel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\MemberPickerTreeView.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\NotificationSound.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\NotificationSoundPlayer.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\OnlineCapability.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\OverlayScrollBarGeometry.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\PanelDragZone.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\PopupMenuPlacement.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\SignatureEditModel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\SignatureEditPopup.cpp" />
+    <ClCompile Include="BalloonMain\TitleBarIcon.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\TrayFlashController.cpp" />
+    <ClCompile Include="BalloonMain\TrayMsgTipPopup.cpp" />
+    <ClCompile Include="BalloonNetSettings\BalloonNetSettingsWindow.cpp" />
+    <ClCompile Include="BalloonNetSettings\NetServerCard.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonNetSettings\NetSettingsLayout.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonNetSettings\NetSettingsModel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonProfile\BalloonProfileWindow.cpp" />
+    <ClCompile Include="BalloonProfile\ProfileLayout.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonProfile\ProfileModel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonRegister\BalloonRegisterWindow.cpp" />
+    <ClCompile Include="BalloonRegister\RegisterIcons.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonRegister\RegisterLayout.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonRegister\RegisterModel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonRemoteDesktop\BalloonRemoteDesktopDlg.cpp" />
+    <ClCompile Include="BalloonRemoteDesktop\RdControlledBar.cpp" />
+    <ClCompile Include="BalloonRemoteDesktop\RdViewerToolbar.cpp" />
+    <ClCompile Include="BalloonRemoteDesktop\RdViewerWindow.cpp" />
+    <ClCompile Include="BalloonScreenshot\AnnotationModel.cpp" />
+    <ClCompile Include="BalloonScreenshot\CaptureCanvas.cpp" />
+    <ClCompile Include="BalloonScreenshot\ScreenCaptureOverlay.cpp" />
+    <ClCompile Include="BalloonScreenshot\ScreenshotGeometry.cpp" />
+    <ClCompile Include="BalloonScreenshot\ScreenshotToolbar.cpp" />
+    <ClCompile Include="BalloonSearch\ContactMatch.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonSearch\PinyinFull.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonSearch\PinyinInitials.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonSearch\SearchDropdown.cpp" />
+    <ClCompile Include="BalloonSearch\SearchFilterTab.cpp" />
+    <ClCompile Include="BalloonSettings\BalloonSystemSettingDlg.cpp" />
+    <ClCompile Include="BalloonSettings\SettingsBinding.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonSettings\SettingsNavList.cpp" />
+    <ClCompile Include="BalloonSettings\SettingsPageModel.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\AudioLoopback.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\AudioPcmUtils.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\BalloonCallDlg.cpp" />
+    <ClCompile Include="Call\CallAudioEngine.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\CallDlgLayout.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\CallMediaFraming.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\CallMediaSession.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\CallRelayClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\CallRelaySelfTest.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\CallRelayTestFrame.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\CallVideoCanvas.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\CallVideoEngine.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\CallVideoUiDebug.cpp" />
+    <ClCompile Include="Call\CameraDisplayTest.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\CameraPreviewDebug.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\H264SelfTest.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\MfCameraCapture.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\MfH264Codec.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\OpusAudioCodec.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\SpeexAudioProcessor.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\SpeexResampler.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\VideoFrameConvert.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\VideoLoopbackDebug.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Call\WasapiAudioIo.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="jsoncpp-1.9.0\json_reader.cpp" />
+    <ClCompile Include="jsoncpp-1.9.0\json_value.cpp" />
+    <ClCompile Include="jsoncpp-1.9.0\json_writer.cpp" />
+    <ClCompile Include="net\AccountProtocolClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\AnnounceProtocolClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\CallProtocolClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\ChatTransferCancelRegistry.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\ContactsProtocolClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\ConversationsProtocolClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\FavoriteProtocolClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\FileProtocolClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\FileStreamTransfer.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\FileTransfer.cpp" />
+    <ClCompile Include="net\FrameCodec.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\FriendProtocolClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\GroupFileProtocolClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\GroupProtocolClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\GroupTransferQueue.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\ImageDownloadDriver.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\ImageTransfer.cpp" />
+    <ClCompile Include="net\ImageUploadDriver.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\IUProtocolData.cpp" />
+    <ClCompile Include="net\IUSocket.cpp" />
+    <ClCompile Include="net\LoginProtocolClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\MessageProtocolClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\ProfileProtocolClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\ProtocolStream.cpp" />
+    <ClCompile Include="net\RegisterProtocolClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\RemoteDesktopProtocolClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\Sha256.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\TransferOwnerRegistry.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\CaptureFallbackPolicy.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\DxgiScreenCapturer.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\GdiScreenCapturer.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdControlledStreamer.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdInputEncoder.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdInputInjector.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdRelayClient.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdRelayFraming.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdRelaySelfTest.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdScreenCapturer.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdScreenDecoder.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\RdSelfTestWindow.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\ScreenFrameEncoder.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="RemoteDesktop\ScreenManager.cpp" />
+    <ClCompile Include="RemoteDesktop\ScreenSpy.cpp" />
+    <ClCompile Include="RemoteDesktop\until.cpp" />
+    <ClCompile Include="SkinLib\SkinButton.cpp" />
+    <ClCompile Include="SkinLib\SkinComboBox.cpp" />
+    <ClCompile Include="SkinLib\SkinDialog.cpp" />
+    <ClCompile Include="SkinLib\SkinEdit.cpp" />
+    <ClCompile Include="SkinLib\SkinHyperLink.cpp" />
+    <ClCompile Include="SkinLib\SkinListCtrl.cpp" />
+    <ClCompile Include="SkinLib\SkinManager.cpp" />
+    <ClCompile Include="SkinLib\SkinMenu.cpp" />
+    <ClCompile Include="SkinLib\SkinMessageBox.cpp" />
+    <ClCompile Include="SkinLib\SkinPictureBox.cpp" />
+    <ClCompile Include="SkinLib\SkinScrollBar.cpp" />
+    <ClCompile Include="SkinLib\SkinStatic.cpp" />
+    <ClCompile Include="SkinLib\SkinTabCtrl.cpp" />
+    <ClCompile Include="SkinLib\SkinToolBar.cpp" />
+    <ClCompile Include="SkinLib\SkinWebBrowser.cpp" />
     <ClCompile Include="zlib1.2.11\adler32.c">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
@@ -307,7 +1072,10 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="ZlibUtil.cpp" />
+    <ClCompile Include="..\..\third-party\sqlite-src-3530100\sqlite3.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">NotUsing</PrecompiledHeader>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="AboutDlg.h" />
@@ -316,14 +1084,18 @@
     <ClInclude Include="BuddyInfoDlg.h" />
     <ClInclude Include="BuddyInfoFloatWnd.h" />
     <ClInclude Include="BuddyListCtrl.h" />
+    <ClInclude Include="BuddyListCtrlEx.h" />
     <ClInclude Include="Buffer.h" />
     <ClInclude Include="CascadeWinManager.h" />
+    <ClInclude Include="ChangePicHead.h" />
     <ClInclude Include="ChangePicHeadDlg.h" />
     <ClInclude Include="ChatDlgCommon.h" />
     <ClInclude Include="ChatTabMgr.h" />
     <ClInclude Include="CheckNetworkStatusTask.h" />
+    <ClInclude Include="ClipboardText.h" />
     <ClInclude Include="ClosePromptDlg.h" />
     <ClInclude Include="CreateNewGroupDlg.h" />
+    <ClInclude Include="CRegisterSkinHyperLink.h" />
     <ClInclude Include="CriticalSection.h" />
     <ClInclude Include="CustomMsgDef.h" />
     <ClInclude Include="DstVersion.h" />
@@ -331,23 +1103,290 @@
     <ClInclude Include="FaceCtrl.h" />
     <ClInclude Include="FaceList.h" />
     <ClInclude Include="FaceSelDlg.h" />
-    <ClInclude Include="FakeData.h" />
     <ClInclude Include="File.h" />
     <ClInclude Include="File2.h" />
     <ClInclude Include="FileTaskThread.h" />
     <ClInclude Include="FileTransferCtrl.h" />
     <ClInclude Include="FindFriendDlg.h" />
+    <ClInclude Include="FlamingoClient.h" />
     <ClInclude Include="FontSelDlg.h" />
     <ClInclude Include="GDIFactory.h" />
     <ClInclude Include="GifImage.h" />
     <ClInclude Include="GroupChatDlg.h" />
     <ClInclude Include="GroupInfoDlg.h" />
+    <ClInclude Include="GroupListCtrl.h" />
+    <ClInclude Include="GroupRoleRules.h" />
     <ClInclude Include="HeartbeatTask.h" />
+    <ClInclude Include="HideWindow.h" />
     <ClInclude Include="IImageOle.h" />
     <ClInclude Include="ImageEx.h" />
     <ClInclude Include="ImageTaskThread.h" />
     <ClInclude Include="IniFile.h" />
     <ClInclude Include="IULog.h" />
+    <ClInclude Include="LoginAccountList.h" />
+    <ClInclude Include="LoginDlg.h" />
+    <ClInclude Include="LoginSettingsDlg.h" />
+    <ClInclude Include="LogonUserInfoDlg.h" />
+    <ClInclude Include="MainDlg.h" />
+    <ClInclude Include="MD5.h" />
+    <ClInclude Include="MD5Core.h" />
+    <ClInclude Include="MD5Sum.h" />
+    <ClInclude Include="MessageLogger.h" />
+    <ClInclude Include="MiniBuffer.h" />
+    <ClInclude Include="MobileStatusDlg.h" />
+    <ClInclude Include="ModifyMarkNameDlg.h" />
+    <ClInclude Include="ModifyPasswordDlg.h" />
+    <ClInclude Include="MsgTipDlg.h" />
+    <ClInclude Include="MultiChatDlg.h" />
+    <ClInclude Include="MultiChatMemberSelectionDlg.h" />
+    <ClInclude Include="NetRecvHandleTask.h" />
+    <ClInclude Include="NetSendTask.h" />
+    <ClInclude Include="Path.h" />
+    <ClInclude Include="PerformanceCounter.h" />
+    <ClInclude Include="PicBarDlg.h" />
+    <ClInclude Include="RecentListCtrl.h" />
+    <ClInclude Include="RecvMsgThread.h" />
+    <ClInclude Include="RegisterDialog.h" />
+    <ClInclude Include="RemoteDesktopDlg.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="Result.h" />
+    <ClInclude Include="RichEditUtil.h" />
+    <ClInclude Include="SendMsgThread.h" />
+    <ClInclude Include="SessChatDlg.h" />
+    <ClInclude Include="SplitterCtrl.h" />
+    <ClInclude Include="SrcVersion.h" />
+    <ClInclude Include="Startup.h" />
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="SystemSettingDlg.h" />
+    <ClInclude Include="TeamDlg.h" />
+    <ClInclude Include="Thread.h" />
+    <ClInclude Include="ThreadPool.h" />
+    <ClInclude Include="Time.h" />
+    <ClInclude Include="TrayIcon.h" />
+    <ClInclude Include="UIText.h" />
+    <ClInclude Include="UpdateDlg.h" />
+    <ClInclude Include="Updater.h" />
+    <ClInclude Include="UserConfig.h" />
+    <ClInclude Include="UserMgr.h" />
+    <ClInclude Include="UserSessionData.h" />
+    <ClInclude Include="UserSnapInfoDlg.h" />
+    <ClInclude Include="Utils.h" />
+    <ClInclude Include="XmlDocument.h" />
+    <ClInclude Include="ZlibUtil.h" />
+    <ClInclude Include="BalloonAnnounce\AnnounceBoxLayout.h" />
+    <ClInclude Include="BalloonAnnounce\AnnounceRow.h" />
+    <ClInclude Include="BalloonAnnounce\BalloonAnnounceBoxWindow.h" />
+    <ClInclude Include="BalloonAuth\AuthBanner.h" />
+    <ClInclude Include="BalloonAuth\AuthButtons.h" />
+    <ClInclude Include="BalloonAuth\AuthInputField.h" />
+    <ClInclude Include="BalloonAuth\BalloonLoginDlg.h" />
+    <ClInclude Include="BalloonAuth\BalloonLoginLayout.h" />
+    <ClInclude Include="BalloonChat\BalloonBuddyChatDlg.h" />
+    <ClInclude Include="BalloonChat\BalloonChatLayout.h" />
+    <ClInclude Include="BalloonChat\BalloonChatMsgFormat.h" />
+    <ClInclude Include="BalloonChat\BalloonGroupChatDlg.h" />
+    <ClInclude Include="BalloonChat\BalloonMultiChatDlg.h" />
+    <ClInclude Include="BalloonChat\BalloonSessChatDlg.h" />
+    <ClInclude Include="BalloonChatWnd\BalloonChatWindow.h" />
+    <ClInclude Include="BalloonChatWnd\BalloonGroupChatWindow.h" />
+    <ClInclude Include="BalloonChatWnd\ChatAvatarResolve.h" />
+    <ClInclude Include="BalloonChatWnd\ChatBannerLabel.h" />
+    <ClInclude Include="BalloonChatWnd\ChatBubble.h" />
+    <ClInclude Include="BalloonChatWnd\ChatFaceTag.h" />
+    <ClInclude Include="BalloonChatWnd\ChatFileAction.h" />
+    <ClInclude Include="BalloonChatWnd\ChatFileLocation.h" />
+    <ClInclude Include="BalloonChatWnd\ChatFileStateModel.h" />
+    <ClInclude Include="BalloonChatWnd\ChatFileVisual.h" />
+    <ClInclude Include="BalloonChatWnd\ChatFontUtil.h" />
+    <ClInclude Include="BalloonChatWnd\ChatHeaderInfo.h" />
+    <ClInclude Include="BalloonChatWnd\ChatHistoryPaging.h" />
+    <ClInclude Include="BalloonChatWnd\ChatIconButton.h" />
+    <ClInclude Include="BalloonChatWnd\ChatIcons.h" />
+    <ClInclude Include="BalloonChatWnd\ChatImageCache.h" />
+    <ClInclude Include="BalloonChatWnd\ChatImageSaveAs.h" />
+    <ClInclude Include="BalloonChatWnd\ChatInputKeyFilter.h" />
+    <ClInclude Include="BalloonChatWnd\ChatInputScrollBar.h" />
+    <ClInclude Include="BalloonChatWnd\ChatMessageList.h" />
+    <ClInclude Include="BalloonChatWnd\ChatMessageMenu.h" />
+    <ClInclude Include="BalloonChatWnd\ChatMockData.h" />
+    <ClInclude Include="BalloonChatWnd\ChatQuoteModel.h" />
+    <ClInclude Include="BalloonChatWnd\ChatRichContentSplit.h" />
+    <ClInclude Include="BalloonChatWnd\ChatRootPanel.h" />
+    <ClInclude Include="BalloonChatWnd\ChatSendButton.h" />
+    <ClInclude Include="BalloonChatWnd\ChatSendMode.h" />
+    <ClInclude Include="BalloonChatWnd\ChatTextSelection.h" />
+    <ClInclude Include="BalloonChatWnd\ChatTitleIcon.h" />
+    <ClInclude Include="BalloonChatWnd\ChatWindowLayout.h" />
+    <ClInclude Include="BalloonChatWnd\EmojiPickerPopup.h" />
+    <ClInclude Include="BalloonChatWnd\FaceImagePickerPopup.h" />
+    <ClInclude Include="BalloonChatWnd\FileBubbleFormat.h" />
+    <ClInclude Include="BalloonChatWnd\FontSettingPopup.h" />
+    <ClInclude Include="BalloonChatWnd\GroupAtDropdown.h" />
+    <ClInclude Include="BalloonChatWnd\GroupChatHeaderInfo.h" />
+    <ClInclude Include="BalloonChatWnd\GroupChatWindowLayout.h" />
+    <ClInclude Include="BalloonChatWnd\GroupFileItem.h" />
+    <ClInclude Include="BalloonChatWnd\GroupFileLibrary.h" />
+    <ClInclude Include="BalloonChatWnd\GroupFileList.h" />
+    <ClInclude Include="BalloonChatWnd\GroupFileUploadTracker.h" />
+    <ClInclude Include="BalloonChatWnd\GroupMemberItem.h" />
+    <ClInclude Include="BalloonChatWnd\GroupMemberList.h" />
+    <ClInclude Include="BalloonChatWnd\GroupMemberOrder.h" />
+    <ClInclude Include="BalloonChatWnd\GroupMentionButton.h" />
+    <ClInclude Include="BalloonChatWnd\GroupMentionMenu.h" />
+    <ClInclude Include="BalloonChatWnd\GroupMentionModel.h" />
+    <ClInclude Include="BalloonChatWnd\GroupSideTab.h" />
+    <ClInclude Include="BalloonChatWnd\ShakeRateLimiter.h" />
+    <ClInclude Include="BalloonChatWnd\SideTabText.h" />
+    <ClInclude Include="BalloonChatWnd\TypingIndicator.h" />
+    <ClInclude Include="BalloonContact\BalloonContactWindow.h" />
+    <ClInclude Include="BalloonContact\ContactIcons.h" />
+    <ClInclude Include="BalloonContact\ContactLayout.h" />
+    <ClInclude Include="BalloonContact\ContactModel.h" />
+    <ClInclude Include="BalloonContact\TagChip.h" />
+    <ClInclude Include="BalloonGroupManage\AnnouncePopupPolicy.h" />
+    <ClInclude Include="BalloonGroupManage\BalloonAnnouncePopupDlg.h" />
+    <ClInclude Include="BalloonGroupManage\BalloonGroupManageWindow.h" />
+    <ClInclude Include="BalloonGroupManage\GroupAvatarDlgRequest.h" />
+    <ClInclude Include="BalloonGroupManage\GroupManageButton.h" />
+    <ClInclude Include="BalloonGroupManage\GroupManageIcons.h" />
+    <ClInclude Include="BalloonGroupManage\GroupManageLayout.h" />
+    <ClInclude Include="BalloonGroupManage\GroupManageMapping.h" />
+    <ClInclude Include="BalloonGroupManage\GroupManageModel.h" />
+    <ClInclude Include="BalloonGroupManage\GroupManageNavItem.h" />
+    <ClInclude Include="BalloonGroupManage\GroupManagePaint.h" />
+    <ClInclude Include="BalloonGroupManage\MemberPickerRequest.h" />
+    <ClInclude Include="BalloonHistory\AnnounceStore.h" />
+    <ClInclude Include="BalloonHistory\BalloonHistoryWindow.h" />
+    <ClInclude Include="BalloonHistory\FileLocalStore.h" />
+    <ClInclude Include="BalloonHistory\HistoryHighlightLabel.h" />
+    <ClInclude Include="BalloonHistory\HistoryModel.h" />
+    <ClInclude Include="BalloonHistory\HistoryContentView.h" />
+    <ClInclude Include="BalloonHistory\HistoryRowMenu.h" />
+    <ClInclude Include="ClipboardImage.h" />
+    <ClInclude Include="BalloonHistory\HistoryRow.h" />
+    <ClInclude Include="BalloonHistory\HistoryView.h" />
+    <ClInclude Include="BalloonHistory\HistoryWindowLayout.h" />
+    <ClInclude Include="BalloonHistory\V2MsgQuery.h" />
+    <ClInclude Include="BalloonHistory\V2MsgStore.h" />
+    <ClInclude Include="BalloonImageViewer\BalloonImageViewerWindow.h" />
+    <ClInclude Include="BalloonImageViewer\ImageCanvas.h" />
+    <ClInclude Include="BalloonImageViewer\ImageViewerGeometry.h" />
+    <ClInclude Include="BalloonImageViewer\ImageViewerToolbar.h" />
+    <ClInclude Include="BalloonMain\AboutDlgModel.h" />
+    <ClInclude Include="BalloonMain\AvatarGray.h" />
+    <ClInclude Include="BalloonMain\AvatarImageUtil.h" />
+    <ClInclude Include="BalloonMain\AvatarPalette.h" />
+    <ClInclude Include="BalloonMain\AvatarPickerTile.h" />
+    <ClInclude Include="BalloonMain\AvatarSpec.h" />
+    <ClInclude Include="BalloonMain\BadgeRender.h" />
+    <ClInclude Include="BalloonMain\BalloonAboutDlg.h" />
+    <ClInclude Include="BalloonMain\BalloonChangePwdDlg.h" />
+    <ClInclude Include="BalloonMain\BalloonChangePwdValidate.h" />
+    <ClInclude Include="BalloonMain\BalloonClosePromptDlg.h" />
+    <ClInclude Include="BalloonMain\BalloonContactTreeAdapter.h" />
+    <ClInclude Include="BalloonMain\BalloonGroupInfoDlg.h" />
+    <ClInclude Include="BalloonMain\BalloonGroupInfoLayout.h" />
+    <ClInclude Include="BalloonMain\BalloonKickoutDlg.h" />
+    <ClInclude Include="BalloonMain\BalloonMainLayout.h" />
+    <ClInclude Include="BalloonMain\BalloonMainPanel.h" />
+    <ClInclude Include="BalloonMain\BalloonModifyAvatarDlg.h" />
+    <ClInclude Include="BalloonMain\BalloonProfileDlg.h" />
+    <ClInclude Include="BalloonMain\BalloonProfileLayout.h" />
+    <ClInclude Include="BalloonMain\ClosePromptDecision.h" />
+    <ClInclude Include="BalloonMain\ContactRemarkModel.h" />
+    <ClInclude Include="BalloonMain\ContactsOrgStats.h" />
+    <ClInclude Include="BalloonMain\ConversationListOps.h" />
+    <ClInclude Include="BalloonMain\CreateGroupDlg.h" />
+    <ClInclude Include="BalloonMain\FavoritesModel.h" />
+    <ClInclude Include="BalloonMain\GroupRowText.h" />
+    <ClInclude Include="BalloonMain\KickoutNotice.h" />
+    <ClInclude Include="BalloonMain\MainPanelAvatar.h" />
+    <ClInclude Include="BalloonMain\MainPanelButtons.h" />
+    <ClInclude Include="BalloonMain\MainPanelContactMenu.h" />
+    <ClInclude Include="BalloonMain\MainPanelConversationMenu.h" />
+    <ClInclude Include="BalloonMain\MainPanelHeader.h" />
+    <ClInclude Include="BalloonMain\MainPanelIcons.h" />
+    <ClInclude Include="BalloonMain\MainPanelListItem.h" />
+    <ClInclude Include="BalloonMain\MainPanelMenuIcons.h" />
+    <ClInclude Include="BalloonMain\MainPanelMockData.h" />
+    <ClInclude Include="BalloonMain\MainPanelScrollView.h" />
+    <ClInclude Include="BalloonMain\MainPanelSectionHeader.h" />
+    <ClInclude Include="BalloonMain\MainPanelStatusMenu.h" />
+    <ClInclude Include="BalloonMain\MainPanelSystemMenu.h" />
+    <ClInclude Include="BalloonMain\MainPanelTab.h" />
+    <ClInclude Include="BalloonMain\MainPanelTrayMenu.h" />
+    <ClInclude Include="BalloonMain\MainPanelTreeView.h" />
+    <ClInclude Include="BalloonMain\MainPanelUserData.h" />
+    <ClInclude Include="BalloonMain\MemberPickerRow.h" />
+    <ClInclude Include="BalloonMain\MemberPickerTreeModel.h" />
+    <ClInclude Include="BalloonMain\MemberPickerTreeView.h" />
+    <ClInclude Include="BalloonMain\NotificationSound.h" />
+    <ClInclude Include="BalloonMain\OnlineCapability.h" />
+    <ClInclude Include="BalloonMain\OverlayScrollBarGeometry.h" />
+    <ClInclude Include="BalloonMain\PanelDragZone.h" />
+    <ClInclude Include="BalloonMain\PopupMenuPlacement.h" />
+    <ClInclude Include="BalloonMain\SignatureEditModel.h" />
+    <ClInclude Include="BalloonMain\SignatureEditPopup.h" />
+    <ClInclude Include="BalloonMain\TitleBarIcon.h" />
+    <ClInclude Include="BalloonMain\TrayFlashController.h" />
+    <ClInclude Include="BalloonMain\TrayMsgTipPopup.h" />
+    <ClInclude Include="BalloonNetSettings\BalloonNetSettingsWindow.h" />
+    <ClInclude Include="BalloonNetSettings\NetServerCard.h" />
+    <ClInclude Include="BalloonNetSettings\NetSettingsLayout.h" />
+    <ClInclude Include="BalloonNetSettings\NetSettingsModel.h" />
+    <ClInclude Include="BalloonProfile\BalloonProfileWindow.h" />
+    <ClInclude Include="BalloonProfile\ProfileLayout.h" />
+    <ClInclude Include="BalloonProfile\ProfileModel.h" />
+    <ClInclude Include="BalloonRegister\BalloonRegisterWindow.h" />
+    <ClInclude Include="BalloonRegister\RegisterIcons.h" />
+    <ClInclude Include="BalloonRegister\RegisterLayout.h" />
+    <ClInclude Include="BalloonRegister\RegisterModel.h" />
+    <ClInclude Include="BalloonRemoteDesktop\BalloonRemoteDesktopDlg.h" />
+    <ClInclude Include="BalloonRemoteDesktop\RdControlledBar.h" />
+    <ClInclude Include="BalloonRemoteDesktop\RdViewerToolbar.h" />
+    <ClInclude Include="BalloonRemoteDesktop\RdViewerWindow.h" />
+    <ClInclude Include="BalloonScreenshot\AnnotationModel.h" />
+    <ClInclude Include="BalloonScreenshot\CaptureCanvas.h" />
+    <ClInclude Include="BalloonScreenshot\ScreenCaptureOverlay.h" />
+    <ClInclude Include="BalloonScreenshot\ScreenshotGeometry.h" />
+    <ClInclude Include="BalloonScreenshot\ScreenshotToolbar.h" />
+    <ClInclude Include="BalloonSearch\ContactMatch.h" />
+    <ClInclude Include="BalloonSearch\PinyinFull.h" />
+    <ClInclude Include="BalloonSearch\PinyinInitials.h" />
+    <ClInclude Include="BalloonSearch\PinyinTable.inc" />
+    <ClInclude Include="BalloonSearch\SearchDropdown.h" />
+    <ClInclude Include="BalloonSearch\SearchFilterTab.h" />
+    <ClInclude Include="BalloonSettings\BalloonSystemSettingDlg.h" />
+    <ClInclude Include="BalloonSettings\SettingsBinding.h" />
+    <ClInclude Include="BalloonSettings\SettingsNavList.h" />
+    <ClInclude Include="BalloonSettings\SettingsPageModel.h" />
+    <ClInclude Include="Call\AudioLoopback.h" />
+    <ClInclude Include="Call\AudioPcmUtils.h" />
+    <ClInclude Include="Call\AvSyncScheduler.h" />
+    <ClInclude Include="Call\BalloonCallDlg.h" />
+    <ClInclude Include="Call\CallActionBarModel.h" />
+    <ClInclude Include="Call\CallAudioEngine.h" />
+    <ClInclude Include="Call\CallDlgLayout.h" />
+    <ClInclude Include="Call\CallMediaFraming.h" />
+    <ClInclude Include="Call\CallMediaSession.h" />
+    <ClInclude Include="Call\CallRelayClient.h" />
+    <ClInclude Include="Call\CallRelaySelfTest.h" />
+    <ClInclude Include="Call\CallRelayTestFrame.h" />
+    <ClInclude Include="Call\CallVideoCanvas.h" />
+    <ClInclude Include="Call\CallVideoDisplaySink.h" />
+    <ClInclude Include="Call\CallVideoEngine.h" />
+    <ClInclude Include="Call\CallVideoUiDebug.h" />
+    <ClInclude Include="Call\CameraDisplayTest.h" />
+    <ClInclude Include="Call\CameraPreviewDebug.h" />
+    <ClInclude Include="Call\H264SelfTest.h" />
+    <ClInclude Include="Call\MfCameraCapture.h" />
+    <ClInclude Include="Call\MfH264Codec.h" />
+    <ClInclude Include="Call\OpusAudioCodec.h" />
+    <ClInclude Include="Call\SpeexAudioProcessor.h" />
+    <ClInclude Include="Call\SpeexResampler.h" />
+    <ClInclude Include="Call\VideoFrameConvert.h" />
+    <ClInclude Include="Call\VideoLoopbackDebug.h" />
+    <ClInclude Include="Call\WasapiAudioIo.h" />
     <ClInclude Include="jsoncpp-1.9.0\allocator.h" />
     <ClInclude Include="jsoncpp-1.9.0\assertions.h" />
     <ClInclude Include="jsoncpp-1.9.0\autolink.h" />
@@ -360,41 +1399,58 @@
     <ClInclude Include="jsoncpp-1.9.0\value.h" />
     <ClInclude Include="jsoncpp-1.9.0\version.h" />
     <ClInclude Include="jsoncpp-1.9.0\writer.h" />
-    <ClInclude Include="LoginAccountList.h" />
-    <ClInclude Include="LoginDlg.h" />
-    <ClInclude Include="LoginSettingsDlg.h" />
-    <ClInclude Include="LogonUserInfoDlg.h" />
-    <ClInclude Include="MainDlg.h" />
-    <ClInclude Include="MD5.h" />
-    <ClInclude Include="MD5Sum.h" />
-    <ClInclude Include="MessageLogger.h" />
-    <ClInclude Include="MiniBuffer.h" />
-    <ClInclude Include="MobileStatusDlg.h" />
-    <ClInclude Include="ModifyMarkNameDlg.h" />
-    <ClInclude Include="ModifyPasswordDlg.h" />
-    <ClInclude Include="MsgTipDlg.h" />
-    <ClInclude Include="MultiChatDlg.h" />
-    <ClInclude Include="MultiChatMemberSelectionDlg.h" />
+    <ClInclude Include="net\AccountProtocolClient.h" />
+    <ClInclude Include="net\AnnounceProtocolClient.h" />
+    <ClInclude Include="net\CallProtocolClient.h" />
+    <ClInclude Include="net\ChatTransferCancelRegistry.h" />
+    <ClInclude Include="net\ContactsProtocolClient.h" />
+    <ClInclude Include="net\ConversationsProtocolClient.h" />
+    <ClInclude Include="net\FavoriteProtocolClient.h" />
     <ClInclude Include="net\FileMsg.h" />
+    <ClInclude Include="net\FileProtocolClient.h" />
+    <ClInclude Include="net\FileStreamTransfer.h" />
+    <ClInclude Include="net\FileTransfer.h" />
+    <ClInclude Include="net\FrameCodec.h" />
+    <ClInclude Include="net\FriendProtocolClient.h" />
+    <ClInclude Include="net\GroupFileProtocolClient.h" />
+    <ClInclude Include="net\GroupProtocolClient.h" />
+    <ClInclude Include="net\GroupTransferQueue.h" />
+    <ClInclude Include="net\ImageDownloadDriver.h" />
+    <ClInclude Include="net\ImageTransfer.h" />
+    <ClInclude Include="net\ImageUploadDriver.h" />
     <ClInclude Include="net\IUProtocolData.h" />
     <ClInclude Include="net\IUSocket.h" />
+    <ClInclude Include="net\LoginProtocolClient.h" />
+    <ClInclude Include="net\MessageProtocolClient.h" />
     <ClInclude Include="net\Msg.h" />
+    <ClInclude Include="net\ProfileProtocolClient.h" />
+    <ClInclude Include="net\Protocol.h" />
     <ClInclude Include="net\ProtocolStream.h" />
-    <ClInclude Include="Path.h" />
-    <ClInclude Include="PerformanceCounter.h" />
-    <ClInclude Include="PicBarDlg.h" />
-    <ClInclude Include="RecentListCtrl.h" />
-    <ClInclude Include="RecvMsgThread.h" />
-    <ClInclude Include="RegisterDialog.h" />
-    <ClInclude Include="RemoteDesktopDlg.h" />
+    <ClInclude Include="net\RegisterProtocolClient.h" />
+    <ClInclude Include="net\RemoteDesktopProtocolClient.h" />
+    <ClInclude Include="net\Sha256.h" />
+    <ClInclude Include="net\TransferOwnerRegistry.h" />
+    <ClInclude Include="RemoteDesktop\CaptureFallbackPolicy.h" />
     <ClInclude Include="RemoteDesktop\CursorInfo.h" />
+    <ClInclude Include="RemoteDesktop\DxgiScreenCapturer.h" />
+    <ClInclude Include="RemoteDesktop\GdiScreenCapturer.h" />
+    <ClInclude Include="RemoteDesktop\IScreenCapturer.h" />
+    <ClInclude Include="RemoteDesktop\RdCaptureTypes.h" />
+    <ClInclude Include="RemoteDesktop\RdControlledStreamer.h" />
+    <ClInclude Include="RemoteDesktop\RdEngineDef.h" />
+    <ClInclude Include="RemoteDesktop\RdInputDef.h" />
+    <ClInclude Include="RemoteDesktop\RdInputEncoder.h" />
+    <ClInclude Include="RemoteDesktop\RdInputInjector.h" />
+    <ClInclude Include="RemoteDesktop\RdRelayClient.h" />
+    <ClInclude Include="RemoteDesktop\RdRelayFraming.h" />
+    <ClInclude Include="RemoteDesktop\RdRelaySelfTest.h" />
+    <ClInclude Include="RemoteDesktop\RdScreenCapturer.h" />
+    <ClInclude Include="RemoteDesktop\RdScreenDecoder.h" />
+    <ClInclude Include="RemoteDesktop\RdSelfTestWindow.h" />
+    <ClInclude Include="RemoteDesktop\ScreenFrameEncoder.h" />
     <ClInclude Include="RemoteDesktop\ScreenManager.h" />
     <ClInclude Include="RemoteDesktop\ScreenSpy.h" />
     <ClInclude Include="RemoteDesktop\until.h" />
-    <ClInclude Include="resource.h" />
-    <ClInclude Include="RichEditUtil.h" />
-    <ClInclude Include="SendMsgThread.h" />
-    <ClInclude Include="SessChatDlg.h" />
     <ClInclude Include="SkinLib\SkinButton.h" />
     <ClInclude Include="SkinLib\SkinComboBox.h" />
     <ClInclude Include="SkinLib\SkinDialog.h" />
@@ -412,27 +1468,29 @@
     <ClInclude Include="SkinLib\SkinTabCtrl.h" />
     <ClInclude Include="SkinLib\SkinToolBar.h" />
     <ClInclude Include="SkinLib\SkinWebBrowser.h" />
-    <ClInclude Include="SplitterCtrl.h" />
-    <ClInclude Include="SQLite 3.7.17\sqlite3.h" />
-    <ClInclude Include="SrcVersion.h" />
-    <ClInclude Include="Startup.h" />
-    <ClInclude Include="stdafx.h" />
-    <ClInclude Include="SystemSettingDlg.h" />
-    <ClInclude Include="TeamDlg.h" />
-    <ClInclude Include="Thread.h" />
-    <ClInclude Include="ThreadPool.h" />
-    <ClInclude Include="Time.h" />
-    <ClInclude Include="TrayIcon.h" />
-    <ClInclude Include="UIText.h" />
-    <ClInclude Include="UpdateDlg.h" />
-    <ClInclude Include="Updater.h" />
-    <ClInclude Include="UserConfig.h" />
-    <ClInclude Include="UserSessionData.h" />
-    <ClInclude Include="UserSnapInfoDlg.h" />
-    <ClInclude Include="FlamingoClient.h" />
-    <ClInclude Include="UserMgr.h" />
-    <ClInclude Include="Utils.h" />
-    <ClInclude Include="XmlDocument.h" />
+    <ClInclude Include="wtl9.0\atlapp.h" />
+    <ClInclude Include="wtl9.0\atlcrack.h" />
+    <ClInclude Include="wtl9.0\atlctrls.h" />
+    <ClInclude Include="wtl9.0\atlctrlw.h" />
+    <ClInclude Include="wtl9.0\atlctrlx.h" />
+    <ClInclude Include="wtl9.0\atlddx.h" />
+    <ClInclude Include="wtl9.0\atldlgs.h" />
+    <ClInclude Include="wtl9.0\atldwm.h" />
+    <ClInclude Include="wtl9.0\atlfind.h" />
+    <ClInclude Include="wtl9.0\atlframe.h" />
+    <ClInclude Include="wtl9.0\atlgdi.h" />
+    <ClInclude Include="wtl9.0\atlmisc.h" />
+    <ClInclude Include="wtl9.0\atlprint.h" />
+    <ClInclude Include="wtl9.0\atlres.h" />
+    <ClInclude Include="wtl9.0\atlresce.h" />
+    <ClInclude Include="wtl9.0\atlribbon.h" />
+    <ClInclude Include="wtl9.0\atlrx.h" />
+    <ClInclude Include="wtl9.0\atlscrl.h" />
+    <ClInclude Include="wtl9.0\atlsplit.h" />
+    <ClInclude Include="wtl9.0\atltheme.h" />
+    <ClInclude Include="wtl9.0\atluser.h" />
+    <ClInclude Include="wtl9.0\atlwince.h" />
+    <ClInclude Include="wtl9.0\atlwinx.h" />
     <ClInclude Include="zlib1.2.11\crc32.h" />
     <ClInclude Include="zlib1.2.11\deflate.h" />
     <ClInclude Include="zlib1.2.11\gzguts.h" />
@@ -444,28 +1502,20 @@
     <ClInclude Include="zlib1.2.11\zconf.h" />
     <ClInclude Include="zlib1.2.11\zlib.h" />
     <ClInclude Include="zlib1.2.11\zutil.h" />
-    <ClInclude Include="ZlibUtil.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <Image Include="res\100.ico" />
-    <Image Include="res\BCF_Title16.ico" />
-    <Image Include="res\BCF_Title32.ico" />
-    <Image Include="res\Group16.ico" />
-    <Image Include="res\Group32.ico" />
-    <Image Include="res\icon1.ico" />
-    <Image Include="res\Multi16.ico" />
-    <Image Include="res\Multi32.ico" />
-    <Image Include="res\sys.ico" />
-    <Image Include="res\flamingo.ico" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="flamingo.rc" />
   </ItemGroup>
   <ItemGroup>
-    <Text Include="zlib1.2.11\文件概览.txt" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="jsoncpp-1.9.0\json_valueiterator.inl" />
+    <ProjectReference Include="..\balloonui\balloonui\balloonui_static.vcxproj">
+      <Project>{e5f9b2a1-6c84-4de3-9c75-3b8a4d2e7f60}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\third-party\opus-1.5.2\opus_static.vcxproj">
+      <Project>{b1e2c3d4-0a1b-4c2d-9e3f-0a1b2c3d4e5f}</Project>
+    </ProjectReference>
+    <ProjectReference Include="..\..\third-party\speexdsp-1.2.1\speexdsp_static.vcxproj">
+      <Project>{c2d3e4f5-1b2c-4d3e-af40-1b2c3d4e5f60}</Project>
+    </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

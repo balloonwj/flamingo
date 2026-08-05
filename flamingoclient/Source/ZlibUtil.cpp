@@ -1,5 +1,5 @@
-/*
- *  Ñ¹Ëõ¹¤¾ßÀà£¬ZlibUtil.cpp
+ï»¿/*
+ *  å‹ç¼©å·¥å…·ç±»ï¼ŒZlibUtil.cpp
  *  zhangyl 2018.03.09
  */
 #include "stdafx.h"
@@ -7,7 +7,7 @@
 #include <string.h>
 #include "ZlibUtil.h"
 
-//×î´óÖ§³ÖÑ¹Ëõ10M
+//æœ€å¤§æ”¯æŒå‹ç¼©10M
 #define MAX_COMPRESS_BUF_SIZE 10*1024*1024
 
 bool ZlibUtil::CompressBuf(const char* pSrcBuf, size_t nSrcBufLength, char* pDestBuf, size_t& nDestBufLength)
@@ -16,11 +16,11 @@ bool ZlibUtil::CompressBuf(const char* pSrcBuf, size_t nSrcBufLength, char* pDes
     if (pSrcBuf == NULL || nSrcBufLength == 0 || nSrcBufLength > MAX_COMPRESS_BUF_SIZE || pDestBuf == NULL)
         return false;
 
-    //¼ÆËã»º³åÇø´óĞ¡£¬²¢ÎªÆä·ÖÅäÄÚ´æ
-    //Ñ¹ËõºóµÄ³¤¶ÈÊÇ²»»á³¬¹ınDestBufLengthµÄ
+    //è®¡ç®—ç¼“å†²åŒºå¤§å°ï¼Œå¹¶ä¸ºå…¶åˆ†é…å†…å­˜
+    //å‹ç¼©åçš„é•¿åº¦æ˜¯ä¸ä¼šè¶…è¿‡nDestBufLengthçš„
     nDestBufLength = compressBound(nSrcBufLength);
 
-    //Ñ¹Ëõ
+    //å‹ç¼©
     int ret = compress((Bytef*)pDestBuf, (uLongf*)&nDestBufLength, (const Bytef*)pSrcBuf, nSrcBufLength);
     if (ret != Z_OK)
         return false;
@@ -44,7 +44,7 @@ bool ZlibUtil::CompressBuf(const std::string& strSrcBuf, std::string& strDestBuf
     char* pDestBuf = new char[nDestBufLength];
     memset(pDestBuf, 0, nDestBufLength * sizeof(char));
 
-    //Ñ¹Ëõ
+    //å‹ç¼©
     int ret = compress((Bytef*)pDestBuf, (uLongf*)&nDestBufLength, (const Bytef*)strSrcBuf.c_str(), nSrcLength);
     if (ret != Z_OK)
     {
@@ -63,7 +63,7 @@ bool ZlibUtil::UncompressBuf(const std::string& strSrcBuf, std::string& strDestB
     char* pDestBuf = new char[nDestBufLength];
     memset(pDestBuf, 0, nDestBufLength * sizeof(char));
     int nPrevDestBufLength = nDestBufLength;
-    //½âÑ¹Ëõ
+    //è§£å‹ç¼©
     int ret = uncompress((Bytef*)pDestBuf, (uLongf*)&nDestBufLength, (const Bytef*)strSrcBuf.c_str(), strSrcBuf.length());
     if (ret != Z_OK)
     {

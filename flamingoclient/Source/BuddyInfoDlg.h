@@ -1,4 +1,4 @@
-#pragma once
+ï»¿#pragma once
 
 #include "resource.h"
 #include "SkinLib/SkinLib.h"
@@ -31,10 +31,10 @@ private:
 	BOOL OnInitDialog(CWindow wndFocus, LPARAM lInitParam);
 	void OnClose();
 	void OnDestroy();
-	void OnBtnOK(UINT uNotifyCode, int nID, CWindow wndCtl);	// ¡°¸üĞÂ¡±°´Å¥
+	void OnBtnOK(UINT uNotifyCode, int nID, CWindow wndCtl);	// â€œæ›´æ–°â€æŒ‰é’®
 
-	BOOL Init();		// ³õÊ¼»¯
-	void UnInit();		// ·´³õÊ¼»¯
+	BOOL Init();		// åˆå§‹åŒ–
+	void UnInit();		// ååˆå§‹åŒ–
 
 public:
 	CFlamingoClient*		m_lpFMGClient;

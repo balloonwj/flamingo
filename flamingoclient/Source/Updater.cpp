@@ -1,4 +1,4 @@
-#include "stdafx.h"
+ï»¿#include "stdafx.h"
 #include "Updater.h"
 #include "UserSessionData.h"
 #include "File2.h"
@@ -23,21 +23,21 @@ BOOL Updater::IsNeedUpdate()
 	TCHAR szLocalVersionFile[MAX_PATH] = {0};
 	_tcscpy_s(szLocalVersionFile, MAX_PATH, g_szHomePath);
 	_tcscat_s(szLocalVersionFile, MAX_PATH, _T("update"));
-	//Èç¹û³ÌĞòÄ¿Â¼ÏÂUpdateÎÄ¼ş¼Ğ²»´æÔÚÔòÏÈ´´½¨Ö®
-	//»òÕß²»´æÔÚ£¬UpdateÎÄ¼ş¼Ğ´´½¨²»³É¹¦£¬ÏÂÃæµÄ°æ±¾ÎÄ¼şÒ²»áÏÂÔØ²»³É¹¦
+	//å¦‚æœç¨‹åºç›®å½•ä¸‹Updateæ–‡ä»¶å¤¹ä¸å­˜åœ¨åˆ™å…ˆåˆ›å»ºä¹‹
+	//æˆ–è€…ä¸å­˜åœ¨ï¼ŒUpdateæ–‡ä»¶å¤¹åˆ›å»ºä¸æˆåŠŸï¼Œä¸‹é¢çš„ç‰ˆæœ¬æ–‡ä»¶ä¹Ÿä¼šä¸‹è½½ä¸æˆåŠŸ
 	if(!::PathFileExists(szLocalVersionFile) && !::CreateDirectory(szLocalVersionFile, NULL))
 		return FALSE;
 	
 	_tcscat_s(szLocalVersionFile, MAX_PATH, _T("\\update2.version"));
-	//¼ì²â±¾µØ°æ±¾ÎÄ¼şÊÇ·ñ´æÔÚ£¬²»´æÔÚ£¬Ôò´Ó·şÎñÆ÷ÏÂÔØ
+	//æ£€æµ‹æœ¬åœ°ç‰ˆæœ¬æ–‡ä»¶æ˜¯å¦å­˜åœ¨ï¼Œä¸å­˜åœ¨ï¼Œåˆ™ä»æœåŠ¡å™¨ä¸‹è½½
 	if(!::PathFileExists(szLocalVersionFile))
 	{	
-		//ÏÂÔØÊ§°ÜÒ²²»Éı¼¶
+		//ä¸‹è½½å¤±è´¥ä¹Ÿä¸å‡çº§
         if (!m_pFileTask->DownloadFileSynchronously("update2.version", szLocalVersionFile, FALSE))
 			return FALSE;
 	}
 	
-	//Èç¹û±¾µØ°æ±¾ÎÄ¼ş´æÔÚ
+	//å¦‚æœæœ¬åœ°ç‰ˆæœ¬æ–‡ä»¶å­˜åœ¨
 	CFile file;
 	if(!file.Open(szLocalVersionFile, FALSE))
 		return FALSE;
@@ -54,14 +54,14 @@ BOOL Updater::IsNeedUpdate()
 
 	file.Close();
 
-	//´Ó·şÎñÆ÷ÏÂÔØĞ£×¼°æ±¾ÎÄ¼ş
+	//ä»æœåŠ¡å™¨ä¸‹è½½æ ¡å‡†ç‰ˆæœ¬æ–‡ä»¶
 	TCHAR szCorrectionVersionFile[MAX_PATH] = {0};
 	_tcscpy_s(szCorrectionVersionFile, MAX_PATH, g_szHomePath);
 	_tcscat_s(szCorrectionVersionFile, MAX_PATH, _T("update\\update.version"));
 	if(!m_pFileTask->DownloadFileSynchronously("update.version", szCorrectionVersionFile, TRUE))
 		return FALSE;
 
-	//¶ÁÈ¡·şÎñÆ÷°æ±¾ÎÄ¼şĞÅÏ¢
+	//è¯»å–æœåŠ¡å™¨ç‰ˆæœ¬æ–‡ä»¶ä¿¡æ¯
 	if(!file.Open(szCorrectionVersionFile, FALSE))
 		return FALSE;
 
@@ -78,7 +78,7 @@ BOOL Updater::IsNeedUpdate()
 	file.Close();
 
 	
-	//·şÎñÆ÷ÉÏ°æ±¾´óÓÚ±¾µØ°æ±¾ĞèÒªÉı¼¶
+	//æœåŠ¡å™¨ä¸Šç‰ˆæœ¬å¤§äºæœ¬åœ°ç‰ˆæœ¬éœ€è¦å‡çº§
 	if(strCorrection <= strLocal)
 		return FALSE;
 

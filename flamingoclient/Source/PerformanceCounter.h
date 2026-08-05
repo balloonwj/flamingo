@@ -1,5 +1,5 @@
-/**
- * ĞÔÄÜ¼ÆÊıÆ÷£¬Í³¼ÆÒ»¶Î´úÂëÖ´ĞĞµÄºÄÊ±£¬²¢´òÓ¡³öÀ´,PerformanceCounter.h
+ï»¿/**
+ * æ€§èƒ½è®¡æ•°å™¨ï¼Œç»Ÿè®¡ä¸€æ®µä»£ç æ‰§è¡Œçš„è€—æ—¶ï¼Œå¹¶æ‰“å°å‡ºæ¥,PerformanceCounter.h
  * zhangyl 2017.07.27
  */
 #ifndef __PERMANCE_COUNTER_H__
@@ -22,8 +22,8 @@ public:
     static bool Init(bool bToFile, PCTSTR pszLogFileName);
     static void Uninit();
 
-    //Êä³öÏß³ÌIDºÅºÍËùÔÚº¯ÊıÇ©Ãû¡¢ĞĞºÅ
-    static bool Begin(PCSTR pszFunctionSig, int nLineNo);		//×¢Òâ:pszFunctionSig²ÎÊıÎªAnsic°æ±¾
+    //è¾“å‡ºçº¿ç¨‹IDå·å’Œæ‰€åœ¨å‡½æ•°ç­¾åã€è¡Œå·
+    static bool Begin(PCSTR pszFunctionSig, int nLineNo);		//æ³¨æ„:pszFunctionSigå‚æ•°ä¸ºAnsicç‰ˆæœ¬
     static bool End(PCSTR pszFunctionSig, int nLineNo);
 
 private:
@@ -36,7 +36,7 @@ private:
     static void GetTime(char* pszTime, int nTimeStrLength);
 
 private:
-    static bool		        m_bToFile;				//ÈÕÖ¾Ğ´ÈëÎÄ¼ş»¹ÊÇĞ´µ½¿ØÖÆÌ¨  
+    static bool		        m_bToFile;				//æ—¥å¿—å†™å…¥æ–‡ä»¶è¿˜æ˜¯å†™åˆ°æ§åˆ¶å°  
     static HANDLE	        m_hPerformanceFile;
     static LARGE_INTEGER    m_liFreq;
     static LARGE_INTEGER    m_liBegin;
