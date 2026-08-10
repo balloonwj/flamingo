@@ -40,15 +40,7 @@ public:
 	BOOL IsNeedUpdateSessHeadPic(UINT nUTalkNum);		// 判断是否需要更新群成员头像
 
 	BOOL IsSelf(PCTSTR pszAccountName);
-	
-	
-	BOOL IsFriend(UINT uAccountID);						//指定账号ID是否是好友
-	BOOL IsFriend(PCTSTR pszAccountName);				//指定账号名是否是好友
 
-	BOOL AddFriend(UINT uAccountID, PCTSTR pszAccountName, PCTSTR pszNickName);
-	BOOL DeleteFriend(UINT uAccountID);
-
-	
 	tstring GetAccountName(UINT uAccountID) const;			//通过内部ID获取账户名
 	void	SetAccountName(UINT uAccountID, PCTSTR pszAccountName);
 
@@ -88,16 +80,6 @@ public:
 	void ClearRecentList();								//清空最近联系人
 	BOOL DeleteRecentItem(UINT uAccountID);				//删除指定好友会话
 
-	BOOL LoadTeamInfo();								//从磁盘中加载分组信息
-	BOOL StoreTeamInfo();								//将分组信息存储至磁盘
-
-	BOOL LoadBuddyInfo();
-	BOOL SaveBuddyInfo();
-
-	PCTSTR GetMarkNameByAccountID(UINT uAccountID);
-	long GetTeamIndexByAccountID(UINT uAccountID);
-	
-
 	void ClearUserInfo();
 
 	long GetTotalBuddyCount();	
@@ -106,9 +88,12 @@ public:
 	HWND			m_hProxyWnd;
 	HWND			m_hCallBackWnd;		//设置为主窗口对话框
 	
+	//企业版说明：v1 好友列表（CBuddyList m_BuddyList）及其增删查改、分组信息 / 好友信息的
+	//本地落盘（BuddyTeamInfo.bti / BuddyInfo.bi）已整体删除 —— 通讯录改由服务端组织架构
+	//下发，由 BalloonMainPanel 自己缓存 v2 联系人（见其 m_contacts）。此处只保留本人资料、
+	//消息列表、群列表与最近联系人列表。
 	CBuddyInfo		m_UserInfo;
-	CBuddyList		m_BuddyList;
-	
+
 	CMessageList	m_MsgList;
 	CMessageLogger	m_MsgLogger;
 
@@ -116,6 +101,5 @@ public:
 	CRecentList		m_RecentList;
 
 private:
-	std::map<UINT, BuddyInfo*>		m_mapLocalBuddyInfo;
 	tstring							m_strCustomRecvPath;	// 系统设置里选的自定义接收目录；空=用默认推导路径
 };

@@ -140,8 +140,10 @@ TEST_CASE("FAV5 各错误分支的 code 与 msg 都带得回来")
         error_code_not_group_member, "不是群成员", conversation_group, 268435456LL, 1), root));
     CHECK(root["code"].asInt() == error_code_not_group_member);
 
+    //error_code_not_friend 的口径在企业版里改成了"够不着该联系人（不在同一企业）"，
+    //错误码本身沿用（客户端还按它提示），只是不再有"好友"这层含义。
     REQUIRE(parseJson(FavoriteProtocol::buildSetFavoriteResponse(
-        error_code_not_friend, "对方不是好友", conversation_single, 5081, 1), root));
+        error_code_not_friend, "不是同一企业的同事", conversation_single, 5081, 1), root));
     CHECK(root["code"].asInt() == error_code_not_friend);
 
     //msg 允许为空串，不应把 JSON 写坏

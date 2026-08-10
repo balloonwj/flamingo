@@ -183,7 +183,7 @@ fileserversrc/FileManager.cpp
 fileserversrc/TcpSession.cpp)
 
 
-add_executable(chatserver ${net_srcs} ${json_srcs}  ${chatserver_srcs} ${dbapi_srcs} ${mysqlapi_srcs} ${sqliteapi_srcs} ${mysqlmgr_srcs} ${zlib_srcs} ${utils_srcs} chatserversrc/LoginProtocol.cpp utils/PasswordHasher.cpp chatserversrc/ContactsProtocol.cpp chatserversrc/FavoriteProtocol.cpp chatserversrc/FavoriteManager.cpp chatserversrc/ProfileProtocol.cpp chatserversrc/RegisterProtocol.cpp chatserversrc/RegisterService.cpp chatserversrc/AccountName.cpp chatserversrc/SmsCodeManager.cpp chatserversrc/FriendProtocol.cpp chatserversrc/MessageProtocol.cpp chatserversrc/GroupProtocol.cpp chatserversrc/GroupPermission.cpp chatserversrc/CardProtocol.cpp chatserversrc/FileProtocol.cpp chatserversrc/FileStoreManager.cpp chatserversrc/GroupFileProtocol.cpp chatserversrc/GroupFileManager.cpp chatserversrc/RemoteDesktopProtocol.cpp chatserversrc/RemoteDesktopManager.cpp chatserversrc/CallProtocol.cpp chatserversrc/CallManager.cpp)
+add_executable(chatserver ${net_srcs} ${json_srcs}  ${chatserver_srcs} ${dbapi_srcs} ${mysqlapi_srcs} ${sqliteapi_srcs} ${mysqlmgr_srcs} ${zlib_srcs} ${utils_srcs} chatserversrc/LoginProtocol.cpp utils/PasswordHasher.cpp chatserversrc/ContactsProtocol.cpp chatserversrc/FavoriteProtocol.cpp chatserversrc/FavoriteManager.cpp chatserversrc/ContactRemarkManager.cpp chatserversrc/ProfileProtocol.cpp chatserversrc/RegisterProtocol.cpp chatserversrc/RegisterService.cpp chatserversrc/AccountName.cpp chatserversrc/SmsCodeManager.cpp chatserversrc/FriendProtocol.cpp chatserversrc/MessageProtocol.cpp chatserversrc/GroupProtocol.cpp chatserversrc/GroupPermission.cpp chatserversrc/CardProtocol.cpp chatserversrc/FileProtocol.cpp chatserversrc/FileStoreManager.cpp chatserversrc/GroupFileProtocol.cpp chatserversrc/GroupFileManager.cpp chatserversrc/RemoteDesktopProtocol.cpp chatserversrc/RemoteDesktopManager.cpp chatserversrc/CallProtocol.cpp chatserversrc/CallManager.cpp)
 #光包含库目录是没用的，还必须使用TARGET_LINK_LIBRARIES链接该库
 #dl / pthread 是 sqlite3 amalgamation 在 Linux 上的依赖：前者用于动态加载扩展，
 #后者用于 SQLITE_THREADSAFE 的互斥实现。sqlite3.c 走 C 编译器，拿不到 CMAKE_CXX_FLAGS
@@ -217,6 +217,8 @@ tests/test_registerprotocol.cpp
 tests/test_registerservice.cpp
 tests/test_accountname.cpp
 tests/test_friendprotocol.cpp
+tests/test_contactremarkmanager.cpp
+tests/test_adminbootstrap.cpp
 tests/test_messageprotocol.cpp
 tests/test_messagepinmanager.cpp
 tests/test_groupprotocol.cpp
@@ -238,12 +240,20 @@ chatserversrc/DepartmentPath.cpp
 chatserversrc/DepartmentMsg.cpp
 chatserversrc/LoginProtocol.cpp
 chatserversrc/ContactsProtocol.cpp
+# tests/test_favoriteprotocol.cpp 用到的实现。Windows 的 windowsproj/Tests.vcxproj 一直列着它，
+# 只有这里漏了，导致 Linux 下单独构建 flamingo_tests 目标时报
+# parseSetFavoriteRequest / buildSetFavoriteResponse 未定义
+chatserversrc/FavoriteProtocol.cpp
 chatserversrc/ProfileProtocol.cpp
 chatserversrc/RegisterProtocol.cpp
 chatserversrc/RegisterService.cpp
 chatserversrc/AccountName.cpp
 chatserversrc/SmsCodeManager.cpp
 chatserversrc/FriendProtocol.cpp
+# ContactRemarkManager 走 DbFactory 取连接，测试里对着临时 .db 文件真的读写 t_contact_remark
+chatserversrc/ContactRemarkManager.cpp
+# AdminManager 同样走 DbFactory，ADB 套用例对着临时 .db 文件真的读写 t_admin
+chatserversrc/AdminManager.cpp
 chatserversrc/MessageProtocol.cpp
 chatserversrc/MessagePinManager.cpp
 chatserversrc/GroupProtocol.cpp

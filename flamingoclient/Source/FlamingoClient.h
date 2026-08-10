@@ -39,9 +39,8 @@ public:
 	void SetRegisterWindow(HWND hwndRegister);					// 设置注册结果的反馈窗口
 	void SetModifyPasswordWindow(HWND hwndModifyPassword);		// 设置修改密码结果反馈窗口
 	void SetCreateNewGroupWindow(HWND hwndCreateNewGroup);		// 设置创建群组结果反馈窗口
-	void SetFindFriendWindow(HWND hwndFindFriend);				// 设置查找用户结果反馈窗口
 
-	void StartCheckNetworkStatusTask();							
+	void StartCheckNetworkStatusTask();
 	//void StartGetUserInfoTask(long nType);					//获取好友
 	void StartHeartbeatTask();
 
@@ -49,21 +48,10 @@ public:
     void Login(int nStatus = STATUS_ONLINE);				    // 登录
 	BOOL Logout();												// 注销
 	void CancelLogin();											// 取消登录
-    void GetFriendList();                                       // 获取好友列表
     void GetGroupMembers(int32_t groupid);                      // 获取群成员
-    void ChangeStatus(int32_t nNewStatus);                      // 更改自己的登录状态        
+    void ChangeStatus(int32_t nNewStatus);                      // 更改自己的登录状态
 
-	BOOL FindFriend(PCTSTR pszAccountName, long nType, HWND hReflectionWnd);                // 查找好友
-	BOOL AddFriend(UINT uAccountToAdd);
-	void ResponseAddFriendApply(UINT uAccountID, UINT uCmd);	                            //回应加好友请求任务
-	BOOL DeleteFriend(UINT uAccountID);							                            // 删除好友
-        
-    bool AddNewTeam(PCTSTR pszNewTeamName);                                                 //添加新分组
-    bool DeleteTeam(PCTSTR pszOldTeamName);                                                 //删除分组
-    bool ModifyTeamName(PCTSTR pszNewTeamName, PCTSTR pszOldTeamName);                      //修改分组名称
-    bool MoveFriendToOtherTeam(UINT uUserID, PCTSTR pszOldTeamName, PCTSTR pszNewTeamName); //移动好友至其他分组
-
-	BOOL UpdateLogonUserInfo(PCTSTR pszNickName, 
+	BOOL UpdateLogonUserInfo(PCTSTR pszNickName,
 							 PCTSTR pszSignature,
 							 UINT uGender,
 							 long nBirthday,
@@ -77,7 +65,6 @@ public:
 	void SendHeartbeatMessage();
 	void ModifyPassword(PCTSTR pszOldPassword, PCTSTR pszNewPassword);
 	void CreateNewGroup(PCTSTR pszGroupName);
-    void ModifyFriendMarkName(UINT friendID, PCTSTR pszNewMarkName);
 	void ChangeStatus(long nStatus);							// 改变在线状态
 	void UpdateBuddyList();										// 更新好友列表
 	void UpdateGroupList();										// 更新群列表
@@ -112,7 +99,6 @@ public:
 	BOOL IsBuddyListAvailable();
 
 	CBuddyInfo* GetUserInfo(UINT uAccountID=0);			// 获取用户信息
-	CBuddyList* GetBuddyList();						// 获取好友列表
 	CGroupList* GetGroupList();						// 获取群列表
 	CRecentList* GetRecentList();						// 获取最近联系人列表
 	CMessageList* GetMessageList();					// 获取消息列表
@@ -152,20 +138,15 @@ private:
 	void OnNetworkStatusChange(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnRegisterResult(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnLoginResult(UINT message, WPARAM wParam, LPARAM lParam);
-	void OnUpdateUserBasicInfo(UINT message, WPARAM wParam, LPARAM lParam);
     void OnUpdateGroupBasicInfo(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnModifyInfoResult(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnRecvUserStatusChangeData(UINT message, WPARAM wParam, LPARAM lParam);
-	void OnRecvAddFriendRequest(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnUserStatusChange(UINT message, WPARAM wParam, LPARAM lParam);
     void OnSendConfirmMessage(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnUpdateChatMsgID(UINT message, WPARAM wParam, LPARAM lParam);
-	void OnFindFriend(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnBuddyCustomFaceAvailable(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnModifyPasswordResult(UINT message, WPARAM wParam, LPARAM lParam);
-	void OnCreateNewGroupResult(UINT message, WPARAM wParam, LPARAM lParam);	
-	void OnDeleteFriendResult(UINT message, WPARAM wParam, LPARAM lParam);
-	void OnUpdateBuddyList(UINT message, WPARAM wParam, LPARAM lParam);
+	void OnCreateNewGroupResult(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnUpdateGroupList(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnUpdateRecentList(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnBuddyMsg(UINT message, WPARAM wParam, LPARAM lParam);
@@ -207,8 +188,6 @@ public:
     
 	CUserConfig						m_UserConfig;
 
-	std::vector<AddFriendInfo*>		m_aryAddFriendInfo;
-
 private:
 	time_t							m_ServerTime;			//服务器时间
 	DWORD							m_StartTime;			//开始计时的时间
@@ -216,7 +195,6 @@ private:
 	BOOL							m_bNetworkAvailable;	//网络是否可用
 
 	HWND							m_hwndRegister;			//注册窗口
-	HWND							m_hwndFindFriend;		//查找好友窗口
 	HWND							m_hwndModifyPassword;	//修改密码窗口
 	HWND							m_hwndCreateNewGroup;	//创建群组窗口
 
@@ -224,7 +202,6 @@ private:
 	BOOL							m_bBuddyListAvailable;	//用户好友列表信息是否可用
 
 	std::map<UINT, long>			m_mapUserStatusCache;	//好友在线状态缓存：key是账户ID，value是状态码
-	std::map<UINT, UINT>			m_mapAddFriendCache;	//加好友操作缓存: key是账户ID，value是操作码
 
 	long							m_nGroupCount;
 	BOOL							m_bGroupInfoAvailable;

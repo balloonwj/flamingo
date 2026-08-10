@@ -142,4 +142,39 @@ bool SetConversationMuted(std::vector<net::ConversationItem>& items,
 bool IsConversationMuted(const std::vector<net::ConversationItem>& items,
                          int ctype, int64_t cid);
 
+/**
+ *  收到一条消息的当下，该会话能否直接算作"用户已经看到了"。
+ *
+ *  存在理由：消息到达时会被立刻渲染进"已经打开着"的聊天窗，但会话列表的未读数
+ *  此前是无条件累加的，于是用户明明在窗口里看着这条消息，最近会话列表仍然亮着
+ *  红点。本函数给出"算不算已经看到"的统一判据，供收消息路径决定累加还是清零。
+ *
+ *  五个入参刻意都用 bool 而不直接收 HWND —— 判据本身与 Win32 无关，拆成布尔量
+ *  才能在单元测试里穷举组合；把 HWND 翻译成这五个值是调用方的事。
+ *    windowExists   该会话的聊天窗对象是否存在（指针非空）。
+ *    isWindow       窗口句柄是否仍然有效（::IsWindow）。对象还在但窗口已销毁时为 false。
+ *    isVisible      窗口是否可见（::IsWindowVisible）。
+ *    isIconic       窗口是否已最小化（::IsIconic）。<u>最小化的窗口 IsWindowVisible
+ *                   仍返回 TRUE</u>，故必须单独判这一项，否则最小化时会被误判成已读。
+ *    isForeground   窗口是否是当前前台窗口（::GetForegroundWindow 与之相等）。
+ *  @return 五项条件全部满足（存在、有效、可见、未最小化、在前台）返回 true，此时
+ *          该消息视为用户已经看到；任何一项不满足返回 false，按未读处理
+ */
+bool ShouldTreatAsReadOnArrival(bool windowExists, bool isWindow, bool isVisible,
+                                bool isIconic, bool isForeground);
+
+/**
+ *  收到一条消息之后，该会话的未读数应当变成多少。
+ *
+ *  之所以独立成一个函数：光"不累加"是不够的 —— 该会话可能还挂着之前累积的旧未读
+ *  （用户此前一直没点开过），窗口在前台看到新消息时那些旧未读也应当一并清掉，
+ *  否则红点照样亮着。
+ *    oldUnread      该会话当前的未读数，负值按 0 处理（防御脏数据）。
+ *    countAsUnread  这条消息本身是否该计未读。自己在别的设备发出、同步回来的消息
+ *                   为 false，见 net::ConversationsProtocolClient::shouldCountAsUnread。
+ *    treatAsRead    当下是否视为用户已经看到，取自 ShouldTreatAsReadOnArrival。
+ *  @return 新的未读数。视为已看到时恒为 0；否则该计未读就加一、不计则维持原值
+ */
+int NextUnreadCount(int oldUnread, bool countAsUnread, bool treatAsRead);
+
 } // namespace balloonmain

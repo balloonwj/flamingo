@@ -88,6 +88,7 @@ namespace net { struct ContactsResult; struct MessageNotify; struct SendMessageR
                 struct GroupAnnouncementsResult; struct GroupAnnouncementNotify;
                 //平台公告（消息盒子）；注意与上一行的<u>群</u>公告不是一回事
                 struct AnnouncementsResult; struct AnnouncementNotify; struct AnnounceMarkReadResult;
+                struct AnnouncementItem;
                 struct TypingNotify; }
 namespace balloonwjui { class DuiTreeView; }
 
@@ -116,24 +117,18 @@ public:
      */
     void CreateAndShow(HWND hMainDlg);
 
-    /**
-     *  用 CFlamingoClient 真实好友数据(CUserMgr::m_BuddyList)刷新
-     *  Contacts 页的 DuiTreeView。窗口未创建时直接返回(InitUi 之前)。
-     *  内部走 BalloonContactTreeAdapter,先 Clear 再 AddRoot/AddChild,
-     *  可反复调用。CMainDlg 在好友列表加载完毕或好友状态变化时调用。
-     */
+    // 下面三个 RefreshXxx 是给 CMainDlg 用的对外刷新入口。它们原先各自走 v1 的
+    // CUserMgr 适配器（好友列表 / 群列表 / 最近会话），企业版删除好友子系统后
+    // 数据源已全部换成 v2：通讯录来自 cmd_get_contacts 应答、群与会话来自会话
+    // 同步。三个方法因此都只是转调真正的重建函数，保留是为了不改动调用方。
+
+    // 重建「联系人」页的组织架构树（转调 RebuildContactsTree）。
     void RefreshContacts();
 
-    /**
-     *  用 CFlamingoClient 真实群数据(CUserMgr::m_GroupList)刷新
-     *  Groups 页的 DuiTreeView。
-     */
+    // 重建「群」页的群列表（转调 FillGroupsTree，数据取自会话缓存与群资料缓存）。
     void RefreshGroups();
 
-    /**
-     *  用 CFlamingoClient 真实最近会话(CUserMgr::m_RecentList)刷新
-     *  Messages 页的 DuiTreeView。
-     */
+    // 重建「消息」页的会话列表（转调 FillConversationsTree，数据取自 m_conversations）。
     void RefreshMessages();
 
     /**
@@ -627,6 +622,7 @@ public:
         MESSAGE_HANDLER(FMG_MSG_SET_CONTACT_REMARK, OnSetContactRemarkMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_CHAT, OnOpenChatMsg)
         MESSAGE_HANDLER(FMG_MSG_CONV_SEND_BUMP, OnConvSendBumpMsg)
+        MESSAGE_HANDLER(FMG_MSG_CONV_MARK_READ, OnConvMarkReadMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_GROUP_MANAGE, OnOpenGroupManageMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_MEMBER_PICKER, OnOpenMemberPickerMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_GROUP_AVATAR_DLG, OnOpenGroupAvatarDlgMsg)
@@ -945,9 +941,16 @@ public:
     void RefreshAnnounceBadge();
 
     /**
-     *  打开「消息盒子」窗口 —— 点 Banner 底部那一行时触发。
+     *  打开「消息盒子」窗口 —— 点 Banner 底部那一行、或系统菜单「公告与通知」时触发。
+     *  两个入口指向同一个窗口，不各开一个。
      */
     void OpenAnnounceBox();
+
+    /**
+     *  在桌面右下角弹一次「新公告」提示窗。收到新发布推送时调用。
+     *    item：公告内容（借用，本方法内用完即弃）。
+     */
+    void ShowAnnouncePopup(const net::AnnouncementItem& item);
 
     /**
      *  向服务端拉取发给本人的平台公告。登录成功后由 CMainDlg 调用一次。
@@ -1323,8 +1326,8 @@ private:
      *  用缓存的通讯录应答重建「联系人」Tab 的 v2 组织架构树（含收藏分区）。
      *  收藏发生变化、以及群列表到达后需要补出群收藏行时调用。
      *
-     *  <u>不要用 RefreshContacts() 代替</u>：那个方法重建的是旧 v1 好友列表
-     *  （BalloonContactTreeAdapter::FillContacts），会把真实的组织架构树整棵冲掉。
+     *  RefreshContacts() 现在就是转调本方法（企业版删掉好友子系统后，它原先走的
+     *  v1 好友列表适配器已成空实现），两者等价，调哪个都行。
      *
      *  重建前会先把收藏模型的现状写回缓存，避免重入时被服务端下发的旧值覆盖掉
      *  刚做的乐观更新。尚未收到过通讯录时本方法什么都不做。
@@ -1491,6 +1494,10 @@ private:
     LRESULT OnOpenChatMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     // 单聊窗发出消息后的会话冒泡：wParam=对端userid，lParam=堆上 std::string*（UTF-8 预览，处理后 delete）。
     LRESULT OnConvSendBumpMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    // 聊天窗被切到前台后请求把该会话未读清零：wParam=ctype（1单聊 2群聊），
+    // lParam=堆上 long long* cid（处理后 delete）。补齐"消息到达时窗口不在前台、
+    // 用户随后才切回来看"这条路径上的清零。
+    LRESULT OnConvMarkReadMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     // FMG_MSG_OPEN_GROUP_MANAGE：群聊窗齿轮请求打开群管理对话框，lParam=堆上
     // int64_t* groupId（处理后 delete）。
     LRESULT OnOpenGroupManageMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);

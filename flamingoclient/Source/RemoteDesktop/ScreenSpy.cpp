@@ -170,7 +170,10 @@ bool CScreenSpy::ScanChangedRect(int nStartLine)
 	LPDWORD p1, p2;
 	::BitBlt(m_hLineMemDC, 0, 0, m_nFullWidth, 1, m_hFullDC, 0, nStartLine, m_dwBitBltRop);
 	// 0 是最后一行
-	p1 = (PDWORD)((DWORD)m_lpvFullBits + ((m_nFullHeight - 1 - nStartLine) * m_nDataSizePerLine));
+	//这里是按行偏移定位 DIB 像素。原写法先把 m_lpvFullBits 转成 DWORD 再做加法，
+	//64 位下位图内存的高 32 位地址会被丢掉，算出来的是野指针。改成在字节指针上
+	//做偏移，与平台位宽无关。
+	p1 = (PDWORD)((LPBYTE)m_lpvFullBits + ((m_nFullHeight - 1 - nStartLine) * m_nDataSizePerLine));
 	p2 = (PDWORD)m_lpvLineBits;
 	::SetRect(&m_changeRect, -1, nStartLine - DEF_STEP, -1, nStartLine + DEF_STEP * 2);
 

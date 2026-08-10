@@ -83,3 +83,129 @@ flamingoclient/Source/.DS_Store
 flamingoclient/Source/net/.DS_Store
 flamingoserver/.DS_Store
 flamingoserver/.vs/
+
+# ── 以下为一键清理脚本 clean.ps1 负责删除的可再生文件，规则与该脚本开头的
+# ── 目标清单保持一致；新增清理目标时请同步补充这里。
+# ── 注意：这些规则必须写在下面 balloonui 反向包含规则之前，避免误伤该子目录。
+
+# 源码编码普查（GBK/UTF-8 转换）脚本生成的文件清单
+/_files_*.txt
+/_flamingo_src_list.txt
+
+# 调试期间 dump 出来的位图：摄像头自测抓的第一帧、DXGI 抓屏改造时的画面比对图
+/cameratest_first.bmp
+flamingoclient/Bin/dxgi*.bmp
+
+# 服务端在 Windows 下就地运行时，手工把标准输出/标准错误重定向出来的文件
+# （日志文件本身已被上面的 *.log 规则覆盖）
+flamingoserver/windowsproj/*.out
+flamingoserver/windowsproj/*.err
+
+# 服务端单元测试工程的中间文件目录与可执行文件（工程文件 Tests.vcxproj 要保留）
+flamingoserver/windowsproj/Tests/
+flamingoserver/windowsproj/Tests.exe
+
+# PC 客户端 x64 配置的输出目录（Win32 的 Debug/Release 已在上面单独列出）
+flamingoclient/Source/Debug_x64/
+flamingoclient/Source/Release_x64/
+
+# PC 客户端单元测试工程的中间文件与测试可执行文件
+flamingoclient/Source/Tests/Unit_Debug_Win32/
+flamingoclient/Bin/Tests/
+
+# 第三方音频库的中间文件目录。生成的静态库放在各自的 Bin 子目录里，不受影响。
+third-party/opus-1.5.2/obj/
+third-party/speexdsp-1.2.1/obj/
+
+# 服务端测试程序跑 SQLite 集成用例时生成的临时库文件（含 WAL 模式的两个附属文件）。
+# 每个用例开头都会重建它们，属于纯粹的测试中间产物。
+flamingoserver/windowsproj/flamingo_sqlite_*.db*
+flamingoserver/flamingo_sqlite_*.db*
+
+# dbtype=sqlite 时 chatserver 运行期生成的本地数据库文件（默认路径 data/flamingo.db）。
+# 属于运行期数据，不入库。
+flamingoserver/windowsproj/data/
+flamingoserver/data/
+
+# Linux（含 WSL）下**就地** cmake（README 与开发约定文档里记的 `cmake .`）的生成物：
+# 缓存、Makefile、安装脚本，以及编出来的四个可执行文件。全部可再生。
+# 注意 flamingoserver/chatserver 这个名字：它早年是存放 VS 工程文件的目录，
+# 在 commit ae91321「修改windows vs项目工程目录，避免与linux下编译生成的二进制文件冲突」
+# 里已经挪走，如今该路径下就是 Linux 编出来的可执行文件本身。
+flamingoserver/CMakeCache.txt
+flamingoserver/CMakeFiles/
+flamingoserver/Makefile
+flamingoserver/cmake_install.cmake
+flamingoserver/chatserver
+flamingoserver/fileserver
+flamingoserver/imgserver
+flamingoserver/flamingo_tests
+
+# Linux（含 WSL）下 out-of-source 构建的输出目录：
+#     cmake -S . -B build-linux && make -C build-linux
+# 里面是 CMakeCache.txt / CMakeFiles/ 与三个服务的可执行文件，全部可再生。
+# 之所以不在源码目录里就地 cmake，是为了不让 CMake 的生成物跟 windowsproj/ 下的
+# VS 工程混在一起。
+flamingoserver/build-linux/
+
+# PC 客户端单元测试工程 x64 两个配置的中间文件与测试可执行文件
+flamingoclient/Source/Tests/Unit_Debug_x64/
+flamingoclient/Source/Tests/Unit_Release_x64/
+
+# PC 客户端 Win32 两个配置的输出目录（里面只有 exe 与 pdb，没有资源）
+flamingoclient/Bin/Win32/
+
+# PC 客户端 x64 Release 的发布包与打好的压缩包。不是「重新编译即可恢复」的东西
+# （exe 之外还手工装配了全套资源与 update 目录），所以 clean.ps1 不删它，
+# 但它是构建产物，不入库。
+flamingoclient/Bin/x64/
+
+# PC 客户端运行期落盘的图片缓存
+flamingoclient/Bin/cache/
+
+# 跑 SQLite 集成用例时落在各处的临时库文件。测试程序的工作目录不固定，
+# 仓库根、客户端目录、服务端 tools 目录下都可能留下一份。
+/flamingo_sqlite_*.db*
+flamingoclient/flamingo_sqlite_*.db*
+flamingoserver/tools/flamingo_sqlite_*.db*
+
+# Python 字节码缓存。tools/ 与 migrations/ 下的脚本跑过就会生成，属于纯派生物。
+__pycache__/
+*.pyc
+
+# 管理端控制台 flamingoAdmin 的构建产物与输出目录（源码本身要入库）
+flamingoAdmin/Bin/
+flamingoAdmin/Debug/
+flamingoAdmin/Debug_x64/
+flamingoAdmin/Release_x64/
+flamingoAdmin/Tests/Debug/
+flamingoAdmin/Tests/Release/
+flamingoAdmin/Tests/Debug_x64/
+flamingoAdmin/Tests/Release_x64/
+# flamingoAdmin 自带的第三方依赖副本，与仓库根的 third-party 同理，不入库
+flamingoAdmin/third-party/
+
+# 第三方依赖的源码副本（opus / speexdsp / libvpx / sqlite 等）。体积以 GB 计，
+# 是编译客户端要用到的真实构建依赖，留在磁盘上但不入库。
+/third-party/
+
+# 参考资料：其它开源项目的源码副本（rustdesk / soui 等），只用来对照实现，不入库。
+/references/
+
+# 设计稿与设计稿抓取的中间产物
+/design/
+/.design-fetch/
+
+# 从 Sysinternals 下载的现成调试工具，可随时重新下载
+/DebugView/
+
+# 本地联调用的测试账号清单，含明文口令，不入库
+/测试账号.md
+
+# flamingoclient/balloonui 与 third-party/balloonui 都是**独立的 git 仓库**
+# （远端 git@github.com:balloonwj/balloonui.git），各自有自己的提交历史。
+# 必须在这里显式忽略：否则 `git add -A` 会把它们当成子模块、往索引里塞一个
+# gitlink 引用，既提交不了内容，clone 下来也是空目录。
+# 注意不要改回 `!flamingoclient/balloonui/` 这种反向包含 —— 那正是会踩上面这个坑的写法。
+flamingoclient/balloonui/
+third-party/balloonui/

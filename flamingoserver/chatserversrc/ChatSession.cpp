@@ -23,6 +23,8 @@
 #include "ContactsProtocol.h"
 #include "FavoriteProtocol.h"
 #include "FavoriteManager.h"
+//联系人备注名（cmd_set_friend_remark 落库 / cmd_get_contacts 读出）
+#include "ContactRemarkManager.h"
 #include "ProfileProtocol.h"
 #include "RegisterProtocol.h"
 #include "RegisterService.h"
@@ -68,12 +70,6 @@ constexpr int HEARTBEAT_CHECK_INTERVAL_US = 15000000;
 constexpr const char* MIN_CLIENT_VERSION = "3.0.0";
 //cmd_search 单次最多返回的结果条数
 constexpr int SEARCH_MAX_RESULTS = 50;
-//cmd_handle_friend_request 的 action 值：1=同意 0=拒绝
-constexpr int FRIEND_REQUEST_ACTION_ACCEPT = 1;
-//cmd_friend_relation_changed_notify 的 changetype 值：1=成为好友 2=好友被删除
-constexpr int FRIEND_RELATION_BECOME_FRIEND = 1;
-//cmd_friend_relation_changed_notify 的 changetype 值：好友被删除
-constexpr int FRIEND_RELATION_FRIEND_DELETED = 2;
 //cmd_set_blacklist 的 action 值：1=加入黑名单 0=移出黑名单
 constexpr int BLACKLIST_ACTION_ADD = 1;
 //会话类型 ctype 值：1=单聊
@@ -265,28 +261,12 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
             onSearch(body, conn);
             break;
 
-        case cmd_add_friend_request:
-            onAddFriendRequest(body, conn);
-            break;
-
-        case cmd_handle_friend_request:
-            onHandleFriendRequest(body, conn);
-            break;
-
-        case cmd_get_notifications:
-            onGetNotifications(conn);
-            break;
-
         case cmd_get_announcements:
             onGetAnnouncements(body, conn);
             break;
 
         case cmd_mark_announcement_read:
             onMarkAnnouncementRead(body, conn);
-            break;
-
-        case cmd_delete_friend:
-            onDeleteFriend(body, conn);
             break;
 
         case cmd_set_friend_remark:
@@ -299,10 +279,6 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
 
         case cmd_set_favorite:
             onSetFavorite(body, conn);
-            break;
-
-        case cmd_set_friend_tags:
-            onSetFriendTags(body, conn);
             break;
 
         case cmd_send_message:
@@ -640,19 +616,15 @@ void ChatSession::onLogin(const std::string& body, const std::shared_ptr<TcpConn
                                   m_userinfo.clienttype, m_id);
 
     //向同企业的在线同事广播本用户上线（在线状态变更 1109）：客户端联系人树是企业组织
-    //架构，同事据此把本用户的状态点实时点亮（presence=登录状态）。无企业归属（如平台
-    //超管）时退回"仅好友"广播。排除发起者自己。本调用未持有会话表锁，可安全调用
-    //broadcastToEnterprise（其内部自行取会话快照）。
-    std::string onlineBody = ProfileProtocol::buildPresenceChangedNotify(
-        m_userinfo.userid, m_userinfo.status, m_userinfo.clienttype);
+    //架构，同事据此把本用户的状态点实时点亮（presence=登录状态）。排除发起者自己。
+    //本调用未持有会话表锁，可安全调用 broadcastToEnterprise（其内部自行取会话快照）。
+    //无企业归属（如平台超管）的账号不推关系链通知 —— 企业版里它没有联系人可推。
     if (loginEnterpriseId != 0)
     {
+        std::string onlineBody = ProfileProtocol::buildPresenceChangedNotify(
+            m_userinfo.userid, m_userinfo.status, m_userinfo.clienttype);
         server.broadcastToEnterprise(loginEnterpriseId, cmd_presence_changed_notify,
                                      onlineBody, m_userinfo.userid);
-    }
-    else
-    {
-        notifyRelations(cmd_presence_changed_notify, onlineBody);
     }
 }
 
@@ -953,11 +925,11 @@ void ChatSession::onResetPassword(const std::string& body, const std::shared_ptr
 }
 
 //把 UserManager 的 User 资料与实时在线状态填充成应答用的 ContactInfo
-//  marknames：本次请求发起人的"好友 → 备注名"映射（见 UserManager::getFriendMarknames）。
-//             备注名是单向的，同一个联系人在不同人的通讯录里备注不同，故要按
-//             发起人的映射来填；不在映射里（不是好友，或就是本人）则留空串。
+//  remarks：本次请求发起人的"联系人 → 备注名"映射（见 ContactRemarkManager::getRemarks）。
+//           备注名是单向的，同一个联系人在不同人的通讯录里备注不同，故要按
+//           发起人的映射来填；不在映射里（没给这个人设过备注）则留空串。
 static void fillContactInfo(ContactInfo& c, const User& u, ChatServer& server,
-                            const std::map<int32_t, std::string>& marknames)
+                            const std::map<int32_t, std::string>& remarks)
 {
     c.userid      = u.userid;
     c.username    = u.username;
@@ -975,9 +947,9 @@ static void fillContactInfo(ContactInfo& c, const User& u, ChatServer& server,
     c.presence    = server.getUserStatusByUserId(u.userid);
     c.clienttype  = server.getUserClientTypeByUserId(u.userid);
 
-    //备注名：通讯录里的同事不一定是好友，非好友查不到，一律留空串。
-    std::map<int32_t, std::string>::const_iterator it = marknames.find(u.userid);
-    c.remark = (it != marknames.end()) ? it->second : std::string();
+    //备注名：没给这个联系人设过备注就留空串，客户端据此退回显示 nickname。
+    std::map<int32_t, std::string>::const_iterator it = remarks.find(u.userid);
+    c.remark = (it != remarks.end()) ? it->second : std::string();
 }
 
 void ChatSession::onGetContacts(const std::shared_ptr<TcpConnection>& conn)
@@ -999,11 +971,11 @@ void ChatSession::onGetContacts(const std::shared_ptr<TcpConnection>& conn)
             data.enterprisename = entInfo.name;
     }
 
-    //2. 本人给各好友起的备注名，一次取全。备注名是单向的（只影响"本人看好友"），
+    //2. 本人给各联系人起的备注名，一次取全。备注名是单向的（只影响"本人看对方"），
     //   所以它属于本次请求的发起人，而不是联系人自身的资料，须随每个人各自的
-    //   通讯录下发。取不到（本人不在缓存里）就当没有任何备注，通讯录照发。
-    std::map<int32_t, std::string> marknames;
-    userMgr.getFriendMarknames(m_userinfo.userid, marknames);
+    //   通讯录下发。取不到（数据库不可用）就当没有任何备注，通讯录照发。
+    std::map<int32_t, std::string> remarks;
+    Singleton<ContactRemarkManager>::Instance().getRemarks(m_userinfo.userid, remarks);
 
     //3. 部门树 + 部门成员；同时把成员去重收进联系人资料池
     std::vector<dept::DepartmentInfo> orgDepts;
@@ -1036,7 +1008,7 @@ void ChatSession::onGetContacts(const std::shared_ptr<TcpConnection>& conn)
                 if (userMgr.getUserInfoByUserId(static_cast<int32_t>(om.userid), u))
                 {
                     ContactInfo c;
-                    fillContactInfo(c, u, server, marknames);
+                    fillContactInfo(c, u, server, remarks);
                     data.contacts.push_back(c);
                 }
             }
@@ -1165,20 +1137,16 @@ void ChatSession::onUpdateProfile(const std::string& body, const std::shared_ptr
     send(cmd_update_profile, m_seq, ProfileProtocol::buildSimpleResponse(0, "ok"));
 
     //广播资料变更。客户端"联系人树"是企业组织架构（同事），故按企业范围推送，使同事端实时刷新
-    //该联系人昵称/签名等；无企业归属时退回"仅好友"。排除发起者自己。与改头像(onChangeAvatar)、
-    //在线状态(onChangePresence)同口径——此前本处只发好友，导致同企业非好友同事收不到资料变更。
-    UserProfile p;
-    fillUserProfile(p, u);
-    std::string notifyBody = ProfileProtocol::buildUserInfoChangedNotify(p);
+    //该联系人昵称/签名等。排除发起者自己。与改头像(onChangeAvatar)、在线状态(onChangePresence)
+    //同口径。无企业归属的账号不推 —— 企业版里它没有联系人可推。
     int64_t enterpriseId = Singleton<DepartmentManager>::Instance().getUserEnterpriseId(m_userinfo.userid);
     if (enterpriseId != 0)
     {
+        UserProfile p;
+        fillUserProfile(p, u);
+        std::string notifyBody = ProfileProtocol::buildUserInfoChangedNotify(p);
         Singleton<ChatServer>::Instance().broadcastToEnterprise(
             enterpriseId, cmd_user_info_changed_notify, notifyBody, m_userinfo.userid);
-    }
-    else
-    {
-        notifyRelations(cmd_user_info_changed_notify, notifyBody);
     }
 
     LOGI("update profile ok, userid: %d", m_userinfo.userid);
@@ -1275,19 +1243,16 @@ void ChatSession::onChangeAvatar(const std::string& body, const std::shared_ptr<
         m_userinfo.userid, req.facetype, req.customface);
 
     //广播资料变更。客户端"联系人树"是企业组织架构（同事），故按企业范围推送，使同事端
-    //实时刷新该联系人头像；无企业归属时退回"仅好友"。排除发起者自己。与在线状态变更同口径。
-    UserProfile p;
-    fillUserProfile(p, u);
-    std::string notifyBody = ProfileProtocol::buildUserInfoChangedNotify(p);
+    //实时刷新该联系人头像。排除发起者自己。与在线状态变更同口径。
+    //无企业归属的账号不推 —— 企业版里它没有联系人可推。
     int64_t enterpriseId = Singleton<DepartmentManager>::Instance().getUserEnterpriseId(m_userinfo.userid);
     if (enterpriseId != 0)
     {
+        UserProfile p;
+        fillUserProfile(p, u);
+        std::string notifyBody = ProfileProtocol::buildUserInfoChangedNotify(p);
         Singleton<ChatServer>::Instance().broadcastToEnterprise(
             enterpriseId, cmd_user_info_changed_notify, notifyBody, m_userinfo.userid);
-    }
-    else
-    {
-        notifyRelations(cmd_user_info_changed_notify, notifyBody);
     }
 
     LOGI("change avatar ok, userid: %d", m_userinfo.userid);
@@ -1307,46 +1272,21 @@ void ChatSession::onChangePresence(const std::string& body, const std::shared_pt
     m_userinfo.status = req.presence;
     send(cmd_change_presence, m_seq, ProfileProtocol::buildSimpleResponse(0, "ok"));
 
-    //广播在线状态变更。客户端的"联系人树"是企业组织架构（同事），而非好友列表，
-    //故按<u>企业范围</u>推送：同企业的在线用户都能实时刷新该联系人的状态点。无企业归属
-    //（enterpriseid==0，如平台超管）时退回"仅好友"广播。排除发起者自己（其联系人树不含自己）。
-    std::string notifyBody = ProfileProtocol::buildPresenceChangedNotify(
-        m_userinfo.userid, req.presence, m_userinfo.clienttype);
+    //广播在线状态变更。客户端的"联系人树"是企业组织架构（同事），
+    //故按<u>企业范围</u>推送：同企业的在线用户都能实时刷新该联系人的状态点。
+    //排除发起者自己（其联系人树不含自己）。无企业归属（enterpriseid==0，如平台超管）
+    //的账号不推 —— 企业版里它没有联系人可推。
     int64_t enterpriseId = Singleton<DepartmentManager>::Instance().getUserEnterpriseId(m_userinfo.userid);
     if (enterpriseId != 0)
     {
+        std::string notifyBody = ProfileProtocol::buildPresenceChangedNotify(
+            m_userinfo.userid, req.presence, m_userinfo.clienttype);
         Singleton<ChatServer>::Instance().broadcastToEnterprise(
             enterpriseId, cmd_presence_changed_notify, notifyBody, m_userinfo.userid);
-    }
-    else
-    {
-        notifyRelations(cmd_presence_changed_notify, notifyBody);
     }
 
     LOGI("change presence ok, userid: %d, presence: %d, enterpriseid: %lld",
          m_userinfo.userid, req.presence, (long long)enterpriseId);
-}
-
-void ChatSession::notifyRelations(uint16_t cmd, const std::string& body)
-{
-    //取本用户的关系链（好友 + 群；群无会话，遍历时自然跳过）
-    std::list<User> relations;
-    Singleton<UserManager>::Instance().getFriendInfoByUserId(m_userinfo.userid, relations);
-    if (relations.empty())
-        return;
-
-    std::set<int32_t> relationIds;
-    for (const User& r : relations)
-        relationIds.insert(r.userid);
-
-    //遍历全部在线会话，命中关系链的逐一推送（同账号多设备会各收到一份）
-    std::list<std::shared_ptr<ChatSession>> allSessions;
-    Singleton<ChatServer>::Instance().getSessions(allSessions);
-    for (auto& s : allSessions)
-    {
-        if (s && relationIds.count(s->getUserId()) > 0)
-            s->send(cmd, 0, body);
-    }
 }
 
 void ChatSession::sendUserStatusChangeMsg(int32_t userid, int type, int status)
@@ -1406,10 +1346,12 @@ void ChatSession::onSearch(const std::string& body, const std::shared_ptr<TcpCon
             if (wantGroup)
             {
                 it.ownerid = u.ownerid;
-                //群成员数 = 群账号关系链的条数
-                std::list<User> members;
-                userMgr.getFriendInfoByUserId(u.userid, members);
-                it.membercount = static_cast<int>(members.size());
+                //群成员数取 t_group_member 的真实计数（GroupManager::getGroup 用相关子查询
+                //一并带出）。这里原先数的是群账号在好友关系表里占的行数 —— 那是老实现
+                //"把群成员也写进 t_user_relationship"留下的副产物，好友关系表删掉后就永远是 0 了。
+                GroupRecord gr;
+                if (Singleton<GroupManager>::Instance().getGroup(u.userid, gr))
+                    it.membercount = gr.membercount;
             }
             else
             {
@@ -1418,7 +1360,6 @@ void ChatSession::onSearch(const std::string& body, const std::shared_ptr<TcpCon
                 it.signature = u.signature;
                 it.address   = u.address;
                 it.usertype  = u.usertype;
-                it.isfriend  = userMgr.isFriend(m_userinfo.userid, u.userid);
             }
             items.push_back(it);
         }
@@ -1427,184 +1368,6 @@ void ChatSession::onSearch(const std::string& body, const std::shared_ptr<TcpCon
     send(cmd_search, m_seq, FriendProtocol::buildSearchResponse(0, "ok", type, items));
     LOGI("search ok, userid: %d, keyword: %s, type: %d, results: %u",
          m_userinfo.userid, keyword.c_str(), type, static_cast<unsigned>(items.size()));
-}
-
-void ChatSession::onAddFriendRequest(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
-{
-    (void)conn;
-    AddFriendRequestData req;
-    if (!FriendProtocol::parseAddFriendRequest(body, req))
-    {
-        send(cmd_add_friend_request, m_seq,
-             FriendProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
-        return;
-    }
-
-    int32_t targetId = static_cast<int32_t>(req.userid);
-    UserManager& userMgr = Singleton<UserManager>::Instance();
-
-    //不能加自己
-    if (targetId == m_userinfo.userid)
-    {
-        send(cmd_add_friend_request, m_seq,
-             FriendProtocol::buildSimpleResponse(error_code_cannot_add_self, "cannot add yourself"));
-        return;
-    }
-
-    //对方必须存在
-    User target;
-    target.userid = 0;
-    userMgr.getUserInfoByUserId(targetId, target);
-    if (target.userid == 0)
-    {
-        send(cmd_add_friend_request, m_seq,
-             FriendProtocol::buildSimpleResponse(error_code_not_found, "target user not found"));
-        return;
-    }
-
-    //已是好友
-    if (userMgr.isFriend(m_userinfo.userid, targetId))
-    {
-        send(cmd_add_friend_request, m_seq,
-             FriendProtocol::buildSimpleResponse(error_code_already_friend, "already friend"));
-        return;
-    }
-
-    //对方已把我拉黑：不允许发起申请（对方无感知，仅申请方收到该错误码）
-    if (userMgr.isInBlacklist(targetId, m_userinfo.userid))
-    {
-        send(cmd_add_friend_request, m_seq,
-             FriendProtocol::buildSimpleResponse(error_code_in_blacklist, "you are in the target's blacklist"));
-        return;
-    }
-
-    //落库：按约定每次申请新建一条记录
-    int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
-    int64_t requestId = userMgr.addFriendRequest(m_userinfo.userid, targetId,
-                                                 req.verifymsg, req.source, now);
-    if (requestId == 0)
-    {
-        send(cmd_add_friend_request, m_seq,
-             FriendProtocol::buildSimpleResponse(error_code_friend_op_fail, "add friend request failed"));
-        return;
-    }
-
-    send(cmd_add_friend_request, m_seq, FriendProtocol::buildAddFriendResponse(0, "ok", requestId));
-
-    //目标在线则推送申请通知；离线则等其登录后经 cmd_get_notifications 取
-    User self;
-    self.userid = 0;
-    userMgr.getUserInfoByUserId(m_userinfo.userid, self);
-    FriendRequestItem item;
-    item.requestid      = requestId;
-    item.fromuserid     = m_userinfo.userid;
-    item.fromusername   = self.username;
-    item.fromnickname   = self.nickname;
-    item.fromfacetype   = self.facetype;
-    item.fromcustomface = self.customface;
-    item.verifymsg      = req.verifymsg;
-    item.timestamp      = now;
-    sendToUser(targetId, cmd_friend_request_notify, FriendProtocol::buildFriendRequestNotify(item));
-
-    LOGI("add friend request ok, from: %d, to: %d, requestid: %lld",
-         m_userinfo.userid, targetId, (long long)requestId);
-}
-
-void ChatSession::onHandleFriendRequest(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
-{
-    (void)conn;
-    HandleFriendRequestData req;
-    if (!FriendProtocol::parseHandleFriendRequest(body, req))
-    {
-        send(cmd_handle_friend_request, m_seq,
-             FriendProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
-        return;
-    }
-
-    UserManager& userMgr = Singleton<UserManager>::Instance();
-    FriendRequestRecord rec;
-    if (!userMgr.getFriendRequestById(req.requestid, rec))
-    {
-        send(cmd_handle_friend_request, m_seq,
-             FriendProtocol::buildSimpleResponse(error_code_request_not_exist, "request not exist"));
-        return;
-    }
-
-    //只能由被申请方处理，且该申请须仍处于待处理状态
-    if (rec.touserid != m_userinfo.userid || rec.status != 0)
-    {
-        send(cmd_handle_friend_request, m_seq,
-             FriendProtocol::buildSimpleResponse(error_code_request_not_exist, "request not handleable"));
-        return;
-    }
-
-    bool accept = (req.action == FRIEND_REQUEST_ACTION_ACCEPT);
-    int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
-    userMgr.updateFriendRequestStatus(req.requestid, accept ? 1 : 2, now);
-
-    if (accept)
-    {
-        //建立双向好友关系：DB 写 t_user_relationship（小id在前），内存同步两侧好友列表
-        int32_t a = rec.fromuserid;
-        int32_t b = rec.touserid;
-        int32_t smallId = (a < b) ? a : b;
-        int32_t greatId = (a < b) ? b : a;
-        userMgr.makeFriendRelationshipInDB(smallId, greatId);
-        userMgr.updateUserRelationshipInMemory(a, b, FRIEND_OPERATION_ADD);
-    }
-
-    send(cmd_handle_friend_request, m_seq, FriendProtocol::buildSimpleResponse(0, "ok"));
-
-    //把处理结果推给原申请方
-    sendToUser(rec.fromuserid, cmd_friend_request_result_notify,
-               FriendProtocol::buildFriendRequestResultNotify(req.requestid, rec.fromuserid, req.action));
-
-    //同意时双方各收到一条好友关系变更通知（携带对端 userid）
-    if (accept)
-    {
-        sendToUser(rec.fromuserid, cmd_friend_relation_changed_notify,
-                   FriendProtocol::buildFriendRelationChangedNotify(rec.touserid, FRIEND_RELATION_BECOME_FRIEND));
-        sendToUser(rec.touserid, cmd_friend_relation_changed_notify,
-                   FriendProtocol::buildFriendRelationChangedNotify(rec.fromuserid, FRIEND_RELATION_BECOME_FRIEND));
-    }
-
-    LOGI("handle friend request ok, requestid: %lld, action: %d, by userid: %d",
-         (long long)req.requestid, req.action, m_userinfo.userid);
-}
-
-void ChatSession::onGetNotifications(const std::shared_ptr<TcpConnection>& conn)
-{
-    (void)conn;
-    UserManager& userMgr = Singleton<UserManager>::Instance();
-    std::vector<FriendRequestRecord> records;
-    userMgr.getPendingFriendRequests(m_userinfo.userid, records);
-
-    std::vector<FriendRequestItem> items;
-    for (const FriendRequestRecord& rec : records)
-    {
-        FriendRequestItem item;
-        item.requestid  = rec.id;
-        item.fromuserid = rec.fromuserid;
-        item.verifymsg  = rec.verifymsg;
-        item.status     = rec.status;
-        item.timestamp  = rec.createtime;
-
-        //补全发起方的展示信息
-        User from;
-        from.userid = 0;
-        userMgr.getUserInfoByUserId(rec.fromuserid, from);
-        item.fromusername   = from.username;
-        item.fromnickname   = from.nickname;
-        item.fromfacetype   = from.facetype;
-        item.fromcustomface = from.customface;
-
-        items.push_back(item);
-    }
-
-    send(cmd_get_notifications, m_seq,
-         FriendProtocol::buildGetNotificationsResponse(0, "ok", items));
-    LOGI("get notifications ok, userid: %d, count: %u",
-         m_userinfo.userid, static_cast<unsigned>(items.size()));
 }
 
 void ChatSession::onGetAnnouncements(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -1653,53 +1416,6 @@ void ChatSession::onMarkAnnouncementRead(const std::string& body, const std::sha
          m_userinfo.userid, (long long)announcementId, code);
 }
 
-void ChatSession::onDeleteFriend(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
-{
-    (void)conn;
-    DeleteFriendRequestData req;
-    if (!FriendProtocol::parseDeleteFriendRequest(body, req))
-    {
-        send(cmd_delete_friend, m_seq,
-             FriendProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
-        return;
-    }
-
-    int32_t friendId = static_cast<int32_t>(req.userid);
-    UserManager& userMgr = Singleton<UserManager>::Instance();
-
-    //必须确实是好友才能删除
-    if (!userMgr.isFriend(m_userinfo.userid, friendId))
-    {
-        send(cmd_delete_friend, m_seq,
-             FriendProtocol::buildSimpleResponse(error_code_not_friend, "not a friend"));
-        return;
-    }
-
-    //解除双向好友关系：t_user_relationship 用小id在前的规则定位整行，
-    //删行的同时备注名(f_userX_markname)随行一并删除
-    int32_t smallId = (m_userinfo.userid < friendId) ? m_userinfo.userid : friendId;
-    int32_t greatId = (m_userinfo.userid < friendId) ? friendId : m_userinfo.userid;
-    if (!userMgr.releaseFriendRelationshipInDBAndMemory(smallId, greatId))
-    {
-        send(cmd_delete_friend, m_seq,
-             FriendProtocol::buildSimpleResponse(error_code_friend_op_fail, "delete friend failed"));
-        return;
-    }
-    //releaseFriendRelationshipInDBAndMemory 内部的 deleteFriendToUser 按值拷贝迭代缓存(v1 既有缺陷)，
-    //并未真正改动内存好友列表；此处再调一次按引用迭代的 updateUserRelationshipInMemory 补齐两侧缓存
-    userMgr.updateUserRelationshipInMemory(m_userinfo.userid, friendId, FRIEND_OPERATION_DELETE);
-
-    send(cmd_delete_friend, m_seq, FriendProtocol::buildSimpleResponse(0, "ok"));
-
-    //双方各收到一条好友关系变更通知(changetype=2)，兼顾被删方与操作方的多端同步
-    sendToUser(friendId, cmd_friend_relation_changed_notify,
-               FriendProtocol::buildFriendRelationChangedNotify(m_userinfo.userid, FRIEND_RELATION_FRIEND_DELETED));
-    sendToUser(m_userinfo.userid, cmd_friend_relation_changed_notify,
-               FriendProtocol::buildFriendRelationChangedNotify(friendId, FRIEND_RELATION_FRIEND_DELETED));
-
-    LOGI("delete friend ok, userid: %d, friendid: %d", m_userinfo.userid, friendId);
-}
-
 void ChatSession::onSetFriendRemark(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
 {
     (void)conn;
@@ -1714,31 +1430,44 @@ void ChatSession::onSetFriendRemark(const std::string& body, const std::shared_p
         return;
     }
 
-    int32_t friendId = static_cast<int32_t>(req.userid);
+    const int32_t targetId = static_cast<int32_t>(req.userid);
     UserManager& userMgr = Singleton<UserManager>::Instance();
 
-    //只能给好友设置备注名
-    if (!userMgr.isFriend(m_userinfo.userid, friendId))
+    //企业版没有好友关系，通讯录里的人全部来自组织架构，所以这里<u>不</u>校验"是不是好友"
+    //（那道校验在企业版里会让本功能 100% 不可用），只要求目标用户确实存在。
+    User target;
+    target.userid = 0;
+    userMgr.getUserInfoByUserId(targetId, target);
+    if (target.userid == 0)
     {
         send(cmd_set_friend_remark, m_seq,
-             FriendProtocol::buildSetFriendRemarkResponse(error_code_not_friend,
-                                                          "not a friend", req.userid));
+             FriendProtocol::buildSetFriendRemarkResponse(error_code_not_found,
+                                                          "target user not found", req.userid));
         return;
     }
 
-    //备注名是单向的：只改"本人看好友"那一侧；remark 为空串表示清除备注
-    if (!userMgr.updateMarknameInDb(m_userinfo.userid, friendId, req.remark))
+    //一秒合多少毫秒。备注名的更新时间与本文件其它落库时间戳同一口径。
+    const int64_t kMillisPerSecond = 1000;
+    const int64_t nowMs = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+
+    //备注名是单向的：只改"本人看对方"那一侧；remark 为空串表示清除备注。
+    int errorCode = error_code_ok;
+    if (!Singleton<ContactRemarkManager>::Instance().setRemark(
+            m_userinfo.userid, targetId, req.remark, nowMs, errorCode))
     {
+        LOGI("set contact remark failed, userid: %d, target: %d, code: %d",
+             m_userinfo.userid, targetId, errorCode);
+
         send(cmd_set_friend_remark, m_seq,
-             FriendProtocol::buildSetFriendRemarkResponse(error_code_friend_op_fail,
+             FriendProtocol::buildSetFriendRemarkResponse(errorCode,
                                                           "set remark failed", req.userid));
         return;
     }
 
     send(cmd_set_friend_remark, m_seq,
          FriendProtocol::buildSetFriendRemarkResponse(0, "ok", req.userid));
-    LOGI("set friend remark ok, userid: %d, friendid: %d, remark: %s",
-         m_userinfo.userid, friendId, req.remark.c_str());
+    LOGI("set contact remark ok, userid: %d, target: %d, remark: %s",
+         m_userinfo.userid, targetId, req.remark.c_str());
 }
 
 void ChatSession::onSetFavorite(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -1785,19 +1514,19 @@ void ChatSession::onSetFavorite(const std::string& body, const std::shared_ptr<T
                 return;
             }
 
-            //够得着的判定：是好友，或者同属一个企业（企业通讯录里看得见的人都能收藏）。
+            //够得着的判定：同属一个企业即可（企业通讯录里看得见的人都能收藏）。
             //服务号也走这条路 —— 它就是 usertype=1 的用户，同企业即可收藏。
+            //原先还有"或者是好友"这半个条件，随好友关系子系统一并去掉了。
             DepartmentManager& deptMgr = Singleton<DepartmentManager>::Instance();
             const int64_t myEnterpriseId     = deptMgr.getUserEnterpriseId(m_userinfo.userid);
             const int64_t targetEnterpriseId = deptMgr.getUserEnterpriseId(targetId);
             const bool sameEnterprise = (myEnterpriseId != 0 && myEnterpriseId == targetEnterpriseId);
 
-            if (!sameEnterprise
-                && !Singleton<UserManager>::Instance().isFriend(m_userinfo.userid, targetId))
+            if (!sameEnterprise)
             {
                 send(cmd_set_favorite, m_seq,
                      FavoriteProtocol::buildSetFavoriteResponse(error_code_not_friend,
-                                                                "not a friend or colleague",
+                                                                "not a colleague",
                                                                 req.ctype, req.cid, req.favorite));
                 return;
             }
@@ -1881,7 +1610,8 @@ void ChatSession::onSetBlacklist(const std::string& body, const std::shared_ptr<
         return;
     }
 
-    //拉黑独立于好友关系：加入/移出黑名单均不触动 t_user_relationship
+    //拉黑只写 t_blacklist 这一张表，不牵连任何别的关系；被拉黑方也不会因此被移出通讯录
+    //（通讯录来自组织架构，拉黑只影响能不能给对方发消息）。
     bool ok = false;
     if (req.action == BLACKLIST_ACTION_ADD)
         ok = userMgr.addToBlacklist(m_userinfo.userid, targetId);
@@ -1899,40 +1629,6 @@ void ChatSession::onSetBlacklist(const std::string& body, const std::shared_ptr<
     //拉黑不向被拉黑方推送任何通知——对方不应感知自己被拉黑
     LOGI("set blacklist ok, userid: %d, target: %d, action: %d",
          m_userinfo.userid, targetId, req.action);
-}
-
-void ChatSession::onSetFriendTags(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
-{
-    (void)conn;
-    SetFriendTagsRequest req;
-    if (!FriendProtocol::parseSetFriendTagsRequest(body, req))
-    {
-        send(cmd_set_friend_tags, m_seq,
-             FriendProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
-        return;
-    }
-
-    int32_t friendId = static_cast<int32_t>(req.userid);
-    UserManager& userMgr = Singleton<UserManager>::Instance();
-
-    //只能给好友设置标签
-    if (!userMgr.isFriend(m_userinfo.userid, friendId))
-    {
-        send(cmd_set_friend_tags, m_seq,
-             FriendProtocol::buildSimpleResponse(error_code_not_friend, "not a friend"));
-        return;
-    }
-
-    //标签是单向的：只改"本人对该好友"的标签；空数组表示清除
-    if (!userMgr.updateFriendTagsInDb(m_userinfo.userid, friendId, req.tagsJson))
-    {
-        send(cmd_set_friend_tags, m_seq,
-             FriendProtocol::buildSimpleResponse(error_code_friend_op_fail, "set friend tags failed"));
-        return;
-    }
-
-    send(cmd_set_friend_tags, m_seq, FriendProtocol::buildSimpleResponse(0, "ok"));
-    LOGI("set friend tags ok, userid: %d, friendid: %d", m_userinfo.userid, friendId);
 }
 
 void ChatSession::onSendMessage(const std::string& body, const std::shared_ptr<TcpConnection>& conn)

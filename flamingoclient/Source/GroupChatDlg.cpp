@@ -1088,10 +1088,9 @@ LRESULT CGroupChatDlg::OnGMemberList_DblClick(LPNMHDR pnmh)
 			return 0;
 		}
 		
-		if(m_lpFMGClient->m_UserMgr.IsFriend(nUTalkUin))
-			::SendMessage(m_hMainDlg, WM_SHOW_BUDDYCHATDLG, 0, nUTalkUin);
-		else
-			::MessageBox(m_hWnd, _T("暂且不支持临时会话，您必须加对方为好友以后才能与之会话。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		//企业版：通讯录里的人都可以直接聊天（不再有"是不是好友"这一说），
+		//原先的 IsFriend 判断与"请先加为好友"提示随 v1 好友体系一并删除。
+		::SendMessage(m_hMainDlg, WM_SHOW_BUDDYCHATDLG, 0, nUTalkUin);
 	}
 	return 0;
 }
@@ -1310,13 +1309,9 @@ void CGroupChatDlg::OnMenu_ViewInfo(UINT uNotifyCode, int nID, CWindow wndCtl)
 	if(nUTalkUin == 0)
 		return;
 
-	if(m_lpFMGClient->m_UserMgr.IsFriend(nUTalkUin) || m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID==nUTalkUin)
-		::PostMessage(m_hMainDlg, WM_SHOW_BUDDYINFODLG, 0, nUTalkUin);
-	else
-	{
-		::MessageBox(m_hWnd, _T("暂不支持查看非好友的资料。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
-		//::PostMessage(m_hMainDlg, WM_SHOW_GMEMBERINFODLG, m_nGroupCode, nUTalkUin);
-	}
+	//企业版：通讯录里的人资料都可以看（不再有"是不是好友"这一说），
+	//原先的 IsFriend 判断与"暂不支持查看非好友资料"提示随 v1 好友体系一并删除。
+	::PostMessage(m_hMainDlg, WM_SHOW_BUDDYINFODLG, 0, nUTalkUin);
 }
 
 // “发送消息”菜单
@@ -1351,12 +1346,12 @@ void CGroupChatDlg::OnMenu_SendMsg(UINT uNotifyCode, int nID, CWindow wndCtl)
 	if(nUTalkUin == 0)
 		return;
 
-	if(m_lpFMGClient->m_UserMgr.IsFriend(nUTalkUin))
-		::SendMessage(m_hMainDlg, WM_SHOW_BUDDYCHATDLG, 0, nUTalkUin);
-	else if(nUTalkUin == m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID)
+	//企业版：通讯录里的人都可以直接聊天（不再有"是不是好友"这一说），原先的
+	//IsFriend 判断已删除；只保留"不能和自己聊天"这一条仍然有意义的拦截。
+	if(nUTalkUin == m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID)
 		::MessageBox(m_hWnd, _T("不能和自己聊天。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 	else
-		::MessageBox(m_hWnd, _T("暂且不支持临时会话，您必须加对方为好友以后才能与之会话。"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::SendMessage(m_hMainDlg, WM_SHOW_BUDDYCHATDLG, 0, nUTalkUin);
 }
 
 // 发送/接收文本框的鼠标移动消息

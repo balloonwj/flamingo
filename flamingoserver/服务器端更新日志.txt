@@ -5,3 +5,23 @@
 5. 大幅度优化服务器日志显示信息;
 6. 优化文件服务器功能.
 7. 修正服务器只能上传小于512k的文件。
+8. 2026-08-05 企业版删除好友关系子系统。
+   作废协议号 1203~1208、1210、1214，编号留空不复用；
+   删除数据库表 t_user_relationship 和 t_friend_request，t_blacklist 保留；
+   删除错误码 201、203、205、206、207、208；错误码 202 保留，语义改为"够不着该联系人（不在同一企业）"；
+   保留 cmd_get_contacts(1201)、cmd_search(1202)、cmd_set_friend_remark(1209)、cmd_set_blacklist(1213)、cmd_set_favorite(1215)；
+   联系人备注名改存新表 t_contact_remark，新增 ContactRemarkManager，1209 的应答回带 userid，
+   备注随 cmd_get_contacts 应答里每个联系人的 remark 字段读回；
+   收藏(1215)的校验从"是好友或同企业同事"退化为"同一企业即可"。
+9. 2026-08-10 chatserver 启动时自动引导默认超级管理员：
+   新部署的库里一个管理员都没有，admin 控制台会陷入"登不进去也就建不了账号"的死循环，
+   故在 AdminManager::init 之后调用 AdminManager::ensureDefaultSuperAdmin 按配置注入一个平台超管；
+   判定口径是"库里有没有任何 f_enterprise_id = 0 的账号"，而不是看默认邮箱在不在 ——
+   这样已导入 testdata.sql（自带平台超管）的库不会被多塞一个账号，
+   管理员在控制台改过口令后重启服务也不会被打回默认口令；
+   默认邮箱已被某个企业管理员占用时放弃注入并记 LOGE，避免撞 t_admin 的 uniq_email 唯一索引；
+   新增配置项 defaultadminenable / defaultadminemail / defaultadminpassword / defaultadminname，
+   四项都可缺省，缺省时用内置默认值 admin@flamingo.com / admin123 / 超级管理员；
+   注意 ConfigFileReader 会把行内 '#' 之后的内容当注释截掉，故口令中不能含 '#'，
+   否则账号会被按截断后的短口令建出来，拿原口令反而登不进去；
+   注入失败只记日志、不拦服务启动。用例见 tests/test_adminbootstrap.cpp（Suite ADB，7 条）。

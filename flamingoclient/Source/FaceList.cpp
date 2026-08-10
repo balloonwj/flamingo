@@ -93,7 +93,11 @@ BOOL CFaceList::LoadConfigFile(LPCTSTR lpszFileName)
 
 CFaceInfo* CFaceList::GetFaceInfo(int nIndex)
 {
-	if (nIndex >= 0 && nIndex < (int)m_arrFaceInfo[nIndex])
+	//原写法是 nIndex < (int)m_arrFaceInfo[nIndex]：先越界取了元素，再把取出来的
+	//指针当整数比大小。32 位下堆地址通常远大于下标，误打误撞总是"通过"；64 位下
+	//这个指针被截成 int 后可能是负数，正常下标反而被判为越界，表情面板整片取不到。
+	//本意显然是跟元素个数比。
+	if (nIndex >= 0 && nIndex < (int)m_arrFaceInfo.size())
 		return m_arrFaceInfo[nIndex];
 	else
 		return NULL;

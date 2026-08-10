@@ -71,75 +71,16 @@ COLORREF BalloonContactTreeAdapter::BuddyStatusColor(long status)
 }
 
 void BalloonContactTreeAdapter::FillContacts(balloonwjui::DuiTreeView* tv,
-                                             CUserMgr* mgr)
+                                             CUserMgr* /*mgr*/)
 {
-    if (tv == NULL)
-    {
-        return;
-    }
-    // 真实数据为空时不 Clear —— 保留 InitUi 阶段 FillContactsTree 填的
-    // mock 占位,避免登录后(BuddyList 还未到 / 账号无好友)一刷就变空白。
-    // 服务器后续真正推送 buddy list 时这里会拿到非空数据,正常 Clear+刷。
-    if (mgr == NULL || mgr->m_BuddyList.GetBuddyTeamCount() == 0)
-    {
-        return;
-    }
-    tv->Clear();
-
-    CBuddyList& bl = mgr->m_BuddyList;
-    int teamCount = bl.GetBuddyTeamCount();
-    for (int t = 0; t < teamCount; ++t)
-    {
-        CBuddyTeamInfo* team = bl.GetBuddyTeamByIndex(t);
-        if (team == NULL)
-        {
-            continue;
-        }
-
-        // 根节点:"分组名  在线 / 总"
-        CString rootLabel;
-        rootLabel.Format(_T("%s  %d / %d"),
-                         team->m_strName.c_str(),
-                         team->GetOnlineBuddyCount(),
-                         team->GetBuddyCount());
-        int rootId = tv->AddRoot(rootLabel);
-        tv->SetExpanded(rootId, true);
-
-        int buddyCount = team->GetBuddyCount();
-        for (int i = 0; i < buddyCount; ++i)
-        {
-            CBuddyInfo* b = team->GetBuddy(i);
-            if (b == NULL)
-            {
-                continue;
-            }
-
-            // 主行:有备注用备注,没备注用昵称,再没有用账号。
-            CString display;
-            if (!b->m_strMarkName.empty())
-            {
-                display = b->m_strMarkName.c_str();
-            }
-            else if (!b->m_strNickName.empty())
-            {
-                display = b->m_strNickName.c_str();
-            }
-            else
-            {
-                display = b->m_strAccount.c_str();
-            }
-            int id = tv->AddChild(rootId, display);
-
-            // 副行:个性签名 (无则不显示副行)。
-            if (!b->m_strSign.empty())
-            {
-                tv->SetItemSubLabel(id, b->m_strSign.c_str());
-            }
-
-            // 右侧状态点。
-            tv->SetItemStatusColor(id, BuddyStatusColor(b->m_nStatus));
-        }
-    }
+    // 企业版：数据源 CUserMgr::m_BuddyList(v1 好友列表)已整体删除 —— 通讯录改由服务端
+    // 组织架构下发，联系人页由 CBalloonMainPanel::OnV2Contacts 收到 cmd_get_contacts
+    // 应答后自行填充(见其 FillContactsFromResult / m_contacts)，不再经本适配器。
+    //
+    // 本函数保留为空实现而不是删掉：调用点在 CBalloonMainPanel::RefreshContacts 里，
+    // 那个文件当前由他人维护，删函数会连带改到那里。空实现的语义与改造前一致 ——
+    // 原实现在"好友分组数为 0"时就直接 return（保留界面已有内容不清空）。
+    (void)tv;
 }
 
 void BalloonContactTreeAdapter::FillGroups(balloonwjui::DuiTreeView* tv,
@@ -222,14 +163,14 @@ void BalloonContactTreeAdapter::FillMessages(balloonwjui::DuiTreeView* tv,
             tv->SetItemRightText(id, timeText);
         }
 
-        // 单聊带在线状态点;群 / 讨论组不带。CRecentInfo 没存对方状态,
-        // 真实场景要回查 m_BuddyList.GetBuddy(uUserID)->m_nStatus。
-        // m_nType == 1 视为好友单聊(与服务端协议约定一致),其余为群类。
-        if (r->m_nType == 1 && mgr != NULL)
+        // 单聊带在线状态点;群 / 讨论组不带。CRecentInfo 本身没存对方状态,原先回查
+        // v1 好友列表(m_BuddyList)取 m_nStatus —— 该列表已随 v1 好友体系删除,这里
+        // 一律按离线灰显示。真实在线状态走 v2 推送(cmd_presence_changed_notify),
+        // 由 CBalloonMainPanel 自己刷会话列表的状态点。
+        // m_nType == 1 视为单聊(与服务端协议约定一致),其余为群类。
+        if (r->m_nType == 1)
         {
-            CBuddyInfo* b = mgr->m_BuddyList.GetBuddy(r->m_uUserID);
-            long status = (b != NULL) ? b->m_nStatus : STATUS_OFFLINE;
-            tv->SetItemStatusColor(id, BuddyStatusColor(status));
+            tv->SetItemStatusColor(id, BuddyStatusColor(STATUS_OFFLINE));
         }
     }
 }

@@ -77,9 +77,10 @@ TEST_CASE("CTM1 右键同事：条目顺序与分隔条位置保持不变", "[co
 {
     const std::vector<ContactMenuEntry> model = BuildContactMenuModel(MakePeerState());
 
-    // 11 个功能项 + 3 条分隔线 = 14 行。这条断言是防回归的锚：菜单结构从
-    // CBalloonMainPanel 搬到纯函数里，形态一个字都不该变。
-    REQUIRE(model.size() == 14);
+    // 8 个功能项 + 2 条分隔线 = 10 行。这条断言是防回归的锚：菜单形态一个字
+    // 都不该悄悄变。企业版取消好友关系后，原先的"移动到分组""加入黑名单"
+    // "删除好友"三项连同末尾那条分隔线一并去掉了，故由 14 行降到 10 行。
+    REQUIRE(model.size() == 10);
 
     size_t i = 0;
     CHECK(model[i].m_id == kContactMenuSendMsg);        ++i;
@@ -90,13 +91,21 @@ TEST_CASE("CTM1 右键同事：条目顺序与分隔条位置保持不变", "[co
     CHECK(model[i].m_id == kContactMenuFavorite);       ++i;
     CHECK(model[i].m_id == kContactMenuViewHistory);    ++i;
     CHECK(model[i].m_id == kContactMenuRemark);         ++i;
-    CHECK(model[i].m_id == kContactMenuMoveGroup);      ++i;
     CHECK(model[i].m_isSeparator);                      ++i;
     CHECK(model[i].m_id == kContactMenuMute);           ++i;
-    CHECK(model[i].m_id == kContactMenuBlacklist);      ++i;
-    CHECK(model[i].m_isSeparator);                      ++i;
-    CHECK(model[i].m_id == kContactMenuDeleteFriend);   ++i;
     CHECK(i == model.size());   // 逐项对完，正好走到末尾，没有漏检的行
+}
+
+TEST_CASE("CTM1b 好友相关的三项已彻底移除", "[contactmenu]")
+{
+    // 企业版通讯录就是企业组织架构，联系人的归属由部门表达，既没有好友分组，
+    // 也谈不上"删掉一个同事"。这三项不是灰显、是整项不存在。
+    // 用字面量而不是枚举值来断言 —— 枚举项本身已经删了，这里要防的是"日后
+    // 有人复用 7 / 9 / 10 这三个编号"。
+    const std::vector<ContactMenuEntry> peer = BuildContactMenuModel(MakePeerState());
+    CHECK_FALSE(HasId(peer, 7));    // 曾经的"移动到分组"
+    CHECK_FALSE(HasId(peer, 9));    // 曾经的"加入黑名单"
+    CHECK_FALSE(HasId(peer, 10));   // 曾经的"删除好友"
 }
 
 TEST_CASE("CTM2 右键自己：只剩查看资料一项", "[contactmenu]")
@@ -114,14 +123,11 @@ TEST_CASE("CTM3 右键自己：那些对自己无意义的项一个都不出现"
 {
     const std::vector<ContactMenuEntry> model = BuildContactMenuModel(MakeSelfState());
 
-    // 与自己不能聊天，也谈不上把自己拉黑 / 删好友 / 移分组。这些项必须整项
-    // 不出现，而不是灰显 —— 灰显仍会让用户以为"本来可以，只是现在不行"。
+    // 与自己不能聊天，也谈不上给自己改备注。这些项必须整项不出现，而不是灰显
+    // —— 灰显仍会让用户以为"本来可以，只是现在不行"。
     CHECK_FALSE(HasId(model, kContactMenuSendMsg));
     CHECK_FALSE(HasId(model, kContactMenuVoice));
     CHECK_FALSE(HasId(model, kContactMenuVideo));
-    CHECK_FALSE(HasId(model, kContactMenuBlacklist));
-    CHECK_FALSE(HasId(model, kContactMenuDeleteFriend));
-    CHECK_FALSE(HasId(model, kContactMenuMoveGroup));
     CHECK_FALSE(HasId(model, kContactMenuRemark));
     CHECK_FALSE(HasId(model, kContactMenuMute));
     CHECK_FALSE(HasId(model, kContactMenuFavorite));

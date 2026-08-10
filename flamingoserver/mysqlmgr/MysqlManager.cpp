@@ -63,36 +63,20 @@ CMysqlManager::CMysqlManager(void)
 		//m_vecTableInfo.push_back(info);
 	}
 
-    // 2. t_user_relationship 
+    // 2. t_contact_remark —— 联系人备注名表（企业版）
+    //    原先此处是 t_user_relationship（好友关系表），已于 2026-08-05 随好友关系子系统
+    //    一并删除：企业版通讯录来自组织架构 t_department_member，同事之间并无好友关系。
+    //    好友关系表上唯一还有人用的"好友备注名"迁到了本表，它不依赖任何好友关系。
     {
-        STableInfo info;
-        //name type desc?
-        info.m_strName = "t_user_relationship";
-        info.m_mapField["f_id"] = { "f_id", "bigint(20) NOT NULL AUTO_INCREMENT COMMENT '自增ID'", "bigint(20)" };
-        info.m_mapField["f_user_id1"] = { "f_user_id1", "bigint(20) NOT NULL COMMENT '用户ID'", "bigint(20)" };
-        info.m_mapField["f_user_id2"] = { "f_user_id2", "bigint(20) NOT NULL COMMENT '用户ID'", "bigint(20)" };
-        info.m_mapField["f_user1_teamname"] = { "f_user1_teamname", "VARCHAR(32) NOT NULL DEFAULT 'My Friends' COMMENT '用户2在用户1的好友分组名称'", "VARCHAR(32)" };
-        info.m_mapField["f_user2_teamname"] = { "f_user2_teamname", "VARCHAR(32) NOT NULL DEFAULT 'My Friends' COMMENT '用户1在用户2的好友分组名称'", "VARCHAR(32)" };
-        info.m_mapField["f_user1_markname"] = { "f_user1_markname", "VARCHAR(32) COMMENT '用户2在用户1的备注名称'", "VARCHAR(32)" },
-        info.m_mapField["f_user2_markname"] = { "f_user2_markname", "VARCHAR(32) COMMENT '用户1在用户2的备注名称'", "VARCHAR(32)" },
-        info.m_mapField["f_user1_tags"] = { "f_user1_tags", "VARCHAR(256) NOT NULL DEFAULT '' COMMENT '用户2在用户1的好友标签(JSON数组)'", "VARCHAR(256)" },
-        info.m_mapField["f_user2_tags"] = { "f_user2_tags", "VARCHAR(256) NOT NULL DEFAULT '' COMMENT '用户1在用户2的好友标签(JSON数组)'", "VARCHAR(256)" },
-        info.m_mapField["f_remark"] = { "f_remark", "varchar(64) NULL COMMENT '备注'", "varchar(64)" };
-        info.m_mapField["f_update_time"] = { "f_update_time", "timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间'", "timestamp" };
+        STableInfo remark;
+        remark.m_strName = "t_contact_remark";
+        remark.m_mapField["f_userid"] = { "f_userid", "bigint(20) NOT NULL COMMENT '备注名归属用户userid'", "bigint(20)" };
+        remark.m_mapField["f_target_userid"] = { "f_target_userid", "bigint(20) NOT NULL COMMENT '被备注的联系人userid'", "bigint(20)" };
+        remark.m_mapField["f_remark"] = { "f_remark", "varchar(32) NOT NULL DEFAULT '' COMMENT '备注名'", "varchar(32)" };
+        remark.m_mapField["f_update_time"] = { "f_update_time", "bigint(20) NOT NULL DEFAULT 0 COMMENT '最近一次修改时间(Unix毫秒)'", "bigint(20)" };
 
-        info.m_strKeyString = "PRIMARY KEY (f_id), INDEX f_id (f_id)";
-        m_vecTableInfo.push_back(info);
-
-        //info.m_mapField["AccountID"] = { "AccountID", "integer NOT NULL AUTO_INCREMENT PRIMARY KEY", "int(11)" };
-        //info.m_mapField["MobilePhone"] = { "MobilePhone", "bigint NOT NULL", "bigint(20)" };
-        //info.m_mapField["NickName"] = { "NickName", "char(65) not null", "char(65)" };
-        //info.m_mapField["PassWord"] = { "PassWord", "char(65) not null", "char(65)" };
-        ////info.m_mapField["Friend"] = { "Friend", "blob not null", "blob" };
-        //      info.m_mapField["Friend"] = { "Friend", "blob default null", "blob" };
-        //info.m_mapField["PersonInfo"] = { "PersonInfo", "blob default null", "blob" };
-        //
-        //info.m_strKeyString = "UNIQUE KEY(MobilePhone)";
-        //m_vecTableInfo.push_back(info);
+        remark.m_strKeyString = "PRIMARY KEY (f_userid, f_target_userid), KEY idx_user (f_userid)";
+        m_vecTableInfo.push_back(remark);
     }
 
 	// 3. t_chatmsg —— 消息记录表（v2 重建；旧 v1 结构已废弃，见 migrations/v2_drop_old_chatmsg.sql）
@@ -386,23 +370,11 @@ CMysqlManager::CMysqlManager(void)
 		m_vecTableInfo.push_back(svcBind);
 	}
 
-	// 18. t_friend_request —— 加好友申请表（v2 好友关系功能）
-	{
-		STableInfo fr;
-		fr.m_strName = "t_friend_request";
-		fr.m_mapField["f_id"] = { "f_id", "bigint(20) NOT NULL AUTO_INCREMENT COMMENT '申请ID'", "bigint(20)" };
-		fr.m_mapField["f_from_userid"] = { "f_from_userid", "bigint(20) NOT NULL COMMENT '申请发起方userid'", "bigint(20)" };
-		fr.m_mapField["f_to_userid"] = { "f_to_userid", "bigint(20) NOT NULL COMMENT '被申请方userid'", "bigint(20)" };
-		fr.m_mapField["f_verify_msg"] = { "f_verify_msg", "varchar(256) DEFAULT NULL COMMENT '验证留言'", "varchar(256)" };
-		fr.m_mapField["f_source"] = { "f_source", "varchar(32) DEFAULT NULL COMMENT '申请来源:search/group/card等'", "varchar(32)" };
-		fr.m_mapField["f_status"] = { "f_status", "int(2) NOT NULL DEFAULT 0 COMMENT '状态:0待处理 1已同意 2已拒绝'", "int(2)" };
-		fr.m_mapField["f_create_time"] = { "f_create_time", "bigint(20) NOT NULL DEFAULT 0 COMMENT '申请时间(Unix毫秒)'", "bigint(20)" };
-		fr.m_mapField["f_handle_time"] = { "f_handle_time", "bigint(20) NOT NULL DEFAULT 0 COMMENT '处理时间(Unix毫秒,0=未处理)'", "bigint(20)" };
-		fr.m_strKeyString = "PRIMARY KEY (f_id), KEY idx_to_status (f_to_userid, f_status), KEY idx_from (f_from_userid)";
-		m_vecTableInfo.push_back(fr);
-	}
+	// 18. 原 t_friend_request（加好友申请表）已于 2026-08-05 随好友关系子系统一并删除。
+	//     企业版没有"加好友"这一步，通讯录直接由组织架构给出。编号 18 空出不复用，
+	//     免得下次读这段的人以为漏了一张表。
 
-	// 19. t_blacklist —— 黑名单表（v2 好友管理功能；与好友关系解耦）
+	// 19. t_blacklist —— 黑名单表（拉黑仍在用：发消息 / 转发 / 群发助手都要查它）
 	{
 		STableInfo bl;
 		bl.m_strName = "t_blacklist";
@@ -625,6 +597,33 @@ CMysqlManager::CMysqlManager(void)
 		gfile.m_mapField["f_uploadtime"] = { "f_uploadtime", "bigint(20) NOT NULL DEFAULT 0 COMMENT '登记时间(Unix毫秒)'", "bigint(20)" };
 		gfile.m_strKeyString = "PRIMARY KEY (f_id), KEY idx_group (f_groupid), KEY idx_fileid (f_fileid)";
 		m_vecTableInfo.push_back(gfile);
+	}
+
+	// 28. t_favorite —— 「我的收藏」表（收藏对象为联系人或群，随通讯录应答下发）
+	//     本表与下面的 t_message_pin 此前一直漏在本清单之外：SQLite 侧由
+	//     SqliteSchema 自动建表、跑得好好的，MySQL 侧却要靠手工执行 table.sql 才有，
+	//     换 MySQL 部署时会在第一次收藏 / Pin 时报表不存在。这里补齐，两种后端行为一致。
+	{
+		STableInfo fav;
+		fav.m_strName = "t_favorite";
+		fav.m_mapField["f_userid"] = { "f_userid", "bigint(20) NOT NULL COMMENT '收藏归属用户userid'", "bigint(20)" };
+		fav.m_mapField["f_ctype"] = { "f_ctype", "int(2) NOT NULL COMMENT '收藏对象类型:1联系人 2群组'", "int(2)" };
+		fav.m_mapField["f_cid"] = { "f_cid", "bigint(20) NOT NULL COMMENT '收藏对象ID:联系人为对端userid,群组为群id'", "bigint(20)" };
+		fav.m_mapField["f_order"] = { "f_order", "int(11) NOT NULL DEFAULT 0 COMMENT '手动排序权重,值小者靠前;0表示未手动排序'", "int(11)" };
+		fav.m_mapField["f_create_time"] = { "f_create_time", "bigint(20) NOT NULL DEFAULT 0 COMMENT '收藏时间,Unix毫秒;列表按本列倒序'", "bigint(20)" };
+		fav.m_strKeyString = "PRIMARY KEY (f_userid, f_ctype, f_cid), KEY idx_favorite_user (f_userid)";
+		m_vecTableInfo.push_back(fav);
+	}
+
+	// 29. t_message_pin —— 消息 Pin 表（被钉住的消息，一条消息至多一行）
+	{
+		STableInfo pin;
+		pin.m_strName = "t_message_pin";
+		pin.m_mapField["f_msgid"] = { "f_msgid", "bigint(20) NOT NULL COMMENT '被Pin的消息msgid'", "bigint(20)" };
+		pin.m_mapField["f_operator"] = { "f_operator", "bigint(20) NOT NULL DEFAULT 0 COMMENT '执行Pin操作的userid'", "bigint(20)" };
+		pin.m_mapField["f_pin_time"] = { "f_pin_time", "bigint(20) NOT NULL DEFAULT 0 COMMENT 'Pin时间,Unix毫秒'", "bigint(20)" };
+		pin.m_strKeyString = "PRIMARY KEY (f_msgid)";
+		m_vecTableInfo.push_back(pin);
 	}
 }
 

@@ -140,4 +140,39 @@ bool IsConversationMuted(const std::vector<net::ConversationItem>& items,
     return pConv->m_mute != 0;
 }
 
+bool ShouldTreatAsReadOnArrival(bool windowExists, bool isWindow, bool isVisible,
+                                bool isIconic, bool isForeground)
+{
+    // 五项全中才算"用户正看着这个窗口"。任何一项不满足都按未读处理 —— 宁可多亮
+    // 一个红点让用户自己去点掉，也不要把没看到的消息悄悄标成已读。
+    if (!windowExists)
+        return false;
+    if (!isWindow)
+        return false;
+    if (!isVisible)
+        return false;
+    // 最小化的窗口 ::IsWindowVisible 仍返回 TRUE，故这一项不能省。
+    if (isIconic)
+        return false;
+    if (!isForeground)
+        return false;
+
+    return true;
+}
+
+int NextUnreadCount(int oldUnread, bool countAsUnread, bool treatAsRead)
+{
+    // 脏数据兜底：未读数不该为负，真出现了按 0 起算，避免把负值一路传进 UI。
+    const int base = (oldUnread > 0) ? oldUnread : 0;
+
+    // 用户正看着这个会话：本条固然不算未读，之前累积的旧未读也一并清掉。
+    if (treatAsRead)
+        return 0;
+
+    if (countAsUnread)
+        return base + 1;
+
+    return base;
+}
+
 } // namespace balloonmain

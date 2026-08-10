@@ -287,6 +287,9 @@ public:
 
     BEGIN_MSG_MAP(CBalloonChatWindow)
         MESSAGE_HANDLER(WM_CLOSE, OnCloseMsg)
+        // 窗口被切到前台时通知主面板清该会话未读（handler 置 bHandled=FALSE，
+        // 消息继续沿消息映射交给 DuiFrameWindow 链）。
+        MESSAGE_HANDLER(WM_ACTIVATE, OnActivateMsg)
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
         MESSAGE_HANDLER(WM_TIMER, OnTimer)
         MESSAGE_HANDLER(WM_SIZE, OnSize)
@@ -353,6 +356,16 @@ private:
      *  WM_CLOSE 处理：销毁本窗口；调试入口下同时通知 CMainDlg 退出程序。
      */
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_ACTIVATE 处理：本窗口被切到前台时，向主面板投 FMG_MSG_CONV_MARK_READ，
+     *  请它把本会话的未读清零。
+     *
+     *  存在理由：收消息那一路只在"消息到达的当下窗口就已在前台"时才算已读；用户
+     *  在别处忙、事后才切回这个窗口来看的情形由本处补齐，否则消息看过了红点还亮着。
+     *  不消费该消息（bHandled=FALSE），仍交 DuiFrameWindow 链继续处理。
+     */
+    LRESULT OnActivateMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
      *  WM_DUI_NOTIFY 处理：识别「发送」按钮点击，触发发消息。

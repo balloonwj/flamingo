@@ -898,14 +898,9 @@ const char* const kContactBodyXml = u8R"xml(
       <switch id="1030" fixedWidth="36" fixedHeight="20" alignCross="center"
               on-color="255,122,69" off-color="216,213,208"/>
     </field-row>
-    <field-row fixedHeight="52" divider="true" gap="16">
+    <field-row fixedHeight="52" divider="false" gap="16">
       <contact-text text="置顶聊天" size="14" color="26,26,26" weight="1"/>
       <switch id="1031" fixedWidth="36" fixedHeight="20" alignCross="center"
-              on-color="255,122,69" off-color="216,213,208"/>
-    </field-row>
-    <field-row fixedHeight="52" divider="false" gap="16">
-      <contact-text text="加入黑名单" size="14" color="26,26,26" weight="1"/>
-      <switch id="1032" fixedWidth="36" fixedHeight="20" alignCross="center"
               on-color="255,122,69" off-color="216,213,208"/>
     </field-row>
   </vbox>

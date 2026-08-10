@@ -3,7 +3,7 @@
  *
  *  联系人资料对话框的数据模型 —— 持有被查看联系人的姓名 / 备注名 /
  *  账号 / 地区 / 部门 / 职务 / 个性签名 / 在线状态，以及对话框内可编辑
- *  的标签列表、分组、三个开关（消息免打扰 / 置顶聊天 / 加入黑名单）。
+ *  的标签列表、分组、两个开关（消息免打扰 / 置顶聊天）。
  *
  *  纯数据结构，不涉及任何控件 / 网络 / 持久化。当前以 mock 数据
  *  （「江屿白」那一组）初始化，真实数据接入待后续。
@@ -34,18 +34,20 @@ enum ContactStatus
 };
 
 /**
- *  对话框内的三个布尔开关。枚举值同时用作 ContactModel 内部开关
- *  数组的下标。
+ *  对话框内的布尔开关。枚举值同时用作 ContactModel 内部开关数组的下标，
+ *  故必须从 0 起连续编号，删项时后面的要顺次前移。
  */
 enum ContactSwitchKind
 {
     kContactSwitchMute      = 0,   // 消息免打扰：开则该联系人消息不提醒
     kContactSwitchPinned    = 1,   // 置顶聊天：开则会话置于消息列表顶部
-    kContactSwitchBlocked   = 2,   // 加入黑名单：开则屏蔽该联系人
+    // 曾经还有一项 kContactSwitchBlocked（加入黑名单）。企业版取消了好友关系，
+    // 该开关连同好友功能一并移除；它此前也从未发出过任何协议，拨动只改内存、
+    // 窗口一关就没了。
 };
 
 // 对话框内开关的总数。
-const int kContactSwitchCount = 3;
+const int kContactSwitchCount = 2;
 
 /**
  *  ContactModel —— 联系人资料对话框的数据模型。

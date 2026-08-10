@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx</Extensions>
+    </Filter>
+    <Filter Include="Source Files\Under Test">
+      <UniqueIdentifier>{2A6E1C40-2222-4A01-9001-000000000001}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="TestMain.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="TestFramework.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DataStoreTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DebugConsoleTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ScrollbarMetricsTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="CommonWidgetsTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AnnouncementPreviewPanelTests.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Mock\MockData.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Mock\DataStore.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Util\Logger.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Util\DebugConsole.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\third-party\jsoncpp\json_reader.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\third-party\jsoncpp\json_value.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\third-party\jsoncpp\json_writer.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Util\ScrollbarMetrics.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Widgets\CommonWidgets.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Widgets\UiHelpers.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Widgets\IconRenderer.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Screens\AnnouncementPreviewPanel.cpp">
+      <Filter>Source Files\Under Test</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="TestFramework.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Util\ScrollbarMetrics.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Widgets\CommonWidgets.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Widgets\UiHelpers.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Widgets\IconRenderer.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Screens\AnnouncementPreviewPanel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

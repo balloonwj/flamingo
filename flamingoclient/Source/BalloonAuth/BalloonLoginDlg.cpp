@@ -454,6 +454,9 @@ LRESULT CBalloonLoginDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
             {
                 m_pAutoLogin->SetCheck(false, false);
             }
+            // 就地落盘 —— 勾选项此前要等登录成功才写盘，用户取消勾选后直接关掉
+            // 登录窗的话改动就丢了，下次启动照旧自动登录。
+            PersistCheckStateForCurrentAccount();
             return 0;
         }
         if (pNotify->ctrlId == balloonauth::kIdAutoLogin)
@@ -463,6 +466,7 @@ LRESULT CBalloonLoginDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
             {
                 m_pRememberPwd->SetCheck(true, false);
             }
+            PersistCheckStateForCurrentAccount();
             return 0;
         }
         // 账号下拉框选中 / 输入变化 —— 联动加载该账号的历史登录信息。
@@ -782,6 +786,43 @@ void CBalloonLoginDlg::PopulateAccountCombo()
     // 由通知触发的，传 kComboExtraNoItem 表示"直接读下拉框现在的文本"。
     UpdateBannerUserName(
         ResolveAccountFromCombo(balloonauth::kComboExtraNoItem));
+}
+
+void CBalloonLoginDlg::PersistCheckStateForCurrentAccount()
+{
+    if (m_pLoginAccountList == NULL)
+        return;
+
+    // 账号一律经 ResolveAccountFromCombo 解析（理由见 OnDuiNotify 里的说明）。
+    // 这里不是由下拉框选中触发的，传 kComboExtraNoItem 表示"直接读现在的文本"。
+    CString account = ResolveAccountFromCombo(balloonauth::kComboExtraNoItem);
+    if (account.IsEmpty())
+        return;   // 账号还没填，无从落盘
+
+    LOGIN_ACCOUNT_INFO* lpAccount = m_pLoginAccountList->Find(account);
+    if (lpAccount == NULL)
+        return;   // 尚未在本机成功登录过的账号，入列等登录成功后再由 CMainDlg 做
+
+    const BOOL bRemember =
+        (m_pRememberPwd != NULL && m_pRememberPwd->IsChecked()) ? TRUE : FALSE;
+    const BOOL bAuto =
+        (m_pAutoLogin != NULL && m_pAutoLogin->IsChecked()) ? TRUE : FALSE;
+    if (lpAccount->bRememberPwd == bRemember && lpAccount->bAutoLogin == bAuto)
+        return;   // 与盘上的一致，不必白写一次
+
+    lpAccount->bRememberPwd = bRemember;
+    lpAccount->bAutoLogin   = bAuto;
+    // 不记住密码就不该继续留着密码，否则文件里仍有明文，这个"取消"名不副实。
+    if (!bRemember)
+    {
+        lpAccount->szPwd[0] = _T('\0');
+    }
+
+    const tstring strFileName =
+        Hootina::CPath::GetAppPath() + _T("Users\\LoginAccountList.dat");
+    const BOOL bSaved = m_pLoginAccountList->SaveFile(strFileName.c_str());
+    LOG_INFO(_T("登录窗勾选项就地落盘: account=%s, 记住密码=%d, 自动登录=%d, 落盘=%d."),
+             (LPCTSTR)account, (int)bRemember, (int)bAuto, (int)bSaved);
 }
 
 void CBalloonLoginDlg::LoadAccountIntoUi(LPCTSTR lpszAccount)

@@ -101,22 +101,17 @@ enum msg_type
     cmd_presence_changed_notify  = 1109,        //推送：某联系人在线状态发生变更
     cmd_reset_password           = 1110,        //忘记密码：凭短信验证码重置登录密码
 
-    //==== 好友与联系人 1200-1299 ====
+    //==== 联系人 1200-1299 ====
     cmd_get_contacts                   = 1201,  //拉取通讯录（企业部门树 + 部门成员 + 群组 + 服务号 + 收藏）
     cmd_search                         = 1202,  //查找用户/群/企业
-    cmd_add_friend_request             = 1203,  //发起加好友申请
-    cmd_friend_request_notify          = 1204,  //推送：收到加好友申请
-    cmd_handle_friend_request          = 1205,  //处理加好友申请（同意/拒绝）
-    cmd_friend_request_result_notify   = 1206,  //推送：自己发出的加好友申请被处理的结果
-    cmd_delete_friend                  = 1207,  //删除好友
-    cmd_friend_relation_changed_notify = 1208,  //推送：好友关系变更（成为好友/被对方删除）
-    cmd_set_friend_remark              = 1209,  //设置好友备注名
-    cmd_set_friend_tags                = 1210,  //设置好友标签
-    //1211 / 1212 原为 cmd_move_friend_team / cmd_operate_team（QQ 式好友分组），v2 已取消：
-    //通讯录以企业组织架构为中心，联系人的归属由部门表达，不再有好友分组这一层。
-    //编号留空不复用，避免与仍在使用旧协议的存量客户端撞号。详见 docs/协议设计-v2.md 第 491 行。
-    cmd_set_blacklist                  = 1213,  //加入/移出黑名单
-    cmd_get_notifications              = 1214,  //拉取消息盒子（加好友申请/系统通知）
+    //1203~1208、1210、1214 原为好友关系那一套（加好友申请、处理申请、删好友、
+    //好友关系变更推送、好友标签、消息盒子里的加好友申请）。企业版取消了好友关系
+    //——通讯录即企业组织架构，能在通讯录里看到的同事就能直接聊天，不需要先加好友
+    //——故整套移除。1211 / 1212 原为好友分组（cmd_move_friend_team /
+    //cmd_operate_team），更早就已取消。
+    //以上编号一律留空不复用，避免与仍在使用旧协议的存量客户端撞号。
+    cmd_set_friend_remark              = 1209,  //设置联系人备注名（沿用旧名，实际已与好友关系无关）
+    cmd_set_blacklist                  = 1213,  //加入/移出黑名单（服务端发消息时据此拦截；客户端当前无入口）
     cmd_set_favorite                   = 1215,  //添加/取消收藏（收藏对象为联系人或群组）
 
     //==== 群组 1300-1399 ====
@@ -267,16 +262,15 @@ enum error_code
     error_code_change_pwd_fail     = 107,  //修改密码失败
     error_code_avatar_too_large    = 108,  //头像文件超过大小限制
 
-    //==== 好友 200-299 ====
-    error_code_friend_op_fail      = 200,  //好友操作失败
-    error_code_already_friend      = 201,  //对方已是好友
-    error_code_not_friend          = 202,  //对方不是好友
-    error_code_request_not_exist   = 203,  //加好友申请不存在或已处理
-    error_code_in_blacklist        = 204,  //已被对方拉黑
-    error_code_cannot_add_self     = 205,  //不能添加自己为好友
-    error_code_friend_limit        = 206,  //好友数量已达上限
-    error_code_team_name_exist     = 207,  //同名分组已存在
-    error_code_team_not_exist      = 208,  //分组不存在
+    //==== 联系人 200-299 ====
+    error_code_friend_op_fail      = 200,  //联系人操作失败（服务端 onSetBlacklist 仍在用）
+    //201 曾是 error_code_already_friend、203 曾是 error_code_request_not_exist、
+    //205~208 曾是"不能加自己/好友数超限/分组名重复/分组不存在"。企业版取消好友关系后
+    //一并废弃，编号留空不复用。
+    //202 的名字沿用旧称，含义已改成"够不着该联系人（不在同一企业）"——收藏时服务端
+    //用它拒绝跨企业收藏。名字暂不改，免得动到已发布的错误码语义。
+    error_code_not_friend          = 202,  //够不着该联系人（不在同一企业）
+    error_code_in_blacklist        = 204,  //已被对方拉黑（服务端发消息 / 转发 / 群发时据此拦截）
     error_code_favorite_limit      = 209,  //收藏数量已达上限（见 kMaxFavoriteCount）
 
     //==== 群组 300-399 ====
@@ -449,12 +443,8 @@ enum group_file_change_type
     group_file_change_removed = 2,  //删除：某群文件被移除（推送体携 entryid）
 };
 
-//加好友申请的处理动作，对应 cmd_handle_friend_request 的 action 字段
-enum friend_request_action
-{
-    friend_request_refuse = 0,   //拒绝加好友申请
-    friend_request_accept = 1,   //接受加好友申请
-};
+//这里原有一个 friend_request_action 枚举（加好友申请的同意 / 拒绝），随
+//cmd_handle_friend_request(1205) 一并移除 —— 企业版没有加好友这一步。
 
 //群成员角色
 enum group_member_role

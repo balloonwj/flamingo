@@ -107,11 +107,13 @@ TEST_CASE("SQM1 空库冷启动建出全部表、索引与触发器")
         CHECK(queryScalar(db, sql.c_str()) == 1);
     }
 
-    //索引与触发器也要建出来。索引数量把 SQLite 为唯一约束自动创建的算在内，
-    //所以只断言「不少于显式创建的条数」
-    CHECK(queryScalar(db, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger'") == 9);
+    //索引与触发器也要建出来。触发器只由 ON UPDATE CURRENT_TIMESTAMP 的列产生，
+    //数目固定，删表 / 加表时要跟着改这个期望值（2026-08-05 删 t_user_relationship 后
+    //由 9 降为 8）。索引数量把 SQLite 为唯一约束自动创建的算在内，
+    //所以只断言「不少于显式创建的条数」（当前生成 49 条）
+    CHECK(queryScalar(db, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger'") == 8);
     CHECK(queryScalar(db,
-        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'") >= 47);
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name NOT LIKE 'sqlite_%'") >= 49);
 }
 
 TEST_CASE("SQM2 重复执行引导是幂等的")

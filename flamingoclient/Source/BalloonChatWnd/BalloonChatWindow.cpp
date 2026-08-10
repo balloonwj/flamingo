@@ -758,6 +758,35 @@ void CBalloonChatWindow::InitUi()
 // 消息处理
 // =======================================================================
 
+LRESULT CBalloonChatWindow::OnActivateMsg(UINT /*uMsg*/, WPARAM wParam,
+                                          LPARAM /*lParam*/, BOOL& bHandled)
+{
+    // 本处只是搭个便车，不消费 WM_ACTIVATE：置 FALSE 让消息继续沿消息映射
+    // 交给 DuiFrameWindow 链（基类目前没有该消息的 handler，最终走 DefWindowProc）。
+    bHandled = FALSE;
+
+    // 只关心"被激活"，失活不做任何事。
+    if (LOWORD(wParam) == WA_INACTIVE)
+    {
+        return 0;
+    }
+    if (m_hostPanel == NULL || !::IsWindow(m_hostPanel))
+    {
+        return 0;
+    }
+    if (m_peerUserId == 0)
+    {
+        return 0;
+    }
+
+    // 用户切回这个聊天窗 = 他要看这个会话了：请主面板清未读并上报已读位点。
+    // cid 用堆上的 long long 传递（Win32 下 LPARAM 装不下 64 位），主面板处理后 delete。
+    long long* pCid = new long long((long long)m_peerUserId);
+    LOG_INFO("单聊窗被激活，请求清除该会话未读: peer=%u.", m_peerUserId);
+    ::PostMessage(m_hostPanel, FMG_MSG_CONV_MARK_READ, (WPARAM)1, (LPARAM)pCid);
+    return 0;
+}
+
 LRESULT CBalloonChatWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
                                        LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {

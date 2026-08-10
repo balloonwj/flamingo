@@ -46,20 +46,6 @@ const char* const SCHEMA_TABLE_STATEMENTS[] =
         "    f_status INTEGER NOT NULL DEFAULT 0,\n"
         "    f_usertype INTEGER NOT NULL DEFAULT 0\n"
         ");\n",
-    "CREATE TABLE IF NOT EXISTS t_user_relationship\n"
-        "(\n"
-        "    f_id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
-        "    f_user_id1 INTEGER NOT NULL,\n"
-        "    f_user_id2 INTEGER NOT NULL,\n"
-        "    f_user1_teamname VARCHAR(32) NOT NULL DEFAULT '\346\210\221\347\232\204\345\245\275\345\217\213',\n"
-        "    f_user1_markname VARCHAR(32),\n"
-        "    f_user2_teamname VARCHAR(32) NOT NULL DEFAULT '\346\210\221\347\232\204\345\245\275\345\217\213',\n"
-        "    f_user2_markname VARCHAR(32),\n"
-        "    f_user1_tags VARCHAR(256) NOT NULL DEFAULT '',\n"
-        "    f_user2_tags VARCHAR(256) NOT NULL DEFAULT '',\n"
-        "    f_update_time TIMESTAMP NOT NULL DEFAULT (datetime('now','localtime')),\n"
-        "    f_remark VARCHAR(64) DEFAULT NULL\n"
-        ");\n",
     "CREATE TABLE IF NOT EXISTS t_chatmsg\n"
         "(\n"
         "    f_msgid INTEGER PRIMARY KEY AUTOINCREMENT,\n"
@@ -254,16 +240,13 @@ const char* const SCHEMA_TABLE_STATEMENTS[] =
         "    f_bind_target_id INTEGER NOT NULL DEFAULT 0,\n"
         "    f_create_time DATETIME NOT NULL\n"
         ");\n",
-    "CREATE TABLE IF NOT EXISTS t_friend_request\n"
+    "CREATE TABLE IF NOT EXISTS t_contact_remark\n"
         "(\n"
-        "    f_id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
-        "    f_from_userid INTEGER NOT NULL,\n"
-        "    f_to_userid INTEGER NOT NULL,\n"
-        "    f_verify_msg VARCHAR(256) DEFAULT NULL,\n"
-        "    f_source VARCHAR(32) DEFAULT NULL,\n"
-        "    f_status INTEGER NOT NULL DEFAULT 0,\n"
-        "    f_create_time INTEGER NOT NULL DEFAULT 0,\n"
-        "    f_handle_time INTEGER NOT NULL DEFAULT 0\n"
+        "    f_userid INTEGER NOT NULL,\n"
+        "    f_target_userid INTEGER NOT NULL,\n"
+        "    f_remark VARCHAR(32) NOT NULL DEFAULT '',\n"
+        "    f_update_time INTEGER NOT NULL DEFAULT 0,\n"
+        "    PRIMARY KEY (f_userid, f_target_userid)\n"
         ");\n",
     "CREATE TABLE IF NOT EXISTS t_blacklist\n"
         "(\n"
@@ -313,14 +296,6 @@ const char* const SCHEMA_TABLE_STATEMENTS[] =
         "    f_order INTEGER NOT NULL DEFAULT 0,\n"
         "    f_create_time INTEGER NOT NULL DEFAULT 0,\n"
         "    PRIMARY KEY (f_userid, f_ctype, f_cid)\n"
-        ");\n",
-    "CREATE TABLE IF NOT EXISTS t_contact_remark\n"
-        "(\n"
-        "    f_userid INTEGER NOT NULL,\n"
-        "    f_target_userid INTEGER NOT NULL,\n"
-        "    f_remark VARCHAR(32) NOT NULL DEFAULT '',\n"
-        "    f_update_time INTEGER NOT NULL DEFAULT 0,\n"
-        "    PRIMARY KEY (f_userid, f_target_userid)\n"
         ");\n",
     "CREATE TABLE IF NOT EXISTS t_group\n"
         "(\n"
@@ -418,7 +393,7 @@ const char* const SCHEMA_TABLE_STATEMENTS[] =
         ");\n",
 };
 
-const int SCHEMA_TABLE_STATEMENT_COUNT = 33;
+const int SCHEMA_TABLE_STATEMENT_COUNT = 31;
 
 const char* const SCHEMA_POST_STATEMENTS[] =
 {
@@ -431,11 +406,6 @@ const char* const SCHEMA_POST_STATEMENTS[] =
         "FOR EACH ROW WHEN NEW.f_update_time = OLD.f_update_time\n"
         "BEGIN\n"
         "    UPDATE t_user SET f_update_time = datetime('now','localtime') WHERE rowid = NEW.rowid;\n"
-        "END;\n",
-    "CREATE TRIGGER IF NOT EXISTS trg_t_user_relationship_f_update_time AFTER UPDATE ON t_user_relationship\n"
-        "FOR EACH ROW WHEN NEW.f_update_time = OLD.f_update_time\n"
-        "BEGIN\n"
-        "    UPDATE t_user_relationship SET f_update_time = datetime('now','localtime') WHERE rowid = NEW.rowid;\n"
         "END;\n",
     "CREATE INDEX IF NOT EXISTS t_chatmsg_idx_from_to ON t_chatmsg(f_from, f_to);\n",
     "CREATE INDEX IF NOT EXISTS t_chatmsg_idx_to_from ON t_chatmsg(f_to, f_from);\n",
@@ -504,8 +474,7 @@ const char* const SCHEMA_POST_STATEMENTS[] =
         "    UPDATE t_service_account SET f_update_time = datetime('now','localtime') WHERE rowid = NEW.rowid;\n"
         "END;\n",
     "CREATE INDEX IF NOT EXISTS t_service_account_binding_idx_service ON t_service_account_binding(f_service_id);\n",
-    "CREATE INDEX IF NOT EXISTS t_friend_request_idx_to_status ON t_friend_request(f_to_userid, f_status);\n",
-    "CREATE INDEX IF NOT EXISTS t_friend_request_idx_from ON t_friend_request(f_from_userid);\n",
+    "CREATE INDEX IF NOT EXISTS t_contact_remark_idx_user ON t_contact_remark(f_userid);\n",
     "CREATE INDEX IF NOT EXISTS t_favorite_idx_favorite_user ON t_favorite(f_userid);\n",
     "CREATE INDEX IF NOT EXISTS t_group_announcement_idx_group_time ON t_group_announcement(f_groupid, f_publish_time);\n",
     "CREATE INDEX IF NOT EXISTS t_group_member_idx_user ON t_group_member(f_userid);\n",
@@ -519,12 +488,11 @@ const char* const SCHEMA_POST_STATEMENTS[] =
     "CREATE INDEX IF NOT EXISTS t_group_file_idx_fileid ON t_group_file(f_fileid);\n",
 };
 
-const int SCHEMA_POST_STATEMENT_COUNT = 59;
+const int SCHEMA_POST_STATEMENT_COUNT = 57;
 
 const char* const SCHEMA_TABLES[] =
 {
     "t_user",
-    "t_user_relationship",
     "t_chatmsg",
     "t_department",
     "t_department_member",
@@ -540,7 +508,7 @@ const char* const SCHEMA_TABLES[] =
     "t_login_record",
     "t_service_account",
     "t_service_account_binding",
-    "t_friend_request",
+    "t_contact_remark",
     "t_blacklist",
     "t_conversation",
     "t_message_deleted",
@@ -557,7 +525,7 @@ const char* const SCHEMA_TABLES[] =
     "t_group_file",
 };
 
-const int SCHEMA_TABLE_COUNT = 32;
+const int SCHEMA_TABLE_COUNT = 31;
 
 const SchemaColumn SCHEMA_COLUMNS[] =
 {
@@ -588,16 +556,6 @@ const SchemaColumn SCHEMA_COLUMNS[] =
     { "t_user", "f_workstation", "VARCHAR(256) DEFAULT NULL" },
     { "t_user", "f_status", "INTEGER NOT NULL DEFAULT 0" },
     { "t_user", "f_usertype", "INTEGER NOT NULL DEFAULT 0" },
-    { "t_user_relationship", "f_user_id1", "INTEGER" },
-    { "t_user_relationship", "f_user_id2", "INTEGER" },
-    { "t_user_relationship", "f_user1_teamname", "VARCHAR(32) NOT NULL DEFAULT '\346\210\221\347\232\204\345\245\275\345\217\213'" },
-    { "t_user_relationship", "f_user1_markname", "VARCHAR(32)" },
-    { "t_user_relationship", "f_user2_teamname", "VARCHAR(32) NOT NULL DEFAULT '\346\210\221\347\232\204\345\245\275\345\217\213'" },
-    { "t_user_relationship", "f_user2_markname", "VARCHAR(32)" },
-    { "t_user_relationship", "f_user1_tags", "VARCHAR(256) NOT NULL DEFAULT ''" },
-    { "t_user_relationship", "f_user2_tags", "VARCHAR(256) NOT NULL DEFAULT ''" },
-    { "t_user_relationship", "f_update_time", "TIMESTAMP" },
-    { "t_user_relationship", "f_remark", "VARCHAR(64) DEFAULT NULL" },
     { "t_chatmsg", "f_clientmsgid", "VARCHAR(64) NOT NULL DEFAULT ''" },
     { "t_chatmsg", "f_ctype", "INTEGER NOT NULL DEFAULT 1" },
     { "t_chatmsg", "f_from", "INTEGER" },
@@ -732,13 +690,10 @@ const SchemaColumn SCHEMA_COLUMNS[] =
     { "t_service_account_binding", "f_bind_type", "INTEGER" },
     { "t_service_account_binding", "f_bind_target_id", "INTEGER NOT NULL DEFAULT 0" },
     { "t_service_account_binding", "f_create_time", "DATETIME" },
-    { "t_friend_request", "f_from_userid", "INTEGER" },
-    { "t_friend_request", "f_to_userid", "INTEGER" },
-    { "t_friend_request", "f_verify_msg", "VARCHAR(256) DEFAULT NULL" },
-    { "t_friend_request", "f_source", "VARCHAR(32) DEFAULT NULL" },
-    { "t_friend_request", "f_status", "INTEGER NOT NULL DEFAULT 0" },
-    { "t_friend_request", "f_create_time", "INTEGER NOT NULL DEFAULT 0" },
-    { "t_friend_request", "f_handle_time", "INTEGER NOT NULL DEFAULT 0" },
+    { "t_contact_remark", "f_userid", "INTEGER" },
+    { "t_contact_remark", "f_target_userid", "INTEGER" },
+    { "t_contact_remark", "f_remark", "VARCHAR(32) NOT NULL DEFAULT ''" },
+    { "t_contact_remark", "f_update_time", "INTEGER NOT NULL DEFAULT 0" },
     { "t_blacklist", "f_userid", "INTEGER" },
     { "t_blacklist", "f_blocked_userid", "INTEGER" },
     { "t_blacklist", "f_create_time", "TIMESTAMP" },
@@ -828,6 +783,6 @@ const SchemaColumn SCHEMA_COLUMNS[] =
     { "t_group_file", "f_uploadtime", "INTEGER NOT NULL DEFAULT 0" },
 };
 
-const int SCHEMA_COLUMN_COUNT = 265;
+const int SCHEMA_COLUMN_COUNT = 252;
 
 } // namespace sqliteapi

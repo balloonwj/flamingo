@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-好友下线通知的回归测试（针对 ChatServer::onDisconnected 自我死锁崩溃）
+下线通知的回归测试（针对 ChatServer::onDisconnected 自我死锁崩溃）
 balloonwj@qq.com   2026-08-03
 
-背景：修复前，只要「下线用户至少有一个好友在线」，chatserver 就会必崩。
+背景：修复前，只要「下线用户至少有一个同事在线」，chatserver 就会必崩。
 原因是 ChatServer::onDisconnected 在持有 m_sessionMutex 期间调用
 ChatSession::sendUserStatusChangeMsg，后者内部又调 getUserClientTypeByUserId
 再加一次同一把非递归锁，直接抛 resource_deadlock_would_occur 并终止进程。
 
 本脚本就是把那个触发条件原样跑一遍，逐项验证：
-  1. 两人互为好友、双方都在线时，一方正常断开，服务端不崩；
+  1. 两人都在线时，一方正常断开，服务端不崩；
   2. 在线的那一方能收到对方的 cmd_presence_changed_notify（presence=0）；
   3. 换成 RST 异常断开（客户端进程被杀 / 网线拔掉那种），服务端同样不崩；
   4. 反方向再来一次（换另一个人断开），确认不是单向侥幸；
@@ -17,6 +17,19 @@ ChatSession::sendUserStatusChangeMsg，后者内部又调 getUserClientTypeByUse
 
 复用 e2e_sqlite_smoke.py 的协议实现（帧编解码、注册、登录等），只在这里
 补充下线场景需要的判定。
+
+【2026-08-05 企业版改造后的变化】
+
+原先第 2 步是「双方互加好友」，靠好友关系把两人关联起来。企业版已删除好友关系
+子系统（加好友 1203 / 处理申请 1205 等全部移除），该步骤连同它引用的
+e2e.CMD_ADD_FRIEND_REQUEST 等常量一并删掉 —— 死锁的触发条件是 onDisconnected
+走到广播分支，与两人之间有没有关系链无关，双方都登录着即可。
+
+关联改由**企业归属**承担：两个账号注册进同一家企业，离线推送就走
+ChatServer::onDisconnected 里的 broadcastToEnterprise 投到对方。这比原先靠好友
+关系更贴近生产 —— 企业版真实用户之间本来就是靠企业范围互相看到在线状态的。
+注意该广播明确跳过 enterpriseId == 0 的账号（平台超管、群账号），所以注册时
+**必须**带上公司全称，见 e2e_sqlite_smoke.resolve_company。
 
 用法：
     python tools/e2e_offline_notify.py --port 20100 --log 路径/chatserver.out
@@ -119,13 +132,18 @@ def abrupt_close(session):
 
 def main():
     parser = argparse.ArgumentParser(
-        description=u"好友下线通知回归测试（onDisconnected 死锁崩溃）")
+        description=u"下线通知回归测试（onDisconnected 死锁崩溃）")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=20100)
     parser.add_argument("--log", required=True,
                         help=u"chatserver 标准输出文件，用于抓注册短信验证码")
     parser.add_argument("--suffix", default="01",
                         help=u"账号后缀，重复跑时换一个，避免撞用户名")
+    parser.add_argument("--db", default="",
+                        help=u"SQLite 库文件路径，用来自动取一家企业作注册用的公司名")
+    parser.add_argument("--company", default="",
+                        help=u"注册时用的公司全称，须与 t_enterprise.f_name 完全一致；"
+                             u"不给则从 --db 里自动取第一家")
     args = parser.parse_args()
 
     alice_name = "off_a%s" % args.suffix
@@ -135,25 +153,23 @@ def main():
     alice_phone = "1390000%s01" % args.suffix
     bob_phone = "1390000%s02" % args.suffix
 
-    print(u"[1/6] 注册两个账号")
+    # 两个账号必须落进<u>同一家</u>企业：离线推送走 broadcastToEnterprise 按企业范围
+    # 投递，不同企业（或没有企业归属）就互相收不到，第 2 项断言无从验起。
+    company = e2e.resolve_company(args.db, args.company)
+    print(u"[1/6] 注册两个账号（公司：%s）" % company)
     e2e.register_account(args.host, args.port, args.log,
-                         alice_name, u"爱丽丝", alice_phone, alice_pwd)
+                         alice_name, u"爱丽丝", alice_phone, alice_pwd, company)
     e2e.register_account(args.host, args.port, args.log,
-                         bob_name, u"鲍勃", bob_phone, bob_pwd)
+                         bob_name, u"鲍勃", bob_phone, bob_pwd, company)
     print(u"      ok")
 
-    print(u"[2/6] 双方登录并互加好友")
+    print(u"[2/6] 双方登录")
+    # 企业版删除好友关系后，这里不再需要"互加好友"这一步：死锁的触发条件是
+    # onDisconnected 走到广播分支，与两人之间有没有关系链无关，双方都在线即可；
+    # 而"对方能收到离线推送"这一条由上面的同企业注册来保证。
     alice = e2e.login(args.host, args.port, alice_name, alice_pwd, "alice")
     bob = e2e.login(args.host, args.port, bob_name, bob_pwd, "bob")
-    resp = e2e.check_ok(alice.request(e2e.CMD_ADD_FRIEND_REQUEST, {
-        "userid": str(bob.userid), "source": "search", "verifymsg": u"回归测试"}),
-        u"发起加好友申请")
-    requestid = int(resp["requestid"])
-    bob.wait(e2e.CMD_FRIEND_REQUEST_NOTIFY)
-    e2e.check_ok(bob.request(e2e.CMD_HANDLE_FRIEND_REQUEST,
-                             {"requestid": str(requestid), "action": e2e.FRIEND_ACTION_ACCEPT}),
-                 u"同意加好友")
-    print(u"      alice userid=%d, bob userid=%d, 已互为好友"
+    print(u"      alice userid=%d, bob userid=%d, 均已登录同一企业"
           % (alice.userid, bob.userid))
 
     print(u"[3/6] bob 正常断开（FIN），alice 在线 —— 这就是原先必崩的场景")

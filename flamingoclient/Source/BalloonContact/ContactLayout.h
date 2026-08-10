@@ -36,7 +36,8 @@ enum ContactCtrlId
 
     kIdSwitchMute     = 1030,   // 「消息免打扰」开关（DuiSwitch）
     kIdSwitchPinned   = 1031,   // 「置顶聊天」开关（DuiSwitch）
-    kIdSwitchBlocked  = 1032,   // 「加入黑名单」开关（DuiSwitch）
+    // 1032 曾是「加入黑名单」开关。企业版取消好友关系后该行整行移除；
+    // 编号留空不复用，避免与旧版本布局对不上号。
 
     kIdBtnClose       = 1040,   // 底部「关闭」按钮（ContactActionButton，ghost）
     kIdBtnSend        = 1041,   // 底部「发消息」按钮（ContactActionButton，primary）

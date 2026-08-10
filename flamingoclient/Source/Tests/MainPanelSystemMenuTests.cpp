@@ -31,11 +31,12 @@ using namespace balloonmain;
 // SYS. 系统菜单行模型契约（对照 design/主面板系统菜单.png）
 // =====================================================================
 
-TEST_CASE("SYS1 系统菜单共 8 个功能项 + 4 条分隔线 = 12 行", "[sysmenu]")
+TEST_CASE("SYS1 系统菜单共 7 个功能项 + 4 条分隔线 = 11 行", "[sysmenu]")
 {
-    // 在设计稿原有的 7 项之后追加了"登出"（末尾单独一组，前置一条分隔线）。
+    // 项数的来历：设计稿原有 7 项，之后追加了"登出"（末尾单独一组，前置一条分隔线）
+    // 变成 8 项，再之后「群发助手」下线又回到 7 项。功能项与总行数是一起变的，改动
+    // 时两个数都要跟上 —— 此前就出现过总行数已改到 11、功能项却还写着 8 的自相矛盾。
     std::vector<SystemMenuEntry> items = BuildSystemMenuModel();
-    //「群发助手」下线后少一项
     REQUIRE(items.size() == 11);
 
     int seps = 0;
@@ -52,7 +53,9 @@ TEST_CASE("SYS1 系统菜单共 8 个功能项 + 4 条分隔线 = 12 行", "[sys
         }
     }
     CHECK(seps == 4);
-    CHECK(funcs == 8);
+    CHECK(funcs == 7);
+    // 分隔线 + 功能项必须正好铺满全部行，不允许出现第三种行类型悄悄混进来。
+    CHECK(seps + funcs == (int)items.size());
 }
 
 TEST_CASE("SYS2 行顺序、文本、分隔线位置严格对照设计稿", "[sysmenu]")

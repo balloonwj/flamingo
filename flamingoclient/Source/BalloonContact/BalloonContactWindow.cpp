@@ -382,14 +382,14 @@ void CBalloonContactWindow::FillSwitches()
         return;
     }
 
-    // 三个开关的 ctrlId 与对应模型开关类别。
+    // 各开关的 ctrlId 与对应模型开关类别。
     const UINT switchIds[kContactSwitchCount] =
     {
-        kIdSwitchMute, kIdSwitchPinned, kIdSwitchBlocked
+        kIdSwitchMute, kIdSwitchPinned
     };
     const int switchKinds[kContactSwitchCount] =
     {
-        kContactSwitchMute, kContactSwitchPinned, kContactSwitchBlocked
+        kContactSwitchMute, kContactSwitchPinned
     };
 
     for (int i = 0; i < kContactSwitchCount; ++i)
@@ -591,9 +591,6 @@ void CBalloonContactWindow::OnSwitchToggled(UINT switchCtrlId, bool on)
     case kIdSwitchPinned:
         kind = kContactSwitchPinned;
         break;
-    case kIdSwitchBlocked:
-        kind = kContactSwitchBlocked;
-        break;
     default:
         return;
     }
@@ -690,10 +687,9 @@ LRESULT CBalloonContactWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
     // ---- 状态变化类通知 ----
     if (pNotify->code == DUIN_VALUECHANGED)
     {
-        // 三个开关翻转 —— extra 为新状态（1 开 / 0 关）。
+        // 开关翻转 —— extra 为新状态（1 开 / 0 关）。
         if (pNotify->ctrlId == kIdSwitchMute
-            || pNotify->ctrlId == kIdSwitchPinned
-            || pNotify->ctrlId == kIdSwitchBlocked)
+            || pNotify->ctrlId == kIdSwitchPinned)
         {
             OnSwitchToggled(pNotify->ctrlId, pNotify->extra != 0);
             return 0;

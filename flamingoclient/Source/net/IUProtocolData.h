@@ -7,8 +7,6 @@
 #include <map>
 #include <string>
 
-#define DEFAULT_TEAMNAME _T("My Friends")
-
 //客户端类型
 enum CLIENT_TYPE
 {
@@ -71,31 +69,6 @@ enum HEARTBEAT_RESULT_CODE
 	HEARTBEAT_DEAD,					//已经断开连接
 };
 
-//加好友状态
-enum OPERATE_FRIEND
-{
-    Apply,
-    Agree,
-    Refuse,
-    Delete
-};
-
-enum ADD_FRIEND_RESULT	//添加好友结果
-{
-	FIND_FRIEND_NOT_FOUND,
-	FIND_FRIEND_FOUND,
-	FIND_FRIEND_FAILED,
-	
-	ADD_FRIEND_SUCCESS,
-	ADD_FRIEND_FAILED
-};
-
-enum DELETE_FRIEND_RESULT
-{
-	DELETE_FRIEND_SUCCESS,
-	DELETE_FRIEND_FAILED
-};
-
 enum SEND_CHAT_MSG_RESULT		//发送聊天消息结果
 {
 	SEND_MSG_SUCESS,
@@ -122,29 +95,13 @@ enum RECV_FILE_RESULT
 	RECV_FILE_SUCCESS
 };
 
+//获取用户信息的类型。v1 好友体系下线后 USER_INFO_TYPE_FRIENDS（拉好友列表）已废弃，
+//故此处逐项写死取值：靠声明顺序推导的话，删掉中间那一项会把后面几项整体前移。
 enum GET_USER_INFO_TYPE
 {
-	USER_INFO_TYPE_SELF,
-	USER_INFO_TYPE_FRIENDS,
-	USER_INFO_TYPE_GROUP,
-	USER_INFO_TYPE_GROUP_MEMBER
-};
-
-struct FindUserOrGroupResult
-{
-	long		nType;			//个人还是群组
-	UINT		uAccountID;
-	TCHAR		szAccountName[32];
-	TCHAR		szNickName[32];
-};
-
-//记录当前添加好友的状态信息
-struct AddFriendInfo
-{
-	UCHAR	nCmd;				//操作类型（Apply/Agree/Refuse）
-	UINT	uAccountID;			//账户ID
-	TCHAR	szAccountName[32];	//账户名
-	TCHAR	szNickName[32];		//昵称
+	USER_INFO_TYPE_SELF         = 0,	//取本人资料
+	USER_INFO_TYPE_GROUP        = 2,	//取某个群的资料
+	USER_INFO_TYPE_GROUP_MEMBER = 3		//取某个群成员的资料
 };
 
 enum CHAT_MSG_TYPE
@@ -253,31 +210,28 @@ enum CHAT_CONFIRM_TYPE
 	CHAT_CONFIRM_TYPE_MULTI			//群发确认消息类型
 };
 
+//发送 / 接收队列里数据项的类型标识（纯客户端内部使用，不上线路，故取值可以随声明顺序推导）。
+//v1 好友体系下线后，好友ID列表 / 好友在线状态 / 查找好友 / 操作好友 / 好友分组 / 好友备注名 /
+//移动好友这几项已一并删除。
 enum NET_DATA_TYPE
 {
-	NET_DATA_UNKNOWN,
-	NET_DATA_REGISTER,
-	NET_DATA_LOGIN,
-	NET_DATA_USER_BASIC_INFO,
-    NET_DATA_CHANGE_STATUS,
-    NET_DATA_GROUP_BASIC_INFO,
-	NET_DATA_USER_EXTEND_INFO,
-	NET_DATA_FRIENDS_ID,
-	NET_DATA_FRIENDS_STATUS,
-	NET_DATA_CHAT_MSG,
+	NET_DATA_UNKNOWN,					//未知类型，仅作缺省值
+	NET_DATA_REGISTER,					//注册请求
+	NET_DATA_LOGIN,						//登录请求
+	NET_DATA_USER_BASIC_INFO,			//拉取用户基本资料
+    NET_DATA_CHANGE_STATUS,				//修改自己的在线状态
+    NET_DATA_GROUP_BASIC_INFO,			//拉取群成员基本资料
+	NET_DATA_USER_EXTEND_INFO,			//拉取用户扩展资料
+	NET_DATA_USER_STATUS,				//对端在线状态 / 资料变更通知(CFriendStatus)，原 NET_DATA_FRIENDS_STATUS
+	NET_DATA_CHAT_MSG,					//聊天消息
 	NET_DATA_CHAT_CONFIRM_IMAGE_MSG,	//聊天发送完图片后追加的确认信息
-	NET_DATA_FIND_FRIEND,
-	NET_DATA_OPERATE_FRIEND,
-	NET_DATA_HEARTBEAT,
-	NET_DATA_UPDATE_LOGON_USER_INFO,
-	NET_DATA_TARGET_INFO_CHANGE,
-	NET_DATA_MODIFY_PASSWORD,
-	NET_DATA_CREATE_NEW_GROUP,
-    NET_DATA_OPERATE_TEAM,              //添加新的好友分组
-    NET_DATA_MODIFY_FRIEND_MARKNAME,    //修改好友备注名
-    NET_DATA_MOVE_FRIEND,               //移动好友至其他分组
+	NET_DATA_HEARTBEAT,					//心跳包
+	NET_DATA_UPDATE_LOGON_USER_INFO,	//更新本人资料
+	NET_DATA_TARGET_INFO_CHANGE,		//对端资料发生变化的通知
+	NET_DATA_MODIFY_PASSWORD,			//修改密码
+	NET_DATA_CREATE_NEW_GROUP,			//创建新群
 
-	NET_DATA_FILE
+	NET_DATA_FILE						//文件传输任务
 };
 
 class CNetData
@@ -419,28 +373,6 @@ public:
 	std::list<UserExtendInfo*> m_listUserExtendInfo;
 };
 
-class CLoginUserFriendsIDRequest : public CNetData
-{
-public:
-	CLoginUserFriendsIDRequest();
-	~CLoginUserFriendsIDRequest();
-
-public:
-	UINT m_uAccountID;
-};
-
-class CLoginUserFriendsIDResult : public CNetData
-{
-public:
-	CLoginUserFriendsIDResult();
-	~CLoginUserFriendsIDResult();
-
-public:
-	UINT				m_uAccountID;
-	std::set<UINT>		m_setFriendIDs;
-	std::set<UINT>		m_setGroupIDs;
-};
-
 class CFriendStatus : public CNetData
 {
 public:
@@ -452,88 +384,6 @@ public:
 	long	m_nStatus;
     long    m_nClientType;
     int     m_type;
-};
-
-class CFindFriendRequest : public CNetData
-{
-public:
-	CFindFriendRequest();
-	~CFindFriendRequest();
-
-public:
-	char m_szAccountName[64];
-	long m_nType;				//查找类型
-};
-
-class CFindFriendResult : public CNetData
-{
-public:
-	CFindFriendResult();
-	~CFindFriendResult();
-
-public:
-	long m_nResultCode;
-	UINT m_uAccountID;
-	char m_szAccountName[64];
-	char m_szNickName[64];
-};
-
-class COperateFriendRequest : public CNetData
-{
-public:
-	COperateFriendRequest();
-	~COperateFriendRequest();
-
-public:
-	UINT m_uAccountID;
-	UINT m_uCmd;
-};
-
-class COperateFriendResult : public CNetData
-{
-public:
-	COperateFriendResult();
-	~COperateFriendResult();
-
-public:
-	UINT m_uAccountID;
-	UINT m_uCmd;
-	char m_szAccountName[64];
-	char m_szNickName[64];
-};
-
-class CAddTeamInfoRequest : public CNetData
-{
-public:
-    CAddTeamInfoRequest();
-    ~CAddTeamInfoRequest();
-
-public:
-    int          m_opType;          //操作类型
-    std::wstring m_strNewTeamName;
-    std::wstring m_strOldTeamName;  
-};
-
-class CAddTeamInfoResult : public CNetData
-{
-public:
-    CAddTeamInfoResult();
-    ~CAddTeamInfoResult();
-
-public:
-    int          m_opType;          //操作类型  
-};
-
-class CMoveFriendRequest : public CNetData
-{
-public:
-    CMoveFriendRequest();
-    ~CMoveFriendRequest();
-
-public:
-    int          m_nFriendID;          //操作类型
-    std::wstring m_strNewTeamName;
-    std::wstring m_strOldTeamName;
 };
 
 class CMsgItem;
@@ -624,30 +474,6 @@ public:
 	UINT	m_uAccountID;
 	char	m_szGroupName[64];
 	char	m_szAccount[32];
-};
-
-//class CModifyFriendMakeNameRequest
-class CModifyFriendMakeNameRequest : public CNetData
-{
-public:
-    CModifyFriendMakeNameRequest();
-    ~CModifyFriendMakeNameRequest();
-
-public:
-    UINT	m_uFriendID;
-    TCHAR   m_szNewMarkName[64];
-};
-
-//class CModifyFriendMakeNameResult
-class CModifyFriendMakeNameResult : public CNetData
-{
-public:
-    CModifyFriendMakeNameResult();
-    ~CModifyFriendMakeNameResult();
-
-public:
-    UINT	m_uFriendID;
-    //char	m_szNewMarkName[64];
 };
 
 class CHeartbeatMessageRequest : public CNetData

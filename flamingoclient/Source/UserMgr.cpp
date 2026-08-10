@@ -186,60 +186,10 @@ BOOL CUserMgr::IsSelf(PCTSTR pszAccountName)
 	return m_UserInfo.m_strAccount==pszAccountName;
 }
 
-
-BOOL CUserMgr::IsFriend(UINT uAccountID)
-{
-	CBuddyTeamInfo* pTeamInfo = NULL;
-	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-				return TRUE;
-		}
-	}
-
-	return FALSE;
-}
-
-BOOL CUserMgr::IsFriend(PCTSTR pszAccountName)
-{
-	CBuddyTeamInfo* pTeamInfo = NULL;
-	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			if(pBuddyInfo->m_strAccount == pszAccountName)
-				return TRUE;
-		}
-	}
-
-	return FALSE;
-}
-
 tstring CUserMgr::GetAccountName(UINT uAccountID) const
 {
 	if(uAccountID == m_UserInfo.m_uUserID)
 		return m_UserInfo.m_strAccount;
-
-	CBuddyTeamInfo* pTeamInfo = NULL;
-	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-				return pBuddyInfo->m_strAccount;
-		}
-	}
 
 	return _T("");
 }
@@ -254,21 +204,7 @@ void CUserMgr::SetAccountName(UINT uAccountID, PCTSTR pszAccountName)
 		m_UserInfo.m_strAccount = pszAccountName;
 	}
 
-	CBuddyTeamInfo* pTeamInfo = NULL;
 	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-			{
-				pBuddyInfo->m_strAccount = pszAccountName;
-				break;
-			}
-		}
-	}
 
 	CGroupInfo* pGroupInfo = NULL;
 	for(size_t i=0; i<m_GroupList.m_arrGroupInfo.size(); ++i)
@@ -318,18 +254,7 @@ tstring CUserMgr::GetNickName(UINT uAccountID) const
 	if(uAccountID == m_UserInfo.m_uUserID)
 		return m_UserInfo.m_strNickName;
 
-	CBuddyTeamInfo* pTeamInfo = NULL;
 	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-				return pBuddyInfo->m_strNickName;
-		}
-	}
 
 	CGroupInfo* pGroupInfo = NULL;
 	for(size_t i=0; i<m_GroupList.m_arrGroupInfo.size(); ++i)
@@ -365,21 +290,7 @@ void CUserMgr::SetNickName(UINT uAccountID, PCTSTR pszNickName)
 		m_UserInfo.m_strNickName = pszNickName;
 	}
 
-	CBuddyTeamInfo* pTeamInfo = NULL;
 	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-			{
-				pBuddyInfo->m_strNickName = pszNickName;
-				break;
-			}
-		}
-	}
 
 	CGroupInfo* pGroupInfo = NULL;
 	for(size_t i=0; i<m_GroupList.m_arrGroupInfo.size(); ++i)
@@ -404,19 +315,6 @@ UINT CUserMgr::GetFaceID(UINT uAccountID) const
 		return m_UserInfo.m_uUserID;
 	
 
-	CBuddyTeamInfo* pTeamInfo = NULL;
-	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-				return pBuddyInfo->m_nFace;
-		}
-	}
-
 	return 0;
 }
 	
@@ -427,21 +325,7 @@ void CUserMgr::SetFaceID(UINT uAccountID, UINT uFaceID)
 		m_UserInfo.m_nFace = uFaceID;
 	}
 	
-	CBuddyTeamInfo* pTeamInfo = NULL;
 	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-			{
-				pBuddyInfo->m_nFace = uFaceID;
-				break;;
-			}
-		}
-	}
 
 	CGroupInfo* pGroupInfo = NULL;
 	for(size_t i=0; i<m_GroupList.m_arrGroupInfo.size(); ++i)
@@ -467,78 +351,9 @@ PCTSTR CUserMgr::GetCustomFace(UINT uAccountID) const
 		return m_UserInfo.m_strCustomFace.c_str();;
 	}
 	
-	CBuddyTeamInfo* pTeamInfo = NULL;
-	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-			{
-				return pBuddyInfo->m_strCustomFace.c_str();
-			}
-		}
-	}
-
 	return NULL;
 }
 
-BOOL CUserMgr::AddFriend(UINT uAccountID, PCTSTR pszAccountName, PCTSTR pszNickName)
-{	
-	if(uAccountID==0 || uAccountID==m_UserInfo.m_uUserID)
-		return FALSE;
-
-	if(pszAccountName==NULL || pszAccountName[0]==NULL || pszNickName==NULL || pszNickName[0]==NULL)
-		return FALSE;
-	
-	if(IsFriend(uAccountID))
-		return FALSE;
-
-	CBuddyInfo* pBuddyInfo = new CBuddyInfo();
-	pBuddyInfo->m_uUserID = uAccountID;
-	pBuddyInfo->m_strAccount = pszAccountName;
-	pBuddyInfo->m_strNickName = pszNickName;
-	
-	//TODO: 目前只有一个分组
-	size_t nTeamCount = m_BuddyList.m_arrBuddyTeamInfo.size();
-	if(nTeamCount == 0)
-		return FALSE;
-	
-	CBuddyTeamInfo* pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[0];
-	pTeamInfo->m_arrBuddyInfo.push_back(pBuddyInfo);
-	
-	return TRUE;
-}
-
-BOOL CUserMgr::DeleteFriend(UINT uAccountID)
-{
-	if(uAccountID==0 || uAccountID==m_UserInfo.m_uUserID)
-		return FALSE;
-
-	if(!IsFriend(uAccountID))
-		return FALSE;
-
-	CBuddyTeamInfo* pTeamInfo = NULL;
-	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(std::vector<CBuddyInfo*>::iterator iter=pTeamInfo->m_arrBuddyInfo.begin(); iter!=pTeamInfo->m_arrBuddyInfo.end(); ++iter)
-		{
-			pBuddyInfo =*iter;
-			if(uAccountID == pBuddyInfo->m_uUserID)
-			{
-				DEL(pBuddyInfo);
-				pTeamInfo->m_arrBuddyInfo.erase(iter);
-				return TRUE;
-			}
-		}
-	}
-
-	return FALSE;
-}
 
 BOOL CUserMgr::ExitGroup(UINT uGroupID)
 {
@@ -584,21 +399,7 @@ void CUserMgr::SetStatus(UINT uAccountID, long nStatus)
 		m_UserInfo.m_nStatus = nStatus;
 	}
 
-	CBuddyTeamInfo* pTeamInfo = NULL;
 	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-			{
-				pBuddyInfo->m_nStatus = nStatus;
-				break;
-			}
-		}
-	}
 
 	CGroupInfo* pGroupInfo = NULL;
 	for(size_t i=0; i<m_GroupList.m_arrGroupInfo.size(); ++i)
@@ -622,21 +423,6 @@ long CUserMgr::GetStatus(UINT uAccountID)
 	if(uAccountID == m_UserInfo.m_uUserID)
 		return m_UserInfo.m_nStatus;
 
-	CBuddyTeamInfo* pTeamInfo = NULL;
-	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-			{
-				return pBuddyInfo->m_nStatus;
-			}
-		}
-	}
-
 	return -1;
 }
 
@@ -650,21 +436,7 @@ void CUserMgr::SetClientType(UINT uAccountID, long nNewClientType)
         m_UserInfo.m_nClientType = nNewClientType;
     }
 
-    CBuddyTeamInfo* pTeamInfo = NULL;
     CBuddyInfo* pBuddyInfo = NULL;
-    for (size_t i = 0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-    {
-        pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-        for (size_t j = 0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-        {
-            pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-            if (uAccountID == pBuddyInfo->m_uUserID)
-            {
-                pBuddyInfo->m_nClientType = nNewClientType;
-                break;
-            }
-        }
-    }
 
     CGroupInfo* pGroupInfo = NULL;
     for (size_t i = 0; i<m_GroupList.m_arrGroupInfo.size(); ++i)
@@ -687,21 +459,6 @@ long CUserMgr::GetClientType(UINT uAccountID)
     if (uAccountID == m_UserInfo.m_uUserID)
         return m_UserInfo.m_nClientType;
 
-    CBuddyTeamInfo* pTeamInfo = NULL;
-    CBuddyInfo* pBuddyInfo = NULL;
-    for (size_t i = 0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-    {
-        pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-        for (size_t j = 0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-        {
-            pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-            if (uAccountID == pBuddyInfo->m_uUserID)
-            {
-                return pBuddyInfo->m_nClientType;
-            }
-        }
-    }
-
     return -1;
 }
 
@@ -710,21 +467,6 @@ UINT CUserMgr::GetMsgID(UINT uAccountID) const
 	if(uAccountID==0 || uAccountID==m_UserInfo.m_uUserID)
 		return 0;
 
-	CBuddyTeamInfo* pTeamInfo = NULL;
-	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-			{
-				return pBuddyInfo->m_uMsgID;
-			}
-		}
-	}
-
 	return 0;
 }
 	
@@ -732,22 +474,6 @@ BOOL CUserMgr::SetMsgID(UINT uAccountID, UINT uMsgID)
 {
 	if(uAccountID==0 || uAccountID==m_UserInfo.m_uUserID)
 		return FALSE;
-
-	CBuddyTeamInfo* pTeamInfo = NULL;
-	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-			{
-				pBuddyInfo->m_uMsgID = uMsgID;
-				return TRUE;
-			}
-		}
-	}
 
 	return FALSE;
 }
@@ -760,21 +486,6 @@ tstring CUserMgr::GetNickName(PCTSTR pszAccountName) const
 	if(m_UserInfo.m_strAccount == pszAccountName)
 		return m_UserInfo.m_strNickName;
 
-	CBuddyTeamInfo* pTeamInfo = NULL;
-	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			if(pBuddyInfo->m_strAccount == pszAccountName)
-			{
-				return pBuddyInfo->m_strNickName;
-			}
-		}
-	}
-
 	return _T("");
 }
 
@@ -786,21 +497,6 @@ UINT CUserMgr::GetFaceID(PCTSTR pszAccountName) const
 	if(m_UserInfo.m_strAccount == pszAccountName)
 		return m_UserInfo.m_nFace;
 
-	CBuddyTeamInfo* pTeamInfo = NULL;
-	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			if(pBuddyInfo->m_strAccount == pszAccountName)
-			{
-				return pBuddyInfo->m_nFace;
-			}
-		}
-	}
-
 	return 0;
 }
 
@@ -808,18 +504,7 @@ void CUserMgr::ResetToOfflineStatus()
 {
 	m_UserInfo.m_nStatus = STATUS_OFFLINE;
 	
-	CBuddyTeamInfo* pTeamInfo = NULL;
 	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			pBuddyInfo->m_nStatus = STATUS_OFFLINE;
-			::PostMessage(m_hProxyWnd, FMG_MSG_UPDATE_BUDDY_HEADPIC, 0, (LPARAM)pBuddyInfo->m_uUserID);
-		}
-	}
 
 	CGroupInfo* pGroupInfo = NULL;
 	for(size_t i=0; i<m_GroupList.m_arrGroupInfo.size(); ++i)
@@ -932,207 +617,10 @@ BOOL CUserMgr::DeleteRecentItem(UINT uAccountID)
 	return m_RecentList.DeleteRecentItem(uAccountID);
 }
 
-BOOL CUserMgr::LoadTeamInfo()
-{
-	CString strTeamInfoFilePath;
-	strTeamInfoFilePath.Format(_T("%sUsers\\%s\\BuddyTeamInfo.bti"), g_szHomePath, m_UserInfo.m_strAccount.c_str());
-	CFile file;
-	if(!file.Open(strTeamInfoFilePath, FALSE))
-		return FALSE;
-
-	long nSize = file.GetSize();
-	if(nSize <= 0)
-		return FALSE;
-
-	long nCount = nSize/sizeof(BuddyTeamInfo);
-	if(nCount <= 0)
-		return FALSE;
-
-	BuddyTeamInfo* pBuddyTeamInfo = (BuddyTeamInfo*)file.Read();
-	if(pBuddyTeamInfo == NULL)
-		return FALSE;
-
-	m_BuddyList.Reset();
-	CBuddyTeamInfo* pTeamInfo = NULL;
-	for(long i=0; i<nCount; ++i)
-	{
-		if(pBuddyTeamInfo[i].nTeamIndex<0 || pBuddyTeamInfo[i].nTeamIndex>nCount-1 || pBuddyTeamInfo[i].szTeamName[0]==NULL)
-			continue;
-		
-		pTeamInfo	= new CBuddyTeamInfo();
-		pTeamInfo->m_nIndex = pBuddyTeamInfo[i].nTeamIndex;
-		pTeamInfo->m_strName = pBuddyTeamInfo[i].szTeamName;
-		m_BuddyList.m_arrBuddyTeamInfo.push_back(pTeamInfo);
-	}
-
-	return TRUE;
-}
-
-BOOL CUserMgr::StoreTeamInfo()
-{
-	long nCount = m_BuddyList.GetBuddyTeamCount();
-	if(nCount <= 0)
-		return TRUE;
-
-	CMiniBuffer miniBuffer(nCount*sizeof(BuddyTeamInfo));
-	BuddyTeamInfo* pBufferToWrite = (BuddyTeamInfo*)miniBuffer.GetBuffer();
-	CBuddyTeamInfo* pBuddyTeamInfo = NULL;
-	for(long i=0; i<nCount; ++i)
-	{
-		pBuddyTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		if(pBuddyTeamInfo == NULL)
-			continue;
-		pBufferToWrite->nTeamIndex = pBuddyTeamInfo->m_nIndex;
-		_tcscpy_s(pBufferToWrite->szTeamName, ARRAYSIZE(pBufferToWrite->szTeamName), pBuddyTeamInfo->m_strName.c_str());
-
-		++pBufferToWrite;
-	}
-
-	CString strTeamInfoFilePath;
-	strTeamInfoFilePath.Format(_T("%sUsers\\%s\\BuddyTeamInfo.bti"), g_szHomePath, m_UserInfo.m_strAccount.c_str());
-	CFile file;
-    //FIXME: 将int64_t强制转换成int32可能会有问题
-	if(!file.Open(strTeamInfoFilePath, TRUE) || !file.Write(miniBuffer.GetBuffer(), (int)miniBuffer.GetSize()))
-		return FALSE;
-
-	return TRUE;
-}
-
-BOOL CUserMgr::LoadBuddyInfo()
-{
-	CString strBuddyInfoFilePath;
-	strBuddyInfoFilePath.Format(_T("%sUsers\\%s\\BuddyInfo.bi"), g_szHomePath, m_UserInfo.m_strAccount.c_str());
-	CFile file;
-	if(!file.Open(strBuddyInfoFilePath, FALSE))
-		return FALSE;
-
-	long nSize = file.GetSize();
-	if(nSize <= 0)
-		return FALSE;
-
-	long nCount = nSize/sizeof(BuddyInfo);
-	if(nCount <= 0)
-		return FALSE;
-
-	BuddyInfo* pBuddyInfo = (BuddyInfo*)file.Read();
-	if(pBuddyInfo == NULL)
-		return FALSE;
-
-	BuddyInfo* p = NULL;
-	for(long i=0; i<nCount; ++i)
-	{
-		p = new BuddyInfo();
-		memset(p, 0, sizeof(BuddyInfo));
-		memcpy(p, &pBuddyInfo[i], sizeof(BuddyInfo));
-		m_mapLocalBuddyInfo.insert(std::pair<UINT, BuddyInfo*>(p->uAccountID, p));
-	}
-
-	return TRUE;
-}
-
-BOOL CUserMgr::SaveBuddyInfo()
-{
-	//先释放内存
-	BuddyInfo* pbi = NULL;
-	std::map<UINT, BuddyInfo*>::iterator iter;
-	while(!m_mapLocalBuddyInfo.empty())
-	{
-		iter = m_mapLocalBuddyInfo.begin();
-		pbi = iter->second;
-		DEL(pbi);
-		m_mapLocalBuddyInfo.erase(iter);
-	}
-	
-	long nTotalBuddyCount = m_BuddyList.GetBuddyTotalCount();
-	if(nTotalBuddyCount <= 0)
-		return TRUE;
-
-	CMiniBuffer miniBuffer(nTotalBuddyCount*sizeof(BuddyInfo));
-	BuddyInfo* bi = (BuddyInfo*)miniBuffer.GetBuffer();
-	
-	CBuddyTeamInfo* pBuddyTeamInfo = NULL;
-	CBuddyInfo* pBuddyInfo = NULL;
-	
-	long nIndex = 0;
-	size_t nTeamCount = m_BuddyList.GetBuddyTeamCount();
-	for(size_t i=0; i<nTeamCount; ++i)
-	{
-		pBuddyTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[i];
-		if(pBuddyTeamInfo == NULL)
-			continue;
-		for(size_t j=0; j<pBuddyTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pBuddyTeamInfo->m_arrBuddyInfo[j];
-			if(pBuddyInfo == NULL)
-				continue;
-
-			bi[nIndex].uAccountID = pBuddyInfo->m_uUserID;
-			_tcscpy_s(bi[nIndex].szAccountName, ARRAYSIZE(bi[nIndex].szAccountName), pBuddyInfo->m_strAccount.c_str());
-			_tcscpy_s(bi[nIndex].szMarkName, ARRAYSIZE(bi[nIndex].szMarkName), pBuddyInfo->m_strMarkName.c_str());
-			bi[nIndex].nTeamIndex = pBuddyInfo->m_nTeamIndex;
-			bi[nIndex].nGroupCount = 0;
-			memset(bi[nIndex].GroupID, 0, sizeof(bi[nIndex].GroupID));
-
-			++nIndex;
-		}
-	}
-
-	CString strBuddyInfoFilePath;
-	strBuddyInfoFilePath.Format(_T("%sUsers\\%s\\BuddyInfo.bi"), g_szHomePath, m_UserInfo.m_strAccount.c_str());
-	CFile file;
-    //FIXME: 将int64_t强制转换成int32可能会有问题
-	if(!file.Open(strBuddyInfoFilePath, TRUE) || !file.Write(miniBuffer.GetBuffer(), (int)miniBuffer.GetSize()))
-		return FALSE;
-
-	return TRUE;
-}
-
-PCTSTR CUserMgr::GetMarkNameByAccountID(UINT uAccountID)
-{
-	std::map<UINT, BuddyInfo*>::iterator iter = m_mapLocalBuddyInfo.find(uAccountID);
-	if(iter != m_mapLocalBuddyInfo.end())
-		return iter->second->szMarkName;
-
-	return NULL;
-}
-
-long CUserMgr::GetTeamIndexByAccountID(UINT uAccountID)
-{
-	std::map<UINT, BuddyInfo*>::iterator iter = m_mapLocalBuddyInfo.find(uAccountID);
-	if(iter != m_mapLocalBuddyInfo.end())
-		return iter->second->nTeamIndex;
-
-	return 0;
-}
-
 void CUserMgr::ClearUserInfo()
 {
-	long nMemberCount = 0;
-	CBuddyTeamInfo* pBuddyTeamInfo = NULL;
-	CBuddyInfo*		pBuddyInfo	   = NULL;
-
-	while(m_BuddyList.m_arrBuddyTeamInfo.size() > 0)
-	{
-		long nLast = m_BuddyList.m_arrBuddyTeamInfo.size()-1;
-		nMemberCount = m_BuddyList.m_arrBuddyTeamInfo[nLast]->m_arrBuddyInfo.size();
-		for(long j=0; j<nMemberCount; ++j)
-		{
-			pBuddyInfo = m_BuddyList.m_arrBuddyTeamInfo[nLast]->m_arrBuddyInfo[j];
-			if(pBuddyInfo != NULL)
-				delete pBuddyInfo;
-
-		}
-		m_BuddyList.m_arrBuddyTeamInfo[nLast]->m_arrBuddyInfo.clear();
-		
-		pBuddyTeamInfo = m_BuddyList.m_arrBuddyTeamInfo[nLast];
-		if(pBuddyTeamInfo != NULL)
-			delete pBuddyTeamInfo;
-		
-		//删除最后一个元素
-		m_BuddyList.m_arrBuddyTeamInfo.pop_back();
-	}
-
-	//清除群组信息
+	//企业版说明：v1 好友列表已删除，这里只需清群组信息。原先在此逐个 delete 好友分组 /
+	//好友对象的循环随 m_BuddyList 一并移除。
 	m_GroupList.Reset();
 }
 
@@ -1149,7 +637,6 @@ long CUserMgr::GetTotalBuddyCount()
 		nCount += (long)pGroupInfo->m_arrMember.size();
 	}
 	
-	nCount += m_BuddyList.GetBuddyTotalCount();
 	//算上自己
 	nCount += 1;
 

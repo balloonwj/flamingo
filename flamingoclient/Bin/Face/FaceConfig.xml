@@ -46,7 +46,6 @@
   <face id="43" tip="/爱情" file="face/face43.png"></face>
   <face id="44" tip="/拥抱" file="face/face44.png"></face>
   <face id="45" tip="/棒棒的" file="face/face45.png"></face>
-  <!-- 注意：以下表情的描述不对，但不影响使用，有兴趣的开发者可以自行修正 -->
   <face id="46" tip="/企鹅1" file="face/face46.png"></face>
   <face id="47" tip="/冷汗" file="face/face47.png"></face>
   <face id="48" tip="/坏笑" file="face/face48.png"></face>
@@ -66,7 +65,7 @@
   <face id="62" tip="/奋斗" file="face/face62.png"></face>
   <face id="63" tip="/爱情" file="face/face63.png"></face>
   <face id="64" tip="/拥抱" file="face/face64.png"></face>
-  <face id="65" tip="/棒棒的" file="face/face65.png"></face> 
+  <face id="65" tip="/棒棒的" file="face/face65.png"></face>
   <face id="66" tip="/亲亲" file="face/face66.png"></face>
   <face id="67" tip="/憨笑" file="face/face67.png"></face>
   <face id="68" tip="/吃惊" file="face/face68.png"></face>
@@ -76,8 +75,8 @@
   <face id="72" tip="/奋斗" file="face/face72.png"></face>
   <face id="73" tip="/爱情" file="face/face73.png"></face>
   <face id="74" tip="/拥抱" file="face/face74.png"></face>
-  <face id="75" tip="/棒棒的" file="face/face75.png"></face>  
-   <face id="76" tip="/亲亲" file="face/face76.png"></face>
+  <face id="75" tip="/棒棒的" file="face/face75.png"></face>
+  <face id="76" tip="/亲亲" file="face/face76.png"></face>
   <face id="77" tip="/憨笑" file="face/face77.png"></face>
   <face id="78" tip="/吃惊" file="face/face78.png"></face>
   <face id="79" tip="/晕" file="face/face79.png"></face>
@@ -87,20 +86,20 @@
   <face id="83" tip="/爱情" file="face/face83.png"></face>
   <face id="84" tip="/拥抱" file="face/face84.png"></face>
   <face id="85" tip="/棒棒的" file="face/face85.png"></face>
-   <face id="86" tip="/亲亲" file="face/face86.png"></face>  
-   <face id="87" tip="/憨笑" file="face/face87.png"></face>
+  <face id="86" tip="/亲亲" file="face/face86.png"></face>
+  <face id="87" tip="/憨笑" file="face/face87.png"></face>
   <face id="88" tip="/吃惊" file="face/face88.png"></face>
   <face id="89" tip="/晕" file="face/face89.png"></face>
   <face id="90" tip="/撇嘴" file="face/face90.png"></face>
   <face id="91" tip="/邪恶" file="face/face91.png"></face>
   <face id="92" tip="/奋斗" file="face/face92.png"></face>
-  <face id="73" tip="/爱情" file="face/face93.png"></face>
-  <face id="94" tip="/拥抱" file="face/face74.png"></face>
-  <face id="95" tip="/棒棒的" file="face/face95.png"></face>  
-   <face id="76" tip="/亲亲" file="face/face96.png"></face>
-  <face id="97" tip="/憨笑" file="face/face77.png"></face>
+  <face id="93" tip="/爱情" file="face/face93.png"></face>
+  <face id="94" tip="/表情94" file="face/face94.png"></face>
+  <face id="95" tip="/棒棒的" file="face/face95.png"></face>
+  <face id="96" tip="/亲亲" file="face/face96.png"></face>
+  <face id="97" tip="/表情97" file="face/face97.png"></face>
   <face id="98" tip="/吃惊" file="face/face98.png"></face>
-  <face id="99" tip="/晕" file="face/face99.png"></face> 
+  <face id="99" tip="/晕" file="face/face99.png"></face>
   <face id="100" tip="/呲牙" file="face/face100.png"></face>
   <face id="101" tip="/调皮" file="face/face101.png"></face>
   <face id="102" tip="/流汗" file="face/face102.png"></face>

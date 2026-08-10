@@ -182,10 +182,6 @@ bool HttpSession::process(const std::shared_ptr<TcpConnection>& conn, const std:
     {
         onLoginResponse(param, conn);
     }
-    else if (url == "/getfriendlist.do")
-    {
-
-    }
     else if (url == "/getgroupmembers.do")
     {
 

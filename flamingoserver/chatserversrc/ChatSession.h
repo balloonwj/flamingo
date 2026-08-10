@@ -131,33 +131,20 @@ private:
     void onChangeAvatar(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //修改在线状态（cmd_change_presence）
     void onChangePresence(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
-    //向本用户关系链中所有在线会话推送一条通知帧（seq=0）
-    void notifyRelations(uint16_t cmd, const std::string& body);
     //查找用户/群（cmd_search）
     void onSearch(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
-    //发起加好友申请（cmd_add_friend_request）
-    void onAddFriendRequest(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
-    //处理加好友申请（cmd_handle_friend_request）
-    void onHandleFriendRequest(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
-    //拉取消息盒子（cmd_get_notifications）
-    void onGetNotifications(const std::shared_ptr<TcpConnection>& conn);
     //拉取发给本人的平台公告（cmd_get_announcements）：主面板「消息盒子」的数据源，
-    //见 docs/消息盒子接入方案.md。注意与上面的 cmd_get_notifications 不是一回事——
-    //那个拉的是加好友申请。
+    //见 docs/消息盒子接入方案.md
     void onGetAnnouncements(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //上报某条平台公告已读（cmd_mark_announcement_read）：写 t_announcement_read，
     //管理控制台的「已读进度」统计的就是这张表。
     void onMarkAnnouncementRead(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
-    //删除好友（cmd_delete_friend）
-    void onDeleteFriend(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
-    //设置好友备注名（cmd_set_friend_remark）
+    //设置联系人备注名（cmd_set_friend_remark）：落 t_contact_remark，见 ContactRemarkManager
     void onSetFriendRemark(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //加入/移出黑名单（cmd_set_blacklist）
     void onSetBlacklist(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //添加/取消收藏（cmd_set_favorite）：收藏对象为联系人或群组，见 docs/收藏接入方案.md
     void onSetFavorite(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
-    //设置好友标签（cmd_set_friend_tags）
-    void onSetFriendTags(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //发送消息（cmd_send_message）：按 ctype 分流到单聊 / 群聊
     void onSendMessage(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //发送群聊消息：onSendMessage 在 ctype=2 时调用

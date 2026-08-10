@@ -152,33 +152,10 @@ CUserExtendInfoResult::~CUserExtendInfoResult()
 
 }
 
-//class CLoginUserFriendsID
-CLoginUserFriendsIDRequest::CLoginUserFriendsIDRequest()
-{
-	m_uType = NET_DATA_FRIENDS_ID;
-	m_uAccountID = 0;
-}
-
-CLoginUserFriendsIDRequest::~CLoginUserFriendsIDRequest()
-{
-
-}
-
-CLoginUserFriendsIDResult::CLoginUserFriendsIDResult()
-{
-	m_uType = NET_DATA_FRIENDS_ID;
-	m_uAccountID = 0;
-}
-
-CLoginUserFriendsIDResult::~CLoginUserFriendsIDResult()
-{
-
-}
-
 //class CFriendStatus
 CFriendStatus::CFriendStatus()
 {
-	m_uType = NET_DATA_FRIENDS_STATUS;
+	m_uType = NET_DATA_USER_STATUS;
 	m_uAccountID = 0;
 	m_nStatus = 0;
     m_nClientType = 0;
@@ -187,85 +164,6 @@ CFriendStatus::CFriendStatus()
 
 CFriendStatus::~CFriendStatus()
 {
-}
-
-//class CFindFriendRequest
-CFindFriendRequest::CFindFriendRequest()
-{
-	m_uType = NET_DATA_FIND_FRIEND;
-	memset(m_szAccountName, 0, sizeof(m_szAccountName));
-	m_nType = 0;
-}
-
-CFindFriendRequest::~CFindFriendRequest()
-{
-
-}
-
-CFindFriendResult::CFindFriendResult()
-{
-	m_uType = NET_DATA_FIND_FRIEND;
-	m_nResultCode = FIND_FRIEND_FAILED;
-	m_uAccountID = 0;
-	memset(m_szAccountName, 0, sizeof(m_szAccountName));
-	memset(m_szNickName, 0, sizeof(m_szNickName));
-}
-
-CFindFriendResult::~CFindFriendResult()
-{
-
-}
-
-//class COperateFriendRequest
-COperateFriendRequest::COperateFriendRequest()
-{
-	m_uType = NET_DATA_OPERATE_FRIEND;
-	m_uAccountID = 0;
-	m_uCmd = -1;
-}
-
-COperateFriendRequest::~COperateFriendRequest()
-{
-
-}
-
-//class COperateFriendResult
-COperateFriendResult::COperateFriendResult()
-{
-	m_uType = NET_DATA_OPERATE_FRIEND;
-	m_uAccountID = 0;
-	m_uCmd = -1;
-	memset(m_szAccountName, 0, sizeof(m_szAccountName));
-	memset(m_szNickName, 0, sizeof(m_szNickName));
-}
-
-COperateFriendResult::~COperateFriendResult()
-{
-
-}
-
-//class CAddTeamInfoRequest
-CAddTeamInfoRequest::CAddTeamInfoRequest()
-{
-    m_uType = NET_DATA_OPERATE_TEAM;
-    m_opType = -1;
-}
-
-CAddTeamInfoRequest::~CAddTeamInfoRequest()
-{
-
-}
-
-//class CMoveFriendRequest
-CMoveFriendRequest::CMoveFriendRequest()
-{
-    m_uType = NET_DATA_MOVE_FRIEND;
-    m_nFriendID = -1;
-}
-
-CMoveFriendRequest::~CMoveFriendRequest()
-{
-
 }
 
 //class CSentChatMessage
@@ -362,28 +260,6 @@ CCreateNewGroupResult::CCreateNewGroupResult()
 }
 
 CCreateNewGroupResult::~CCreateNewGroupResult()
-{
-}
-
-//class CModifyFriendMakeNameRequest
-CModifyFriendMakeNameRequest::CModifyFriendMakeNameRequest()
-{
-    m_uType = NET_DATA_MODIFY_FRIEND_MARKNAME;
-    m_uFriendID = -1;
-    memset(m_szNewMarkName, 0, sizeof(m_szNewMarkName));
-}
-
-CModifyFriendMakeNameRequest::~CModifyFriendMakeNameRequest()
-{
-
-}
-
-//class CModifyFriendMakeNameResult
-CModifyFriendMakeNameResult::CModifyFriendMakeNameResult()
-{
-}
-
-CModifyFriendMakeNameResult::~CModifyFriendMakeNameResult()
 {
 }
 

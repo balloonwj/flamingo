@@ -36,6 +36,19 @@ struct AdminInfo
     int32_t     status;        //状态：0=正常 1=停用
 };
 
+//默认超级管理员的引导配置。chatserver 启动时据此决定要不要往空库里自动注入一个平台
+//超管账号，解决"新部署的库里一个管理员都没有、admin 控制台压根登不进去"的先有鸡还是
+//先有蛋问题。四个字段都来自 etc/chatserver.conf，配置项缺失时由 main.cpp 填内置默认值。
+struct DefaultAdminConfig
+{
+    DefaultAdminConfig() : enable(true) {}
+
+    bool        enable;    //是否启用自动注入：true=启用（配置项缺失时的默认值），false=完全不碰数据库
+    std::string email;     //默认超管的登录邮箱，落库到 f_email，同时是登录账号
+    std::string password;  //默认超管的明文初始口令，落库前转成 MD5(明文 + 盐)，明文不入库
+    std::string name;      //默认超管的显示姓名，落库到 f_name
+};
+
 //仪表盘概览统计。
 struct DashboardStats
 {
@@ -127,6 +140,23 @@ public:
 
     //初始化。连接参数统一由 dbapi/DbConfig 保管，本函数不再收参。管理员数据按请求查询，不做内存缓存。
     bool init();
+
+    /**
+     *  确保库里存在一个平台超级管理员，没有就按配置注入一个。chatserver 启动时调一次。
+     *
+     *  判定口径是「库里有没有任何 f_enterprise_id = 0 的账号」，而不是看默认邮箱在不在。
+     *  这样已经导入过 testdata.sql（自带平台超管）的库不会被再多塞一个账号；同时管理员
+     *  改过口令之后重启服务，也不会被打回默认口令。
+     *
+     *  @param cfg        引导配置；cfg.enable 为 false 时立即返回，连数据库连接都不建。
+     *  @param outCreated 输出本次是否真的插入了账号：true=新建了；false=跳过了（开关关闭、
+     *                    已有超管、参数不合法或写库失败）。
+     *  @return 错误码：0 表示流程正常（含"已有超管故跳过"与"开关关闭"）；
+     *          101 表示默认邮箱已被别的管理员占用，放弃注入；
+     *          1 表示参数不合法或数据库操作失败。
+     *          调用方不应因非 0 返回值终止启动 —— 少一个默认账号不影响其它功能。
+     */
+    int32_t ensureDefaultSuperAdmin(const DefaultAdminConfig& cfg, bool& outCreated);
 
     /**
      *  管理员登录。

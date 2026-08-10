@@ -42,4 +42,25 @@ const wchar_t* GetKickoutNoticeText(int reason)
     }
 }
 
+bool ShouldClearAutoLoginOnExit(int exitKind, int kickoutReason)
+{
+    // 主动登出：用户明确表达了"我不想再自动进去"，清。
+    if (exitKind == kLoginExitUserLogout)
+    {
+        return true;
+    }
+
+    // 被踢下线：只有"密码已修改"这一种要清 —— 本机存的密码已经失效，留着自动登录
+    // 只会让用户每次开机都被弹一次"密码错误"，白白卡在那里。
+    // 其余原因（异地登录 / 账号停用 / 服务器维护 / 被本人从别的设备踢掉）都是被动
+    // 发生的，用户没有表达任何意愿，不替他做主。越界的 exitKind 也走到这里，按
+    // 保守的一侧处理（不清）。
+    if (kickoutReason == kKickoutReasonPasswordChanged)
+    {
+        return true;
+    }
+
+    return false;
+}
+
 } // namespace balloonmain

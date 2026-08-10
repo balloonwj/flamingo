@@ -32,11 +32,12 @@ class BalloonContactTreeAdapter
 {
 public:
     /**
-     *  用 mgr->m_BuddyList 的真实分组 + 好友数据填 Contacts 页 TreeView。
-     *  节点结构:每个 CBuddyTeamInfo 作为一个根 ("分组名 在线/总"),
-     *  下面挂该分组的所有 CBuddyInfo;默认全部展开。
-     *    tv:  目标 TreeView;空指针时函数直接返回。
-     *    mgr: 数据源;空指针或数据为空时 TreeView 会被清空(显示为空)。
+     *  【企业版下已成空实现】原先用 mgr->m_BuddyList(v1 好友列表)的分组 + 好友数据填
+     *  Contacts 页 TreeView。v1 好友体系已整体删除 —— 通讯录改由服务端组织架构下发,
+     *  联系人页由 CBalloonMainPanel 收到 cmd_get_contacts 应答后自行填充,不再经本适配器。
+     *  函数保留是为了不改动调用点(CBalloonMainPanel::RefreshContacts),调用它不产生任何效果。
+     *    tv:  目标 TreeView;当前实现不使用。
+     *    mgr: 数据源;当前实现不使用。
      */
     static void FillContacts(balloonwjui::DuiTreeView* tv, CUserMgr* mgr);
 

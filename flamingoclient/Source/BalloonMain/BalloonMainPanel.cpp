@@ -981,20 +981,10 @@ void CBalloonMainPanel::SyncPaneContentHeight(UINT paneId, UINT treeViewId,
 
 void CBalloonMainPanel::RefreshContacts()
 {
-    balloonwjui::DuiControl* content = GetClientContent();
-    if (content == NULL)
-    {
-        return;
-    }
-    balloonwjui::DuiTreeView* tv = dynamic_cast<balloonwjui::DuiTreeView*>(
-        content->FindCtrlById(balloonmain::kIdContactsTree));
-    if (tv == NULL)
-    {
-        return;
-    }
-    balloonmain::BalloonContactTreeAdapter::FillContacts(tv, &CUserMgr::GetInstance());
-    SyncPaneContentHeight(balloonmain::kIdPaneContacts,
-                          balloonmain::kIdContactsTree, kContactsPaneTitleHeight);
+    // 企业版的联系人树来自 v2 通讯录应答（组织架构），由 RebuildContactsTree 用
+    // 缓存的应答整棵重建。这里原本走的是 v1 好友列表适配器 —— 好友功能删除后那条
+    // 路径已经不存在，直接委托过去，免得留下一个"调了等于没调"的方法。
+    RebuildContactsTree();
 }
 
 void CBalloonMainPanel::RefreshGroups()
@@ -1007,20 +997,9 @@ void CBalloonMainPanel::RefreshGroups()
 
 void CBalloonMainPanel::RefreshMessages()
 {
-    balloonwjui::DuiControl* content = GetClientContent();
-    if (content == NULL)
-    {
-        return;
-    }
-    balloonwjui::DuiTreeView* tv = dynamic_cast<balloonwjui::DuiTreeView*>(
-        content->FindCtrlById(balloonmain::kIdMessagesTree));
-    if (tv == NULL)
-    {
-        return;
-    }
-    balloonmain::BalloonContactTreeAdapter::FillMessages(tv, &CUserMgr::GetInstance());
-    SyncPaneContentHeight(balloonmain::kIdPaneMessages,
-                          balloonmain::kIdMessagesTree, 0);
+    // 会话列表同理：真实数据来自 v2 会话同步（m_conversations），由
+    // FillConversationsTree 重建。原先那条 v1 适配器路径随好友功能一并删除。
+    FillConversationsTree();
 }
 
 void CBalloonMainPanel::RefreshAll()
@@ -2405,6 +2384,28 @@ bool CBalloonMainPanel::EnsureMsgStoreOpen()
     return true;
 }
 
+/**
+ *  判断用户此刻是不是正看着某个聊天窗 —— 是的话，刚到达的消息已经当场被看到，
+ *  不该再给最近会话列表记未读。
+ *
+ *  判据本身在 balloonmain::ShouldTreatAsReadOnArrival（纯函数、有单测，见
+ *  Tests/ConversationListOpsTests.cpp 的 RD 系列），本函数只负责把 Win32 侧的
+ *  窗口状态查出来喂给它，好让判据保持可测。
+ *    hWnd  聊天窗句柄；NULL 表示该会话的窗口根本没打开。
+ *  @return 用户正看着该窗口返回 true
+ */
+static bool IsUserWatchingChatWindow(HWND hWnd)
+{
+    const bool windowExists = (hWnd != NULL);
+    const bool isWindow     = windowExists && (::IsWindow(hWnd) != FALSE);
+    const bool isVisible    = isWindow && (::IsWindowVisible(hWnd) != FALSE);
+    const bool isIconic     = isWindow && (::IsIconic(hWnd) != FALSE);
+    const bool isForeground = isWindow && (::GetForegroundWindow() == hWnd);
+
+    return balloonmain::ShouldTreatAsReadOnArrival(windowExists, isWindow, isVisible,
+                                                   isIconic, isForeground);
+}
+
 void CBalloonMainPanel::OnRecvChatMessage(const net::MessageNotify& notify)
 {
     // 预览按消息类型统一算（文本取正文，抖动/表情等取占位文案），与服务端 digest
@@ -2439,11 +2440,13 @@ void CBalloonMainPanel::OnRecvChatMessage(const net::MessageNotify& notify)
         //（用户点开群会话时再建窗，靠历史同步看到这条）。群聊暂无窗口抖动。
         int64_t groupId = notify.m_cid;
         bool bGroupWindowOpen = false;
+        HWND hGroupWnd = NULL;   // 已打开的群聊窗句柄；未打开时为 NULL，供已读判定使用
         std::map<int64_t, CBalloonGroupChatWindow*>::iterator it = m_groupChatWindows.find(groupId);
         if (it != m_groupChatWindows.end() && it->second != NULL && it->second->IsWindow())
         {
             it->second->OnRecvGroupMessage(notify);
             bGroupWindowOpen = true;
+            hGroupWnd = it->second->m_hWnd;
         }
         // @提醒：本条有没有 @ 到我。<u>只看 uid、不看文本</u>，所以群名片改了、群里有
         // 同名成员都不受影响。自己在别端发出、同步回来的消息不算（不该提醒自己）。
@@ -2458,12 +2461,27 @@ void CBalloonMainPanel::OnRecvChatMessage(const net::MessageNotify& notify)
             groupDigest = "[\xE6\x9C\x89\xE4\xBA\xBA@\xE6\x88\x91] " + digest;   // "[有人@我] "（UTF-8）
         }
 
+        // 用户此刻是不是正看着这个群窗（可见、未最小化、且在前台）。是的话这条消息
+        // 已经当场被看到，不该再记未读——否则就出现"消息就在眼前，会话列表还亮着
+        // 红点"。判据与单聊共用同一个纯函数，两边口径一致。
+        const bool bGroupWatching = IsUserWatchingChatWindow(hGroupWnd);
+
         // 未读只由他人发来的消息构成：服务端把群消息推给<u>包括发送者在内</u>的全体成员，
         // 自己发的群消息回推回来时若也 +1，自己发一条就会给自己点亮一个红点。
+        const bool bGroupCountAsUnread =
+            net::ConversationsProtocolClient::shouldCountAsUnread((UINT)notify.m_from, selfId);
+
         BumpConversation(2, groupId, (UINT)notify.m_from, groupDigest,
                          notify.m_msgtype, notify.m_timestamp, notify.m_msgid,
-                         net::ConversationsProtocolClient::shouldCountAsUnread(
-                             (UINT)notify.m_from, selfId));
+                         bGroupCountAsUnread && !bGroupWatching);
+
+        // 正看着：除了本条不计未读，之前累积的旧未读也一并清掉，并把已读位点上报
+        // 服务端（否则换设备 / 重新登录时红点又会冒出来）。必须放在 BumpConversation
+        // <u>之后</u> —— 本条的 msgid 要先落进 m_lastmsgid，上报的已读位点才包含它。
+        if (bGroupWatching)
+        {
+            MarkConversationRead(2, groupId);
+        }
         // 群窗未打开、且不是自己同步回来的消息：在托盘闪该群头像提醒（窗口已开则消息
         // 已渲染进去，无需闪）。设了"消息免打扰"的会话除外——它的未读数照常在会话列表
         // 上累加，但不闪托盘、不出声，这正是免打扰的意思。
@@ -2505,11 +2523,22 @@ void CBalloonMainPanel::OnRecvChatMessage(const net::MessageNotify& notify)
         pWin->OnRecvMessage(notify);
     }
 
+    // 用户此刻是不是正看着这个聊天窗，口径同群聊分支。
+    const bool bWatching = IsUserWatchingChatWindow((pWin != NULL) ? pWin->m_hWnd : NULL);
+
     // 同群聊：多端登录时服务端会把自己发的单聊消息同步回本端，那类推送不计未读。
+    const bool bCountAsUnread =
+        net::ConversationsProtocolClient::shouldCountAsUnread((UINT)notify.m_from, selfId);
+
     BumpConversation(1, (int64_t)peerUserId, (UINT)notify.m_from, digest,
                      notify.m_msgtype, notify.m_timestamp, notify.m_msgid,
-                     net::ConversationsProtocolClient::shouldCountAsUnread(
-                         (UINT)notify.m_from, selfId));
+                     bCountAsUnread && !bWatching);
+
+    // 正看着：连同旧未读一并清零并上报已读位点，理由与顺序要求同群聊分支。
+    if (bWatching)
+    {
+        MarkConversationRead(1, (int64_t)peerUserId);
+    }
 
     // 单聊窗未打开（pWin==NULL）、非窗口抖动、且不是自己同步回来的消息：在托盘闪对端
     // 头像提醒。窗口已打开时消息已渲染进窗口、无需闪；抖动消息上面已 EnsureChatWindow
@@ -2658,6 +2687,11 @@ void CBalloonMainPanel::OnImageDownloadResult(const net::ImageDownloadResult& re
         else
             git->second->OnImageDownloadFailed(result.m_msgid);
     }
+
+    //消息记录窗也可能发起过图片下载（用户双击了缩略图、或点了菜单里的「下载」）。
+    //它自己按 msgid 判断这一笔是不是它要的，不是就安静忽略。
+    m_historyWindow.OnImageDownloadFinished(result.m_msgid, result.m_ok,
+                                            result.m_localpath);
 }
 
 void CBalloonMainPanel::OnFileSendProgress(const net::FileSendProgress& prog)
@@ -2788,6 +2822,10 @@ void CBalloonMainPanel::OnFileDownloadResult(const net::FileDownloadResult& resu
         else
             git->second->OnFileDownloadFailed(result.m_msgid, result.m_cancelled);
     }
+
+    //消息记录窗同理：它可能从行右键菜单发起过下载，按 msgid 认领属于自己的那一笔。
+    m_historyWindow.OnFileDownloadFinished(result.m_msgid, result.m_ok,
+                                           result.m_localpath, result.m_cancelled);
 }
 
 void CBalloonMainPanel::OnFileTransferAck(const net::FileTransferAckNotify& notify)
@@ -4529,7 +4567,11 @@ void CBalloonMainPanel::RefreshContactDisplayName(UINT peerUserId)
 {
     //通讯录树与会话列表整体重建最稳妥：显示名同时影响树节点文字与会话行标题，
     //逐节点改文字要在两棵树里各找一遍，还容易漏掉收藏分区里的那一份。
-    RefreshContacts();
+    //
+    //联系人树必须走 RebuildContactsTree（用缓存的 v2 通讯录应答重建组织架构树），
+    //<u>不能</u>用 RefreshContacts —— 后者重建的是旧 v1 好友列表，企业版下好友列表
+    //恒为空，那条路径整个是空转，改完备注树上的名字根本不会变。
+    RebuildContactsTree();
     FillConversationsTree();
 
     //已打开的单聊窗：标题 / 标题栏 / 任务栏图标上都是这个名字。走 UpdatePeerInfo
@@ -4590,12 +4632,14 @@ void CBalloonMainPanel::OnSetFriendRemarkResult(const net::SetFriendRemarkResult
 
     LOG_ERROR("设置备注失败，已回滚: userid=%u, code=%d。", peerUserId, result.m_code);
 
-    //"不是好友"要给一句明确的话——企业通讯录里看得到的同事不一定是好友，用户
-    //不会想到这一层，只给通用提示他会以为是网络问题反复重试。
+    //"这个人不在了"要给一句明确的话（对方已离职 / 账号被删，通讯录还没刷新到），
+    //用户不会想到这一层，只给通用提示他会以为是网络问题反复重试。
+    //注意服务端这里返回的是通用的 error_code_not_found，不是 error_code_not_friend
+    //——企业版取消好友关系后，改备注不再有"是不是好友"这道校验。
     LPCTSTR tip = _T("备注保存失败，请稍后重试。");
-    if (result.m_code == error_code_not_friend)
+    if (result.m_code == error_code_not_found)
     {
-        tip = _T("你们还不是好友，无法设置备注。");
+        tip = _T("该联系人不存在，可能已经离职。");
     }
     ::MessageBox(m_hWnd, tip, _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
 }
@@ -6099,6 +6143,29 @@ LRESULT CBalloonMainPanel::OnConvSendBumpMsg(UINT /*uMsg*/, WPARAM wParam,
     // 本端发出时服务器 msgid 暂未知（在 cmd_send_message 回执里才回来），传 0；
     // 已读上限锚点不靠自己发出的消息推进——未读只由对端消息构成。
     BumpConversation(ctype, cid, selfId, digest, msgType, nowMs, 0, false);
+
+    // 用户在窗口里回了一条消息 —— 这是最强的"我已经看到了"信号，故顺带把该会话
+    // 可能还挂着的旧未读清零。此前只有从会话列表点进去才会清，于是出现过"回都回
+    // 了，列表上的红点还在"。
+    MarkConversationRead(ctype, cid);
+    return 0;
+}
+
+LRESULT CBalloonMainPanel::OnConvMarkReadMsg(UINT /*uMsg*/, WPARAM wParam,
+                                             LPARAM lParam, BOOL& /*bHandled*/)
+{
+    // 聊天窗被用户切到前台：把该会话未读清零并上报已读位点。
+    // lParam 为堆上 long long* cid（Win32 下 LPARAM 装不下 64 位 cid，与
+    // FMG_MSG_TRAY_CLEAR 同法），处理后须 delete。
+    long long* pCid = (long long*)lParam;
+    if (pCid == NULL)
+    {
+        return 0;
+    }
+    const int64_t cid = (int64_t)*pCid;
+    delete pCid;
+
+    MarkConversationRead((int)wParam, cid);
     return 0;
 }
 

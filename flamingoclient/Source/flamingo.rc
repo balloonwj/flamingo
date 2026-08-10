@@ -228,19 +228,6 @@ BEGIN
     LTEXT           "确认密码 :",IDC_STATIC_CHECKPWD,57,118,45,10
 END
 
-IDD_FINDFRIENDDLG DIALOGEX 0, 0, 248, 140
-STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "新好友查找"
-FONT 8, "MS Shell Dlg", 400, 0, 0x1
-BEGIN
-    DEFPUSHBUTTON   "查找",IDC_BTN_ADD,171,29,50,14
-    EDITTEXT        IDC_EDIT_ADD,15,29,144,14,ES_MULTILINE | ES_AUTOHSCROLL
-    CONTROL         "找人",IDC_RADIO_FINDTYPE1,"Button",BS_AUTORADIOBUTTON,67,59,32,10
-    CONTROL         "找群",IDC_RADIO_FINDTYPE2,"Button",BS_AUTORADIOBUTTON,116,59,32,10
-    CTEXT           "",IDC_STATIC_ADDINFO,10,89,199,12
-    LTEXT           "查找类型：",IDC_STATIC,17,59,40,8
-END
-
 IDD_LOGSETDLG DIALOGEX 0, 0, 362, 195
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "添加服务器"
@@ -277,16 +264,6 @@ BEGIN
     LTEXT           "Flamingo.exe",IDC_UPFILENAME,21,22,129,11
     RTEXT           "100%",IDC_UPRATE,180,23,114,11
     CONTROL         "",IDC_UPFILELIST,"SysListView32",LVS_ALIGNLEFT | WS_BORDER | WS_TABSTOP,20,54,274,129
-END
-
-IDD_ADDFRIENDCONFIRMDLG DIALOGEX 0, 0, 316, 94
-STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
-FONT 8, "MS Shell Dlg", 400, 0, 0x1
-BEGIN
-    DEFPUSHBUTTON   "同意",ID_ADDCONFIRM_AGREE,70,68,50,14
-    PUSHBUTTON      "拒绝",ID_ADDCONFIRM_REFUSE,162,68,50,14
-    LTEXT           "静态",IDC_ADDCONFIRM,19,19,229,25
-    PUSHBUTTON      "确定",IDOK,110,68,50,14
 END
 
 IDD_CHANGEPICDLG DIALOGEX 0, 0, 587, 508
@@ -377,28 +354,6 @@ CAPTION "Dialog"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
 BEGIN
     LTEXT           "Static",IDC_STATIC_INFO,16,22,114,73
-END
-
-IDD_MODIFYMARKNAME DIALOGEX 0, 0, 229, 131
-STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Dialog"
-FONT 8, "MS Shell Dlg", 400, 0, 0x1
-BEGIN
-    DEFPUSHBUTTON   "确定",IDOK,37,63,50,14
-    PUSHBUTTON      "取消",IDCANCEL,121,63,50,14
-    LTEXT           "请输入备注姓名：",IDC_STATIC_MARKNAME,14,23,104,8
-    EDITTEXT        IDC_EDIT_MARKNAME,16,36,171,14,ES_AUTOHSCROLL
-END
-
-IDD_TEAM DIALOGEX 0, 0, 179, 117
-STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
-CAPTION "Dialog"
-FONT 8, "MS Shell Dlg", 400, 0, 0x1
-BEGIN
-    DEFPUSHBUTTON   "确定",IDOK,24,61,50,14
-    PUSHBUTTON      "取消",IDCANCEL,91,61,50,14
-    LTEXT           "新分组名：",IDC_STATIC_TEAMNAME,19,23,85,8
-    EDITTEXT        IDC_EDIT_TEAMNAME,19,37,133,14,ES_AUTOHSCROLL
 END
 
 IDD_MODIFYPASSWORD DIALOGEX 0, 0, 316, 183
@@ -569,14 +524,6 @@ BEGIN
         BOTTOMMARGIN, 178
     END
 
-    IDD_FINDFRIENDDLG, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 241
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 133
-    END
-
     IDD_LOGSETDLG, DIALOG
     BEGIN
         LEFTMARGIN, 7
@@ -591,14 +538,6 @@ BEGIN
         RIGHTMARGIN, 302
         TOPMARGIN, 7
         BOTTOMMARGIN, 205
-    END
-
-    IDD_ADDFRIENDCONFIRMDLG, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 309
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 87
     END
 
     IDD_CHANGEPICDLG, DIALOG
@@ -642,22 +581,6 @@ BEGIN
     BEGIN
         LEFTMARGIN, 7
         RIGHTMARGIN, 179
-        TOPMARGIN, 7
-        BOTTOMMARGIN, 110
-    END
-
-    IDD_MODIFYMARKNAME, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 222
-        TOPMARGIN, 22
-        BOTTOMMARGIN, 88
-    END
-
-    IDD_TEAM, DIALOG
-    BEGIN
-        LEFTMARGIN, 7
-        RIGHTMARGIN, 172
         TOPMARGIN, 7
         BOTTOMMARGIN, 110
     END
@@ -966,161 +889,6 @@ BEGIN
         MENUITEM MFT_SEPARATOR
         MENUITEM "删除选中消息记录",                    IDM_DELETESELECTMSGLOG,MFT_STRING,MFS_ENABLED
         MENUITEM "删除所有消息记录",                    IDM_CLEARMSGLOG,MFT_STRING,MFS_ENABLED
-    END
-END
-
-ID_MENU_MAIN_PANEL MENU
-BEGIN
-    POPUP "状态"
-    BEGIN
-        MENUITEM "我在线上",                        ID_MENU_IMONLINE
-        MENUITEM "离线",                          ID_MENU_IMOFFLINE
-    END
-    POPUP "系统托盘菜单一"
-    BEGIN
-        MENUITEM "打开主面板",                       ID_MENU_SHOW_MAIN_PANEL
-        MENUITEM SEPARATOR
-        MENUITEM "退出",                          ID_MENU_EXIT
-    END
-    POPUP "系统托盘菜单二"
-    BEGIN
-        MENUITEM "我在线上",                        ID_MENU_IMONLINE
-        MENUITEM "离线",                          ID_MENU_IMOFFLINE
-        MENUITEM SEPARATOR
-        MENUITEM "锁定 Flamingo ",                ID_MENU_LOCK
-        MENUITEM SEPARATOR
-        MENUITEM "关闭所有声音",                      ID_MENU_MUTE
-        MENUITEM SEPARATOR
-        MENUITEM "打开主面板 Ctrl+Alt+D",            ID_MENU_SHOW_MAIN_PANEL
-        MENUITEM SEPARATOR
-        MENUITEM "退出",                          ID_MENU_EXIT
-    END
-    POPUP "最近联系人"
-    BEGIN
-        POPUP "排序显示"
-        BEGIN
-            MENUITEM "按时间排序",                       ID_32974, CHECKED
-            MENUITEM "按在线情况排序",                     ID_32975
-        END
-        MENUITEM SEPARATOR
-        MENUITEM "漫游最近联系人列表",                   ID_32976, GRAYED
-        MENUITEM "清空最近联系人列表",                   IDM_CLEARRECENTLIST
-    END
-    POPUP "联系人"
-    BEGIN
-        POPUP "头像显示"
-        BEGIN
-            MENUITEM "大头像",                         ID_MENU_BIGHEADPIC, CHECKED
-            MENUITEM "小头像",                         ID_MENU_SMALLHEADPIC
-            MENUITEM "标准头像",                        ID_MENU_STDHEADPIC
-            MENUITEM SEPARATOR
-            MENUITEM "选中时显示大头像",                    ID_MENU_SHOWBIGHEADPICINSEL
-            MENUITEM SEPARATOR
-            MENUITEM "显示我的头像",                      ID_32909, CHECKED
-        END
-        POPUP "名称显示"
-        BEGIN
-            MENUITEM "显示昵称和账号",                     ID_32911, CHECKED
-            MENUITEM "显示昵称",                        ID_32912
-            MENUITEM "显示账号",                        ID_32913
-            MENUITEM SEPARATOR
-            MENUITEM "不显示个性签名",                     ID_32914
-        END
-        MENUITEM SEPARATOR
-        POPUP "排序显示"
-        BEGIN
-            MENUITEM "按昵称排序",                       ID_32920, CHECKED
-            MENUITEM "按账户名排序",                      ID_32921
-        END
-        MENUITEM "刷新好友列表",                      IDM_REFRESH_BUDDYLIST
-        MENUITEM SEPARATOR
-        MENUITEM "显示在线联系人",                     IDM_SHOW_ONLINEBUDDY_ONLY
-    END
-    POPUP "群/讨论组"
-    BEGIN
-        POPUP "图标显示"
-        BEGIN
-            MENUITEM "大图标",                         ID_MENU_BIGHEADPIC
-            MENUITEM "小图标",                         ID_MENU_SMALLHEADPIC, CHECKED
-            MENUITEM "标准图标",                        ID_MENU_STDHEADPIC
-            MENUITEM SEPARATOR
-            MENUITEM "选中时显示大图标",                    ID_MENU_SHOWBIGHEADPICINSEL, CHECKED
-        END
-        MENUITEM SEPARATOR
-        POPUP "所有群消息设置"
-        BEGIN
-            MENUITEM "使用群自身的消息设置",                  ID_32953
-            MENUITEM SEPARATOR
-            MENUITEM "所有群接收并提示消息",                  ID_32954
-            MENUITEM "所有群接收不显示消息",                  ID_32955
-            MENUITEM "所有群不提示消息只显示数目",               ID_32956
-            MENUITEM SEPARATOR
-            MENUITEM "所有群阻止一切群内消息",                 ID_32957
-        END
-        MENUITEM SEPARATOR
-        MENUITEM "查找添加群",                       ID_32961
-        MENUITEM "创建一个群",                       ID_32962
-        MENUITEM SEPARATOR
-        MENUITEM "添加群分组",                       ID_32963
-    END
-    POPUP "好友右键菜单"
-    BEGIN
-        MENUITEM "发送即时消息",                      IDM_SENDMSG
-        MENUITEM SEPARATOR
-        MENUITEM "查看用户资料",                      IDM_VIEWBUDDYINFO
-        MENUITEM SEPARATOR
-        MENUITEM "修改备注姓名",                      IDM_MODIFY_BUDDY_MARKNAME
-        MENUITEM SEPARATOR
-        MENUITEM "删除好友",                        IDM_DELETEFRIEND
-        MENUITEM SEPARATOR
-        MENUITEM "移动联系人至",                      65535
-    END
-    POPUP "主菜单"
-    BEGIN
-        MENUITEM "系统设置",                        IDM_SYSTEMSETTINGS
-        MENUITEM SEPARATOR
-        MENUITEM "修改密码",                        IDM_MODIFYPASSWORD
-        MENUITEM SEPARATOR
-        MENUITEM "关于",                          ID_TOOL
-    END
-    POPUP "面板锁定状态"
-    BEGIN
-        MENUITEM "打开主面板",                       ID_MENU_SHOW_MAIN_PANEL
-        MENUITEM SEPARATOR
-        MENUITEM "退出",                          ID_MENU_EXIT
-    END
-    POPUP "最近联系人会话右键菜单"
-    BEGIN
-        MENUITEM "发送即时消息",                      IDM_SENDMSGFROMRECENTLIST
-        MENUITEM SEPARATOR
-        MENUITEM "查看用户资料",                      IDM_VIEWBUDDYINFO_FROMRECENTLIST
-        MENUITEM SEPARATOR
-        MENUITEM "从会话列表移除",                     IDM_DELETERECENTITEM
-    END
-    POPUP "群组右键菜单"
-    BEGIN
-        MENUITEM "发送群消息",                       IDM_SENDGROUP_MSG
-        MENUITEM SEPARATOR
-        MENUITEM "查看群资料",                       IDM_VIEW_GROUPINFO
-        MENUITEM SEPARATOR
-        MENUITEM "退出该群",                        IDM_EXIT_GROUP
-    END
-    POPUP "分组右键菜单"
-    BEGIN
-        MENUITEM "添加分组",                        IDM_ADDTEAM
-        MENUITEM "删除分组",                        IDM_DELETETEAM
-        MENUITEM SEPARATOR
-        MENUITEM "修改分组名",                       33103
-    END
-    POPUP "好友列表空白处右键菜单"
-    BEGIN
-        MENUITEM "添加分组",                        IDM_ADDTEAM
-        MENUITEM SEPARATOR
-        MENUITEM "刷新好友列表",                      IDM_REFRESH_BUDDYLIST
-    END
-    POPUP "群组列表空白处右键菜单"
-    BEGIN
-        MENUITEM "创建群",                         IDM_CREATENEWGROUP
     END
 END
 

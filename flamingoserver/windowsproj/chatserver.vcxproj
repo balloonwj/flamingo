@@ -31,6 +31,7 @@
     <ClCompile Include="..\chatserversrc\ContactsProtocol.cpp" />
     <ClCompile Include="..\chatserversrc\FavoriteProtocol.cpp" />
     <ClCompile Include="..\chatserversrc\FavoriteManager.cpp" />
+    <ClCompile Include="..\chatserversrc\ContactRemarkManager.cpp" />
     <ClCompile Include="..\chatserversrc\ProfileProtocol.cpp" />
     <ClCompile Include="..\chatserversrc\RegisterProtocol.cpp" />
     <ClCompile Include="..\chatserversrc\RegisterService.cpp" />
@@ -151,6 +152,7 @@
     <ClInclude Include="..\chatserversrc\ContactsProtocol.h" />
     <ClInclude Include="..\chatserversrc\FavoriteProtocol.h" />
     <ClInclude Include="..\chatserversrc\FavoriteManager.h" />
+    <ClInclude Include="..\chatserversrc\ContactRemarkManager.h" />
     <ClInclude Include="..\chatserversrc\ProfileProtocol.h" />
     <ClInclude Include="..\chatserversrc\RegisterProtocol.h" />
     <ClInclude Include="..\chatserversrc\RegisterService.h" />

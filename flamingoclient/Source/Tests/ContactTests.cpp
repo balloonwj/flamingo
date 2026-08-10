@@ -107,7 +107,7 @@ TEST_CASE("C5 联系人资料对话框含分组下拉框", "[contact]")
               root->FindCtrlById(kIdGroupCombo)) != nullptr);
 }
 
-TEST_CASE("C6 联系人资料对话框含三个 DuiSwitch 开关", "[contact]")
+TEST_CASE("C6 联系人资料对话框含两个 DuiSwitch 开关", "[contact]")
 {
     auto root = BuildContactBody();
     REQUIRE(root != nullptr);
@@ -116,8 +116,10 @@ TEST_CASE("C6 联系人资料对话框含三个 DuiSwitch 开关", "[contact]")
               root->FindCtrlById(kIdSwitchMute)) != nullptr);
     CHECK(dynamic_cast<DuiSwitch*>(
               root->FindCtrlById(kIdSwitchPinned)) != nullptr);
-    CHECK(dynamic_cast<DuiSwitch*>(
-              root->FindCtrlById(kIdSwitchBlocked)) != nullptr);
+
+    // 企业版取消好友关系后，「加入黑名单」那一行整行移除。用字面量 1032 断言
+    // 而不是枚举 —— 枚举项已经删了，这里要防的是"日后有人复用这个编号"。
+    CHECK(root->FindCtrlById(1032) == nullptr);
 }
 
 TEST_CASE("C7 联系人资料对话框含关闭 / 发消息底部按钮", "[contact]")
@@ -220,22 +222,23 @@ TEST_CASE("C14 ContactModel 分组默认选中「产品部 · 设计组」、可
     CHECK(model.SelectedGroup() == 0);
 }
 
-TEST_CASE("C15 ContactModel 三个开关默认全关、可读写、越界忽略", "[contact][model]")
+TEST_CASE("C15 ContactModel 两个开关默认全关、可读写、越界忽略", "[contact][model]")
 {
     ContactModel model;
 
     // 默认全关。
     CHECK(model.Switch(kContactSwitchMute)    == false);
     CHECK(model.Switch(kContactSwitchPinned)  == false);
-    CHECK(model.Switch(kContactSwitchBlocked) == false);
 
     // 分别打开，互不串扰。
     model.SetSwitch(kContactSwitchPinned, true);
     CHECK(model.Switch(kContactSwitchMute)    == false);
     CHECK(model.Switch(kContactSwitchPinned)  == true);
-    CHECK(model.Switch(kContactSwitchBlocked) == false);
 
-    // 越界 kind：写忽略、读返回 false。
+    // 越界 kind：写忽略、读返回 false。开关只剩两个，下标 2 已经越界 ——
+    // 这一条同时锁住"删掉黑名单开关后 kContactSwitchCount 确实降到了 2"。
+    model.SetSwitch(2, true);
+    CHECK(model.Switch(2) == false);
     model.SetSwitch(99, true);
     CHECK(model.Switch(99) == false);
 }

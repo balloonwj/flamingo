@@ -1026,6 +1026,31 @@ void CBalloonGroupChatWindow::InitUi()
 // 消息处理
 // =======================================================================
 
+LRESULT CBalloonGroupChatWindow::OnActivateMsg(UINT /*uMsg*/, WPARAM wParam,
+                                               LPARAM /*lParam*/, BOOL& bHandled)
+{
+    // 不消费 WM_ACTIVATE，理由与口径同单聊窗（见 CBalloonChatWindow::OnActivateMsg）。
+    bHandled = FALSE;
+
+    if (LOWORD(wParam) == WA_INACTIVE)
+    {
+        return 0;
+    }
+    if (m_hostPanel == NULL || !::IsWindow(m_hostPanel))
+    {
+        return 0;
+    }
+    if (m_groupId <= 0)
+    {
+        return 0;
+    }
+
+    long long* pCid = new long long((long long)m_groupId);
+    LOG_INFO("群聊窗被激活，请求清除该会话未读: group=%lld.", (long long)m_groupId);
+    ::PostMessage(m_hostPanel, FMG_MSG_CONV_MARK_READ, (WPARAM)2, (LPARAM)pCid);
+    return 0;
+}
+
 LRESULT CBalloonGroupChatWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
                                             LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {

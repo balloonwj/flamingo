@@ -206,7 +206,8 @@ void CBalloonAnnounceBoxWindow::ReloadRows()
 
         //「发布者 · 时间」合成一行。发布者为空（老数据）时只显示时间，不留一个孤零零的分隔点。
         CString sender = Utf8ToCString(rec.m_senderName);
-        CString when   = FormatSentTime(rec.m_sentTimeMs);
+        //时间格式化与新公告提示窗共用同一支函数，两处显示的时间口径一致。
+        CString when   = FormatAnnounceTime(rec.m_sentTimeMs);
         if (!sender.IsEmpty() && !when.IsEmpty())
         {
             view.m_metaText = sender + _T(" · ") + when;

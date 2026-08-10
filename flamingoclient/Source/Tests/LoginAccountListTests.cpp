@@ -397,3 +397,156 @@ TEST_CASE("LAL4 最后登录账号与自动登录标志随账号切换")
     REQUIRE(list.GetLastLoginAccountInfo(&stCopy) == TRUE);
     CHECK(wcscmp(stCopy.szUser, _T("bob")) == 0);
 }
+
+// =====================================================================
+// LAL-A —— "取消自动登录"依赖的落盘语义
+//
+// CMainDlg::ClearAutoLoginFlag / ForgetSavedPasswordForCurrentAccount 与
+// CBalloonLoginDlg::PersistCheckStateForCurrentAccount 都是"改 LOGIN_ACCOUNT_INFO
+// 的字段 + SaveFile"这个套路。那三个函数本身挂在窗口类上、测试工程不编译它们，
+// 但它们赖以成立的这一层语义能在这里钉死：改完落盘、重新加载后必须还是改后的值。
+// 这一层要是悄悄坏了，表现就是"取消了自动登录，下次启动还是自动登进去"。
+// =====================================================================
+
+TEST_CASE("LAL-A1 清掉自动登录标志后落盘,重新加载仍为假", "[lal][autologin]")
+{
+    const std::wstring path = FreshTempDat(L"flamingo_lal_a1.dat");
+
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, TRUE));
+
+    LOGIN_ACCOUNT_INFO* lpAlice = list.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    lpAlice->bAutoLogin = FALSE;
+    REQUIRE(list.SaveFile(path.c_str()));
+
+    CLoginAccountList reloaded;
+    REQUIRE(reloaded.LoadFile(path.c_str()));
+    LOGIN_ACCOUNT_INFO* lpReloaded = reloaded.Find(_T("alice"));
+    REQUIRE(lpReloaded != NULL);
+    CHECK(lpReloaded->bAutoLogin == FALSE);
+}
+
+TEST_CASE("LAL-A2 清标志只影响目标账号", "[lal][autologin]")
+{
+    const std::wstring path = FreshTempDat(L"flamingo_lal_a2.dat");
+
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, TRUE));
+    REQUIRE(list.Add(_T("bob"),   _T("pwd_b"), 1, TRUE, TRUE));
+
+    LOGIN_ACCOUNT_INFO* lpAlice = list.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    lpAlice->bAutoLogin = FALSE;
+    REQUIRE(list.SaveFile(path.c_str()));
+
+    CLoginAccountList reloaded;
+    REQUIRE(reloaded.LoadFile(path.c_str()));
+    LOGIN_ACCOUNT_INFO* lpReloadedAlice = reloaded.Find(_T("alice"));
+    LOGIN_ACCOUNT_INFO* lpReloadedBob   = reloaded.Find(_T("bob"));
+    REQUIRE(lpReloadedAlice != NULL);
+    REQUIRE(lpReloadedBob != NULL);
+    CHECK(lpReloadedAlice->bAutoLogin == FALSE);
+    CHECK(lpReloadedBob->bAutoLogin == TRUE);   // 没被殃及
+}
+
+TEST_CASE("LAL-A3 账号不在列表里时 Find 返回空,调用方据此跳过", "[lal][autologin]")
+{
+    // ClearAutoLoginFlag 的防御分支:账号还没在本机成功登录过时什么都不做。
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, TRUE));
+    CHECK(list.Find(_T("nobody")) == NULL);
+}
+
+TEST_CASE("LAL-A4 清自动登录标志不动记住密码与密码本身", "[lal][autologin]")
+{
+    // 登出只是"别自动登进去",不该顺手把用户记住的密码也弄没了 —— 下次打开
+    // 登录窗密码仍要回填得出来,只是不再自动登录。
+    const std::wstring path = FreshTempDat(L"flamingo_lal_a4.dat");
+
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, TRUE));
+
+    LOGIN_ACCOUNT_INFO* lpAlice = list.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    lpAlice->bAutoLogin = FALSE;
+    REQUIRE(list.SaveFile(path.c_str()));
+
+    CLoginAccountList reloaded;
+    REQUIRE(reloaded.LoadFile(path.c_str()));
+    LOGIN_ACCOUNT_INFO* lpReloaded = reloaded.Find(_T("alice"));
+    REQUIRE(lpReloaded != NULL);
+    CHECK(lpReloaded->bAutoLogin == FALSE);
+    CHECK(lpReloaded->bRememberPwd == TRUE);
+    CHECK(wcscmp(lpReloaded->szPwd, _T("pwd_a")) == 0);
+}
+
+TEST_CASE("LAL-A5 清掉最后登录账号的标志后 IsAutoLogin 返回假", "[lal][autologin]")
+{
+    // IsAutoLogin 只看"最后登录账号"那一条(CMainDlg::OnInitDialog 据它决定要不要
+    // 跳过登录窗),故清标志之后必须能从这个入口看出来。
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, FALSE));
+    REQUIRE(list.Add(_T("bob"),   _T("pwd_b"), 1, TRUE, TRUE));
+
+    list.SetLastLoginUser(_T("bob"));
+    REQUIRE(list.IsAutoLogin() == TRUE);
+
+    LOGIN_ACCOUNT_INFO* lpBob = list.Find(_T("bob"));
+    REQUIRE(lpBob != NULL);
+    lpBob->bAutoLogin = FALSE;
+    CHECK(list.IsAutoLogin() == FALSE);
+}
+
+TEST_CASE("LAL-A6 密码错误后忘掉密码:密码清空且两个勾选项一并取消", "[lal][autologin]")
+{
+    // 对应 CMainDlg::ForgetSavedPasswordForCurrentAccount。存下的密码已经不对了,
+    // 留着只会让勾了自动登录的用户每次开机被自动登一次、再被弹一次"密码错误"。
+    const std::wstring path = FreshTempDat(L"flamingo_lal_a6.dat");
+
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("stale_pwd"), 1, TRUE, TRUE));
+
+    LOGIN_ACCOUNT_INFO* lpAlice = list.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    lpAlice->szPwd[0]     = _T('\0');
+    lpAlice->bRememberPwd = FALSE;
+    lpAlice->bAutoLogin   = FALSE;
+    REQUIRE(list.SaveFile(path.c_str()));
+
+    CLoginAccountList reloaded;
+    REQUIRE(reloaded.LoadFile(path.c_str()));
+    LOGIN_ACCOUNT_INFO* lpReloaded = reloaded.Find(_T("alice"));
+    REQUIRE(lpReloaded != NULL);
+    CHECK(wcslen(lpReloaded->szPwd) == 0);
+    CHECK(lpReloaded->bRememberPwd == FALSE);
+    CHECK(lpReloaded->bAutoLogin == FALSE);
+    // 账号本身仍在列表里 —— 只是忘掉密码,不是把这个账号从历史里抹掉。
+    CHECK(wcscmp(lpReloaded->szUser, _T("alice")) == 0);
+}
+
+TEST_CASE("LAL-A7 取消记住密码时一并清空密码", "[lal][autologin]")
+{
+    // 对应 CBalloonLoginDlg::PersistCheckStateForCurrentAccount。不清的话文件里
+    // 仍留着明文密码,这个"取消记住密码"就名不副实。
+    const std::wstring path = FreshTempDat(L"flamingo_lal_a7.dat");
+
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, TRUE));
+
+    LOGIN_ACCOUNT_INFO* lpAlice = list.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    // 取消"记住密码"必然连带取消"自动登录"(两个复选框的联动),密码一并清空。
+    lpAlice->bRememberPwd = FALSE;
+    lpAlice->bAutoLogin   = FALSE;
+    lpAlice->szPwd[0]     = _T('\0');
+    REQUIRE(list.SaveFile(path.c_str()));
+
+    CLoginAccountList reloaded;
+    REQUIRE(reloaded.LoadFile(path.c_str()));
+    LOGIN_ACCOUNT_INFO* lpReloaded = reloaded.Find(_T("alice"));
+    REQUIRE(lpReloaded != NULL);
+    CHECK(wcslen(lpReloaded->szPwd) == 0);
+    CHECK(lpReloaded->bRememberPwd == FALSE);
+    CHECK(lpReloaded->bAutoLogin == FALSE);
+}

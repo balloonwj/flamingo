@@ -47,9 +47,7 @@ CMD_LOGIN = 1003
 CMD_REGISTER = 1101
 CMD_SEND_SMS_CODE = 1102
 CMD_GET_CONTACTS = 1201
-CMD_ADD_FRIEND_REQUEST = 1203
-CMD_FRIEND_REQUEST_NOTIFY = 1204
-CMD_HANDLE_FRIEND_REQUEST = 1205
+CMD_SET_FRIEND_REMARK = 1209
 CMD_CREATE_GROUP = 1301
 CMD_SYNC_CONVERSATIONS = 1501
 CMD_SYNC_MESSAGES = 1502
@@ -62,8 +60,6 @@ CTYPE_SINGLE = 1
 CTYPE_GROUP = 2
 #消息内容类型：1 为文本
 MSGTYPE_TEXT = 1
-#处理加好友申请的动作：1 表示同意
-FRIEND_ACTION_ACCEPT = 1
 
 #等待一帧应答的最长时间，单位秒
 RECV_TIMEOUT_SECONDS = 8
@@ -224,8 +220,41 @@ def log_size(log_path):
     return os.path.getsize(log_path) if os.path.exists(log_path) else 0
 
 
-def register_account(host, port, log_path, username, nickname, phone, password):
-    """注册一个账号：先要验证码，再提交注册。用完即断开。"""
+def resolve_company(db_path, explicit):
+    """定出注册时要用的公司全称。
+
+    企业版的 cmd_register **必须**带 company，且要与 t_enterprise.f_name 完全一致
+    （见 chatserversrc/RegisterProtocol.h）—— 服务端据它把新账号挂进该企业的根部门。
+    账号有没有企业归属很关键：通讯录、在线状态广播、离线推送全都按企业范围投递，
+    无企业归属的账号收不到任何关系链通知，用它做端到端回归等于什么都验不到。
+
+      db_path  SQLite 库路径；没显式指定公司名时从这里取第一家企业。
+      explicit 命令行显式给的公司全称；给了就直接用。
+    返回：公司全称。定不出来时直接终止并说明原因。
+    """
+    if explicit:
+        return explicit
+    check(bool(db_path),
+          "注册需要公司全称：请用 --company 指定，或用 --db 指定库文件以便自动取一家企业")
+    import sqlite3
+    con = sqlite3.connect(db_path)
+    try:
+        cur = con.cursor()
+        cur.execute("SELECT f_name FROM t_enterprise ORDER BY f_enterprise_id LIMIT 1")
+        row = cur.fetchone()
+        check(row is not None and row[0],
+              "库里一家企业都没有，无法注册测试账号：请先建企业或用 --company 指定")
+        return row[0]
+    finally:
+        con.close()
+
+
+def register_account(host, port, log_path, username, nickname, phone, password, company):
+    """注册一个账号：先要验证码，再提交注册。用完即断开。
+
+    company 是必填项，不是可选装饰 —— 缺了服务端 parseRegisterRequest 直接返回
+    false，注册会被拒。取值见 resolve_company。
+    """
     s = Session(host, port, "register-" + username)
     try:
         offset = log_size(log_path)
@@ -239,6 +268,7 @@ def register_account(host, port, log_path, username, nickname, phone, password):
             "password": sha256_hex(password),
             "phone": phone,
             "smscode": code,
+            "company": company,
         })
         check_ok(resp, "注册账号(%s)" % username)
         return code
@@ -283,7 +313,10 @@ def main():
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=20000)
     parser.add_argument("--log", required=True, help="chatserver 标准输出的日志文件，用于取短信验证码")
-    parser.add_argument("--db", default="", help="SQLite 库文件路径；给了就在跑完后查库核对")
+    parser.add_argument("--db", default="", help="SQLite 库文件路径；给了就在跑完后查库核对，"
+                                                 "同时用来自动取一家企业作注册用的公司名")
+    parser.add_argument("--company", default="", help="注册时用的公司全称，须与 t_enterprise.f_name "
+                                                      "完全一致；不给则从 --db 里自动取第一家")
     args = parser.parse_args()
 
     alice_pwd = "alice@1234"
@@ -291,9 +324,12 @@ def main():
     sessions = []
 
     try:
-        print("[1/9] 注册两个账号")
-        register_account(args.host, args.port, args.log, "alice001", "爱丽丝", "13900000001", alice_pwd)
-        register_account(args.host, args.port, args.log, "bob00001", "鲍勃", "13900000002", bob_pwd)
+        #两个账号必须落进<u>同一家</u>企业：通讯录、在线状态广播、离线推送都是按企业范围
+        #投递的，不同企业（或没有企业）就互相看不见，后面几步全都验不到东西。
+        company = resolve_company(args.db, args.company)
+        print("[1/9] 注册两个账号（公司：%s）" % company)
+        register_account(args.host, args.port, args.log, "alice001", "爱丽丝", "13900000001", alice_pwd, company)
+        register_account(args.host, args.port, args.log, "bob00001", "鲍勃", "13900000002", bob_pwd, company)
         print("      ok")
 
         print("[2/9] 两个账号分别登录")
@@ -303,32 +339,46 @@ def main():
         sessions.append(bob)
         print("      alice userid=%d, bob userid=%d" % (alice.userid, bob.userid))
 
-        print("[3/9] alice 申请加 bob 为好友，bob 同意")
-        resp = check_ok(alice.request(CMD_ADD_FRIEND_REQUEST, {
-            "userid": str(bob.userid), "source": "search", "verifymsg": "我是爱丽丝"}),
-            "发起加好友申请")
-        requestid = int(resp["requestid"])
-        #bob 应当收到申请推送
-        notify = bob.wait(CMD_FRIEND_REQUEST_NOTIFY)
-        check(str(notify.get("requestid")) == str(requestid),
-              "加好友推送里的 requestid 与应答不一致：%s" % json.dumps(notify, ensure_ascii=False))
-        check_ok(bob.request(CMD_HANDLE_FRIEND_REQUEST,
-                             {"requestid": str(requestid), "action": FRIEND_ACTION_ACCEPT}),
-                 "同意加好友")
-        print("      requestid=%d，已成为好友" % requestid)
+        #好友关系子系统已于 2026-08-05 在企业版中删除（1203~1208 等协议号作废），
+        #这一步改成验证接替它的联系人备注名（1209 → t_contact_remark）。
+        #备注名里刻意带一个单引号，顺带把 SQL 转义这条路也走一遍。
+        print("[3/9] alice 给 bob 设联系人备注名")
+        remark_text = "鲍勃 O'Brien"
+        resp = check_ok(alice.request(CMD_SET_FRIEND_REMARK, {
+            "userid": str(bob.userid), "remark": remark_text}),
+            "设置联系人备注名")
+        check(str(resp.get("userid")) == str(bob.userid),
+              "备注名应答未原样回带 userid：%s" % json.dumps(resp, ensure_ascii=False))
+        print("      remark=%s" % remark_text)
 
-        print("[4/9] alice 拉取通讯录")
+        print("[4/9] alice 拉取通讯录，并核对上一步的备注名能读回来")
         contacts = check_ok(alice.request(CMD_GET_CONTACTS, {}), "拉取通讯录")
-        ids = [str(c.get("userid")) for c in contacts.get("contacts", [])]
-        #这里刻意不断言 bob 在列表里，而且这是<u>正确</u>行为，不是缺陷：
-        #企业版没有好友关系这条线，通讯录就是组织架构。协议规范（docs/协议设计-v2.md
-        #第 1116 行）把 contacts 定义为「部门成员与服务号」的资料池，第 491 行进一步写明
-        #v2 取消了 QQ 式好友分组、联系人的归属由企业组织架构表达。alice / bob 是本用例
-        #临时注册的账号，不属于任何企业，所以 contacts 返回空数组完全符合预期。
-        #本步骤只用来确认这条命令在 SQLite 后端下能正常应答，不校验好友。
-        if str(bob.userid) not in ids:
-            print("      通讯录里没有 bob —— 符合预期：二人不属于任何企业，"
-                  "而通讯录只返回企业组织架构")
+        entries = contacts.get("contacts", [])
+        ids = [str(c.get("userid")) for c in entries]
+        #企业版的通讯录就是企业组织架构（协议规范见 docs/协议设计-v2.md 的
+        #cmd_get_contacts 一节：contacts 是「部门成员与服务号」的资料池）。两个账号
+        #注册时挂进了同一家企业的根部门，所以 alice 一定能在通讯录里看到 bob。
+        check(str(bob.userid) in ids,
+              "通讯录里没有 bob（二人应属同一企业）：实际 userid 列表=%s" % ids)
+
+        #这一条才是备注名功能的<u>读回路径</u>验证：上一步设的备注，必须能随通讯录
+        #原样带回来。备注不走推送，客户端重登后就是靠这个字段恢复显示的 ——
+        #以前这里因为账号没有企业归属、通讯录恒为空，等于设完从来没验证过能不能读回。
+        bob_entry = next(c for c in entries if str(c.get("userid")) == str(bob.userid))
+        check(bob_entry.get("remark") == remark_text,
+              "通讯录里 bob 的 remark 与设置的不一致：期望 %r 实际 %r"
+              % (remark_text, bob_entry.get("remark")))
+        print("      bob 在通讯录里，remark=%s（含单引号，转义与落库都正确）"
+              % bob_entry.get("remark"))
+
+        #反向再确认一次单向性：备注是"alice 给 bob 起的名字"，不该出现在 bob 那一侧。
+        bob_contacts = check_ok(bob.request(CMD_GET_CONTACTS, {}), "bob 拉取通讯录")
+        alice_entry = next((c for c in bob_contacts.get("contacts", [])
+                            if str(c.get("userid")) == str(alice.userid)), None)
+        check(alice_entry is not None, "bob 的通讯录里没有 alice")
+        check(not alice_entry.get("remark"),
+              "备注名不该是双向的：bob 看 alice 竟然也有备注 %r" % alice_entry.get("remark"))
+        print("      bob 看 alice 无备注 —— 备注是单向的，符合预期")
         print("      contacts=%d, groups=%d" % (len(ids), len(contacts.get("groups", []))))
 
         print("[5/9] alice 给 bob 发单聊消息，bob 应收到推送")
@@ -394,11 +444,13 @@ def main():
         if args.db:
             verify_database(args.db, [
                 ("SELECT COUNT(*) FROM t_user", 2, "t_user 行数"),
-                ("SELECT COUNT(*) FROM t_user_relationship", 1, "t_user_relationship 行数"),
                 ("SELECT COUNT(*) FROM t_chatmsg", 2, "t_chatmsg 行数"),
                 ("SELECT COUNT(*) FROM t_group", 1, "t_group 行数"),
                 ("SELECT COUNT(*) FROM t_group_member", 2, "t_group_member 行数"),
-                ("SELECT COUNT(*) FROM t_friend_request", 1, "t_friend_request 行数"),
+                ("SELECT COUNT(*) FROM t_contact_remark", 1, "t_contact_remark 行数"),
+                #备注名里的单引号必须原样落库：转义时翻倍的那个应当已被 SQLite 消费掉
+                ("SELECT COUNT(*) FROM t_contact_remark WHERE f_remark LIKE '%O''Brien'", 1,
+                 "备注名里的单引号原样落库"),
                 ("SELECT COUNT(*) FROM t_conversation WHERE f_readmsgid > 0", 1,
                  "t_conversation 已读位点行数"),
                 #f_content 里存的是 jsoncpp 序列化结果，中文会被转成 \uXXXX，

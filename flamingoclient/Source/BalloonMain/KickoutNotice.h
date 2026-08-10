@@ -60,4 +60,38 @@ const wchar_t* GetKickoutNoticeTitle();
  */
 const wchar_t* GetKickoutNoticeText(int reason);
 
+/**
+ *  LoginExitKind —— 这次退出登录态是怎么发生的。
+ *
+ *  主动登出与被踢下线共用同一套收尾序列（CMainDlg::ReturnToLoginWindow），但在
+ *  "要不要顺手关掉自动登录"这件事上必须区分开，故单立一个枚举把两者传下去。
+ */
+enum LoginExitKind
+{
+    kLoginExitUserLogout = 0,   // 用户自己在菜单里点了"登出"，是一次明确的主观意愿表达
+    kLoginExitKickedOut  = 1,   // 被服务器踢下线（cmd_kickout 推送），用户没有表达任何意愿
+};
+
+/**
+ *  这次退出登录之后，是否应当把本机存下的"自动登录"标志清掉。
+ *
+ *  背景：自动登录标志存在 Bin\Users\LoginAccountList.dat 里，勾上之后每次启动都会
+ *  跳过登录窗直接登进去。此前登出并不清这个标志，于是用户点了"登出"、下次开机却
+ *  照样被自动登进去，而自动登录成功后又没有界面可以取消勾选，等于绕不出来。
+ *
+ *  口径：
+ *    · 主动登出 —— 清。用户点"登出"就是在说"我不想自动进去了"。
+ *    · 被踢下线且原因是"密码已修改" —— 清。本机存的密码已经失效，留着自动登录
+ *      只会让用户每次开机都被弹一次"密码错误"。
+ *    · 其余被踢原因（异地登录、账号停用、服务器维护、被本人从别的设备踢掉）—— 不清。
+ *      这些都是被动发生的，用户并没有表达"以后别自动登录"的意思，替他关掉反而突兀。
+ *
+ *    exitKind       退出方式，取值见 LoginExitKind；越界值按"被踢下线"这一侧保守处理。
+ *    kickoutReason  被踢原因，取值见 KickoutReasonValue；exitKind 为主动登出时本参数被忽略。
+ *  @return 应当清掉自动登录标志返回 true；应当原样保留返回 false
+ *
+ *  纯判定，无副作用（真正的清除与落盘由 CMainDlg 负责）。
+ */
+bool ShouldClearAutoLoginOnExit(int exitKind, int kickoutReason);
+
 } // namespace balloonmain

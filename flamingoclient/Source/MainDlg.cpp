@@ -41,17 +41,13 @@
 #include "IULog.h"
 #include "MobileStatusDlg.h"
 #include "UserSessionData.h"
-#include "ModifyMarkNameDlg.h"
-#include "TeamDlg.h"
 #include "BalloonChat/BalloonBuddyChatDlg.h"
 #include "BalloonChat/BalloonGroupChatDlg.h"
 #include "BalloonChat/BalloonSessChatDlg.h"
 #include "FontSelDlg.h"
 #include "BuddyInfoDlg.h"
 #include "GroupInfoDlg.h"
-#include "FindFriendDlg.h"
 #include "RemoteDesktopDlg.h"
-#include "AddFriendConfirmDlg.h"
 #include "Updater.h"
 #include "UpdateDlg.h"
 #include "CreateNewGroupDlg.h"
@@ -82,7 +78,6 @@ extern HWND g_hwndOwner;
 
 #define LOGIN_TIMER_ID			  1
 #define RECVCHATMSG_TIMER_ID	  2
-#define ADDFRIENDREQUEST_TIMER_ID 3
 #define EXITAPP_TIMER_ID		  4	
 #define RECONNECT_TIMER_ID        5
 
@@ -147,7 +142,6 @@ m_BalloonSystemSettingDlg(&m_FMGClient)
     m_hMsgIcon = NULL;
     m_dwLoginTimerId = 0;
     m_dwMsgTimerId = 0;
-    m_dwAddFriendTimerId = 0;
     m_dwReconnectTimerId = 0;
 
     m_bAlreadySendReloginRequest = false;
@@ -158,12 +152,9 @@ m_BalloonSystemSettingDlg(&m_FMGClient)
     m_bEnableReconnect = true;
     m_uReconnectInterval = 3000;
 
-    memset(m_hAddFriendIcon, 0, sizeof(m_hAddFriendIcon));
-
     m_hDlgIcon = m_hDlgSmallIcon = NULL;
     memset(&m_stAccountInfo, 0, sizeof(m_stAccountInfo));
 
-    m_pFindFriendDlg = new CFindFriendDlg();
     m_pRemoteDesktopDlg = new CRemoteDesktopDlg();
 
     m_bAlreadyLogin = FALSE;
@@ -178,7 +169,6 @@ m_BalloonSystemSettingDlg(&m_FMGClient)
 
 CMainDlg::~CMainDlg(void)
 {
-    delete m_pFindFriendDlg;
     delete m_pRemoteDesktopDlg;
 }
 
@@ -620,16 +610,6 @@ void CMainDlg::OnTimer(UINT_PTR nIDEvent)
         if (m_nCurLoginIcon >= 6)
             m_nCurLoginIcon = 0;
     }
-    else if (nIDEvent == m_dwAddFriendTimerId)	//有申请加好友提示喇叭
-    {
-        static BOOL bSwitch = FALSE;
-
-        bSwitch = !bSwitch;
-        if (bSwitch)
-            m_TrayIcon.ModifyIcon(m_hAddFriendIcon[0], _T("加好友请求"));
-        else
-            m_TrayIcon.ModifyIcon(m_hAddFriendIcon[1], _T("加好友请求"));
-    }
     else if (nIDEvent == m_dwReconnectTimerId)
     {
         // 用户主动离线后必须停手。这里原先只看定时器在不在、不看登录态，于是"掉线
@@ -725,10 +705,6 @@ void CMainDlg::OnDestroy()
     m_FMGClient.m_UserConfig.SetCustomFace(m_FMGClient.m_UserMgr.m_UserInfo.m_strCustomFace.c_str());
     m_FMGClient.SaveUserConfig();
 
-    //存储用户信息
-    m_FMGClient.m_UserMgr.SaveBuddyInfo();
-    //存储好友分组信息
-    m_FMGClient.m_UserMgr.StoreTeamInfo();
     //存储最近联系人列表
     m_FMGClient.m_UserMgr.StoreRecentList();
 
@@ -745,7 +721,6 @@ void CMainDlg::OnDestroy()
 
     DestroyAppIcon();
     DestroyLoginIcon();
-    DestroyAddFriendIcon();
 
     if (m_hMsgIcon != NULL)
     {
@@ -1147,7 +1122,6 @@ LRESULT CMainDlg::OnNetError(UINT uMsg, WPARAM wParam, LPARAM lParam)
     m_FMGClient.m_UserMgr.ResetToOfflineStatus();
 
     ::SendMessage(m_FMGClient.m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_BUDDY_INFO, 0, (LPARAM)(m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID));
-    ::SendMessage(m_FMGClient.m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
     ::SendMessage(m_FMGClient.m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
     ::SendMessage(m_FMGClient.m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_GROUP_LIST, 0, 0);
 
@@ -1254,7 +1228,10 @@ LRESULT CMainDlg::OnV2Kickout(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/)
     LOG_INFO("MainDlg::OnV2Kickout: 用户已关闭提示框，回到登录界面。");
 
     //【7】与登出相同的收尾：关掉所有窗口、销毁主面板、清空登录态，重新弹出登录窗。
-    ReturnToLoginWindow();
+    //     把被踢原因一并传下去 —— 只有"密码已修改"那一种才顺手清掉自动登录标志，
+    //     其余原因(异地登录 / 账号停用 / 服务器维护 / 被本人从别的设备踢掉)都是被动
+    //     发生的，用户没表达"以后别自动登录"的意思，不替他做主。
+    ReturnToLoginWindow(balloonmain::kLoginExitKickedOut, nReason);
     return 0;
 }
 
@@ -1369,8 +1346,12 @@ LRESULT CMainDlg::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
         //m_FMGClient.RequestServerTime();
 
 
+        //打开接收线程的 UI 闸门（放行登录期间缓存下来的消息）。原先靠
+        //FMG_MSG_UPDATE_BUDDY_LIST 的处理函数来开，那条消息已随 v1 好友列表一并删除，
+        //故改为登录成功时在此直接打开。
+        m_FMGClient.m_RecvMsgThread.EnableUI(true);
+
         //TODO: 这里调用时，网络线程一定都启动了吗？
-        m_FMGClient.GetFriendList();
         m_FMGClient.StartCheckNetworkStatusTask();
         //m_FMGClient.StartHeartbeatTask();
 
@@ -1409,9 +1390,6 @@ LRESULT CMainDlg::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
             //SaveCurrentLogonUserToFile();
 //#endif
 
-            //加载加好友通知Icon
-        LoadAddFriendIcon();
-
         m_FMGClient.LoadUserConfig();
         // 旧好友列表头像风格成员(m_nBuddyListHeadPicStyle / m_bShowBigHeadPicInSel)已随
         // 旧主窗口一并移除；对应用户配置仍保留在 UserConfig 中，Phase 2 由
@@ -1422,8 +1400,6 @@ LRESULT CMainDlg::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
         // 已无意义,但保留为无害空操作; Phase 2 由 BalloonMainPanel 自持其
         // 位置与尺寸。
 
-        m_FMGClient.m_UserMgr.LoadTeamInfo();
-        m_FMGClient.m_UserMgr.LoadBuddyInfo();
         //加载最近联系人列表
         m_FMGClient.m_UserMgr.LoadRecentList();
         // PR7: 不再切换旧 TabCtrl 选项 —— 旧 UI 已废弃,BalloonMainPanel
@@ -1520,6 +1496,11 @@ LRESULT CMainDlg::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
             ResumeOnlineFailed(_T("恢复在线失败：密码错误，仍保持离线状态。"));
             break;
         }
+        //服务端明确说了密码不对：把本机存下的这个密码忘掉，并取消"记住密码" /
+        //"自动登录"。留着的话，勾了自动登录的用户每次开机都会被自动登一次、再被
+        //弹一次"密码错误"，而在那之前他根本没有界面可以取消勾选。
+        ForgetSavedPasswordForCurrentAccount();
+
         MessageBox(_T("密码错误！"), g_strAppTitle.c_str(), MB_OK);
         StartLogin();
         m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
@@ -1573,26 +1554,6 @@ LRESULT CMainDlg::OnUpdateUserInfo(UINT uMsg, WPARAM wParam, LPARAM lParam)
     //delete lpBuddyInfoResult;
 
     return 0;
-}
-
-// 更新好友列表消息
-LRESULT CMainDlg::OnUpdateBuddyList(UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    // 按在线状态对好友列表数据排序（在线靠前）。这是对共享数据模型
-    // m_FMGClient.m_UserMgr.m_BuddyList 的排序，新版 BalloonMainPanel 刷新
-    // 联系人时依赖此顺序，必须保留。旧自绘列表控件 m_BuddyListCtrl 已废弃，
-    // 不再填充，故原先的 UpdateBuddyTreeCtrl(uAccountID) 调用已移除。
-    BuddyListSortOnStaus();
-
-    //TODO: 后期放到更新最近联系人和群组列表之后
-    m_FMGClient.m_RecvMsgThread.EnableUI(true);
-
-    // #20:转发到 BalloonMainPanel,刷新联系人 Tab。同时刷新会话 Tab ——
-    // 单聊会话的"对方在线状态点"颜色随好友状态变化。
-    m_BalloonMainPanel.RefreshContacts();
-    m_BalloonMainPanel.RefreshMessages();
-
-    return 1;
 }
 
 // 更新群列表消息
@@ -1708,6 +1669,60 @@ void CMainDlg::SyncNickNameToLoginAccountList()
         m_stAccountInfo.szUser, strNickName.c_str());
     m_LoginAccountList.SetNickName(m_stAccountInfo.szUser, strNickName.c_str());
     SaveLoginAccountListFile();
+}
+
+// 清掉某账号在本机存下的"自动登录"标志并立即落盘
+void CMainDlg::ClearAutoLoginFlag(LPCTSTR lpszAccount)
+{
+    if (lpszAccount == NULL || lpszAccount[0] == _T('\0'))
+    {
+        LOG_INFO("MainDlg::ClearAutoLoginFlag: 账号为空，跳过。");
+        return;
+    }
+
+    LOGIN_ACCOUNT_INFO* lpAccount = m_LoginAccountList.Find(lpszAccount);
+    if (lpAccount == NULL)
+    {
+        //该账号还没在本机成功登录过（历史列表里没有它），本来就没有标志可清。
+        LOG_INFO(_T("MainDlg::ClearAutoLoginFlag: 账号不在历史列表里，跳过。account=%s."),
+            lpszAccount);
+        return;
+    }
+
+    if (!lpAccount->bAutoLogin)
+    {
+        return;   //本就没勾自动登录，不必白写一次盘
+    }
+
+    lpAccount->bAutoLogin = FALSE;
+    SaveLoginAccountListFile();
+    LOG_INFO(_T("MainDlg::ClearAutoLoginFlag: 已清除自动登录标志。account=%s."), lpszAccount);
+}
+
+// 忘掉当前账号在本机存下的密码，并取消"记住密码" / "自动登录"
+void CMainDlg::ForgetSavedPasswordForCurrentAccount()
+{
+    const tstring& strAccount = m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount;
+    if (strAccount.empty())
+    {
+        LOG_INFO("MainDlg::ForgetSavedPasswordForCurrentAccount: 账号为空，跳过。");
+        return;
+    }
+
+    LOGIN_ACCOUNT_INFO* lpAccount = m_LoginAccountList.Find(strAccount.c_str());
+    if (lpAccount == NULL)
+    {
+        LOG_INFO(_T("MainDlg::ForgetSavedPasswordForCurrentAccount: 账号不在历史列表里，跳过。account=%s."),
+            strAccount.c_str());
+        return;
+    }
+
+    lpAccount->szPwd[0]     = _T('\0');
+    lpAccount->bRememberPwd = FALSE;
+    lpAccount->bAutoLogin   = FALSE;
+    SaveLoginAccountListFile();
+    LOG_INFO(_T("MainDlg::ForgetSavedPasswordForCurrentAccount: 已清除保存的密码并取消记住密码 / 自动登录。account=%s."),
+        strAccount.c_str());
 }
 
 // 把历史登录账号列表写回磁盘
@@ -1882,8 +1897,11 @@ LRESULT CMainDlg::OnLogout(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/)
         return 0;
     }
 
-    //收尾与"被踢下线"完全相同，共用同一个序列（见 ReturnToLoginWindow）。
-    ReturnToLoginWindow();
+    //收尾与"被踢下线"完全相同，共用同一个序列（见 ReturnToLoginWindow）。区别只在于
+    //这里是用户主动发起的 —— 点"登出"就是明确表达了"我不想自动登进去"，故要清掉本机
+    //的自动登录标志；被踢下线那条路径则按原因区分。
+    ReturnToLoginWindow(balloonmain::kLoginExitUserLogout,
+                        balloonmain::kKickoutReasonUnknown);
     return 0;
 }
 
@@ -1895,7 +1913,7 @@ LRESULT CMainDlg::OnLogout(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/)
 //
 // 调用方须保证自己跑在一个干净的消息调用栈上（由 PostMessage 投递而来）：本函数要销毁
 // 主面板、并在 StartLogin 内进入登录窗的模态循环，不能跑在菜单 TrackPopup 返回后的栈上。
-void CMainDlg::ReturnToLoginWindow()
+void CMainDlg::ReturnToLoginWindow(int exitKind, int kickoutReason)
 {
     //先置"用户主动下线"态再关连接，压制 OnNetError 里的自动重连 —— 否则关 socket 会被
     //当成掉线触发重连（见 OnNetError 对 MAINPANEL_STATUS_USERGOOFFLINE 的判断）。
@@ -1940,6 +1958,16 @@ void CMainDlg::ReturnToLoginWindow()
     //后托盘右键仍会弹出"在线 / 离线 / 登出"那套已登录菜单。
     m_bAlreadyLogin    = FALSE;
     m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
+
+    //按退出方式决定要不要顺手关掉"自动登录"（口径见 balloonmain::ShouldClearAutoLoginOnExit）。
+    //必须在这里清、而且要立刻落盘：不清的话，用户点了"登出"、本次进程内确实回到了登录窗，
+    //可下次启动照样被自动登进去——而自动登录一旦成功就直接进主面板，他再也没有机会看到
+    //登录窗去取消那个勾选，等于绕不出来。
+    //账号取上面留存下来的 strAccount：紧邻的 ClearUserInfo 已经把 m_UserInfo 清过一遍了。
+    if (balloonmain::ShouldClearAutoLoginOnExit(exitKind, kickoutReason))
+    {
+        ClearAutoLoginFlag(strAccount.c_str());
+    }
 
     //托盘图标先摘掉，StartLogin(FALSE) 内部会重新挂上"Flamingo未登录"那只。
     m_TrayIcon.RemoveIcon();
@@ -3302,31 +3330,13 @@ LRESULT CMainDlg::OnStatusChangeMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
     if (0 == nUTalkUin)
         return 0;
 
-    CBuddyList* lpBuddyList = m_FMGClient.GetBuddyList();
-    if (NULL == lpBuddyList)
-        return 0;
-
-    CBuddyInfo* lpBuddyInfo = lpBuddyList->GetBuddy(nUTalkUin);
-    if (NULL == lpBuddyInfo)
-        return 0;
-
-    BOOL bOnline = TRUE;
-    if (lpBuddyInfo->m_nStatus == STATUS_OFFLINE || lpBuddyInfo->m_nStatus == STATUS_INVISIBLE)
-        bOnline = FALSE;
-
-    if (bOnline)	// 播放好友上线声音
-    {
-        // 是否启用静音
-        if (!m_FMGClient.m_UserConfig.IsEnableMute())
-        {
-            tstring strFileName = Hootina::CPath::GetAppPath() + _T("Sound\\Global.wav");
-            ::sndPlaySound(strFileName.c_str(), SND_ASYNC);
-        }
-    }
-
-    // 旧自绘好友列表控件已移除，原先这里对 m_BuddyListCtrl 的分组在线人数 / 头像 /
-    // 在线状态更新已一并删除；新版 BalloonMainPanel 的联系人在线状态由
-    // OnUpdateBuddyList -> RefreshContacts 统一刷新。
+    // 企业版说明：原先这里从 v1 好友列表里取该账号的在线状态，只有"由离线变在线"才放
+    // 上线提示音；v1 好友列表已删除，无从判断新旧状态，故本消息不再放提示音。
+    // 联系人在线状态改由 v2 推送（cmd_presence_changed_notify → FMG_MSG_V2_PRESENCE_CHANGED）
+    // 驱动 BalloonMainPanel 刷新状态点。
+    //
+    // 旧自绘好友列表控件也已移除，原先这里对 m_BuddyListCtrl 的分组在线人数 / 头像 /
+    // 在线状态更新已一并删除。
     return 0;
 }
 
@@ -3793,101 +3803,6 @@ LRESULT CMainDlg::OnChangeStatusResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
     //状态改变成功：托盘图标随新状态更新。
     RefreshTrayIconForStatus();
     return 0;
-}
-
-LRESULT CMainDlg::OnSendAddFriendRequestResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    if (wParam == ADD_FRIEND_FAILED)
-    {
-        ::MessageBox(m_hWnd, _T("网络故障，发送加好友请求失败，请稍后重试！"), g_strAppTitle.c_str(), MB_OK | MB_ICONERROR);
-    }
-
-    return 1;
-}
-
-LRESULT CMainDlg::OnRecvAddFriendRequest(UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    COperateFriendResult* pResult = (COperateFriendResult*)lParam;
-    if (pResult == NULL)
-        return (LRESULT)0;
-
-    //当账号是自己的ID，cmd为Apply，账户和昵称为空时，是自己主动发送申请的成功应答，忽略掉
-    if (pResult->m_uCmd == Apply && pResult->m_uAccountID == m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID && *(pResult->m_szAccountName) == 0 && *(pResult->m_szNickName) == 0)
-    {
-        delete pResult;
-        return 0;
-    }
-
-    AddFriendInfo* pAddFriendInfo = new AddFriendInfo();
-    pAddFriendInfo->nCmd = pResult->m_uCmd;
-    pAddFriendInfo->uAccountID = pResult->m_uAccountID;
-
-    TCHAR szData[64] = { 0 };
-    EncodeUtil::Utf8ToUnicode(pResult->m_szAccountName, szData, ARRAYSIZE(szData));
-    _tcscpy_s(pAddFriendInfo->szAccountName, ARRAYSIZE(pAddFriendInfo->szAccountName), szData);
-
-    memset(szData, 0, sizeof(szData));
-    EncodeUtil::Utf8ToUnicode(pResult->m_szNickName, szData, ARRAYSIZE(szData));
-    _tcscpy_s(pAddFriendInfo->szNickName, ARRAYSIZE(pAddFriendInfo->szNickName), szData);
-
-    if (pAddFriendInfo->nCmd == Agree)
-    {
-        m_FMGClient.m_UserMgr.AddFriend(pAddFriendInfo->uAccountID, pAddFriendInfo->szAccountName, pAddFriendInfo->szNickName);
-        PostMessage(FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
-        //重新获取下好友列表并更新
-        m_FMGClient.GetFriendList();
-    }
-
-    delete pResult;
-
-    m_FMGClient.m_aryAddFriendInfo.push_back(pAddFriendInfo);
-
-    // 是否启用静音
-    if (!m_FMGClient.m_UserConfig.IsEnableMute())
-    {
-        tstring strFileName(Hootina::CPath::GetAppPath() + _T("Sound\\system.wav"));	// 播放加好友提示音
-        ::sndPlaySound(strFileName.c_str(), SND_ASYNC);
-    }
-
-    m_dwAddFriendTimerId = SetTimer(ADDFRIENDREQUEST_TIMER_ID, ::GetCaretBlinkTime(), NULL);
-
-    return 1;
-}
-
-LRESULT CMainDlg::OnDeleteFriendResult(UINT message, WPARAM wParam, LPARAM lParam)
-{
-    UINT uAccountID = (UINT)lParam;
-    if (!IsGroupTarget(uAccountID))
-    {
-        if (wParam == DELETE_FRIEND_FAILED)
-            ::MessageBox(m_hWnd, _T("因网络问题，删除好友失败，请稍后重试！"), g_strAppTitle.c_str(), MB_OK | MB_ICONWARNING);
-        else if (wParam == DELETE_FRIEND_SUCCESS)
-        {
-            //删完之后已经没有好友了，则不用重新请求好友列表
-            if (m_FMGClient.m_UserMgr.m_BuddyList.GetBuddyTotalCount() == 0)
-                ::SendMessage(m_hWnd, FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
-            else
-                //删除好友成功以后更新好友列表
-                m_FMGClient.GetFriendList();
-
-            //删除成功之后，关闭之前与该好友的聊天窗口
-            ShowBuddyChatDlg(lParam, FALSE);
-
-            //::MessageBox(m_hWnd, _T("删除好友成功！"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
-        }
-    }
-    else
-    {
-        ::MessageBox(m_hWnd, _T("退群成功！"), g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
-        ShowGroupChatDlg(uAccountID, FALSE);
-        m_FMGClient.GetFriendList();
-        ::PostMessage(m_hWnd, FMG_MSG_UPDATE_GROUP_LIST, 0, 0);
-    }
-
-    // 旧自绘好友 / 群列表的"未读消息头像闪烁"已随旧控件移除（新版改由托盘
-    // m_trayFlash 状态机闪烁发送方头像）。原先这里重新点亮其余未读会话闪动的
-    // 循环已一并删除。
-    return (LRESULT)1;
 }
 
 LRESULT CMainDlg::OnSelfStatusChange(UINT message, WPARAM wParam, LPARAM lParam)
@@ -4712,13 +4627,6 @@ void CMainDlg::OnTrayIcon_LButtunUp()
             m_BalloonMainPanel.OpenConversation(target.m_ctype, target.m_cid);
         return;
     }
-    else if (m_dwAddFriendTimerId != 0)
-    {
-        KillTimer(m_dwAddFriendTimerId);
-        m_dwAddFriendTimerId = 0;
-
-        ShowAddFriendConfirmDlg();
-    }
     else
     {
         // 托盘左键单击默认行为：唤出登录窗(登录前) / 主面板(登录后)，含最小化还原。
@@ -5094,33 +5002,6 @@ void CMainDlg::DestroyLoginIcon()
     }
 }
 
-BOOL CMainDlg::LoadAddFriendIcon()
-{
-    DestroyAddFriendIcon();
-
-    CString strFileName;
-    for (int i = 0; i < ARRAYSIZE(m_hAddFriendIcon); i++)
-    {
-        strFileName.Format(_T("%sImage\\speaker_%d.ico"), Hootina::CPath::GetAppPath().c_str(), i + 1);
-        m_hAddFriendIcon[i] = AtlLoadIconImage((LPCTSTR)strFileName, LR_DEFAULTCOLOR | LR_LOADFROMFILE,
-            ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
-    }
-
-    return TRUE;
-}
-
-void CMainDlg::DestroyAddFriendIcon()
-{
-    for (int i = 0; i < ARRAYSIZE(m_hAddFriendIcon); i++)
-    {
-        if (m_hAddFriendIcon[i] != NULL)
-        {
-            ::DestroyIcon(m_hAddFriendIcon[i]);
-            m_hAddFriendIcon[i] = NULL;
-        }
-    }
-}
-
 void CMainDlg::UpdateTrayFlashIcon()
 {
     // 先销毁旧图标，避免每次重建泄漏 HICON。
@@ -5406,10 +5287,6 @@ void CMainDlg::CloseAllDlg()
         m_mapGroupInfoDlg.clear();
     }
 
-    //销毁查找好友对话框
-    if (m_pFindFriendDlg != NULL && m_pFindFriendDlg->IsWindow())
-        m_pFindFriendDlg->DestroyWindow();
-
     //销毁我的资料对话框
     if (m_LogonUserInfoDlg.IsWindow())
         m_LogonUserInfoDlg.DestroyWindow();
@@ -5427,83 +5304,6 @@ long CMainDlg::GetStatusFromMenuID(int nMenuID)
     default:
         return STATUS_OFFLINE;
     }
-}
-
-// 根据指定状态设置状态菜单按钮的图标
-void CMainDlg::BuddyListSortOnStaus()
-{
-    long nTeamCount = m_FMGClient.m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.size();
-    for (long i = 0; i < nTeamCount; ++i)
-    {
-        m_FMGClient.m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo[i]->Sort();
-    }
-}
-
-void CMainDlg::ShowAddFriendConfirmDlg()
-{
-    size_t nCount = m_FMGClient.m_aryAddFriendInfo.size();
-    if (nCount == 0)
-        return;
-
-    AddFriendInfo* pAddFriendInfo = m_FMGClient.m_aryAddFriendInfo[nCount - 1];
-    if (pAddFriendInfo == NULL)
-        return;
-
-    CString strWindowTitle;
-    CString strInfo;
-    CAddFriendConfirmDlg AddFriendConfirmDlg;
-    AddFriendConfirmDlg.m_pFMGClient = &m_FMGClient;
-
-    //别人加自己
-    if (pAddFriendInfo->nCmd == Apply)
-    {
-        strWindowTitle = _T("加好友请求");
-        strInfo.Format(_T("%s(%s)请求您添加为好友，是否同意？"), pAddFriendInfo->szNickName, pAddFriendInfo->szAccountName);
-        AddFriendConfirmDlg.ShowAgreeButton(TRUE);
-        AddFriendConfirmDlg.ShowRefuseButton(TRUE);
-        AddFriendConfirmDlg.ShowOKButton(FALSE);
-    }
-    //自己主动拒绝别人或者被别人拒绝
-    else if (pAddFriendInfo->nCmd == Refuse)
-    {
-        strWindowTitle = g_strAppTitle.c_str();
-        strInfo.Format(_T("您或者对方(%s(%s))拒绝了加好友请求。"), pAddFriendInfo->szNickName, pAddFriendInfo->szAccountName);
-        AddFriendConfirmDlg.ShowAgreeButton(FALSE);
-        AddFriendConfirmDlg.ShowRefuseButton(FALSE);
-        AddFriendConfirmDlg.ShowOKButton(TRUE);
-    }
-    //自己或者别人同意了加好友请求
-    else if (pAddFriendInfo->nCmd == Agree)
-    {
-        strWindowTitle = g_strAppTitle.c_str();
-        //群号大于0xFFFFFFF
-        if (pAddFriendInfo->uAccountID < 0xFFFFFFF)
-            strInfo.Format(_T("您和%s(%s)已经是好友啦，开始聊天吧。"), pAddFriendInfo->szNickName, pAddFriendInfo->szAccountName);
-        else
-            strInfo.Format(_T("您已经成功加入群【%s(%s)】啦，开始聊天吧。"), pAddFriendInfo->szNickName, pAddFriendInfo->szAccountName);
-        AddFriendConfirmDlg.ShowAgreeButton(FALSE);
-        AddFriendConfirmDlg.ShowRefuseButton(FALSE);
-        AddFriendConfirmDlg.ShowOKButton(TRUE);
-
-        //m_FMGClient.m_UserMgr.AddFriend(pAddFriendInfo->uAccountID, pAddFriendInfo->szAccountName, pAddFriendInfo->szNickName);
-        //PostMessage(FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
-        //重新获取下好友列表并更新
-        m_FMGClient.GetFriendList();
-    }
-
-    AddFriendConfirmDlg.SetWindowInfo(strInfo);
-    AddFriendConfirmDlg.SetWindowTitle(strWindowTitle);
-
-    int nRet = AddFriendConfirmDlg.DoModal(m_hWnd, NULL);
-
-    if (nRet == ID_ADDCONFIRM_REFUSE || nRet == ID_ADDCONFIRM_AGREE)
-    {
-        UINT uCmd = (nRet == ID_ADDCONFIRM_AGREE ? Agree : Refuse);
-        m_FMGClient.ResponseAddFriendApply(pAddFriendInfo->uAccountID, uCmd);
-    }
-
-    DELETE_PTR(pAddFriendInfo);
-    m_FMGClient.m_aryAddFriendInfo.erase(m_FMGClient.m_aryAddFriendInfo.end() - 1);
 }
 
 void CMainDlg::SaveCurrentLogonUserToFile()

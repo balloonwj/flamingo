@@ -326,8 +326,11 @@ void CSkinMenu::OnDrawItem(int nIDCtl, LPDRAWITEMSTRUCT lpDrawItemStruct)
 				DrawIcon(hMemDC, rcItem, lpIconImgN);	// 绘制非选中图标
 		}
 
-		DrawText(hMemDC, rcItem, bGrayed, bSelected, 
-			(BOOL)lpSkinMenuItemInfo->hSubMenu, lpSkinMenuItemInfo->szText);	// 绘制菜单文本
+		//这个参数只是"有没有子菜单"的开关。原写法把 HMENU 直接强转 BOOL，64 位下
+		//只取低 32 位，句柄低位恰好为 0 时就会被误判成"没有子菜单"，右侧三角箭头
+		//留出的那块空白不会预留，文本被箭头压住。改成显式判空。
+		DrawText(hMemDC, rcItem, bGrayed, bSelected,
+			lpSkinMenuItemInfo->hSubMenu != NULL, lpSkinMenuItemInfo->szText);	// 绘制菜单文本
 
 		if (lpSkinMenuItemInfo->hSubMenu != NULL)	// 绘制子菜单的右三角箭头
 			DrawArrow(hMemDC, rcItem);
@@ -750,7 +753,10 @@ BOOL CSkinMenu::SetMenuItemInfo(UINT nItem, BOOL bByPosition, SKIN_MENU_ITEM_INF
 
 	stMenuItemInfo.cbSize = sizeof(MENUITEMINFO);
 	stMenuItemInfo.fMask = MIIM_DATA;
-	stMenuItemInfo.dwItemData = (DWORD)lpItemInfo;
+	//dwItemData 的类型是 ULONG_PTR。这里原先转的是 DWORD —— 32 位下无碍，64 位下
+	//会把指针高 32 位截掉，而取回处（GetMenuItemInfo / WM_MEASUREITEM / WM_DRAWITEM）
+	//又按完整指针解引用，堆地址一旦落在 4GB 以上就是野指针。
+	stMenuItemInfo.dwItemData = (ULONG_PTR)lpItemInfo;
 
 	return ::SetMenuItemInfo(m_hMenu, nItem, bByPosition, &stMenuItemInfo);
 }
@@ -809,7 +815,9 @@ BOOL CSkinMenu::EnableOwnerDraw(HMENU hMenu, BOOL bEnable)
 
 					stMenuItemInfo.fMask = MIIM_TYPE | MIIM_DATA;
 					stMenuItemInfo.fType |= MFT_OWNERDRAW;
-					stMenuItemInfo.dwItemData = (DWORD)lpSkinMenuItemInfo;
+					//同 SetMenuItemInfo：dwItemData 是 ULONG_PTR，64 位下必须整指针存进去，
+					//否则 DrawItem / MeasureItem 里取回来解引用的是被截断的半截地址。
+					stMenuItemInfo.dwItemData = (ULONG_PTR)lpSkinMenuItemInfo;
 					bRet = ::SetMenuItemInfo(hMenu, i, TRUE, &stMenuItemInfo);
 				}
 			}

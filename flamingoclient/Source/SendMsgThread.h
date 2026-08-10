@@ -48,11 +48,8 @@ class CRegisterRequest;
 class CLoginRequest;
 class CUserBasicInfoRequest;
 class CUserExtendInfoRequest;
-class CLoginUserFriendsIDRequest;
 class CSentChatMessage;
 class CSentChatConfirmImageMessage;
-class CFindFriendRequest;
-class COperateFriendRequest;
 class CHeartbeatMessageRequest;
 class CUpdateLogonUserInfoRequest;
 class CModifyPasswordRequest;
@@ -82,20 +79,14 @@ private:
     void HandleItem(CNetData* pNetData);
 	void HandleRegister(const CRegisterRequest* pRegisterRequest);
     void HandleLogon(const CLoginRequest* pLoginRequest);
-	void HandleUserBasicInfo(const CUserBasicInfoRequest* pUserBasicInfo);
     void HandleChangeUserStatus(const CChangeUserStatusRequest* pChangeUserStatusRequest);
     void HandleGroupBasicInfo(const CGroupBasicInfoRequest* pGroupBasicInfo);
 	BOOL HandleSentChatMessage(const CSentChatMessage* pSentChatMessage);				
 	BOOL HandleSentConfirmImageMessage(const CSentChatConfirmImageMessage* pConfirmImageMessage);	//图片上传成功以后的确认信息
-	void HandleFindFriendMessage(const CFindFriendRequest* pFindFriendRequest);
-	void HandleOperateFriendMessage(const COperateFriendRequest* pOperateFriendRequest);
 	BOOL HandleHeartbeatMessage(const CHeartbeatMessageRequest* pHeartbeatRequest);
 	void HandleUpdateLogonUserInfoMessage(const CUpdateLogonUserInfoRequest* pRequest);
 	void HandleModifyPassword(const CModifyPasswordRequest* pModifyPassword);
 	void HandleCreateNewGroup(const CCreateNewGroupRequest* pCreateNewGroup);
-    void HandleOperateTeam(const CAddTeamInfoRequest* pAddNewTeam);
-    void HandleModifyFriendMarkName(const CModifyFriendMakeNameRequest* pModifyFriendMakeNameRequest);
-    void HandleMoveFriendMessage(const CMoveFriendRequest* pMoveFriendRequest);
 
 	BOOL HandleFontInfo(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);
 	BOOL HandleSysFaceId(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);

@@ -306,13 +306,6 @@ void CRecvMsgThread::EnableUI(bool bEnable)
     }
 
     m_listCachedChatMsg.clear();
-
-    for (const auto& iter : m_listCachedNotifyMsg)
-    {
-        HandleOperateFriendMessage(iter.strNotifyMsg);
-    }
-
-    m_listCachedNotifyMsg.clear();
 }
 
 BOOL CRecvMsgThread::HandleMessage(const std::string& strMsg)
@@ -350,21 +343,9 @@ BOOL CRecvMsgThread::HandleMessage(const std::string& strMsg)
     case msg_type_login:
         HandleLoginMessage(data);
         break;
-        //用户信息
-    case msg_type_getofriendlist:
-        HandleFriendListInfo(data);
-        break;
         //获取群成员信息
     case msg_type_getgroupmembers:
         HandleGroupBasicInfo(data);
-        break;
-        //查找用户结果
-    case msg_type_finduser:
-        HandleFindFriendMessage(data);
-        break;
-        //加好友申请或删除好友或加群或退群
-    case msg_type_operatefriend:
-        CacheNotifyMsg(data);
         break;
         //用户信息发生变更
     case msg_type_userstatuschange:
@@ -530,129 +511,6 @@ BOOL CRecvMsgThread::HandleLoginMessage(const std::string& strMsg)
     return TRUE;
 }
 
-BOOL CRecvMsgThread::HandleFriendListInfo(const std::string& strMsg)
-{
-    /*
-    {
-    "code": 0,
-    "msg": "ok",
-    "userinfo": [
-        {
-            "teamindex": 0,
-            "teamname": "My Friends",
-            "members": [
-                {
-                    "userid": 4,
-                    "username": "13811411052",
-                    "nickname": "bj_man",
-                    "facetype": 2,
-                    "customface": "",
-                    "gender": 0,
-                    "birthday": 19900101,
-                    "signature": "",
-                    "address": "",
-                    "phonenumber": "",
-                    "mail": "",
-                    "clienttype": 0,
-                    "status": 0
-                },
-                {
-                    "userid": 5,
-                    "username": "15618326596",
-                    "nickname": "Half",
-                    "facetype": 0,
-                    "customface": "",
-                    "gender": 0,
-                    "birthday": 19900101,
-                    "signature": "",
-                    "address": "",
-                    "phonenumber": "",
-                    "mail": "",
-                    "clienttype": 0,
-                    "status": 0
-                }
-            ]
-        }
-    ]
-}
-    */
-
-    Json::Reader JsonReader;
-    Json::Value JsonRoot;
-    if (!JsonReader.parse(strMsg, JsonRoot))
-    {
-        return FALSE;
-    }
-
-    if (JsonRoot["code"].isNull() || JsonRoot["code"].asInt() != 0 || !JsonRoot["userinfo"].isArray())
-        return FALSE;
-
-    LOG_INFO("Recv user basic info, info count=%u:", JsonRoot["userinfo"].size());
-
-    CUserBasicInfoResult* pUserBasicInfoResult = new CUserBasicInfoResult();
-    UserBasicInfo* pUserBasicInfo = NULL;
-    UINT nTeamCount = (UINT)JsonRoot["userinfo"].size();
-
-    std::string strTeamName;
-    for (UINT i = 0; i < nTeamCount; ++i)
-    {
-        strTeamName = JsonRoot["userinfo"][(UINT)i]["teamname"].asString();
-
-        std::list<UserBasicInfo*> friendList;
-
-        if (!JsonRoot["userinfo"][(UINT)i]["members"].isArray())
-            continue;
-
-        for (UINT j = 0; j < JsonRoot["userinfo"][(UINT)i]["members"].size(); ++j)
-        {
-            pUserBasicInfo = new UserBasicInfo();
-            //memset(pUserBasicInfo, 0, sizeof(UserBasicInfo));
-
-            pUserBasicInfo->uAccountID = JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["userid"].asUInt();
-
-#ifdef _DEBUG
-            //为了调试方便加上userid
-            sprintf_s(pUserBasicInfo->szAccountName, 32, "%s - %d", JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["username"].asString().c_str(), pUserBasicInfo->uAccountID);
-#else
-            sprintf_s(pUserBasicInfo->szAccountName, 32, "%s", JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["username"].asString().c_str(), pUserBasicInfo->uAccountID);
-#endif
-            //账户名
-            //strcpy_s(pUserBasicInfo->szAccountName, ARRAYSIZE(pUserBasicInfo->szAccountName), pUserInfo[i].user);
-            //昵称
-            strcpy_s(pUserBasicInfo->szNickName, ARRAYSIZE(pUserBasicInfo->szNickName), JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["nickname"].asString().c_str());
-            //备注名
-            strcpy_s(pUserBasicInfo->szMarkName, ARRAYSIZE(pUserBasicInfo->szMarkName), JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["markname"].asString().c_str());
-            //签名
-            strcpy_s(pUserBasicInfo->szSignature, ARRAYSIZE(pUserBasicInfo->szSignature), JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["signature"].asString().c_str());
-            //地址
-            strcpy_s(pUserBasicInfo->szAddress, ARRAYSIZE(pUserBasicInfo->szAddress), JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["address"].asString().c_str());
-            //自定义头像
-            strcpy_s(pUserBasicInfo->customFace, ARRAYSIZE(pUserBasicInfo->customFace), JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["customface"].asString().c_str());
-            //电话
-            strcpy_s(pUserBasicInfo->szPhoneNumber, ARRAYSIZE(pUserBasicInfo->szPhoneNumber), JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["phonenumber"].asString().c_str());
-            //邮箱
-            strcpy_s(pUserBasicInfo->szMail, ARRAYSIZE(pUserBasicInfo->szMail), JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["mail"].asString().c_str());
-
-            pUserBasicInfo->nStatus = JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["status"].asInt();
-            pUserBasicInfo->clientType = JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["clienttype"].asInt();
-            //头像ID
-            pUserBasicInfo->uFaceID = JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["facetype"].asInt();
-            //性别
-            pUserBasicInfo->nGender = JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["gender"].asInt();
-            //生日
-            pUserBasicInfo->nBirthday = JsonRoot["userinfo"][(UINT)i]["members"][(UINT)j]["birthday"].asInt();
-
-            friendList.push_back(pUserBasicInfo);
-        }
-
-        pUserBasicInfoResult->m_mapUserBasicInfo[strTeamName] = friendList;
-    }
-
-    ::PostMessage(m_hProxyWnd, FMG_MSG_UPDATE_USER_BASIC_INFO, 0, (LPARAM)pUserBasicInfoResult);
-
-    return TRUE;
-}
-
 BOOL CRecvMsgThread::HandleGroupBasicInfo(const std::string& strMsg)
 {
     Json::Reader JsonReader;
@@ -714,34 +572,6 @@ BOOL CRecvMsgThread::HandleGroupBasicInfo(const std::string& strMsg)
 
 
 
-BOOL CRecvMsgThread::HandleFindFriendMessage(const std::string& strMsg)
-{
-    Json::Reader JsonReader;
-    Json::Value JsonRoot;
-    if (!JsonReader.parse(strMsg, JsonRoot))
-    {
-        return FALSE;
-    }
-
-    if (JsonRoot["code"].isNull() || JsonRoot["code"].asInt() != 0 || !JsonRoot["userinfo"].isArray())
-        return FALSE;
-
-    CFindFriendResult* pFindFriendResult = new CFindFriendResult();
-    if (JsonRoot["userinfo"].size() == 0)
-        pFindFriendResult->m_nResultCode = FIND_FRIEND_NOT_FOUND;
-    else
-    {
-        pFindFriendResult->m_nResultCode = FIND_FRIEND_FOUND;
-        pFindFriendResult->m_uAccountID = JsonRoot["userinfo"][(UINT)0]["userid"].asInt();
-        strcpy_s(pFindFriendResult->m_szAccountName, ARRAYSIZE(pFindFriendResult->m_szAccountName), JsonRoot["userinfo"][(UINT)0]["username"].asCString());
-        strcpy_s(pFindFriendResult->m_szNickName, ARRAYSIZE(pFindFriendResult->m_szNickName), JsonRoot["userinfo"][(UINT)0]["nickname"].asCString());
-    }
-
-
-    ::PostMessage(m_hProxyWnd, FMG_MSG_FINDFREIND, 0, (LPARAM)pFindFriendResult);
-    return TRUE;
-}
-
 BOOL CRecvMsgThread::HandleUserStatusNotifyMessage(int targetId, const std::string& strMsg)
 {
     Json::Reader JsonReader;
@@ -789,69 +619,6 @@ BOOL CRecvMsgThread::HandleUserStatusNotifyMessage(int targetId, const std::stri
     ::PostMessage(m_hProxyWnd, FMG_MSG_USER_STATUS_CHANGE, 0, (LPARAM)pFriendStatus);
 
     return TRUE;
-}
-
-BOOL CRecvMsgThread::HandleOperateFriendMessage(const std::string& strMsg)
-{
-    //{"userid": 9, "type": 2, "username": "xxx"}
-    Json::Reader JsonReader;
-    Json::Value JsonRoot;
-    if (!JsonReader.parse(strMsg, JsonRoot))
-    {
-        return FALSE;
-    }
-
-    if (!JsonRoot["userid"].isInt() || !JsonRoot["type"].isInt() != 0 || !JsonRoot["username"].isString())
-        return FALSE;
-
-    LOG_INFO("Recv operate friend request");
-    int userid = JsonRoot["userid"].asInt();
-    int type = JsonRoot["type"].asInt();
-    std::string username = JsonRoot["username"].asString();
-    //收到加好友请求
-    if (type == 2)
-    {
-        COperateFriendResult* pOperateFriendResult = new COperateFriendResult();
-        pOperateFriendResult->m_uCmd = Apply;
-        pOperateFriendResult->m_uAccountID = userid;
-        strcpy_s(pOperateFriendResult->m_szAccountName, ARRAYSIZE(pOperateFriendResult->m_szAccountName), username.c_str());
-
-        ::PostMessage(m_hProxyWnd, FMG_MSG_RECVADDFRIENDREQUSET, 0, (LPARAM)pOperateFriendResult);
-        return TRUE;
-    }
-    //收到加好友结果
-    else if (type == 3)
-    {
-        if (!JsonRoot["accept"].isInt())
-            return FALSE;
-
-        int accept = JsonRoot["accept"].asInt();
-
-        COperateFriendResult* pOperateFriendResult = new COperateFriendResult();
-        pOperateFriendResult->m_uCmd = (accept != 0 ? Agree : Refuse);
-        pOperateFriendResult->m_uAccountID = userid;
-        strcpy_s(pOperateFriendResult->m_szAccountName, ARRAYSIZE(pOperateFriendResult->m_szAccountName), username.c_str());
-
-        ::PostMessage(m_hProxyWnd, FMG_MSG_RECVADDFRIENDREQUSET, 0, (LPARAM)pOperateFriendResult);
-        return TRUE;
-    }
-    //删除好友或者退群
-    else if (type == 5)
-    {
-        COperateFriendResult* pOperateFriendResult = new COperateFriendResult();
-        pOperateFriendResult->m_uCmd = Delete;
-        pOperateFriendResult->m_uAccountID = userid;
-        strcpy_s(pOperateFriendResult->m_szAccountName, ARRAYSIZE(pOperateFriendResult->m_szAccountName), username.c_str());
-        ::PostMessage(m_lpUserMgr->m_hProxyWnd, FMG_MSG_DELETEFRIEND, DELETE_FRIEND_SUCCESS, pOperateFriendResult->m_uAccountID);
-        return TRUE;
-    }
-    //else if(pOperateFriendResult->m_uCmd==Agree || pOperateFriendResult->m_uCmd==Refuse || pOperateFriendResult->m_uCmd==Apply)
-    //{
-    //	::PostMessage(m_lpUserMgr->m_hProxyWnd,  FMG_MSG_RECVADDFRIENDREQUSET, 0, (LPARAM)pOperateFriendResult);
-    //	return TRUE;
-    //}
-
-    return FALSE;
 }
 
 BOOL CRecvMsgThread::HandleChatMessage(int32_t senderId, int32_t targetId, const std::string& strMsg)
@@ -996,27 +763,6 @@ BOOL CRecvMsgThread::CacheChatMessage(int32_t senderId, int32_t targetId, const 
     return TRUE;
 }
 
-BOOL CRecvMsgThread::CacheNotifyMsg(const std::string& strMsg)
-{
-    std::lock_guard<std::mutex> guard(m_mtUIEnable);
-    CachedNotifyMsg c;
-    c.strNotifyMsg = strMsg;
-    m_listCachedNotifyMsg.push_back(c);
-
-    if (!m_bUIEnable)
-    {
-        return FALSE;
-    }
-
-    for (const auto& iter : m_listCachedNotifyMsg)
-    {
-        HandleOperateFriendMessage(iter.strNotifyMsg);
-    }
-
-    m_listCachedNotifyMsg.clear();
-
-    return TRUE;
-}
 
 BOOL CRecvMsgThread::ParseChatMessage(int32_t senderId, int32_t targetId, const std::string& strMsg, std::vector<CRecvMsg*>& arrMsg)
 {

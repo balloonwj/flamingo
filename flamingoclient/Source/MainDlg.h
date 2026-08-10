@@ -12,7 +12,6 @@
 #include "LoginAccountList.h"
 #include "CascadeWinManager.h"
 #include "RecentListCtrl.h"
-#include "BuddyListCtrl.h"
 #include "BalloonAuth/BalloonLoginDlg.h"
 //#include "VerifyCodeDlg.h"
 #include "MsgTipDlg.h"
@@ -81,7 +80,6 @@ public:
 class CBuddyInfoDlg;
 class CGroupInfoDlg;
 
-class CFindFriendDlg;
 class CRemoteDesktopDlg;
 
 class CMainDlg : public CDialogImpl<CMainDlg>, public CUpdateUI<CMainDlg>,
@@ -134,7 +132,6 @@ public:
 		MESSAGE_HANDLER_EX(FMG_MSG_SELF_STATUS_CHANGE, OnSelfStatusChange)
 
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_CHATDLG_USERINFO, OnUpdateChatDlgOnlineStatus)			//更新聊天窗口中用户状态
-		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_BUDDY_LIST, OnUpdateBuddyList)		 //更新好友列表信息
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_GROUP_LIST, OnUpdateGroupList)
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_RECENT_LIST, OnUpdateRecentList)	 //更新最近联系人列表
 		MESSAGE_HANDLER_EX(FMG_MSG_BUDDY_MSG, OnBuddyMsg)
@@ -232,9 +229,6 @@ public:
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_GMEMBER_HEADPIC, OnUpdateGMemberHeadPic)
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_GROUP_HEADPIC, OnUpdateGroupHeadPic)
 		MESSAGE_HANDLER_EX(FMG_MSG_CHANGE_STATUS_RESULT, OnChangeStatusResult)
-		MESSAGE_HANDLER_EX(FMG_MSG_ADDFREIND, OnSendAddFriendRequestResult)			//自己加好友是否发送成功
-		MESSAGE_HANDLER_EX(FMG_MSG_RECVADDFRIENDREQUSET, OnRecvAddFriendRequest)		//收到加好友相关通知
-		MESSAGE_HANDLER_EX(FMG_MSG_DELETEFRIEND, OnDeleteFriendResult)				//删除好友结果
 
 		MESSAGE_HANDLER_EX(WM_TRAYICON_NOTIFY, OnTrayIconNotify)
 		MESSAGE_HANDLER_EX(WM_SHOW_BUDDYCHATDLG, OnShowOrCloseDlg)				//显示或关闭与好友聊天对话框
@@ -296,7 +290,34 @@ private:
 	// 断开连接、关掉所有窗口、清空登录态并重新弹出登录窗 —— 用户主动登出(OnLogout)与
 	// 账号在别处登录被顶下线(OnV2Kickout)共用的收尾序列。调用方须跑在由 PostMessage
 	// 投递而来的干净调用栈上：本函数要销毁主面板、并进入登录窗的模态循环。
-	void ReturnToLoginWindow();
+	//   exitKind：      本次退出登录的方式，取值见 balloonmain::LoginExitKind。
+	//   kickoutReason： 被踢原因，取值见 balloonmain::KickoutReasonValue；exitKind 为
+	//                   主动登出时本参数被忽略，传 kKickoutReasonUnknown 即可。
+	// 这两个参数只用于判定要不要顺手清掉本机的"自动登录"标志(见
+	// balloonmain::ShouldClearAutoLoginOnExit)，不影响其余任何收尾动作。
+	void ReturnToLoginWindow(int exitKind, int kickoutReason);
+
+	/**
+	 *  清掉某账号在本机存下的"自动登录"标志并立即落盘。
+	 *
+	 *  收口在一处而不是各调用点各写一遍：登出、被踢下线(密码已修改)两条路径要做的
+	 *  是同一件事，散着写迟早漏掉一条。
+	 *    lpszAccount：账号名；NULL、空串、或该账号不在历史列表里时只记日志、不做事。
+	 *  无返回值；本就没勾自动登录时不写盘。落盘失败由 SaveLoginAccountListFile 记日志。
+	 */
+	void ClearAutoLoginFlag(LPCTSTR lpszAccount);
+
+	/**
+	 *  忘掉当前账号在本机存下的密码 —— 清空密码，并把"记住密码"与"自动登录"一并
+	 *  取消，随后落盘。
+	 *
+	 *  用在服务端明确回了"密码错误"之后：存下的密码既然已经不对，留着只会让勾了
+	 *  自动登录的用户每次开机被自动登一次、再被弹一次"密码错误"，而在那之前他根本
+	 *  没有界面可以取消勾选，等于卡死在这个循环里。"记住密码"一并取消，是因为密码
+	 *  框已经没有可回填的内容，勾着一个空密码没有意义。
+	 *  当前账号为空或不在历史列表里时只记日志、不做事。
+	 */
+	void ForgetSavedPasswordForCurrentAccount();
 
 	/**
 	 *  把历史登录账号列表写回 Bin\Users\LoginAccountList.dat。
@@ -317,7 +338,6 @@ private:
 	LRESULT OnLogoutResult(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 注销返回消息
 	LRESULT OnGoOffline(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 下线
 	LRESULT OnUpdateUserInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 更新用户信息
-	LRESULT OnUpdateBuddyList(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 更新好友列表消息
 	LRESULT OnUpdateGroupList(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 更新群列表消息
 	LRESULT OnUpdateRecentList(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新最近联系人列表消息
 	LRESULT OnBuddyMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 好友消息
@@ -432,9 +452,6 @@ private:
 	LRESULT OnUpdateGMemberHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam);// 更新群成员头像图片
 	LRESULT OnUpdateGroupHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新群头像图片
 	LRESULT OnChangeStatusResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 改变在线状态返回消息
-	LRESULT OnSendAddFriendRequestResult(UINT uMsg, WPARAM wParam, LPARAM lParam);//加好友向服务器发请求的成败结果
-	LRESULT OnRecvAddFriendRequest(UINT uMsg, WPARAM wParam, LPARAM lParam);// 收到加好友的请求
-	LRESULT OnDeleteFriendResult(UINT message, WPARAM wParam, LPARAM lParam);//删除好友结果
 	LRESULT OnSelfStatusChange(UINT message, WPARAM wParam, LPARAM lParam); //自己在另外终端上下线通知
 	
 	LRESULT OnCloseDlg(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -460,8 +477,6 @@ private:
 	void NotifyBuddyInfoDlg(UINT nUTalkUin, UINT uMsg);						// 通知好友信息窗口更新
 	void NotifyGMemberInfoDlg(UINT nGroupCode, UINT nUTalkUin, UINT uMsg);	// 通知群成员信息窗口更新
 	void NotifyGroupInfoDlg(UINT nGroupCode, UINT uMsg);					// 通知群信息窗口更新
-
-	void BuddyListSortOnStaus();											//根据在线和离线状态排列好友列表
 
 	void OnTrayIcon_LButtunUp();
 	void OnTrayIcon_RButtunUp();
@@ -535,8 +550,6 @@ private:
 	void RefreshTrayIconForStatus();
 	BOOL LoadLoginIcon();
 	void DestroyLoginIcon();
-	BOOL LoadAddFriendIcon();
-	void DestroyAddFriendIcon();
 	void UpdateMsgIcon();
 
 	// 按 m_trayFlash 当前"最近一条"未读会话重建托盘闪烁图标 m_hMsgIcon —— 用
@@ -562,9 +575,6 @@ private:
 	long GetStatusFromMenuID(int nMenuID);									// 从菜单ID获取对应的UTalk_STATUS
 
 	void CreateEssentialDirectories();										//登录成功以后创建必需文件夹
-
-	void ShowAddFriendConfirmDlg();											//显示加好友请求对话框 
-
 
 	void SaveCurrentLogonUserToFile();										//将当前登录的账户保存到文件中
 	void DeleteCurrentUserFromFile();										//从文件中删除当前登录的账户
@@ -599,7 +609,6 @@ private:
 	CRdControlledBar			m_rdControlledBar;							//被控端受控提示条(本端=被控端时屏幕顶部置顶提示"正在被控制"+结束按钮)
 	std::wstring				m_rdControlledPeerName;						//被控端记录的控制方昵称(授权时由 cmd_rd_invite_notify 带来,显示在受控条文案)
 	std::string					m_rdControlledSessionId;					//被控端记录的会话 id(用户主动结束时发 cmd_rd_close 用)
-	CFindFriendDlg*			m_pFindFriendDlg;								//查找好友对话框
 	CMsgTipDlg				m_MsgTipDlg;
 	// 托盘"新消息闪头像"状态机：记录哪些会话未读、最近一条（单击打开它）、闪烁状态。
 	// 由 v2 收消息回投的 FMG_MSG_TRAY_FLASH 填入、会话已读时移除；驱动 m_TrayIcon 的
@@ -640,10 +649,8 @@ private:
 	HICON							m_hLoginIcon[6];
 	int								m_nCurLoginIcon;
 	HICON							m_hMsgIcon;
-	HICON							m_hAddFriendIcon[2];
 	DWORD							m_dwLoginTimerId;
 	DWORD							m_dwMsgTimerId;
-	DWORD							m_dwAddFriendTimerId;					//加好友通知
     DWORD                           m_dwReconnectTimerId;                   //断线重连定时器ID
 	//DWORD							m_dwExitAppTimerId;						//检测程序退出计时器
 

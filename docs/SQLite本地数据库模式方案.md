@@ -224,7 +224,11 @@ SQLite 侧用 `sqlite3_mprintf("%q", src)`，或者手写「单引号翻倍」�
 
 ### 5.4 自增 ID 的连接私有语义（重要）
 
-业务层有 6 处是「先 `execute` 插入，紧接着 `query("SELECT LAST_INSERT_ID()")` 取自增 ID」：`MessageManager.cpp:69`、`GroupManager.cpp:643`、`GroupManager.cpp:969`、`UserManager.cpp:963`、`FileStoreManager.cpp:147`、`GroupFileManager.cpp:60`。
+业务层有 6 处是「先 `execute` 插入，紧接着 `query("SELECT LAST_INSERT_ID()")` 取自增 ID」：`MessageManager.cpp:73`、`GroupManager.cpp:650`、`GroupManager.cpp:1045`、`GroupManager.cpp:1231`、`FileStoreManager.cpp:143`、`GroupFileManager.cpp:56`。
+
+> 起草时这份清单里还有一处 `UserManager.cpp`（`addFriendRequest()` 插完 `t_friend_request` 后取 `requestid`），
+> 已随好友关系子系统于 2026-08-05 删除；`GroupManager` 另有一处新增，故总数仍是 6。
+> 行号会随代码漂移，以 `grep -rn "LAST_INSERT_ID" chatserversrc/` 的实时结果为准。
 
 自增 ID 在 MySQL 和 SQLite 里**都是连接私有的状态**。目前每个 Manager 在同一条连接上先插后读，所以取得到。一旦把写操作挪到专用线程、而 `SELECT LAST_INSERT_ID()` 走调用方自己的读连接，**这个 ID 就读不到了，会静默拿到 0**，不报错、只写出错误数据。
 
@@ -347,7 +351,12 @@ option(WITH_MYSQL "编译 MySQL 数据库后端" ON)
   2. **MySQL 允许自增列不是主键，SQLite 不允许。** 全仓库只有 `t_user` 是这种情况（自增列 `f_id`、主键 `f_user_id`），处理办法是把自增列升为 SQLite 主键、原主键降级成唯一索引，约束强度不变。其余 27 张表要么自增列本身就是主键，要么没有自增列。
   3. **建索引必须排在补列之后。** 这一条是被测试逼出来的：SQM3 一开始就失败，查下来是结构落后的存量库里，索引要用到的列还没补上，`CREATE INDEX` 直接报 `no such column`。所以生成的语句分成了 `SCHEMA_TABLE_STATEMENTS` 与 `SCHEMA_POST_STATEMENTS` 两组，执行顺序固定为「建表 → 补列 → 建索引与触发器」。
 
-  另外，生成的 C++ 里所有非 ASCII 字节都用**八进制转义**。这不是洁癖：源文件里直接写中文时，MSVC 会把窄字符串字面量转成系统 ANSI 代码页（本机是 GBK），而 SQLite 要的是 UTF-8，`DEFAULT '我的好友'` 这类默认值会被写成乱码。八进制转义描述的是字节，不受执行字符集影响。
+  另外，生成的 C++ 里所有非 ASCII 字节都用**八进制转义**。这不是洁癖：源文件里直接写中文时，MSVC 会把窄字符串字面量转成系统 ANSI 代码页（本机是 GBK），而 SQLite 要的是 UTF-8，建表语句里含中文的字面量（默认值、字符串常量）会被写成乱码。八进制转义描述的是字节，不受执行字符集影响。
+
+> 这一条起草时举的例子是 `DEFAULT '我的好友'`（`t_user_relationship` 的好友分组名默认值）。该表已随好友关系
+> 子系统于 2026-08-05 删除，目前 `table.sql` 里已没有含中文的 `DEFAULT` 值，`SqliteSchema.cpp` 里也不再有
+> 八进制转义串——中文只剩在 `COMMENT` 子句里，而生成器本来就会把 `COMMENT` 剥掉（SQLite 不支持）。
+> **但这条规则要保留**：只要以后有人往 schema 里加一个含中文的默认值或字符串常量，同一个坑立刻复现。
 
   `main.cpp` 已按 `dbtype` 分支选择 `CSqliteManager` 或 `CMysqlManager` 做引导 —— 两者流程完全不同，SQLite 模式下跑 MySQL 引导会直接连不上库。`etc/chatserver.conf` 也补上了 `dbtype` / `dbpath` 两项，默认值仍是 `mysql`。
 
@@ -418,7 +427,7 @@ option(WITH_MYSQL "编译 MySQL 数据库后端" ON)
 五步已全部完成。当前状态：
 
 - **MySQL 模式**：行为与改造前一致。所有方言相关改动在 MySQL 侧都生成与原先逐字相同的 SQL（有单元测试逐条比对），唯一的实质变化是日志不再打印密码。
-- **SQLite 模式**：可用。`chatserver` 能以 `dbtype=sqlite` 冷启动、自动建库建表、12 个业务 Manager 全部初始化通过；注册、登录、加好友、单聊收发、会话与历史消息同步、标记已读、建群、群聊这一整条主流程已按线协议实测走通，数据确实落盘（详见第 9 节 2026-08-03 的记录）。
+- **SQLite 模式**：可用。`chatserver` 能以 `dbtype=sqlite` 冷启动、自动建库建表、业务 Manager 全部初始化通过；注册、登录、设联系人备注名、单聊收发、会话与历史消息同步、标记已读、建群、群聊这一整条主流程已按线协议实测走通，数据确实落盘（详见第 9 节 2026-08-03 的记录，以及第 11 节 2026-08-05 的更正）。
 
 尚未做、建议后续跟进的事项：
 
@@ -477,3 +486,53 @@ TcpConnection::handleRead → handleError → handleClose
 这条记录保留在此，是为了留下「据推测的结论不该当成据实证来用」的教训：当时该做的是先查协议文档，而不是只读实现就断言行为不对。
 
 **一处遗留的文档与代码不一致（未处理）：** `chatserversrc/Protocol.h:105` 给 `cmd_get_contacts` 的注释仍写作「拉取好友列表（含分组/标签/收藏）」，与规范矛盾；`cmd_move_friend_team`（1211）、`cmd_operate_team`（1212）两个枚举及配套的分组操作类型枚举（`Protocol.h:481`）也仍留在文件里，而规范明确写着这两条「已删除、编号留空」。客户端 `flamingoclient/Source/net/Protocol.h` 有同样的残留。上面那次误判正是被这条过时注释带偏的。是否清理由用户决定。
+
+---
+
+## 11. 2026-08-05 更正：好友关系子系统删除后，上面哪些记录已经对不上了
+
+企业版于 2026-08-05 整体删除了好友关系子系统（作废协议号 1203~1208、1210、1214；删表
+`t_user_relationship`、`t_friend_request`；备注名迁到新表 `t_contact_remark`）。
+
+第 9、10 节是**当时的实测流水**，记的是那一天确实发生过的事，因此**原文一概不改**。但照着它复现会撞墙，
+以下逐条说明现在的实际情况。
+
+**① 端到端脚本的第 3 步换了。** 第 9 节写的九步主流程里「加好友 / 通过好友申请」已改为
+「alice 给 bob 设联系人备注名」（`tools/e2e_sqlite_smoke.py` 现在走 `CMD_SET_FRIEND_REMARK = 1209`）。
+落盘核对的表也跟着变：原文那句「`t_user_relationship` 1 行 …… `t_friend_request` 1 行」现在是
+**`t_contact_remark` 1 行**，并多了一条「备注名里的单引号原样落库」的断言——正好还是在验 SQL 转义，
+所以这一步的测试价值没有丢。
+
+**② 缺陷一（下线死锁）的成因描述仍然成立，但代码形态已经变了。** 原文里
+「持锁遍历在线好友并逐个推送」的那段循环随好友关系删除而消失，修复时引入的局部变量 `friendSessions`
+现在也已不存在——`ChatServer::onDisconnected` 改成只记下下线者的 userid 与 clienttype，**解锁之后**
+按企业广播一次。因此：
+- 原文引的 `ChatServer.cpp:87 / :118 / :403` 三个行号**只对 2026-08-03 那版有效**，现在指向别处；
+- 原文「两份通知内容一致、不会互相打架」的论证前提没有了，现在只剩企业广播一份；
+- 触发条件「下线用户至少有一个好友在线」应理解为「至少有一个同企业同事在线」。
+
+「持锁期间只收集、解锁之后再推送」这条教训本身没有过期，仍是这个函数的约束。
+
+**③ 回归脚本 `tools/e2e_offline_notify.py` 现在跑不起来（待修）。** 它仍在引用
+`CMD_ADD_FRIEND_REQUEST` / `CMD_FRIEND_REQUEST_NOTIFY` / `CMD_HANDLE_FRIEND_REQUEST` /
+`FRIEND_ACTION_ACCEPT`，而这几个常量已随协议号作废从被它 import 的 `e2e_sqlite_smoke.py` 里删掉，
+运行会直接 `AttributeError`。修法是把「两人互加好友」这个前置条件换成「两人分别登录、且同属一个企业」。
+
+**④ 缺陷二那段「撤回」的记录，结论比当时更硬了。** 原文的标题「`cmd_get_contacts` 从不返回普通好友」
+以"普通好友"为前提，而现在企业版根本没有这个概念，准确的说法是「`cmd_get_contacts` 不返回非企业联系人」。
+文末那句定调——**企业版没有好友关系，通讯录即组织架构**——现在已经由代码兑现，不再只是口径。
+
+**⑤ 引用 `docs/协议设计-v2.md` 的三个行号已全部位移**（该文档 §7.3 被整章改写）。原文引的
+第 1116 / 491 / 1665 行，现分别约在第 1115 / 501 / 1730 行一带；其中「取消 QQ 式『好友分组』」那句
+原文已不在，最接近的表述在作废编号表里。**引用规范时请按小节号找（§7.3、§10.13、§14.1），不要认行号。**
+
+**⑥ 第 10 节末尾那条「一处遗留的文档与代码不一致（未处理）」已经处理完了。**
+`chatserversrc/Protocol.h` 里 `cmd_get_contacts` 的注释已改为「拉取通讯录（企业部门树 + 部门成员 +
+群组 + 服务号 + 收藏）」，1211/1212 与分组操作类型枚举已删除、只留「编号留空不复用」的注释，
+客户端 `flamingoclient/Source/net/Protocol.h` 同步清理（`friend_request_action` 枚举也已删）。
+
+**⑦ 全文的两个统计数字已过期。** 「28 张表」现为 **31 张**（本次 −2 +1，其余来自 Pin 与群管理几轮），
+「12 个业务 Manager」现为 **15 个**（本次新增 `ContactRemarkManager`，另有 `FavoriteManager`、
+`MessagePinManager`）。§2.4 的方言用法计数（`INSERT IGNORE` 13 处、`escapeString` 16 处等）同理，
+均为 **2026-07-31 的快照**，删掉 `UserManager` 里的好友 SQL 之后会变小。这些数字只用来说明改造规模，
+不影响任何结论，故不逐个重数。

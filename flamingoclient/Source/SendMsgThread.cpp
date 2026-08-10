@@ -114,24 +114,12 @@ void CSendMsgThread::HandleItem(CNetData* pNetData)
         HandleLogon((const CLoginRequest*)pNetData);
         break;
 
-    case NET_DATA_USER_BASIC_INFO:
-        HandleUserBasicInfo((const CUserBasicInfoRequest*)pNetData);
-        break;
-
     case NET_DATA_CHANGE_STATUS:
         HandleChangeUserStatus((const CChangeUserStatusRequest*)pNetData);
         break;
 
     case NET_DATA_GROUP_BASIC_INFO:
         HandleGroupBasicInfo((const CGroupBasicInfoRequest*)pNetData);
-        break;
-
-    case NET_DATA_FIND_FRIEND:
-        HandleFindFriendMessage((const CFindFriendRequest*)pNetData);
-        break;
-
-    case NET_DATA_OPERATE_FRIEND:
-        HandleOperateFriendMessage((const COperateFriendRequest*)pNetData);
         break;
 
     case NET_DATA_CHAT_MSG:
@@ -156,18 +144,6 @@ void CSendMsgThread::HandleItem(CNetData* pNetData)
 
     case NET_DATA_CREATE_NEW_GROUP:
         HandleCreateNewGroup((const CCreateNewGroupRequest*)pNetData);
-        break;
-
-    case NET_DATA_OPERATE_TEAM:
-        HandleOperateTeam((const CAddTeamInfoRequest*)pNetData);
-        break;
-
-    case NET_DATA_MODIFY_FRIEND_MARKNAME:
-        HandleModifyFriendMarkName((const CModifyFriendMakeNameRequest*)pNetData);
-        break;
-
-    case NET_DATA_MOVE_FRIEND:
-        HandleMoveFriendMessage((const CMoveFriendRequest*)pNetData);
         break;
 
     default:
@@ -305,24 +281,6 @@ void CSendMsgThread::HandleLogon(const CLoginRequest* pLoginRequest)
                   (LPARAM)pLoginResult);
 }
 
-void CSendMsgThread::HandleUserBasicInfo(const CUserBasicInfoRequest* pUserBasicInfo)
-{
-    if (pUserBasicInfo == NULL)
-        return;
-
-    std::string outbuf;
-    net::BinaryStreamWriter writeStream(&outbuf);
-    writeStream.WriteInt32(msg_type_getofriendlist);
-    writeStream.WriteInt32(m_seq);
-    std::string dummy;
-    writeStream.WriteString(dummy);
-    writeStream.Flush();
-
-    LOG_INFO("Request to get userinfo.");
-
-    CIUSocket::GetInstance().Send(outbuf);
-}
-
 void CSendMsgThread::HandleChangeUserStatus(const CChangeUserStatusRequest* pChangeUserStatusRequest)
 {
     if (pChangeUserStatusRequest == NULL)
@@ -357,57 +315,6 @@ void CSendMsgThread::HandleGroupBasicInfo(const CGroupBasicInfoRequest* pGroupBa
     writeStream.Flush();
 
     LOG_INFO("Request to get group members, groupid=%d.", pGroupBasicInfo->m_groupid);
-
-    CIUSocket::GetInstance().Send(outbuf);
-}
-
-void CSendMsgThread::HandleFindFriendMessage(const CFindFriendRequest* pFindFriendRequest)
-{
-    if (pFindFriendRequest == NULL)
-        return;
-
-    char szData[64] = { 0 };
-    sprintf_s(szData, 64, "{\"type\": %d, \"username\": \"%s\"}", pFindFriendRequest->m_nType, pFindFriendRequest->m_szAccountName);
-
-    std::string outbuf;
-    net::BinaryStreamWriter writeStream(&outbuf);
-    writeStream.WriteInt32(msg_type_finduser);
-    writeStream.WriteInt32(m_seq);
-    //std::string data = szData;
-    writeStream.WriteCString(szData, strlen(szData));
-    writeStream.Flush();
-
-    LOG_INFO("Request to find friend, type=%d, accountName=%s", pFindFriendRequest->m_nType, pFindFriendRequest->m_szAccountName);
-
-    CIUSocket::GetInstance().Send(outbuf);
-}
-
-void CSendMsgThread::HandleOperateFriendMessage(const COperateFriendRequest* pOperateFriendRequest)
-{
-    if (pOperateFriendRequest == NULL)
-        return;
-
-    char szData[64] = { 0 };
-    if (pOperateFriendRequest->m_uCmd == Apply)
-    {
-        sprintf_s(szData, 64, "{\"userid\": %d, \"type\": 1}", pOperateFriendRequest->m_uAccountID);
-    } else if (pOperateFriendRequest->m_uCmd == Agree || pOperateFriendRequest->m_uCmd == Refuse)
-    {
-        sprintf_s(szData, 64, "{\"userid\": %d, \"type\": 3, \"accept\": %d}", pOperateFriendRequest->m_uAccountID, pOperateFriendRequest->m_uCmd != Agree ? 0 : 1);
-    } else if (pOperateFriendRequest->m_uCmd == Delete)
-    {
-        sprintf_s(szData, 64, "{\"userid\": %d, \"type\": 4}", pOperateFriendRequest->m_uAccountID);
-    }
-
-    std::string outbuf;
-    net::BinaryStreamWriter writeStream(&outbuf);
-    writeStream.WriteInt32(msg_type_operatefriend);
-    writeStream.WriteInt32(m_seq);
-    std::string data = szData;
-    writeStream.WriteCString(szData, strlen(szData));
-    writeStream.Flush();
-
-    LOG_INFO("Request to operate friend, type=%d, accountId=%u", pOperateFriendRequest->m_uCmd, pOperateFriendRequest->m_uAccountID);
 
     CIUSocket::GetInstance().Send(outbuf);
 }
@@ -483,75 +390,6 @@ void CSendMsgThread::HandleCreateNewGroup(const CCreateNewGroupRequest* pCreateN
     writeStream.Flush();
 
     LOG_INFO("Request to create new group, data=%s", szData);
-
-    CIUSocket::GetInstance().Send(outbuf);
-}
-
-void CSendMsgThread::HandleOperateTeam(const CAddTeamInfoRequest* pAddNewTeam)
-{
-    if (pAddNewTeam == NULL)
-        return;
-
-    std::string outbuf;
-    net::BinaryStreamWriter writeStream(&outbuf);
-    writeStream.WriteInt32(msg_type_updateteaminfo);
-    writeStream.WriteInt32(m_seq);
-    std::string dummy;
-    writeStream.WriteString(dummy);
-    writeStream.WriteInt32(pAddNewTeam->m_opType);
-    std::string strUtf8NewTeamName = EncodeUtil::UnicodeToUtf8(pAddNewTeam->m_strNewTeamName);
-    writeStream.WriteString(strUtf8NewTeamName);
-    std::string strUtf8OldTeamName = EncodeUtil::UnicodeToUtf8(pAddNewTeam->m_strOldTeamName);
-    writeStream.WriteString(strUtf8OldTeamName);
-    writeStream.Flush();
-
-    //LOG_INFO(_T("Request to update teamname, NewTeamName=%s, OldTeamName=%s."), pAddNewTeam->m_strNewTeamName, pAddNewTeam->m_strOldTeamName);
-
-    CIUSocket::GetInstance().Send(outbuf);
-}
-
-void CSendMsgThread::HandleModifyFriendMarkName(const CModifyFriendMakeNameRequest* pModifyFriendMakeNameRequest)
-{
-    if (pModifyFriendMakeNameRequest == NULL)
-        return;
-
-    std::string outbuf;
-    net::BinaryStreamWriter writeStream(&outbuf);
-    writeStream.WriteInt32(msg_type_modifyfriendmarkname);
-    writeStream.WriteInt32(m_seq);
-    std::string dummyData;
-    writeStream.WriteString(dummyData);
-    writeStream.WriteInt32((int32_t)(pModifyFriendMakeNameRequest->m_uFriendID));
-    char szData[64] = { 0 };
-    EncodeUtil::UnicodeToUtf8(pModifyFriendMakeNameRequest->m_szNewMarkName, szData, ARRAYSIZE(szData));
-    std::string newMarkName = szData;
-    writeStream.WriteString(newMarkName);
-    writeStream.Flush();
-
-    LOG_INFO(_T("Request to update friend markname, friendid=%d, NewMarkName=%s."), pModifyFriendMakeNameRequest->m_uFriendID, pModifyFriendMakeNameRequest->m_szNewMarkName);
-
-    CIUSocket::GetInstance().Send(outbuf);
-}
-
-void CSendMsgThread::HandleMoveFriendMessage(const CMoveFriendRequest* pMoveFriendRequest)
-{
-    if (pMoveFriendRequest == NULL)
-        return;
-
-    std::string outbuf;
-    net::BinaryStreamWriter writeStream(&outbuf);
-    writeStream.WriteInt32(msg_type_movefriendtootherteam);
-    writeStream.WriteInt32(m_seq);
-    std::string dummy;
-    writeStream.WriteString(dummy);
-    writeStream.WriteInt32(pMoveFriendRequest->m_nFriendID);
-    std::string strUtf8NewTeamName = EncodeUtil::UnicodeToUtf8(pMoveFriendRequest->m_strNewTeamName);
-    writeStream.WriteString(strUtf8NewTeamName);
-    std::string strUtf8OldTeamName = EncodeUtil::UnicodeToUtf8(pMoveFriendRequest->m_strOldTeamName);
-    writeStream.WriteString(strUtf8OldTeamName);
-    writeStream.Flush();
-
-    //LOG_INFO(_T("Request to move friend, NewTeamName=%s, OldTeamName=%s."), pAddNewTeam->m_strNewTeamName, pAddNewTeam->m_strOldTeamName);
 
     CIUSocket::GetInstance().Send(outbuf);
 }

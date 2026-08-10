@@ -182,6 +182,23 @@ bool SetProfileEditMode(balloonwjui::DuiControl* root, bool edit);
  *  返回:客户区根控件(一个 vbox),调用方拿走所有权;解析失败返
  *        nullptr(内嵌 XML 为编译期常量、形态固定,理论上不会失败)。
  */
+/**
+ *  按给定字体量出「个人信息」对话框行左侧字段名那一列该有多宽(像素)。
+ *
+ *  存在理由:这一列原先在内嵌 XML 里写死 60 物理像素,而字体随 DPI 放大
+ *  (DuiResMgr::GetFontByPointSize 的 lfHeight = -MulDiv(pt, dpi, 72))。125% 缩放下
+ *  10pt 汉字宽约 17 像素,四个字的"个性签名"要 68 像素,塞不进 60 就被 DrawText 从
+ *  中间硬裁掉半个字。本函数遍历全部字段名取最宽者加留白,并做上下限夹取。
+ *
+ *  纯计算 + 只读 GDI 测量,不建窗口、不改控件,故可被单元测试直接断言
+ *  (见 Tests/BalloonProfileLayoutTests.cpp 的 PW 系列)。
+ *    hFont  用来测量的字体,必须与最终真正绘制标签的字体<u>同源</u>,否则量的和画的
+ *           对不上、照样裁字;传 NULL 时返回下限值兜底。
+ *  @return 列宽(像素),已夹在 [60, 88] 之间。上限 88 是为了不挤压右侧值列,
+ *          超过 150% 缩放时列宽被夹住,由标签的 DT_END_ELLIPSIS 退化成省略号
+ */
+int ComputeFieldLabelColumnWidth(HFONT hFont);
+
 std::unique_ptr<balloonwjui::DuiControl> BuildProfileBody();
 
 } // namespace balloonmain

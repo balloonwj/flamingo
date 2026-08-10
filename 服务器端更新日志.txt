@@ -5,3 +5,11 @@
 5. 大幅度优化服务器日志显示信息;
 6. 优化文件服务器功能.
 7. 修正服务器只能上传小于512k的文件。
+8. 2026-08-05 企业版删除好友关系子系统。
+   作废协议号 1203~1208、1210、1214，编号留空不复用；
+   删除数据库表 t_user_relationship 和 t_friend_request，t_blacklist 保留；
+   删除错误码 201、203、205、206、207、208；错误码 202 保留，语义改为"够不着该联系人（不在同一企业）"；
+   保留 cmd_get_contacts(1201)、cmd_search(1202)、cmd_set_friend_remark(1209)、cmd_set_blacklist(1213)、cmd_set_favorite(1215)；
+   联系人备注名改存新表 t_contact_remark，新增 ContactRemarkManager，1209 的应答回带 userid，
+   备注随 cmd_get_contacts 应答里每个联系人的 remark 字段读回；
+   收藏(1215)的校验从"是好友或同企业同事"退化为"同一企业即可"。

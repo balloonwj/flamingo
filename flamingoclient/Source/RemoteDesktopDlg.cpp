@@ -65,12 +65,8 @@ CRemoteDesktopDlg::~CRemoteDesktopDlg()
 
 BOOL CRemoteDesktopDlg::PreTranslateMessage(MSG* pMsg)
 {
-    //支持回车键查找
-    if (pMsg->hwnd == m_hWnd && pMsg->message == WM_KEYDOWN && pMsg->wParam == VK_RETURN)
-    {
-        PostMessage(WM_COMMAND, (WPARAM)IDC_BTN_ADD, 0);
-        return TRUE;
-    }
+    //原先这里按回车会转成"查找好友"按钮的命令（本窗口是从查找好友对话框抄来的），
+    //随 v1 好友体系一并删除，本窗口没有对应控件，回车不再特殊处理。
 
     if (pMsg->hwnd == m_hWnd && pMsg->message == WM_KEYDOWN && pMsg->wParam == VK_ESCAPE)
     {
@@ -218,47 +214,10 @@ BOOL CRemoteDesktopDlg::InitUI()
     m_SkinDlg.MoveWindow(0, 0, 350, 200, TRUE);
 
 
-    HDC hDlgBgDC = m_SkinDlg.GetBgDC();
-
-    //m_edtAddId.SetBgNormalPic(_T("frameBorderEffect_normalDraw.png"), CRect(2, 2, 2, 2));
-    //m_edtAddId.SetBgHotPic(_T("frameBorderEffect_mouseDownDraw.png"), CRect(2, 2, 2, 2));
-    //m_edtAddId.SetTransparent(TRUE, hDlgBgDC);
-    //m_edtAddId.SubclassWindow(GetDlgItem(IDC_EDIT_ADD));
-
-    //m_btnAdd.SetButtonType(SKIN_PUSH_BUTTON);
-    //m_btnAdd.SetTransparent(TRUE, hDlgBgDC);
-    //m_btnAdd.SetBgPic(_T("Button\\btn_normal.png"), _T("Button\\btn_focus.png"), _T("Button\\btn_focus.png"), _T("Button\\btn_focus.png"));
-    //m_btnAdd.SetRound(4, 4);
-    //m_btnAdd.SubclassWindow(GetDlgItem(IDC_BTN_ADD));
-    //m_btnAdd.SetWindowText(_T("查找"));
-    //m_btnAdd.SetToolTipText(_T("点击按钮进行查找"));
-
-    //m_btnFindTypeSingle.Attach(GetDlgItem(IDC_RADIO_FINDTYPE1));
-    //m_btnFindTypeSingle.SetCheck(TRUE);
-    ////m_btnFindTypeSingle.SetTransparent(TRUE, hDlgBgDC);
-
-    //m_btnFindTypeGroup.Attach(GetDlgItem(IDC_RADIO_FINDTYPE2));
-    ////m_btnFindTypeGroup.SetTransparent(TRUE, hDlgBgDC);
-
-    //m_staticAddInfo.SetTransparent(TRUE, hDlgBgDC);
-    //m_staticAddInfo.SetLinkColor(RGB(225, 0, 0));
-    //m_staticAddInfo.SetLinkType(SKIN_LINK_ADDNEW);
-    //m_staticAddInfo.SubclassWindow(GetDlgItem(IDC_STATIC_ADDINFO));
+    //本窗口是从"查找并添加好友"对话框抄下来改的，原先这一大段全是被注释掉的
+    //查找框 / 查找按钮 / 找人找群单选钮的皮肤化代码，随 v1 好友体系一并删除。
 
     return TRUE;
-}
-
-void CRemoteDesktopDlg::OnAddFriend(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-
-}
-
-LRESULT CRemoteDesktopDlg::OnFindFriendResult(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
-{
-
-
-    return (LRESULT)1;
-
 }
 
 HBRUSH CRemoteDesktopDlg::OnCtlColorStatic(CDCHandle dc, CStatic wndStatic)

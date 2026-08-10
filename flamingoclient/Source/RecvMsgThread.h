@@ -74,9 +74,6 @@ class CChatMessage;
 class CFriendStatus;
 class CUserBasicInfoResult;
 class CUserExtendInfoResult;
-class CLoginUserFriendsIDResult;
-class CFindFriendResult;
-class COperateFriendResult;
 class CRecvChatMessage;
 class CUpdateLogonUserInfoResult;
 class CTargetInfoChangeResult;
@@ -91,12 +88,6 @@ struct CachedChatMsg
     int         targetid;
     int         senderid;
     std::string strChatMsg;
-};
-
-//缓存的通知类消息
-struct CachedNotifyMsg
-{
-    std::string strNotifyMsg;
 };
 
 class CRecvMsgThread : public CThread
@@ -140,15 +131,10 @@ private:
 	BOOL HandleMessage(const std::string& strMsg);
     BOOL HandleRegisterMessage(const std::string& strMsg);
     BOOL HandleLoginMessage(const std::string& strMsg);
-    BOOL HandleFriendListInfo(const std::string& strMsg);
     BOOL HandleGroupBasicInfo(const std::string& strMsg);
-    BOOL HandleFindFriendMessage(const std::string& strMsg);
     BOOL HandleUserStatusNotifyMessage(int targetId, const std::string& strMsg);
     BOOL HandleUpdateLogonUserInfoMessage(const std::string& strMsg);
     BOOL HandleModifyPasswordResult(const std::string& strMsg);
-
-    BOOL HandleOperateFriendMessage(const std::string& strMsg);
-    BOOL CacheNotifyMsg(const std::string& strMsg);
 
     BOOL CacheChatMessage(int32_t senderId, int32_t targetId, const std::string& strMsg);
     BOOL HandleChatMessage(int32_t senderId, int32_t targetId, const std::string& strMsg);
@@ -192,7 +178,6 @@ private:
 	std::map<CGMemberMapKey, RMT_BUDDY_DATA*>	m_mapGMemberData;
 	
     std::list<CachedChatMsg>	                m_listCachedChatMsg;			//缓存的聊天消息
-    std::list<CachedNotifyMsg>                  m_listCachedNotifyMsg;          //缓存的通知类消息
 	bool										m_bUIEnable;                    //UI界面是否已经准备好
     std::mutex                                  m_mtUIEnable;                   //多线程保护m_bUIEnable和m_listCacheChatMsg的变量
 

@@ -80,9 +80,46 @@ const int kFontTitle    = 10;  // 13.5 / 10pt (标签 / 值 / 按钮 / 标题)
 const int kFontNickname = 13;  // 17px / 13pt
 const int kFontAccount  = 9;   // 12px / 9pt
 
+// ---- 行左侧字段名(标签列)的排版常量 ----
+// 这一列原先在 XML 里写死 60 物理像素,而字体是随 DPI 放大的
+// (DuiResMgr::GetFontByPointSize 里 lfHeight = -MulDiv(pt, dpi, 72))。于是 125%
+// 缩放下 10pt 汉字宽约 17 像素、四个字的"个性签名"要 68 像素,塞不进 60 就被
+// DrawText 从中间硬裁掉半个字(实测见 Tests/BalloonProfileLayoutTests.cpp 的 PW0)。
+// 改为按实际字体现场测量,见 ComputeFieldLabelColumnWidth。
+const int kFieldLabelPadding  = 8;    // 标签文字与右侧内容之间的最小留白(像素)
+const int kFieldLabelWidthMin = 60;   // 列宽下限 = 原设计值,100% 缩放下的观感基准
+// 列宽上限 88:客户区 420 减去外层 vbox 左右 padding 各 20,可用 380;一行里固定
+// 占位的是右侧 View 标签 260,加上 hbox 两条 gap 16(label / spacer / view 共三个
+// 子控件、两条间隙)共 32,380 - 260 - 32 = 88。再宽就要挤压右侧值列,故夹到这里。
+const int kFieldLabelWidthMax = 88;
+
+struct RowDef
+{
+    const char* labelText;   // 行左侧固定标签文字(UTF-8)
+    UINT viewId;             // View 态 DuiLabel ctrlId
+    UINT editId;             // Edit 态控件 ctrlId；取 0 表示本行只读、不生成编辑控件
+    bool editIsCombo;        // true = DuiComboBox(性别)
+};
+// 字段行总表。BuildXml 按它生成控件树、ComputeFieldLabelColumnWidth 按它测量左列
+// 宽度,两处共用同一张表 —— 将来加字段时不会出现"加了行却没算进列宽"的脱节。
+// 末尾两行(部门 / 职位)的 editId 为 0：它们来自企业组织架构、由管理员在
+// admin 控制台维护，本人改不了，故只有查看态，切到编辑态时原样保持只读。
+const RowDef kFieldRows[] = {
+    { u8"昵称",     kIdNicknameView,  kIdNicknameEdit,  false },
+    { u8"个性签名", kIdSignatureView, kIdSignatureEdit, false },
+    { u8"性别",     kIdGenderView,    kIdGenderEdit,    true  },
+    { u8"生日",     kIdBirthdayView,  kIdBirthdayEdit,  false },
+    { u8"所在地",   kIdLocationView,  kIdLocationEdit,  false },
+    { u8"邮箱",     kIdEmailView,     kIdEmailEdit,     false },
+    { u8"部门",     kIdDeptView,      0,                false },
+    { u8"职位",     kIdPositionView,  0,                false },
+};
+const size_t kFieldRowCount = sizeof(kFieldRows) / sizeof(kFieldRows[0]);
+
 // 控件树整体 XML。所有 ctrlId 与 ProfileCtrlId enum 一一对应;数值嵌入
 // 时用 std::to_string,避免魔数。
-std::string BuildXml()
+//   fieldLabelWidth  行左侧标签列的宽度(像素),由 ComputeFieldLabelColumnWidth 算出。
+std::string BuildXml(int fieldLabelWidth)
 {
     std::string xml;
     // 整体 vbox padding:横向保持 20(对齐 width=420 设计),纵向由 18 收到 14 更紧凑
@@ -123,34 +160,16 @@ std::string BuildXml()
     // 设计稿 rows 容器 padding 10 0:外加上下空白 → 用 spacer 模拟,收到 8px
     xml += "  <control fixedHeight=\"8\"/>\n";
 
-    struct RowDef
+    for (size_t i = 0; i < kFieldRowCount; ++i)
     {
-        const char* labelText;   // 行左侧固定标签文字(UTF-8)
-        UINT viewId;             // View 态 DuiLabel ctrlId
-        UINT editId;             // Edit 态控件 ctrlId；取 0 表示本行只读、不生成编辑控件
-        bool editIsCombo;        // true = DuiComboBox(性别)
-    };
-    // 末尾两行(部门 / 职位)的 editId 为 0：它们来自企业组织架构、由管理员在
-    // admin 控制台维护，本人改不了，故只有查看态，切到编辑态时原样保持只读。
-    const RowDef rows[] = {
-        { u8"昵称",     kIdNicknameView,  kIdNicknameEdit,  false },
-        { u8"个性签名", kIdSignatureView, kIdSignatureEdit, false },
-        { u8"性别",     kIdGenderView,    kIdGenderEdit,    true  },
-        { u8"生日",     kIdBirthdayView,  kIdBirthdayEdit,  false },
-        { u8"所在地",   kIdLocationView,  kIdLocationEdit,  false },
-        { u8"邮箱",     kIdEmailView,     kIdEmailEdit,     false },
-        { u8"部门",     kIdDeptView,      0,                false },
-        { u8"职位",     kIdPositionView,  0,                false },
-    };
-    const size_t rowCount = sizeof(rows) / sizeof(rows[0]);
-    for (size_t i = 0; i < rowCount; ++i)
-    {
-        const RowDef& r = rows[i];
+        const RowDef& r = kFieldRows[i];
         xml += "  <hbox fixedHeight=\"";
         xml += std::to_string(kFieldRowHeight);
         xml += "\" gap=\"16\">\n";
-        // 行左标签 fixedWidth 60 紧凑
-        xml += "    <label fixedWidth=\"60\" text=\"";
+        // 行左标签列宽:按实际字体量出(见 ComputeFieldLabelColumnWidth),不写死。
+        xml += "    <label fixedWidth=\"";
+        xml += std::to_string(fieldLabelWidth);
+        xml += "\" text=\"";
         xml += r.labelText;
         xml += "\"/>\n";
         // 中间 spacer 拉撑,View / Edit 共同靠右
@@ -186,7 +205,7 @@ std::string BuildXml()
         xml += "  </hbox>\n";
 
         // 每行 borderBottom 1px(除最后一行)
-        if (i + 1 < rowCount)
+        if (i + 1 < kFieldRowCount)
         {
             xml += "  <separator fixedHeight=\"1\"/>\n";
         }
@@ -364,6 +383,10 @@ void WalkUnnamedLabelsSetDefaultFont(balloonwjui::DuiControl* node, HFONT defaul
     if (lbl != NULL && lbl->GetCtrlId() == 0)
     {
         lbl->SetFont(defaultFont);
+        // 兜底加省略号:列宽已按字体量过、正常放得下,但万一将来字段名更长、或者
+        // 列宽被上限夹住,溢出时退化成"个性签…"而不是被 DrawText 从中间硬裁半个字。
+        // DuiLabel 默认绘制标志不含 DT_END_ELLIPSIS(见 DuiLabel.h),故需显式设。
+        lbl->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
     }
     const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& children =
         node->Children();
@@ -666,9 +689,77 @@ bool SetProfileEditMode(balloonwjui::DuiControl* root, bool edit)
     return true;
 }
 
+int ComputeFieldLabelColumnWidth(HFONT hFont)
+{
+    // 拿不到字体就退回下限:宁可维持原来的观感,也不要返回 0 让整列塌掉。
+    if (hFont == NULL)
+    {
+        return kFieldLabelWidthMin;
+    }
+
+    HDC hdc = ::GetDC(NULL);
+    if (hdc == NULL)
+    {
+        return kFieldLabelWidthMin;
+    }
+    HGDIOBJ oldFont = ::SelectObject(hdc, hFont);
+
+    // 量全表最宽的那个字段名 —— 所有行共用一个列宽,取最大值才不会有哪一行被裁。
+    int widest = 0;
+    for (size_t i = 0; i < kFieldRowCount; ++i)
+    {
+        // 表里的标签是 UTF-8 字面量,测量要用宽字符版本。
+        const int wideLen = ::MultiByteToWideChar(CP_UTF8, 0, kFieldRows[i].labelText,
+                                                  -1, NULL, 0);
+        if (wideLen <= 1)
+        {
+            continue;   // 空串:MultiByteToWideChar 的返回值含结尾的 L'\0'
+        }
+        std::wstring wide;
+        wide.resize((size_t)wideLen);
+        const int written = ::MultiByteToWideChar(CP_UTF8, 0, kFieldRows[i].labelText,
+                                                  -1, &wide[0], wideLen);
+        if (written <= 1)
+        {
+            continue;
+        }
+        wide.resize((size_t)(written - 1));   // 去掉结尾的 L'\0'
+
+        SIZE sz = { 0, 0 };
+        if (::GetTextExtentPoint32W(hdc, wide.c_str(), (int)wide.size(), &sz))
+        {
+            if (sz.cx > widest)
+            {
+                widest = sz.cx;
+            }
+        }
+    }
+
+    ::SelectObject(hdc, oldFont);
+    ::ReleaseDC(NULL, hdc);
+
+    int width = widest + kFieldLabelPadding;
+    if (width < kFieldLabelWidthMin)
+    {
+        width = kFieldLabelWidthMin;
+    }
+    if (width > kFieldLabelWidthMax)
+    {
+        width = kFieldLabelWidthMax;
+    }
+    return width;
+}
+
 std::unique_ptr<balloonwjui::DuiControl> BuildProfileBody()
 {
-    const std::string xml = BuildXml();
+    // 左列宽度按<u>真正会被设上去的那个字体</u>现场测量 —— 下面
+    // WalkUnnamedLabelsSetDefaultFont 设的就是同一个 viewFont,两处必须同源,
+    // 否则量的是一套字体、画的是另一套,又会裁字。
+    balloonwjui::DuiResMgr& res = balloonwjui::DuiResMgr::Inst();
+    HFONT viewFont = res.GetFontByPointSize(kFontTitle, false);
+    const int fieldLabelWidth = ComputeFieldLabelColumnWidth(viewFont);
+
+    const std::string xml = BuildXml(fieldLabelWidth);
     std::unique_ptr<balloonwjui::DuiControl> root =
         balloonwjui::DuiXmlBuilder::FromString(xml.c_str(),
                                                &CreateProfileCustomControl);
@@ -697,8 +788,7 @@ std::unique_ptr<balloonwjui::DuiControl> BuildProfileBody()
         avatar->SetCornerRadius(kAvatarRadius);
     }
 
-    // ---- 字号设置 ----
-    balloonwjui::DuiResMgr& res = balloonwjui::DuiResMgr::Inst();
+    // ---- 字号设置 ----（res / viewFont 已在本函数开头取到,用于测量左列宽度）
 
     // 顶部昵称 13pt 600
     balloonwjui::DuiLabel* nickname =
@@ -725,7 +815,6 @@ std::unique_ptr<balloonwjui::DuiControl> BuildProfileBody()
     }
 
     // 各行 View 系列:10pt + 右对齐,字色 muted(设计稿 fontSize:13)
-    HFONT viewFont = res.GetFontByPointSize(kFontTitle, false);
     const UINT viewIds[] = {
         kIdNicknameView, kIdSignatureView, kIdGenderView,
         kIdBirthdayView, kIdLocationView,  kIdEmailView,

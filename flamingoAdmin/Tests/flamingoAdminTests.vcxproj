@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- flamingoAdminTests:console 单元测试程序。覆盖范围:
+       1) Mock 数据层 (Mock/ 与 Util/ 下的纯数据 / 工具类);
+       2) UI 控件的非绘制路径 (通过静态链接 balloonui_static.lib,
+          在无 host 的裸构造下,断言 SetContent / Children() / 卡片样式
+          setter 等"参数 → 状态"的转写正确性;**绝不调用 OnPaint,故
+          gdiplus 不必初始化、HDC 不必拿到**)。
+       静态链接 balloonui_static.lib,与 flamingoAdmin 主程序对齐
+       (/MTd /MT 静态 CRT,BUI_API 展开为空) —— 测试侧 CRT 必须与
+       balloonui_static 一致,否则链接冲突。 -->
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{EC99AC2C-4BF0-4BB8-8B6B-8EE93C9F2034}</ProjectGuid>
+    <RootNamespace>flamingoAdminTests</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings"></ImportGroup>
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <!-- 测试 exe 与主程序同放 Bin\，中间产物放 Tests\ 下各配置目录 -->
+  <PropertyGroup Condition="'$(Platform)'=='x64'">
+    <OutDir>..\Bin\x64\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)'=='Win32'">
+    <OutDir>..\Bin\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <IntDir>Debug_x64\</IntDir>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <IntDir>Release_x64\</IntDir>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <IntDir>Debug\</IntDir>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <IntDir>Release\</IntDir>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <!--
+    公共编译 / 链接设置。include 目录:
+      ..                                       flamingoAdmin 工程根(解析 stdafx.h / Mock/ / Util/ / Tests/ / Widgets/ / Theme/)
+      ..\third-party\jsoncpp                   jsoncpp(被 DebugConsole 用到)
+      ..\..\flamingoclient\balloonui\balloonui balloonui 头(DuiVBox / DuiLabel / DuiControl 等;由 CommonWidgets 与测试代码经 #include 间接需要)
+      ..\..\flamingoclient\balloonui\wtl9.0    WTL 头(stdafx.h 经 atlapp.h 间接需要)
+    链接库:
+      balloonui_static.lib                     静态库形式的 balloonui 全集
+      gdiplus.lib / comctl32.lib / winhttp.lib balloonui 静态链接时系统侧需要的库(与主程序对齐)
+  -->
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>..;..\third-party\jsoncpp;..\..\flamingoclient\balloonui\balloonui;..\..\flamingoclient\balloonui\wtl9.0;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_CRT_NON_CONFORMING_SWPRINTFS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <WarningLevel>Level3</WarningLevel>
+      <PrecompiledHeader />
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <AdditionalOptions>/utf-8 /FS %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <AdditionalLibraryDirectories>..\..\flamingoclient\balloonui\Bin\Static\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>balloonui_static.lib;gdiplus.lib;comctl32.lib;winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Debug'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+    </ClCompile>
+    <Link>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <!-- 测试工程自身的源文件 -->
+    <ClCompile Include="TestMain.cpp" />
+    <ClCompile Include="TestFramework.cpp" />
+    <ClCompile Include="DataStoreTests.cpp" />
+    <ClCompile Include="DebugConsoleTests.cpp" />
+    <ClCompile Include="ScrollbarMetricsTests.cpp" />
+    <ClCompile Include="ListPagingTests.cpp" />
+    <ClCompile Include="OrgTreeFilterTests.cpp" />
+    <ClCompile Include="OrgTreeBuilderTests.cpp" />
+    <ClCompile Include="PinyinTests.cpp" />
+    <ClCompile Include="CommonWidgetsTests.cpp" />
+    <ClCompile Include="AnnouncementPreviewPanelTests.cpp" />
+    <ClCompile Include="RichEditScrollTests.cpp" />
+    <!-- 被测的数据层源文件(直接编入测试 exe,不依赖主程序产物) -->
+    <ClCompile Include="..\Mock\MockData.cpp" />
+    <ClCompile Include="..\Mock\DataStore.cpp" />
+    <ClCompile Include="..\Util\Logger.cpp" />
+    <ClCompile Include="..\Util\DebugConsole.cpp" />
+    <!-- DebugConsole 依赖的 jsoncpp:请求/响应体的敏感字段掩码与美化缩进 -->
+    <ClCompile Include="..\third-party\jsoncpp\json_reader.cpp" />
+    <ClCompile Include="..\third-party\jsoncpp\json_value.cpp" />
+    <ClCompile Include="..\third-party\jsoncpp\json_writer.cpp" />
+    <!-- 被测:自绘悬浮滚动条几何计算(纯函数,不依赖 balloonui) -->
+    <ClCompile Include="..\Util\ScrollbarMetrics.cpp" />
+    <ClCompile Include="..\Util\ListPaging.cpp" />
+    <ClCompile Include="..\Util\OrgTreeBuilder.cpp" />
+    <ClCompile Include="..\Util\Pinyin.cpp" />
+    <!-- 被测:UI 控件层(链接 balloonui_static 后才能编;测试不调 OnPaint,
+         故运行时不需要 gdiplus 初始化与真实 HDC) -->
+    <ClCompile Include="..\Widgets\CommonWidgets.cpp" />
+    <ClCompile Include="..\Widgets\UiHelpers.cpp" />
+    <ClCompile Include="..\Widgets\IconRenderer.cpp" />
+    <ClCompile Include="..\Widgets\OverlayScrollbar.cpp" />
+    <ClCompile Include="..\Widgets\OrgTree.cpp" />
+    <ClCompile Include="..\Screens\AnnouncementPreviewPanel.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="TestFramework.h" />
+    <ClInclude Include="..\Util\ScrollbarMetrics.h" />
+    <ClInclude Include="..\Util\ListPaging.h" />
+    <ClInclude Include="..\Util\Pinyin.h" />
+    <ClInclude Include="..\Widgets\OverlayScrollbar.h" />
+    <ClInclude Include="..\Widgets\OrgTree.h" />
+    <ClInclude Include="..\Widgets\CommonWidgets.h" />
+    <ClInclude Include="..\Widgets\UiHelpers.h" />
+    <ClInclude Include="..\Widgets\IconRenderer.h" />
+    <ClInclude Include="..\Screens\AnnouncementPreviewPanel.h" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets"></ImportGroup>
+</Project>

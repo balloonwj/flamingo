@@ -1,10 +1,13 @@
 ﻿/**
- *  v2 好友关系相关报文（cmd_search / add_friend_request / friend_request_notify /
- *  handle_friend_request / friend_request_result_notify /
- *  friend_relation_changed_notify / get_notifications）的编解码。
+ *  v2 联系人相关报文（cmd_search / cmd_set_friend_remark / cmd_set_blacklist）的编解码。
  *
  *  本模块是纯逻辑——只依赖 jsoncpp，不触及网络与数据库，便于单元测试
- *  （见 tests/test_friendprotocol.cpp）。查找、申请落库、关系建立等均在会话层。
+ *  （见 tests/test_friendprotocol.cpp）。查找、备注落库、拉黑落库等均在会话层。
+ *
+ *  文件名里的 "Friend" 是历史遗留：企业版已于 2026-08-05 删除好友关系子系统
+ *  （加好友 / 删好友 / 好友标签 / 消息盒子 1203~1208、1210、1214 全部移除），
+ *  留下的三个协议本质上是"联系人"而非"好友"操作，只是文件名与协议名沿用旧称，
+ *  以免动到已发布的协议号与客户端。
  *
  *  balloonwj@qq.com   2026-05-21
  */
@@ -26,58 +29,12 @@ struct SearchResultItem
     std::string signature;    //个性签名（用户）
     std::string address;      //所在地（用户）
     int         usertype;     //用户类型（用户）：0 普通 1 服务号
-    bool        isfriend;     //是否已是当前用户的好友（用户）
     int         membercount;  //成员数（群）
     int64_t     ownerid;      //群主ID（群）
 
     SearchResultItem()
         : id(0), facetype(0), gender(0), usertype(0)
-        , isfriend(false), membercount(0), ownerid(0)
-    {
-    }
-};
-
-//cmd_add_friend_request 请求
-struct AddFriendRequestData
-{
-    int64_t     userid;     //被申请加为好友的目标用户ID
-    std::string source;     //申请来源：search/group/card 等
-    std::string verifymsg;  //验证留言
-};
-
-//cmd_handle_friend_request 请求
-struct HandleFriendRequestData
-{
-    int64_t requestid;  //被处理的申请ID
-    int     action;     //处理动作：0 拒绝 1 同意
-};
-
-//一条加好友申请：供 cmd_friend_request_notify 与 cmd_get_notifications 共用
-struct FriendRequestItem
-{
-    int64_t     requestid;       //申请ID
-    int64_t     fromuserid;      //申请发起方ID
-    std::string fromusername;    //发起方账号
-    std::string fromnickname;    //发起方昵称
-    int         fromfacetype;    //发起方头像类型
-    std::string fromcustomface;  //发起方自定义头像
-    std::string verifymsg;       //验证留言
-    int         status;          //状态：0 待处理 1 已同意 2 已拒绝
-    int64_t     timestamp;       //申请时间，Unix 毫秒
-
-    FriendRequestItem()
-        : requestid(0), fromuserid(0), fromfacetype(0), status(0), timestamp(0)
-    {
-    }
-};
-
-//cmd_delete_friend 请求
-struct DeleteFriendRequestData
-{
-    int64_t userid;  //被删除的好友用户ID
-
-    DeleteFriendRequestData()
-        : userid(0)
+        , membercount(0), ownerid(0)
     {
     }
 };
@@ -85,7 +42,7 @@ struct DeleteFriendRequestData
 //cmd_set_friend_remark 请求
 struct SetFriendRemarkRequestData
 {
-    int64_t     userid;  //目标好友用户ID
+    int64_t     userid;  //目标联系人用户ID
     std::string remark;  //备注名；空串表示清除备注
 
     SetFriendRemarkRequestData()
@@ -106,19 +63,7 @@ struct SetBlacklistRequestData
     }
 };
 
-//cmd_set_friend_tags 请求
-struct SetFriendTagsRequest
-{
-    int64_t     userid;    //目标好友用户ID
-    std::string tagsJson;  //标签列表已序列化为紧凑JSON数组文本（如 ["同事","项目组"]）
-
-    SetFriendTagsRequest()
-        : userid(0)
-    {
-    }
-};
-
-//好友关系报文编解码工具类；全部为静态方法，不可实例化
+//联系人报文编解码工具类；全部为静态方法，不可实例化
 class FriendProtocol
 {
 public:
@@ -132,55 +77,11 @@ public:
     static bool parseSearchRequest(const std::string& json, std::string& keyword, int& type);
 
     /**
-     *  解析 cmd_add_friend_request 请求；userid 缺失或非正返回 false。
-     */
-    static bool parseAddFriendRequest(const std::string& json, AddFriendRequestData& req);
-
-    /**
-     *  解析 cmd_handle_friend_request 请求；requestid 缺失或非正返回 false。
-     */
-    static bool parseHandleFriendRequest(const std::string& json, HandleFriendRequestData& req);
-
-    /**
      *  构造 cmd_search 应答 JSON：{ code, msg, type, results:[...] }。
      *  results 各元素按 type 取字段：type=1 为用户卡片，type=2 为群卡片。
      */
     static std::string buildSearchResponse(int code, const std::string& msg,
                                            int type, const std::vector<SearchResultItem>& items);
-
-    /**
-     *  构造 cmd_add_friend_request 应答 JSON：{ code, msg, requestid }。
-     */
-    static std::string buildAddFriendResponse(int code, const std::string& msg, int64_t requestid);
-
-    /**
-     *  构造 cmd_friend_request_notify 推送 JSON（推给被申请方）。
-     */
-    static std::string buildFriendRequestNotify(const FriendRequestItem& item);
-
-    /**
-     *  构造 cmd_friend_request_result_notify 推送 JSON（推给原申请方）。
-     *  @param action 申请方申请的处理结果：0 被拒绝 1 被同意
-     */
-    static std::string buildFriendRequestResultNotify(int64_t requestid, int64_t fromuserid, int action);
-
-    /**
-     *  构造 cmd_friend_relation_changed_notify 推送 JSON。
-     *  @param userid     发生关系变更的对端用户ID
-     *  @param changetype 变更类型：1 成为好友 2 好友被删除
-     */
-    static std::string buildFriendRelationChangedNotify(int64_t userid, int changetype);
-
-    /**
-     *  构造 cmd_get_notifications 应答 JSON：{ code, msg, notifications:[...] }。
-     */
-    static std::string buildGetNotificationsResponse(int code, const std::string& msg,
-                                                     const std::vector<FriendRequestItem>& items);
-
-    /**
-     *  解析 cmd_delete_friend 请求；userid 缺失或非正返回 false。
-     */
-    static bool parseDeleteFriendRequest(const std::string& json, DeleteFriendRequestData& req);
 
     /**
      *  解析 cmd_set_friend_remark 请求；userid 缺失或非正返回 false。
@@ -192,14 +93,6 @@ public:
      *  解析 cmd_set_blacklist 请求；userid 缺失/非正或 action 缺失返回 false。
      */
     static bool parseSetBlacklistRequest(const std::string& json, SetBlacklistRequestData& req);
-
-    /**
-     *  解析 cmd_set_friend_tags 请求（请求体为 { "userid":"...", "tags":[...] }）。
-     *  tags 缺省或为空数组表示清除全部标签；非字符串元素被忽略。
-     *  解析后 req.tagsJson 为标签数组的紧凑JSON文本。
-     *  @return userid 缺失或非正返回 false
-     */
-    static bool parseSetFriendTagsRequest(const std::string& json, SetFriendTagsRequest& req);
 
     /**
      *  构造通用 { code, msg } 应答。
@@ -216,7 +109,7 @@ public:
      *
      *    code：   结果码，0 成功；其余见 Protocol.h 的 enum error_code。
      *    msg：    结果描述。
-     *    userid： 本次设置备注的目标好友ID，原样回带；以字符串编码，避免大整数
+     *    userid： 本次设置备注的目标联系人ID，原样回带；以字符串编码，避免大整数
      *             在 JSON 里丢精度（与本协议其余 64 位 ID 同一口径）。
      */
     static std::string buildSetFriendRemarkResponse(int code, const std::string& msg,

@@ -13,27 +13,32 @@ enum
     PACKAGE_COMPRESSED
 };
 
+//企业版说明：v1 好友体系（好友列表 / 查找用户 / 加删好友 / 好友分组 / 好友备注名）已整体
+//下线——通讯录改由服务端组织架构下发（走 v2 协议，见 net/Protocol.h）。下列协议号已废弃并
+//<u>永久保留不再复用</u>，避免与仍在线上跑的旧版客户端 / 服务端串号：
+//  1003 msg_type_getofriendlist        获取好友列表
+//  1004 msg_type_finduser              查找用户
+//  1005 msg_type_operatefriend         加好友 / 删好友 / 加群 / 退群
+//  1104 msg_type_updateteaminfo        更新好友分组
+//  1105 msg_type_modifyfriendmarkname  更新好友备注名
+//  1106 msg_type_movefriendtootherteam 移动好友至其他分组
+//因此本枚举里剩下的取值一律<u>写死数字</u>：原先靠声明顺序推导，删掉中间几项会把后面所有
+//协议号整体前移，等于悄悄改了线上协议。
 enum msg_type
 {
-    msg_type_unknown,
-    msg_type_heartbeat = 1000,     //心跳包
-    msg_type_register,             //注册
-    msg_type_login,                //登陆
-    msg_type_getofriendlist,       //获取好友列表
-    msg_type_finduser,             //查找用户
-    msg_type_operatefriend,        //添加、删除等好友操作
-    msg_type_userstatuschange,     //用户信息改变通知
-    msg_type_updateuserinfo,       //更新用户信息
-    msg_type_modifypassword,       //修改登陆密码
-    msg_type_creategroup,          //创建群组
-    msg_type_getgroupmembers,      //获取群组成员列表
-    msg_type_chat   = 1100,        //单聊消息
-    msg_type_multichat,            //群发消息
-    msg_type_kickuser,             //被踢下线
-    msg_type_remotedesktop,        //远程桌面
-    msg_type_updateteaminfo,       //更新用户好友分组信息
-    msg_type_modifyfriendmarkname, //更新好友备注信息
-    msg_type_movefriendtootherteam, //移动好友至
+    msg_type_unknown            = 0,    //未知协议，仅作缺省值
+    msg_type_heartbeat          = 1000, //心跳包
+    msg_type_register           = 1001, //注册
+    msg_type_login              = 1002, //登陆
+    msg_type_userstatuschange   = 1006, //用户信息改变通知
+    msg_type_updateuserinfo     = 1007, //更新用户信息
+    msg_type_modifypassword     = 1008, //修改登陆密码
+    msg_type_creategroup        = 1009, //创建群组
+    msg_type_getgroupmembers    = 1010, //获取群组成员列表
+    msg_type_chat               = 1100, //单聊消息
+    msg_type_multichat          = 1101, //群发消息
+    msg_type_kickuser           = 1102, //被踢下线
+    msg_type_remotedesktop      = 1103, //远程桌面
 
 #ifdef FXN_VERSION
     //定制协议
@@ -65,41 +70,7 @@ struct msg
 
 #pragma pack(pop)
 
-//type为1发出加好友申请 2 收到加好友请求(仅客户端使用) 3应答加好友 4删除好友请求 5应答删除好友
-//当type=3时，accept是必须字段，0对方拒绝，1对方接受
-enum friend_operation_type
-{
-    //发送加好友申请
-    friend_operation_send_add_apply      = 1,
-    //接收到加好友申请(仅客户端使用)
-    friend_operation_recv_add_apply,
-    //应答加好友申请
-    friend_operation_reply_add_apply,
-    //删除好友申请
-    friend_operation_send_delete_apply,
-    //应答删好友申请
-    friend_operation_recv_delete_apply
-};
-
-enum friend_operation_apply_type
-{
-    //拒绝加好友
-    friend_operation_apply_refuse,
-    //接受加好友
-    friend_operation_apply_accept
-};
-
-enum updateteaminfo_operation_type
-{
-    //新增分组
-    updateteaminfo_operation_add,
-    //删除分组
-    updateteaminfo_operation_delete,
-    //修改分组
-    updateteaminfo_operation_modify
-};
-
-/** 
+/**
  *  错误码
  *  0   成功
  *  1   未知失败
@@ -157,118 +128,6 @@ enum error_code
     cmd = 1002, seq = 0, {"code": 0, "msg": "ok", "userid": 8, "username": "13917043320", "nickname": "zhangyl",
                           "facetype": 0, "customface":"文件md5", "gender":0, "birthday":19891208, "signature":"哈哈，终于成功了",
                           "address":"上海市东方路3261号", "phonenumber":"021-389456", "mail":"balloonwj@qq.com"}
- **/
-
-/** 
- * 获取用户列表
- **/
-/*
-    cmd = 1003, seq = 0
-    cmd = 1003, seq = 0,  
-    {
-    "code": 0,
-    "msg": "ok",
-    "userinfo": [
-        {            
-            "teamname": "我的好友",
-            "members": [
-                {
-                    "userid": 2,
-                    "username": "qqq",
-                    "nickname": "qqq123",
-                    "facetype": 0,
-                    "customface": "466649b507cdf7443c4e88ba44611f0c",
-                    "gender": 1,
-                    "birthday": 19900101,
-                    "signature": "生活需要很多的力气呀。xx",
-                    "address": "",
-                    "phonenumber": "",
-                    "mail": "",
-                    "clienttype": 1,
-                    "status": 1,
-                    "markname": "qq测试号"
-                },
-                {
-                    "userid": 3,
-                    "username": "hujing",
-                    "nickname": "hujingx",
-                    "facetype": 0,
-                    "customface": "",
-                    "gender": 0,
-                    "birthday": 19900101,
-                    "signature": "",
-                    "address": "",
-                    "phonenumber": "",
-                    "mail": "",
-                    "clienttype": 1,
-                    "status": 0
-                }
-            ]
-        },
-        {
-            "teamname": "我的同学",
-            "members": [
-                {
-                    "userid": 4,
-                    "username": "qqq",
-                    "nickname": "qqq123",
-                    "facetype": 0,
-                    "customface": "466649b507cdf7443c4e88ba44611f0c",
-                    "gender": 1,
-                    "birthday": 19900101,
-                    "signature": "生活需要很多的力气呀。xx",
-                    "address": "",
-                    "phonenumber": "",
-                    "mail": "",
-                    "clienttype": 1,
-                    "status": 1
-                },
-                {
-                    "userid": 5,
-                    "username": "hujing",
-                    "nickname": "hujingx",
-                    "facetype": 0,
-                    "customface": "",
-                    "gender": 0,
-                    "birthday": 19900101,
-                    "signature": "",
-                    "address": "",
-                    "phonenumber": "",
-                    "mail": "",
-                    "clienttype": 1,
-                    "status": 0,
-                    "markname": "qq测试号"
-                }
-            ]
-        }
-    ]
-}
-    
-**/
-
-/** 
- * 查找用户
- **/
-/*
-    //type查找类型 0所有， 1查找用户 2查找群
-    cmd = 1004, seq = 0, {"type": 1, "username": "zhangyl"}
-    cmd = 1004, seq = 0, { "code": 0, "msg": "ok", "userinfo": [{"userid": 2, "username": "qqq", "nickname": "qqq123", "facetype":0}] } 
-**/
-
-/** 
- *  操作好友，包括加好友、删除好友
- **/
-/* 
-    //type为1发出加好友申请 2 收到加好友请求(仅客户端使用) 3应答加好友 4删除好友请求 5应答删除好友
-    //当type=3时，accept是必须字段，0对方拒绝，1对方接受
-    cmd = 1005, seq = 0, {"userid": 9, "type": 1}
-    cmd = 1005, seq = 0, {"userid": 9, "type": 2, "username": "xxx"}
-    cmd = 1005, seq = 0, {"userid": 9, "type": 3, "username": "xxx", "accept": 1}
-
-    //发送
-    cmd = 1005, seq = 0, {"userid": 9, "type": 4}
-    //应答
-    cmd = 1005, seq = 0, {"userid": 9, "type": 5, "username": "xxx"}
  **/
 
 /**
@@ -348,30 +207,6 @@ cmd = 1010, seq = 0, {"code":0, "msg": "ok", "groupid": 12345678,
 /*
     cmd = 1103, seq = 0, string: 位图头部信息， 位图信息，targetId
 **/
-
-/**
- * 更新用户好友分组信息
- **/
-/*
-    客户端请求： cmd = 1104, seq = 0, data(必填，空字符串), int(操作类型：0增 1删 2改), string(新的分组名称), string(旧的分组名)
-    服务器应答： cmd = 1003, seq = 0,  
-**/
-
-/** 
- *  更新好友备注信息
- */
-/*
-    客户端请求： cmd = 1105, seq = 0, data: 组装后的json, friendid, newmarkname
-    服务器应答： cmd = 1003, seq = 0, data: {"code": 0, "msg": ok}
-*/
-
-/**
-*   移动好友至其他分组
-*/
-/*
-    客户端请求： cmd = 1105, seq = 0, data(必填，空字符串), friendid(int32, 操作的好友id), newteamname(string, 新分组名), oldteamname(string, 旧分组名)
-    服务器应答： cmd = 1003, seq = 0, data: {"code": 0, "msg": ok}
-*/
 
 
 

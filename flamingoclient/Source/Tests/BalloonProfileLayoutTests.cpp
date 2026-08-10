@@ -523,3 +523,164 @@ TEST_CASE("B5 与 FormatBirthday 往返一致", "[p2][profile][birthday]")
     CHECK(ParseProfileBirthday(_T("1988-08-08")) == 19880808);
     CHECK(ParseProfileBirthday(_T("2010-10-10")) == 20101010);
 }
+
+// =====================================================================
+// PW —— 行左侧字段名列宽（对应"个性签名"标签被裁掉半个字的缺陷）
+// =====================================================================
+
+namespace {
+
+// 产品侧列宽的上下限,与 BalloonProfileLayout.cpp 的 kFieldLabelWidthMin /
+// kFieldLabelWidthMax 同值。测试自带一份而不去引产品的匿名命名空间常量 —— 这样
+// 产品那两个值一旦被改动,本文件的断言会立刻炸出来,而不是跟着一起变形失去意义。
+const int kColumnWidthMin = 60;
+const int kColumnWidthMax = 88;
+
+// 全部八个字段名,顺序与产品的 kFieldRows 一致。同样自带一份:将来产品加了字段
+// 却忘了它更长,PW4 会失败提醒。
+const wchar_t* const kFieldLabels[] = {
+    L"昵称", L"个性签名", L"性别", L"生日",
+    L"所在地", L"邮箱", L"部门", L"职位"
+};
+const size_t kFieldLabelCount = sizeof(kFieldLabels) / sizeof(kFieldLabels[0]);
+
+// 按给定 DPI 造一个与产品同款的 10pt 字体。产品侧走 DuiResMgr::GetFontByPointSize,
+// 其 lfHeight = -MulDiv(pt, dpi, 72),这里照抄同一公式,好把 DPI 作为自变量注入。
+//   dpi  目标 DPI(96=100%,120=125%,144=150%)。
+//   pt   字号(磅)。
+// 调用方负责 ::DeleteObject。
+HFONT MakeLabelFont(int dpi, int pt)
+{
+    return ::CreateFontW(-::MulDiv(pt, dpi, 72), 0, 0, 0,
+                         FW_NORMAL, FALSE, FALSE, FALSE,
+                         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                         CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                         DEFAULT_PITCH | FF_DONTCARE, L"微软雅黑");
+}
+
+// 用给定字体量一段文字的像素宽度。
+//   hFont  字体句柄,不可为 NULL；text 待测文字；len 字符数。
+int MeasureTextPixels(HFONT hFont, const wchar_t* text, int len)
+{
+    HDC hdc = ::GetDC(NULL);
+    if (hdc == NULL)
+    {
+        return 0;
+    }
+    HGDIOBJ oldFont = ::SelectObject(hdc, hFont);
+    SIZE sz = { 0, 0 };
+    ::GetTextExtentPoint32W(hdc, text, len, &sz);
+    ::SelectObject(hdc, oldFont);
+    ::ReleaseDC(NULL, hdc);
+    return (int)sz.cx;
+}
+
+} // anonymous namespace
+
+// PW1~PW3 —— 三档常见缩放下,列宽都要放得下最长的字段名"个性签名"。
+//
+// 修复前这一列写死 60 像素:实测 120 DPI 下"个性签名"要 68 像素,于是最后一个字被
+// DrawText 从中间硬裁(截图 snapshots/171401.png 就是这个现象)。这三条把"列宽必须
+// 跟着字体走"钉死。
+TEST_CASE("PW1 96 DPI(100%)下列宽放得下最长字段名", "[p2][profile][labelwidth]")
+{
+    HFONT hFont = MakeLabelFont(96, 10);
+    REQUIRE(hFont != NULL);
+
+    const int needed = MeasureTextPixels(hFont, L"个性签名", 4);
+    const int width  = ComputeFieldLabelColumnWidth(hFont);
+    ::DeleteObject(hFont);
+
+    CHECK(width >= needed);
+    CHECK(width >= kColumnWidthMin);
+    CHECK(width <= kColumnWidthMax);
+}
+
+TEST_CASE("PW2 120 DPI(125%)下列宽放得下最长字段名", "[p2][profile][labelwidth]")
+{
+    // 这就是缺陷复现的那一档:needed 实测 68 > 写死的 60。
+    HFONT hFont = MakeLabelFont(120, 10);
+    REQUIRE(hFont != NULL);
+
+    const int needed = MeasureTextPixels(hFont, L"个性签名", 4);
+    const int width  = ComputeFieldLabelColumnWidth(hFont);
+    ::DeleteObject(hFont);
+
+    CHECK(needed > kColumnWidthMin);   // 钉死"旧的 60 确实不够"这个前提
+    CHECK(width >= needed);
+    CHECK(width <= kColumnWidthMax);
+}
+
+TEST_CASE("PW3 144 DPI(150%)下列宽放得下最长字段名", "[p2][profile][labelwidth]")
+{
+    // 150% 是列宽上限 88 仍能容下四个汉字的最高一档;再高就会被上限夹住,
+    // 转由标签的 DT_END_ELLIPSIS 退化成省略号(见 PW5)。
+    HFONT hFont = MakeLabelFont(144, 10);
+    REQUIRE(hFont != NULL);
+
+    const int needed = MeasureTextPixels(hFont, L"个性签名", 4);
+    const int width  = ComputeFieldLabelColumnWidth(hFont);
+    ::DeleteObject(hFont);
+
+    CHECK(width >= needed);
+    CHECK(width <= kColumnWidthMax);
+}
+
+TEST_CASE("PW4 八个字段名逐个都不会被裁", "[p2][profile][labelwidth]")
+{
+    // 所有行共用一个列宽,故必须按最宽的那个字段名取值。逐个断言而不是只测
+    // "个性签名",是为了将来加了更长的字段名时这条会失败提醒。
+    HFONT hFont = MakeLabelFont(120, 10);
+    REQUIRE(hFont != NULL);
+
+    const int width = ComputeFieldLabelColumnWidth(hFont);
+    for (size_t i = 0; i < kFieldLabelCount; ++i)
+    {
+        const int needed = MeasureTextPixels(hFont, kFieldLabels[i],
+                                             (int)::wcslen(kFieldLabels[i]));
+        CHECK(width >= needed);
+    }
+    ::DeleteObject(hFont);
+}
+
+TEST_CASE("PW5 字体过大时列宽被上限夹住,不挤压右侧值列", "[p2][profile][labelwidth]")
+{
+    // 上限 88 的由来:客户区 420 - 左右 padding 各 20 = 380 可用,右侧值列固定 260、
+    // 两条 gap 共 32,380 - 260 - 32 = 88。给一个夸张字号,断言不会突破这个上限。
+    HFONT hFont = MakeLabelFont(144, 40);
+    REQUIRE(hFont != NULL);
+
+    const int width = ComputeFieldLabelColumnWidth(hFont);
+    ::DeleteObject(hFont);
+
+    CHECK(width == kColumnWidthMax);
+}
+
+TEST_CASE("PW6 DPI 越大列宽不减", "[p2][profile][labelwidth]")
+{
+    // 防止 MulDiv 的换算方向被写反 —— 写反了字会越放越小,测量值反而变窄,
+    // 单看某一档还可能"碰巧通过"。
+    HFONT f96  = MakeLabelFont(96, 10);
+    HFONT f120 = MakeLabelFont(120, 10);
+    HFONT f144 = MakeLabelFont(144, 10);
+    REQUIRE(f96 != NULL);
+    REQUIRE(f120 != NULL);
+    REQUIRE(f144 != NULL);
+
+    const int w96  = ComputeFieldLabelColumnWidth(f96);
+    const int w120 = ComputeFieldLabelColumnWidth(f120);
+    const int w144 = ComputeFieldLabelColumnWidth(f144);
+
+    ::DeleteObject(f96);
+    ::DeleteObject(f120);
+    ::DeleteObject(f144);
+
+    CHECK(w120 >= w96);
+    CHECK(w144 >= w120);
+}
+
+TEST_CASE("PW7 字体为空时返回下限而不是 0", "[p2][profile][labelwidth]")
+{
+    // 取不到字体时整列宽度若返回 0,标签会整条消失。必须退回原设计值兜底。
+    CHECK(ComputeFieldLabelColumnWidth(NULL) == kColumnWidthMin);
+}

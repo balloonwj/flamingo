@@ -86,30 +86,14 @@ void CMultiChatMemberSelectionDlg::InitBuddyList()
 	if(m_pFMGClient == NULL)
 		return;
 
-	const std::vector<CBuddyTeamInfo*>& arrBuddyTeamInfo = m_pFMGClient->m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo;
-	size_t nSize = arrBuddyTeamInfo.size();
-	CBuddyTeamInfo* pTeamInfo = NULL;
+	//企业版：v1 好友列表（好友分组 + 组内好友）已删除，通讯录改由服务端组织架构下发。
+	//本对话框是 v1 时期的群发选人窗，这里只保留"我的群组"这一层；选人改用 v2 的
+	//CCreateGroupDlg（它的候选来源是 BalloonMainPanel 缓存的 v2 通讯录）。
 	HTREEITEM hTreeItem = NULL;
 	HTREEITEM hTreeItemRoot = NULL;
 	CString strTemp;
-	int nItemIndex = -1;
-	for(size_t i=0; i<nSize; ++i)
-	{
-		pTeamInfo = arrBuddyTeamInfo[i];
-		if(pTeamInfo == NULL)
-			continue;
-		hTreeItemRoot = m_treeBuddyList.InsertItem(pTeamInfo->m_strName.c_str(), 0, 0, NULL, NULL);
-		m_treeBuddyList.SetItemData(hTreeItemRoot, (DWORD_PTR)(-1));
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			if(pTeamInfo->m_arrBuddyInfo[j]->m_strNickName.empty())
-				continue;
-			strTemp.Format(_T("%s(%s)"), pTeamInfo->m_arrBuddyInfo[j]->m_strNickName.c_str(), pTeamInfo->m_arrBuddyInfo[j]->m_strAccount.c_str());
-			hTreeItem = m_treeBuddyList.InsertItem(strTemp, 0, 0, hTreeItemRoot, NULL);
-			m_treeBuddyList.SetItemData(hTreeItem, (DWORD_PTR)pTeamInfo->m_arrBuddyInfo[j]->m_uUserID);
-		}
-	}
-	
+	size_t nSize = 0;
+
 	hTreeItemRoot = m_treeBuddyList.InsertItem(_T("我的群组"), 0, 0, NULL, hTreeItemRoot);
 	m_treeBuddyList.SetItemData(hTreeItemRoot, (DWORD_PTR)(-1)); 
 	const std::vector<CGroupInfo*>& arrGroupInfo = m_pFMGClient->m_UserMgr.m_GroupList.m_arrGroupInfo;

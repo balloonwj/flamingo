@@ -12,7 +12,8 @@
 
 class CFlamingoClient;
 
-//查找还有并添加好友对话框
+//远程桌面窗口（早期是从"查找并添加好友"对话框抄下来改的，故仍沿用 IDD_REMOTEDESKTOP
+//之外的一些旧命名与皮肤图 DlgBg\FindFriendDlgBg.png；好友那套逻辑已随 v1 好友体系删除）
 class CRemoteDesktopDlg : public CDialogImpl<CRemoteDesktopDlg>, public CMessageFilter
 {
 public: 
@@ -36,8 +37,6 @@ public:
         MSG_WM_CLOSE(OnClose)
         MSG_WM_DESTROY(OnDestroy)
         MSG_WM_CTLCOLORSTATIC(OnCtlColorStatic)
-        COMMAND_ID_HANDLER_EX(IDC_BTN_ADD, OnAddFriend)
-        MESSAGE_HANDLER(FMG_MSG_FINDFREIND, OnFindFriendResult)
     END_MSG_MAP()
 
 protected:
@@ -55,8 +54,6 @@ protected:
     void OnShowWindow(BOOL bShow, UINT nStatus);
     void OnClose();
     void OnDestroy();
-    void OnAddFriend(UINT uNotifyCode, int nID, CWindow wndCtl);
-    LRESULT OnFindFriendResult(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     HBRUSH OnCtlColorStatic(CDCHandle dc, CStatic wndStatic);
 
     virtual void PostNcDestroy();

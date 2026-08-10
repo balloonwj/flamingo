@@ -54,6 +54,15 @@ NetworkInitializer windowsNetworkInitializer;
 
 EventLoop g_mainLoop;
 
+//默认超级管理员的内置兜底值。etc/chatserver.conf 里没写对应配置项时用这三个值，
+//保证老配置文件不改也能引导出一个能登录 admin 控制台的账号。
+//注意：口令是公开写在仓库里的，正式部署务必在配置文件里改掉，或把 defaultadminenable 置 0。
+//姓名必须带 u8 前缀：chatserver.vcxproj 没有 /utf-8 选项，不加前缀的中文字面量会被
+//MSVC 按系统代码页（GBK）编码写进库里，客户端读出来就是乱码。全仓库其它中文字面量同此。
+#define DEFAULT_ADMIN_EMAIL      "admin@flamingo.com"
+#define DEFAULT_ADMIN_PASSWORD   "admin123"
+#define DEFAULT_ADMIN_NAME       u8"超级管理员"
+
 /**
  *  定时公告调度器的一轮工作：把到点的定时公告转为「已发布」，并把它们推给在线受众。
  *
@@ -291,6 +300,35 @@ int main(int argc, char* argv[])
     if (!Singleton<AdminManager>::Instance().init())
     {
         LOGF("Init AdminManager failed, please check your database config..............");
+    }
+
+    //引导默认超级管理员：新部署的库里一个管理员都没有，admin 控制台会陷入"登不进去也就
+    //建不了账号"的死循环，故在这里按配置注入一个。四个配置项都允许缺失，缺时用下面的内置
+    //默认值，老配置文件不改也能照常跑。
+    DefaultAdminConfig defaultAdmin;
+    const char* defaultadminenable = config.getConfigName("defaultadminenable");
+    //配置项缺失时默认启用；只有显式写 0 才关闭
+    defaultAdmin.enable = (defaultadminenable == NULL || atoi(defaultadminenable) != 0);
+    const char* defaultadminemail = config.getConfigName("defaultadminemail");
+    defaultAdmin.email = (defaultadminemail != NULL ? defaultadminemail : DEFAULT_ADMIN_EMAIL);
+    const char* defaultadminpassword = config.getConfigName("defaultadminpassword");
+    defaultAdmin.password = (defaultadminpassword != NULL ? defaultadminpassword : DEFAULT_ADMIN_PASSWORD);
+    const char* defaultadminname = config.getConfigName("defaultadminname");
+    defaultAdmin.name = (defaultadminname != NULL ? defaultadminname : DEFAULT_ADMIN_NAME);
+
+    //注入失败只记日志不拦启动：少一个默认账号不影响 IM 本身的任何功能
+    bool defaultAdminCreated = false;
+    int32_t defaultAdminRet = Singleton<AdminManager>::Instance().ensureDefaultSuperAdmin(defaultAdmin, defaultAdminCreated);
+    if (defaultAdminRet != 0)
+    {
+        LOGE("Ensure default super admin failed, code: %d, email: %s. "
+             "The admin console may have no account to log in with.",
+             defaultAdminRet, defaultAdmin.email.c_str());
+    }
+    else if (defaultAdminCreated)
+    {
+        LOGI("Default super admin created, email: %s. Please change its password after the first login.",
+             defaultAdmin.email.c_str());
     }
 
     //初始化企业租户管理器：admin 企业管理模块

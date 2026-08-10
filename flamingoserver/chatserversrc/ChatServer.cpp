@@ -10,7 +10,6 @@
 #include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
 #include "ChatSession.h"
-#include "UserManager.h"
 #include "Protocol.h"
 #include "LoginProtocol.h"
 #include "ProfileProtocol.h"        // buildPresenceChangedNotify（按企业广播离线通知用）
@@ -77,19 +76,12 @@ void ChatServer::onDisconnected(const std::shared_ptr<TcpConnection>& conn)
 {
     //是否有用户下线
     //bool bUserOffline = false;
-    UserManager& userManager = Singleton<UserManager>::Instance();
 
     //本次正常下线的用户（仅当命中有效会话时被赋值），供<u>解锁后</u>按企业广播其离线用。
     //放到锁外广播是因为 broadcastToEnterprise 内部会再取会话表快照（再次加 m_sessionMutex），
-    //在持锁期间调用会自我死锁。
+    //而 m_sessionMutex 是非递归锁，在持锁期间调用会自我死锁。
     int32_t disconnectedUserId = 0;
     int32_t disconnectedClientType = 0;
-
-    //本次下线用户的在线好友会话，同样只在持锁期间收集、<u>解锁后</u>再推送，原因与上面一致：
-    //推送离线通知需要读下线用户的在线状态，而读状态的接口内部会再加一次 m_sessionMutex。
-    //m_sessionMutex 是非递归锁，同一线程重复加锁会直接抛 resource_deadlock_would_occur
-    //并终止进程。这里存的是 shared_ptr，即使解锁后原会话被摘除，被推送的会话仍然存活。
-    std::list<std::shared_ptr<ChatSession>> friendSessions;
 
     //TODO: 这样的代码逻辑太混乱，需要优化
     {
@@ -105,30 +97,13 @@ void ChatServer::onDisconnected(const std::shared_ptr<TcpConnection>& conn)
             //通过比对connection对象找到对应的session
             if ((*iter)->getConnectionPtr() == conn)
             {
-                //该Session不是之前被踢下线的有效Session，才认为是正常下线，才给其好友推送其下线消息
+                //该Session不是之前被踢下线的有效Session，才认为是正常下线，才广播其下线消息
                 if ((*iter)->isSessionValid())
                 {
                     int32_t offlineUserId = (*iter)->getUserId();
                     //记下供解锁后按企业广播离线（同企业同事的状态点据此变灰）。
                     disconnectedUserId     = offlineUserId;
                     disconnectedClientType = (*iter)->getClientType();
-
-                    //遍历其在线好友，收集这些好友的会话，留到解锁后再推送其下线消息
-                    //（保留：覆盖跨企业好友；同企业好友会在解锁后的企业广播里再收到一份
-                    //离线通知，两份内容一致，幂等无害）
-                    std::list<User> friends;
-                    userManager.getFriendInfoByUserId(offlineUserId, friends);
-                    for (const auto& iter2 : friends)
-                    {
-                        for (auto& iter3 : m_sessions)
-                        {
-                            //该好友是否在线（在线会存在session）
-                            if (iter2.userid == iter3->getUserId())
-                            {
-                                friendSessions.push_back(iter3);
-                            }
-                        }
-                    }
 
                     //向该账号的其它在线设备推送本设备掉线通知（cmd_device_changed_notify）。
                     //本函数已持有 m_sessionMutex，故此处直接遍历 m_sessions，不另调 broadcastDeviceChanged
@@ -166,29 +141,11 @@ void ChatServer::onDisconnected(const std::shared_ptr<TcpConnection>& conn)
         LOGI("current online user count: %d", (int)m_sessions.size());
     }
 
-    //解锁后：给下线用户的在线好友逐个推送离线通知（presence=0）。
-    //clienttype 取会话里记下的 disconnectedClientType，而不是回头去会话表里查——此刻该
-    //会话已从 m_sessions 摘除，查也查不到；且这样与下面按企业广播的那份通知内容完全一致，
-    //同企业好友先后收到的两份通知不会互相打架。
-    if (disconnectedUserId != 0 && !friendSessions.empty())
-    {
-        std::string friendOfflineBody = ProfileProtocol::buildPresenceChangedNotify(
-            disconnectedUserId, 0, disconnectedClientType);
-        for (const std::shared_ptr<ChatSession>& s : friendSessions)
-        {
-            if (!s)
-                continue;
-
-            s->send(cmd_presence_changed_notify, 0, friendOfflineBody);
-
-            LOGI("send presence offline notify to friend(userid=%d): offline userid = %d",
-                 s->getUserId(), disconnectedUserId);
-        }
-    }
-
     //解锁后：向同企业的在线同事广播本用户离线（presence=0），让其联系人树/会话列表上该用户
-    //的状态点实时变灰。与登录上线广播对称。无企业归属（如平台超管）时跳过（其上面的好友离线
-    //通知已发）。
+    //的状态点实时变灰。与登录上线广播对称。无企业归属（如平台超管）时跳过 —— 企业版里
+    //它没有联系人可推。
+    //clienttype 取会话里记下的 disconnectedClientType，而不是回头去会话表里查 —— 此刻该
+    //会话已从 m_sessions 摘除，查也查不到。
     if (disconnectedUserId != 0)
     {
         int64_t enterpriseId = Singleton<DepartmentManager>::Instance().getUserEnterpriseId(disconnectedUserId);

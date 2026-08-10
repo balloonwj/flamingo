@@ -8,6 +8,9 @@
  *  这些函数支撑会话列表右键菜单的"删除该会话 / 删除全部会话 / 置顶 / 免打扰"四个
  *  动作，出错的直接后果是删错会话或列表顺序错乱，故逐条钉死行为。
  *
+ *  RD 系列另外覆盖"收到消息时算不算用户已经看到"的判据与未读数演算，支撑的是
+ *  "聊天窗口就在眼前、消息也渲染进去了，会话列表却仍亮着红点"这个缺陷的修复。
+ *
  *  用 Catch2 v3（amalgamated）作框架，纯内存断言，不创建窗口 / 不发协议。
  *  全局 _Module 由 BalloonChatLayoutTests.cpp 统一定义，本文件只引用。
  *
@@ -275,4 +278,103 @@ TEST_CASE("OPS15 查询未知会话按不免打扰处理", "[convops]")
     //这种情况必须按"不免打扰"处理，否则提示音和托盘闪烁会被静默吞掉。
     std::vector<net::ConversationItem> items;
     CHECK(IsConversationMuted(items, kSingle, 1001) == false);
+}
+
+// =====================================================================
+// RD1~RD7 —— 收到消息的当下"算不算用户已经看到"的判据
+//
+// 口径：窗口存在、句柄有效、可见、未最小化、且是当前前台窗口，五项全中才算
+// 已经看到。窗口被别的窗口盖住或用户正在别处忙时照常亮红点，等用户切回该窗口
+// 再清。单聊与群聊共用这一个函数 —— 签名里没有 ctype，同口径由此在类型层面
+// 就得到保证，不会出现两边各写一套判据的情况。
+// =====================================================================
+
+TEST_CASE("RD1 窗口存在、有效、可见、未最小化且在前台时算已读", "[convunread]")
+{
+    CHECK(ShouldTreatAsReadOnArrival(true, true, true, false, true) == true);
+}
+
+TEST_CASE("RD2 聊天窗根本没打开时不算已读", "[convunread]")
+{
+    CHECK(ShouldTreatAsReadOnArrival(false, false, false, false, false) == false);
+}
+
+TEST_CASE("RD3 窗口对象还在但句柄已失效时不算已读", "[convunread]")
+{
+    //窗口关掉之后 m_chatWindows 里的指针可能还没回收，此时 ::IsWindow 为假。
+    CHECK(ShouldTreatAsReadOnArrival(true, false, true, false, true) == false);
+}
+
+TEST_CASE("RD4 窗口不可见时不算已读", "[convunread]")
+{
+    CHECK(ShouldTreatAsReadOnArrival(true, true, false, false, true) == false);
+}
+
+TEST_CASE("RD5 窗口最小化时不算已读", "[convunread]")
+{
+    //钉死一个 Win32 陷阱：最小化的窗口 ::IsWindowVisible 仍返回 TRUE，只判可见
+    //会把最小化误判成"用户正看着"。故意把 isVisible 传 true 来复现这个场景。
+    CHECK(ShouldTreatAsReadOnArrival(true, true, true, true, true) == false);
+}
+
+TEST_CASE("RD6 窗口开着但不在前台时不算已读", "[convunread]")
+{
+    CHECK(ShouldTreatAsReadOnArrival(true, true, true, false, false) == false);
+}
+
+TEST_CASE("RD7 五个条件的全部组合里只有一种算已读", "[convunread]")
+{
+    //防止将来有人把 && 写成 ||、或把某一项的正负号弄反：穷举 32 种组合，逐个
+    //比对，并断言判为已读的组合有且只有一种。
+    const int kCombinationCount = 32;   // 五个布尔量共 2^5 种组合
+    int trueCount = 0;
+    for (int mask = 0; mask < kCombinationCount; ++mask)
+    {
+        const bool windowExists = (mask & 1) != 0;
+        const bool isWindow     = (mask & 2) != 0;
+        const bool isVisible    = (mask & 4) != 0;
+        const bool isIconic     = (mask & 8) != 0;
+        const bool isForeground = (mask & 16) != 0;
+
+        const bool got = ShouldTreatAsReadOnArrival(windowExists, isWindow, isVisible,
+                                                    isIconic, isForeground);
+        const bool expected =
+            windowExists && isWindow && isVisible && !isIconic && isForeground;
+        CHECK(got == expected);
+        if (got)
+        {
+            ++trueCount;
+        }
+    }
+    CHECK(trueCount == 1);
+}
+
+// =====================================================================
+// RD8~RD11 —— 收到消息之后未读数该变成多少
+// =====================================================================
+
+TEST_CASE("RD8 窗口在前台时连同旧未读一起清零", "[convunread]")
+{
+    //本次修复的核心：光"这条不累加"是不够的。该会话此前可能已经攒了 3 条未读，
+    //用户在前台看到新消息时那 3 条也该一并清掉，否则红点照样亮着。
+    CHECK(NextUnreadCount(3, true, true) == 0);
+}
+
+TEST_CASE("RD9 窗口不在前台时未读加一", "[convunread]")
+{
+    CHECK(NextUnreadCount(3, true, false) == 4);
+}
+
+TEST_CASE("RD10 自己在别端发出、同步回来的消息不动未读", "[convunread]")
+{
+    //countAsUnread 为 false（见 ConversationsProtocolClient::shouldCountAsUnread），
+    //这类推送既不加也不清，维持原值。
+    CHECK(NextUnreadCount(3, false, false) == 3);
+}
+
+TEST_CASE("RD11 未读数为负的脏数据按零起算", "[convunread]")
+{
+    CHECK(NextUnreadCount(-5, false, false) == 0);
+    CHECK(NextUnreadCount(-5, true, false) == 1);
+    CHECK(NextUnreadCount(-5, true, true) == 0);
 }

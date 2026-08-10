@@ -14,15 +14,15 @@ Flamingo has implemented these features below（Remind that we just list the fea
 
 - searching users and groups
 
-- adding user to friend list & joining in groups
+- joining in groups
 
-- displaying friends list, group list and recent session list
+- displaying enterprise contact directory, group list and recent session list
 
-- chatting with a single friend (including sending texts, emotions, images, window shake and offline files, etc).
+- chatting with a single contact (including sending texts, emotions, images, window shake and offline files, etc).
 
 - chatting in groups(include sending texts, emotions, etc)
 
-- sending messages to multiple friends or groups (This is different from chatting in groups) 
+- sending messages to multiple contacts or groups (This is different from chatting in groups) 
 
 - modifying password
 
@@ -32,7 +32,14 @@ Flamingo has implemented these features below（Remind that we just list the fea
 
 - reconnecting automatically when disconnecting
 
-- some other handsome features, such as three mode of friend list, playing animations when a friend going online, chat message history, auto-replying chat message when chatting, etc. You can explore more amazing features by your own in Flamingo.
+- some other handsome features, such as three mode of avatar display, presence indication of contacts, chat message history, auto-replying chat message when chatting, etc. You can explore more amazing features by your own in Flamingo.
+
+> **Note on the enterprise edition:** this branch is the enterprise edition. The whole friend-relationship
+> subsystem was removed on 2026-08-05. The contact directory is derived directly from the enterprise
+> organization structure, so colleagues of the same enterprise can see and message each other without
+> "adding a friend" first. There is no add-friend / delete-friend / friend group / friend tag any more.
+> Contact remark names and the blacklist are kept. On the wire, 1203~1208, 1210 and 1214 are retired
+> and their numbers must not be reused — see `docs/协议设计-v2.md`.
 
   
 
@@ -54,13 +61,21 @@ Flamingo has implemented these features below（Remind that we just list the fea
 
 ​     When **chatserver** startups at first time, it will dectect whether the database you configured exist in mysql. If it does not exist, the **chatserver** will create it including creating its related tables. So you do not need to create the database and tables manually. However the SQL syntax of creating table differs a litle in different mysql version, some SQL of creating tables might failed in some mysql version, therefore under this condition, you have to create tables manually. We prepare these SQLs for you in the file **flamingoserver/table.sql**.
 
-Flamingo server uses four database tables illustrated below:
+The enterprise edition now has more than thirty tables; `flamingoserver/table.sql` is the authoritative list. The core ones are:
 
-|     Table Name      |                     Usage                      |
-| :-----------------: | :--------------------------------------------: |
-|       t_user        |              store user accounts               |
-| t_user_relationship | store user relationship and group members info |
-|      t_chatmsg      |             store chatting message             |
+|          Table Name           |                     Usage                      |
+| :---------------------------: | :--------------------------------------------: |
+|            t_user             |              store user accounts               |
+|           t_chatmsg           |             store chatting message             |
+|         t_department          |         enterprise department tree             |
+|      t_department_member      | department members; the contact directory is built from this table |
+|       t_contact_remark        |   per-viewer (one-way) remark name of a contact |
+|          t_blacklist          |                   blacklist                    |
+|  t_group / t_group_member     |            groups and group members            |
+
+> `t_user_relationship` (formerly listed here as "store user relationship and group members info") was
+> dropped on 2026-08-05 together with the friend-relationship subsystem, as was `t_friend_request`.
+> Group membership now lives in `t_group_member`, and friend remark names moved to `t_contact_remark`.
 
 ###### Compiling
 

@@ -38,6 +38,17 @@
 #include "../net/ImageTransfer.h"   // CacheFilePathForMd5（算缩略图的本地缓存路径）
 #include "../FlamingoClient.h"      // 取当前登录用户 userid（缓存按账号隔离）
 #include "../BalloonMain/TitleBarIcon.h"       // CreateProgramIconBitmap（标题栏左侧图标）
+#include "../BalloonMain/PopupMenuPlacement.h" // ClampPopupMenuToWorkArea（菜单不越屏）
+#include "HistoryRowMenu.h"                    // 行右键菜单的纯模型
+#include "../BalloonChatWnd/ChatFileLocation.h"  // ResolveLocalFilePath（本地落点优先级）
+#include "../BalloonChatWnd/ChatImageSaveAs.h"   // SaveChatImageAs（图片另存为）
+#include "../BalloonChatWnd/ChatMessageMenu.h"   // MakeImageSaveAsDefaultName
+#include "../BalloonImageViewer/BalloonImageViewerWindow.h"  // 看图窗（双击图片放大）
+#include "FileLocalStore.h"                    // 文件本地落点登记库
+#include "../net/FileTransfer.h"               // 文件下载 / 取消
+#include "../ClipboardText.h"                  // CopyTextToClipboard（复制正文）
+#include "../ClipboardImage.h"                 // CopyImageFileToClipboard（复制图片）
+#include <shellapi.h>                          // ShellExecute（打开文件 / 定位文件夹）
 
 using namespace balloonwjui;
 using namespace balloonhistory;
@@ -67,6 +78,12 @@ static const COLORREF kHisTitleBarBg = RGB(0xFF, 0xFF, 0xFF);
 
 //每页条数。
 static const int kHisPageSize = 8;
+
+//行右键菜单尺寸的估算值（像素）。Win32 的 HMENU 在弹出前拿不到精确尺寸，故按行数估算
+//交给夹取函数 —— 估大一点只会让靠近屏幕边缘时更早翻向左 / 上，不会误伤（与 ChatBubble
+//弹菜单时的做法一致）。菜单最长的一项是「打开所在文件夹」，6 个汉字。
+static const int kRowMenuEstWidth      = 160;
+static const int kRowMenuEstItemHeight = 26;
 
 namespace {
 
@@ -193,6 +210,23 @@ bool WriteUtf8FileWithBom(LPCTSTR path, const CString& text)
     }
     ::CloseHandle(h);
     return ok;
+}
+
+//某个路径在磁盘上是否真的存在（且不是目录）。
+//本地文件"在不在"要实测磁盘 —— 用户随时会把文件移走、改名、删掉，登记表里有记录
+//不代表文件还在。
+bool PathExistsOnDisk(LPCWSTR path)
+{
+    if (path == NULL || path[0] == 0)
+    {
+        return false;
+    }
+    const DWORD attr = ::GetFileAttributesW(path);
+    if (attr == INVALID_FILE_ATTRIBUTES)
+    {
+        return false;
+    }
+    return (attr & FILE_ATTRIBUTE_DIRECTORY) == 0;
 }
 
 //由发送者 id 取一个稳定的头像底色（小调色板取模）。
@@ -803,6 +837,602 @@ void CBalloonHistoryWindow::UpdateRowHover(POINT pt)
     }
 }
 
+// =======================================================================
+// 行右键菜单（C2）与图片 / 文件的行内操作（C3 / C4）
+//
+// 右键与悬停一样<u>按几何位置在窗口层判</u>，不靠控件分发：DuiHost::OnRButtonDown
+// 只把事件发给 HitTopMost 命中的那个最深控件，右键点在正文或某枚按钮上时，行容器
+// 根本收不到。按落点算"点在哪一行"才不受子控件切换影响。
+// =======================================================================
+
+LRESULT CBalloonHistoryWindow::OnRButtonUpMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                              LPARAM lParam, BOOL& bHandled)
+{
+    //只旁听、不消费 —— 置 FALSE 让 DuiFrameWindow / DuiHost 照常继续处理，
+    //否则整个界面的右键交互都会失灵。
+    bHandled = FALSE;
+
+    POINT pt;
+    pt.x = GET_X_LPARAM(lParam);
+    pt.y = GET_Y_LPARAM(lParam);
+
+    const int row = RowIndexAtPoint(pt);
+    if (row < 0)
+    {
+        return 0;   //没点在任何一行上（点到了筛选行、分页栏或空白处）
+    }
+
+    POINT ptScreen = pt;
+    ::ClientToScreen(m_hWnd, &ptScreen);
+
+    //TrackPopupMenu 是个模态消息循环，直接在这里跑会与 DuiHost 的鼠标捕获打架
+    //（菜单收起之后界面点击失灵）。投递出去，等鼠标事件解栈之后再弹。
+    ::PostMessage(m_hWnd, WM_HISTORY_SHOW_ROW_MENU, (WPARAM)row,
+                  MAKELPARAM((WORD)ptScreen.x, (WORD)ptScreen.y));
+    return 0;
+}
+
+LRESULT CBalloonHistoryWindow::OnShowRowMenuMsg(UINT /*uMsg*/, WPARAM wParam,
+                                                LPARAM lParam, BOOL& /*bHandled*/)
+{
+    const int row = (int)wParam;
+    POINT ptScreen;
+    //MAKELPARAM 打包时按 WORD 截断，取出时须按有符号还原 —— 多显示器布局下屏幕坐标
+    //可能为负，当成无符号会把菜单弹到几万像素之外。
+    ptScreen.x = GET_X_LPARAM(lParam);
+    ptScreen.y = GET_Y_LPARAM(lParam);
+
+    const std::vector<HistoryRecord>& recs = m_model.Records();
+    if (row < 0 || row >= (int)recs.size())
+    {
+        return 0;
+    }
+
+    const std::vector<HistoryRowMenuItem> model =
+        BuildHistoryRowMenuModel(BuildRowMenuContext(row));
+    if (model.empty())
+    {
+        return 0;
+    }
+
+    HMENU menu = ::CreatePopupMenu();
+    if (menu == NULL)
+    {
+        return 0;
+    }
+    for (size_t i = 0; i < model.size(); ++i)
+    {
+        if (model[i].m_isSeparator)
+        {
+            ::AppendMenu(menu, MF_SEPARATOR, 0, NULL);
+        }
+        else
+        {
+            //菜单命令 id 直接用菜单项标识：它们都是从 1 起的小正整数，而
+            //TrackPopupMenu 用 0 表示"用户没选"，不会撞。
+            ::AppendMenuW(menu, MF_STRING, (UINT_PTR)model[i].m_id,
+                          model[i].m_label.c_str());
+        }
+    }
+
+    //落点必须夹进锚点所在显示器的工作区：列表行靠近窗口底边时，直接把光标坐标交给
+    //TrackPopupMenu 会让菜单跑到桌面外看不见（开发约定文档的菜单不越屏规则）。
+    //Win32 的 HMENU 在弹出前拿不到精确尺寸，按行数估算即可 —— 估大一点只会让靠边时
+    //更早翻向左 / 上，不会误伤（与 ChatBubble 的做法一致）。
+    SIZE menuSize;
+    menuSize.cx = kRowMenuEstWidth;
+    menuSize.cy = (LONG)model.size() * kRowMenuEstItemHeight;
+    const POINT at = balloonmain::ClampPopupMenuToWorkArea(ptScreen, menuSize);
+
+    ::SetForegroundWindow(m_hWnd);   //菜单要靠前台窗口才能在点击别处时正常收起
+    const int cmd = ::TrackPopupMenu(menu,
+                                     TPM_RETURNCMD | TPM_LEFTALIGN | TPM_TOPALIGN,
+                                     at.x, at.y, 0, m_hWnd, NULL);
+    ::DestroyMenu(menu);
+
+    if (cmd != 0)
+    {
+        ExecuteRowMenuCommand(cmd, row);
+    }
+    return 0;
+}
+
+int CBalloonHistoryWindow::RowIndexAtPoint(POINT pt) const
+{
+    if (m_pScroll == NULL)
+    {
+        return -1;
+    }
+    balloonwjui::DuiControl* content = m_pScroll->GetContent();
+    if (content == NULL)
+    {
+        return -1;
+    }
+
+    //落点必须同时落在滚动视口内：滚出可视区的行其矩形仍在，只按行矩形判会把视口外的
+    //行也算命中（与 UpdateRowHover 同一处理）。
+    const RECT viewRc = m_pScroll->GetRect();
+    if (pt.x < viewRc.left || pt.x >= viewRc.right
+        || pt.y < viewRc.top || pt.y >= viewRc.bottom)
+    {
+        return -1;
+    }
+
+    //行下标由 ctrlId 反算（id = kIdHistoryRowBase + 行下标），<u>不能</u>按"第几个
+    //HistoryRow 子控件"数 —— 中间还夹着日期分组头。
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = content->Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        const HistoryRow* rowCtrl = dynamic_cast<const HistoryRow*>(kids[i].get());
+        if (rowCtrl == NULL)
+        {
+            continue;
+        }
+        const RECT rc = rowCtrl->GetRect();
+        if (pt.x >= rc.left && pt.x < rc.right && pt.y >= rc.top && pt.y < rc.bottom)
+        {
+            const UINT id = rowCtrl->GetCtrlId();
+            if (id >= (UINT)kIdHistoryRowBase
+                && id < (UINT)kIdHistoryRowBase + kIdHistoryRowCapacity)
+            {
+                return (int)(id - (UINT)kIdHistoryRowBase);
+            }
+            return -1;
+        }
+    }
+    return -1;
+}
+
+int64_t CBalloonHistoryWindow::SelfUserId() const
+{
+    //缓存与下载目录都按登录账号隔离，取不到 userid 就什么都算不出来
+    //（调试入口没有登录态，此时一律当作"本地没有文件"处理）。
+    if (m_lpFMGClient == NULL)
+    {
+        return 0;
+    }
+    return (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID;
+}
+
+bool CBalloonHistoryWindow::ResolveRowLocalFile(int row, CString& outPath) const
+{
+    outPath.Empty();
+
+    const std::vector<HistoryRecord>& recs = m_model.Records();
+    if (row < 0 || row >= (int)recs.size())
+    {
+        return false;
+    }
+    const HistoryRecord& rec = recs[(size_t)row];
+
+    const int64_t selfId = SelfUserId();
+    if (selfId <= 0)
+    {
+        return false;
+    }
+
+    const HistoryContentBrief brief = ParseContentBrief(rec.m_msgtype, rec.m_content);
+
+    if (IsHistoryRowImageType(rec.m_msgtype))
+    {
+        //图片只有缓存这一处落点：本地缓存按内容 MD5 命名。
+        if (brief.m_imageMd5.empty())
+        {
+            return false;
+        }
+        const std::wstring cache =
+            net::ImageTransfer::CacheFilePathForMd5(selfId, brief.m_imageMd5);
+        if (cache.empty() || !PathExistsOnDisk(cache.c_str()))
+        {
+            return false;
+        }
+        outPath = cache.c_str();
+        return true;
+    }
+
+    if (IsHistoryRowFileType(rec.m_msgtype))
+    {
+        //文件有两处可能的落点，优先级与回退交给纯逻辑 ResolveLocalFilePath 决定
+        //（登记路径优先、失效再回退 MD5 缓存路径）。那套规则已有单测 Suite CFL，
+        //这里只负责把"路径"与"文件在不在"两样事实喂给它。
+        std::wstring registered;
+        CFileLocalStore::GetInstance().Query(brief.m_fileMd5, brief.m_fileName, registered);
+
+        std::wstring cache;
+        if (!brief.m_fileMd5.empty() && !brief.m_fileName.empty())
+        {
+            cache = net::FileTransfer::CacheFilePathFor(selfId, brief.m_fileMd5,
+                                                        brief.m_fileName);
+        }
+
+        const std::wstring picked = balloonchatwnd::ResolveLocalFilePath(
+            registered, !registered.empty() && PathExistsOnDisk(registered.c_str()),
+            cache, !cache.empty() && PathExistsOnDisk(cache.c_str()));
+        if (picked.empty())
+        {
+            return false;
+        }
+        outPath = picked.c_str();
+        return true;
+    }
+
+    return false;   //其余类型没有"本地文件"这一说
+}
+
+HistoryRowMenuContext CBalloonHistoryWindow::BuildRowMenuContext(int row) const
+{
+    HistoryRowMenuContext ctx;
+
+    const std::vector<HistoryRecord>& recs = m_model.Records();
+    if (row < 0 || row >= (int)recs.size())
+    {
+        return ctx;   //空上下文：菜单只会剩通用项
+    }
+    const HistoryRecord& rec = recs[(size_t)row];
+
+    ctx.m_msgType = rec.m_msgtype;
+    ctx.m_pinned  = rec.m_pinned;
+    ctx.m_msgId   = rec.m_msgid;
+    ctx.m_downloading =
+        (m_downloadingMsgids.find(rec.m_msgid) != m_downloadingMsgids.end());
+
+    CString local;
+    ctx.m_hasLocalFile = ResolveRowLocalFile(row, local);
+    return ctx;
+}
+
+void CBalloonHistoryWindow::ExecuteRowMenuCommand(int menuId, int row)
+{
+    const std::vector<HistoryRecord>& recs = m_model.Records();
+    if (row < 0 || row >= (int)recs.size())
+    {
+        return;
+    }
+    const HistoryRecord& rec = recs[(size_t)row];
+
+    CString localPath;
+    const bool hasLocal = ResolveRowLocalFile(row, localPath);
+
+    switch (menuId)
+    {
+    case kHistoryRowMenuCopy:
+        CopyRowText(row);
+        break;
+
+    case kHistoryRowMenuCopyImage:
+        if (hasLocal)
+        {
+            if (!flamingo::CopyImageFileToClipboard((LPCWSTR)localPath))
+            {
+                ::MessageBox(m_hWnd, _T("复制图片失败，可能文件已被移动或删除。"),
+                             _T("消息记录"), MB_OK | MB_ICONWARNING);
+            }
+        }
+        break;
+
+    case kHistoryRowMenuSaveImageAs:
+        if (hasLocal)
+        {
+            //默认文件名与聊天窗里那条路同口径（按 msgid + 原图扩展名给一个可读名字）。
+            balloonchatwnd::SaveChatImageAs(
+                m_hWnd, std::wstring((LPCWSTR)localPath),
+                balloonchatwnd::MakeImageSaveAsDefaultName(
+                    std::wstring((LPCWSTR)localPath), (long long)rec.m_msgid));
+        }
+        break;
+
+    case kHistoryRowMenuOpenFile:
+        OpenRowFile(localPath, hasLocal);
+        break;
+
+    case kHistoryRowMenuOpenFolder:
+        OpenRowFolder(localPath, hasLocal);
+        break;
+
+    case kHistoryRowMenuSaveFileAs:
+        if (hasLocal)
+        {
+            SaveRowFileAs(row, localPath);
+        }
+        break;
+
+    case kHistoryRowMenuDownload:
+        //从菜单点「下载」纯粹是把文件拿到本地，下完<u>不</u>弹看图窗 ——
+        //那是"双击缩略图"才有的意图。
+        StartRowDownload(row, false);
+        break;
+
+    case kHistoryRowMenuCancelDownload:
+        CancelRowDownload(row);
+        break;
+
+    case kHistoryRowMenuLocate:
+        LocateRow(row);
+        break;
+
+    case kHistoryRowMenuPin:
+        //与行内那枚 Pin 按钮完全同口径：只发请求，界面等服务端推送回来再变，
+        //不做乐观更新。无权取消时由服务端拒绝并提示。
+        if (m_pMainPanel != NULL && rec.m_msgid > 0)
+        {
+            const HistoryFilter& filter = m_model.Filter();
+            CIUSocket::GetInstance().PinMessage(filter.m_ctype, filter.m_cid,
+                                                (long long)rec.m_msgid, !rec.m_pinned);
+        }
+        break;
+
+    default:
+        break;
+    }
+}
+
+void CBalloonHistoryWindow::CopyRowText(int row)
+{
+    const std::vector<HistoryRecord>& recs = m_model.Records();
+    if (row < 0 || row >= (int)recs.size())
+    {
+        return;
+    }
+
+    const CString full =
+        Utf8ToCString(FullTextFromContent(recs[(size_t)row].m_msgtype,
+                                          recs[(size_t)row].m_content));
+    if (full.IsEmpty())
+    {
+        return;
+    }
+
+    //正文里的 /f["<id>"] 要换成可读的「[表情]」，与气泡复制同口径 —— 粘到微信、
+    //记事本里都读得懂。原始标记只有粘回本程序输入框才有意义，那不是主要场景。
+    std::vector<balloonchat::ChatSegment> segs = balloonchat::ParseSendBody(full);
+    std::wstring text;
+    for (size_t i = 0; i < segs.size(); ++i)
+    {
+        if (segs[i].m_bFace)
+        {
+            text += L"[表情]";
+        }
+        else
+        {
+            text += (LPCWSTR)segs[i].m_strText;
+        }
+    }
+
+    flamingo::CopyTextToClipboard(text.c_str());
+    LOG_INFO(_T("消息记录：复制了一条正文，长度 %d。"), (int)text.size());
+}
+
+void CBalloonHistoryWindow::OpenRowFile(const CString& localPath, bool hasLocal)
+{
+    if (!hasLocal || localPath.IsEmpty())
+    {
+        return;
+    }
+    //ShellExecute 返回值 <= 32 表示失败（没有关联程序、文件刚被删掉等）。
+    const INT_PTR kShellExecOkThreshold = 32;
+    HINSTANCE hr = ::ShellExecute(m_hWnd, _T("open"), localPath, NULL, NULL, SW_SHOWNORMAL);
+    if ((INT_PTR)hr <= kShellExecOkThreshold)
+    {
+        ::MessageBox(m_hWnd, _T("打开文件失败，可能没有关联的打开方式。"),
+                     _T("消息记录"), MB_OK | MB_ICONWARNING);
+    }
+}
+
+void CBalloonHistoryWindow::OpenRowFolder(const CString& localPath, bool hasLocal)
+{
+    if (!hasLocal || localPath.IsEmpty())
+    {
+        return;
+    }
+    //资源管理器定位并选中该文件。路径<u>必须带引号</u> —— 不带的话含空格的路径会被
+    //explorer 拆成多个参数，结果打开的是"我的文档"而不是定位到文件。
+    CString param;
+    param.Format(_T("/select,\"%s\""), (LPCTSTR)localPath);
+    ::ShellExecute(m_hWnd, _T("open"), _T("explorer.exe"), param, NULL, SW_SHOWNORMAL);
+}
+
+void CBalloonHistoryWindow::SaveRowFileAs(int row, const CString& localPath)
+{
+    const std::vector<HistoryRecord>& recs = m_model.Records();
+    if (row < 0 || row >= (int)recs.size() || localPath.IsEmpty())
+    {
+        return;
+    }
+
+    const HistoryContentBrief brief =
+        ParseContentBrief(recs[(size_t)row].m_msgtype, recs[(size_t)row].m_content);
+    CString defName = Utf8ToCString(brief.m_fileName);
+    if (defName.IsEmpty())
+    {
+        defName = _T("文件");
+    }
+
+    //默认扩展名取原文件名的后缀，使另存出来的文件仍能被正确打开。
+    CString defExt;
+    const int dot = defName.ReverseFind(_T('.'));
+    if (dot > 0 && dot + 1 < defName.GetLength())
+    {
+        defExt = defName.Mid(dot + 1);
+    }
+
+    CFileDialog dlg(FALSE, defExt.IsEmpty() ? NULL : (LPCTSTR)defExt, defName,
+                    OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY,
+                    _T("所有文件 (*.*)\0*.*\0"), m_hWnd);
+    if (dlg.DoModal() != IDOK)
+    {
+        return;
+    }
+
+    //整字节拷贝，不做任何转换 —— 另存出来的必须与原文件逐字节一致。
+    if (!::CopyFile(localPath, dlg.m_szFileName, FALSE))
+    {
+        ::MessageBox(m_hWnd, _T("另存文件失败，请检查目标位置是否可写。"),
+                     _T("消息记录"), MB_OK | MB_ICONWARNING);
+        return;
+    }
+    LOG_INFO(_T("消息记录：文件另存为完成。"));
+}
+
+void CBalloonHistoryWindow::StartRowDownload(int row, bool viewAfter)
+{
+    const std::vector<HistoryRecord>& recs = m_model.Records();
+    if (row < 0 || row >= (int)recs.size())
+    {
+        return;
+    }
+    const HistoryRecord& rec = recs[(size_t)row];
+
+    //调试入口用的是预置假库、没有真实连接，发出去也没意义。
+    if (m_pMainPanel == NULL)
+    {
+        return;
+    }
+    const int64_t selfId = SelfUserId();
+    if (selfId <= 0 || rec.m_msgid <= 0)
+    {
+        return;
+    }
+
+    const HistoryContentBrief brief = ParseContentBrief(rec.m_msgtype, rec.m_content);
+
+    if (IsHistoryRowImageType(rec.m_msgtype))
+    {
+        if (brief.m_imageFileId.empty())
+        {
+            //没有 fileid 就无从下载（老消息缺字段等）。告诉用户，别让他一直等。
+            ::MessageBox(m_hWnd, _T("这条消息缺少图片信息，无法下载原图。"),
+                         _T("消息记录"), MB_OK | MB_ICONWARNING);
+            return;
+        }
+        net::ImageTransfer::GetInstance().EnqueueDownload(
+            (int64_t)rec.m_msgid, brief.m_imageFileId, brief.m_imageMd5,
+            brief.m_imageSize, selfId);
+    }
+    else if (IsHistoryRowFileType(rec.m_msgtype))
+    {
+        if (brief.m_fileId.empty())
+        {
+            ::MessageBox(m_hWnd, _T("这条消息缺少文件信息，无法下载。"),
+                         _T("消息记录"), MB_OK | MB_ICONWARNING);
+            return;
+        }
+        net::FileTransfer::GetInstance().EnqueueDownload(
+            (int64_t)rec.m_msgid, brief.m_fileId, brief.m_fileName,
+            brief.m_fileMd5, brief.m_fileSize, selfId);
+    }
+    else
+    {
+        return;   //其余类型没有可下载的东西
+    }
+
+    m_downloadingMsgids.insert(rec.m_msgid);
+    if (viewAfter)
+    {
+        m_pendingViewMsgid = rec.m_msgid;
+    }
+    LOG_INFO(_T("消息记录：发起下载 msgid=%lld, 下完是否看图=%d。"),
+             (long long)rec.m_msgid, (int)viewAfter);
+
+    //菜单项要从「下载」变成「取消下载」，刷一次列表。
+    ::PostMessage(m_hWnd, WM_HISTORY_REFRESH_CONTENT, 0, 0);
+}
+
+void CBalloonHistoryWindow::CancelRowDownload(int row)
+{
+    const std::vector<HistoryRecord>& recs = m_model.Records();
+    if (row < 0 || row >= (int)recs.size())
+    {
+        return;
+    }
+    const HistoryRecord& rec = recs[(size_t)row];
+
+    if (IsHistoryRowFileType(rec.m_msgtype))
+    {
+        net::FileTransfer::GetInstance().CancelDownload((int64_t)rec.m_msgid);
+    }
+    //图片下载没有取消接口（net::ImageTransfer 只提供 EnqueueDownload）。图片通常只有
+    //几百 KB、几秒就完，为它单开一条取消链路不划算；这里只把本窗口的跟踪状态撤掉，
+    //传输仍会跑完并落进缓存 —— 那份缓存下次看图时还用得上，不算浪费。
+    m_downloadingMsgids.erase(rec.m_msgid);
+    if (m_pendingViewMsgid == rec.m_msgid)
+    {
+        m_pendingViewMsgid = 0;   //撤掉"下完自动看图"的待办
+    }
+    ::PostMessage(m_hWnd, WM_HISTORY_REFRESH_CONTENT, 0, 0);
+}
+
+void CBalloonHistoryWindow::ViewRowImage(int row)
+{
+    CString localPath;
+    if (ResolveRowLocalFile(row, localPath))
+    {
+        //本地已有原图：直接开看图窗（进程内共享一个实例，已开则换图置前）。
+        CBalloonImageViewerWindow::OpenShared(m_hWnd, localPath);
+        return;
+    }
+
+    //本地没有：发起下载，下完自动开看图窗。双击的意图就是"我要看这张图"，
+    //下载只是达成它的手段，故这里 viewAfter 传 true。
+    StartRowDownload(row, true);
+}
+
+void CBalloonHistoryWindow::OnImageDownloadFinished(int64_t msgid, bool ok,
+                                                    const std::wstring& localPath)
+{
+    //不是本窗口发起的那几笔一概不管 —— 聊天窗自己的下载不该在这里弹窗。
+    if (m_downloadingMsgids.find(msgid) == m_downloadingMsgids.end())
+    {
+        return;
+    }
+    m_downloadingMsgids.erase(msgid);
+
+    const bool wantView = (m_pendingViewMsgid == msgid);
+    if (wantView)
+    {
+        m_pendingViewMsgid = 0;
+    }
+
+    if (!ok)
+    {
+        LOG_ERROR(_T("消息记录：图片下载失败 msgid=%lld。"), (long long)msgid);
+        ::MessageBox(m_hWnd, _T("图片下载失败，请检查网络后重试。"),
+                     _T("消息记录"), MB_OK | MB_ICONWARNING);
+        ::PostMessage(m_hWnd, WM_HISTORY_REFRESH_CONTENT, 0, 0);
+        return;
+    }
+
+    //成功：缩略图这下能画出来了，刷一次列表；若这笔下载本就是"双击要看大图"引起的，
+    //顺带把看图窗打开。
+    if (wantView && !localPath.empty())
+    {
+        CBalloonImageViewerWindow::OpenShared(m_hWnd, localPath.c_str());
+    }
+    ::PostMessage(m_hWnd, WM_HISTORY_REFRESH_CONTENT, 0, 0);
+}
+
+void CBalloonHistoryWindow::OnFileDownloadFinished(int64_t msgid, bool ok,
+                                                   const std::wstring& /*localPath*/,
+                                                   bool cancelled)
+{
+    if (m_downloadingMsgids.find(msgid) == m_downloadingMsgids.end())
+    {
+        return;
+    }
+    m_downloadingMsgids.erase(msgid);
+
+    //用户主动取消不算失败，不弹提示 —— 他知道自己做了什么。
+    if (!ok && !cancelled)
+    {
+        LOG_ERROR(_T("消息记录：文件下载失败 msgid=%lld。"), (long long)msgid);
+        ::MessageBox(m_hWnd, _T("文件下载失败，请检查网络后重试。"),
+                     _T("消息记录"), MB_OK | MB_ICONWARNING);
+    }
+
+    //无论成败都刷一次：成功了菜单要从「下载」变成「打开 / 另存为」，
+    //失败或取消了要从「取消下载」变回「下载」。
+    ::PostMessage(m_hWnd, WM_HISTORY_REFRESH_CONTENT, 0, 0);
+}
+
 void CBalloonHistoryWindow::LocateRow(int row)
 {
     //跳到聊天窗并滚动定位到该消息。调试入口没有主面板（m_pMainPanel==NULL），
@@ -1170,7 +1800,18 @@ LRESULT CBalloonHistoryWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         if (id >= (UINT)kIdHistoryRowBase
             && id < (UINT)kIdHistoryRowBase + kIdHistoryRowCapacity)
         {
-            LocateRow((int)(id - kIdHistoryRowBase));
+            const int row = (int)(id - kIdHistoryRowBase);
+            const std::vector<HistoryRecord>& recs = m_model.Records();
+            //图片行的双击改成"看大图"（本地没有原图时先下载、下完自动开），
+            //其余类型仍是"定位到聊天窗"。图片行的定位只留行内那枚「定位」按钮。
+            //这条取舍是与用户确认过的，见 docs/消息记录内容交互方案.md §10-2。
+            if (row >= 0 && row < (int)recs.size()
+                && IsHistoryRowImageType(recs[(size_t)row].m_msgtype))
+            {
+                ViewRowImage(row);
+                return 0;
+            }
+            LocateRow(row);
             return 0;
         }
     }

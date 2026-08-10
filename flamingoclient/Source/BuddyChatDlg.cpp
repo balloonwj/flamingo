@@ -598,7 +598,9 @@ BOOL CBuddyChatDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
     m_lpCascadeWinManager->Add(m_hWnd, CHATDLG_WIDTH, CHATDLG_HEIGHT);
 
     CString strThumbPath;
-    CBuddyInfo* lpBuddyInfo = m_lpFMGClient->m_UserMgr.m_BuddyList.GetBuddy(m_nUTalkUin);
+    //企业版：v1 好友列表已删除，改从"本人 + 群成员"里找这个人（CFlamingoClient::GetUserInfo）。
+    //本窗口是 v1 时期的单聊窗，v2 已由 BalloonChatWindow 取代，这里只需保证能编译。
+    CBuddyInfo* lpBuddyInfo = m_lpFMGClient->GetUserInfo(m_nUTalkUin);
     if (lpBuddyInfo == NULL)
     {
         ::MessageBox(m_lpFMGClient->m_UserMgr.m_hCallBackWnd, _T("程序遇到一个严重的错误导致打开聊天对话框失败！"), g_strAppTitle.c_str(), MB_OK | MB_ICONERROR);
@@ -2282,12 +2284,10 @@ BOOL CBuddyChatDlg::OnRichEdit_RBtnDown(MSG* pMsg)
 // 获取好友信息指针
 CBuddyInfo* CBuddyChatDlg::GetBuddyInfoPtr()
 {
+    //企业版：v1 好友列表已删除，改从"本人 + 群成员"里找（CFlamingoClient::GetUserInfo）。
     if (m_lpFMGClient != NULL)
-    {
-        CBuddyList* lpBuddyList = m_lpFMGClient->GetBuddyList();
-        if (lpBuddyList != NULL)
-            return lpBuddyList->GetBuddy(m_nUTalkUin);
-    }
+        return m_lpFMGClient->GetUserInfo(m_nUTalkUin);
+
     return NULL;
 }
 

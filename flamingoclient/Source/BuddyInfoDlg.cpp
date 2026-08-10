@@ -88,7 +88,10 @@ void CBuddyInfoDlg::OnBtnOK(UINT uNotifyCode, int nID, CWindow wndCtl)
 
 void CBuddyInfoDlg::UpdateCtrls()
 {
-	CBuddyInfo* pBuddyInfo = m_lpFMGClient->m_UserMgr.m_BuddyList.GetBuddy(m_nUTalkUin);
+	//企业版：v1 好友列表已删除，改从"本人 + 群成员"里找这个人（CFlamingoClient::GetUserInfo）。
+	//本对话框是 v1 时期的好友资料窗，v2 已由 BalloonContact 的联系人资料窗取代，这里只需
+	//保证能编译、找不到人时什么都不显示。
+	CBuddyInfo* pBuddyInfo = m_lpFMGClient->GetUserInfo(m_nUTalkUin);
 	if(pBuddyInfo == NULL)
 		return;
 

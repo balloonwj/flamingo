@@ -46,8 +46,8 @@ std::vector<ContactMenuEntry> BuildContactMenuModel(const ContactMenuState& stat
 
     // 右键的是自己：整份菜单只留"查看资料"一项。
     // 通讯录里能看到自己是为了让用户看清自己在组织架构里的位置，但"给自己发消息"
-    // "把自己拉黑""删除自己这个好友"这些动作要么无意义要么荒唐，整项不出现比
-    // 灰显在那里更干净。也不放分隔条——只有一项，分隔条无处可分。
+    // "给自己改备注"这些动作要么无意义要么荒唐，整项不出现比灰显在那里更干净。
+    // 也不放分隔条——只有一项，分隔条无处可分。
     if (state.m_isSelf)
     {
         PushItem(items, kContactMenuViewProfile, L"查看资料");
@@ -69,18 +69,15 @@ std::vector<ContactMenuEntry> BuildContactMenuModel(const ContactMenuState& stat
              FavoritesModel::GetMenuLabel(state.m_favorite));
     PushItem(items, kContactMenuViewHistory, L"查看历史消息");
     PushItem(items, kContactMenuRemark,      L"修改备注");
-    PushItem(items, kContactMenuMoveGroup,   L"移动到分组");
     PushSeparator(items);
 
     // 第三组：打扰控制。文案随当前状态取反。
     PushItem(items, kContactMenuMute,
              state.m_muted ? L"取消免打扰" : L"消息免打扰");
-    PushItem(items, kContactMenuBlacklist, L"加入黑名单");
-    PushSeparator(items);
 
-    // 第四组：破坏性动作单独一组，与上面隔开，避免误点。
-    // （DuiMenu 暂不支持单项配色，故这里还标不成红色。）
-    PushItem(items, kContactMenuDeleteFriend, L"删除好友");
+    // 企业版没有好友关系，原先第二组末尾的"移动到分组"、第三组的"加入黑名单"、
+    // 以及单独一组的"删除好友"都随好友功能一并去掉了：通讯录是企业组织架构，
+    // 归属由部门表达，也谈不上"删掉一个同事"。
 
     return items;
 }

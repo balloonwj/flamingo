@@ -24,6 +24,10 @@
 //SQL 侧取的是「今天往前 ADMIN_TREND_DAYS - 1 天」的零点，正好覆盖这 14 个自然日
 #define ADMIN_TREND_DAYS    14
 
+//密码盐的长度（十六进制字符数）。取 MD5 摘要的前 16 位，与 createAdmin 生成盐的口径一致。
+//盐一旦取短，同口令的哈希碰撞面与彩虹表的可用性都会上升，故单列成常量避免被随手改小。
+#define DEFAULT_ADMIN_SALT_LEN   16
+
 //token 序列号，与时间戳一起参与生成，保证同一秒内多次登录的 token 也不重复。
 static std::atomic<uint32_t> g_tokenSeq(0);
 
@@ -57,6 +61,82 @@ bool AdminManager::init()
 {
     LOGI("AdminManager::init ok, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
     return true;
+}
+
+int32_t AdminManager::ensureDefaultSuperAdmin(const DefaultAdminConfig& cfg, bool& outCreated)
+{
+    outCreated = false;
+
+    //开关关闭时连数据库都不碰：生产库不该因为服务起了一次就平白多出一个带默认口令的超管
+    if (!cfg.enable)
+    {
+        LOGI("AdminManager::ensureDefaultSuperAdmin skipped, disabled by config.");
+        return error_code_ok;
+    }
+
+    //邮箱与口令缺任何一个都建不出能登录的账号，与其建一个残缺账号不如直接报错让人去改配置
+    if (cfg.email.empty() || cfg.password.empty())
+    {
+        LOGE("AdminManager::ensureDefaultSuperAdmin failed, email or password is empty in config.");
+        return error_code_unknown;
+    }
+
+    //与登录、改密等写操作串行化，避免启动期与其它路径同时改 t_admin
+    std::lock_guard<std::mutex> guard(m_mutex);
+
+    std::unique_ptr<IDatabase> pConn(createDbConnection());
+    if (!pConn)
+        return error_code_unknown;
+
+    //判定口径：库里只要已经有任意一个平台超管（f_enterprise_id = 0），就不需要引导账号了。
+    //之所以不按默认邮箱判，是为了让导入过 testdata.sql 的库不被多塞一个账号，
+    //也让管理员改过口令之后重启服务不会被打回默认口令。
+    if (queryCount(pConn.get(), "SELECT COUNT(*) FROM t_admin WHERE f_enterprise_id = 0") > 0)
+    {
+        LOGI("AdminManager::ensureDefaultSuperAdmin skipped, a platform super admin already exists.");
+        return error_code_ok;
+    }
+
+    //库里没有超管，但默认邮箱仍可能已被某个企业管理员占用。t_admin 的 uniq_email 不允许
+    //邮箱重复，这时硬插会失败，故先查出来记日志跳过，免得启动期抛一条看不懂的 SQL 错误。
+    std::string emailEsc = dbapi::EscapeString(cfg.email);
+    char sql[ADMIN_SQL_BUF_LEN] = { 0 };
+    snprintf(sql, sizeof(sql), "SELECT COUNT(*) FROM t_admin WHERE f_email = '%s'", emailEsc.c_str());
+    if (queryCount(pConn.get(), sql) > 0)
+    {
+        LOGE("AdminManager::ensureDefaultSuperAdmin failed, email already taken by another admin: %s",
+             cfg.email.c_str());
+        return error_code_registeralready;
+    }
+
+    //分配管理员业务ID = 当前最大值 + 1，口径与 createAdmin 保持一致
+    int64_t newAdminId = queryCount(pConn.get(), "SELECT IFNULL(MAX(f_admin_id), 0) FROM t_admin") + 1;
+
+    //每个管理员一份独立的盐，做法同 createAdmin：拿邮箱 + 当前时间 + 自增序列做种子算 MD5
+    uint32_t seq = ++g_tokenSeq;
+    std::string base = cfg.email + std::to_string((long long)time(NULL)) + std::to_string(seq);
+    std::string salt = Md5Hex("salt" + base).substr(0, DEFAULT_ADMIN_SALT_LEN);
+
+    //口令哈希的口径必须与 login 的校验口径一致（MD5(明文 + 盐)），否则账号建出来也登不进去
+    std::string pwdHash = Md5Hex(cfg.password + salt);
+
+    //企业ID 固定写 0（平台超管），状态固定写 0（启用）—— 建出来就是为了立刻能登录
+    std::string nameEsc = dbapi::EscapeString(cfg.name);
+    snprintf(sql, sizeof(sql),
+        "INSERT INTO t_admin(f_admin_id, f_email, f_password, f_salt, f_name, f_enterprise_id, f_status, f_create_time) "
+        "VALUES(%lld, '%s', '%s', '%s', '%s', 0, 0, NOW())",
+        (long long)newAdminId, emailEsc.c_str(), pwdHash.c_str(), salt.c_str(), nameEsc.c_str());
+    if (!pConn->execute(sql))
+    {
+        LOGE("AdminManager::ensureDefaultSuperAdmin failed, insert error, email: %s", cfg.email.c_str());
+        return error_code_unknown;
+    }
+
+    outCreated = true;
+    //这条日志是部署后找默认账号的唯一线索，必须带上邮箱；口令就写在配置文件里，日志不重复打印
+    LOGI("AdminManager::ensureDefaultSuperAdmin ok, created default super admin, adminid: %lld, email: %s",
+         (long long)newAdminId, cfg.email.c_str());
+    return error_code_ok;
 }
 
 IDatabase* AdminManager::createDbConnection()

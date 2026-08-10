@@ -40,7 +40,6 @@ CFlamingoClient::CFlamingoClient(void)
 	m_bNetworkAvailable = TRUE;
 
 	m_hwndRegister = NULL;
-	m_hwndFindFriend = NULL;
 	m_hwndModifyPassword = NULL;
 	
 	m_bBuddyIDsAvailable = FALSE;
@@ -201,117 +200,6 @@ void CFlamingoClient::Register(PCTSTR pszAccountName, PCTSTR pszNickName, PCTSTR
 	m_SendMsgThread.AddItem(pRequest);
 }
 
-// 查找好友
-BOOL CFlamingoClient::FindFriend(PCTSTR pszAccountName, long nType, HWND hReflectionWnd)
-{
-	//TODO: 先判断一下是否离线
-
-	if(pszAccountName==NULL ||*pszAccountName==NULL)
-		return FALSE;
-
-	m_hwndFindFriend = hReflectionWnd;
-
-	CFindFriendRequest* pRequest = new CFindFriendRequest();
-	char szData[64] = {0};
-    EncodeUtil::UnicodeToUtf8(pszAccountName, szData, ARRAYSIZE(szData));
-	strcpy_s(pRequest->m_szAccountName, ARRAYSIZE(pRequest->m_szAccountName), szData);
-	pRequest->m_nType = nType;
-	
-	m_SendMsgThread.AddItem(pRequest);
-
-	return TRUE;
-}
-
-BOOL CFlamingoClient::AddFriend(UINT uAccountToAdd)
-{
-	//TODO: 先判断是否离线
-	if(uAccountToAdd == 0)
-		return FALSE;
-
-	COperateFriendRequest* pRequest = new COperateFriendRequest();
-	pRequest->m_uCmd = Apply;
-	pRequest->m_uAccountID = uAccountToAdd;
-	//m_mapAddFriendCache.insert(std::pair<UINT, UINT>(uAccountToAdd, Apply));
-
-	m_SendMsgThread.AddItem(pRequest);
-    return TRUE;
-}
-
-// 删除好友
-BOOL CFlamingoClient::DeleteFriend(UINT uAccountID)
-{
-	//TODO: 先判断是否离线
-	COperateFriendRequest* pRequest = new COperateFriendRequest();
-	pRequest->m_uCmd = Delete;
-	pRequest->m_uAccountID = uAccountID;
-	
-	m_SendMsgThread.AddItem(pRequest);
-
-	return TRUE;
-}
-
-bool CFlamingoClient::AddNewTeam(PCTSTR pszNewTeamName)
-{
-    if (pszNewTeamName == NULL || pszNewTeamName[0] == NULL)
-        return false;
-    
-    //TODO: 先判断是否离线
-    CAddTeamInfoRequest* pRequest = new CAddTeamInfoRequest();
-    pRequest->m_opType = updateteaminfo_operation_add;
-    pRequest->m_strNewTeamName = pszNewTeamName;
-
-    m_SendMsgThread.AddItem(pRequest);
-
-    return true;
-}
-
-bool CFlamingoClient::DeleteTeam(PCTSTR pszOldTeamName)
-{
-    if (pszOldTeamName == NULL || pszOldTeamName[0] == NULL)
-        return false;
-
-    //TODO: 先判断是否离线
-    CAddTeamInfoRequest* pRequest = new CAddTeamInfoRequest();
-    pRequest->m_opType = updateteaminfo_operation_delete;
-    pRequest->m_strOldTeamName = pszOldTeamName;
-
-    m_SendMsgThread.AddItem(pRequest);
-
-    return true;
-}
-
-bool CFlamingoClient::ModifyTeamName(PCTSTR pszNewTeamName, PCTSTR pszOldTeamName)
-{
-    if (pszNewTeamName == NULL || pszNewTeamName[0] == NULL || pszOldTeamName == NULL || pszOldTeamName[0] == NULL)
-        return false;
-
-    //TODO: 先判断是否离线
-    CAddTeamInfoRequest* pRequest = new CAddTeamInfoRequest();
-    pRequest->m_opType = updateteaminfo_operation_modify;
-    pRequest->m_strNewTeamName = pszNewTeamName;
-    pRequest->m_strOldTeamName = pszOldTeamName;
-
-    m_SendMsgThread.AddItem(pRequest);
-
-    return true;
-}
-
-bool CFlamingoClient::MoveFriendToOtherTeam(UINT uUserID, PCTSTR pszOldTeamName, PCTSTR pszNewTeamName)
-{
-    if (pszOldTeamName == NULL || pszOldTeamName[0] == NULL || pszNewTeamName == NULL || pszNewTeamName[0] == NULL)
-        return false;
-
-    //TODO: 先判断是否离线
-    CMoveFriendRequest* pRequest = new CMoveFriendRequest();
-    pRequest->m_nFriendID = (int)uUserID;
-    pRequest->m_strNewTeamName = pszNewTeamName;
-    pRequest->m_strOldTeamName = pszOldTeamName;
-
-    m_SendMsgThread.AddItem(pRequest);
-
-    return true;
-}
-
 BOOL CFlamingoClient::UpdateLogonUserInfo(  PCTSTR pszNickName, 
 										 PCTSTR pszSignature, 
 										 UINT uGender, 
@@ -443,32 +331,6 @@ void CFlamingoClient::CreateNewGroup(PCTSTR pszGroupName)
     m_SendMsgThread.AddItem(pRequest);
 }
 
-void CFlamingoClient::ModifyFriendMarkName(UINT friendID, PCTSTR pszNewMarkName)
-{
-    if (!m_bNetworkAvailable)
-        return;
-
-    CModifyFriendMakeNameRequest* pRequest = new CModifyFriendMakeNameRequest();
-    pRequest->m_uFriendID = friendID;
-    _tcscpy_s(pRequest->m_szNewMarkName, ARRAYSIZE(pRequest->m_szNewMarkName), pszNewMarkName);
-    m_SendMsgThread.AddItem(pRequest);
-}
-
-void CFlamingoClient::ResponseAddFriendApply(UINT uAccountID, UINT uCmd)
-{
-	if(uCmd!=Agree && uCmd!=Refuse)
-		return;
-
-	COperateFriendRequest* pRequest = new COperateFriendRequest();
-	
-	pRequest->m_uAccountID = uAccountID;
-	pRequest->m_uCmd = uCmd;
-
-	//m_mapAddFriendCache.insert(std::pair<UINT, UINT>(uAccountID, uCmd));
-	
-	m_SendMsgThread.AddItem(pRequest);
-}
-
 // 登录
 void CFlamingoClient::Login(int nStatus/* = STATUS_ONLINE*/)
 {
@@ -506,13 +368,6 @@ void CFlamingoClient::Login(int nStatus/* = STATUS_ONLINE*/)
 	m_SendMsgThread.AddItem(pLoginRequest);
 }
 
-void CFlamingoClient::GetFriendList()
-{
-    CUserBasicInfoRequest* pBasicInfoRequest = new CUserBasicInfoRequest();
-    pBasicInfoRequest->m_setAccountID.insert(m_UserMgr.m_UserInfo.m_uUserID);
-    m_SendMsgThread.AddItem(pBasicInfoRequest);
-}
-
 void CFlamingoClient::GetGroupMembers(int32_t groupid)
 {
     CGroupBasicInfoRequest* pGroupInfoRequest = new CGroupBasicInfoRequest();
@@ -541,11 +396,6 @@ BOOL CFlamingoClient::Logout()
 void CFlamingoClient::CancelLogin()
 {
 	//m_ThreadPool.RemoveAllTask();
-}
-
-void CFlamingoClient::SetFindFriendWindow(HWND hwndFindFriend)
-{
-	m_hwndFindFriend = hwndFindFriend;
 }
 
 // 改变在线状态
@@ -855,21 +705,9 @@ CBuddyInfo* CFlamingoClient::GetUserInfo(UINT uAccountID/*=0*/)
 {
 	if(uAccountID==0 || uAccountID==m_UserMgr.m_UserInfo.m_uUserID)
 		return &m_UserMgr.m_UserInfo;
-	
-	CBuddyTeamInfo* pTeamInfo = NULL;
+
+	//企业版说明：v1 好友列表已删除，这里只剩"在群成员里找"这一条路径。
 	CBuddyInfo* pBuddyInfo = NULL;
-	for(size_t i=0; i<m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.size(); ++i)
-	{
-		pTeamInfo = m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo[i];
-		for(size_t j=0; j<pTeamInfo->m_arrBuddyInfo.size(); ++j)
-		{
-			pBuddyInfo = pTeamInfo->m_arrBuddyInfo[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-				return pBuddyInfo;
-		}
-	}
-
-
 	CGroupInfo* pGroupInfo = NULL;
 	for(size_t i=0; i<m_UserMgr.m_GroupList.m_arrGroupInfo.size(); ++i)
 	{
@@ -883,12 +721,6 @@ CBuddyInfo* CFlamingoClient::GetUserInfo(UINT uAccountID/*=0*/)
 	}
 
 	return NULL;
-}
-
-// 获取好友列表
-CBuddyList* CFlamingoClient::GetBuddyList()
-{
-	return &m_UserMgr.m_BuddyList;
 }
 
 // 获取群列表
@@ -1136,153 +968,6 @@ void CFlamingoClient::OnLoginResult(UINT message, WPARAM wParam, LPARAM lParam)
 	delete pLoginResult;
 }
 
-void CFlamingoClient::OnUpdateUserBasicInfo(UINT message, WPARAM wParam, LPARAM lParam)
-{
-    CUserBasicInfoResult* pResult = (CUserBasicInfoResult*)lParam;
-	if(pResult == NULL)
-		return;
-
-    m_UserMgr.ClearUserInfo();
-    //没有好友，默认创建一个叫“我的好友”的默认好友分组
-    if (pResult->m_mapUserBasicInfo.empty())
-    {
-        CBuddyTeamInfo* pTeamInfo = new CBuddyTeamInfo();
-        pTeamInfo->m_nIndex = 0;
-        pTeamInfo->m_strName = _T("我的好友");
-        m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.push_back(pTeamInfo);
-    }
-    else
-    {
-        //TODO: 暂且先创建一个默认群分组
-
-        CBuddyInfo* pBuddyInfo = NULL;
-        TCHAR szAccountName[32] = { 0 };
-        TCHAR szNickName[32] = { 0 };
-        TCHAR szMarkName[32] = { 0 };
-        TCHAR szSignature[256] = { 0 };
-        TCHAR szPhoneNumber[32] = { 0 };
-        TCHAR szMail[32] = { 0 };
-        TCHAR szAddress[64] = { 0 };
-
-        TCHAR szGroupAccount[32];
-
-        CBuddyTeamInfo* pTeamInfo = NULL;
-        CGroupInfo* pGroupInfo = NULL;
-        int nTeamIndex = 0;
-        for (const auto& iter : pResult->m_mapUserBasicInfo)
-        {       
-            pTeamInfo = new CBuddyTeamInfo();
-            pTeamInfo->m_nIndex = nTeamIndex;
-            ++ nTeamIndex;
-            pTeamInfo->m_strName = EncodeUtil::Utf8ToUnicode(iter.first);
-            m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.push_back(pTeamInfo);
-            
-            for (auto& iter2 : iter.second)
-            {       
-                EncodeUtil::Utf8ToUnicode(iter2->szAccountName, szAccountName, ARRAYSIZE(szAccountName));
-                EncodeUtil::Utf8ToUnicode(iter2->szNickName, szNickName, ARRAYSIZE(szNickName));
-                EncodeUtil::Utf8ToUnicode(iter2->szMarkName, szMarkName, ARRAYSIZE(szMarkName));
-                EncodeUtil::Utf8ToUnicode(iter2->szSignature, szSignature, ARRAYSIZE(szSignature));
-                EncodeUtil::Utf8ToUnicode(iter2->szPhoneNumber, szPhoneNumber, ARRAYSIZE(szPhoneNumber));
-                EncodeUtil::Utf8ToUnicode(iter2->szMail, szMail, ARRAYSIZE(szMail));
-                EncodeUtil::Utf8ToUnicode(iter2->szAddress, szAddress, ARRAYSIZE(szAddress));
-        
-                if (iter2->uAccountID < 0xFFFFFFF)
-                {
-                    pBuddyInfo = new CBuddyInfo();
-                    pBuddyInfo->m_uUserID = iter2->uAccountID;
-
-                    pBuddyInfo->m_strAccount = szAccountName;
-
-                    pBuddyInfo->m_strNickName = szNickName;
-
-                    pBuddyInfo->m_strMarkName = szMarkName;
-
-                    pBuddyInfo->m_strSign = szSignature;
-
-                    pBuddyInfo->m_strMobile = szPhoneNumber;
-
-                    pBuddyInfo->m_strEmail = szMail;
-                    pBuddyInfo->m_strAddress = szAddress;
-                    pBuddyInfo->m_nStatus = iter2->nStatus;
-                    pBuddyInfo->m_nClientType = iter2->clientType;
-                    pBuddyInfo->m_nFace = iter2->uFaceID;
-                    pBuddyInfo->m_nBirthday = iter2->nBirthday;
-                    pBuddyInfo->m_nGender = iter2->nGender;
-
-			        pBuddyInfo->m_strCustomFaceName = iter2->customFace;
-			        if (!pBuddyInfo->m_strCustomFaceName.IsEmpty())
-			        {
-				        pBuddyInfo->m_bUseCustomFace = TRUE;
-				        CString cachedUserThumb;
-				        cachedUserThumb.Format(_T("%s%d.png"), m_UserMgr.GetCustomUserThumbFolder().c_str(), iter2->uAccountID);
-				        if (Hootina::CPath::IsFileExist(cachedUserThumb))
-				        {
-					        TCHAR szCachedThumbMd5[64] = { 0 };
-					        GetFileMd5ValueW(cachedUserThumb, szCachedThumbMd5, ARRAYSIZE(szCachedThumbMd5));
-
-					        TCHAR szThumbMd5Unicode[64] = { 0 };
-                            EncodeUtil::Utf8ToUnicode(iter2->customFace, szThumbMd5Unicode, ARRAYSIZE(szThumbMd5Unicode));
-					        if (_tcsncmp(szCachedThumbMd5, szThumbMd5Unicode, 32) == 0)
-					        {
-						        pBuddyInfo->m_bUseCustomFace = TRUE;
-						        pBuddyInfo->m_bCustomFaceAvailable = TRUE;
-					        }
-					        //头像不存在，下载该头像
-					        else
-					        {
-						        //下载头像
-						        CFileItemRequest* pFileItem = new CFileItemRequest();
-						        pFileItem->m_nFileType = FILE_ITEM_DOWNLOAD_USER_THUMB;
-						        pFileItem->m_uAccountID = iter2->uAccountID;
-						        strcpy_s(pFileItem->m_szUtfFilePath, ARRAYSIZE(pFileItem->m_szUtfFilePath), iter2->customFace);
-                                m_ImageTask.AddItem(pFileItem);
-					        }
-				        }
-				        else
-				        {
-					        //下载头像
-					        CFileItemRequest* pFileItem = new CFileItemRequest();
-					        pFileItem->m_nFileType = FILE_ITEM_DOWNLOAD_USER_THUMB;
-					        pFileItem->m_uAccountID = iter2->uAccountID;
-					        strcpy_s(pFileItem->m_szUtfFilePath, ARRAYSIZE(pFileItem->m_szUtfFilePath), iter2->customFace);
-                            m_ImageTask.AddItem(pFileItem);
-				        }
-			        }
-
-                    pBuddyInfo->m_nTeamIndex = 0;
-                    pTeamInfo->m_arrBuddyInfo.push_back(pBuddyInfo);
-                }
-                else
-                {
-                    pGroupInfo = new CGroupInfo();
-                    pGroupInfo->m_nGroupId = iter2->uAccountID;
-                    pGroupInfo->m_nGroupCode = iter2->uAccountID;
-                    pGroupInfo->m_strName = szNickName;
-                    memset(szGroupAccount, 0, sizeof(szGroupAccount));
-                    _stprintf_s(szGroupAccount, ARRAYSIZE(szGroupAccount), _T("%d"), iter2->uAccountID);
-                    pGroupInfo->m_strAccount = szGroupAccount;
-
-                    m_UserMgr.m_GroupList.AddGroup(pGroupInfo);
-
-                    GetGroupMembers(iter2->uAccountID);
-                } 
-
-                //TODO: 为啥不能直接DEL(iter2);
-                UserBasicInfo* p = iter2;
-                DEL(p);
-            }
-        }       
-   }
-
-    delete pResult;
-
-    //::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_BUDDY_INFO, 0, (LPARAM)m_UserMgr.m_UserInfo.m_uUserID);
-    ::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
-    ::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
-    ::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_GROUP_LIST, 0, 0);
-}
-
 void CFlamingoClient::OnUpdateGroupBasicInfo(UINT message, WPARAM wParam, LPARAM lParam)
 {
     CGroupBasicInfoResult* pResult = (CGroupBasicInfoResult*)lParam;
@@ -1384,7 +1069,6 @@ void CFlamingoClient::OnUpdateGroupBasicInfo(UINT message, WPARAM wParam, LPARAM
     delete pResult;
 
     //::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_BUDDY_INFO, 0, (LPARAM)m_UserMgr.m_UserInfo.m_uUserID);
-    //::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
     ::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
     ::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_GROUP_LIST, 0, 0);
 }
@@ -1474,48 +1158,6 @@ void CFlamingoClient::OnRecvUserStatusChangeData(UINT message, WPARAM wParam, LP
 	//m_RecvMsgTask.AddMsgData(pFriendStatus);
 }
 
-void CFlamingoClient::OnRecvAddFriendRequest(UINT message, WPARAM wParam, LPARAM lParam)
-{
-	//TODO: 这种加好友的逻辑太烂，需要优化。
-	COperateFriendResult* pOperateFriendResult = (COperateFriendResult*)lParam;
-	if(pOperateFriendResult == NULL)
-		return;
-	
-	BOOL bAlreadyExist = FALSE;
-	std::map<UINT, UINT>::iterator iter = m_mapAddFriendCache.begin();
-	for( ; iter!=m_mapAddFriendCache.end(); ++iter)
-	{
-		if(pOperateFriendResult->m_uCmd==Apply && pOperateFriendResult->m_uCmd==iter->second && iter->first==pOperateFriendResult->m_uAccountID)
-		{
-			bAlreadyExist = TRUE;
-			break;
-		}
-		//else if(pOperateFriendResult->m_uCmd==Agree && pOperateFriendResult->m_uCmd==iter->second && iter->first==pOperateFriendResult->m_uAccountID)
-		//{
-		//	bAlreadyExist = TRUE;
-		//	//马上要更新好友列表了，先将m_bBuddyListAvailable设置为FALSE，以便缓存新加的好友在线通知
-		//	StartGetUserInfoTask(USER_INFO_TYPE_SELF);
-		//	StartGetUserInfoTask(USER_INFO_TYPE_FRIENDS);
-		//	break;
-		//}
-		else
-		{
-			//马上要更新好友列表了，先将m_bBuddyListAvailable设置为FALSE，以便缓存新加的好友在线通知
-			m_bBuddyListAvailable = FALSE;
-			m_mapAddFriendCache.erase(iter);
-			break;
-		}
-
-	}
-	if(bAlreadyExist)
-		delete pOperateFriendResult;
-	else
-	{
-		::PostMessage(m_UserMgr.m_hCallBackWnd,  FMG_MSG_RECVADDFRIENDREQUSET, 0, (LPARAM)pOperateFriendResult);
-	}
-
-}
-
 void CFlamingoClient::OnUserStatusChange(UINT message, WPARAM wParam, LPARAM lParam)
 {
 	CFriendStatus* pFriendStatus = (CFriendStatus*)lParam;
@@ -1558,11 +1200,6 @@ void CFlamingoClient::OnUserStatusChange(UINT message, WPARAM wParam, LPARAM lPa
             ::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_CHATDLG_USERINFO, (WPARAM)uAccountID, 0);
             ::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_GROUP_INFO, (WPARAM)uAccountID, 0);
         }
-    }
-    else if (pFriendStatus->m_type == 3)
-    {
-        //好友信息有更新，重新拉下好友列表(TODO: 这操作太耗流量，后期优化成只拉更新的好友信息)
-        GetFriendList();
     }
 
     delete pFriendStatus;
@@ -1635,27 +1272,18 @@ void CFlamingoClient::OnUpdateChatMsgID(UINT message, WPARAM wParam, LPARAM lPar
 	m_UserMgr.SetMsgID(uAccountID, uMsgID);
 }
 
-void CFlamingoClient::OnFindFriend(UINT message, WPARAM wParam, LPARAM lParam)
-{
-	::PostMessage(m_hwndFindFriend, FMG_MSG_FINDFREIND, 0, lParam);
-}
-
 void CFlamingoClient::OnBuddyCustomFaceAvailable(UINT message, WPARAM wParam, LPARAM lParam)
 {
 	UINT uAccountID = (UINT)wParam;
 	if(uAccountID == 0)
 		return;
 
-	if(uAccountID == m_UserMgr.m_UserInfo.m_uUserID)
-		m_UserMgr.m_UserInfo.m_bCustomFaceAvailable = TRUE;
-	else
-	{
-		CBuddyInfo* pBuddyInfo = m_UserMgr.m_BuddyList.GetBuddy(uAccountID);
-		if(pBuddyInfo == NULL)
-			return;
+	//企业版说明：v1 好友列表已删除，这里只剩"本人自定义头像可用"这一条；
+	//联系人头像走 v2（cmd_user_info_changed_notify + AvatarDownloadResult），不经此处。
+	if(uAccountID != m_UserMgr.m_UserInfo.m_uUserID)
+		return;
 
-		pBuddyInfo->m_bCustomFaceAvailable = TRUE;
-	}
+	m_UserMgr.m_UserInfo.m_bCustomFaceAvailable = TRUE;
 
 	::PostMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_BUDDY_INFO, 0, (LPARAM)uAccountID);
 	::PostMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
@@ -1669,36 +1297,6 @@ void CFlamingoClient::OnModifyPasswordResult(UINT message, WPARAM wParam, LPARAM
 void CFlamingoClient::OnCreateNewGroupResult(UINT message, WPARAM wParam, LPARAM lParam)
 {
 	::PostMessage(m_hwndCreateNewGroup, message, wParam, lParam);
-}
-
-void CFlamingoClient::OnDeleteFriendResult(UINT message, WPARAM wParam, LPARAM lParam)
-{
-	if(wParam != DELETE_FRIEND_SUCCESS)
-		return;
-	
-	UINT uAccountID = (UINT)lParam;
-	if(!IsGroupTarget(uAccountID))
-	{
-		m_UserMgr.DeleteFriend(uAccountID);
-		m_UserMgr.m_MsgList.DelMsgSender(FMG_MSG_TYPE_BUDDY, uAccountID);
-	}
-	else
-	{
-		m_UserMgr.ExitGroup(uAccountID);
-		m_UserMgr.m_MsgList.DelMsgSender(FMG_MSG_TYPE_GROUP, uAccountID);
-		if(m_UserMgr.m_RecentList.DeleteRecentItem(uAccountID))
-			::PostMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
-	}
-	
-	if(m_UserMgr.m_MsgList.GetMsgSenderCount() <= 0)
-		::PostMessage(m_UserMgr.m_hCallBackWnd, WM_CANCEL_FLASH, 0, 0);
-
-	::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_DELETEFRIEND, DELETE_FRIEND_SUCCESS, lParam);
-}
-
-void CFlamingoClient::OnUpdateBuddyList(UINT message, WPARAM wParam, LPARAM lParam)
-{
-	::SendMessage(m_UserMgr.m_hCallBackWnd, message, wParam, lParam);	
 }
 
 void CFlamingoClient::OnUpdateGroupList(UINT message, WPARAM wParam, LPARAM lParam)
@@ -1924,12 +1522,8 @@ void CFlamingoClient::OnUpdateGMemberSign(UINT message, WPARAM wParam, LPARAM lP
 
 void CFlamingoClient::OnUpdateBuddyInfo(UINT message, WPARAM wParam, LPARAM lParam)
 {
-	UINT uUserID = m_UserMgr.m_UserInfo.m_uUserID;
-		
-	CBuddyInfo* lpBuddyInfo = m_UserMgr.m_BuddyList.GetBuddy(uUserID);
-	if (lpBuddyInfo != NULL)
-		lpBuddyInfo->SetBuddyInfo(lpBuddyInfo);
-	
+	//企业版说明：原先这里从 v1 好友列表里取自己那条记录再自我赋值（本身就是空操作），
+	//随 m_BuddyList 一并删除，只保留向主窗口转发刷新通知。
 	::SendMessage(m_UserMgr.m_hCallBackWnd, message, NULL, 0);
 }
 
@@ -1996,9 +1590,6 @@ void CFlamingoClient::OnTargetInfoChange(UINT message, WPARAM wParam, LPARAM lPa
 	//m_SendMsgTask.AddItem(pBasicInfoRequest);
 	
 	m_bGroupMemberInfoAvailable = FALSE;
-	CLoginUserFriendsIDRequest* pFriendsIDRequest = new CLoginUserFriendsIDRequest();
-	pFriendsIDRequest->m_uAccountID = uAccountID;
-	//m_SendMsgTask.AddItem(pFriendsIDRequest);
 }
 
 void CFlamingoClient::OnInternal_GetBuddyData(UINT message, WPARAM wParam, LPARAM lParam)
@@ -2008,18 +1599,10 @@ void CFlamingoClient::OnInternal_GetBuddyData(UINT message, WPARAM wParam, LPARA
 	if (NULL == lpBuddyData)
 		return;
 
-	CBuddyInfo* lpBuddyInfo = m_UserMgr.m_BuddyList.GetBuddy(nUTalkUin);
-	if (NULL == lpBuddyInfo)
-		return;
-
-	lpBuddyData->nUTalkNum = lpBuddyInfo->m_uUserID;
-
-	int nMaxCnt = sizeof(lpBuddyData->szNickName) / sizeof(TCHAR);
-	if (!lpBuddyInfo->m_strMarkName.empty())
-		_tcsncpy(lpBuddyData->szNickName, lpBuddyInfo->m_strMarkName.c_str(), nMaxCnt);
-	else
-		_tcsncpy(lpBuddyData->szNickName, lpBuddyInfo->m_strNickName.c_str(), nMaxCnt);
-	lpBuddyData->szNickName[nMaxCnt-1] = _T('\0');
+	//企业版说明：数据源 v1 好友列表已删除，本查询恒等于"查不到"。调用方
+	//（CRecvMsgThread::GetBuddyData）本来就按"取不到就退回用账号ID显示"处理，
+	//故这里直接返回，保持同一语义。
+	(void)nUTalkUin;
 }
 
 void CFlamingoClient::OnInternal_GetGroupData(UINT message, WPARAM wParam, LPARAM lParam)
@@ -2177,35 +1760,12 @@ void CFlamingoClient::GoOffline()
 	//m_mapUserStatusCache.clear();
 	
 	::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_BUDDY_INFO, 0, (LPARAM)m_UserMgr.m_UserInfo.m_uUserID);
-	::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_BUDDY_LIST, 0, 0);
 	::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
 	::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_GROUP_LIST, 0, 0);
 }
 
 void CFlamingoClient::CacheBuddyStatus()
 {
-	CBuddyTeamInfo* pBuddyTeamInfo = NULL;
-	CBuddyInfo* pBuddyInfo = NULL;
-	size_t nTeamCount = m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo.size();
-	size_t nBuddyCount = 0;
-	for(size_t i=0; i<nTeamCount; ++i)
-	{
-		pBuddyTeamInfo = m_UserMgr.m_BuddyList.m_arrBuddyTeamInfo[i];
-		if(pBuddyTeamInfo == NULL)
-			continue;
-
-		nBuddyCount = pBuddyTeamInfo->m_arrBuddyInfo.size();
-
-		for(size_t j=0; j<nBuddyCount; ++j)
-		{
-			pBuddyInfo = pBuddyTeamInfo->m_arrBuddyInfo[j];
-			if(pBuddyInfo == NULL)
-				continue;
-			if(pBuddyInfo->m_nStatus != STATUS_OFFLINE)
-				m_mapUserStatusCache.insert(std::pair<UINT, long>(pBuddyInfo->m_uUserID, pBuddyInfo->m_nStatus));
-		}
-	}
-
 	//群成员的在线状态也要缓存
 	CGroupInfo* pGroupInfo = NULL;
 	for(std::vector<CGroupInfo*>::iterator iter=m_UserMgr.m_GroupList.m_arrGroupInfo.begin(); 
@@ -2218,7 +1778,10 @@ void CFlamingoClient::CacheBuddyStatus()
 
 		for(size_t j=0; j<pGroupInfo->m_arrMember.size(); ++j)
 		{
-			pBuddyInfo = pGroupInfo->m_arrMember[j];
+			// pBuddyInfo 原先在函数开头声明，供"遍历 v1 好友列表"与"遍历群成员"
+			// 两个循环共用。好友列表随好友子系统删除后，只剩群成员这一个循环，
+			// 变量就地声明即可。
+			CBuddyInfo* pBuddyInfo = pGroupInfo->m_arrMember[j];
 			if(pBuddyInfo == NULL)
 				continue;
 
@@ -2316,10 +1879,6 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 	case FMG_MSG_UPDATE_GROUP_HEADPIC:	// 更新群头像
 		::SendMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
 		break;
-	case FMG_MSG_UPDATE_USER_BASIC_INFO:	//收到用户的基本信息
-		lpFMGClient->OnUpdateUserBasicInfo(message, wParam, lParam);
-		break;
-
     case FMG_MSG_UPDATE_GROUP_BASIC_INFO:
         lpFMGClient->OnUpdateGroupBasicInfo(message, wParam, lParam);
         break;
@@ -2342,18 +1901,6 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 	case FMG_MSG_UPDATE_USER_CHAT_MSG_ID:
 		lpFMGClient->OnUpdateChatMsgID(message, wParam, lParam);
 		break;	
-	case FMG_MSG_FINDFREIND:
-		lpFMGClient->OnFindFriend(message, wParam, lParam);
-		break;
-
-	case FMG_MSG_DELETEFRIEND:
-		lpFMGClient->OnDeleteFriendResult(message, wParam, lParam);
-		break;
-
-	case FMG_MSG_RECVADDFRIENDREQUSET:
-		lpFMGClient->OnRecvAddFriendRequest(message, wParam, lParam);
-		break;
-
 	case FMG_MSG_CUSTOMFACE_AVAILABLE:
 		lpFMGClient->OnBuddyCustomFaceAvailable(message, wParam, lParam);
 		break;
@@ -2366,9 +1913,6 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 		lpFMGClient->OnCreateNewGroupResult(message, wParam, lParam);
 		break;
 
-	case FMG_MSG_UPDATE_BUDDY_LIST:				//更新好友列表
-		lpFMGClient->OnUpdateBuddyList(message, wParam, lParam);
-		break;
 	case FMG_MSG_UPDATE_GROUP_LIST:		// 更新群列表消息
 		lpFMGClient->OnUpdateGroupList(message, wParam, lParam);
 		break;

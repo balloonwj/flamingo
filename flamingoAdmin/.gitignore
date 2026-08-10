@@ -1,0 +1,36 @@
+# flamingoAdmin —— 构建产物与 IDE 临时文件，不纳入版本管理
+
+# 链接输出目录
+/Bin/
+
+# 各配置的中间产物目录
+/Debug/
+/Release/
+/Debug_x64/
+/Release_x64/
+
+# 单元测试工程各配置的输出目录。上面那几条以 / 开头的规则只锚定在本目录根，
+# 覆盖不到 Tests 子目录，必须单独列出，否则 Tests\Release_x64 下的增量链接产物会漏进版本库。
+/Tests/Debug/
+/Tests/Release/
+/Tests/Debug_x64/
+/Tests/Release_x64/
+
+# MSBuild / 编译临时文件
+*.tlog
+*.obj
+*.pdb
+*.idb
+*.ilk
+*.res
+*.log
+*.lastbuildstate
+# 增量链接（/INCREMENTAL）产物，单个可达十几 MB
+*.iobj
+*.ipdb
+*.recipe
+
+# Visual Studio 用户态文件
+/.vs/
+*.vcxproj.user
+*.aps

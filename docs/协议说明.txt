@@ -1,5 +1,13 @@
 聊天服务器协议定义于：
-flamingoserver/chatserversrc/Msg.h
+flamingoserver/chatserversrc/Protocol.h
+
+完整协议规范（帧格式、报文 JSON 示例、错误码、作废编号）见：
+docs/协议设计-v2.md
+
+flamingoserver/chatserversrc/Msg.h 是 v1 遗留协议，只供对照历史版本，不要照它写新代码。
+其中好友相关的定义（msg_type_getofriendlist、msg_type_operatefriend、
+msg_type_updateteaminfo、msg_type_movefriendtootherteam，以及
+error_code_teamname_exist 等）已随好友关系子系统于 2026-08-05 作废。
 
 文件传输协议定义于：
 flamingoserver/fileserversrc/FileMsg.h

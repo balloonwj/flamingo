@@ -20,7 +20,7 @@ extern std::wstring g_strAppTitle;
 
 #define		FMG_MSG_LOGIN_RESULT			WM_USER + 100		    // 登录返回消息
 #define		FMG_MSG_LOGOUT_RESULT			WM_USER + 101			// 注销返回消息
-#define		FMG_MSG_UPDATE_BUDDY_LIST		WM_USER + 103			// 更新好友列表消息
+//WM_USER + 103 原 FMG_MSG_UPDATE_BUDDY_LIST（更新 v1 好友列表）已废弃，禁止复用。
 #define		FMG_MSG_UPDATE_GROUP_LIST		WM_USER + 104			// 更新群列表消息
 #define		FMG_MSG_UPDATE_RECENT_LIST		WM_USER + 105		    // 更新最近联系人列表消息
 #define		FMG_MSG_BUDDY_MSG				WM_USER + 106			// 好友消息
@@ -50,21 +50,24 @@ extern std::wstring g_strAppTitle;
 #define		FMG_MSG_INTERNAL_GROUPID2CODE	WM_USER + 403
 
 #define		FMG_MSG_REGISTER				WM_USER + 404			//注册新用户
-#define		FMG_MSG_FINDFREIND			    WM_USER + 405
-#define     FMG_MSG_ADDFREIND				WM_USER + 406			//主动发送加好友请求
-#define		FMG_MSG_RECVADDFRIENDREQUSET	WM_USER + 407			//收到加好友请求
-#define		FMG_MSG_DELETEFRIEND			WM_USER + 408
+//企业版说明：v1 好友体系（查找好友 / 加好友 / 删好友 / 好友ID列表）已整体删除，通讯录
+//改由服务端组织架构下发。下列窗口消息编号已废弃、禁止复用 —— 留这段说明是为了
+//防止后来人看到编号空档就顺手拿去当新消息用，与遗留的旧代码互发时串号：
+//  WM_USER + 405  FMG_MSG_FINDFREIND           查找好友结果
+//  WM_USER + 406  FMG_MSG_ADDFREIND            主动发送加好友请求的成败
+//  WM_USER + 407  FMG_MSG_RECVADDFRIENDREQUSET 收到加好友请求 / 应答
+//  WM_USER + 408  FMG_MSG_DELETEFRIEND         删除好友结果（曾兼作 v1 退群通知）
+//  WM_USER + 413  FMG_MSG_RECVADDFRIENDANS     收到对方对加好友请求的答复
+//  WM_USER + 418  FMG_MSG_UPDATE_FRIEND_IDS    更新所有好友ID
 #define		FMG_MSG_SENDCHATMSG_RESULT	    WM_USER + 409			//给好友发消息的反馈结果
 //#define		FMG_MSG_UPLOADFILE_RESULT		WM_USER + 410		//上传文件反馈结果
 #define		FMG_MSG_RECVFILE_REQUEST		WM_USER + 411			//接受文件请求
 #define		FMG_MSG_RECVFILE_RESULT		    WM_USER + 412			//下载文件反馈结果
-#define     FMG_MSG_RECVADDFRIENDANS		WM_USER + 413			//收到请求添加好友的对方反馈(拒绝或者同意)
 #define		FMG_MSG_HEARTBEAT				WM_USER + 414			//心跳消息
 #define		FMG_MSG_GOOFFLINE				WM_USER + 415			//下线或者掉线
 #define		FMG_MSG_UPDATE_USER_BASIC_INFO  WM_USER + 416			//更新某个用户基本信息
 #define		FMG_MSG_UPDATE_GROUP_BASIC_INFO WM_USER + 417		    //更新某个群组基本信息
 
-#define		FMG_MSG_UPDATE_FRIEND_IDS		WM_USER + 418			//更新所有好友ID
 #define		FMG_MSG_MODIFY_USER_INFO		WM_USER + 421			//修改用户信息成功
 #define		FMG_MSG_RECV_USER_STATUS_CHANGE_DATA	WM_USER + 422	//收到用户在线状态改变数据
 #define		FMG_MSG_USER_STATUS_CHANGE	    WM_USER + 423			//用户在线状态改变
@@ -228,6 +231,7 @@ enum MyPresenceValue
 #define     FMG_MSG_OPEN_CONTACT_PROFILE    WM_USER + 453			//请求主面板打开某联系人资料窗，wParam=userid
 #define     FMG_MSG_OPEN_CHAT               WM_USER + 454			//请求主面板打开与某 userid 的单聊，wParam=userid
 #define     FMG_MSG_CONV_SEND_BUMP          WM_USER + 456			//单聊窗发出一条消息后通知主面板冒泡该会话，wParam=对端userid，lParam=堆上 ConvSendBumpData*（处理后 delete）
+#define     FMG_MSG_CONV_MARK_READ          WM_USER + 497			//聊天窗/群聊窗被切到前台（WM_ACTIVATE）后通知主面板把该会话未读清零，wParam=ctype（1单聊 2群聊），lParam=堆上 long long* cid（处理后 delete）。窗口间直投、不经 ProxyWndProc，故无须在 FlamingoClient.cpp 加转发 case
 #define     FMG_MSG_OPEN_GROUP_MANAGE       WM_USER + 472			//请求主面板打开某群的群管理对话框，lParam=堆上 int64_t* groupId（处理后 delete）
 #define     FMG_MSG_OPEN_HISTORY            WM_USER + 477			//请求主面板打开某会话的历史消息记录窗，wParam 低字节=ctype(1单聊 2群聊)、次低字节=打开后预选的类型胶囊(balloonhistory::HistoryTypeFilter，0=全部 6=Pin；不填即 0)，lParam=堆上 int64_t* cid（处理后 delete）
 #define     FMG_MSG_OPEN_CHANGEPWD          WM_USER + 473			//请求主面板打开修改密码对话框（系统设置「账号安全」页"修改"按钮转发；无参）
@@ -338,22 +342,10 @@ enum CONTENT_TYPE
     CONTENT_TYPE_REMOTE_DESKTOP         //远程桌面
 };
 
-class CBuddyTeamInfo;
 class CBuddyInfo;
-class COnlineBuddyInfo;
 class CGroupInfo;
 class CRecentInfo;
 class CBuffer;
-
-struct BuddyInfo
-{
-    UINT	uAccountID;
-    TCHAR	szAccountName[32];
-    TCHAR	szMarkName[32];
-    long	nTeamIndex;
-    long	nGroupCount;		//群个数
-    UINT	GroupID[64];		//群号ID
-};
 
 class CBuddyInfo			// 好友信息
 {
@@ -392,72 +384,13 @@ public:
     UINT		m_uMsgID;			//会话消息ID，初始值为0，只存在于内存中不存档
 };
 
-struct BuddyTeamInfo
-{
-    long	nTeamIndex;
-    TCHAR	szTeamName[16];
-};
-
-class CBuddyTeamInfo		// 好友分组信息
-{
-public:
-    CBuddyTeamInfo(void);
-    ~CBuddyTeamInfo(void);
-
-public:
-    void Reset();
-    int GetBuddyCount();
-    int GetOnlineBuddyCount();
-    CBuddyInfo* GetBuddy(int nIndex);
-    void Sort();
-
-public:
-    int m_nIndex;			// 索引
-    int m_nSort;			// 排列顺序
-    tstring m_strName;		// 分组名称
-    std::vector<CBuddyInfo*> m_arrBuddyInfo;
-};
-
-class COnlineBuddyInfo		// 在线好友信息
-{
-public:
-    COnlineBuddyInfo(void);
-    ~COnlineBuddyInfo(void);
-
-public:
-    void Reset();
-
-public:
-    UINT m_nUin;
-    long m_nStatus;	// 在线状态
-    int m_nClientType;		// 客户端类型
-};
-
-class CBuddyList	// 好友列表
-{
-public:
-    CBuddyList(void);
-    ~CBuddyList(void);
-
-public:
-    void Reset();
-    int GetBuddyTeamCount();
-    CBuddyTeamInfo* GetBuddyTeam(int nTeamIndex);
-    CBuddyTeamInfo* GetBuddyTeamByIndex(int nIndex);
-    int GetBuddyTotalCount();
-    int GetBuddyCount(int nTeamIndex);
-    int GetOnlineBuddyCount(int nTeamIndex);
-    CBuddyInfo* GetBuddy(int nTeamIndex, int nIndex);
-    CBuddyInfo* GetBuddy(UINT nUTalkUin);
-    void SortBuddyTeam();
-    void SortBuddy();
-    BOOL AddBuddyTeam(CBuddyTeamInfo* lpBuddyTeamInfo);
-    BOOL IsTeamNameExist(PCTSTR pszTeamName);
-
-public:
-    int m_nRetCode;
-    std::vector<CBuddyTeamInfo*> m_arrBuddyTeamInfo;
-};
+//企业版说明：v1 好友体系已整体删除 —— 通讯录改由服务端组织架构下发（v2 cmd_get_contacts），
+//由 CBalloonMainPanel 自己缓存联系人。随之删掉的有：
+//  struct BuddyInfo / struct BuddyTeamInfo —— 好友与好友分组落盘用的 POD（BuddyInfo.bi / BuddyTeamInfo.bti）
+//  class  CBuddyTeamInfo                   —— 好友分组
+//  class  COnlineBuddyInfo                 —— 在线好友精简信息（已无调用方）
+//  class  CBuddyList                       —— 好友列表容器
+//CBuddyInfo 保留：它同时是“本人资料”与“群成员资料”的载体（见 CGroupInfo::m_arrMember）。
 
 class CGroupInfo			// 群信息
 {

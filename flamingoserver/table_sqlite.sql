@@ -54,27 +54,6 @@ BEGIN
     UPDATE t_user SET f_update_time = datetime('now','localtime') WHERE rowid = NEW.rowid;
 END;
 
-CREATE TABLE IF NOT EXISTS t_user_relationship
-(
-    f_id INTEGER PRIMARY KEY AUTOINCREMENT,    -- 自增ID
-    f_user_id1 INTEGER NOT NULL,    -- 第一个用户id
-    f_user_id2 INTEGER NOT NULL,    -- 第二个用户id
-    f_user1_teamname VARCHAR(32) NOT NULL DEFAULT '我的好友',    -- 用户2在用户1的好友分组名称
-    f_user1_markname VARCHAR(32),    -- 用户2在用户1的备注名称
-    f_user2_teamname VARCHAR(32) NOT NULL DEFAULT '我的好友',    -- 用户1在用户2的好友分组名称
-    f_user2_markname VARCHAR(32),    -- 用户1在用户2的备注名称
-    f_user1_tags VARCHAR(256) NOT NULL DEFAULT '',    -- 用户2在用户1的好友标签(JSON数组)
-    f_user2_tags VARCHAR(256) NOT NULL DEFAULT '',    -- 用户1在用户2的好友标签(JSON数组)
-    f_update_time TIMESTAMP NOT NULL DEFAULT (datetime('now','localtime')),    -- 更新时间
-    f_remark VARCHAR(64) DEFAULT NULL    -- 备注
-);
-
-CREATE TRIGGER IF NOT EXISTS trg_t_user_relationship_f_update_time AFTER UPDATE ON t_user_relationship
-FOR EACH ROW WHEN NEW.f_update_time = OLD.f_update_time
-BEGIN
-    UPDATE t_user_relationship SET f_update_time = datetime('now','localtime') WHERE rowid = NEW.rowid;
-END;
-
 CREATE TABLE IF NOT EXISTS t_chatmsg
 (
     f_msgid INTEGER PRIMARY KEY AUTOINCREMENT,    -- 服务器消息ID(全局自增,单调递增)
@@ -373,20 +352,16 @@ CREATE TABLE IF NOT EXISTS t_service_account_binding
 
 CREATE INDEX IF NOT EXISTS t_service_account_binding_idx_service ON t_service_account_binding(f_service_id);
 
-CREATE TABLE IF NOT EXISTS t_friend_request
+CREATE TABLE IF NOT EXISTS t_contact_remark
 (
-    f_id INTEGER PRIMARY KEY AUTOINCREMENT,    -- 申请ID
-    f_from_userid INTEGER NOT NULL,    -- 申请发起方userid
-    f_to_userid INTEGER NOT NULL,    -- 被申请方userid
-    f_verify_msg VARCHAR(256) DEFAULT NULL,    -- 验证留言
-    f_source VARCHAR(32) DEFAULT NULL,    -- 申请来源:search/group/card等
-    f_status INTEGER NOT NULL DEFAULT 0,    -- 状态:0待处理 1已同意 2已拒绝
-    f_create_time INTEGER NOT NULL DEFAULT 0,    -- 申请时间(Unix毫秒)
-    f_handle_time INTEGER NOT NULL DEFAULT 0    -- 处理时间(Unix毫秒,0=未处理)
+    f_userid INTEGER NOT NULL,    -- 备注名归属用户userid
+    f_target_userid INTEGER NOT NULL,    -- 被备注的联系人userid
+    f_remark VARCHAR(32) NOT NULL DEFAULT '',    -- 备注名
+    f_update_time INTEGER NOT NULL DEFAULT 0,    -- 最近一次修改时间(Unix毫秒)
+    PRIMARY KEY (f_userid, f_target_userid)
 );
 
-CREATE INDEX IF NOT EXISTS t_friend_request_idx_to_status ON t_friend_request(f_to_userid, f_status);
-CREATE INDEX IF NOT EXISTS t_friend_request_idx_from ON t_friend_request(f_from_userid);
+CREATE INDEX IF NOT EXISTS t_contact_remark_idx_user ON t_contact_remark(f_userid);
 
 CREATE TABLE IF NOT EXISTS t_blacklist
 (

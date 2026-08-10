@@ -1,0 +1,7 @@
+// flamingoAdmin - application resource script (icon only for now).
+// balloonwj@qq.com  2026.05.21
+#include "resource.h"
+
+// Application icon. app.ico is a placeholder copied from the balloonui demo;
+// it will be replaced with the Flamingo-branded flamingo icon in a later phase.
+IDI_APPICON   ICON   "app.ico"

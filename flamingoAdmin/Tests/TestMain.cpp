@@ -1,0 +1,106 @@
+/**
+ *  flamingoAdmin —— 单元测试程序入口（console）。
+ *
+ *  flamingoAdminTests 是与主程序并列的独立 console 工程，只编译 flamingoAdmin
+ *  的数据层（Mock/ 与 Util/），不依赖 balloonui，用于跑 Mock 数据层单元测试。
+ *  进程退出码：全部通过返回 0，有失败返回 1，便于 CI / 脚本判定。
+ *
+ *  balloonwj@qq.com   2026.05.21
+ */
+#include "stdafx.h"
+#include "Tests/TestFramework.h"
+
+// 满足 stdafx.h 中 `extern CAppModule _Module;` 的定义需求。测试进程只用到
+// ATL CString 与 Win32 API，无需 _Module.Init()，定义一个实例即可。
+CAppModule _Module;
+
+namespace flamingoadmin { namespace test {
+
+// 在 DataStoreTests.cpp 中定义：依次运行全部 Mock 数据层用例。
+void RunAllDataStoreTests();
+
+// 在 DebugConsoleTests.cpp 中定义：依次运行全部调试控制台数据层用例。
+void RunAllDebugConsoleTests();
+
+// 在 ScrollbarMetricsTests.cpp 中定义：运行自绘悬浮滚动条几何计算用例。
+void RunAllScrollbarMetricsTests();
+
+// 在 CommonWidgetsTests.cpp 中定义:运行 Widgets/CommonWidgets.cpp 里 UI
+// 控件的非绘制路径用例(目前覆盖 StatTile 的 7 条)。
+void RunAllCommonWidgetsTests();
+
+// 在 AnnouncementPreviewPanelTests.cpp 中定义:运行公告中心右栏「公告详情」
+// 面板(Screens/AnnouncementPreviewPanel)的 8 条用例,验证 SetAnnouncement
+// 把 7 个★强项文字字段正确转写到 DuiLabel/DuiRichEditHost 子控件,以及
+// pinned/scheduled/status 切换时的可见性 + 按钮文字。
+void RunAllAnnouncementPreviewPanelTests();
+
+// 在 RichEditScrollTests.cpp 中定义:公告正文滚动机制集成测试(需真 RICHEDIT
+// 子窗口,创建隐藏宿主窗口验证 DuiRichEditHost 滚动 API 与 OnPreviewWheel)。
+void RunAllRichEditScrollTests();
+
+// 在 ListPagingTests.cpp 中定义:列表分页纯函数(Util/ListPaging)单元测试。
+void RunAllListPagingTests();
+
+// 在 OrgTreeFilterTests.cpp 中定义:组织树 OrgTree 搜索过滤单元测试。
+void RunAllOrgTreeFilterTests();
+
+// 在 PinyinTests.cpp 中定义:拼音首字母工具(Util/Pinyin)单元测试。
+void RunAllPinyinTests();
+
+// 在 OrgTreeBuilderTests.cpp 中定义:组织架构树组装(Util/OrgTreeBuilder)单元
+// 测试,覆盖"公司根部门"作为树根的识别、挂接与不可删除标记。
+void RunAllOrgTreeBuilderTests();
+
+}} // namespace flamingoadmin::test
+
+int main()
+{
+    // 控制台按 UTF-8 输出，保证测试信息里的中文不乱码。
+    ::SetConsoleOutputCP(CP_UTF8);
+
+    flamingoadmin::test::RunAllDataStoreTests();
+
+    // 运行调试控制台数据层（DebugConsole）单元测试。
+    flamingoadmin::test::RunAllDebugConsoleTests();
+
+    // 运行自绘悬浮滚动条几何计算（ScrollbarMetrics）单元测试。
+    flamingoadmin::test::RunAllScrollbarMetricsTests();
+
+    // 运行 UI 控件层(CommonWidgets)单元测试 —— 静态链接 balloonui_static
+    // 后,在无 host 下裸构造控件并断言"参数 → 状态"的转写正确。
+    flamingoadmin::test::RunAllCommonWidgetsTests();
+
+    // 运行公告中心「公告详情」面板单元测试 —— 在无 host 下裸构造 PreviewPanel,
+    // 断言 SetAnnouncement 后 7 个★强项文字字段 / 双状态卡可见性 / 5 按钮
+    // 文字切换正确;不调 OnPaint,故 RichEdit HWND 不必 EnsureCreated。
+    flamingoadmin::test::RunAllAnnouncementPreviewPanelTests();
+
+    // 运行公告正文滚动机制集成测试 —— 创建隐藏宿主窗口 + 真 RICHEDIT 子窗口,
+    // 验证 DuiRichEditHost 滚动 API(GetVScrollMetrics/SetVScrollPos)与
+    // AnnouncementPreviewPanel::OnPreviewWheel 的真实滚动行为。
+    flamingoadmin::test::RunAllRichEditScrollTests();
+
+    // 运行列表分页纯函数(Util/ListPaging)单元测试。
+    flamingoadmin::test::RunAllListPagingTests();
+
+    // 运行组织树 OrgTree 搜索过滤单元测试。
+    flamingoadmin::test::RunAllOrgTreeFilterTests();
+
+    // 运行拼音首字母工具(Util/Pinyin)单元测试。
+    flamingoadmin::test::RunAllPinyinTests();
+
+    // 运行组织架构树组装单元测试 —— 验证公司根部门被正确识别为树根、顶级部门与
+    // 成员各就各位,以及公司节点被标记为不可删除。
+    flamingoadmin::test::RunAllOrgTreeBuilderTests();
+
+    // 汇总并打印通过 / 失败数。
+    const flamingoadmin::test::TestStats& stats = flamingoadmin::test::Stats();
+    CString summary;
+    summary.Format(_T("\n==== 测试结束：通过 %d，失败 %d ====\n"),
+                   stats.m_passed, stats.m_failed);
+    flamingoadmin::test::PrintLine(summary);
+
+    // 有失败返回 1，全部通过返回 0。
+    return stats.m_failed == 0 ? 0 : 1;
+}

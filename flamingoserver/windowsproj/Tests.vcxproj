@@ -36,6 +36,10 @@
     <ClCompile Include="..\chatserversrc\ContactsProtocol.cpp" />
     <ClCompile Include="..\tests\test_favoriteprotocol.cpp" />
     <ClCompile Include="..\chatserversrc\FavoriteProtocol.cpp" />
+    <ClCompile Include="..\tests\test_contactremarkmanager.cpp" />
+    <ClCompile Include="..\chatserversrc\ContactRemarkManager.cpp" />
+    <ClCompile Include="..\tests\test_adminbootstrap.cpp" />
+    <ClCompile Include="..\chatserversrc\AdminManager.cpp" />
     <ClCompile Include="..\tests\test_profileprotocol.cpp" />
     <ClCompile Include="..\chatserversrc\ProfileProtocol.cpp" />
     <ClCompile Include="..\tests\test_registerprotocol.cpp" />

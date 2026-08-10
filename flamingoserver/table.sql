@@ -39,29 +39,10 @@ CREATE TABLE IF NOT EXISTS  t_user  (
 //alter table t_user add f_teaminfo blob default null comment "好友分组信息";
 //alter table t_user drop column f_teaminfo;
 
-//用户关系表
-//为了避免冗余，一定要保证f_user_id1小于f_user_id2
-CREATE TABLE IF NOT EXISTS  t_user_relationship  (
-         f_id  bigint(20) NOT NULL AUTO_INCREMENT COMMENT '自增ID',
-         f_user_id1  bigint(20) NOT NULL COMMENT '第一个用户id',
-         f_user_id2  bigint(20) NOT NULL COMMENT '第二个用户id',		 
-		 f_user1_teamname VARCHAR(32) NOT NULL DEFAULT "我的好友" COMMENT "用户2在用户1的好友分组名称",
-		 f_user1_markname VARCHAR(32) COMMENT "用户2在用户1的备注名称",
-		 f_user2_teamname VARCHAR(32) NOT NULL DEFAULT "我的好友" COMMENT "用户1在用户2的好友分组名称",
-		 f_user2_markname VARCHAR(32) COMMENT "用户1在用户2的备注名称",
-		 f_user1_tags VARCHAR(256) NOT NULL DEFAULT '' COMMENT "用户2在用户1的好友标签(JSON数组)",
-		 f_user2_tags VARCHAR(256) NOT NULL DEFAULT '' COMMENT "用户1在用户2的好友标签(JSON数组)",
-         f_update_time  timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-         f_remark  varchar(64) DEFAULT NULL COMMENT '备注',
-         PRIMARY KEY ( f_id ),
-         KEY  f_id  ( f_id )
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8
-
-//ALTER TABLE t_user_relationship CHANGE f_create_time f_update_time timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间';		
-//alter table t_user_relationship modify f_user1_teamname varchar(32) not null default "我的好友" comment "用户2在用户1的好友分组名称";
-//alter table t_user_relationship modify f_user2_teamname varchar(32) not null default "我的好友" comment "用户1在用户2的好友分组名称";
-//alter table t_user_relationship add f_user1_markname VARCHAR(32) COMMENT "用户2在用户1的备注名称";
-//alter table t_user_relationship add f_user2_markname VARCHAR(32) COMMENT "用户1在用户2的备注名称";
+//用户关系表 t_user_relationship 已于企业版删除（2026-08-05）。
+//企业版通讯录来自组织架构 t_department_member，好友关系表实测 0 行、从未被使用；
+//其上唯一还有人用的"好友备注名"已迁到独立的 t_contact_remark（见本文件后半部分）。
+//表名不要复用，存量库里的残表可手工 DROP。
 
 //消息记录表（v2 重建：旧 v1 结构 f_senderid/f_targetid/f_msgcontent 已废弃，
 //迁移脚本 migrations/v2_drop_old_chatmsg.sql 先 DROP 旧表，checkTable 启动时按本结构重建）
@@ -345,22 +326,24 @@ CREATE TABLE IF NOT EXISTS  t_service_account_binding  (
          KEY  idx_service  ( f_service_id )
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8
 
-//加好友申请表（v2 好友关系功能；时间列用 bigint 存 Unix 毫秒，与协议时间戳一致）
-CREATE TABLE IF NOT EXISTS  t_friend_request  (
-         f_id           bigint(20) NOT NULL AUTO_INCREMENT COMMENT '申请ID',
-         f_from_userid  bigint(20) NOT NULL COMMENT '申请发起方userid',
-         f_to_userid    bigint(20) NOT NULL COMMENT '被申请方userid',
-         f_verify_msg   varchar(256) DEFAULT NULL COMMENT '验证留言',
-         f_source       varchar(32)  DEFAULT NULL COMMENT '申请来源:search/group/card等',
-         f_status       int(2) NOT NULL DEFAULT 0 COMMENT '状态:0待处理 1已同意 2已拒绝',
-         f_create_time  bigint(20) NOT NULL DEFAULT 0 COMMENT '申请时间(Unix毫秒)',
-         f_handle_time  bigint(20) NOT NULL DEFAULT 0 COMMENT '处理时间(Unix毫秒,0=未处理)',
-         PRIMARY KEY ( f_id ),
-         KEY  idx_to_status  ( f_to_userid, f_status ),
-         KEY  idx_from  ( f_from_userid )
+//加好友申请表 t_friend_request 已于企业版删除（2026-08-05），随好友关系子系统一并移除。
+//表名不要复用，存量库里的残表可手工 DROP。
+
+//联系人备注名表（企业版）：一行 = f_userid 给 f_target_userid 起的备注名。
+//备注名是<单向>的（只影响"本人看对方"的显示，不影响对方），故主键取 (f_userid, f_target_userid)。
+//本表取代原 t_user_relationship 的 f_userX_markname 两列：企业版通讯录来自组织架构
+//（t_department_member），同事之间并无好友关系，备注名必须能独立于好友关系存在。
+//清除备注直接删行，不留空串行，故表里的每一行都是"确实设过备注"。
+CREATE TABLE IF NOT EXISTS  t_contact_remark  (
+         f_userid         bigint(20) NOT NULL COMMENT '备注名归属用户userid',
+         f_target_userid  bigint(20) NOT NULL COMMENT '被备注的联系人userid',
+         f_remark         varchar(32) NOT NULL DEFAULT '' COMMENT '备注名',
+         f_update_time    bigint(20) NOT NULL DEFAULT 0 COMMENT '最近一次修改时间(Unix毫秒)',
+         PRIMARY KEY ( f_userid, f_target_userid ),
+         KEY  idx_user  ( f_userid )
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8
 
-//黑名单表（v2 好友管理功能；与 t_user_relationship 解耦——拉黑不解除好友关系）
+//黑名单表：一行表示 f_userid 把 f_blocked_userid 加入了自己的黑名单。
 //一行表示 f_userid 把 f_blocked_userid 加入了自己的黑名单；联合主键天然去重
 CREATE TABLE IF NOT EXISTS  t_blacklist  (
          f_userid          bigint(20) NOT NULL COMMENT '拉黑发起方userid',
@@ -496,7 +479,7 @@ CREATE TABLE IF NOT EXISTS  t_group_member  (
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8
 
 //加群申请表（v2 群组功能）：群 join_mode=需审批 时，申请会落此表等待群主/管理员处理。
-//结构对标 t_friend_request；时间列用 bigint 存 Unix 毫秒。
+//时间列用 bigint 存 Unix 毫秒，与协议时间戳一致。
 CREATE TABLE IF NOT EXISTS  t_group_join_request  (
          f_id           bigint(20)   NOT NULL AUTO_INCREMENT COMMENT '申请ID',
          f_groupid      bigint(20)   NOT NULL COMMENT '目标群ID',

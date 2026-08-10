@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!--
+    flamingoAdmin.exe
+    · balloonui 采用【静态链接】：链接 balloonui_static.lib，不定义 BUI_USE_DLL，
+      运行时不依赖 balloonui.dll。
+    · CRT 采用【静态链接】：Debug=/MTd、Release=/MT，运行时不依赖 VC++ 运行库 DLL。
+      balloonui_static.vcxproj 同样以 /MTd /MT 编译，两侧 CRT 一致，无链接冲突。
+    Debug|x64 列在首位：作为本工程默认配置（应用户优先级要求）。
+  -->
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{82CB1BFF-40B8-48DC-B083-1B2D88B68CD3}</ProjectGuid>
+    <RootNamespace>flamingoAdmin</RootNamespace>
+    <Keyword>Win32Proj</Keyword>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings"></ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <!-- 输出目录：flamingoAdmin 自己的 Bin\（与 balloonui 的 Bin 分开） -->
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>Bin\x64\</OutDir>
+    <IntDir>Debug_x64\</IntDir>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <OutDir>Bin\x64\</OutDir>
+    <IntDir>Release_x64\</IntDir>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <OutDir>Bin\</OutDir>
+    <IntDir>Debug\</IntDir>
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <OutDir>Bin\</OutDir>
+    <IntDir>Release\</IntDir>
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <!--
+    各配置说明（4 个 ItemDefinitionGroup 共同点）：
+    · 不定义 BUI_USE_DLL —— 消费静态库时 BUI_API 必须展开为空（非 dllimport）。
+    · RuntimeLibrary 为静态 CRT（MultiThreadedDebug / MultiThreaded）。
+    · 链接 balloonui_static.lib，库目录按 (平台,配置) 定位到
+      balloonui\Bin\Static\$(Platform)\$(Configuration)\。
+    · gdiplus.lib / comctl32.lib 是 balloonui 需要的系统库，静态链接时必须
+      由最终 exe 显式提供（shlwapi 由 balloonui 源码内 #pragma comment 自动带入）。
+    · 无 post-build 拷贝 DLL 步骤 —— 已无运行时 DLL 依赖。
+  -->
+  <!-- ===================== Debug | x64 ===================== -->
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>.;third-party\jsoncpp;..\flamingoclient\balloonui\balloonui;..\flamingoclient\balloonui\wtl9.0;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;_CRT_NON_CONFORMING_SWPRINTFS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>false</MinimalRebuild>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <AdditionalOptions>/utf-8 /FS %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <TargetMachine>MachineX64</TargetMachine>
+      <AdditionalLibraryDirectories>..\flamingoclient\balloonui\Bin\Static\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>balloonui_static.lib;gdiplus.lib;comctl32.lib;winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- ===================== Release | x64 ===================== -->
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <AdditionalIncludeDirectories>.;third-party\jsoncpp;..\flamingoclient\balloonui\balloonui;..\flamingoclient\balloonui\wtl9.0;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;_CRT_NON_CONFORMING_SWPRINTFS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <AdditionalOptions>/utf-8 /FS %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <TargetMachine>MachineX64</TargetMachine>
+      <AdditionalLibraryDirectories>..\flamingoclient\balloonui\Bin\Static\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>balloonui_static.lib;gdiplus.lib;comctl32.lib;winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- ===================== Debug | Win32 ===================== -->
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <Optimization>Disabled</Optimization>
+      <AdditionalIncludeDirectories>.;third-party\jsoncpp;..\flamingoclient\balloonui\balloonui;..\flamingoclient\balloonui\wtl9.0;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;_CRT_NON_CONFORMING_SWPRINTFS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <MinimalRebuild>false</MinimalRebuild>
+      <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <AdditionalOptions>/utf-8 /FS %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <TargetMachine>MachineX86</TargetMachine>
+      <AdditionalLibraryDirectories>..\flamingoclient\balloonui\Bin\Static\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>balloonui_static.lib;gdiplus.lib;comctl32.lib;winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <!-- ===================== Release | Win32 ===================== -->
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <Optimization>MaxSpeed</Optimization>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <AdditionalIncludeDirectories>.;third-party\jsoncpp;..\flamingoclient\balloonui\balloonui;..\flamingoclient\balloonui\wtl9.0;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;_CRT_NON_CONFORMING_SWPRINTFS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <PrecompiledHeader />
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <AdditionalOptions>/utf-8 /FS %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <TargetMachine>MachineX86</TargetMachine>
+      <AdditionalLibraryDirectories>..\flamingoclient\balloonui\Bin\Static\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>balloonui_static.lib;gdiplus.lib;comctl32.lib;winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+    <ClCompile Include="AdminFrame.cpp" />
+    <ClCompile Include="Util\Logger.cpp" />
+    <ClCompile Include="Util\CrashHandler.cpp" />
+    <ClCompile Include="Util\AppConfig.cpp" />
+    <ClCompile Include="Util\NetProbe.cpp" />
+    <ClCompile Include="Util\HttpClient.cpp" />
+    <ClCompile Include="Util\HttpWorker.cpp" />
+    <ClCompile Include="Util\AdminApi.cpp" />
+    <ClCompile Include="Util\DebugConsole.cpp" />
+    <ClCompile Include="Util\DebugConsoleWindow.cpp" />
+    <ClCompile Include="Util\ScrollbarMetrics.cpp" />
+    <ClCompile Include="Util\ListPaging.cpp" />
+    <ClCompile Include="Util\OrgTreeBuilder.cpp" />
+    <ClCompile Include="Util\Pinyin.cpp" />
+    <ClCompile Include="third-party\jsoncpp\json_reader.cpp" />
+    <ClCompile Include="third-party\jsoncpp\json_value.cpp" />
+    <ClCompile Include="third-party\jsoncpp\json_writer.cpp" />
+    <ClCompile Include="Mock\MockData.cpp" />
+    <ClCompile Include="Mock\DataStore.cpp" />
+    <ClCompile Include="Widgets\UiHelpers.cpp" />
+    <ClCompile Include="Widgets\IconRenderer.cpp" />
+    <ClCompile Include="Widgets\Widgets.cpp" />
+    <ClCompile Include="Widgets\CommonWidgets.cpp" />
+    <ClCompile Include="Widgets\OrgTree.cpp" />
+    <ClCompile Include="Widgets\Toast.cpp" />
+    <ClCompile Include="Widgets\OverlayScrollbar.cpp" />
+    <ClCompile Include="Shell\Sidebar.cpp" />
+    <ClCompile Include="Shell\TopBar.cpp" />
+    <ClCompile Include="Shell\ScreenHost.cpp" />
+    <ClCompile Include="Screens\LoginScreen.cpp" />
+    <ClCompile Include="Screens\PlaceholderScreen.cpp" />
+    <ClCompile Include="Screens\DashboardScreen.cpp" />
+    <ClCompile Include="Screens\EnterprisesScreen.cpp" />
+    <ClCompile Include="Screens\EnterpriseDetailScreen.cpp" />
+    <ClCompile Include="Screens\OrgDetailPanel.cpp" />
+    <ClCompile Include="Screens\NewEnterpriseModal.cpp" />
+    <ClCompile Include="Screens\NodeModal.cpp" />
+    <ClCompile Include="Screens\EmployeeEditDialog.cpp" />
+    <ClCompile Include="Screens\EnterpriseSettingsModal.cpp" />
+    <ClCompile Include="Screens\ConfirmDialog.cpp" />
+    <ClCompile Include="Screens\ServicesPanel.cpp" />
+    <ClCompile Include="Screens\ServiceModal.cpp" />
+    <ClCompile Include="Screens\BindingModal.cpp" />
+    <ClCompile Include="Screens\AnnouncementsScreen.cpp" />
+    <ClCompile Include="Screens\AnnouncementPreviewPanel.cpp" />
+    <ClCompile Include="Screens\ComposeModal.cpp" />
+    <ClCompile Include="Screens\GroupModal.cpp" />
+    <ClCompile Include="Screens\AuditScreen.cpp" />
+    <ClCompile Include="Screens\SettingsScreen.cpp" />
+    <ClCompile Include="Screens\NetworkSettingsScreen.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="stdafx.h" />
+    <ClInclude Include="resource.h" />
+    <ClInclude Include="UiIds.h" />
+    <ClInclude Include="AdminFrame.h" />
+    <ClInclude Include="Theme\AdminTheme.h" />
+    <ClInclude Include="Util\Logger.h" />
+    <ClInclude Include="Util\CrashHandler.h" />
+    <ClInclude Include="Util\AppConfig.h" />
+    <ClInclude Include="Util\NetProbe.h" />
+    <ClInclude Include="Util\HttpClient.h" />
+    <ClInclude Include="Util\HttpWorker.h" />
+    <ClInclude Include="Util\AdminApi.h" />
+    <ClInclude Include="Util\DebugConsole.h" />
+    <ClInclude Include="Util\DebugConsoleWindow.h" />
+    <ClInclude Include="Util\ScrollbarMetrics.h" />
+    <ClInclude Include="Util\ListPaging.h" />
+    <ClInclude Include="Util\OrgTreeBuilder.h" />
+    <ClInclude Include="Util\Pinyin.h" />
+    <ClInclude Include="Mock\MockData.h" />
+    <ClInclude Include="Mock\DataStore.h" />
+    <ClInclude Include="Widgets\UiHelpers.h" />
+    <ClInclude Include="Widgets\IconRenderer.h" />
+    <ClInclude Include="Widgets\Widgets.h" />
+    <ClInclude Include="Widgets\CommonWidgets.h" />
+    <ClInclude Include="Widgets\OrgTree.h" />
+    <ClInclude Include="Widgets\Toast.h" />
+    <ClInclude Include="Widgets\OverlayScrollbar.h" />
+    <ClInclude Include="Shell\Sidebar.h" />
+    <ClInclude Include="Shell\TopBar.h" />
+    <ClInclude Include="Shell\ScreenHost.h" />
+    <ClInclude Include="Screens\LoginScreen.h" />
+    <ClInclude Include="Screens\PlaceholderScreen.h" />
+    <ClInclude Include="Screens\DashboardScreen.h" />
+    <ClInclude Include="Screens\EnterprisesScreen.h" />
+    <ClInclude Include="Screens\EnterpriseDetailScreen.h" />
+    <ClInclude Include="Screens\OrgDetailPanel.h" />
+    <ClInclude Include="Screens\NewEnterpriseModal.h" />
+    <ClInclude Include="Screens\NodeModal.h" />
+    <ClInclude Include="Screens\EmployeeEditDialog.h" />
+    <ClInclude Include="Screens\EnterpriseSettingsModal.h" />
+    <ClInclude Include="Screens\ConfirmDialog.h" />
+    <ClInclude Include="Screens\ServicesPanel.h" />
+    <ClInclude Include="Screens\ServiceModal.h" />
+    <ClInclude Include="Screens\BindingModal.h" />
+    <ClInclude Include="Screens\AnnouncementsScreen.h" />
+    <ClInclude Include="Screens\AnnouncementPreviewPanel.h" />
+    <ClInclude Include="Screens\ComposeModal.h" />
+    <ClInclude Include="Screens\GroupModal.h" />
+    <ClInclude Include="Screens\AuditScreen.h" />
+    <ClInclude Include="Screens\SettingsScreen.h" />
+    <ClInclude Include="Screens\NetworkSettingsScreen.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="app.rc" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets"></ImportGroup>
+</Project>

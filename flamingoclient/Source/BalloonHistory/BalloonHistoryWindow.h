@@ -222,13 +222,30 @@ private:
     //把第 row 行的整条正文写进剪贴板，内联表情写成“[表情]”（与气泡复制同口径）。
     void CopyRowText(int row);
 
+    //用系统默认程序打开本地文件；失败弹提示。hasLocal 为 false 时什么都不做。
+    void OpenRowFile(const CString& localPath, bool hasLocal);
+
+    //在资源管理器里定位并选中本地文件。hasLocal 为 false 时什么都不做。
+    void OpenRowFolder(const CString& localPath, bool hasLocal);
+
+    //把第 row 行对应的本地文件另存到用户选定位置（整字节拷贝）。
+    //@param row        当前页行下标（用来取原始文件名作默认名）
+    //@param localPath  源文件的本地完整路径；空串直接返回
+    void SaveRowFileAs(int row, const CString& localPath);
+
     //对第 row 行发起一次下载（图片走 ImageTransfer、文件走 FileTransfer）。
     //@param row        当前页行下标
     //@param viewAfter  下载成功后是否自动打开看图窗（仅图片行有意义）
     void StartRowDownload(int row, bool viewAfter);
 
+    //取消第 row 行正在进行的下载。图片没有取消接口，此时只撤掉本窗口的跟踪状态。
+    void CancelRowDownload(int row);
+
     //打开第 row 行对应的图片：本地已有直接开看图窗；没有则发起下载、完成后自动开。
     void ViewRowImage(int row);
+
+    //当前登录用户 userid（缓存与下载目录按账号隔离）。未登录 / 调试入口返回 0。
+    int64_t SelfUserId() const;
 
 private:
 

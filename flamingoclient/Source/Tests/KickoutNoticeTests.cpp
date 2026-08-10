@@ -114,3 +114,44 @@ TEST_CASE("KICK5 提示框标题非空", "[kickout]")
     REQUIRE(title != NULL);
     CHECK(wcslen(title) > 0);
 }
+
+// =====================================================================
+// KO-A —— 退出登录时要不要清掉本机的"自动登录"标志
+//
+// 背景：此前登出并不清这个标志，用户点了"登出"、下次开机照样被自动登进去；而自动
+// 登录成功后又直接进主面板、没有界面能取消勾选，等于绕不出来。这几条把口径钉死。
+// =====================================================================
+
+TEST_CASE("KO-A1 用户主动登出时清掉自动登录标志", "[kickout][autologin]")
+{
+    // 点"登出"是一次明确的主观意愿表达 —— 用户在说"我不想自动进去了"。
+    // 第二个参数是被踢原因，主动登出这一侧应当被忽略，故随便给个值也不影响结果。
+    CHECK(ShouldClearAutoLoginOnExit(kLoginExitUserLogout, kKickoutReasonUnknown));
+    CHECK(ShouldClearAutoLoginOnExit(kLoginExitUserLogout, kKickoutReasonOtherDevice));
+}
+
+TEST_CASE("KO-A2 被踢下线且原因是密码已修改时清掉标志", "[kickout][autologin]")
+{
+    // 本机存的密码已经失效，留着自动登录只会让用户每次开机都被弹一次"密码错误"。
+    CHECK(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kKickoutReasonPasswordChanged));
+}
+
+TEST_CASE("KO-A3 其余被踢原因一律不动自动登录标志", "[kickout][autologin]")
+{
+    // 这些都是被动发生的，用户没有表达"以后别自动登录"的意思，不替他做主。
+    CHECK_FALSE(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kKickoutReasonOtherDevice));
+    CHECK_FALSE(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kKickoutReasonDisabled));
+    CHECK_FALSE(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kKickoutReasonMaintenance));
+    CHECK_FALSE(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kKickoutReasonKickedByUser));
+}
+
+TEST_CASE("KO-A4 未知原因与越界取值按保守一侧处理", "[kickout][autologin]")
+{
+    // 服务端将来加了本端还不认识的新原因时，宁可保留自动登录（用户下次照常进得去），
+    // 也不要莫名其妙把他的勾选清掉。exitKind 越界同理，按"被踢下线"这一侧处理。
+    const int kUnknownReason = 999;   // 本端尚未登记的被踢原因
+    const int kUnknownExit   = 42;    // 越界的退出方式
+    CHECK_FALSE(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kKickoutReasonUnknown));
+    CHECK_FALSE(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kUnknownReason));
+    CHECK_FALSE(ShouldClearAutoLoginOnExit(kUnknownExit, kUnknownReason));
+}

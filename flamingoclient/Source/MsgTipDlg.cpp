@@ -460,10 +460,13 @@ void CMsgTipDlg::_AddMsgSender(int nIndex, CMessageSender* lpMsgSender)
 			//strHeadPicFileName = GetHeadPicFullName(0, nSenderId);
 			//if (!Hootina::CPath::IsFileExist(strHeadPicFileName.c_str()))
 			//	strHeadPicFileName = Hootina::CPath::GetAppPath() + _T("Image\\DefBuddyHeadPic.png");
-			CBuddyInfo* pBuddyInfo = m_lpFMGClient->m_UserMgr.m_BuddyList.GetBuddy(nSenderId);
+			//企业版：v1 好友列表已删除，发送方资料改从"本人 + 群成员"里找
+			//（CFlamingoClient::GetUserInfo）。本窗口是 v1 时期的托盘消息提示浮窗，
+			//v2 已由 CTrayMsgTipPopup 取代，这里只需保证能编译。
+			CBuddyInfo* pBuddyInfo = m_lpFMGClient->GetUserInfo(nSenderId);
 			if(pBuddyInfo != NULL)
 			{
-				if(pBuddyInfo!=NULL && pBuddyInfo->m_bUseCustomFace && pBuddyInfo->m_bCustomFaceAvailable)
+				if(pBuddyInfo->m_bUseCustomFace && pBuddyInfo->m_bCustomFaceAvailable)
 				{
 					strHeadPicFileName.Format(_T("%s%d.png"), m_lpFMGClient->m_UserMgr.GetCustomUserThumbFolder().c_str(), pBuddyInfo->m_uUserID);
 					if(!Hootina::CPath::IsFileExist(strHeadPicFileName))
@@ -471,24 +474,15 @@ void CMsgTipDlg::_AddMsgSender(int nIndex, CMessageSender* lpMsgSender)
 				}
 				else
 					strHeadPicFileName.Format(_T("%sImage\\UserThumbs\\%d.png"), g_szHomePath, pBuddyInfo->m_nFace);
-			}
 
-			CBuddyList* lpBuddyList = m_lpFMGClient->GetBuddyList();
-			if (lpBuddyList != NULL)
-			{
-				CBuddyInfo* lpBuddyInfo = lpBuddyList->GetBuddy(nSenderId);
-				if (lpBuddyInfo != NULL)
-				{
-					CString strBuddyName;
+				CString strBuddyName;
+				if (!pBuddyInfo->m_strMarkName.empty())
+					strBuddyName = pBuddyInfo->m_strMarkName.c_str();
+				else
+					strBuddyName = pBuddyInfo->m_strNickName.c_str();
 
-					if (!lpBuddyInfo->m_strMarkName.empty())
-						strBuddyName = lpBuddyInfo->m_strMarkName.c_str();
-					else
-						strBuddyName = lpBuddyInfo->m_strNickName.c_str();
-
-					if (lpBuddyInfo->m_uUserID != 0)
-						strSenderName.Format(_T("%s"), strBuddyName);
-				}
+				if (pBuddyInfo->m_uUserID != 0)
+					strSenderName.Format(_T("%s"), strBuddyName);
 			}
 		}
 		break;
@@ -592,12 +586,9 @@ void CMsgTipDlg::GetNumber(UINT nGroupCode, UINT nUTalkUin, UINT& nGroupNum, UIN
 	}
 	else if (nUTalkUin != 0)
 	{
-		CBuddyList* lpBuddyList = m_lpFMGClient->GetBuddyList();
-		if (lpBuddyList != NULL)
-		{
-			CBuddyInfo* lpBuddyInfo = lpBuddyList->GetBuddy(nUTalkUin);
-			if (lpBuddyInfo != NULL)
-				nUTalkNum = lpBuddyInfo->m_uUserID;
-		}
+		//企业版：v1 好友列表已删除，改从"本人 + 群成员"里找（CFlamingoClient::GetUserInfo）。
+		CBuddyInfo* lpBuddyInfo = m_lpFMGClient->GetUserInfo(nUTalkUin);
+		if (lpBuddyInfo != NULL)
+			nUTalkNum = lpBuddyInfo->m_uUserID;
 	}
 }
