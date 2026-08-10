@@ -25,3 +25,20 @@
    注意 ConfigFileReader 会把行内 '#' 之后的内容当注释截掉，故口令中不能含 '#'，
    否则账号会被按截断后的短口令建出来，拿原口令反而登不进去；
    注入失败只记日志、不拦服务启动。用例见 tests/test_adminbootstrap.cpp（Suite ADB，7 条）。
+
+10. 2026-08-10 SQLite 库文件的相对路径改为以 chatserver 可执行文件所在目录为基准：
+    此前 dbpath 的相对路径以进程工作目录为基准，而工作目录是启动方式决定的
+    （从哪个目录敲的命令、被谁拉起来的都会影响它），换一种启动方式就会打开另一个库，
+    现象像是「数据全没了」；
+    现在 main.cpp 先用新增的 utils/AppPath 把 dbpath 解析成绝对路径，再交给 CDbConfig。
+    绝对路径（X:\...、/var/...、UNC）原样放行；取不到可执行文件目录时回落到旧行为并
+    继续启动，不让服务起不来；配置项缺失时先补上默认值再解析，否则 CDbConfig 内部
+    回落出来的默认路径会绕过这一步。
+    拼接用的分隔符跟随基准目录已有的风格，避免拼出 /opt/bin\data 这类混搭路径。
+    父目录不存在会被逐级自动创建 —— 该行为原本就有（sqliteapi/DatabaseSqlite.cpp 的
+    ensureParentDirectory），本次补了回归用例 SQD14 把它钉住。
+    注意：Linux 下 out-of-source 构建（build-linux/）的库位置随之从 flamingoserver/data/
+    变为 flamingoserver/build-linux/data/；就地 cmake 与 Windows 的 windowsproj 两种
+    构建方式下位置不变，因为它们的工作目录本来就等于可执行文件所在目录。
+    仅改数据库路径，logfiledir 与文件缓存目录仍以工作目录为基准。
+    用例见 tests/test_apppath.cpp（Suite APP，6 条）。

@@ -13,6 +13,7 @@
 #include "../net/EventLoopThreadPool.h"
 #include "../dbapi/DbConfig.h"
 #include "../sqliteapi/SqliteManager.h"
+#include "../utils/AppPath.h"
 
 //FLAMINGO_NO_MYSQL 由 CMake 在 -DWITH_MYSQL=OFF 时定义，
 //用于编出一份不依赖 libmysqlclient 的纯本地版本，见 CMakeLists.txt 顶部的说明
@@ -183,10 +184,25 @@ int main(int argc, char* argv[])
     //getConfigName 会返回 NULL，CDbConfig::init 据此回落到 mysql，行为与改造前一致。
     const char* dbtype = config.getConfigName("dbtype");
     const char* dbpath = config.getConfigName("dbpath");
+
+    //把 dbpath 的相对路径基准从「进程工作目录」改成「可执行文件所在目录」。
+    //工作目录是启动方式决定的（从哪个目录敲的命令、被谁拉起来的都会影响它），
+    //而库文件必须始终是同一个，否则换种方式启动就等于换了一个空库。
+    //绝对路径原样放行；万一取不到可执行文件目录，则回落到原有行为，不让服务起不来。
+    //配置项缺失时先补上默认值再解析，否则 CDbConfig 内部回落出来的默认路径会绕过这里。
+    std::string configuredDbPath = (dbpath != NULL ? dbpath : "");
+    if (configuredDbPath.empty())
+    {
+        configuredDbPath = DEFAULT_SQLITE_DB_PATH;
+    }
+    std::string resolvedDbPath = apppath::ResolveAgainstDirectory(
+                                     apppath::GetExecutableDirectory(), configuredDbPath);
+    LOGI("db path resolved against executable directory: %s -> %s",
+         configuredDbPath.c_str(), resolvedDbPath.c_str());
     //全局数据库配置必须在任何一个 Manager 初始化之前灌好：
     //它们建连接时都走 DbFactory，而工厂的连接参数就取自这里。
     CDbConfig& dbConfig = Singleton<CDbConfig>::Instance();
-    dbConfig.init(dbtype, dbserver, dbuser, dbpassword, dbname, dbpath);
+    dbConfig.init(dbtype, dbserver, dbuser, dbpassword, dbname, resolvedDbPath.c_str());
 
     //建库建表引导。两种后端的引导流程完全不同：MySQL 要先连上服务器、必要时 CREATE DATABASE，
     //再逐表 desc 比对；SQLite 的库就是一个文件，打开即建，只需执行建表语句再补列。

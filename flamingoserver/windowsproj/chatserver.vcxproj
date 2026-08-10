@@ -114,6 +114,7 @@
     <ClCompile Include="..\net\TcpServer.cpp" />
     <ClCompile Include="..\net\Timer.cpp" />
     <ClCompile Include="..\net\TimerQueue.cpp" />
+    <ClCompile Include="..\utils\AppPath.cpp" />
     <ClCompile Include="..\utils\DaemonRun.cpp" />
     <ClCompile Include="..\utils\MD5.cpp" />
     <ClCompile Include="..\utils\StringUtil.cpp" />

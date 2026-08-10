@@ -138,6 +138,8 @@ utils/MD5.cpp
 utils/FileToken.cpp
 utils/RelayToken.cpp
 utils/DaemonRun.cpp
+# 把配置里的相对 dbpath 解析到可执行文件所在目录，见 chatserversrc/main.cpp
+utils/AppPath.cpp
 )
 
 set(chatserver_srcs
@@ -219,6 +221,7 @@ tests/test_accountname.cpp
 tests/test_friendprotocol.cpp
 tests/test_contactremarkmanager.cpp
 tests/test_adminbootstrap.cpp
+tests/test_apppath.cpp
 tests/test_messageprotocol.cpp
 tests/test_messagepinmanager.cpp
 tests/test_groupprotocol.cpp
@@ -271,6 +274,8 @@ utils/PasswordHasher.cpp
 utils/MD5.cpp
 utils/FileToken.cpp
 utils/RelayToken.cpp
+# tests/test_apppath.cpp 用到的实现
+utils/AppPath.cpp
 # SQLite 驱动的集成测试要真的打开一个临时 .db 文件，因此要把驱动本体与 amalgamation 一起编进来。
 # 驱动内部会调用 LOGI / LOGE，所以还要带上 AsyncLog（未 init 时日志只是进内存队列，不影响测试）
 sqlite3/sqlite3.c

@@ -16,11 +16,24 @@
 #include <string>
 #include <vector>
 
+#ifdef WIN32
+#include <direct.h>     //_rmdir
+#else
+#include <unistd.h>     //rmdir
+#endif
+
 #include "doctest.h"
 #include "../sqliteapi/DatabaseSqlite.h"
 
 //测试用的临时数据库文件名，落在测试程序的工作目录下
 static const char* const TEST_DB_PATH = "flamingo_sqlite_test.db";
+
+//SQD14 专用：一条三级目录都不存在的相对路径，用来验证 dbpath 的父目录会被逐级创建。
+//三层各留一个常量，是因为删除时要从最里层往外逐级 rmdir。
+static const char* const NESTED_TEST_DIR_L1  = "sqd14_dir";
+static const char* const NESTED_TEST_DIR_L2  = "sqd14_dir/nested";
+static const char* const NESTED_TEST_DIR_L3  = "sqd14_dir/nested/data";
+static const char* const NESTED_TEST_DB_PATH = "sqd14_dir/nested/data/flamingo_sqlite_nested_test.db";
 
 //删除测试库文件，连同 WAL 模式产生的两个附属文件一起清掉，
 //保证每个用例都从一个全新的空库开始
@@ -30,6 +43,27 @@ static void removeTestDbFiles()
     remove(basePath.c_str());
     remove((basePath + "-wal").c_str());
     remove((basePath + "-shm").c_str());
+}
+
+//清掉 SQD14 用到的那棵多级目录，连同库文件与 WAL 附属文件一起。
+//用例前后各调一次：调用前保证从「目录不存在」的状态开始，调用后不留垃圾目录。
+//C++11 标准库里没有删目录的接口，只能按平台调 rmdir，且必须从最里层往外删。
+static void removeNestedTestDir()
+{
+    std::string basePath(NESTED_TEST_DB_PATH);
+    remove(basePath.c_str());
+    remove((basePath + "-wal").c_str());
+    remove((basePath + "-shm").c_str());
+
+#ifdef WIN32
+    _rmdir(NESTED_TEST_DIR_L3);
+    _rmdir(NESTED_TEST_DIR_L2);
+    _rmdir(NESTED_TEST_DIR_L1);
+#else
+    rmdir(NESTED_TEST_DIR_L3);
+    rmdir(NESTED_TEST_DIR_L2);
+    rmdir(NESTED_TEST_DIR_L1);
+#endif
 }
 
 //取结果集第一行第 col 列的文本值。调用前须确保结果集非空
@@ -416,4 +450,37 @@ TEST_CASE("SQD13 escapeString 拼进 SQL 后能原样往返")
     REQUIRE(pResult != NULL);
     CHECK(firstCellText(pResult, 0) == raw);
     delete pResult;
+}
+
+// ---------------------------------------------------------------------------
+// SQD14  库文件所在目录会被逐级自动创建
+// ---------------------------------------------------------------------------
+
+TEST_CASE("SQD14 dbpath 里缺失的多级目录会被自动创建，不需要预先建好 data 目录")
+{
+    //NESTED_TEST_DB_PATH 刻意用一条三级都不存在的相对路径。SQLite 自己不建目录，
+    //若 ensureParentDirectory 失灵，initialize 会直接打不开文件。
+    //这正是「解压即用」部署与配置项 dbpath=data/flamingo.db 依赖的行为。
+
+    //先把上次残留的整棵目录清掉，保证从「目录不存在」的状态开始
+    removeNestedTestDir();
+
+    //连接放在内层作用域里：CDatabaseSqlite 靠析构关闭库文件，
+    //不先析构就去删目录，Windows 上会因为文件仍被占用而删不掉
+    {
+        CDatabaseSqlite db;
+        REQUIRE(db.initialize(NESTED_TEST_DB_PATH));
+
+        //库能正常建表，说明文件真的落在了那条多级路径上
+        REQUIRE(db.execute("CREATE TABLE t_demo(f_id INTEGER PRIMARY KEY AUTOINCREMENT)"));
+
+        //文件确实存在于预期位置
+        FILE* fp = fopen(NESTED_TEST_DB_PATH, "rb");
+        CHECK(fp != NULL);
+        if (fp != NULL)
+            fclose(fp);
+    }
+
+    //用例结束后不留垃圾目录
+    removeNestedTestDir();
 }
