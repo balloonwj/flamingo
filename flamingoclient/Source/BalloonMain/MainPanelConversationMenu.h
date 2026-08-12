@@ -12,6 +12,7 @@
  *      查看历史消息
  *      查看资料 / 查看群资料  ← 按会话类型切换文案
  *      添加到收藏 / 取消收藏  ← 按当前收藏状态切换文案
+ *      特别关注 / 取消特别关注 ← 按当前关注状态切换文案；<u>仅单聊会话有这一项</u>
  *      ──────────
  *      置顶会话 / 取消置顶    ← 按当前置顶状态切换文案
  *      消息免打扰 / 取消免打扰 ← 按当前免打扰状态切换文案
@@ -57,6 +58,7 @@ enum ConversationMenuId : UINT
     kConvMenuDelete    = 8,   // 删除该会话 —— 仅从最近会话列表移除，不删聊天消息
     kConvMenuDeleteAll = 9,   // 删除全部会话 —— 同上，作用于列表里的每一条会话
     kConvMenuFavorite  = 10,  // 添加到收藏 / 取消收藏 —— 把该联系人或群加进「我的收藏」
+    kConvMenuStarred   = 11,  // 特别关注 / 取消特别关注 —— 仅单聊会话出现；被关注者上下线时桌面右下角弹提示
 };
 
 /**
@@ -70,6 +72,7 @@ struct ConversationMenuState
     bool m_muted;     // 当前是否已免打扰；决定免打扰项文案的正反
     int  m_unread;    // 当前未读消息数；为 0 时"标记已读"灰显（已经全读完了，点了没意义）
     bool m_favorite;  // 该联系人 / 群当前是否已收藏；决定收藏项文案是"取消收藏"还是"添加到收藏"
+    bool m_starred;   // 该联系人当前是否已特别关注；决定该项文案的正反。m_isGroup 为 true 时无意义 —— 群没有上下线，群会话上根本不出现这一项
 
     ConversationMenuState()
         : m_isGroup(false)
@@ -77,6 +80,7 @@ struct ConversationMenuState
         , m_muted(false)
         , m_unread(0)
         , m_favorite(false)
+        , m_starred(false)
     {
     }
 };

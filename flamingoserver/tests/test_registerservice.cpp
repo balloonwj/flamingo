@@ -24,9 +24,10 @@
 class FakeRegisterDataSource : public IRegisterDataSource
 {
 public:
+    //初始化列表的书写顺序必须与成员的声明顺序一致，否则 GCC 会报 -Wreorder。
+    //m_nextUserId 声明在末尾的 private 段里，所以这里也要放在最后
     FakeRegisterDataSource()
-        : m_nextUserId(FAKE_FIRST_USER_ID)
-        , m_createUserShouldFail(false)
+        : m_createUserShouldFail(false)
         , m_addToDeptShouldFail(false)
         , m_createdUserId(0)
         , m_createdEnterpriseId(0)
@@ -34,6 +35,7 @@ public:
         , m_attachedUserId(0)
         , m_createUserCalled(false)
         , m_addToDeptCalled(false)
+        , m_nextUserId(FAKE_FIRST_USER_ID)
     {
     }
 
@@ -330,4 +332,111 @@ TEST_CASE("RS11 判定顺序：手机号已被占用时，连企业都不去查"
 
     RegisterOutcome out;
     CHECK(RegisterService::doRegister(ds, req, out) == error_code_already_registered);
+}
+
+TEST_CASE("RS12 注册成功：带出公司根部门ID，供会话层广播组织架构变更")
+{
+    //会话层要靠这个ID告诉同企业的在线客户端"哪个部门多了人"。以前 outcome 里
+    //没有它，注册成功后那条 cmd_org_structure_notify 就无从发起——在线的老用户
+    //因此看不到刚注册的新同事，直到自己重新登录一次。
+    FakeRegisterDataSource ds;
+    RegisterEnterprise ent = MakeActiveEnterprise();
+    ds.m_enterprises[ent.name] = ent;
+
+    RegisterRequest req = MakeValidRequest();
+    RegisterOutcome out;
+    REQUIRE(RegisterService::doRegister(ds, req, out) == error_code_ok);
+
+    CHECK(out.rootDeptId == ent.rootDeptId);
+    //与实际挂进去的那个部门必须是同一个，否则通知里的部门ID指向别处。
+    CHECK(out.rootDeptId == ds.m_attachedDeptId);
+}
+
+TEST_CASE("RS13 注册失败时根部门ID保持 0，会话层不会据此误发通知")
+{
+    //各条失败分支都在建号之前返回，此时 outcome 应当是干净的——尤其不能带出
+    //一个看着像真的部门ID，否则会话层会为一次根本没成功的注册广播变更通知。
+    SUBCASE("企业不存在")
+    {
+        FakeRegisterDataSource ds;
+        RegisterEnterprise ent = MakeActiveEnterprise();
+        ds.m_enterprises[ent.name] = ent;
+
+        RegisterRequest req = MakeValidRequest();
+        req.company = "并不存在的某某公司";
+
+        RegisterOutcome out;
+        CHECK(RegisterService::doRegister(ds, req, out) == error_code_enterprise_not_exist);
+        CHECK(out.rootDeptId == 0);
+    }
+
+    SUBCASE("企业已停用")
+    {
+        FakeRegisterDataSource ds;
+        RegisterEnterprise ent = MakeActiveEnterprise();
+        ent.status = 2;
+        ds.m_enterprises[ent.name] = ent;
+
+        RegisterRequest req = MakeValidRequest();
+        RegisterOutcome out;
+        CHECK(RegisterService::doRegister(ds, req, out) == error_code_enterprise_disabled);
+        CHECK(out.rootDeptId == 0);
+    }
+
+    SUBCASE("企业尚未建立公司根部门")
+    {
+        FakeRegisterDataSource ds;
+        RegisterEnterprise ent = MakeActiveEnterprise();
+        ent.rootDeptId = 0;
+        ds.m_enterprises[ent.name] = ent;
+
+        RegisterRequest req = MakeValidRequest();
+        RegisterOutcome out;
+        CHECK(RegisterService::doRegister(ds, req, out) == error_code_enterprise_no_root_dept);
+        CHECK(out.rootDeptId == 0);
+    }
+
+    SUBCASE("手机号已被占用")
+    {
+        FakeRegisterDataSource ds;
+        RegisterEnterprise ent = MakeActiveEnterprise();
+        ds.m_enterprises[ent.name] = ent;
+
+        RegisterRequest req = MakeValidRequest();
+        ds.m_takenPhones.insert(req.phone);
+
+        RegisterOutcome out;
+        CHECK(RegisterService::doRegister(ds, req, out) == error_code_already_registered);
+        CHECK(out.rootDeptId == 0);
+    }
+
+    SUBCASE("建号失败")
+    {
+        FakeRegisterDataSource ds;
+        RegisterEnterprise ent = MakeActiveEnterprise();
+        ds.m_enterprises[ent.name] = ent;
+        ds.m_createUserShouldFail = true;
+
+        RegisterRequest req = MakeValidRequest();
+        RegisterOutcome out;
+        CHECK(RegisterService::doRegister(ds, req, out) == error_code_register_fail);
+        CHECK(out.rootDeptId == 0);
+    }
+}
+
+TEST_CASE("RS14 入部门失败：根部门ID照常带出，但 departmentAttached 为 false")
+{
+    //这两项要一起看：会话层只在 departmentAttached 为真时才广播，光有部门ID
+    //不足以说明新人已经在组织架构里了。
+    FakeRegisterDataSource ds;
+    RegisterEnterprise ent = MakeActiveEnterprise();
+    ds.m_enterprises[ent.name] = ent;
+    ds.m_addToDeptShouldFail = true;
+
+    RegisterRequest req = MakeValidRequest();
+    RegisterOutcome out;
+    REQUIRE(RegisterService::doRegister(ds, req, out) == error_code_ok);
+
+    CHECK(out.rootDeptId == ent.rootDeptId);
+    CHECK_FALSE(out.departmentAttached);
 }

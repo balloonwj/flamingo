@@ -118,6 +118,21 @@ public:
 	BOOL IsEnableDoNotDisturb() const;
 	void EnableNotifyAfterLock(BOOL bEnable);		//锁屏后是否继续通知
 	BOOL IsEnableNotifyAfterLock() const;
+	// 通用页：无操作自动切到"离开"。关掉后本功能完全停用（不再自动切离开；
+	// 若此刻正处于自动设上的离开，会被切回在线）。默认开。
+	void EnableAutoAway(BOOL bEnable);
+	BOOL IsEnableAutoAway() const;
+	// 自动离开的等待时长，存<u>下拉索引</u>而非分钟数（与语言 / 字体大小等下拉项同口径，
+	// 索引 → 分钟数的映射在 BalloonSettings/SettingsBinding.h）。默认 0，即 5 分钟。
+	void SetAutoAwayDelayIndex(long nIndex);
+	long GetAutoAwayDelayIndex() const;
+	// 通用页：禁止机器休眠。开启后本机不休眠、不关闭显示器、也不锁屏（系统电源请求 +
+	// 周期性合成输入事件，见 BalloonMain/KeepAwakeSession.h）。默认关闭 —— 该功能用于
+	// 演示、长时间传输文件一类的临时场景，不应长期开启。它与"自动离开"互斥：开启期间
+	// 自动离开不生效（合成输入事件会把全系统空闲计时器重置为 0，而自动离开正是依据该
+	// 计时器判定空闲）。
+	void EnableKeepAwake(BOOL bEnable);
+	BOOL IsEnableKeepAwake() const;
 	// 聊天页
 	void EnableAutoRecvImage(BOOL bEnable);			//自动接收图片
 	BOOL IsEnableAutoRecvImage() const;
@@ -125,8 +140,8 @@ public:
 	BOOL IsEnableAutoRecvFile() const;
 	void EnableMsgRoaming(BOOL bEnable);			//消息漫游（本期仅存、暂不联服务端）
 	BOOL IsEnableMsgRoaming() const;
-	void EnableEmojiRain(BOOL bEnable);				//开启表情雨特效
-	BOOL IsEnableEmojiRain() const;
+	void EnableLinkDetect(BOOL bEnable);			//自动识别聊天内容里的链接（默认开）
+	BOOL IsEnableLinkDetect() const;
 	// 音视频页（本期仅存索引/开关，A/V 子系统未接入，暂不真正生效）
 	void SetAudioInputIndex(long nIndex);			//麦克风设备下拉索引
 	long GetAudioInputIndex() const;
@@ -194,10 +209,13 @@ private:
 	BOOL	m_bShakeFlashIcon;		//震动 / 闪烁托盘图标提醒
 	BOOL	m_bDoNotDisturb;		//勿扰时段（开启后时段内不提醒）；本期仅存开关、时段固定文案
 	BOOL	m_bNotifyAfterLock;		//锁屏后是否继续通知
+	BOOL	m_bAutoAway;			//电脑无操作时是否自动切到"离开"（默认开）
+	long	m_nAutoAwayDelayIndex;	//自动离开的等待时长下拉索引（0=5分钟 1=10 2=15 3=30），映射见 SettingsBinding.h
+	BOOL	m_bKeepAwake;			//禁止机器休眠（不休眠 / 不关闭显示器 / 不锁屏）；默认关闭，与自动离开互斥
 	BOOL	m_bAutoRecvImage;		//聊天自动接收图片
 	BOOL	m_bAutoRecvFile;		//聊天自动接收文件
 	BOOL	m_bMsgRoaming;			//消息漫游（多设备同步）；本期仅存、暂不联服务端
-	BOOL	m_bEmojiRain;			//开启表情雨特效
+	BOOL	m_bLinkDetect;			//自动识别聊天内容里的链接（关掉后链接以普通文字显示）
 	long	m_nAudioInputIndex;		//麦克风设备下拉索引；本期仅存、A/V 未接入暂不生效
 	long	m_nAudioOutputIndex;	//扬声器设备下拉索引；同上
 	long	m_nCameraIndex;			//摄像头设备下拉索引；同上

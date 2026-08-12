@@ -144,6 +144,8 @@ GroupMemberItem::GroupMemberItem()
     , m_avatarColor(RGB(0xFF, 0x7A, 0x45))
     , m_netRole(grouprole::kNetRoleMember)
     , m_myNetRole(-1)
+    , m_starredQuery(NULL)
+    , m_starredQueryUd(NULL)
     , m_avatarBmp(NULL)
     , m_avatarLoadTried(false)
 {
@@ -177,9 +179,14 @@ bool GroupMemberItem::OnRButtonDown(POINT pt, UINT /*mkFlags*/)
     // 与气泡里 @某人 片段共用同一套菜单模型：本人只留「查看资料」，其余四项，
     // 群主还会在末尾多出「设为 / 撤销管理员」。
     // 成员既然出现在侧栏里就一定还在群里，故 stillInGroup 恒传 true。
+    // 「特别关注」那一项的文案要问主面板的关注名单，本控件不认识它，故经宿主群聊窗
+    // 装下来的查询钩子代问；没装钩子时按"未关注"显示。
+    const bool isStarred = (m_starredQuery != NULL)
+                               ? m_starredQuery(m_starredQueryUd, m_userid) : false;
+
     const std::vector<balloonchatwnd::MentionMenuEntry> model =
         balloonchatwnd::BuildMentionMenuModel(m_userid, m_isSelf ? m_userid : 0, true,
-                                              m_myNetRole, m_netRole);
+                                              m_myNetRole, m_netRole, isStarred);
     if (model.empty())
     {
         return false;

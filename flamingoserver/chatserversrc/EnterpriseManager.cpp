@@ -542,6 +542,12 @@ int32_t EnterpriseManager::deleteEnterprise(int64_t enterpriseId)
     if (!pConn->execute(sql))
         return error_code_unknown;
 
+    //7) 同步组织架构缓存：上面第 4 步的部门与成员记录是直接批量 DELETE 的，
+    //   不经 DepartmentManager 的写方法，其内存缓存不会自行重载。不同步的话，
+    //   被删企业的整棵部门树会继续留在 tree.do 与在线客户端的通讯录里。
+    //   第 5 步把员工的 f_enterprise_id 清了零，用户→企业映射同样要一并清掉。
+    Singleton<DepartmentManager>::Instance().removeCachedEnterprise(enterpriseId);
+
     LOGI("EnterpriseManager::deleteEnterprise ok, enterpriseid: %lld", (long long)enterpriseId);
     return error_code_ok;
 }

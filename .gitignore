@@ -209,3 +209,32 @@ flamingoAdmin/third-party/
 # 注意不要改回 `!flamingoclient/balloonui/` 这种反向包含 —— 那正是会踩上面这个坑的写法。
 flamingoclient/balloonui/
 third-party/balloonui/
+
+# 会话过程中的临时产物（探针脚本、截图、备份等）。开发期需要临时目录时一律用它，
+# 不要写到系统 Temp 下 —— 放在项目内才好和对应项目对上号、一起清理。
+tmp/
+
+# 更新器 iUpdateAuto 四个配置的中间目录（2026-08-12 重写后按配置分开，旧的
+# iAutoUpdate/Release/ 已在上面列过，这里补齐其余三个 + x64）。
+flamingoclient/iAutoUpdate/Debug_x64/
+flamingoclient/iAutoUpdate/Release_x64/
+flamingoclient/iAutoUpdate/Debug_Win32/
+flamingoclient/iAutoUpdate/Release_Win32/
+
+# 客户端下载的升级包与更新器日志。运行期产物，几十 MB，且每次升级都会变。
+flamingoclient/Bin/update/
+
+# WSL / Linux 侧 CMake 构建目录。里面是编出来的可执行文件与 CMake 中间产物，
+# 单个近 20 MB，且重新 cmake+make 即可恢复。
+flamingoserver/build-mysql/
+
+# 升级包投放目录。运维手工把 zip 放进去，服务端按 MD5 反查，属于部署数据不是源码。
+flamingoserver/windowsproj/updatecache/
+
+# MariaDB 客户端 SDK：下载解压得来的第三方依赖，与 third-party/ 同理不入库。
+flamingoserver/mariadb-connector-c-3.4.9/
+flamingoserver/mariadb-connector-c-3.4.9.zip
+flamingoserver/mariadb-connector-x64/
+
+# 跑单测时在源码目录里落下的临时 SQLite 库。
+flamingoclient/Source/flamingo_sqlite_*_test.db

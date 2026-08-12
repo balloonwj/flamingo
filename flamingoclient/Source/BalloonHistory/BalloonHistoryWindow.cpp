@@ -19,6 +19,7 @@
 
 #include "../CustomMsgDef.h"   // WM_CLOSE_MAINDLG
 #include "../IULog.h"          // LOG_INFO / LOG_ERROR
+#include "../BalloonChatWnd/ChatLinkDetect.h"   // IsSafeLinkUrl（打开链接前的协议白名单）
 
 #include "../../balloonui/balloonui/DuiNotify.h"
 #include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
@@ -35,7 +36,8 @@
 #include "../net/Protocol.h"   // message_type_file（文件行的正文沿用"名字 · 大小"那份）
 #include "../BalloonMain/BalloonMainPanel.h"   // 真实会话下解析发送者昵称
 #include "../net/IUSocket.h"        // 行内 Pin 按钮直接发 cmd_pin_message
-#include "../net/ImageTransfer.h"   // CacheFilePathForMd5（算缩略图的本地缓存路径）
+#include "../net/ImageTransfer.h"
+#include "../net/CurrentUserAccount.h"   // net::CurrentUserAccount（本地缓存目录按登录账号分）   // CacheFilePathForMd5（算缩略图的本地缓存路径）
 #include "../FlamingoClient.h"      // 取当前登录用户 userid（缓存按账号隔离）
 #include "../BalloonMain/TitleBarIcon.h"       // CreateProgramIconBitmap（标题栏左侧图标）
 #include "../BalloonMain/PopupMenuPlacement.h" // ClampPopupMenuToWorkArea（菜单不越屏）
@@ -501,7 +503,14 @@ void CBalloonHistoryWindow::SeedDebugStore()
         "等主色定下来再统一调，不然改两遍。还有一件事，移动端的按钮高度现在是"
         "40，我觉得可以提到 44，拇指点起来会舒服很多，安卓那边也好对齐。"
         "你看周五之前能不能出一版对比稿？我们约个时间一起过一遍。",
+        //带网址的一条 —— 用来目检链接识别那条渲染分支（蓝色 + 下划线 + 可点）。
+        //网址按原样写：正文格式里的转义只认"紧跟表情标记的双斜杠"，网址不受影响。
+        "参考资料见 https://example.com/brand/guide?v=2 还有 www.example.org 都看下",
     };
+    //上面那张假正文表的条数。取数组长度而不是写死 —— 往表里加一条却忘了改这里的话，
+    //新加的那条永远轮不上，等于白加（本来写死的是 6）。
+    const int kTextCount = (int)(sizeof(kTexts) / sizeof(kTexts[0]));
+
     const char* kFiles[] = { "设计规范-v2.docx", "参考案例.zip", "季度报告.xlsx" };
 
     int64_t msgid = 1001;
@@ -518,7 +527,7 @@ void CBalloonHistoryWindow::SeedDebugStore()
         int kind = k % 5;
         if (kind == 0)
         {
-            std::string text = kTexts[k % 6];
+            std::string text = kTexts[k % kTextCount];
             rec.m_msgtype = 1;
             rec.m_content = std::string("{\"text\":\"") + text + "\"}";
             rec.m_searchText = text;
@@ -647,7 +656,8 @@ HistoryViewData CBalloonHistoryWindow::BuildViewData()
             if (selfId > 0)
             {
                 row.m_thumbImagePath = CString(
-                    net::ImageTransfer::CacheFilePathForMd5(selfId, brief.m_imageMd5).c_str());
+                    net::ImageTransfer::CacheFilePathForMd5(
+                        net::CurrentUserAccount(), brief.m_imageMd5).c_str());
             }
         }
         else if (!brief.m_fileName.empty())
@@ -872,6 +882,28 @@ LRESULT CBalloonHistoryWindow::OnRButtonUpMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
     return 0;
 }
 
+LRESULT CBalloonHistoryWindow::OnChatOpenLinkMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                                 LPARAM lParam, BOOL& /*bHandled*/)
+{
+    std::wstring* pUrl = (std::wstring*)lParam;
+    if (pUrl == NULL)
+    {
+        return 0;
+    }
+
+    // 协议白名单：只放行 http / https，与两个聊天窗同一口径。
+    if (balloonchatwnd::IsSafeLinkUrl(*pUrl))
+    {
+        ::ShellExecuteW(m_hWnd, L"open", pUrl->c_str(), NULL, NULL, SW_SHOWNORMAL);
+    }
+    else
+    {
+        LOG_ERROR("消息记录窗拒绝打开非 http/https 链接。");
+    }
+    delete pUrl;
+    return 0;
+}
+
 LRESULT CBalloonHistoryWindow::OnShowRowMenuMsg(UINT /*uMsg*/, WPARAM wParam,
                                                 LPARAM lParam, BOOL& /*bHandled*/)
 {
@@ -1021,7 +1053,7 @@ bool CBalloonHistoryWindow::ResolveRowLocalFile(int row, CString& outPath) const
             return false;
         }
         const std::wstring cache =
-            net::ImageTransfer::CacheFilePathForMd5(selfId, brief.m_imageMd5);
+            net::ImageTransfer::CacheFilePathForMd5(net::CurrentUserAccount(), brief.m_imageMd5);
         if (cache.empty() || !PathExistsOnDisk(cache.c_str()))
         {
             return false;
@@ -1041,8 +1073,8 @@ bool CBalloonHistoryWindow::ResolveRowLocalFile(int row, CString& outPath) const
         std::wstring cache;
         if (!brief.m_fileMd5.empty() && !brief.m_fileName.empty())
         {
-            cache = net::FileTransfer::CacheFilePathFor(selfId, brief.m_fileMd5,
-                                                        brief.m_fileName);
+            cache = net::FileTransfer::CacheFilePathFor(net::CurrentUserAccount(),
+                                                        brief.m_fileMd5, brief.m_fileName);
         }
 
         const std::wstring picked = balloonchatwnd::ResolveLocalFilePath(
@@ -1182,7 +1214,7 @@ void CBalloonHistoryWindow::CopyRowText(int row)
         return;
     }
 
-    //正文里的 /f["<id>"] 要换成可读的「[表情]」，与气泡复制同口径 —— 粘到微信、
+    //正文里的 /f["<id>"] 要换成可读的「[表情]」，与气泡复制同口径 —— 粘到其它聊天软件、
     //记事本里都读得懂。原始标记只有粘回本程序输入框才有意义，那不是主要场景。
     std::vector<balloonchat::ChatSegment> segs = balloonchat::ParseSendBody(full);
     std::wstring text;
@@ -1306,7 +1338,7 @@ void CBalloonHistoryWindow::StartRowDownload(int row, bool viewAfter)
         }
         net::ImageTransfer::GetInstance().EnqueueDownload(
             (int64_t)rec.m_msgid, brief.m_imageFileId, brief.m_imageMd5,
-            brief.m_imageSize, selfId);
+            brief.m_imageSize, net::CurrentUserAccount());
     }
     else if (IsHistoryRowFileType(rec.m_msgtype))
     {
@@ -1318,7 +1350,7 @@ void CBalloonHistoryWindow::StartRowDownload(int row, bool viewAfter)
         }
         net::FileTransfer::GetInstance().EnqueueDownload(
             (int64_t)rec.m_msgid, brief.m_fileId, brief.m_fileName,
-            brief.m_fileMd5, brief.m_fileSize, selfId);
+            brief.m_fileMd5, brief.m_fileSize, net::CurrentUserAccount());
     }
     else
     {

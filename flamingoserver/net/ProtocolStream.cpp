@@ -358,7 +358,10 @@ namespace net
 #endif
             WriteCString(int64str, strlen(int64str));
         } else
-            WriteCString(int64str, 0);
+            //isNULL 为真时只写一个长度为 0 的字符串，故这里传空字符串字面量。
+            //原先传的是尚未写入内容的 int64str，虽然长度为 0 不会真的读到它，
+            //但把未初始化的数组交出去本身就不妥，GCC 也会报 -Wmaybe-uninitialized
+            WriteCString("", 0);
         return true;
     }
     bool BinaryStreamWriter::WriteShort(short i, bool isNULL)
@@ -385,7 +388,9 @@ namespace net
             sprintf(doublestr, "%f", value);
             WriteCString(doublestr, strlen(doublestr));
         } else
-            WriteCString(doublestr, 0);
+            //理由同 WriteInt64：isNULL 为真时只写长度为 0 的字符串，
+            //不要把未初始化的 doublestr 传出去
+            WriteCString("", 0);
         return true;
     }
     void BinaryStreamWriter::Flush()

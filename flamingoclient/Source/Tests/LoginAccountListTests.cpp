@@ -550,3 +550,146 @@ TEST_CASE("LAL-A7 取消记住密码时一并清空密码", "[lal][autologin]")
     CHECK(lpReloaded->bRememberPwd == FALSE);
     CHECK(lpReloaded->bAutoLogin == FALSE);
 }
+
+// =====================================================================
+// LAL-D —— 删除账号时"最后登录账号"下标的修正
+//
+// 登录窗下拉里那个删除叉走的就是 CLoginAccountList::Del。m_nLastLoginUser
+// 存的是<u>下标</u>而不是账号名，删掉一项之后它前面的项整体前移；不跟着调整
+// 就会指向另一个人 —— 表现为下次打开登录窗自动填的是别的账号，甚至越界。
+// =====================================================================
+
+TEST_CASE("LAL-D1 删掉排在最后登录账号之前的项，最后登录账号不变", "[lal][del]")
+{
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, FALSE));
+    REQUIRE(list.Add(_T("bob"), _T("pwd_b"), 1, TRUE, FALSE));
+    REQUIRE(list.Add(_T("carol"), _T("pwd_c"), 1, TRUE, FALSE));
+
+    list.SetLastLoginUser(_T("carol"));
+    REQUIRE(list.GetLastLoginUser() == 2);
+
+    // 删掉排在它前面的 alice：下标要跟着前移一位，指向的人不能变。
+    REQUIRE(list.Del(0) == TRUE);
+    CHECK(list.GetLastLoginUser() == 1);
+
+    LOGIN_ACCOUNT_INFO stCopy;
+    memset(&stCopy, 0, sizeof(stCopy));
+    REQUIRE(list.GetLastLoginAccountInfo(&stCopy) == TRUE);
+    CHECK(wcscmp(stCopy.szUser, _T("carol")) == 0);
+}
+
+TEST_CASE("LAL-D2 删掉排在最后登录账号之后的项，下标不动", "[lal][del]")
+{
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, FALSE));
+    REQUIRE(list.Add(_T("bob"), _T("pwd_b"), 1, TRUE, FALSE));
+    REQUIRE(list.Add(_T("carol"), _T("pwd_c"), 1, TRUE, FALSE));
+
+    list.SetLastLoginUser(_T("alice"));
+    REQUIRE(list.GetLastLoginUser() == 0);
+
+    REQUIRE(list.Del(2) == TRUE);
+    CHECK(list.GetLastLoginUser() == 0);
+
+    LOGIN_ACCOUNT_INFO stCopy;
+    memset(&stCopy, 0, sizeof(stCopy));
+    REQUIRE(list.GetLastLoginAccountInfo(&stCopy) == TRUE);
+    CHECK(wcscmp(stCopy.szUser, _T("alice")) == 0);
+}
+
+TEST_CASE("LAL-D3 删掉最后登录账号本身，退回第一个账号", "[lal][del]")
+{
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, FALSE));
+    REQUIRE(list.Add(_T("bob"), _T("pwd_b"), 1, TRUE, FALSE));
+    REQUIRE(list.Add(_T("carol"), _T("pwd_c"), 1, TRUE, FALSE));
+
+    list.SetLastLoginUser(_T("bob"));
+    REQUIRE(list.GetLastLoginUser() == 1);
+
+    REQUIRE(list.Del(1) == TRUE);
+    CHECK(list.GetLastLoginUser() == 0);
+
+    LOGIN_ACCOUNT_INFO stCopy;
+    memset(&stCopy, 0, sizeof(stCopy));
+    REQUIRE(list.GetLastLoginAccountInfo(&stCopy) == TRUE);
+    CHECK(wcscmp(stCopy.szUser, _T("alice")) == 0);
+}
+
+TEST_CASE("LAL-D4 删掉末尾那个（同时也是最后登录账号），下标不越界", "[lal][del]")
+{
+    // 这条是最容易崩的情形：不夹取的话 m_nLastLoginUser 会停在已经不存在的下标上。
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, FALSE));
+    REQUIRE(list.Add(_T("bob"), _T("pwd_b"), 1, TRUE, FALSE));
+
+    list.SetLastLoginUser(_T("bob"));
+    REQUIRE(list.GetLastLoginUser() == 1);
+
+    REQUIRE(list.Del(1) == TRUE);
+    CHECK(list.GetCount() == 1);
+    CHECK(list.GetLastLoginUser() == 0);
+
+    LOGIN_ACCOUNT_INFO stCopy;
+    memset(&stCopy, 0, sizeof(stCopy));
+    REQUIRE(list.GetLastLoginAccountInfo(&stCopy) == TRUE);
+    CHECK(wcscmp(stCopy.szUser, _T("alice")) == 0);
+}
+
+TEST_CASE("LAL-D5 删空整个列表：不崩，且查不到最后登录账号", "[lal][del]")
+{
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, FALSE));
+    list.SetLastLoginUser(_T("alice"));
+
+    REQUIRE(list.Del(0) == TRUE);
+    CHECK(list.GetCount() == 0);
+
+    // 列表空了，取"最后登录账号"必须失败而不是读到野内存。
+    LOGIN_ACCOUNT_INFO stCopy;
+    memset(&stCopy, 0, sizeof(stCopy));
+    CHECK(list.GetLastLoginAccountInfo(&stCopy) == FALSE);
+}
+
+TEST_CASE("LAL-D6 越界下标删除被拒，列表与最后登录账号都不受影响", "[lal][del]")
+{
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, FALSE));
+    REQUIRE(list.Add(_T("bob"), _T("pwd_b"), 1, TRUE, FALSE));
+    list.SetLastLoginUser(_T("bob"));
+
+    CHECK(list.Del(-1) == FALSE);
+    CHECK(list.Del(2) == FALSE);
+    CHECK(list.GetCount() == 2);
+    CHECK(list.GetLastLoginUser() == 1);
+}
+
+TEST_CASE("LAL-D7 删除后落盘，重新加载仍是删除后的样子", "[lal][del]")
+{
+    // 删完必须真的写回文件，否则重启客户端那个账号又回来了。
+    const std::wstring path = FreshTempDat(L"lal_del.dat");
+
+    {
+        CLoginAccountList list;
+        REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, FALSE));
+        REQUIRE(list.Add(_T("bob"), _T("pwd_b"), 1, TRUE, FALSE));
+        REQUIRE(list.Add(_T("carol"), _T("pwd_c"), 1, TRUE, FALSE));
+        list.SetLastLoginUser(_T("carol"));
+
+        REQUIRE(list.Del(0) == TRUE);
+        REQUIRE(list.SaveFile(path.c_str()) == TRUE);
+    }
+
+    {
+        CLoginAccountList loaded;
+        REQUIRE(loaded.LoadFile(path.c_str()) == TRUE);
+        CHECK(loaded.GetCount() == 2);
+        CHECK(loaded.Find(_T("alice")) == NULL);
+        CHECK(loaded.Find(_T("bob")) != NULL);
+        CHECK(loaded.Find(_T("carol")) != NULL);
+        CHECK(loaded.GetLastLoginUser() == 1);
+    }
+
+    ::DeleteFileW(path.c_str());
+}

@@ -56,6 +56,29 @@ public:
     void SetIsSelf(bool isSelf) { m_isSelf = isSelf; }
 
     /**
+     *  查询某 userid 当前是否被本人「特别关注」。
+     *    userdata：SetStarredQuery 时透传的用户数据（一般是群聊窗 this）。
+     *    uid：     待查的 userid。
+     *  @return 已关注返回 true。
+     */
+    typedef bool (*StarredQuery)(void* userdata, long long uid);
+
+    /**
+     *  装上"该联系人是否被特别关注"的查询钩子，右键菜单据它决定那一项的文案。
+     *
+     *  用钩子而不是 SetStarred(bool) 那样的状态位：关注状态可能在别处（主面板的
+     *  联系人 / 会话右键菜单）被改掉，存一份在行里就会过期，而成员侧栏不会因此重建。
+     *  与 ChatMessageList::SetStarredQuery 是同一套路子，两处共用群聊窗的同一个钩子函数。
+     *    fn：      查询回调；传 NULL 表示卸载（此时菜单一律显示"特别关注"）。
+     *    userdata：回调透传的用户数据（借用，不持有）。
+     */
+    void SetStarredQuery(StarredQuery fn, void* userdata)
+    {
+        m_starredQuery   = fn;
+        m_starredQueryUd = userdata;
+    }
+
+    /**
      *  DuiControl 覆写：右键弹出成员操作菜单（与 TA 聊天 / 查看资料 / @TA /
      *  复制 TA 的昵称），与气泡里 @某人 片段的右键菜单共用同一套模型与分发消息。
      *  选中项经 WM_CHAT_MENTION_ACTION 投给宿主群聊窗执行。
@@ -87,6 +110,8 @@ private:
     COLORREF m_avatarColor;      // 头像底色
     int      m_netRole;          // 本行成员在本群的角色，取值见 grouprole::NetGroupRole，负值=未知
     int      m_myNetRole;        // 登录者本人在本群的角色，取值同上，负值=未知（决定菜单里有无管理项）
+    StarredQuery m_starredQuery;   // "该联系人是否被特别关注"的查询钩子（借用，不持有）；NULL=未装，菜单按"未关注"显示
+    void*        m_starredQueryUd; // 上面那个钩子的透传数据（借用，不持有）
     CString  m_avatarImagePath;  // 成员真图头像本地路径（空=画字形）
 
     // 真图解码缓存：首次绘制按 m_avatarImagePath 解码、之后复用；换路径 / 析构释放。

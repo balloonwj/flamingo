@@ -9,6 +9,8 @@
 #include "MainDlg.h"
 #include "BalloonMain/NotificationSound.h"   // 通话音效：回铃 / 来电铃声（循环）与接通 / 结束 / 忙音（一次性）
 #include "IniFile.h"
+#include "Update/UpdateManager.h"
+#include "BalloonUpdate/BalloonUpdateWindow.h"   // 静默检查查出新版本时拉起升级窗
 #include "net/IUProtocolData.h"
 #include "net/IUSocket.h"                 // CIUSocket::RequestContacts（登录后拉取通讯录）
 #include "net/MessageProtocolClient.h"    // net::MessageNotify / net::SendMessageResponse
@@ -31,6 +33,7 @@
 #include "net/GroupFileProtocolClient.h"    // net::GetGroupFilesResult / GroupFilesChangedNotify
 #include "net/AnnounceProtocolClient.h"     // net::AnnouncementsResult / AnnouncementNotify / AnnounceMarkReadResult（平台公告 = 消息盒子）
 #include "net/FriendProtocolClient.h"       // net::SetFriendRemarkResult（设置好友备注名应答）
+#include "net/StarredProtocolClient.h"      // net::SetStarredResult（「特别关注」设置应答）
 #include "net/FileTransfer.h"               // net::GroupFileUploadResult / GroupFileDownloadResult
 #include "net/AccountProtocolClient.h"      // net::ChangePasswordResponse
 #include "net/ProfileProtocolClient.h"      // net::UpdateProfileResponse（更新个性签名应答）
@@ -48,8 +51,6 @@
 #include "BuddyInfoDlg.h"
 #include "GroupInfoDlg.h"
 #include "RemoteDesktopDlg.h"
-#include "Updater.h"
-#include "UpdateDlg.h"
 #include "CreateNewGroupDlg.h"
 #include "GDIFactory.h"
 #include "IULog.h"
@@ -67,6 +68,15 @@
 #include "BalloonMain/MainPanelMenuIcons.h"                // CreateMenuIconImage（托盘菜单项图标渲染）
 #include "BalloonMain/MainPanelStatusMenu.h"               // GetPresenceVisual（托盘悬停提示的状态文字）
 #include "BalloonMain/OnlineCapability.h"                  // 连接态推导 / 托盘图标选择 / 自动重连守卫
+#include "BalloonMain/AutoAwayPolicy.h"                    // DecideAutoAway / ComputeIdleMs（无操作自动离开）
+#include "BalloonMain/KeepAwakePolicy.h"                   // DecideKeepAwake（禁止机器休眠）
+
+//锁屏 / 解锁等会话事件的通知注册。只用到 WTSRegisterSessionNotification 与
+//WTSUnRegisterSessionNotification 两个函数，故就地 pragma 链接，不动工程文件。
+#include <wtsapi32.h>
+#pragma comment(lib, "wtsapi32.lib")
+#include "BalloonSettings/SettingsBinding.h"               // AutoAwayDelayMinutesFromIndex（时长下拉索引→分钟）
+#include "BalloonChatWnd/ChatLinkDetect.h"                 // SetChatLinkOptionEnabled（登录后灌入链接识别开关）
 #include "BalloonMain/KickoutNotice.h"                     // GetKickoutNoticeTitle / Text（被踢下线的提示文案）
 #include "BalloonMain/BalloonKickoutDlg.h"                  // CBalloonKickoutDlg（贴托盘弹出的被踢下线模态提示框）
 #include "BalloonMain/PopupMenuPlacement.h"                // ClampPopupMenuToWorkArea（保证菜单在桌面内）
@@ -78,8 +88,13 @@ extern HWND g_hwndOwner;
 
 #define LOGIN_TIMER_ID			  1
 #define RECVCHATMSG_TIMER_ID	  2
-#define EXITAPP_TIMER_ID		  4	
+#define EXITAPP_TIMER_ID		  4
 #define RECONNECT_TIMER_ID        5
+#define AUTOAWAY_TIMER_ID         6
+
+//"无操作自动离开"的轮询间隔（毫秒）。最短的可选阈值是 5 分钟，30 秒一跳足够 ——
+//最坏情况比设定时刻晚半分钟切过去，用户无感；跳得再密只是白耗电。
+#define AUTOAWAY_POLL_INTERVAL_MS 30000
 
 //好友项信息浮动窗口宽和高
 #define BUDDYINFOFLOATWND_WIDTH   300
@@ -143,6 +158,11 @@ m_BalloonSystemSettingDlg(&m_FMGClient)
     m_dwLoginTimerId = 0;
     m_dwMsgTimerId = 0;
     m_dwReconnectTimerId = 0;
+    m_dwAutoAwayTimerId = 0;
+    m_dwLastKeepAwakeNudgeTick = 0;
+
+    //进程启动时还没发生过自动离开（初始状态由用户在登录窗选定）。
+    m_bAutoAway = false;
 
     m_bAlreadySendReloginRequest = false;
 
@@ -188,6 +208,10 @@ BOOL CMainDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 
     UIAddChildWindowContainer(m_hWnd);
 
+    //把自己的句柄登记给升级窗：安装升级包之前必须让本进程先退出（更新器按 --pid 等，
+    //等不到就放弃），升级窗据此句柄请本窗口关闭。不登记的话升级只能靠用户手动退出程序。
+    CBalloonUpdateWindow::GetInstance().SetHostWindow(m_hWnd);
+
     //去除最大化按钮
     ModifyStyle(WS_MAXIMIZEBOX, 0);
     //InitUI();
@@ -203,6 +227,22 @@ BOOL CMainDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
     // OnLoginResult 里的 RefreshTrayIconForStatus 换成彩色。
     LoadAppIcon(GetConnectionUiState());
     m_TrayIcon.AddIcon(m_hWnd, WM_TRAYICON_NOTIFY, 1, m_hAppIcon, _T("Flamingo未登录"));
+
+    //"无操作自动离开"的轮询定时器，进程在世期间一直跑。之所以不等登录成功才起：
+    //每一跳都会先看连接态，未登录 / 掉线时 DecideAutoAway 直接返回"什么都不做"，
+    //比在登录、掉线、重连、登出各处分别起停定时器要少好几处漏改的机会。
+    m_dwAutoAwayTimerId = SetTimer(AUTOAWAY_TIMER_ID, AUTOAWAY_POLL_INTERVAL_MS, NULL);
+
+    //订阅锁屏 / 解锁等会话事件（WM_WTSSESSION_CHANGE），让"人已经走了"这件事第一时间
+    //反映到在线状态上，而不是傻等空闲满 5 分钟。NOTIFY_FOR_THIS_SESSION 表示只关心本
+    //会话自己的事件，不关心机器上其他用户会话。注册失败不影响主流程 —— 空闲轮询那条
+    //路照常兜底，只是锁屏后要多等一会儿才切走，故只记一条日志、不打断启动。
+    if (!::WTSRegisterSessionNotification(m_hWnd, NOTIFY_FOR_THIS_SESSION))
+    {
+        LOG_WARNING("WTSRegisterSessionNotification failed (error %u); "
+            "lock/unlock will fall back to the idle poll.",
+            (unsigned int)::GetLastError());
+    }
 
     //创建Users目录
     CString strAppPath(g_szHomePath);
@@ -321,6 +361,44 @@ BOOL CMainDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
     if (::_tcsstr(::GetCommandLine(), _T("--about")) != NULL)
     {
         m_BalloonAboutDlg.OpenAbout(m_hWnd);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --updatewindow 时跳过登录，直接弹出升级窗，便于开发期核对
+    // 它的视觉与四种形态。默认呈现"发现新版本"；再带 --forced 看强制升级形态（隐藏
+    // 「稍后」、去掉关闭按钮），带 --latest 看"已是最新"，带 --failed 看检查失败。
+    // 这里喂的是构造出来的结果，不连服务器，故不受联调环境影响。
+    if (::_tcsstr(::GetCommandLine(), _T("--updatewindow")) != NULL)
+    {
+        update::UpdateTaskResult mock;
+        mock.m_valid       = true;
+        mock.m_transportOk = true;
+        mock.m_code        = 0;
+
+        if (::_tcsstr(::GetCommandLine(), _T("--failed")) != NULL)
+        {
+            mock.m_transportOk = false;
+            mock.m_errmsg      = "check-update timeout";
+        }
+        else if (::_tcsstr(::GetCommandLine(), _T("--latest")) != NULL)
+        {
+            mock.m_hasUpdate     = false;
+            mock.m_latestVersion = "3.2.1";
+        }
+        else
+        {
+            mock.m_hasUpdate     = true;
+            mock.m_packageUsable = true;
+            mock.m_latestVersion = "3.3.0";
+            mock.m_size          = 38219776;
+            mock.m_releaseNote   = "1. 新增群接龙，支持在群里发起接龙并统计参与人；\r\n"
+                                   "2. 修复了聊天记录搜索在消息量较大时偶尔卡顿的问题；\r\n"
+                                   "3. 优化了文件传输的断点续传逻辑，弱网下更稳定；\r\n"
+                                   "4. 修复若干已知问题。";
+            mock.m_forced = (::_tcsstr(::GetCommandLine(), _T("--forced")) != NULL);
+        }
+
+        CBalloonUpdateWindow::GetInstance().ShowResult(mock);
         ShowWindow(SW_HIDE);
         return TRUE;
     }
@@ -595,13 +673,40 @@ void CMainDlg::OnTimer(UINT_PTR nIDEvent)
         static BOOL bSwitch = FALSE;
 
         if (m_dwLoginTimerId != NULL)	// 未登录成功
+        {
+            // 登录动画定时器还在，说明本轮登录尚未收到应答。此时直接返回会让托盘
+            // 一声不响地不闪，记一笔，免得排查时以为是闪烁逻辑本身坏了。
+            if (!m_bTrayFlashTickLogged)
+            {
+                m_bTrayFlashTickLogged = true;
+                LOG_WARNING("托盘闪烁 tick 被跳过：登录动画定时器仍在（loginTimerId=%u）。",
+                            (UINT)m_dwLoginTimerId);
+            }
             return;
+        }
 
+        // 两个相位在"应用图标"与"发送方头像"之间来回切。灭的那半拍原先传的是
+        // NULL —— 各版本 Windows 对 NIM_MODIFY 带空图标的处理并不一致，有的会
+        // 原样留着上一个图标不动，那样看起来就是根本没闪。换成始终给一个有效
+        // 图标，任何版本上都能看出两幅画面在交替。
+        // 头像图标万一没生成出来（m_hMsgIcon 为空），两个相位都退回应用图标 ——
+        // 宁可不闪，也不要把托盘图标闪成空白。
         bSwitch = !bSwitch;
-        if (bSwitch)
-            m_TrayIcon.ModifyIcon(NULL, _T(""));
+        BOOL bOk = FALSE;
+        if (bSwitch || m_hMsgIcon == NULL)
+            bOk = m_TrayIcon.ModifyIcon(m_hAppIcon, _T(""));
         else
-            m_TrayIcon.ModifyIcon(m_hMsgIcon, _T(""));
+            bOk = m_TrayIcon.ModifyIcon(m_hMsgIcon, _T(""));
+
+        // 每轮闪烁只在第一次 tick 记一条：确认定时器确实在跑、Shell_NotifyIcon
+        // 是否成功、以及那一刻用的头像图标是不是空的（空图标会闪成"什么都没有"）。
+        if (!m_bTrayFlashTickLogged)
+        {
+            m_bTrayFlashTickLogged = true;
+            LOG_INFO("托盘闪烁首次 tick: ModifyIcon 返回=%d, 头像图标=%p, "
+                     "集合内会话数=%d。",
+                     bOk ? 1 : 0, m_hMsgIcon, m_trayFlash.GetConversationCount());
+        }
     }
     else if (nIDEvent == m_dwLoginTimerId)	// 登录动画
     {
@@ -635,6 +740,163 @@ void CMainDlg::OnTimer(UINT_PTR nIDEvent)
             m_FMGClient.Login();
         }
     }
+    else if (nIDEvent == m_dwAutoAwayTimerId)
+    {
+        CheckAutoAway();
+        // 「禁止机器休眠」复用同一个定时器：它同样是 30 秒粒度的周期性处理，无需另挂一个。
+        // 两者互斥，同一次触发中至多只有一个会真正执行动作。
+        CheckKeepAwake();
+    }
+}
+
+void CMainDlg::CheckKeepAwake()
+{
+    // 与自动离开一样，每次触发都重新读取配置：用户在设置中改动开关后，下一次触发
+    // （最多 30 秒）即生效，设置窗口不必向此处推送通知。
+    const CUserConfig& cfg = m_FMGClient.m_UserConfig;
+
+    balloonmain::KeepAwakeInput input;
+    input.m_enabled       = (cfg.IsEnableKeepAwake() != FALSE);
+    // 未登录时不占用系统电源请求 —— 停留在登录界面的客户端没有理由阻止整台机器休眠。
+    input.m_loggedIn      = m_bAlreadyLogin;
+    input.m_holding       = m_KeepAwakeSession.IsHolding();
+    input.m_nowTick       = ::GetTickCount();
+    input.m_lastNudgeTick = m_dwLastKeepAwakeNudgeTick;
+
+    switch (balloonmain::DecideKeepAwake(input))
+    {
+    //刚开启功能（或刚登录）：获取系统电源请求，并立即合成一次输入事件。若不立即合成，
+    //首次合成要等满一个间隔才会发生，这段间隔足以让超时较短的锁屏策略生效。
+    case balloonmain::kKeepAwakeAcquire:
+        balloonmain::CKeepAwakeSession::LogIdlePolicySnapshot();
+        if (m_KeepAwakeSession.Acquire())
+        {
+            m_KeepAwakeSession.Nudge();
+            m_dwLastKeepAwakeNudgeTick = ::GetTickCount();
+        }
+        break;
+
+    //开关刚被关闭，或已退出登录：释放电源请求，本机恢复正常的休眠与锁屏行为。
+    case balloonmain::kKeepAwakeRelease:
+        m_KeepAwakeSession.Release();
+        m_dwLastKeepAwakeNudgeTick = 0;
+        break;
+
+    //持有期间的常规处理：距上次合成已满一个间隔，再合成一次以重置输入空闲计时器。
+    case balloonmain::kKeepAwakeNudge:
+        m_KeepAwakeSession.Nudge();
+        m_dwLastKeepAwakeNudgeTick = ::GetTickCount();
+        break;
+
+    //功能未开启（默认状态，多数情况下都走这条分支），或距上次合成尚未满一个间隔：
+    //不执行任何动作。
+    case balloonmain::kKeepAwakeNone:
+    default:
+        break;
+    }
+}
+
+bool CMainDlg::BuildAutoAwayInput(balloonmain::AutoAwayInput& input)
+{
+    // 每次都重新读一次配置：这样用户在系统设置里改开关 / 改时长，下一次判定就生效，
+    // 设置窗不必再往这边推送通知。
+    const CUserConfig& cfg = m_FMGClient.m_UserConfig;
+
+    // 全系统空闲时长。GetLastInputInfo 取的是整台机器最后一次键鼠输入的时刻，跨所有
+    // 程序 —— 用户在浏览器里忙活也不会被判成空闲，这正是"电脑无操作"该有的口径。
+    LASTINPUTINFO lii = {};
+    lii.cbSize = sizeof(lii);
+    if (!::GetLastInputInfo(&lii))
+    {
+        // 取不到就这次不判。不记日志：定时器每 30 秒一跳，真出问题会刷屏。
+        return false;
+    }
+
+    input.m_presence    = GetCurrentPresence();
+    input.m_isAutoAway  = m_bAutoAway;
+    input.m_idleMs      = balloonmain::ComputeIdleMs(::GetTickCount(), lii.dwTime);
+    input.m_thresholdMs = (DWORD)balloonsettings::AutoAwayDelayMinutesFromIndex(
+                              (int)cfg.GetAutoAwayDelayIndex()) * 60 * 1000;
+    // 连接就绪的判据与"直接发 cmd_change_presence"那条路径同源（见 OnChangeMyPresence）：
+    // 已登录且主面板处于正常登录态，才谈得上改状态。
+    input.m_connected   = (m_bAlreadyLogin && m_nMainPanelStatus == MAINPANEL_STATUS_LOGIN);
+    // 与「禁止机器休眠」互斥（2026-08-12 与用户确认）：该功能通过周期性合成输入事件
+    // 推迟锁屏，而本功能正是依据"多久没有输入"判定空闲，合成会把空闲计时器重置为 0，
+    // 自动离开将永远不会触发。与其让它保持开启却不产生效果，不如在该功能开启期间明确
+    // 不生效 —— 设置页也会把「自动离开」相关两行置为禁用并说明原因
+    // （见 ApplyKeepAwakeExclusion）。
+    // 注意此处<u>不</u>修改配置中 AutoAway 的取值：关闭禁止休眠后它原样恢复，不丢失
+    // 用户此前的选择。
+    input.m_enabled     = (cfg.IsEnableAutoAway() != FALSE) && (cfg.IsEnableKeepAwake() == FALSE);
+    return true;
+}
+
+void CMainDlg::ApplyAutoAwayAction(int action, const balloonmain::AutoAwayInput& input,
+                                   const char* pszTrigger)
+{
+    if (action == balloonmain::kAutoAwayNone)
+    {
+        return;
+    }
+
+    const int target = (action == balloonmain::kAutoAwayGoAway)
+                     ? kMyPresenceAway
+                     : kMyPresenceOnline;
+
+    LOG_INFO("auto-away[%s]: idle %u sec (threshold %u sec), presence %d -> %d.",
+        pszTrigger,
+        (unsigned int)(input.m_idleMs / 1000), (unsigned int)(input.m_thresholdMs / 1000),
+        input.m_presence, target);
+
+    // 走与手动切换同一个漏斗，胶囊、托盘图标、协议下发全都自动跟上；lParam 标明这次
+    // 是自动切换，OnChangeMyPresence 据此维护 m_bAutoAway。
+    OnChangeMyPresence(0, (WPARAM)target, (LPARAM)kPresenceChangeAuto);
+}
+
+void CMainDlg::CheckAutoAway()
+{
+    balloonmain::AutoAwayInput input;
+    if (!BuildAutoAwayInput(input))
+    {
+        return;
+    }
+
+    ApplyAutoAwayAction(balloonmain::DecideAutoAway(input), input, "idle-poll");
+}
+
+LRESULT CMainDlg::OnSessionChange(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/)
+{
+    // 锁屏那一刻人肯定已经不在了，不必再等空闲满阈值 —— 否则同事在随后的 5 分钟里
+    // 看到的仍是"在线"，发了消息以为你马上就回。解锁则立刻切回在线（前提是这个
+    // "离开"本来就是自动切过去的，用户自己选的离开不动）。
+    const int kind = balloonmain::ClassifySessionEvent((int)wParam);
+
+    // 无条件先输出一条。这条日志是排查「禁止机器休眠」时"是否发生过锁屏"的<u>直接证据</u>：
+    // 开启该功能并静置一段时间后，日志中若始终没有出现 WTS_SESSION_LOCK（状态码 0x7），
+    // 即可确认锁屏确实被阻止，无需推断。同时带上当时的功能开关状态与全系统空闲时长，
+    // 使这一条日志自身即可说明上下文。
+    LOG_INFO("session event: code=0x%X, kind=%d (0 ignore / 1 user left / 2 user back), "
+             "keepAwake=%d, holdingPowerRequest=%d, systemIdle %u sec.",
+             (unsigned int)wParam, kind,
+             (int)(m_FMGClient.m_UserConfig.IsEnableKeepAwake() != FALSE),
+             (int)m_KeepAwakeSession.IsHolding(),
+             (unsigned int)(balloonmain::CKeepAwakeSession::QuerySystemIdleMs() / 1000));
+
+    if (kind == balloonmain::kSessionEventNone)
+    {
+        // 登录 / 注销 / 远程协助等与"人在不在电脑前"无关的会话事件，忽略。
+        return 0;
+    }
+
+    balloonmain::AutoAwayInput input;
+    if (!BuildAutoAwayInput(input))
+    {
+        return 0;
+    }
+
+    ApplyAutoAwayAction(balloonmain::DecideAutoAwayOnSessionEvent(input, kind), input,
+                        (kind == balloonmain::kSessionEventLeave) ? "session-lock" : "session-unlock");
+    return 0;
 }
 
 void CMainDlg::OnSize(UINT nType, CSize size)
@@ -772,6 +1034,20 @@ void CMainDlg::CloseDialog(int nVal)
         KillTimer(m_dwMsgTimerId);
         m_dwMsgTimerId = NULL;
     }
+    // 退出前把系统电源请求还给系统。进程结束时系统也会回收，此处显式释放一次，
+    // 让"哪个程序在阻止休眠"这件事在日志上有始有终。
+    m_KeepAwakeSession.Release();
+    m_dwLastKeepAwakeNudgeTick = 0;
+
+    if (m_dwAutoAwayTimerId != 0)
+    {
+        KillTimer(m_dwAutoAwayTimerId);
+        m_dwAutoAwayTimerId = 0;
+    }
+
+    //退订会话通知。必须赶在窗口销毁之前 —— 系统按 HWND 记录订阅方，窗口没了还留着
+    //订阅，事件会投到一个已经不存在的窗口上。
+    ::WTSUnRegisterSessionNotification(m_hWnd);
 
     if (m_LogonUserInfoDlg.IsWindow())
         m_LogonUserInfoDlg.DestroyWindow();
@@ -856,24 +1132,10 @@ bool CMainDlg::StartLogin(BOOL bAutoLogin/* = FALSE*/)
     m_FMGClient.SetCallBackWnd(m_hWnd);
     if (bAutoLogin)
     {
-        //调试版就不要升级啦
-#ifndef _DEBUG
-        Updater updater(&m_FMGClient.m_FileTask);
-        //updater.m_lpProcotol = &m_FMGClient.m_IUProtocol;
-
-        //需要升级
-        if (CheckOnlyOneInstance() && updater.IsNeedUpdate())
-        {
-            if (IDYES == ::MessageBox(m_hWnd, _T("检测到新版本，是否现在就升级？"), _T("新版本提示"), MB_YESNO | MB_ICONQUESTION | MB_TOPMOST))
-            {
-                CUpdateDlg updateDlg;
-                updateDlg.m_pFMGClient = &m_FMGClient;
-                updateDlg.m_aryFileInfo = updater.m_aryUpdateFileList;
-                //updateDlg.m_lpProtocol = &m_FMGClient.m_IUProtocol;
-                updateDlg.DoModal(m_hWnd, NULL);
-            }
-        }
-#endif
+        //此处原先在自动登录前同步跑一遍 v1 时代的自动升级（Updater + CUpdateDlg），
+        //并用 #ifndef _DEBUG 把它挡在 Release 才生效。那条链路在 v2 改造后已经跑不通，
+        //现已整体删除。检查更新改为登录成功后异步进行，见本文件 OnLoginResult 里的
+        //静默检查，以及 Source/Update、Source/BalloonUpdate。
 
         BOOL bRet = m_LoginAccountList.GetLastLoginAccountInfo(&m_stAccountInfo);
         if (!bRet)
@@ -1391,6 +1653,10 @@ LRESULT CMainDlg::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
 //#endif
 
         m_FMGClient.LoadUserConfig();
+        // 把该账号的「自动识别链接」设置灌进进程级开关：气泡在测量阶段读它决定
+        // 要不要识别，故必须在任何聊天窗打开之前设好（配置里没有这一项时默认开）。
+        balloonchatwnd::SetChatLinkOptionEnabled(
+            m_FMGClient.m_UserConfig.IsEnableLinkDetect() != FALSE);
         // 旧好友列表头像风格成员(m_nBuddyListHeadPicStyle / m_bShowBigHeadPicInSel)已随
         // 旧主窗口一并移除；对应用户配置仍保留在 UserConfig 中，Phase 2 由
         // BalloonMainPanel 接管列表样式时直接从 UserConfig 读取即可。
@@ -1406,6 +1672,26 @@ LRESULT CMainDlg::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
         // 在 CreateAndShow 时自行决定默认 Tab。
 
         m_bAlreadyLogin = TRUE;
+
+        // 登录成功后发起一次静默检查更新。默认<u>只查不下</u>：查出新版本时弹升级窗，
+        // 由用户决定要不要下载 —— 背着用户拉几十 MB 不合适。想提前验证下载链路时，
+        // 把 flamingo.ini 的 [app] autodownloadupdate 置 1。
+        //
+        // 结果经 FMG_MSG_UPDATE_RESULT 回到 OnSilentUpdateResult。这里把投递目标登记
+        // 成主窗口，是因为此刻升级窗还没创建；等它创建时会把目标改登记为它自己。
+        // 升级窗已经开着的话就别抢，否则正在下载的进度会投到主窗口来。
+        if (!CBalloonUpdateWindow::GetInstance().IsShowing())
+        {
+            update::UpdateManager::GetInstance().SetNotifyTarget(m_hWnd);
+        }
+        {
+            CIniFile iniFile;
+            CString strIniPath(g_szHomePath);
+            strIniPath += _T("config\\flamingo.ini");
+            const bool bAutoDownload =
+                (iniFile.ReadInt(_T("app"), _T("autodownloadupdate"), 0, strIniPath) != 0);
+            update::UpdateManager::GetInstance().CheckAndDownload(bAutoDownload);
+        }
 
         m_nMainPanelStatus = MAINPANEL_STATUS_LOGIN;
 
@@ -1430,6 +1716,11 @@ LRESULT CMainDlg::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
             ::SetForegroundWindow(m_BalloonMainPanel.m_hWnd);
             ::SetFocus(m_BalloonMainPanel.m_hWnd);
         }
+
+        //本轮登录重新开始记账："收到陌生人消息就补拉通讯录"那道兜底闸门要清零。
+        //掉线重连期间组织架构可能变过、cmd_org_structure_notify 也可能错过，
+        //上一轮攒下的"这些人已经问过了"不该继续压着本轮的补拉。
+        m_BalloonMainPanel.ResetUnknownSenderPolicy();
 
         //登录成功后拉取一次 v2 通讯录，应答经 FMG_MSG_V2_CONTACTS 异步回投，
         //在 OnV2Contacts 里填充联系人面板（让联系人树由 mock 变真实）。
@@ -1473,6 +1764,27 @@ LRESULT CMainDlg::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
         StartLogin();
 
         m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
+    }
+    break;
+
+    case LOGIN_VERSION_TOO_OLD:
+    {
+        //服务端以 error_code_version_too_old 拒绝了登录。这个错误重试多少次都是同一个
+        //结果，所以不走"弹提示 + 退回登录窗"那套，直接把用户引到升级流程上去：拉起
+        //升级窗并立即检查更新。检查更新走的是登录前白名单，此刻未登录也能查、能下。
+        if (bResuming)
+        {
+            ResumeOnlineFailed(_T("恢复在线失败：客户端版本过低，请升级后重试。"));
+            break;
+        }
+
+        MessageBox(_T("当前客户端版本过低，无法登录，请先升级。"),
+                   g_strAppTitle.c_str(), MB_OK | MB_ICONWARNING);
+        StartLogin();
+        m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
+
+        //放在退回登录窗之后弹：否则升级窗会被随后出现的登录窗盖住。
+        CBalloonUpdateWindow::GetInstance().ShowChecking();
     }
     break;
 
@@ -1538,6 +1850,40 @@ LRESULT CMainDlg::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
 }
 
 // 注销返回消息
+LRESULT CMainDlg::OnExitForUpdate(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/)
+{
+    LOG_INFO("MainDlg::OnExitForUpdate: 升级包已就绪，直接退出程序交给更新器。");
+    //直接退出，不经 OnClose 的「退出还是最小化」询问
+    CloseDialog(IDOK);
+    return 0;
+}
+
+LRESULT CMainDlg::OnSilentUpdateResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    update::UpdateTaskResult* pResult = (update::UpdateTaskResult*)lParam;
+    if (pResult == NULL)
+    {
+        return 0;
+    }
+
+    LOG_INFO("MainDlg::OnSilentUpdateResult: transportOk=%d, code=%d, hasUpdate=%d, "
+             "usable=%d, forced=%d, latest=%s.",
+             pResult->m_transportOk ? 1 : 0, pResult->m_code,
+             pResult->m_hasUpdate ? 1 : 0, pResult->m_packageUsable ? 1 : 0,
+             pResult->m_forced ? 1 : 0, pResult->m_latestVersion.c_str());
+
+    //只有确实有可用新版本才打扰用户。已是最新、检查超时、服务端报错这几种情况
+    //都只留日志——用户并没有主动要求检查，弹个"已是最新"或"检查失败"纯属打扰。
+    if (pResult->m_hasUpdate && pResult->m_packageUsable)
+    {
+        //ShowResult 内部会把消息投递目标改登记为升级窗自己，后续下载进度直接投给它。
+        CBalloonUpdateWindow::GetInstance().ShowResult(*pResult);
+    }
+
+    delete pResult;
+    return 0;
+}
+
 LRESULT CMainDlg::OnLogoutResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     CloseDialog(IDOK);
@@ -1784,13 +2130,44 @@ LRESULT CMainDlg::OnV2UserInfoChanged(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM l
     return 0;
 }
 
+// v2 组织架构变更推送：交主面板重新拉一次通讯录。企业里新入职 / 新注册的同事就是
+// 靠这条推送在已登录的客户端上"冒"出来的 —— 通讯录本身只在登录时拉过一次。
+LRESULT CMainDlg::OnV2OrgStructureChanged(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::OrgStructureChangedNotify，处理后须 delete。
+    net::OrgStructureChangedNotify* pNotify = (net::OrgStructureChangedNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+    m_BalloonMainPanel.OnOrgStructureChanged(*pNotify);
+    delete pNotify;
+    return 0;
+}
+
 // 切换我的在线状态（主面板状态菜单触发）。wParam = 目标 v2 presence（见 MyPresenceValue，
 // 与 net/Protocol.h presence_type 同值）。据当前连接 / 登录态分三路处理。
-LRESULT CMainDlg::OnChangeMyPresence(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/)
+LRESULT CMainDlg::OnChangeMyPresence(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam)
 {
     int presence = (int)wParam;
-    LOG_INFO("MainDlg::OnChangeMyPresence: target presence=%d, panelStatus=%d, alreadyLogin=%d.",
-        presence, m_nMainPanelStatus, m_bAlreadyLogin ? 1 : 0);
+    //lParam 是本次切换的来源：0（kPresenceChangeManual）= 用户手动选的，
+    //1（kPresenceChangeAuto）= "无操作自动离开"功能切的。主面板状态菜单与托盘菜单
+    //两个既有入口传的都是 0，语义天然正确，无需改动。
+    const bool bAuto = ((int)lParam == kPresenceChangeAuto);
+
+    LOG_INFO("MainDlg::OnChangeMyPresence: target presence=%d, panelStatus=%d, alreadyLogin=%d, auto=%d.",
+        presence, m_nMainPanelStatus, m_bAlreadyLogin ? 1 : 0, bAuto ? 1 : 0);
+
+    //维护"当前这个离开是不是自动切过去的"。
+    //  · 手动改状态一律清标志 —— 这一条最关键：自动离开期间用户自己切成了忙碌，
+    //    那他回到电脑前就不该被擅自切回在线。
+    //  · 自动切换时，只有目标是"离开"才置位；自动切回在线要清掉。
+    if (bAuto)
+    {
+        m_bAutoAway = (presence == kMyPresenceAway);
+    }
+    else
+    {
+        m_bAutoAway = false;
+    }
 
     //先把主面板的状态胶囊乐观更新成目标状态。这一步必须放在这里而不是各个发起点：
     //切换在线状态有两个入口（主面板状态菜单、系统托盘右键菜单），两者都汇到本函数，
@@ -2310,6 +2687,27 @@ LRESULT CMainDlg::OnV2SetFavoriteResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM
     return 0;
 }
 
+LRESULT CMainDlg::OnV2SetStarredResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    net::SetStarredResult* pResult = (net::SetStarredResult*)lParam;
+    if (pResult == NULL)
+    {
+        return 0;
+    }
+
+    LOG_INFO("MainDlg::OnV2SetStarredResult: code=%d, target=%lld, starred=%d.",
+        pResult->m_code, (long long)pResult->m_target, pResult->m_starred);
+
+    //转交主面板：成功什么都不用做（乐观更新已经生效），失败要回滚并提示。
+    if (m_BalloonMainPanel.IsWindow())
+    {
+        m_BalloonMainPanel.OnSetStarredResult(*pResult);
+    }
+
+    delete pResult;
+    return 0;
+}
+
 LRESULT CMainDlg::OnV2SetRemarkResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
 {
     net::SetFriendRemarkResult* pResult = (net::SetFriendRemarkResult*)lParam;
@@ -2485,6 +2883,9 @@ LRESULT CMainDlg::OnV2TrayFlash(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
     if (pData == NULL)
         return 0;
 
+    const int nCtype = pData->ctype;
+    const long long nCid = (long long)pData->cid;
+
     m_trayFlash.PushUnread(pData->ctype, pData->cid, pData->displayName,
                            pData->preview, pData->avatarText, pData->avatarColor);
     delete pData;
@@ -2493,8 +2894,26 @@ LRESULT CMainDlg::OnV2TrayFlash(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
     UpdateTrayFlashIcon();
 
     // 闪烁定时器未起则起一个（复用收消息闪烁定时器 id）。已在闪则沿用，避免重复 SetTimer。
-    if (0 == m_dwMsgTimerId)
-        m_dwMsgTimerId = SetTimer(RECVCHATMSG_TIMER_ID, ::GetCaretBlinkTime(), NULL);
+    const bool bTimerAlreadyOn = (0 != m_dwMsgTimerId);
+    if (!bTimerAlreadyOn)
+    {
+        // 闪烁快慢跟随系统的文本光标闪烁速度，但那个值必须过一遍 ClampTrayFlashInterval：
+        // 用户把系统的"文本光标闪烁"关掉时 ::GetCaretBlinkTime() 返回 INFINITE，原样
+        // 交给 SetTimer 会被夹成约 24.8 天，托盘就一次都不闪、且毫无提示。
+        const UINT uBlink = ::GetCaretBlinkTime();
+        const UINT uInterval = balloonmain::ClampTrayFlashInterval(uBlink);
+        m_dwMsgTimerId = SetTimer(RECVCHATMSG_TIMER_ID, uInterval, NULL);
+        LOG_INFO("托盘闪烁定时器已启动: timerId=%u, 系统光标闪烁=%u ms, 实际间隔=%u ms。",
+                 (UINT)m_dwMsgTimerId, uBlink, uInterval);
+    }
+
+    // 首次 tick 打一条日志用（每次重新起闪都复位），确认定时器真的在跑。
+    m_bTrayFlashTickLogged = false;
+
+    LOG_INFO("收到托盘闪烁请求: ctype=%d, cid=%lld, 集合内会话数=%d, 图标=%p, "
+             "定时器原本就在跑=%d, 登录动画定时器=%u。",
+             nCtype, nCid, m_trayFlash.GetConversationCount(), m_hMsgIcon,
+             bTimerAlreadyOn ? 1 : 0, (UINT)m_dwLoginTimerId);
 
     return 0;
 }
@@ -2512,6 +2931,12 @@ LRESULT CMainDlg::OnV2TrayClear(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam)
     delete pCid;
 
     bool bStillFlashing = m_trayFlash.ClearConversation(nCtype, (int64_t)nCid);
+
+    // 停闪是"该闪没闪"最常见的来源之一（某处误判会话已读就会把刚起的闪掐掉），
+    // 故清除动作也记一笔，日志里能看清是谁把它清的、清完还剩几个。
+    LOG_INFO("托盘清除会话: ctype=%d, cid=%lld, 清除后仍有未读=%d。",
+             nCtype, (long long)nCid, bStillFlashing ? 1 : 0);
+
     if (bStillFlashing)
         UpdateTrayFlashIcon();      // 目标可能已切换，重建图标继续闪
     else
@@ -4790,13 +5215,19 @@ void CMainDlg::OnTrayIcon_RButtunUp()
         }
 
         CImageEx* icon = NULL;
-        if (e.iconKind >= 0)
+        if (e.dotColor != 0)
         {
-            // 在线状态项(dotColor!=0)用其状态色渲染圆点(在线绿/离开橙/忙碌红/离线灰)，
-            // 与主面板状态菜单观感一致；其余项用默认单色。
-            COLORREF iconColor = (e.dotColor != 0) ? e.dotColor : kTrayMenuIconColor;
+            // 在线状态项：画该状态的徽标(在线实心圆/离开时钟/忙碌横杠/离线空心环)，
+            // 字形与颜色都取自 PresenceBadge 的共用映射，与主面板状态菜单观感一致；
+            // 当前所处的那一项额外套一圈外环。
+            icon = balloonmain::CreateStatusIconImage(
+                e.presence, e.isCurrent, kTrayMenuIconSize);
+        }
+        else if (e.iconKind >= 0)
+        {
+            // 其余功能项：普通线描图标，默认单色。
             icon = balloonmain::CreateMenuIconImage(
-                e.iconKind, iconColor, kTrayMenuIconSize);
+                e.iconKind, kTrayMenuIconColor, kTrayMenuIconSize);
         }
         icons.push_back(std::unique_ptr<CImageEx>(icon));   // icon 可能为 NULL，AppendItem 容忍
         menu.AppendItem(e.id, e.label, icon);
@@ -4848,19 +5279,19 @@ void CMainDlg::OnTrayIcon_RButtunUp()
     // 行为——离线=真正断开(GoOffline)，在线/离开/忙碌=改状态(在线态发 cmd_change_presence、
     // 离线态走 GoOnline 带上目标状态)。wParam 取 v2 presence(MyPresenceValue 与 presence_type 同值)。
     case balloonmain::kTrayMenuOnline:
-        OnChangeMyPresence(0, (WPARAM)kMyPresenceOnline, 0);
+        OnChangeMyPresence(0, (WPARAM)kMyPresenceOnline, (LPARAM)kPresenceChangeManual);
         break;
 
     case balloonmain::kTrayMenuAway:
-        OnChangeMyPresence(0, (WPARAM)kMyPresenceAway, 0);
+        OnChangeMyPresence(0, (WPARAM)kMyPresenceAway, (LPARAM)kPresenceChangeManual);
         break;
 
     case balloonmain::kTrayMenuBusy:
-        OnChangeMyPresence(0, (WPARAM)kMyPresenceBusy, 0);
+        OnChangeMyPresence(0, (WPARAM)kMyPresenceBusy, (LPARAM)kPresenceChangeManual);
         break;
 
     case balloonmain::kTrayMenuOffline:
-        OnChangeMyPresence(0, (WPARAM)kMyPresenceOffline, 0);
+        OnChangeMyPresence(0, (WPARAM)kMyPresenceOffline, (LPARAM)kPresenceChangeManual);
         break;
 
     case balloonmain::kTrayMenuMute:
@@ -5014,12 +5445,20 @@ void CMainDlg::UpdateTrayFlashIcon()
     // 取"最近一条"未读会话；集合为空（无未读）时 m_hMsgIcon 保持空，OnTimer 不会闪。
     balloonmain::TrayFlashEntry target;
     if (!m_trayFlash.GetTarget(target))
+    {
+        LOG_INFO("重建托盘闪烁头像：集合为空，不生成图标。");
         return;
+    }
 
     // 按系统小图标尺寸生成 monogram 头像图标（首字 + 底色，与会话列表头像同口径）。
     int nIconSize = ::GetSystemMetrics(SM_CXSMICON);
     m_hMsgIcon = balloonmain::MakeMonogramIcon(target.m_avatarText.c_str(),
                                                target.m_avatarColor, nIconSize);
+
+    // 图标生成失败时 m_hMsgIcon 为空，OnTimer 两个分支都变成"设空图标"，看起来
+    // 就是完全不闪，所以这里把结果记下来。
+    LOG_INFO("重建托盘闪烁头像: ctype=%d, cid=%lld, 尺寸=%d, 图标=%p。",
+             target.m_ctype, (long long)target.m_cid, nIconSize, m_hMsgIcon);
 }
 
 void CMainDlg::StopTrayFlash()

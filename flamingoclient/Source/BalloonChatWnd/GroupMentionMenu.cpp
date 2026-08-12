@@ -12,6 +12,7 @@
 
 #include "GroupMentionModel.h"   // kMentionUidAll
 #include "../GroupRoleRules.h"   // CanSetAdmin：设 / 撤管理员的门控，与群管理窗共用
+#include "../BalloonMain/StarredModel.h"   // GetMenuLabel：特别关注项文案，四处菜单共用同一份
 
 namespace balloonchatwnd {
 
@@ -61,7 +62,8 @@ std::vector<MentionMenuEntry> BuildMentionMenuModel(long long mentionUid,
                                                     long long selfUid,
                                                     bool stillInGroup,
                                                     int myNetRole,
-                                                    int targetNetRole)
+                                                    int targetNetRole,
+                                                    bool isStarred)
 {
     std::vector<MentionMenuEntry> items;
     if (!ShouldShowMentionMenu(mentionUid))
@@ -85,6 +87,12 @@ std::vector<MentionMenuEntry> BuildMentionMenuModel(long long mentionUid,
     // 用户看得见"有这一项、只是现在不能用"，比项忽然消失更好理解。
     items.push_back(MakeEntry(kMentionMenuMentionMore, kLabelMentionMore, stillInGroup));
     items.push_back(MakeEntry(kMentionMenuCopyName, kLabelCopyName, true));
+    // 特别关注排在日常动作这一组的末尾。文案由 StarredModel 统一给出，与主面板的
+    // 联系人 / 会话两处右键菜单逐字一致。
+    // 这一项<u>不受 stillInGroup 影响</u>：特别关注是"这位同事上下线提醒我"，标记的是
+    // 企业通讯录里的人，跟他还在不在这个群没有关系 —— 退了群照样是同事。
+    items.push_back(MakeEntry(kMentionMenuStarred,
+                              balloonmain::StarredModel::GetMenuLabel(isStarred), true));
 
     // 管理动作放在最后，与上面的日常动作用分隔线隔开。判定与群管理窗口成员卡
     // 菜单共用 grouprole 的两个函数。这里不必再传 isSelf —— 上面 @ 到自己的

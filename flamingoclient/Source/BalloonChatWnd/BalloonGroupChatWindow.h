@@ -30,6 +30,7 @@
 #include "GroupFileUploadTracker.h"                 // 群文件「正在上传」行跟踪器（成员需完整类型）
 #include "GroupAtDropdown.h"                        // @ 成员选择浮层（成员需完整类型）
 #include "GroupMentionModel.h"                      // MentionCandidate（成员需完整类型）
+#include "ChatDropController.h"                     // 拖文件进窗口发送（成员需完整类型）
 #include "ChatHistoryPaging.h"                      // HistoryPagingState（向上翻页，成员需完整类型）
 #include "../net/GroupProtocolClient.h"             // net::GroupAnnouncementItem（成员需完整类型）
 
@@ -39,6 +40,9 @@
 #include <stdint.h>
 
 class CFlamingoClient;
+
+//轻量提示条（拖放里"这些没处理"的汇总提示）。只按指针持有，前向声明即可。
+namespace balloonwjui { class DuiToast; }
 
 //v2 消息推送 / 群成员 / 历史消息投递载体（解析层结构体，定义在 net/*.h）。
 namespace net { struct MessageNotify; struct GroupMembersResult; struct SyncMessagesResult;
@@ -55,7 +59,8 @@ namespace balloonchatwnd { class ChatMessageList; }
  *  边框自绘窗体、标题栏与 min/max/close 按钮。非模态窗口，消息由进程
  *  主消息循环统一泵送。
  */
-class CBalloonGroupChatWindow : public balloonwjui::DuiFrameWindow
+class CBalloonGroupChatWindow : public balloonwjui::DuiFrameWindow,
+                                public balloonchatwnd::IChatDropSink
 {
 public:
     /**
@@ -225,6 +230,16 @@ public:
      *  @return 网络侧角色取值（0成员 1管理员 2群主）；不在群或查不到返回 -1。
      */
     static int MemberRoleThunk(void* userdata, long long uid);
+
+    /**
+     *  ChatMessageList / GroupMemberItem 的"该联系人是否被特别关注"查询钩子
+     *  （静态转发到实例）。实例内部再经 FMG_MSG_QUERY_STARRED 同步问主面板 ——
+     *  关注名单只有主面板那一份。
+     *    userdata：本窗口 this。
+     *    uid：     待查的 userid。
+     *  @return 已关注返回 true；拿不到窗口 / 没有宿主主面板（调试入口）返回 false。
+     */
+    static bool StarredThunk(void* userdata, long long uid);
 
     /**
      *  设置本人在本群的角色（0成员 1管理员 2群主，见 group_member_role）。决定
@@ -415,6 +430,12 @@ public:
         MESSAGE_HANDLER(kDoScreenshotMsg, OnDoScreenshot)
         MESSAGE_HANDLER(WM_VIEW_CHAT_IMAGE, OnViewImageMsg)
         MESSAGE_HANDLER(WM_CHAT_IMAGE_READY, OnImageReady)
+        MESSAGE_HANDLER(WM_CHAT_OPEN_LINK, OnChatOpenLink)
+        MESSAGE_HANDLER(WM_CHAT_COPY_SELECTION, OnChatCopySelection)
+        MESSAGE_HANDLER(WM_CHAT_CANCEL_LINK_OPEN, OnChatCancelLinkOpen)
+        MESSAGE_HANDLER(WM_CHAT_FOCUS_AREA, OnChatFocusArea)
+        MESSAGE_HANDLER(WM_LBUTTONDOWN, OnLButtonDownMsg)
+        MESSAGE_HANDLER(WM_KEYDOWN, OnKeyDownMsg)
         MESSAGE_HANDLER(WM_GROUP_FILE_DOWNLOAD, OnGroupFileDownloadMsg)
         MESSAGE_HANDLER(WM_GROUP_FILE_UPLOAD_CANCEL, OnGroupFileUploadCancelMsg)
         MESSAGE_HANDLER(WM_GROUP_FILE_DOWNLOAD_CANCEL, OnGroupFileDownloadCancelMsg)
@@ -438,6 +459,13 @@ public:
      *    state：界面连接态，取值见 BalloonMain/OnlineCapability.h 的 ConnectionUiState。
      */
     void ApplyConnectionState(int state);
+
+    /**
+     *  「自动识别链接」开关变化后，让本窗口的消息行重新测量并重绘。由主面板在收到
+     *  FMG_MSG_LINK_OPTION_CHANGED 后逐窗调用（进程级开关须先设好再调本方法）。
+     *  窗口尚未初始化完成时为空操作。
+     */
+    void RefreshLinkRendering();
 
 private:
     /**
@@ -494,6 +522,49 @@ private:
      *  图片气泡再画一次（查缓存命中、换成真图）。wParam / lParam 未用。
      */
     LRESULT OnImageReady(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_CHAT_OPEN_LINK 处理：气泡里的超链接被点击（或右键选了「在浏览器中打开」）。
+     *  lParam 为堆上的 std::wstring*（规范化后的 URL），本函数负责 delete。
+     *  打开前先过 balloonchatwnd::IsSafeLinkUrl 的协议白名单 —— 只放行 http / https。
+     */
+    LRESULT OnChatOpenLink(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_CHAT_COPY_SELECTION 处理：把消息区里当前选中的那段文字复制到剪贴板
+     *  （口径与气泡右键「复制」一致）。
+     *  @return 有选区且已复制返回 1；没有选区返回 0。
+     */
+    LRESULT OnChatCopySelection(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_CHAT_CANCEL_LINK_OPEN 处理：撤销上一条 WM_CHAT_OPEN_LINK 排队的打开动作
+     *  （气泡双击时投来）。与单聊窗同一套做法。
+     */
+    LRESULT OnChatCancelLinkOpen(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_CHAT_FOCUS_AREA 处理：记下用户当前在哪一块操作（wParam 见 CustomMsgDef.h
+     *  的 CHAT_FOCUS_*）。Ctrl+C 据它路由。与单聊窗同一套做法。
+     */
+    LRESULT OnChatFocusArea(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_LBUTTONDOWN 旁听：落点在消息区里就把逻辑焦点记成"接收框"。
+     *  只旁听、不消费（恒置 bHandled=FALSE）。
+     */
+    LRESULT OnLButtonDownMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  真正打开排队中的那个链接（延时定时器到点时调）。打开前过协议白名单。
+     */
+    void OpenPendingLink();
+
+    /**
+     *  WM_KEYDOWN 处理：焦点不在输入框时按 Ctrl+C 同样复制消息区选区。
+     *  非 Ctrl+C 一律不消费。与单聊窗同一套做法。
+     */
+    LRESULT OnKeyDownMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
      *  WM_DUI_NOTIFY 处理：识别「发送」按钮点击触发发消息、边栏 Tab
@@ -665,6 +736,45 @@ private:
      *  @return 确实发起了一笔上传返回 true；用户取消选择、或调试入口无群绑定返回 false。
      */
     bool PickAndUploadGroupFile();
+
+    /**
+     *  把一个本地文件作为群文件上传（入队 + 在面板顶部登记一行「上传中」）。
+     *  PickAndUploadGroupFile 选完文件后调它，拖放进来的文件也走同一条路，两处
+     *  共用同一段登记逻辑，不各写一份。
+     *    path：本地文件绝对路径。
+     *  @return 确实入队返回 true；调试入口无群绑定、或路径为空返回 false。
+     */
+    bool UploadGroupFile(const std::wstring& path);
+
+    // ---- balloonchatwnd::IChatDropSink 实现（把文件拖进窗口）----
+
+    /**
+     *  IChatDropSink 覆写：落点是否落在发送框（输入区块）内。拖文件只在发送框接收。
+     *    ptClient：落点（本窗口客户区坐标）。
+     */
+    bool IsChatDropZone(const POINT& ptClient) override;
+
+    /**
+     *  IChatDropSink 覆写：拖到发送框上 / 离开时开关提示（发送框描边 + 左下角提示文字）。
+     *    visible：true 显示、false 收起并还原原提示文案。
+     */
+    void OnChatDropHintChanged(bool visible) override;
+
+    /**
+     *  取「发送框」控件 —— 即输入框所在的那个 vbox。拖放落点判定与提示描边都用它。
+     *  @return 发送框控件；界面尚未构建时返回 NULL。
+     */
+    balloonwjui::DuiVBox* InputBlockCtrl();
+
+    /**
+     *  IChatDropSink 覆写：文件被放下。图片作为群图片消息发出；其余文件<u>上传到
+     *  群文件库</u>并把边栏切到「群文件」—— 与工具栏「文件」按钮的语义一致，群里
+     *  发文件就是入群文件库，不在消息区发文件气泡。
+     *    paths：      拖进来的路径列表。
+     *    forceAsFile：落手时按住了 Shift —— 图片也按群文件上传。
+     */
+    void OnChatFilesDropped(const std::vector<std::wstring>& paths,
+                            bool forceAsFile) override;
 
     /**
      *  WM_SIZE 处理：窗口尺寸变化后投递 kRelayoutMsg；不消费 WM_SIZE。
@@ -962,6 +1072,17 @@ private:
     // 正在上传的群文件跟踪器（可多笔并发）：每笔一行钉在文件列表顶部显示「上传中 NN%」+ ✕。
     // RenderFilePanel 据它在库文件行之前补出这些行；上传结束 / 取消时移除对应笔。
     balloonchatwnd::GroupFileUploadTracker m_uploadTracker;
+    // 用户当前在哪一块操作（取 CustomMsgDef.h 的 CHAT_FOCUS_*）。Ctrl+C 据它路由。
+    // 窗口刚打开时焦点在输入框，故初值为发送框。
+    int m_focusArea;
+    // 排队待打开的链接 URL：点了链接先记在这里、等一个双击间隔再真打开（见
+    // kLinkOpenTimerId 的注释）；期间收到双击就清空。空串表示当前没有排队的链接。
+    std::wstring m_pendingLinkUrl;
+    // 拖文件进窗口的接收器。InitUi 末尾绑定到本窗口与输入框，OnCloseMsg 解绑。
+    balloonchatwnd::ChatDropController m_dropCtrl;
+    // 轻量提示条，汇总"哪些拖进来的东西没处理"。所有权在控件树（客户区根容器的
+    // 最后一个子），本指针只作访问用；窗口未初始化完成时为 NULL。
+    balloonwjui::DuiToast* m_dropToast;
 
     // ---- 公告边栏 ----
     //

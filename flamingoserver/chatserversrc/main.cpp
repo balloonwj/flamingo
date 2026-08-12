@@ -14,6 +14,7 @@
 #include "../dbapi/DbConfig.h"
 #include "../sqliteapi/SqliteManager.h"
 #include "../utils/AppPath.h"
+#include "../utils/ServerConfigLoader.h"
 
 //FLAMINGO_NO_MYSQL 由 CMake 在 -DWITH_MYSQL=OFF 时定义，
 //用于编出一份不依赖 libmysqlclient 的纯本地版本，见 CMakeLists.txt 顶部的说明
@@ -27,6 +28,7 @@
 #endif 
 
 #include "UserManager.h"
+#include "UpdatePackageScanner.h"
 #include "MessageManager.h"
 #include "MessagePinManager.h"
 #include "GroupManager.h"
@@ -63,6 +65,11 @@ EventLoop g_mainLoop;
 #define DEFAULT_ADMIN_EMAIL      "admin@flamingo.com"
 #define DEFAULT_ADMIN_PASSWORD   "admin123"
 #define DEFAULT_ADMIN_NAME       u8"超级管理员"
+
+//本服务的名字与配置文件名。名字只出现在启动失败的提示里，让用户一眼看出是哪个进程报的错；
+//配置文件名交给 ServerConfigLoader 去各个候选目录里找，不再写死一条相对路径
+#define SERVER_NAME              "chatserver"
+#define SERVER_CONFIG_FILE_NAME  "chatserver.conf"
 
 /**
  *  定时公告调度器的一轮工作：把到点的定时公告转为「已发布」，并把它们推给在线受众。
@@ -125,11 +132,39 @@ int main(int argc, char* argv[])
         daemon_run();
 #endif
 
-#ifdef WIN32
-    CConfigFileReader config("../etc/chatserver.conf");
-#else
-    CConfigFileReader config("etc/chatserver.conf");
-#endif
+    //配置文件按「可执行文件所在目录优先」的顺序查找，找不到再回落到相对工作目录的老路径。
+    //工作目录是启动方式决定的：在可执行文件所在目录里双击、用起始位置为空的快捷方式启动、
+    //以管理员身份运行、从别的目录敲命令，拿到的工作目录各不相同。改造前这里写死一条相对
+    //工作目录的路径，工作目录一变就读不到配置文件，随后在下面第一处取配置项时对空指针
+    //取长度而崩溃，且崩溃发生在日志初始化之前，控制台上一个字都看不到。详见 ServerConfigLoader.h
+    CConfigFileReader config;
+    std::string triedConfigPaths;
+    if (!serverconfig::LoadServerConfig(config, SERVER_CONFIG_FILE_NAME, triedConfigPaths))
+    {
+        serverconfig::ReportStartupFailure(SERVER_NAME,
+            std::string("cannot open config file ") + SERVER_CONFIG_FILE_NAME
+            + ", tried: " + triedConfigPaths);
+        return 1;
+    }
+
+    //必需配置项先一次性取齐、再统一判断，这样缺哪几项一次就报全，
+    //不必让运维改一项、重启一次、再看下一条报错
+    serverconfig::CRequiredConfig required(config);
+    std::string logfiledir      = required.getString("logfiledir");
+    std::string logfilename     = required.getString("logfilename");
+    std::string listenip        = required.getString("listenip");
+    int         listenport      = required.getInt("listenport");
+    std::string monitorlistenip = required.getString("monitorlistenip");
+    int         monitorlistenport = required.getInt("monitorlistenport");
+    std::string monitortoken    = required.getString("monitortoken");
+    int         httplistenport  = required.getInt("httplistenport");
+    if (required.hasMissing())
+    {
+        serverconfig::ReportStartupFailure(SERVER_NAME,
+            std::string("missing required config item(s): ") + required.missingKeys()
+            + ", config file: " + config.getFilePath());
+        return 1;
+    }
 
     const char* logbinarypackage = config.getConfigName("logbinarypackage");
     if (logbinarypackage != NULL)
@@ -140,41 +175,30 @@ int main(int argc, char* argv[])
         else
             Singleton<ChatServer>::Instance().enableLogPackageBinary(false);
     }
-   
-    std::string logFileFullPath;
 
-#ifndef WIN32
-    const char* logfilepath = config.getConfigName("logfiledir");
-    if (logfilepath == NULL)
+    //日志目录取自配置项 logfiledir：相对路径按可执行文件所在目录解析、绝对路径原样使用，
+    //与配置文件和 dbpath 的规则一致，这样无论从哪个工作目录启动，日志都落在同一处。
+    //目录不存在就创建，两个平台都做 —— 改造前只有 Linux 建目录，Windows 上目录不存在时
+    //日志文件建不出来，而那时写日志线程会直接结束，连控制台输出也一起没了
+    std::string resolvedLogDir = serverconfig::StripTrailingSeparators(
+                                     apppath::ResolveAgainstDirectory(
+                                         apppath::GetExecutableDirectory(), logfiledir));
+    std::string logDirError;
+    if (!serverconfig::EnsureDirectoryExists(resolvedLogDir, logDirError))
     {
-        LOGF("logdir is not set in config file");
+        serverconfig::ReportStartupFailure(SERVER_NAME,
+            std::string("cannot create log dir ") + resolvedLogDir + ", " + logDirError);
         return 1;
     }
 
-    //如果log目录不存在则创建之
-    DIR* dp = opendir(logfilepath);
-    if (dp == NULL)
-    {
-        if (mkdir(logfilepath, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) != 0)
-        {
-            LOGF("create base dir error, %s , errno: %d, %s", logfilepath, errno, strerror(errno));
-            return 1;
-        }
-    }
-    closedir(dp);
-
-    logFileFullPath = logfilepath;
-#endif
-
-    const char* logfilename = config.getConfigName("logfilename");
-    logFileFullPath += logfilename;
+    std::string logFileFullPath = apppath::ResolveAgainstDirectory(resolvedLogDir, logfilename);
 
 #ifdef _DEBUG
     CAsyncLog::init();
 #else
     CAsyncLog::init(logFileFullPath.c_str());
 #endif
-    
+
     //初始化数据库配置
     const char* dbserver = config.getConfigName("dbserver");
     const char* dbuser = config.getConfigName("dbuser");
@@ -199,6 +223,24 @@ int main(int argc, char* argv[])
                                      apppath::GetExecutableDirectory(), configuredDbPath);
     LOGI("db path resolved against executable directory: %s -> %s",
          configuredDbPath.c_str(), resolvedDbPath.c_str());
+    //客户端升级包目录：控制台的「客户端版本」页要列出目录里的候选包。chatserver 对该目录
+    //<u>只读</u>，包由运维手工放入、由 fileserver 提供下载，两个服务必须指向同一个目录。
+    //与 dbpath 同样按可执行文件所在目录解析，理由见上：工作目录随启动方式变，目录不能跟着变。
+    const char* updatecachedirCfg = config.getConfigName("updatecachedir");
+    std::string resolvedUpdateDir;
+    if (updatecachedirCfg != NULL && updatecachedirCfg[0] != '\0')
+    {
+        resolvedUpdateDir = apppath::ResolveAgainstDirectory(
+                                apppath::GetExecutableDirectory(), updatecachedirCfg);
+        LOGI("update package dir resolved against executable directory: %s -> %s",
+             updatecachedirCfg, resolvedUpdateDir.c_str());
+    }
+    else
+    {
+        LOGW("updatecachedir not configured, admin console cannot list upgrade packages");
+    }
+    Singleton<UpdatePackageScanner>::Instance().init(resolvedUpdateDir);
+
     //全局数据库配置必须在任何一个 Manager 初始化之前灌好：
     //它们建连接时都走 DbFactory，而工厂的连接参数就取自这里。
     CDbConfig& dbConfig = Singleton<CDbConfig>::Instance();
@@ -395,18 +437,15 @@ int main(int argc, char* argv[])
             }
         });
 
-    const char* listenip = config.getConfigName("listenip");
-    short listenport = (short)atol(config.getConfigName("listenport"));
-    Singleton<ChatServer>::Instance().init(listenip, listenport, &g_mainLoop);
+    //几个监听地址与端口在函数开头已随其它必需配置项一并取出并校验过，这里直接用
+    Singleton<ChatServer>::Instance().init(listenip.c_str(), (short)listenport, &g_mainLoop);
 
-    const char* monitorlistenip = config.getConfigName("monitorlistenip");
-    short monitorlistenport = (short)atol(config.getConfigName("monitorlistenport"));
-    const char* monitortoken = config.getConfigName("monitortoken");
-    Singleton<MonitorServer>::Instance().init(monitorlistenip, monitorlistenport, &g_mainLoop, monitortoken);
+    Singleton<MonitorServer>::Instance().init(monitorlistenip.c_str(), (short)monitorlistenport,
+                                              &g_mainLoop, monitortoken.c_str());
 
-    const char* httplistenip = config.getConfigName("monitorlistenip");
-    short httplistenport = (short)atol(config.getConfigName("httplistenport"));
-    Singleton<HttpServer>::Instance().init(httplistenip, httplistenport, &g_mainLoop);
+    //注意：HTTP 监听用的是 monitorlistenip 而不是 httplistenip，这是既有行为，
+    //改动它会影响现网部署的监听地址，须先与使用方确认，故此处照原样保留
+    Singleton<HttpServer>::Instance().init(monitorlistenip.c_str(), (short)httplistenport, &g_mainLoop);
 
     LOGI("chatserver initialization completed, now you can use client to connect it.");
 

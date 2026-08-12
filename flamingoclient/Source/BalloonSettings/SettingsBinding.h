@@ -116,6 +116,41 @@ int                   FontScaleOptionCount();
 int ClampFontScaleIndex(int index);
 
 // =====================================================================
+// 自动离开的等待时长（通用页：下拉「5 / 10 / 15 / 30 分钟」）
+// 对应 CUserConfig::GetAutoAwayDelayIndex —— 存的是<u>索引</u>不是分钟数，
+// 与语言 / 字体大小等下拉项同口径。分钟数只在这里映射一次，别处不再写死。
+// =====================================================================
+
+/**
+ *  下拉选项索引。顺序即下拉项顺序，取值必须与 AutoAwayDelayMinutesFromIndex 一一对上。
+ */
+enum AutoAwayDelayIndex
+{
+    kAutoAwayDelay5Min  = 0,   // 空闲 5 分钟后切到离开（默认）
+    kAutoAwayDelay10Min = 1,   // 空闲 10 分钟
+    kAutoAwayDelay15Min = 2,   // 空闲 15 分钟
+    kAutoAwayDelay30Min = 3,   // 空闲 30 分钟
+};
+
+// 选项文本表首元素指针 + 项数（供对话框填下拉、供测试断言）。
+const wchar_t* const* AutoAwayDelayOptions();
+int                   AutoAwayDelayOptionCount();
+
+/**
+ *  把等待时长索引夹到合法区间 [0, AutoAwayDelayOptionCount())。
+ *    index：任意取值，含配置文件被手工改坏后读出来的越界值。
+ *  返回：越界 / 负数一律回落到默认档 kAutoAwayDelay5Min(0)。
+ */
+int ClampAutoAwayDelayIndex(int index);
+
+/**
+ *  下拉索引 → 等待分钟数。
+ *    index：下拉选中索引；越界值先经 ClampAutoAwayDelayIndex 归一，故一定有返回值。
+ *  返回：5 / 10 / 15 / 30 之一（分钟）。调用方自行乘 60 * 1000 换成毫秒阈值。
+ */
+int AutoAwayDelayMinutesFromIndex(int index);
+
+// =====================================================================
 // 提示音 ↔ 静音（design 系统设置2.png：开关「提示音」对应 CUserConfig 的静音，取反）
 // =====================================================================
 

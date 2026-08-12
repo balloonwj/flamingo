@@ -108,33 +108,23 @@ void FlushRichGroup(std::vector<balloonchat::ChatSegment>& group,
         }
     }
 
-    CString body;
-    if (hasFace)
+    // 无表情的纯文本组里，全空白的直接丢弃（发一条空消息没有意义）。
+    if (!hasFace && IsWhitespaceOnly(joined))
     {
-        // 含表情：编码成 "文字（已转义）+ /f["id"]" 的正文。
-        body = balloonchat::BuildSendBody(group);
+        group.clear();
+        return;
     }
-    else
-    {
-        // 无表情的纯文本组：全空白丢弃；原文恰好含可解析的 /f["N"] 标签（用户手打）
-        // 时仍转义，避免对端把字面文本误判成表情。
-        if (IsWhitespaceOnly(joined))
-        {
-            group.clear();
-            return;
-        }
-        bool looksLikeFaceTag = false;
-        std::vector<balloonchat::ChatSegment> probe = balloonchat::ParseSendBody(joined);
-        for (size_t i = 0; i < probe.size(); ++i)
-        {
-            if (probe[i].m_bFace)
-            {
-                looksLikeFaceTag = true;
-                break;
-            }
-        }
-        body = looksLikeFaceTag ? balloonchat::BuildSendBody(group) : joined;
-    }
+
+    // 一律交 BuildSendBody 编码 —— 它是接收侧 ParseSendBody 的逆运算，这条路走下来
+    // 才能保证"打进去什么、对端看到什么"。
+    //
+    // 早先这里对纯文本组<u>不</u>调 BuildSendBody（只在正文碰巧含可解析的 /f["N"] 时才调），
+    // 理由是当时 BuildSendBody 会把每个 '/' 都翻倍、网线上的网址会变成 http:////x 而
+    // 影响跨端显示。代价是发送侧不转义、接收侧却照样把 // 解成一个 /，用户输入
+    // http://www.baidu.com 发出去就少一个斜杠。现在 BuildSendBody 只给"会被误判成
+    // 表情标记"的那个斜杠加转义（见 BalloonChatMsgFormat.cpp 的 EscapeTextForSend），
+    // 网线上的网址仍是原样，两侧也终于对称了，故这里不再分支。
+    const CString body = balloonchat::BuildSendBody(group);
 
     RichOutgoingPart t;
     t.kind = kRichPartText;

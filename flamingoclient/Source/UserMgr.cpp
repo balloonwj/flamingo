@@ -26,7 +26,7 @@ CUserMgr::~CUserMgr(void)
 // 获取用户文件夹存放路径
 tstring CUserMgr::GetUserFolder()
 {
-	tstring strPath(g_szHomePath);
+	tstring strPath(g_szDataRoot);
 	strPath += _T("Users\\");
 
 	return strPath;
@@ -522,7 +522,7 @@ void CUserMgr::ResetToOfflineStatus()
 BOOL CUserMgr::LoadRecentList()
 {
 	CString strRecentFilePath;
-	strRecentFilePath.Format(_T("%sUsers\\%s\\RecentSessionList.rsl"), g_szHomePath, m_UserInfo.m_strAccount.c_str());
+	strRecentFilePath.Format(_T("%sUsers\\%s\\RecentSessionList.rsl"), g_szDataRoot, m_UserInfo.m_strAccount.c_str());
 	CFile RecentFile;
 	if(!RecentFile.Open(strRecentFilePath, FALSE))
 		return FALSE;
@@ -562,7 +562,7 @@ BOOL CUserMgr::LoadRecentList()
 BOOL CUserMgr::StoreRecentList()
 {
 	CString strRecentFilePath;
-	strRecentFilePath.Format(_T("%sUsers\\%s\\RecentSessionList.rsl"), g_szHomePath, m_UserInfo.m_strAccount.c_str());
+	strRecentFilePath.Format(_T("%sUsers\\%s\\RecentSessionList.rsl"), g_szDataRoot, m_UserInfo.m_strAccount.c_str());
 	long nCount = m_RecentList.GetRecentCount();
 	//如果最近联系人个数为0，删除最近联系人文件
 	if(nCount <= 0)
@@ -605,7 +605,7 @@ void CUserMgr::ClearRecentList()
 	m_RecentList.Reset();
 
 	CString strRecentFilePath;
-	strRecentFilePath.Format(_T("%sUsers\\%s\\RecentSessionList.rsl"), g_szHomePath, m_UserInfo.m_strAccount.c_str());
+	strRecentFilePath.Format(_T("%sUsers\\%s\\RecentSessionList.rsl"), g_szDataRoot, m_UserInfo.m_strAccount.c_str());
 	::DeleteFile(strRecentFilePath);
 }
 

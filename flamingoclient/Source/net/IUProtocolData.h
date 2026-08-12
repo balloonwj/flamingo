@@ -52,7 +52,11 @@ enum LOGIN_RESULT_CODE	// 登录结果代码
 	LOGIN_PASSWORD_ERROR,		// 密码错误
 	LOGIN_USER_CANCEL_LOGIN,	// 用户取消登录
 	LOGIN_SERVER_REFUSED,		// 服务器拒绝
-	LOGIN_SERVER_NOT_RESPONSE	// 服务器未响应
+	LOGIN_SERVER_NOT_RESPONSE,	// 服务器未响应
+	// 客户端版本低于服务端要求的最低版本，服务端以 error_code_version_too_old(4)
+	// 拒绝了本次登录。此时不能只弹一句"登录失败"了事——用户重试多少次都是同一个
+	// 结果，必须直接把他引到升级流程上去。
+	LOGIN_VERSION_TOO_OLD
 };
 
 enum REGISTER_RESULT_CODE	//注册结果代码

@@ -35,6 +35,18 @@ static const wchar_t* const kFontScaleOpts[] =
     L"大",             // kFontScaleLarge
 };
 
+static const wchar_t* const kAutoAwayDelayOpts[] =
+{
+    L"5 分钟",         // kAutoAwayDelay5Min（默认）
+    L"10 分钟",        // kAutoAwayDelay10Min
+    L"15 分钟",        // kAutoAwayDelay15Min
+    L"30 分钟",        // kAutoAwayDelay30Min
+};
+
+// 各档对应的分钟数，逐项与 kAutoAwayDelayOpts 对齐（第 i 项文本 ↔ 第 i 项分钟数）。
+// 分钟数只在这一处写死，别处一律经 AutoAwayDelayMinutesFromIndex 取。
+static const int kAutoAwayDelayMinutes[] = { 5, 10, 15, 30 };
+
 // ---- 关闭主面板时 ------------------------------------------------------
 
 const wchar_t* const* CloseActionOptions()
@@ -121,6 +133,34 @@ int ClampFontScaleIndex(int index)
         return kFontScaleMedium;   // 越界回落到默认「中」
     }
     return index;
+}
+
+// ---- 自动离开等待时长 --------------------------------------------------
+
+const wchar_t* const* AutoAwayDelayOptions()
+{
+    return kAutoAwayDelayOpts;
+}
+
+int AutoAwayDelayOptionCount()
+{
+    return (int)(sizeof(kAutoAwayDelayOpts) / sizeof(kAutoAwayDelayOpts[0]));
+}
+
+int ClampAutoAwayDelayIndex(int index)
+{
+    int count = AutoAwayDelayOptionCount();
+    if (index < 0 || index >= count)
+    {
+        return kAutoAwayDelay5Min;   // 越界回落到默认「5 分钟」
+    }
+    return index;
+}
+
+int AutoAwayDelayMinutesFromIndex(int index)
+{
+    // 先归一再取，故下标一定落在表内 —— 配置文件被手工改成 99 也不会越界读。
+    return kAutoAwayDelayMinutes[ClampAutoAwayDelayIndex(index)];
 }
 
 // ---- 提示音 ↔ 静音 -----------------------------------------------------

@@ -860,3 +860,44 @@ TEST_CASE("PB7 ChatMessageList::CountPinned 数出带 Pin 标记的行数", "[ch
     REQUIRE(list.SetPinnedByMsgid(5000, false));
     CHECK(list.CountPinned() == 1);
 }
+
+TEST_CASE("DZ1 拖放投放区（输入区块）的矩形", "[chatwnd][dropzone]")
+{
+    // 拖文件只在发送框接收，落点判定取的就是输入框父容器的矩形（见
+    // CBalloonChatWindow::IsChatDropZone）。本用例把它的几何钉住：投放区必须
+    // 与消息区不重叠、且覆盖客户区整宽 —— 高亮描边贴着客户区左右边缘这一点，
+    // 正是"左边那条线看不见"那个 bug 的成因。
+    auto root = BuildChatWindowBody();
+    REQUIRE(root != nullptr);
+
+    const int kW = 700;
+    const int kH = 500;
+    RECT rcAll = { 0, 0, kW, kH };
+    root->ForceLayout(rcAll);
+
+    DuiControl* input = root->FindCtrlById(kIdInputEdit);
+    REQUIRE(input != nullptr);
+    DuiControl* block = input->GetParent();
+    REQUIRE(block != nullptr);
+
+    const RECT rcBlock = block->GetRect();
+    INFO("input block rect = (" << rcBlock.left << "," << rcBlock.top << ","
+         << rcBlock.right << "," << rcBlock.bottom << ")  client w=" << kW << " h=" << kH);
+
+    DuiControl* msgArea = root->FindCtrlById(kIdMessageArea);
+    REQUIRE(msgArea != nullptr);
+    const RECT rcMsg = msgArea->GetRect();
+
+    // 投放区在消息区下方，两者不重叠。
+    CHECK(rcBlock.top >= rcMsg.bottom);
+    // 投放区非空。
+    CHECK(rcBlock.right > rcBlock.left);
+    CHECK(rcBlock.bottom > rcBlock.top);
+
+    // 投放区左右两边正好压在客户区边线上 —— 拖入高亮之所以用<u>填充底色</u>而不是
+    // 描边，原因就在这里：描边画在矩形边线上，贴边那一侧只剩半条、实测左边那条
+    // 根本看不见。这条断言把"贴边"这个前提钉住，日后若布局改成留边距，看到它失败
+    // 就知道可以回头考虑描边了。
+    CHECK(rcBlock.left == 0);
+    CHECK(rcBlock.right == kW);
+}

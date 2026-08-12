@@ -76,7 +76,10 @@ private:
     // 官方网站）。链接式按钮走 DuiButton 的 Text 变体（橙字、无底无边、hover 浅底）。
     //   title     左侧标题文本；linkText 右侧按钮文本；
     //   ctrlId    右侧按钮命令 id（点击经 DUIN_CLICK 回到 OnDuiNotify 分发）；
-    //   linkWidth 右侧按钮宽度（逻辑像素，须够容纳 linkText）。
+    //   linkWidth 右侧按钮的<u>最小</u>宽度（逻辑像素）。实际宽度按 linkText 量出来的
+    //             宽度撑开，故不必也不能靠它来"留够位置"；它只管住文字很短时按钮
+    //             不要缩得各行右缘参差不齐。撑开后仍会受左侧标题最小宽度的限制，
+    //             真放不下时由 DT_END_ELLIPSIS 在尾部收成省略号。
     void AddLinkRow(balloonwjui::DuiVBox* root, LPCTSTR title,
                     LPCTSTR linkText, UINT ctrlId, int linkWidth);
 

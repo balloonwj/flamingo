@@ -60,7 +60,16 @@ CREATE TABLE IF NOT EXISTS  t_chatmsg  (
          PRIMARY KEY ( f_msgid ),
          KEY  idx_from_to  ( f_from, f_to ),
          KEY  idx_to_from  ( f_to, f_from ),
-         KEY  idx_client   ( f_clientmsgid )
+         KEY  idx_client   ( f_clientmsgid ),
+         //按会话取最新消息用。拉会话列表时要按会话取"最后一条消息"，查询形如
+         //"WHERE f_ctype=? AND f_to IN (...) GROUP BY f_to" 取 MAX(f_msgid)，
+         //本索引让它按 (f_to, f_msgid) 逐组直接跳到最大值。
+         //idx_to_from 顶不上：它的第二列是 f_from，同一个会话内 msgid 是散的。
+         //2026-08-12 两种后端都实测过（25 万行 / 50 个群，见
+         //docs/会话列表拉取性能优化方案.md）：SQLite 1046ms → 68ms，MySQL 583ms → 303ms。
+         //注意 MySQL 侧 checkTable 只补列不补索引，本行只对<u>新建库</u>生效；
+         //存量库须执行 migrations/v6_add_t_chatmsg_idx_to_msgid.sql。
+         KEY  idx_to_msgid ( f_to, f_msgid )
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8
 
 //企业部门表（组织架构树）
@@ -421,6 +430,26 @@ CREATE TABLE IF NOT EXISTS  t_favorite  (
 
 //群组表（v2 群组功能）：群本体彻底独立于 t_user。群 id 仍在高位 id 空间
 //（>=GROUPID_BOUBDARY），与消息 cid 共用同一 id 空间。
+//特别关注表：记录"某用户特别关注了哪些联系人"。被关注者上下线时，关注方的客户端
+//会在桌面右下角弹一个置顶小窗提示（见 docs/特别关注接入方案.md）。
+//
+//键的形态与 t_favorite 一致（归属者 + 对象），但<u>不带 ctype</u> —— 特别关注只对
+//联系人有效，群与群成员都不参与，多一列 ctype 只会让人误以为群也能标。
+//
+//之所以不复用 t_favorite 加一列：收藏与特别关注是两件事（常用入口的书签 vs 要盯
+//上下线的人），一个对象可以只收藏不关注、也可以只关注不收藏；挤进一张表两个语义
+//会互相牵制，删收藏时还得小心别把关注一并删掉。
+//
+//注意：服务端不需要知道"谁关注了谁"来决定推送 —— 上下线仍按企业全员广播
+//（见 ChatServer::broadcastToEnterprise），弹不弹由客户端拿本表的名单自己判断。
+CREATE TABLE IF NOT EXISTS  t_starred  (
+         f_userid       bigint(20) NOT NULL COMMENT '关注方userid(名单的归属者)',
+         f_target       bigint(20) NOT NULL COMMENT '被关注的联系人userid',
+         f_create_time  bigint(20) NOT NULL DEFAULT 0 COMMENT '标记时间,Unix毫秒;列表按本列倒序,最近标记的排最前',
+         PRIMARY KEY ( f_userid, f_target ),
+         INDEX idx_starred_user ( f_userid )
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8
+
 CREATE TABLE IF NOT EXISTS  t_group  (
          f_groupid       bigint(20)    NOT NULL COMMENT '群ID(高位id空间,>=GROUPID_BOUBDARY)',
          f_name          varchar(64)   NOT NULL COMMENT '群名称',
@@ -553,4 +582,27 @@ CREATE TABLE IF NOT EXISTS  t_group_file  (
          PRIMARY KEY ( f_id ),
          KEY  idx_group  ( f_groupid ),
          KEY  idx_fileid  ( f_fileid )
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8
+
+//客户端版本发布记录表（v2 自动更新功能）：一行 = 某平台的一次版本发布。
+//取数规则为“按 f_platform 过滤，在 f_enabled=1 的记录里取 f_publish_time 最大的一条”，
+//故 idx_platform_enabled 覆盖这两列；历史发布记录保留不删，便于回溯与回滚到旧版本
+//（回滚只需把旧版本那行重新发布一次，不必改动已有数据）。
+//f_package_md5 既是升级包的内容校验值，也是它在 fileserver filecache 目录下的文件名。
+CREATE TABLE IF NOT EXISTS  t_client_version  (
+         f_id           int(11)       NOT NULL AUTO_INCREMENT COMMENT '自增主键',
+         f_platform     int(4)        NOT NULL DEFAULT 1 COMMENT '客户端平台:1 Windows PC 2 Android(预留)',
+         f_version      varchar(32)   NOT NULL DEFAULT '' COMMENT '本条记录发布的版本号,形如3.3.0',
+         f_min_version  varchar(32)   NOT NULL DEFAULT '' COMMENT '允许登录的最低版本号,低于它的客户端被拒绝登录并强制升级',
+         f_release_note varchar(2048) NOT NULL DEFAULT '' COMMENT '更新说明,展示在升级窗里',
+         f_package_md5  varchar(32)   NOT NULL DEFAULT '' COMMENT '升级包内容MD5(小写十六进制32位),fileserver在升级包目录里按它反查实际文件',
+         f_package_size bigint(20)    NOT NULL DEFAULT 0 COMMENT '升级包字节数',
+         f_package_name varchar(255)  NOT NULL DEFAULT '' COMMENT '升级包原始文件名,仅用于界面显示与本地落地命名',
+         f_forced       int(4)        NOT NULL DEFAULT 0 COMMENT '是否强制升级:0否 1是。为1时客户端升级窗不给稍后出口、也不放行登录;与f_min_version相互独立,任一命中即按强制处理',
+         f_enabled      int(4)        NOT NULL DEFAULT 0 COMMENT '是否已发布:0草稿不下发 1已发布',
+         f_publish_time bigint(20)    NOT NULL DEFAULT 0 COMMENT '发布时间(Unix毫秒)',
+         f_creator_adminid int(11)     NOT NULL DEFAULT 0 COMMENT '发布人的管理员ID,引用t_admin.f_admin_id;0表示非控制台创建',
+         f_create_time   bigint(20)    NOT NULL DEFAULT 0 COMMENT '记录创建时间(Unix毫秒),f_publish_time回滚时会被刷新而本列不变',
+         PRIMARY KEY ( f_id ),
+         KEY  idx_platform_enabled  ( f_platform, f_enabled )
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8

@@ -5,7 +5,7 @@
  *  产出的行模型符合 flamingo.rc 原托盘子菜单 —— 三种形态的条目数、顺序、文本、
  *  分隔线位置、命令 id 的唯一性与非 0 约束、静音项的可勾选 / 勾选态、图标列与
  *  勾选标记互斥（可勾选项不带图标），以及"用户当前所处的在线状态"在四个状态项里
- *  被正确标出（图标换成 kIconStatusCurrent、文字带"（当前）"后缀，每次至多一项）。
+ *  被正确标出（文字带"（当前）"后缀，每次至多一项；图标则恒为本行状态的徽标字形）。
  *
  *  用 Catch2 v3（amalgamated）作框架，纯内存断言，不创建窗口 / 不依赖消息循环。
  *  全局 _Module 由 BalloonChatLayoutTests.cpp 统一定义，本文件只引用。
@@ -318,16 +318,29 @@ TEST_CASE("TRAY8 四种在线状态各自被标为当前项，且每份模型只
     }
 }
 
-TEST_CASE("TRAY9 当前项换成 kIconStatusCurrent，其余状态项仍是 kIconOnline", "[traymenu][presence]")
+TEST_CASE("TRAY9 四个状态项各用各自状态的徽标字形，且四者两两不同", "[traymenu][presence]")
 {
     // 当前状态取"离开"（第 2 行），便于同时验证前后两侧的行都没被误标。
     std::vector<TrayMenuEntry> items = BuildTrayMenuModel(kTrayNormal, false, presence_away);
     REQUIRE(items.size() == 11);
 
-    CHECK(items[0].iconKind == kIconOnline);
-    CHECK(items[1].iconKind == kIconStatusCurrent);   // 离开 = 当前
-    CHECK(items[2].iconKind == kIconOnline);
-    CHECK(items[3].iconKind == kIconOnline);
+    // 2026-08-12 状态图标改版后，图标认的是"本行是哪个状态"，不再随 isCurrent 变化；
+    // "当前"由文字后缀 + 渲染期叠加的外环表达（见 TRAY10）。
+    CHECK(items[0].iconKind == kIconPresenceOnline);
+    CHECK(items[1].iconKind == kIconPresenceAway);
+    CHECK(items[2].iconKind == kIconPresenceBusy);
+    CHECK(items[3].iconKind == kIconPresenceOffline);
+
+    // 本次改版的核心保证：四种字形两两不同 —— 即便四个圆点被渲染成同一种颜色
+    // （灰度打印、色觉障碍），用户仍能靠形状认出谁是谁。
+    for (int i = 0; i < 4; ++i)
+    {
+        for (int j = i + 1; j < 4; ++j)
+        {
+            INFO("比较状态项 " << i << " 与 " << j);
+            CHECK(items[i].iconKind != items[j].iconKind);
+        }
+    }
 
     // 换图标不能把配色换掉：四行的圆点色仍与状态菜单 / 胶囊同源。
     const int presences[4] = { presence_online, presence_away, presence_busy, presence_offline };
@@ -335,6 +348,8 @@ TEST_CASE("TRAY9 当前项换成 kIconStatusCurrent，其余状态项仍是 kIco
     {
         INFO("状态项 index = " << i);
         CHECK(items[i].dotColor == GetPresenceVisual(presences[i]).dotColor);
+        // presence 字段是渲染期取徽标字形 / 判当前项的依据，必须逐行对上。
+        CHECK(items[i].presence == presences[i]);
     }
 }
 
@@ -360,7 +375,7 @@ TEST_CASE("TRAY11 隐身与越界取值退化为\"离线\"项被标记", "[traym
         BuildTrayMenuModel(kTrayNormal, false, presence_invisible);
     REQUIRE(invisible.size() == 11);
     CHECK(invisible[3].isCurrent);
-    CHECK(invisible[3].iconKind == kIconStatusCurrent);
+    CHECK(invisible[3].iconKind == kIconPresenceOffline);
     CHECK(::wcscmp(invisible[3].label, L"离线（当前）") == 0);
 
     std::vector<TrayMenuEntry> unknown = BuildTrayMenuModel(kTrayNormal, false, 999);

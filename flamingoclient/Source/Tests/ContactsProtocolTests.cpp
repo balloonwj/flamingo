@@ -311,3 +311,70 @@ TEST_CASE("CT15 parseContactsResponse favorites 里的非法项被跳过，其�
     CHECK(out.m_favorites[0].m_cid == 5081);
     CHECK(out.m_favorites[1].m_cid == 700001);
 }
+
+//------------------------------------------------------------------------------
+// Suite CT-OS：cmd_org_structure_notify(1404) 推送解析
+//
+// 这条推送是"新同事出现在通讯录里"的触发信号。以前客户端根本不认这个 cmd，
+// 导致同事注册 / 管理台加人之后，已在线的用户要等到自己重新登录才看得见对方，
+// 中间收到对方的消息只能显示成"用户<userid>"。
+//------------------------------------------------------------------------------
+
+TEST_CASE("CT-OS1 parseOrgStructureChangedNotify 解析成员归属变更")
+{
+    const char* body = "{\"changetype\":2,\"deptid\":1610612737}";
+
+    OrgStructureChangedNotify out;
+    REQUIRE(ContactsProtocolClient::parseOrgStructureChangedNotify(body, out));
+    CHECK(out.m_changetype == org_change_member);
+    CHECK(out.m_deptid == 1610612737);
+}
+
+TEST_CASE("CT-OS2 deptid 为 0 仍算有效推送")
+{
+    // 服务端删员工那条路径（HttpSession::onAdminUserDelete）传的 deptid 就是 0 ——
+    // 该员工可能横跨多个部门，没有单一的"受影响部门"。这种推送照样要触发整体刷新，
+    // 不能因为 deptid 是 0 就丢掉。
+    const char* body = "{\"changetype\":2,\"deptid\":0}";
+
+    OrgStructureChangedNotify out;
+    REQUIRE(ContactsProtocolClient::parseOrgStructureChangedNotify(body, out));
+    CHECK(out.m_deptid == 0);
+}
+
+TEST_CASE("CT-OS3 deptid 超过 32 位不丢精度")
+{
+    // 部门ID 从 0x60000000（1610612736）起递增，早晚会越过 int32 的上限。
+    // 这里用一个明确超过 32 位的值，确认解析走的是 int64。
+    const char* body = "{\"changetype\":1,\"deptid\":6442450945}";
+
+    OrgStructureChangedNotify out;
+    REQUIRE(ContactsProtocolClient::parseOrgStructureChangedNotify(body, out));
+    CHECK(out.m_changetype == org_change_department);
+    CHECK(out.m_deptid == 6442450945LL);
+}
+
+TEST_CASE("CT-OS4 JSON 非法：安全失败")
+{
+    OrgStructureChangedNotify out;
+    CHECK_FALSE(ContactsProtocolClient::parseOrgStructureChangedNotify("not json at all", out));
+    CHECK_FALSE(ContactsProtocolClient::parseOrgStructureChangedNotify("", out));
+    CHECK_FALSE(ContactsProtocolClient::parseOrgStructureChangedNotify("[1,2,3]", out));
+}
+
+TEST_CASE("CT-OS5 缺 changetype 字段：视为无效")
+{
+    // changetype 是这条推送唯一的必有字段，缺了就读不懂它在说什么。
+    OrgStructureChangedNotify out;
+    CHECK_FALSE(ContactsProtocolClient::parseOrgStructureChangedNotify("{\"deptid\":1610612737}", out));
+}
+
+TEST_CASE("CT-OS6 changetype 类型不对或取值不认识：视为无效")
+{
+    OrgStructureChangedNotify out;
+    // 字符串形式的 changetype 不接受：服务端写的就是数字，出现字符串说明对不上。
+    CHECK_FALSE(ContactsProtocolClient::parseOrgStructureChangedNotify("{\"changetype\":\"2\",\"deptid\":1}", out));
+    // 将来服务端若加了第三种变更类型，老客户端在这里安全忽略，而不是盲目刷一次通讯录。
+    CHECK_FALSE(ContactsProtocolClient::parseOrgStructureChangedNotify("{\"changetype\":99,\"deptid\":1}", out));
+    CHECK_FALSE(ContactsProtocolClient::parseOrgStructureChangedNotify("{\"changetype\":0,\"deptid\":1}", out));
+}

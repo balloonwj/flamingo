@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!--
     flamingoAdmin.exe
@@ -199,6 +199,7 @@
     <ClCompile Include="Util\Logger.cpp" />
     <ClCompile Include="Util\CrashHandler.cpp" />
     <ClCompile Include="Util\AppConfig.cpp" />
+    <ClCompile Include="Util\DpapiSecret.cpp" />
     <ClCompile Include="Util\NetProbe.cpp" />
     <ClCompile Include="Util\HttpClient.cpp" />
     <ClCompile Include="Util\HttpWorker.cpp" />
@@ -208,6 +209,7 @@
     <ClCompile Include="Util\ScrollbarMetrics.cpp" />
     <ClCompile Include="Util\ListPaging.cpp" />
     <ClCompile Include="Util\OrgTreeBuilder.cpp" />
+    <ClCompile Include="Util\OrgToolbarLayout.cpp" />
     <ClCompile Include="Util\Pinyin.cpp" />
     <ClCompile Include="third-party\jsoncpp\json_reader.cpp" />
     <ClCompile Include="third-party\jsoncpp\json_value.cpp" />
@@ -243,6 +245,8 @@
     <ClCompile Include="Screens\ComposeModal.cpp" />
     <ClCompile Include="Screens\GroupModal.cpp" />
     <ClCompile Include="Screens\AuditScreen.cpp" />
+    <ClCompile Include="Screens\ClientVersionsScreen.cpp" />
+    <ClCompile Include="Screens\ClientVersionModal.cpp" />
     <ClCompile Include="Screens\SettingsScreen.cpp" />
     <ClCompile Include="Screens\NetworkSettingsScreen.cpp" />
   </ItemGroup>
@@ -255,6 +259,7 @@
     <ClInclude Include="Util\Logger.h" />
     <ClInclude Include="Util\CrashHandler.h" />
     <ClInclude Include="Util\AppConfig.h" />
+    <ClInclude Include="Util\DpapiSecret.h" />
     <ClInclude Include="Util\NetProbe.h" />
     <ClInclude Include="Util\HttpClient.h" />
     <ClInclude Include="Util\HttpWorker.h" />
@@ -264,6 +269,7 @@
     <ClInclude Include="Util\ScrollbarMetrics.h" />
     <ClInclude Include="Util\ListPaging.h" />
     <ClInclude Include="Util\OrgTreeBuilder.h" />
+    <ClInclude Include="Util\OrgToolbarLayout.h" />
     <ClInclude Include="Util\Pinyin.h" />
     <ClInclude Include="Mock\MockData.h" />
     <ClInclude Include="Mock\DataStore.h" />
@@ -296,6 +302,8 @@
     <ClInclude Include="Screens\ComposeModal.h" />
     <ClInclude Include="Screens\GroupModal.h" />
     <ClInclude Include="Screens\AuditScreen.h" />
+    <ClInclude Include="Screens\ClientVersionsScreen.h" />
+    <ClInclude Include="Screens\ClientVersionModal.h" />
     <ClInclude Include="Screens\SettingsScreen.h" />
     <ClInclude Include="Screens\NetworkSettingsScreen.h" />
   </ItemGroup>

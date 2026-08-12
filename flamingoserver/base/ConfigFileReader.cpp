@@ -6,13 +6,38 @@
 #include <stdio.h>  //for snprintf
 #include <string.h>
 
+CConfigFileReader::CConfigFileReader()
+    : m_load_ok(false)
+{
+}
+
 CConfigFileReader::CConfigFileReader(const char* filename)
+    : m_load_ok(false)
 {
 	loadFile(filename);
 }
 
 CConfigFileReader::~CConfigFileReader()
 {
+}
+
+bool CConfigFileReader::load(const char* filename)
+{
+    m_load_ok = false;
+    m_config_map.clear();
+    loadFile(filename);
+
+    return m_load_ok;
+}
+
+bool CConfigFileReader::isLoadOk() const
+{
+    return m_load_ok;
+}
+
+const std::string& CConfigFileReader::getFilePath() const
+{
+    return m_config_file;
 }
 
 char* CConfigFileReader::getConfigName(const char* name)

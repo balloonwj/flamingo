@@ -13,7 +13,9 @@
 #include <string>
 
 #include "../BalloonChatWnd/ChatFaceTag.h"          // kFaceDisplayPx
-#include "../BalloonChatWnd/ChatTextSelection.h"    // SelLayout / BuildSelectionRects
+#include "../BalloonChatWnd/ChatTextSelection.h"    // SelLayout / BuildSelectionRects / HitTestCharRanges
+#include "../CustomMsgDef.h"                        // WM_CHAT_OPEN_LINK（点链接后请宿主窗打开）
+#include "../../balloonui/balloonui/DuiHost.h"      // GetHost()->m_hWnd（投消息给宿主窗）
 
 namespace balloonhistory {
 
@@ -23,6 +25,10 @@ static const COLORREF kHighlightColor = RGB(0xFF, 0xF1, 0xA8);
 
 //正文默认颜色：深灰，与聊天气泡正文同色。
 static const COLORREF kDefaultTextColor = RGB(0x33, 0x33, 0x33);
+
+//超链接文字色。与聊天气泡里的 kLinkFg 同一档蓝 —— 同一条消息在气泡里和在消息记录
+//里必须长得一样，两处的色值不能各定各的。
+static const COLORREF kLinkTextColor = RGB(0x2F, 0x6F, 0xD0);
 
 //折叠态末行结尾的省略号（U+2026 HORIZONTAL ELLIPSIS）。
 //
@@ -46,7 +52,10 @@ HistoryContentView::HistoryContentView()
     , m_measuredExpanded(false)
     , m_measuredHeight(0)
     , m_measuredNeedExpand(false)
+    , m_linkLayoutValid(false)
 {
+    m_linkOrigin.x = 0;
+    m_linkOrigin.y = 0;
 }
 
 void HistoryContentView::SetContent(const CString& fullText)
@@ -64,9 +73,46 @@ void HistoryContentView::SetContent(const CString& fullText)
         }
     }
 
+    //顺带识别正文里的超链接（与纯文本入口共用同一段）。
+    RebuildLinks();
+
     //内容换了，之前量出来的高度与"要不要展开链接"一概作废。
     InvalidateMeasureCache();
     Invalidate();
+}
+
+void HistoryContentView::SetPlainContent(const CString& plainText)
+{
+    //纯文本：整串就是一个文字段，不解析表情标记、不把 "//" 折成一个斜杠。
+    m_segs.clear();
+    if (!plainText.IsEmpty())
+    {
+        m_segs.push_back(balloonchat::ChatSegment::Text(plainText));
+    }
+    m_hasFace = false;
+
+    RebuildLinks();
+    InvalidateMeasureCache();
+    Invalidate();
+}
+
+CString HistoryContentView::GetFlatText() const
+{
+    const std::wstring flat = balloonchatwnd::BuildFlatText(m_segs);
+    return CString(flat.c_str());
+}
+
+void HistoryContentView::RebuildLinks()
+{
+    //口径与高亮区间一致（扁平文本下标），故渲染时能直接拿去要矩形、命中时能直接
+    //拿去做区间命中。识别开关关掉时得到空表，后面渲染与命中两处自然什么都不做。
+    m_links.clear();
+    if (balloonchatwnd::ChatLinkOptionEnabled())
+    {
+        m_links = balloonchatwnd::DetectLinks(balloonchatwnd::BuildFlatText(m_segs));
+    }
+    //上一份内容的排版模型对新内容无意义，先作废，等下次绘制重建。
+    m_linkLayoutValid = false;
 }
 
 void HistoryContentView::SetHighlightRanges(const std::vector<HighlightRange>& ranges)
@@ -136,9 +182,10 @@ void HistoryContentView::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     const int maxLines = EffectiveMaxLines();
     const int faceSize = EffectiveFaceSize();
 
-    //需要自己排一趟版的只有两件事：铺高亮底色、折叠态末行补省略号。两件都不沾时
-    //（无高亮 + 展开态）就省掉这一趟，绘制交给 DrawInlineContent 内部那趟即可。
-    const bool needPlaced = (!m_ranges.empty() || maxLines > kNoLineLimit);
+    //需要自己排一趟版的有三件事：铺高亮底色、折叠态末行补省略号、把超链接重画成
+    //链接色。三件都不沾时（无高亮 + 展开态 + 无链接）就省掉这一趟，绘制交给
+    //DrawInlineContent 内部那趟即可。
+    const bool needPlaced = (!m_ranges.empty() || maxLines > kNoLineLimit || !m_links.empty());
 
     std::vector<balloonchatwnd::InlinePlaced> placed;
     bool  truncated = false;
@@ -172,9 +219,95 @@ void HistoryContentView::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         {
             PaintCollapsedEllipsis(hdc, rc, placed);
         }
+        //超链接放在最后画：盖在正文之上，与聊天气泡那边的层次一致。
+        PaintLinks(hdc, rc, placed);
         ::SelectObject(hdc, oldFont);
         ::DeleteObject(font);
     }
+}
+
+void HistoryContentView::PaintLinks(HDC hdc, const RECT& rc,
+                                    const std::vector<balloonchatwnd::InlinePlaced>& placed)
+{
+    if (m_links.empty() || placed.empty())
+    {
+        return;
+    }
+
+    //与高亮底色走同一条路：排版结果 → 字符级模型 → 按字符区间取矩形。模型同时
+    //存下来给命中测试用（鼠标事件里没有 HDC，排不了版）。
+    const std::wstring flat = balloonchatwnd::BuildFlatText(m_segs);
+    balloonchatwnd::BuildSelLayoutFromPlaced(hdc, placed, (int)flat.size(), m_linkLayout);
+    m_linkOrigin.x    = rc.left;
+    m_linkOrigin.y    = rc.top;
+    m_linkLayoutValid = true;
+
+    balloonchatwnd::InlineTextStyle ls;
+    ls.sizePx    = m_fontPx;
+    ls.color     = kLinkTextColor;
+    ls.underline = true;
+
+    const int faceSize = EffectiveFaceSize();
+    for (size_t i = 0; i < m_links.size(); ++i)
+    {
+        balloonchatwnd::DrawInlineContentRestyledRange(
+            hdc, m_segs, m_linkLayout,
+            m_links[i].m_off, m_links[i].m_off + m_links[i].m_len,
+            rc, ls, faceSize);
+    }
+}
+
+int HistoryContentView::LinkAtPoint(POINT pt) const
+{
+    if (m_links.empty() || !m_linkLayoutValid || m_linkLayout.m_lines.empty())
+    {
+        return -1;
+    }
+
+    std::vector<std::pair<int, int> > ranges;
+    ranges.reserve(m_links.size());
+    for (size_t i = 0; i < m_links.size(); ++i)
+    {
+        ranges.push_back(std::make_pair(m_links[i].m_off,
+                                        m_links[i].m_off + m_links[i].m_len));
+    }
+    return balloonchatwnd::HitTestCharRanges(m_linkLayout, ranges,
+                                             pt.x - m_linkOrigin.x,
+                                             pt.y - m_linkOrigin.y);
+}
+
+bool HistoryContentView::OnSetCursor(POINT pt)
+{
+    if (LinkAtPoint(pt) >= 0)
+    {
+        ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+        return true;
+    }
+    return false;
+}
+
+bool HistoryContentView::OnLButtonUp(POINT pt, UINT /*mkFlags*/)
+{
+    const int idx = LinkAtPoint(pt);
+    if (idx < 0)
+    {
+        return false;   // 没点在链接上：不消费，交回给列表行自己的点击处理
+    }
+
+    balloonwjui::DuiHost* host = GetHost();
+    HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+    if (hwnd == NULL)
+    {
+        return false;
+    }
+
+    //与聊天气泡同一条路：本控件不碰 ShellExecute，URL 交宿主窗过协议白名单后再打开。
+    std::wstring* pUrl = new std::wstring(m_links[(size_t)idx].m_url);
+    if (!::PostMessage(hwnd, WM_CHAT_OPEN_LINK, 0, (LPARAM)pUrl))
+    {
+        delete pUrl;
+    }
+    return true;
 }
 
 HFONT HistoryContentView::CreateContentFont() const

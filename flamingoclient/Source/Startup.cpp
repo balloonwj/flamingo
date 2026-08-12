@@ -10,16 +10,17 @@
 
 #include "aboutdlg.h"
 #include "MainDlg.h"
-#include "UpdateDlg.h"
-#include "Updater.h"
 #include "LoginSettingsDlg.h"
 #include "File2.h"
 #include "IULog.h"
 #include "UserSessionData.h"
+#include "Crash.h"                    // ConfigureCrashDumpEnvironment（转储目录 + WER 配置）
 #include "Utils.h"
 #include "IniFile.h"
+#include "net/StorageLocation.h"      // ResolveDataRoot（本地数据根目录的归一）
 #include "UIText.h"
 #include "PerformanceCounter.h"
+#include "../balloonui/balloonui/DuiDpi.h"
 
 CAppModule _Module;
 
@@ -139,11 +140,42 @@ void UnInitSocket()
 
 int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lpstrCmdLine, int nCmdShow)
 {
+    //声明本进程为 per-monitor DPI 感知。必须放在整个函数最前面：进程的 DPI 感知级别
+    //一旦有窗口创建就无法再更改。
+    //
+    //不声明的后果是进程被判定为 DPI unaware，系统改为把整个窗口的位图拉伸到目标 DPI
+    //（125% 缩放下就是整体放大 1.25 倍并发虚）。此前之所以看起来正常，是因为开发机上
+    //手工给 Bin\Flamingo.exe 勾了「替代高 DPI 缩放行为：应用程序」，该设置记在注册表
+    //HKCU\...\AppCompatFlags\Layers 下、且<u>按 exe 完整路径匹配</u> —— 换个输出目录、
+    //换台机器、或改个文件名，全都会立刻退回被拉伸的状态。实测：同一份二进制改个文件名
+    //后，DPI 感知级别就从 PER_MONITOR 掉回 UNAWARE，主窗口由 338x727 被拉伸成 420x899。
+    //
+    //balloonui 的各个 Demo（DuiGallery / XChat 等）都在 WinMain 开头调了这一句，
+    //主客户端此前是漏掉的。
+    balloonwjui::DuiDpi::OptInPerMonitorV2();
+
 #ifdef _DEBUG
     _CrtSetDebugFillThreshold(0);
 #endif
     _tcscpy_s(g_szHomePath, MAX_PATH, Hootina::CPath::GetAppPath().c_str());
     strcpy_s(g_szHomePathAscii, MAX_PATH, Hootina::CPath::GetAppPathAscii().c_str());
+
+    //本地数据根目录：读 config\flamingo.ini 的 [storage] datapath，经 ResolveDataRoot
+    //归一（未配置、相对路径、含上跳的一律回落到程序目录）。必须在这里算 —— 日志、
+    //各个库与缓存目录都要用它，比登录还早。用户改了这一项须重启才生效，正是因为它
+    //在此处只算一次。
+    {
+        TCHAR szIniPath[MAX_PATH] = { 0 };
+        _stprintf_s(szIniPath, MAX_PATH, _T("%sconfig\\flamingo.ini"), g_szHomePath);
+
+        TCHAR szConfigured[MAX_PATH] = { 0 };
+        CIniFile iniFile;
+        iniFile.ReadString(_T("storage"), _T("datapath"), _T(""),
+                           szConfigured, MAX_PATH, szIniPath);
+
+        const std::wstring dataRoot = net::ResolveDataRoot(szConfigured, g_szHomePath);
+        _tcscpy_s(g_szDataRoot, MAX_PATH, dataRoot.c_str());
+    }
 
     SYSTEMTIME st = { 0 };
     ::GetLocalTime(&st);
@@ -177,6 +209,11 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
     //日志级别
     int nLogLevel = iniFile.ReadInt(_T("app"), _T("loglevel"), 0, strIniFilePath);
     CIULog::SetLevel((LOG_LEVEL)nLogLevel);
+
+    //建好转储目录；若本次<u>恰好</u>以管理员权限运行，顺手把 WER LocalDumps 配置写进注册表。
+    //未提权时静默跳过——不弹界面、不请求提权（详见 docs/崩溃转储方案.md）。放在这里是因为
+    //它依赖 g_szHomePath 拼目录，又需要日志已初始化才记得下那两条说明。
+    ConfigureCrashDumpEnvironment();
 
     if (!InitSocket())
         return 0;

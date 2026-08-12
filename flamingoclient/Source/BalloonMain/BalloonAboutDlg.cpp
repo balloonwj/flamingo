@@ -28,6 +28,7 @@
 #pragma comment(lib, "gdiplus.lib")
 
 #include "AboutDlgModel.h"                 // 文案常量 + BuildAboutTitle
+#include "../BalloonUpdate/BalloonUpdateWindow.h"   // 「检查更新」拉起升级窗
 #include "../IULog.h"
 #include "../IniFile.h"                    // CIniFile（读 flamingo.ini 的官网地址）
 #include "../UserSessionData.h"            // g_szHomePath（flamingo.ini 所在目录）
@@ -71,11 +72,18 @@ static const int kCheckBtnW     = 78;    // "检查"按钮宽
 static const int kCheckBtnH     = 32;    // "检查"按钮高（行内竖向居中）
 static const int kLinkBtnH      = 30;    // 链接式按钮高（行内竖向居中）
 static const int kViewLinkW     = 56;    // "查看"链接按钮宽
-// 官网 URL 链接按钮宽。显示的是<u>完整</u>网址（含 https:// 协议头），比早先去掉
-// 协议头的写法长 8 个字符，故按默认地址 https://github.com/balloonwj/flamingo
-// （37 字符）留足宽度；对话框内容区宽 430-28*2=374，左侧"官方网站"标题仍有
-// 374-10-260=104px，够放 4 个汉字。
+// 官网 URL 链接按钮的<u>最小</u>宽。实际宽度由 AddLinkRow 按文字量出来的宽度撑开
+// （官网地址是从 flamingo.ini 读的，长度不可预知，写死宽度必然有配不上的时候），
+// 这个值只保证地址很短时按钮不至于缩得比"查看"还窄、右缘看起来参差不齐。
 static const int kUrlLinkW      = 260;
+
+// 链接式按钮在量出的文字宽度之外再留的余量（逻辑像素）。防止不同 DPI / 字体版本下
+// 文字正好卡在边界上被削掉最后一两个像素。
+static const int kLinkTextPad   = 8;
+
+// 功能行左侧标题至少要留的宽度（逻辑像素）。右侧链接按钮按文字实际宽度撑开，但不能
+// 把标题挤没了 —— "官方网站"四个汉字在 11pt 下约 60px，留 72px 有余量。
+static const int kRowTitleMinW  = 72;
 
 // flamingo.ini 里"官方网站"地址的段名 / 键名。文件路径为
 // <g_szHomePath>config\flamingo.ini，与旧版关于框（AboutDlg.cpp）取同一份配置。
@@ -225,6 +233,49 @@ static HBITMAP MakeIconBitmapOnColor(HICON hIcon, int sizePx, COLORREF bgColor)
     ::SelectObject(mem, old);
     ::DeleteDC(mem);
     return hbmp;
+}
+
+/**
+ *  用指定字体量一段文字占的像素宽度。
+ *
+ *    text： 待测量的文字，NULL / 空串返回 0
+ *    font： 量宽用的字体，<u>必须是文字真正绘制时用的那一支</u>；传 NULL 则按屏幕 DC
+ *           的默认字体量，结果通常偏小，不要依赖
+ *
+ *  @return 文字宽度（像素）。
+ *
+ *  量宽用的是屏幕 DC（GetDC(NULL)），与控件自己绘制时用的 DC 兼容，同一 DPI 下
+ *  结果一致；用完即 ReleaseDC，不留句柄。
+ */
+static int MeasureTextWidth(LPCTSTR text, HFONT font)
+{
+    if (text == NULL || *text == _T('\0'))
+    {
+        return 0;
+    }
+
+    HDC hdc = ::GetDC(NULL);
+    if (hdc == NULL)
+    {
+        return 0;
+    }
+
+    HFONT oldFont = NULL;
+    if (font != NULL)
+    {
+        oldFont = (HFONT)::SelectObject(hdc, font);
+    }
+
+    SIZE sz = { 0, 0 };
+    ::GetTextExtentPoint32(hdc, text, ::lstrlen(text), &sz);
+
+    if (oldFont != NULL)
+    {
+        ::SelectObject(hdc, oldFont);
+    }
+    ::ReleaseDC(NULL, hdc);
+
+    return sz.cx;
 }
 
 // =======================================================================
@@ -400,9 +451,34 @@ void CBalloonAboutDlg::AddLinkRow(balloonwjui::DuiVBox* root, LPCTSTR title,
     link->SetCtrlId(ctrlId);
     link->SetText(linkText);
     link->SetTextColor(kLinkColor);
-    link->SetTextAlign(DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
+    // DT_END_ELLIPSIS 是兜底：地址长到连下面算出的上限都放不下时，让它在<u>尾部</u>
+    // 收成省略号，而不是被硬生生截断 —— 见下面对截断方向的说明。
+    link->SetTextAlign(DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+    // 按钮宽度按文字实际宽度撑开，不再直接吃调用方传进来的 linkWidth。
+    // 原先"官方网站"那行写死 260px，装不下完整地址，而 DuiButton 的文字是
+    // DT_RIGHT 绘制的、宽度不够时削掉的是<u>开头</u>，于是
+    // https://github.com/balloonwj/flamingo 显示成 os://github.com/balloonwj/flamingo，
+    // 看着像乱码。地址还是从 flamingo.ini 读的，写死宽度更不可能永远合适。
+    //
+    // 量宽的字体必须与真正绘制时用的是同一支：调用方没 SetFont 时 DuiButton 会回落到
+    // DuiResMgr 的默认字体（见 DuiButton.cpp 里 useFont 的取法），这里照同样的优先级取。
+    HFONT linkFont = link->GetFont();
+    if (linkFont == NULL)
+    {
+        linkFont = balloonwjui::DuiResMgr::Inst().GetDefaultFont();
+    }
+
+    // 上限：行宽减去左侧标题至少要占的宽度，不能把标题挤没。撑到上限还放不下的，
+    // 交给上面那个 DT_END_ELLIPSIS 收尾，至少协议头和域名看得见。
+    const int kMaxLinkW = kDlgWidth - kRootPadding * 2 - kRowTitleMinW - kRowGap;
+
+    // 钳位算术在 AboutDlgModel.h 里，纯函数、有单测（Suite ABOUT）。
+    const int width = balloonmain::ComputeLinkButtonWidth(
+        MeasureTextWidth(linkText, linkFont), linkWidth, kMaxLinkW, kLinkTextPad);
+
     row->AddChild(std::move(link),
-                  balloonwjui::DuiLayout::Hint().Fixed(linkWidth, kLinkBtnH)
+                  balloonwjui::DuiLayout::Hint().Fixed(width, kLinkBtnH)
                       .AlignC(balloonwjui::DuiLayout::AlignCenter));
 
     root->AddChild(std::move(row), balloonwjui::DuiLayout::Hint().Fixed(kRowLinkH));
@@ -576,9 +652,9 @@ LRESULT CBalloonAboutDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
             return 0;
 
         case kIdCheckUpdate:
-            // 自动更新后端已推迟，本期提示当前为最新版本。
-            ::MessageBox(m_hWnd, _T("当前已是最新版本。"),
-                         _T("检查更新"), MB_OK | MB_ICONINFORMATION);
+            // 拉起升级窗并立即发起一次检查（只检查、不下载）。查的结果——有新版本、
+            // 已是最新、还是检查失败——都由升级窗自己呈现，本对话框不再弹提示框。
+            CBalloonUpdateWindow::GetInstance().ShowChecking();
             return 0;
 
         case kIdAgreement:

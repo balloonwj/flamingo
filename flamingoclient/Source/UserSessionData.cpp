@@ -11,6 +11,10 @@
 TCHAR g_szHomePath[MAX_PATH] = {0};
 char g_szHomePathAscii[MAX_PATH] = {0};
 
+//本地数据根目录。启动时由 Startup.cpp 按 flamingo.ini 的 [storage] datapath 算好，
+//未配置时等于 g_szHomePath。含义与分工见 UserSessionData.h 的声明处注释。
+TCHAR g_szDataRoot[MAX_PATH] = {0};
+
 std::wstring g_strAppTitle;
 
 //系统库中用户头像的个数

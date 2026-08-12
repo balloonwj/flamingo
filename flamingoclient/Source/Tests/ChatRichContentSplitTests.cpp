@@ -142,7 +142,7 @@ TEST_CASE("P7 文字+表情聚合成一个编码文本部分", "[richsplit][face
     CHECK(parts[0].text == CString(_T("你好/f[\"3\"]")));
 }
 
-TEST_CASE("P7 纯文本组不转义斜杠（互通保真）", "[richsplit][face]")
+TEST_CASE("P7 纯文本组的斜杠原样上线（互通保真）", "[richsplit][face]")
 {
     std::vector<RichInputSegment> in;
     in.push_back(SegText(_T("http://a.com")));
@@ -151,14 +151,17 @@ TEST_CASE("P7 纯文本组不转义斜杠（互通保真）", "[richsplit][face]
     CHECK(parts[0].text == CString(_T("http://a.com")));
 }
 
-TEST_CASE("P7 含表情的组里文字斜杠被转义", "[richsplit][face]")
+TEST_CASE("P7 含表情的组里普通斜杠同样原样保留", "[richsplit][face]")
 {
+    //早先这里会把 a/b 转义成 a//b —— 只因为同一条消息里有表情。于是"消息里有没有
+    //表情"决定了斜杠要不要翻倍，同一段文字两种写法，接收侧再一律还原，网址就被
+    //吃掉一个斜杠。现在转义只认"会被误判成表情标记"的那个斜杠。
     std::vector<RichInputSegment> in;
     in.push_back(SegText(_T("a/b")));
     in.push_back(SegFace(0));
     std::vector<RichOutgoingPart> parts = BuildOutgoingParts(in);
     REQUIRE(parts.size() == 1u);
-    CHECK(parts[0].text == CString(_T("a//b/f[\"0\"]")));
+    CHECK(parts[0].text == CString(_T("a/b/f[\"0\"]")));
 }
 
 TEST_CASE("P7 手打 /f 标签的纯文本仍被转义防误判", "[richsplit][face]")

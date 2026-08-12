@@ -39,6 +39,7 @@ extern CAppModule _Module;
 
 #include "MainPanelListItem.h"
 #include "MainPanelMockData.h"
+#include "PresenceBadge.h"          // DrawPresenceBadge（头像右下角的状态徽标）
 #include "MainPanelScrollView.h"
 
 namespace balloonmain {
@@ -68,8 +69,13 @@ const int           kAvatarSize    = MainPanelListItem::kAvatarSizePx;
 const int           kAvatarLeft    = 8;     // 头像距行左边
 const int           kAvatarTextGap = 10;    // 头像与文字列间距
 const Gdiplus::REAL kAvatarRadius  = (Gdiplus::REAL)MainPanelListItem::kAvatarRadiusPx;
-const Gdiplus::REAL kStatusDotSize = 7.0f;  // 状态点直径
+// 状态徽标的绘制方框边长。徽标圆底只占方框的 20/24，故 9 对应约 7.5px 的圆点 ——
+// 与改版前 7px 的纯色小圆点接近，但字形（时钟 / 横杠 / 空心环）能看出来了。
+const Gdiplus::REAL kStatusDotSize = 9.0f;
 const Gdiplus::REAL kStatusRingW   = 2.0f;  // 状态点白描边宽度
+// 徽标圆底在绘制方框中所占的比例（viewBox 24 里半径 10 的圆，直径 20/24）。
+// 白描边要贴着圆底外扩，故需要知道这个比例。
+const Gdiplus::REAL kBadgeDiscRatio = 20.0f / 24.0f;
 const int           kNamePx        = 12;    // 名称字号
 const int           kSubPx         = 10;    // 副行字号
 const int           kRightPx       = 11;    // 右侧文字（时间 / 成员数）字号
@@ -339,14 +345,19 @@ void MainPanelListItem::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         {
             const Gdiplus::REAL dotCx = (Gdiplus::REAL)(avX + kAvatarSize) - kStatusDotSize / 2.0f - 1.0f;
             const Gdiplus::REAL dotCy = (Gdiplus::REAL)(avY + kAvatarSize) - kStatusDotSize / 2.0f - 1.0f;
-            const Gdiplus::REAL ringR = kStatusDotSize / 2.0f + kStatusRingW;
+            // 先垫一圈白描边，把徽标与头像本身的颜色隔开（否则深色头像上的徽标会糊进去）。
+            // 白圈按徽标<u>圆底</u>的半径外扩，而不是按绘制方框 —— 方框比圆底大一圈，
+            // 照方框外扩会让白圈离徽标太远、看着像单独的一个白点。
+            const Gdiplus::REAL discR = kStatusDotSize * kBadgeDiscRatio / 2.0f;
+            const Gdiplus::REAL ringR = discR + kStatusRingW;
             Gdiplus::SolidBrush ring(kStatusRing);
             g.FillEllipse(&ring, dotCx - ringR, dotCy - ringR, ringR * 2.0f, ringR * 2.0f);
-            COLORREF sc = MockStatusColor(m_status);
-            Gdiplus::SolidBrush dot(Gdiplus::Color(255,
-                GetRValue(sc), GetGValue(sc), GetBValue(sc)));
-            g.FillEllipse(&dot, dotCx - kStatusDotSize / 2.0f, dotCy - kStatusDotSize / 2.0f,
-                          kStatusDotSize, kStatusDotSize);
+
+            // 徽标本体：字形与配色都取自共用映射，与通讯录列表里同一个人身上的那枚一致。
+            DrawPresenceBadge(g, MockPresenceFromStatus(m_status), false,
+                              dotCx - kStatusDotSize / 2.0f,
+                              dotCy - kStatusDotSize / 2.0f,
+                              kStatusDotSize);
         }
 
         // 未读角标。

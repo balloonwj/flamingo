@@ -14,7 +14,10 @@
 #include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
 #include "../utils/MD5.h"
+#include "../utils/PasswordHasher.h"   //口令存储哈希与盐值生成
+#include "../utils/Sha256.h"           //服务端自行计算口令哈希的第一层（客户端不参与该场景）
 #include "UserManager.h"
+#include "DepartmentManager.h"   //改职务后同步组织架构缓存里的 position，见 updateEmployee
 #include "AccountName.h"   //登录账号生成规则，与自助注册共用
 
 //拼装 SQL 的字符缓冲区大小。
@@ -339,7 +342,15 @@ int32_t EmployeeManager::createEmployee(const CreateEmployeeReq& req, int64_t& o
         LOGE("createEmployee failed: cannot make account name for userid %lld", (long long)newUserId);
         return error_code_unknown;
     }
+    //生成明文初始口令，并按 v2 的口令存储格式算出入库用的哈希与盐值。
+    //明文只用于回给管理员转告员工，绝不入库 —— 库里存的必须是
+    //MD5(SHA256(明文) + salt)，与 ChatSession 注册流程、以及登录时
+    //PasswordHasher::verifyPassword 的比对方式完全一致。
+    //这里之所以要服务端自己算第一层 SHA-256（正常登录时该层由客户端算），
+    //是因为这个场景的明文是服务端生成的，客户端全程不参与。
     std::string password = generatePassword(newUserId);
+    std::string salt = PasswordHasher::generateSalt();
+    std::string storedPassword = PasswordHasher::hashPassword(Sha256::hexDigest(password), salt);
 
     //入库：仅写 t_user；入职日期为空则写 NULL。
     std::string nicknameEsc = dbapi::EscapeString(req.name);
@@ -368,11 +379,12 @@ int32_t EmployeeManager::createEmployee(const CreateEmployeeReq& req, int64_t& o
 
     char sql[EMPLOYEE_SQL_BUF_LEN] = { 0 };
     snprintf(sql, sizeof(sql),
-        "INSERT INTO t_user(f_user_id, f_username, f_nickname, f_password, f_facetype, "
+        "INSERT INTO t_user(f_user_id, f_username, f_nickname, f_password, f_salt, f_facetype, "
         "f_gender, f_birthday, f_signature, f_phonenumber, f_mail, f_register_time, "
         "f_enterprise_id, f_role, f_employee_no, f_join_date, f_status) "
-        "VALUES(%lld, '%s', '%s', '%s', 0, 0, %d, '', '%s', '%s', NOW(), %lld, 0, %s, %s, 0)",
-        (long long)newUserId, usernameEsc.c_str(), nicknameEsc.c_str(), password.c_str(),
+        "VALUES(%lld, '%s', '%s', '%s', '%s', 0, 0, %d, '', '%s', '%s', NOW(), %lld, 0, %s, %s, 0)",
+        (long long)newUserId, usernameEsc.c_str(), nicknameEsc.c_str(),
+        storedPassword.c_str(), salt.c_str(),
         EMPLOYEE_DEFAULT_BIRTHDAY, phoneEsc.c_str(), mailEsc.c_str(),
         (long long)req.enterpriseId, employeeNoValue.c_str(), joinDateValue.c_str());
     if (!pConn->execute(sql))
@@ -444,8 +456,9 @@ int32_t EmployeeManager::updateEmployee(const UpdateEmployeeReq& req)
     }
 
     //2. 同步把职务写入主部门成员记录的 f_position（无主部门记录则该 UPDATE 影响 0 行）。
-    //   注意：此处直改 t_department_member，DepartmentManager 的内存缓存不会随之刷新，
-    //   tree.do 里成员的 position 字段可能短暂滞后，至该管理器下次写操作或重启后一致。
+    //   此处直改 t_department_member、不经 DepartmentManager 的写方法，故其内存缓存
+    //   不会自行重载，须在下面显式同步一份，否则 tree.do 与客户端通讯录
+    //   （cmd_get_contacts 的数据源即该缓存）读到的都还是旧职务。
     snprintf(sql, sizeof(sql),
         "UPDATE t_department_member SET f_position = '%s' "
         "WHERE f_user_id = %lld AND f_is_primary = 1 AND f_status = 0",
@@ -454,6 +467,11 @@ int32_t EmployeeManager::updateEmployee(const UpdateEmployeeReq& req)
     {
         //职务同步失败不致命：基础信息已更新成功，仅记日志。
         LOGE("updateEmployee: sync position to dept member failed, userid: %lld", (long long)req.userId);
+    }
+    else
+    {
+        //库改成功才同步缓存：写库失败时缓存保持旧值，与库一致，不制造"内存比库新"的假象。
+        Singleton<DepartmentManager>::Instance().updateCachedMemberPosition(req.userId, req.title);
     }
 
     //把改动同步进 IM 侧 UserManager 缓存（昵称、签名、手机号等会即时对 IM 端生效）。
@@ -536,6 +554,13 @@ int32_t EmployeeManager::deleteEmployee(int64_t userId)
 
     //从 IM 侧缓存中移除该用户，使其无法再登录（否则重启前仍能用旧缓存登录）。
     Singleton<UserManager>::Instance().reloadUserCache(static_cast<int32_t>(userId));
+
+    //同步把他从组织架构缓存的各部门成员列表里摘掉。这一步不能省：上面那句已经把
+    //他的资料从 UserManager 移除了，若组织架构缓存里还留着他，onGetContacts 就会
+    //在部门里列出一个查不到资料的 userid，客户端只能显示成"用户<userid>"；管理端
+    //的组织架构树同样会继续显示他，看上去像是"删不掉"。
+    Singleton<DepartmentManager>::Instance().removeCachedMember(userId);
+
     LOGI("deleteEmployee ok, userid: %lld", (long long)userId);
     return error_code_ok;
 }
@@ -557,10 +582,15 @@ int32_t EmployeeManager::resetPassword(int64_t userId, std::string& outNewPasswo
         return error_code_notregister;
     }
 
+    //与 createEmployee 同理：明文只回给管理员，入库的是 MD5(SHA256(明文) + salt)。
+    //盐值必须一并重新生成并写回 —— 沿用旧盐会让「重置口令」这个动作无法作废
+    //可能已经泄露的旧盐，而且历史遗留账号的 f_salt 本来就是空的。
     std::string newPwd = generatePassword(userId);
+    std::string salt = PasswordHasher::generateSalt();
+    std::string storedPassword = PasswordHasher::hashPassword(Sha256::hexDigest(newPwd), salt);
     snprintf(sql, sizeof(sql),
-        "UPDATE t_user SET f_password = '%s' WHERE f_user_id = %lld",
-        newPwd.c_str(), (long long)userId);
+        "UPDATE t_user SET f_password = '%s', f_salt = '%s' WHERE f_user_id = %lld",
+        storedPassword.c_str(), salt.c_str(), (long long)userId);
     if (!pConn->execute(sql))
     {
         LOGE("resetPassword failed: db execute error, sql: %s", sql);
@@ -568,6 +598,10 @@ int32_t EmployeeManager::resetPassword(int64_t userId, std::string& outNewPasswo
     }
 
     outNewPassword = newPwd;
+    //登录时比对的是 UserManager 缓存里的 password / salt（见 ChatSession::onLogin），
+    //不刷新缓存的话新口令要等 chatserver 重启才生效，表现为「刚重置的密码登录不了」。
+    //createEmployee 一直有这一步，这里此前是漏的。
+    Singleton<UserManager>::Instance().reloadUserCache(static_cast<int32_t>(userId));
     LOGI("resetPassword ok, userid: %lld", (long long)userId);
     return error_code_ok;
 }

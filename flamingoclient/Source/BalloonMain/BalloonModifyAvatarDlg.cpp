@@ -35,7 +35,8 @@
 #include "AvatarImageUtil.h"             // 本地上传：ProcessAvatarSourceFile / MakeRoundedAvatarFromFile
 #include "../net/ProfileProtocolClient.h" // net::UpdateProfileResponse
 #include "../net/IUSocket.h"              // CIUSocket::SendChangeAvatar
-#include "../net/ImageTransfer.h"         // net::ImageTransfer / net::AvatarUploadResult（本地上传走图片服务器）
+#include "../net/ImageTransfer.h"
+#include "../net/CurrentUserAccount.h"   // net::CurrentUserAccount（本地缓存目录按登录账号分）         // net::ImageTransfer / net::AvatarUploadResult（本地上传走图片服务器）
 #include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
 #include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
@@ -1172,7 +1173,7 @@ void CBalloonModifyAvatarDlg::DoUse()
         }
         m_submitting = true;
         net::ImageTransfer::GetInstance().EnqueueAvatarUpload(
-            std::wstring(m_pendingAvatarFile.GetString()), (int64_t)m_selfUserId);
+            std::wstring(m_pendingAvatarFile.GetString()), net::CurrentUserAccount());
         LOG_INFO("发起头像图片上传（本地上传，已提交，等待上传结果）。");
         return;
     }

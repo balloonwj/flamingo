@@ -92,7 +92,14 @@ CMysqlManager::CMysqlManager(void)
 		chat.m_mapField["f_content"] = { "f_content", "blob COMMENT '内容JSON(content/mentions/mentionall/quote 打包)'", "blob" };
 		chat.m_mapField["f_recalled"] = { "f_recalled", "int(2) NOT NULL DEFAULT 0 COMMENT '是否已撤回:0否 1是'", "int(2)" };
 		chat.m_mapField["f_create_time"] = { "f_create_time", "bigint(20) NOT NULL DEFAULT 0 COMMENT '消息时间(Unix毫秒)'", "bigint(20)" };
-		chat.m_strKeyString = "PRIMARY KEY (f_msgid), KEY idx_from_to (f_from, f_to), KEY idx_to_from (f_to, f_from), KEY idx_client (f_clientmsgid)";
+		//idx_to_msgid 是"按会话取最新消息"用的：拉会话列表时的查询形如
+		//"WHERE f_ctype=? AND f_to IN (...) GROUP BY f_to" 取 MAX(f_msgid)，
+		//本索引让它按 (f_to, f_msgid) 逐组直接跳到最大值。idx_to_from 顶不上 ——
+		//它的第二列是 f_from，同一个会话内 f_msgid 是散的。
+		//2026-08-12 实测（25 万行 / 50 个群）：MySQL 583ms → 303ms、SQLite 1046ms → 68ms。
+		//注意 checkTable 只补列不补索引，本行只对<u>新建库</u>生效；存量库须执行
+		//migrations/v6_add_t_chatmsg_idx_to_msgid.sql。
+		chat.m_strKeyString = "PRIMARY KEY (f_msgid), KEY idx_from_to (f_from, f_to), KEY idx_to_from (f_to, f_from), KEY idx_client (f_clientmsgid), KEY idx_to_msgid (f_to, f_msgid)";
 		m_vecTableInfo.push_back(chat);
 	}
 
@@ -624,6 +631,27 @@ CMysqlManager::CMysqlManager(void)
 		pin.m_mapField["f_pin_time"] = { "f_pin_time", "bigint(20) NOT NULL DEFAULT 0 COMMENT 'Pin时间,Unix毫秒'", "bigint(20)" };
 		pin.m_strKeyString = "PRIMARY KEY (f_msgid)";
 		m_vecTableInfo.push_back(pin);
+	}
+
+	// 30. t_client_version —— 客户端版本发布记录表（v2 自动更新功能；一行=某平台的一次版本发布）
+	{
+		STableInfo ver;
+		ver.m_strName = "t_client_version";
+		ver.m_mapField["f_id"] = { "f_id", "int(11) NOT NULL AUTO_INCREMENT COMMENT '自增主键'", "int(11)" };
+		ver.m_mapField["f_platform"] = { "f_platform", "int(4) NOT NULL DEFAULT 1 COMMENT '客户端平台:1 Windows PC 2 Android(预留)'", "int(4)" };
+		ver.m_mapField["f_version"] = { "f_version", "varchar(32) NOT NULL DEFAULT '' COMMENT '本条记录发布的版本号,形如3.3.0'", "varchar(32)" };
+		ver.m_mapField["f_min_version"] = { "f_min_version", "varchar(32) NOT NULL DEFAULT '' COMMENT '允许登录的最低版本号,低于它的客户端被拒绝登录并强制升级'", "varchar(32)" };
+		ver.m_mapField["f_release_note"] = { "f_release_note", "varchar(2048) NOT NULL DEFAULT '' COMMENT '更新说明,展示在升级窗里'", "varchar(2048)" };
+		ver.m_mapField["f_package_md5"] = { "f_package_md5", "varchar(32) NOT NULL DEFAULT '' COMMENT '升级包内容MD5(小写十六进制32位),同时是它在filecache里的文件名'", "varchar(32)" };
+		ver.m_mapField["f_package_size"] = { "f_package_size", "bigint(20) NOT NULL DEFAULT 0 COMMENT '升级包字节数'", "bigint(20)" };
+		ver.m_mapField["f_package_name"] = { "f_package_name", "varchar(255) NOT NULL DEFAULT '' COMMENT '升级包原始文件名,仅用于界面显示与本地落地命名'", "varchar(255)" };
+		ver.m_mapField["f_forced"] = { "f_forced", "int(4) NOT NULL DEFAULT 0 COMMENT '是否强制升级:0否 1是。为1时客户端升级窗不给稍后出口、也不放行登录;与f_min_version相互独立,任一命中即按强制处理'", "int(4)" };
+		ver.m_mapField["f_enabled"] = { "f_enabled", "int(4) NOT NULL DEFAULT 0 COMMENT '是否已发布:0草稿不下发 1已发布'", "int(4)" };
+		ver.m_mapField["f_publish_time"] = { "f_publish_time", "bigint(20) NOT NULL DEFAULT 0 COMMENT '发布时间(Unix毫秒)'", "bigint(20)" };
+		ver.m_mapField["f_creator_adminid"] = { "f_creator_adminid", "int(11) NOT NULL DEFAULT 0 COMMENT '发布人的管理员ID,引用t_admin.f_admin_id;0表示非控制台创建'", "int(11)" };
+		ver.m_mapField["f_create_time"] = { "f_create_time", "bigint(20) NOT NULL DEFAULT 0 COMMENT '记录创建时间(Unix毫秒),f_publish_time回滚时会被刷新而本列不变'", "bigint(20)" };
+		ver.m_strKeyString = "PRIMARY KEY (f_id), KEY idx_platform_enabled (f_platform, f_enabled)";
+		m_vecTableInfo.push_back(ver);
 	}
 }
 

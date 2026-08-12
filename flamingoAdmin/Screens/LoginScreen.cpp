@@ -26,11 +26,13 @@ namespace {
 // ---- 登录界面布局常量（96 dpi 逻辑像素）----
 const int kBrandWidth   = 560;   // 左侧品牌面板宽度
 const int kFormWidth    = 420;   // 右侧表单列宽度
-// 右侧表单列总高度：标题 34 + 副标题 20 + 账户 64 + 密码 64 + 登录按钮 42
-// + TLS 脚注 44 + 网络设置行 28 + 6 个间距 ×14 = 380。
-const int kFormHeight   = 380;
 const int kFieldEditH   = 40;    // 输入框高度
 const int kButtonHeight = 42;    // 登录按钮高度
+const int kRememberRowH = 22;    // 「记住密码」复选框行高
+// 右侧表单列总高度：标题 34 + 副标题 20 + 账户 64 + 密码 64 + 记住密码 22
+// + 登录按钮 42 + TLS 脚注 44 + 网络设置行 28 + 7 个间距 ×14 = 416。
+// 加减字段时这里必须同步改，否则表单会按错误的高度居中、末尾几行被裁掉。
+const int kFormHeight   = 416;
 
 // 左侧品牌面板渐变三停靠色（对应设计稿 #ff5a44 → #d93a8d → #7a3d99）。
 const COLORREF kBrandC0 = RGB(0xff, 0x5a, 0x44);
@@ -107,7 +109,7 @@ std::unique_ptr<DuiControl> BuildBrandPanel()
     panel->AddChild(std::move(hero), Hint().Weight(1));
 
     // 底部版本信息。
-    panel->AddChild(ui::MakeLabel(_T("v4.2.108 · 内部构建 2026.05.18"),
+    panel->AddChild(ui::MakeLabel(_T("v2.0.0 · 内部构建 2026.05.18"),
                                   theme::kFontSizeSmall, false, kBrandTextFaint),
                     Hint().Fixed(18));
 
@@ -163,6 +165,19 @@ std::unique_ptr<DuiControl> BuildFormPanel()
                    Hint().Fixed(18 + 6 + kFieldEditH));
     form->AddChild(MakeField(_T("密码"), kIdLoginPassword, _T("请输入密码"), true),
                    Hint().Fixed(18 + 6 + kFieldEditH));
+
+    // 「记住密码」：勾上后登录成功时把账号与口令写进 exe 同目录的 flamingoAdmin.ini，
+    // 口令先经 DPAPI 加密（见 Util/DpapiSecret.h），下次打开自动回填。
+    // 初始勾选状态在 AdminFrame 进入登录页时按 ini 里存的值回填，这里只建控件。
+    auto rememberBox = std::make_unique<balloonwjui::DuiButton>();
+    rememberBox->SetButtonType(balloonwjui::DuiButton::StyleCheckbox);
+    // Variant 必须选一个"透明"的（Ghost / Outlined / Text），否则 DuiButton 会按
+    // 按钮那套浅色填充 + 边框来画，勾选框行上就多出一个跟输入框一样宽的方框。
+    rememberBox->SetVariant(balloonwjui::DuiButton::Variant::Text);
+    rememberBox->SetCtrlId(kIdLoginRememberPwd);
+    rememberBox->SetText(_T("记住密码"));
+    rememberBox->SetTextPointSize(theme::kFontSizeSmall);
+    form->AddChild(std::move(rememberBox), Hint().Fixed(kRememberRowH));
 
     // 试点接入：登录按钮从 admin 私有 DuiButton 换成 balloonwjui::DuiButton
     // + SetVariant(Primary)。视觉一致（品牌蓝实色 + 白字 + hover/pressed 渐

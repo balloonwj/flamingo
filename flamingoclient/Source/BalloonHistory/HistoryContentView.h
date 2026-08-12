@@ -35,6 +35,8 @@
 #include "../../balloonui/balloonui/DuiControl.h"
 #include "../BalloonChat/BalloonChatMsgFormat.h"   // balloonchat::ChatSegment
 #include "../BalloonChatWnd/ChatInlineText.h"      // 排版 / 绘制引擎与 InlinePlaced
+#include "../BalloonChatWnd/ChatLinkDetect.h"      // LinkSpan（成员需完整类型）
+#include "../BalloonChatWnd/ChatTextSelection.h"   // SelLayout（成员需完整类型）
 #include "HistoryView.h"                           // HighlightRange
 
 namespace balloonhistory {
@@ -69,6 +71,20 @@ public:
     void SetContent(const CString& fullText);
 
     /**
+     *  设置要显示的正文，但把它当作<u>纯文本</u>，不做发送正文格式的解析。
+     *
+     *  两个入口的区别在于对 '/' 的处理：SetContent 吃的是聊天消息的<u>发送正文
+     *  格式</u>，其中 `/f["5"]` 是表情标记、`//` 才表示一个字面 '/'；而群公告一类
+     *  的文本是服务端原样存的纯文本，里面的 `https://x` 就是字面三个字符，拿
+     *  SetContent 去解会平白吃掉一个斜杠、`/f[` 开头的文本还会被当成表情。
+     *
+     *  纯文本入口下正文里不会有内联表情（整串就是一个文字段），链接识别照常。
+     *    plainText：正文原文（不含任何标记约定）；可为空串。
+     *  副作用：作废高度测量缓存并触发重绘。
+     */
+    void SetPlainContent(const CString& plainText);
+
+    /**
      *  设置搜索命中要高亮的字符区间。
      *    ranges：区间列表（扁平文本字符口径，见类注释）；传空表示不高亮。
      *            越界或长度非正的区间由本类忽略，不必由调用方预先过滤。
@@ -87,6 +103,16 @@ public:
 
     //当前是否处于展开态。
     bool IsExpanded() const { return m_expanded; }
+
+    /**
+     *  取当前正文的「扁平文本」：各文字段原样拼接，每个内联表情占一个 U+FFFC
+     *  占位字符（口径见类注释）。纯文本入口喂进来的内容原样返回。
+     *
+     *  供需要回读正文的调用方与单元测试使用 —— 本控件取代 DuiLabel 之后，那些
+     *  原先靠 DuiLabel::GetText 断言正文的用例需要一个等价的读法。
+     *  @return 扁平文本；正文为空时返回空串。
+     */
+    CString GetFlatText() const;
 
     /**
      *  设置正文颜色。默认深灰 RGB(0x33, 0x33, 0x33)，与聊天气泡正文同色。
@@ -132,9 +158,21 @@ public:
 
     /**
      *  DuiControl 覆写：先铺高亮底色，再画文字与表情；折叠态内容没画完时，
-     *  在末行末尾补一个省略号。
+     *  在末行末尾补一个省略号；最后把识别出的超链接用链接色 + 下划线重画一遍。
      */
     void OnPaint(HDC hdc, const RECT& rcDirty) override;
+
+    /**
+     *  DuiControl 覆写：光标落在超链接上时显示手型（与聊天气泡一致）。
+     */
+    bool OnSetCursor(POINT pt) override;
+
+    /**
+     *  DuiControl 覆写：左键抬起时若落在超链接上，请宿主窗打开它（投
+     *  WM_CHAT_OPEN_LINK，URL 用堆上的 std::wstring* 传递，宿主处理后 delete）。
+     *  本控件不直接 ShellExecute —— 协议白名单校验只该有一处，放在宿主窗里。
+     */
+    bool OnLButtonUp(POINT pt, UINT mkFlags) override;
 
 private:
     //建一支绘制 / 测量共用的字体（微软雅黑，字号取 m_fontPx）。与
@@ -170,6 +208,19 @@ private:
     void PaintCollapsedEllipsis(HDC hdc, const RECT& rc,
                                 const std::vector<balloonchatwnd::InlinePlaced>& placed);
 
+    //把识别出的超链接用链接色 + 下划线重画一遍，并把本次的字符级排版模型存进
+    //m_linkLayout 供命中测试用。placed 为本次绘制用的排版结果，rc 为本控件矩形。
+    void PaintLinks(HDC hdc, const RECT& rc,
+                    const std::vector<balloonchatwnd::InlinePlaced>& placed);
+
+    //落点命中了第几条超链接；没命中（或还没画过、没有链接）返回 -1。
+    //  pt：落点（宿主客户区坐标）。
+    int LinkAtPoint(POINT pt) const;
+
+    //按当前 m_segs 重算链接片段并作废排版模型。两个内容入口（正文格式 / 纯文本）
+    //共用，免得两处各写一遍、日后漏改一处。
+    void RebuildLinks();
+
 private:
     //正文解析出的段序列（文字段 + 表情段），SetContent 时一次性解析好。
     //绘制与测量都直接吃它，不再重复解析正文。
@@ -180,6 +231,17 @@ private:
 
     //待高亮的字符区间（扁平文本口径）；空表示不高亮。
     std::vector<HighlightRange> m_ranges;
+
+    //正文里识别出的超链接（扁平文本口径），SetContent 时一次性算好；识别开关
+    //关掉时恒为空，于是渲染与命中两处自然退化成"没有链接"。
+    std::vector<balloonchatwnd::LinkSpan> m_links;
+
+    //最近一次绘制时的字符级排版模型与控件原点。命中测试要拿它把落点映射回字符
+    //区间 —— 排版只在绘制时算得出来（要 HDC 与字体），故存下来给鼠标事件用。
+    //m_linkLayoutValid 为 false 表示还没画过，此时一律判为没命中。
+    mutable balloonchatwnd::SelLayout m_linkLayout;
+    mutable POINT                     m_linkOrigin;
+    mutable bool                      m_linkLayoutValid;
 
     //正文颜色。
     COLORREF m_textColor;

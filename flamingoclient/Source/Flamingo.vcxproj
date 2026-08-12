@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -326,8 +326,6 @@
     <ClCompile Include="ThreadPool.cpp" />
     <ClCompile Include="Time.cpp" />
     <ClCompile Include="TrayIcon.cpp" />
-    <ClCompile Include="UpdateDlg.cpp" />
-    <ClCompile Include="Updater.cpp" />
     <ClCompile Include="UserConfig.cpp" />
     <ClCompile Include="UserMgr.cpp" />
     <ClCompile Include="UserSessionData.cpp" />
@@ -354,6 +352,7 @@
     <ClCompile Include="BalloonAuth\BalloonLoginLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="BalloonAuth\AccountRemoval.cpp" />
     <ClCompile Include="BalloonChat\BalloonBuddyChatDlg.cpp" />
     <ClCompile Include="BalloonChat\BalloonChatLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
@@ -377,6 +376,16 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="BalloonChatWnd\ChatFileLocation.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatDropController.cpp" />
+    <ClCompile Include="BalloonChatWnd\ChatDropModel.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatLinkDetect.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatTimeSeparator.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="BalloonChatWnd\ChatFileStateModel.cpp">
@@ -610,6 +619,16 @@
     <ClCompile Include="BalloonMain\GroupRowText.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="BalloonMain\StarredModel.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\CornerPopupPlacement.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\StarredPopupModel.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\StarredPopupWindow.cpp" />
     <ClCompile Include="BalloonMain\KickoutNotice.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -643,6 +662,18 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="BalloonMain\MainPanelStatusMenu.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\PresenceBadge.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\AutoAwayPolicy.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\KeepAwakePolicy.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\KeepAwakeSession.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="BalloonMain\MainPanelSystemMenu.cpp">
@@ -696,6 +727,16 @@
     </ClCompile>
     <ClCompile Include="BalloonMain\TrayFlashController.cpp" />
     <ClCompile Include="BalloonMain\TrayMsgTipPopup.cpp" />
+    <ClCompile Include="BalloonMain\UnknownSenderRefreshPolicy.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\UserCachePath.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\StorageLocation.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\CurrentUserAccount.cpp" />
     <ClCompile Include="BalloonNetSettings\BalloonNetSettingsWindow.cpp" />
     <ClCompile Include="BalloonNetSettings\NetServerCard.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
@@ -744,6 +785,13 @@
     <ClCompile Include="BalloonSearch\SearchDropdown.cpp" />
     <ClCompile Include="BalloonSearch\SearchFilterTab.cpp" />
     <ClCompile Include="BalloonSettings\BalloonSystemSettingDlg.cpp" />
+    <ClCompile Include="BalloonSettings\CacheCleanPlan.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonSettings\CacheCleanExecutor.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonSettings\BalloonCacheCleanDlg.cpp" />
     <ClCompile Include="BalloonSettings\SettingsBinding.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -846,6 +894,9 @@
     <ClCompile Include="net\FileProtocolClient.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="net\StarredProtocolClient.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="net\FileStreamTransfer.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -875,6 +926,14 @@
     <ClCompile Include="net\IUProtocolData.cpp" />
     <ClCompile Include="net\IUSocket.cpp" />
     <ClCompile Include="net\LoginProtocolClient.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\UpdateProtocolClient.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Update\UpdateManager.cpp" />
+    <ClCompile Include="BalloonUpdate\BalloonUpdateWindow.cpp" />
+    <ClCompile Include="Update\UpdateViewModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="net\MessageProtocolClient.cpp">
@@ -1046,8 +1105,8 @@
     <ClInclude Include="ImageTaskThread.h" />
     <ClInclude Include="IniFile.h" />
     <ClInclude Include="IULog.h" />
+    <ClInclude Include="Crash.h" />
     <ClInclude Include="LoginAccountList.h" />
-    <ClInclude Include="LoginDlg.h" />
     <ClInclude Include="LoginSettingsDlg.h" />
     <ClInclude Include="LogonUserInfoDlg.h" />
     <ClInclude Include="MainDlg.h" />
@@ -1085,8 +1144,6 @@
     <ClInclude Include="Time.h" />
     <ClInclude Include="TrayIcon.h" />
     <ClInclude Include="UIText.h" />
-    <ClInclude Include="UpdateDlg.h" />
-    <ClInclude Include="Updater.h" />
     <ClInclude Include="UserConfig.h" />
     <ClInclude Include="UserMgr.h" />
     <ClInclude Include="UserSessionData.h" />
@@ -1103,6 +1160,7 @@
     <ClInclude Include="BalloonAuth\AuthInputField.h" />
     <ClInclude Include="BalloonAuth\BalloonLoginDlg.h" />
     <ClInclude Include="BalloonAuth\BalloonLoginLayout.h" />
+    <ClInclude Include="BalloonAuth\AccountRemoval.h" />
     <ClInclude Include="BalloonChat\BalloonBuddyChatDlg.h" />
     <ClInclude Include="BalloonChat\BalloonChatLayout.h" />
     <ClInclude Include="BalloonChat\BalloonChatMsgFormat.h" />
@@ -1116,6 +1174,10 @@
     <ClInclude Include="BalloonChatWnd\ChatBubble.h" />
     <ClInclude Include="BalloonChatWnd\ChatFaceTag.h" />
     <ClInclude Include="BalloonChatWnd\ChatFileAction.h" />
+    <ClInclude Include="BalloonChatWnd\ChatDropController.h" />
+    <ClInclude Include="BalloonChatWnd\ChatDropModel.h" />
+    <ClInclude Include="BalloonChatWnd\ChatLinkDetect.h" />
+    <ClInclude Include="BalloonChatWnd\ChatTimeSeparator.h" />
     <ClInclude Include="BalloonChatWnd\ChatFileLocation.h" />
     <ClInclude Include="BalloonChatWnd\ChatFileStateModel.h" />
     <ClInclude Include="BalloonChatWnd\ChatFileVisual.h" />
@@ -1220,6 +1282,10 @@
     <ClInclude Include="BalloonMain\ConversationListOps.h" />
     <ClInclude Include="BalloonMain\CreateGroupDlg.h" />
     <ClInclude Include="BalloonMain\FavoritesModel.h" />
+    <ClInclude Include="BalloonMain\StarredModel.h" />
+    <ClInclude Include="BalloonMain\CornerPopupPlacement.h" />
+    <ClInclude Include="BalloonMain\StarredPopupModel.h" />
+    <ClInclude Include="BalloonMain\StarredPopupWindow.h" />
     <ClInclude Include="BalloonMain\GroupRowText.h" />
     <ClInclude Include="BalloonMain\KickoutNotice.h" />
     <ClInclude Include="BalloonMain\MainPanelAvatar.h" />
@@ -1234,6 +1300,10 @@
     <ClInclude Include="BalloonMain\MainPanelScrollView.h" />
     <ClInclude Include="BalloonMain\MainPanelSectionHeader.h" />
     <ClInclude Include="BalloonMain\MainPanelStatusMenu.h" />
+    <ClInclude Include="BalloonMain\PresenceBadge.h" />
+    <ClInclude Include="BalloonMain\AutoAwayPolicy.h" />
+    <ClInclude Include="BalloonMain\KeepAwakePolicy.h" />
+    <ClInclude Include="BalloonMain\KeepAwakeSession.h" />
     <ClInclude Include="BalloonMain\MainPanelSystemMenu.h" />
     <ClInclude Include="BalloonMain\MainPanelTab.h" />
     <ClInclude Include="BalloonMain\MainPanelTrayMenu.h" />
@@ -1247,6 +1317,10 @@
     <ClInclude Include="BalloonMain\OverlayScrollBarGeometry.h" />
     <ClInclude Include="BalloonMain\PanelDragZone.h" />
     <ClInclude Include="BalloonMain\PopupMenuPlacement.h" />
+    <ClInclude Include="BalloonMain\UnknownSenderRefreshPolicy.h" />
+    <ClInclude Include="net\UserCachePath.h" />
+    <ClInclude Include="net\StorageLocation.h" />
+    <ClInclude Include="net\CurrentUserAccount.h" />
     <ClInclude Include="BalloonMain\SignatureEditModel.h" />
     <ClInclude Include="BalloonMain\SignatureEditPopup.h" />
     <ClInclude Include="BalloonMain\TitleBarIcon.h" />
@@ -1280,6 +1354,9 @@
     <ClInclude Include="BalloonSearch\SearchFilterTab.h" />
     <ClInclude Include="BalloonSettings\BalloonSystemSettingDlg.h" />
     <ClInclude Include="BalloonSettings\SettingsBinding.h" />
+    <ClInclude Include="BalloonSettings\CacheCleanPlan.h" />
+    <ClInclude Include="BalloonSettings\CacheCleanExecutor.h" />
+    <ClInclude Include="BalloonSettings\BalloonCacheCleanDlg.h" />
     <ClInclude Include="BalloonSettings\SettingsNavList.h" />
     <ClInclude Include="BalloonSettings\SettingsPageModel.h" />
     <ClInclude Include="Call\AudioLoopback.h" />
@@ -1328,6 +1405,7 @@
     <ClInclude Include="net\ContactsProtocolClient.h" />
     <ClInclude Include="net\ConversationsProtocolClient.h" />
     <ClInclude Include="net\FavoriteProtocolClient.h" />
+    <ClInclude Include="net\StarredProtocolClient.h" />
     <ClInclude Include="net\FileMsg.h" />
     <ClInclude Include="net\FileProtocolClient.h" />
     <ClInclude Include="net\FileStreamTransfer.h" />
@@ -1343,6 +1421,13 @@
     <ClInclude Include="net\IUProtocolData.h" />
     <ClInclude Include="net\IUSocket.h" />
     <ClInclude Include="net\LoginProtocolClient.h" />
+    <ClInclude Include="Update\UpdateManager.h" />
+    <ClInclude Include="Update\UpdateTaskResult.h" />
+    <ClInclude Include="BalloonUpdate\BalloonUpdateWindow.h" />
+    <ClInclude Include="Update\UpdateViewModel.h" />
+    <ClInclude Include="net\FileServerConn.h" />
+    <ClInclude Include="net\UpdateProtocolClient.h" />
+    <ClInclude Include="ClientVersion.h" />
     <ClInclude Include="net\MessageProtocolClient.h" />
     <ClInclude Include="net\Msg.h" />
     <ClInclude Include="net\ProfileProtocolClient.h" />
@@ -1438,6 +1523,17 @@
     <ProjectReference Include="..\..\third-party\speexdsp-1.2.1\speexdsp_static.vcxproj">
       <Project>{c2d3e4f5-1b2c-4d3e-af40-1b2c3d4e5f60}</Project>
     </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="res\100.ico" />
+    <Image Include="res\BCF_Title16.ico" />
+    <Image Include="res\BCF_Title32.ico" />
+    <Image Include="res\flamingo.ico" />
+    <Image Include="res\Group16.ico" />
+    <Image Include="res\Group32.ico" />
+    <Image Include="res\Multi16.ico" />
+    <Image Include="res\Multi32.ico" />
+    <Image Include="res\sys.ico" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

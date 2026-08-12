@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  ChatBubble.cpp
  *
  *  单聊窗消息行的绘制实现。形状（头像 / 气泡 / 引用块 / 图片占位 / 文件
@@ -318,12 +318,9 @@ void DrawMentionBlocks(HDC hdc, const SelLayout& layout,
 
 // 把各 @ 片段的文字用高亮色重画一遍。
 //
-// 做法是「按片段矩形设裁剪区、再整段重画」，而不是只画那几个字的子串 —— 后者遇到
-// 片段跨行就得自己按行拆，还得复刻本引擎的折行规则；裁剪重画沿用同一次排版，落在
-// 矩形里的字形恰好就是那几个字，跨行天然正确。
-//
-// 代价是每个片段矩形都要重跑一次 DrawInlineContent（内含一次折行排版）。一条消息里
-// @ 的人通常个位数，且整行的绘制结果有渲染缓存兜着、不是每帧都跑，这个代价可以接受。
+// 「按片段矩形设裁剪区、再整段重画」那套手法已抽到 ChatInlineText 的
+// DrawInlineContentRestyledRange，与超链接渲染共用同一份实现（理由见那边的注释）；
+// 本函数只负责逐片段算出该用什么颜色。
 //   hdc：     本行绘制目标。
 //   segs：    正文解析出的消息段（与 DrawInlineContent 用的同一份）。
 //   layout：  字符级排版模型。
@@ -355,25 +352,52 @@ void DrawMentionHighlightText(HDC hdc,
         BubbleTextStyle hi = st;
         hi.color = fg;
 
-        const std::vector<SelRect> rects = BuildSelectionRects(
-            layout, atsFlat[i].m_off, atsFlat[i].m_off + atsFlat[i].m_len);
-        for (std::size_t r = 0; r < rects.size(); ++r)
-        {
-            // 保存原裁剪区。GetClipRgn 返回 1 表示原本有裁剪区、0 表示没有，
-            // 恢复时据此决定是还原那个区域还是清成"不裁剪"。
-            HRGN saved = ::CreateRectRgn(0, 0, 0, 0);
-            const int hadClip = ::GetClipRgn(hdc, saved);
+        DrawInlineContentRestyledRange(hdc, segs, layout,
+                                       atsFlat[i].m_off,
+                                       atsFlat[i].m_off + atsFlat[i].m_len,
+                                       txRc, hi, faceSize);
+    }
+}
 
-            ::IntersectClipRect(hdc,
-                                txRc.left + rects[r].m_left,
-                                txRc.top  + rects[r].m_top,
-                                txRc.left + rects[r].m_right,
-                                txRc.top  + rects[r].m_bottom);
-            DrawInlineContent(hdc, segs, txRc, hi, faceSize);
+// 超链接文字色。两种气泡（对方浅灰底 / 自己浅橙底）共用同一档蓝 —— 与 @别人 的
+// 文字同色，那一档已经在两种底色上都验证过可读。链接靠"蓝 + 下划线"与 @ 区分开
+// （@ 有圆角底色块、没有下划线）。
+const COLORREF kLinkFg = RGB(0x2F, 0x6F, 0xD0);
 
-            ::SelectClipRgn(hdc, (hadClip == 1) ? saved : NULL);
-            ::DeleteObject(saved);
-        }
+// 把各超链接片段用链接色 + 下划线重画一遍。
+//
+// 与 @提醒 的高亮共用 DrawInlineContentRestyledRange（裁剪重画那套手法），故跨行的
+// 长链接天然正确，不必自己按行拆。
+//   hdc：      本行绘制目标。
+//   segs：     正文解析出的消息段（与 DrawInlineContent 用的同一份）。
+//   layout：   字符级排版模型。
+//   links：    扁平口径的链接片段。
+//   txRc：     文本区矩形（绝对坐标）。
+//   st：       本条消息的文字样式；本函数只改颜色并打开下划线，其余照用。
+//   faceSize： 内联表情显示边长。
+void DrawLinkText(HDC hdc,
+                  const std::vector<balloonchat::ChatSegment>& segs,
+                  const SelLayout& layout,
+                  const std::vector<LinkSpan>& links,
+                  const RECT& txRc,
+                  const BubbleTextStyle& st,
+                  int faceSize)
+{
+    if (links.empty() || layout.m_lines.empty())
+    {
+        return;
+    }
+
+    BubbleTextStyle ls = st;
+    ls.color     = kLinkFg;
+    ls.underline = true;
+
+    for (std::size_t i = 0; i < links.size(); ++i)
+    {
+        DrawInlineContentRestyledRange(hdc, segs, layout,
+                                       links[i].m_off,
+                                       links[i].m_off + links[i].m_len,
+                                       txRc, ls, faceSize);
     }
 }
 
@@ -459,38 +483,8 @@ int MeasureTextWidth(HDC hdc, LPCWSTR text, int pixelHeight)
     return sz.cx;
 }
 
-// 把一段 Unicode 文字放进剪贴板（复制菜单用）。
-//   owner：拥有剪贴板会话的窗口；text：要复制的文字（NULL 安全）。
-void PutTextToClipboard(HWND owner, LPCWSTR text)
-{
-    if (text == NULL)
-    {
-        return;
-    }
-    if (!::OpenClipboard(owner))
-    {
-        return;
-    }
-    ::EmptyClipboard();
-    const size_t chars = ::wcslen(text) + 1;
-    const size_t bytes = chars * sizeof(WCHAR);
-    HGLOBAL hMem = ::GlobalAlloc(GMEM_MOVEABLE, bytes);
-    if (hMem != NULL)
-    {
-        void* dst = ::GlobalLock(hMem);
-        if (dst != NULL)
-        {
-            ::CopyMemory(dst, text, bytes);
-            ::GlobalUnlock(hMem);
-            ::SetClipboardData(CF_UNICODETEXT, hMem);
-        }
-        else
-        {
-            ::GlobalFree(hMem);
-        }
-    }
-    ::CloseClipboard();
-}
+// 剪贴板写入已抽到 ChatTextSelection（右键「复制」与消息区 Ctrl+C 共用同一份，
+// 见那边的 PutTextToClipboard 注释），本文件直接用它。
 
 // 把一条消息的可复制文本取出来（不同 kind 取不同字段）。
 CString MessageCopyText(const ChatMessage& msg)
@@ -547,6 +541,7 @@ ChatBubble::ChatBubble()
     , m_renderDirty(true)
     , m_quoteRectRel()
     , m_quoteThumbLogged(false)
+    , m_linkPressIdx(-1)
 {
     m_msg.kind = kMsgText;
     m_msg.fromMe = false;
@@ -1177,6 +1172,15 @@ void ChatBubble::Measure(int availWidth)
         m_selFlatText = BuildFlatText(segs);
         BuildSelLayoutFromPlaced(hdc, placed, (int)m_selFlatText.size(), m_selLayout);
 
+        // 顺带识别正文里的超链接。口径与选区模型一致（扁平文本下标），故渲染时能直接
+        // 拿去要矩形、命中时能直接拿去做区间命中。识别开关关掉时这里得到空表，
+        // 后面渲染 / 命中 / 菜单三处自然什么都不做。
+        m_linksFlat.clear();
+        if (ChatLinkOptionEnabled())
+        {
+            m_linksFlat = DetectLinks(m_selFlatText);
+        }
+
         // 带引用的消息：引用块占据气泡内部顶端一块固定高度，正文从它下方开始，
         // 故气泡总高要把它算进去（早先引用画在气泡外，是加在行高上的）。
         if (m_msg.hasQuote)
@@ -1301,6 +1305,11 @@ bool ChatBubble::OnLButtonDown(POINT pt, UINT /*mkFlags*/)
     // 放在最前 —— 多选模式下整行是勾选目标，不做文字选择（下面那支会先返回）。
     if (!ParentInMultiSelect() && IsTextSelectable())
     {
+        // 记下按下时命中的链接（没命中为 -1）。这一下<u>不</u>消费 —— 按下仍要照常
+        // 开始拖拽选择，链接是在抬起时才判定的：只有"按下与抬起落在同一条链接上、
+        // 且期间没有真的选出一段文字"才算点击，否则从链接上起手选文字就会被误当成点击。
+        m_linkPressIdx = LinkAtPoint(pt);
+
         // 同一时刻只允许一个气泡有选区 —— 在别的气泡上开始新选择时，先清掉旧的，
         // 否则会出现两条消息同时高亮、而"复制"只取其中一条的割裂感。
         ChatMessageList* list = dynamic_cast<ChatMessageList*>(GetParent());
@@ -1424,10 +1433,43 @@ bool ChatBubble::OnLButtonUp(POINT pt, UINT /*mkFlags*/)
         m_selCaret    = CharIndexFromHostPoint(pt);
         m_selDragging = false;
         ReleaseCapture();
+
+        // 抬起处若仍在按下那条链接上、且这一趟没有真的选出文字（按下与抬起的字符
+        // 下标相同），就当成一次点击，请宿主聊天窗打开它。
+        const int pressed = m_linkPressIdx;
+        m_linkPressIdx = -1;
+        if (pressed >= 0 && !HasTextSelection() && LinkAtPoint(pt) == pressed)
+        {
+            OpenLinkByIndex(pressed);
+        }
+
         Invalidate();
         return true;
     }
+    m_linkPressIdx = -1;
     return false;
+}
+
+void ChatBubble::OpenLinkByIndex(int index)
+{
+    if (index < 0 || (std::size_t)index >= m_linksFlat.size())
+    {
+        return;
+    }
+    balloonwjui::DuiHost* host = GetHost();
+    HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+    if (hwnd == NULL)
+    {
+        return;
+    }
+
+    // 气泡自己不拉起外部程序：URL 经宿主聊天窗统一过一遍协议白名单再打开，
+    // 安全判断只留一处（见 CustomMsgDef.h 里 WM_CHAT_OPEN_LINK 的说明）。
+    std::wstring* pUrl = new std::wstring(m_linksFlat[(std::size_t)index].m_url);
+    if (!::PostMessage(hwnd, WM_CHAT_OPEN_LINK, 0, (LPARAM)pUrl))
+    {
+        delete pUrl;
+    }
 }
 
 bool ChatBubble::OnMouseLeave()
@@ -1449,33 +1491,38 @@ bool ChatBubble::OnSetCursor(POINT pt)
         ::SetCursor(::LoadCursor(NULL, IDC_HAND));
         return true;
     }
+    // 光标落在正文里的超链接上：同样显示手型。多选模式下整行是勾选目标，
+    // 链接不可点，就别给手型误导用户。
+    if (!ParentInMultiSelect() && LinkAtPoint(pt) >= 0)
+    {
+        ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+        return true;
+    }
     return false;
 }
 
 bool ChatBubble::OnLButtonDblClk(POINT pt, UINT /*mkFlags*/)
 {
-    // 文字气泡：双击选词。连点第三下（此时上一次双击已把整词选中）扩成全选整条 ——
-    // DUI 层没有三击事件，靠"双击时发现已是整词选中"来近似识别第三下。
+    // 文字气泡：双击 = 选中整条（与用户对齐的行为）。想选其中一段仍然靠单击拖动。
     if (!ParentInMultiSelect() && IsTextSelectable())
     {
-        const int idx = CharIndexFromHostPoint(pt);
-        int s = 0;
-        int e = 0;
-        WordRangeAt(m_selFlatText, idx, s, e);
+        m_selAnchor   = 0;
+        m_selCaret    = (int)m_selFlatText.size();
+        m_selDragging = false;
+        m_linkPressIdx = -1;
 
-        const int total = (int)m_selFlatText.size();
-        int curS = 0;
-        int curE = 0;
-        NormalizeSelRange(m_selAnchor, m_selCaret, curS, curE);
-        if (HasTextSelection() && curS == s && curE == e)
+        // 双击的第一下本身是一次完整单击：落在链接上时它已经请求打开浏览器了。
+        // 双击的语义是"选中整条"，故在这里把那次打开撤销掉（宿主窗为此把打开
+        // 延后了一个双击间隔，见 WM_CHAT_OPEN_LINK / WM_CHAT_CANCEL_LINK_OPEN）。
         {
-            s = 0;         // 已经正好选中这个词 → 这是第三下，扩成整条
-            e = total;
+            balloonwjui::DuiHost* host = GetHost();
+            HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+            if (hwnd != NULL)
+            {
+                ::PostMessage(hwnd, WM_CHAT_CANCEL_LINK_OPEN, 0, 0);
+            }
         }
 
-        m_selAnchor   = s;
-        m_selCaret    = e;
-        m_selDragging = false;
         Invalidate();
         return true;
     }
@@ -1507,6 +1554,39 @@ bool ChatBubble::OnLButtonDblClk(POINT pt, UINT /*mkFlags*/)
     // m_msg.imagePath 缓冲区有效；聊天窗在处理函数里据此打开看图窗。
     ::SendMessage(hwnd, WM_VIEW_CHAT_IMAGE, 0, (LPARAM)(LPCTSTR)m_msg.imagePath);
     return true;
+}
+
+void ChatBubble::InvalidateMeasureCache()
+{
+    m_measuredWidth = -1;     // 下次 Measure 不再命中缓存，会重新排版并重算链接片段
+    m_renderDirty   = true;   // 渲染缓存里那张位图也作废
+    Invalidate();
+}
+
+int ChatBubble::LinkAtPoint(POINT pt) const
+{
+    if (m_linksFlat.empty() || m_selLayout.m_lines.empty())
+    {
+        return -1;   // 本条没有链接，或还没测量过
+    }
+
+    // 命中测试在"相对文本区原点"的坐标系里做，与排版模型同一套坐标（与 @提醒
+    // 的 TryPopupMentionMenu 完全一致）。
+    bool ok = false;
+    const POINT origin = TextOriginInHost(ok);
+    if (!ok)
+    {
+        return -1;
+    }
+
+    std::vector<std::pair<int, int> > ranges;
+    ranges.reserve(m_linksFlat.size());
+    for (std::size_t i = 0; i < m_linksFlat.size(); ++i)
+    {
+        ranges.push_back(std::make_pair(m_linksFlat[i].m_off,
+                                        m_linksFlat[i].m_off + m_linksFlat[i].m_len));
+    }
+    return HitTestCharRanges(m_selLayout, ranges, pt.x - origin.x, pt.y - origin.y);
 }
 
 bool ChatBubble::TryPopupMentionMenu(const POINT& pt, HWND hwnd)
@@ -1558,20 +1638,81 @@ bool ChatBubble::TryPopupMentionMenu(const POINT& pt, HWND hwnd)
     // 「@ 的是不是我自己」直接读片段上的 m_isMe —— 它在协议换算时就按本人 uid
     // 标好了（见 GroupMentionModel），气泡不必再去问谁是当前登录用户。
     const bool isSelf = m_atsFlat[(std::size_t)hit].m_isMe;
-    ChatMessageList* list = dynamic_cast<ChatMessageList*>(GetParent());
-    const bool stillInGroup = (list != NULL) ? list->IsMemberInGroup(mentionUid) : true;
 
-    // 本人与被 @ 者在本群的角色：菜单末尾的「设为 / 撤销管理员」据此决定要不要出现。
+    return PopupMemberMenu(mentionUid, displayName, isSelf, pt, hwnd);
+}
+
+RECT ChatBubble::AvatarRectInHost() const
+{
+    RECT rc = { 0, 0, 0, 0 };
+    // 时间分隔 / 撤回提示行整行只有一句居中文字，没有头像。
+    if (!IsRealMessage())
+    {
+        return rc;
+    }
+
+    // 多选模式下行首让出勾选列、内容整体右移 —— 与 RenderContent 里 cx/cw 的算法一致。
+    const int selW = ParentInMultiSelect() ? kCheckColW : 0;
+    const int cx   = m_rcItem.left + selW;
+    const int cw   = (m_rcItem.right - m_rcItem.left) - selW;
+    if (cw <= 0)
+    {
+        return rc;
+    }
+
+    const int avX = m_msg.fromMe ? (cx + cw - kEdgePad - kAvatarSize) : (cx + kEdgePad);
+    const int avY = m_rcItem.top + kRowVMargin;
+    rc.left   = avX;
+    rc.top    = avY;
+    rc.right  = avX + kAvatarSize;
+    rc.bottom = avY + kAvatarSize;
+    return rc;
+}
+
+bool ChatBubble::TryPopupAvatarMenu(const POINT& pt, HWND hwnd)
+{
+    // 只在群聊里生效：单聊窗上下就两个人，对着头像弹"与 TA 聊天 / @TA"没有意义。
+    // senderName 只有群聊才填（与 RenderContent 里 showSender 同一口径）。
+    if (m_msg.fromMe || m_msg.senderName.IsEmpty())
+    {
+        return false;
+    }
+    if (m_msg.senderUserId <= 0)
+    {
+        return false;   // 发送者 userid 未知（老数据 / mock 消息），无从操作
+    }
+
+    const RECT av = AvatarRectInHost();
+    if (!::PtInRect(&av, pt))
+    {
+        return false;   // 没点在头像上，交回给气泡自己的菜单
+    }
+
+    // 走到这里目标必然不是本人（上面已经把 fromMe 挡掉了），故 isSelf 传 false。
+    return PopupMemberMenu(m_msg.senderUserId, (LPCWSTR)m_msg.senderName, false, pt, hwnd);
+}
+
+bool ChatBubble::PopupMemberMenu(long long uid, const std::wstring& displayName,
+                                 bool isSelf, const POINT& pt, HWND hwnd)
+{
+    ChatMessageList* list = dynamic_cast<ChatMessageList*>(GetParent());
+    const bool stillInGroup = (list != NULL) ? list->IsMemberInGroup(uid) : true;
+
+    // 本人与目标在本群的角色：菜单末尾的「设为 / 撤销管理员」据此决定要不要出现。
     // 两者都由消息列表代问宿主群聊窗 —— 气泡不认识"群成员表"这类业务对象。
     // 单聊窗没装查询钩子，两者均为负值，管理项自然不出现。
     const int myNetRole     = (list != NULL) ? list->MyNetRole() : -1;
-    const int targetNetRole = (list != NULL) ? list->MemberNetRole(mentionUid) : -1;
+    const int targetNetRole = (list != NULL) ? list->MemberNetRole(uid) : -1;
 
-    // selfUid 传法：BuildMentionMenuModel 只用它和 mentionUid 比对判本人，这里已经
+    // 「特别关注」那一项的文案同样由消息列表代问宿主群聊窗 —— 关注名单只有主面板
+    // 那一份。单聊窗没装这个钩子，恒返回 false（按"未关注"显示）。
+    const bool isStarred = (list != NULL) ? list->IsStarred(uid) : false;
+
+    // selfUid 传法：BuildMentionMenuModel 只用它和第一个参数比对判本人，这里已经
     // 有现成的 isSelf，故把两者传成"相等 / 不等"即可，不必真去取本人 uid。
     const std::vector<MentionMenuEntry> model =
-        BuildMentionMenuModel(mentionUid, isSelf ? mentionUid : 0, stillInGroup,
-                              myNetRole, targetNetRole);
+        BuildMentionMenuModel(uid, isSelf ? uid : 0, stillInGroup,
+                              myNetRole, targetNetRole, isStarred);
     if (model.empty())
     {
         return false;
@@ -1614,11 +1755,11 @@ bool ChatBubble::TryPopupMentionMenu(const POINT& pt, HWND hwnd)
         return true;   // 用户按 Esc / 点别处取消 —— 已经处理过了，不再弹气泡菜单
     }
 
-    // 四个动作全要碰业务（打开单聊 / 资料窗、往输入框插字、写剪贴板），气泡不认识
-    // 这些对象，打包投给宿主聊天窗去执行。投递失败时自行释放，避免泄漏。
+    // 这些动作全要碰业务（打开单聊 / 资料窗、往输入框插字、写剪贴板、改关注名单），
+    // 气泡不认识这些对象，打包投给宿主聊天窗去执行。投递失败时自行释放，避免泄漏。
     MentionActionData* pData = new MentionActionData();
     pData->id          = (MentionMenuId)cmd;
-    pData->uid         = mentionUid;
+    pData->uid         = uid;
     pData->displayName = displayName;
     if (!::PostMessage(hwnd, WM_CHAT_MENTION_ACTION, 0, (LPARAM)pData))
     {
@@ -1646,9 +1787,21 @@ bool ChatBubble::OnRButtonDown(POINT pt, UINT /*mkFlags*/)
         return false;
     }
 
-    // 先看这一下是不是点在某个 @某人 的片段上 —— 是的话弹「@ 的菜单」而不是气泡
+    // 右键是不是点在正文里的超链接上。命中时把「在浏览器中打开 / 复制链接地址」
+    // 两项<u>加在菜单最前面</u>，而不是换掉整份菜单 —— 复制 / 引用 / 撤回那些照样要
+    // 有、也照样要能用（早先做成了独立菜单，一含链接就把它们全挡没了）。
+    const int linkIdx = LinkAtPoint(pt);
+
+    // 再看这一下是不是点在某个 @某人 的片段上 —— 是的话弹「@ 的菜单」而不是气泡
     // 自己的菜单（复制 / 引用 / 撤回那套）。点空了照旧走下面的气泡菜单。
     if (TryPopupMentionMenu(pt, hwnd))
+    {
+        return true;
+    }
+
+    // 再看是不是点在发送者头像上 —— 是的话弹同一套成员菜单（只在群聊里，见
+    // TryPopupAvatarMenu 的说明）。点空了照旧走下面的气泡菜单。
+    if (TryPopupAvatarMenu(pt, hwnd))
     {
         return true;
     }
@@ -1685,6 +1838,16 @@ bool ChatBubble::OnRButtonDown(POINT pt, UINT /*mkFlags*/)
     {
         return false;
     }
+
+    // 命中链接时，两项链接操作排在最前，再用分隔线与气泡本身的那套隔开。
+    // 顺序是"点哪儿就先给哪儿的操作"，与浏览器 / 各家 IM 的习惯一致。
+    if (linkIdx >= 0)
+    {
+        ::AppendMenuW(menu, MF_STRING, (UINT_PTR)kChatMsgMenuOpenLink, L"在浏览器中打开");
+        ::AppendMenuW(menu, MF_STRING, (UINT_PTR)kChatMsgMenuCopyLink, L"复制链接地址");
+        ::AppendMenuW(menu, MF_SEPARATOR, 0, NULL);
+    }
+
     for (std::size_t mi = 0; mi < model.size(); ++mi)
     {
         if (model[mi].isSeparator)
@@ -1716,6 +1879,17 @@ bool ChatBubble::OnRButtonDown(POINT pt, UINT /*mkFlags*/)
     // 不得再访问任何成员 —— 各分支处理完立即 return。
     switch (cmd)
     {
+    case kChatMsgMenuOpenLink:
+        OpenLinkByIndex(linkIdx);
+        return true;
+    case kChatMsgMenuCopyLink:
+        // 复制的是规范化之后的 URL（www. 开头的那种已经补上了 https://），
+        // 粘到浏览器地址栏里直接能用。
+        if (linkIdx >= 0 && (std::size_t)linkIdx < m_linksFlat.size())
+        {
+            PutTextToClipboard(hwnd, m_linksFlat[(std::size_t)linkIdx].m_url.c_str());
+        }
+        return true;
     case kChatMsgMenuCopy:
         // 有选区就只复制选中的那一段，没有选区才复制整条 —— 不新增菜单项，
         // "复制"这一项按当前是否有选区自动切换含义，与浏览器 / 各家 IM 一致。
@@ -2307,6 +2481,10 @@ void ChatBubble::RenderContent(HDC hdc)
         DrawInlineContent(hdc, segs, txRc, st, kFaceDisplayPx);
         DrawMentionHighlightText(hdc, segs, m_selLayout, m_atsFlat, m_msg.fromMe,
                                  txRc, st, kFaceDisplayPx);
+        // 第五层：超链接按矩形裁剪、用链接色 + 下划线重画那几个字。放在 @ 之后 ——
+        // 两者理论上不会重叠（@ 片段是昵称、链接是 URL），真撞上时以链接为准，
+        // 因为链接是可点的、必须让用户看出来。
+        DrawLinkText(hdc, segs, m_selLayout, m_linksFlat, txRc, st, kFaceDisplayPx);
     }
     else if (m_msg.kind == kMsgEmoji)
     {

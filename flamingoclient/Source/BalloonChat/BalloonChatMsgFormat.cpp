@@ -99,30 +99,6 @@ CString FormatDisplayLine(const CString& sender, time_t when, const CString& tex
     return line;
 }
 
-CString BuildSendBody(const std::vector<ChatSegment>& segs)
-{
-    CString body;
-    for (size_t i = 0; i < segs.size(); ++i)
-    {
-        const ChatSegment& seg = segs[i];
-        if (seg.m_bFace)
-        {
-            // 表情段 → /f["<id>"]，与 HandleSysFaceId 的解析格式一致。
-            CString tag;
-            tag.Format(_T("/f[\"%d\"]"), seg.m_nFaceId);
-            body += tag;
-        }
-        else
-        {
-            // 文本段 → 把每个 '/' 转义成 '//'，避免被发送管线当成标签起始。
-            CString escaped = seg.m_strText;
-            escaped.Replace(_T("/"), _T("//"));
-            body += escaped;
-        }
-    }
-    return body;
-}
-
 namespace {
 
 // 尝试从 body[i] 起解析一个 /f["<整数>"] 表情标签。命中则返回 true，并把 faceId
@@ -164,7 +140,60 @@ bool TryParseFaceTag(const CString& body, int i, int n, int& outId, int& outNext
     return true;
 }
 
+/**
+ *  把一段纯文本编码进发送正文：<u>只</u>给"看上去像表情标记"的那个 '/' 前面多写
+ *  一个 '/'，其余斜杠原样保留。
+ *
+ *  为什么不是把每个 '/' 都翻倍（那是本函数早先的做法）：翻倍会让网线上的正文变成
+ *  `http:////x` 这种样子，跨端（安卓、以及任何不认这套 PC 端约定的地方）直接照原样
+ *  显示就错了；而"只在真会被误判成表情的地方加一个转义"既保住了网线上的原貌，
+ *  也仍然挡住了"用户手打 /f["3"] 被渲染成表情"这一种情形 —— 转义本来就只为这一件事
+ *  存在。（用户报的 bug 正是翻倍带来的：输入 http://www.baidu.com 发出去，
+ *  对端解析回来少一个斜杠。）
+ */
+CString EscapeTextForSend(const CString& text)
+{
+    CString out;
+    const int n = text.GetLength();
+    int i = 0;
+    while (i < n)
+    {
+        int faceId = 0;
+        int next   = 0;
+        if (text[i] == _T('/') && TryParseFaceTag(text, i, n, faceId, next))
+        {
+            //这个位置起是一个能被解析出来的表情标记，补一个 '/' 让接收侧还原成字面 '/'。
+            out += _T('/');
+        }
+        out += text[i];
+        ++i;
+    }
+    return out;
+}
+
 } // anonymous namespace
+
+CString BuildSendBody(const std::vector<ChatSegment>& segs)
+{
+    CString body;
+    for (size_t i = 0; i < segs.size(); ++i)
+    {
+        const ChatSegment& seg = segs[i];
+        if (seg.m_bFace)
+        {
+            // 表情段 → /f["<id>"]，与 HandleSysFaceId 的解析格式一致。
+            CString tag;
+            tag.Format(_T("/f[\"%d\"]"), seg.m_nFaceId);
+            body += tag;
+        }
+        else
+        {
+            // 文本段 → 仅对"会被误判成表情标记"的斜杠加转义（见 EscapeTextForSend）。
+            body += EscapeTextForSend(seg.m_strText);
+        }
+    }
+    return body;
+}
 
 std::vector<ChatSegment> ParseSendBody(const CString& body)
 {
@@ -177,12 +206,23 @@ std::vector<ChatSegment> ParseSendBody(const CString& body)
         const TCHAR c = body[i];
         if (c == _T('/'))
         {
-            // "//" → 文本里的一个字面 '/'
+            // "//" 只有在<u>紧跟一个表情标记</u>时才是转义，还原成文本里的一个字面 '/'。
+            // 例：`//f["3"]` → 字面的 /f["3"]。
+            //
+            // 为什么不是"凡 // 都还原成一个 /"（那是早先的做法）：那样 `http://x` 会被
+            // 吃掉一个斜杠，而正文里的双斜杠绝大多数来自网址，不是转义。转义只为
+            // "挡住用户手打的表情标记"存在，故只在那一种情形下认它。
             if (i + 1 < n && body[i + 1] == _T('/'))
             {
-                cur += _T('/');
-                i += 2;
-                continue;
+                int escId   = 0;
+                int escNext = 0;
+                if (TryParseFaceTag(body, i + 1, n, escId, escNext))
+                {
+                    cur += _T('/');
+                    i += 2;   // 吃掉两个斜杠中的第一个（转义位）与第二个（字面位）
+                    continue;
+                }
+                // 不是转义：落到下面"孤立斜杠当普通字符"那一支，逐个原样收进正文。
             }
             // /f["<整数>"] → 表情段
             int faceId = 0;
@@ -228,14 +268,21 @@ std::vector<int> BuildFlatIndexMap(const CString& body)
         const TCHAR c = body[i];
         if (c == _T('/'))
         {
-            // "//" → 扁平文本里的一个字面 '/'：两个原文字符共用同一个扁平位置。
+            // "//" 紧跟表情标记时才是转义 → 扁平文本里的一个字面 '/'：两个原文字符
+            // 共用同一个扁平位置。判断口径与 ParseSendBody 逐字一致（见那边的注释）。
             if (i + 1 < n && body[i + 1] == _T('/'))
             {
-                map[(std::size_t)i]     = flat;
-                map[(std::size_t)i + 1] = flat;
-                ++flat;
-                i += 2;
-                continue;
+                int escId   = 0;
+                int escNext = 0;
+                if (TryParseFaceTag(body, i + 1, n, escId, escNext))
+                {
+                    map[(std::size_t)i]     = flat;
+                    map[(std::size_t)i + 1] = flat;
+                    ++flat;
+                    i += 2;
+                    continue;
+                }
+                // 不是转义：落到下面"孤立斜杠当普通字符"那一支，各占一个扁平位置。
             }
             // /f["<整数>"] → 一个表情占位字符：整个标记的所有原文字符共用同一位置。
             int faceId = 0;

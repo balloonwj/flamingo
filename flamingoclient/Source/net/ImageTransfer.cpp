@@ -12,6 +12,8 @@
 #include "../UserSessionData.h"     // FMG_MSG_V2_IMAGE_SEND_*
 #include "../IULog.h"               // LOG_INFO / LOG_ERROR
 #include "../MD5Sum.h"              // MD5Init / MD5Update / MD5Final
+#include "../EncodeUtil.h"          // UnicodeToUtf8（日志里打登录账号用）
+#include "UserCachePath.h"          // UserCacheDir（Users\<登录账号>\ 的统一口径）
 
 #include <fstream>
 #include <chrono>
@@ -107,35 +109,39 @@ static bool writeWholeFile(const std::wstring& path, const std::string& bytes)
     return out.good();
 }
 
-//构造图片下载缓存文件的完整路径：<g_szHomePath>Users\<userId>\ChatImage\<md5>，
-//并按需逐级创建 Users、Users\<userId>、Users\<userId>\ChatImage 三级目录。落地
-//写文件前调用。
-static std::wstring buildImageCachePath(int64_t userId, const std::string& md5)
+//构造图片下载缓存文件的完整路径：<g_szHomePath>Users\<登录账号>\ChatImage\<md5>，
+//并按需逐级创建 Users、Users\<账号>、Users\<账号>\ChatImage 三级目录。落地
+//写文件前调用。账号为空（未登录）时返回空串，调用方按落地失败处理。
+static std::wstring buildImageCachePath(const std::wstring& account, const std::string& md5)
 {
-    std::wstring dir = g_szHomePath;   //约定以反斜杠结尾（见 IUSocket 对其用法）
-    dir += L"Users\\";
-    ::CreateDirectoryW(dir.c_str(), NULL);   //已存在返回失败，忽略即可
-    dir += std::to_wstring(userId);
-    dir += L"\\";
-    ::CreateDirectoryW(dir.c_str(), NULL);
-    dir += L"ChatImage\\";
-    ::CreateDirectoryW(dir.c_str(), NULL);
-    return ImageTransfer::CacheFilePathForMd5(userId, md5);
+    const std::wstring imageDir = net::UserCacheDir(g_szDataRoot, account, L"ChatImage");
+    if (imageDir.empty())
+        return std::wstring();
+
+    //CreateDirectoryW 只建最后一级，故从 Users 往下逐级调用；已存在返回失败，忽略即可。
+    std::wstring usersRoot = g_szDataRoot;   //约定以反斜杠结尾（见 IUSocket 对其用法）
+    usersRoot += L"Users\\";
+    ::CreateDirectoryW(usersRoot.c_str(), NULL);
+    ::CreateDirectoryW(net::UserCacheDir(g_szDataRoot, account, NULL).c_str(), NULL);
+    ::CreateDirectoryW(imageDir.c_str(), NULL);
+    return ImageTransfer::CacheFilePathForMd5(account, md5);
 }
 
-//构造头像缓存文件完整路径：<g_szHomePath>Users\<userId>\Avatar\<fileid>，并按需
-//逐级创建 Users、Users\<userId>、Users\<userId>\Avatar 三级目录。落地写文件前调用。
-static std::wstring buildAvatarCachePath(int64_t userId, const std::string& fileid)
+//构造头像缓存文件完整路径：<g_szHomePath>Users\<登录账号>\Avatar\<fileid>，并按需
+//逐级创建 Users、Users\<账号>、Users\<账号>\Avatar 三级目录。落地写文件前调用。
+//账号为空（未登录）时返回空串，调用方按落地失败处理。
+static std::wstring buildAvatarCachePath(const std::wstring& account, const std::string& fileid)
 {
-    std::wstring dir = g_szHomePath;   //约定以反斜杠结尾
-    dir += L"Users\\";
-    ::CreateDirectoryW(dir.c_str(), NULL);
-    dir += std::to_wstring(userId);
-    dir += L"\\";
-    ::CreateDirectoryW(dir.c_str(), NULL);
-    dir += L"Avatar\\";
-    ::CreateDirectoryW(dir.c_str(), NULL);
-    return ImageTransfer::AvatarCacheFilePathForFileId(userId, fileid);
+    const std::wstring avatarDir = net::UserCacheDir(g_szHomePath, account, L"Avatar");
+    if (avatarDir.empty())
+        return std::wstring();
+
+    std::wstring usersRoot = g_szDataRoot;   //约定以反斜杠结尾
+    usersRoot += L"Users\\";
+    ::CreateDirectoryW(usersRoot.c_str(), NULL);
+    ::CreateDirectoryW(net::UserCacheDir(g_szDataRoot, account, NULL).c_str(), NULL);
+    ::CreateDirectoryW(avatarDir.c_str(), NULL);
+    return ImageTransfer::AvatarCacheFilePathForFileId(account, fileid);
 }
 
 //上传分片的真实传输实现：组 cmd_file_upload(1851) 附件帧、经 img socket 发出、
@@ -278,31 +284,34 @@ ImageTransfer& ImageTransfer::GetInstance()
     return instance;
 }
 
-std::wstring ImageTransfer::CacheFilePathForMd5(int64_t userId, const std::string& md5)
+std::wstring ImageTransfer::CacheFilePathForMd5(const std::wstring& account, const std::string& md5)
 {
-    if (userId <= 0 || md5.empty())
+    if (md5.empty())
         return std::wstring();
-    //缓存按登录用户分隔、按内容 MD5 命名：<g_szHomePath>Users\<userId>\ChatImage\<md5>。
-    //md5 为 ASCII 十六进制，逐字符宽化即可。本方法只拼路径、不创建目录、不判断存在。
-    std::wstring path = g_szHomePath;   //约定以反斜杠结尾
-    path += L"Users\\";
-    path += std::to_wstring(userId);
-    path += L"\\ChatImage\\";
+    //缓存按登录账号分隔、按内容 MD5 命名：<g_szHomePath>Users\<账号>\ChatImage\<md5>。
+    //目录那一截统一由 UserCacheDir 拼（Users 下的命名口径只此一处），账号为空时它
+    //返回空串。md5 为 ASCII 十六进制，逐字符宽化即可。本方法只拼路径、不创建目录、
+    //不判断存在。
+    std::wstring path = net::UserCacheDir(g_szDataRoot, account, L"ChatImage");
+    if (path.empty())
+        return std::wstring();
+
     for (size_t i = 0; i < md5.size(); ++i)
         path.push_back(static_cast<wchar_t>(md5[i]));
     return path;
 }
 
-std::wstring ImageTransfer::AvatarCacheFilePathForFileId(int64_t userId, const std::string& fileid)
+std::wstring ImageTransfer::AvatarCacheFilePathForFileId(const std::wstring& account,
+                                                         const std::string& fileid)
 {
-    if (userId <= 0 || fileid.empty())
+    if (fileid.empty())
         return std::wstring();
-    //缓存按登录用户分隔、按 fileid 命名：<g_szHomePath>Users\<userId>\Avatar\<fileid>。
+    //缓存按登录账号分隔、按 fileid 命名：<g_szHomePath>Users\<账号>\Avatar\<fileid>。
     //fileid 为字符串编码的数字（ASCII），逐字符宽化即可；只拼路径、不建目录、不判存在。
-    std::wstring path = g_szHomePath;   //约定以反斜杠结尾
-    path += L"Users\\";
-    path += std::to_wstring(userId);
-    path += L"\\Avatar\\";
+    std::wstring path = net::UserCacheDir(g_szHomePath, account, L"Avatar");
+    if (path.empty())
+        return std::wstring();
+
     for (size_t i = 0; i < fileid.size(); ++i)
         path.push_back(static_cast<wchar_t>(fileid[i]));
     return path;
@@ -356,15 +365,15 @@ void ImageTransfer::EnqueueSend(int ctype, int64_t cid, const std::string& clien
 
 void ImageTransfer::EnqueueDownload(int64_t msgid, const std::string& fileid,
                                     const std::string& expectMd5, int64_t expectSize,
-                                    int64_t selfUserId)
+                                    const std::wstring& selfAccount)
 {
     Task task;
-    task.m_kind       = task_download;
-    task.m_msgid      = msgid;
-    task.m_fileid     = fileid;
-    task.m_expectMd5  = expectMd5;
-    task.m_expectSize = expectSize;
-    task.m_selfUserId = selfUserId;
+    task.m_kind        = task_download;
+    task.m_msgid       = msgid;
+    task.m_fileid      = fileid;
+    task.m_expectMd5   = expectMd5;
+    task.m_expectSize  = expectSize;
+    task.m_selfAccount = selfAccount;
 
     {
         std::lock_guard<std::mutex> guard(m_queueMtx);
@@ -384,30 +393,33 @@ void ImageTransfer::EnqueueDownload(int64_t msgid, const std::string& fileid,
              (long long)msgid, fileid.c_str());
 }
 
-void ImageTransfer::EnqueueAvatarUpload(const std::wstring& localPath, int64_t selfUserId)
+void ImageTransfer::EnqueueAvatarUpload(const std::wstring& localPath,
+                                        const std::wstring& selfAccount)
 {
     Task task;
-    task.m_kind       = task_avatar_upload;
-    task.m_localpath  = localPath;
-    task.m_selfUserId = selfUserId;
+    task.m_kind        = task_avatar_upload;
+    task.m_localpath   = localPath;
+    task.m_selfAccount = selfAccount;
 
     {
         std::lock_guard<std::mutex> guard(m_queueMtx);
         m_queue.push_back(task);
     }
     m_queueCv.notify_one();
-    LOG_INFO("ImageTransfer enqueue avatar upload, selfUserId=%lld.", (long long)selfUserId);
+    LOG_INFO("ImageTransfer enqueue avatar upload, account=%s.",
+             EncodeUtil::UnicodeToUtf8(selfAccount).c_str());
 }
 
-void ImageTransfer::EnqueueAvatarDownload(const std::string& fileid, int64_t selfUserId)
+void ImageTransfer::EnqueueAvatarDownload(const std::string& fileid,
+                                          const std::wstring& selfAccount)
 {
-    if (fileid.empty() || selfUserId <= 0)
+    if (fileid.empty() || selfAccount.empty())
     {
         return;
     }
 
     //已缓存则无需下载：直接回投成功，UI 据本地路径渲染。
-    std::wstring cached = AvatarCacheFilePathForFileId(selfUserId, fileid);
+    std::wstring cached = AvatarCacheFilePathForFileId(selfAccount, fileid);
     if (!cached.empty() && ::GetFileAttributesW(cached.c_str()) != INVALID_FILE_ATTRIBUTES)
     {
         PostAvatarDownloadResult(fileid, true, cached);
@@ -415,9 +427,9 @@ void ImageTransfer::EnqueueAvatarDownload(const std::string& fileid, int64_t sel
     }
 
     Task task;
-    task.m_kind       = task_avatar_download;
-    task.m_fileid     = fileid;
-    task.m_selfUserId = selfUserId;
+    task.m_kind        = task_avatar_download;
+    task.m_fileid      = fileid;
+    task.m_selfAccount = selfAccount;
 
     {
         std::lock_guard<std::mutex> guard(m_queueMtx);
@@ -559,7 +571,7 @@ void ImageTransfer::ProcessAvatarUpload(const Task& task)
 {
     //与 ProcessSend 的上传部分完全一致，区别只有两点：scene=file_scene_avatar，且
     //成功后<b>不发聊天消息</b>，而是把图落地到头像缓存、回投 fileid/md5/本地路径。
-    if (task.m_selfUserId <= 0)
+    if (task.m_selfAccount.empty())
     {
         PostAvatarUploadResult(false, error_code_upload_fail, "not logged in", "", "", L"");
         return;
@@ -645,7 +657,7 @@ void ImageTransfer::ProcessAvatarUpload(const Task& task)
     }
 
     //7. 落地到头像缓存 Users\<userId>\Avatar\<fileid>，供本端即时渲染、后续免下载。
-    std::wstring cachePath = buildAvatarCachePath(task.m_selfUserId, ru.m_fileid);
+    std::wstring cachePath = buildAvatarCachePath(task.m_selfAccount, ru.m_fileid);
     if (cachePath.empty() || !writeWholeFile(cachePath, bytes))
     {
         //缓存落地失败不算致命：fileid 已拿到，仍回投成功，但本地路径为空，
@@ -724,7 +736,7 @@ void ImageTransfer::ProcessAvatarDownload(const Task& task)
 
     //3. 原子落地缓存 Users\<userId>\Avatar\<fileid>（先写临时再 rename）。头像下载不强制
     //   校验 md5（联系人侧未必带期望 md5）；内容由 fileid 唯一对应。
-    std::wstring cachePath = buildAvatarCachePath(task.m_selfUserId, task.m_fileid);
+    std::wstring cachePath = buildAvatarCachePath(task.m_selfAccount, task.m_fileid);
     if (cachePath.empty())
     {
         PostAvatarDownloadResult(task.m_fileid, false, std::wstring());
@@ -927,7 +939,7 @@ void ImageTransfer::ProcessDownload(const Task& task)
     //   先写临时文件、整文件写完再 rename 成最终 <md5> 名——保证只要 <md5>
     //   存在即为完整文件（崩在写中途只会留下临时文件，绝不留半截 <md5>），
     //   读取侧因而可只判存在即认完整。
-    std::wstring cachePath = buildImageCachePath(task.m_selfUserId, actual);
+    std::wstring cachePath = buildImageCachePath(task.m_selfAccount, actual);
     std::wstring tmpPath   = cachePath + L".downloading";
     if (!writeWholeFile(tmpPath, bytes))
     {

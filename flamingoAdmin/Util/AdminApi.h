@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  flamingoAdmin —— admin 控制台接口的业务层。
  *
  *  本文件是「业务层」：把 admin 接口的请求 / 应答与 JSON 细节封装成纯函数，
@@ -91,6 +91,12 @@ enum ApiTag
     kApiTagDashTrend         = 53, // 仪表盘近 14 天消息量 dashboard/messagetrend.do
     kApiTagUserMsgStats      = 54, // 员工消息与会话统计 user/messagestats.do
     kApiTagGroupCreate       = 55, // 新建群（企业详情页把成员拉进群）group/create.do
+    kApiTagCvScanPackages    = 56, // 扫描升级包目录 clientversion/scanpackages.do
+    kApiTagCvList            = 57, // 版本记录列表 clientversion/list.do
+    kApiTagCvCreate          = 58, // 新建版本记录 clientversion/create.do
+    kApiTagCvUpdate          = 59, // 修改版本记录 clientversion/update.do
+    kApiTagCvSetEnabled      = 60, // 发布 / 撤回 clientversion/setenabled.do
+    kApiTagCvRepublish       = 61, // 回滚（重新发布旧版本）clientversion/republish.do
 };
 
 // 当前登录管理员的会话信息（进程级单例）。
@@ -1140,6 +1146,164 @@ HttpRequest MakeAuditStatsRequest(const ServerConfig& server,
 
 // 解析审计统计概览应答，得到 AuditStatsResult。
 AuditStatsResult ParseAuditStatsResponse(const HttpResult& http);
+
+
+// ---- 客户端版本（模块 10）----
+// 说明：升级包由运维手工放进服务器的升级包目录，控制台<u>不负责上传</u>。
+//       scanpackages.do 把目录里的候选包连同大小与 MD5 列出来，管理员挑一个即可，
+//       这两个值不需要人工输入。整组接口仅平台超管可用。
+
+// 升级包目录里的一个候选文件（scanpackages.do 返回）。
+struct UpdatePackageItem
+{
+    CString   m_fileName;   // 文件名，界面下拉里显示的就是它
+    long long m_size;       // 文件字节数
+    CString   m_md5;        // 内容 MD5（小写十六进制 32 位），建记录时回传给服务端
+    bool      m_isZip;      // 文件头是否为 zip 魔数；false 说明多半放错了文件
+    bool      m_used;       // 是否已被某条版本记录引用，避免对同一个包重复建记录
+
+    UpdatePackageItem()
+        : m_size(0), m_isZip(false), m_used(false)
+    {
+    }
+};
+
+// 扫描升级包目录（scanpackages.do）的解析结果。
+struct ScanPackagesResult
+{
+    bool                           m_transportOk;  // HTTP 往返是否成功
+    int                            m_code;         // 业务错误码
+    CString                        m_message;      // 失败时给用户看的中文提示
+    CString                        m_dir;          // 服务端的升级包目录，界面上提示"把包放到这里"
+    std::vector<UpdatePackageItem> m_list;         // 候选包列表（成功时有效）
+
+    ScanPackagesResult()
+        : m_transportOk(false), m_code(0)
+    {
+    }
+
+    bool Succeeded() const { return m_transportOk && m_code == 0; }
+};
+
+// 一条客户端版本记录（list.do 返回）。
+struct ClientVersionItem
+{
+    long long m_id;              // 记录 ID
+    int       m_platform;        // 客户端平台：1 Windows PC、2 Android
+    CString   m_version;         // 版本号
+    CString   m_minVersion;      // 允许登录的最低版本号
+    CString   m_releaseNote;     // 更新说明
+    CString   m_md5;             // 升级包内容 MD5
+    long long m_size;            // 升级包字节数
+    CString   m_packageName;     // 升级包原始文件名
+    bool      m_forced;          // 是否强制升级：勾了之后客户端不给"稍后"出口、也不放行登录
+    int       m_enabled;         // 0 草稿、1 已发布
+    long long m_publishTime;     // 发布时间，Unix 毫秒
+    long long m_creatorAdminId;  // 发布人管理员 ID
+    long long m_createTime;      // 记录创建时间，Unix 毫秒
+    bool      m_isCurrent;       // 是否为该平台当前真正生效的那一条
+
+    ClientVersionItem()
+        : m_id(0), m_platform(0), m_size(0), m_forced(false), m_enabled(0)
+        , m_publishTime(0), m_creatorAdminId(0), m_createTime(0), m_isCurrent(false)
+    {
+    }
+};
+
+// 版本记录列表（list.do）的解析结果。
+struct ClientVersionListResult
+{
+    bool                           m_transportOk;  // HTTP 往返是否成功
+    int                            m_code;         // 业务错误码
+    CString                        m_message;      // 失败时给用户看的中文提示
+    std::vector<ClientVersionItem> m_list;         // 版本记录列表（成功时有效）
+
+    ClientVersionListResult()
+        : m_transportOk(false), m_code(0)
+    {
+    }
+
+    bool Succeeded() const { return m_transportOk && m_code == 0; }
+};
+
+// 新建版本记录（create.do）的解析结果，带回服务端分配的记录 ID。
+struct ClientVersionCreateResult
+{
+    bool      m_transportOk;  // HTTP 往返是否成功
+    int       m_code;         // 业务错误码
+    CString   m_message;      // 失败时给用户看的中文提示
+    long long m_id;           // 新记录 ID（成功时有效）
+
+    ClientVersionCreateResult()
+        : m_transportOk(false), m_code(0), m_id(0)
+    {
+    }
+
+    bool Succeeded() const { return m_transportOk && m_code == 0; }
+};
+
+// 构造扫描升级包目录请求（POST /admin/clientversion/scanpackages.do）。
+// 服务端要把目录里每个文件完整读一遍算 MD5，故超时给得比别的接口宽。
+HttpRequest MakeScanPackagesRequest(const ServerConfig& server, const CString& token);
+
+// 解析扫描升级包目录应答，得到 ScanPackagesResult。
+ScanPackagesResult ParseScanPackagesResponse(const HttpResult& http);
+
+// 构造版本记录列表请求（POST /admin/clientversion/list.do）。
+//   platform：按平台过滤；取 0 表示不过滤，返回全部平台。
+HttpRequest MakeClientVersionListRequest(const ServerConfig& server,
+                                         const CString& token, int platform);
+
+// 解析版本记录列表应答，得到 ClientVersionListResult。
+ClientVersionListResult ParseClientVersionListResponse(const HttpResult& http);
+
+// 构造新建版本记录请求（POST /admin/clientversion/create.do）。
+//   platform：客户端平台（1 Windows PC）。
+//   version：新版本号，须与客户端内置版本号一致。
+//   minVersion：允许登录的最低版本号，低于它的客户端会被强制升级。
+//   releaseNote：更新说明，展示在客户端升级窗里。
+//   md5：选中的候选包 MD5，来自 scanpackages.do 的结果。
+//   forced：是否强制升级。勾上之后客户端的升级窗不给"稍后"出口、也不放行登录，
+//           直到装完为止。它与 minVersion 相互独立：后者是版本门槛（低于它连登录都
+//           会被服务端拒绝），前者是发布人的主观决定（这个版本必须装）。
+//   publish：true 直接发布 / false 先存草稿。
+// 包的大小与文件名由服务端按 md5 自行查出，<u>不由本请求携带</u>——两者一旦不一致，
+// 表现为客户端下完校验失败，那时很难查出是谁写错的。
+HttpRequest MakeClientVersionCreateRequest(const ServerConfig& server, const CString& token,
+                                           int platform, const CString& version,
+                                           const CString& minVersion,
+                                           const CString& releaseNote,
+                                           const CString& md5, bool forced, bool publish);
+
+// 解析新建版本记录应答，得到 ClientVersionCreateResult。
+ClientVersionCreateResult ParseClientVersionCreateResponse(const HttpResult& http);
+
+// 构造修改版本记录请求（POST /admin/clientversion/update.do）。
+//   minVersion：新的最低版本号；传空串表示不改动该项。
+//   releaseNote：新的更新说明；空串是合法值，表示清空说明。
+//   forced：新的强制升级开关。
+// 只能改这两项：版本号与升级包三件套一旦发布就可能已被客户端下载，原地改会让
+// 同一个版本号对应两份内容。要换包请新建一条记录。应答复用 ParseEnterpriseActionResponse。
+HttpRequest MakeClientVersionUpdateRequest(const ServerConfig& server, const CString& token,
+                                           long long id, const CString& minVersion,
+                                           const CString& releaseNote, bool forced);
+
+// 构造发布 / 撤回请求（POST /admin/clientversion/setenabled.do）。
+//   enabled：true 发布 / false 撤回。
+// 应答复用 ParseEnterpriseActionResponse。
+HttpRequest MakeClientVersionSetEnabledRequest(const ServerConfig& server, const CString& token,
+                                               long long id, bool enabled);
+
+// 构造回滚请求（POST /admin/clientversion/republish.do）：把旧版本重新发布一次，
+// 使其立刻成为"最新发布"。数据层与"发布"是同一个动作，分成两个接口是为了让
+// 审计日志能区分意图。应答复用 ParseEnterpriseActionResponse。
+HttpRequest MakeClientVersionRepublishRequest(const ServerConfig& server,
+                                              const CString& token, long long id);
+
+// 把字节数格式化成人能读的大小文本，如 36 -> "36 B"、1536 -> "1.5 KB"、
+// 3221225472 -> "3.00 GB"。列表与下拉里显示包大小用。
+//   bytes：字节数；负数按 0 处理。
+CString FormatPackageSize(long long bytes);
 
 } // namespace adminapi
 

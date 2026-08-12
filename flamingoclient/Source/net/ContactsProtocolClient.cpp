@@ -156,6 +156,24 @@ bool ContactsProtocolClient::parseContactsResponse(const std::string& jsonbody, 
         }
     }
 
+    //「特别关注」：扁平的 userid 字符串数组（只装人，不像 favorites 那样带 ctype），
+    //服务端已按标记时间倒序排好，本端保持原序。
+    //字段整体缺失是合法情形（老服务端不带这个字段），此时名单为空、不会弹任何上下线提示。
+    const Json::Value& starred = root["starred"];
+    if (starred.isArray())
+    {
+        for (Json::ArrayIndex i = 0; i < starred.size(); ++i)
+        {
+            const int64_t uid = jsonToInt64(starred[i]);
+            //非法项跳过而不是整条应答判失败 —— 名单里混进一条脏数据，
+            //不该连整个通讯录都收不到。
+            if (uid <= 0)
+                continue;
+
+            out.m_starred.push_back(uid);
+        }
+    }
+
     return true;
 }
 
@@ -209,6 +227,34 @@ bool ContactsProtocolClient::parseUserInfoChangedNotify(const std::string& jsonb
         out.m_nickname   = p["nickname"].isString()   ? p["nickname"].asString()   : std::string();
         out.m_signature  = p["signature"].isString()  ? p["signature"].asString()  : std::string();
     }
+    return true;
+}
+
+bool ContactsProtocolClient::parseOrgStructureChangedNotify(const std::string& jsonbody,
+                                                            OrgStructureChangedNotify& out)
+{
+    Json::CharReaderBuilder b;
+    Json::Value root;
+    JSONCPP_STRING errs;
+    Json::CharReader* reader = b.newCharReader();
+    bool ok = reader->parse(jsonbody.c_str(), jsonbody.c_str() + jsonbody.size(), &root, &errs);
+    delete reader;
+    if (!ok || !errs.empty() || !root.isObject())
+        return false;
+
+    //changetype 是这条推送里唯一的必有字段，缺了或者类型不对就没法判断它到底
+    //在说什么，直接当无效丢弃。
+    if (!root["changetype"].isInt())
+        return false;
+
+    int changetype = root["changetype"].asInt();
+    if (changetype != org_change_department && changetype != org_change_member)
+        return false;   //将来服务端若加了新的变更类型，老客户端在这里安全地忽略掉
+
+    out.m_changetype = changetype;
+    //deptid 服务端写的是数字，这里仍走 jsonToInt64：部门ID从 0x60000000 起递增，
+    //早晚要越过 32 位，用 int64 读才不会截断。缺字段时得 0，按"未指明部门"处理。
+    out.m_deptid = jsonToInt64(root["deptid"]);
     return true;
 }
 

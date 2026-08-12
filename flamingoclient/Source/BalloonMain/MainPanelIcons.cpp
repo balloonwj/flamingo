@@ -76,6 +76,60 @@ void DrawGear(Gdiplus::Graphics& g, Gdiplus::Pen& pen,
     }
 }
 
+// ---- 在线状态徽标（presence badge）的几何常量 ----
+//
+// 全部以 viewBox 24 为基准，圆心固定在正中 (12,12)。数值不是随手定的：按 10px /
+// 12px / 16px 三档实拍逐一调过（2026-08-12 效果图确认），指针与横杠细于 3.0 时
+// 10px 下会糊成一团看不出字形，空心环内孔小于 5.6 时看不出是个环、只像个灰点。
+const Gdiplus::REAL kBadgeCenter      = 12.0f;   // 徽标圆心（viewBox 24 的正中）
+const Gdiplus::REAL kBadgeRadius      = 10.0f;   // 圆底 / 外环半径
+const Gdiplus::REAL kBadgeGlyphWidth  = 3.0f;    // 白色字形（时钟指针 / 横杠）的线宽
+const Gdiplus::REAL kBadgeHourEndY    = 7.4f;    // 时针端点 y —— 自圆心指向 12 点方向
+const Gdiplus::REAL kBadgeMinuteEndX  = 15.8f;   // 分针端点 x —— 自圆心指向 3 点方向
+const Gdiplus::REAL kBadgeBarLeftX    = 7.0f;    // 忙碌横杠左端 x
+const Gdiplus::REAL kBadgeBarRightX   = 17.0f;   // 忙碌横杠右端 x
+const Gdiplus::REAL kBadgeRingHoleR   = 5.6f;    // 离线空心环的内孔半径（真镂空）
+
+// ---- 「特别关注」星标（kIconStar）----
+// 顶点数：正五角星的轮廓是十边形，外圆五个尖、内圆五个凹。
+const int kStarPointCount = 10;
+// 外接半径（viewBox 24 单位）。取 10 与 kBadgeRadius 同值，星与状态徽标在同一
+// 尺寸下画出来视觉重量相当，摆在同一行里不会一个显眼一个发虚。
+const Gdiplus::REAL kStarOuterRadius = 10.0f;
+// 内外半径比。0.382 是正五芒星的固有比例（由正五边形对角线的黄金分割得出），
+// 偏大星显得胖、偏小显得瘦。
+const Gdiplus::REAL kStarInnerRatio = 0.382f;
+// 第一个顶点的方位角（度）。-90 即 12 点方向，保证尖角朝正上。
+const double kStarStartAngleDeg = -90.0;
+// 相邻顶点的夹角（度）：十个顶点均分一周，360 / 10。
+const double kStarStepAngleDeg = 36.0;
+// 圆周率。<cmath> 的 M_PI 不是标准里保证有的（MSVC 要先定义 _USE_MATH_DEFINES），
+// 本文件只用这一处，直接给个常量省得为它动编译选项。
+const double kPi = 3.14159265358979323846;
+
+// 徽标上的字形恒为白色 —— 圆底已经带了状态色，字形再着色会两种颜色打架；
+// 同类状态徽标的通行做法也是彩色圆底 + 纯白字形。
+const Gdiplus::Color kBadgeGlyphColor(255, 255, 255, 255);
+
+// 画徽标的实心圆底（在线 / 离开 / 忙碌三种字形共用这一层）。
+void FillBadgeDisc(Gdiplus::Graphics& g, const Gdiplus::Color& color)
+{
+    Gdiplus::SolidBrush brush(color);
+    g.FillEllipse(&brush,
+                  kBadgeCenter - kBadgeRadius, kBadgeCenter - kBadgeRadius,
+                  kBadgeRadius * 2.0f, kBadgeRadius * 2.0f);
+}
+
+// 在徽标圆底上画一条白色字形线段（圆头圆角，线宽 kBadgeGlyphWidth）。
+void DrawBadgeGlyphLine(Gdiplus::Graphics& g,
+                        Gdiplus::REAL x0, Gdiplus::REAL y0,
+                        Gdiplus::REAL x1, Gdiplus::REAL y1)
+{
+    Gdiplus::Pen pen(kBadgeGlyphColor, kBadgeGlyphWidth);
+    MakeStrokePen(pen);
+    g.DrawLine(&pen, x0, y0, x1, y1);
+}
+
 // 画一个朝右的喇叭轮廓（左侧矩形音箱 + 右侧梯形号角），供"声音 / 静音"图标共用。
 // 右侧的声波弧或叉号由各自的 case 另画。
 void AddSpeaker(Gdiplus::GraphicsPath& path)
@@ -308,6 +362,64 @@ void DrawLineIcon(Gdiplus::Graphics& g, int kind,
             g.DrawPath(&pen, &spk);
             g.DrawLine(&pen, 15.5f, 8.5f, 21.0f, 15.5f);       // 叉（左上 → 右下）
             g.DrawLine(&pen, 21.0f, 8.5f, 15.5f, 15.5f);       // 叉（右上 → 左下）
+        }
+        break;
+
+    case kIconPresenceOnline:
+        // 在线：一个实心圆，不加任何字形 —— "满"本身就是在线的意思，也与另外三种
+        // 带缺口 / 带字形的徽标形成最强对比。
+        FillBadgeDisc(g, color);
+        break;
+
+    case kIconPresenceAway:
+        // 离开：实心圆底 + 白色时钟指针（时针指 12 点、分针指 3 点），取"离开一会儿、
+        // 稍后回来"的意思。
+        FillBadgeDisc(g, color);
+        DrawBadgeGlyphLine(g, kBadgeCenter, kBadgeCenter, kBadgeCenter, kBadgeHourEndY);
+        DrawBadgeGlyphLine(g, kBadgeCenter, kBadgeCenter, kBadgeMinuteEndX, kBadgeCenter);
+        break;
+
+    case kIconPresenceBusy:
+        // 忙碌：实心圆底 + 一条居中白横杠，即通用的"禁止 / 请勿打扰"符号。
+        FillBadgeDisc(g, color);
+        DrawBadgeGlyphLine(g, kBadgeBarLeftX, kBadgeCenter, kBadgeBarRightX, kBadgeCenter);
+        break;
+
+    case kIconPresenceOffline:
+        // 离线：空心圆环。内孔用 FillModeAlternate 真镂空（外圆与内圆同属一条 path，
+        // 交替填充规则下内圆成为洞），底色直接透出来 —— 这样在白底、悬停底、深色胶囊
+        // 上都成立，不必假设背景是白的。
+        {
+            Gdiplus::GraphicsPath ring(Gdiplus::FillModeAlternate);
+            ring.AddEllipse(kBadgeCenter - kBadgeRadius, kBadgeCenter - kBadgeRadius,
+                            kBadgeRadius * 2.0f, kBadgeRadius * 2.0f);
+            ring.AddEllipse(kBadgeCenter - kBadgeRingHoleR, kBadgeCenter - kBadgeRingHoleR,
+                            kBadgeRingHoleR * 2.0f, kBadgeRingHoleR * 2.0f);
+
+            Gdiplus::SolidBrush brush(color);
+            g.FillPath(&brush, &ring);
+        }
+        break;
+
+    case kIconStar:
+        // 特别关注：实心正五角星，尖角朝上。十个顶点交替落在外圆与内圆上，
+        // 内外半径比取正五芒星的 0.382 —— 比这个值大星会显得胖、小则显得瘦。
+        {
+            Gdiplus::PointF pts[kStarPointCount];
+            for (int i = 0; i < kStarPointCount; ++i)
+            {
+                // 自 12 点方向起，每个顶点转 36 度（360 / 10）。
+                const double angle = (kStarStartAngleDeg + i * kStarStepAngleDeg)
+                                     * kPi / 180.0;
+                const Gdiplus::REAL r = ((i % 2) == 0)
+                                        ? kStarOuterRadius
+                                        : (kStarOuterRadius * kStarInnerRatio);
+                pts[i].X = kBadgeCenter + r * (Gdiplus::REAL)cos(angle);
+                pts[i].Y = kBadgeCenter + r * (Gdiplus::REAL)sin(angle);
+            }
+
+            Gdiplus::SolidBrush brush(color);
+            g.FillPolygon(&brush, pts, kStarPointCount);
         }
         break;
 

@@ -35,6 +35,10 @@ enum KickoutReasonValue
     kKickoutReasonMaintenance     = 3,   // 服务器进入维护，主动断开全部连接
     kKickoutReasonPasswordChanged = 4,   // 账号密码被修改（本人在别处改密或走了找回密码），其余设备须用新密码重登
     kKickoutReasonKickedByUser    = 5,   // 本人在另一台设备上从设备列表里主动踢掉了本设备（cmd_kick_device）
+    kKickoutReasonEnterpriseDisabled = 6,// 所属企业被平台管理员停用，该企业全员下线；企业恢复后可再登录
+    kKickoutReasonEnterpriseDeleted  = 7,// 所属企业被平台管理员删除，该企业全员下线；账号已无企业归属，无法再登录
+    kKickoutReasonAccountDeleted     = 8,// 账号被管理员删除，不可恢复（与 2 停用可恢复相区分）
+    kKickoutReasonKickedByAdmin      = 9,// 本设备被管理员在控制台强制注销（与 5 本人从别的设备踢的相区分）
 };
 
 /**

@@ -333,6 +333,103 @@ void DepartmentManager::updateCachedMemberAvatar(int64_t userId, int32_t facetyp
     }
 }
 
+void DepartmentManager::updateCachedMemberPosition(int64_t userId, const std::string& position)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+    //同一用户可能兼属多个部门，但职务只跟着主部门走，故加 isprimary 条件，
+    //与 EmployeeManager::updateEmployee 里那条 UPDATE 的 WHERE 保持一致。
+    for (size_t i = 0; i < m_cachedDepts.size(); ++i)
+    {
+        std::vector<dept::DepartmentMember>& members = m_cachedDepts[i].members;
+        for (size_t k = 0; k < members.size(); ++k)
+        {
+            if (members[k].userid == userId && members[k].isprimary == 1)
+            {
+                members[k].position = position;
+            }
+        }
+    }
+}
+
+void DepartmentManager::removeCachedMember(int64_t userId)
+{
+    std::lock_guard<std::mutex> guard(m_mutex);
+
+    int removed = 0;
+    for (size_t i = 0; i < m_cachedDepts.size(); ++i)
+    {
+        std::vector<dept::DepartmentMember>& members = m_cachedDepts[i].members;
+        //倒序遍历后再 erase：正序删会让后续元素前移、跳过紧邻的下一个。
+        //同一用户在同一部门理论上只有一条记录，但这里不依赖该前提。
+        for (size_t k = members.size(); k > 0; --k)
+        {
+            size_t idx = k - 1;
+            if (members[idx].userid == userId)
+            {
+                members.erase(members.begin() + idx);
+                ++removed;
+            }
+        }
+    }
+
+    //关键路径日志：删员工时若这里报 0，说明缓存与库已经不同步，界面上会表现为
+    //"删不掉"，据此可直接判定问题出在缓存而不是数据库。
+    LOGI("DepartmentManager::removeCachedMember, userid: %lld, removed member rows: %d",
+         (long long)userId, removed);
+}
+
+void DepartmentManager::removeCachedEnterprise(int64_t enterpriseId)
+{
+    //企业ID 为 0 是"无企业归属"的哨兵值，不是真实企业；真按它清理会把所有
+    //未归属用户的映射误删，直接挡掉。
+    if (enterpriseId == 0)
+    {
+        LOGE("DepartmentManager::removeCachedEnterprise ignored: enterpriseid is 0");
+        return;
+    }
+
+    int removedDepts = 0;
+    {
+        std::lock_guard<std::mutex> guard(m_mutex);
+
+        //倒序遍历后再 erase，避免正序删导致后续元素前移、跳过紧邻的下一个。
+        for (size_t i = m_cachedDepts.size(); i > 0; --i)
+        {
+            size_t idx = i - 1;
+            if (m_cachedDepts[idx].enterpriseid == enterpriseId)
+            {
+                m_cachedDepts.erase(m_cachedDepts.begin() + idx);
+                ++removedDepts;
+            }
+        }
+    }
+
+    //两把锁分开取、不嵌套持有：头文件约定的锁序是 m_mutex→m_userEnterpriseCacheMutex，
+    //这里上面那段已经出了作用域、锁已释放，不构成嵌套，也就不存在反向加锁的风险。
+    int removedUsers = 0;
+    {
+        std::lock_guard<std::mutex> guard(m_userEnterpriseCacheMutex);
+
+        std::map<int64_t, int64_t>::iterator it = m_userEnterpriseCache.begin();
+        while (it != m_userEnterpriseCache.end())
+        {
+            if (it->second == enterpriseId)
+            {
+                //erase(it++) 而不是 erase(it)：后者会让 it 失效，再自增就是未定义行为。
+                m_userEnterpriseCache.erase(it++);
+                ++removedUsers;
+            }
+            else
+            {
+                ++it;
+            }
+        }
+    }
+
+    LOGI("DepartmentManager::removeCachedEnterprise, enterpriseid: %lld, removed depts: %d, removed user-enterprise entries: %d",
+         (long long)enterpriseId, removedDepts, removedUsers);
+}
+
 int32_t DepartmentManager::createDepartment(int64_t enterpriseId, const dept::OperateDepartmentReq& req, int64_t& outDeptId)
 {
     if (req.deptname.empty())

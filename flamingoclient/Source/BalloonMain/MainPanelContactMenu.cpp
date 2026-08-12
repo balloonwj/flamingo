@@ -13,6 +13,7 @@
 
 #include "MainPanelContactMenu.h"
 #include "FavoritesModel.h"   // GetMenuLabel（收藏项文案，与会话右键菜单共用同一份）
+#include "StarredModel.h"     // GetMenuLabel（特别关注项文案，四处菜单共用同一份）
 
 namespace balloonmain {
 
@@ -67,6 +68,10 @@ std::vector<ContactMenuEntry> BuildContactMenuModel(const ContactMenuState& stat
     // 免得三处菜单各写一份措辞不同的字面量。
     PushItem(items, kContactMenuFavorite,
              FavoritesModel::GetMenuLabel(state.m_favorite));
+    // 特别关注紧跟收藏 —— 两者都是"给这个人打个标记"，摆在一起用户好找。文案同样
+    // 由模型统一给出（四处菜单共用一份措辞，见 StarredModel::GetMenuLabel）。
+    PushItem(items, kContactMenuStarred,
+             StarredModel::GetMenuLabel(state.m_starred));
     PushItem(items, kContactMenuViewHistory, L"查看历史消息");
     PushItem(items, kContactMenuRemark,      L"修改备注");
     PushSeparator(items);

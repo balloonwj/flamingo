@@ -14,7 +14,8 @@
 #include "Widgets/Widgets.h"
 #include "Widgets/CommonWidgets.h"
 #include "Mock/DataStore.h"
-#include "Util/OrgTreeBuilder.h"   // kSyntheticRootId（尚未迁移的存量数据兜底）
+#include "Util/OrgTreeBuilder.h"     // kSyntheticRootId（尚未迁移的存量数据兜底）
+#include "Util/OrgToolbarLayout.h"   // 工具条搜索框 / 图标按钮的摆位（纯函数，有单测）
 
 #include "Controls/Basic/DuiButton.h"   // FlatButton 已迁到 balloonwjui::DuiButton
 #include "Controls/Input/DuiEditHost.h" // 组织树搜索框
@@ -40,6 +41,12 @@ const int kAvatarY      = 42;   // 企业头像距头部顶部
 const int kAvatarSz     = 44;   // 企业头像边长
 const int kBtnH         = 34;   // 头部操作按钮高度
 const int kToolBtn      = 28;   // 工具条图标按钮边长
+const int kToolBtnGap    = 4;   // 工具条相邻图标按钮之间的间距
+const int kToolSidePad   = 12;  // 工具条左 / 右内边距
+const int kToolSearchGap = 8;   // 搜索框右边界与最左侧图标按钮之间的间距
+const int kOrgSearchH    = 28;  // 组织树搜索框高度
+const int kToolBtnIcon   = 14;  // 工具条图标按钮内图标边长
+const int kToolBtnCount  = 3;   // 工具条图标按钮个数（刷新 / 展开全部 / 折叠）
 
 int MeasureW(LPCTSTR text, HFONT font)
 {
@@ -134,6 +141,37 @@ EnterpriseDetailScreen::EnterpriseDetailScreen()
     orgSearch->SetIcon(DuiEditHost::RightIcon, 30, &DrawOrgSearchIcon);
     m_orgSearch = orgSearch.get();
     AddChild(std::move(orgSearch));
+
+    // ---- 组织树工具条右侧的三个图标按钮 ----
+    // 复用 admin 自己的 ui::IconButton（hover 圆角底色 + tooltip + DUIN_CLICK），
+    // 三个按钮外观统一。点击通知直接发到 AdminFrame（NotifyParent 只通知宿主
+    // 窗口，不沿控件父链冒泡），由 AdminFrame 转调回本屏或发起网络请求。
+    auto btnRefresh = std::make_unique<ui::IconButton>();
+    btnRefresh->SetCtrlId(kIdOrgRefresh);
+    btnRefresh->SetIcon(ui::Icon::Refresh);
+    btnRefresh->SetIconSize(kToolBtnIcon);
+    btnRefresh->SetColors(theme::kInk500, theme::kInk700, theme::kInk50);
+    btnRefresh->SetTooltip(_T("刷新组织架构"));
+    m_btnOrgRefresh = btnRefresh.get();
+    AddChild(std::move(btnRefresh));
+
+    auto btnExpandAll = std::make_unique<ui::IconButton>();
+    btnExpandAll->SetCtrlId(kIdOrgExpandAll);
+    btnExpandAll->SetIcon(ui::Icon::ChevronDown);
+    btnExpandAll->SetIconSize(kToolBtnIcon);
+    btnExpandAll->SetColors(theme::kInk500, theme::kInk700, theme::kInk50);
+    btnExpandAll->SetTooltip(_T("展开全部部门"));
+    m_btnOrgExpandAll = btnExpandAll.get();
+    AddChild(std::move(btnExpandAll));
+
+    auto btnCollapse = std::make_unique<ui::IconButton>();
+    btnCollapse->SetCtrlId(kIdOrgCollapse);
+    btnCollapse->SetIcon(ui::Icon::ChevronRight);
+    btnCollapse->SetIconSize(kToolBtnIcon);
+    btnCollapse->SetColors(theme::kInk500, theme::kInk700, theme::kInk50);
+    btnCollapse->SetTooltip(_T("折叠全部部门"));
+    m_btnOrgCollapse = btnCollapse.get();
+    AddChild(std::move(btnCollapse));
 
     // ---- 组织树 + 详情面板 ----
     auto tree = std::make_unique<OrgTree>();
@@ -238,6 +276,22 @@ void EnterpriseDetailScreen::OnOrgSearchChanged()
     m_tree->SetFilter(m_orgSearch->GetText());
 }
 
+void EnterpriseDetailScreen::ExpandAllOrg()
+{
+    if (m_tree != nullptr)
+    {
+        m_tree->ExpandAll();
+    }
+}
+
+void EnterpriseDetailScreen::CollapseAllOrg()
+{
+    if (m_tree != nullptr)
+    {
+        m_tree->CollapseAll();
+    }
+}
+
 void EnterpriseDetailScreen::SelectThunk(void* user, const CString& nodeId)
 {
     static_cast<EnterpriseDetailScreen*>(user)->OnNodeSelected(nodeId);
@@ -318,6 +372,11 @@ void EnterpriseDetailScreen::SetSubTab(int tab)
     m_btnPrimary->SetText(org ? _T("新增员工") : _T("新建服务号"));
     // 「新建群」只在组织架构 tab 有意义；服务号 tab 隐藏。
     m_btnCreateGroup->SetVisible(org);
+    // 工具条三个图标按钮同理：服务号 tab 下整个树列都不显示，按钮须一并隐藏，
+    // 否则会浮在服务号面板上方。
+    m_btnOrgRefresh->SetVisible(org);
+    m_btnOrgExpandAll->SetVisible(org);
+    m_btnOrgCollapse->SetVisible(org);
     Invalidate();
 }
 
@@ -367,17 +426,22 @@ void EnterpriseDetailScreen::Layout(const RECT& rcAvail)
     const int bodyT = T + kHeaderH;
     const int treeColR = L + kTreeColW;
 
-    // 树工具条上的两个图标按钮（折叠 / 展开），右对齐。
-    const int toolCy = bodyT + kToolbarH / 2;
-    m_rcCollapse  = RECT{ treeColR - 12 - kToolBtn, toolCy - kToolBtn / 2,
-                          treeColR - 12,            toolCy + kToolBtn / 2 };
-    m_rcExpandAll = RECT{ m_rcCollapse.left - 4 - kToolBtn, toolCy - kToolBtn / 2,
-                          m_rcCollapse.left - 4,            toolCy + kToolBtn / 2 };
+    // 树工具条：搜索框占左侧，三个图标按钮（刷新 / 展开全部 / 折叠）整组右对齐。
+    // 具体摆位交给 Util/OrgToolbarLayout 的纯函数，那部分有单测。
+    OrgToolbarSpec toolSpec;
+    toolSpec.m_buttonCount = kToolBtnCount;
+    toolSpec.m_buttonSize  = kToolBtn;
+    toolSpec.m_buttonGap   = kToolBtnGap;
+    toolSpec.m_sidePad     = kToolSidePad;
+    toolSpec.m_searchGap   = kToolSearchGap;
+    toolSpec.m_searchH     = kOrgSearchH;
+    const OrgToolbarMetrics toolMetrics = LayoutOrgToolbar(
+        RECT{ L, bodyT, treeColR, bodyT + kToolbarH }, toolSpec);
 
-    // 组织树搜索框:工具条左侧,右到展开 / 折叠图标之前。
-    const int kOrgSearchH = 28;
-    m_orgSearch->ForceLayout(RECT{ L + 12, toolCy - kOrgSearchH / 2,
-                                   m_rcExpandAll.left - 8, toolCy + kOrgSearchH / 2 });
+    m_btnOrgRefresh  ->ForceLayout(toolMetrics.m_rcButtons[0]);
+    m_btnOrgExpandAll->ForceLayout(toolMetrics.m_rcButtons[1]);
+    m_btnOrgCollapse ->ForceLayout(toolMetrics.m_rcButtons[2]);
+    m_orgSearch      ->ForceLayout(toolMetrics.m_rcSearch);
 
     // 组织树本体。
     m_tree->ForceLayout(RECT{ L, bodyT + kToolbarH,
@@ -515,20 +579,10 @@ void EnterpriseDetailScreen::OnPaint(HDC hdc, const RECT& rcDirty)
                      theme::kInk100);
 
         // 工具条:左侧是组织树搜索框(m_orgSearch,自绘 EDIT 自行绘制),右侧是
-        // 展开 / 折叠图标按钮。原"组织架构"标题与上方子 tab 重复,已移除,腾给
-        // 搜索框。仅画工具条底分隔线。
+        // 刷新 / 展开 / 折叠三个 ui::IconButton 子控件(各自绘制,见本函数末尾
+        // 基类 OnPaint)。原"组织架构"标题与上方子 tab 重复,已移除,腾给搜索框。
+        // 这里只画工具条底分隔线。
         ui::FillLine(hdc, L, bodyT + kToolbarH - 1, kTreeColW - 1, 1, theme::kInk100);
-        // 工具条图标按钮。
-        auto toolBtn = [&](const RECT& rc, ui::Icon ic)
-        {
-            ui::FillRoundRect(hdc, rc, theme::kInk50, theme::kRadiusSm);
-            const int bcx = (rc.left + rc.right) / 2;
-            const int bcy = (rc.top + rc.bottom) / 2;
-            ui::DrawIcon(hdc, ic, RECT{ bcx - 7, bcy - 7, bcx + 7, bcy + 7 },
-                         theme::kInk500);
-        };
-        toolBtn(m_rcExpandAll, ui::Icon::ChevronDown);
-        toolBtn(m_rcCollapse,  ui::Icon::ChevronRight);
 
         // 树页脚。
         const int footTop = m_rcItem.bottom - kTreeFooterH;
@@ -562,8 +616,8 @@ bool EnterpriseDetailScreen::OnLButtonUp(POINT pt, UINT /*mkFlags*/)
 
     if (m_subTab == kTabOrg)
     {
-        if (::PtInRect(&m_rcExpandAll, pt)) { m_tree->ExpandAll();   return true; }
-        if (::PtInRect(&m_rcCollapse,  pt)) { m_tree->CollapseAll(); return true; }
+        // 展开 / 折叠 / 刷新已改为 ui::IconButton 子控件，点击由控件自身处理，
+        // 这里不再做热区命中测试。
         if (::PtInRect(&m_rcAddTopDept, pt))
         {
             //「新增顶级部门」即在公司节点下加一个子部门，父节点取组织树的根。
@@ -576,11 +630,11 @@ bool EnterpriseDetailScreen::OnLButtonUp(POINT pt, UINT /*mkFlags*/)
 
 bool EnterpriseDetailScreen::OnSetCursor(POINT pt)
 {
+    // 工具条三个图标按钮是子控件，光标由 IconButton::OnSetCursor 自行处理，
+    // 这里只管本屏自绘的热区（子 tab、页脚「顶级部门」）。
     const bool onHit =
         ::PtInRect(&m_rcTabOrg, pt) || ::PtInRect(&m_rcTabSvc, pt) ||
-        (m_subTab == kTabOrg &&
-         (::PtInRect(&m_rcExpandAll, pt) || ::PtInRect(&m_rcCollapse, pt) ||
-          ::PtInRect(&m_rcAddTopDept, pt)));
+        (m_subTab == kTabOrg && ::PtInRect(&m_rcAddTopDept, pt));
     if (onHit)
     {
         ::SetCursor(::LoadCursor(nullptr, IDC_HAND));

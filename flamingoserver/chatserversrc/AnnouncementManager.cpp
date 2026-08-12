@@ -292,7 +292,10 @@ void AnnouncementManager::listAnnouncements(int32_t status, int32_t page, int32_
     int32_t offset = (page - 1) * pageSize;
     char sql[ANN_SQL_BUF_LEN] = { 0 };
     snprintf(sql, sizeof(sql),
-        "SELECT a.f_announcement_id, a.f_title, a.f_severity, a.f_sender_name, a.f_audience_type, "
+        //带上 f_body：控制台的公告列表项要画一行正文摘要，详情面板首次打开时
+        //也直接用它显示正文。此前列表不返回正文，表现为“第一次进公告界面，
+        //选中那条的正文是空白的，点过一遍才有”。
+        "SELECT a.f_announcement_id, a.f_title, a.f_body, a.f_severity, a.f_sender_name, a.f_audience_type, "
         "a.f_pinned, a.f_scheduled, a.f_scheduled_time, a.f_sent_time, a.f_status, a.f_create_time, "
         "(SELECT COUNT(*) FROM t_announcement_read r WHERE r.f_announcement_id = a.f_announcement_id) "
         "FROM t_announcement a%s ORDER BY a.f_pinned DESC, a.f_create_time DESC LIMIT %d, %d",
@@ -311,16 +314,17 @@ void AnnouncementManager::listAnnouncements(int32_t status, int32_t page, int32_
         AnnouncementInfo info;
         info.announcementId = pRow[0].getInt32();
         info.title          = pRow[1].getString();
-        info.severity       = pRow[2].getInt32();
-        info.senderName     = pRow[3].getString();
-        info.audienceType   = pRow[4].getInt32();
-        info.pinned         = pRow[5].getInt32();
-        info.scheduled      = pRow[6].getInt32();
-        info.scheduledTime  = pRow[7].getString();
-        info.sentTime       = pRow[8].getString();
-        info.status         = pRow[9].getInt32();
-        info.createTime     = pRow[10].getString();
-        info.readCount      = pRow[11].getInt32();
+        info.body           = pRow[2].getString();
+        info.severity       = pRow[3].getInt32();
+        info.senderName     = pRow[4].getString();
+        info.audienceType   = pRow[5].getInt32();
+        info.pinned         = pRow[6].getInt32();
+        info.scheduled      = pRow[7].getInt32();
+        info.scheduledTime  = pRow[8].getString();
+        info.sentTime       = pRow[9].getString();
+        info.status         = pRow[10].getInt32();
+        info.createTime     = pRow[11].getString();
+        info.readCount      = pRow[12].getInt32();
         outList.push_back(info);
 
         if (!pResult->nextRow())

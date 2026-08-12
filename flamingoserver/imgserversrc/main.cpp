@@ -14,13 +14,20 @@
 #include "../fileserversrc/FileServer.h"
 #include "../fileserversrc/FileMsg.h"
 #include "RelayServer.h"
+#include "../utils/AppPath.h"
+#include "../utils/ServerConfigLoader.h"
 
 #ifndef WIN32
 #include <string.h>
 #include "../utils/DaemonRun.h"
-#endif 
+#endif
 
 using namespace net;
+
+//本服务的名字与配置文件名。名字只出现在启动失败的提示里，让用户一眼看出是哪个进程报的错；
+//配置文件名交给 ServerConfigLoader 去各个候选目录里找，不再写死一条相对路径
+#define SERVER_NAME              "imgserver"
+#define SERVER_CONFIG_FILE_NAME  "imgserver.conf"
 
 #ifdef WIN32
 //初始化Windows socket库
@@ -37,6 +44,11 @@ void prog_exit(int signo)
     Singleton<FileServer>::Instance().uninit();
     Singleton<RelayServer>::Instance().uninit();
     g_mainLoop.quit();
+
+    //必须停掉异步日志：它的写日志线程是 std::thread，进程退出时静态成员析构，
+    //析构一个仍然 joinable 的 std::thread 会直接 std::terminate 掉整个进程，
+    //表现为服务收到 SIGTERM 后 core dump。chatserver 一直有这一行，这里补齐
+    CAsyncLog::uninit();
 }
 #endif
 
@@ -66,41 +78,47 @@ int main(int argc, char* argv[])
         daemon_run();
 #endif
 
-#ifdef WIN32
-    CConfigFileReader config("../etc/imgserver.conf");
-#else
-    CConfigFileReader config("etc/imgserver.conf");
-#endif
-
-    std::string logFileFullPath;
-
-
-    const char* logfilepath = config.getConfigName("logfiledir");
-    if (logfilepath == NULL)
+    //配置文件按「可执行文件所在目录优先」的顺序查找，理由与 chatserver 相同，
+    //详见 utils/ServerConfigLoader.h
+    CConfigFileReader config;
+    std::string triedConfigPaths;
+    if (!serverconfig::LoadServerConfig(config, SERVER_CONFIG_FILE_NAME, triedConfigPaths))
     {
-        LOGF("logdir is not set in config file");
+        serverconfig::ReportStartupFailure(SERVER_NAME,
+            std::string("cannot open config file ") + SERVER_CONFIG_FILE_NAME
+            + ", tried: " + triedConfigPaths);
         return 1;
     }
 
-#ifndef WIN32
-    //如果log目录不存在则创建之
-    DIR* dp = opendir(logfilepath);
-    if (dp == NULL)
+    //必需配置项先一次性取齐、再统一判断，缺哪几项一次报全
+    serverconfig::CRequiredConfig required(config);
+    std::string logfiledir   = required.getString("logfiledir");
+    std::string logfilename  = required.getString("logfilename");
+    std::string imgcachedir  = required.getString("imgcachedir");
+    std::string filetokenkey = required.getString("filetokenkey");
+    std::string listenip     = required.getString("listenip");
+    int         listenport   = required.getInt("listenport");
+    if (required.hasMissing())
     {
-        if (mkdir(logfilepath, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) != 0)
-        {
-            LOGF("create base dir error, %s , errno: %d, %s", logfilepath, errno, strerror(errno));
-            return 1;
-        }
+        serverconfig::ReportStartupFailure(SERVER_NAME,
+            std::string("missing required config item(s): ") + required.missingKeys()
+            + ", config file: " + config.getFilePath());
+        return 1;
     }
-    closedir(dp);
 
-#endif
+    //日志目录的解析与创建规则同 chatserver，见 chatserversrc/main.cpp 的说明
+    std::string resolvedLogDir = serverconfig::StripTrailingSeparators(
+                                     apppath::ResolveAgainstDirectory(
+                                         apppath::GetExecutableDirectory(), logfiledir));
+    std::string logDirError;
+    if (!serverconfig::EnsureDirectoryExists(resolvedLogDir, logDirError))
+    {
+        serverconfig::ReportStartupFailure(SERVER_NAME,
+            std::string("cannot create log dir ") + resolvedLogDir + ", " + logDirError);
+        return 1;
+    }
 
-    logFileFullPath = logfilepath;
-
-    const char* logfilename = config.getConfigName("logfilename");
-    logFileFullPath += logfilename;
+    std::string logFileFullPath = apppath::ResolveAgainstDirectory(resolvedLogDir, logfilename);
 
 #ifdef _DEBUG
     CAsyncLog::init();
@@ -108,17 +126,13 @@ int main(int argc, char* argv[])
     CAsyncLog::init(logFileFullPath.c_str());
 #endif
 
-    const char* filecachedir = config.getConfigName("imgcachedir");
-    Singleton<FileManager>::Instance().init(filecachedir);
+    Singleton<FileManager>::Instance().init(imgcachedir.c_str());
 
-    //上传 / 下载令牌的 HMAC 校验密钥，须与 chatserver.conf 的 filetokenkey 一致
-    const char* filetokenkey = config.getConfigName("filetokenkey");
-
-    const char* listenip = config.getConfigName("listenip");
-    short listenport = (short)atol(config.getConfigName("listenport"));
+    //监听地址、端口与令牌密钥在函数开头已随其它必需配置项一并取出并校验过，这里直接用。
+    //filetokenkey 是上传 / 下载令牌的 HMAC 校验密钥，须与 chatserver.conf 的同名项一致。
     //imgserver 以 file_server_kind_image 启动，只放行头像 / 图片消息场景
-    Singleton<FileServer>::Instance().init(listenip, listenport, &g_mainLoop,
-        filecachedir, filetokenkey, file_server_kind_image);
+    Singleton<FileServer>::Instance().init(listenip.c_str(), (short)listenport, &g_mainLoop,
+        imgcachedir.c_str(), filetokenkey.c_str(), file_server_kind_image);
 
     //远程桌面中转：在独立端口起 RelayServer，令牌密钥须与 chatserver.conf 的 relaytokenkey 一致
     const char* relaytokenkey = config.getConfigName("relaytokenkey");

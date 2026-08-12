@@ -26,6 +26,8 @@
 #include <atltypes.h>
 
 #include "MainPanelMockData.h"
+#include "MainPanelStatusMenu.h"    // GetPresenceVisual（状态 → 配色的唯一出处）
+#include "../net/Protocol.h"        // presence_type（mock 状态换算的目标编号）
 
 namespace balloonmain {
 
@@ -209,16 +211,31 @@ int MockContactsTotalCount()
     return 15;
 }
 
-COLORREF MockStatusColor(int status)
+int MockPresenceFromStatus(int status)
 {
     switch (status)
     {
-    case kMockOnline:    return RGB(0x22, 0xC5, 0x5E);   // 在线 绿
-    case kMockAway:      return RGB(0xF5, 0x9E, 0x0B);   // 离开 橙
-    case kMockBusy:      return RGB(0xEF, 0x44, 0x44);   // 忙碌 红
-    case kMockInvisible: return RGB(0x94, 0xA3, 0xB8);   // 隐身 灰
-    default:             return RGB(0x94, 0xA3, 0xB8);   // 离线 灰
+    case kMockOnline:
+        return presence_online;
+    case kMockAway:
+        return presence_away;
+    case kMockBusy:
+        return presence_busy;
+    case kMockInvisible:
+        // 隐身对外一律显示成离线 —— 与 NormalizePresenceForMenu / GetPresenceBadgeIconKind
+        // 的兜底口径一致。
+        return presence_offline;
+    default:
+        return presence_offline;
     }
+}
+
+COLORREF MockStatusColor(int status)
+{
+    // 颜色不在这里另写一张表：mock 与真实数据必须长得一模一样，否则调试入口里核对过的
+    // 观感到了登录后又变一副样子。改版前这里自留过一份 #22C55E / #F59E0B / #EF4444 /
+    // #94A3B8，正式配色一调就对不上了。
+    return GetPresenceVisual(MockPresenceFromStatus(status)).dotColor;
 }
 
 } // namespace balloonmain

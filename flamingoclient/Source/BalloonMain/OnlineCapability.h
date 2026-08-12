@@ -151,6 +151,26 @@ const wchar_t* GetTrayIconFileName(int state);
 PresenceVisual GetConnectionPresenceVisual(int presence, int connUiState);
 
 /**
+ *  取当前<u>连接态</u>下状态胶囊该画哪个状态的徽标（形状）。是 GetConnectionPresenceVisual
+ *  的形状版：后者回答"显示什么文字、什么颜色"，本函数回答"画成什么形状"。
+ *
+ *  2026-08-12 状态图标改版后，胶囊上的点不再只有颜色、还带字形（在线实心圆 / 离开时钟 /
+ *  忙碌横杠 / 离线空心环），于是"画哪个状态"必须与"用哪个颜色"由同一套连接态规则决定，
+ *  否则会出现"灰色的点、却画成在线实心圆"这种自相矛盾。凡是要画胶囊徽标的地方都走本函数。
+ *
+ *    presence：   用户当前选择的在线状态（v2 presence_type）；仅连接就绪时用得上。
+ *    connUiState：界面连接态，取值见 ConnectionUiState。
+ *
+ *  @return 该画的在线状态（presence_type）：
+ *            · kConnUiOnline     —— 用户选的那个状态（先经 NormalizePresenceForMenu 归一）；
+ *            · kConnUiConnecting —— presence_offline（空心环，与"正在连接"的灰点同源）；
+ *            · kConnUiOffline 及一切越界取值 —— presence_offline。
+ *
+ *  本函数无副作用。
+ */
+int GetConnectionBadgePresence(int presence, int connUiState);
+
+/**
  *  判定主面板顶部"我自己"的头像是否该置灰。
  *
  *    connUiState： 界面连接态，取值见 ConnectionUiState。

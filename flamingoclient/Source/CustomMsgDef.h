@@ -38,6 +38,12 @@
 #define			WM_CHAT_LOAD_OLDER		WM_USER + 32	// 消息区滚到接近顶部：请宿主聊天窗判断要不要拉更早的一页历史（无参，异步消息）。判定所需的分页状态归宿主窗持有，消息列表只报告"滚到顶部附近了"这一事实
 #define			WM_CHAT_REPLY_REQUEST	WM_USER + 33	// 气泡右键「引用回复」：lParam = 被引用消息的服务器 msgid（long long*，堆上，宿主聊天窗据它组装引用快照并在输入区挂出引用条，处理后 delete，异步消息）
 #define			WM_CHAT_LOCATE_QUOTED	WM_USER + 34	// 点击气泡里的引用块：请宿主聊天窗滚动定位到被引用的原消息（lParam = 堆上 long long*，原消息的服务器 msgid，处理后 delete，异步消息）。消息列表只报告"点了引用块"，找不到原消息时由宿主决定怎么提示
+#define			WM_CHAT_FOCUS_AREA		WM_USER + 39	// 报告聊天窗里「用户当前在哪一块操作」，wParam 取 CHAT_FOCUS_INPUT / CHAT_FOCUS_MESSAGES（异步消息，无 lParam）。窗口据它路由 Ctrl+C：焦点在发送框就让输入框自己复制，焦点在接收框才复制气泡选区。之所以要自己维护这个"逻辑焦点"而不是查 Win32 焦点：点消息区时 DuiHost 只挪 DUI 内部焦点、<u>不调 ::SetFocus</u>（见 DuiHost::OnLButtonDown），输入框始终握着系统焦点，查它永远得到"焦点在发送框"
+#define			CHAT_FOCUS_INPUT		1				// 发送框（输入区）
+#define			CHAT_FOCUS_MESSAGES		2				// 接收框（消息区）
+#define			WM_CHAT_CANCEL_LINK_OPEN	WM_USER + 38// 撤销上一条 WM_CHAT_OPEN_LINK（无参，异步消息）。气泡双击时投出：双击的第一下本来就是一次完整单击，落在链接上会请求打开浏览器，而双击的语义是"选中整条"，故用它把还没执行的那次打开取消掉
+#define			WM_CHAT_COPY_SELECTION	WM_USER + 37// 请宿主聊天窗把「消息区里当前选中的那段文字」复制到剪贴板（无参，<u>同步</u> SendMessage）。返回 1 表示确实有选区且已复制、调用方应吞掉这次按键；返回 0 表示消息区没有选区、按键该照常交给原处理者（输入框）。输入框的键盘钩子据此实现 Ctrl+C：气泡有选区就复制气泡的，没有才让输入框自己复制
+#define			WM_CHAT_OPEN_LINK		WM_USER + 36// 气泡里的超链接被点击 / 右键选了「在浏览器中打开」：lParam = 堆上 std::wstring*（规范化后的完整 URL，处理后 delete，异步消息）。宿主聊天窗先过 balloonchatwnd::IsSafeLinkUrl 的协议白名单再 ShellExecute —— 气泡不该直接拉起外部程序，安全判断也只该有一处
 #define			WM_CHAT_IMAGE_ACTION	WM_USER + 35	// 图片气泡右键选了「图片另存为」/「再次发送」：lParam = 堆上 balloonchatwnd::ChatImageActionData*（图片本地路径 + 另存为默认文件名 + 选中的菜单项，处理后 delete，异步消息）。另存为要弹模态文件对话框、再次发送要调宿主窗的 SendImageFile，气泡两样都不该碰，故经宿主窗中转
 
 #define			WM_CLOSE_MSGLOGDLG		WM_USER + 1	// 关闭消息记录浏览窗口

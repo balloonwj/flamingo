@@ -32,7 +32,8 @@
 #include "GroupAvatarDlgRequest.h"      // 打开修改群头像对话框的请求载荷
 #include "../GroupRoleRules.h"          // CanChangeGroupAvatar：谁能改群头像
 #include "../BalloonMain/AvatarSpec.h"  // avatar_kind_image：判断群头像是不是自定义图
-#include "../net/ImageTransfer.h"       // 群头像真图的本地缓存路径与下载
+#include "../net/ImageTransfer.h"
+#include "../net/CurrentUserAccount.h"   // net::CurrentUserAccount（本地缓存目录按登录账号分）       // 群头像真图的本地缓存路径与下载
 #include <memory>
 
 using namespace balloongroupmanage;
@@ -794,7 +795,8 @@ void CBalloonGroupManageWindow::ResolveGroupAvatarImage()
 
     const std::string fileId =
         EncodeUtil::UnicodeToUtf8(std::wstring((LPCTSTR)m_model.m_groupAvatarFileId));
-    const std::wstring path = net::ImageTransfer::AvatarCacheFilePathForFileId(selfId, fileId);
+    const std::wstring path =
+        net::ImageTransfer::AvatarCacheFilePathForFileId(net::CurrentUserAccount(), fileId);
     if (!path.empty() && ::GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES)
     {
         m_model.m_groupAvatarImagePath = path.c_str();
@@ -803,7 +805,7 @@ void CBalloonGroupManageWindow::ResolveGroupAvatarImage()
 
     //缓存没命中：先留空（这一轮画字形占位），同时把图拉下来。下载完成后主面板
     //会把结果转回本窗口的 OnAvatarDownloaded，那时再解析一次并重建界面。
-    net::ImageTransfer::GetInstance().EnqueueAvatarDownload(fileId, selfId);
+    net::ImageTransfer::GetInstance().EnqueueAvatarDownload(fileId, net::CurrentUserAccount());
     LOG_INFO(_T("群头像真图未命中缓存，已发起下载，groupid=%lld。"), (long long)m_groupId);
 }
 

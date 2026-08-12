@@ -15,7 +15,12 @@
 #include <stdint.h>
 #include <string>
 #include <vector>
+#include <map>
 #include "MessageProtocol.h"
+
+//数据库连接接口。私有辅助方法按指针借用它，不需要完整类型，前向声明即可 ——
+//免得让每个包含本头文件的编译单元都跟着引入 dbapi 那一串。
+class IDatabase;
 
 //消息存储管理器；全局单例，经 Singleton<MessageManager> 访问
 class MessageManager final
@@ -56,6 +61,26 @@ public:
      *  @return 命中返回既有 f_msgid；无记录或 clientmsgid 为空返回 0
      */
     int64_t getMsgIdByClientId(int32_t fromUserid, const std::string& clientmsgid);
+
+    /**
+     *  会话未读数的上限。数到这个值就停，不再"有多少数多少"。
+     *
+     *  为什么要封顶：未读数原先是一条 `SELECT COUNT(*)`，未读多少条就要逐行数多少条，
+     *  用户离线越久、群越活跃这个数越大。实测 50 个群、每群积 5000 条时，光是数未读就
+     *  要两秒多，而且这段时间同步占着网络 I/O 线程（见 docs/会话列表拉取性能优化方案.md
+     *  第 2 节的实测曲线）。聊天记录只增不减，所以那是一条会持续恶化的曲线。
+     *
+     *  为什么封顶不影响使用：客户端的未读角标本来就封顶显示 "99+"
+     *  （见客户端 BalloonMain/BadgeRender.cpp 的 kBadgeMaxShown），数到 100 以上的部分
+     *  没有任何地方用得上。
+     *
+     *  取 101 而不是 100：客户端要判断"是不是超过 99"才决定显示 99+，多留一格，
+     *  日后把显示阈值调成"100 以上"也不必再动服务端。
+     *
+     *  <u>语义提醒</u>：本值意味着未读数的含义是"精确值，或达到上限时为 ≥kMaxUnreadCount"。
+     *  日后若要做"全部会话未读求和"一类的功能，必须知道这个上限的存在。
+     */
+    static const int kMaxUnreadCount = 101;
 
     /**
      *  拉取某用户的全部单聊会话摘要（cmd_sync_conversations 用）。
@@ -198,4 +223,40 @@ public:
     bool getMessagesByIds(const std::vector<int64_t>& msgids, std::vector<MessageRecord>& out);
 
 private:
+    /**
+     *  一条消息在会话摘要里要用到的那几项。仅供下面的批量取详情使用。
+     */
+    struct LastMsgDetail
+    {
+        int64_t     from;        //发送方 userid
+        int         msgtype;     //内容类型，取值见 message_type
+        std::string content;     //已从 f_content 解包出来的 content 部分
+        int64_t     timestamp;   //消息时间，Unix 毫秒
+
+        LastMsgDetail()
+            : from(0), msgtype(1), timestamp(0)
+        {
+        }
+    };
+
+    /**
+     *  按 msgid <u>批量</u>取消息详情。
+     *
+     *  拉会话列表时，每个会话都要取自己"最后一条消息"的发送方 / 类型 / 内容 / 时间。
+     *  原先是每个会话跑一条 SQL，N 个会话就是 N 次往返 —— 会话一多就线性变慢，
+     *  换成 MySQL 后端时每一次往返还都是一次网络开销。改成把 msgid 收齐后一次查完。
+     *
+     *    pConn：  已打开的数据库连接（借用，不接管生命周期）。
+     *    msgids： 要取的 msgid 集合；允许有重复，内部按 map 归并。
+     *    out：    [出参] msgid → 详情；查不到的 msgid 不会出现在结果里。
+     *
+     *  内部按 kDetailBatchSize 分批拼 IN 列表 —— 一条 SQL 的长度有上限，
+     *  会话极多时不分批会拼出一条超长语句被数据库拒掉。
+     */
+    void fetchLastMsgDetails(IDatabase* pConn, const std::vector<int64_t>& msgids,
+                             std::map<int64_t, LastMsgDetail>& out);
+
+    //批量取详情时每批最多放多少个 msgid。取 500：够把常见规模一两次查完，
+    //又不至于把 SQL 拼得过长（500 个 20 位数字加分隔符约 10KB，远低于各后端的语句上限）。
+    static const int kDetailBatchSize = 500;
 };

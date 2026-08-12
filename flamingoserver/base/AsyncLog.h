@@ -58,6 +58,18 @@ public:
 
     static void setLevel(LOG_LEVEL nLevel);
     static bool isRunning();
+
+    /**
+     *  日志文件写入是否已被停用。
+     *
+     *  以文件方式初始化（init 传了文件名）之后，如果日志文件建不出来或写不进去，
+     *  写日志线程不会就此结束，而是把这个标志置上、退化为只写控制台继续跑，
+     *  并向标准错误说明一次原因。调用方通常不需要关心它，本方法主要供单元测试核对。
+     *
+     *  @return true 表示文件写入已停用，此后日志只出现在控制台；
+     *          以控制台方式初始化（init 未传文件名）时恒为 false。
+     */
+    static bool isFileWriteDisabled();
 	
 	//不输出线程ID号和所在函数签名、行号
 	static bool output(long nLevel, const char* pszFmt, ...);
@@ -77,6 +89,9 @@ private:
     static void getTime(char* pszTime, int nTimeStrLength);
     static bool createNewFile(const char* pszLogFileName);
     static bool writeToFile(const std::string& data);
+    //停用日志文件写入，退化为只写控制台，并向标准错误说明原因。
+    //只在写日志线程里调用，pszLogFileName 为出问题的文件路径，仅用于提示信息
+    static void disableFileWrite(const char* pszLogFileName);
     //让程序主动崩溃
     static void crash();
 
@@ -86,7 +101,6 @@ private:
     static void writeThreadProc();
 	
 private:
-	static bool		                        m_bToFile;			    //日志写入文件还是写到控制台  
 	static FILE*                            m_hLogFile;
     static std::string                      m_strFileName;          //日志文件名
     static std::string                      m_strFileNamePID;    //文件名中的进程id
@@ -100,6 +114,9 @@ private:
     static std::condition_variable          m_cvWrite;
     static bool                             m_bExit;                //退出标志
     static bool                             m_bRunning;             //运行标志
+    //日志文件写入是否已停用。建文件或写文件失败时置 true，此后只写控制台。
+    //只由写日志线程修改，其余线程只读，故不额外加锁
+    static bool                             m_bFileWriteDisabled;
 };
 
 #endif // !__ASYNC_LOG_H__

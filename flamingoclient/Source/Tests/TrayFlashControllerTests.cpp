@@ -193,3 +193,59 @@ TEST_CASE("FLASH6 非法会话 ID 被忽略；Clear 全清", "[trayflash]")
     CHECK_FALSE(ctrl.IsFlashing());
     CHECK(ctrl.GetConversationCount() == 0);
 }
+
+// =====================================================================
+// FLASH7 —— 闪烁间隔换算 ClampTrayFlashInterval
+//
+// 这条是为"本机好好的、换台机器托盘就一次都不闪"那个问题补的。根因在于闪烁
+// 定时器的间隔直接取 ::GetCaretBlinkTime()，而用户把系统的"文本光标闪烁"关掉
+// 时它返回 INFINITE，原样交给 SetTimer 会被夹成约 24.8 天 —— 定时器永不触发，
+// 托盘完全不闪且没有任何报错。该设置每台机器每个用户独立，故症状与机器绑定。
+// =====================================================================
+
+TEST_CASE("FLASH7 闪烁间隔换算：异常取值回退、正常取值夹进上下界", "[trayflash]")
+{
+    SECTION("系统默认的 530ms 落在合理区间内，原样采用")
+    {
+        CHECK(ClampTrayFlashInterval(530) == 530);
+    }
+
+    SECTION("关闭光标闪烁返回 INFINITE —— 必须回退到兜底值，绝不能原样外传")
+    {
+        CHECK(ClampTrayFlashInterval(INFINITE) == kTrayFlashIntervalDefaultMs);
+    }
+
+    SECTION("系统给 0 视为无效值，同样回退到兜底值")
+    {
+        CHECK(ClampTrayFlashInterval(0) == kTrayFlashIntervalDefaultMs);
+    }
+
+    SECTION("偏小的取值抬到下界，避免一秒切十几次图标")
+    {
+        CHECK(ClampTrayFlashInterval(1) == kTrayFlashIntervalMinMs);
+        CHECK(ClampTrayFlashInterval(kTrayFlashIntervalMinMs - 1) == kTrayFlashIntervalMinMs);
+    }
+
+    SECTION("偏大的取值压到上界，保证还看得出是在闪")
+    {
+        CHECK(ClampTrayFlashInterval(10000) == kTrayFlashIntervalMaxMs);
+        CHECK(ClampTrayFlashInterval(kTrayFlashIntervalMaxMs + 1) == kTrayFlashIntervalMaxMs);
+    }
+
+    SECTION("上下界本身是合法取值，不被改动")
+    {
+        CHECK(ClampTrayFlashInterval(kTrayFlashIntervalMinMs) == kTrayFlashIntervalMinMs);
+        CHECK(ClampTrayFlashInterval(kTrayFlashIntervalMaxMs) == kTrayFlashIntervalMaxMs);
+    }
+
+    SECTION("任何输入的结果都落在上下界之内")
+    {
+        const unsigned int inputs[] = { 0, 1, 99, 100, 530, 2000, 2001, 60000, INFINITE };
+        for (size_t i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i)
+        {
+            const unsigned int out = ClampTrayFlashInterval(inputs[i]);
+            CHECK(out >= kTrayFlashIntervalMinMs);
+            CHECK(out <= kTrayFlashIntervalMaxMs);
+        }
+    }
+}

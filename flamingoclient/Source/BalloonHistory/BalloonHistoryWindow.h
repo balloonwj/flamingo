@@ -25,6 +25,7 @@
 #include <string>
 
 #include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../CustomMsgDef.h"       // WM_CHAT_OPEN_LINK（消息映射里要用）
 #include "HistoryWindowLayout.h"   // balloonhistory::HistoryViewData / HistoryRowView
 #include "HistoryModel.h"          // balloonhistory::HistoryModel
 #include "HistoryRowMenu.h"        // balloonhistory::HistoryRowMenuContext（成员函数返回它）
@@ -120,6 +121,7 @@ public:
         //那个控件，行容器收不到）。本处理器只<u>旁听</u>、不消费。
         MESSAGE_HANDLER(WM_RBUTTONUP, OnRButtonUpMsg)
         MESSAGE_HANDLER(WM_HISTORY_SHOW_ROW_MENU, OnShowRowMenuMsg)
+        MESSAGE_HANDLER(WM_CHAT_OPEN_LINK, OnChatOpenLinkMsg)
         CHAIN_MSG_MAP(balloonwjui::DuiFrameWindow)
     END_MSG_MAP()
 
@@ -192,6 +194,13 @@ private:
 
     //WM_HISTORY_SHOW_ROW_MENU：事件解栈后真正弹出行右键菜单并分发选中项。
     LRESULT OnShowRowMenuMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_CHAT_OPEN_LINK 处理：列表行正文里的超链接被点击。lParam 为堆上的
+     *  std::wstring*（规范化后的 URL），本函数负责 delete。打开前先过
+     *  balloonchatwnd::IsSafeLinkUrl 的协议白名单 —— 只放行 http / https。
+     */
+    LRESULT OnChatOpenLinkMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     // ---- 行右键菜单：命中、上下文、以及各菜单项的处理 ----
 

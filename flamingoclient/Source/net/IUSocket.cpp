@@ -22,6 +22,7 @@
 #include "AccountProtocolClient.h"       // v2 账号报文编解码（修改密码）
 #include "ProfileProtocolClient.h"       // v2 账号资料报文编解码（更新个性签名）
 #include "FavoriteProtocolClient.h"      // v2「我的收藏」报文编解码（cmd_set_favorite）
+#include "StarredProtocolClient.h"       // v2「特别关注」报文编解码（cmd_set_starred）
 #include "FriendProtocolClient.h"        // v2 好友管理报文编解码（cmd_set_friend_remark 设置备注名）
 #include "AnnounceProtocolClient.h"      // v2 平台公告报文编解码（消息盒子：2101/2102/2103）
 #include "FileProtocolClient.h"          // v2 文件/图片信令报文编解码（申请上传/下载）
@@ -35,9 +36,14 @@
 #pragma comment(lib, "Sensapi.lib")
 #pragma comment(lib, "ole32.lib")   // CoCreateGuid
 
-//v2 客户端版本号，登录请求 cmd_login 携带；必须不低于服务端要求的最低
-//版本（当前服务端 MIN_CLIENT_VERSION 为 "3.0.0"）。
-static const char* const kClientVersionV2 = "3.2.1";
+#include "../ClientVersion.h"
+#include "UpdateProtocolClient.h"
+#include "../Update/UpdateManager.h"
+
+//v2 客户端版本号，登录请求 cmd_login 与检查更新 cmd_check_update 都携带它。
+//取自 ClientVersion.h 这一个出处 —— 此前登录上报的、关于页显示的、exe 属性里的
+//三个版本号各写各的，自动更新下会直接表现为“升级完还提示有新版本”。
+static const char* const kClientVersionV2 = FLAMINGO_CLIENT_VERSION;
 
 CIUSocket::CIUSocket()
 {
@@ -104,6 +110,8 @@ bool CIUSocket::Init()
     //启动聊天图片 / 文件传输工作线程（字节流收发在各自线程串行完成，不占主连接）
     net::ImageTransfer::GetInstance().Start();
     net::FileTransfer::GetInstance().Start();
+    //启动自动更新工作线程（检查更新与下载升级包串行跑在它上）
+    update::UpdateManager::GetInstance().Init();
 
     return true;
 }
@@ -113,6 +121,7 @@ void CIUSocket::Uninit()
     //先停发图 / 文件工作线程（其内部会关掉对应连接以唤醒可能阻塞的字节流收发）
     net::ImageTransfer::GetInstance().Stop();
     net::FileTransfer::GetInstance().Stop();
+    update::UpdateManager::GetInstance().Uninit();
 
     m_bStop = true;
     if (m_spSendThread)
@@ -1208,6 +1217,22 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         break;
     }
 
+    case cmd_check_update:
+    {
+        //检查更新应答：解析后按 seq 转交 UpdateManager 的等待槽。
+        //本应答不经 UI，直接喂给工作线程。
+        net::CheckUpdateResult r;
+        if (!net::UpdateProtocolClient::parseCheckUpdateResponse(body, r))
+        {
+            LOG_ERROR("Parse v2 check-update ack failed, body=%s.", body.c_str());
+            break;
+        }
+        LOG_INFO("Recv v2 check-update ack, seq=%u, code=%d, hasupdate=%d, latest=%s.",
+                 seq, r.m_code, r.m_hasUpdate ? 1 : 0, r.m_latestVersion.c_str());
+        update::UpdateManager::GetInstance().OnCheckUpdateResponse(seq, r);
+        break;
+    }
+
     case cmd_request_download:
     {
         //申请下载应答：解析后按 seq 查归属表，转交给 ImageTransfer 或 FileTransfer。
@@ -1957,6 +1982,33 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         break;
     }
 
+    case cmd_org_structure_notify:
+    {
+        //组织架构变更推送：本企业新建/改动了部门，或者有人进出部门（含新用户注册后
+        //被挂进公司根部门）。本端的通讯录只在登录时拉过一次，不接这条推送的话，新
+        //同事要等到下次登录才会出现，中途收到他的消息也只能显示成"用户<userid>"。
+        //解析后投递到 UI 线程，由主面板重新拉一次通讯录。堆对象由 UI 处理后 delete。
+        net::OrgStructureChangedNotify* pNotify = new net::OrgStructureChangedNotify();
+        if (!net::ContactsProtocolClient::parseOrgStructureChangedNotify(body, *pNotify))
+        {
+            LOG_ERROR("Parse v2 org-structure-changed notify failed, bodylen=%u.", (uint32_t)body.size());
+            delete pNotify;
+            break;
+        }
+        HWND hUI = (m_pRecvMsgThread != NULL) ? m_pRecvMsgThread->GetProxyWnd() : NULL;
+        if (hUI != NULL)
+        {
+            LOG_INFO("Recv v2 org-structure-changed notify, changetype=%d, deptid=%lld.",
+                     pNotify->m_changetype, (long long)pNotify->m_deptid);
+            ::PostMessage(hUI, FMG_MSG_V2_ORG_STRUCTURE_CHANGED, 0, (LPARAM)pNotify);
+        }
+        else
+        {
+            delete pNotify;
+        }
+        break;
+    }
+
     case cmd_presence_changed_notify:
     {
         //好友在线状态变更推送：解析 {userid,presence,clienttype} 后投递到 UI 线程，由主面板
@@ -2326,6 +2378,34 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
                      pResult->m_code, pResult->m_ctype,
                      (long long)pResult->m_cid, pResult->m_favorite);
             ::PostMessage(hUI, FMG_MSG_V2_SET_FAVORITE_RESULT, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            delete pResult;
+        }
+        break;
+    }
+
+    case cmd_set_starred:
+    {
+        //「特别关注」标记 / 取消的应答。与上面的收藏同理：原样回带 target/starred，
+        //用户连点几个人时会有多条请求在途，不带这两项就对不上号、失败时也没法
+        //回滚到正确的那一条，故单独走一条投递路径。
+        net::SetStarredResult* pResult = new net::SetStarredResult();
+        if (!net::StarredProtocolClient::parseSetStarredResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 set starred response failed, bodylen=%u.",
+                      (uint32_t)body.size());
+            delete pResult;
+            break;
+        }
+
+        HWND hUI = (m_pRecvMsgThread != NULL) ? m_pRecvMsgThread->GetProxyWnd() : NULL;
+        if (hUI != NULL)
+        {
+            LOG_INFO("Recv v2 set starred result, code=%d, target=%lld, starred=%d.",
+                     pResult->m_code, (long long)pResult->m_target, pResult->m_starred);
+            ::PostMessage(hUI, FMG_MSG_V2_SET_STARRED_RESULT, 0, (LPARAM)pResult);
         }
         else
         {
@@ -2871,6 +2951,17 @@ void CIUSocket::SendSetFavorite(int ctype, int64_t cid, bool favorite)
              ctype, (long long)cid, (int)favorite);
 }
 
+void CIUSocket::SendSetStarred(int64_t target, bool starred)
+{
+    //组装 cmd_set_starred 请求体并编码成 v2 帧发出。应答经同一 cmd 异步回投到 UI
+    //（FMG_MSG_V2_SET_STARRED_RESULT），主面板据其中回带的 target/starred 对上号。
+    std::string body = net::StarredProtocolClient::buildSetStarredRequest(target, starred);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_set_starred, seq, body);
+    LOG_INFO("Send v2 set starred, target=%lld, starred=%d.",
+             (long long)target, (int)starred);
+}
+
 void CIUSocket::SendSetFriendRemark(int64_t userid, const std::string& remarkUtf8)
 {
     //组装 cmd_set_friend_remark 请求体并编码成 v2 帧发出。应答经同一 cmd 异步回投到
@@ -3217,6 +3308,24 @@ uint32_t CIUSocket::RequestUpload(int scene, const std::string& md5, int64_t siz
     EnqueueFrame(cmd_request_upload, seq, body);
     LOG_INFO("Send v2 request-upload, scene=%d, size=%lld, md5=%s, seq=%u, owner=%d.",
              scene, (long long)size, md5.c_str(), seq, owner);
+    return seq;
+}
+
+//发 cmd_check_update(1905)。本命令<u>允许未登录时发</u>：版本过低的客户端
+//会被登录拒绝，正要靠它自救，服务端已把它放进登录前白名单。
+//应答异步回到 HandleV2Frame，再按 seq 转交 UpdateManager 的等待槽。
+//未连上时返回 0，调用方据此当作“这次没查成”。
+uint32_t CIUSocket::SendCheckUpdate(const std::string& body)
+{
+    if (!m_bConnected)
+    {
+        LOG_ERROR("Send v2 check-update failed: not connected.");
+        return 0;
+    }
+
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_check_update, seq, body);
+    LOG_INFO("Send v2 check-update, seq=%u, body=%s.", seq, body.c_str());
     return seq;
 }
 

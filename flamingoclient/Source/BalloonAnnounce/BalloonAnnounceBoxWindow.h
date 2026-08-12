@@ -28,15 +28,20 @@
 #include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "AnnounceBoxLayout.h"                 // balloonannounce::AnnounceBoxViewData / AnnounceRowView
 #include "../BalloonHistory/AnnounceStore.h"   // balloonhistory::CAnnounceStore
+#include "../CustomMsgDef.h"                   // WM_CHAT_OPEN_LINK（消息映射里要用）
 
 class CFlamingoClient;
 class CBalloonMainPanel;
 
-namespace balloonwjui { class DuiScrollView; }
+namespace balloonmain { class MainPanelScrollView; }
 
-//局部刷新延迟消息：点选某行会销毁正被点击的那个行控件（重建列表），故把刷新
-//PostMessage 到事件解栈之后再做，避免在控件自身的事件回调里销毁它导致 use-after-free。
-//这个坑历史窗那边踩过（见 WM_HISTORY_REFRESH_CONTENT 的注释），本窗照同一办法处理。
+//整窗重建的延迟消息：重建会销毁现有控件，若在控件自己的事件回调里做就会 use-after-free，
+//故把它 PostMessage 到事件解栈之后再做。这个坑历史窗那边踩过（见 WM_HISTORY_REFRESH_CONTENT
+//的注释），本窗照同一办法处理。
+//
+//如今只有 RefreshIfOpen（收到新公告 / 撤回推送）会投递本消息 —— 那种场景下公告的集合确实
+//变了，非重建不可。点选某行、标记已读都改走定点更新（ApplyStateToUi），不销毁任何控件，
+//也就不需要延迟。
 #define WM_ANNBOX_REFRESH_CONTENT   (WM_APP + 0x0139)
 
 //正文高度补算消息：窗口尺寸变化后控件重排发生在 WM_SIZE 继续传递之后，故投递本消息
@@ -81,6 +86,7 @@ public:
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
         MESSAGE_HANDLER(WM_ANNBOX_REFRESH_CONTENT, OnRefreshContentMsg)
         MESSAGE_HANDLER(WM_ANNBOX_SYNC_BODY_HEIGHT, OnSyncBodyHeightMsg)
+        MESSAGE_HANDLER(WM_CHAT_OPEN_LINK, OnChatOpenLinkMsg)
         //列表行的悬停要按几何位置自己判（理由见 AnnounceRow 的头注释：enter/leave
         //只发给最深的子控件，行容器收不到）。这两个处理器只<u>旁听</u>、不消费：
         //处理完置 bHandled=FALSE 让 DuiFrameWindow / DuiHost 照常继续处理，
@@ -93,6 +99,9 @@ public:
         //滚动范围还停在旧值（拉宽后本该变矮、却仍能滚出一大截空白）。
         //同样只旁听、不消费：DuiFrameWindow 还要靠它做客户区重排。
         MESSAGE_HANDLER(WM_SIZE, OnSizeMsg)
+        //两栏滚动条的淡入淡出由本窗口的定时器推进（滚动视口自己起定时器、由本窗口
+        //统一推进并在都稳定后停掉，理由见 MainPanelScrollView.h 的头注释）。
+        MESSAGE_HANDLER(WM_TIMER, OnScrollBarAnimTimer)
         CHAIN_MSG_MAP(balloonwjui::DuiFrameWindow)
     END_MSG_MAP()
 
@@ -109,11 +118,29 @@ private:
     //按当前 m_rows / m_selectedIndex 组装 AnnounceBoxViewData。
     void BuildViewData(balloonannounce::AnnounceBoxViewData& out) const;
 
-    //局部刷新：重查本地库、换列表内容、更新右栏与顶部信息，不重建整窗。
+    /**
+     *  重查本地库并整棵重建客户区控件树。
+     *
+     *  只用于"公告的集合变了"的场景（收到新公告、公告被撤回）—— 那要新增 / 删除行控件，
+     *  绕不开重建。单纯的选中变化与已读变化走 ApplyStateToUi 定点更新，不到这里来。
+     *
+     *  重建会把列表的滚动位置清零，故本方法会先记下再恢复（超出新范围时自动夹回）。
+     */
     void RefreshContent();
 
+    /**
+     *  把当前的选中态 / 已读态落到<u>既有</u>控件上，不重建控件树。
+     *
+     *  点选一条公告、把公告标为已读时走这条路：公告的集合没变，重建整棵树纯属浪费，
+     *  还会让列表跳回顶部。
+     *
+     *    refreshDetail：true 时连右栏三项一起换成当前选中的那条（选中行确实变了才需要，
+     *                   仅仅是已读状态变了的话右栏内容并没有变）。
+     */
+    void ApplyStateToUi(bool refreshDetail);
+
     //选中第 index 行：更新选中态、右栏正文；该行若未读则标已读并上报服务端。
-    //index 越界时忽略。
+    //index 越界、或点的还是当前这条且它早已读过（界面不会有任何变化）时忽略。
     void SelectRow(int index);
 
     //把全部未读公告标为已读并逐条上报服务端。
@@ -144,16 +171,53 @@ private:
     LRESULT OnSyncBodyHeightMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
+     *  WM_TIMER：滚动条淡入淡出的 pulse 定时器到点，把左右两个滚动视口各推进一帧。
+     *  两个都不再需要下一帧时停掉定时器省电，下次滚动时视口会自己把它重新起起来。
+     *  不是本窗关心的定时器 id 时置 bHandled=FALSE 放行。
+     */
+    LRESULT OnScrollBarAnimTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_CHAT_OPEN_LINK 处理：右栏正文里的超链接被点击。lParam 为堆上的
+     *  std::wstring*（规范化后的 URL），本函数负责 delete。打开前先过
+     *  balloonchatwnd::IsSafeLinkUrl 的协议白名单 —— 只放行 http / https。
+     */
+    LRESULT OnChatOpenLinkMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
      *  按右栏当前实际宽度算出正文折行后的高度，喂给正文滚动视口。
      *
-     *  正文是一个多行 Label，它折行后有多高只有拿到<u>实际宽度</u>才能算（
-     *  DuiLabel::MeasureHeight）。滚动视口的内容高度就是这个值——不设的话视口
-     *  以为内容只有一屏高，长公告滚不下去。
+     *  取出正文视口与正文控件后转交 balloonannounce::SyncAnnounceDetailBodyHeight，
+     *  算法与"为什么设完高度还要重排一次"都写在那边。
      *
      *  须在布局完成之后调用（此时控件的 GetRect 才有效）：建窗后、每次局部刷新后、
      *  以及窗口尺寸变化后各调一次。控件尚未就绪时静默返回。
      */
     void SyncDetailBodyHeight();
+
+    /**
+     *  按当前窗口边框与 DPI，告诉两个滚动视口右侧要给窗口缩放边框让出多少像素。
+     *
+     *  滚动条是悬浮式的、贴着视口右缘画，视口右缘若落在 DuiFrameWindow 的缩放边框
+     *  里，鼠标靠近就变成左右双向箭头、滑块根本抓不住（原委见 OverlayScrollBarGeometry.h）。
+     *  本窗右栏视口离客户区右缘还有一段内边距，通常已经躲开了边框，故这里按"边框
+     *  宽度减去这段距离"算出真正还需要让的量，避免无谓地把滚动条往里推。
+     *
+     *  须在布局落定之后调用（建窗后、窗口尺寸 / DPI 变化后）。控件尚未就绪时静默返回。
+     */
+    void SyncScrollBarEdgeInset();
+
+    /**
+     *  判断某个点是不是落在左栏列表那条悬浮滚动条的命中带上。
+     *
+     *  本窗的行悬停与行点击是按几何位置自己判的（不走 DUI 事件派发，理由见
+     *  AnnounceRow 的头注释），而悬浮滚动条正压在列表上层。不把命中带排掉的话，
+     *  拖完滑块一松手就会顺带选中滑块底下那条公告。
+     *
+     *    pt：客户区坐标。
+     *  @return 落在命中带上返回 true；列表不需要滚动条、或视口尚未就绪时返回 false。
+     */
+    bool PointOnListScrollBar(POINT pt) const;
 
     //把列表里包含 pt（客户区坐标）的那一行置为悬停、其余撤销。
     //pt 传 (-1,-1) 表示"鼠标不在列表里"，即全部撤销。
@@ -177,7 +241,7 @@ private:
     int m_selectedIndex;
 
     //列表滚动视口（局部刷新时按 id 取回、SetContent 换列表）。窗口未建时为 NULL。
-    balloonwjui::DuiScrollView* m_pScroll;
+    balloonmain::MainPanelScrollView* m_pScroll;
 
     //标题栏左侧图标位图；本窗持有，析构时释放。
     HBITMAP m_hTitleIcon;

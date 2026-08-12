@@ -132,14 +132,15 @@ public:
 
     /**
      *  取某 md5 图片在本地缓存中的完整路径（仅拼路径，不创建目录、不判断存在）。
-     *  缓存按登录用户分隔、按内容 MD5 命名：<主目录>Users\<userId>\ChatImage\<md5>，
+     *  缓存按登录账号分隔、按内容 MD5 命名：<主目录>Users\<登录账号>\ChatImage\<md5>，
      *  收发共用。接收侧在触发下载前可据此判断缓存是否已命中，命中则直接渲染、
      *  免重复下载。
-     *  @param userId 当前登录用户 userid（缓存按账号隔离，0 视为未登录、返回空串）
-     *  @param md5    图片内容MD5（小写十六进制）
-     *  @return 缓存文件完整路径；userId<=0 或 md5 为空返回空串
+     *  @param account 当前登录账号（形如 MY0309 / EMP5321）。Users 下一律按登录账号
+     *                 分目录，与配置、聊天记录、头像同一口径（见 net/UserCachePath.h）
+     *  @param md5     图片内容MD5（小写十六进制）
+     *  @return 缓存文件完整路径；账号为空（未登录）或 md5 为空返回空串
      */
-    static std::wstring CacheFilePathForMd5(int64_t userId, const std::string& md5);
+    static std::wstring CacheFilePathForMd5(const std::wstring& account, const std::string& md5);
 
     //启动工作线程；幂等，重复调用无副作用。在 CIUSocket::Init 中调用。
     void Start();
@@ -166,42 +167,42 @@ public:
      *  @param msgid      该图片消息的服务器 msgid（与气泡对回）
      *  @param fileid     图片文件ID（来自消息 content，传给 cmd_request_download）
      *  @param expectMd5  期望MD5（来自消息 content，下载完成后校验；可空则用应答里的 md5）
-     *  @param expectSize 期望字节数（来自消息 content，便于日志；可为 0）
-     *  @param selfUserId 当前登录用户 userid，决定落地到哪个账号的缓存目录
+     *  @param expectSize  期望字节数（来自消息 content，便于日志；可为 0）
+     *  @param selfAccount 当前登录账号，决定落地到哪个账号的缓存目录（Users\<账号>\ChatImage\）
      */
     void EnqueueDownload(int64_t msgid, const std::string& fileid,
                          const std::string& expectMd5, int64_t expectSize,
-                         int64_t selfUserId);
+                         const std::wstring& selfAccount);
 
     /**
      *  发起一次头像上传：把已处理好的本地头像图片（建议先居中裁方 + 缩放）上传到
      *  imgserver，<b>不发任何聊天消息</b>，成功后把该文件落地到头像缓存
-     *  Users\<userId>\Avatar\<fileid>，并经 FMG_MSG_V2_AVATAR_UPLOAD_RESULT 异步回投
+     *  Users\<登录账号>\Avatar\<fileid>，并经 FMG_MSG_V2_AVATAR_UPLOAD_RESULT 异步回投
      *  fileid / md5 / 本地缓存路径。UI 收到成功结果后再发 cmd_change_avatar 落库。
      *  线程安全，可在 UI 线程调用，立即返回。
-     *  @param localPath  待上传的本地图片完整路径（宽字符；调用方已做裁剪/缩放/校验）
-     *  @param selfUserId 当前登录用户 userid（决定缓存目录；<=0 视为未登录、任务失败）
+     *  @param localPath   待上传的本地图片完整路径（宽字符；调用方已做裁剪/缩放/校验）
+     *  @param selfAccount 当前登录账号（决定缓存目录；为空视为未登录、任务失败）
      */
-    void EnqueueAvatarUpload(const std::wstring& localPath, int64_t selfUserId);
+    void EnqueueAvatarUpload(const std::wstring& localPath, const std::wstring& selfAccount);
 
     /**
      *  取某 fileid 头像在本地缓存中的完整路径（仅拼路径，不创建目录、不判存在）。
-     *  缓存按登录用户分隔：<主目录>Users\<userId>\Avatar\<fileid>。
-     *  @param userId 当前登录用户 userid（<=0 返回空串）
-     *  @param fileid 头像文件ID（来自上传结果 / 联系人 customface）
-     *  @return 缓存文件完整路径；userId<=0 或 fileid 为空返回空串
+     *  缓存按登录账号分隔：<主目录>Users\<登录账号>\Avatar\<fileid>。
+     *  @param account 当前登录账号（为空返回空串）
+     *  @param fileid  头像文件ID（来自上传结果 / 联系人 customface）
+     *  @return 缓存文件完整路径；账号为空或 fileid 为空返回空串
      */
-    static std::wstring AvatarCacheFilePathForFileId(int64_t userId, const std::string& fileid);
+    static std::wstring AvatarCacheFilePathForFileId(const std::wstring& account, const std::string& fileid);
 
     /**
      *  发起一次头像下载：把某 fileid 的头像图从 imgserver 下载到本地头像缓存
-     *  Users\<userId>\Avatar\<fileid>，成功后经 FMG_MSG_V2_AVATAR_DOWNLOAD_RESULT 异步
+     *  Users\<登录账号>\Avatar\<fileid>，成功后经 FMG_MSG_V2_AVATAR_DOWNLOAD_RESULT 异步
      *  回投 fileid + 本地路径（UI 据 fileid 找到对应联系人节点刷新头像）。线程安全。
      *  内部按 fileid 去重（在途不重复发），缓存已存在则直接回投成功、不重复下载。
-     *  @param fileid     头像文件ID（来自联系人 customface，facetype==自定义图时）
-     *  @param selfUserId 当前登录用户 userid（决定缓存目录；<=0 任务失败）
+     *  @param fileid      头像文件ID（来自联系人 customface，facetype==自定义图时）
+     *  @param selfAccount 当前登录账号（决定缓存目录；为空则任务失败）
      */
-    void EnqueueAvatarDownload(const std::string& fileid, int64_t selfUserId);
+    void EnqueueAvatarDownload(const std::string& fileid, const std::wstring& selfAccount);
 
     /**
      *  由 CIUSocket::HandleV2Frame 在收到 cmd_request_upload(1801) 应答时调用，
@@ -259,7 +260,7 @@ private:
         std::string  m_fileid;       //图片文件ID
         std::string  m_expectMd5;    //期望MD5（校验用，可空）
         int64_t      m_expectSize;   //期望字节数（日志用，可为 0）
-        int64_t      m_selfUserId;   //当前登录用户 userid（决定落地到哪个账号的缓存目录）
+        std::wstring m_selfAccount;  //当前登录账号（决定落地到 Users\<账号>\ 下哪个缓存目录）
 
         Task()
             : m_kind(task_send)
@@ -267,7 +268,6 @@ private:
             , m_cid(0)
             , m_msgid(0)
             , m_expectSize(0)
-            , m_selfUserId(0)
         {
         }
     };

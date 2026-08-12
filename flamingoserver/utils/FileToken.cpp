@@ -159,6 +159,9 @@ bool FileToken::isImageScene(int scene)
 
 bool FileToken::isFileScene(int scene)
 {
-    //聊天文件与群文件由 fileserver 处理
-    return scene == file_scene_chat_file || scene == file_scene_group_file;
+    //聊天文件、群文件与客户端升级包由 fileserver 处理。
+    //fileserver 那道场景门禁（FileSession.cpp 的 isSceneAllowedOnServer）只委托给本函数，
+    //故此处放行即等于放行整条下载链路，无需再改 fileserver。
+    return scene == file_scene_chat_file || scene == file_scene_group_file
+        || scene == file_scene_update;
 }

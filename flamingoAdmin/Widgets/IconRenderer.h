@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  flamingoAdmin —— 矢量图标绘制。
  *
  *  设计稿采用 Phosphor / Lucide 风格的描边图标。本文件用 GDI+ 在一个
@@ -40,6 +40,8 @@ enum class Icon
     Terminal,     // 调试控制台：终端窗口（带「>」命令提示符）
     Check,        // 对勾：成功 / 完成提示（toast Info 用）
     Warning,      // 警告：三角形内一个感叹号（toast Warn 用）
+    Refresh,      // 刷新：顺时针环形箭头（组织树工具条「刷新」按钮）
+    Download,     // 下载：向下箭头 + 底线（侧栏「客户端版本」导航项）
 };
 
 // 在 rc 内绘制一个图标（建议 rc 为正方形）。

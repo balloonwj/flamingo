@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  flamingoAdmin —— 侧边栏。
  *
  *  主界面外壳的左栏：品牌头部 + 5 个导航项 + 弹性空白 + 用户信息与登出。
@@ -34,20 +34,20 @@ private:
     // 构建品牌头部（徽标 + 名称两行）。
     std::unique_ptr<balloonwjui::DuiControl> BuildHeader();
 
-    // 构建页脚（用户名 / 角色 + 登出按钮）。
-    std::unique_ptr<balloonwjui::DuiControl> BuildFooter();
-
     // 创建一个导航项并登记到 m_navItems。
     //   navId：控件 ID（kIdNav*）；icon：图标；label：文字。
     std::unique_ptr<balloonwjui::DuiControl> MakeNavItem(int navId,
                                                          ui::Icon icon,
                                                          LPCTSTR label);
 
-    SidebarNavItem* m_navItems[5] = {};   // 5 个导航项（借用指针，树持有所有权）
-    int             m_navCount    = 0;    // 已登记的导航项数
+    // 导航项（借用指针，控件树持有所有权）。
+    // 用 vector 而非定长数组：导航项数量不再是常量
+    // ——「客户端版本」仅平台超管可见，两类管理员看到的项数不同。
+    // 此处曾是写死 5 的数组，而 .cpp 里的上限常量被改成 6，
+    // 结果第 6 项越界写到紧跟其后的计数器上，平台超管登录即崩。
+    std::vector<SidebarNavItem*> m_navItems;
 
     balloonwjui::DuiControl* m_headerTitles = nullptr; // 头部副标题 VBox（紧凑态隐藏）
-    balloonwjui::DuiControl* m_footerInfo   = nullptr; // 页脚用户信息 VBox（紧凑态隐藏）
     bool                     m_collapsed    = false;   // 当前是否紧凑态
 };
 

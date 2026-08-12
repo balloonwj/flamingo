@@ -589,10 +589,16 @@ void CBalloonRegisterWindow::OnRegisterSucceeded(const RegisterResult& result)
     // 这样公司名大小写、空格上的差异能当场被用户看见。
     m_resultAccount = result.m_username;
     m_resultCompany = result.m_enterpriseName;
+    // 密码服务端不会回传（也不该回传），只能从本地模型里取用户刚设的那份明文。
+    // 取值时机放在这里是安全的：CommitFormToModel 在非填写页会直接返回
+    // （见本文件 kRegStepFillInfo 的判断），GoNextStep 也只改步骤号，故进入
+    // 完成页后 m_model.Password() 仍是用户填的密码，不会被空串覆盖。
+    m_resultPassword = m_model.Password();
     // 记下"已注册成功"，关窗时据此让 DoModal 返回 IDOK，登录窗才知道要把
-    // 账号回填进账号框。用户在完成页直接点叉关窗也算数——账号已经发下来了。
+    // 账号与密码回填进登录框。用户在完成页直接点叉关窗也算数——账号已经发下来了。
     m_registered = true;
 
+    // 日志只记账号与公司名，密码是敏感信息，任何情况下都不进日志。
     LOG_INFO(_T("注册成功 (userid=%I64d, account=%s, company=%s)."),
              result.m_userid, (LPCTSTR)m_resultAccount, (LPCTSTR)m_resultCompany);
 

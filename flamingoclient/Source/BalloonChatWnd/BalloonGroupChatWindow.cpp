@@ -23,6 +23,10 @@
 #include "ChatImageCache.h"           // 图片后台解码缓存：注册监听 + 就绪重绘
 #include "../../balloonui/balloonui/Controls/Layout/DuiSplitter.h"  // 拖动完成后算回分割比例
 #include "ChatMessageList.h"          // ChatMessageList::AppendMessage
+#include "ChatDropModel.h"            // 拖进来的路径归类成 DropPlan
+#include "ChatLinkDetect.h"           // IsSafeLinkUrl（打开链接前的协议白名单）
+#include <windowsx.h>                 // GET_X_LPARAM / GET_Y_LPARAM（旁听点击定焦点区域）
+#include "../../balloonui/balloonui/Controls/Basic/DuiToast.h"   // 拖放跳过项的轻量提示
 #include "ChatMockData.h"             // ChatMessage / MakeTextMessage / MakeGroupAutoReply
 #include "ChatFontUtil.h"             // 当前聊天字体的载入/保存/应用到输入框
 #include "GroupMentionMenu.h"         // MentionMenuId / MentionActionData（气泡里 @某人 右键菜单的分发负载）
@@ -64,7 +68,8 @@ static const COLORREF kGroupConnectingBannerBorderColor = RGB(0xE5, 0xE7, 0xEB);
 #include "../net/MessageProtocolClient.h"  // net::MessageNotify / digestForMsgType
 #include "../net/GroupProtocolClient.h"    // net::GroupMembersResult
 #include "../net/Protocol.h"               // group_member_role（群主/管理员/成员角色枚举，全局命名空间）
-#include "../net/ImageTransfer.h"          // net::ImageTransfer（发图工作线程）
+#include "../net/ImageTransfer.h"
+#include "../net/CurrentUserAccount.h"   // net::CurrentUserAccount（本地缓存目录按登录账号分）          // net::ImageTransfer（发图工作线程）
 #include "../net/FileTransfer.h"           // net::FileTransfer（群文件上传/下载）+ GroupFileUpload/DownloadResult
 #include "ChatAvatarResolve.h"             // ResolveAvatarRender（气泡 / 成员真图头像呈现解析）
 #include "GroupChatHeaderInfo.h"           // 头部群名 / 人数 / 公告摘要行
@@ -121,6 +126,10 @@ static const int kGroupChatWindowTitleBarHeight = 32;
 // mock 自动回复定时器 id 与延时（毫秒）—— 发出消息后过一会儿模拟群成员回话。
 static const UINT_PTR kReplyTimerId = 0xC101;
 static const UINT     kReplyDelayMs = 1400;
+
+// 「打开链接」延后执行的定时器 id。理由与单聊窗同一处注释：点链接不立刻打开，
+// 先等一个系统双击间隔，期间收到双击就把这次打开作废（双击的语义是选中整条）。
+static const UINT_PTR kLinkOpenTimerId = 0xC104;
 
 // 消息类型常量，与 net::message_type（net/Protocol.h）对齐。
 static const int kMsgTypeText  = 1;   // message_type_text
@@ -460,6 +469,8 @@ CBalloonGroupChatWindow::CBalloonGroupChatWindow(CFlamingoClient* pFMGClient)
     , m_fileLoaded(false)
     , m_fileLoading(false)
     , m_mentionAtPos(-1)   // -1 = 当前不处于 @ 输入状态
+    , m_focusArea(CHAT_FOCUS_INPUT)   // 开窗时焦点在输入框
+    , m_dropToast(NULL)    // 提示条在 InitUi 里建好后才有值
     , m_noticeIndex(0)
     , m_noticeTotal(0)
     , m_noticeLoaded(false)
@@ -938,6 +949,10 @@ void CBalloonGroupChatWindow::InitUi()
                 msgList->SetMemberRoleQuery(
                     &CBalloonGroupChatWindow::MemberRoleThunk, this);
                 msgList->SetMyNetRole(m_myRole);
+                // 再装"是否被特别关注"的钩子：气泡里 @某人 与发送者头像的右键菜单
+                // 据它决定那一项的文案是「特别关注」还是「取消特别关注」。
+                msgList->SetStarredQuery(
+                    &CBalloonGroupChatWindow::StarredThunk, this);
             }
         }
         // 载入上次的聊天字体并应用到输入框（所见即所得）。未设过则保持默认外观。
@@ -1019,7 +1034,162 @@ void CBalloonGroupChatWindow::InitUi()
         }
     }
 
+    // 轻量提示条：挂在客户区根容器末尾（末尾即最上层），Fixed(0) 不占 vbox 主轴空间。
+    balloonwjui::DuiVBox* rootBox = dynamic_cast<balloonwjui::DuiVBox*>(content);
+    if (rootBox != NULL)
+    {
+        std::unique_ptr<balloonwjui::DuiToast> toast(new balloonwjui::DuiToast());
+        m_dropToast = toast.get();
+        rootBox->AddChild(std::move(toast), balloonwjui::DuiLayout::Hint().Fixed(0));
+    }
+
+    // 拖文件进窗口：注册窗口级与输入框级拖放目标（后者会先摘掉 RichEdit 自带的那份，
+    // 见 ChatDropController.h）。
+    m_dropCtrl.Attach(m_hWnd, GetInputEditHwnd(), this);
+
     LOG_INFO(_T("群聊窗客户区 UI 初始化完成。"));
+}
+
+void CBalloonGroupChatWindow::RefreshLinkRendering()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    balloonchatwnd::ChatMessageList* list =
+        dynamic_cast<balloonchatwnd::ChatMessageList*>(
+            content->FindCtrlById(balloonchatwnd::kGIdMessageArea));
+    if (list != NULL)
+    {
+        list->RefreshAllRows();
+    }
+    if (IsWindow())
+    {
+        ::InvalidateRect(m_hWnd, NULL, FALSE);
+    }
+}
+
+balloonwjui::DuiVBox* CBalloonGroupChatWindow::InputBlockCtrl()
+{
+    // 发送框 = 输入框（richedit）所在的那个 vbox，与单聊窗同一套结构。
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return NULL;
+    }
+    balloonwjui::DuiControl* input = content->FindCtrlById(balloonchatwnd::kGIdInputEdit);
+    if (input == NULL)
+    {
+        return NULL;
+    }
+    return dynamic_cast<balloonwjui::DuiVBox*>(input->GetParent());
+}
+
+bool CBalloonGroupChatWindow::IsChatDropZone(const POINT& ptClient)
+{
+    balloonwjui::DuiVBox* block = InputBlockCtrl();
+    if (block == NULL)
+    {
+        return false;
+    }
+    RECT rc = block->GetRect();
+    return ::PtInRect(&rc, ptClient) != FALSE;
+}
+
+void CBalloonGroupChatWindow::OnChatDropHintChanged(bool visible)
+{
+    // 提示落在发送框上（整块浅蓝底 + 左下角提示文字），与单聊窗同一套做法，
+    // 为什么用底色而不是描边见那边的注释。
+    balloonwjui::DuiVBox* block = InputBlockCtrl();
+    if (block != NULL)
+    {
+        const COLORREF kDropZoneBg = RGB(0xE6, 0xF1, 0xFD);
+        block->SetBgColor(visible ? kDropZoneBg : CLR_INVALID);
+    }
+
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content != NULL)
+    {
+        balloonwjui::DuiLabel* hint = dynamic_cast<balloonwjui::DuiLabel*>(
+            content->FindCtrlById(balloonchatwnd::kGIdHintLabel));
+        if (hint != NULL)
+        {
+            if (visible)
+            {
+                // 群里拖文件的落点是群文件库，文案要说清楚，免得用户以为是发消息。
+                hint->SetText(_T("松开发送：图片进聊天，文件进群文件"));
+            }
+            else
+            {
+                RefreshSendModeUi();
+            }
+        }
+    }
+
+    if (IsWindow())
+    {
+        ::InvalidateRect(m_hWnd, NULL, FALSE);
+    }
+}
+
+void CBalloonGroupChatWindow::OnChatFilesDropped(const std::vector<std::wstring>& paths,
+                                                 bool forceAsFile)
+{
+    // 调试入口（无群绑定）没有服务器可发。
+    if (m_groupId == 0)
+    {
+        if (m_dropToast != NULL)
+        {
+            m_dropToast->Show(_T("调试窗口没有绑定群，无法发送"));
+        }
+        return;
+    }
+
+    const balloonchatwnd::DropPlan plan =
+        balloonchatwnd::BuildDropPlanFromPaths(paths, forceAsFile);
+
+    if (plan.m_needConfirm)
+    {
+        CString ask;
+        ask.Format(_T("确定要发送 %d 个文件吗？"), (int)plan.m_items.size());
+        if (::MessageBoxW(m_hWnd, (LPCWSTR)ask, L"发送文件",
+                          MB_OKCANCEL | MB_ICONQUESTION) != IDOK)
+        {
+            LOG_INFO("群聊窗拖放：用户取消了 %d 个文件的发送。", (int)plan.m_items.size());
+            return;
+        }
+    }
+
+    // 图片发群图片消息，其余上传群文件库。至少上传了一笔才把边栏切到「群文件」，
+    // 与工具栏「文件」按钮的做法一致 —— 纯图片的一次拖放不该把边栏切走。
+    bool anyUpload = false;
+    for (std::vector<balloonchatwnd::DropSendItem>::size_type i = 0;
+         i < plan.m_items.size(); ++i)
+    {
+        const balloonchatwnd::DropSendItem& item = plan.m_items[i];
+        if (item.m_kind == balloonchatwnd::kDropSendImage)
+        {
+            SendImageFile(item.m_path);
+        }
+        else if (UploadGroupFile(item.m_path))
+        {
+            anyUpload = true;
+        }
+    }
+    if (anyUpload)
+    {
+        SwitchSideTab(balloonchatwnd::kGIdTabFiles);
+    }
+
+    if (!plan.m_skipped.empty() && m_dropToast != NULL)
+    {
+        const std::wstring note = balloonchatwnd::DescribeDropSkipped(plan.m_skipped);
+        m_dropToast->Show(note.c_str());
+    }
+
+    LOG_INFO("群聊窗拖放处理完成: 处理 %d 个, 跳过 %d 个, shift=%d。",
+             (int)plan.m_items.size(), (int)plan.m_skipped.size(), forceAsFile ? 1 : 0);
 }
 
 // =======================================================================
@@ -1063,11 +1233,153 @@ LRESULT CBalloonGroupChatWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
     }
     // 从图片解码缓存注销本窗口，避免就绪后向已销毁窗口 PostMessage。
     balloonchatwnd::ChatImageCache::Inst().UnregisterListener(m_hWnd);
+    // 注销拖放目标。须在 DestroyWindow 之前 —— RevokeDragDrop 要求窗口还在。
+    m_dropCtrl.Detach();
     if (IsWindow())
     {
         DestroyWindow();
     }
     return 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnChatFocusArea(UINT /*uMsg*/, WPARAM wParam,
+                                                 LPARAM /*lParam*/, BOOL& /*bHandled*/)
+{
+    if (wParam == (WPARAM)CHAT_FOCUS_INPUT || wParam == (WPARAM)CHAT_FOCUS_MESSAGES)
+    {
+        m_focusArea = (int)wParam;
+    }
+    return 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnLButtonDownMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                                  LPARAM lParam, BOOL& bHandled)
+{
+    // 只旁听：DuiFrameWindow / DuiHost 还要靠这条消息派发点击。
+    bHandled = FALSE;
+
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return 0;
+    }
+    POINT pt;
+    pt.x = GET_X_LPARAM(lParam);
+    pt.y = GET_Y_LPARAM(lParam);
+
+    balloonwjui::DuiControl* msgArea = content->FindCtrlById(balloonchatwnd::kGIdMessageArea);
+    if (msgArea != NULL)
+    {
+        RECT rc = msgArea->GetRect();
+        if (::PtInRect(&rc, pt))
+        {
+            m_focusArea = CHAT_FOCUS_MESSAGES;
+            return 0;
+        }
+    }
+
+    // 点发送框那一整块（工具栏、提示行、发送按钮等）同样算回到发送框。
+    balloonwjui::DuiVBox* block = InputBlockCtrl();
+    if (block != NULL)
+    {
+        RECT rcBlock = block->GetRect();
+        if (::PtInRect(&rcBlock, pt))
+        {
+            m_focusArea = CHAT_FOCUS_INPUT;
+        }
+    }
+    return 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnChatCopySelection(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                                     LPARAM /*lParam*/, BOOL& /*bHandled*/)
+{
+    // 焦点在发送框时这一下不归消息区，返回 0 让输入框自己复制。
+    if (m_focusArea != CHAT_FOCUS_MESSAGES)
+    {
+        return 0;
+    }
+
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return 0;
+    }
+    balloonchatwnd::ChatMessageList* list =
+        dynamic_cast<balloonchatwnd::ChatMessageList*>(
+            content->FindCtrlById(balloonchatwnd::kGIdMessageArea));
+    if (list == NULL)
+    {
+        return 0;
+    }
+    return list->CopySelectedTextToClipboard() ? 1 : 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnKeyDownMsg(UINT uMsg, WPARAM wParam,
+                                              LPARAM lParam, BOOL& bHandled)
+{
+    // 焦点不在输入框时的 Ctrl+C。焦点在输入框里时走的是输入框键盘钩子那条路。
+    if (wParam == 'C' && (::GetKeyState(VK_CONTROL) & 0x8000) != 0)
+    {
+        BOOL dummy = TRUE;
+        if (OnChatCopySelection(uMsg, 0, 0, dummy) != 0)
+        {
+            return 0;
+        }
+    }
+    bHandled = FALSE;
+    (void)lParam;
+    return 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnChatOpenLink(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                                LPARAM lParam, BOOL& /*bHandled*/)
+{
+    std::wstring* pUrl = (std::wstring*)lParam;
+    if (pUrl == NULL)
+    {
+        return 0;
+    }
+
+    // 不立刻打开：先记下来、等一个系统双击间隔（见 kLinkOpenTimerId 的注释）。
+    m_pendingLinkUrl = *pUrl;
+    delete pUrl;
+    if (IsWindow())
+    {
+        ::SetTimer(m_hWnd, kLinkOpenTimerId, ::GetDoubleClickTime(), NULL);
+    }
+    return 0;
+}
+
+LRESULT CBalloonGroupChatWindow::OnChatCancelLinkOpen(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                                      LPARAM /*lParam*/, BOOL& /*bHandled*/)
+{
+    if (IsWindow())
+    {
+        ::KillTimer(m_hWnd, kLinkOpenTimerId);
+    }
+    m_pendingLinkUrl.clear();
+    return 0;
+}
+
+void CBalloonGroupChatWindow::OpenPendingLink()
+{
+    if (m_pendingLinkUrl.empty())
+    {
+        return;
+    }
+    const std::wstring url = m_pendingLinkUrl;
+    m_pendingLinkUrl.clear();
+
+    // 协议白名单：只放行 http / https。理由与单聊窗同一处注释。
+    if (balloonchatwnd::IsSafeLinkUrl(url))
+    {
+        ::ShellExecuteW(m_hWnd, L"open", url.c_str(), NULL, NULL, SW_SHOWNORMAL);
+    }
+    else
+    {
+        LOG_ERROR("群聊窗拒绝打开非 http/https 链接。");
+    }
 }
 
 LRESULT CBalloonGroupChatWindow::OnViewImageMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
@@ -1351,6 +1663,14 @@ LRESULT CBalloonGroupChatWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
 LRESULT CBalloonGroupChatWindow::OnTimer(UINT /*uMsg*/, WPARAM wParam,
                                          LPARAM /*lParam*/, BOOL& bHandled)
 {
+    if (wParam == (WPARAM)kLinkOpenTimerId)
+    {
+        // 一次性定时器：双击间隔内没等到双击，这次点击算数，真的打开链接。
+        ::KillTimer(m_hWnd, kLinkOpenTimerId);
+        OpenPendingLink();
+        return 0;
+    }
+
     if (wParam == (WPARAM)kReplyTimerId)
     {
         // 一次性定时器：先关掉，再追加一条某位群成员的 mock 回复。
@@ -2522,7 +2842,7 @@ void CBalloonGroupChatWindow::RenderIncomingGroupImage(balloonchatwnd::ChatMessa
     // （否则每次渲染历史 / 收推送都重下，把 imgserver 刷爆、还堵住串行发送队列）。用文件
     // 实际大小与期望大小比对兜底；期望缺失(<=0)时退回只判存在。与单聊同口径。
     std::wstring cachePath = net::ImageTransfer::CacheFilePathForMd5(
-        (int64_t)selfId, notify.m_imageMd5);
+        net::CurrentUserAccount(), notify.m_imageMd5);
     bool cached = false;
     if (!cachePath.empty())
     {
@@ -2587,7 +2907,7 @@ void CBalloonGroupChatWindow::RenderIncomingGroupImage(balloonchatwnd::ChatMessa
     {
         net::ImageTransfer::GetInstance().EnqueueDownload(
             (int64_t)notify.m_msgid, notify.m_imageFileId,
-            notify.m_imageMd5, notify.m_imageSize, (int64_t)selfId);
+            notify.m_imageMd5, notify.m_imageSize, net::CurrentUserAccount());
     }
 }
 
@@ -2640,7 +2960,8 @@ static CString ResolveQuoteThumbPath(long long selfUserId, const net::ReplyQuote
                  (long long)selfUserId, q.m_md5.empty() ? 1 : 0);
         return CString();
     }
-    const std::wstring cached = net::ImageTransfer::CacheFilePathForMd5(selfUserId, q.m_md5);
+    const std::wstring cached =
+        net::ImageTransfer::CacheFilePathForMd5(net::CurrentUserAccount(), q.m_md5);
     // CacheFilePathForMd5 只拼路径、不判断存在，得自己确认文件真在。
     if (cached.empty() || ::GetFileAttributesW(cached.c_str()) == INVALID_FILE_ATTRIBUTES)
     {
@@ -2859,6 +3180,9 @@ void CBalloonGroupChatWindow::OnGroupMembersArrived(const net::GroupMembersResul
             item->SetMember(name, glyph, color, m.m_role, imagePath);
             // 本人角色决定这一行的右键菜单里有没有「设为 / 撤销管理员」（仅群主可见）。
             item->SetMyNetRole(m_myRole);
+            // 与消息区共用同一个钩子：右键菜单里「特别关注」那一项的文案要现问一次
+            // 主面板的关注名单（别处改过之后，这里不会因此重建，故不能存状态位）。
+            item->SetStarredQuery(&CBalloonGroupChatWindow::StarredThunk, this);
             list->AddChild(std::unique_ptr<balloonwjui::DuiControl>(item.release()));
         }
         // 重新布局成员侧栏并重绘。
@@ -2909,7 +3233,8 @@ void CBalloonGroupChatWindow::OnAvatarDownloaded(const std::string& fileid)
     }
 
     // 刚下好的真图缓存路径（取不到则不刷）。
-    std::wstring path = net::ImageTransfer::AvatarCacheFilePathForFileId(selfId, fileid);
+    std::wstring path =
+        net::ImageTransfer::AvatarCacheFilePathForFileId(net::CurrentUserAccount(), fileid);
     if (path.empty() || ::GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES)
     {
         return;
@@ -4229,6 +4554,20 @@ bool CBalloonGroupChatWindow::IsMemberInGroupThunk(void* userdata, long long uid
     return self->m_memberInfo.find(uid) != self->m_memberInfo.end();
 }
 
+bool CBalloonGroupChatWindow::StarredThunk(void* userdata, long long uid)
+{
+    CBalloonGroupChatWindow* self = static_cast<CBalloonGroupChatWindow*>(userdata);
+    if (self == NULL || self->m_hostPanel == NULL || !::IsWindow(self->m_hostPanel))
+    {
+        return false;   // 拿不到主面板（调试入口）：按"未关注"处理
+    }
+
+    //同步问主面板要结果 —— 两者都在 UI 线程上，SendMessage 就是一次直接调用，
+    //不会阻塞；用 PostMessage 则既拿不到返回值，&uid 指向的栈变量也早没了。
+    const int64_t target = (int64_t)uid;
+    return ::SendMessage(self->m_hostPanel, FMG_MSG_QUERY_STARRED, 0, (LPARAM)&target) != 0;
+}
+
 int CBalloonGroupChatWindow::MemberRoleThunk(void* userdata, long long uid)
 {
     CBalloonGroupChatWindow* self = static_cast<CBalloonGroupChatWindow*>(userdata);
@@ -4517,6 +4856,14 @@ LRESULT CBalloonGroupChatWindow::OnChatMentionAction(UINT /*uMsg*/, WPARAM /*wPa
     case balloonchatwnd::kMentionMenuCopyName:
         PutMentionNameToClipboard(m_hWnd, name);
         break;
+    case balloonchatwnd::kMentionMenuStarred:
+        //标记 / 取消特别关注。名单在主面板手上（发协议、乐观更新、失败回滚都在那边），
+        //本窗口只把"用户点了这一项"转过去；目标状态由主面板按现状取反，故不用传。
+        if (m_hostPanel != NULL && ::IsWindow(m_hostPanel))
+        {
+            ::PostMessage(m_hostPanel, FMG_MSG_TOGGLE_STARRED, (WPARAM)uid, 0);
+        }
+        break;
     case balloonchatwnd::kMentionMenuSetAdmin:
         //设为管理员。菜单只对群主出现，服务端还会再校验一次（仅群主可设），
         //本端不预改界面 —— 等 cmd_group_member_changed_notify 推回来统一刷新。
@@ -4749,22 +5096,32 @@ bool CBalloonGroupChatWindow::PickAndUploadGroupFile()
         return false;   // 用户取消
     }
 
+    return UploadGroupFile(szFile);
+}
+
+bool CBalloonGroupChatWindow::UploadGroupFile(const std::wstring& path)
+{
+    // 调试入口（无群绑定）无服务器，不支持真实上传。
+    if (m_groupId == 0 || path.empty())
+    {
+        return false;
+    }
+
     int64_t selfId = (m_lpFMGClient != NULL)
                      ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
     // 入队上传，拿回客户端分配的 uploadId（可多笔并发，每笔一个 id）。
-    int uploadId = net::FileTransfer::GetInstance().EnqueueGroupFileUpload(m_groupId, szFile, selfId);
+    int uploadId = net::FileTransfer::GetInstance().EnqueueGroupFileUpload(m_groupId, path, selfId);
 
     // 从路径拆出文件名与扩展名，登记进上传跟踪器，使面板顶部立刻冒出一行「上传中 0%」。
-    std::wstring fullPath(szFile);
-    size_t slash = fullPath.find_last_of(L"\\/");
-    std::wstring nameW = (slash == std::wstring::npos) ? fullPath : fullPath.substr(slash + 1);
+    size_t slash = path.find_last_of(L"\\/");
+    std::wstring nameW = (slash == std::wstring::npos) ? path : path.substr(slash + 1);
     size_t dot = nameW.find_last_of(L'.');
     std::wstring extW = (dot == std::wstring::npos) ? std::wstring() : nameW.substr(dot + 1);
     m_uploadTracker.Begin(uploadId, nameW, extW);
     RenderFilePanel();
 
     // 路径先转 UTF-8 再以 %s 记日志（含中文路径用 %ls 会触发 narrow 日志器缓冲溢出断言）。
-    std::string pathUtf8 = CStringToUtf8(CString(szFile));
+    std::string pathUtf8 = CStringToUtf8(CString(path.c_str()));
     LOG_INFO("群文件上传已入队: group=%lld, uploadId=%d, path=%s。",
              (long long)m_groupId, uploadId, pathUtf8.c_str());
     return true;

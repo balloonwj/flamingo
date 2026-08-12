@@ -69,20 +69,26 @@ enum TrayMenuKind
  *  （静音图标）。文字与图标一起随 muted 切换。
  *
  *  四个在线状态项里"用户当前所处的那一项"同样用图标 + 文字双通道标记（原因同上，
- *  勾选标记用不了）：图标换成带外环的 kIconStatusCurrent、文字带"（当前）"后缀。
- *  两者都取自 MainPanelStatusMenu 的共用映射，与主面板状态菜单逐字一致。
+ *  勾选标记用不了）：文字带"（当前）"后缀，图标则在该状态的徽标外圈多画一环
+ *  （渲染期按 isCurrent 决定，见 MainPanelMenuIcons::CreateStatusIconImage）。
+ *  文字与字形都取自 MainPanelStatusMenu / PresenceBadge 的共用映射，与主面板状态
+ *  菜单逐字一致。
  */
 struct TrayMenuEntry
 {
     UINT           id;            // 功能项命令 id（见 TrayMenuId）；分隔条取 0
     bool           isSeparator;   // 是否为分隔条；true 时 label/iconKind 无意义
     const wchar_t* label;         // 显示文本（宽字符常量串）；分隔条取 nullptr
-    int            iconKind;      // 左侧图标类型（MainPanelIcons.h 的 IconKind）；无图标 / 分隔条取 -1
+    int            iconKind;      // 左侧图标类型（MainPanelIcons.h 的 IconKind）；无图标 / 分隔条取 -1。
+                                  // 在线状态项取该状态的徽标字形（kIconPresence* 之一），不随 isCurrent 变化
     bool           enabled;       // 是否可点击；false 为灰显 no-op（当前各项均 true）
-    COLORREF       dotColor;      // 在线状态项的圆点颜色（在线绿/离开橙/忙碌红/离线灰，与状态菜单同源）；
-                                  // 非状态项取 0，渲染时表示"用默认单色图标"，不做彩色覆盖
+    COLORREF       dotColor;      // 在线状态项的徽标颜色（在线绿/离开橙/忙碌红/离线灰，与状态菜单同源）；
+                                  // 非状态项取 0，渲染时表示"用默认单色图标"，不做彩色覆盖。
+                                  // <u>本字段兼作"是不是在线状态项"的判据</u>（!= 0 即是）
     bool           isCurrent;     // 是否为用户当前所处的在线状态；只有在线状态项可能为 true，
                                   // 且一份模型里至多一项为 true。非状态项 / 分隔条恒为 false
+    int            presence;      // 本行代表的在线状态（v2 presence_type）。<u>仅 dotColor != 0
+                                  // 时有意义</u>；非状态项 / 分隔条填 0，调用方不得读取
 };
 
 /**
@@ -95,8 +101,8 @@ struct TrayMenuEntry
  *                     （未静音"关闭所有声音"+kIconSound / 已静音"开启所有声音"+kIconMute），
  *                     其余形态忽略该参数。
  *    currentPresence：用户当前所处的在线状态（v2 presence_type）。与之相符的那一个状态
- *                     项被标记为当前项（isCurrent = true、图标换成 kIconStatusCurrent、
- *                     文字带"（当前）"后缀）。取值先经 NormalizePresenceForMenu 归一，
+ *                     项被标记为当前项（isCurrent = true、文字带"（当前）"后缀，
+ *                     渲染期再给徽标套一圈外环）。取值先经 NormalizePresenceForMenu 归一，
  *                     故隐身 / 越界值会落到"离线"项上。kTrayBeforeLogin / kTrayLocked
  *                     两种形态没有状态项，忽略该参数。
  *

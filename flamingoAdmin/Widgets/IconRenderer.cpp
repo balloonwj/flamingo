@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  flamingoAdmin —— 矢量图标绘制实现。
  *
  *  所有图标都在 0..24 的归一化坐标系里描述，DrawIcon 先把该坐标系映射到
@@ -347,11 +347,78 @@ void DrawWarning(Gdiplus::Graphics& g, Gdiplus::Pen& pen, Gdiplus::SolidBrush& b
     g.FillEllipse(&brush, 10.9f, 16.2f, 2.2f, 2.2f);    // 感叹号圆点
 }
 
+// 刷新：一段留缺口的圆弧 + 弧末端的实心箭头，整体读作"顺时针转一圈"。
+// 缺口开在正上方偏右，箭头落在缺口左端、沿切线指向顺时针方向。
+void DrawRefresh(Gdiplus::Graphics& g, Gdiplus::Pen& pen, Gdiplus::SolidBrush& brush)
+{
+    // 圆弧几何（归一化 0..24 坐标系）。圆心取视图盒中心，半径 7.5 与其余
+    // 图标的视觉重量相当。
+    const float kCx = 12.0f;         // 圆心 x
+    const float kCy = 12.0f;         // 圆心 y
+    const float kRadius = 7.5f;      // 圆弧半径
+
+    // GDI+ 角度：0° 指向 +x（右），顺时针为正（屏幕 y 轴朝下）。
+    // 从 300°（右上）起顺时针扫 300°，止于 240°（左上），正上方留 60° 缺口。
+    const float kStartAngle = 300.0f;   // 圆弧起始角（度）
+    const float kSweepAngle = 300.0f;   // 圆弧扫过的角度（度）
+
+    pen.SetStartCap(Gdiplus::LineCapRound);
+    pen.SetEndCap(Gdiplus::LineCapRound);
+    g.DrawArc(&pen, kCx - kRadius, kCy - kRadius, kRadius * 2.0f, kRadius * 2.0f,
+              kStartAngle, kSweepAngle);
+
+    // 箭头：位于圆弧末端，沿该处切线方向（顺时针运动方向）指出去。
+    const double kDegToRad = 3.14159265358979323846 / 180.0;
+    const double endRad = (kStartAngle + kSweepAngle) * kDegToRad;
+    const float endX = kCx + kRadius * static_cast<float>(cos(endRad));
+    const float endY = kCy + kRadius * static_cast<float>(sin(endRad));
+    // 顺时针运动方向的单位切向量：(-sinθ, cosθ)。
+    const float tx = -static_cast<float>(sin(endRad));
+    const float ty =  static_cast<float>(cos(endRad));
+    // 法向量（把切向量转 90°），用来撑开箭头底边两角。
+    const float nx = -ty;
+    const float ny =  tx;
+
+    const float kArrowLen  = 3.6f;   // 箭头长度（从底边中点到尖端）
+    const float kArrowHalf = 2.4f;   // 箭头底边半宽
+
+    Gdiplus::PointF arrow[3] =
+    {
+        Gdiplus::PointF(endX + tx * kArrowLen,  endY + ty * kArrowLen),    // 尖端
+        Gdiplus::PointF(endX + nx * kArrowHalf, endY + ny * kArrowHalf),   // 底边一角
+        Gdiplus::PointF(endX - nx * kArrowHalf, endY - ny * kArrowHalf),   // 底边另一角
+    };
+    g.FillPolygon(&brush, arrow, 3);
+}
+
 } // anonymous namespace
 
 // 假定 g 已经 SetSmoothingMode + ScaleTransform 到 24x24 视图盒。
 // 抽出来后供 DrawIcon(HDC,...) 与 RenderIconToBitmap 共用。
-static void DrawIconCore(Gdiplus::Graphics& g, Icon icon, COLORREF color)
+static // 下载图标：一根竖线 + 向下的箭头，下方一条底线。
+// 语义对应「客户端从服务器取升级包」，与侧栏其它图标同为 0..24 归一化坐标系。
+void DrawDownload(Gdiplus::Graphics& g, Gdiplus::Pen& pen, Gdiplus::SolidBrush& brush)
+{
+    (void)brush;
+
+    const float kCx = 12.0f;        // 竖线与箭头的中心 x
+    const float kShaftTop = 4.0f;   // 竖线顶端 y
+    const float kShaftBottom = 14.5f; // 竖线底端 y（箭头尖）
+    const float kHeadHalfW = 4.0f;  // 箭头左右各展开的宽度
+    const float kHeadTop = 10.5f;   // 箭头两翼的起始 y
+    const float kBaseY = 19.0f;     // 底线 y
+    const float kBaseHalfW = 6.5f;  // 底线左右各展开的宽度
+
+    pen.SetStartCap(Gdiplus::LineCapRound);
+    pen.SetEndCap(Gdiplus::LineCapRound);
+
+    g.DrawLine(&pen, kCx, kShaftTop, kCx, kShaftBottom);
+    g.DrawLine(&pen, kCx - kHeadHalfW, kHeadTop, kCx, kShaftBottom);
+    g.DrawLine(&pen, kCx + kHeadHalfW, kHeadTop, kCx, kShaftBottom);
+    g.DrawLine(&pen, kCx - kBaseHalfW, kBaseY, kCx + kBaseHalfW, kBaseY);
+}
+
+void DrawIconCore(Gdiplus::Graphics& g, Icon icon, COLORREF color)
 {
     Gdiplus::Pen pen(ToGdiColor(color), kStrokeWidth);
     pen.SetStartCap(Gdiplus::LineCapRound);
@@ -384,6 +451,8 @@ static void DrawIconCore(Gdiplus::Graphics& g, Icon icon, COLORREF color)
     case Icon::Terminal:     DrawTerminal(g, pen);         break;
     case Icon::Check:        DrawCheck(g, pen);            break;
     case Icon::Warning:      DrawWarning(g, pen, brush);   break;
+    case Icon::Refresh:      DrawRefresh(g, pen, brush);   break;
+    case Icon::Download:     DrawDownload(g, pen, brush);  break;
     default:                                              break;
     }
 }

@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  ChatMessageList.cpp
  *
  *  单聊窗消息区的实现。自上而下堆叠变高的 ChatBubble 行，鼠标滚轮滚动，
@@ -46,6 +46,8 @@ extern CAppModule _Module;
 #include "ChatMessageList.h"
 #include "ChatBubble.h"
 #include "ChatHistoryPaging.h"   // kHistoryLoadTriggerY（滚到多近算"到顶了"）
+#include "ChatTimeSeparator.h"    // 时间分隔行的判定与文案（何时插、插什么字）
+#include <time.h>                // time（取当前时刻，用于"今天 / 昨天"的判定）
 #include "../CustomMsgDef.h"   // WM_CHAT_RECALL_REQUEST（撤回请求转交宿主聊天窗）
 #include "../../balloonui/balloonui/DuiHost.h"
 
@@ -122,11 +124,29 @@ ChatMessageList::ChatMessageList()
     , m_memberQueryUd(NULL)
     , m_roleQuery(NULL)
     , m_roleQueryUd(NULL)
+    , m_starredQuery(NULL)
+    , m_starredQueryUd(NULL)
     , m_myNetRole(-1)
     , m_prependActive(false)
     , m_prependMarkCount(0)
     , m_prependMarkHeight(0)
+    , m_lastMsgTimestampMs(0)
 {
+}
+
+void ChatMessageList::RefreshAllRows()
+{
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b != NULL)
+        {
+            b->InvalidateMeasureCache();
+        }
+    }
+    ForceLayout(GetRect());
+    Invalidate();
 }
 
 void ChatMessageList::SetMemberInGroupQuery(MemberInGroupQuery fn, void* userdata)
@@ -157,6 +177,21 @@ int ChatMessageList::MemberNetRole(long long uid) const
         return -1;   // 无从查证（单聊窗 / 调试入口），管理项一律不出现
     }
     return m_roleQuery(m_roleQueryUd, uid);
+}
+
+void ChatMessageList::SetStarredQuery(StarredQuery fn, void* userdata)
+{
+    m_starredQuery   = fn;
+    m_starredQueryUd = userdata;
+}
+
+bool ChatMessageList::IsStarred(long long uid) const
+{
+    if (m_starredQuery == NULL)
+    {
+        return false;   // 无从查证（单聊窗 / 调试入口），按"未关注"显示
+    }
+    return m_starredQuery(m_starredQueryUd, uid);
 }
 
 void ChatMessageList::SetMyNetRole(int role)
@@ -327,6 +362,40 @@ bool ChatMessageList::ScrollToMsgid(long long msgid)
 
 void ChatMessageList::AppendMessage(const ChatMessage& msg)
 {
+    // 需要的话，先插一行居中的时间分隔（形态与口径见 docs/聊天消息时间显示方案.md）。
+    //
+    // 放在这个漏斗里而不是各调用点：实时收发、向上翻页（批次期间照常调本函数）、
+    // 单聊窗与群聊窗，全都从这里过，插一处即可，不会出现"某条路径忘了插"。
+    //
+    // 分隔行自身是 kMsgTime，不参与判定，否则会被自己的时间反复触发。
+    if (msg.kind != kMsgTime)
+    {
+        const long long nowMs = (long long)::time(NULL) * 1000LL;
+        if (ShouldInsertTimeSeparator(m_lastMsgTimestampMs, msg.timestampMs,
+                                      kChatTimeSeparatorThresholdMs))
+        {
+            const CString timeText = FormatChatSeparatorTime(msg.timestampMs, nowMs);
+            // 文案为空说明时间戳不可用，这一行就不插了 —— 插一行空白比不插更费解。
+            if (!timeText.IsEmpty())
+            {
+                ChatMessage sep;
+                sep.kind   = kMsgTime;
+                sep.fromMe = false;      // kMsgTime 忽略此项，给个确定值免得读到未初始化
+                sep.text   = timeText;
+
+                std::unique_ptr<ChatBubble> sepBubble(new ChatBubble());
+                sepBubble->SetMessage(sep);
+                AddChild(std::unique_ptr<balloonwjui::DuiControl>(sepBubble.release()));
+            }
+        }
+        // 时间未知（0）的消息不更新基准：否则后面一条正常消息会与 0 相比，
+        // 被判成"没有上一条"而多插一行。
+        if (msg.timestampMs > 0)
+        {
+            m_lastMsgTimestampMs = msg.timestampMs;
+        }
+    }
+
     std::unique_ptr<ChatBubble> bubble(new ChatBubble());
     bubble->SetMessage(msg);
     AddChild(std::unique_ptr<balloonwjui::DuiControl>(bubble.release()));
@@ -1135,6 +1204,49 @@ CString ChatMessageList::GetSelectedText() const
     return CString();
 }
 
+void PutTextToClipboard(HWND owner, LPCWSTR text)
+{
+    if (text == NULL || text[0] == L'\0')
+    {
+        return;
+    }
+    if (!::OpenClipboard(owner))
+    {
+        return;
+    }
+    ::EmptyClipboard();
+    const size_t chars = ::wcslen(text) + 1;
+    const size_t bytes = chars * sizeof(WCHAR);
+    HGLOBAL hMem = ::GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if (hMem != NULL)
+    {
+        void* dst = ::GlobalLock(hMem);
+        if (dst != NULL)
+        {
+            ::CopyMemory(dst, text, bytes);
+            ::GlobalUnlock(hMem);
+            ::SetClipboardData(CF_UNICODETEXT, hMem);
+        }
+        else
+        {
+            //锁不住就得自己释放，否则这块内存既没交给剪贴板、也没人回收。
+            ::GlobalFree(hMem);
+        }
+    }
+    ::CloseClipboard();
+}
+
+bool ChatMessageList::CopySelectedTextToClipboard()
+{
+    const CString text = GetSelectedText();
+    if (text.IsEmpty())
+    {
+        return false;   // 没有选区：这一下按键不归消息区，交回原处理者
+    }
+    PutTextToClipboard(HostHwnd(), (LPCWSTR)text);
+    return true;
+}
+
 void ChatMessageList::Layout(const RECT& rcAvail)
 {
     m_rcItem = rcAvail;
@@ -1312,6 +1424,7 @@ void ChatMessageList::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
                     (n > 0) ? kBarDeleteColor : kBarDisabledColor);
     }
 }
+
 
 bool ChatMessageList::OnMouseWheel(POINT /*pt*/, short zDelta, UINT /*mkFlags*/)
 {

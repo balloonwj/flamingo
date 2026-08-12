@@ -26,15 +26,24 @@ using namespace balloonmain;
 
 namespace {
 
-// 五种已知的被踢原因，供逐条遍历。未知（0）不在此列，它单独由 KICK4 覆盖。
-const int kAllKnownReasons[5] =
+// 全部已知的被踢原因，供逐条遍历。未知（0）不在此列，它单独由 KICK4 覆盖。
+const int kAllKnownReasons[] =
 {
     kKickoutReasonOtherDevice,
     kKickoutReasonDisabled,
     kKickoutReasonMaintenance,
     kKickoutReasonPasswordChanged,
     kKickoutReasonKickedByUser,
+    kKickoutReasonEnterpriseDisabled,
+    kKickoutReasonEnterpriseDeleted,
+    kKickoutReasonAccountDeleted,
+    kKickoutReasonKickedByAdmin,
 };
+
+// 已知原因的条数。由数组自身算出而不是写死 —— 以后再加新原因时只需往上面数组里
+// 补一行，遍历用例会自动覆盖到，不会出现"加了原因却漏测"。
+const int kKnownReasonCount =
+    static_cast<int>(sizeof(kAllKnownReasons) / sizeof(kAllKnownReasons[0]));
 
 } // anonymous namespace
 
@@ -49,6 +58,10 @@ TEST_CASE("KICK1 KickoutReasonValue 与协议 kickout_reason 逐条相等", "[ki
     CHECK((int)kKickoutReasonMaintenance     == (int)kickout_reason_maintenance);
     CHECK((int)kKickoutReasonPasswordChanged == (int)kickout_reason_password_changed);
     CHECK((int)kKickoutReasonKickedByUser    == (int)kickout_reason_kicked_by_user);
+    CHECK((int)kKickoutReasonEnterpriseDisabled == (int)kickout_reason_enterprise_disabled);
+    CHECK((int)kKickoutReasonEnterpriseDeleted  == (int)kickout_reason_enterprise_deleted);
+    CHECK((int)kKickoutReasonAccountDeleted     == (int)kickout_reason_account_deleted);
+    CHECK((int)kKickoutReasonKickedByAdmin      == (int)kickout_reason_kicked_by_admin);
 
     // 未知值不来自协议，它只是本端的兜底档位，必须与任何一个协议取值都不同，
     // 否则真有一个原因会被当成"未知"。
@@ -70,9 +83,9 @@ TEST_CASE("KICK2 异地登录的提示框文案与需求原文逐字相同", "[k
 // KICK3 ~ KICK5 —— 文案完整性
 // =====================================================================
 
-TEST_CASE("KICK3 五种已知原因的文案互不相同且均非空", "[kickout]")
+TEST_CASE("KICK3 各已知原因的文案互不相同且均非空", "[kickout]")
 {
-    for (int i = 0; i < 5; ++i)
+    for (int i = 0; i < kKnownReasonCount; ++i)
     {
         INFO("reason = " << kAllKnownReasons[i]);
         const wchar_t* text = GetKickoutNoticeText(kAllKnownReasons[i]);
@@ -81,9 +94,9 @@ TEST_CASE("KICK3 五种已知原因的文案互不相同且均非空", "[kickout
     }
 
     // 两两比对：任意两种原因的文案都不该重复，否则等于少写了一条、用户看不出区别。
-    for (int i = 0; i < 5; ++i)
+    for (int i = 0; i < kKnownReasonCount; ++i)
     {
-        for (int j = i + 1; j < 5; ++j)
+        for (int j = i + 1; j < kKnownReasonCount; ++j)
         {
             INFO("reason " << kAllKnownReasons[i] << " vs " << kAllKnownReasons[j]);
             CHECK(wcscmp(GetKickoutNoticeText(kAllKnownReasons[i]),
@@ -95,7 +108,9 @@ TEST_CASE("KICK3 五种已知原因的文案互不相同且均非空", "[kickout
 TEST_CASE("KICK4 未知与越界原因返回非空兜底文案", "[kickout]")
 {
     // 未知档位本身、服务端将来新增的取值、以及负数 / 极端值都必须有话可说。
-    const int kOutOfRangeReasons[4] = { kKickoutReasonUnknown, 6, 999, -1 };
+    // 这里的 10 是"本端尚未登记的下一个取值"——协议已用到 9（设备被管理员注销），
+    // 将来协议加了 10 就把这个数往后挪，保持它始终指向一个未登记值。
+    const int kOutOfRangeReasons[4] = { kKickoutReasonUnknown, 10, 999, -1 };
     for (int i = 0; i < 4; ++i)
     {
         INFO("reason = " << kOutOfRangeReasons[i]);
@@ -130,10 +145,18 @@ TEST_CASE("KO-A1 用户主动登出时清掉自动登录标志", "[kickout][auto
     CHECK(ShouldClearAutoLoginOnExit(kLoginExitUserLogout, kKickoutReasonOtherDevice));
 }
 
-TEST_CASE("KO-A2 被踢下线且原因是密码已修改时清掉标志", "[kickout][autologin]")
+TEST_CASE("KO-A2 账号已登不上的两种被踢原因要清掉标志", "[kickout][autologin]")
 {
-    // 本机存的密码已经失效，留着自动登录只会让用户每次开机都被弹一次"密码错误"。
+    // 密码已修改：本机存的密码已经失效，留着自动登录只会让用户每次开机都被弹一次
+    // "密码错误"。
     CHECK(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kKickoutReasonPasswordChanged));
+
+    // 企业已删除：账号虽在但已无企业归属，服务端登录校验会以"企业不存在"回绝，
+    // 且不可恢复 —— 留着自动登录同样只是每次开机弹一次失败。
+    CHECK(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kKickoutReasonEnterpriseDeleted));
+
+    // 账号已删除：账号本身没了，再登录会被判为未注册，同样不可恢复。
+    CHECK(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kKickoutReasonAccountDeleted));
 }
 
 TEST_CASE("KO-A3 其余被踢原因一律不动自动登录标志", "[kickout][autologin]")
@@ -143,6 +166,13 @@ TEST_CASE("KO-A3 其余被踢原因一律不动自动登录标志", "[kickout][a
     CHECK_FALSE(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kKickoutReasonDisabled));
     CHECK_FALSE(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kKickoutReasonMaintenance));
     CHECK_FALSE(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kKickoutReasonKickedByUser));
+
+    // 企业被停用是<u>可恢复</u>的：管理员把企业改回活跃后，用户开机就该照常自动
+    // 登进去，所以这一条必须留着标志 —— 与上面同为"企业"场景的"已删除"分道扬镳。
+    CHECK_FALSE(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kKickoutReasonEnterpriseDisabled));
+
+    // 被管理员注销某台设备：账号本身好好的，重新登录即可，不该动自动登录标志。
+    CHECK_FALSE(ShouldClearAutoLoginOnExit(kLoginExitKickedOut, kKickoutReasonKickedByAdmin));
 }
 
 TEST_CASE("KO-A4 未知原因与越界取值按保守一侧处理", "[kickout][autologin]")

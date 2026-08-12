@@ -52,10 +52,13 @@ CUserConfig::CUserConfig() : m_strFontName(_T("微软雅黑"))
 	m_bShakeFlashIcon = FALSE;
 	m_bDoNotDisturb = FALSE;
 	m_bNotifyAfterLock = TRUE;
+	m_bAutoAway = TRUE;				//默认开：无操作满 5 分钟自动切到离开
+	m_bKeepAwake = FALSE;			//默认关闭：该功能用于演示、长时间传输文件一类的临时场景
+	m_nAutoAwayDelayIndex = 0;		//默认 5 分钟（下拉第一项）
 	m_bAutoRecvImage = TRUE;
 	m_bAutoRecvFile = FALSE;
 	m_bMsgRoaming = TRUE;
-	m_bEmojiRain = TRUE;
+	m_bLinkDetect = TRUE;
 	m_nAudioInputIndex = 0;
 	m_nAudioOutputIndex = 0;
 	m_nCameraIndex = 0;
@@ -132,10 +135,15 @@ BOOL CUserConfig::LoadConfig(PCTSTR pszFilePath)
 	m_bShakeFlashIcon = iniFile.ReadInt(_T("Settings"), _T("ShakeFlashIcon"), 0, pszFilePath) ? TRUE : FALSE;
 	m_bDoNotDisturb = iniFile.ReadInt(_T("Settings"), _T("DoNotDisturb"), 0, pszFilePath) ? TRUE : FALSE;
 	m_bNotifyAfterLock = iniFile.ReadInt(_T("Settings"), _T("NotifyAfterLock"), 1, pszFilePath) ? TRUE : FALSE;
+	//缺省值 1 / 0：老账号的配置文件里没有这两项，按"开启、5 分钟"处理，与设置页默认值一致
+	m_bAutoAway = iniFile.ReadInt(_T("Settings"), _T("AutoAway"), 1, pszFilePath) ? TRUE : FALSE;
+	m_bKeepAwake = iniFile.ReadInt(_T("Settings"), _T("KeepAwake"), 0, pszFilePath) ? TRUE : FALSE;
+	m_nAutoAwayDelayIndex = iniFile.ReadInt(_T("Settings"), _T("AutoAwayDelayIndex"), 0, pszFilePath);
 	m_bAutoRecvImage = iniFile.ReadInt(_T("Settings"), _T("AutoRecvImage"), 1, pszFilePath) ? TRUE : FALSE;
 	m_bAutoRecvFile = iniFile.ReadInt(_T("Settings"), _T("AutoRecvFile"), 0, pszFilePath) ? TRUE : FALSE;
 	m_bMsgRoaming = iniFile.ReadInt(_T("Settings"), _T("MsgRoaming"), 1, pszFilePath) ? TRUE : FALSE;
-	m_bEmojiRain = iniFile.ReadInt(_T("Settings"), _T("EmojiRain"), 1, pszFilePath) ? TRUE : FALSE;
+	//缺省值 1：老账号的配置文件里没有这一项，按"识别"处理，与设置页默认值一致
+	m_bLinkDetect = iniFile.ReadInt(_T("Settings"), _T("LinkDetect"), 1, pszFilePath) ? TRUE : FALSE;
 	m_nAudioInputIndex = iniFile.ReadInt(_T("Settings"), _T("AudioInputIndex"), 0, pszFilePath);
 	m_nAudioOutputIndex = iniFile.ReadInt(_T("Settings"), _T("AudioOutputIndex"), 0, pszFilePath);
 	m_nCameraIndex = iniFile.ReadInt(_T("Settings"), _T("CameraIndex"), 0, pszFilePath);
@@ -199,10 +207,13 @@ BOOL CUserConfig::SaveConfig(PCTSTR pszFilePath)
 	iniFile.WriteInt(_T("Settings"), _T("ShakeFlashIcon"), m_bShakeFlashIcon, pszFilePath);
 	iniFile.WriteInt(_T("Settings"), _T("DoNotDisturb"), m_bDoNotDisturb, pszFilePath);
 	iniFile.WriteInt(_T("Settings"), _T("NotifyAfterLock"), m_bNotifyAfterLock, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("AutoAway"), m_bAutoAway, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("KeepAwake"), m_bKeepAwake, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("AutoAwayDelayIndex"), m_nAutoAwayDelayIndex, pszFilePath);
 	iniFile.WriteInt(_T("Settings"), _T("AutoRecvImage"), m_bAutoRecvImage, pszFilePath);
 	iniFile.WriteInt(_T("Settings"), _T("AutoRecvFile"), m_bAutoRecvFile, pszFilePath);
 	iniFile.WriteInt(_T("Settings"), _T("MsgRoaming"), m_bMsgRoaming, pszFilePath);
-	iniFile.WriteInt(_T("Settings"), _T("EmojiRain"), m_bEmojiRain, pszFilePath);
+	iniFile.WriteInt(_T("Settings"), _T("LinkDetect"), m_bLinkDetect, pszFilePath);
 	iniFile.WriteInt(_T("Settings"), _T("AudioInputIndex"), m_nAudioInputIndex, pszFilePath);
 	iniFile.WriteInt(_T("Settings"), _T("AudioOutputIndex"), m_nAudioOutputIndex, pszFilePath);
 	iniFile.WriteInt(_T("Settings"), _T("CameraIndex"), m_nCameraIndex, pszFilePath);
@@ -603,6 +614,36 @@ BOOL CUserConfig::IsEnableNotifyAfterLock() const
 	return m_bNotifyAfterLock;
 }
 
+void CUserConfig::EnableAutoAway(BOOL bEnable)
+{
+	m_bAutoAway = bEnable;
+}
+
+BOOL CUserConfig::IsEnableAutoAway() const
+{
+	return m_bAutoAway;
+}
+
+void CUserConfig::EnableKeepAwake(BOOL bEnable)
+{
+	m_bKeepAwake = bEnable;
+}
+
+BOOL CUserConfig::IsEnableKeepAwake() const
+{
+	return m_bKeepAwake;
+}
+
+void CUserConfig::SetAutoAwayDelayIndex(long nIndex)
+{
+	m_nAutoAwayDelayIndex = nIndex;
+}
+
+long CUserConfig::GetAutoAwayDelayIndex() const
+{
+	return m_nAutoAwayDelayIndex;
+}
+
 void CUserConfig::EnableAutoRecvImage(BOOL bEnable)
 {
 	m_bAutoRecvImage = bEnable;
@@ -633,14 +674,14 @@ BOOL CUserConfig::IsEnableMsgRoaming() const
 	return m_bMsgRoaming;
 }
 
-void CUserConfig::EnableEmojiRain(BOOL bEnable)
+void CUserConfig::EnableLinkDetect(BOOL bEnable)
 {
-	m_bEmojiRain = bEnable;
+	m_bLinkDetect = bEnable;
 }
 
-BOOL CUserConfig::IsEnableEmojiRain() const
+BOOL CUserConfig::IsEnableLinkDetect() const
 {
-	return m_bEmojiRain;
+	return m_bLinkDetect;
 }
 
 void CUserConfig::SetAudioInputIndex(long nIndex)

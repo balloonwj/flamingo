@@ -21,6 +21,7 @@
 #include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "../../balloonui/balloonui/DuiNotify.h"   // WM_DUI_NOTIFY / struct DuiNotify
 #include "../LoginAccountList.h"      // LOGIN_ACCOUNT_INFO / CLoginAccountList
+#include "../UserSessionData.h"       // FMG_MSG_UPDATE_RESULT / FMG_MSG_UPDATE_LOGIN_CONTINUE
 
 class CFlamingoClient;
 
@@ -28,6 +29,20 @@ class CFlamingoClient;
 namespace balloonwjui { class DuiComboBox; class DuiEditHost; class DuiButton; }
 // 自绘 Banner 控件 —— 同上，前置声明即可。
 namespace balloonauth { class AuthBanner; }
+
+// 延迟执行"删除一个历史账号"。wParam = 该账号在下拉框里的项索引，无堆负载。
+//
+// 为什么必须延迟：这个动作由账号下拉浮层里的删除叉触发，通知是在<u>浮层窗口的
+// 消息处理栈里</u>同步发出来的。要是就地弹二次确认框，模态框会泵消息，浮层随即
+// 因失去焦点而自我销毁（OnFinalMessage 里 delete this），等模态框返回、栈退回
+// DuiComboBoxPopup::OnDuiNotify 时那个对象已经没了 —— 实测表现为 atlwin.h 的
+// "Object deleted before window was destroyed" 断言。PostMessage 一拍之后再弹，
+// 浮层早已正常关闭，就没有这个问题了。
+//
+// 用 WM_APP 段而不是 WM_USER 段：客户端的 FMG_MSG_* 全在 WM_USER 段，且受
+// CFlamingoClient::ProxyWndProc 的 FMG_MSG_FIRST / FMG_MSG_LAST 闸门约束；
+// 本消息是登录窗投给自己的，不经代理窗，另起一段最省心、也不会与那批撞号。
+#define WM_APP_REMOVE_ACCOUNT   (WM_APP + 1)
 
 /**
  *  CBalloonLoginDlg
@@ -99,6 +114,11 @@ public:
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
         MESSAGE_HANDLER(WM_SYSCOMMAND, OnSysCommand)
         MESSAGE_HANDLER(WM_CLOSE,      OnCloseMsg)
+        MESSAGE_HANDLER(WM_APP_REMOVE_ACCOUNT, OnRemoveAccount)
+        //登录前那次检查更新的结果（升级窗 / UpdateManager 投来）
+        MESSAGE_HANDLER(FMG_MSG_UPDATE_RESULT, OnPreLoginUpdateResult)
+        //用户关掉了升级窗，被拦下的登录可以继续了
+        MESSAGE_HANDLER(FMG_MSG_UPDATE_LOGIN_CONTINUE, OnUpdateLoginContinue)
         CHAIN_MSG_MAP(balloonwjui::DuiFrameWindow)
     END_MSG_MAP()
 
@@ -119,6 +139,38 @@ private:
      *  循环退出后统一 DestroyWindow，此处不直接销毁。
      */
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_APP_REMOVE_ACCOUNT 处理：真正执行"删除一个历史账号"（弹二次确认、
+     *  删列表、落盘、刷界面）。由 OnDuiNotify 收到删除叉通知后 PostMessage
+     *  过来，延后一拍执行的理由见该消息号的定义处。
+     *    wParam：该账号在账号下拉框里的项索引。
+     */
+    LRESULT OnRemoveAccount(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  登录前那次检查更新的结果。lParam 是堆上的 update::UpdateTaskResult*，本函数
+     *  处理完后 delete。
+     *
+     *  查出可用新版本就弹升级窗并<u>不再继续登录</u>；已是最新 / 检查失败一律照常登录
+     *  —— 检查更新这条链路自己挂了不该把用户挡在门外。
+     */
+    LRESULT OnPreLoginUpdateResult(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    //用户关掉升级窗（点「稍后」）后继续被拦下的那次登录。强制升级时升级窗关不掉，
+    //这条消息不会到来，登录也就一直进行不下去。
+    LRESULT OnUpdateLoginContinue(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  发起一次"登录前检查更新"。
+     *  @return true 表示已发起、正在等结果，调用方应<u>暂不登录</u>；
+     *          false 表示发不出去（连不上服务器等），调用方照常登录即可。
+     */
+    bool StartPreLoginUpdateCheck();
+
+    //把登录按钮切到 / 切回"正在检查更新"外观。
+    //  checking：true 显示检查中并禁用按钮，false 恢复原样。
+    void SetLoginButtonChecking(bool checking);
 
     /**
      *  WM_DUI_NOTIFY 处理：分发客户区控件的点击 / 值变化通知 —— 登录
@@ -142,7 +194,6 @@ private:
     void OnNetworkClicked();
 
     // 检测新版本，用户确认后走自动升级流程（仅 Release 构建会调用）。
-    void DetectNewVersion();
 
     // 用 m_pLoginAccountList 的历史账号填充账号下拉框，并按默认账号 /
     // 最后登录账号预填账号与密码。须在 InitLoginUi 建好控件树后调用。
@@ -153,6 +204,21 @@ private:
      *    lpszAccount：账号名；在 m_pLoginAccountList 里查不到时不改动界面。
      */
     void LoadAccountIntoUi(LPCTSTR lpszAccount);
+
+    /**
+     *  从历史账号列表里删掉一个账号（账号下拉里点删除叉触发）。
+     *
+     *  先弹二次确认 —— 删掉就找不回来了，而删除叉紧挨着账号文字，误点的代价
+     *  不该是"账号和聊天记录都没了"。确认框里另给一个「同时删除本地聊天记录」
+     *  的勾选项，默认<u>不勾</u>：多数人只是想让下拉列表干净点，不是要清历史。
+     *
+     *  确认后依次：从 CLoginAccountList 删除并落盘、从下拉框摘掉该项、必要时
+     *  把界面切到另一个账号；勾了那个选项的话再删掉 Users\<账号>\ 整个目录。
+     *
+     *    comboIndex：下拉框里的项索引（DUICBN_ITEMDELETE 带回来的 extra）。
+     *                越界、或该项对应的账号已不在历史列表里时什么都不做。
+     */
+    void RemoveAccountFromHistory(int comboIndex);
 
     /**
      *  把当前账号的两个勾选项（记住密码 / 自动登录）就地写回历史账号列表并落盘。
@@ -223,6 +289,7 @@ private:
     // 本类不负责释放。未 InitLoginUi 时为 NULL。
     balloonwjui::DuiComboBox* m_pAccountCombo;   // 账号下拉框
     balloonwjui::DuiEditHost* m_pPasswordEdit;   // 密码输入框
+    balloonwjui::DuiButton*   m_pLoginButton;    // “登录”按钮（检查更新期间要改文案并禁用）
     balloonwjui::DuiButton*   m_pRememberPwd;    // “记住密码”复选框
     balloonwjui::DuiButton*   m_pAutoLogin;      // “自动登录”复选框
     balloonauth::AuthBanner*  m_pBanner;         // 顶部品牌 / 头像 Banner（含可点击的在线状态胶囊）
@@ -234,6 +301,10 @@ private:
     LOGIN_ACCOUNT_INFO m_stAccountInfo;       // 当前待登录的账号信息
     CString            m_strDefaultAccount;   // 预填账号，空表示不预填
     CString            m_strDefaultPassword;  // 预填密码，与预填账号配套
+    //本次进程内是否已经做过"登录前检查更新"。只查一次：用户点「稍后」之后再点登录
+    //不该又被拦一遍，否则永远登不进去。
+    bool               m_preLoginUpdateChecked;
+
     bool               m_modalRunning;        // 模态消息循环是否在运行
     INT_PTR            m_modalResult;         // DoModal 的返回值缓存
     HBITMAP            m_hBgBitmap;           // 窗体 9-grid 背景图，本类持有并释放

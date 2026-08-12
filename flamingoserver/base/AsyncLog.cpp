@@ -9,6 +9,7 @@
 #include <sys/timeb.h>
 #include <stdio.h>
 #include <string.h>
+#include <errno.h>
 #include <sstream>
 #include <iostream>
 #include <stdarg.h>
@@ -30,6 +31,7 @@ std::mutex CAsyncLog::m_mutexWrite;
 std::condition_variable CAsyncLog::m_cvWrite;
 bool CAsyncLog::CAsyncLog::m_bExit = false;
 bool CAsyncLog::m_bRunning = false;
+bool CAsyncLog::m_bFileWriteDisabled = false;
 
 bool CAsyncLog::init(const char* pszLogFileName/* = nullptr*/, bool bTruncateLongLine/* = false*/, int64_t nRollSize/* = 10 * 1024 * 1024*/)
 {
@@ -54,6 +56,11 @@ bool CAsyncLog::init(const char* pszLogFileName/* = nullptr*/, bool bTruncateLon
 
     //TODO：创建文件夹
 
+    //退出标志与文件停用标志都要复位，否则 uninit 之后再次 init 起来的写日志线程
+    //会因为看到上一轮遗留的 m_bExit 而立即退出，整个进程再也打不出日志
+    m_bExit = false;
+    m_bFileWriteDisabled = false;
+
     m_spWriteThread.reset(new std::thread(writeThreadProc));
 
     return true;
@@ -65,9 +72,11 @@ void CAsyncLog::uninit()
 
     m_cvWrite.notify_one();
 
-    if (m_spWriteThread->joinable())
+    //没有 init 过就调用 uninit 时 m_spWriteThread 是空的，不能直接解引用。
+    //进程退出路径上多处都会调 uninit，容不得它自己再崩一次
+    if (m_spWriteThread && m_spWriteThread->joinable())
         m_spWriteThread->join();
-    
+
     if(m_hLogFile != nullptr)
 	{
         fclose(m_hLogFile);
@@ -86,6 +95,11 @@ void CAsyncLog::setLevel(LOG_LEVEL nLevel)
 bool CAsyncLog::isRunning()
 {
     return m_bRunning;
+}
+
+bool CAsyncLog::isFileWriteDisabled()
+{
+    return m_bFileWriteDisabled;
 }
 
 bool CAsyncLog::output(long nLevel, const char* pszFmt, ...)
@@ -444,6 +458,24 @@ bool CAsyncLog::createNewFile(const char* pszLogFileName)
     return m_hLogFile != nullptr;
 }
 
+void CAsyncLog::disableFileWrite(const char* pszLogFileName)
+{
+    m_bFileWriteDisabled = true;
+
+    if (m_hLogFile != nullptr)
+    {
+        fclose(m_hLogFile);
+        m_hLogFile = nullptr;
+    }
+
+    //这条提示不能用 LOGE 之类打出去：出问题的正是写日志本身，
+    //绕回自己只会让提示跟着丢掉，所以直接写标准错误
+    fprintf(stderr, "[AsyncLog] cannot write log file \"%s\" (%s), "
+                    "fall back to console output only\n",
+            pszLogFileName != nullptr ? pszLogFileName : "", strerror(errno));
+    fflush(stderr);
+}
+
 bool CAsyncLog::writeToFile(const std::string& data)
 {
     //为了防止长文件一次性写不完，放在一个循环里面分批写
@@ -482,8 +514,8 @@ void CAsyncLog::writeThreadProc()
     m_bRunning = true;
 
     while (true)
-    {        
-        if (!m_strFileName.empty())
+    {
+        if (!m_strFileName.empty() && !m_bFileWriteDisabled)
         {
             if (m_hLogFile == nullptr || m_nCurrentWrittenSize >= m_nFileRollSize)
             {
@@ -507,9 +539,15 @@ void CAsyncLog::writeThreadProc()
                 strNewFileName += ".";
                 strNewFileName += m_strFileNamePID;
                 strNewFileName += ".log";
+                //建不出日志文件不能让本线程就此结束：它是唯一一个把日志队列写出去的线程，
+                //一旦退出，连控制台也不再有任何输出，进程却还在正常跑，
+                //现象就是「服务活着但一行日志都没有」，极难定位。
+                //这里退化为只写控制台并说明一次原因，让服务继续可观测
                 if (!createNewFile(strNewFileName.c_str()))
-                    return;
-            }// end inner if        
+                {
+                    disableFileWrite(strNewFileName.c_str());
+                }
+            }// end inner if
         }// end outer-if
 
 
@@ -536,13 +574,18 @@ void CAsyncLog::writeThreadProc()
         OutputDebugStringA("\n");
 #endif
 
-        if (!m_strFileName.empty())
+        if (!m_strFileName.empty() && !m_bFileWriteDisabled)
         {
+            //写失败同样只停用文件写入，理由与上面建文件失败时一致
             if (!writeToFile(strLine))
-                return;
-
-            m_nCurrentWrittenSize += strLine.length();
-        }     
+            {
+                disableFileWrite(m_strFileName.c_str());
+            }
+            else
+            {
+                m_nCurrentWrittenSize += strLine.length();
+            }
+        }
     }// end outer-while-loop
 
     m_bRunning = false;

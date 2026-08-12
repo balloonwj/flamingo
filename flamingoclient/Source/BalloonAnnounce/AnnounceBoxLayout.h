@@ -18,9 +18,10 @@
  *    │                            [全部标为已读]     │
  *    └───────────────────────────────────────────────┘
  *
- *  列表行用 AnnounceRow（DuiHBox 子类，只补悬停 / 选中态与未读点），其余一律用
- *  balloonui 现成控件（DuiVBox / DuiHBox / DuiLabel / DuiButton / DuiSeparator /
- *  DuiScrollView）组合，不自绘。
+ *  列表行用 AnnounceRow（DuiHBox 子类，只补悬停 / 选中态与未读点），左右两栏的滚动
+ *  视口用 balloonmain::MainPanelScrollView（DuiScrollView 子类，滚动条悬浮、滚动时
+ *  淡入、空闲后淡出），其余一律用 balloonui 现成控件（DuiVBox / DuiHBox / DuiLabel /
+ *  DuiButton / DuiSeparator）组合，不自绘。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前，调用方必须已引入 ATL/WTL
  *  （Flamingo 侧由 stdafx.h 保证，FlamingoUnit 侧由其 stdafx.h 保证）。
@@ -34,6 +35,9 @@
 #include <stdint.h>
 
 #include "../../balloonui/balloonui/DuiControl.h"
+
+namespace balloonwjui { class DuiScrollView; }
+namespace balloonhistory { class HistoryContentView; }
 
 namespace balloonannounce {
 
@@ -141,6 +145,61 @@ std::unique_ptr<balloonwjui::DuiControl> BuildAnnounceListContent(
     int selectedIndex,
     LPCTSTR emptyTitle,
     LPCTSTR emptySubtitle);
+
+/**
+ *  把「哪一行选中 / 哪些行未读 / 顶部计数 / 底部按钮可用性」落到<u>既有</u>控件上。
+ *
+ *  点选一条公告、或把公告标为已读时用它代替整棵控件树重建：这些场景下行的<u>集合</u>
+ *  没有变，变的只是每行的状态与两处文案，重建整棵树既费时（要重查本地库、重新排版、
+ *  重新测正文高度），又会把列表的滚动位置清零 —— 用户点了靠下的一行，列表却跳回顶部。
+ *
+ *  行的集合真的变了（收到新公告 / 公告被撤回）时本函数不适用，那种情况仍须重建列表内容
+ *  （见 BuildAnnounceListContent），因为要新增 / 删除行控件。
+ *
+ *    root：客户区根控件（BuildAnnounceBoxBody 的产物）；为空时直接返回。
+ *    data：当前整窗渲染数据；其中只有 m_rows 的未读位、m_selectedIndex、
+ *          m_totalCount、m_unreadCount 会被用到。
+ *  副作用：状态确有变化的控件会被标脏重绘。不碰任何一栏的滚动位置。
+ */
+void ApplyAnnounceListState(balloonwjui::DuiControl* root, const AnnounceBoxViewData& data);
+
+/**
+ *  把右栏三项（标题 / 发布者·时间 / 正文）换成当前选中的那一条，重算正文滚动范围，
+ *  并把正文滚回顶部。同样不重建控件树。
+ *
+ *  正文滚回顶部是有意为之：上一条公告看到一半的位置对新选中的这条没有意义，
+ *  留在那儿只会让人以为开头的内容丢了。
+ *
+ *    root：客户区根控件；为空时直接返回。
+ *    data：当前整窗渲染数据；用到 m_selectedIndex 与 m_detailTitle / m_detailMeta /
+ *          m_detailBody。m_selectedIndex 为 -1 时标题与 meta 置空、正文显示占位提示。
+ *  须在布局落定之后调用（要按视口实际宽度算正文高度）。
+ */
+void ApplyAnnounceDetail(balloonwjui::DuiControl* root, const AnnounceBoxViewData& data);
+
+/**
+ *  按右栏滚动视口的实际宽度算出正文折行后的高度，喂给视口并让它重新排一次。
+ *
+ *  正文是一个多行内联文本控件，它折行后有多高只有拿到<u>实际宽度</u>才问得出
+ *  （HistoryContentView::MeasureHeight）。滚动视口的内容高度就是这个值——不设的话
+ *  视口以为内容只有一屏高，长公告滚不下去。
+ *
+ *  设完高度还必须让视口重排一次：DuiScrollView::SetContentHeight 只更新滚动范围，
+ *  <u>不</u>重算内容控件的名义矩形，而那个矩形是上一次布局按当时的内容高（建窗时
+ *  还是 0）算的，只有一个视口那么高。不补这一下，正文滚过一屏后整块内容矩形就跑到
+ *  视口上方，DuiScrollView::OnPaint 里那句 IntersectRect 不成立，正文会整块不画
+ *  ——表现为"往下滚着滚着正文突然没了"。
+ *
+ *  须在布局完成之后调用（此时控件的 GetRect 才有效）：建窗后、每次局部刷新后、
+ *  以及窗口尺寸变化后各调一次。
+ *
+ *    scroll：右栏正文滚动视口；为空时静默返回。
+ *    body：  右栏正文控件；为空时静默返回。
+ *  @return 算得并已设进视口的内容总高（像素）；控件为空或布局尚未落定（视口矩形
+ *          为空）时返回 0，且不改动任何状态。
+ */
+int SyncAnnounceDetailBodyHeight(balloonwjui::DuiScrollView* scroll,
+                                 balloonhistory::HistoryContentView* body);
 
 /**
  *  把某行的 id 反解成行下标。

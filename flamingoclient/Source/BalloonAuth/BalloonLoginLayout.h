@@ -83,6 +83,44 @@ enum LoginInputResult
 LoginInputResult ValidateLoginInput(const CString& account, const CString& password);
 
 /**
+ *  MakePostRegisterFill 的产物 —— 注册成功后登录表单各控件应处的状态。
+ *
+ *  为什么要单独立一个结构体：注册成功后要动的不止账号一处（账号框、密码框、
+ *  两个勾选框各有各的取值），把"该回填成什么样"从对话框代码里抽出来做成纯
+ *  函数，才能不建窗口就把它测住 —— "密码没跟着回填"这个 bug 正是因为这段
+ *  决策原先散在 UI 事件处理里、无从测起。
+ */
+struct PostRegisterFill
+{
+    bool    m_shouldFill;    // 是否应执行回填；false 时其余字段无意义，调用方保持界面原样
+    CString m_account;       // 账号框应显示的账号（服务端注册时分配的那个）
+    CString m_password;      // 密码框应显示的密码（用户注册时设置的明文，原样不作修剪）
+    bool    m_rememberPwd;   // “记住密码”复选框应处的勾选状态
+    bool    m_autoLogin;     // “自动登录”复选框应处的勾选状态
+};
+
+/**
+ *  算出注册成功后登录表单应回填成什么样。
+ *
+ *  规则：
+ *    · 账号为空或纯空白 —— 视为服务端没给出账号（注册成功的应答里理论上
+ *      不会这样），m_shouldFill 为 false，调用方应保持登录界面原样并记一条
+ *      错误日志；
+ *    · 账号有效 —— 账号与密码分别回填，密码<u>原样</u>写入、不作 Trim
+ *      （首尾空格在密码里是有效字符，去掉就登不上去了）；
+ *    · 两个勾选框一律回到未勾选 —— 用户此刻还没表达过"记住密码"的意愿，
+ *      而且这与调用方同时写进历史账号列表的那条记录（空密码 + 两项皆否）
+ *      保持一致，免得界面显示的与盘上存的对不上。
+ *
+ *    registeredAccount： 注册成功后服务端分配的账号。
+ *    registeredPassword：用户在注册窗里设置的明文密码；传空串则密码框被清空
+ *                        —— 宁可空着，也不能把上一个账号的密码留在框里。
+ *  返回：见 PostRegisterFill。纯函数，无副作用，便于单元测试。
+ */
+PostRegisterFill MakePostRegisterFill(const CString& registeredAccount,
+                                      const CString& registeredPassword);
+
+/**
  *  决定登录窗顶部 Banner 头像方块的底色。
  *
  *  规则（与"切换账号头像跟着变 / 未登录账号显示默认头像"的需求对应）：

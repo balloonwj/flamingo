@@ -446,10 +446,10 @@ static void BuildLast14Days(std::vector<std::string>& outYmd,
 #endif
         char ymd[16] = { 0 };
         char label[8] = { 0 };
-        snprintf(ymd, sizeof(ymd), "%04d-%02d-%02d",
-                 tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday);
-        snprintf(label, sizeof(label), "%02d-%02d",
-                 tmv.tm_mon + 1, tmv.tm_mday);
+        //用 strftime 而不是 snprintf 拼 struct tm 的字段：GCC 把 tm_mon / tm_mday 等
+        //当作无界的 int，认为每个 %02d 最坏要写 11 个字节，从而报 -Wformat-truncation 误报
+        strftime(ymd, sizeof(ymd), "%Y-%m-%d", &tmv);
+        strftime(label, sizeof(label), "%m-%d", &tmv);
         outYmd.push_back(ymd);
         outLabel.push_back(label);
     }

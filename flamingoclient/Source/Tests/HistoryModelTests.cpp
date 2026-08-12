@@ -14,11 +14,24 @@
 using namespace balloonhistory;
 
 //取临时目录下的 db 全路径并删旧文件，保证每个用例从空库开始。
+//
+//文件名里带当前进程 id，是为了让<u>并发跑的两个测试进程</u>各用各的库文件。此前这里
+//用的是固定文件名，命令行跑一份、同时 VS 里又跑一份时两个进程会共用同一个文件：先
+//起的进程正打开着它，后起的进程 DeleteFileW 删不掉（Windows 上被占用的文件删除会
+//失败），随后 CV2MsgStore::Open 失败，表现为 REQUIRE(store.Open(...)) 为 false。
+//这类失败与被测代码无关，却极易被误判成回归——已经误判过一次。
+//
+//代价是每跑一次会在临时目录留下几个几十 KB 的 db 文件，由系统的临时目录清理回收。
 static std::wstring FreshTempDb(const wchar_t* name)
 {
     wchar_t dir[MAX_PATH] = { 0 };
     ::GetTempPathW(MAX_PATH, dir);
+
+    wchar_t prefix[32] = { 0 };
+    ::swprintf_s(prefix, L"%u_", static_cast<unsigned int>(::GetCurrentProcessId()));
+
     std::wstring path = dir;
+    path += prefix;
     path += name;
     ::DeleteFileW(path.c_str());
     return path;

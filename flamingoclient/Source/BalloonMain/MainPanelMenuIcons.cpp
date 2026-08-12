@@ -15,6 +15,7 @@
 #include "stdafx.h"
 #include "MainPanelMenuIcons.h"
 #include "MainPanelIcons.h"        // DrawLineIcon / IconKind
+#include "PresenceBadge.h"         // DrawPresenceBadge（在线状态徽标）
 #include "../ImageEx.h"            // CImageEx（CImage 子类）
 
 #include <gdiplus.h>
@@ -45,6 +46,22 @@ void EnsureGdiplus()
 // 菜单图标描边宽度，以 viewBox 24 为基准（与 MainPanelIcons 其它图标同口径）。
 const Gdiplus::REAL kMenuIconStroke = 2.0f;
 
+// 建一张 sizePx 见方的 32bpp 预乘 alpha CImageEx，尚未绘制任何内容。失败返回 NULL。
+//
+// 负高度 → top-down DIB：GetPitch() 为正、GetBits() 指向视觉首行，直接交给 GDI+
+// 不存在上下翻转歧义。createAlphaChannel → 32bpp 带 alpha，CImage::Draw 走
+// AlphaBlend（DuiMenu 即这样绘制图标）。
+CImageEx* CreateTransparentIconImage(int sizePx)
+{
+    CImageEx* img = new CImageEx();
+    if (!img->Create(sizePx, -sizePx, 32, CImage::createAlphaChannel))
+    {
+        delete img;
+        return NULL;
+    }
+    return img;
+}
+
 } // anonymous namespace
 
 CImageEx* CreateMenuIconImage(int iconKind, COLORREF color, int sizePx)
@@ -56,14 +73,9 @@ CImageEx* CreateMenuIconImage(int iconKind, COLORREF color, int sizePx)
 
     EnsureGdiplus();
 
-    CImageEx* img = new CImageEx();
-
-    // 负高度 → top-down DIB：GetPitch() 为正、GetBits() 指向视觉首行，直接交给
-    // GDI+ 不存在上下翻转歧义。createAlphaChannel → 32bpp 带 alpha，CImage::Draw
-    // 走 AlphaBlend（DuiMenu 即这样绘制图标）。
-    if (!img->Create(sizePx, -sizePx, 32, CImage::createAlphaChannel))
+    CImageEx* img = CreateTransparentIconImage(sizePx);
+    if (img == NULL)
     {
-        delete img;
         return NULL;
     }
 
@@ -88,6 +100,36 @@ CImageEx* CreateMenuIconImage(int iconKind, COLORREF color, int sizePx)
     return img;
 }
 
+CImageEx* CreateStatusIconImage(int presence, bool markCurrent, int sizePx)
+{
+    if (sizePx <= 0)
+    {
+        return NULL;
+    }
+
+    EnsureGdiplus();
+
+    CImageEx* img = CreateTransparentIconImage(sizePx);
+    if (img == NULL)
+    {
+        return NULL;
+    }
+
+    Gdiplus::Bitmap bitmap(sizePx, sizePx, img->GetPitch(),
+                           PixelFormat32bppPARGB,
+                           static_cast<BYTE*>(img->GetBits()));
+
+    Gdiplus::Graphics g(&bitmap);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.Clear(Gdiplus::Color(0, 0, 0, 0));
+
+    // 字形与颜色都由 presence 决定，调用方不必查配色表 —— 与胶囊、列表状态点同源。
+    DrawPresenceBadge(g, presence, markCurrent, 0.0f, 0.0f,
+                      static_cast<Gdiplus::REAL>(sizePx));
+
+    return img;
+}
+
 void AppendStatusMenuItems(balloonwjui::DuiMenu& menu,
                            std::vector<std::unique_ptr<CImageEx> >& icons,
                            const std::vector<StatusMenuEntry>& model,
@@ -99,9 +141,9 @@ void AppendStatusMenuItems(balloonwjui::DuiMenu& menu,
     {
         const StatusMenuEntry& e = model[i];
 
-        // 图标类型由行模型给出：当前所处的状态是带外环的 kIconStatusCurrent，其余
-        // 是普通实心点 kIconOnline；颜色一律取该状态的圆点色，与胶囊同源。
-        CImageEx* icon = CreateMenuIconImage(e.iconKind, e.dotColor, iconSizePx);
+        // 图标是本行所代表状态的徽标（字形与颜色都由 presence 决定，与胶囊同源）；
+        // 当前所处的那一项额外套一圈外环。
+        CImageEx* icon = CreateStatusIconImage(e.presence, e.isCurrent, iconSizePx);
 
         // 先存进容器保活，再交给 DuiMenu 借用；渲染失败时 icon 为 NULL，AppendItem 容忍。
         icons.push_back(std::unique_ptr<CImageEx>(icon));

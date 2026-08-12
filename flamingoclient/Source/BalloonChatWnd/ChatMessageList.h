@@ -22,6 +22,18 @@
 
 namespace balloonchatwnd {
 
+/**
+ *  把一段 Unicode 文字放进剪贴板。
+ *
+ *  放在本文件是因为"选中一段文字然后复制"有<u>两条</u>入口 —— 气泡的右键「复制」
+ *  与消息区的 Ctrl+C —— 两处必须写出同样的剪贴板内容，实现只该有一份。之所以不
+ *  放进 ChatTextSelection：那是明确的<u>纯逻辑</u>模块，不引 windows.h，而剪贴板
+ *  少不了 HWND。
+ *    owner：拥有本次剪贴板会话的窗口。
+ *    text： 要复制的文字；NULL 或空串时什么都不做。
+ */
+void PutTextToClipboard(HWND owner, LPCWSTR text);
+
 class ChatBubble;
 
 /**
@@ -221,6 +233,32 @@ public:
     int MemberNetRole(long long uid) const;
 
     /**
+     *  查询某 userid 当前是否被本人「特别关注」。
+     *    userdata：SetStarredQuery 时透传的用户数据（一般是群聊窗 this）。
+     *    uid：     待查的 userid。
+     *  @return 已关注返回 true。
+     */
+    typedef bool (*StarredQuery)(void* userdata, long long uid);
+
+    /**
+     *  装上"该联系人是否被特别关注"的查询钩子。气泡里 @某人 的右键菜单、以及发送者
+     *  头像的右键菜单据此决定那一项的文案是「特别关注」还是「取消特别关注」。
+     *
+     *  为什么要走钩子：关注名单只有主面板那一份（balloonmain::StarredModel），气泡与
+     *  消息列表都不认识它；与上面两个群成员查询同一套路子，宿主窗代问、控件只管显示。
+     *  只有群聊窗需要装；单聊窗不装即可（不装时恒返回 false，见 IsStarred）。
+     *    fn：      查询回调；传 NULL 表示卸载。
+     *    userdata：回调透传的用户数据（借用，不持有）。
+     */
+    void SetStarredQuery(StarredQuery fn, void* userdata);
+
+    /**
+     *  该联系人当前是否被本人特别关注。未装查询钩子时恒返回 false（无从查证时
+     *  按"未关注"显示，点下去就是去关注，是这两种误判里代价较小的那个）。
+     */
+    bool IsStarred(long long uid) const;
+
+    /**
      *  设置 / 读取本人在本群的角色，取值见 grouprole::NetGroupRole，负值表示未知。
      *  由群聊窗在自己的角色更新时同步下来 —— 气泡不认识"当前登录用户"这类业务对象，
      *  与其让它去问，不如由宿主推给它。
@@ -322,6 +360,26 @@ public:
      */
     CString GetSelectedText() const;
 
+    /**
+     *  把当前选中的那段文字复制到剪贴板（内容口径与气泡右键「复制」完全一致，
+     *  内联表情替换成 "[表情]"）。
+     *
+     *  供宿主聊天窗响应 Ctrl+C。<u>没有任何气泡有选区时什么都不做</u> —— 不去
+     *  "退而复制整条"，那种情形下"整条"指的是哪一条说不清楚。
+     *  @return 确实有选区并已写入剪贴板返回 true；没有选区返回 false（调用方据此
+     *          决定要不要把这次按键交回原处理者，比如输入框自己的复制）。
+     */
+    bool CopySelectedTextToClipboard();
+
+    /**
+     *  让所有消息行重新测量并重绘。
+     *
+     *  用于"消息内容没变、但渲染口径变了"的场合 —— 目前只有系统设置里改动
+     *  「自动识别链接」开关时用得上。行高可能随之变化（链接不改变文字，理论上
+     *  不变；但重新测量是安全的做法），故走一次完整重排而不是只 Invalidate。
+     */
+    void RefreshAllRows();
+
     // DuiControl 覆写：按各 ChatBubble 的行高堆叠子控件（含滚动偏移）。
     void Layout(const RECT& rcAvail) override;
 
@@ -389,6 +447,7 @@ private:
     // 释放离屏合成缓冲。
     void ReleaseOffscreen();
 
+
 private:
     // 滚动到接近顶部时向宿主聊天窗投 WM_CHAT_LOAD_OLDER，请它判断要不要拉更早的
     // 一页。本控件不持有分页状态（有没有在途、还有没有更早的、before 锚点是多少），
@@ -401,6 +460,11 @@ private:
     bool   m_prependActive;
     size_t m_prependMarkCount;
     int    m_prependMarkHeight;
+
+    // 上一条<u>真实</u>消息的时间（Unix 毫秒），供时间分隔行判定用；0=还没有过。
+    // 只记真实消息：分隔行自身不参与判定，时间未知（0）的消息也不更新它，否则
+    // 后面一条正常消息会与 0 相比、被判成"没有上一条"而多插一行。
+    long long m_lastMsgTimestampMs;
 
     int  m_scrollY;        // 当前纵向滚动偏移
     int  m_contentHeight;  // 全部消息行的总高
@@ -416,6 +480,11 @@ private:
     // 单聊窗不装 —— 为空时 MemberNetRole 恒返回 -1。
     MemberRoleQuery m_roleQuery;
     void*           m_roleQueryUd;
+
+    // "该联系人是否被特别关注"的查询钩子与其透传数据（借用，不持有）。群聊窗装上，
+    // 单聊窗不装 —— 为空时 IsStarred 恒返回 false。
+    StarredQuery m_starredQuery;
+    void*        m_starredQueryUd;
 
     // 本人在本群的角色，取值见 grouprole::NetGroupRole；-1 表示未知（单聊窗 / 尚未拉到群资料）
     int m_myNetRole;

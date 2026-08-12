@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  flamingoAdmin —— 公告中心右栏「公告详情」面板 AnnouncementPreviewPanel 实现。
  *
  *  balloonwj@qq.com   2026-05-26
@@ -33,6 +33,9 @@ const int kPinnedChipW   = 60;  // "已置顶"徽章预估宽度
 const int kScheduledChipW = 72; // "定时发送"徽章预估宽度
 const int kDateW         = 240; // 日期文字最大宽度(右对齐)
 const int kTitleBottomGap = 12; // 标题与发送者行之间间距
+// 单行标题的高度富余量（像素）：DrawText 量出的行高与 RichEdit 实际行高
+// 略有出入，多给几像素免得字形下沿被切。
+const int kTitleSingleLinePad = 6;
 const int kSenderRowH    = 22;  // 发送者行高度
 const int kAvatarSize    = 22;  // 头像尺寸
 const int kSenderRowGap  = 8;   // 头像与文字间距
@@ -198,6 +201,11 @@ AnnouncementPreviewPanel::AnnouncementPreviewPanel()
     // ====================================================================
     std::unique_ptr<DuiRichEditHost> titleEdit = MakeReadOnlyRichEdit(
         ui::UiFont(kTitlePt, true), theme::kInk700);
+    //标题固定单行：换行版靠 DrawText 量算高度，而 RichEdit 的真实行高与之有出入，
+    //两行标题经常差几像素、末行被切掉半截（见 snapshots/105040.png）。单行则高度
+    //恒定、不依赖量算，超长部分直接被控件矩形截断，仍可选中复制。
+    titleEdit->SetMultiLine(false);
+    titleEdit->SetWordWrap(false);
     m_titleEdit = titleEdit.get();
     AddChild(std::move(titleEdit), Hint().Fixed(0).Margin(0, 0, 0, kTitleBottomGap));
 
@@ -529,13 +537,13 @@ void AnnouncementPreviewPanel::Layout(const RECT& rcAvail)
                       - kPanelPadH - kPanelPadH;
     if (avail > 0)
     {
+        //标题已固定单行,高度不随文本变化:量一行的高度即可,不必按可用宽度算换行。
+        //没有选中公告时高度取 0,让整块塌陷(此时只显示"未选择公告"提示)。
         int titleH = 0;
         if (m_current != nullptr)
         {
-            // DrawText DT_CALCRECT 在指定宽度下的换行高度;RichEdit 实际行高
-            // 与之相差不超过 1~2px,加 4px 兜底防止末行被截。
-            titleH = MeasureWrappedH(m_current->m_title,
-                                     ui::UiFont(kTitlePt, true), avail) + 4;
+            titleH = MeasureWrappedH(_T("A"), ui::UiFont(kTitlePt, true), avail)
+                     + kTitleSingleLinePad;
         }
         SetHint(m_titleEdit, Hint().Fixed(titleH).Margin(0, 0, 0, kTitleBottomGap));
     }

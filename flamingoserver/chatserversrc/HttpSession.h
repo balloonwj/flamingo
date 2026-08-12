@@ -122,6 +122,20 @@ private:
     void onAdminServiceSetBindings(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     void onAdminServiceSetStatus(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
 
+    //==== admin 控制台接口处理器（客户端版本模块）====
+    //这组接口<u>仅平台超管可用</u>（admin.enterpriseid == 0）：
+    //客户端版本是平台级资产，不属于任何一家企业。
+    //升级包本身由运维手工放进升级包目录，控制台只管元数据，
+    //故这里没有上传接口，scanpackages 负责把目录里的候选包列给人选。
+    void onAdminClientVersionScanPackages(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    void onAdminClientVersionList(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    void onAdminClientVersionCreate(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    void onAdminClientVersionUpdate(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    void onAdminClientVersionSetEnabled(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //回滚：把旧版本重新发布一次。数据层与发布是同一个动作，
+    //分两个接口是为了在审计日志里区分意图。
+    void onAdminClientVersionRepublish(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+
     //群组管理：在企业详情页把企业成员拉进一个群，指定群主、可选管理员（/admin/group/create.do）。
     void onAdminGroupCreate(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
 

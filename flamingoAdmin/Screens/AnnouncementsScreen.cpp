@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  flamingoAdmin —— 公告中心界面 AnnouncementsScreen 实现。
  *
  *  balloonwj@qq.com   2026.05.21
@@ -34,6 +34,10 @@ const int kListW     = 340;  // 列表栏宽度
 const int kListItemH = 100;  // 列表项高度
 const int kFilterH   = 42;   // 列表筛选行高
 const int kPagerH    = 44;   // 列表底部分页条高度
+// 翻页后的冷却时长（毫秒）。
+// 取 260ms：一次快速甸动的几格滚轮都落在这个窗口内，
+// 只翻一页；而人手动一格一格拨的间隔通常大于它，不会有卡顿感。
+const DWORD kPageFlipCooldownMs = 260;
 const int kPvPad     = 30;   // 预览区内距
 
 const int kEyebrowPt   = 8;
@@ -607,9 +611,35 @@ bool AnnouncementsScreen::OnMouseWheel(POINT pt, short zDelta, UINT /*mkFlags*/)
                          m_rcItem.bottom };
     if (::PtInRect(&listItemsRc, pt))
     {
+        // 分页列表用滚轮翻页，一格就跳一整页，跳变本身无法避免；能做的是别让它
+        // 跳得太随意。两道闸：
+        //  (1) 冷却期：翻完一页后的一小段时间内，滚轮一律吞掉并清空累积。一次
+        //      快速甩动会在几十毫秒内连发三四格，没有这道闸就会一口气飞过三四页。
+        //  (2) 累积到一整格（WHEEL_DELTA）才翻。触控板 / 高精度滚轮一次只送几个
+        //      像素的增量，没有这道闸会一碰就翻页。
+        // 反向滚动时先把累积清零，否则要先"抵消"掉反方向攒下的量才动得了。
+        const DWORD nowTick = ::GetTickCount();
+        if (nowTick - m_lastPageFlipTick < kPageFlipCooldownMs)
+        {
+            m_wheelAccum = 0;
+            return true;
+        }
+
+        if ((m_wheelAccum > 0) != (zDelta > 0))
+        {
+            m_wheelAccum = 0;
+        }
+        m_wheelAccum += zDelta;
+        if (m_wheelAccum > -WHEEL_DELTA && m_wheelAccum < WHEEL_DELTA)
+        {
+            return true;   //还没攒够一整格
+        }
+
         const int pageCount = ListPageCount(CollectFiltered(nullptr),
                                             ListPageSize());
-        const int dir = (zDelta > 0) ? -1 : 1;   // 上滚上一页 / 下滚下一页
+        const int dir = (m_wheelAccum > 0) ? -1 : 1;   // 上滚上一页 / 下滚下一页
+        m_wheelAccum = 0;
+        m_lastPageFlipTick = nowTick;
         int np = m_listPage + dir;
         if (np < 0)
         {

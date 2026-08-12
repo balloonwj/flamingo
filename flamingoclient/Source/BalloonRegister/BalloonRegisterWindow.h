@@ -106,9 +106,10 @@ public:
      *  以模态对话框形式打开注册窗口（供登录窗调用）。
      *  在 hWndParent 上跑独立消息循环，模态期间禁用父窗口，关闭后返回。
      *    hWndParent：父窗口句柄（登录窗），模态期间被禁用。
-     *  返回值：IDOK 表示注册成功且用户已确认（此时 RegisteredAccount() 给出
-     *          服务端分配的账号，调用方应把它回填到登录框）；IDCANCEL 表示
-     *          用户中途关闭、或注册未成功。
+     *  返回值：IDOK 表示注册成功且用户已确认（此时 RegisteredAccount() 与
+     *          RegisteredPassword() 分别给出服务端分配的账号与用户设置的
+     *          密码，调用方应把两者一并回填到登录框）；IDCANCEL 表示用户
+     *          中途关闭、或注册未成功。
      */
     INT_PTR DoModal(HWND hWndParent);
 
@@ -118,6 +119,19 @@ public:
      *  返回：账号字符串的常引用，生命周期同本对象。
      */
     const CString& RegisteredAccount() const { return m_resultAccount; }
+
+    /**
+     *  取本次注册时用户设置的明文密码，供登录窗回填密码框用。
+     *
+     *  账号是服务端生成的、密码是用户自己设的，两样都得回填登录框，用户才能
+     *  直接点"登录"；只回填账号的话，密码框里会留着登录窗打开时预填的上一个
+     *  账号的密码，看上去像是"注册时设的密码没生效"。
+     *
+     *  仅当 DoModal 返回 IDOK 时有意义；其余情况为空串。密码只在进程内传递，
+     *  调用方不得把它写进任何落盘文件（是否记住密码由用户自己勾选决定）。
+     *  返回：明文密码字符串的常引用，生命周期同本对象。
+     */
+    const CString& RegisteredPassword() const { return m_resultPassword; }
 
     BEGIN_MSG_MAP(CBalloonRegisterWindow)
         MESSAGE_HANDLER(WM_CLOSE, OnCloseMsg)
@@ -203,5 +217,6 @@ private:
     bool             m_registered;    // 本次是否已注册成功；决定 DoModal 返回 IDOK 还是 IDCANCEL
     CString          m_resultAccount; // 注册成功后服务端分配的账号，完成页回显 + 回填登录框
     CString          m_resultCompany; // 注册成功后所加入企业的全称，完成页回显用
+    CString          m_resultPassword;// 注册成功时用户设置的明文密码，仅用于回填登录窗密码框，不落盘
     balloonregister::RegisterModel m_model;   // 注册流程数据模型（字段 + 校验）
 };

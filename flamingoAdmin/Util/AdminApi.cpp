@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  flamingoAdmin —— admin 控制台接口业务层实现。
  *
  *  balloonwj@qq.com   2026-05-21
@@ -29,6 +29,12 @@ const wchar_t* const kPathUserMessageStats = L"/admin/user/messagestats.do";
 const wchar_t* const kPathAuditList        = L"/admin/audit/list.do";
 const wchar_t* const kPathAuditExport      = L"/admin/audit/export.do";
 const wchar_t* const kPathAuditStats       = L"/admin/audit/stats.do";
+const wchar_t* const kPathClientVersionScan       = L"/admin/clientversion/scanpackages.do";
+const wchar_t* const kPathClientVersionList       = L"/admin/clientversion/list.do";
+const wchar_t* const kPathClientVersionCreate     = L"/admin/clientversion/create.do";
+const wchar_t* const kPathClientVersionUpdate     = L"/admin/clientversion/update.do";
+const wchar_t* const kPathClientVersionSetEnabled = L"/admin/clientversion/setenabled.do";
+const wchar_t* const kPathClientVersionRepublish  = L"/admin/clientversion/republish.do";
 const wchar_t* const kPathAnnList          = L"/admin/announcement/list.do";
 const wchar_t* const kPathAnnDetail        = L"/admin/announcement/detail.do";
 const wchar_t* const kPathAnnRecall        = L"/admin/announcement/recall.do";
@@ -2566,6 +2572,267 @@ HttpRequest MakeEnterpriseRemoveAdminRequest(const ServerConfig& server,
     root["token"]   = Utf8FromWide(token);
     root["adminid"] = static_cast<Json::Int64>(adminId);
     return MakeRequest(server, kPathEntRemoveAdmin, root, kEnterpriseTimeoutMs);
+}
+
+
+// ===========================================================================
+// 客户端版本（模块 10）
+// ===========================================================================
+
+// 扫描升级包目录的超时。服务端要把目录里每个文件完整读一遍算 MD5，
+// 几百 MB 的包在机械盘上就要好几秒，故比其它接口给得宽。
+const int kScanPackagesTimeoutMs = 30000;
+
+// 大小换算的进位基数与各档阈值。用 1024 进制（KB/MB/GB 按二进制口径），
+// 与 Windows 资源管理器显示的数值一致，免得管理员对不上。
+const long long kSizeUnitKB = 1024LL;
+const long long kSizeUnitMB = 1024LL * 1024LL;
+const long long kSizeUnitGB = 1024LL * 1024LL * 1024LL;
+
+HttpRequest MakeScanPackagesRequest(const ServerConfig& server, const CString& token)
+{
+    Json::Value root;
+    root["token"] = Utf8FromWide(token);
+    return MakeRequest(server, kPathClientVersionScan, root, kScanPackagesTimeoutMs);
+}
+
+ScanPackagesResult ParseScanPackagesResponse(const HttpResult& http)
+{
+    ScanPackagesResult result;
+
+    if (!http.m_transportOk)
+    {
+        result.m_message = http.m_error;
+        return result;
+    }
+    result.m_transportOk = true;
+
+    if (http.m_statusCode != kHttpStatusOk)
+    {
+        result.m_code = kErrLocalBadResponse;
+        result.m_message.Format(_T("服务器返回异常状态码 %d"), http.m_statusCode);
+        return result;
+    }
+
+    Json::Value root;
+    if (!ParseJsonObject(http.m_body, root))
+    {
+        result.m_code    = kErrLocalBadResponse;
+        result.m_message = DescribeAdminError(kErrLocalBadResponse);
+        return result;
+    }
+
+    const int code = root["code"].isIntegral()
+                         ? root["code"].asInt() : kErrLocalBadResponse;
+    result.m_code = code;
+    if (code != kErrOk)
+    {
+        result.m_message = DescribeAdminError(code);
+        return result;
+    }
+
+    result.m_dir = WideFromUtf8(JsonStr(root, "dir"));
+
+    const Json::Value& list = root["list"];
+    if (list.isArray())
+    {
+        result.m_list.reserve(list.size());
+        for (Json::ArrayIndex i = 0; i < list.size(); ++i)
+        {
+            const Json::Value& item = list[i];
+            UpdatePackageItem pkg;
+            pkg.m_fileName = WideFromUtf8(JsonStr(item, "filename"));
+            pkg.m_size     = JsonInt64(item, "size");
+            pkg.m_md5      = WideFromUtf8(JsonStr(item, "md5"));
+            pkg.m_isZip    = JsonBool(item, "iszip");
+            pkg.m_used     = JsonBool(item, "used");
+            result.m_list.push_back(pkg);
+        }
+    }
+    return result;
+}
+
+HttpRequest MakeClientVersionListRequest(const ServerConfig& server,
+                                         const CString& token, int platform)
+{
+    Json::Value root;
+    root["token"]    = Utf8FromWide(token);
+    root["platform"] = platform;
+    return MakeRequest(server, kPathClientVersionList, root, kEnterpriseTimeoutMs);
+}
+
+ClientVersionListResult ParseClientVersionListResponse(const HttpResult& http)
+{
+    ClientVersionListResult result;
+
+    if (!http.m_transportOk)
+    {
+        result.m_message = http.m_error;
+        return result;
+    }
+    result.m_transportOk = true;
+
+    if (http.m_statusCode != kHttpStatusOk)
+    {
+        result.m_code = kErrLocalBadResponse;
+        result.m_message.Format(_T("服务器返回异常状态码 %d"), http.m_statusCode);
+        return result;
+    }
+
+    Json::Value root;
+    if (!ParseJsonObject(http.m_body, root))
+    {
+        result.m_code    = kErrLocalBadResponse;
+        result.m_message = DescribeAdminError(kErrLocalBadResponse);
+        return result;
+    }
+
+    const int code = root["code"].isIntegral()
+                         ? root["code"].asInt() : kErrLocalBadResponse;
+    result.m_code = code;
+    if (code != kErrOk)
+    {
+        result.m_message = DescribeAdminError(code);
+        return result;
+    }
+
+    const Json::Value& list = root["list"];
+    if (list.isArray())
+    {
+        result.m_list.reserve(list.size());
+        for (Json::ArrayIndex i = 0; i < list.size(); ++i)
+        {
+            const Json::Value& item = list[i];
+            ClientVersionItem v;
+            v.m_id             = JsonInt64(item, "id");
+            v.m_platform       = JsonInt(item, "platform");
+            v.m_version        = WideFromUtf8(JsonStr(item, "version"));
+            v.m_minVersion     = WideFromUtf8(JsonStr(item, "minversion"));
+            v.m_releaseNote    = WideFromUtf8(JsonStr(item, "releasenote"));
+            v.m_md5            = WideFromUtf8(JsonStr(item, "md5"));
+            // 包大小必须按 64 位读：升级包超过 2GiB 时 32 位会溢出成负数
+            v.m_size           = JsonInt64(item, "size");
+            v.m_packageName    = WideFromUtf8(JsonStr(item, "packagename"));
+            v.m_forced         = JsonBool(item, "forced");
+            v.m_enabled        = JsonInt(item, "enabled");
+            v.m_publishTime    = JsonInt64(item, "publishtime");
+            v.m_creatorAdminId = JsonInt64(item, "creatoradminid");
+            v.m_createTime     = JsonInt64(item, "createtime");
+            v.m_isCurrent      = JsonBool(item, "iscurrent");
+            result.m_list.push_back(v);
+        }
+    }
+    return result;
+}
+
+HttpRequest MakeClientVersionCreateRequest(const ServerConfig& server, const CString& token,
+                                           int platform, const CString& version,
+                                           const CString& minVersion,
+                                           const CString& releaseNote,
+                                           const CString& md5, bool forced, bool publish)
+{
+    Json::Value root;
+    root["token"]       = Utf8FromWide(token);
+    root["platform"]    = platform;
+    root["version"]     = Utf8FromWide(version);
+    root["minversion"]  = Utf8FromWide(minVersion);
+    root["releasenote"] = Utf8FromWide(releaseNote);
+    root["md5"]         = Utf8FromWide(md5);
+    root["forced"]      = forced;
+    root["publish"]     = publish;
+    return MakeRequest(server, kPathClientVersionCreate, root, kEnterpriseTimeoutMs);
+}
+
+ClientVersionCreateResult ParseClientVersionCreateResponse(const HttpResult& http)
+{
+    ClientVersionCreateResult result;
+
+    if (!http.m_transportOk)
+    {
+        result.m_message = http.m_error;
+        return result;
+    }
+    result.m_transportOk = true;
+
+    if (http.m_statusCode != kHttpStatusOk)
+    {
+        result.m_code = kErrLocalBadResponse;
+        result.m_message.Format(_T("服务器返回异常状态码 %d"), http.m_statusCode);
+        return result;
+    }
+
+    Json::Value root;
+    if (!ParseJsonObject(http.m_body, root))
+    {
+        result.m_code    = kErrLocalBadResponse;
+        result.m_message = DescribeAdminError(kErrLocalBadResponse);
+        return result;
+    }
+
+    const int code = root["code"].isIntegral()
+                         ? root["code"].asInt() : kErrLocalBadResponse;
+    result.m_code = code;
+    if (code != kErrOk)
+    {
+        // 这组接口的失败多半是"包不在目录里"或"选中的不是 zip"，服务端的 msg
+        // 比通用错误码描述更具体，有就优先用它
+        const CString serverMsg = WideFromUtf8(JsonStr(root, "msg"));
+        result.m_message = serverMsg.IsEmpty() ? DescribeAdminError(code) : serverMsg;
+        return result;
+    }
+
+    result.m_id = JsonInt64(root, "id");
+    return result;
+}
+
+HttpRequest MakeClientVersionUpdateRequest(const ServerConfig& server, const CString& token,
+                                           long long id, const CString& minVersion,
+                                           const CString& releaseNote, bool forced)
+{
+    Json::Value root;
+    root["token"]       = Utf8FromWide(token);
+    root["id"]          = static_cast<Json::Int64>(id);
+    root["minversion"]  = Utf8FromWide(minVersion);
+    root["releasenote"] = Utf8FromWide(releaseNote);
+    root["forced"]      = forced;
+    return MakeRequest(server, kPathClientVersionUpdate, root, kEnterpriseTimeoutMs);
+}
+
+HttpRequest MakeClientVersionSetEnabledRequest(const ServerConfig& server, const CString& token,
+                                               long long id, bool enabled)
+{
+    Json::Value root;
+    root["token"]   = Utf8FromWide(token);
+    root["id"]      = static_cast<Json::Int64>(id);
+    root["enabled"] = enabled;
+    return MakeRequest(server, kPathClientVersionSetEnabled, root, kEnterpriseTimeoutMs);
+}
+
+HttpRequest MakeClientVersionRepublishRequest(const ServerConfig& server,
+                                              const CString& token, long long id)
+{
+    Json::Value root;
+    root["token"] = Utf8FromWide(token);
+    root["id"]    = static_cast<Json::Int64>(id);
+    return MakeRequest(server, kPathClientVersionRepublish, root, kEnterpriseTimeoutMs);
+}
+
+CString FormatPackageSize(long long bytes)
+{
+    CString text;
+    if (bytes < 0)
+        bytes = 0;
+
+    if (bytes >= kSizeUnitGB)
+        text.Format(_T("%.2f GB"), static_cast<double>(bytes) / static_cast<double>(kSizeUnitGB));
+    else if (bytes >= kSizeUnitMB)
+        text.Format(_T("%.1f MB"), static_cast<double>(bytes) / static_cast<double>(kSizeUnitMB));
+    else if (bytes >= kSizeUnitKB)
+        text.Format(_T("%.1f KB"), static_cast<double>(bytes) / static_cast<double>(kSizeUnitKB));
+    else
+        text.Format(_T("%lld B"), bytes);
+
+    return text;
 }
 
 } // namespace adminapi

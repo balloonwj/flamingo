@@ -12,6 +12,28 @@
 
 namespace balloonmain {
 
+unsigned int ClampTrayFlashInterval(unsigned int blinkTimeMs)
+{
+    // INFINITE 表示用户关掉了系统的文本光标闪烁，0 表示系统没有给出有效值。
+    // 这两种都不是"用户希望闪得很慢"的意思，直接用兜底值，不要往上界靠。
+    if (blinkTimeMs == 0 || blinkTimeMs == INFINITE)
+    {
+        return kTrayFlashIntervalDefaultMs;
+    }
+
+    if (blinkTimeMs < kTrayFlashIntervalMinMs)
+    {
+        return kTrayFlashIntervalMinMs;
+    }
+
+    if (blinkTimeMs > kTrayFlashIntervalMaxMs)
+    {
+        return kTrayFlashIntervalMaxMs;
+    }
+
+    return blinkTimeMs;
+}
+
 CTrayFlashController::CTrayFlashController()
 {
 }

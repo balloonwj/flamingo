@@ -218,6 +218,10 @@ std::unique_ptr<DuiControl> CreateLoginCustomControl(const DuiXmlBuilder::Node& 
             std::unique_ptr<DuiComboBox> combo(new DuiComboBox());
             combo->SetCtrlId(kIdAccountCombo);
             combo->SetEditable(true);
+            // 下拉里每个历史账号右侧带一个删除叉，让用户清掉不再用的账号。
+            // 点它只发 DUICBN_ITEMDELETE 通知，真删与否由登录窗二次确认后决定
+            // （见 CBalloonLoginDlg::OnDuiNotify）。
+            combo->SetShowItemDelete(true);
             combo->SetBgColor(kFieldFillColor);
             combo->SetShowBorder(false);
             field->AddChild(std::unique_ptr<DuiControl>(combo.release()));
@@ -254,6 +258,31 @@ LoginInputResult ValidateLoginInput(const CString& account, const CString& passw
     if (IsBlank(password))
         return kLoginInputNoPassword;
     return kLoginInputOk;
+}
+
+PostRegisterFill MakePostRegisterFill(const CString& registeredAccount,
+                                      const CString& registeredPassword)
+{
+    PostRegisterFill fill;
+    // 两个勾选框一律回到未勾选：用户还没表达过"记住密码"的意愿，且要与调用方
+    // 写进历史账号列表的那条记录（空密码 + 两项皆否）对得上。
+    fill.m_shouldFill  = false;
+    fill.m_rememberPwd = false;
+    fill.m_autoLogin   = false;
+
+    // 账号是这次回填的锚点 —— 没有账号，密码填给谁都说不清，索性整个界面不动。
+    if (IsBlank(registeredAccount))
+    {
+        return fill;
+    }
+
+    fill.m_shouldFill = true;
+    fill.m_account    = registeredAccount;
+    // 密码原样搬运，不 Trim：首尾空格在密码里是有效字符，去掉了就登不上去。
+    // 传进来的密码为空时这里也照样赋空 —— 密码框被清空，好过把上一个账号的
+    // 密码留在框里让用户误以为那就是自己刚设的密码。
+    fill.m_password   = registeredPassword;
+    return fill;
 }
 
 COLORREF ChooseBannerAvatarColor(const CString& account, bool isKnownAccount)

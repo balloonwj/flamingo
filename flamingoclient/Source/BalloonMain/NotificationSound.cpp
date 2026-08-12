@@ -71,4 +71,11 @@ bool IsBuddyJustCameOnline(int oldPresence, int newPresence)
     return IsVisibleOnline(newPresence) && !IsVisibleOnline(oldPresence);
 }
 
+bool IsBuddyJustWentOffline(int oldPresence, int newPresence)
+{
+    // 与上面那条严格对称：变化前可见在线、变化后不可见，才算刚下线。
+    // 共用 IsVisibleOnline 这一套口径，两处判定不会对同一次跳变各说各话。
+    return IsVisibleOnline(oldPresence) && !IsVisibleOnline(newPresence);
+}
+
 } // namespace balloonmain

@@ -12,6 +12,7 @@
  */
 
 #include "MainPanelConversationMenu.h"
+#include "StarredModel.h"     // GetMenuLabel（特别关注项文案，四处菜单共用同一份）
 
 namespace balloonmain {
 
@@ -59,6 +60,14 @@ std::vector<ConversationMenuEntry> BuildConversationMenuModel(const Conversation
     // 状态取反，与下面的置顶 / 免打扰同一套写法。
     PushItem(items, kConvMenuFavorite,
              state.m_favorite ? L"取消收藏" : L"添加到收藏", true);
+    // 特别关注紧跟收藏，与联系人右键菜单同一位置。<u>只在单聊会话上出现</u>：特别关注
+    // 关心的是"这个人上线 / 下线了"，群本身没有上下线可言，在群会话上摆这一项只会
+    // 让用户以为能关注整个群。故群会话这一项整项不出现，而不是灰显。
+    if (!state.m_isGroup)
+    {
+        PushItem(items, kConvMenuStarred,
+                 StarredModel::GetMenuLabel(state.m_starred), true);
+    }
 
     // 第二组：会话属性开关。文案随当前状态取反，用户一眼能看出点下去会变成什么。
     PushSeparator(items);

@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS t_chatmsg
 CREATE INDEX IF NOT EXISTS t_chatmsg_idx_from_to ON t_chatmsg(f_from, f_to);
 CREATE INDEX IF NOT EXISTS t_chatmsg_idx_to_from ON t_chatmsg(f_to, f_from);
 CREATE INDEX IF NOT EXISTS t_chatmsg_idx_client ON t_chatmsg(f_clientmsgid);
+CREATE INDEX IF NOT EXISTS t_chatmsg_idx_to_msgid ON t_chatmsg(f_to, f_msgid);
 
 CREATE TABLE IF NOT EXISTS t_department
 (
@@ -420,6 +421,16 @@ CREATE TABLE IF NOT EXISTS t_favorite
 
 CREATE INDEX IF NOT EXISTS t_favorite_idx_favorite_user ON t_favorite(f_userid);
 
+CREATE TABLE IF NOT EXISTS t_starred
+(
+    f_userid INTEGER NOT NULL,    -- 关注方userid(名单的归属者)
+    f_target INTEGER NOT NULL,    -- 被关注的联系人userid
+    f_create_time INTEGER NOT NULL DEFAULT 0,    -- 标记时间,Unix毫秒;列表按本列倒序,最近标记的排最前
+    PRIMARY KEY (f_userid, f_target)
+);
+
+CREATE INDEX IF NOT EXISTS t_starred_idx_starred_user ON t_starred(f_userid);
+
 CREATE TABLE IF NOT EXISTS t_group
 (
     f_groupid INTEGER NOT NULL,    -- 群ID(高位id空间,>=GROUPID_BOUBDARY)
@@ -538,3 +549,22 @@ CREATE TABLE IF NOT EXISTS t_group_file
 
 CREATE INDEX IF NOT EXISTS t_group_file_idx_group ON t_group_file(f_groupid);
 CREATE INDEX IF NOT EXISTS t_group_file_idx_fileid ON t_group_file(f_fileid);
+
+CREATE TABLE IF NOT EXISTS t_client_version
+(
+    f_id INTEGER PRIMARY KEY AUTOINCREMENT,    -- 自增主键
+    f_platform INTEGER NOT NULL DEFAULT 1,    -- 客户端平台:1 Windows PC 2 Android(预留)
+    f_version VARCHAR(32) NOT NULL DEFAULT '',    -- 本条记录发布的版本号,形如3.3.0
+    f_min_version VARCHAR(32) NOT NULL DEFAULT '',    -- 允许登录的最低版本号,低于它的客户端被拒绝登录并强制升级
+    f_release_note VARCHAR(2048) NOT NULL DEFAULT '',    -- 更新说明,展示在升级窗里
+    f_package_md5 VARCHAR(32) NOT NULL DEFAULT '',    -- 升级包内容MD5(小写十六进制32位),fileserver在升级包目录里按它反查实际文件
+    f_package_size INTEGER NOT NULL DEFAULT 0,    -- 升级包字节数
+    f_package_name VARCHAR(255) NOT NULL DEFAULT '',    -- 升级包原始文件名,仅用于界面显示与本地落地命名
+    f_forced INTEGER NOT NULL DEFAULT 0,    -- 是否强制升级:0否 1是。为1时客户端升级窗不给稍后出口、也不放行登录;与f_min_version相互独立,任一命中即按强制处理
+    f_enabled INTEGER NOT NULL DEFAULT 0,    -- 是否已发布:0草稿不下发 1已发布
+    f_publish_time INTEGER NOT NULL DEFAULT 0,    -- 发布时间(Unix毫秒)
+    f_creator_adminid INTEGER NOT NULL DEFAULT 0,    -- 发布人的管理员ID,引用t_admin.f_admin_id;0表示非控制台创建
+    f_create_time INTEGER NOT NULL DEFAULT 0    -- 记录创建时间(Unix毫秒),f_publish_time回滚时会被刷新而本列不变
+);
+
+CREATE INDEX IF NOT EXISTS t_client_version_idx_platform_enabled ON t_client_version(f_platform, f_enabled);

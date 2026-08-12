@@ -125,6 +125,20 @@ PresenceVisual GetConnectionPresenceVisual(int presence, int connUiState)
     return GetPresenceVisual(presence_offline);
 }
 
+int GetConnectionBadgePresence(int presence, int connUiState)
+{
+    if (connUiState == kConnUiOnline)
+    {
+        // 连接就绪：画用户自己选的那个状态的徽标。
+        return NormalizePresenceForMenu(presence);
+    }
+
+    // 重连中与主动离线都画"离线"的空心环。这必须与 GetConnectionPresenceVisual 给出的
+    // 灰色圆点色保持同一口径 —— 两者一旦分叉，就会出现"点是灰的、形状却画成在线实心圆"
+    // 这种自相矛盾的胶囊。
+    return presence_offline;
+}
+
 bool ShouldGrayAvatar(int connUiState)
 {
     // 与 GetTrayIconFileName 同一个判断：只有真正在线才是彩色，其余（含越界值）全灰。

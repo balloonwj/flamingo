@@ -12,24 +12,29 @@
  */
 
 #include "MainPanelStatusMenu.h"
-#include "MainPanelIcons.h"         // IconKind（kIconOnline / kIconStatusCurrent）
+#include "PresenceBadge.h"          // GetPresenceBadgeIconKind（状态 → 徽标字形）
 #include "../net/Protocol.h"        // presence_type（在线状态取值的单一事实来源）
 
 namespace balloonmain {
 
 namespace {
 
-// ---- 各在线状态的圆点配色（取自 design/主面板状态菜单.png）------------------
-// 圆点既用于菜单项左侧图标，也复用为胶囊上的状态点，保证两处一致。
+// ---- 各在线状态的徽标配色 ---------------------------------------------------
+// 颜色既用于菜单项左侧的状态徽标，也复用为胶囊上的状态点，保证各处一致。
+//
+// 2026-08-12 状态图标改版时整体压深了一档（改版前是 design/主面板状态菜单.png 的
+// #22C55E / #F59E0B / #EF4444 / #9CA3AF）。压深的两个理由：忙碌的红与离开的琥珀在
+// 10px 圆点上色相太近，离线灰对白底只有 2.3:1 的对比度、在浅色行底上近乎消失。
+// 注意颜色现在只是<u>辅助</u>通道 —— 四个状态靠字形本身就能区分（见 PresenceBadge.h）。
 
-// 在线：绿 #22C55E（与 Banner 现有"在线点"同色）。
-const COLORREF kDotOnline  = RGB(0x22, 0xC5, 0x5E);
-// 离开：琥珀橙 #F59E0B。
+// 在线：绿 #16A34A。对白底对比度 3.1:1（改版前 #22C55E 只有 1.9:1，小圆点发飘）。
+const COLORREF kDotOnline  = RGB(0x16, 0xA3, 0x4A);
+// 离开：琥珀橙 #F59E0B。这一个不动 —— 琥珀本身没问题，问题出在红离它太近。
 const COLORREF kDotAway    = RGB(0xF5, 0x9E, 0x0B);
-// 勿扰：红 #EF4444。
-const COLORREF kDotBusy    = RGB(0xEF, 0x44, 0x44);
-// 离线：中性灰 #9CA3AF。
-const COLORREF kDotOffline = RGB(0x9C, 0xA3, 0xAF);
+// 忙碌：深红 #DC2626。往深红走，与琥珀拉开色相与明度两重差距。
+const COLORREF kDotBusy    = RGB(0xDC, 0x26, 0x26);
+// 离线：中性灰 #6B7280。对白底对比度 4.8:1 —— 离线徽标是个空心环，环细，灰浅了就没了。
+const COLORREF kDotOffline = RGB(0x6B, 0x72, 0x80);
 
 // 装配一行状态项。文字、圆点色、图标类型全部从"状态 → 视觉"映射里取，保证与
 // 胶囊以及另外两处菜单同源。currentPresence 须由调用方先经 NormalizePresenceForMenu
@@ -42,7 +47,10 @@ StatusMenuEntry MakeStatusEntry(UINT id, int presence, int currentPresence)
     e.isCurrent = (presence == currentPresence);
     e.label     = GetPresenceMenuLabel(presence, e.isCurrent);
     e.dotColor  = GetPresenceVisual(presence).dotColor;
-    e.iconKind  = e.isCurrent ? kIconStatusCurrent : kIconOnline;
+    // 图标一律是"本行代表的那个状态"的徽标 —— 四种字形各不相同，这一列本身就在回答
+    // "这一行是哪个状态"。当前项<u>不</u>换图标：它的"当前"由文字后缀"（当前）"以及
+    // 渲染期在徽标外圈另加的一环表达（见 MainPanelMenuIcons::CreateStatusIconImage）。
+    e.iconKind  = GetPresenceBadgeIconKind(presence);
     return e;
 }
 

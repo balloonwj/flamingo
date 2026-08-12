@@ -150,3 +150,23 @@ TEST_CASE("T8 场景字段往返与 imgserver/fileserver 归属判定")
     CHECK_FALSE(FileToken::isImageScene(fileOut.scene));
     CHECK(FileToken::isFileScene(fileOut.scene));
 }
+
+TEST_CASE("T9 客户端升级包场景归 fileserver")
+{
+    const std::string key = "k";
+
+    //scene=5 升级包：走 fileserver，不走 imgserver。
+    //与前四种场景不同，这枚令牌由 chatserver 在 cmd_check_update 应答里直接签发，
+    //未登录时 uid 为 0，故此处特意用 uid=0 构造，确认 0 不影响签发与校验。
+    FileTokenPayload update = makeUploadPayload();
+    update.type   = FileToken::token_type_download;
+    update.scene  = file_scene_update;
+    update.uid    = 0;
+    FileTokenPayload updateOut;
+    REQUIRE(FileToken::verify(FileToken::sign(update, key), key, 1, updateOut));
+    CHECK(updateOut.scene == file_scene_update);
+    CHECK(updateOut.uid == 0);
+    CHECK(updateOut.type == FileToken::token_type_download);
+    CHECK(FileToken::isFileScene(updateOut.scene));
+    CHECK_FALSE(FileToken::isImageScene(updateOut.scene));
+}

@@ -302,8 +302,14 @@ LRESULT CRdViewerWindow::OnTimer(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/
 LRESULT CRdViewerWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam, BOOL& bHandled)
 {
     const balloonwjui::DuiNotify* n = reinterpret_cast<const balloonwjui::DuiNotify*>(lParam);
+    //标题栏图标的通知不带 ctrlId（caption icon 不是客户区控件），只能靠 extra 里回带的
+    //captionId 区分，故必须先确认 m_fullscreenIconId 已经分配过。自定义通知码是按控件
+    //各自编号的（都从 DUIN_CUSTOM 起算），DUIFW_CAPTION_ICON_CLICK 与别的控件的第一个
+    //自定义码同值；漏掉这道判定的话，图标尚未创建（m_fullscreenIconId 为 0）时，别的
+    //控件发来的 extra 恰为 0 的同值通知会被误判成"点了全屏按钮"。
     if (n != NULL
         && n->code == static_cast<UINT>(balloonwjui::DuiFrameWindow::DUIFW_CAPTION_ICON_CLICK)
+        && m_fullscreenIconId != 0
         && static_cast<int>(n->extra) == m_fullscreenIconId)
     {
         //标题栏全屏按钮点击：切换全屏并同步全屏工具条

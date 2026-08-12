@@ -75,6 +75,49 @@ public:
     void broadcastOrgStructureChanged(int64_t enterpriseId, int32_t changetype, int64_t deptid);
 
     /**
+     *  把某企业的全部在线会话踢下线。供管理控制台「停用企业」「删除企业」调用，
+     *  使这两个操作即时生效，而不是等这些人自己退出。
+     *
+     *  实现上<u>先发 cmd_kickout 再置会话失效，不强制关闭连接</u>，与 onLogin 里
+     *  顶号踢旧会话的做法一致。这一点很关键：若直接 forceClose，客户端只会认为
+     *  网络断了并启动自动重连，而不会弹下线提示、也不会退回登录窗；收到
+     *  cmd_kickout 它才知道是被服务器踢的，从而停掉重连、提示用户、回到登录界面。
+     *
+     *  <u>删除企业时必须在删库之前调用</u>：本方法靠 DepartmentManager::getUserEnterpriseId
+     *  把在线会话归到企业上，而删企业会把部门数据连同那份缓存一起清掉，删完再调
+     *  一个人都匹配不到。这与 recallAnnouncementAndNotify「先筛受众再撤回」是同一类
+     *  顺序约束。
+     *
+     *  @param enterpriseId 目标企业ID；为 0 时直接返回（0 是「无企业归属」的哨兵值，
+     *                      真按它踢会把所有未归属用户全踢下线）
+     *  @param reason       下发给客户端的被踢原因，取值见 enum kickout_reason；
+     *                      本方法的两个场景分别用 kickout_reason_enterprise_disabled
+     *                      与 kickout_reason_enterprise_deleted
+     *  @return 实际踢下线的会话数，供调用方记日志
+     */
+    int32_t kickEnterpriseSessions(int64_t enterpriseId, int32_t reason);
+
+    /**
+     *  把某个账号的在线会话踢下线。供管理控制台「停用员工」「删除员工」「强制注销
+     *  设备」调用。
+     *
+     *  与 kickEnterpriseSessions 同理：<u>先发 cmd_kickout 再置会话失效，不强制关闭
+     *  连接</u>。直接 forceClose 的话客户端只当是网络断了并自动重连，看不到下线提示、
+     *  也不会退回登录窗。
+     *
+     *  本方法放在 ChatServer 而非 HttpSession：组 cmd_kickout 报文要用 Protocol.h 的
+     *  cmd 与 reason 取值，而 HttpSession 属 Msg.h 世界、引不进 Protocol.h（两者枚举
+     *  冲突），故由本方法居中编排，与 broadcastAnnouncementPublished 同一理由。
+     *
+     *  @param userId           目标账号userid
+     *  @param clientTypeFilter 只踢该客户端类型的设备（见 enum platform_type）；
+     *                          <=0 表示该账号的全部设备
+     *  @param reason           下发给客户端的被踢原因，取值见 enum kickout_reason
+     *  @return 实际踢下线的会话数，供调用方记日志 / 回给控制台
+     */
+    int32_t kickUserSessions(int64_t userId, int32_t clientTypeFilter, int32_t reason);
+
+    /**
      *  向指定企业的全部在线 IM 客户端广播一条通知（按企业范围，而非好友范围）。
      *  用于"客户端联系人树是企业组织架构（同事），而非好友列表"的场景——典型是
      *  在线状态变更（cmd_presence_changed_notify），让同企业的在线用户都能实时刷新该

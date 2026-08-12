@@ -19,8 +19,10 @@
 
 #include "../BalloonHistory/HistoryContentView.h"
 #include "../BalloonChatWnd/ChatFaceTag.h"
+#include "../BalloonChatWnd/ChatLinkDetect.h"   // 链接识别开关（HCV9 要开关它）
 
 #include <vector>
+#include <stdlib.h>                            // abs（数像素时比色差用）
 
 using namespace balloonhistory;
 
@@ -259,6 +261,228 @@ TEST_CASE("HCV6 宽度越窄行数越多，折叠态仍夹在 5 行但开始需�
 // ---------------------------------------------------------------------------
 // HCV7  空正文
 // ---------------------------------------------------------------------------
+
+namespace {
+
+//超链接文字色。必须与 HistoryContentView.cpp 里的 kLinkTextColor 一致 —— 用例正是
+//靠"位图里有没有这个颜色的像素"来判断链接到底画没画出来的。
+const COLORREF kExpectLinkColor = RGB(0x2F, 0x6F, 0xD0);
+
+/**
+ *  一块可以真绘制的离屏画布：32 位 DIB + 内存 DC，建好即铺成白底。
+ *
+ *  用例需要它是因为"链接有没有被画成链接色"没法从测量接口看出来 —— 只有真画一遍、
+ *  再去数像素才算数。这一步不需要 GDI+：纯文字内容（不含表情）走的是 GDI DrawText。
+ */
+class RenderCanvas
+{
+public:
+    RenderCanvas(int w, int h)
+        : m_hdc(NULL)
+        , m_bmp(NULL)
+        , m_oldBmp(NULL)
+        , m_bits(NULL)
+        , m_w(w)
+        , m_h(h)
+    {
+        m_hdc = ::CreateCompatibleDC(NULL);
+        if (m_hdc == NULL)
+        {
+            return;
+        }
+        BITMAPINFO bi;
+        ::ZeroMemory(&bi, sizeof(bi));
+        bi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+        bi.bmiHeader.biWidth       = w;
+        bi.bmiHeader.biHeight      = -h;   // 负高 = 自上而下，扫描像素时下标好算
+        bi.bmiHeader.biPlanes      = 1;
+        bi.bmiHeader.biBitCount    = 32;
+        bi.bmiHeader.biCompression = BI_RGB;
+        m_bmp = ::CreateDIBSection(m_hdc, &bi, DIB_RGB_COLORS, (void**)&m_bits, NULL, 0);
+        if (m_bmp == NULL)
+        {
+            return;
+        }
+        m_oldBmp = (HBITMAP)::SelectObject(m_hdc, m_bmp);
+
+        RECT all = { 0, 0, w, h };
+        HBRUSH white = ::CreateSolidBrush(RGB(255, 255, 255));
+        ::FillRect(m_hdc, &all, white);
+        ::DeleteObject(white);
+    }
+
+    ~RenderCanvas()
+    {
+        if (m_hdc != NULL && m_oldBmp != NULL)
+        {
+            ::SelectObject(m_hdc, m_oldBmp);
+        }
+        if (m_bmp != NULL)
+        {
+            ::DeleteObject(m_bmp);
+        }
+        if (m_hdc != NULL)
+        {
+            ::DeleteDC(m_hdc);
+        }
+    }
+
+    HDC  Get() const { return m_hdc; }
+    bool Ok()  const { return m_hdc != NULL && m_bmp != NULL && m_bits != NULL; }
+
+    /**
+     *  数一数画布里"接近目标色"的像素有多少个。
+     *
+     *  用容差而不是精确相等：文字是抗锯齿画的，笔画边缘会与白底混色，只有笔画中心
+     *  才接近纯色。容差取得够小，不会把正文的深灰（0x33）误判成链接蓝。
+     *    target：目标颜色。
+     *    tol：   每个通道允许的偏差。
+     */
+    int CountNear(COLORREF target, int tol) const
+    {
+        if (!Ok())
+        {
+            return 0;
+        }
+        const int tr = GetRValue(target);
+        const int tg = GetGValue(target);
+        const int tb = GetBValue(target);
+        int hit = 0;
+        for (int i = 0; i < m_w * m_h; ++i)
+        {
+            //DIB 是 BGRA 排列。
+            const int b = m_bits[i * 4 + 0];
+            const int g = m_bits[i * 4 + 1];
+            const int r = m_bits[i * 4 + 2];
+            if (abs(r - tr) <= tol && abs(g - tg) <= tol && abs(b - tb) <= tol)
+            {
+                ++hit;
+            }
+        }
+        return hit;
+    }
+
+private:
+    HDC      m_hdc;
+    HBITMAP  m_bmp;
+    HBITMAP  m_oldBmp;
+    BYTE*    m_bits;
+    int      m_w;
+    int      m_h;
+};
+
+//把一段正文按给定宽度画进画布，返回接近链接色的像素数。plainEntry 为 true 时走
+//纯文本入口（公告那条路），否则走发送正文格式入口（消息记录那条路）。
+//linkEnabled 决定这一趟识不识别链接。
+//
+//为什么结果要成对比较、而不是直接断言"没链接时计数为 0"：文字用 ClearType 画，
+//笔画边缘是<u>次像素</u>混色的，R/G/B 三通道各不相同，天然会蹭出一些偏蓝的像素。
+//同一段文字、同一个位置画两趟，这层噪声完全一样，相减即可抵掉。
+int RenderAndCountLinkPixels(const CString& text, bool plainEntry, bool linkEnabled,
+                             int width, int height)
+{
+    RenderCanvas canvas(width, height);
+    if (!canvas.Ok())
+    {
+        return -1;
+    }
+
+    //开关是进程级的，用完必须还原，否则会污染同进程里后面的用例。
+    const bool saved = balloonchatwnd::ChatLinkOptionEnabled();
+    balloonchatwnd::SetChatLinkOptionEnabled(linkEnabled);
+
+    HistoryContentView view;
+    view.SetExpanded(true);          // 不折叠，免得内容被 5 行上限截掉
+    if (plainEntry)
+    {
+        view.SetPlainContent(text);
+    }
+    else
+    {
+        view.SetContent(text);
+    }
+
+    RECT rc = { 0, 0, width, height };
+    view.ForceLayout(rc);
+    view.OnPaint(canvas.Get(), rc);
+
+    balloonchatwnd::SetChatLinkOptionEnabled(saved);
+    return canvas.CountNear(kExpectLinkColor, 12);
+}
+
+//链接色像素比"同一段文字不识别链接"时多出这么多，才算真把链接画出来了。
+//一条十几个字符的链接，笔画中心的像素远不止这个数；取这个下限是给字体版本差异
+//留余地，同时又远高于 ClearType 边缘噪声的量级。
+const int kLinkPixelMargin = 50;
+
+} // namespace
+
+TEST_CASE("HCV8 纯文本入口下正文里的网址被画成链接色", "[historycontent]")
+{
+    //公告走的就是这条路：正文是纯文本，里面的 https:// 是字面三个字符
+    const CString text = _T("参考资料见 https://example.com/guide 谢谢");
+    const int on  = RenderAndCountLinkPixels(text, true, true,  420, 120);
+    const int off = RenderAndCountLinkPixels(text, true, false, 420, 120);
+    REQUIRE(on >= 0);
+    REQUIRE(off >= 0);
+    CHECK(on > off + kLinkPixelMargin);
+}
+
+TEST_CASE("HCV9 关掉识别开关后同一段正文回到普通文字", "[historycontent]")
+{
+    //与 HCV8 同一段正文：关掉开关这一趟的链接色像素必须回落到"没有链接"的水平。
+    //拿"一段压根没有网址的正文"做基准 —— 两者都只剩 ClearType 的边缘噪声，量级相当。
+    const CString withUrl = _T("参考资料见 https://example.com/guide 谢谢");
+    const CString noUrl   = _T("参考资料见 我稍后再发一份给你 谢谢");
+    const int offWithUrl = RenderAndCountLinkPixels(withUrl, true, false, 420, 120);
+    const int baseline   = RenderAndCountLinkPixels(noUrl,   true, false, 420, 120);
+    REQUIRE(offWithUrl >= 0);
+    REQUIRE(baseline >= 0);
+    CHECK(offWithUrl < baseline + kLinkPixelMargin);
+}
+
+TEST_CASE("HCV10 正文格式入口下转义过的网址同样被画成链接色", "[historycontent]")
+{
+    //消息记录窗走的是这条路：正文格式里一个字面斜杠写成两个（见 BuildSendBody）
+    const CString text = _T("参考资料见 https:////example.com//guide 谢谢");
+    const int on  = RenderAndCountLinkPixels(text, false, true,  420, 120);
+    const int off = RenderAndCountLinkPixels(text, false, false, 420, 120);
+    REQUIRE(on >= 0);
+    REQUIRE(off >= 0);
+    CHECK(on > off + kLinkPixelMargin);
+}
+
+TEST_CASE("HCV11 没有网址的正文不受识别开关影响", "[historycontent]")
+{
+    //反向用例：挡住"把整段正文都画成蓝色"这类错误。同一段没有网址的文字，
+    //开与关画出来必须<u>一模一样</u>（绘制是确定性的，可以断言严格相等）。
+    const CString text = _T("明天上午十点开会，别迟到");
+    const int on  = RenderAndCountLinkPixels(text, true, true,  420, 120);
+    const int off = RenderAndCountLinkPixels(text, true, false, 420, 120);
+    REQUIRE(on >= 0);
+    CHECK(on == off);
+}
+
+TEST_CASE("HCV12 两个入口对网址都不吃斜杠，只在表情标记上有别", "[historycontent]")
+{
+    //纯文本入口：整串就是文字，什么都不解析
+    HistoryContentView plain;
+    plain.SetPlainContent(_T("https://a.com /f[\"3\"]"));
+    CHECK(plain.GetFlatText() == CString(_T("https://a.com /f[\"3\"]")));
+
+    //正文格式入口：网址里的双斜杠同样原样保留（转义只认"紧跟表情标记的双斜杠"），
+    //但 /f["3"] 会被解析成一个表情、在扁平文本里占一个 U+FFFC 占位符
+    HistoryContentView body;
+    body.SetContent(_T("https://a.com /f[\"3\"]"));
+    CString expect = _T("https://a.com ");
+    expect += (wchar_t)0xFFFC;
+    CHECK(body.GetFlatText() == expect);
+
+    //转义过的表情标记：还原成字面文本，不当表情
+    HistoryContentView escaped;
+    escaped.SetContent(_T("https://a.com //f[\"3\"]"));
+    CHECK(escaped.GetFlatText() == CString(_T("https://a.com /f[\"3\"]")));
+}
 
 TEST_CASE("HCV7 空正文有一行的下限高度，不为 0", "[historycontent]")
 {

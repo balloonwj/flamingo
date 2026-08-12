@@ -6,8 +6,10 @@
 #include <sstream>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 #include <ctype.h>
 #include <vector>
+#include <set>
 #include "../net/EventLoopThread.h"
 #include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
@@ -19,12 +21,24 @@
 #include "UserManager.h"
 #include "BussinessLogic.h"
 #include "AdminManager.h"
+#include "ClientVersionManager.h"
+#include "UpdatePackageScanner.h"
 #include "EnterpriseManager.h"
 #include "DepartmentManager.h"
 #include "DepartmentMsg.h"
 #include "EmployeeManager.h"
 #include "AnnouncementManager.h"
 #include "ServiceAccountManager.h"
+
+//被踢下线原因，与 Protocol.h 的 enum kickout_reason 逐条同值。本文件属 Msg.h 世界、
+//引不进 Protocol.h（两者的 msg_type / error_code 枚举冲突），而这些值要作为参数交给
+//ChatServer::kickUserSessions / kickEnterpriseSessions（Protocol.h 世界）下发，故在此
+//显式对齐取值。改 Protocol.h 里那些枚举值时，这里必须同步。
+#define ADMIN_KICKOUT_REASON_ACCOUNT_DISABLED     2
+#define ADMIN_KICKOUT_REASON_ENTERPRISE_DISABLED  6
+#define ADMIN_KICKOUT_REASON_ENTERPRISE_DELETED   7
+#define ADMIN_KICKOUT_REASON_ACCOUNT_DELETED      8
+#define ADMIN_KICKOUT_REASON_KICKED_BY_ADMIN      9
 
 //HTTP 头部最大长度，超过仍未出现 \r\n\r\n 视为非法请求。
 #define MAX_HTTP_HEADER_LENGTH   8192
@@ -307,6 +321,18 @@ bool HttpSession::processAdminRequest(const std::shared_ptr<TcpConnection>& conn
         onAdminServiceSetStatus(body, conn);
     else if (url == "/admin/group/create.do")
         onAdminGroupCreate(body, conn);
+    else if (url == "/admin/clientversion/scanpackages.do")
+        onAdminClientVersionScanPackages(body, conn);
+    else if (url == "/admin/clientversion/list.do")
+        onAdminClientVersionList(body, conn);
+    else if (url == "/admin/clientversion/create.do")
+        onAdminClientVersionCreate(body, conn);
+    else if (url == "/admin/clientversion/update.do")
+        onAdminClientVersionUpdate(body, conn);
+    else if (url == "/admin/clientversion/setenabled.do")
+        onAdminClientVersionSetEnabled(body, conn);
+    else if (url == "/admin/clientversion/republish.do")
+        onAdminClientVersionRepublish(body, conn);
     else
         sendAdminResult(conn, error_code_unknown, "admin endpoint not implemented yet");
 
@@ -827,6 +853,11 @@ void HttpSession::onAdminEnterpriseUpdate(const std::string& body, const std::sh
     {
         Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
             conn->peerAddress().toIpPort(), req.enterpriseId, "enterprise.update", req.name, 1, u8"修改企业信息");
+        //企业名称会显示在客户端通讯录树的根节点上（cmd_get_contacts 应答的 enterprise.name），
+        //改了不通知的话同事端根节点会一直挂着旧名字。归为部门结构变更：改的是树的根那一层，
+        //不是某个人。deptid 传 0，客户端整棵重拉、不依赖该字段。
+        Singleton<ChatServer>::Instance().broadcastOrgStructureChanged(
+            req.enterpriseId, dept::org_change_department, 0);
     }
     //与新建一样，重名单独给提示，其余失败沿用笼统文案。
     const char* failMsg = "update enterprise failed";
@@ -860,6 +891,18 @@ void HttpSession::onAdminEnterpriseSetStatus(const std::string& body, const std:
     int32_t code = Singleton<EnterpriseManager>::Instance().setEnterpriseStatus(entId, status);
     if (code == error_code_ok)
     {
+        //停用（2）后把该企业所有在线会话踢下线，使停用立即生效 —— 与「停用员工」
+        //对单个账号的处理一致。登录侧的拦截由 ChatSession::onLogin 的企业状态校验
+        //负责，两者配合才是完整的「停用 = 停服」：踢掉已在线的，挡住再登录的。
+        //改回活跃（1）/ 待审核（0）不踢人：前者本就该恢复使用，后者不是从活跃态
+        //出发的正常流转。
+        if (status == kEnterpriseStatusDisabled)
+        {
+            const int32_t kicked = Singleton<ChatServer>::Instance().kickEnterpriseSessions(
+                entId, ADMIN_KICKOUT_REASON_ENTERPRISE_DISABLED);
+            LOGI("onAdminEnterpriseSetStatus: enterprise %lld disabled, kicked %d sessions",
+                 (long long)entId, kicked);
+        }
         Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
             conn->peerAddress().toIpPort(), entId, "enterprise.setstatus", "-", 1, u8"变更企业状态");
     }
@@ -918,11 +961,27 @@ void HttpSession::onAdminEnterpriseDelete(const std::string& body, const std::sh
     }
 
     int64_t entId = JInt(root, "enterpriseid", 0);
+
+    //踢人必须在删库【之前】：kickEnterpriseSessions 靠 getUserEnterpriseId 把在线
+    //会话归到企业上，而 deleteEnterprise 会删掉部门数据并清掉那份缓存，删完再踢
+    //一个都匹配不到。代价是删库失败时人已经被踢了 —— 相比「删成功却留着一批
+    //拿着已注销企业身份的在线会话」，这个方向的代价更小，且被踢的人重连即可。
+    const int32_t kicked = Singleton<ChatServer>::Instance().kickEnterpriseSessions(
+        entId, ADMIN_KICKOUT_REASON_ENTERPRISE_DELETED);
+
     int32_t code = Singleton<EnterpriseManager>::Instance().deleteEnterprise(entId);
     if (code == error_code_ok)
     {
+        LOGI("onAdminEnterpriseDelete: enterprise %lld deleted, kicked %d sessions beforehand",
+             (long long)entId, kicked);
         Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
             conn->peerAddress().toIpPort(), entId, "enterprise.delete", "-", 2, u8"硬删除企业");
+    }
+    else
+    {
+        //删库失败：上面已经踢掉的人重连后仍属原企业，功能不受影响，只是被打断一次。
+        LOGE("onAdminEnterpriseDelete: delete failed after kicking %d sessions, enterpriseid: %lld, code: %d",
+             kicked, (long long)entId, code);
     }
     sendAdminResult(conn, code, code == error_code_ok ? "ok" : "delete enterprise failed");
 }
@@ -1421,29 +1480,16 @@ static Json::Value EmployeeDetailToJson(const EmployeeDetail& e)
 }
 
 //踢掉某用户的在线会话；clientTypeFilter<=0 表示全部设备，否则只踢该客户端类型。
-//返回实际踢下线的会话数。强制关闭连接经由 muduo 投递到连接所属 loop，跨线程安全。
-static int32_t KickUserSessions(int64_t userId, int32_t clientTypeFilter)
+//reason 为下发给客户端的被踢原因（见 ADMIN_KICKOUT_REASON_* 常量），返回实际踢下
+//线的会话数。
+//
+//实际工作委托给 ChatServer::kickUserSessions —— 组 cmd_kickout 报文要用 Protocol.h
+//的 cmd 与 reason 取值，本文件属 Msg.h 世界、引不进 Protocol.h。历史上这里是自己
+//遍历会话并 forceClose 的，那样客户端只会当成网络断线去自动重连，看不到下线提示、
+//也不退回登录窗（2026-08-11 现场：删企业后客户端自动重连）。
+static int32_t KickUserSessions(int64_t userId, int32_t clientTypeFilter, int32_t reason)
 {
-    std::list<std::shared_ptr<ChatSession>> sessions;
-    Singleton<ChatServer>::Instance().getSessionsByUserId(sessions, static_cast<int32_t>(userId));
-
-    int32_t kicked = 0;
-    for (std::list<std::shared_ptr<ChatSession>>::iterator it = sessions.begin();
-         it != sessions.end(); ++it)
-    {
-        std::shared_ptr<ChatSession>& s = *it;
-        if (!s)
-            continue;
-        if (clientTypeFilter > 0 && s->getClientType() != clientTypeFilter)
-            continue;
-        //先置会话失效，再强制关闭底层连接。
-        s->makeSessionInvalid();
-        std::shared_ptr<TcpConnection> c = s->getConnectionPtr();
-        if (c)
-            c->forceClose();
-        ++kicked;
-    }
-    return kicked;
+    return Singleton<ChatServer>::Instance().kickUserSessions(userId, clientTypeFilter, reason);
 }
 
 //把形如 "7d" / "30d" / "all" 的时间窗口字符串解析为天数；"all"、空串、无效值返回 0（不限）。
@@ -1698,6 +1744,10 @@ void HttpSession::onAdminUserUpdate(const std::string& body, const std::shared_p
     {
         Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
             conn->peerAddress().toIpPort(), empEnt, "user.update", req.name, 1, u8"修改员工信息");
+        //姓名/职务等资料已变更，通知该企业在线 IM 客户端刷新通讯录，免得同事端要重登才看到。
+        //deptid 传 0：本次改的是"人"而不是某个部门，客户端收到后整棵通讯录重拉，不依赖该字段。
+        Singleton<ChatServer>::Instance().broadcastOrgStructureChanged(
+            empEnt, dept::org_change_member, 0);
     }
     sendAdminResult(conn, code, code == error_code_ok ? "ok" : "update employee failed");
 }
@@ -1730,12 +1780,18 @@ void HttpSession::onAdminUserSetStatus(const std::string& body, const std::share
     int32_t code = empMgr.setEmployeeStatus(userId, status);
     if (code == error_code_ok)
     {
-        //停用后顺带把该员工已在线的会话踢下线，使停用立即生效。
+        //停用后顺带把该员工已在线的会话踢下线，使停用立即生效。下发
+        //「账号被停用」原因，客户端据此弹提示并退回登录窗；再登录时会被
+        //onLogin 的账号停用校验以 error_code_account_disabled 挡住。
         if (status == 1)
-            KickUserSessions(userId, 0);
+            KickUserSessions(userId, 0, ADMIN_KICKOUT_REASON_ACCOUNT_DISABLED);
         Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
             conn->peerAddress().toIpPort(), empEnt, "user.setstatus",
             (status == 1) ? "disable" : "enable", 1, u8"启用/停用员工");
+        //账号启停会改变该员工在同事通讯录里的呈现，通知本企业在线 IM 客户端刷新。
+        //被停用者自己已在上面踢下线，收不到也不影响。
+        Singleton<ChatServer>::Instance().broadcastOrgStructureChanged(
+            empEnt, dept::org_change_member, 0);
     }
     sendAdminResult(conn, code, code == error_code_ok ? "ok" : "set status failed");
 }
@@ -1767,8 +1823,10 @@ void HttpSession::onAdminUserDelete(const std::string& body, const std::shared_p
     int32_t code = empMgr.deleteEmployee(userId);
     if (code == error_code_ok)
     {
-        //删除后把该员工的在线会话一并踢下线。
-        KickUserSessions(userId, 0);
+        //删除后把该员工的在线会话一并踢下线。原因用「账号已删除」而非「已停用」：
+        //前者不可恢复，客户端据此提示用户并清掉本机的自动登录标志，免得他每次
+        //开机都被弹一次登录失败。
+        KickUserSessions(userId, 0, ADMIN_KICKOUT_REASON_ACCOUNT_DELETED);
         Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
             conn->peerAddress().toIpPort(), empEnt, "user.delete", "-", 2, u8"删除员工");
         //成员已移出企业，通知该企业在线 IM 客户端刷新通讯录
@@ -1970,7 +2028,11 @@ void HttpSession::onAdminUserKickDevice(const std::string& body, const std::shar
     //deviceid 为空踢全部设备；为客户端类型数字（1=PC 2=移动端）时只踢该类设备。
     std::string deviceId = JStr(root, "deviceid");
     int32_t clientTypeFilter = deviceId.empty() ? 0 : atoi(deviceId.c_str());
-    int32_t kicked = KickUserSessions(userId, clientTypeFilter);
+    //管理员在控制台强制注销设备，与「本人在另一台设备上踢掉本设备」
+    //（kickout_reason_kicked_by_user）是两回事，故用单独的原因码，让客户端能给出
+    //「被管理员注销」而不是「你自己踢的」这种驴唇不对马嘴的提示。
+    int32_t kicked = KickUserSessions(userId, clientTypeFilter,
+                                      ADMIN_KICKOUT_REASON_KICKED_BY_ADMIN);
 
     Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
         conn->peerAddress().toIpPort(), empEnt, "user.kickdevice", "-", 1, u8"强制注销员工设备");
@@ -2060,6 +2122,9 @@ void HttpSession::onAdminUserSetRole(const std::string& body, const std::shared_
     {
         Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
             conn->peerAddress().toIpPort(), empEnt, "user.setrole", "-", 1, u8"设置员工角色");
+        //角色（普通成员/部门负责人/企业管理员）影响该员工在通讯录里的呈现，通知本企业在线客户端刷新。
+        Singleton<ChatServer>::Instance().broadcastOrgStructureChanged(
+            empEnt, dept::org_change_member, 0);
     }
     sendAdminResult(conn, code, code == error_code_ok ? "ok" : "set role failed");
 }
@@ -2187,6 +2252,9 @@ static Json::Value AnnouncementSummaryToJson(const AnnouncementInfo& a)
     Json::Value j;
     j["announcementid"] = static_cast<Json::Int64>(a.announcementId);
     j["title"]          = a.title;
+    //正文也随列表下发：控制台列表项要画一行摘要，详情面板首次打开也靠它显示正文。
+    //detail.do 在本函数之后会再赋一次同值，无害。
+    j["body"]           = a.body;
     j["severity"]       = a.severity;
     j["audiencetype"]   = a.audienceType;
     j["status"]         = a.status;
@@ -2976,4 +3044,388 @@ void HttpSession::onAdminGroupCreate(const std::string& body, const std::shared_
     resp["msg"]     = "ok";
     resp["groupid"] = static_cast<Json::Int64>(newGroupId);
     sendJsonResponse(conn, DumpJson(resp));
+}
+
+// ===========================================================================
+// admin 控制台接口：客户端版本模块
+//
+// 六个接口统一只对平台超管开放（admin.enterpriseid == 0）——客户端版本是平台级
+// 资产，不属于任何一家企业。升级包本身由运维手工放进升级包目录，控制台只管元数据，
+// 故本模块没有上传接口：scanpackages 把目录里的候选包连同大小与 MD5 列出来，
+// 管理员从中挑一个，这两个值不需要人工输入。
+//
+// 注意错误码：本文件用的是 Msg.h 里的 error_code（v1 那一套，admin 接口文档即按它
+// 编写），而 ClientVersionManager 返回的是 Protocol.h 里的 error_code。两套枚举不能
+// 在同一个编译单元里共存，故这里<u>不转发</u> manager 的原始码，一律回
+// error_code_unknown 并附一句能看懂的英文原因。
+// ===========================================================================
+
+//审计日志里客户端版本相关操作的严重级别。发版影响全体用户，按"需要留意"记，
+//与企业创建等常规写操作同级。
+static const int32_t CLIENT_VERSION_AUDIT_SEVERITY = 1;
+
+void HttpSession::onAdminClientVersionScanPackages(const std::string& body,
+                                                   const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    if (!ParseJsonBody(body, root) || !root.isObject())
+    {
+        sendAdminResult(conn, error_code_unknown, "invalid request body");
+        return;
+    }
+    AdminInfo admin;
+    if (!AdminCheckToken(root, admin))
+    {
+        sendAdminResult(conn, error_code_notlogin, "not login or token expired");
+        return;
+    }
+    if (admin.enterpriseid != 0)
+    {
+        sendAdminResult(conn, error_code_dept_permissiondenied, "platform admin required");
+        return;
+    }
+
+    std::vector<UpdatePackageCandidate> candidates;
+    Singleton<UpdatePackageScanner>::Instance().scan(candidates);
+
+    //把已经建过版本记录的包标出来，免得管理员对同一个包重复建记录。
+    //平台传 0 表示不过滤：同一个包理论上可以被不同平台的记录引用。
+    std::set<std::string> usedMd5;
+    std::vector<ClientVersionRecord> versions;
+    if (Singleton<ClientVersionManager>::Instance().listVersions(0, versions))
+    {
+        for (size_t i = 0; i < versions.size(); ++i)
+            usedMd5.insert(versions[i].packageMd5);
+    }
+
+    Json::Value resp;
+    resp["code"] = 0;
+    resp["msg"] = "ok";
+    //把目录一并回给界面：管理员得知道该往哪儿放包
+    resp["dir"] = Singleton<UpdatePackageScanner>::Instance().dir();
+    Json::Value arr(Json::arrayValue);
+    for (size_t i = 0; i < candidates.size(); ++i)
+    {
+        Json::Value item;
+        item["filename"] = candidates[i].filename;
+        item["size"] = static_cast<Json::Int64>(candidates[i].size);
+        item["md5"] = candidates[i].md5;
+        item["iszip"] = candidates[i].iszip;
+        item["used"] = (usedMd5.find(candidates[i].md5) != usedMd5.end());
+        arr.append(item);
+    }
+    resp["list"] = arr;
+    sendJsonResponse(conn, DumpJson(resp));
+}
+
+void HttpSession::onAdminClientVersionList(const std::string& body,
+                                           const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    if (!ParseJsonBody(body, root) || !root.isObject())
+    {
+        sendAdminResult(conn, error_code_unknown, "invalid request body");
+        return;
+    }
+    AdminInfo admin;
+    if (!AdminCheckToken(root, admin))
+    {
+        sendAdminResult(conn, error_code_notlogin, "not login or token expired");
+        return;
+    }
+    if (admin.enterpriseid != 0)
+    {
+        sendAdminResult(conn, error_code_dept_permissiondenied, "platform admin required");
+        return;
+    }
+
+    //platform 取 0 或缺省表示不过滤，返回全部平台
+    const int32_t platform = static_cast<int32_t>(JInt(root, "platform", 0));
+
+    std::vector<ClientVersionRecord> list;
+    if (!Singleton<ClientVersionManager>::Instance().listVersions(platform, list))
+    {
+        sendAdminResult(conn, error_code_unknown, "query client versions failed");
+        return;
+    }
+
+    //标出每个平台当前真正生效的那一条：列表按发布时间倒序，故某平台第一条
+    //f_enabled 为 1 的记录就是它。界面据此显示「当前生效」徽标。
+    std::set<int32_t> currentMarked;
+    Json::Value arr(Json::arrayValue);
+    for (size_t i = 0; i < list.size(); ++i)
+    {
+        const ClientVersionRecord& rec = list[i];
+        bool isCurrent = false;
+        if (rec.enabled == 1 && currentMarked.find(rec.platform) == currentMarked.end())
+        {
+            isCurrent = true;
+            currentMarked.insert(rec.platform);
+        }
+
+        Json::Value item;
+        item["id"] = static_cast<Json::Int64>(rec.id);
+        item["platform"] = rec.platform;
+        item["version"] = rec.version;
+        item["minversion"] = rec.minVersion;
+        item["releasenote"] = rec.releaseNote;
+        item["md5"] = rec.packageMd5;
+        item["size"] = static_cast<Json::Int64>(rec.packageSize);
+        item["packagename"] = rec.packageName;
+        item["forced"] = rec.forced;
+        item["enabled"] = rec.enabled;
+        item["publishtime"] = static_cast<Json::Int64>(rec.publishTime);
+        item["creatoradminid"] = static_cast<Json::Int64>(rec.creatorAdminId);
+        item["createtime"] = static_cast<Json::Int64>(rec.createTime);
+        item["iscurrent"] = isCurrent;
+        arr.append(item);
+    }
+
+    Json::Value resp;
+    resp["code"] = 0;
+    resp["msg"] = "ok";
+    resp["list"] = arr;
+    sendJsonResponse(conn, DumpJson(resp));
+}
+
+void HttpSession::onAdminClientVersionCreate(const std::string& body,
+                                             const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    if (!ParseJsonBody(body, root) || !root.isObject())
+    {
+        sendAdminResult(conn, error_code_unknown, "invalid request body");
+        return;
+    }
+    AdminInfo admin;
+    if (!AdminCheckToken(root, admin))
+    {
+        sendAdminResult(conn, error_code_notlogin, "not login or token expired");
+        return;
+    }
+    if (admin.enterpriseid != 0)
+    {
+        sendAdminResult(conn, error_code_dept_permissiondenied, "platform admin required");
+        return;
+    }
+
+    ClientVersionRecord rec;
+    rec.platform       = static_cast<int32_t>(JInt(root, "platform", 0));
+    rec.version        = JStr(root, "version");
+    rec.minVersion     = JStr(root, "minversion");
+    rec.releaseNote    = JStr(root, "releasenote");
+    rec.packageMd5     = JStr(root, "md5");
+    //强制升级开关。与 minversion 相互独立：前者是发布人的主观决定（这个版本必须装），
+    //后者是版本门槛（低于它连登录都不放行），任一命中客户端即按强制处理。
+    rec.forced         = JBool(root, "forced") ? 1 : 0;
+    rec.enabled        = JBool(root, "publish") ? 1 : 0;
+    rec.creatorAdminId = admin.adminid;
+
+    if (rec.platform <= 0 || rec.version.empty() || rec.packageMd5.empty())
+    {
+        sendAdminResult(conn, error_code_unknown, "platform, version and md5 are required");
+        return;
+    }
+
+    //包的大小与文件名一律以服务器扫描结果为准，不采信请求里传来的值——
+    //两者一旦不一致，客户端下完校验必然失败，而那时已经很难查出是谁写错了。
+    std::vector<UpdatePackageCandidate> candidates;
+    Singleton<UpdatePackageScanner>::Instance().scan(candidates);
+    const UpdatePackageCandidate* matched = NULL;
+    for (size_t i = 0; i < candidates.size(); ++i)
+    {
+        if (candidates[i].md5 == rec.packageMd5)
+        {
+            matched = &candidates[i];
+            break;
+        }
+    }
+    if (matched == NULL)
+    {
+        sendAdminResult(conn, error_code_unknown,
+                        "package not found in update dir, please rescan");
+        return;
+    }
+    //最便宜的一道防呆：文件头都不是 zip，多半是放错了文件
+    if (!matched->iszip)
+    {
+        sendAdminResult(conn, error_code_unknown, "selected file is not a zip package");
+        return;
+    }
+    rec.packageSize = matched->size;
+    rec.packageName = matched->filename;
+
+    //发布时间必须取<u>真毫秒</u>：这一列是"哪条记录更新"的唯一判据，而 time(NULL)*1000
+    //只有秒级精度——同一秒内先发布新版本、再回滚旧版本，两条记录的发布时间会一模一样，
+    //随后按 f_id 兜底就会选中后插入的那条，回滚静默失效。
+    const int64_t nowMs = Timestamp::now().microSecondsSinceEpoch() / 1000;
+    int64_t newId = 0;
+    int errorCode = 0;
+    if (!Singleton<ClientVersionManager>::Instance().createVersion(rec, nowMs, newId, errorCode))
+    {
+        LOGE("create client version failed, version: %s, manager errorcode: %d",
+             rec.version.c_str(), errorCode);
+        sendAdminResult(conn, error_code_unknown, "create client version failed");
+        return;
+    }
+
+    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
+        conn->peerAddress().toIpPort(), 0, "clientversion.create", rec.version,
+        CLIENT_VERSION_AUDIT_SEVERITY,
+        rec.enabled == 1 ? u8"新建并发布客户端版本" : u8"新建客户端版本草稿");
+
+    Json::Value resp;
+    resp["code"] = 0;
+    resp["msg"] = "ok";
+    resp["id"] = static_cast<Json::Int64>(newId);
+    sendJsonResponse(conn, DumpJson(resp));
+}
+
+void HttpSession::onAdminClientVersionUpdate(const std::string& body,
+                                             const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    if (!ParseJsonBody(body, root) || !root.isObject())
+    {
+        sendAdminResult(conn, error_code_unknown, "invalid request body");
+        return;
+    }
+    AdminInfo admin;
+    if (!AdminCheckToken(root, admin))
+    {
+        sendAdminResult(conn, error_code_notlogin, "not login or token expired");
+        return;
+    }
+    if (admin.enterpriseid != 0)
+    {
+        sendAdminResult(conn, error_code_dept_permissiondenied, "platform admin required");
+        return;
+    }
+
+    const int64_t id = JInt(root, "id", 0);
+    if (id <= 0)
+    {
+        sendAdminResult(conn, error_code_unknown, "id is required");
+        return;
+    }
+
+    int errorCode = 0;
+    if (!Singleton<ClientVersionManager>::Instance().updateVersion(
+            id, JStr(root, "minversion"), JStr(root, "releasenote"), errorCode))
+    {
+        LOGE("update client version failed, id: %lld, manager errorcode: %d",
+             (long long)id, errorCode);
+        sendAdminResult(conn, error_code_unknown, "update client version failed, check the id");
+        return;
+    }
+
+    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
+        conn->peerAddress().toIpPort(), 0, "clientversion.update",
+        std::to_string(static_cast<long long>(id)),
+        CLIENT_VERSION_AUDIT_SEVERITY, u8"修改客户端版本信息");
+
+    sendAdminResult(conn, 0, "ok");
+}
+
+void HttpSession::onAdminClientVersionSetEnabled(const std::string& body,
+                                                 const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    if (!ParseJsonBody(body, root) || !root.isObject())
+    {
+        sendAdminResult(conn, error_code_unknown, "invalid request body");
+        return;
+    }
+    AdminInfo admin;
+    if (!AdminCheckToken(root, admin))
+    {
+        sendAdminResult(conn, error_code_notlogin, "not login or token expired");
+        return;
+    }
+    if (admin.enterpriseid != 0)
+    {
+        sendAdminResult(conn, error_code_dept_permissiondenied, "platform admin required");
+        return;
+    }
+
+    const int64_t id = JInt(root, "id", 0);
+    if (id <= 0)
+    {
+        sendAdminResult(conn, error_code_unknown, "id is required");
+        return;
+    }
+    const bool enabled = JBool(root, "enabled");
+
+    //发布时间必须取<u>真毫秒</u>：这一列是"哪条记录更新"的唯一判据，而 time(NULL)*1000
+    //只有秒级精度——同一秒内先发布新版本、再回滚旧版本，两条记录的发布时间会一模一样，
+    //随后按 f_id 兜底就会选中后插入的那条，回滚静默失效。
+    const int64_t nowMs = Timestamp::now().microSecondsSinceEpoch() / 1000;
+    int errorCode = 0;
+    if (!Singleton<ClientVersionManager>::Instance().setEnabled(id, enabled, nowMs, errorCode))
+    {
+        LOGE("set client version status failed, id: %lld, manager errorcode: %d",
+             (long long)id, errorCode);
+        sendAdminResult(conn, error_code_unknown, "set client version status failed, check the id");
+        return;
+    }
+
+    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
+        conn->peerAddress().toIpPort(), 0,
+        enabled ? "clientversion.enable" : "clientversion.disable",
+        std::to_string(static_cast<long long>(id)),
+        CLIENT_VERSION_AUDIT_SEVERITY,
+        enabled ? u8"发布客户端版本" : u8"撤回客户端版本");
+
+    sendAdminResult(conn, 0, "ok");
+}
+
+void HttpSession::onAdminClientVersionRepublish(const std::string& body,
+                                                const std::shared_ptr<TcpConnection>& conn)
+{
+    Json::Value root;
+    if (!ParseJsonBody(body, root) || !root.isObject())
+    {
+        sendAdminResult(conn, error_code_unknown, "invalid request body");
+        return;
+    }
+    AdminInfo admin;
+    if (!AdminCheckToken(root, admin))
+    {
+        sendAdminResult(conn, error_code_notlogin, "not login or token expired");
+        return;
+    }
+    if (admin.enterpriseid != 0)
+    {
+        sendAdminResult(conn, error_code_dept_permissiondenied, "platform admin required");
+        return;
+    }
+
+    const int64_t id = JInt(root, "id", 0);
+    if (id <= 0)
+    {
+        sendAdminResult(conn, error_code_unknown, "id is required");
+        return;
+    }
+
+    //数据层与"发布"是同一个动作：置为已发布并把发布时间刷到当前，使该条立刻成为
+    //取数规则下的最新发布。分成两个接口是为了让审计日志能区分"首次发布"与"回滚"。
+    //发布时间必须取<u>真毫秒</u>：这一列是"哪条记录更新"的唯一判据，而 time(NULL)*1000
+    //只有秒级精度——同一秒内先发布新版本、再回滚旧版本，两条记录的发布时间会一模一样，
+    //随后按 f_id 兜底就会选中后插入的那条，回滚静默失效。
+    const int64_t nowMs = Timestamp::now().microSecondsSinceEpoch() / 1000;
+    int errorCode = 0;
+    if (!Singleton<ClientVersionManager>::Instance().setEnabled(id, true, nowMs, errorCode))
+    {
+        LOGE("republish client version failed, id: %lld, manager errorcode: %d",
+             (long long)id, errorCode);
+        sendAdminResult(conn, error_code_unknown, "republish client version failed, check the id");
+        return;
+    }
+
+    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
+        conn->peerAddress().toIpPort(), 0, "clientversion.republish",
+        std::to_string(static_cast<long long>(id)),
+        CLIENT_VERSION_AUDIT_SEVERITY, u8"回滚：重新发布旧版本客户端");
+
+    sendAdminResult(conn, 0, "ok");
 }

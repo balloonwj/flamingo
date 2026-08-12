@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  flamingoAdmin —— 业务控件 ID 常量。
  *
  *  DuiFrameWindow 标题栏内置的最小化 / 最大化 / 关闭按钮占用 ID 1 / 2 / 3，
@@ -20,6 +20,7 @@ enum UiId
     kIdLoginSubmit   = 103,   // 登录按钮
     kIdLoginNetwork  = 104,   // 「网络设置」链接按钮
     kIdLoginConnInfo = 105,   // 「连接到 <host:port>」信息标签
+    kIdLoginRememberPwd = 106, // 「记住密码」复选框（勾选后口令经 DPAPI 加密存入 ini）
 
     // ---- 网络设置页（NetworkSettingsScreen）----
     kIdNetBack = 110,   // 「返回登录」链接
@@ -34,11 +35,17 @@ enum UiId
     kIdNavAnnouncements = 203,   // 公告中心
     kIdNavAudit         = 204,   // 审计日志
     kIdNavSettings      = 205,   // 平台设置
+    // 客户端版本：仅平台超管可见（客户端版本是平台级资产，不属于任何企业），
+    // 侧栏在登录后按管辖范围决定加不加这一项。数值必须紧接上一项 ——
+    // AdminFrame 的导航分发靠 kNavScreenBase + (ctrlId - kIdNavDashboard)
+    // 映射到 Screen 枚举，跳号会把界面切错。
+    kIdNavClientVersions = 206,  // 客户端版本
 
     // ---- 侧边栏 / 顶栏其它控件 ----
-    kIdLogout        = 210,   // 侧边栏登出按钮
-    kIdTopSearch     = 211,   // 顶栏全局搜索框
-    kIdTopBell       = 212,   // 顶栏通知铃铛
+    kIdLogout        = 210,   // 登出按钮（2026-08-12 起位于顶栏右上角，此前在侧边栏页脚）
+    // 211 / 212 历史为顶栏的「全局搜索框」与「通知铃铛」，2026-08-12 移除这两个
+    // 控件（搜索一直未接入实际跳转，铃铛也无通知源）。编号留空不复用，避免日后
+    // 新控件误用旧 ID 时与残留代码对上。
     kIdSidebarToggle = 213,   // 顶栏「折叠 / 展开侧边栏」按钮
 
     // ---- 仪表板（DashboardScreen）----
@@ -75,7 +82,10 @@ enum UiId
     kIdDetailAnnounce = 263,  // 发布公告按钮（Phase 5 占位）
     kIdDetailPrimary  = 264,  // 主操作按钮（组织 tab=新增员工 / 服务 tab=新建服务号）
     kIdDetailCreateGroup = 265, // 「新建群」按钮（组织 tab：把企业成员拉进一个新群）
-    kIdOrgSearch      = 265,  // 组织架构树搜索框（按部门名 / 员工姓名过滤树）
+    kIdOrgSearch      = 266,  // 组织架构树搜索框（按部门名 / 员工姓名过滤树）
+    kIdOrgRefresh     = 267,  // 组织树工具条「刷新」按钮（重新拉取部门树）
+    kIdOrgExpandAll   = 268,  // 组织树工具条「展开全部」按钮
+    kIdOrgCollapse    = 269,  // 组织树工具条「折叠」按钮
 
     // ---- 节点弹窗（NodeModal：新增部门 / 新增员工）----
     kIdNodeClose    = 270,    // 关闭按钮（X）
@@ -174,6 +184,13 @@ enum UiId
     kIdEntSetShort     = 386,   // 企业简称输入框
     kIdEntSetIndustry  = 387,   // 所属行业输入框
     kIdEntSetRegion    = 388,   // 主要地区输入框
+    kIdEntSetPlan      = 389,   // 套餐下拉框
+    // 下面两个跳到 395 起：本段 380-389 已用满，而 390-394 归新建群弹窗。
+    // 它们曾被误编为 390 / 391，与 kIdGroupModal / kIdGroupClose 撞号 ——
+    // 控件 ID 是 WM_DUI_NOTIFY 分辨事件来源的唯一依据，撞号会让点击落到
+    // 另一个弹窗的分支上，故此处宁可跳号也不复用。
+    kIdEntSetNewName   = 395,   // 新增管理员 - 姓名输入框
+    kIdEntSetNewEmail  = 396,   // 新增管理员 - 邮箱输入框
 
     // ---- 新建群弹窗（GroupModal）----
     kIdGroupModal   = 390,   // 弹窗自身
@@ -181,9 +198,29 @@ enum UiId
     kIdGroupCancel  = 392,   // 「取消」按钮
     kIdGroupSubmit  = 393,   // 「创建」按钮
     kIdGroupName    = 394,   // 群名称输入框
-    kIdEntSetPlan      = 389,   // 套餐下拉框
-    kIdEntSetNewName   = 390,   // 新增管理员 - 姓名输入框
-    kIdEntSetNewEmail  = 391,   // 新增管理员 - 邮箱输入框
+
+    // ---- 客户端版本界面（ClientVersionsScreen）----
+    // 取 430 起而不是紧接 396：400-405 已归平台设置界面（kIdSettings*）。
+    // 控件 ID 是 WM_DUI_NOTIFY 分辨事件来源的唯一依据，撞号会让点击落到
+    // 另一个界面的分支上 —— 这里最初就误编成 400 起，编译期 case 重复才发现。
+    kIdCvRefresh    = 430,   // 页头「刷新」按钮
+    kIdCvNew        = 431,   // 页头「新建版本」按钮
+    // 表格行内的操作（发布 / 撤回 / 回滚 / 编辑）都由本控件自绘并自行命中，
+    // 统一用这一个 ID 上报；具体点了哪一行的哪个动作经 GetPendingAction 取。
+    kIdCvRowAction  = 432,   // 表格行内操作
+
+    // ---- 新建 / 编辑客户端版本弹窗（ClientVersionModal）----
+    kIdCvModal      = 440,   // 弹窗自身（上报「刷新候选包」动作）
+    kIdCvModalClose = 441,   // 关闭按钮（X）
+    kIdCvModalCancel = 442,  // 「取消」按钮
+    kIdCvModalSaveDraft = 443,  // 「存为草稿」按钮
+    kIdCvModalPublish   = 444,  // 「直接发布」按钮
+    kIdCvModalRescan    = 445,  // 「重新扫描」按钮
+    kIdCvModalVersion   = 446,  // 版本号输入框
+    kIdCvModalMinVer    = 447,  // 最低版本号输入框
+    kIdCvModalNote      = 448,  // 更新说明输入框
+    kIdCvModalPackage   = 449,  // 候选包下拉框
+    kIdCvModalForced    = 450,  // 「强制升级」复选框
 };
 
 } // namespace flamingoadmin

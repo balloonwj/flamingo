@@ -49,9 +49,23 @@ namespace balloonmain {
 CImageEx* CreateMenuIconImage(int iconKind, COLORREF color, int sizePx);
 
 /**
- *  把一份在线状态菜单的行模型整段装配进 DuiMenu：逐行按 entry.iconKind 与
- *  entry.dotColor 渲染左侧圆点（当前项是带外环的 kIconStatusCurrent），再以
- *  entry.label 作文本追加为普通菜单项，项 id 取 entry.id。
+ *  渲染一个<u>在线状态徽标</u>到 sizePx × sizePx 的 32bpp 预乘 alpha 位图。与
+ *  CreateMenuIconImage 的区别是：字形与颜色都由 presence 决定（走 PresenceBadge 的
+ *  共用映射），调用方不必自己查配色表；且支持把该项标记为"当前所处的状态"。
+ *
+ *    presence：  v2 在线状态（presence_type）；越界取值按"离线"画。
+ *    markCurrent：true 时徽标缩小居中、外面套一圈同色细环，表示这是用户当前所处的
+ *                 状态。菜单里至多一项该传 true。
+ *    sizePx：    位图边长（逻辑像素），>0；给 DuiMenu 用时须传 16。
+ *
+ *  @return 新建的 CImageEx，<u>所有权归调用方</u>，用完 delete；分配失败返回 NULL。
+ */
+CImageEx* CreateStatusIconImage(int presence, bool markCurrent, int sizePx);
+
+/**
+ *  把一份在线状态菜单的行模型整段装配进 DuiMenu：逐行按 entry.presence 渲染左侧
+ *  状态徽标（当前项按 entry.isCurrent 额外套一圈外环），再以 entry.label 作文本
+ *  追加为普通菜单项，项 id 取 entry.id。
  *
  *    menu：      目标菜单，函数只往里追加、不清空已有项。
  *    icons：     图标暂存容器。函数把新建的每张图标存进去 —— DuiMenu 只<u>借用</u>

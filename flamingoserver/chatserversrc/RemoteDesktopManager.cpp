@@ -6,9 +6,11 @@
 #include "RemoteDesktopProtocol.h"      // enum rd_state
 #include "../utils/RelayToken.h"
 
+//初始化列表的书写顺序必须与头文件里成员的声明顺序一致，
+//否则 GCC 会报 -Wreorder：实际的初始化顺序由声明顺序决定，与这里写的顺序无关
 RemoteDesktopManager::RemoteDesktopManager()
-    : m_relayPort(0)
-    , m_seqCounter(0)
+    : m_seqCounter(0)
+    , m_relayPort(0)
 {
 }
 

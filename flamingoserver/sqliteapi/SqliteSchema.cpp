@@ -297,6 +297,13 @@ const char* const SCHEMA_TABLE_STATEMENTS[] =
         "    f_create_time INTEGER NOT NULL DEFAULT 0,\n"
         "    PRIMARY KEY (f_userid, f_ctype, f_cid)\n"
         ");\n",
+    "CREATE TABLE IF NOT EXISTS t_starred\n"
+        "(\n"
+        "    f_userid INTEGER NOT NULL,\n"
+        "    f_target INTEGER NOT NULL,\n"
+        "    f_create_time INTEGER NOT NULL DEFAULT 0,\n"
+        "    PRIMARY KEY (f_userid, f_target)\n"
+        ");\n",
     "CREATE TABLE IF NOT EXISTS t_group\n"
         "(\n"
         "    f_groupid INTEGER NOT NULL,\n"
@@ -391,9 +398,25 @@ const char* const SCHEMA_TABLE_STATEMENTS[] =
         "    f_uploaderid INTEGER NOT NULL DEFAULT 0,\n"
         "    f_uploadtime INTEGER NOT NULL DEFAULT 0\n"
         ");\n",
+    "CREATE TABLE IF NOT EXISTS t_client_version\n"
+        "(\n"
+        "    f_id INTEGER PRIMARY KEY AUTOINCREMENT,\n"
+        "    f_platform INTEGER NOT NULL DEFAULT 1,\n"
+        "    f_version VARCHAR(32) NOT NULL DEFAULT '',\n"
+        "    f_min_version VARCHAR(32) NOT NULL DEFAULT '',\n"
+        "    f_release_note VARCHAR(2048) NOT NULL DEFAULT '',\n"
+        "    f_package_md5 VARCHAR(32) NOT NULL DEFAULT '',\n"
+        "    f_package_size INTEGER NOT NULL DEFAULT 0,\n"
+        "    f_package_name VARCHAR(255) NOT NULL DEFAULT '',\n"
+        "    f_forced INTEGER NOT NULL DEFAULT 0,\n"
+        "    f_enabled INTEGER NOT NULL DEFAULT 0,\n"
+        "    f_publish_time INTEGER NOT NULL DEFAULT 0,\n"
+        "    f_creator_adminid INTEGER NOT NULL DEFAULT 0,\n"
+        "    f_create_time INTEGER NOT NULL DEFAULT 0\n"
+        ");\n",
 };
 
-const int SCHEMA_TABLE_STATEMENT_COUNT = 31;
+const int SCHEMA_TABLE_STATEMENT_COUNT = 33;
 
 const char* const SCHEMA_POST_STATEMENTS[] =
 {
@@ -410,6 +433,7 @@ const char* const SCHEMA_POST_STATEMENTS[] =
     "CREATE INDEX IF NOT EXISTS t_chatmsg_idx_from_to ON t_chatmsg(f_from, f_to);\n",
     "CREATE INDEX IF NOT EXISTS t_chatmsg_idx_to_from ON t_chatmsg(f_to, f_from);\n",
     "CREATE INDEX IF NOT EXISTS t_chatmsg_idx_client ON t_chatmsg(f_clientmsgid);\n",
+    "CREATE INDEX IF NOT EXISTS t_chatmsg_idx_to_msgid ON t_chatmsg(f_to, f_msgid);\n",
     "CREATE UNIQUE INDEX IF NOT EXISTS t_department_uniq_dept_id ON t_department(f_dept_id);\n",
     "CREATE INDEX IF NOT EXISTS t_department_idx_parent ON t_department(f_parent_dept_id);\n",
     "CREATE INDEX IF NOT EXISTS t_department_idx_path ON t_department(f_dept_path);\n",
@@ -476,6 +500,7 @@ const char* const SCHEMA_POST_STATEMENTS[] =
     "CREATE INDEX IF NOT EXISTS t_service_account_binding_idx_service ON t_service_account_binding(f_service_id);\n",
     "CREATE INDEX IF NOT EXISTS t_contact_remark_idx_user ON t_contact_remark(f_userid);\n",
     "CREATE INDEX IF NOT EXISTS t_favorite_idx_favorite_user ON t_favorite(f_userid);\n",
+    "CREATE INDEX IF NOT EXISTS t_starred_idx_starred_user ON t_starred(f_userid);\n",
     "CREATE INDEX IF NOT EXISTS t_group_announcement_idx_group_time ON t_group_announcement(f_groupid, f_publish_time);\n",
     "CREATE INDEX IF NOT EXISTS t_group_member_idx_user ON t_group_member(f_userid);\n",
     "CREATE INDEX IF NOT EXISTS t_group_join_request_idx_group_status ON t_group_join_request(f_groupid, f_status);\n",
@@ -486,9 +511,10 @@ const char* const SCHEMA_POST_STATEMENTS[] =
     "CREATE INDEX IF NOT EXISTS t_file_idx_uploader ON t_file(f_uploaderid);\n",
     "CREATE INDEX IF NOT EXISTS t_group_file_idx_group ON t_group_file(f_groupid);\n",
     "CREATE INDEX IF NOT EXISTS t_group_file_idx_fileid ON t_group_file(f_fileid);\n",
+    "CREATE INDEX IF NOT EXISTS t_client_version_idx_platform_enabled ON t_client_version(f_platform, f_enabled);\n",
 };
 
-const int SCHEMA_POST_STATEMENT_COUNT = 57;
+const int SCHEMA_POST_STATEMENT_COUNT = 60;
 
 const char* const SCHEMA_TABLES[] =
 {
@@ -515,6 +541,7 @@ const char* const SCHEMA_TABLES[] =
     "t_file_ack",
     "t_message_pin",
     "t_favorite",
+    "t_starred",
     "t_group",
     "t_group_announcement",
     "t_group_member",
@@ -523,9 +550,10 @@ const char* const SCHEMA_TABLES[] =
     "t_card_interaction",
     "t_file",
     "t_group_file",
+    "t_client_version",
 };
 
-const int SCHEMA_TABLE_COUNT = 31;
+const int SCHEMA_TABLE_COUNT = 33;
 
 const SchemaColumn SCHEMA_COLUMNS[] =
 {
@@ -719,6 +747,9 @@ const SchemaColumn SCHEMA_COLUMNS[] =
     { "t_favorite", "f_cid", "INTEGER" },
     { "t_favorite", "f_order", "INTEGER NOT NULL DEFAULT 0" },
     { "t_favorite", "f_create_time", "INTEGER NOT NULL DEFAULT 0" },
+    { "t_starred", "f_userid", "INTEGER" },
+    { "t_starred", "f_target", "INTEGER" },
+    { "t_starred", "f_create_time", "INTEGER NOT NULL DEFAULT 0" },
     { "t_group", "f_groupid", "INTEGER" },
     { "t_group", "f_name", "VARCHAR(64)" },
     { "t_group", "f_facetype", "INTEGER NOT NULL DEFAULT 0" },
@@ -781,8 +812,20 @@ const SchemaColumn SCHEMA_COLUMNS[] =
     { "t_group_file", "f_filetype", "INTEGER NOT NULL DEFAULT 6" },
     { "t_group_file", "f_uploaderid", "INTEGER NOT NULL DEFAULT 0" },
     { "t_group_file", "f_uploadtime", "INTEGER NOT NULL DEFAULT 0" },
+    { "t_client_version", "f_platform", "INTEGER NOT NULL DEFAULT 1" },
+    { "t_client_version", "f_version", "VARCHAR(32) NOT NULL DEFAULT ''" },
+    { "t_client_version", "f_min_version", "VARCHAR(32) NOT NULL DEFAULT ''" },
+    { "t_client_version", "f_release_note", "VARCHAR(2048) NOT NULL DEFAULT ''" },
+    { "t_client_version", "f_package_md5", "VARCHAR(32) NOT NULL DEFAULT ''" },
+    { "t_client_version", "f_package_size", "INTEGER NOT NULL DEFAULT 0" },
+    { "t_client_version", "f_package_name", "VARCHAR(255) NOT NULL DEFAULT ''" },
+    { "t_client_version", "f_forced", "INTEGER NOT NULL DEFAULT 0" },
+    { "t_client_version", "f_enabled", "INTEGER NOT NULL DEFAULT 0" },
+    { "t_client_version", "f_publish_time", "INTEGER NOT NULL DEFAULT 0" },
+    { "t_client_version", "f_creator_adminid", "INTEGER NOT NULL DEFAULT 0" },
+    { "t_client_version", "f_create_time", "INTEGER NOT NULL DEFAULT 0" },
 };
 
-const int SCHEMA_COLUMN_COUNT = 252;
+const int SCHEMA_COLUMN_COUNT = 267;
 
 } // namespace sqliteapi

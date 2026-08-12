@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  flamingoAdmin —— 侧边栏实现。
  *
  *  balloonwj@qq.com   2026.05.21
@@ -6,6 +6,7 @@
 #include "stdafx.h"
 #include "Shell/Sidebar.h"
 #include "UiIds.h"
+#include "Util/AdminApi.h"   // AdminSession：按管辖范围决定加不加「客户端版本」
 #include "Theme/AdminTheme.h"
 
 #include "Controls/Basic/DuiLabel.h"
@@ -21,14 +22,14 @@ namespace {
 
 // ---- 侧边栏布局常量（96 dpi 逻辑像素）----
 const int kHeaderHeight   = 56;   // 品牌头部高度
-const int kFooterHeight   = 56;   // 页脚高度
+// 原 kFooterHeight（页脚高度）随页脚移到顶栏一并删除，见本文件下方说明。
 const int kNavItemHeight  = 36;   // 单个导航项高度
-const int kNavItemCount   = 5;    // 导航项数量
+// 导航项数量不再是常量：仅平台超管能看到「客户端版本」。
+// 导航区高度改为建完后按实际项数现算（见 BuildNav 末尾）。
 const int kNavGap         = 2;    // 导航项间距
 const int kNavPadV        = 10;   // 导航区上下内边距
 // 导航区总高度 = 上下内边距 + N 项 + (N-1) 个间距。
-const int kNavAreaHeight  = kNavPadV * 2 + kNavItemHeight * kNavItemCount
-                            + kNavGap * (kNavItemCount - 1);
+
 
 // 导航项内部度量。
 const int kNavIconSize    = 16;   // 图标边长
@@ -164,12 +165,23 @@ Sidebar::Sidebar()
                   Hint().Fixed(kNavItemHeight));
     nav->AddChild(MakeNavItem(kIdNavSettings,      ui::Icon::Settings,  _T("平台设置")),
                   Hint().Fixed(kNavItemHeight));
-    AddChild(std::move(nav), Hint().Fixed(kNavAreaHeight));
+    // 客户端版本：升级包是平台级资产，不属于任何一家企业，故只给平台超管看。
+    // 侧栏在登录成功后才构建，此时 AdminSession 已填好。
+    if (AdminSession::Instance().IsPlatformAdmin())
+    {
+        nav->AddChild(MakeNavItem(kIdNavClientVersions, ui::Icon::Download, _T("客户端版本")),
+                      Hint().Fixed(kNavItemHeight));
+    }
+    // 高度按实际添加的项数算：企业级管理员少一项，写死会多出一块空白。
+    const int navCount = static_cast<int>(m_navItems.size());
+    const int navAreaHeight = kNavPadV * 2 + kNavItemHeight * navCount
+                              + kNavGap * (navCount - 1);
+    AddChild(std::move(nav), Hint().Fixed(navAreaHeight));
 
-    // 弹性空白，把页脚顶到底部。
+    // 弹性空白，占住导航项以下的全部剩余高度。
+    // 原本这里的作用是"把页脚顶到底部"，2026-08-12 页脚（管理员姓名/角色 + 登出
+    // 按钮）整体移到了顶栏右上角，侧栏底部不再有内容，这块空白就纯粹是留白了。
     AddChild(std::make_unique<DuiControl>(), Hint().Weight(1));
-
-    AddChild(BuildFooter(), Hint().Fixed(kFooterHeight));
 }
 
 std::unique_ptr<DuiControl> Sidebar::BuildHeader()
@@ -198,35 +210,8 @@ std::unique_ptr<DuiControl> Sidebar::BuildHeader()
     return header;
 }
 
-std::unique_ptr<DuiControl> Sidebar::BuildFooter()
-{
-    // 页脚：白底 + 顶部分隔线，用户名 / 角色 + 登出按钮。
-    auto footer = std::make_unique<ui::SolidHBox>();
-    footer->SetFillColor(theme::kInk0);
-    footer->SetEdgeBorder(ui::SolidHBox::kEdgeTop, theme::kInk100);
-    footer->SetPadding(14, 0, 10, 0);
-    footer->SetGap(8);
-
-    auto info = std::make_unique<DuiVBox>();
-    info->AddChild(ui::MakeLabel(_T("李正阳"), theme::kFontSizeNormal, true,
-                                 theme::kInk700), Hint().Fixed(18));
-    info->AddChild(ui::MakeLabel(_T("admin · 超管"), theme::kFontSizeSmall, false,
-                                 theme::kInk400), Hint().Fixed(16));
-    m_footerInfo = info.get();
-    footer->AddChild(std::move(info),
-                     Hint().Weight(1).Fixed(-1, 34).AlignC(DuiLayout::AlignCenter));
-
-    auto logout = std::make_unique<ui::IconButton>();
-    logout->SetCtrlId(kIdLogout);
-    logout->SetIcon(ui::Icon::Logout);
-    logout->SetIconSize(16);
-    logout->SetColors(theme::kInk400, theme::kInk700, theme::kInk100);
-    logout->SetTooltip(_T("退出登录"));
-    footer->AddChild(std::move(logout),
-                     Hint().Fixed(30, 30).AlignC(DuiLayout::AlignCenter));
-
-    return footer;
-}
+// 侧栏页脚（管理员姓名 / 角色 + 登出按钮）已于 2026-08-12 整体移到顶栏右上角，
+// 见 TopBar 的构造。BuildFooter 及其相关的 m_footerInfo、kFooterHeight 一并删除。
 
 std::unique_ptr<DuiControl> Sidebar::MakeNavItem(int navId, ui::Icon icon,
                                                  LPCTSTR label)
@@ -234,16 +219,13 @@ std::unique_ptr<DuiControl> Sidebar::MakeNavItem(int navId, ui::Icon icon,
     auto item = std::make_unique<SidebarNavItem>();
     item->SetCtrlId(navId);
     item->Setup(icon, label);
-    if (m_navCount < kNavItemCount)
-    {
-        m_navItems[m_navCount++] = item.get();
-    }
+    m_navItems.push_back(item.get());
     return item;
 }
 
 void Sidebar::SetActiveNav(int navId)
 {
-    for (int i = 0; i < m_navCount; ++i)
+    for (size_t i = 0; i < m_navItems.size(); ++i)
     {
         if (m_navItems[i] != nullptr)
         {
@@ -262,22 +244,19 @@ void Sidebar::SetCollapsed(bool collapsed)
     m_collapsed = collapsed;
 
     // 导航项切到只画图标的紧凑态。
-    for (int i = 0; i < m_navCount; ++i)
+    for (size_t i = 0; i < m_navItems.size(); ++i)
     {
         if (m_navItems[i] != nullptr)
         {
             m_navItems[i]->SetCollapsed(collapsed);
         }
     }
-    // 头部副标题、页脚用户信息在紧凑态隐藏。balloonui 的 HBox 布局会跳过
-    // 不可见子控件，余下的徽标 / 登出按钮自动重排。
+    // 头部副标题在紧凑态隐藏。balloonui 的 HBox 布局会跳过不可见子控件，
+    // 余下的徽标自动重排。
+    //（页脚用户信息原本也在这里一并隐藏，页脚移到顶栏后不再需要。）
     if (m_headerTitles != nullptr)
     {
         m_headerTitles->SetVisible(!collapsed);
-    }
-    if (m_footerInfo != nullptr)
-    {
-        m_footerInfo->SetVisible(!collapsed);
     }
     Invalidate();
 }

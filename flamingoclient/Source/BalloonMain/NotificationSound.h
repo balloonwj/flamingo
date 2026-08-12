@@ -80,6 +80,24 @@ const wchar_t* NotifySoundRelativePath(NotifySoundKind kind);
 bool IsBuddyJustCameOnline(int oldPresence, int newPresence);
 
 /**
+ *  判断好友的一次 presence 变化是否构成"刚下线" —— 即由可见在线态（在线 / 离开 /
+ *  忙碌）跳变为不可见态（离线 / 隐身）。与上面那条<u>严格对称</u>，共用同一套
+ *  "可见在线"口径（IsVisibleOnline），故两者不会对同一次跳变都成立、也不会都不成立。
+ *
+ *  用途：「特别关注」的桌面提示要在被关注者上线<u>和</u>下线时各弹一次，故需要这条。
+ *  上线提示音不用它（下线不出声）。
+ *
+ *  与上线同理，在线↔离开↔忙碌之间的来回切换<u>不算</u>下线 —— 对方锁个屏就提示一次，
+ *  一上午能弹十几次。隐身算下线：对外表现就是"这个人不在了"，与真下线没有区别。
+ *
+ *    oldPresence：变化前的 presence 值（通讯录缓存里的旧值；查不到时调用方按离线 0 传入）。
+ *    newPresence：变化后的 presence 值（服务端推送的新值）。
+ *
+ *  返回：true 表示这是一次"下线"跳变；否则 false。
+ */
+bool IsBuddyJustWentOffline(int oldPresence, int newPresence);
+
+/**
  *  按种类异步播放通知提示音。内部用 ::sndPlaySound(..., SND_ASYNC) 提交播放，<u>不阻塞</u>
  *  调用线程（须在 UI 线程调用）。实现位于 NotificationSoundPlayer.cpp（仅 Flamingo
  *  主工程编译，带 Win32 / 程序路径依赖；不进 FlamingoUnit 测试工程）。

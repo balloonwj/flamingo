@@ -15,8 +15,9 @@
 #include "net/CallProtocolClient.h"          // net::CallInviteResponse / CallInviteNotify / CallSignalingInfo / CallStateNotify（v2 音视频通话投递载体）
 #include "net/AnnounceProtocolClient.h"      // net::AnnouncementsResult / AnnouncementNotify / AnnounceMarkReadResult（v2 平台公告投递载体）
 #include "net/FriendProtocolClient.h"        // net::SetFriendRemarkResult（v2 设置好友备注名应答投递载体）
+#include "net/FavoriteProtocolClient.h"      // net::SetFavoriteResult（v2「我的收藏」设置应答投递载体）
+#include "net/StarredProtocolClient.h"       // net::SetStarredResult（v2「特别关注」设置应答投递载体）
 #include "IULog.h"
-#include "UpdateDlg.h"
 #include "EncodeUtil.h"
 #include "UserSessionData.h"
 #include "CustomMsgDef.h"
@@ -1656,7 +1657,7 @@ void CFlamingoClient::LoadUserConfig()
 	PCTSTR pszAccount = m_UserMgr.m_UserInfo.m_strAccount.c_str();
 	
 	TCHAR szConfigPath[MAX_PATH] = {0};
-	_stprintf_s(szConfigPath, MAX_PATH, _T("%sUsers\\%s\\%s.cfg"), g_szHomePath, pszAccount, pszAccount);
+	_stprintf_s(szConfigPath, MAX_PATH, _T("%sUsers\\%s\\%s.cfg"), g_szDataRoot, pszAccount, pszAccount);
 
 	m_UserConfig.LoadConfig(szConfigPath);
 
@@ -1673,7 +1674,7 @@ void CFlamingoClient::SaveUserConfig()
 	PCTSTR pszAccount = m_UserMgr.m_UserInfo.m_strAccount.c_str();
 	
 	TCHAR szConfigPath[MAX_PATH] = {0};
-	_stprintf_s(szConfigPath, MAX_PATH,_T("%sUsers\\%s\\%s.cfg"),  g_szHomePath, pszAccount, pszAccount);
+	_stprintf_s(szConfigPath, MAX_PATH,_T("%sUsers\\%s\\%s.cfg"),  g_szDataRoot, pszAccount, pszAccount);
 
 	m_UserConfig.SaveConfig(szConfigPath);
 }
@@ -2007,6 +2008,16 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
             delete (net::UserInfoChangedNotify*)lParam;
         break;
 
+    //v2 组织架构变更推送：转发给主窗口重新拉一次通讯录，好让新入职 / 新注册的同事
+    //立刻出现在联系人列表里；未就绪则就地释放。管理控制台改员工资料 / 启停用 / 设角色、
+    //增删改部门、改企业名称，都会推这条。
+    case FMG_MSG_V2_ORG_STRUCTURE_CHANGED:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::OrgStructureChangedNotify*)lParam;
+        break;
+
     //v2 会话属性多端同步推送：转发给主窗口按新状态刷新会话列表（置顶 / 免打扰 / 删除）；
     //未就绪则就地释放。
     case FMG_MSG_V2_CONVERSATION_CHANGED:
@@ -2152,6 +2163,27 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::SetFriendRemarkResult*)lParam;
+        break;
+
+    //v2 收藏设置应答：转发给主窗口（成功只记日志，失败时主面板据回带的 ctype/cid
+    //把那一条收藏回滚并提示原因）；未就绪则就地释放。
+    //这一条原先漏在了这里 —— 消息投给的是代理窗而不是主窗口，代理窗 switch 里没有
+    //对应 case 时会落进 default 被丢掉，堆负载顺带泄漏。表现是"收藏失败时界面毫无
+    //反应"（成功路径靠乐观更新，看不出问题），故一直没被发现。
+    case FMG_MSG_V2_SET_FAVORITE_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::SetFavoriteResult*)lParam;
+        break;
+
+    //v2 特别关注设置应答：转发给主窗口（成功只记日志，失败时主面板据回带的
+    //target/starred 把那一个人的关注状态回滚）；未就绪则就地释放。
+    case FMG_MSG_V2_SET_STARRED_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::SetStarredResult*)lParam;
         break;
 
     //v2 Pin 消息应答：转发给主窗口按 code 提示失败原因（成功不动界面，等下面的推送）；

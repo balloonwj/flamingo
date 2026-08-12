@@ -94,6 +94,15 @@ const Gdiplus::REAL kPinnedAccentRadius = (Gdiplus::REAL)kPinnedAccentWidth / 2.
 const Gdiplus::Color kBadgeMutedGray(255, 0x9A, 0xA0, 0xA6);
 
 // 静音图标边长（逻辑像素）。与未读胶囊同排，故比胶囊直径略小。
+// 「特别关注」星标：画在主标签文字之后，金色实心五角星。
+// 12px 与静音图标、在线状态徽标同尺寸，一行里几个装饰视觉重量才一致。
+const int kStarIconSize = 12;
+// 星与名字末尾之间的间距。留 4px：贴太紧会像名字的一部分，拉太开又不知道它属于谁。
+const int kStarIconGap = 4;
+// 金色 #F5A623。与未读的红 #FF4D4F、静音的灰 #9AA0A6 都拉得开；白底、悬停浅蓝
+// #E8F0FC、选中品牌蓝 #2D6CDF 三种行底色上都够亮，故选中态不必另换一套颜色。
+const Gdiplus::Color kStarIconColor(255, 0xF5, 0xA6, 0x23);
+
 const int kMuteIconSize = 12;
 // 静音图标与其右侧未读胶囊之间的横向间距（逻辑像素）。
 const int kMuteIconGap = 4;
@@ -314,10 +323,32 @@ void MainPanelTreeView::SetItemConversationFlags(int id, bool pinned, bool muted
     Invalidate();
 }
 
+void MainPanelTreeView::SetItemStarred(int id, bool starred)
+{
+    const bool had = (m_starredRows.count(id) != 0);
+    if (had == starred)
+    {
+        return;   // 状态没变，不必重绘
+    }
+
+    if (starred)
+    {
+        m_starredRows.insert(id);
+    }
+    else
+    {
+        m_starredRows.erase(id);
+    }
+
+    // 与置顶 / 免打扰不同，星标<u>不占右侧列</u>（它画在名字之后），故不必重算预留宽。
+    Invalidate();
+}
+
 void MainPanelTreeView::ClearAllRowDecorations()
 {
     if (m_rightTopText.empty() && m_badges.empty()
-        && m_pinnedRows.empty() && m_mutedRows.empty())
+        && m_pinnedRows.empty() && m_mutedRows.empty()
+        && m_starredRows.empty())
     {
         return;
     }
@@ -325,6 +356,7 @@ void MainPanelTreeView::ClearAllRowDecorations()
     m_badges.clear();
     m_pinnedRows.clear();
     m_mutedRows.clear();
+    m_starredRows.clear();
     Invalidate();
 }
 
@@ -361,11 +393,82 @@ void MainPanelTreeView::UpdateRightReserve_(int id)
     SetItemRightText(id, BuildSpacerForWidth(reserveW));
 }
 
+void MainPanelTreeView::PaintStarredMarks(HDC hdc, const RECT& rcDirty)
+{
+    if (m_starredRows.empty())
+    {
+        return;
+    }
+
+    // 先按可见行收集要画的矩形，再统一开一次 GDI+ 画完 —— 与下面那套装饰同一路子：
+    // Graphics 对象建一次就够，逐行新建既慢又容易与 GDI 交错出问题。
+    std::vector<RECT> starRects;
+    const int visibleCount = GetVisibleCount();
+    for (int row = 0; row < visibleCount; ++row)
+    {
+        const int nodeId = GetIdAtVisibleRow(row);
+        if (m_starredRows.count(nodeId) == 0)
+        {
+            continue;
+        }
+
+        RECT rcText;
+        if (!GetItemLabelTextRect(nodeId, rcText))
+        {
+            // 节点不可见 / 标签为空 / 可用宽度已被挤没：该行不画，不做近似猜测。
+            continue;
+        }
+
+        // 不与脏区相交的行跳过（基类没重绘它，hdc 也被裁掉）。
+        if (rcText.bottom <= rcDirty.top || rcText.top >= rcDirty.bottom)
+        {
+            continue;
+        }
+
+        RECT rcStar;
+        rcStar.left   = rcText.right + kStarIconGap;
+        rcStar.right  = rcStar.left + kStarIconSize;
+        // 与名字那一行的文字垂直居中对齐，而不是与整行居中 —— 两行节点里后者会让
+        // 星落到姓名与预览之间的中缝上。
+        rcStar.top    = (rcText.top + rcText.bottom - kStarIconSize) / 2;
+        rcStar.bottom = rcStar.top + kStarIconSize;
+
+        // 名字太长把星挤出可视区时就不画了。星是锦上添花的标记，宁可这一行不显示，
+        // 也不该让它压在右侧的时间 / 状态徽标上。
+        if (rcStar.right > m_rcItem.right - kBadgeRightPad)
+        {
+            continue;
+        }
+
+        starRects.push_back(rcStar);
+    }
+
+    if (starRects.empty())
+    {
+        return;
+    }
+
+    Gdiplus::Graphics g(hdc);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    for (size_t i = 0; i < starRects.size(); ++i)
+    {
+        const RECT& rc = starRects[i];
+        DrawLineIcon(g, kIconStar,
+                     (Gdiplus::REAL)rc.left, (Gdiplus::REAL)rc.top,
+                     (Gdiplus::REAL)kStarIconSize, kStarIconColor, 0.0f);
+    }
+}
+
 void MainPanelTreeView::OnPaint(HDC hdc, const RECT& rcDirty)
 {
     // 先让基类把整行其余内容画完（行底色 / 头像 / 标题 / 预览）。被本类接管的行，
     // 基类右侧文字是占位空格、不可见；未接管的行（如联系人树）右侧文字仍由基类正常绘制。
     DuiTreeView::OnPaint(hdc, rcDirty);
+
+    // 「特别关注」星标单独一段：它画在<u>名字之后</u>，与下面那套右侧装饰
+    // （时间 / 未读 / 静音 / 置顶）在坐标上毫不相干，混在一起写只会让两边都难读。
+    // 一个人都没关注时（以及整棵群树）这一段整段跳过。
+    PaintStarredMarks(hdc, rcDirty);
 
     // 一样都没接管的树（联系人树）直接短路，零开销。
     if (m_rightTopText.empty() && m_badges.empty()

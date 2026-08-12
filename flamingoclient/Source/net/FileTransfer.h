@@ -234,14 +234,16 @@ public:
     /**
      *  取某文件在本地下载缓存中的完整路径（仅拼路径，不创建目录、不判断存在）。
      *  缓存按登录用户分隔、按内容 MD5 分目录、按原始文件名命名：
-     *  <主目录>Users\<userId>\ChatFile\<md5>\<filename>。按 md5 分目录天然去重并
+     *  <主目录>Users\<登录账号>\ChatFile\<md5>\<filename>。按 md5 分目录天然去重并
      *  支持"是否已下载"判定，文件保留原始名与扩展名以便直接打开。
-     *  @param userId   当前登录用户 userid（缓存按账号隔离，<=0 返回空串）
+     *  @param account  当前登录账号（形如 MY0309 / EMP5321）。Users 下一律按登录账号
+     *                  分目录，与配置、聊天记录、头像同一口径（见 net/UserCachePath.h）；
+     *                  为空串（未登录）时返回空串
      *  @param md5      文件内容MD5（小写十六进制）
      *  @param filename 原始文件名（UTF-8，含扩展名）
      *  @return 缓存文件完整路径；参数非法返回空串
      */
-    static std::wstring CacheFilePathFor(int64_t userId, const std::string& md5,
+    static std::wstring CacheFilePathFor(const std::wstring& account, const std::string& md5,
                                          const std::string& filename);
 
     //启动工作线程；幂等，重复调用无副作用。在 CIUSocket::Init 中调用。
@@ -270,12 +272,12 @@ public:
      *  @param fileid     文件ID（来自消息 content，传给 cmd_request_download）
      *  @param filename   原始文件名（UTF-8，来自消息 content，决定落地文件名）
      *  @param expectMd5  期望MD5（来自消息 content，下载完成后校验；可空则用应答里的 md5）
-     *  @param expectSize 期望字节数（来自消息 content，便于日志；可为 0）
-     *  @param selfUserId 当前登录用户 userid，决定落地到哪个账号的下载目录
+     *  @param expectSize  期望字节数（来自消息 content，便于日志；可为 0）
+     *  @param selfAccount 当前登录账号，决定落地到哪个账号的下载目录（Users\<账号>\ChatFile\）
      */
     void EnqueueDownload(int64_t msgid, const std::string& fileid,
                          const std::string& filename, const std::string& expectMd5,
-                         int64_t expectSize, int64_t selfUserId);
+                         int64_t expectSize, const std::wstring& selfAccount);
 
     /**
      *  取消一笔单聊发文件（用户点「发送中」气泡的「取消」）。线程安全，可在 UI 线程
@@ -402,7 +404,7 @@ private:
         std::string  m_filename;     //原始文件名（UTF-8，决定落地命名）
         std::string  m_expectMd5;    //期望MD5（校验用，可空）
         int64_t      m_expectSize;   //期望字节数（日志用，可为 0）
-        int64_t      m_selfUserId;   //当前登录用户 userid（决定落地到哪个账号的下载目录）
+        std::wstring m_selfAccount;  //当前登录账号（决定落地到 Users\<账号>\ChatFile\ 哪个目录）
 
         //取消标志（入队时由 m_cancelReg 登记并装入）：worker 不持锁地 load 它，UI 线程
         //经 CancelSend / CancelDownload 持锁 store。worker 持有这份 shared_ptr，故簿记表
@@ -415,7 +417,6 @@ private:
             , m_cid(0)
             , m_msgid(0)
             , m_expectSize(0)
-            , m_selfUserId(0)
         {
         }
     };

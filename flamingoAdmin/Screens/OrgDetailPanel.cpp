@@ -1067,6 +1067,20 @@ void OrgDetailPanel::EnsureBasicEditsCreated()
     }
 }
 
+void OrgDetailPanel::SetBasicEditsSuppressed(bool suppressed)
+{
+    if (m_basicEditsSuppressed == suppressed)
+    {
+        return;
+    }
+    m_basicEditsSuppressed = suppressed;
+
+    // 立刻按新状态 reconcile 一次，不等下一帧：弹窗打开这条路径上，AdminFrame
+    // 调完本函数就会去显示弹窗，中间未必还有本面板的重绘，靠等下一帧会漏。
+    // 关闭弹窗那条路径同理 —— 立刻把该显示的字段恢复出来。
+    ApplyBasicEditVisibility();
+}
+
 void OrgDetailPanel::ApplyBasicEditVisibility()
 {
     for (size_t i = 0; i < m_basicValueEdits.size(); ++i)
@@ -1076,7 +1090,10 @@ void OrgDetailPanel::ApplyBasicEditVisibility()
         {
             continue;
         }
-        const bool show = (i < m_basicEditShown.size() && m_basicEditShown[i] != 0);
+        // 有弹窗压在上面时一律隐藏，忽略本帧标记表。真 EDIT 子窗恒画在 DUI
+        // 绘制之上，留着就会浮到弹窗表面（见 SetBasicEditsSuppressed 的说明）。
+        const bool show = !m_basicEditsSuppressed
+                          && (i < m_basicEditShown.size() && m_basicEditShown[i] != 0);
         // SetVisible 幂等：状态未变不触发 ShowWindow，避免每帧闪烁。
         edit->SetVisible(show);
     }
@@ -1222,7 +1239,7 @@ int OrgDetailPanel::PaintUserRoles(HDC hdc, int y)
     const TCHAR* const groups[] =
     {
         _T("全员"), _T("技术周会"), _T("前端组"),
-        _T("产品评审"), _T("OKR 同步"), _T("飞书互通"),
+        _T("产品评审"), _T("OKR 同步"), _T("跨部门协同"),
     };
     int gx = left;
     for (int i = 0; i < 6; ++i)

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -25,6 +25,8 @@
     <ClCompile Include="..\base\Platform.cpp" />
     <ClCompile Include="..\base\Timestamp.cpp" />
     <ClCompile Include="..\fileserversrc\FileManager.cpp" />
+    <ClCompile Include="..\fileserversrc\UpdatePackageIndex.cpp" />
+    <ClCompile Include="..\utils\FileEnum.cpp" />
     <ClCompile Include="..\fileserversrc\FileServer.cpp" />
     <ClCompile Include="..\fileserversrc\FileSession.cpp" />
     <ClCompile Include="..\fileserversrc\TcpSession.cpp" />
@@ -58,6 +60,8 @@
     <ClCompile Include="..\utils\UUIDGenerator.cpp" />
     <ClCompile Include="..\net\FrameCodec.cpp" />
     <ClCompile Include="..\utils\FileToken.cpp" />
+    <ClCompile Include="..\utils\AppPath.cpp" />
+    <ClCompile Include="..\utils\ServerConfigLoader.cpp" />
     <ClCompile Include="..\utils\RelayToken.cpp" />
     <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp" />
     <ClCompile Include="..\jsoncpp1.9.0\json_value.cpp" />
@@ -72,6 +76,8 @@
     <ClInclude Include="..\base\Singleton.h" />
     <ClInclude Include="..\base\Timestamp.h" />
     <ClInclude Include="..\fileserversrc\FileManager.h" />
+    <ClInclude Include="..\fileserversrc\UpdatePackageIndex.h" />
+    <ClInclude Include="..\utils\FileEnum.h" />
     <ClInclude Include="..\fileserversrc\FileMsg.h" />
     <ClInclude Include="..\fileserversrc\FileServer.h" />
     <ClInclude Include="..\imgserversrc\RelayServer.h" />
@@ -108,6 +114,8 @@
     <ClInclude Include="..\utils\UUIDGenerator.h" />
     <ClInclude Include="..\net\FrameCodec.h" />
     <ClInclude Include="..\utils\FileToken.h" />
+    <ClInclude Include="..\utils\AppPath.h" />
+    <ClInclude Include="..\utils\ServerConfigLoader.h" />
     <ClInclude Include="..\utils\RelayToken.h" />
     <ClInclude Include="..\chatserversrc\Protocol.h" />
   </ItemGroup>
@@ -170,6 +178,9 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
+    <!-- x64 的产物与中间文件都放进各自的子目录，免得与 Win32 的同名产物互相覆盖 -->
+    <OutDir>x64\$(Configuration)\</OutDir>
+    <IntDir>imgserver\x64\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -178,6 +189,9 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
+    <!-- x64 的产物与中间文件都放进各自的子目录，免得与 Win32 的同名产物互相覆盖 -->
+    <OutDir>x64\$(Configuration)\</OutDir>
+    <IntDir>imgserver\x64\$(Configuration)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -202,12 +216,15 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    <!-- WIN32 必须定义：全仓库判断平台用的是裸 WIN32（见 base/Platform.h），而不是 MSVC 自带的
+         _WIN32。x64 下不定义它会走进 POSIX 分支，编译必然失败 -->
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -238,8 +255,13 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <WholeProgramOptimization>true</WholeProgramOptimization>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    <!-- WIN32 必须定义：全仓库判断平台用的是裸 WIN32（见 base/Platform.h），而不是 MSVC 自带的
+         _WIN32。x64 下不定义它会走进 POSIX 分支，编译必然失败 -->
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -247,6 +269,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

@@ -22,6 +22,7 @@
 
 #include "../BalloonMain/MainPanelConversationMenu.h"
 #include "../BalloonMain/FavoritesModel.h"   // GetMenuLabel（与本模型的收藏项文案须一致）
+#include "../BalloonMain/StarredModel.h"     // GetMenuLabel（与本模型的特别关注项文案须一致）
 
 using namespace balloonmain;
 
@@ -67,8 +68,8 @@ TEST_CASE("CMENU1 常规单聊会话的菜单行序与分隔条位置", "[convme
 {
     std::vector<ConversationMenuEntry> items = BuildConversationMenuModel(MakeState());
 
-    // 9 个功能项 + 2 条分隔条 = 11 行。
-    REQUIRE(items.size() == 11);
+    // 10 个功能项 + 2 条分隔条 = 12 行（MakeState 造的是单聊会话，故有「特别关注」）。
+    REQUIRE(items.size() == 12);
 
     CHECK(items[0].m_id == kConvMenuOpen);
     CHECK(items[1].m_id == kConvMenuMarkRead);
@@ -76,16 +77,18 @@ TEST_CASE("CMENU1 常规单聊会话的菜单行序与分隔条位置", "[convme
     CHECK(items[3].m_id == kConvMenuProfile);
     // 收藏项紧跟在"查看资料"之后，与联系人 / 群两个右键菜单同一位置。
     CHECK(items[4].m_id == kConvMenuFavorite);
-    CHECK(items[5].m_isSeparator == true);
-    CHECK(items[6].m_id == kConvMenuPin);
-    CHECK(items[7].m_id == kConvMenuMute);
-    CHECK(items[8].m_isSeparator == true);
-    CHECK(items[9].m_id == kConvMenuDelete);
-    CHECK(items[10].m_id == kConvMenuDeleteAll);
+    // 特别关注又紧跟收藏，同样与联系人右键菜单同一位置。
+    CHECK(items[5].m_id == kConvMenuStarred);
+    CHECK(items[6].m_isSeparator == true);
+    CHECK(items[7].m_id == kConvMenuPin);
+    CHECK(items[8].m_id == kConvMenuMute);
+    CHECK(items[9].m_isSeparator == true);
+    CHECK(items[10].m_id == kConvMenuDelete);
+    CHECK(items[11].m_id == kConvMenuDeleteAll);
 
     // 两个删除项排在最末一组，与上面的日常动作被分隔条隔开，减少误点。
-    CHECK(items[9].m_isSeparator == false);
     CHECK(items[10].m_isSeparator == false);
+    CHECK(items[11].m_isSeparator == false);
 }
 
 TEST_CASE("CMENU2 分隔条不带 id 与文本，功能项都有文本", "[convmenu]")
@@ -130,7 +133,7 @@ TEST_CASE("CMENU3 功能项 id 均非 0 且互不重复", "[convmenu]")
         CHECK(seen.count(items[i].m_id) == 0);
         seen.insert(items[i].m_id);
     }
-    CHECK(funcCount == 9);
+    CHECK(funcCount == 10);
 }
 
 TEST_CASE("CMENU3b 第一项就是「打开会话」，前面没有标题行", "[convmenu]")
@@ -192,6 +195,42 @@ TEST_CASE("CMENU4b 收藏项文案随当前收藏状态取反", "[convmenu]")
     // 走那个函数、会话菜单走本模型，两边不一致用户会以为是两个不同的功能。
     CHECK(wcscmp(eOff.m_label, balloonmain::FavoritesModel::GetMenuLabel(false)) == 0);
     CHECK(wcscmp(eOn.m_label, balloonmain::FavoritesModel::GetMenuLabel(true)) == 0);
+}
+
+TEST_CASE("CMENU4c 特别关注只在单聊会话出现，文案随状态取反", "[convmenu][starred]")
+{
+    //单聊：该项存在，未关注时显示「特别关注」
+    ConversationMenuState single = MakeState();
+    ConversationMenuEntry eOff =
+        FindEntry(BuildConversationMenuModel(single), kConvMenuStarred);
+    REQUIRE(eOff.m_id == kConvMenuStarred);
+    REQUIRE(eOff.m_label != NULL);
+    CHECK(wcscmp(eOff.m_label, L"特别关注") == 0);
+
+    single.m_starred = true;
+    ConversationMenuEntry eOn =
+        FindEntry(BuildConversationMenuModel(single), kConvMenuStarred);
+    REQUIRE(eOn.m_label != NULL);
+    CHECK(wcscmp(eOn.m_label, L"取消特别关注") == 0);
+
+    //与 StarredModel::GetMenuLabel 必须是同一套文案 —— 另外四处菜单走那个函数、
+    //会话菜单走本模型，两边不一致用户会以为是两个不同的功能。
+    CHECK(wcscmp(eOff.m_label, balloonmain::StarredModel::GetMenuLabel(false)) == 0);
+    CHECK(wcscmp(eOn.m_label, balloonmain::StarredModel::GetMenuLabel(true)) == 0);
+
+    //群会话：整项<u>不出现</u>，而不是灰显。群没有上下线可言，摆在那里只会让用户
+    //以为能关注整个群。
+    ConversationMenuState group = MakeState();
+    group.m_isGroup = true;
+    group.m_starred = true;   //即便状态位为真也不该冒出来
+    const std::vector<ConversationMenuEntry> groupItems = BuildConversationMenuModel(group);
+    for (size_t i = 0; i < groupItems.size(); ++i)
+    {
+        INFO("行 index = " << i);
+        CHECK((groupItems[i].m_isSeparator || groupItems[i].m_id != kConvMenuStarred));
+    }
+    //群会话因此比单聊少一行
+    CHECK(groupItems.size() == BuildConversationMenuModel(single).size() - 1);
 }
 
 TEST_CASE("CMENU5 置顶项文案随当前置顶状态取反", "[convmenu]")

@@ -10,7 +10,6 @@
 #include "net/IUSocket.h"
 
 class CFriendStatus;
-class CUpdateDlg;
 
 class CFlamingoClient
 {

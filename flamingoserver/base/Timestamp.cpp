@@ -1,4 +1,4 @@
-#include "Timestamp.h"
+﻿#include "Timestamp.h"
 #include <chrono>
 #include <ctime>
 #include <iomanip>
@@ -38,35 +38,20 @@ string Timestamp::toFormattedString(bool showMicroseconds) const
 
 	char buf[32] = { 0 };
 
+	//日期与时间部分用 strftime 输出，不再用 snprintf 逐个拼 struct tm 的字段。
+	//原因有两个：一是 GCC 把 tm_mon / tm_mday 等字段当作无界的 int，认为每个 %02d
+	//最坏要写 11 个字节，于是对着 buf[32] 报 -Wformat-truncation 误报；二是 strftime
+	//在 Windows 与 POSIX 上都可用，省掉了 _snprintf_s 与 snprintf 两套分支。
+	//年份此处输出四位，与原先的 "%4d" 在公元 1000 年以后的取值上完全一致。
+	//strftime 的返回值是写入的字符数（不含结尾的 '\0'），缓冲区放不下时返回 0。
+	size_t len = strftime(buf, sizeof(buf), "%Y%m%d %H:%M:%S", &tm_time);
+
 	if (showMicroseconds)
 	{
 		int microseconds = static_cast<int>(microSecondsSinceEpoch_ % kMicroSecondsPerSecond);
-#ifdef WIN32
-		_snprintf_s(buf, sizeof(buf), "%4d%02d%02d %02d:%02d:%02d.%06d",
-			tm_time.tm_year + 1900, tm_time.tm_mon + 1, tm_time.tm_mday,
-			tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec,
-			microseconds);
-#else
-		snprintf(buf, sizeof(buf), "%4d%02d%02d %02d:%02d:%02d.%06d",
-			tm_time.tm_year + 1900, tm_time.tm_mon + 1, tm_time.tm_mday,
-			tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec,
-			microseconds);
-#endif
+		snprintf(buf + len, sizeof(buf) - len, ".%06d", microseconds);
 	}
-	else
-	{
-#ifdef WIN32
-		_snprintf_s(buf, sizeof(buf), "%4d%02d%02d %02d:%02d:%02d",
-			tm_time.tm_year + 1900, tm_time.tm_mon + 1, tm_time.tm_mday,
-			tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
-#else
-		snprintf(buf, sizeof(buf), "%4d%02d%02d %02d:%02d:%02d",
-			tm_time.tm_year + 1900, tm_time.tm_mon + 1, tm_time.tm_mday,
-			tm_time.tm_hour, tm_time.tm_min, tm_time.tm_sec);
-#endif
-	}
-	
-	
+
 	return buf;
 }
 

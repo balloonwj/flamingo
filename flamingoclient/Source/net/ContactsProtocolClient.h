@@ -105,6 +105,7 @@ struct ContactsResult
     std::vector<DepartmentItem> m_departments;     //企业部门（扁平数组，按 m_parentdeptid 还原成树）
     std::vector<ContactItem>    m_contacts;        //去重的联系人资料池
     std::vector<FavoriteItem>   m_favorites;       //「我的收藏」，联系人与群混排，按收藏时间倒序（最近收藏的在前）
+    std::vector<int64_t>        m_starred;         //「特别关注」的联系人 userid，按标记时间倒序（最近标记的在前）。只装人、不带 ctype —— 群没有上下线，标记它没有意义。客户端据它决定这些人上下线时弹不弹右下角提示
 
     ContactsResult()
         : m_code(-1)        //-1：尚未解析出有效结果码
@@ -147,6 +148,32 @@ struct UserInfoChangedNotify
     }
 };
 
+//组织架构变更的类型，与服务端 dept::org_change_type 一一对应（见
+//flamingoserver/chatserversrc/DepartmentMsg.h）。本端目前两种都只是"重新拉一次
+//通讯录"，区分它主要是为了打日志时能看出变的是部门还是人。
+enum org_change_type
+{
+    org_change_department = 1,  //部门结构变更：管理台新建 / 改名 / 删除 / 移动了部门
+    org_change_member     = 2   //成员归属变更：有人被加进部门（含新用户注册）、改岗、移出或换部门
+};
+
+//cmd_org_structure_notify(1404) 推送解析结果：本企业的组织架构发生了变更。
+//服务端 dept::BuildOrgStructureNotify 产出 {changetype, deptid}，两个都是数字。
+//本端收到后重新拉一次通讯录（cmd_get_contacts），因此这两个字段只用于日志与
+//将来做增量刷新时的判断依据，当前不参与刷新逻辑。
+struct OrgStructureChangedNotify
+{
+    int     m_changetype;  //变更类型，取值见 enum org_change_type
+    int64_t m_deptid;      //受影响的部门ID；0 表示服务端未指明具体部门（如员工被整个删除），
+                           //此时仍应整体刷新通讯录
+
+    OrgStructureChangedNotify()
+        : m_changetype(0)
+        , m_deptid(0)
+    {
+    }
+};
+
 //通讯录报文编解码工具类；全部为静态方法，不可实例化。
 class ContactsProtocolClient
 {
@@ -180,6 +207,18 @@ public:
      *  @return JSON 合法且 userid>0 返回 true，否则 false
      */
     static bool parseUserInfoChangedNotify(const std::string& jsonbody, UserInfoChangedNotify& out);
+
+    /**
+     *  解析 cmd_org_structure_notify(1404) 推送 JSON 包体 {changetype, deptid}。
+     *  changetype 必须是整型且为 org_change_type 里的取值，否则视为无效推送——
+     *  收到不认识的变更类型时宁可不刷，也好过为一条读不懂的报文触发一次全量拉取。
+     *  deptid 允许缺失或为 0：服务端删员工那条路径就传 0（该员工可能横跨多个部门，
+     *  没有单一的"受影响部门"），此时仍算有效推送，由调用方整体刷新通讯录。
+     *  @param jsonbody 推送包体（UTF-8 JSON 文本）
+     *  @param out      [出参] 解析结果；返回 true 时字段有效
+     *  @return JSON 合法且 changetype 为已知取值返回 true，否则 false
+     */
+    static bool parseOrgStructureChangedNotify(const std::string& jsonbody, OrgStructureChangedNotify& out);
 
 private:
     ContactsProtocolClient() = delete;

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <!-- flamingoAdminTests:console 单元测试程序。覆盖范围:
        1) Mock 数据层 (Mock/ 与 Util/ 下的纯数据 / 工具类);
@@ -131,10 +131,13 @@
     <ClCompile Include="ListPagingTests.cpp" />
     <ClCompile Include="OrgTreeFilterTests.cpp" />
     <ClCompile Include="OrgTreeBuilderTests.cpp" />
+    <ClCompile Include="OrgToolbarLayoutTests.cpp" />
     <ClCompile Include="PinyinTests.cpp" />
+    <ClCompile Include="DpapiSecretTests.cpp" />
     <ClCompile Include="CommonWidgetsTests.cpp" />
     <ClCompile Include="AnnouncementPreviewPanelTests.cpp" />
     <ClCompile Include="RichEditScrollTests.cpp" />
+    <ClCompile Include="ClientVersionApiTests.cpp" />
     <!-- 被测的数据层源文件(直接编入测试 exe,不依赖主程序产物) -->
     <ClCompile Include="..\Mock\MockData.cpp" />
     <ClCompile Include="..\Mock\DataStore.cpp" />
@@ -148,7 +151,10 @@
     <ClCompile Include="..\Util\ScrollbarMetrics.cpp" />
     <ClCompile Include="..\Util\ListPaging.cpp" />
     <ClCompile Include="..\Util\OrgTreeBuilder.cpp" />
+    <ClCompile Include="..\Util\OrgToolbarLayout.cpp" />
     <ClCompile Include="..\Util\Pinyin.cpp" />
+    <ClCompile Include="..\Util\DpapiSecret.cpp" />
+    <ClCompile Include="..\Util\AdminApi.cpp" />
     <!-- 被测:UI 控件层(链接 balloonui_static 后才能编;测试不调 OnPaint,
          故运行时不需要 gdiplus 初始化与真实 HDC) -->
     <ClCompile Include="..\Widgets\CommonWidgets.cpp" />
@@ -161,7 +167,9 @@
   <ItemGroup>
     <ClInclude Include="TestFramework.h" />
     <ClInclude Include="..\Util\ScrollbarMetrics.h" />
+    <ClInclude Include="..\Util\OrgToolbarLayout.h" />
     <ClInclude Include="..\Util\ListPaging.h" />
+    <ClInclude Include="..\Util\DpapiSecret.h" />
     <ClInclude Include="..\Util\Pinyin.h" />
     <ClInclude Include="..\Widgets\OverlayScrollbar.h" />
     <ClInclude Include="..\Widgets\OrgTree.h" />

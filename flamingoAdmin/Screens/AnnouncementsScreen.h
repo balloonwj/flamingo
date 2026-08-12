@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  flamingoAdmin —— 公告中心界面 AnnouncementsScreen。
  *
  *  对应设计稿「05 公告中心」：页头（导出 / 新建公告）+ 双栏主体（左栏
@@ -103,6 +103,11 @@ private:
     CString m_selectedId;
     int     m_filter = 0;            // 0 全部 / 1 置顶 / 2 重要 / 3 定时
     int     m_listPage = 0;          // 左侧列表当前页(0-based);超长列表底部分页
+    // 滚轮翻页的两个钝化状态（见 OnMouseWheel）。
+    // 列表是分页显示的，一格滚轮就跳整页，
+    // 不加这两道闸会“一甸飞过三四页”。
+    int     m_wheelAccum = 0;        // 累积的滚轮增量（未满一格的部分留到下次）
+    DWORD   m_lastPageFlipTick = 0;  // 上次翻页的时刻（GetTickCount），用于冷却
     int     m_previewScroll = 0;     // 预览区当前竖向滚动偏移（像素）
     int     m_previewContentH = 0;   // 预览区内容总高（像素，PaintPreview 中算出）
     int     m_listScroll = 0;        // 左侧公告列表当前竖向滚动偏移（像素）

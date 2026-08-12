@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  flamingoAdmin —— 主窗口 AdminFrame。
  *
  *  继承 balloonui 的 DuiFrameWindow，负责：
@@ -25,6 +25,7 @@
 #include "DuiNotify.h"
 #include "Widgets/Toast.h"
 #include "Util/AdminApi.h"   // ApiTag / HttpResult / AdminSession / 领域结构
+#include "Util/AppConfig.h"  // LoginConfig（"记住密码"暂存成员需完整类型）
 
 #include <memory>
 #include <string>
@@ -53,6 +54,13 @@
 // 同理:ConfirmDialog WM_DESTROY 后的延迟 delete。wParam 携带 ConfirmDialog*。
 #define WM_APP_DELETE_CONFIRM_DIALOG   (WM_APP + 6)
 
+// 同理:NodeModal(新增部门 / 新增员工对话框)WM_DESTROY 后的延迟 delete。
+// wParam 携带 NodeModal*。
+// 注意取 +8 而不是紧接上一条的 +7 —— +7 已被下面的 WM_APP_ORG_FILTER 占用。
+// 两条消息若同号,BEGIN_MSG_MAP 里靠前的 handler 会把另一条吃掉:组织树搜索
+// 过滤将永不生效,而过滤消息的 wParam(0)还会被当成 NodeModal* 去 delete。
+#define WM_APP_DELETE_NODE_MODAL       (WM_APP + 8)
+
 // 组织树搜索:把"按搜索框文本过滤组织树"延迟到 EN_CHANGE 派发结束之后再做。
 // 若在 EN_CHANGE 同一消息周期里同步过滤(触发树重绘),搜索框 EDIT 子窗口刚
 // 输入的文字不会被画出来(须再点一下),故延迟一拍。详见 OnOrgFilter。
@@ -80,6 +88,8 @@ class ComposeModal;
 class GroupModal;
 class EmployeeEditDialog;
 class EnterpriseSettingsModal;
+class ClientVersionsScreen;
+class ClientVersionModal;
 
 // 屏路由枚举。前 5 个对应侧边栏导航项（数值顺序与导航项一致）；
 // EnterpriseDetail 是「企业管理」的子屏（点企业行进入），不在侧栏。
@@ -90,11 +100,15 @@ enum class Screen
     Announcements,    // 公告中心
     Audit,            // 审计日志
     Settings,         // 平台设置
+    // 客户端版本：仅平台超管可见。位置必须排在 EnterpriseDetail 之前 ——
+    // 前 6 项与侧栏导航项 kIdNav* 一一对应且数值连续，EnterpriseDetail 是
+    // 没有导航项的子屏，只能挂在末尾。
+    ClientVersions,   // 客户端版本（发布升级包、发布 / 撤回 / 回滚）
     EnterpriseDetail, // 企业详情（企业管理的子屏）
 };
 
 // 主界面数量（与 Screen 枚举值数量一致）。
-const int kScreenCount = 6;
+const int kScreenCount = 7;
 
 // 主窗口。
 class AdminFrame : public balloonwjui::DuiFrameWindow
@@ -105,6 +119,9 @@ class AdminFrame : public balloonwjui::DuiFrameWindow
     // 这些接口提到 public 区(它们对 admin 其它代码并非通用 API)。
     friend class EmployeeEditDialog;
     friend class ConfirmDialog;
+    //NodeModal 同理:它在自己的提交 / 销毁路径上要调 ShowToast 与
+    //OnNodeModalSubmit / Destroyed 这几个私有成员。
+    friend class NodeModal;
 
 public:
     BEGIN_MSG_MAP(AdminFrame)
@@ -117,6 +134,7 @@ public:
         MESSAGE_HANDLER(WM_APP_API_RESULT, OnApiResult)
         MESSAGE_HANDLER(WM_APP_DELETE_EMP_EDIT_DIALOG, OnDeleteEmpEditDialog)
         MESSAGE_HANDLER(WM_APP_DELETE_CONFIRM_DIALOG,  OnDeleteConfirmDialog)
+        MESSAGE_HANDLER(WM_APP_DELETE_NODE_MODAL,      OnDeleteNodeModal)
         MESSAGE_HANDLER(WM_APP_ORG_FILTER,             OnOrgFilter)
         MESSAGE_HANDLER(WM_LBUTTONDOWN, OnLButtonDown)
         CHAIN_MSG_MAP(balloonwjui::DuiFrameWindow)
@@ -166,6 +184,9 @@ private:
 
     // 同理:异步 delete ConfirmDialog 入口。wParam 是 ConfirmDialog*。
     LRESULT OnDeleteConfirmDialog(UINT, WPARAM, LPARAM, BOOL& bHandled);
+
+    // 同理:异步 delete NodeModal 入口。wParam 是 NodeModal*。
+    LRESULT OnDeleteNodeModal(UINT, WPARAM, LPARAM, BOOL& bHandled);
 
     // 组织树搜索过滤(延迟执行)入口。由 kIdOrgSearch 的 DUIN_VALUECHANGED
     // PostMessage(WM_APP_ORG_FILTER) 触发,延后一拍按搜索框文本过滤组织树,
@@ -278,6 +299,28 @@ private:
     // 拉取审计日志当前页（audit/list.do）。切到审计界面 / 点刷新 / 切换筛选 /
     // 翻页时调用 —— 页码与筛选均取自 AuditScreen 的当前状态。
     void StartLoadAudit();
+    // ---- 客户端版本（模块 10，仅平台超管）----
+    // 拉取版本记录列表；切进「客户端版本」界面与点「刷新」时调用。
+    void StartLoadClientVersions();
+    // 扫描服务器升级包目录；点「新建版本」时先扫一次，拿到候选包再开弹窗。
+    void StartScanPackages();
+    // 对某条版本记录执行发布 / 撤回 / 回滚。
+    //   action：动作种类；id：目标记录 ID。
+    void StartClientVersionAction(int action, long long id);
+    void OnClientVersionsLoaded(const HttpResult& http);
+    void OnPackagesScanned(const HttpResult& http);
+    // 发布 / 撤回 / 回滚 / 修改 的应答统一走这里：成功就提示并重拉列表。
+    void OnClientVersionActionDone(const HttpResult& http);
+    // 处理「客户端版本」界面上报的行内操作：取出待处理动作后发对应请求。
+    void HandleClientVersionRowAction();
+    // 打开新建版本弹窗（候选包已由 scanpackages 应答带回）。
+    //   scan：扫描结果，装进弹窗的候选包列表。
+    void ShowClientVersionModal(const adminapi::ScanPackagesResult& scan);
+    void HideClientVersionModal();
+    // 提交新建版本。publish 为 true 直接发布，false 存为草稿。
+    void SubmitClientVersionModal(bool publish);
+
+
 
     // 拉取审计统计概览（audit/stats.do），用于审计界面 4 个统计卡。
     void StartLoadAuditStats();
@@ -359,10 +402,12 @@ private:
     // 由 ShowComposeModal（新建）与 OnAnnEditFetchLoaded（编辑）共用。
     void PresentComposeModal();
 
-    // 打开 / 关闭 / 提交 组织节点弹窗（新增部门 / 员工）。
+    // 打开 / 关闭 组织节点对话框（新增部门 / 员工）。对话框是独立顶层窗口，
+    // ShowNodeModal 负责 new + CreateAndShow，HideNodeModal 只发起关闭
+    // （真正的收尾在 OnNodeModalDestroyed）。提交入口是 OnNodeModalSubmit，
+    // 由对话框自己在校验通过后回调，不再走 navigate 消息。
     void ShowNodeModal();
     void HideNodeModal();
-    void SubmitNodeModal();
 
     // 打开 / 关闭 / 提交 新建群弹窗（把企业成员拉进一个新群）。
     void ShowGroupModal();
@@ -377,6 +422,14 @@ private:
     //     AdminFrame 把 m_employeeEditDialog 指针清空。
     void OnEmployeeEditDialogSubmit(EmployeeEditDialog* dlg);
     void OnEmployeeEditDialogDestroyed(EmployeeEditDialog* dlg);
+
+    // 组织节点对话框(NodeModal)的两个回调,与上面 EmployeeEditDialog 那对同构:
+    //   · OnNodeModalSubmit:对话框内点「创建」且通过必填校验后调用,
+    //     AdminFrame 在此按模式发建部门 / 建员工的 HTTP 请求。
+    //   · OnNodeModalDestroyed:对话框收 WM_DESTROY 时调用,AdminFrame 清空
+    //     m_nodeModal 指针并经 WM_APP_DELETE_NODE_MODAL 安排延迟 delete。
+    void OnNodeModalSubmit(NodeModal* dlg);
+    void OnNodeModalDestroyed(NodeModal* dlg);
 
     // 处理 user/detail.do 应答：成功则预填并打开修改员工资料弹窗。
     void OnUserDetailLoaded(const HttpResult& http);
@@ -433,8 +486,13 @@ private:
     // 处理 dept/delete.do · user/delete.do 应答：成功则刷新组织树。
     void OnOrgNodeDeleted(const HttpResult& http);
 
-    // 组织写操作成功后，重新拉取当前企业的 dept/tree.do。
-    void ReloadOrgTree();
+    // 重新拉取当前企业的 dept/tree.do（应答里带各部门成员，故部门与员工一次
+    // 刷完）。两类调用来源：组织写操作成功后的自动刷新，以及组织树工具条上
+    // 「刷新」按钮的手动刷新。
+    //   showToastOnDone：完成后是否弹「组织架构已刷新」提示。写操作后的自动
+    //                    刷新传 false —— 那些流程自己已经弹过「已删除」之类
+    //                    的提示，再弹一条会连出两个 toast；手动刷新传 true。
+    void ReloadOrgTree(bool showToastOnDone = false);
 
     // 处理组织树重拉应答：覆盖 DataStore 的组织树并刷新企业详情屏。
     void OnOrgTreeReloaded(const HttpResult& http);
@@ -562,6 +620,10 @@ private:
     bool                     m_sidebarCollapsed = false;       // 侧边栏是否紧凑态
     bool                     m_netTestBusy = false;            // 网络测试是否进行中
     bool                     m_loginBusy   = false;            // 登录请求是否进行中
+    // 本次提交登录用的账号 / 口令 / "记住密码"勾选状态。TrySubmitLogin 提交时暂存，
+    // OnLoginResult 在登录成功那一支据它落盘。登录是异步的，其间用户可能又改了
+    // 输入框，故不能等应答回来再去读控件。
+    LoginConfig              m_pendingLogin;
     bool                     m_entCreateBusy = false;          // 新增企业请求是否进行中
     bool                     m_entExportBusy = false;          // 导出企业请求是否进行中
     bool                     m_auditExportBusy = false;        // 导出审计日志请求是否进行中
@@ -587,9 +649,13 @@ private:
     EnterpriseDetailScreen*  m_enterpriseDetail = nullptr; // 企业详情（借用，在 m_screenHost 内）
     AnnouncementsScreen*     m_announcementsScreen = nullptr; // 公告中心（借用，在 m_screenHost 内）
     AuditScreen*             m_auditScreen = nullptr; // 审计日志（借用，在 m_screenHost 内）
+    ClientVersionsScreen*    m_clientVersionsScreen = nullptr; // 客户端版本（借用，在 m_screenHost 内）
+    ClientVersionModal*      m_clientVersionModal = nullptr;   // 新建版本弹窗（借用，在 m_root 弹窗层内）
     SettingsScreen*          m_settingsScreen = nullptr; // 平台设置（借用，在 m_screenHost 内）
     NewEnterpriseModal*      m_modal        = nullptr; // 新增企业弹窗（借用，在 m_root 内）
-    NodeModal*               m_nodeModal    = nullptr; // 组织节点弹窗（借用，在 m_root 内）
+    // 组织节点对话框(新增部门 / 新增员工):独立顶层窗口,on-demand 创建/销毁。
+    // 只在对话框显示期间非空;OnNodeModalDestroyed 收到通知后清回 nullptr。
+    NodeModal*               m_nodeModal    = nullptr;
     // 通用确认/信息对话框:独立顶层窗口,on-demand 创建/销毁。
     // 只在弹窗显示期间非空;OnConfirmDialogDestroyed 收到通知后清回 nullptr。
     ConfirmDialog*           m_confirmDialog = nullptr;
@@ -613,6 +679,14 @@ private:
     // 组织节点弹窗提交时，新部门 / 员工要挂载到的父部门 ID。
     CString                  m_nodeModalParentId;
 
+    // 待打开的组织节点对话框的两个构造参数。按钮点击处（OnDuiNotify）先把它们
+    // 记下来再 PostMessage(kNavShowNodeModal)，由 ShowNodeModal 取用来 new 对话框
+    // —— 对话框改成独立顶层窗口后模式在构造时定死，不能再像以前那样先建好实例
+    // 再 SetMode 切换。之所以仍绕一次 PostMessage 而不就地创建：沿用原有时序，
+    // 不在 DUI 通知回调栈里创建顶层窗口。
+    bool                     m_nodeModalPendingIsDept = false; // true=新增部门，false=新增员工
+    CString                  m_nodeModalParentName;            // 挂载目标部门名，仅用于对话框顶部横幅
+
     // 确认弹窗点「确认」后待处理项的 ID（组织节点 / 服务号 / 公告 / 企业 / 员工 ID）。
     CString                  m_confirmDeleteNodeId;
     // 待处理项类型：0=组织节点 1=服务号 2=公告 3=企业 4=重置员工密码 5=启用/停用员工。
@@ -634,6 +708,14 @@ private:
     // 再解析，避免树先回来时拿不到根部门 ID 而退回合成根节点。
     HttpResult           m_detailTreeHttp;
     std::vector<Service> m_detailServices;            // 累积：服务号列表
+
+    // ---- 组织树重拉（ReloadOrgTree / OnOrgTreeReloaded）----
+    // 是否有一次 dept/tree.do 重拉正在途中。用于「刷新」按钮的防连点：在途时
+    // 再点只提示、不再发请求。请求发出时置 true，应答（含失败）回来时清 false。
+    bool                 m_orgTreeReloading = false;
+    // 本次重拉完成后是否要弹「组织架构已刷新」提示。由 ReloadOrgTree 的
+    // showToastOnDone 参数写入，OnOrgTreeReloaded 读取后复位。
+    bool                 m_orgTreeReloadToast = false;
     // 企业详情加载完成后要定位到的子 tab：0=组织架构 1=服务号。行菜单
     // 「打开详情 → 服务号」用它；每次发起加载前由调用方设置。
     int                  m_detailInitialTab = 0;

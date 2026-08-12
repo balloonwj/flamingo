@@ -9,8 +9,12 @@
 #include <memory>
 
 #include "../BalloonMain/TitleBarIcon.h"   // CreateProgramIconBitmap（标题栏左侧图标）
+#include "../BalloonMain/CornerPopupPlacement.h"   // 贴工作区右下角的落点计算（与特别关注提示窗共用）
 #include "../IULog.h"                      // LOG_INFO / LOG_ERROR
 #include "../UserSessionData.h"            // FMG_MSG_OPEN_ANNOUNCE_BOX
+#include "../BalloonHistory/HistoryContentView.h"   // 公告正文控件（正文里的网址可点）
+#include "../BalloonChatWnd/ChatLinkDetect.h"       // IsSafeLinkUrl（打开链接前的协议白名单）
+#include <shellapi.h>                      // ShellExecuteW（打开链接）
 
 #include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
 #include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
@@ -47,9 +51,9 @@ const int kMetaH     = 20;   // 「发布者 · 时间」行高
 const int kButtonH   = 34;   // 底部按钮高
 const int kBadgeW    = 52;   // 级别徽章宽
 
-//弹窗距工作区右 / 下边缘的留白。留一点缝，贴死了像是被裁掉半截。
-const int kCornerMarginX = 16;
-const int kCornerMarginY = 16;
+//弹窗距工作区右 / 下边缘的留白已移到 BalloonMain/CornerPopupPlacement.h
+//（kCornerPopupMarginX / Y），与「特别关注」的上下线提示窗共用同一组值 —— 两个窗口
+//贴的是同一个角，各留各的边距会显得没对齐。
 
 // ---- 配色 ----
 const COLORREF kBgColor      = RGB(0xFF, 0xFF, 0xFF);   // 客户区白底
@@ -166,7 +170,9 @@ void CAnnouncePopupWindow::ShowAnnouncement(HWND ownerPanel, int64_t announcemen
     }
     if (m_body != NULL)
     {
-        m_body->SetText(body != NULL ? body : _T(""));
+        //公告是服务端原样存的纯文本，走纯文本入口 —— 用聊天消息那套正文格式去解，
+        //会把网址里的 "//" 折成一个斜杠。
+        m_body->SetPlainContent(body != NULL ? body : _T(""));
     }
     if (m_meta != NULL)
     {
@@ -202,41 +208,12 @@ void CAnnouncePopupWindow::ShowAnnouncement(HWND ownerPanel, int64_t announcemen
 
 void CAnnouncePopupWindow::MoveToWorkAreaCorner()
 {
-    //取鼠标所在显示器的工作区（已排除任务栏），多显示器下弹在用户正看的那块屏上。
-    POINT pt;
-    ::GetCursorPos(&pt);
-    HMONITOR mon = ::MonitorFromPoint(pt, MONITOR_DEFAULTTOPRIMARY);
-
-    MONITORINFO mi;
-    ::ZeroMemory(&mi, sizeof(mi));
-    mi.cbSize = sizeof(mi);
-    if (!::GetMonitorInfo(mon, &mi))
-    {
-        //取不到就退回不挪窗，至少别把窗口扔到屏幕外。
-        return;
-    }
-
-    RECT rcWnd;
-    ::GetWindowRect(m_hWnd, &rcWnd);
-    const int w = rcWnd.right - rcWnd.left;
-    const int h = rcWnd.bottom - rcWnd.top;
-
-    //贴工作区右下角，各留一段边距。按工作区反推坐标，天然落在可见范围内
-    //（开发约定文档 UI 约定第 3 条：弹层必须整体落在工作区内）。
-    int x = mi.rcWork.right - w - kCornerMarginX;
-    int y = mi.rcWork.bottom - h - kCornerMarginY;
-
-    //窗口比工作区还大时（极端小分辨率），退到工作区左上角，保证标题栏可见、关得掉。
-    if (x < mi.rcWork.left)
-    {
-        x = mi.rcWork.left;
-    }
-    if (y < mi.rcWork.top)
-    {
-        y = mi.rcWork.top;
-    }
-
-    ::SetWindowPos(m_hWnd, NULL, x, y, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    //落点算法原本写在这里，2026-08-12 抽到 BalloonMain/CornerPopupPlacement.h 与
+    //「特别关注」的上下线提示窗共用 —— 两个窗口贴的是同一个角，几何只该有一份
+    //（开发约定文档 UI 约定第 3 条对菜单落点的要求，同理适用于这类浮窗）。
+    balloonmain::MoveWindowToWorkAreaCorner(m_hWnd,
+                                            balloonmain::kCornerPopupMarginX,
+                                            balloonmain::kCornerPopupMarginY);
 }
 
 void CAnnouncePopupWindow::BuildUiOnce()
@@ -287,11 +264,13 @@ void CAnnouncePopupWindow::BuildUiOnce()
 
     // ---- 公告正文（占满中间，自动换行；放不下的部分去消息盒子看全文）----
     {
-        std::unique_ptr<DuiLabel> body(new DuiLabel());
+        //正文用消息记录窗那个内联文本控件：它自带按宽度折行，并且能把网址画成
+        //可点的链接（DuiLabel 做不到，没有字符级排版模型）。
+        std::unique_ptr<balloonhistory::HistoryContentView> body(
+            new balloonhistory::HistoryContentView());
         body->SetTextColor(kContentColor);
-        //与消息盒子右栏同一个坑：必须显式 SetWordWrap(true)，光给 DT_WORDBREAK 不生效。
-        body->SetWordWrap(true);
-        body->SetTextAlign(DT_LEFT | DT_TOP | DT_WORDBREAK);
+        //弹窗里正文一律画全，不要消息记录窗那套"折叠成 5 行"。
+        body->SetExpanded(true);
         m_body = body.get();
         root->AddChild(std::move(body), Hint().Weight(1));
     }
@@ -337,6 +316,28 @@ void CAnnouncePopupWindow::BuildUiOnce()
 
     SetClientContent(std::unique_ptr<DuiControl>(root.release()));
     m_built = true;
+}
+
+LRESULT CAnnouncePopupWindow::OnChatOpenLinkMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                                LPARAM lParam, BOOL& /*bHandled*/)
+{
+    std::wstring* pUrl = (std::wstring*)lParam;
+    if (pUrl == NULL)
+    {
+        return 0;
+    }
+
+    // 协议白名单：只放行 http / https，与聊天窗、消息记录窗同一口径。
+    if (balloonchatwnd::IsSafeLinkUrl(*pUrl))
+    {
+        ::ShellExecuteW(m_hWnd, L"open", pUrl->c_str(), NULL, NULL, SW_SHOWNORMAL);
+    }
+    else
+    {
+        LOG_ERROR("公告弹窗拒绝打开非 http/https 链接。");
+    }
+    delete pUrl;
+    return 0;
 }
 
 LRESULT CAnnouncePopupWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,

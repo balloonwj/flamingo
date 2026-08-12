@@ -141,16 +141,23 @@ TEST_CASE("F1 BuildSendBody 纯文本无表情原样输出", "[face][msgfmt]")
     CHECK(WS(BuildSendBody(segs)) == L"hello");
 }
 
-TEST_CASE("F2 BuildSendBody 文本里的斜杠转义成双斜杠", "[face][msgfmt]")
+TEST_CASE("F2 BuildSendBody 只给会被误判成表情标记的斜杠加转义", "[face][msgfmt]")
 {
+    // 普通斜杠原样保留 —— 早先是逐个翻倍，那会让网址在网线上变形、跨端显示出错，
+    // 而且发送侧翻倍、接收侧还原两边一旦不对称就会吃掉斜杠（用户报过的 bug）。
     std::vector<ChatSegment> segs1;
     segs1.push_back(ChatSegment::Text(_T("a/b")));
-    CHECK(WS(BuildSendBody(segs1)) == L"a//b");
+    CHECK(WS(BuildSendBody(segs1)) == L"a/b");
 
-    // URL 里的双斜杠也逐个转义，发送管线 // → / 可无损还原。
+    // 网址原样上线：对端不认这套 PC 端约定时照原样显示也是对的。
     std::vector<ChatSegment> segs2;
     segs2.push_back(ChatSegment::Text(_T("http://x")));
-    CHECK(WS(BuildSendBody(segs2)) == L"http:////x");
+    CHECK(WS(BuildSendBody(segs2)) == L"http://x");
+
+    // 用户手打的表情标记要转义，否则对端会把它渲染成表情。
+    std::vector<ChatSegment> segs3;
+    segs3.push_back(ChatSegment::Text(_T("literal /f[\"3\"] here")));
+    CHECK(WS(BuildSendBody(segs3)) == L"literal //f[\"3\"] here");
 }
 
 TEST_CASE("F3 BuildSendBody 单个表情编码成 /f[\"id\"]", "[face][msgfmt]")
@@ -176,14 +183,20 @@ TEST_CASE("F5 BuildSendBody 空段序列返回空串", "[face][msgfmt]")
     CHECK(WS(BuildSendBody(segs)) == L"");
 }
 
-TEST_CASE("F6 BuildSendBody 用户手打的 /f 被转义不会冒充表情", "[face][msgfmt]")
+TEST_CASE("F6 用户手打的 /f 不成标记则无需转义，成标记才转义", "[face][msgfmt]")
 {
-    // 用户在文本里真的打了 "/f"，转义成 "//f" 后发送管线不会把它解析成表情；
-    // 紧随其后的真正表情段才输出 /f["0"]。
+    // "/f fake" 缺 ["N"] 那一截，接收侧本来就解析不成表情，故不必转义 ——
+    // 转义只加在"真会被误判"的地方，别处一律原样，网址才不会变形。
     std::vector<ChatSegment> segs;
     segs.push_back(ChatSegment::Text(_T("see /f fake")));
     segs.push_back(ChatSegment::Face(0));
-    CHECK(WS(BuildSendBody(segs)) == L"see //f fake/f[\"0\"]");
+    CHECK(WS(BuildSendBody(segs)) == L"see /f fake/f[\"0\"]");
+
+    // 打全了的 /f["9"] 才是"会被误判"的那一种，必须转义。
+    std::vector<ChatSegment> segs2;
+    segs2.push_back(ChatSegment::Text(_T("see /f[\"9\"] fake")));
+    segs2.push_back(ChatSegment::Face(0));
+    CHECK(WS(BuildSendBody(segs2)) == L"see //f[\"9\"] fake/f[\"0\"]");
 }
 
 // ---- ParseSendBody —— BuildSendBody 的逆（接收 / 回显解析内联表情）----
@@ -219,11 +232,43 @@ TEST_CASE("G3 ParseSendBody 图文穿插", "[face][msgfmt]")
     CHECK(segs[3].m_nFaceId == 5);
 }
 
-TEST_CASE("G4 ParseSendBody 双斜杠还原成单斜杠", "[face][msgfmt]")
+TEST_CASE("G4 ParseSendBody 只把紧跟表情标记的双斜杠当转义", "[face][msgfmt]")
 {
-    std::vector<ChatSegment> segs = ParseSendBody(CString(_T("a//b")));
-    REQUIRE(segs.size() == 1);
-    CHECK(WS(segs[0].m_strText) == L"a/b");
+    // 后面不是表情标记：两个斜杠原样留着，<u>不</u>还原成一个。
+    // 网址里的 // 属于这一类，早先一律还原的做法会把它吃掉一个。
+    {
+        std::vector<ChatSegment> segs = ParseSendBody(CString(_T("a//b")));
+        REQUIRE(segs.size() == 1);
+        CHECK(WS(segs[0].m_strText) == L"a//b");
+    }
+
+    // 后面紧跟表情标记：这才是转义，还原成字面的 /f["3"]、且不渲染成表情。
+    {
+        std::vector<ChatSegment> segs = ParseSendBody(CString(_T("//f[\"3\"]")));
+        REQUIRE(segs.size() == 1);
+        CHECK(segs[0].m_bFace == false);
+        CHECK(WS(segs[0].m_strText) == L"/f[\"3\"]");
+    }
+}
+
+TEST_CASE("G4b 网址往返不丢斜杠（用户报的 bug）", "[face][msgfmt]")
+{
+    // 在输入框里打 http://www.baidu.com 发出去，对端 / 本端回显都应当一字不差。
+    const CString typed = _T("http://www.baidu.com");
+
+    std::vector<ChatSegment> in;
+    in.push_back(ChatSegment::Text(typed));
+    const CString body = BuildSendBody(in);
+    //网线上的正文也保持原样，跨端照原样显示同样是对的
+    CHECK(WS(body) == L"http://www.baidu.com");
+
+    std::vector<ChatSegment> out = ParseSendBody(body);
+    REQUIRE(out.size() == 1);
+    CHECK(out[0].m_bFace == false);
+    CHECK(WS(out[0].m_strText) == WS(typed));
+
+    //会话列表的预览摘要走的是另一条路（BodyToDigest），同样不能丢斜杠
+    CHECK(WS(BodyToDigest(body)) == WS(typed));
 }
 
 TEST_CASE("G5 ParseSendBody 残缺表情标签当普通文本", "[face][msgfmt]")
@@ -238,9 +283,9 @@ TEST_CASE("G5 ParseSendBody 残缺表情标签当普通文本", "[face][msgfmt]"
 TEST_CASE("G6 ParseSendBody 与 BuildSendBody 往返一致", "[face][msgfmt]")
 {
     std::vector<ChatSegment> in;
-    in.push_back(ChatSegment::Text(_T("path a/b ")));   // 含字面斜杠
+    in.push_back(ChatSegment::Text(_T("path a/b see http://x ")));   // 含字面斜杠与网址
     in.push_back(ChatSegment::Face(7));
-    in.push_back(ChatSegment::Text(_T(" end")));
+    in.push_back(ChatSegment::Text(_T(" end /f[\"9\"] literal")));   // 含手打的表情标记
     std::vector<ChatSegment> out = ParseSendBody(BuildSendBody(in));
     REQUIRE(out.size() == in.size());
     for (size_t i = 0; i < in.size(); ++i)
@@ -257,9 +302,12 @@ TEST_CASE("G6 ParseSendBody 与 BuildSendBody 往返一致", "[face][msgfmt]")
     }
 }
 
-TEST_CASE("G7 BodyToDigest 表情替换成占位、双斜杠还原", "[face][msgfmt]")
+TEST_CASE("G7 BodyToDigest 表情替换成占位、普通双斜杠原样", "[face][msgfmt]")
 {
-    CHECK(WS(BodyToDigest(CString(_T("hi/f[\"3\"]a//b")))) == L"hi[\x8868\x60c5]a/b");
+    //后面不跟表情标记的 // 不是转义，摘要里原样保留（网址的双斜杠就靠这一条）
+    CHECK(WS(BodyToDigest(CString(_T("hi/f[\"3\"]a//b")))) == L"hi[\x8868\x60c5]a//b");
+    //跟着表情标记的 // 才是转义，摘要里还原成字面的 /f["3"]
+    CHECK(WS(BodyToDigest(CString(_T("hi //f[\"3\"]")))) == L"hi /f[\"3\"]");
 }
 
 // =====================================================================

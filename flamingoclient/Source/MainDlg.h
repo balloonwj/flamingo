@@ -82,6 +82,14 @@ class CGroupInfoDlg;
 
 class CRemoteDesktopDlg;
 
+// "无操作自动离开"的判定输入（定义在 BalloonMain/AutoAwayPolicy.h）。这里只按引用
+// 传递，故前向声明即可，不必把该头文件拉进本头文件的所有包含方。
+namespace balloonmain { struct AutoAwayInput; }
+
+// 「禁止机器休眠」的系统电源请求持有者。本类按值持有它，需要完整类型，故直接包含
+// 头文件；该头文件只依赖 <windows.h>，不会把额外依赖带给本头文件的包含方。
+#include "BalloonMain/KeepAwakeSession.h"
+
 class CMainDlg : public CDialogImpl<CMainDlg>, public CUpdateUI<CMainDlg>,
 		public CMessageFilter, public CIdleHandler
 {
@@ -125,6 +133,13 @@ public:
 		MESSAGE_HANDLER_EX(FMG_MSG_LOGIN_RESULT, OnLoginResult)
 		MESSAGE_HANDLER_EX(FMG_MSG_LOGOUT_RESULT, OnLogoutResult)
 
+		//登录成功后那次静默检查更新的结果。只有查出可用新版本时才弹升级窗，
+		//"已是最新"与"检查失败"一律不打扰用户。
+		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_RESULT, OnSilentUpdateResult)
+
+		//升级窗请求直接退出程序，好让更新器覆盖文件。不走 WM_CLOSE，见处理函数说明。
+		MESSAGE_HANDLER_EX(FMG_MSG_EXIT_FOR_UPDATE, OnExitForUpdate)
+
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_BUDDY_INFO, OnUpdateBuddyInfo)		 //更新用户信息
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_BUDDY_NUMBER, OnUpdateBuddyNumber)	 //更新用户昵称(TODO: 名字要改)
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_BUDDY_HEADPIC, OnUpdateBuddyHeadPic)
@@ -144,6 +159,7 @@ public:
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_MEMBER_CARD_RESULT, OnV2GroupWriteResult)	//v2 改群名片应答：日志/失败提示
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_LEAVE_GROUP_RESULT, OnV2GroupWriteResult)		//v2 退群应答：日志/失败提示
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_FAVORITE_RESULT, OnV2SetFavoriteResult)	//v2 收藏设置应答：失败时让主面板回滚乐观更新
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_STARRED_RESULT, OnV2SetStarredResult)		//v2 特别关注设置应答：失败时让主面板按回带的 target 回滚那一个人的关注状态
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_REMARK_RESULT, OnV2SetRemarkResult)		//v2 设置好友备注名应答：失败时让主面板按回带的 userid 回滚那一个人的备注
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILES, OnV2GroupFiles)				//v2 群文件列表应答：路由到群聊窗
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILES_CHANGED, OnV2GroupFilesChanged)	//v2 群文件变更推送：路由到群聊窗
@@ -159,7 +175,9 @@ public:
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_AVATAR_UPLOAD_RESULT, OnV2AvatarUploadResult)	//v2 头像图片上传结果：转发到修改头像对话框
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_AVATAR_DOWNLOAD_RESULT, OnV2AvatarDownloadResult)	//v2 头像图片下载结果：转发到主面板刷新节点头像
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_USERINFO_CHANGED, OnV2UserInfoChanged)		//v2 联系人资料变更推送：转发到主面板实时刷新头像
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_ORG_STRUCTURE_CHANGED, OnV2OrgStructureChanged)	//v2 组织架构变更推送：转发到主面板重新拉通讯录
 		MESSAGE_HANDLER_EX(FMG_MSG_CHANGE_MY_PRESENCE, OnChangeMyPresence)		//主面板状态菜单切换在线状态：据连接态走 GoOffline/GoOnline/SendChangePresence
+		MESSAGE_HANDLER_EX(WM_WTSSESSION_CHANGE, OnSessionChange)			//锁屏/解锁等会话事件：锁屏立刻切离开、解锁切回在线（"无操作自动离开"的第二条触发路径）
 		MESSAGE_HANDLER_EX(FMG_MSG_LOGOUT, OnLogout)					//托盘菜单/系统菜单登出：二次确认后断开连接、销毁主面板并回登录界面
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_RECALL_RESULT, OnV2RecallResult)			//v2 撤回消息应答：失败时提示原因，成功不动界面（等推送）
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_MESSAGE_RECALLED, OnV2MessageRecalled)		//v2 消息被撤回推送：转发到主面板改气泡/刷会话列表/标记本地库
@@ -335,6 +353,16 @@ private:
 
     LRESULT OnNetError(UINT uMsg, WPARAM wParam, LPARAM lParam);    
 	LRESULT OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 登录返回消息
+
+	// 登录成功后那次静默检查更新的结果。lParam 是堆上的 update::UpdateTaskResult*，
+	// 本函数处理完后 delete。只有查出可用新版本时才拉起升级窗；已是最新或检查失败
+	// 都只记日志，不打扰用户——他并没有主动要求检查。
+	LRESULT OnSilentUpdateResult(UINT uMsg, WPARAM wParam, LPARAM lParam);
+
+	// 升级窗请求退出程序（升级包已就绪，更新器正等着覆盖文件）。直接走 CloseDialog，
+	// 不弹「退出还是最小化」那个提示框——那个框在这里是有害的：用户选「最小化」的话
+	// 程序不退出，更新器等 30 秒后放弃，升级白做一场，而用户还以为在升级。
+	LRESULT OnExitForUpdate(UINT uMsg, WPARAM wParam, LPARAM lParam);
 	LRESULT OnLogoutResult(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 注销返回消息
 	LRESULT OnGoOffline(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 下线
 	LRESULT OnUpdateUserInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 更新用户信息
@@ -351,6 +379,11 @@ private:
 	// 本方法负责 delete。转交主面板：成功只记日志，失败要按应答里回带的
 	// ctype/cid/favorite 把那一条的乐观更新回滚掉。
 	LRESULT OnV2SetFavoriteResult(UINT uMsg, WPARAM wParam, LPARAM lParam);
+	// v2 特别关注设置应答（cmd_set_starred）。lParam 为堆上的 net::SetStarredResult*，
+	// 本方法负责 delete。转交主面板：成功只记日志（乐观更新在发起时已生效），失败要按
+	// 应答里回带的 target/starred 把那一个人的关注状态回滚，并按 code 提示原因
+	// （典型是关注人数已达上限）。
+	LRESULT OnV2SetStarredResult(UINT uMsg, WPARAM wParam, LPARAM lParam);
 	// v2 设置好友备注名应答（cmd_set_friend_remark）。lParam 为堆上的
 	// net::SetFriendRemarkResult*，本方法负责 delete。转交主面板：成功只记日志
 	// （乐观更新在发起时已生效），失败要按应答里回带的 userid 把那一个人的备注退回去。
@@ -369,7 +402,9 @@ private:
 	LRESULT OnV2AvatarUploadResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 头像图片上传结果(lParam=net::AvatarUploadResult*，处理后 delete)
 	LRESULT OnV2AvatarDownloadResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 头像图片下载结果(lParam=net::AvatarDownloadResult*，处理后 delete)
 	LRESULT OnV2UserInfoChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 联系人资料变更推送(lParam=net::UserInfoChangedNotify*，处理后 delete)
-	LRESULT OnChangeMyPresence(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 切换我的在线状态(wParam=v2 presence)：据连接态走 GoOffline/GoOnline/SendChangePresence
+	LRESULT OnV2OrgStructureChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 组织架构变更推送(lParam=net::OrgStructureChangedNotify*，处理后 delete)
+	LRESULT OnChangeMyPresence(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 切换我的在线状态(wParam=v2 presence，lParam=切换来源见 PresenceChangeSource)：据连接态走 GoOffline/GoOnline/SendChangePresence
+	LRESULT OnSessionChange(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 锁屏/解锁等会话事件(wParam=WTS_* 状态码)：锁屏立刻切离开、解锁切回在线
 	LRESULT OnLogout(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 登出(wParam/lParam 均为 0)：二次确认后断开三条连接、关掉所有子窗口、销毁主面板并重新弹出登录窗
 	LRESULT OnV2RecallResult(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 撤回消息应答(lParam=net::RecallMessageResponse*，处理后 delete)
 	LRESULT OnV2MessageRecalled(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 消息被撤回推送(lParam=net::MessageRecalledNotify*，处理后 delete)
@@ -548,6 +583,39 @@ private:
 	// 按当前在线状态刷新系统托盘图标与提示文字（提示为"昵称（状态）"）。
 	// 登录成功、在线状态变化时调用，让托盘随状态显示对应图标。
 	void RefreshTrayIconForStatus();
+
+	// "无操作自动离开"的一跳：读全系统空闲时长与设置，交给 AutoAwayPolicy 判定，
+	// 该切就走 OnChangeMyPresence（标明来源为自动）。由 AUTOAWAY_TIMER_ID 定时器每
+	// 30 秒调一次；未登录 / 掉线 / 功能关闭等情形由判定函数内部挡掉，本方法不另加守卫。
+	//
+	// 副作用：可能改变自己的在线状态并向服务端发 cmd_change_presence，同时刷新状态
+	// 胶囊与托盘图标；绝大多数跳什么都不做。
+	void CheckAutoAway();
+
+	// 装配一次"自动离开"判定所需的输入（当前状态、空闲时长、阈值、连接态、开关）。
+	// 空闲轮询与锁屏事件两条触发路径共用它，保证两边看到的是同一份口径。
+	//   input：出参，装配结果。
+	// 返回：取不到系统空闲时长时返回 false（此时 input 内容无意义，调用方应直接放弃本次判定）。
+	bool BuildAutoAwayInput(balloonmain::AutoAwayInput& input);
+
+	// 执行一次"自动离开"判定的结果：该切就打日志并走 OnChangeMyPresence（来源标为自动），
+	// kAutoAwayNone 时什么都不做。
+	//   action：    判定结果，取值见 AutoAwayPolicy.h 的 AutoAwayAction。
+	//   input：     本次判定的输入，仅用于打日志（空闲时长 / 阈值 / 原状态）。
+	//   pszTrigger：触发来源的中文短标签，只进日志，便于事后区分是空闲轮询还是锁屏引起的。
+	void ApplyAutoAwayAction(int action, const balloonmain::AutoAwayInput& input,
+	                         const char* pszTrigger);
+
+	// 「禁止机器休眠」的一次处理：读取设置与当前持有状态，交给 KeepAwakePolicy 判定，
+	// 按判定结果获取或释放系统电源请求、或向系统合成一次输入事件。与 CheckAutoAway
+	// 复用同一个 AUTOAWAY_TIMER_ID 定时器（30 秒），两者互斥，同一次触发中至多一个
+	// 会真正执行动作。
+	//
+	// 副作用：可能获取或释放系统电源请求（本机随之不再休眠 / 恢复可休眠），并合成一次
+	// 位移量为 0 的鼠标移动事件；每个动作都会输出日志（日志约定见
+	// BalloonMain/KeepAwakeSession.h）。本功能默认关闭，多数情况下不执行任何动作。
+	void CheckKeepAwake();
+
 	BOOL LoadLoginIcon();
 	void DestroyLoginIcon();
 	void UpdateMsgIcon();
@@ -614,6 +682,10 @@ private:
 	// 由 v2 收消息回投的 FMG_MSG_TRAY_FLASH 填入、会话已读时移除；驱动 m_TrayIcon 的
 	// 头像闪烁与单击开窗。生命周期与本对话框一致。
 	balloonmain::CTrayFlashController	m_trayFlash;
+	// 本轮闪烁是否已经打过"首次 tick"那条日志。每次 FMG_MSG_TRAY_FLASH 到达时复位为
+	// false，OnTimer 的闪烁分支打完一条后置 true —— 定时器每几百毫秒触发一次，不做
+	// 这个限制会把日志刷满。纯诊断用途，不参与任何闪烁逻辑。
+	bool						m_bTrayFlashTickLogged = false;
 	// 托盘悬停弹出的未读消息提示浮窗（balloonui 重写，取代旧 SkinLib 版 m_MsgTipDlg）；
 	// 数据来自 m_trayFlash，点击行经 OpenConvFromTrayPopup 打开会话。
 	CTrayMsgTipPopup		m_trayMsgTipPopup;
@@ -652,7 +724,24 @@ private:
 	DWORD							m_dwLoginTimerId;
 	DWORD							m_dwMsgTimerId;
     DWORD                           m_dwReconnectTimerId;                   //断线重连定时器ID
+    DWORD                           m_dwAutoAwayTimerId;                    //"无操作自动离开"轮询定时器ID；0=未启动
 	//DWORD							m_dwExitAppTimerId;						//检测程序退出计时器
+
+    // 当前这个"离开"是否为"无操作自动离开"功能切过去的。
+    //
+    // 只有它为 true 时，检测到键鼠操作才会把用户自动切回在线；用户<u>自己手动</u>选的
+    // 离开不会被动。任何一次手动改状态都会把它清掉（见 OnChangeMyPresence 的来源标志），
+    // 这样"自动离开期间用户手动切成忙碌"之后回到电脑前也不会被擅自切回在线。
+    // 不持久化：每次启动都由用户在登录窗选定初始状态，自动标记从头算起。
+    bool                            m_bAutoAway;
+
+    // 「禁止机器休眠」的系统电源请求持有者。功能关闭时它不持有任何资源，析构时会
+    // 自动释放。只在主线程访问（定时器与消息处理），见 KeepAwakeSession.h 的说明。
+    balloonmain::CKeepAwakeSession   m_KeepAwakeSession;
+
+    // 上次向系统合成输入事件时的 tick（::GetTickCount()）；0 表示本次持有期间尚未
+    // 合成过。与 m_KeepAwakeSession 一同构成 KeepAwakePolicy 判定所需的状态。
+    DWORD                           m_dwLastKeepAwakeNudgeTick;
 
     bool                            m_bEnableReconnect;                     //是否断线重连
     UINT                            m_uReconnectInterval;                   //重连时间间隔，必须大于0，单位毫秒

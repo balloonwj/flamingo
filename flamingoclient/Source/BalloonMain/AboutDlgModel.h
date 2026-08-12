@@ -17,6 +17,8 @@
  */
 #pragma once
 
+#include "../ClientVersion.h"
+
 #include <string>
 
 namespace balloonmain {
@@ -30,14 +32,20 @@ namespace balloonmain {
 // 应用名（品牌区主标题，同时用于标题栏"关于 <应用名> [pid]"）。
 constexpr const wchar_t* kAboutAppName = L"FlamingoIM";
 
-// 版本号（已与用户确认写 2.0.0，不取设计稿的 3.2.1）。
-constexpr const wchar_t* kAboutVersion = L"2.0.0";
+// 版本号。此处曾写死 2.0.0（当时确认不取设计稿的 3.2.1），
+// 接入自动更新后改为取自 ClientVersion.h：服务端是拿登录上报的
+// 版本号判定要不要升级的，关于页又显示另一个数字的话，
+// 用户会看到“明明刚升完级，关于页还是旧版本”。
+constexpr const wchar_t* kAboutVersion = FLAMINGO_CLIENT_VERSION_W;
 
 // 构建号（沿用设计稿，仅作展示，不参与任何逻辑）。
-constexpr const wchar_t* kAboutBuild = L"20260518";
+constexpr const wchar_t* kAboutBuild = FLAMINGO_CLIENT_BUILD_W;
 
-// 品牌区版本行完整文案：版本 2.0.0 (Build 20260518)。
-constexpr const wchar_t* kAboutVersionLine = L"版本 2.0.0 (Build 20260518)";
+// 品牌区版本行完整文案，如：版本 3.2.1 (Build 20260518)。
+// 版本号与 build 号都取自 ClientVersion.h，不在本处另写一份 ——
+// 关于页显示的版本必须与登录上报的一致，否则升级完用户看到的还是旧号。
+constexpr const wchar_t* kAboutVersionLine =
+    L"版本 " FLAMINGO_CLIENT_VERSION_W L" (Build " FLAMINGO_CLIENT_BUILD_W L")";
 
 // 品牌区标语（设计稿原文）。
 constexpr const wchar_t* kAboutSlogan = L"让沟通像火烈鸟一样优雅";
@@ -62,5 +70,45 @@ constexpr const wchar_t* kAboutWebsiteUrl = L"https://github.com/balloonwj/flami
  *          纯函数、无副作用，可直接单测。
  */
 std::wstring BuildAboutTitle(unsigned long processId);
+
+/**
+ *  算功能行（用户协议 / 隐私政策 / 开源许可 / 官方网站）右侧那个链接式按钮该多宽。
+ *
+ *  这一行的右侧按钮原先是写死宽度的，装不下完整的官网地址；而 balloonui 的 DuiButton
+ *  按 DT_RIGHT 绘制文字，宽度不够时削掉的是<u>开头</u>，于是
+ *  https://github.com/balloonwj/flamingo 显示成 os://github.com/balloonwj/flamingo，
+ *  看着像乱码。官网地址还是运行期从 flamingo.ini 读的，长度不可预知，写死宽度不可能
+ *  永远合适，故改为按文字实际宽度撑开。本函数只做那一点钳位算术，不碰任何 UI 对象，
+ *  便于单测。
+ *
+ *    textWidth： 链接文字按<u>真正绘制时用的字体</u>量出来的像素宽度。量宽的字体取错
+ *                结果就不准，调用方须与控件实际使用的字体保持一致。无文字传 0。
+ *    minWidth：  最小宽度（像素）。文字很短时（如「查看」）按它走，使各行右缘对齐。
+ *    maxWidth：  上限（像素）。由行宽减去左侧标题至少要占的宽度算出，防止标题被挤没。
+ *    pad：       在文字宽度之外额外留的余量（像素），防止不同 DPI / 字体版本下文字
+ *                正好卡在边界上被削掉一两个像素。
+ *
+ *  @return 钳到 [minWidth, maxWidth] 区间内的宽度（像素）。
+ *          <u>上限优先</u>：maxWidth 小于 minWidth 这种参数本身矛盾的情况下返回
+ *          maxWidth —— 宁可按钮比预期窄（文字由 DT_END_ELLIPSIS 收尾），也不能超出
+ *          行宽把左侧标题挤没。纯函数、无副作用。
+ */
+inline int ComputeLinkButtonWidth(int textWidth, int minWidth, int maxWidth, int pad)
+{
+    int width = textWidth + pad;
+
+    if (width < minWidth)
+    {
+        width = minWidth;
+    }
+
+    //上限放在下限之后判断，故两者矛盾时以上限为准
+    if (width > maxWidth)
+    {
+        width = maxWidth;
+    }
+
+    return width;
+}
 
 } // namespace balloonmain

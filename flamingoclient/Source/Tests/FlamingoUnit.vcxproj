@@ -217,6 +217,9 @@
     <ClCompile Include="CaptureFallbackPolicyTests.cpp" />
     <ClCompile Include="catch_amalgamated.cpp" />
     <ClCompile Include="ChatBubbleBackfillRepaintTests.cpp" />
+    <ClCompile Include="ChatDropModelTests.cpp" />
+    <ClCompile Include="ChatLinkDetectTests.cpp" />
+    <ClCompile Include="ChatTimeSeparatorTests.cpp" />
     <ClCompile Include="ChatFileLocationTests.cpp" />
     <ClCompile Include="ChatFileStateModelTests.cpp" />
     <ClCompile Include="ChatFontMapTests.cpp" />
@@ -239,6 +242,10 @@
     <ClCompile Include="ConversationsProtocolTests.cpp" />
     <ClCompile Include="DuiButtonFocusRectTests.cpp" />
     <ClCompile Include="FavoritesModelTests.cpp" />
+    <ClCompile Include="StarredModelTests.cpp" />
+    <ClCompile Include="StarredPopupTests.cpp" />
+    <ClCompile Include="StarredRowBadgeTests.cpp" />
+    <ClCompile Include="MsgStoreWriteBenchTests.cpp" />
     <ClCompile Include="FileBubbleFormatTests.cpp" />
     <ClCompile Include="FileLocalStoreTests.cpp" />
     <ClCompile Include="FileProtocolClientTests.cpp" />
@@ -268,6 +275,9 @@
     <ClCompile Include="KickoutNoticeTests.cpp" />
     <ClCompile Include="LoginAccountListTests.cpp" />
     <ClCompile Include="LoginProtocolTests.cpp" />
+    <ClCompile Include="UpdateProtocolClientTests.cpp" />
+    <ClCompile Include="UpdateViewModelTests.cpp" />
+    <ClCompile Include="UpdaterCoreTests.cpp" />
     <ClCompile Include="MainPanelContactMenuTests.cpp" />
     <ClCompile Include="MainPanelConversationMenuTests.cpp" />
     <ClCompile Include="MainPanelStatusMenuTests.cpp" />
@@ -281,13 +291,20 @@
     <ClCompile Include="OnlineCapabilityTests.cpp" />
     <ClCompile Include="OpusAudioCodecTests.cpp" />
     <ClCompile Include="OverlayScrollBarGeometryTests.cpp" />
+    <ClCompile Include="PresenceBadgeTests.cpp" />
+    <ClCompile Include="AutoAwayPolicyTests.cpp" />
+    <ClCompile Include="KeepAwakePolicyTests.cpp" />
     <ClCompile Include="PanelDragZoneTests.cpp" />
     <ClCompile Include="PinyinFullTests.cpp" />
     <ClCompile Include="PinyinInitialsTests.cpp" />
     <ClCompile Include="PopupMenuPlacementTests.cpp" />
+    <ClCompile Include="UnknownSenderRefreshPolicyTests.cpp" />
+    <ClCompile Include="UserCachePathTests.cpp" />
+    <ClCompile Include="StorageLocationTests.cpp" />
     <ClCompile Include="ProfileProtocolClientTests.cpp" />
     <ClCompile Include="ProfileTests.cpp" />
     <ClCompile Include="RdInputTests.cpp" />
+    <ClCompile Include="RichEditContextMenuPlacementTests.cpp" />
     <ClCompile Include="RdRelayFramingTests.cpp" />
     <ClCompile Include="RdScreenDecoderTests.cpp" />
     <ClCompile Include="RdScreenEncoderTests.cpp" />
@@ -296,6 +313,7 @@
     <ClCompile Include="ReplyQuoteProtocolTests.cpp" />
     <ClCompile Include="ScreenshotGeometryTests.cpp" />
     <ClCompile Include="SettingsBindingTests.cpp" />
+    <ClCompile Include="CacheCleanPlanTests.cpp" />
     <ClCompile Include="SettingsPageModelTests.cpp" />
     <ClCompile Include="Sha256Tests.cpp" />
     <ClCompile Include="ShakeRateLimiterTests.cpp" />
@@ -323,6 +341,9 @@
     <ClCompile Include="..\BalloonChatWnd\ChatBannerLabel.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatBubble.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatInlineText.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatDropModel.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatLinkDetect.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatTimeSeparator.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatFileLocation.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatFileStateModel.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatFileVisual.cpp" />
@@ -396,6 +417,9 @@
     <ClCompile Include="..\BalloonMain\ContactsOrgStats.cpp" />
     <ClCompile Include="..\BalloonMain\ConversationListOps.cpp" />
     <ClCompile Include="..\BalloonMain\FavoritesModel.cpp" />
+    <ClCompile Include="..\BalloonMain\StarredModel.cpp" />
+    <ClCompile Include="..\BalloonMain\StarredPopupModel.cpp" />
+    <ClCompile Include="..\BalloonMain\CornerPopupPlacement.cpp" />
     <ClCompile Include="..\BalloonMain\GroupRowText.cpp" />
     <ClCompile Include="..\BalloonMain\KickoutNotice.cpp" />
     <ClCompile Include="..\BalloonMain\MainPanelButtons.cpp" />
@@ -408,6 +432,9 @@
     <ClCompile Include="..\BalloonMain\MainPanelScrollView.cpp" />
     <ClCompile Include="..\BalloonMain\MainPanelSectionHeader.cpp" />
     <ClCompile Include="..\BalloonMain\MainPanelStatusMenu.cpp" />
+    <ClCompile Include="..\BalloonMain\PresenceBadge.cpp" />
+    <ClCompile Include="..\BalloonMain\AutoAwayPolicy.cpp" />
+    <ClCompile Include="..\BalloonMain\KeepAwakePolicy.cpp" />
     <ClCompile Include="..\BalloonMain\MainPanelSystemMenu.cpp" />
     <ClCompile Include="..\BalloonMain\MainPanelTab.cpp" />
     <ClCompile Include="..\BalloonMain\MainPanelTrayMenu.cpp" />
@@ -421,6 +448,9 @@
     <ClCompile Include="..\BalloonMain\OverlayScrollBarGeometry.cpp" />
     <ClCompile Include="..\BalloonMain\PanelDragZone.cpp" />
     <ClCompile Include="..\BalloonMain\PopupMenuPlacement.cpp" />
+    <ClCompile Include="..\BalloonMain\UnknownSenderRefreshPolicy.cpp" />
+    <ClCompile Include="..\net\UserCachePath.cpp" />
+    <ClCompile Include="..\net\StorageLocation.cpp" />
     <ClCompile Include="..\BalloonMain\SignatureEditModel.cpp" />
     <ClCompile Include="..\BalloonMain\TrayFlashController.cpp" />
     <ClCompile Include="..\BalloonNetSettings\NetServerCard.cpp" />
@@ -438,6 +468,7 @@
     <ClCompile Include="..\BalloonSearch\PinyinInitials.cpp" />
     <ClCompile Include="..\BalloonSettings\SettingsBinding.cpp" />
     <ClCompile Include="..\BalloonSettings\SettingsPageModel.cpp" />
+    <ClCompile Include="..\BalloonSettings\CacheCleanPlan.cpp" />
     <ClCompile Include="..\Call\AudioPcmUtils.cpp" />
     <ClCompile Include="..\Call\CallDlgLayout.cpp" />
     <ClCompile Include="..\Call\CallMediaFraming.cpp" />
@@ -456,6 +487,7 @@
     <ClCompile Include="..\net\ContactsProtocolClient.cpp" />
     <ClCompile Include="..\net\ConversationsProtocolClient.cpp" />
     <ClCompile Include="..\net\FavoriteProtocolClient.cpp" />
+    <ClCompile Include="..\net\StarredProtocolClient.cpp" />
     <ClCompile Include="..\net\FileProtocolClient.cpp" />
     <ClCompile Include="..\net\FileStreamTransfer.cpp" />
     <ClCompile Include="..\net\FrameCodec.cpp" />
@@ -466,6 +498,11 @@
     <ClCompile Include="..\net\ImageDownloadDriver.cpp" />
     <ClCompile Include="..\net\ImageUploadDriver.cpp" />
     <ClCompile Include="..\net\LoginProtocolClient.cpp" />
+    <ClCompile Include="..\net\UpdateProtocolClient.cpp" />
+    <ClCompile Include="..\Update\UpdateViewModel.cpp" />
+    <ClCompile Include="..\..\iAutoUpdate\CommandLine.cpp" />
+    <ClCompile Include="..\..\iAutoUpdate\ZipPathSafety.cpp" />
+    <ClCompile Include="..\..\iAutoUpdate\ZipReader.cpp" />
     <ClCompile Include="..\net\MessageProtocolClient.cpp" />
     <ClCompile Include="..\net\ProfileProtocolClient.cpp" />
     <ClCompile Include="..\net\RegisterProtocolClient.cpp" />

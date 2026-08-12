@@ -6,7 +6,8 @@
 #include "ChatAvatarResolve.h"
 
 #include "../BalloonMain/AvatarSpec.h"   // balloonmain::DecodeAvatar / AvatarSpec / avatar_kind_image
-#include "../net/ImageTransfer.h"        // 真图缓存路径 + 入队下载
+#include "../net/ImageTransfer.h"
+#include "../net/CurrentUserAccount.h"   // net::CurrentUserAccount（本地缓存目录按登录账号分）        // 真图缓存路径 + 入队下载
 
 namespace balloonchatwnd {
 
@@ -26,7 +27,7 @@ AvatarRender ResolveAvatarRender(int64_t userId, int facetype,
     if (spec.m_kind == balloonmain::avatar_kind_image && !customface.empty() && selfId > 0)
     {
         std::wstring path =
-            net::ImageTransfer::AvatarCacheFilePathForFileId(selfId, customface);
+            net::ImageTransfer::AvatarCacheFilePathForFileId(net::CurrentUserAccount(), customface);
         if (!path.empty()
             && ::GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES)
         {
@@ -35,7 +36,8 @@ AvatarRender ResolveAvatarRender(int64_t userId, int facetype,
         else
         {
             // 未缓存：入队下载（按 fileid 去重），下载完成后由聊天窗刷新本气泡 / 列表。
-            net::ImageTransfer::GetInstance().EnqueueAvatarDownload(customface, selfId);
+            net::ImageTransfer::GetInstance().EnqueueAvatarDownload(
+                customface, net::CurrentUserAccount());
         }
     }
 

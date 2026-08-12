@@ -52,6 +52,22 @@ public:
     //   ent：所属企业（部门为根节点时用其名称 / 头像）。
     void SetNode(const OrgNode* node, const Enterprise* ent);
 
+    /**
+     *  设置「外部强制隐藏值字段 EDIT」开关。
+     *
+     *  本面板「基本信息」tab 的 11 个值字段是只读 DuiEditHost，各自寄宿一个真
+     *  Win32 EDIT 子窗，而真 HWND 恒画在 DUI 绘制内容之上。弹窗（NodeModal /
+     *  ComposeModal 等 overlay 弹窗）盖上来时，AdminFrame 会调 SetEditsVisible
+     *  把它们隐藏；但本面板每帧绘制末尾都会按自己的标记表 reconcile 一次显隐
+     *  （见 ApplyBasicEditVisibility），把那次隐藏又覆盖回去，于是字段文字会
+     *  浮在弹窗上方（2026-08-11 现场：「新增员工」弹窗里漂出员工姓名与登录账号）。
+     *
+     *  本开关让 reconcile 知道"现在有弹窗压着，一律别显示"。开关打开期间
+     *  reconcile 一律隐藏，关闭后下一帧自动恢复成该显示的那些。
+     *  @param suppressed true=外部要求全部隐藏（弹窗打开）；false=恢复由本面板自行决定。
+     */
+    void SetBasicEditsSuppressed(bool suppressed);
+
     // 用从服务端取回的权限矩阵填充「权限与角色」tab。AdminFrame 收到
     // user/getpermissions.do 应答后调用。
     //   role：员工角色（0 普通成员 / 1 部门负责人 / 2 企业管理员）。
@@ -204,6 +220,12 @@ private:
     // 11 个值字段 EDIT 是否都已创建并挂好滚轮子类（EnsureBasicEditsCreated
     // 全部就绪后置 true，后续重绘跳过创建逻辑）。
     bool                                    m_basicEditsReady = false;
+
+    // 外部（AdminFrame）是否要求把值字段 EDIT 全部藏起来。弹窗盖上来时置 true，
+    // 弹窗关闭后置回 false。为 true 期间 ApplyBasicEditVisibility 一律隐藏，
+    // 不理会本帧标记表 —— 否则每帧 reconcile 会把 AdminFrame 那次隐藏覆盖掉，
+    // 真 EDIT 子窗重新浮到弹窗之上。详见 SetBasicEditsSuppressed 的说明。
+    bool                                    m_basicEditsSuppressed = false;
 
     SelectFn           m_selFn   = nullptr;
     ActionFn           m_actFn   = nullptr;

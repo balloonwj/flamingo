@@ -1,7 +1,7 @@
 /**
  *  BalloonMainPanel.h
  *
- *  登录成功后的主面板 —— 基于 balloonui 的窄高 QQ 风格主窗口，对照
+ *  登录成功后的主面板 —— 基于 balloonui 的窄高主窗口，对照
  *  design/pc-snapshots/05-main-contacts.png 与 06-main-groups.png。
  *
  *  与现有 CMainDlg 的关系（已与用户确认的集成方式）：CMainDlg 体量庞大、
@@ -37,9 +37,12 @@
 #include "../BalloonContact/BalloonContactWindow.h"  // 联系人资料窗
 #include "../BalloonSearch/SearchDropdown.h"       // 搜索结果下拉（主面板下方顶层浮窗）
 #include "FavoritesModel.h"                        // 「我的收藏」模型（成员按值持有，需完整类型）
+#include "StarredModel.h"                          // 「特别关注」模型（成员按值持有，需完整类型）
 #include "../net/FavoriteProtocolClient.h"          // net::SetFavoriteResult（应答回调形参）
+#include "../net/StarredProtocolClient.h"           // net::SetStarredResult（应答回调形参）
 #include "../net/FriendProtocolClient.h"            // net::SetFriendRemarkResult（设置备注名应答回调形参）
 #include "ContactRemarkModel.h"                    // 显示名解析 / 备注提交判定（纯函数）
+#include "UnknownSenderRefreshPolicy.h"            // 陌生发送方补拉通讯录的节流器（成员按值持有，需完整类型）
 #include "OnlineCapability.h"                      // kConnUiOnline（备注提交前的连接态门禁）
 #include "CreateGroupDlg.h"                        // 新建群聊对话框（成员需完整类型）
 #include "BalloonChangePwdDlg.h"                   // 修改密码对话框（成员需完整类型）
@@ -59,6 +62,7 @@
 #include "../BalloonHistory/AnnounceStore.h"   // 平台公告本地库（单例，消息盒子的数据落点）
 #include "../BalloonAnnounce/BalloonAnnounceBoxWindow.h"  // 消息盒子窗口（成员按值持有，需完整类型）
 #include "../BalloonAnnounce/AnnouncePopupWindow.h"       // 新公告桌面提示窗（成员按值持有，需完整类型）
+#include "StarredPopupWindow.h"                          // 特别关注上下线提示窗（成员按值持有，需完整类型）
 #include "../BalloonHistory/BalloonHistoryWindow.h"  // 历史消息记录窗口（成员需完整类型）
 
 class CFlamingoClient;
@@ -419,6 +423,58 @@ public:
     void OnSetFavoriteResult(const net::SetFavoriteResult& result);
 
     /**
+     *  收到 cmd_set_starred 应答后的处理（由 CMainDlg 转交）。
+     *    result： 应答解析结果，含服务端原样回带的 target / starred。
+     *  成功时只记日志 —— 乐观更新在发起时已经生效。失败时把那一个人的关注状态
+     *  回滚回去并提示用户（关注人数超限要给一句明确的话，否则用户只会看到
+     *  "点了没反应"）。
+     */
+    void OnSetStarredResult(const net::SetStarredResult& result);
+
+    /**
+     *  查询某个联系人当前是否被特别关注。供群聊窗那两处右键菜单（成员列表、气泡里的
+     *  @片段与发送者头像）在弹菜单前取文案用 —— 关注名单只有主面板这一份。
+     *    userid： 联系人 userid。
+     *  @return 已关注返回 true。
+     */
+    bool IsContactStarred(int64_t userid) const;
+
+private:
+    /**
+     *  给刚建好的树节点打上「特别关注」星标（按名单现状）。填联系人行 / 会话行时调用。
+     *    tv：     目标树；实际必须是 MainPanelTreeView，不是则安静跳过。
+     *    node：   节点 id。
+     *    userid： 该行对应的联系人 userid。
+     */
+    void ApplyStarredMark(balloonwjui::DuiTreeView* tv, int node, int64_t userid);
+
+    /**
+     *  某个人的关注状态变了之后，就地刷新树上所有对应行的星标。
+     *
+     *  不整树重建：星标不改变树的结构，只改一个标记，重建会白丢展开状态与滚动位置。
+     *  做法与收到上下线推送时重着状态点一致（见 OnPresenceChanged）。
+     *
+     *  三处调用：ToggleStarred 的乐观更新、OnSetStarredResult 的失败回滚、以及
+     *  群聊窗那三处菜单转过来的切换（它们最终也走 ToggleStarred）。
+     *    userid： 关注状态发生变化的联系人；<= 0 时什么都不做。
+     */
+    void RefreshStarredMarks(int64_t userid);
+
+    /**
+     *  收到一条 presence 推送后，判断要不要为它弹「特别关注」的上下线提示，该弹就弹。
+     *  由 OnPresenceChanged 调用；五条抑制条件（不在名单、是自己、不是上下线跳变、
+     *  登录静默期内、勿扰）任意一条成立都不弹，理由逐条写在实现里。
+     *    userid：     发生变化的联系人 userid。
+     *    oldPresence：变化前的 presence（通讯录缓存里的旧值；查不到时调用方传 0）。
+     *    newPresence：变化后的 presence（服务端推送的新值）。
+     *    selfId：     当前登录用户的 userid，用来排除多设备回声。
+     */
+    void MaybeShowStarredPresencePopup(int64_t userid, int oldPresence,
+                                       int newPresence, UINT selfId);
+
+public:
+
+    /**
      *  收到 cmd_set_friend_remark 应答后的处理（由 CMainDlg 转交）。
      *    result： 应答解析结果，含服务端原样回带的 userid。
      *  成功时丢掉回滚快照即可 —— 乐观更新在发起时已经生效。失败时按回带的 userid
@@ -562,6 +618,25 @@ public:
     void OnUserInfoChanged(const net::UserInfoChangedNotify& notify);
 
     /**
+     *  收到 v2 组织架构变更推送（1404）：重新拉一次通讯录（cmd_get_contacts），应答
+     *  照常经 OnContactsArrived 回来重建联系人树与缓存。由 CMainDlg 的
+     *  OnV2OrgStructureChanged 调用。
+     *
+     *  之所以整份重拉而不做增量：推送体里只有"变更类型 + 部门ID"，没带变了什么，
+     *  服务端也没有增量接口。组织架构的变更频率很低（有人入职 / 调岗 / 部门调整才发
+     *  一次），整份重拉的代价可以接受。
+     *    notify：变更解析结果，当前只用于日志，不参与刷新判断。
+     */
+    void OnOrgStructureChanged(const net::OrgStructureChangedNotify& notify);
+
+    /**
+     *  重置"陌生发送方补拉通讯录"的节流记账。由 CMainDlg 在每次登录成功后调用。
+     *  掉线重连期间组织架构可能变过、推送也可能错过，把上一轮"这些人已经问过了"
+     *  的记录清掉，本轮才能对同一个人再补拉一次。
+     */
+    void ResetUnknownSenderPolicy();
+
+    /**
      *  打开（或前置）指定会话并把其未读本地清零 —— 供 CMainDlg 在用户单击闪烁的托盘
      *  图标时调用。单聊走 OpenSingleChat、群聊走 OpenGroupChat，随后 MarkConversationRead
      *  清未读角标（其内部会回投 FMG_MSG_TRAY_CLEAR 给 CMainDlg，使托盘停闪 / 切目标）。
@@ -603,6 +678,9 @@ public:
     // WM_CLOSE 自行处理（关闭主面板 = 退出程序，转交 CMainDlg）；其余
     // 消息经 CHAIN 交回 DuiFrameWindow。
     BEGIN_MSG_MAP(CBalloonMainPanel)
+        // 主面板是普通顶层窗口，每次显示都会被分到一个任务栏按钮，须逐次摘除
+        // （不用 WS_EX_TOOLWINDOW 的缘由见 CreateAndShow 的注释）。
+        MESSAGE_HANDLER(WM_SHOWWINDOW, OnShowWindowForTaskbar)
         MESSAGE_HANDLER(WM_CLOSE, OnCloseMsg)
         MESSAGE_HANDLER(WM_SYSCOMMAND, OnSysCommand)
         // WM_NCHITTEST / WM_NCLBUTTONDBLCLK：让顶部 Banner 与底部栏的空白处也能
@@ -619,6 +697,8 @@ public:
         MESSAGE_HANDLER(WM_TIMER, OnScrollBarAnimTimer)
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
         MESSAGE_HANDLER(FMG_MSG_OPEN_CONTACT_PROFILE, OnOpenContactProfileMsg)
+        MESSAGE_HANDLER(FMG_MSG_QUERY_STARRED, OnQueryStarredMsg)
+        MESSAGE_HANDLER(FMG_MSG_TOGGLE_STARRED, OnToggleStarredMsg)
         MESSAGE_HANDLER(FMG_MSG_SET_CONTACT_REMARK, OnSetContactRemarkMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_CHAT, OnOpenChatMsg)
         MESSAGE_HANDLER(FMG_MSG_CONV_SEND_BUMP, OnConvSendBumpMsg)
@@ -629,6 +709,7 @@ public:
         MESSAGE_HANDLER(FMG_MSG_OPEN_GROUP_ANNOUNCE, OnOpenGroupAnnounceMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_CHANGEPWD, OnOpenChangePwdMsg)
         MESSAGE_HANDLER(FMG_MSG_REFRESH_SELF_HEADER, OnRefreshSelfHeaderMsg)
+        MESSAGE_HANDLER(FMG_MSG_LINK_OPTION_CHANGED, OnLinkOptionChangedMsg)
         MESSAGE_HANDLER(FMG_MSG_RD_START_INVITE, OnRdStartInviteMsg)
         MESSAGE_HANDLER(FMG_MSG_CALL_START_INVITE, OnCallStartInviteMsg)
         MESSAGE_HANDLER(FMG_MSG_CALL_START_VIDEO_INVITE, OnCallStartVideoInviteMsg)
@@ -656,6 +737,16 @@ private:
      *  其余 syscommand 交回基类 / DefWindowProc 按默认处理。
      */
     LRESULT OnSysCommand(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_SHOWWINDOW 处理：主面板每次被显示时，把它的任务栏按钮摘掉。
+     *
+     *  主面板是<u>普通顶层窗口</u>（扩展样式为 0，不用 WS_EX_TOOLWINDOW，缘由见
+     *  CreateAndShow 里的长注释与 `docs/主面板被其它窗口盖住问题排查.md`），所以
+     *  系统每次显示它都会分配一个任务栏按钮，须逐次摘除。
+     *  本 handler 只记录 / 摘除，不消费消息（bHandled 置 FALSE）。
+     */
+    LRESULT OnShowWindowForTaskbar(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
      *  WM_MOVE 处理：主面板被拖动后，把搜索结果下拉同步挪到新的搜索框下方。
@@ -1211,6 +1302,17 @@ private:
                                    int facetype, const std::string& customface, int sizePx);
 
     /**
+     *  取某个在线状态的徽标位图，用于往 DuiTreeView 的行右端挂状态点
+     *  （DuiTreeView::SetItemStatusIcon）。四种徽标是常量图形，本方法按 presence
+     *  缓存复用，首次用到时才创建，位图归本类所有、析构时统一释放 —— 调用方
+     *  <u>不得</u> DeleteObject，也不要存进 m_avatarBitmaps 那几个随刷新清空的池子里。
+     *    presence：v2 在线状态（presence_type）；隐身与越界值按"离线"取，
+     *              与 GetPresenceBadgeIconKind 的兜底口径一致。
+     *  返回：徽标位图；创建失败返回 NULL（此时调用方跳过挂图即可，树会退回不画状态点）。
+     */
+    HBITMAP GetPresenceBadgeBitmap(int presence);
+
+    /**
      *  打开（或前置）指定群的群聊窗口 —— 点击"群"Tab 群节点 / "消息"Tab 群会话时
      *  调用。按 groupid 维护"一个群一个窗口"：已开则前置，未开则新建。
      *    groupId：群 id。
@@ -1313,6 +1415,20 @@ private:
      *    cid：   对象ID；<= 0 时本方法什么都不做。
      */
     void ToggleFavorite(int ctype, int64_t cid);
+
+public:
+    /**
+     *  切换某个联系人的特别关注状态：先做本地乐观更新，再发 cmd_set_starred。
+     *  四处右键菜单（主面板联系人 / 主面板会话 / 群成员列表 / 气泡的 @片段与
+     *  发送者头像）的"特别关注 / 取消特别关注"都汇到这里。
+     *
+     *  公开而不是私有：后两处入口在群聊窗那边，只能经主面板 HWND 转过来调。
+     *    userid： 被关注的联系人 userid；<= 0 或等于本人时本方法什么都不做
+     *             （关注自己没有意义，服务端也会拒）。
+     */
+    void ToggleStarred(int64_t userid);
+
+private:
 
     /**
      *  往「联系人」Tab 的树里插入「我的收藏」根节点及其子行。须在铺开部门树<u>之前</u>
@@ -1491,6 +1607,13 @@ private:
 
     // 子窗口路由消息处理：打开联系人资料 / 打开单聊（wParam=userid）。
     LRESULT OnOpenContactProfileMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // 群聊窗代问"某联系人是否被特别关注"（FMG_MSG_QUERY_STARRED，同步 SendMessage）。
+    // lParam 指向调用方栈上的 int64_t userid；返回 1 已关注 / 0 未关注。
+    LRESULT OnQueryStarredMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // 群聊窗请求切换某联系人的特别关注状态（FMG_MSG_TOGGLE_STARRED，wParam=userid）。
+    LRESULT OnToggleStarredMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnOpenChatMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     // 单聊窗发出消息后的会话冒泡：wParam=对端userid，lParam=堆上 std::string*（UTF-8 预览，处理后 delete）。
     LRESULT OnConvSendBumpMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
@@ -1532,6 +1655,10 @@ private:
     // FMG_MSG_REFRESH_SELF_HEADER：个人信息对话框乐观保存后请求按 m_UserInfo 立即刷新本人
     // Header（昵称/签名/头像）。无参，直接转 RefreshSelfAvatar()。
     LRESULT OnRefreshSelfHeaderMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    // FMG_MSG_LINK_OPTION_CHANGED：系统设置里改了「自动识别链接」开关（wParam=1 开 / 0 关）。
+    // 更新进程级开关，再让已打开的单聊 / 群聊窗重新测量重绘 —— 链接片段是在气泡测量阶段
+    // 算出来的，不重新测量已开着的窗口就还是旧样子。
+    LRESULT OnLinkOptionChangedMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     // 单聊窗显示器按钮发起远程桌面：单聊窗 m_hMainDlg 为 NULL，故经主面板转发给
     // CMainDlg 协调器。wParam=对端userid，lParam=堆 std::wstring* peerName（转交后由 CMainDlg delete）。
     LRESULT OnRdStartInviteMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
@@ -1589,6 +1716,13 @@ private:
     // 新公告桌面提示窗：收到新公告推送时在桌面右下角弹一次。同一时刻只有一个实例，
     // 上一条还没关就来了新的即就地换内容（弹一摞窗口比漏掉一条更糟）。
     CAnnouncePopupWindow        m_announcePopup;
+    // 特别关注的上下线提示窗：被关注的联系人上线 / 下线时在桌面右下角弹一次。同一
+    // 时刻只有一个实例，多人同时变化时并进同一个窗口逐行列出（弹一摞窗口是骚扰）。
+    CStarredPopupWindow         m_starredPopup;
+    // 登录初期的静默截止时刻（GetTickCount 口径，毫秒）。这个时刻之前收到的 presence
+    // 推送一律不弹特别关注提示 —— 通讯录还没拉回来时 OnPresenceChanged 对查不到的人
+    // 一律按离线处理，此时来的推送会被当成"刚上线"，不静默就会在登录瞬间弹一大片。
+    DWORD                       m_starredSilenceUntilTick;
     // 单聊窗口：一个对端一个，按 userid 索引。堆分配、本类持有，析构时统一
     // 释放；窗口被用户关闭后对象仍在表中（IsWindow()==false），下次开同一
     // 对端时惰性回收重建。
@@ -1605,6 +1739,11 @@ private:
     std::map<UINT, CString> m_pendingRemarkRollback;
     // 缓存的部门列表（OnContactsArrived 存入），算联系人职位/部门路径用。
     std::vector<net::DepartmentItem> m_departments;
+    // "收到陌生人消息就补拉通讯录"这个兜底动作的节流器。正常情况下新同事是靠
+    // cmd_org_structure_notify 推送进来的，这里管的是那条推送没到时（掉线重连期间
+    // 发生的变更、服务端漏推）的补救，故必须限流，免得一串陌生消息把通讯录请求
+    // 打成风暴。生命周期与本面板一致。
+    balloonmain::UnknownSenderRefreshPolicy m_unknownSenderPolicy;
     // 缓存的会话列表（OnConversationsArrived 存入，含 ctype==1 单聊与 ctype==2 群聊）。
     // 已按"置顶优先、其余按最后消息时间倒序"排好序，与 Messages 树呈现顺序一致；
     // 收发消息时就地冒泡更新。
@@ -1647,6 +1786,9 @@ private:
     // 「我的收藏」模型（OnContactsArrived 灌入）。三处右键菜单据它决定文案，
     // 「联系人」Tab 树顶的收藏分区据它出行。改动走乐观更新 + 应答失败回滚。
     balloonmain::FavoritesModel m_favorites;
+    // 「特别关注」模型（OnContactsArrived 灌入）。四处右键菜单据它决定文案，收到
+    // 上下线推送时据它决定要不要弹右下角提示。改动走乐观更新 + 应答失败回滚。
+    balloonmain::StarredModel m_starred;
     // 群聊窗口：一个群一个，按 groupid 索引（类比 m_chatWindows）。堆分配、本类
     // 持有，析构统一释放；窗口被关闭后对象仍在表中，下次开同群惰性回收重建。
     std::map<int64_t, CBalloonGroupChatWindow*> m_groupChatWindows;
@@ -1699,4 +1841,17 @@ private:
     // "群"Tab 群树专用的 monogram 头像位图池（同理与通讯录树池分开，避免一方
     // 刷新清池误删另一方仍引用的位图）。FillGroupsTree 重建前只清本池。
     std::vector<HBITMAP> m_groupAvatarBitmaps;
+
+    // 状态徽标缓存的槽位数 —— 对应 presence_type 的 0..3（离线 / 在线 / 离开 / 忙碌）。
+    // 隐身（4）与一切越界值都归到离线槽，故四个槽够用。
+    static const int kPresenceBadgeSlotCount = 4;
+
+    // 在线状态徽标位图缓存，按 presence 取值（0 离线 / 1 在线 / 2 离开 / 3 忙碌）直接
+    // 下标。四种徽标是常量图形，全树共用四张即可 —— 树里几百个联系人时逐行造位图是
+    // 几百次 DIB 分配，纯属浪费。首次用到时才创建（见 GetPresenceBadgeBitmap），
+    // 析构时统一 DeleteObject。
+    //
+    // 与上面三个头像池的区别：头像池随刷新重建，本缓存<u>不随刷新清空</u>——
+    // 徽标与具体是谁无关，重建树时继续借用同一批位图即可。
+    HBITMAP m_presenceBadges[kPresenceBadgeSlotCount];
 };

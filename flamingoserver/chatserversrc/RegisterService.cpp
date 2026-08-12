@@ -52,6 +52,10 @@ int32_t RegisterService::doRegister(IRegisterDataSource& ds, const RegisterReque
     out.enterpriseId   = enterprise.enterpriseId;
     //回显用库里的企业全称而不是用户输入的原文，这样大小写、空格上的差异能当场看出来。
     out.enterpriseName = enterprise.name;
+    //根部门ID带给会话层：注册成功后要向同企业的在线客户端推一条组织架构变更通知，
+    //那条通知的"受影响部门"就是新人落脚的这个根部门。上面几条失败分支都在建号之前
+    //返回，rootDeptId 保持构造时的 0，会话层不会拿到一个似是而非的部门ID。
+    out.rootDeptId     = enterprise.rootDeptId;
 
     //把新人挂进公司根部门，作为其主部门。失败不改变注册结果（理由见头文件中
     //本函数的注释），只把结果记在 departmentAttached 上交给调用方去打日志。

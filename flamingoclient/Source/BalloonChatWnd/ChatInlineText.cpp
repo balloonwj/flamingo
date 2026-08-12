@@ -615,4 +615,38 @@ void DrawInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& seg
     ::DeleteObject(hFont);
 }
 
+void DrawInlineContentRestyledRange(HDC hdc,
+                                    const std::vector<balloonchat::ChatSegment>& segs,
+                                    const SelLayout& layout,
+                                    int charBegin, int charEnd,
+                                    const RECT& rcText,
+                                    const InlineTextStyle& style,
+                                    int faceSize)
+{
+    if (charEnd <= charBegin || layout.m_lines.empty())
+    {
+        return;
+    }
+
+    //区间可能跨行，故先取它占的若干矩形，逐个矩形裁剪重画。
+    const std::vector<SelRect> rects = BuildSelectionRects(layout, charBegin, charEnd);
+    for (std::size_t r = 0; r < rects.size(); ++r)
+    {
+        //保存原裁剪区。GetClipRgn 返回 1 表示原本有裁剪区、0 表示没有，
+        //恢复时据此决定是还原那个区域还是清成"不裁剪"。
+        HRGN saved = ::CreateRectRgn(0, 0, 0, 0);
+        const int hadClip = ::GetClipRgn(hdc, saved);
+
+        ::IntersectClipRect(hdc,
+                            rcText.left + rects[r].m_left,
+                            rcText.top  + rects[r].m_top,
+                            rcText.left + rects[r].m_right,
+                            rcText.top  + rects[r].m_bottom);
+        DrawInlineContent(hdc, segs, rcText, style, faceSize);
+
+        ::SelectClipRgn(hdc, (hadClip == 1) ? saved : NULL);
+        ::DeleteObject(saved);
+    }
+}
+
 } // namespace balloonchatwnd

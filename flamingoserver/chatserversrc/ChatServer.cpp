@@ -228,6 +228,100 @@ void ChatServer::broadcastOrgStructureChanged(int64_t enterpriseId, int32_t chan
          (long long)enterpriseId, changetype, (long long)deptid, pushed);
 }
 
+int32_t ChatServer::kickEnterpriseSessions(int64_t enterpriseId, int32_t reason)
+{
+    //企业ID 为 0 是「无企业归属」的哨兵值，不是真实企业。真按它踢会把所有尚未
+    //归属企业的用户一并踢下线，故直接挡掉。
+    if (enterpriseId == 0)
+    {
+        LOGE("kick enterprise sessions ignored: enterpriseid is 0");
+        return 0;
+    }
+
+    //踢下线通知包体。reason 让客户端能分辨"被服务器踢"与"网络断了"：前者要停掉
+    //自动重连、弹提示框、退回登录窗，后者要重连。msg 是面向开发者的英文诊断串，
+    //客户端展示给用户的文案由它自己按 reason 选（见客户端 KickoutNotice.cpp）。
+    const char* diagMsg = (reason == kickout_reason_enterprise_deleted)
+                              ? "enterprise deleted"
+                              : "enterprise disabled";
+    char kickoutBody[128] = { 0 };
+    snprintf(kickoutBody, sizeof(kickoutBody),
+             "{\"reason\":%d,\"msg\":\"%s\"}", reason, diagMsg);
+
+    //拷贝一份在线会话快照后再踢，避免持锁期间发包
+    std::list<std::shared_ptr<ChatSession>> sessions;
+    getSessions(sessions);
+
+    DepartmentManager& deptMgr = Singleton<DepartmentManager>::Instance();
+    int32_t kicked = 0;
+    for (auto& s : sessions)
+    {
+        if (!s || s->getUserId() == 0)
+            continue;
+        if (deptMgr.getUserEnterpriseId(s->getUserId()) != enterpriseId)
+            continue;
+
+        //与顶号踢人（onLogin 里踢同类型设备的旧会话）完全一致：先把 cmd_kickout
+        //发出去，再把会话置为失效，<u>不</u>主动 forceClose 底层连接 —— 强制关会
+        //把还在发送缓冲区里的这条通知一起丢掉，客户端就只看到一次莫名其妙的断线、
+        //转而走自动重连，而不是弹出下线提示并退回登录窗。连接由客户端收到通知后
+        //自行断开（其 GoOffline 会关掉 chat/file/img 三条连接）。
+        //被踢下线为服务器主动推送，seq 填 0。
+        s->send(cmd_kickout, 0, std::string(kickoutBody));
+        s->makeSessionInvalid();
+        ++kicked;
+    }
+
+    LOGI("kick enterprise sessions, enterpriseid: %lld, reason: %d, kicked sessions: %d",
+         (long long)enterpriseId, reason, kicked);
+    return kicked;
+}
+
+int32_t ChatServer::kickUserSessions(int64_t userId, int32_t clientTypeFilter, int32_t reason)
+{
+    if (userId == 0)
+    {
+        LOGE("kick user sessions ignored: userid is 0");
+        return 0;
+    }
+
+    //踢下线通知包体。msg 是面向开发者的英文诊断串，客户端展示给用户的文案由它
+    //自己按 reason 选（见客户端 KickoutNotice.cpp）。
+    const char* diagMsg = "kicked by admin";
+    if (reason == kickout_reason_disabled)
+        diagMsg = "account disabled";
+    else if (reason == kickout_reason_account_deleted)
+        diagMsg = "account deleted";
+
+    char kickoutBody[128] = { 0 };
+    snprintf(kickoutBody, sizeof(kickoutBody),
+             "{\"reason\":%d,\"msg\":\"%s\"}", reason, diagMsg);
+
+    std::list<std::shared_ptr<ChatSession>> sessions;
+    getSessionsByUserId(sessions, static_cast<int32_t>(userId));
+
+    int32_t kicked = 0;
+    for (std::list<std::shared_ptr<ChatSession>>::iterator it = sessions.begin();
+         it != sessions.end(); ++it)
+    {
+        std::shared_ptr<ChatSession>& s = *it;
+        if (!s)
+            continue;
+        if (clientTypeFilter > 0 && s->getClientType() != clientTypeFilter)
+            continue;
+
+        //先发通知、再置失效，不 forceClose —— 理由见本方法在头文件里的说明。
+        //被踢下线为服务器主动推送，seq 填 0。
+        s->send(cmd_kickout, 0, std::string(kickoutBody));
+        s->makeSessionInvalid();
+        ++kicked;
+    }
+
+    LOGI("kick user sessions, userid: %lld, clienttype filter: %d, reason: %d, kicked sessions: %d",
+         (long long)userId, clientTypeFilter, reason, kicked);
+    return kicked;
+}
+
 void ChatServer::broadcastToEnterprise(int64_t enterpriseId, uint16_t cmd,
                                        const std::string& body, int32_t excludeUserId)
 {

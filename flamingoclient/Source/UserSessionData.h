@@ -12,6 +12,20 @@ typedef std::string tstring;
 
 extern TCHAR g_szHomePath[MAX_PATH];
 extern char g_szHomePathAscii[MAX_PATH];
+
+// 本地数据根目录，形如 "D:\FlamingoData\"（以反斜杠结尾）。按账号隔离的本地数据
+// 都挂在它下面的 Users\<登录账号>\ 里：账号配置、聊天记录、公告、文件落点登记表，
+// 以及文件 / 图片 / 头像缓存。
+//
+// 默认等于程序目录 g_szHomePath；用户在「系统设置 → 存储」里改过之后，取值来自
+// config\flamingo.ini 的 [storage] datapath（归一规则见 net/StorageLocation.h）。
+// 进程启动时算一次，之后不再变 —— 改动须重启才生效，因为登录流程很早就用它打开了
+// 各个库与缓存目录。
+//
+// <u>注意与 g_szHomePath 的分工</u>：程序自身的东西（皮肤、表情、config\flamingo.ini、
+// Users\LoginAccountList.dat 这份机器级的登录账号列表）仍然跟着 g_szHomePath 走，
+// 不随数据根目录搬家。
+extern TCHAR g_szDataRoot[MAX_PATH];
 extern const UINT USER_THUMB_COUNT;
 
 extern std::wstring g_strAppTitle;
@@ -92,6 +106,7 @@ extern std::wstring g_strAppTitle;
 #define     FMG_MSG_V2_RECV_CHATMSG         WM_USER + 450			//收到 v2 单聊消息推送(cmd_message_notify 1504)，lParam=net::MessageNotify*
 #define     FMG_MSG_V2_SEND_CHATMSG_ACK     WM_USER + 451			//v2 单聊发送回执(cmd_send_message 1503)，lParam=net::SendMessageResponse*
 #define     FMG_MSG_V2_CONTACTS             WM_USER + 452			//v2 通讯录应答(cmd_get_contacts 1201)，lParam=net::ContactsResult*
+#define     FMG_MSG_V2_ORG_STRUCTURE_CHANGED WM_USER + 555			//v2 组织架构变更推送(cmd_org_structure_notify 1404)，lParam=net::OrgStructureChangedNotify*（处理后 delete）；主面板据此重新拉一次通讯录，好让新入职/新注册的同事立刻出现。号段接在 507 之后往下取，与本行相邻的 452/455 无关
 #define     FMG_MSG_V2_CONVERSATIONS        WM_USER + 455			//v2 会话列表应答(cmd_sync_conversations 1501)，lParam=net::ConversationsResult*
 #define     FMG_MSG_V2_CREATE_GROUP_RESULT  WM_USER + 457			//v2 建群应答(cmd_create_group 1301)，lParam=net::CreateGroupResponse*
 #define     FMG_MSG_V2_GROUP_INFO           WM_USER + 458			//v2 群资料应答(cmd_get_group_info 1303)，lParam=net::GroupInfoResult*
@@ -101,7 +116,7 @@ extern std::wstring g_strAppTitle;
 #define     FMG_MSG_V2_CHANGE_PWD_RESULT    WM_USER + 462			//v2 修改密码应答(cmd_change_password 1105)，lParam=net::ChangePasswordResponse*（处理后 delete）
 #define     FMG_MSG_V2_UPDATE_PROFILE_RESULT WM_USER + 463			//v2 更新资料应答(cmd_update_profile 1104，当前用于个性签名)，lParam=net::UpdateProfileResponse*（处理后 delete）
 #define     FMG_MSG_V2_CHANGE_PRESENCE_RESULT WM_USER + 464			//v2 修改在线状态应答(cmd_change_presence 1107)，lParam=net::ChangePresenceResponse*（处理后 delete）
-#define     FMG_MSG_CHANGE_MY_PRESENCE      WM_USER + 465			//主面板状态菜单→消息中枢的"切换我的在线状态"请求，wParam=v2 presence(presence_type)，lParam=0；由 CMainDlg 决定 GoOffline/GoOnline/SendChangePresence
+#define     FMG_MSG_CHANGE_MY_PRESENCE      WM_USER + 465			//主面板状态菜单→消息中枢的"切换我的在线状态"请求，wParam=v2 presence(presence_type)，lParam=切换来源(见 PresenceChangeSource，0=手动)；由 CMainDlg 决定 GoOffline/GoOnline/SendChangePresence
 #define     FMG_MSG_V2_CHANGE_AVATAR_RESULT WM_USER + 466			//v2 修改头像应答(cmd_change_avatar 1106，应答体为通用{code,msg})，lParam=net::UpdateProfileResponse*（处理后 delete）
 #define     FMG_MSG_V2_AVATAR_UPLOAD_RESULT WM_USER + 467			//v2 头像图片上传结果(走 imgserver，仅上传不发消息)，lParam=net::AvatarUploadResult*（处理后 delete）
 #define     FMG_MSG_V2_AVATAR_DOWNLOAD_RESULT WM_USER + 469			//v2 头像图片下载结果(按 fileid 拉联系人头像到本地缓存)，lParam=net::AvatarDownloadResult*（处理后 delete）
@@ -153,7 +168,26 @@ extern std::wstring g_strAppTitle;
 #define     FMG_MSG_OPEN_ANNOUNCE_BOX       WM_USER + 552			//新公告提示窗→主面板：点「查看全部」，请它打开「消息盒子」窗口，wParam=0，lParam=0；无堆负载，无需 delete
 #define     FMG_MSG_V2_SET_REMARK_RESULT    WM_USER + 552			//v2 设置好友备注名应答(cmd_set_friend_remark 1209)，lParam=堆 net::SetFriendRemarkResult*（UI 处理后 delete）；成功只记日志（乐观更新在发起时已生效），失败时主面板据其中原样回带的 userid 把那一个人的备注回滚并提示。备注名改完不走推送，读回靠下次通讯录应答里的 contacts[].remark
 #define     FMG_MSG_SET_CONTACT_REMARK      WM_USER + 553			//联系人资料窗→主面板：备注名编辑提交，wParam=对端 userid，lParam=堆 std::string*（用户敲进去的原始文本，UTF-8，未 trim；主面板处理后 delete）。该不该发、发不出去怎么办、失败怎么退回来全由主面板判定——通讯录缓存与 socket 都在它手上
-#define     FMG_MSG_V2_TYPING_NOTIFY        WM_USER + 554			//v2 推送：对端正在 / 停止输入(cmd_typing_notify 1510)，lParam=堆 net::TypingNotify*（UI 处理后 delete）；m_cid 是"正在输入的那个人"的 userid，主面板据它找单聊窗刷新头部提示。这条提示不可靠（服务端不落库不重发），对端掉线时 state=0 收不到，故聊天窗侧另有过期兜底
+//——客户端自动更新：UpdateManager 工作线程 → 升级窗（CBalloonUpdateWindow）——
+//这两条是<u>窗口间直投</u>，不经 CFlamingoClient::ProxyWndProc，但号段仍取在
+//FMG_MSG_FIRST~FMG_MSG_LAST 闸门之内，免得日后有人把它们改成走代理窗时莫名失效。
+//升级窗 → 登录窗：用户关掉了升级窗（点「稍后」或标题栏关闭），登录可以继续了。
+//wParam=0，lParam=0。强制升级时升级窗关不掉，这条消息也就永远不会发出——登录被
+//一直挡在门外，正是强制升级该有的效果。
+#define     FMG_MSG_UPDATE_LOGIN_CONTINUE   WM_USER + 500
+
+//升级窗 → 主窗口：升级包已就绪，请<u>直接退出</u>以便更新器覆盖文件。wParam=0，lParam=0。
+//不能用 WM_CLOSE 代替：那条路会先弹「退出程序还是最小化到托盘？」提示框，用户选了
+//「最小化」的话程序不退出，更新器等 30 秒后放弃，升级白做一场。
+#define     FMG_MSG_EXIT_FOR_UPDATE         WM_USER + 499
+#define     FMG_MSG_UPDATE_PROGRESS         WM_USER + 556			//升级包下载进度，lParam=堆 update::UpdateProgressInfo*（UI 处理后 delete）；wParam=0
+#define     FMG_MSG_UPDATE_RESULT           WM_USER + 557			//一次检查更新 / 下载的最终结果，lParam=堆 update::UpdateTaskResult*（UI 处理后 delete）；wParam=0
+#define     FMG_MSG_V2_SET_STARRED_RESULT   WM_USER + 558			//v2 特别关注设置应答(cmd_set_starred 1216，标记/取消特别关注)，lParam=堆 net::SetStarredResult*（UI 处理后 delete）；失败时主面板据其中回带的 target/starred 回滚乐观更新（口径同 542 的收藏应答）
+//本条是<u>同步查询</u>，只能用 SendMessage、不能 PostMessage —— 调用方要的是返回值，
+//且 lParam 指向调用栈上的变量，异步投递时那块内存早没了。
+#define     FMG_MSG_QUERY_STARRED           WM_USER + 559			//群聊窗→主面板：查某联系人是否被特别关注（弹右键菜单前取文案用），lParam=const int64_t* userid（借用，指向调用栈），返回 1 已关注 / 0 未关注。关注名单只有主面板那一份，群聊窗与气泡都不认识它，故代问
+#define     FMG_MSG_TOGGLE_STARRED          WM_USER + 560			//群聊窗→主面板：请求切换某联系人的特别关注状态（群成员列表 / 气泡的 @片段与发送者头像三处右键菜单点了那一项），wParam=userid，lParam=0，无堆负载。目标状态由主面板按名单现状取反并发 cmd_set_starred，故无需传
+#define     FMG_MSG_V2_TYPING_NOTIFY        WM_USER + 554		//v2 推送：对端正在 / 停止输入(cmd_typing_notify 1510)，lParam=堆 net::TypingNotify*（UI 处理后 delete）；m_cid 是"正在输入的那个人"的 userid，主面板据它找单聊窗刷新头部提示。这条提示不可靠（服务端不落库不重发），对端掉线时 state=0 收不到，故聊天窗侧另有过期兜底
 
 // FMG_MSG_CHANGE_MY_PRESENCE 的 wParam 取值（与 v2 协议 net/Protocol.h 的 presence_type
 // 同值）。单列一份命名常量，是因为 CMainDlg 等编译单元包含 v1 net/Msg.h，无法再 include
@@ -197,6 +231,18 @@ enum MyPresenceValue
     kMyPresenceAway    = 2,   // 离开 —— 暂时离开
     kMyPresenceBusy    = 3,   // 勿扰 —— 忙碌 / 请勿打扰
 };
+
+// FMG_MSG_CHANGE_MY_PRESENCE 的 lParam 取值：本次状态切换是<u>谁</u>发起的。
+//
+// CMainDlg::OnChangeMyPresence 据它维护"当前这个离开是不是自动切过去的"标志：
+// 手动改状态一律把标志清掉，于是"自动离开期间用户自己切成忙碌"之后回到电脑前
+// 不会被擅自切回在线。取值 0 表示手动是刻意的 —— 主面板状态菜单与托盘菜单两个
+// 既有入口传的都是 0，语义天然正确，加这个字段时一行都不用改。
+enum PresenceChangeSource
+{
+    kPresenceChangeManual = 0,   // 用户手动选的（状态菜单 / 托盘菜单）
+    kPresenceChangeAuto   = 1,   // "无操作自动离开"功能自动切的（见 CMainDlg::CheckAutoAway）
+};
 //——v2 聊天图片发送相关，lParam 携带堆上 net:: 结构体指针，由 UI 线程处理后 delete——
 #define     FMG_MSG_V2_IMAGE_SEND_PROGRESS  WM_USER + 470			//v2 发图上传进度，lParam=net::ImageSendProgress*（按 clientmsgid 更新"发送中"气泡进度）
 #define     FMG_MSG_V2_IMAGE_SEND_RESULT    WM_USER + 471			//v2 发图最终结果，lParam=net::ImageSendResult*（ok=失败则把气泡标失败；成功后发送回执仍走 FMG_MSG_V2_SEND_CHATMSG_ACK）
@@ -236,6 +282,14 @@ enum MyPresenceValue
 #define     FMG_MSG_OPEN_HISTORY            WM_USER + 477			//请求主面板打开某会话的历史消息记录窗，wParam 低字节=ctype(1单聊 2群聊)、次低字节=打开后预选的类型胶囊(balloonhistory::HistoryTypeFilter，0=全部 6=Pin；不填即 0)，lParam=堆上 int64_t* cid（处理后 delete）
 #define     FMG_MSG_OPEN_CHANGEPWD          WM_USER + 473			//请求主面板打开修改密码对话框（系统设置「账号安全」页"修改"按钮转发；无参）
 #define     FMG_MSG_REFRESH_SELF_HEADER     WM_USER + 474			//请求主面板按 m_UserInfo 立即刷新本人 Header（昵称/签名/头像）；个人信息对话框乐观保存后转发（无参）
+//这条原先取的是 WM_USER + 497，与上面的 FMG_MSG_CONV_MARK_READ 撞了号，而两者<u>由同一个
+//窗口 CBalloonMainPanel 处理</u>。ATL 消息映射先匹配先赢，靠后的这条处理器永远不会执行：
+//系统设置里改「自动识别链接」开关时，消息落进了 OnConvMarkReadMsg，那个函数把 lParam 当
+//堆上的 long long* 解，而本消息的 lParam 是 0，于是判空提前返回 —— 不崩，但开关对已打开的
+//会话窗静默失效，要重启客户端才生效（登录时 MainDlg 会另读一次配置）。2026-08-12 改到
+//空闲的 498。教训：取新号不能只看"当前最大号"，还要确认这个号没被别人占着 —— 本文件里
+//号段并非按顺序排列，光看末尾很容易挑中一个中间已被用掉的号。
+#define     FMG_MSG_LINK_OPTION_CHANGED     WM_USER + 498			//系统设置里改了"自动识别链接"开关，wParam=1 开 / 0 关。主面板据此更新进程级开关，并让已打开的单聊 / 群聊窗重新测量重绘（无 lParam）
 //——托盘"新消息闪头像"相关（v2）。主面板 → 隐藏的 CMainDlg（持有托盘图标）——
 #define     FMG_MSG_TRAY_FLASH              WM_USER + 475			//有应在托盘闪烁的新消息（非窗口抖动、对端发来、对应聊天窗当前未打开），lParam=堆上 TrayFlashData*（CMainDlg 处理后 delete）
 #define     FMG_MSG_TRAY_CLEAR              WM_USER + 476			//某会话已读：从托盘闪烁集合移除该会话，wParam=ctype（1单聊 2群聊），lParam=堆上 long long* cid（CMainDlg 处理后 delete）
@@ -266,9 +320,10 @@ enum MyPresenceValue
 // 消息（如 539 群公告、541 修改群头像，由某个窗口 PostMessage 给主面板）不经代理窗，
 // 越界也照常工作，很容易让人误以为这个号段没问题。
 //
-// 上界留足余量到 560，免得每加一条消息都要动它一次；闸门放宽本身无风险：switch 里
-// 没有匹配 case 的消息一律走 default → DefWindowProc，与被闸门挡掉的效果相同。
-#define		FMG_MSG_LAST					WM_USER + 560
+// 上界留足余量（原为 560，2026-08-12 特别关注用掉 558-560 后上抬到 580），免得每加
+// 一条消息都要动它一次；闸门放宽本身无风险：switch 里没有匹配 case 的消息一律走
+// default → DefWindowProc，与被闸门挡掉的效果相同。
+#define		FMG_MSG_LAST					WM_USER + 580
 
 //聊天窗 → 主面板 的"会话冒泡"载荷（FMG_MSG_CONV_SEND_BUMP 的 lParam，堆分配，
 //主面板处理后 delete）。承载本端刚发出的一条消息，用于刷新会话列表的最后预览。

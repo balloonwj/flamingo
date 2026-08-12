@@ -85,6 +85,51 @@ public:
     void updateCachedMemberAvatar(int64_t userId, int32_t facetype, const std::string& customface);
 
     /**
+     *  就地更新组织架构缓存里某用户在其<u>主部门</u>的职务字段。管理控制台改员工资料
+     *  （user/update.do）时，职务是直写 t_department_member 的，不经本类的写方法，
+     *  缓存不会自行重载；不同步这一份，客户端收到组织架构变更通知后重拉通讯录
+     *  （数据源正是 getOrgStructure）拿到的仍是旧职务。仅改内存缓存，不写库
+     *  （库已由调用方 EmployeeManager::updateEmployee 更新）。
+     *
+     *  只改主部门（isprimary=1）那条记录，与 updateEmployee 的 SQL 条件保持一致：
+     *  职务是"这个人在主部门里担任什么"，兼属部门的职务由部门成员管理另行维护，
+     *  不能被这里一并覆盖。
+     *  @param userId   被改职务的用户ID。
+     *  @param position 新职务（UTF-8）；允许为空串，表示清空职务。
+     */
+    void updateCachedMemberPosition(int64_t userId, const std::string& position);
+
+    /**
+     *  把某用户从组织架构缓存的<u>所有</u>部门成员列表里就地移除。管理控制台删除员工
+     *  （user/delete.do）时，其部门成员记录是被 EmployeeManager 直接 DELETE 掉的、
+     *  不经本类的写方法，缓存不会自行重载；不同步这一份，被删的人会继续留在
+     *  tree.do 与客户端通讯录里，看上去就像"删不掉"。更糟的是此时 UserManager
+     *  那边已经把他的资料删干净了，客户端在部门里看得见这个 userid、却查不到对应
+     *  资料，只能回退显示成"用户<userid>"。仅改内存缓存，不写库（库已由调用方删除）。
+     *
+     *  与 updateCachedMemberPosition 不同，这里<u>不</u>限定主部门：人都删了，兼属的
+     *  部门也不该再留着他。
+     *  @param userId 被删除的用户ID。
+     */
+    void removeCachedMember(int64_t userId);
+
+    /**
+     *  把某企业的<u>整棵组织架构</u>从缓存里就地移除，并清掉该企业名下的用户→企业
+     *  映射。管理控制台删除企业（enterprise/delete.do）时，其部门与部门成员记录
+     *  是被 EnterpriseManager 直接批量 DELETE 的、不经本类的写方法，两份缓存都不会
+     *  自行刷新；不同步的话，被删企业的部门树会继续留在 tree.do 与在线客户端的
+     *  通讯录里，症状与删单个员工时"删不掉"一样，只是范围扩大到整个企业。
+     *
+     *  注意删企业只解除员工的企业归属（f_enterprise_id 清零）、并不删员工账号，
+     *  所以这里要把 m_userEnterpriseCache 里指向该企业的条目一并清掉，否则
+     *  getUserEnterpriseId 会继续返回这个已经不存在的企业ID。
+     *
+     *  仅改内存缓存，不写库（库已由调用方 EnterpriseManager::deleteEnterprise 处理）。
+     *  @param enterpriseId 被删除的企业ID。
+     */
+    void removeCachedEnterprise(int64_t enterpriseId);
+
+    /**
      *  查询某用户所属的企业ID。供处理器把会话用户解析为企业维度（典型：在线状态变更时
      *  按企业广播，须对每个在线会话查其企业，频次较高）。
      *

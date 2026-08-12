@@ -315,6 +315,28 @@ BOOL CLoginAccountList::Del(int nIndex)
 	if (lpAccount != NULL)
 		delete lpAccount;
 	m_arrLoginAccount.erase(m_arrLoginAccount.begin()+nIndex);
+
+	// 修正"最后登录账号"。m_nLastLoginUser 存的是<u>下标</u>而不是账号名，
+	// 删掉一项之后它前面的项整体前移，不跟着调整就会指向另一个人 ——
+	// 表现为下次打开登录窗，自动填的是刚才没删的那个别的账号。
+	if (m_nLastLoginUser > nIndex)
+	{
+		// 被删的排在它前面：整体前移一位。
+		--m_nLastLoginUser;
+	}
+	else if (m_nLastLoginUser == nIndex)
+	{
+		// 被删的正是"上次登录"的那个：退回第一个账号。
+		m_nLastLoginUser = 0;
+	}
+
+	// 兜底夹取：删到列表变短（含删空）时，下标不能越界。列表空了取 0 也无妨，
+	// GetAccountInfo 会因越界返回 NULL，调用方本就要判空。
+	if (m_nLastLoginUser < 0 || m_nLastLoginUser >= (int)m_arrLoginAccount.size())
+	{
+		m_nLastLoginUser = 0;
+	}
+
 	return TRUE;
 }
 

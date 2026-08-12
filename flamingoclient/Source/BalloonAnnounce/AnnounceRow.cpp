@@ -21,6 +21,8 @@ static const COLORREF kRowSelectedBg = RGB(0xFD, 0xF0, 0xE8);
 static const COLORREF kRowAccentBar  = RGB(0xF2, 0x6B, 0x3E);
 //未读小圆点（红），与各处未读角标同色。
 static const COLORREF kRowUnreadDot  = RGB(0xE5, 0x3E, 0x3E);
+//行底部那条分隔线的颜色，与窗内其它分隔线（AnnounceBoxLayout 的 kColorSepLine）同色。
+static const COLORREF kRowBottomLine = RGB(0xEC, 0xEA, 0xE6);
 
 // ---- 级别色：决定未读圆点与左侧竖条的色调 ----
 //普通公告不做强调，用中性灰；提醒用琥珀；警告用红。取值对应 announcement_severity。
@@ -33,6 +35,7 @@ static const int kAccentBarW   = 3;    // 选中行左侧强调竖条宽
 static const int kUnreadDotD   = 7;    // 未读圆点直径
 static const int kUnreadDotX   = 6;    // 未读圆点圆心距行左边的距离（预留给它的槽位中点）
 static const int kSeverityBarW = 3;    // 未选中行的级别色条宽（仅"提醒/警告"两级才画）
+static const int kBottomLineH  = 1;    // 行底部分隔线的粗细
 
 //按级别取色。越界值按"普通"处理。
 static COLORREF SeverityColor(int severity)
@@ -54,6 +57,7 @@ AnnounceRow::AnnounceRow()
     , m_selected(false)
     , m_unread(false)
     , m_severity(0)
+    , m_showBottomLine(false)
 {
 }
 
@@ -92,7 +96,20 @@ void AnnounceRow::OnPaint(HDC hdc, const RECT& rcDirty)
         ::DeleteObject(brush);
     }
 
-    // 2. 左侧竖条。选中行画主题橙的强调条；未选中但级别为"提醒 / 警告"的画级别色条，
+    // 2. 行底部的分隔线。它由行自己画、而不是在列表里插一个独立的分隔线控件：
+    //    独立控件会成为滚轮的"死线"—— DuiHost 只把滚轮投给最深命中控件、返回 false
+    //    就丢掉（不向上冒泡），鼠标恰好停在那 1 像素上时整个列表滚不动，表现为滚轮失灵。
+    //    并进行内画就没有夹缝了。最后一行不画（调用方置 false），免得列表末尾多一道悬空的线。
+    if (m_showBottomLine)
+    {
+        RECT line = rc;
+        line.top = line.bottom - kBottomLineH;
+        HBRUSH brush = ::CreateSolidBrush(kRowBottomLine);
+        ::FillRect(hdc, &line, brush);
+        ::DeleteObject(brush);
+    }
+
+    // 3. 左侧竖条。选中行画主题橙的强调条；未选中但级别为"提醒 / 警告"的画级别色条，
     //    让重要公告在一列里自己跳出来。普通级别不画，避免整列都是竖条反而没有重点。
     if (m_selected)
     {
@@ -111,7 +128,7 @@ void AnnounceRow::OnPaint(HDC hdc, const RECT& rcDirty)
         ::DeleteObject(brush);
     }
 
-    // 3. 未读圆点，画在行左侧预留的槽位里（布局侧已用左内边距把文字让开）。
+    // 4. 未读圆点，画在行左侧预留的槽位里（布局侧已用左内边距把文字让开）。
     //    用 GDI+ 画圆并开抗锯齿 —— GDI 的 Ellipse 在这个尺寸上边缘毛刺明显。
     if (m_unread)
     {
@@ -127,7 +144,7 @@ void AnnounceRow::OnPaint(HDC hdc, const RECT& rcDirty)
         g.FillEllipse(&brush, cx - r, cy - r, (Gdiplus::REAL)kUnreadDotD, (Gdiplus::REAL)kUnreadDotD);
     }
 
-    // 4. 底色与装饰画完再交基类画子控件（标题、发布者·时间两行 Label）。
+    // 5. 底色与装饰画完再交基类画子控件（标题、发布者·时间两行 Label）。
     //    顺序不能反：反过来底色会把刚画好的文字盖掉。
     balloonwjui::DuiHBox::OnPaint(hdc, rcDirty);
 }
@@ -141,6 +158,12 @@ bool AnnounceRow::OnMouseWheel(POINT pt, short zDelta, UINT mkFlags)
 bool AnnounceWheelLabel::OnMouseWheel(POINT pt, short zDelta, UINT mkFlags)
 {
     //DuiLabel 自己不消化滚轮，直接上抛给祖先里的滚动视口。
+    return balloonmain::ForwardWheelToScrollView(this, pt, zDelta, mkFlags);
+}
+
+bool AnnounceWheelContentView::OnMouseWheel(POINT pt, short zDelta, UINT mkFlags)
+{
+    //HistoryContentView 自己不消化滚轮，直接上抛给祖先里的滚动视口。
     return balloonmain::ForwardWheelToScrollView(this, pt, zDelta, mkFlags);
 }
 

@@ -90,7 +90,7 @@ net::ReplyQuote BuildQuoteFromMessage(const ChatMessage& src,
 CString BuildQuoteDigest(const ChatMessage& src);
 
 /**
- *  拼出「引用回复」要塞进输入框的那段文本（QQ 式：分隔线 + 头部 + 内容）。
+ *  拼出「引用回复」要塞进输入框的那段文本（分隔线 + 头部 + 内容）。
  *
  *  形如：
  *      ------------------ 原消息 ------------------

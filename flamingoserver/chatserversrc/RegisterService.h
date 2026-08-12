@@ -50,7 +50,7 @@ struct RegisterEnterprise
 struct RegisterOutcome
 {
     RegisterOutcome()
-        : userid(0), enterpriseId(0), departmentAttached(false)
+        : userid(0), enterpriseId(0), rootDeptId(0), departmentAttached(false)
     {
     }
 
@@ -58,6 +58,10 @@ struct RegisterOutcome
     std::string username;            //服务端自动生成的登录账号（形如 "EMP1024"），需回传给用户
     int64_t     enterpriseId;        //新账号所属企业的业务ID
     std::string enterpriseName;      //企业全称，取自库中原文，供客户端完成页回显
+    int64_t     rootDeptId;          //新人被挂进的公司根部门ID；0 表示本次注册没走到挂部门这一步。
+                                     //会话层拿它作组织架构变更通知的"受影响部门"参数（见
+                                     //ChatServer::broadcastOrgStructureChanged），好让同企业在线
+                                     //客户端知道该刷哪个部门。
     bool        departmentAttached;  //是否成功挂进公司根部门；false 表示账号建出来了
                                      //但没进组织架构，登录后通讯录为空，需运维补挂
 };
@@ -115,7 +119,8 @@ public:
      *  执行一次注册。
      *  @param ds  数据访问实现，引用语义，所有权归调用方，须在本调用期间保持有效。
      *  @param req 已解析的注册请求；其 company 须已去掉首尾空白（parseRegisterRequest 会做）。
-     *  @param out [出参] 仅在返回 0 时有效，填入自动生成的登录账号与企业归属。
+     *  @param out [出参] 仅在返回 0 时有效，填入自动生成的登录账号、企业归属与
+     *             公司根部门ID。
      *  @return 0 表示注册成功；否则为 Protocol.h 中 enum error_code 的取值，
      *          可能是 error_code_register_fail / error_code_already_registered /
      *          error_code_enterprise_not_exist / error_code_enterprise_disabled /

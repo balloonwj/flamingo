@@ -250,6 +250,11 @@ public:
      */
     uint32_t RequestDownload(const std::string& fileid, int owner = net::transfer_owner_image);
 
+    //发 cmd_check_update(1905)，返回本次请求的 seq；未连上返回 0。
+    //  body：请求包体，由 net::UpdateProtocolClient::buildCheckUpdateRequest 组。
+    //应答异步回到 HandleV2Frame，再按 seq 转交 update::UpdateManager。
+    uint32_t SendCheckUpdate(const std::string& body);
+
     /**
      *  发送一条图片消息（v2，cmd_send_message=1503，msgtype=2）。线程安全。图片须
      *  已上传到 imgserver（先经 cmd_request_upload + cmd_file_upload 拿到 fileid）。
@@ -403,6 +408,18 @@ public:
      *  @param favorite  true=加入收藏，false=移出收藏
      */
     void    SendSetFavorite(int ctype, int64_t cid, bool favorite);
+
+    /**
+     *  发送"特别关注 / 取消特别关注"请求（v2，cmd_set_starred=1216）。线程安全，可在
+     *  UI 线程调用。与收藏不同，特别关注<u>只能是人</u>（群没有上下线，关注它没有意义），
+     *  故没有 ctype 参数。应答经 cmd_set_starred 异步回投到 UI
+     *  （FMG_MSG_V2_SET_STARRED_RESULT，lParam 为堆上的 net::SetStarredResult*），
+     *  主面板据其中原样回带的 target/starred 判断是哪一条请求的结果，失败时回滚
+     *  对应的乐观更新。
+     *  @param target   被关注的联系人 userid（>0，须与本人同企业、且不能是自己）
+     *  @param starred  true=标记特别关注，false=取消
+     */
+    void    SendSetStarred(int64_t target, bool starred);
 
     /**
      *  发送"设置好友备注名"请求（v2，cmd_set_friend_remark=1209）。线程安全，可在

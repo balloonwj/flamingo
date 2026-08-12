@@ -23,6 +23,7 @@
 #include "../../balloonui/balloonui/DuiControl.h"
 #include "ChatMockData.h"
 #include "ChatTextSelection.h"   // SelLayout（成员需完整类型）
+#include "ChatLinkDetect.h"      // LinkSpan（成员需完整类型）
 #include <string>
 
 //图片气泡解码用的 GDI+ 位图前置声明，避免在头文件引入 <gdiplus.h>。
@@ -122,6 +123,15 @@ public:
 
     // 只读取回本行承载的消息（右键菜单复制 / 引用等需要）。
     const ChatMessage& GetMessage() const { return m_msg; }
+
+    /**
+     *  让折行测量与渲染缓存作废，使下一次排版重新测量本行。
+     *
+     *  用于"消息内容没变、但渲染口径变了"的场合 —— 目前只有"自动识别链接"开关被
+     *  改动时用得上：链接片段是在 Measure 里算的，不重新测量就还是旧的那一份。
+     *  与 SetMessage 不同，本方法<u>不</u>动消息内容与选区。
+     */
+    void InvalidateMeasureCache();
 
     /**
      *  回填服务器分配的消息 ID 与消息时间（本端发出、服务器回执到达后调用）。
@@ -258,6 +268,25 @@ public:
     bool OnSetCursor(POINT pt) override;
 
 private:
+    /**
+     *  落点命中了第几条超链接。
+     *
+     *  命中测试在"相对文本区原点"的坐标系里做（与 @提醒 的 TryPopupMentionMenu
+     *  同一套），故非文字气泡、尚未测量、或本条没有链接时一律返回 -1。
+     *    pt：落点（宿主客户区坐标）。
+     *  @return m_linksFlat 的下标；没命中返回 -1。
+     */
+    int LinkAtPoint(POINT pt) const;
+
+    /**
+     *  请宿主聊天窗打开第 index 条链接（投 WM_CHAT_OPEN_LINK，URL 用堆上的
+     *  std::wstring 传递，宿主处理后 delete）。气泡自己不碰 ShellExecute ——
+     *  协议白名单校验只该有一处，放在宿主窗里。
+     *    index：m_linksFlat 的下标；越界时什么都不做。
+     */
+    void OpenLinkByIndex(int index);
+
+
     // 本行是否是"可被选择 / 可弹菜单的真实消息"（时间分隔与撤回提示
     // 行返回 false）。
     bool IsRealMessage() const;
@@ -296,6 +325,34 @@ private:
     // @return 命中并已处理（无论用户是否选了菜单项）返回 true；没命中返回 false，
     //         调用方据此继续弹气泡自己的菜单。
     bool TryPopupMentionMenu(const POINT& pt, HWND hwnd);
+
+    // 本行发送者头像的矩形（宿主客户区坐标）。几何与 RenderContent 里画头像那段
+    // 逐字一致：自己发的靠右、别人发的靠左，边长 kAvatarSize。
+    // 时间分隔 / 撤回提示行没有头像，此时返回空矩形。
+    RECT AvatarRectInHost() const;
+
+    // 若落点命中本行的发送者头像，则弹出该发送者的右键菜单（与 @某人 片段、群成员
+    // 侧栏共用同一套模型与分发消息）并把选中项投给宿主聊天窗。
+    //
+    // <u>只在群聊里生效</u>：单聊窗上下就两个人，对着头像弹"与 TA 聊天 / @TA"没有意义。
+    // 判据是本行带不带发送者名（showSender 那套口径，只有群聊才填 senderName）。
+    // 自己发的那条也不弹 —— 与 @ 到自己时只留「查看资料」是同一个道理，但这里连
+    // 菜单都不必出：右键点自己的头像本就不是个有意义的动作。
+    //   pt：   落点（宿主客户区坐标）。
+    //   hwnd： 宿主窗口句柄，菜单的属主、也是投递目标。
+    // @return 命中并已处理返回 true；没命中返回 false，调用方据此继续往下走。
+    bool TryPopupAvatarMenu(const POINT& pt, HWND hwnd);
+
+    // 建出成员操作菜单、弹出、把选中项投给宿主聊天窗。@某人 片段与发送者头像两个
+    // 入口共用它 —— 两处菜单本来就该逐字一样，各建一份迟早会走样。
+    //   uid：        目标成员 userid。
+    //   displayName：目标成员显示名（不含 '@'），复制昵称 / 再 @ 一次要用。
+    //   isSelf：     目标是不是本人（决定菜单只留「查看资料」）。
+    //   pt：         落点（宿主客户区坐标）。
+    //   hwnd：       宿主窗口句柄，菜单的属主、也是投递目标。
+    // @return 菜单弹出过（无论用户是否选了项）返回 true；模型为空、建菜单失败返回 false。
+    bool PopupMemberMenu(long long uid, const std::wstring& displayName, bool isSelf,
+                         const POINT& pt, HWND hwnd);
 
     // 取落点 pt（宿主客户区坐标）命中的文件操作链接下标（0~2）；未命中返回 -1。
     // 供悬停高亮（OnMouseMove）、手型光标（OnSetCursor）、点击（OnLButtonDown）共用。
@@ -377,6 +434,14 @@ private:
     // m_msg.ats 本身记的是<u>发送正文</u>下标，正文里有表情或转义斜杠时两者不等，
     // 换算见 balloonchat::BuildFlatIndexMap。随 Measure 一起重建。
     std::vector<RenderSpan> m_atsFlat;
+
+    // 本条正文里识别出的超链接，口径同样是<u>扁平文本</u>下标，与 m_selLayout 配套。
+    // Measure() 里与选区模型一起产出；识别开关关掉时恒为空，于是渲染 / 命中 / 菜单
+    // 三处都自然退化成"没有链接"，不需要各自再判一次开关。
+    std::vector<LinkSpan> m_linksFlat;
+    // 左键按下时命中的链接下标（-1 = 没按在链接上）。抬起时要求落在同一条链接上
+    // 才算点击 —— 否则"从链接上按下、拖出去选中一段文字"会被误当成点击。
+    int m_linkPressIdx;
     int          m_selAnchor;      // 选区锚点字符下标；-1 = 无选区
     int          m_selCaret;       // 选区当前端字符下标；-1 = 无选区
     bool         m_selDragging;    // 是否正在拖拽选择（鼠标按下未抬起）

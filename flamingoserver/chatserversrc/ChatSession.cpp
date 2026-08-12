@@ -23,8 +23,12 @@
 #include "ContactsProtocol.h"
 #include "FavoriteProtocol.h"
 #include "FavoriteManager.h"
+#include "StarredProtocol.h"
+#include "StarredManager.h"
 //联系人备注名（cmd_set_friend_remark 落库 / cmd_get_contacts 读出）
 #include "ContactRemarkManager.h"
+#include "UpdateProtocol.h"
+#include "ClientVersionManager.h"
 #include "ProfileProtocol.h"
 #include "RegisterProtocol.h"
 #include "RegisterService.h"
@@ -66,8 +70,10 @@ static const int32_t kSystemMessageSenderId = 0;
 constexpr int MAX_NO_PACKAGE_INTERVAL = 30;
 //掉线检测定时器触发周期（微秒）：每 15 秒检测一次
 constexpr int HEARTBEAT_CHECK_INTERVAL_US = 15000000;
-//服务器要求的客户端最低版本号；低于此版本拒绝登录
-constexpr const char* MIN_CLIENT_VERSION = "3.0.0";
+//客户端最低版本号的兜底值；低于此版本拒绝登录。
+//正常情况下最低版本取自版本表（t_client_version 里该平台最新发布记录的 f_min_version），
+//本常量只在"该平台还没发过版"或"库不可用"时顶上，行为与接入版本表之前保持一致。
+constexpr const char* MIN_CLIENT_VERSION_FALLBACK = "3.0.0";
 //cmd_search 单次最多返回的结果条数
 constexpr int SEARCH_MAX_RESULTS = 50;
 //cmd_set_blacklist 的 action 值：1=加入黑名单 0=移出黑名单
@@ -214,6 +220,13 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
         onResetPassword(body, conn);
         break;
 
+    //检查更新必须在登录前也能用：版本过低的客户端会被 onLogin 以
+    //error_code_version_too_old 拒绝，如果检查更新还要求先登录，它就既登不上
+    //也查不到升级包，只能靠用户自己去官网下载。故与注册 / 找回密码一样放行。
+    case cmd_check_update:
+        onCheckUpdate(body, conn);
+        break;
+
     default:
         //登录前收到除登录 / 心跳外的任何 cmd，视为非法
         if (!m_isLogin)
@@ -275,6 +288,12 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
 
         case cmd_set_blacklist:
             onSetBlacklist(body, conn);
+            break;
+
+        //加入 / 取消对某个联系人的「特别关注」。服务端只保管这份名单，
+        //上下线推送不因它改变（弹不弹提示由客户端拿名单自己判断）
+        case cmd_set_starred:
+            onSetStarred(body, conn);
             break;
 
         case cmd_set_favorite:
@@ -521,11 +540,23 @@ void ChatSession::onLogin(const std::string& body, const std::shared_ptr<TcpConn
         return;
     }
 
-    //1. 客户端版本校验：低于最低版本要求则拒绝并提示升级
-    if (!LoginProtocol::isVersionAtLeast(req.clientversion, MIN_CLIENT_VERSION))
+    //1. 客户端版本校验：低于最低版本要求则拒绝并提示升级。
+    //最低版本以版本表里该平台最新发布记录的 f_min_version 为准，这样"拦住谁登录"与
+    //"检查更新时算不算强制升级"由同一份配置驱动，不会两边打架；表里没有可用记录时
+    //回落到编译期兜底常量。
+    std::string minClientVersion = MIN_CLIENT_VERSION_FALLBACK;
+    ClientVersionInfo latestForLogin;
+    if (Singleton<ClientVersionManager>::Instance().getLatestVersion(req.platform, latestForLogin)
+        && !latestForLogin.minVersion.empty())
     {
-        LOGI("client version too old: %s, client: %s",
-             req.clientversion.c_str(), conn->peerAddress().toIpPort().c_str());
+        minClientVersion = latestForLogin.minVersion;
+    }
+
+    if (!LoginProtocol::isVersionAtLeast(req.clientversion, minClientVersion))
+    {
+        LOGI("client version too old: %s, required at least: %s, client: %s",
+             req.clientversion.c_str(), minClientVersion.c_str(),
+             conn->peerAddress().toIpPort().c_str());
         send(cmd_login, m_seq,
              LoginProtocol::buildLoginFailResponse(error_code_version_too_old, "client version too old"));
         return;
@@ -558,7 +589,53 @@ void ChatSession::onLogin(const std::string& body, const std::shared_ptr<TcpConn
         return;
     }
 
-    //5. 同类型设备顶号：踢掉同 userid 且同 clienttype 的旧会话
+    //5. 企业可用性校验：放在口令校验【之后】，避免未通过认证的人凭错误码探测
+    //   某个账号所属企业的经营状态。企业版里每个员工都归属某个企业，故这里
+    //   两种不可用情形都要挡：
+    //     · 企业归属为 0 —— 企业已被平台管理员删除（deleteEnterprise 保留员工
+    //       账号、只把 f_enterprise_id 清零），此时该账号已无组织可归，按
+    //       「企业不存在」回绝；
+    //     · 企业存在但状态不是「活跃」—— 待审核或已停用，按「企业不可用」回绝。
+    //   与之配套，停用 / 删除企业时会把该企业在线会话立即踢下线（见
+    //   ChatServer::kickEnterpriseSessions），两者合起来才是完整的「停服」。
+    {
+        const int64_t loginEntId =
+            Singleton<DepartmentManager>::Instance().getUserEnterpriseId(cachedUser.userid);
+        if (loginEntId == 0)
+        {
+            LOGI("login rejected: enterprise deleted, userid: %d, account: %s",
+                 cachedUser.userid, req.account.c_str());
+            send(cmd_login, m_seq,
+                 LoginProtocol::buildLoginFailResponse(error_code_enterprise_not_exist,
+                                                       "enterprise not exist"));
+            return;
+        }
+
+        EnterpriseInfo entInfo;
+        if (!Singleton<EnterpriseManager>::Instance().getEnterprise(loginEntId, entInfo))
+        {
+            //归属ID 有值却查不到企业：库里数据不一致（企业行没了但用户没被清）。
+            //按企业不存在处理，并记 LOGE 以便运维发现这种脏数据。
+            LOGE("login rejected: enterprise %lld not found, userid: %d",
+                 (long long)loginEntId, cachedUser.userid);
+            send(cmd_login, m_seq,
+                 LoginProtocol::buildLoginFailResponse(error_code_enterprise_not_exist,
+                                                       "enterprise not exist"));
+            return;
+        }
+
+        if (entInfo.status != kEnterpriseStatusActive)
+        {
+            LOGI("login rejected: enterprise %lld not active (status: %d), userid: %d",
+                 (long long)loginEntId, entInfo.status, cachedUser.userid);
+            send(cmd_login, m_seq,
+                 LoginProtocol::buildLoginFailResponse(error_code_enterprise_disabled,
+                                                       "enterprise disabled"));
+            return;
+        }
+    }
+
+    //6. 同类型设备顶号：踢掉同 userid 且同 clienttype 的旧会话
     ChatServer& server = Singleton<ChatServer>::Instance();
     std::shared_ptr<ChatSession> oldSession;
     server.getSessionByUserIdAndClientType(oldSession, cachedUser.userid, req.clienttype);
@@ -574,7 +651,7 @@ void ChatSession::onLogin(const std::string& body, const std::shared_ptr<TcpConn
         LOGI("kick out old session, userid: %d, clienttype: %d", cachedUser.userid, req.clienttype);
     }
 
-    //6. 记录本会话的登录用户信息
+    //7. 记录本会话的登录用户信息
     m_userinfo.userid = cachedUser.userid;
     m_userinfo.username = cachedUser.username;
     m_userinfo.nickname = cachedUser.nickname;
@@ -583,7 +660,7 @@ void ChatSession::onLogin(const std::string& body, const std::shared_ptr<TcpConn
     m_userinfo.status = req.presence;
     m_isLogin = true;
 
-    //7. 组装并下发成功应答
+    //8. 组装并下发成功应答
     LoginProfile profile;
     profile.usertype = cachedUser.usertype;
     profile.username = cachedUser.username;
@@ -842,6 +919,17 @@ void ChatSession::onRegister(const std::string& body, const std::shared_ptr<TcpC
         LOGE("register: user created but not attached to root department, userid: %lld, enterpriseid: %lld",
              (long long)outcome.userid, (long long)outcome.enterpriseId);
     }
+    else
+    {
+        //新人已进组织架构，通知该企业已在线的同事刷新通讯录。少了这一步，那些人的
+        //通讯录还停在各自登录那一刻的快照上：看不到这位新同事，收到他的消息时也只能
+        //显示成"用户<userid>"这种兜底名字，直到自己重新登录一次才好。
+        //与管理台建员工那条路径（HttpSession::onAdminUserCreate）保持一致。
+        //注意本连接此刻尚未登录（getUserId() 为 0），broadcastOrgStructureChanged
+        //会把它跳过，所以刚注册的这个客户端不会收到自己触发的这条通知。
+        Singleton<ChatServer>::Instance().broadcastOrgStructureChanged(
+            outcome.enterpriseId, dept::org_change_member, outcome.rootDeptId);
+    }
 
     LOGI("register ok, userid: %lld, username: %s, enterpriseid: %lld, enterprise: %s, client: %s",
          (long long)outcome.userid, outcome.username.c_str(), (long long)outcome.enterpriseId,
@@ -1037,6 +1125,10 @@ void ChatSession::onGetContacts(const std::shared_ptr<TcpConnection>& conn)
     //   拉不到时按"没有收藏"降级 —— 收藏只是通讯录顶上的一个分区，不该因为它
     //   查询失败就让整棵部门树也发不出去。serviceaccounts 留待后续，仍为空数组。
     Singleton<FavoriteManager>::Instance().getFavorites(m_userinfo.userid, data.favorites);
+
+    //6. starred（特别关注）：只装联系人 userid，按标记时间倒序。同样按"拉不到就当
+    //   没关注任何人"降级 —— 名单拉不到只是少一层上下线提醒，不该连通讯录也发不出去。
+    Singleton<StarredManager>::Instance().getStarred(m_userinfo.userid, data.starred);
 
     std::string resp = ContactsProtocol::buildContactsResponse(data);
     send(cmd_get_contacts, m_seq, resp);
@@ -1468,6 +1560,95 @@ void ChatSession::onSetFriendRemark(const std::string& body, const std::shared_p
          FriendProtocol::buildSetFriendRemarkResponse(0, "ok", req.userid));
     LOGI("set contact remark ok, userid: %d, target: %d, remark: %s",
          m_userinfo.userid, targetId, req.remark.c_str());
+}
+
+void ChatSession::onSetStarred(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    SetStarredRequest req;
+    if (!StarredProtocol::parseSetStarredRequest(body, req))
+    {
+        //parseSetStarredRequest 已经把格式与取值域全查过了（target 须为正、
+        //starred 只认 0/1），失败一律回 bad_request，这里不必再分类。
+        send(cmd_set_starred, m_seq,
+             StarredProtocol::buildSetStarredResponse(error_code_bad_request, "bad request",
+                                                      req.target, req.starred));
+        return;
+    }
+
+    //取消关注不做归属校验：对方离职、被移出企业之后，用户更需要能把这条死行清掉。
+    //只有"加入关注"才要求对方确实是够得着的同事。
+    if (req.starred == 1)
+    {
+        const int32_t targetId = static_cast<int32_t>(req.target);
+
+        //不能关注自己 —— 自己的上下线自己最清楚，给自己弹提示没有意义。
+        if (targetId == m_userinfo.userid)
+        {
+            send(cmd_set_starred, m_seq,
+                 StarredProtocol::buildSetStarredResponse(error_code_bad_request,
+                                                          "cannot star yourself",
+                                                          req.target, req.starred));
+            return;
+        }
+
+        //目标用户须存在
+        User target;
+        target.userid = 0;
+        Singleton<UserManager>::Instance().getUserInfoByUserId(targetId, target);
+        if (target.userid == 0)
+        {
+            send(cmd_set_starred, m_seq,
+                 StarredProtocol::buildSetStarredResponse(error_code_not_found,
+                                                          "target user not found",
+                                                          req.target, req.starred));
+            return;
+        }
+
+        //够得着的判定：同属一个企业即可，与收藏对联系人的校验同口径。
+        //跨企业的人在通讯录里根本看不见，他的上下线推送也收不到（上下线按企业广播），
+        //标了也永远不会弹提示，故这里直接拒绝。
+        DepartmentManager& deptMgr = Singleton<DepartmentManager>::Instance();
+        const int64_t myEnterpriseId     = deptMgr.getUserEnterpriseId(m_userinfo.userid);
+        const int64_t targetEnterpriseId = deptMgr.getUserEnterpriseId(targetId);
+        const bool sameEnterprise = (myEnterpriseId != 0 && myEnterpriseId == targetEnterpriseId);
+
+        if (!sameEnterprise)
+        {
+            send(cmd_set_starred, m_seq,
+                 StarredProtocol::buildSetStarredResponse(error_code_not_friend,
+                                                          "not a colleague",
+                                                          req.target, req.starred));
+            return;
+        }
+    }
+
+    //一秒合多少毫秒。标记时间与本文件其它落库时间戳同一口径。
+    const int64_t kMillisPerSecond = 1000;
+    const int64_t nowMs = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+
+    int errorCode = error_code_ok;
+    if (!Singleton<StarredManager>::Instance().setStarred(
+            m_userinfo.userid, req.target, req.starred, nowMs, errorCode))
+    {
+        const char* msg = "set starred failed";
+        if (errorCode == error_code_starred_limit)
+            msg = "starred count limit reached";
+
+        LOGI("set starred failed, userid: %d, target: %lld, starred: %d, code: %d",
+             m_userinfo.userid, (long long)req.target, req.starred, errorCode);
+
+        send(cmd_set_starred, m_seq,
+             StarredProtocol::buildSetStarredResponse(errorCode, msg,
+                                                      req.target, req.starred));
+        return;
+    }
+
+    send(cmd_set_starred, m_seq,
+         StarredProtocol::buildSetStarredResponse(error_code_ok, "ok",
+                                                  req.target, req.starred));
+
+    LOGI("set starred ok, userid: %d, target: %lld, starred: %d",
+         m_userinfo.userid, (long long)req.target, req.starred);
 }
 
 void ChatSession::onSetFavorite(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -4989,6 +5170,77 @@ void ChatSession::onRequestDownload(const std::string& body, const std::shared_p
                                                     rec.size, host, port, tls));
     LOGI("request download ok, userid: %d, fileid: %lld, md5: %s",
          m_userinfo.userid, (long long)req.fileid, rec.md5.c_str());
+}
+
+void ChatSession::onCheckUpdate(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    CheckUpdateRequest req;
+    if (!UpdateProtocol::parseCheckUpdateRequest(body, req))
+    {
+        LOGE("check update bad request, client: %s", conn->peerAddress().toIpPort().c_str());
+        send(cmd_check_update, m_seq,
+             UpdateProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        return;
+    }
+
+    //查该平台当前已发布的最新版本。没发过版与库不可用都按"无更新"回复：
+    //调用方可能正因版本过低而登不上，这一步再报错就把它彻底堵死了。
+    ClientVersionInfo info;
+    if (!Singleton<ClientVersionManager>::Instance().getLatestVersion(req.platform, info))
+    {
+        send(cmd_check_update, m_seq, UpdateProtocol::buildNoUpdateResponse(std::string()));
+        return;
+    }
+
+    //客户端版本已不低于最新发布版本即为无更新。高于最新版本的内部测试包同样走这里，
+    //只回"已是最新"，不提示降级。
+    if (LoginProtocol::isVersionAtLeast(req.version, info.version))
+    {
+        send(cmd_check_update, m_seq, UpdateProtocol::buildNoUpdateResponse(info.version));
+        return;
+    }
+
+    //记录里没有可用的升级包（MD5 或大小缺失）时不下发：客户端拿到也校验不过，
+    //不如让它维持现状，等发布侧把记录补齐。
+    if (info.packageMd5.empty() || info.packageSize <= 0)
+    {
+        LOGE("check update: published version %s has no usable package, platform: %d",
+             info.version.c_str(), (int)req.platform);
+        send(cmd_check_update, m_seq, UpdateProtocol::buildNoUpdateResponse(info.version));
+        return;
+    }
+
+    //强制升级：客户端低于最低可登录版本，登录也会被拒，故不给"稍后再说"的出口
+    //强制升级有两条独立来源，任一命中即为强制：
+    //  ① 发布时在控制台勾了"强制升级"（f_forced）—— 发布人主观认定这个版本必须装；
+    //  ② 客户端版本低于最低可登录版本 —— 它连登录都会被拒，不强制也没有别的出路。
+    const bool forced = (info.forced != 0)
+                     || !LoginProtocol::isVersionAtLeast(req.version, info.minVersion);
+
+    //直接签发下载令牌，省掉一次 cmd_request_download，也让未登录的客户端能下载。
+    //未登录时 m_userinfo.userid 为 0，令牌里的 uid 随之为 0——这是允许的：升级包对所有人
+    //是同一份公开内容，防伪由 HMAC 签名与过期时间保证，不依赖调用方身份。
+    FileStoreManager& fileMgr = Singleton<FileStoreManager>::Instance();
+    int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
+    FileTokenPayload payload;
+    payload.type   = FileToken::token_type_download;
+    payload.scene  = file_scene_update;
+    payload.md5    = info.packageMd5;
+    payload.size   = info.packageSize;
+    payload.uid    = m_userinfo.userid;
+    payload.expire = now + FILE_TOKEN_TTL_MS;
+    std::string token = FileToken::sign(payload, fileMgr.getTokenKey());
+
+    std::string host;
+    int port = 0;
+    bool tls = false;
+    fileMgr.getServerForScene(file_scene_update, host, port, tls);
+
+    send(cmd_check_update, m_seq,
+         UpdateProtocol::buildHasUpdateResponse(info, forced, token, host, port, tls));
+    LOGI("check update has update, platform: %d, from: %s, to: %s, forced: %d, md5: %s, client: %s",
+         (int)req.platform, req.version.c_str(), info.version.c_str(), (int)forced,
+         info.packageMd5.c_str(), conn->peerAddress().toIpPort().c_str());
 }
 
 void ChatSession::onGetGroupFiles(const std::string& body, const std::shared_ptr<TcpConnection>& conn)

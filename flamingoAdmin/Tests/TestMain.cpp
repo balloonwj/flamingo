@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  flamingoAdmin —— 单元测试程序入口（console）。
  *
  *  flamingoAdminTests 是与主程序并列的独立 console 工程，只编译 flamingoAdmin
@@ -52,6 +52,21 @@ void RunAllPinyinTests();
 // 测试,覆盖"公司根部门"作为树根的识别、挂接与不可删除标记。
 void RunAllOrgTreeBuilderTests();
 
+// 在 OrgToolbarLayoutTests.cpp 中定义:组织树工具条几何计算
+// (Util/OrgToolbarLayout)单元测试,覆盖搜索框与刷新 / 展开 / 折叠三个图标
+// 按钮的摆位。
+void RunAllOrgToolbarLayoutTests();
+
+// 在 DpapiSecretTests.cpp 中定义:本地口令保护(Util/DpapiSecret)单元测试,
+// 覆盖"记住密码"落盘前的 DPAPI 加解密往返、单行 Base64 格式约束,以及密文
+// 被截断 / 篡改 / 非法时的安全失败。
+void RunAllDpapiSecretTests();
+
+// 在 ClientVersionApiTests.cpp 中定义：运行客户端版本管理 API
+// （模块 10）的 7 条用例，覆盖 6 对「构造请求 / 解析应答」纯函数
+// 与包大小格式化。
+void RunAllClientVersionApiTests();
+
 }} // namespace flamingoadmin::test
 
 int main()
@@ -93,6 +108,18 @@ int main()
     // 运行组织架构树组装单元测试 —— 验证公司根部门被正确识别为树根、顶级部门与
     // 成员各就各位,以及公司节点被标记为不可删除。
     flamingoadmin::test::RunAllOrgTreeBuilderTests();
+
+    // 运行组织树工具条几何计算单元测试 —— 验证搜索框与刷新 / 展开 / 折叠
+    // 三个图标按钮的摆位，含工具条过窄、按钮个数越界等边界情形。
+    flamingoadmin::test::RunAllOrgToolbarLayoutTests();
+
+    // 运行本地口令保护单元测试 —— 验证"记住密码"落盘前的 DPAPI 加解密往返、
+    // 密文的单行 Base64 格式，以及密文被截断 / 篡改 / 非法时安全失败不崩。
+    flamingoadmin::test::RunAllDpapiSecretTests();
+
+    // 运行客户端版本管理 API 单元测试 —— 验证模块 10 六个接口的
+    // 请求体字段与应答解析，含超过 2GiB 的包大小不被截断。
+    flamingoadmin::test::RunAllClientVersionApiTests();
 
     // 汇总并打印通过 / 失败数。
     const flamingoadmin::test::TestStats& stats = flamingoadmin::test::Stats();

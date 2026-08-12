@@ -29,10 +29,13 @@
 
 #include "../IULog.h"
 #include "../FlamingoClient.h"            // CFlamingoClient::m_UserConfig / SaveUserConfig
-#include "../UserSessionData.h"           // FMG_MSG_OPEN_CHANGEPWD（"修改密码"转发主面板）
+#include "../UserSessionData.h"           // FMG_MSG_OPEN_CHANGEPWD（"修改密码"转发主面板）、g_szHomePath / g_szDataRoot
+#include "../IniFile.h"                  // CIniFile（数据存储位置存在全局 flamingo.ini 里）
+#include "BalloonCacheCleanDlg.h"        // 「立即清理」弹出的清理对话框
 #include "SettingsNavList.h"
 #include "SettingsPageModel.h"
 #include "SettingsBinding.h"
+#include "../BalloonMain/TitleBarIcon.h"   // CreateProgramIconBitmap（标题栏左侧图标）
 #include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"        // DuiVBox / DuiHBox
 #include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../balloonui/balloonui/Controls/Basic/DuiSeparator.h"
@@ -48,6 +51,14 @@ static const int kDlgClientH  = 500;   // 客户区高
 static const int kDlgMinW     = 620;   // 最小宽
 static const int kDlgMinH     = 420;   // 最小高
 static const int kTitleBarH   = 40;    // 标题栏高度
+
+// 标题栏左侧图标的位图边长（像素）。标题栏最终按 16x16 绘制，直接生成 16 可免去缩放。
+static const int kTitleIconSize = 16;
+// 图标合成用的底色，必须与标题栏实际显示的颜色一致，否则图标周围会出现一块异色。
+// 本对话框没有调 SetTitleBarTransparent，标题栏由 balloonui 画成不透明的
+// RGB(245,246,250)（见 balloonui/Controls/Window/DuiFrameWindow.cpp 的 Title strip
+// background 一段），故取同值。缘由详见 BalloonMain/TitleBarIcon.h。
+static const COLORREF kTitleBarBg = RGB(245, 246, 250);
 
 // ---- 动画时钟 ----------------------------------------------------------
 // 开关（DuiSwitch）等动画控件鼠标翻转时走 150ms 滑动动画，由 DuiAnimMgr / DuiDoubleAnim
@@ -107,6 +118,13 @@ static const int      kKeyCapPadX   = 12;   // 键帽文字左右内距（贴文
 static const int      kKeyCapFontPx = 12;   // 键帽等宽字号
 static const TCHAR* const kKeyCapFont = _T("Consolas");   // 键帽等宽字体（设计稿"代码块"观感）
 
+// ---- 「自动离开」那行的两句副标题（正常态 / 被禁止休眠压制时）----------
+// 分别用于 ApplyKeepAwakeExclusion 的两条分支，写在一处免得两边文案走样。
+static const TCHAR* const kAutoAwaySubtitleNormal =
+    _T("电脑无操作时自动切到离开状态，一有操作再自动切回在线");
+static const TCHAR* const kAutoAwaySubtitleBlocked =
+    _T("已开启「禁止机器休眠」，自动离开暂不生效");
+
 // ---- 控件 id（对话框内唯一即可；设置项按页分段编号）-------------------
 // 重要：DuiFrameWindow 内部 min/max/close 标题按钮固定占用 ctrlId 1/2/3
 // （见 DuiFrameWindow::OnDuiChildNotify，按 ctrlId 1→最小化 / 2→最大化 / 3→关闭
@@ -121,6 +139,10 @@ enum SettingCtrlId
     kIdCloseAction     = 102,   // 关闭主面板时（下拉）→ ExitWhenCloseMainDlg
     kIdLanguage        = 103,   // 语言（下拉，本期仅存）
     kIdFontScale       = 104,   // 字体大小（下拉，本期仅存）
+    kIdAutoAway        = 105,   // 无操作自动切到"离开"（开关）→ EnableAutoAway
+    kIdAutoAwayDelay   = 106,   // 自动离开的等待时长（下拉）→ SetAutoAwayDelayIndex
+    kIdKeepAwake       = 107,   // 禁止机器休眠（开关）→ EnableKeepAwake；开启时把上面两项置灰
+    kIdAutoAwaySubtitle = 108,  // 「自动离开」那行的副标题（置灰时要换成解释文案，故给它一个 id）
 
     // 消息通知页
     kIdNewMsgNotify    = 201,   // 新消息提醒
@@ -135,7 +157,7 @@ enum SettingCtrlId
     kIdAutoRecvImage   = 302,   // 自动接收图片
     kIdAutoRecvFile    = 303,   // 自动接收文件
     kIdMsgRoaming      = 304,   // 消息漫游
-    kIdEmojiRain       = 305,   // 开启表情雨
+    kIdLinkDetect      = 306,   // 自动识别聊天中的链接
 
     // 音视频页
     kIdMicDevice       = 401,   // 麦克风设备（下拉）
@@ -396,11 +418,19 @@ CBalloonSystemSettingDlg::CBalloonSystemSettingDlg(CFlamingoClient* pFMGClient)
     , m_pNav(NULL)
     , m_pContentHost(NULL)
     , m_pRecvPathLabel(NULL)
+    , m_hTitleIcon(NULL)
+    , m_cacheCleanDlg(pFMGClient)
 {
 }
 
 CBalloonSystemSettingDlg::~CBalloonSystemSettingDlg()
 {
+    // SetIcon 只借用位图、不负责释放，故由本类收尾。
+    if (m_hTitleIcon != NULL)
+    {
+        ::DeleteObject(m_hTitleIcon);
+        m_hTitleIcon = NULL;
+    }
 }
 
 // =======================================================================
@@ -423,6 +453,18 @@ void CBalloonSystemSettingDlg::OpenSettings(HWND owner)
         }
         SetTitle(_T("系统设置"));
         SetTitleBarHeight(kTitleBarH);
+
+        // 标题栏左侧图标：程序主图标合成到标题栏底色上再挂，与主面板 / 群管理窗
+        // 等窗口同一套做法（合成的缘由见 TitleBarIcon.h）。
+        m_hTitleIcon = balloonmain::CreateProgramIconBitmap(kTitleIconSize, kTitleBarBg);
+        if (m_hTitleIcon != NULL)
+        {
+            SetIcon(m_hTitleIcon);
+        }
+        else
+        {
+            LOG_WARNING(_T("系统设置对话框标题栏图标位图创建失败，标题栏只显示文字。"));
+        }
         SetButtons(false, false, true);   // 只留关闭按钮
         SetMinSize(kDlgMinW, kDlgMinH);
 
@@ -475,7 +517,7 @@ LRESULT CBalloonSystemSettingDlg::OnTimerMsg(UINT /*uMsg*/, WPARAM wParam,
 // =======================================================================
 
 std::unique_ptr<balloonwjui::DuiVBox> CBalloonSystemSettingDlg::BuildRowTextBlock(
-    LPCTSTR title, LPCTSTR subtitle)
+    LPCTSTR title, LPCTSTR subtitle, UINT subtitleCtrlId)
 {
     std::unique_ptr<balloonwjui::DuiVBox> col(new balloonwjui::DuiVBox());
     col->SetGap(kRowTextGap);
@@ -496,6 +538,11 @@ std::unique_ptr<balloonwjui::DuiVBox> CBalloonSystemSettingDlg::BuildRowTextBloc
         lblSub->SetText(subtitle);
         lblSub->SetTextColor(kRowSubClr);
         lblSub->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        if (subtitleCtrlId != 0)
+        {
+            //只有事后要换文案的行才给 id（见头文件说明）。
+            lblSub->SetCtrlId(subtitleCtrlId);
+        }
         col->AddChild(std::move(lblSub), balloonwjui::DuiLayout::Hint().Fixed(kRowSubH));
     }
 
@@ -514,12 +561,13 @@ void CBalloonSystemSettingDlg::AddRowDivider(balloonwjui::DuiVBox* page)
 
 void CBalloonSystemSettingDlg::AddSwitchRow(balloonwjui::DuiVBox* page, LPCTSTR title,
                                             LPCTSTR subtitle, UINT ctrlId, bool on,
-                                            bool addDivider)
+                                            bool addDivider, UINT subtitleCtrlId)
 {
     std::unique_ptr<balloonwjui::DuiHBox> row(new balloonwjui::DuiHBox());
     row->SetGap(kRowGap);
 
-    row->AddChild(BuildRowTextBlock(title, subtitle), balloonwjui::DuiLayout::Hint().Weight(1));
+    row->AddChild(BuildRowTextBlock(title, subtitle, subtitleCtrlId),
+                  balloonwjui::DuiLayout::Hint().Weight(1));
 
     std::unique_ptr<balloonwjui::DuiSwitch> sw(new balloonwjui::DuiSwitch());
     sw->SetCtrlId(ctrlId);
@@ -589,6 +637,29 @@ std::unique_ptr<balloonwjui::DuiVBox> CBalloonSystemSettingDlg::BuildGeneralPage
                 balloonsettings::CloseActionOptionCount(),
                 balloonsettings::CloseActionIndexFromExitWhenClose(exitWhenClose), true);
 
+    // 禁止机器休眠（开关）。放在「自动离开」<u>之前</u>是有意为之：它一旦开启就会把下面
+    // 两行置为禁用，因果顺序与阅读顺序一致 —— 用户操作的是这一行，变化发生在其下方。
+    bool keepAwake = (cfg != NULL) ? (cfg->IsEnableKeepAwake() != FALSE) : false;
+    //副标题长度须与本页其它行相当：行内文字块用的是单行不折行、不加省略号的绘制方式，
+    //写长了会一直画到右侧开关底下（实测 32 个字就被压住了）。
+    AddSwitchRow(page.get(), _T("禁止机器休眠"),
+                 _T("开启后本机不会自动休眠、关屏或锁屏，适合演示等场景"),
+                 kIdKeepAwake, keepAwake, true);
+
+    // 无操作自动离开（开关）+ 等待时长（下拉）。两行挨着放，读起来就是一句话：
+    // "自动离开 —— 电脑无操作 5 分钟后自动切到离开状态"。
+    // 副标题给了 id：被上面那个开关置灰时要换成解释文案（见 ApplyKeepAwakeExclusion）。
+    bool autoAway = (cfg != NULL) ? (cfg->IsEnableAutoAway() != FALSE) : true;
+    AddSwitchRow(page.get(), _T("自动离开"), kAutoAwaySubtitleNormal,
+                 kIdAutoAway, autoAway, true, kIdAutoAwaySubtitle);
+
+    int awayDelayIdx = (cfg != NULL)
+                     ? balloonsettings::ClampAutoAwayDelayIndex(cfg->GetAutoAwayDelayIndex())
+                     : balloonsettings::kAutoAwayDelay5Min;
+    AddComboRow(page.get(), _T("无操作多久后切换成离开"), NULL,
+                kIdAutoAwayDelay, balloonsettings::AutoAwayDelayOptions(),
+                balloonsettings::AutoAwayDelayOptionCount(), awayDelayIdx, true);
+
     // 语言（下拉，本期仅存）。
     int langIdx = (cfg != NULL) ? balloonsettings::ClampLanguageIndex(cfg->GetLanguageIndex()) : 0;
     AddComboRow(page.get(), _T("语言"), NULL,
@@ -646,7 +717,7 @@ std::unique_ptr<balloonwjui::DuiVBox> CBalloonSystemSettingDlg::BuildChatPage()
     bool autoRecvImg  = (cfg != NULL) ? (cfg->IsEnableAutoRecvImage()    != FALSE) : true;
     bool autoRecvFile = (cfg != NULL) ? (cfg->IsEnableAutoRecvFile()     != FALSE) : false;
     bool roaming      = (cfg != NULL) ? (cfg->IsEnableMsgRoaming()       != FALSE) : true;
-    bool emojiRain    = (cfg != NULL) ? (cfg->IsEnableEmojiRain()        != FALSE) : true;
+    bool linkDetect   = (cfg != NULL) ? (cfg->IsEnableLinkDetect()       != FALSE) : true;
 
     // 发送消息快捷键（下拉：Enter / Ctrl+Enter）。
     AddComboRow(page.get(), _T("发送消息快捷键"), NULL,
@@ -657,7 +728,8 @@ std::unique_ptr<balloonwjui::DuiVBox> CBalloonSystemSettingDlg::BuildChatPage()
     AddSwitchRow(page.get(), _T("自动接收图片"), NULL, kIdAutoRecvImage, autoRecvImg, true);
     AddSwitchRow(page.get(), _T("自动接收文件"), NULL, kIdAutoRecvFile, autoRecvFile, true);
     AddSwitchRow(page.get(), _T("消息漫游"), _T("多设备间同步最近 30 天的消息"), kIdMsgRoaming, roaming, true);
-    AddSwitchRow(page.get(), _T("开启表情雨"), NULL, kIdEmojiRain, emojiRain, false);
+    AddSwitchRow(page.get(), _T("自动识别链接"), _T("关闭后聊天里的网址以普通文字显示"),
+                 kIdLinkDetect, linkDetect, false);
 
     page->AddChild(std::unique_ptr<balloonwjui::DuiControl>(new balloonwjui::DuiControl()),
                    balloonwjui::DuiLayout::Hint().Weight(1));
@@ -864,7 +936,7 @@ std::unique_ptr<balloonwjui::DuiVBox> CBalloonSystemSettingDlg::BuildStoragePage
     std::unique_ptr<balloonwjui::DuiVBox> page(new balloonwjui::DuiVBox());
     page->SetGap(0);
 
-    // ---- 文件保存位置（可改：右侧"更改"按钮弹系统选目录框）----
+    // ---- 数据存储位置（可改：右侧"更改"按钮弹选目录框，改动须重启才生效）----
     {
         std::unique_ptr<balloonwjui::DuiHBox> row(new balloonwjui::DuiHBox());
         row->SetGap(kRowGap);
@@ -876,13 +948,13 @@ std::unique_ptr<balloonwjui::DuiVBox> CBalloonSystemSettingDlg::BuildStoragePage
                       balloonwjui::DuiLayout::Hint().Weight(1));
 
         std::unique_ptr<balloonwjui::DuiLabel> title(new balloonwjui::DuiLabel());
-        title->SetText(_T("文件保存位置"));
+        title->SetText(_T("数据存储位置"));
         title->SetTextColor(kRowTitleClr);
         title->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         col->AddChild(std::move(title), balloonwjui::DuiLayout::Hint().Fixed(kRowTitleH));
 
         std::unique_ptr<balloonwjui::DuiLabel> pathLbl(new balloonwjui::DuiLabel());
-        pathLbl->SetText(EffectiveRecvPath());
+        pathLbl->SetText(DataRootDisplayText());
         pathLbl->SetTextColor(kValueClr);
         pathLbl->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
         m_pRecvPathLabel = pathLbl.get();   // 借用：改路径后就地 SetText 刷新
@@ -915,35 +987,52 @@ std::unique_ptr<balloonwjui::DuiVBox> CBalloonSystemSettingDlg::BuildStoragePage
     return page;
 }
 
-CString CBalloonSystemSettingDlg::EffectiveRecvPath()
+CString CBalloonSystemSettingDlg::EffectiveDataRoot()
 {
-    // 配置里设了自定义目录就用它（与 CUserMgr::GetDefaultRecvFilePath 同口径）。
-    if (m_lpFMGClient != NULL)
-    {
-        CString custom = m_lpFMGClient->m_UserConfig.GetRecvFilePath();
-        if (!custom.IsEmpty())
-        {
-            return custom;
-        }
-    }
-
-    // 否则用默认推导路径：我的文档\Flamingo\FileRecv\账号。
-    CString dataDir = GetFlamingoDataDir();
-    CString recvPath = dataDir.IsEmpty() ? CString(_T("（无法定位文档目录）"))
-                                         : (dataDir + _T("\\FileRecv\\"));
-    if (m_lpFMGClient != NULL && !dataDir.IsEmpty())
-    {
-        PCTSTR pszAccount = m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount.c_str();
-        if (pszAccount != NULL && pszAccount[0] != _T('\0'))
-        {
-            recvPath += pszAccount;
-            recvPath += _T("\\");
-        }
-    }
-    return recvPath;
+    // 本次会话真正在用的数据根目录。它在进程启动时按 flamingo.ini 的 [storage] datapath
+    // 算好（见 Startup.cpp 与 net/StorageLocation.h），运行期不再变。
+    return CString(g_szDataRoot);
 }
 
-void CBalloonSystemSettingDlg::ChooseRecvPath()
+CString CBalloonSystemSettingDlg::ConfiguredDataRoot()
+{
+    // 配置里当前写着的值。用户刚改完还没重启时，它与 EffectiveDataRoot 不同 ——
+    // 界面显示这一个，并在两者不一致时标注"重启后生效"，免得用户以为没改上。
+    TCHAR szIniPath[MAX_PATH] = { 0 };
+    _stprintf_s(szIniPath, MAX_PATH, _T("%sconfig\\flamingo.ini"), g_szHomePath);
+
+    TCHAR szConfigured[MAX_PATH] = { 0 };
+    CIniFile iniFile;
+    iniFile.ReadString(_T("storage"), _T("datapath"), _T(""),
+                       szConfigured, MAX_PATH, szIniPath);
+    return CString(szConfigured);
+}
+
+CString CBalloonSystemSettingDlg::DataRootDisplayText()
+{
+    const CString configured = ConfiguredDataRoot();
+    const CString effective  = EffectiveDataRoot();
+
+    // 没配置过：显示当前生效的（即程序目录）。
+    if (configured.IsEmpty())
+    {
+        return effective;
+    }
+
+    // 配置过但与本次会话正在用的不一致，说明改完还没重启。
+    CString normalized(configured);
+    if (!normalized.IsEmpty() && normalized[normalized.GetLength() - 1] != _T('\\'))
+    {
+        normalized += _T('\\');
+    }
+    if (normalized.CompareNoCase(effective) == 0)
+    {
+        return effective;
+    }
+    return normalized + _T("（重启后生效）");
+}
+
+void CBalloonSystemSettingDlg::ChooseDataRoot()
 {
     // 弹系统选目录框。BIF_NEWDIALOGSTYLE 需调用线程已初始化 OLE，故就地配平
     // CoInitialize / CoUninitialize（已初始化时返回 S_FALSE，仍需配平以不改引用计数语义）。
@@ -952,7 +1041,7 @@ void CBalloonSystemSettingDlg::ChooseRecvPath()
     BROWSEINFO bi;
     ::ZeroMemory(&bi, sizeof(bi));
     bi.hwndOwner = m_hWnd;
-    bi.lpszTitle = _T("选择接收文件的保存位置");
+    bi.lpszTitle = _T("选择本地数据的存储位置");
     bi.ulFlags   = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
 
     LPITEMIDLIST pidl = ::SHBrowseForFolder(&bi);
@@ -974,21 +1063,66 @@ void CBalloonSystemSettingDlg::ChooseRecvPath()
         return;   // 用户取消或取不到路径
     }
 
-    // 写回配置 + 即时落盘 + 同步给 UserMgr（使本次会话的文件接收立刻按新路径生效）。
-    if (m_lpFMGClient != NULL)
+    // 选中的就是当前正在用的目录：无需任何动作，也不必拿确认框打扰用户。
+    CString picked(szPath);
+    if (picked.IsEmpty() || picked[picked.GetLength() - 1] != _T('\\'))
     {
-        m_lpFMGClient->m_UserConfig.SetRecvFilePath(szPath);
-        m_lpFMGClient->SaveUserConfig();
-        m_lpFMGClient->m_UserMgr.SetCustomRecvFilePath(szPath);
+        picked += _T('\\');
+    }
+    if (picked.CompareNoCase(EffectiveDataRoot()) == 0)
+    {
+        return;
     }
 
-    // 刷新显示。
+    // 确认框：把后果与手动迁移步骤一次讲清。只说"重启后生效"是不够的 —— 用户多半是
+    // 冲着"C 盘满了想挪到 D 盘"来的，未必预期聊天记录也跟着从头开始。
+    const CString account = (m_lpFMGClient != NULL)
+                          ? CString(m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount.c_str())
+                          : CString(_T("<账号>"));
+    CString prompt;
+    prompt.Format(
+        _T("更改后需要重启客户端才会生效。\n\n")
+        _T("新位置是空的：聊天记录、公告、本地设置都会从头开始。原有数据仍保留在\n")
+        _T("    %sUsers\\%s\\\n")
+        _T("但不再被使用。\n\n")
+        _T("如需保留原有数据，请手动迁移：\n")
+        _T("    1. 退出客户端；\n")
+        _T("    2. 把上面那个目录整个复制到\n")
+        _T("       %sUsers\\\n")
+        _T("    3. 再启动客户端。\n\n")
+        _T("是否继续？"),
+        EffectiveDataRoot().GetString(), account.GetString(), picked.GetString());
+
+    if (::MessageBox(m_hWnd, prompt, _T("更改数据存储位置"),
+                     MB_OKCANCEL | MB_ICONWARNING) != IDOK)
+    {
+        return;
+    }
+
+    // 写全局配置。<u>不能</u>写进账号配置 —— <账号>.cfg 本身就在要搬走的那棵树里，
+    // 存进去的话下次启动会去新位置找它、找不到就用默认值，这一项永远不会生效
+    // （原委见 net/StorageLocation.h）。
+    TCHAR szIniPath[MAX_PATH] = { 0 };
+    _stprintf_s(szIniPath, MAX_PATH, _T("%sconfig\\flamingo.ini"), g_szHomePath);
+
+    CIniFile iniFile;
+    if (!iniFile.WriteString(_T("storage"), _T("datapath"), picked, szIniPath))
+    {
+        LOG_ERROR(_T("系统设置：写入数据存储位置失败（错误码 %u）。"), ::GetLastError());
+        ::MessageBox(m_hWnd, _T("保存设置失败，请检查程序目录是否可写。"),
+                     _T("更改数据存储位置"), MB_OK | MB_ICONWARNING);
+        return;
+    }
+
+    // 刷新显示（会带上"重启后生效"的标注），并提示重启。
     if (m_pRecvPathLabel != NULL)
     {
-        m_pRecvPathLabel->SetText(szPath);
+        m_pRecvPathLabel->SetText(DataRootDisplayText());
         m_pRecvPathLabel->Invalidate();
     }
-    LOG_INFO(_T("系统设置：文件保存位置已更改。"));
+    LOG_INFO(_T("系统设置：数据存储位置已改为 %s，重启后生效。"), picked.GetString());
+    ::MessageBox(m_hWnd, _T("设置已保存，重启客户端后生效。"),
+                 _T("更改数据存储位置"), MB_OK | MB_ICONINFORMATION);
 }
 
 // =======================================================================
@@ -1134,6 +1268,14 @@ void CBalloonSystemSettingDlg::BuildUiOnce()
     // 初始仅显示第 0 页（首次真实布局发生在 OpenSettings 的 ResizeClient）。
     ApplyPageVisibility(0);
 
+    // 「禁止机器休眠」若本来就开着，打开设置页时「自动离开」那两行就应当已经是灰的。
+    // 放在建树之后：ApplyKeepAwakeExclusion 要靠 FindCtrlById 找控件，树没挂上就找不到。
+    {
+        CUserConfig* cfg = (m_lpFMGClient != NULL) ? &m_lpFMGClient->m_UserConfig : NULL;
+        const bool keepAwakeOn = (cfg != NULL) ? (cfg->IsEnableKeepAwake() != FALSE) : false;
+        ApplyKeepAwakeExclusion(keepAwakeOn);
+    }
+
     m_built = true;
 }
 
@@ -1177,6 +1319,36 @@ void CBalloonSystemSettingDlg::ShowPage(int index)
 // 设置项变更落配置
 // =======================================================================
 
+void CBalloonSystemSettingDlg::ApplyKeepAwakeExclusion(bool keepAwakeOn)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+
+    //开关与下拉框：置为禁用后 balloonui 会将其淡化绘制（DuiSwitch 整体按 40% 不透明度
+    //绘制、DuiComboBox 改用禁用配色），并且不再响应鼠标，用户可以直接看出此刻不可操作。
+    balloonwjui::DuiControl* sw = content->FindCtrlById(kIdAutoAway);
+    if (sw != NULL)
+    {
+        sw->SetEnabled(!keepAwakeOn);
+    }
+    balloonwjui::DuiControl* combo = content->FindCtrlById(kIdAutoAwayDelay);
+    if (combo != NULL)
+    {
+        combo->SetEnabled(!keepAwakeOn);
+    }
+
+    //副标题换成说明文案，讲清"此刻为何不可操作"。仅淡化而不作说明，用户会误以为界面异常。
+    balloonwjui::DuiLabel* sub =
+        dynamic_cast<balloonwjui::DuiLabel*>(content->FindCtrlById(kIdAutoAwaySubtitle));
+    if (sub != NULL)
+    {
+        sub->SetText(keepAwakeOn ? kAutoAwaySubtitleBlocked : kAutoAwaySubtitleNormal);
+    }
+}
+
 bool CBalloonSystemSettingDlg::ApplySettingChange(UINT ctrlId, int value)
 {
     bool on = (value != 0);
@@ -1208,6 +1380,19 @@ bool CBalloonSystemSettingDlg::ApplySettingChange(UINT ctrlId, int value)
         break;
     case kIdFontScale:
         cfg->SetUiFontScaleIndex(balloonsettings::ClampFontScaleIndex(value));
+        break;
+    case kIdAutoAway:
+        cfg->EnableAutoAway(on ? TRUE : FALSE);
+        break;
+    case kIdAutoAwayDelay:
+        cfg->SetAutoAwayDelayIndex(balloonsettings::ClampAutoAwayDelayIndex(value));
+        break;
+    //用户切换「禁止机器休眠」开关：写入配置，并立即把与之互斥的「自动离开」两行置为
+    //禁用或恢复。真正获取与释放系统电源请求由 CMainDlg 的定时器按配置执行（它每次触发
+    //都会重新读取配置），本处不调用 Win32 API；相关日志见 BalloonMain/KeepAwakeSession.cpp。
+    case kIdKeepAwake:
+        cfg->EnableKeepAwake(on ? TRUE : FALSE);
+        ApplyKeepAwakeExclusion(on);
         break;
 
     // ---- 消息通知页 ----
@@ -1244,8 +1429,15 @@ bool CBalloonSystemSettingDlg::ApplySettingChange(UINT ctrlId, int value)
     case kIdMsgRoaming:
         cfg->EnableMsgRoaming(on ? TRUE : FALSE);
         break;
-    case kIdEmojiRain:
-        cfg->EnableEmojiRain(on ? TRUE : FALSE);
+    case kIdLinkDetect:
+        cfg->EnableLinkDetect(on ? TRUE : FALSE);
+        // 已打开的聊天窗要立刻跟着变：请主面板更新进程级开关并让各窗重新测量重绘。
+        // 设置窗自己够不着那些窗口（它们归主面板持有），故经主面板中转。
+        if (m_ownerHwnd != NULL && ::IsWindow(m_ownerHwnd))
+        {
+            ::PostMessage(m_ownerHwnd, FMG_MSG_LINK_OPTION_CHANGED,
+                          (WPARAM)(on ? 1 : 0), 0);
+        }
         break;
 
     // ---- 音视频页 ----
@@ -1307,13 +1499,13 @@ bool CBalloonSystemSettingDlg::HandleButtonClick(UINT ctrlId)
                      _T("系统设置"), MB_OK | MB_ICONINFORMATION);
         return true;
 
+    //「立即清理」：弹清理对话框，由它列出各类缓存的占用量并按用户勾选执行删除。
     case kIdClearCache:
-        ::MessageBox(m_hWnd, _T("本地缓存清理功能开发中。"),
-                     _T("系统设置"), MB_OK | MB_ICONINFORMATION);
+        m_cacheCleanDlg.OpenDialog(m_hWnd);
         return true;
 
     case kIdChangeRecvPath:
-        ChooseRecvPath();
+        ChooseDataRoot();
         return true;
 
     case kIdManageDevices:

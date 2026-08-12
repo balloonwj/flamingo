@@ -25,12 +25,13 @@
 #include "../net/LoginProtocolClient.h"  // v2 登录应答解析
 #include "../BalloonRegister/BalloonRegisterWindow.h"        // 新版注册窗口（“注册账号”链接）
 #include "../BalloonNetSettings/BalloonNetSettingsWindow.h"  // 新版网络设置窗口（“网络设置”链接）
-#include "../Updater.h"              // Updater（检测新版本）
-#include "../UpdateDlg.h"            // CUpdateDlg（自动升级对话框）
 #include "../Startup.h"              // CheckOnlyOneInstance
+#include "../Update/UpdateManager.h"          // 登录前检查更新
+#include "../BalloonUpdate/BalloonUpdateWindow.h"  // 查出新版本时弹升级窗
 #include "../Path.h"                 // Hootina::CPath::GetAppPath（历史账号列表落盘路径）
 
 #include "BalloonLoginLayout.h"      // BuildLoginBody / ValidateLoginInput / CtrlId
+#include "AccountRemoval.h"          // 删除历史账号的二次确认与本地数据清理
 #include "AuthBanner.h"              // AuthBanner（顶部 Banner，回填用户名 + 可点击状态胶囊）
 #include "../../balloonui/balloonui/Controls/Input/DuiComboBox.h"
 #include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
@@ -70,6 +71,9 @@ static const int kLoginRespCodeOk = 0;
 static const int kLoginRespCodeUnregistered = 102;
 // 服务器返回"密码错误"的 code 值。
 static const int kLoginRespCodePasswordError = 103;
+// 服务器返回"客户端版本过低"的 code 值（服务端 error_code_version_too_old）。
+// 这个错误重试多少次都是同一个结果，必须把用户引到升级流程，不能只报"登录失败"。
+static const int kLoginRespCodeVersionTooOld = 4;
 
 // 登录请求的超时时间（秒）。
 static const int kLoginTimeoutSeconds = 3;
@@ -88,10 +92,12 @@ CBalloonLoginDlg::CBalloonLoginDlg(CFlamingoClient* pFMGClient)
     , m_pLoginAccountList(NULL)
     , m_pAccountCombo(NULL)
     , m_pPasswordEdit(NULL)
+    , m_pLoginButton(NULL)
     , m_pRememberPwd(NULL)
     , m_pAutoLogin(NULL)
     , m_pBanner(NULL)
     , m_loginPresence(kMyPresenceOnline)   // 默认在线；由头像下状态胶囊菜单覆盖
+    , m_preLoginUpdateChecked(false)
     , m_modalRunning(false)
     , m_modalResult(IDCANCEL)
     , m_hBgBitmap(NULL)
@@ -353,6 +359,8 @@ void CBalloonLoginDlg::InitLoginUi()
         content->FindCtrlById(balloonauth::kIdAccountCombo));
     m_pPasswordEdit = dynamic_cast<balloonwjui::DuiEditHost*>(
         content->FindCtrlById(balloonauth::kIdPasswordEdit));
+    m_pLoginButton = dynamic_cast<balloonwjui::DuiButton*>(
+        content->FindCtrlById(balloonauth::kIdLoginButton));
     m_pRememberPwd = dynamic_cast<balloonwjui::DuiButton*>(
         content->FindCtrlById(balloonauth::kIdRememberPwd));
     m_pAutoLogin = dynamic_cast<balloonwjui::DuiButton*>(
@@ -484,14 +492,35 @@ LRESULT CBalloonLoginDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
             return 0;
         }
     }
-    else if (pNotify->code == balloonauth::AuthBanner::DUIN_BANNER_STATUS_CLICK)
+    // 从这里往下是各控件的<u>自定义</u>通知码。这类码是<u>按控件各自编号</u>的
+    // ——每个控件都从 balloonwjui::DUIN_CUSTOM 起算，于是不同控件的第一个自定义码
+    // 数值必然相同（DuiComboBox::DUICBN_ITEMDELETE 与 AuthBanner::DUIN_BANNER_STATUS_CLICK
+    // 都等于 DUIN_CUSTOM + 1）。所以判定<u>必须把 ctrlId 一起写进分支条件</u>，
+    // 只比 code 会让排在前面的那个分支把别的控件的通知一并吃掉。
+    //
+    // 这正是"点击登录窗的在线状态胶囊没有反应"的成因（2026-08-12 定位）：胶囊点击
+    // 先落进下面这个删除账号的分支，里面的 ctrlId 判定不成立就掉到函数末尾，
+    // 后面那个 else if 根本没机会执行。
+    else if (pNotify->code == (UINT)balloonwjui::DuiComboBox::DUICBN_ITEMDELETE
+             && pNotify->ctrlId == balloonauth::kIdAccountCombo)
+    {
+        // 点了账号下拉里某一项右侧的删除叉。DuiComboBox 只发通知、不动数据，
+        // 删不删由本窗口二次确认后决定。
+        //
+        // 这里<u>只投消息、不就地处理</u>：本通知是在账号下拉浮层的消息处理栈里
+        // 同步发过来的，就地弹二次确认框会让模态框泵消息、浮层随即自我销毁，
+        // 栈退回浮层的 handler 时那个对象已经没了（atlwin.h 会断言
+        // "Object deleted before window was destroyed"）。延后一拍再做，
+        // 那时浮层已经正常关闭。详见 WM_APP_REMOVE_ACCOUNT 的定义处。
+        PostMessage(WM_APP_REMOVE_ACCOUNT, (WPARAM)pNotify->extra, 0);
+        return 0;
+    }
+    else if (pNotify->code == (UINT)balloonauth::AuthBanner::DUIN_BANNER_STATUS_CLICK
+             && pNotify->ctrlId == balloonauth::kIdLoginBanner)
     {
         // 点击头像下方"在线状态胶囊" —— 弹出在线状态选择菜单（在线 / 离开 / 忙碌）。
-        if (pNotify->ctrlId == balloonauth::kIdLoginBanner)
-        {
-            ShowLoginStatusMenu();
-            return 0;
-        }
+        ShowLoginStatusMenu();
+        return 0;
     }
 
     // 其余通知（标题栏 min/close 按钮等）交回 DuiFrameWindow。
@@ -505,10 +534,12 @@ LRESULT CBalloonLoginDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
 
 void CBalloonLoginDlg::OnLoginClicked()
 {
-    // 调试版不检测自动升级，便于调试（与旧 CLoginDlg 一致）。
-#ifndef _DEBUG
-    DetectNewVersion();
-#endif
+    // 这里原先调 DetectNewVersion() 走 v1 时代那套自动升级，且用 #ifndef _DEBUG
+    // 把它挡在 Release 才生效。整条链路在 v2 改造后已经跑不通（协议与寻址方式都对不上），
+    // 现已整体删除：检查更新改由登录成功后的静默检查、关于页按钮、以及登录被
+    // error_code_version_too_old 拒绝这三个触发点驱动，见 Source/Update 与
+    // Source/BalloonUpdate。要不要顺带下载由 flamingo.ini 的 [app] autodownloadupdate 控制，
+    // 不再需要编译期开关。
 
     CString account;
     CString password;
@@ -545,6 +576,18 @@ void CBalloonLoginDlg::OnLoginClicked()
         m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount = m_stAccountInfo.szUser;
 
     LOG_INFO(_T("登录窗发起登录 (account=%s)."), m_stAccountInfo.szUser);
+
+    //先检查更新，查出可用新版本就把登录拦在这里。整个进程只查一次：用户点过「稍后」
+    //之后再点登录不该又被拦一遍，否则永远登不进去。
+    if (!m_preLoginUpdateChecked)
+    {
+        m_preLoginUpdateChecked = true;
+        if (StartPreLoginUpdateCheck())
+        {
+            //已发起，等应答回来再决定登不登
+            return;
+        }
+    }
 
     DoLogin();
     EndModal(IDOK);
@@ -612,15 +655,20 @@ void CBalloonLoginDlg::OnRegisterClicked()
         return;
     }
 
-    // 注册成功：登录账号是服务端自动生成的，用户没有手输过，这里替他填进
-    // 账号框，省得他再照着完成页一个字符一个字符敲。
-    const CString& account = regDlg.RegisteredAccount();
-    if (account.IsEmpty())
+    // 注册成功：登录账号是服务端自动生成的、用户没有手输过，密码则是他刚在
+    // 注册窗里设的，两样都替他填进登录框，省得再照着完成页一个字符一个字符敲。
+    // 具体回填成什么样由纯函数 MakePostRegisterFill 决定（可单测，见
+    // Tests/BalloonLoginLayoutTests.cpp 的 PR 组用例）。
+    const balloonauth::PostRegisterFill fill =
+        balloonauth::MakePostRegisterFill(regDlg.RegisteredAccount(),
+                                          regDlg.RegisteredPassword());
+    if (!fill.m_shouldFill)
     {
         // 理论上不会发生：DoModal 返回 IDOK 就意味着服务端已下发账号。
         LOG_ERROR(_T("注册返回成功但账号为空，无法回填登录框。"));
         return;
     }
+    const CString& account = fill.m_account;
 
     // 新账号还没登录过，不在历史账号列表里，因而也不在下拉列表里 —— 下拉列表
     // 是 PopulateAccountCombo 在窗口初始化时一次性灌进去的，之后没人再往里加。
@@ -671,6 +719,31 @@ void CBalloonLoginDlg::OnRegisterClicked()
         m_pAccountCombo->Invalidate();
     }
 
+    // 密码框必须在这里显式回填。DuiComboBox::SetText 是压制通知的（理由见下
+    // 一段），账号变化不会触发 OnDuiNotify 里那条联动、也就不会走
+    // LoadAccountIntoUi，密码框里那串圆点仍是登录窗打开时 PopulateAccountCombo
+    // 预填的内容 —— 上一个账号记住的密码，或本机无历史登录时的兜底测试密码。
+    // 曾因此出现"账号是刚注册的、密码却是别人的，点登录报密码错误"。
+    //
+    // 密码只写进界面（显示为圆点），不写进上面那条历史账号记录 —— 用户还没
+    // 勾"记住密码"，替他落盘存密码是越权。
+    if (m_pPasswordEdit != NULL)
+    {
+        m_pPasswordEdit->SetText(fill.m_password);
+    }
+
+    // 两个勾选框一并复位，与上面写进历史列表的那条记录（两项皆否）对齐；
+    // 否则它们会滞留在上一个账号的勾选状态上。notify 传 false —— 这是程序
+    // 回填，不该触发用户手动勾选才走的 PersistCheckStateForCurrentAccount。
+    if (m_pRememberPwd != NULL)
+    {
+        m_pRememberPwd->SetCheck(fill.m_rememberPwd, false);
+    }
+    if (m_pAutoLogin != NULL)
+    {
+        m_pAutoLogin->SetCheck(fill.m_autoLogin, false);
+    }
+
     // DuiComboBox::SetText 是明确压制通知的（m_suppressEditNotify + SetCurSel
     // 的 notify=false），不会触发 OnDuiNotify 里那条"账号变了"的联动，所以
     // Banner 上的头像首字母与用户名得在这里手工同步一次 —— 否则账号框已经是
@@ -678,13 +751,16 @@ void CBalloonLoginDlg::OnRegisterClicked()
     // 同样补了这一步。
     UpdateBannerUserName(account);
 
-    // 账号已就位，焦点直接落到密码框，用户接着输密码就能登录。
+    // 账号与密码都已就位，焦点仍落到密码框：用户想核对或改密码时不必再点一下，
+    // 直接就能编辑。
     if (m_pPasswordEdit != NULL)
     {
         m_pPasswordEdit->SetFocus();
     }
 
-    LOG_INFO(_T("注册成功，已把账号 %s 回填到登录框。"), (LPCTSTR)account);
+    // 密码不进日志，只记"填没填上"，便于日后仅凭日志判断这条路径是否走到。
+    LOG_INFO(_T("注册成功，已把账号 %s 回填到登录框，密码框已回填=%d。"),
+             (LPCTSTR)account, (int)(!fill.m_password.IsEmpty()));
 }
 
 void CBalloonLoginDlg::OnNetworkClicked()
@@ -695,29 +771,95 @@ void CBalloonLoginDlg::OnNetworkClicked()
     netDlg.DoModal(m_hWnd);
 }
 
-void CBalloonLoginDlg::DetectNewVersion()
-{
-    if (m_lpFMGClient == NULL)
-        return;
 
-    Updater updater(&(m_lpFMGClient->m_FileTask));
-    if (CheckOnlyOneInstance() && updater.IsNeedUpdate())
+// =======================================================================
+// 登录前检查更新
+// =======================================================================
+
+bool CBalloonLoginDlg::StartPreLoginUpdateCheck()
+{
+    //检查更新走的是服务端的登录前白名单（cmd_check_update 1905），但仍然需要一条
+    //已建立的连接才能把帧发出去。CIUSocket::Login 内部本来也会先 Connect，这里提前
+    //连上，登录时那次 Connect 会直接复用。
+    if (!CIUSocket::GetInstance().Connect())
     {
-        if (IDYES == ::MessageBox(m_hWnd, _T("检测到新版本，是否现在就升级？"),
-                                  _T("新版本升级提示"),
-                                  MB_YESNO | MB_ICONQUESTION | MB_TOPMOST))
-        {
-            ShowWindow(SW_HIDE);
-            CUpdateDlg updateDlg;
-            updateDlg.m_pFMGClient = m_lpFMGClient;
-            updateDlg.m_aryFileInfo = updater.m_aryUpdateFileList;
-            if (updateDlg.DoModal(m_hWnd, NULL) == IDCANCEL)
-            {
-                ShowWindow(SW_SHOW);
-                return;
-            }
-        }
+        LOG_ERROR(_T("登录前检查更新：连接服务器失败，跳过检查直接登录。"));
+        return false;
     }
+
+    //结果投给本窗口
+    update::UpdateManager::GetInstance().SetNotifyTarget(m_hWnd);
+    //false = 只查不下。要不要下载由用户在升级窗里决定。
+    update::UpdateManager::GetInstance().CheckAndDownload(false);
+
+    SetLoginButtonChecking(true);
+    LOG_INFO(_T("登录前检查更新：已发起，登录暂缓。"));
+    return true;
+}
+
+void CBalloonLoginDlg::SetLoginButtonChecking(bool checking)
+{
+    if (m_pLoginButton == NULL)
+    {
+        return;
+    }
+
+    if (checking)
+    {
+        m_pLoginButton->SetText(_T("正在检查更新..."));
+        m_pLoginButton->SetEnabled(false);
+    }
+    else
+    {
+        m_pLoginButton->SetText(_T("登 录"));
+        m_pLoginButton->SetEnabled(true);
+    }
+    m_pLoginButton->Invalidate();
+}
+
+LRESULT CBalloonLoginDlg::OnPreLoginUpdateResult(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                                 LPARAM lParam, BOOL& bHandled)
+{
+    bHandled = TRUE;
+
+    update::UpdateTaskResult* pResult = (update::UpdateTaskResult*)lParam;
+    if (pResult == NULL)
+    {
+        return 0;
+    }
+
+    SetLoginButtonChecking(false);
+
+    const bool hasUsableUpdate = pResult->m_hasUpdate && pResult->m_packageUsable;
+    LOG_INFO(_T("登录前检查更新结果：transportOk=%d, code=%d, hasUpdate=%d, usable=%d, forced=%d。"),
+             pResult->m_transportOk ? 1 : 0, pResult->m_code,
+             pResult->m_hasUpdate ? 1 : 0, pResult->m_packageUsable ? 1 : 0,
+             pResult->m_forced ? 1 : 0);
+
+    if (hasUsableUpdate)
+    {
+        //拦住登录，把升级窗摆出来。用户点「稍后」关掉它时会给本窗口投一条
+        //FMG_MSG_UPDATE_LOGIN_CONTINUE，那时再继续登录；强制升级关不掉，于是登不进去。
+        CBalloonUpdateWindow& w = CBalloonUpdateWindow::GetInstance();
+        w.SetLoginGateWindow(m_hWnd);
+        w.ShowResult(*pResult);
+        delete pResult;
+        return 0;
+    }
+
+    //已是最新 / 检查失败：照常登录。检查更新这条链路自己挂了不该把用户挡在门外。
+    delete pResult;
+    DoLogin();
+    return 0;
+}
+
+LRESULT CBalloonLoginDlg::OnUpdateLoginContinue(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                                LPARAM /*lParam*/, BOOL& bHandled)
+{
+    bHandled = TRUE;
+    LOG_INFO(_T("用户关闭升级窗，继续被拦下的登录。"));
+    DoLogin();
+    return 0;
 }
 
 void CBalloonLoginDlg::PopulateAccountCombo()
@@ -848,6 +990,119 @@ void CBalloonLoginDlg::LoadAccountIntoUi(LPCTSTR lpszAccount)
         m_pAutoLogin->SetCheck(lpAccount->bAutoLogin != FALSE, false);
 }
 
+LRESULT CBalloonLoginDlg::OnRemoveAccount(UINT /*uMsg*/, WPARAM wParam,
+                                          LPARAM /*lParam*/, BOOL& /*bHandled*/)
+{
+    // 到这里时下拉浮层早已关闭、它的消息栈也完全展开了，弹模态确认框才是安全的。
+    RemoveAccountFromHistory((int)wParam);
+    return 0;
+}
+
+void CBalloonLoginDlg::RemoveAccountFromHistory(int comboIndex)
+{
+    if (m_pAccountCombo == NULL || m_pLoginAccountList == NULL)
+    {
+        return;
+    }
+    if (comboIndex < 0 || comboIndex >= m_pAccountCombo->GetCount())
+    {
+        return;
+    }
+
+    const CString account = m_pAccountCombo->GetItemText(comboIndex);
+    if (account.IsEmpty())
+    {
+        return;
+    }
+
+    // 下拉项与历史列表按账号名对应（下拉是拿历史列表铺的），但两边的下标不一定
+    // 一致，故按名字回查历史列表拿真正的下标。查不到说明两边已经不同步，
+    // 那就只把下拉项摘掉、不动文件。
+    int listIndex = -1;
+    for (int i = 0; i < m_pLoginAccountList->GetCount(); ++i)
+    {
+        LOGIN_ACCOUNT_INFO* lpInfo = m_pLoginAccountList->GetAccountInfo(i);
+        if (lpInfo != NULL && account.Compare(lpInfo->szUser) == 0)
+        {
+            listIndex = i;
+            break;
+        }
+    }
+
+    // 二次确认。删除叉紧挨着账号文字，误点的代价不该是"账号连同聊天记录一起没了"，
+    // 所以这一步不能省。「同时删除本地聊天记录」做成确认框里的勾选项，默认不勾 ——
+    // 多数人只是想让下拉列表干净点，并不想清历史。
+    bool bAlsoDeleteLocalData = false;
+    if (!balloonauth::ConfirmRemoveAccount(m_hWnd, account, bAlsoDeleteLocalData))
+    {
+        return;
+    }
+
+    // 先摘下拉项，界面立即有反馈。
+    m_pAccountCombo->DeleteString(comboIndex);
+
+    if (listIndex >= 0)
+    {
+        m_pLoginAccountList->Del(listIndex);
+        const tstring strFileName =
+            Hootina::CPath::GetAppPath() + _T("Users\\LoginAccountList.dat");
+        const BOOL bSaved = m_pLoginAccountList->SaveFile(strFileName.c_str());
+        LOG_INFO(_T("删除历史账号: account=%s, 列表下标=%d, 落盘=%d, 剩余条数=%d."),
+                 (LPCTSTR)account, listIndex, (int)bSaved, m_pLoginAccountList->GetCount());
+    }
+    else
+    {
+        LOG_INFO(_T("删除历史账号: account=%s 不在历史列表里，仅从下拉框摘除。"),
+                 (LPCTSTR)account);
+    }
+
+    if (bAlsoDeleteLocalData)
+    {
+        const bool bWiped = balloonauth::DeleteAccountLocalData(account);
+        LOG_INFO(_T("删除历史账号的本地数据: account=%s, 结果=%d."),
+                 (LPCTSTR)account, (int)bWiped);
+    }
+
+    // 被删的正是当前显示的那个账号时，界面得换一个人 —— 否则账号框里还留着
+    // 一个已经删掉的名字，点登录又会把它写回历史列表。
+    CString current = m_pAccountCombo->GetText();
+    current.Trim();
+    if (current.Compare(account) != 0)
+    {
+        return;
+    }
+
+    CString next;
+    if (m_pAccountCombo->GetCount() > 0)
+    {
+        next = m_pAccountCombo->GetItemText(0);
+    }
+    m_pAccountCombo->SetText(next);
+    m_pAccountCombo->Invalidate();
+
+    if (next.IsEmpty())
+    {
+        // 一个历史账号都不剩：清空密码与两个勾选项，回到"全新登录"的样子。
+        if (m_pPasswordEdit != NULL)
+        {
+            m_pPasswordEdit->SetText(_T(""));
+        }
+        if (m_pRememberPwd != NULL)
+        {
+            m_pRememberPwd->SetCheck(false, false);
+        }
+        if (m_pAutoLogin != NULL)
+        {
+            m_pAutoLogin->SetCheck(false, false);
+        }
+    }
+    else
+    {
+        LoadAccountIntoUi(next);
+    }
+    UpdateBannerUserName(next);
+}
+
 // =======================================================================
 // 发起登录
 //
@@ -913,9 +1168,16 @@ UINT CBalloonLoginDlg::LoginThreadProc(void* pParam)
                 pLoginResult->m_LoginResultCode = LOGIN_UNREGISTERED;
             else if (resp.code == kLoginRespCodePasswordError)
                 pLoginResult->m_LoginResultCode = LOGIN_PASSWORD_ERROR;
+            else if (resp.code == kLoginRespCodeVersionTooOld)
+            {
+                // 版本过低：单独一个结果码，好让主窗口把用户引到升级流程去，
+                // 而不是弹一句"网络故障，登录失败"让他反复重试。
+                LOG_ERROR(_T("login rejected: client version too old, code=%d."), resp.code);
+                pLoginResult->m_LoginResultCode = LOGIN_VERSION_TOO_OLD;
+            }
             else
             {
-                // 其它错误码（如 4 版本过低 / 104 账号停用）本期统一按登录失败处理
+                // 其它错误码（如 104 账号停用）统一按登录失败处理
                 LOG_ERROR(_T("login failed, server returned code=%d."), resp.code);
                 pLoginResult->m_LoginResultCode = LOGIN_FAILED;
             }

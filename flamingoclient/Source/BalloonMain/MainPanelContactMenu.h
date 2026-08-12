@@ -16,6 +16,7 @@
  *      ──────────
  *      查看资料
  *      添加到收藏 / 取消收藏  ← 按当前收藏状态切换文案
+ *      特别关注 / 取消特别关注 ← 按当前关注状态切换文案；被关注者上下线时右下角弹提示
  *      查看历史消息
  *      修改备注
  *      ──────────
@@ -71,6 +72,7 @@ enum ContactMenuId : UINT
     kContactMenuMute         = 8,    // 消息免打扰 / 取消免打扰
     kContactMenuViewHistory  = 11,   // 查看历史消息 —— 打开历史消息窗并定位到本会话
     kContactMenuFavorite     = 12,   // 添加到收藏 / 取消收藏（文案随当前状态取反）
+    kContactMenuStarred      = 13,   // 特别关注 / 取消特别关注（文案随当前状态取反）—— 被关注的联系人上下线时，桌面右下角弹提示
 };
 
 /**
@@ -82,11 +84,13 @@ struct ContactMenuState
     bool m_isSelf;    // 被右键的是不是当前登录用户本人；true 时菜单只剩"查看资料"
     bool m_muted;     // 当前是否已免打扰；决定免打扰项文案的正反。m_isSelf 为 true 时无意义
     bool m_favorite;  // 当前是否已收藏；决定收藏项文案是"取消收藏"还是"添加到收藏"。m_isSelf 为 true 时无意义
+    bool m_starred;   // 当前是否已特别关注；决定该项文案是"取消特别关注"还是"特别关注"。m_isSelf 为 true 时无意义（自己的上下线自己清楚，菜单里不出现该项）
 
     ContactMenuState()
         : m_isSelf(false)
         , m_muted(false)
         , m_favorite(false)
+        , m_starred(false)
     {
     }
 };
@@ -112,7 +116,7 @@ struct ContactMenuEntry
  *  构造联系人右键菜单的行模型。纯函数、无副作用、不创建窗口；调用方据此逐行
  *  喂给 DuiMenu（分隔条走 AppendSeparator，其余走 AppendItem）。
  *
- *    state：被右键那个联系人的当前状态（是否本人 / 免打扰 / 收藏）。
+ *    state：被右键那个联系人的当前状态（是否本人 / 免打扰 / 收藏 / 特别关注）。
  *
  *  返回：行模型 vector（值语义，调用方拥有）。m_label 指向静态常量串，调用方
  *        可直接持有使用，无需拷贝。

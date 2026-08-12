@@ -165,7 +165,7 @@ CString BuildQuoteDigest(const ChatMessage& src)
 CString BuildQuotedReplyText(const CString& senderName, long long timestampMs,
                              const CString& digest)
 {
-    // 头尾两条线用不同字符：头部用 ASCII 短横（与老式 QQ / 邮件一致，任何字体都画得出），
+    // 头尾两条线用不同字符：头部用 ASCII 短横（与纯文本邮件的引用线一致，任何字体都画得出），
     // 结尾用制表线，视觉上比再来一遍短横更像"引用到此为止"。
     const TCHAR* const kHeadRule = _T("------------------ 原消息 ------------------");
     const TCHAR* const kTailRule = _T("───────────────────────");

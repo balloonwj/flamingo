@@ -1,7 +1,7 @@
 /**
  *  TrayMsgTipPopup.h
  *
- *  鼠标悬停在系统托盘图标上时弹出的"未读消息提示"小列表（QQ 风格）。列出当前正在
+ *  鼠标悬停在系统托盘图标上时弹出的"未读消息提示"小列表。列出当前正在
  *  托盘闪烁的未读会话（每条：彩色字母头像 + 会话名 + "N 条新消息"），点某条即打开
  *  对应会话。取代旧的 SkinLib 版 CMsgTipDlg —— 旧版数据绑死 v1 的 CMessageList，
  *  这里用 balloonui 重写，数据直接来自 CMainDlg 持有的托盘闪烁状态机（CTrayFlashController）。

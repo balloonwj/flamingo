@@ -114,6 +114,7 @@ enum msg_type
     //1214 原为 cmd_get_notifications（拉取加好友申请的消息盒子），随好友关系子系统一并删除，
     //编号留空不复用。注意平台公告的消息盒子是 cmd_get_announcements（2101），与本条无关。
     cmd_set_favorite                   = 1215,  //添加/取消收藏（收藏对象为联系人或群组）
+    cmd_set_starred                    = 1216,  //添加/取消特别关注（对象<u>只能是联系人</u>，群与群成员之外的对象一律拒绝）。被关注者上下线时，关注方客户端在桌面右下角弹提示；服务端只管这份名单，上下线推送仍按企业全员广播、不因关注关系而改变（见 docs/特别关注接入方案.md）
 
     //==== 群组 1300-1399 ====
     cmd_create_group                 = 1301,    //创建群聊
@@ -274,6 +275,7 @@ enum error_code
     //207 / 208 原为好友分组错误码（同名分组已存在 / 分组不存在），随 QQ 式分组取消而删除，
     //编号留空不要复用
     error_code_favorite_limit      = 209,  //收藏数量已达上限（见 kMaxFavoriteCount）
+    error_code_starred_limit       = 210,  //特别关注人数已达上限（见 kMaxStarredCount）。特别关注的意义就是"少数几个人"，标满几百人等于没关注，上限同时也防刷表
 
     //==== 群组 300-399 ====
     error_code_create_group_fail   = 300,  //创建群失败
@@ -371,6 +373,10 @@ enum kickout_reason
     kickout_reason_maintenance  = 3,   //服务器维护，主动断开
     kickout_reason_password_changed = 4,   //账号密码已修改，本账号其它设备需用新密码重新登录
     kickout_reason_kicked_by_user   = 5,   //本账号在另一设备上主动踢掉了本设备（cmd_kick_device）
+    kickout_reason_enterprise_disabled = 6,//所属企业被平台管理员停用，该企业全员下线；企业恢复为活跃后可再登录
+    kickout_reason_enterprise_deleted  = 7,//所属企业被平台管理员删除，该企业全员下线；账号虽保留但已无企业归属，无法再登录
+    kickout_reason_account_deleted     = 8,//账号被管理员删除，不可恢复；与 kickout_reason_disabled（停用，可恢复）区分
+    kickout_reason_kicked_by_admin     = 9,//设备被管理员在控制台强制注销；与 kickout_reason_kicked_by_user（本人在别的设备上踢的）区分
 };
 
 //cmd_device_changed_notify 的 changetype 字段取值
@@ -429,6 +435,10 @@ enum file_scene
     file_scene_group_file = 2,   //群文件：登记进群文件库的文件，走 fileserver
     file_scene_avatar     = 3,   //头像：用户/群头像图片，走 imgserver
     file_scene_image_msg  = 4,   //图片消息：聊天里发送的图片/截图，走 imgserver
+    file_scene_update     = 5,   //客户端升级包：cmd_check_update 应答里直下发下载令牌用的场景，走 fileserver。
+                                 //与前四种不同，本场景的令牌不经 cmd_request_upload / cmd_request_download 申请，
+                                 //而是由 chatserver 在检查更新时直接签发（升级包对所有人是同一份公开内容，
+                                 //且检查更新须在未登录时可用，此时令牌里的 uid 为 0）
 };
 
 //群文件类别，位于 t_group_file.f_filetype 与 cmd_get_group_files 的 filetype 字段。

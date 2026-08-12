@@ -39,6 +39,7 @@ extern CAppModule _Module;
 #include "ChatHeaderInfo.h"
 #include "ChatMockData.h"
 #include "../net/Protocol.h"        // presence_type（把对方真实 presence 映射到状态点颜色/文字）
+#include "../BalloonMain/PresenceBadge.h"   // DrawPresenceBadge（对方状态徽标，与列表 / 菜单同源）
 
 namespace balloonchatwnd {
 
@@ -62,6 +63,25 @@ int ChatStatusFromPresence(int presence)
     }
 }
 
+// 反向映射：把本头部的 ChatStatus 换回 v2 在线状态（presence_type）。之所以要绕这一道，
+// 是因为状态徽标的字形与配色统一由 PresenceBadge / MainPanelStatusMenu 那套共用映射
+// 给出（六个显示点同源），本文件不再自己维护一张"状态 → 颜色"的表。
+// mock 数据那条路径给的是 ChatStatus，故这道反向映射省不掉。
+int PresenceFromChatStatus(int status)
+{
+    switch (status)
+    {
+    case kChatOnline:
+        return presence_online;
+    case kChatAway:
+        return presence_away;
+    case kChatBusy:
+        return presence_busy;
+    default:
+        return presence_offline;
+    }
+}
+
 // ---- 配色 --------------------------------------------------------------
 
 const COLORREF kNameColor = RGB(0x2A, 0x2A, 0x2A);   // 昵称
@@ -81,19 +101,14 @@ const int kNamePx     = 15;   // 昵称字号
 const int kSigPx      = 12;   // 签名字号
 const int kPillTextPx = 11;   // 状态胶囊文字字号
 const int kPillHeight = 18;   // 状态胶囊高度
-const int kStatusDot  = 6;    // 状态点直径
+// 状态徽标的绘制方框边长。徽标圆底只占方框的 20/24，故 9 对应约 7.5px 的圆点
+// （改版前是 6px 的纯色圆点）。6px 下时钟指针与横杠会糊成一团，看不出字形。
+const int kStatusDot  = 9;
 
-// 取在线状态对应的状态点颜色。
-COLORREF StatusColor(int status)
-{
-    switch (status)
-    {
-    case kChatOnline: return RGB(0x22, 0xC5, 0x5E);   // 在线 绿
-    case kChatAway:   return RGB(0xF5, 0x9E, 0x0B);   // 离开 橙
-    case kChatBusy:   return RGB(0xEF, 0x44, 0x44);   // 忙碌 红
-    default:          return RGB(0x94, 0xA3, 0xB8);   // 离线 灰
-    }
-}
+// 徽标圆底在绘制方框中所占的比例（viewBox 24 里半径 10 的圆，直径 20/24）。
+// "正在输入…"不是一个在线状态、没有对应徽标，用同尺寸的实心圆点表示 —— 尺寸对齐了，
+// 它才不会看起来像另一套东西。
+const float kBadgeDiscRatio = 20.0f / 24.0f;
 
 // 取在线状态对应的文字。
 LPCWSTR StatusText(int status)
@@ -234,13 +249,25 @@ void ChatHeaderInfo::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         Gdiplus::SolidBrush pillBrush(kPillFill);
         g.FillPath(&pillBrush, &pill);
 
-        COLORREF dotC = m_typing ? kTypingColor : StatusColor(drawStatus);
-        Gdiplus::SolidBrush dotBrush(Gdiplus::Color(255,
-            GetRValue(dotC), GetGValue(dotC), GetBValue(dotC)));
-        g.FillEllipse(&dotBrush,
-                      (Gdiplus::REAL)(pillX + 8),
-                      (Gdiplus::REAL)(pillY + (kPillHeight - kStatusDot) / 2),
-                      (Gdiplus::REAL)kStatusDot, (Gdiplus::REAL)kStatusDot);
+        const Gdiplus::REAL badgeX = (Gdiplus::REAL)(pillX + 8);
+        const Gdiplus::REAL badgeY = (Gdiplus::REAL)(pillY + (kPillHeight - kStatusDot) / 2);
+
+        if (m_typing)
+        {
+            // 正在输入：不是在线状态，画一枚主题橙实心圆点，尺寸对齐徽标的圆底。
+            const Gdiplus::REAL disc  = (Gdiplus::REAL)kStatusDot * kBadgeDiscRatio;
+            const Gdiplus::REAL inset = ((Gdiplus::REAL)kStatusDot - disc) / 2.0f;
+            Gdiplus::SolidBrush dotBrush(Gdiplus::Color(255,
+                GetRValue(kTypingColor), GetGValue(kTypingColor), GetBValue(kTypingColor)));
+            g.FillEllipse(&dotBrush, badgeX + inset, badgeY + inset, disc, disc);
+        }
+        else
+        {
+            // 对方的在线状态：字形与配色都取自共用映射，与联系人列表里同一个人身上
+            // 的那枚徽标逐字一致。
+            balloonmain::DrawPresenceBadge(g, PresenceFromChatStatus(drawStatus), false,
+                                           badgeX, badgeY, (Gdiplus::REAL)kStatusDot);
+        }
     }
 
     RECT pillTextRc = { pillX + 8 + kStatusDot + 5, pillY,

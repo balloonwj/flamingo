@@ -31,7 +31,13 @@
     <ClCompile Include="..\chatserversrc\ContactsProtocol.cpp" />
     <ClCompile Include="..\chatserversrc\FavoriteProtocol.cpp" />
     <ClCompile Include="..\chatserversrc\FavoriteManager.cpp" />
+    <ClCompile Include="..\chatserversrc\StarredProtocol.cpp" />
+    <ClCompile Include="..\chatserversrc\StarredManager.cpp" />
     <ClCompile Include="..\chatserversrc\ContactRemarkManager.cpp" />
+    <ClCompile Include="..\chatserversrc\UpdateProtocol.cpp" />
+    <ClCompile Include="..\chatserversrc\ClientVersionManager.cpp" />
+    <ClCompile Include="..\chatserversrc\UpdatePackageScanner.cpp" />
+    <ClCompile Include="..\utils\FileEnum.cpp" />
     <ClCompile Include="..\chatserversrc\ProfileProtocol.cpp" />
     <ClCompile Include="..\chatserversrc\RegisterProtocol.cpp" />
     <ClCompile Include="..\chatserversrc\RegisterService.cpp" />
@@ -59,6 +65,7 @@
     <ClCompile Include="..\utils\RelayToken.cpp" />
     <ClCompile Include="..\net\FrameCodec.cpp" />
     <ClCompile Include="..\utils\PasswordHasher.cpp" />
+    <ClCompile Include="..\utils\Sha256.cpp" />
     <ClCompile Include="..\chatserversrc\DepartmentManager.cpp" />
     <ClCompile Include="..\chatserversrc\DepartmentMsg.cpp" />
     <ClCompile Include="..\chatserversrc\DepartmentPath.cpp" />
@@ -115,6 +122,7 @@
     <ClCompile Include="..\net\Timer.cpp" />
     <ClCompile Include="..\net\TimerQueue.cpp" />
     <ClCompile Include="..\utils\AppPath.cpp" />
+    <ClCompile Include="..\utils\ServerConfigLoader.cpp" />
     <ClCompile Include="..\utils\DaemonRun.cpp" />
     <ClCompile Include="..\utils\MD5.cpp" />
     <ClCompile Include="..\utils\StringUtil.cpp" />
@@ -141,6 +149,7 @@
   <ItemGroup>
     <ClInclude Include="..\base\AsyncLog.h" />
     <ClInclude Include="..\base\ConfigFileReader.h" />
+    <ClInclude Include="..\utils\ServerConfigLoader.h" />
     <ClInclude Include="..\base\CountDownLatch.h" />
     <ClInclude Include="..\base\Platform.h" />
     <ClInclude Include="..\base\RAIIWrapper.h" />
@@ -153,7 +162,13 @@
     <ClInclude Include="..\chatserversrc\ContactsProtocol.h" />
     <ClInclude Include="..\chatserversrc\FavoriteProtocol.h" />
     <ClInclude Include="..\chatserversrc\FavoriteManager.h" />
+    <ClInclude Include="..\chatserversrc\StarredProtocol.h" />
+    <ClInclude Include="..\chatserversrc\StarredManager.h" />
     <ClInclude Include="..\chatserversrc\ContactRemarkManager.h" />
+    <ClInclude Include="..\chatserversrc\UpdateProtocol.h" />
+    <ClInclude Include="..\chatserversrc\ClientVersionManager.h" />
+    <ClInclude Include="..\chatserversrc\UpdatePackageScanner.h" />
+    <ClInclude Include="..\utils\FileEnum.h" />
     <ClInclude Include="..\chatserversrc\ProfileProtocol.h" />
     <ClInclude Include="..\chatserversrc\RegisterProtocol.h" />
     <ClInclude Include="..\chatserversrc\RegisterService.h" />
@@ -182,6 +197,7 @@
     <ClInclude Include="..\chatserversrc\Protocol.h" />
     <ClInclude Include="..\net\FrameCodec.h" />
     <ClInclude Include="..\utils\PasswordHasher.h" />
+    <ClInclude Include="..\utils\Sha256.h" />
     <ClInclude Include="..\chatserversrc\DepartmentManager.h" />
     <ClInclude Include="..\chatserversrc\DepartmentMsg.h" />
     <ClInclude Include="..\chatserversrc\DepartmentPath.h" />
@@ -337,6 +353,14 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
+    <!-- x64 的产物与中间文件都放进各自的子目录，免得与 Win32 的同名产物互相覆盖 -->
+    <OutDir>x64\$(Configuration)\</OutDir>
+    <IntDir>chatserver\x64\$(Configuration)\</IntDir>
+    <!-- x64 的 MySQL 客户端用 MariaDB Connector/C 3.4.9（源码在 ../mariadb-connector-c-3.4.9，
+         编译产物装在 ../mariadb-connector-x64）。仓库自带的 mysql-5.1.73-win32 只有 32 位库，
+         x64 用不了。第二个包含目录是给连接器头文件之间的平铺互相引用（如 #include <mariadb_com.h>）用的 -->
+    <IncludePath>..\mariadb-connector-x64\include;..\mariadb-connector-x64\include\mysql;$(IncludePath)</IncludePath>
+    <LibraryPath>..\mariadb-connector-x64\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -347,6 +371,14 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
+    <!-- x64 的产物与中间文件都放进各自的子目录，免得与 Win32 的同名产物互相覆盖 -->
+    <OutDir>x64\$(Configuration)\</OutDir>
+    <IntDir>chatserver\x64\$(Configuration)\</IntDir>
+    <!-- x64 的 MySQL 客户端用 MariaDB Connector/C 3.4.9（源码在 ../mariadb-connector-c-3.4.9，
+         编译产物装在 ../mariadb-connector-x64）。仓库自带的 mysql-5.1.73-win32 只有 32 位库，
+         x64 用不了。第二个包含目录是给连接器头文件之间的平铺互相引用（如 #include <mariadb_com.h>）用的 -->
+    <IncludePath>..\mariadb-connector-x64\include;..\mariadb-connector-x64\include\mysql;$(IncludePath)</IncludePath>
+    <LibraryPath>..\mariadb-connector-x64\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -372,13 +404,21 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    <!-- WIN32 必须定义：全仓库判断平台用的是裸 WIN32（见 base/Platform.h），而不是 MSVC 自带的
+         _WIN32。x64 下不定义它会走进 POSIX 分支，编译必然失败 -->
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
+      <AdditionalDependencies>libmariadb.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>copy /Y "$(ProjectDir)..\mariadb-connector-x64\lib\libmariadb.dll" "$(OutDir)" &gt;nul</Command>
+      <Message>copy MariaDB Connector/C runtime dll to output dir</Message>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
@@ -412,8 +452,13 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <WholeProgramOptimization>true</WholeProgramOptimization>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    <!-- WIN32 必须定义：全仓库判断平台用的是裸 WIN32（见 base/Platform.h），而不是 MSVC 自带的
+         _WIN32。x64 下不定义它会走进 POSIX 分支，编译必然失败 -->
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
@@ -421,7 +466,13 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
+      <AdditionalDependencies>libmariadb.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
+    <PostBuildEvent>
+      <Command>copy /Y "$(ProjectDir)..\mariadb-connector-x64\lib\libmariadb.dll" "$(OutDir)" &gt;nul</Command>
+      <Message>copy MariaDB Connector/C runtime dll to output dir</Message>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

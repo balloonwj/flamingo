@@ -20,7 +20,8 @@
 #include "../BalloonMain/AvatarSpec.h"         // DecodeAvatar：按 (facetype,customface) 定该画什么
 #include "../BalloonMain/AvatarImageUtil.h"    // MakeRoundedAvatarFromFile：自定义图头像位图
 #include "../BalloonMain/ContactRemarkModel.h" // ResolveContactDisplayName：备注优先的统一取名口径
-#include "../net/ImageTransfer.h"              // 头像真图的本地缓存路径与下载
+#include "../net/ImageTransfer.h"
+#include "../net/CurrentUserAccount.h"   // net::CurrentUserAccount（本地缓存目录按登录账号分）              // 头像真图的本地缓存路径与下载
 #include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox / DuiHBox / Hint
 #include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
@@ -107,7 +108,8 @@ static void ApplyRowAvatar(balloonmain::MainPanelListItem* item, int64_t entityI
     if (spec.m_kind == balloonmain::avatar_kind_image && !customfaceUtf8.empty() && selfId > 0)
     {
         const std::wstring path =
-            net::ImageTransfer::AvatarCacheFilePathForFileId(selfId, customfaceUtf8);
+            net::ImageTransfer::AvatarCacheFilePathForFileId(net::CurrentUserAccount(),
+                                                             customfaceUtf8);
         if (!path.empty() && ::GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES)
         {
             HBITMAP hbm = balloonmain::MakeRoundedAvatarFromFile(
@@ -125,7 +127,8 @@ static void ApplyRowAvatar(balloonmain::MainPanelListItem* item, int64_t entityI
 
         //缓存没命中：这一次先画字形占位，同时把图拉下来 —— 下拉是随手开随手关的
         //浮窗，每次搜索都整批重建行，不值得为一张头像单独回刷，下次打开就是真图了。
-        net::ImageTransfer::GetInstance().EnqueueAvatarDownload(customfaceUtf8, selfId);
+        net::ImageTransfer::GetInstance().EnqueueAvatarDownload(customfaceUtf8,
+                                                                net::CurrentUserAccount());
     }
 
     item->SetAvatar(spec.m_glyph, spec.m_color);

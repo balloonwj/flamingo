@@ -31,6 +31,8 @@
 #include "Screens/ComposeModal.h"
 #include "Screens/GroupModal.h"
 #include "Screens/AuditScreen.h"
+#include "Screens/ClientVersionsScreen.h"
+#include "Screens/ClientVersionModal.h"
 #include "Screens/SettingsScreen.h"
 #include "Screens/NetworkSettingsScreen.h"
 #include "Mock/DataStore.h"
@@ -49,6 +51,7 @@
 
 #include "Controls/Layout/DuiLayout.h"
 #include "Controls/Input/DuiEditHost.h"
+#include "Controls/Basic/DuiButton.h"   // 「记住密码」复选框（StyleCheckbox）的读写
 #include "Controls/Input/DuiRichEditHost.h"   // 公告详情面板的标题 / 正文用
 #include "Controls/List/DuiMenu.h"
 #include "DuiAnimation.h"   // DuiAnimMgr：host 须周期性 TickAll 驱动 balloonui 动画
@@ -73,9 +76,11 @@ const WPARAM kNavLogout          = 2;   // 登出回到登录界面
 const WPARAM kNavShowModal       = 3;   // 打开新增企业弹窗
 const WPARAM kNavHideModal       = 4;   // 关闭新增企业弹窗
 const WPARAM kNavSubmitModal     = 5;   // 提交新增企业弹窗
-const WPARAM kNavShowNodeModal   = 7;   // 打开组织节点弹窗
-const WPARAM kNavHideNodeModal   = 8;   // 关闭组织节点弹窗
-const WPARAM kNavSubmitNodeModal = 9;   // 提交组织节点弹窗
+const WPARAM kNavShowNodeModal   = 7;   // 打开组织节点对话框（新增部门 / 员工）
+const WPARAM kNavHideNodeModal   = 8;   // 关闭组织节点对话框
+// 9 历史用于「提交组织节点弹窗」的 navigate 分发。NodeModal 改成独立顶层窗口后,
+// 「创建」按钮由对话框自己接管、校验通过后直接回调 AdminFrame::OnNodeModalSubmit,
+// 不再 PostMessage 到主窗口。与上面 10/11/12 同理,ID 保留空缺不复用。
 // 10/11/12 历史用于「通用确认弹窗」的 navigate 分发,ConfirmDialog 改成
 // 独立顶层窗口后,按钮事件 dialog 自己接管,不再 PostMessage 到主窗口。
 // ID 段保留空缺不复用,避免误重用引发 stale handler。
@@ -103,6 +108,11 @@ const WPARAM kNavExportAnnouncements = 33; // 导出公告列表为 CSV
 const WPARAM kNavShowGroupModal    = 34; // 打开新建群弹窗
 const WPARAM kNavHideGroupModal    = 35; // 关闭新建群弹窗
 const WPARAM kNavSubmitGroupModal  = 36; // 提交新建群弹窗
+const WPARAM kNavShowCvModal       = 37; // 打开新建客户端版本弹窗
+const WPARAM kNavHideCvModal       = 38; // 关闭新建客户端版本弹窗
+const WPARAM kNavSubmitCvDraft     = 39; // 提交新建客户端版本（存草稿）
+const WPARAM kNavSubmitCvPublish   = 40; // 提交新建客户端版本（直接发布）
+const WPARAM kNavRescanPackages    = 41; // 弹窗内「重新扫描」升级包目录
 const WPARAM kNavScreenBase        = 100;// 切换界面：kNavScreenBase + (int)Screen
 
 // 注:历史的 kToastTimerId / kToastTickMs 已删除 ——
@@ -306,6 +316,9 @@ ScreenInfo GetScreenInfo(Screen screen)
     case Screen::Settings:
         return { kIdNavSettings, ui::Icon::Settings, _T("平台设置"),
                  _T("域名、SSO、安全策略、品牌定制等") };
+    case Screen::ClientVersions:
+        return { kIdNavClientVersions, ui::Icon::Download, _T("客户端版本"),
+                 _T("发布 PC 客户端升级包，控制发布 / 撤回与回滚") };
     case Screen::EnterpriseDetail:
     default:
         // 企业详情是「企业管理」的子屏：侧栏高亮 / 面包屑沿用企业管理。
@@ -487,9 +500,9 @@ void AdminFrame::InitContent()
     m_modal = modal.get();
     m_root->AddModal(std::move(modal));
 
-    auto nodeModal = std::make_unique<NodeModal>();
-    m_nodeModal = nodeModal.get();
-    m_root->AddModal(std::move(nodeModal));
+    // 组织节点对话框(NodeModal,新增部门 / 新增员工)已经改成独立顶层
+    // DuiFrameWindow,on-demand 在 ShowNodeModal 里 new + CreateAndShow,
+    // 关闭即销毁。RootContainer 不再持有它。
 
     // 通用确认/信息对话框(ConfirmDialog)已经改成独立顶层 DuiFrameWindow,
     // on-demand 在调用方需要时 new + CreateAndShow,关闭即销毁。
@@ -510,6 +523,12 @@ void AdminFrame::InitContent()
     auto groupModal = std::make_unique<GroupModal>();
     m_groupModal = groupModal.get();
     m_root->AddModal(std::move(groupModal));
+
+    // 新建客户端版本弹窗（仅平台超管会用到，但与其它弹窗一样常驻，
+    // 开 / 关只切显隐 —— 销毁一棵宿主仍在跟踪的控件树会留下悬空指针）。
+    auto cvModal = std::make_unique<ClientVersionModal>();
+    m_clientVersionModal = cvModal.get();
+    m_root->AddModal(std::move(cvModal));
 
     // 修改员工资料弹窗(EmployeeEditDialog)不再预创建 —— 它已经改成
     // 独立顶层 DuiFrameWindow,on-demand 在 OnUserDetailLoaded 里 new 出来,
@@ -630,6 +649,7 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
         case kIdNavAnnouncements:
         case kIdNavAudit:
         case kIdNavSettings:
+        case kIdNavClientVersions:
             // 切换界面延迟到事件派发结束后执行。kIdNav* 连续递增、与
             // Screen 枚举一一对应。
             ::PostMessage(m_hWnd, WM_APP_NAVIGATE,
@@ -711,9 +731,9 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
                 const CString parentId = m_enterpriseDetail->DefaultParentDept();
                 const OrgNode* p = DataStore::Instance().FindOrgNode(
                     m_enterpriseDetail->GetEnterpriseId(), parentId);
-                m_nodeModalParentId = parentId;
-                m_nodeModal->SetMode(NodeModal::Mode::AddUser,
-                                     p != nullptr ? p->m_name : CString());
+                m_nodeModalParentId      = parentId;
+                m_nodeModalPendingIsDept = false;
+                m_nodeModalParentName    = (p != nullptr) ? p->m_name : CString();
                 ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavShowNodeModal, 0);
             }
             else
@@ -728,6 +748,37 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
             {
                 m_groupModal->SetEnterprise(m_enterpriseDetail->GetEnterpriseId());
                 ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavShowGroupModal, 0);
+            }
+            break;
+        case kIdOrgRefresh:
+            // 组织树工具条「刷新」→ 重新拉取当前企业的部门树（含成员）。
+            // 树的展开状态、滚动位置、搜索过滤词都由 OrgTree::Rebuild 保留。
+            if (m_enterpriseDetail != nullptr && m_enterpriseDetail->IsOrgTab())
+            {
+                if (m_orgTreeReloading)
+                {
+                    // 上一次刷新还没回来，避免连点堆请求。
+                    ShowToast(_T("正在刷新组织架构，请稍候…"));
+                }
+                else
+                {
+                    ReloadOrgTree(true);
+                }
+            }
+            break;
+        case kIdOrgExpandAll:
+            // 组织树工具条「展开全部」。IconButton 的通知直接到宿主窗口，
+            // 不沿控件父链冒泡，故在这里转调回详情屏。
+            if (m_enterpriseDetail != nullptr)
+            {
+                m_enterpriseDetail->ExpandAllOrg();
+            }
+            break;
+        case kIdOrgCollapse:
+            // 组织树工具条「折叠」。转调理由同上。
+            if (m_enterpriseDetail != nullptr)
+            {
+                m_enterpriseDetail->CollapseAllOrg();
             }
             break;
         case kIdDetailScreen:
@@ -764,11 +815,10 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
             {
                 const OrgNode* p = DataStore::Instance().FindOrgNode(
                     m_enterpriseDetail->GetEnterpriseId(), nodeId);
-                m_nodeModalParentId = nodeId;
-                m_nodeModal->SetMode(
-                    pend == EnterpriseDetailScreen::Pending::AddDept
-                        ? NodeModal::Mode::AddDept : NodeModal::Mode::AddUser,
-                    p != nullptr ? p->m_name : CString());
+                m_nodeModalParentId      = nodeId;
+                m_nodeModalPendingIsDept =
+                    (pend == EnterpriseDetailScreen::Pending::AddDept);
+                m_nodeModalParentName    = (p != nullptr) ? p->m_name : CString();
                 ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavShowNodeModal, 0);
             }
             else if (pend == EnterpriseDetailScreen::Pending::SelectUser)
@@ -879,13 +929,11 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
             break;
         }
 
-        case kIdNodeClose:
-        case kIdNodeCancel:
-            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavHideNodeModal, 0);
-            break;
-        case kIdNodeSubmit:
-            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavSubmitNodeModal, 0);
-            break;
+        // kIdNodeClose/Cancel/Submit 历史在此 PostMessage 到主窗口的 navigate
+        // 分发。NodeModal 改成独立顶层窗口后，这三个按钮事件不再经主窗口
+        // OnDuiNotify —— 对话框自己 CHAIN 到 DuiFrameWindow 收 WM_DUI_NOTIFY
+        // 并在 NodeModal::OnDuiNotify 里处理（取消→RequestClose，创建→校验后
+        // 回调 OnNodeModalSubmit），故这里不再需要对应分支。
 
         case kIdGroupClose:
         case kIdGroupCancel:
@@ -893,6 +941,30 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
             break;
         case kIdGroupSubmit:
             ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavSubmitGroupModal, 0);
+            break;
+
+        // ---- 客户端版本界面与其弹窗 ----
+        case kIdCvRefresh:
+            StartLoadClientVersions();
+            break;
+        case kIdCvNew:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavShowCvModal, 0);
+            break;
+        case kIdCvRowAction:
+            HandleClientVersionRowAction();
+            break;
+        case kIdCvModalClose:
+        case kIdCvModalCancel:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavHideCvModal, 0);
+            break;
+        case kIdCvModalSaveDraft:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavSubmitCvDraft, 0);
+            break;
+        case kIdCvModalPublish:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavSubmitCvPublish, 0);
+            break;
+        case kIdCvModalRescan:
+            ::PostMessage(m_hWnd, WM_APP_NAVIGATE, kNavRescanPackages, 0);
             break;
 
         // kIdEmpEditClose/Cancel/Submit 历史在此 PostMessage 到主窗口的
@@ -1303,10 +1375,6 @@ LRESULT AdminFrame::OnNavigate(UINT, WPARAM wParam, LPARAM, BOOL& bHandled)
     {
         HideNodeModal();
     }
-    else if (wParam == kNavSubmitNodeModal)
-    {
-        SubmitNodeModal();
-    }
     else if (wParam == kNavShowGroupModal)
     {
         ShowGroupModal();
@@ -1318,6 +1386,27 @@ LRESULT AdminFrame::OnNavigate(UINT, WPARAM wParam, LPARAM, BOOL& bHandled)
     else if (wParam == kNavSubmitGroupModal)
     {
         SubmitGroupModal();
+    }
+    else if (wParam == kNavShowCvModal)
+    {
+        // 先扫一次升级包目录，拿到候选包再开弹窗（见 OnPackagesScanned）
+        StartScanPackages();
+    }
+    else if (wParam == kNavHideCvModal)
+    {
+        HideClientVersionModal();
+    }
+    else if (wParam == kNavSubmitCvDraft)
+    {
+        SubmitClientVersionModal(false);
+    }
+    else if (wParam == kNavSubmitCvPublish)
+    {
+        SubmitClientVersionModal(true);
+    }
+    else if (wParam == kNavRescanPackages)
+    {
+        StartScanPackages();
     }
     // kNavShowConfirm / kNavHideConfirm / kNavConfirmOk 历史 navigate 分支
     // 在此处理,ConfirmDialog 改独立顶层窗口后,按钮事件 dialog 自己接管。
@@ -1456,6 +1545,18 @@ LRESULT AdminFrame::OnLoginResult(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
                 login.m_adminId, login.m_adminName.GetString(),
                 AdminSession::Instance().IsPlatformAdmin()
                     ? _T("平台超管") : _T("企业管理员"));
+
+        // 记住本次登录：账号总是记（下次打开自动填好），口令仅在用户勾了
+        // "记住密码"时才记，且落盘前经 DPAPI 加密（见 Util/DpapiSecret.h）。
+        // 只在登录成功这一支保存 —— 密码错了还给它存下来，下次打开又是错的。
+        LoginConfig toSave = m_pendingLogin;
+        if (!toSave.m_rememberPassword)
+        {
+            toSave.m_password.Empty();
+        }
+        AppConfig::Instance().SetLogin(toSave);
+        AppConfig::Instance().Save();
+
         EnterShell();
     }
     else
@@ -1481,6 +1582,15 @@ LRESULT AdminFrame::OnDeleteConfirmDialog(UINT, WPARAM wParam, LPARAM,
 {
     bHandled = TRUE;
     ConfirmDialog* dlg = reinterpret_cast<ConfirmDialog*>(wParam);
+    delete dlg;
+    return 0;
+}
+
+LRESULT AdminFrame::OnDeleteNodeModal(UINT, WPARAM wParam, LPARAM,
+                                      BOOL& bHandled)
+{
+    bHandled = TRUE;
+    NodeModal* dlg = reinterpret_cast<NodeModal*>(wParam);
     delete dlg;
     return 0;
 }
@@ -1615,6 +1725,18 @@ LRESULT AdminFrame::OnApiResult(UINT, WPARAM wParam, LPARAM lParam,
         break;
     case kApiTagGroupCreate:
         OnGroupCreated(*http);
+        break;
+    case kApiTagCvList:
+        OnClientVersionsLoaded(*http);
+        break;
+    case kApiTagCvScanPackages:
+        OnPackagesScanned(*http);
+        break;
+    case kApiTagCvCreate:
+    case kApiTagCvUpdate:
+    case kApiTagCvSetEnabled:
+    case kApiTagCvRepublish:
+        OnClientVersionActionDone(*http);
         break;
     case kApiTagOrgNodeDelete:
         OnOrgNodeDeleted(*http);
@@ -1784,6 +1906,13 @@ void AdminFrame::EnterShell()
         m_screens[static_cast<int>(Screen::Settings)] = settingsScreen.get();
         m_screenHost->AddScreen(std::move(settingsScreen));
 
+        // 客户端版本（真实界面）。企业级管理员看不到入口，但屏本身照建 ——
+        // m_screens 按 Screen 枚举下标寻址，留空会让下标错位。
+        auto cvScreen = std::make_unique<ClientVersionsScreen>();
+        m_clientVersionsScreen = cvScreen.get();
+        m_screens[static_cast<int>(Screen::ClientVersions)] = cvScreen.get();
+        m_screenHost->AddScreen(std::move(cvScreen));
+
         auto mainColumn = std::make_unique<DuiVBox>();
         mainColumn->AddChild(std::move(topbar),     Hint().Fixed(theme::kTopBarHeight));
         mainColumn->AddChild(std::move(screenHost), Hint().Weight(1));
@@ -1839,6 +1968,10 @@ void AdminFrame::SwitchScreen(Screen screen)
     else if (screen == Screen::Settings && m_settingsScreen != nullptr)
     {
         StartLoadProfile();
+    }
+    else if (screen == Screen::ClientVersions && m_clientVersionsScreen != nullptr)
+    {
+        StartLoadClientVersions();
     }
 
     // 切换可见性（屏常驻、不销毁）。
@@ -2567,6 +2700,21 @@ void AdminFrame::TrySubmitLogin()
     }
     m_loginBusy = true;
 
+    // 把本次提交用的账号 / 口令 / "记住密码"勾选状态暂存下来，登录成功后由
+    // OnLoginResult 落盘。之所以在这里存而不是等到应答回来再读控件：登录是异步的，
+    // 这期间用户完全可能又去改输入框，那时读到的就不是这次登录用的凭据了。
+    m_pendingLogin.m_account  = accountText;
+    m_pendingLogin.m_password = passwordText;
+    m_pendingLogin.m_rememberPassword = false;
+    if (m_loginPage != nullptr)
+    {
+        if (DuiButton* remember = dynamic_cast<DuiButton*>(
+                m_loginPage->FindCtrlById(kIdLoginRememberPwd)))
+        {
+            m_pendingLogin.m_rememberPassword = remember->IsChecked();
+        }
+    }
+
     // 拼好登录请求，交 HTTP 工作线程异步发送 —— Post 后本函数立即返回，
     // 界面不阻塞；应答经 WM_APP_LOGIN_RESULT 回到 OnLoginResult。
     const ServerConfig& server = AppConfig::Instance().Server();
@@ -3105,26 +3253,41 @@ void AdminFrame::OnDetailPartLoaded(ApiTag tag, const HttpResult& http)
 
 void AdminFrame::ShowNodeModal()
 {
-    if (m_nodeModal == nullptr || m_root == nullptr)
+    // 已经开着就不再开第二个（连点「新增员工」两次会走到这里）。
+    if (m_nodeModal != nullptr)
     {
         return;
     }
-    // 弹窗模式与字段已在 OnDuiNotify 里经 SetMode 配置好。隐藏外壳内
-    // 真 EDIT 子窗，再显示弹窗。
-    SetEditsVisible(m_shellPage, false);
-    m_root->ShowModal(m_nodeModal);
-    FA_LOGI(_T("打开组织节点弹窗"));
+
+    // 对话框已改成独立顶层窗口：它自带真模态（EnableWindow(主窗, FALSE)），
+    // 顶层 HWND 天然盖得住主窗口里的任何子窗口，故【不再】需要像 overlay 弹窗
+    // 那样先 SetEditsVisible(m_shellPage, false) 去藏外壳里的真 EDIT 子窗。
+    m_nodeModal = new NodeModal(
+        this, m_hWnd,
+        m_nodeModalPendingIsDept ? NodeModal::Mode::AddDept
+                                 : NodeModal::Mode::AddUser,
+        m_nodeModalParentName);
+    if (!m_nodeModal->CreateAndShow())
+    {
+        delete m_nodeModal;
+        m_nodeModal = nullptr;
+        ShowToast(_T("打开对话框失败"), ToastKind::Warn);
+        return;
+    }
+    m_nodeSubmitBusy = false;
+    FA_LOGI(_T("打开组织节点对话框（%s）"),
+            m_nodeModalPendingIsDept ? _T("新增部门") : _T("新增员工"));
 }
 
 void AdminFrame::HideNodeModal()
 {
-    if (m_root == nullptr)
+    // 关闭走对话框自己的 WM_CLOSE → WM_DESTROY，收口在 OnNodeModalDestroyed：
+    // 那里恢复主窗口 Enable、清指针、安排延迟 delete。本方法只负责发起。
+    if (m_nodeModal != nullptr)
     {
-        return;
+        m_nodeModal->RequestClose();
     }
-    m_root->HideModal();
-    SetEditsVisible(m_shellPage, true);
-    FA_LOGI(_T("关闭组织节点弹窗"));
+    FA_LOGI(_T("关闭组织节点对话框"));
 }
 
 void AdminFrame::ShowGroupModal()
@@ -3564,18 +3727,12 @@ void AdminFrame::OnEnterpriseAdminRemoved(const HttpResult& http)
     FireEnterpriseAdmins();
 }
 
-void AdminFrame::SubmitNodeModal()
+void AdminFrame::OnNodeModalSubmit(NodeModal* dlg)
 {
-    if (m_nodeModal == nullptr || m_enterpriseDetail == nullptr)
+    // 必填校验已由对话框在 SubmitOrShake 里做过（不通过就不会调到这里），
+    // 本方法只做幂等保护与实际的 HTTP 提交。
+    if (dlg == nullptr || dlg != m_nodeModal || m_enterpriseDetail == nullptr)
     {
-        return;
-    }
-    const bool isDept = (m_nodeModal->GetMode() == NodeModal::Mode::AddDept);
-    if (!m_nodeModal->Validate())
-    {
-        ShowToast(isDept ? _T("请填写部门名称")
-                         : _T("请填写员工姓名与邮箱"));
-        FA_LOGW(_T("组织节点弹窗校验未通过"));
         return;
     }
 
@@ -3584,6 +3741,8 @@ void AdminFrame::SubmitNodeModal()
         ShowToast(_T("正在提交，请稍候…"));
         return;
     }
+
+    const bool isDept = (m_nodeModal->GetMode() == NodeModal::Mode::AddDept);
 
     const ServerConfig& server = AppConfig::Instance().Server();
     const CString       token  = AdminSession::Instance().Token();
@@ -3630,6 +3789,21 @@ void AdminFrame::SubmitNodeModal()
     }
 }
 
+void AdminFrame::OnNodeModalDestroyed(NodeModal* dlg)
+{
+    // 对话框 WM_DESTROY 时调用 —— 不论取消、点 X、还是创建成功后 RequestClose，
+    // 都会走到这里。清掉自己持有的裸指针，并把 delete 推迟到当前 WM_DESTROY
+    // 栈展开之后，避免在对话框自己的消息处理里就把对象析构掉。
+    if (dlg != nullptr && dlg == m_nodeModal)
+    {
+        m_nodeModal      = nullptr;
+        //对话框没了，提交中的标志一并复位，否则下次开对话框会被误判成"正在提交"。
+        m_nodeSubmitBusy = false;
+        ::PostMessage(m_hWnd, WM_APP_DELETE_NODE_MODAL,
+                      reinterpret_cast<WPARAM>(dlg), 0);
+    }
+}
+
 void AdminFrame::OnDeptCreated(const HttpResult& http)
 {
     m_nodeSubmitBusy = false;
@@ -3637,7 +3811,13 @@ void AdminFrame::OnDeptCreated(const HttpResult& http)
         adminapi::ParseEnterpriseActionResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);   // 失败保留弹窗，让用户改后重试
+        //失败保留对话框让用户改后重试，但要把「创建中…」按钮恢复成可点，
+        //否则用户改完了也按不动。
+        if (m_nodeModal != nullptr)
+        {
+            m_nodeModal->SetBusy(false);
+        }
+        ShowToast(r.m_message);
         FA_LOGW(_T("新增部门失败：%s"), r.m_message.GetString());
         return;
     }
@@ -3652,7 +3832,12 @@ void AdminFrame::OnUserCreated(const HttpResult& http)
     const UserCreateResult r = adminapi::ParseUserCreateResponse(http);
     if (!r.Succeeded())
     {
-        ShowToast(r.m_message);   // 失败保留弹窗
+        //同 OnDeptCreated：失败保留对话框，但把提交按钮恢复成可点。
+        if (m_nodeModal != nullptr)
+        {
+            m_nodeModal->SetBusy(false);
+        }
+        ShowToast(r.m_message);
         FA_LOGW(_T("新增员工失败：%s"), r.m_message.GetString());
         return;
     }
@@ -3690,7 +3875,7 @@ void AdminFrame::OnOrgNodeDeleted(const HttpResult& http)
     ReloadOrgTree();
 }
 
-void AdminFrame::ReloadOrgTree()
+void AdminFrame::ReloadOrgTree(bool showToastOnDone)
 {
     if (m_enterpriseDetail == nullptr)
     {
@@ -3701,6 +3886,9 @@ void AdminFrame::ReloadOrgTree()
     {
         return;
     }
+    m_orgTreeReloading   = true;
+    m_orgTreeReloadToast = showToastOnDone;
+
     HttpRequest request = adminapi::MakeDeptTreeRequest(
         AppConfig::Instance().Server(), AdminSession::Instance().Token(),
         _ttoi64(entId));
@@ -3708,10 +3896,16 @@ void AdminFrame::ReloadOrgTree()
     request.m_replyMsg  = WM_APP_API_RESULT;
     request.m_tag       = kApiTagOrgTreeReload;
     HttpWorker::Instance().Post(request);
+    FA_LOGI(_T("重新拉取企业组织树：%s"), entId.GetString());
 }
 
 void AdminFrame::OnOrgTreeReloaded(const HttpResult& http)
 {
+    // 无论成功失败都先解除在途标记，否则一次失败会把「刷新」按钮永久卡住。
+    const bool showToast = m_orgTreeReloadToast;
+    m_orgTreeReloading   = false;
+    m_orgTreeReloadToast = false;
+
     if (m_enterpriseDetail == nullptr)
     {
         return;
@@ -3736,6 +3930,10 @@ void AdminFrame::OnOrgTreeReloaded(const HttpResult& http)
     }
     DataStore::Instance().SetOrgTree(entId, r.m_root);
     m_enterpriseDetail->Refresh();
+    if (showToast)
+    {
+        ShowToast(_T("组织架构已刷新"));
+    }
 }
 
 void AdminFrame::ShowConfirmDialog(const ConfirmDialogSpec& spec)
@@ -4638,21 +4836,42 @@ void AdminFrame::ShowToast(LPCTSTR text, ToastKind kind)
 
 void AdminFrame::PrefillLogin()
 {
-    // 预填测试数据库（testdata.sql）里的平台超级管理员账户，方便联调演示。
-    // 须在输入框 EnsureCreated 之后调用。
+    // 回填登录框。须在输入框 EnsureCreated 之后调用。
+    // 优先用 ini 里记下的上次登录信息；本机从未登录过时，才回退到测试数据库
+    // （testdata.sql）里的平台超级管理员账户，保持联调演示的便利。
     if (m_loginPage == nullptr)
     {
         return;
     }
+
+    const LoginConfig& saved = AppConfig::Instance().Login();
+
+    CString accountText  = saved.m_account;
+    // 没勾"记住密码"时 m_password 本就是空的，这里再判一次是为了让意图显式：
+    // 密码只在用户明确要求记住时才回填。
+    CString passwordText = saved.m_rememberPassword ? saved.m_password : CString();
+
+    if (accountText.IsEmpty())
+    {
+        accountText  = _T("li@flamingo.com");
+        passwordText = _T("admin123");
+    }
+
     if (DuiEditHost* account = dynamic_cast<DuiEditHost*>(
             m_loginPage->FindCtrlById(kIdLoginAccount)))
     {
-        account->SetText(_T("li@flamingo.com"));
+        account->SetText(accountText);
     }
     if (DuiEditHost* password = dynamic_cast<DuiEditHost*>(
             m_loginPage->FindCtrlById(kIdLoginPassword)))
     {
-        password->SetText(_T("admin123"));
+        password->SetText(passwordText);
+    }
+    if (DuiButton* remember = dynamic_cast<DuiButton*>(
+            m_loginPage->FindCtrlById(kIdLoginRememberPwd)))
+    {
+        // notify 传 false：这是程序回填，不该触发用户手动勾选才走的通知。
+        remember->SetCheck(saved.m_rememberPassword, false);
     }
 }
 
@@ -4684,6 +4903,21 @@ void AdminFrame::SetEditsVisible(DuiControl* node, bool visible)
     {
         return;
     }
+
+    // 员工详情面板自己管这 11 个只读值字段的显隐 —— 它每帧绘制末尾都会按本帧
+    // 标记表 reconcile 一次(OrgDetailPanel::ApplyBasicEditVisibility)。若在这里
+    // 逐个 SetVisible,弹窗显示引发的下一次重绘就会把这次隐藏覆盖回去,真 EDIT
+    // 子窗重新浮到弹窗表面(2026-08-11 现场:「新增员工」弹窗里漂出员工姓名与
+    // 登录账号)。改为拨它的"外部强制隐藏"开关,并【跳过其子树】——
+    // 子树递归下去只会与该面板的 reconcile 互相打架:恢复时递归会把 11 个字段
+    // 全设为可见,而其中一部分本就不该显示(空字段 / 当前不在基本信息 tab),
+    // 要等下一帧 reconcile 才纠正,中间会闪一帧错误内容。
+    if (OrgDetailPanel* orgPanel = dynamic_cast<OrgDetailPanel*>(node))
+    {
+        orgPanel->SetBasicEditsSuppressed(!visible);
+        return;
+    }
+
     if (DuiEditHost* edit = dynamic_cast<DuiEditHost*>(node))
     {
         edit->SetVisible(visible);
@@ -4719,19 +4953,23 @@ void AdminFrame::HideModalEdits()
     // 都不会出现。弹窗之后正常 ShowModal / HideModal 时，SetVisible 触发
     // 的同步会按 IsEffectivelyVisible 把这些子窗正确显示 / 隐藏。
     EnsureEditsCreated(m_modal);        // 确保新增企业弹窗的 EDIT 子窗已创建
-    EnsureEditsCreated(m_nodeModal);    // 确保组织节点弹窗的 EDIT 子窗已创建
     EnsureEditsCreated(m_serviceModal); // 确保新建服务号弹窗的 EDIT 子窗已创建
     EnsureEditsCreated(m_composeModal); // 确保新建公告弹窗的 EDIT 子窗已创建
     EnsureEditsCreated(m_groupModal);   // 确保新建群弹窗的 EDIT 子窗已创建
-    // 修改员工资料弹窗(EmployeeEditDialog)已经改成独立顶层窗口,on-demand
-    // 创建,不再常驻 RootContainer,此处不需要预创建 / 隐藏它的 EDIT 子窗。
+    EnsureEditsCreated(m_clientVersionModal); // 确保新建客户端版本弹窗的 3 个 EDIT 子窗已创建
+    // 修改员工资料弹窗(EmployeeEditDialog)与组织节点对话框(NodeModal)已经改成
+    // 独立顶层窗口,on-demand 创建,不再常驻 RootContainer,此处不需要预创建 /
+    // 隐藏它们的 EDIT 子窗。
     EnsureEditsCreated(m_enterpriseSettingsModal); // 确保企业设置弹窗的 EDIT 子窗已创建
     EnsureEditsCreated(m_networkPage);  // 确保网络设置页的 EDIT 子窗已创建
     HideEditHwnds(m_modal);             // 再逐个 ShowWindow(SW_HIDE)
-    HideEditHwnds(m_nodeModal);
     HideEditHwnds(m_serviceModal);
     HideEditHwnds(m_composeModal);
     HideEditHwnds(m_groupModal);        // 新建群弹窗的群名输入框
+    // 新建客户端版本弹窗的版本号 / 最低版本号 / 更新说明三个输入框。漏掉这一行的
+    // 表现就是登录界面正中浮着三条白色横条（2026-08-12 现场）—— 弹窗逻辑上没显示，
+    // 但它的真 EDIT 子窗一经创建默认可见，而真 HWND 永远画在 DUI 画面之上。
+    HideEditHwnds(m_clientVersionModal);
     HideEditHwnds(m_enterpriseSettingsModal); // 企业设置弹窗的输入框
     HideEditHwnds(m_networkPage);       // 网络设置页默认不显示，藏好其 EDIT
 }
@@ -4754,6 +4992,263 @@ void AdminFrame::HideEditHwnds(DuiControl* node)
     {
         HideEditHwnds(child.get());
     }
+}
+
+
+// ===========================================================================
+// 客户端版本（模块 10，仅平台超管）
+// ===========================================================================
+
+void AdminFrame::StartLoadClientVersions()
+{
+    if (m_clientVersionsScreen == nullptr)
+    {
+        return;
+    }
+
+    // platform 传 0 表示不按平台过滤：目前只有 PC 端在发版，但 Android 将来
+    // 也用同一张表，列表页一次全列出来更省事。
+    HttpRequest request = adminapi::MakeClientVersionListRequest(
+        AppConfig::Instance().Server(), AdminSession::Instance().Token(), 0);
+    request.m_replyHwnd = m_hWnd;
+    request.m_replyMsg  = WM_APP_API_RESULT;
+    request.m_tag       = kApiTagCvList;
+    HttpWorker::Instance().Post(request);
+    FA_LOGI(_T("客户端版本：发起列表加载"));
+}
+
+void AdminFrame::StartScanPackages()
+{
+    HttpRequest request = adminapi::MakeScanPackagesRequest(
+        AppConfig::Instance().Server(), AdminSession::Instance().Token());
+    request.m_replyHwnd = m_hWnd;
+    request.m_replyMsg  = WM_APP_API_RESULT;
+    request.m_tag       = kApiTagCvScanPackages;
+    HttpWorker::Instance().Post(request);
+    FA_LOGI(_T("客户端版本：发起升级包目录扫描"));
+}
+
+void AdminFrame::StartClientVersionAction(int action, long long id)
+{
+    if (id <= 0)
+    {
+        return;
+    }
+
+    HttpRequest request;
+    const ServerConfig& server = AppConfig::Instance().Server();
+    const CString& token = AdminSession::Instance().Token();
+
+    switch (static_cast<CvRowAction>(action))
+    {
+    case CvRowAction::Publish:
+        request = adminapi::MakeClientVersionSetEnabledRequest(server, token, id, true);
+        break;
+    case CvRowAction::Disable:
+        request = adminapi::MakeClientVersionSetEnabledRequest(server, token, id, false);
+        break;
+    case CvRowAction::Republish:
+        request = adminapi::MakeClientVersionRepublishRequest(server, token, id);
+        break;
+    default:
+        // Edit 不走这里（它开弹窗，不直接发请求）
+        return;
+    }
+
+    request.m_replyHwnd = m_hWnd;
+    request.m_replyMsg  = WM_APP_API_RESULT;
+    request.m_tag       = kApiTagCvSetEnabled;
+    HttpWorker::Instance().Post(request);
+    FA_LOGI(_T("客户端版本：发起行内操作 action=%d id=%lld"), action, id);
+}
+
+void AdminFrame::OnClientVersionsLoaded(const HttpResult& http)
+{
+    const adminapi::ClientVersionListResult r =
+        adminapi::ParseClientVersionListResponse(http);
+    if (!r.Succeeded())
+    {
+        ShowToast(r.m_message, ToastKind::Warn);
+        FA_LOGW(_T("客户端版本：列表加载失败 —— %s"), r.m_message.GetString());
+        return;
+    }
+
+    if (m_clientVersionsScreen != nullptr)
+    {
+        m_clientVersionsScreen->SetVersions(r.m_list);
+        m_clientVersionsScreen->Invalidate();
+    }
+    FA_LOGI(_T("客户端版本：列表加载成功，共 %d 条"), static_cast<int>(r.m_list.size()));
+}
+
+void AdminFrame::OnPackagesScanned(const HttpResult& http)
+{
+    const adminapi::ScanPackagesResult r = adminapi::ParseScanPackagesResponse(http);
+    if (!r.Succeeded())
+    {
+        ShowToast(r.m_message, ToastKind::Warn);
+        FA_LOGW(_T("客户端版本：扫描升级包目录失败 —— %s"), r.m_message.GetString());
+        return;
+    }
+
+    // 目录先回填到界面提示条上，管理员即便不建版本也能看到该往哪儿放包
+    if (m_clientVersionsScreen != nullptr)
+    {
+        m_clientVersionsScreen->SetPackageDir(r.m_dir);
+        m_clientVersionsScreen->Invalidate();
+    }
+
+    // 目录里一个可用的包都没有：与其开一个空下拉的弹窗让人困惑，不如直说
+    int usable = 0;
+    for (size_t i = 0; i < r.m_list.size(); ++i)
+    {
+        if (r.m_list[i].m_isZip)
+        {
+            ++usable;
+        }
+    }
+    if (usable == 0)
+    {
+        CString tip;
+        tip.Format(_T("升级包目录 %s 下没有可用的 zip，请先把升级包放进去"),
+                   r.m_dir.GetString());
+        ShowToast(tip, ToastKind::Warn);
+        FA_LOGW(_T("客户端版本：升级包目录里没有可用的 zip（共 %d 个文件）"),
+                static_cast<int>(r.m_list.size()));
+        return;
+    }
+
+    ShowClientVersionModal(r);
+    FA_LOGI(_T("客户端版本：扫描到 %d 个候选包（其中可用 %d 个）"),
+            static_cast<int>(r.m_list.size()), usable);
+}
+
+void AdminFrame::OnClientVersionActionDone(const HttpResult& http)
+{
+    const EnterpriseActionResult r =
+        adminapi::ParseEnterpriseActionResponse(http);
+    if (!r.Succeeded())
+    {
+        ShowToast(r.m_message, ToastKind::Warn);
+        FA_LOGW(_T("客户端版本：操作失败 —— %s"), r.m_message.GetString());
+        return;
+    }
+
+    ShowToast(_T("操作已生效"), ToastKind::Info);
+    // 发布 / 撤回 / 回滚都会改变"当前生效"是哪一条，必须重拉列表才能把
+    // 状态列与徽标刷新对，否则界面显示的还是操作前的样子。
+    StartLoadClientVersions();
+}
+
+
+void AdminFrame::HandleClientVersionRowAction()
+{
+    if (m_clientVersionsScreen == nullptr)
+    {
+        return;
+    }
+
+    const CvPendingAction pending = m_clientVersionsScreen->TakePendingAction();
+    if (pending.m_action == CvRowAction::None)
+    {
+        return;
+    }
+
+    // 「编辑」不发请求，而是把该条记录预填进弹窗，只让人改最低版本与更新说明。
+    if (pending.m_action == CvRowAction::Edit)
+    {
+        if (m_clientVersionModal != nullptr && m_root != nullptr)
+        {
+            m_clientVersionModal->SetEditTarget(m_clientVersionsScreen->GetSelected());
+            SetEditsVisible(m_shellPage, false);
+            m_root->ShowModal(m_clientVersionModal);
+            FA_LOGI(_T("打开编辑客户端版本弹窗，id=%lld"), pending.m_id);
+        }
+        return;
+    }
+
+    StartClientVersionAction(static_cast<int>(pending.m_action), pending.m_id);
+}
+
+void AdminFrame::ShowClientVersionModal(const adminapi::ScanPackagesResult& scan)
+{
+    if (m_clientVersionModal == nullptr || m_root == nullptr)
+    {
+        return;
+    }
+
+    m_clientVersionModal->SetPackages(scan);
+    // 隐藏外壳内的真 EDIT 子窗，否则它们会透过半透明遮罩显形
+    SetEditsVisible(m_shellPage, false);
+    m_root->ShowModal(m_clientVersionModal);
+    FA_LOGI(_T("打开新建客户端版本弹窗"));
+}
+
+void AdminFrame::HideClientVersionModal()
+{
+    if (m_root == nullptr)
+    {
+        return;
+    }
+    m_root->HideModal();
+    SetEditsVisible(m_shellPage, true);
+    FA_LOGI(_T("关闭新建客户端版本弹窗"));
+}
+
+void AdminFrame::SubmitClientVersionModal(bool publish)
+{
+    if (m_clientVersionModal == nullptr)
+    {
+        return;
+    }
+
+    if (!m_clientVersionModal->Validate())
+    {
+        ShowToast(_T("请选择一个升级包并填写版本号"), ToastKind::Warn);
+        return;
+    }
+
+    // 编辑态走 update.do：只改最低版本与更新说明，包与版本号不动。
+    if (m_clientVersionModal->IsEditing())
+    {
+        const long long editingId = m_clientVersionModal->GetEditingId();
+        HttpRequest updateReq = adminapi::MakeClientVersionUpdateRequest(
+            AppConfig::Instance().Server(), AdminSession::Instance().Token(),
+            editingId,
+            m_clientVersionModal->GetMinVersion(),
+            m_clientVersionModal->GetReleaseNote(),
+            m_clientVersionModal->IsForced());
+        updateReq.m_replyHwnd = m_hWnd;
+        updateReq.m_replyMsg  = WM_APP_API_RESULT;
+        updateReq.m_tag       = kApiTagCvUpdate;
+        HttpWorker::Instance().Post(updateReq);
+
+        HideClientVersionModal();
+        FA_LOGI(_T("客户端版本：提交修改 id=%lld"), editingId);
+        return;
+    }
+
+    // 平台固定为 PC：目前只有 PC 客户端做自动更新，Android 端将来接入时
+    // 这里再按界面上的选择传。
+    const int kPlatformPc = 1;
+    HttpRequest request = adminapi::MakeClientVersionCreateRequest(
+        AppConfig::Instance().Server(), AdminSession::Instance().Token(),
+        kPlatformPc,
+        m_clientVersionModal->GetVersion(),
+        m_clientVersionModal->GetMinVersion(),
+        m_clientVersionModal->GetReleaseNote(),
+        m_clientVersionModal->GetSelectedMd5(),
+        m_clientVersionModal->IsForced(),
+        publish);
+    request.m_replyHwnd = m_hWnd;
+    request.m_replyMsg  = WM_APP_API_RESULT;
+    request.m_tag       = kApiTagCvCreate;
+    HttpWorker::Instance().Post(request);
+
+    // 请求已发出就先关弹窗：应答回来会重拉列表，成败都有 toast 提示。
+    HideClientVersionModal();
+    FA_LOGI(_T("客户端版本：提交新建 version=%s publish=%d"),
+            m_clientVersionModal->GetVersion().GetString(), publish ? 1 : 0);
 }
 
 } // namespace flamingoadmin

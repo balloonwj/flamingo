@@ -15,7 +15,7 @@
  *  不依赖 monogram 渲染、调色板等任何 GDI 设施。
  *
  *  排序约定：内部集合<u>最近在前</u>（下标 0 = 最近）。同一会话重复到达时把它
- *  移到最前并累加未读，与 QQ"最新活动浮到顶部"一致；单击托盘打开的就是下标 0。
+ *  移到最前并累加未读，即"最新活动浮到顶部"；单击托盘打开的就是下标 0。
  *
  *  本文件遵循 balloonui 头文件约定中"纯模型只依赖标准头"的做法（参照
  *  MainPanelTrayMenu.h）：只依赖 <windows.h>（COLORREF）、<string>、<vector>、
@@ -32,6 +32,40 @@
 #include <vector>
 
 namespace balloonmain {
+
+// ---- 托盘闪烁节奏（毫秒）----------------------------------------------
+// 闪烁间隔取自系统的文本光标闪烁速度（::GetCaretBlinkTime），让托盘闪烁的快慢
+// 跟着用户自己的系统偏好走。但那个函数的取值<u>不可全信</u>，故有下面三个界。
+
+// 闪烁间隔下界。低于此值一秒要切十几次图标，既晃眼又白白刷 Shell_NotifyIcon。
+const unsigned int kTrayFlashIntervalMinMs = 100;
+
+// 闪烁间隔上界。超过 2 秒就不像"在闪"了，用户几乎察觉不到托盘在提示。
+const unsigned int kTrayFlashIntervalMaxMs = 2000;
+
+// 系统取值不可用时的兜底间隔。500 毫秒接近 Windows 默认的光标闪烁速度
+// （注册表 HKCU\Control Panel\Desktop\CursorBlinkRate 出厂值 530）。
+const unsigned int kTrayFlashIntervalDefaultMs = 500;
+
+/**
+ *  把系统给出的光标闪烁速度换算成托盘闪烁定时器该用的间隔。
+ *
+ *  存在理由：`::GetCaretBlinkTime()` 在用户把系统的"文本光标闪烁"关掉时返回
+ *  `INFINITE`（0xFFFFFFFF），而不是某个大数值。把它原样交给 `SetTimer`，间隔
+ *  会被系统夹到 USER_TIMER_MAXIMUM（约 24.8 天），定时器等于永不触发 —— 托盘
+ *  一次都不闪，且没有任何报错，排查起来极其费劲。这个设置是每台机器每个用户
+ *  独立的，所以症状表现为"这台机器好好的，换台机器就不闪"。
+ *
+ *    blinkTimeMs：`::GetCaretBlinkTime()` 的原始返回值（毫秒）。0 表示系统未
+ *                 提供有效值，INFINITE 表示光标闪烁已被关闭，两者都不可直接用。
+ *
+ *  @return 一定落在 [kTrayFlashIntervalMinMs, kTrayFlashIntervalMaxMs] 内的间隔。
+ *          规则：0 与 INFINITE 视为"系统没给出有效值"，返回
+ *          kTrayFlashIntervalDefaultMs；其余取值夹进上下界（区间内的原样返回，
+ *          偏小的抬到下界，偏大的压到上界），尽量尊重用户的系统偏好。
+ *          纯函数、无副作用，可直接单测。
+ */
+unsigned int ClampTrayFlashInterval(unsigned int blinkTimeMs);
 
 /**
  *  TrayFlashEntry —— 托盘未读会话集合里的一条。承载"单击开窗"与"悬停弹窗 / 闪头像"

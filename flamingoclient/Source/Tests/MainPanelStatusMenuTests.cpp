@@ -24,7 +24,8 @@
 #include <cwchar>          // wcscmp —— 比对菜单项中文文本
 
 #include "../BalloonMain/MainPanelStatusMenu.h"
-#include "../BalloonMain/MainPanelIcons.h"   // IconKind（断言当前项的图标类型）
+#include "../BalloonMain/MainPanelIcons.h"   // IconKind（断言各项的图标类型）
+#include "../BalloonMain/PresenceBadge.h"    // GetPresenceBadgeIconKind（状态 → 徽标字形）
 #include "../net/Protocol.h"                 // presence_type（断言各项对应的在线状态值）
 
 using namespace balloonmain;
@@ -173,10 +174,11 @@ TEST_CASE("STM8 四种状态各自被标为当前项，且每份模型只标一�
     }
 }
 
-TEST_CASE("STM9 当前项 isCurrent / iconKind / label 后缀三者一致", "[statusmenu][current]")
+TEST_CASE("STM9 当前项 isCurrent / label 后缀一致，图标恒为本行状态的徽标", "[statusmenu][current]")
 {
-    // 三种表达必须同步：只要 isCurrent 为真，图标就得是 kIconStatusCurrent、文字就得
-    // 带"（当前）"后缀；反之亦然。任一处漏改都会让菜单自相矛盾。
+    // 2026-08-12 状态图标改版后，iconKind 这一列专门表达"这一行是哪个状态"（四种字形
+    // 各不相同），<u>不再</u>随 isCurrent 变化；"当前"改由文字后缀 +
+    // 渲染期叠加的外环表达（见 MainPanelMenuIcons::CreateStatusIconImage）。
     const int presences[4] = { presence_online, presence_away, presence_busy, presence_offline };
 
     for (int p = 0; p < 4; ++p)
@@ -189,10 +191,11 @@ TEST_CASE("STM9 当前项 isCurrent / iconKind / label 后缀三者一致", "[st
             INFO("行 index = " << i);
             const StatusMenuEntry& e = items[i];
 
-            CHECK(e.iconKind == (e.isCurrent ? kIconStatusCurrent : kIconOnline));
+            // 图标只认本行的 presence，与是不是当前项无关。
+            CHECK(e.iconKind == GetPresenceBadgeIconKind(e.presence));
             CHECK(::wcscmp(e.label, GetPresenceMenuLabel(e.presence, e.isCurrent)) == 0);
 
-            // 换图标 / 加后缀都不能把配色改掉：仍与胶囊同源。
+            // 加后缀不能把配色改掉：仍与胶囊同源。
             CHECK(e.dotColor == GetPresenceVisual(e.presence).dotColor);
         }
     }
@@ -274,17 +277,18 @@ TEST_CASE("STM14 登录窗菜单同样标出当前项；当前状态是离线时
     REQUIRE(away.size() == 3);
     CHECK(!away[0].isCurrent);
     CHECK(away[1].isCurrent);
-    CHECK(away[1].iconKind == kIconStatusCurrent);
+    CHECK(away[1].iconKind == kIconPresenceAway);   // 图标认的是本行状态，不是"当前"
     CHECK(::wcscmp(away[1].label, L"离开（当前）") == 0);
     CHECK(!away[2].isCurrent);
 
     // 本菜单没有"离线"行可标，故三行都不是当前项 —— 这是预期行为，不是漏标。
+    // 各行图标仍是各自状态的徽标，不因"没有当前项"而改变。
     std::vector<StatusMenuEntry> offline = BuildLoginStatusMenuModel(presence_offline);
     REQUIRE(offline.size() == 3);
     for (size_t i = 0; i < offline.size(); ++i)
     {
         INFO("行 index = " << i);
         CHECK(!offline[i].isCurrent);
-        CHECK(offline[i].iconKind == kIconOnline);
+        CHECK(offline[i].iconKind == GetPresenceBadgeIconKind(offline[i].presence));
     }
 }

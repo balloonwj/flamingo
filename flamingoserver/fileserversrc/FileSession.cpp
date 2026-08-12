@@ -16,6 +16,7 @@
 #include "../utils/MD5.h"
 #include "../jsoncpp1.9.0/json.h"
 #include "FileMsg.h"
+#include "UpdatePackageIndex.h"
 #include "FileManager.h"
 
 using namespace net;
@@ -448,11 +449,22 @@ bool FileSession::onDownloadChunk(const std::shared_ptr<TcpConnection>& conn,
         if (m_fp != NULL)
             resetFile();
 
-        std::string path = m_strFileBaseDir + md5;
+        //两类文件的寻址方式不同：聊天文件 / 群文件落盘时即以 MD5 命名可直接拼接，
+        //客户端升级包由运维手工放入、文件名是人起的，须经索引反查。差异收敛在
+        //ResolveDownloadPath 里，本处不做场景判断。
+        std::string path;
+        if (!ResolveDownloadPath(payload.scene, md5, now, m_strFileBaseDir,
+                                 Singleton<UpdatePackageIndex>::Instance(), path))
+        {
+            LOGE("download: resolve path failed, scene: %d, md5: %s", payload.scene, md5.c_str());
+            sendDownloadError(seq, error_code_file_not_exist, "file not exist");
+            return true;
+        }
+
         m_fp = fopen(path.c_str(), "rb");
         if (m_fp == NULL)
         {
-            LOGE("download: file not exist, md5: %s", md5.c_str());
+            LOGE("download: file not exist, path: %s, md5: %s", path.c_str(), md5.c_str());
             sendDownloadError(seq, error_code_file_not_exist, "file not exist");
             return true;
         }

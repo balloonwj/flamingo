@@ -6,8 +6,11 @@
  *  引用的控件都能按既定数字 id 找到、类型正确、关键属性正确。
  *
  *  覆盖用例（与需求确认一致）：
- *    L1-L7  登录布局契约
- *    C1     CtrlId enum 自洽
+ *    L1-L7   登录布局契约
+ *    C1      CtrlId enum 自洽
+ *    V1-V5   登录输入校验
+ *    A1-A13  Banner 头像底色 / 显示名 / 下拉框账号取法
+ *    PR1-PR7 注册成功后回填登录表单
  *
  *  用 Catch2 v3（amalgamated 形态）作测试框架。本工程不创建任何窗口，
  *  纯粹在内存里 build 控件树 + 断言，无需消息循环 / HWND。
@@ -345,4 +348,124 @@ TEST_CASE("A13 索引越界时退回读输入框文本", "[login][comboaccount]"
 
     // -1 以外的负数（不该出现，但不能因此取到越界项）。
     CHECK_FALSE(ShouldReadAccountFromComboItem(-7, 3));
+}
+
+// =====================================================================
+// PR. 注册成功后回填登录表单（纯函数 MakePostRegisterFill）
+//
+// 这组用例锁的同样是一个真实缺陷的修复：注册成功后登录窗只回填了账号、
+// 没有回填密码，密码框里留着的是登录窗打开时预填的上一个账号的密码（本机
+// 无历史登录时则是兜底的测试账号密码）。表现为"账号是刚注册的那个、密码
+// 却不是注册时填的那个，点登录报密码错误"。
+// =====================================================================
+
+TEST_CASE("PR1 密码框回填的是注册时设置的密码", "[login][postregister]")
+{
+    const PostRegisterFill fill =
+        MakePostRegisterFill(_T("88234561"), _T("myNewPwd123"));
+
+    REQUIRE(fill.m_shouldFill);
+    // 缺陷复现点：这里若拿到的是别的密码（旧账号的 / 兜底测试密码），即为回归。
+    CHECK(fill.m_password == CString(_T("myNewPwd123")));
+}
+
+TEST_CASE("PR2 账号框回填服务端下发的账号", "[login][postregister]")
+{
+    const PostRegisterFill fill =
+        MakePostRegisterFill(_T("88234561"), _T("myNewPwd123"));
+
+    REQUIRE(fill.m_shouldFill);
+    CHECK(fill.m_account == CString(_T("88234561")));
+}
+
+TEST_CASE("PR3 回填后记住密码 / 自动登录均为未勾选", "[login][postregister]")
+{
+    // 用户此刻还没表达过"记住密码"的意愿，且要与同时写进历史账号列表的
+    // 那条记录（空密码 + 两项皆否）保持一致。
+    const PostRegisterFill fill =
+        MakePostRegisterFill(_T("88234561"), _T("myNewPwd123"));
+
+    REQUIRE(fill.m_shouldFill);
+    CHECK_FALSE(fill.m_rememberPwd);
+    CHECK_FALSE(fill.m_autoLogin);
+}
+
+TEST_CASE("PR4 账号为空时整体不回填", "[login][postregister]")
+{
+    // 注册成功的应答里理论上不会没有账号；真出现了也不能只把密码填进去 ——
+    // 界面保持原样，由调用方记错误日志。
+    const PostRegisterFill fill = MakePostRegisterFill(_T(""), _T("myNewPwd123"));
+
+    CHECK_FALSE(fill.m_shouldFill);
+}
+
+TEST_CASE("PR5 账号为纯空白时同样不回填", "[login][postregister]")
+{
+    CHECK_FALSE(MakePostRegisterFill(_T("   "), _T("myNewPwd123")).m_shouldFill);
+    CHECK_FALSE(MakePostRegisterFill(_T(" \t "), _T("myNewPwd123")).m_shouldFill);
+}
+
+TEST_CASE("PR6 密码原样回填，首尾空格不被去掉", "[login][postregister]")
+{
+    // 空格在密码里是有效字符，若照账号 / 公司名的口径 Trim 一道，回填出来的
+    // 密码与用户注册时输入的就不是同一个了。
+    const PostRegisterFill fill =
+        MakePostRegisterFill(_T("88234561"), _T("  pwd with space  "));
+
+    REQUIRE(fill.m_shouldFill);
+    CHECK(fill.m_password == CString(_T("  pwd with space  ")));
+}
+
+TEST_CASE("PR7 密码为空时仍回填并清空密码框", "[login][postregister]")
+{
+    // 注册窗的表单校验不放空密码过，正常走不到这里；万一走到了，宁可让密码
+    // 框空着，也不能把上一个账号的密码留在框里冒充"刚设的密码"。
+    const PostRegisterFill fill = MakePostRegisterFill(_T("88234561"), _T(""));
+
+    REQUIRE(fill.m_shouldFill);
+    CHECK(fill.m_account == CString(_T("88234561")));
+    CHECK(fill.m_password.IsEmpty());
+}
+
+// =====================================================================
+// MAP —— 下拉浮层项下标 → m_items 下标的映射
+//
+// 这组用例锁的是"删错账号"这条风险：账号下拉开了增量搜索过滤时，浮层里
+// 只显示命中的那几项，它报回来的下标是"第几个命中项"而不是"m_items 的第
+// 几项"。不映射的话，用户敲几个字过滤之后点某一行的删除叉，删掉的会是另
+// 一个账号 —— 比崩溃更糟，因为数据没了而用户不知道。
+//
+// 映射逻辑做成了 DuiComboBox 的 public static 纯函数，正好脱离控件状态直接测。
+// =====================================================================
+
+TEST_CASE("MAP1 未过滤时浮层下标与 m_items 下标 1:1", "[combo][map]")
+{
+    std::vector<int> none;
+    CHECK(DuiComboBox::MapPopupIndexWithFilter(0, none) == 0);
+    CHECK(DuiComboBox::MapPopupIndexWithFilter(3, none) == 3);
+}
+
+TEST_CASE("MAP2 过滤激活时浮层下标映射回真实下标", "[combo][map]")
+{
+    // 过滤命中的是 m_items 的第 0、1、4 项。
+    std::vector<int> filtered;
+    filtered.push_back(0);
+    filtered.push_back(1);
+    filtered.push_back(4);
+
+    CHECK(DuiComboBox::MapPopupIndexWithFilter(0, filtered) == 0);
+    CHECK(DuiComboBox::MapPopupIndexWithFilter(1, filtered) == 1);
+    // 关键的一条：浮层第 3 行是 m_items 的第 5 项，不是第 3 项。
+    CHECK(DuiComboBox::MapPopupIndexWithFilter(2, filtered) == 4);
+}
+
+TEST_CASE("MAP3 越出映射表范围时原样返回，由调用方判越界", "[combo][map]")
+{
+    std::vector<int> filtered;
+    filtered.push_back(2);
+    filtered.push_back(7);
+
+    CHECK(DuiComboBox::MapPopupIndexWithFilter(-1, filtered) == -1);
+    CHECK(DuiComboBox::MapPopupIndexWithFilter(2, filtered) == 2);
+    CHECK(DuiComboBox::MapPopupIndexWithFilter(99, filtered) == 99);
 }

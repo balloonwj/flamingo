@@ -19,8 +19,16 @@
 
 #include "FileServer.h"
 #include "FileMsg.h"
+#include "UpdatePackageIndex.h"
+#include "../utils/AppPath.h"
+#include "../utils/ServerConfigLoader.h"
 
 using namespace net;
+
+//本服务的名字与配置文件名。名字只出现在启动失败的提示里，让用户一眼看出是哪个进程报的错；
+//配置文件名交给 ServerConfigLoader 去各个候选目录里找，不再写死一条相对路径
+#define SERVER_NAME              "fileserver"
+#define SERVER_CONFIG_FILE_NAME  "fileserver.conf"
 
 #ifdef WIN32
 //初始化Windows socket库
@@ -36,6 +44,11 @@ void prog_exit(int signo)
 
     Singleton<FileServer>::Instance().uninit();
     g_mainLoop.quit();
+
+    //必须停掉异步日志：它的写日志线程是 std::thread，进程退出时静态成员析构，
+    //析构一个仍然 joinable 的 std::thread 会直接 std::terminate 掉整个进程，
+    //表现为服务收到 SIGTERM 后 core dump。chatserver 一直有这一行，这里补齐
+    CAsyncLog::uninit();
 }
 #endif
 
@@ -65,53 +78,82 @@ int main(int argc, char* argv[])
         daemon_run();
 #endif
 
-#ifdef WIN32
-    CConfigFileReader config("../etc/fileserver.conf");
-#else
-    CConfigFileReader config("etc/fileserver.conf");
-#endif
-
-    std::string logFileFullPath;
-
-#ifndef WIN32
-    const char* logfilepath = config.getConfigName("logfiledir");
-    if (logfilepath == NULL)
+    //配置文件按「可执行文件所在目录优先」的顺序查找，理由与 chatserver 相同，
+    //详见 utils/ServerConfigLoader.h
+    CConfigFileReader config;
+    std::string triedConfigPaths;
+    if (!serverconfig::LoadServerConfig(config, SERVER_CONFIG_FILE_NAME, triedConfigPaths))
     {
-        LOGF("logdir is not set in config file");
+        serverconfig::ReportStartupFailure(SERVER_NAME,
+            std::string("cannot open config file ") + SERVER_CONFIG_FILE_NAME
+            + ", tried: " + triedConfigPaths);
         return 1;
     }
 
-    //如果log目录不存在则创建之
-    DIR* dp = opendir(logfilepath);
-    if (dp == NULL)
+    //必需配置项先一次性取齐、再统一判断，缺哪几项一次报全
+    serverconfig::CRequiredConfig required(config);
+    std::string logfiledir   = required.getString("logfiledir");
+    std::string logfilename  = required.getString("logfilename");
+    std::string filecachedir = required.getString("filecachedir");
+    std::string filetokenkey = required.getString("filetokenkey");
+    std::string listenip     = required.getString("listenip");
+    int         listenport   = required.getInt("listenport");
+    if (required.hasMissing())
     {
-        if (mkdir(logfilepath, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) != 0)
-        {
-            LOGF("create base dir error, %s , errno: %d, %s", logfilepath, errno, strerror(errno));
-            return 1;
-        }
-}
-    closedir(dp);
+        serverconfig::ReportStartupFailure(SERVER_NAME,
+            std::string("missing required config item(s): ") + required.missingKeys()
+            + ", config file: " + config.getFilePath());
+        return 1;
+    }
 
-    logFileFullPath = logfilepath;
-#endif
+    //日志目录的解析与创建规则同 chatserver，见 chatserversrc/main.cpp 的说明
+    std::string resolvedLogDir = serverconfig::StripTrailingSeparators(
+                                     apppath::ResolveAgainstDirectory(
+                                         apppath::GetExecutableDirectory(), logfiledir));
+    std::string logDirError;
+    if (!serverconfig::EnsureDirectoryExists(resolvedLogDir, logDirError))
+    {
+        serverconfig::ReportStartupFailure(SERVER_NAME,
+            std::string("cannot create log dir ") + resolvedLogDir + ", " + logDirError);
+        return 1;
+    }
 
-    const char* logfilename = config.getConfigName("logfilename");
-    logFileFullPath += logfilename;
+    std::string logFileFullPath = apppath::ResolveAgainstDirectory(resolvedLogDir, logfilename);
 
     CAsyncLog::init(logFileFullPath.c_str());
 
-    const char* filecachedir = config.getConfigName("filecachedir");
-    Singleton<FileManager>::Instance().init(filecachedir);
+    Singleton<FileManager>::Instance().init(filecachedir.c_str());
 
-    //上传 / 下载令牌的 HMAC 校验密钥，须与 chatserver.conf 的 filetokenkey 一致
-    const char* filetokenkey = config.getConfigName("filetokenkey");
+    //客户端升级包与聊天文件分目录存放：升级包由运维手工放入 updatecachedir，
+    //文件名是人起的，靠 UpdatePackageIndex 按内容MD5 反查。
+    //缺省时回落到 filecachedir，老配置文件不改也能跑（行为与本功能上线前一致）。
+    const char* updatecachedirCfg = config.getConfigName("updatecachedir");
+    std::string updatecachedir;
+    if (updatecachedirCfg != NULL && updatecachedirCfg[0] != '\0')
+    {
+        //与 chatserver 的 dbpath 一样按「可执行文件所在目录」解析，而不是按进程工作目录。
+        //工作目录是启动方式决定的，而升级包必须始终是同一批文件，否则换种方式启动
+        //就等于换了一个空目录、所有升级包凭空消失。
+        updatecachedir = apppath::ResolveAgainstDirectory(
+                             apppath::GetExecutableDirectory(), updatecachedirCfg);
+        LOGI("update package dir resolved against executable directory: %s -> %s",
+             updatecachedirCfg, updatecachedir.c_str());
+    }
+    else
+    {
+        updatecachedir = filecachedir;
+        LOGW("updatecachedir not configured, fall back to filecachedir: %s",
+             updatecachedir.c_str());
+    }
+    Singleton<UpdatePackageIndex>::Instance().init(
+        updatecachedir, static_cast<int64_t>(time(NULL)) * 1000);
 
-    const char* listenip = config.getConfigName("listenip");
-    short listenport = (short)atol(config.getConfigName("listenport"));
+    //监听地址、端口与令牌密钥在函数开头已随其它必需配置项一并取出并校验过，这里直接用。
+    //filetokenkey 是上传 / 下载令牌的 HMAC 校验密钥，须与 chatserver.conf 的同名项一致。
     //fileserver 以 file_server_kind_file 启动，只放行聊天文件 / 群文件场景
-    Singleton<FileServer>::Instance().init(listenip, listenport, &g_mainLoop,
-                                           filecachedir, filetokenkey, file_server_kind_file);
+    Singleton<FileServer>::Instance().init(listenip.c_str(), (short)listenport, &g_mainLoop,
+                                           filecachedir.c_str(), filetokenkey.c_str(),
+                                           file_server_kind_file);
 
     LOGI("fileserver initialization completed, now you can use client to connect it.");
     

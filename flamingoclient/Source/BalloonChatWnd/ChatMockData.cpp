@@ -218,6 +218,17 @@ const std::vector<ChatMessage>& ChatMessages()
             _T("好的好的，我先按这个思路出一版，争取周四就给你看初稿，")
             _T("有问题我们再当面过一遍")));
 
+        // 一条带网址的消息 —— 正文里的链接会被识别成可点的超链接（蓝色 + 下划线，
+        // 见 ChatLinkDetect.{h,cpp}）。假数据里必须留这么一条：否则两个调试入口下
+        // 永远走不到链接渲染那条分支，目检时看不出它有没有坏。这里同时覆盖三种写法：
+        // 写明 https、只写 www.、以及紧挨中文（应断在"这几"之前）。
+        //
+        // 网址按<u>原样</u>写即可：正文格式里的转义只认"紧跟表情标记的双斜杠"
+        // （见 BuildSendBody / ParseSendBody），网址里的 // 不受影响。
+        msgs.push_back(MakeText(kMsgText, false,
+            _T("参考资料我放这儿了 https://example.com/brand/guide?v=2 ")
+            _T("还有 www.example.org 这几个都看一下")));
+
         //给各条补上假的服务器 msgid。真实会话里每条消息都带 msgid（见
         //CBalloonChatWindow::MakeRealTextMessage），而凡是"拿 msgid 说事"的界面
         //——右键菜单里的「Pin / 取消 Pin」就是——在 msgid 为 0 时整项不出现。

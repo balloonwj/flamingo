@@ -97,6 +97,12 @@ TEST_CASE("C5 isVersionAtLeast 客户端版本号比较")
     CHECK(LoginProtocol::isVersionAtLeast("3.2", "3.2.0"));     //段数不足，补 0 后相等
     CHECK_FALSE(LoginProtocol::isVersionAtLeast("2.9.9", "3.0.0")); //主版本低
     CHECK_FALSE(LoginProtocol::isVersionAtLeast("3.0.0", "3.0.1")); //修订号低
+
+    //多位数版本段：实现是逐段转 int 做数值比较，不是按字符串字典序，
+    //否则 "3.10.0" 会被判成小于 "3.9.0"（'1' < '9'）。自动更新上线后版本号
+    //迟早会跨过 9，这两条是防回归。
+    CHECK(LoginProtocol::isVersionAtLeast("3.10.0", "3.9.0"));
+    CHECK_FALSE(LoginProtocol::isVersionAtLeast("3.9.0", "3.10.0"));
 }
 
 TEST_CASE("C6 设备管理报文编解码")

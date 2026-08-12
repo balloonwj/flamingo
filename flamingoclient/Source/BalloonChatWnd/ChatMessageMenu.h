@@ -45,6 +45,8 @@ enum ChatMessageMenuId
     kChatMsgMenuDelete      = 7,   // 删除：只从本端列表移除这一行
     kChatMsgMenuMultiSelect = 8,   // 多选：以本行为起点进入多选模式
     kChatMsgMenuPin         = 9,   // Pin / 取消 Pin：把本条钉在会话里（会话内共享，对方与全体群成员都看得到）
+    kChatMsgMenuOpenLink    = 10,  // 在浏览器中打开：仅当右键点在正文里的超链接上时出现，排在菜单最前
+    kChatMsgMenuCopyLink    = 11   // 复制链接地址：同上；复制的是规范化后的完整 URL（www. 开头的已补 https://）
 };
 
 /**

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
     <Filter Include="Mock">
@@ -45,6 +45,9 @@
     <ClCompile Include="Util\AppConfig.cpp">
       <Filter>Util</Filter>
     </ClCompile>
+    <ClCompile Include="Util\DpapiSecret.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
     <ClCompile Include="Util\NetProbe.cpp">
       <Filter>Util</Filter>
     </ClCompile>
@@ -64,6 +67,9 @@
       <Filter>Util</Filter>
     </ClCompile>
     <ClCompile Include="Util\ScrollbarMetrics.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="Util\OrgToolbarLayout.cpp">
       <Filter>Util</Filter>
     </ClCompile>
     <ClCompile Include="third-party\jsoncpp\json_reader.cpp">
@@ -162,6 +168,12 @@
     <ClCompile Include="Screens\AuditScreen.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
+    <ClCompile Include="Screens\ClientVersionsScreen.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
+    <ClCompile Include="Screens\ClientVersionModal.cpp">
+      <Filter>Screens</Filter>
+    </ClCompile>
     <ClCompile Include="Screens\SettingsScreen.cpp">
       <Filter>Screens</Filter>
     </ClCompile>
@@ -192,6 +204,9 @@
     <ClInclude Include="Util\AppConfig.h">
       <Filter>Util</Filter>
     </ClInclude>
+    <ClInclude Include="Util\DpapiSecret.h">
+      <Filter>Util</Filter>
+    </ClInclude>
     <ClInclude Include="Util\NetProbe.h">
       <Filter>Util</Filter>
     </ClInclude>
@@ -211,6 +226,9 @@
       <Filter>Util</Filter>
     </ClInclude>
     <ClInclude Include="Util\ScrollbarMetrics.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="Util\OrgToolbarLayout.h">
       <Filter>Util</Filter>
     </ClInclude>
     <ClInclude Include="Widgets\UiHelpers.h">
@@ -298,6 +316,12 @@
       <Filter>Screens</Filter>
     </ClInclude>
     <ClInclude Include="Screens\AuditScreen.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\ClientVersionsScreen.h">
+      <Filter>Screens</Filter>
+    </ClInclude>
+    <ClInclude Include="Screens\ClientVersionModal.h">
       <Filter>Screens</Filter>
     </ClInclude>
     <ClInclude Include="Screens\SettingsScreen.h">

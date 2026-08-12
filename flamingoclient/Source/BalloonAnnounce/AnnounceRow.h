@@ -30,6 +30,7 @@
 
 #include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
 #include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../BalloonHistory/HistoryContentView.h"   // 右栏正文控件（网址可点）的基类
 
 namespace balloonannounce {
 
@@ -44,6 +45,20 @@ namespace balloonannounce {
  *  只覆写 OnMouseWheel 一个函数，其余行为与 DuiLabel 完全一致。
  */
 class AnnounceWheelLabel : public balloonwjui::DuiLabel
+{
+public:
+    //DuiControl 覆写：把滚轮上抛给祖先里的滚动视口。
+    bool OnMouseWheel(POINT pt, short zDelta, UINT mkFlags) override;
+};
+
+/**
+ *  AnnounceWheelContentView —— 会把滚轮上抛给祖先滚动视口的 HistoryContentView。
+ *
+ *  右栏正文从 DuiLabel 换成了 HistoryContentView（要把正文里的网址渲染成可点的
+ *  链接，DuiLabel 没有字符级排版模型、做不到），于是 AnnounceWheelLabel 那个滚轮
+ *  不冒泡的坑原样跟了过来 —— 理由见上面那个类的注释，这里同样只覆写一个虚函数。
+ */
+class AnnounceWheelContentView : public balloonhistory::HistoryContentView
 {
 public:
     //DuiControl 覆写：把滚轮上抛给祖先里的滚动视口。
@@ -89,6 +104,21 @@ public:
     bool IsUnread() const { return m_unread; }
 
     /**
+     *  设置本行底部要不要画一条分隔线。列表里除最后一行外都要画。
+     *
+     *  这条线由行自己画、而不是在列表里插一个独立的分隔线控件：独立控件会成为滚轮的
+     *  "死线"—— DuiHost 只把滚轮投给最深命中控件、返回 false 就丢掉（不向上冒泡），
+     *  鼠标恰好停在那 1 像素上时整个列表滚不动，看着像滚轮失灵。
+     *
+     *  只改内存状态，调用方负责随后 Invalidate（一般在构建时就设好，不必单独刷）。
+     *    show：true 表示画。
+     */
+    void SetShowBottomLine(bool show) { m_showBottomLine = show; }
+
+    // 本行底部是否画分隔线。
+    bool IsShowBottomLine() const { return m_showBottomLine; }
+
+    /**
      *  设置公告级别，决定最左侧那道强调竖条的颜色。
      *    severity：取值见 net/Protocol.h 的 announcement_severity
      *              （0 普通 1 提醒 2 警告）；越界值按"普通"处理。
@@ -113,10 +143,11 @@ public:
     bool OnMouseWheel(POINT pt, short zDelta, UINT mkFlags) override;
 
 private:
-    bool m_hovered;    // 是否悬停
-    bool m_selected;   // 是否选中（右栏正在显示这一条）
-    bool m_unread;     // 是否未读（画标题左侧的小圆点）
-    int  m_severity;   // 公告级别（决定左侧竖条颜色）
+    bool m_hovered;         // 是否悬停
+    bool m_selected;        // 是否选中（右栏正在显示这一条）
+    bool m_unread;          // 是否未读（画标题左侧的小圆点）
+    int  m_severity;        // 公告级别（决定左侧竖条颜色）
+    bool m_showBottomLine;  // 是否在行底画分隔线（列表里除最后一行外都画）
 };
 
 } // namespace balloonannounce

@@ -131,6 +131,14 @@ zlib1.2.11/adler32.c
 zlib1.2.11/ZlibUtil.cpp
 )
 
+# zlib 的 gz* 实现要由 configure 定义 HAVE_UNISTD_H，才会去 include <unistd.h>。
+# 仓库里的 zlib 是直接放进来的源码、没有跑过 configure，于是 read / write / close / lseek
+# 在 Linux 下全是隐式声明，编译器一律按返回 int 处理 —— lseek 返回的 off_t 会被截断成
+# 32 位，与本文件开头定义 _FILE_OFFSET_BITS=64 的意图正好相反。
+# 这里只给 zlib 的源文件补上这个宏，不去改第三方源码本身；Windows 下 gzguts.h 走的是
+# <io.h> 分支，不受影响。
+set_source_files_properties(${zlib_srcs} PROPERTIES COMPILE_DEFINITIONS HAVE_UNISTD_H)
+
 set(utils_srcs
 utils/StringUtil.cpp
 utils/URLEncodeUtil.cpp
@@ -140,6 +148,10 @@ utils/RelayToken.cpp
 utils/DaemonRun.cpp
 # 把配置里的相对 dbpath 解析到可执行文件所在目录，见 chatserversrc/main.cpp
 utils/AppPath.cpp
+# 配置文件定位与必需配置项校验，三个服务的 main.cpp 共用
+utils/ServerConfigLoader.cpp
+# 升级包目录的枚举与 MD5 计算，fileserver 的索引与 chatserver 的扫描器共用
+utils/FileEnum.cpp
 )
 
 set(chatserver_srcs
@@ -172,6 +184,7 @@ fileserversrc/main.cpp
 fileserversrc/FileServer.cpp
 fileserversrc/FileSession.cpp
 fileserversrc/FileManager.cpp
+fileserversrc/UpdatePackageIndex.cpp
 fileserversrc/TcpSession.cpp)
 
 set(imgserver_srcs
@@ -182,10 +195,11 @@ imgserversrc/RelayHub.cpp
 fileserversrc/FileServer.cpp
 fileserversrc/FileSession.cpp
 fileserversrc/FileManager.cpp
+fileserversrc/UpdatePackageIndex.cpp
 fileserversrc/TcpSession.cpp)
 
 
-add_executable(chatserver ${net_srcs} ${json_srcs}  ${chatserver_srcs} ${dbapi_srcs} ${mysqlapi_srcs} ${sqliteapi_srcs} ${mysqlmgr_srcs} ${zlib_srcs} ${utils_srcs} chatserversrc/LoginProtocol.cpp utils/PasswordHasher.cpp chatserversrc/ContactsProtocol.cpp chatserversrc/FavoriteProtocol.cpp chatserversrc/FavoriteManager.cpp chatserversrc/ContactRemarkManager.cpp chatserversrc/ProfileProtocol.cpp chatserversrc/RegisterProtocol.cpp chatserversrc/RegisterService.cpp chatserversrc/AccountName.cpp chatserversrc/SmsCodeManager.cpp chatserversrc/FriendProtocol.cpp chatserversrc/MessageProtocol.cpp chatserversrc/GroupProtocol.cpp chatserversrc/GroupPermission.cpp chatserversrc/CardProtocol.cpp chatserversrc/FileProtocol.cpp chatserversrc/FileStoreManager.cpp chatserversrc/GroupFileProtocol.cpp chatserversrc/GroupFileManager.cpp chatserversrc/RemoteDesktopProtocol.cpp chatserversrc/RemoteDesktopManager.cpp chatserversrc/CallProtocol.cpp chatserversrc/CallManager.cpp)
+add_executable(chatserver ${net_srcs} ${json_srcs}  ${chatserver_srcs} ${dbapi_srcs} ${mysqlapi_srcs} ${sqliteapi_srcs} ${mysqlmgr_srcs} ${zlib_srcs} ${utils_srcs} chatserversrc/LoginProtocol.cpp utils/PasswordHasher.cpp utils/Sha256.cpp chatserversrc/ContactsProtocol.cpp chatserversrc/FavoriteProtocol.cpp chatserversrc/FavoriteManager.cpp chatserversrc/StarredProtocol.cpp chatserversrc/StarredManager.cpp chatserversrc/ContactRemarkManager.cpp chatserversrc/UpdateProtocol.cpp chatserversrc/ClientVersionManager.cpp chatserversrc/UpdatePackageScanner.cpp chatserversrc/ProfileProtocol.cpp chatserversrc/RegisterProtocol.cpp chatserversrc/RegisterService.cpp chatserversrc/AccountName.cpp chatserversrc/SmsCodeManager.cpp chatserversrc/FriendProtocol.cpp chatserversrc/MessageProtocol.cpp chatserversrc/GroupProtocol.cpp chatserversrc/GroupPermission.cpp chatserversrc/CardProtocol.cpp chatserversrc/FileProtocol.cpp chatserversrc/FileStoreManager.cpp chatserversrc/GroupFileProtocol.cpp chatserversrc/GroupFileManager.cpp chatserversrc/RemoteDesktopProtocol.cpp chatserversrc/RemoteDesktopManager.cpp chatserversrc/CallProtocol.cpp chatserversrc/CallManager.cpp)
 #光包含库目录是没用的，还必须使用TARGET_LINK_LIBRARIES链接该库
 #dl / pthread 是 sqlite3 amalgamation 在 Linux 上的依赖：前者用于动态加载扩展，
 #后者用于 SQLITE_THREADSAFE 的互斥实现。sqlite3.c 走 C 编译器，拿不到 CMAKE_CXX_FLAGS
@@ -214,14 +228,24 @@ tests/test_passwordhasher.cpp
 tests/test_loginprotocol.cpp
 tests/test_contactsprotocol.cpp
 tests/test_favoriteprotocol.cpp
+tests/test_starredprotocol.cpp
+tests/test_starredmanager.cpp
+tests/test_conversationbench.cpp
+tests/test_conversationunread.cpp
+tests/test_conversationbriefs.cpp
+# 测试用的数据库后端切换（默认 SQLite，FLAMINGO_TEST_MYSQL=1 时跑 MySQL）
+tests/test_dbbackend.cpp
 tests/test_profileprotocol.cpp
 tests/test_registerprotocol.cpp
 tests/test_registerservice.cpp
 tests/test_accountname.cpp
 tests/test_friendprotocol.cpp
+tests/test_sha256.cpp
 tests/test_contactremarkmanager.cpp
 tests/test_adminbootstrap.cpp
 tests/test_apppath.cpp
+tests/test_serverconfigloader.cpp
+tests/test_asynclog.cpp
 tests/test_messageprotocol.cpp
 tests/test_messagepinmanager.cpp
 tests/test_groupprotocol.cpp
@@ -239,6 +263,10 @@ tests/test_sqlite_database.cpp
 tests/test_sqlite_schema.cpp
 tests/test_sqldialect.cpp
 tests/test_announcementprotocol.cpp
+tests/test_updateprotocol.cpp
+tests/test_clientversionmanager.cpp
+tests/test_updatepackageindex.cpp
+tests/test_updatepackagescanner.cpp
 chatserversrc/DepartmentPath.cpp
 chatserversrc/DepartmentMsg.cpp
 chatserversrc/LoginProtocol.cpp
@@ -247,6 +275,10 @@ chatserversrc/ContactsProtocol.cpp
 # 只有这里漏了，导致 Linux 下单独构建 flamingo_tests 目标时报
 # parseSetFavoriteRequest / buildSetFavoriteResponse 未定义
 chatserversrc/FavoriteProtocol.cpp
+# tests/test_starredprotocol.cpp 与 tests/test_starredmanager.cpp 用到的实现。
+# StarredManager 走 DbFactory 取连接，测试里对着临时 .db 文件真的读写 t_starred
+chatserversrc/StarredProtocol.cpp
+chatserversrc/StarredManager.cpp
 chatserversrc/ProfileProtocol.cpp
 chatserversrc/RegisterProtocol.cpp
 chatserversrc/RegisterService.cpp
@@ -257,6 +289,8 @@ chatserversrc/FriendProtocol.cpp
 chatserversrc/ContactRemarkManager.cpp
 # AdminManager 同样走 DbFactory，ADB 套用例对着临时 .db 文件真的读写 t_admin
 chatserversrc/AdminManager.cpp
+# MessageManager 走 DbFactory 取连接，CVB 套计时用例对着临时 .db 文件真的建会话、灌消息
+chatserversrc/MessageManager.cpp
 chatserversrc/MessageProtocol.cpp
 chatserversrc/MessagePinManager.cpp
 chatserversrc/GroupProtocol.cpp
@@ -269,13 +303,26 @@ chatserversrc/RemoteDesktopManager.cpp
 chatserversrc/CallProtocol.cpp
 chatserversrc/CallManager.cpp
 chatserversrc/AnnouncementProtocol.cpp
+chatserversrc/UpdateProtocol.cpp
+# ClientVersionManager 经 DbFactory 取连接，CVM 套用例对着临时 .db 文件真的读 t_client_version
+chatserversrc/ClientVersionManager.cpp
+# UPI 套用例验的是 fileserver 侧的升级包目录索引
+fileserversrc/UpdatePackageIndex.cpp
+chatserversrc/UpdatePackageScanner.cpp
+utils/FileEnum.cpp
 net/FrameCodec.cpp
 utils/PasswordHasher.cpp
 utils/MD5.cpp
+# 管理端建员工 / 重置口令时由服务端自己算 SHA256(明文)，故测试程序也要编进来
+utils/Sha256.cpp
 utils/FileToken.cpp
 utils/RelayToken.cpp
 # tests/test_apppath.cpp 用到的实现
 utils/AppPath.cpp
+# tests/test_serverconfigloader.cpp 用到的实现。ServerConfigLoader 依赖 CConfigFileReader，
+# 后者原先没进测试程序，故一并加进来
+utils/ServerConfigLoader.cpp
+base/ConfigFileReader.cpp
 # SQLite 驱动的集成测试要真的打开一个临时 .db 文件，因此要把驱动本体与 amalgamation 一起编进来。
 # 驱动内部会调用 LOGI / LOGE，所以还要带上 AsyncLog（未 init 时日志只是进内存队列，不影响测试）
 sqlite3/sqlite3.c
@@ -301,3 +348,19 @@ add_executable(flamingo_tests ${test_srcs} ${json_srcs})
 target_compile_definitions(flamingo_tests PRIVATE FLAMINGO_NO_MYSQL)
 #理由同 chatserver：测试程序里编进了 sqlite3 amalgamation
 TARGET_LINK_LIBRARIES(flamingo_tests dl pthread)
+
+# 第二个测试目标：带 MySQL 后端的同一套用例。
+#
+# 为什么要单独一个目标：上面那个 flamingo_tests 特意定义了 FLAMINGO_NO_MYSQL，
+# DbFactory 里连 MySQL 分支都没编进去，无论怎么设环境变量都连不上 MySQL。而产品是
+# 两种后端都支持的，两边的差异又不只是语法（InnoDB 的二级索引自带主键值、SQLite 不带，
+# 索引需求因此完全不同），只测一边等于没测另一边。
+#
+# 跑法（需要一个可连的 MySQL，参数见 tests/test_dbbackend.h）：
+#     FLAMINGO_TEST_MYSQL=1 ./build-mysql/flamingo_tests_mysql --test-case="CVU*,CVE*"
+# 不设 FLAMINGO_TEST_MYSQL 时它跑的仍是 SQLite，与 flamingo_tests 等价。
+if (WITH_MYSQL)
+    add_executable(flamingo_tests_mysql ${test_srcs} ${json_srcs} ${mysqlapi_srcs}
+                   mysqlmgr/MysqlManager.cpp)
+    TARGET_LINK_LIBRARIES(flamingo_tests_mysql dl pthread ${MYSQL_LIB})
+endif()

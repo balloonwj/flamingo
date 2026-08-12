@@ -77,10 +77,11 @@ TEST_CASE("CTM1 右键同事：条目顺序与分隔条位置保持不变", "[co
 {
     const std::vector<ContactMenuEntry> model = BuildContactMenuModel(MakePeerState());
 
-    // 8 个功能项 + 2 条分隔线 = 10 行。这条断言是防回归的锚：菜单形态一个字
+    // 9 个功能项 + 2 条分隔线 = 11 行。这条断言是防回归的锚：菜单形态一个字
     // 都不该悄悄变。企业版取消好友关系后，原先的"移动到分组""加入黑名单"
-    // "删除好友"三项连同末尾那条分隔线一并去掉了，故由 14 行降到 10 行。
-    REQUIRE(model.size() == 10);
+    // "删除好友"三项连同末尾那条分隔线一并去掉了，故由 14 行降到 10 行；
+    // 2026-08-12 加了「特别关注」一项，回到 11 行。
+    REQUIRE(model.size() == 11);
 
     size_t i = 0;
     CHECK(model[i].m_id == kContactMenuSendMsg);        ++i;
@@ -89,6 +90,7 @@ TEST_CASE("CTM1 右键同事：条目顺序与分隔条位置保持不变", "[co
     CHECK(model[i].m_isSeparator);                      ++i;
     CHECK(model[i].m_id == kContactMenuViewProfile);    ++i;
     CHECK(model[i].m_id == kContactMenuFavorite);       ++i;
+    CHECK(model[i].m_id == kContactMenuStarred);        ++i;
     CHECK(model[i].m_id == kContactMenuViewHistory);    ++i;
     CHECK(model[i].m_id == kContactMenuRemark);         ++i;
     CHECK(model[i].m_isSeparator);                      ++i;

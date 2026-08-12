@@ -73,6 +73,9 @@
     <Filter Include="UI">
       <UniqueIdentifier>{71ff7152-6d15-db86-eb50-fcac245d183b}</UniqueIdentifier>
     </Filter>
+    <Filter Include="BalloonUpdate">
+      <UniqueIdentifier>{feaabe26-6ee9-47f9-9d34-7a46350571bf}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Update">
       <UniqueIdentifier>{06933067-aafd-4842-5d67-bcb01bba5cb6}</UniqueIdentifier>
     </Filter>
@@ -282,12 +285,6 @@
     <ClCompile Include="TrayIcon.cpp">
       <Filter>Tasks</Filter>
     </ClCompile>
-    <ClCompile Include="UpdateDlg.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
-    <ClCompile Include="Updater.cpp">
-      <Filter>Update</Filter>
-    </ClCompile>
     <ClCompile Include="UserConfig.cpp">
       <Filter>UserData</Filter>
     </ClCompile>
@@ -336,6 +333,9 @@
     <ClCompile Include="BalloonAuth\BalloonLoginLayout.cpp">
       <Filter>BalloonAuth</Filter>
     </ClCompile>
+    <ClCompile Include="BalloonAuth\AccountRemoval.cpp">
+      <Filter>BalloonAuth</Filter>
+    </ClCompile>
     <ClCompile Include="BalloonChat\BalloonBuddyChatDlg.cpp">
       <Filter>BalloonChat</Filter>
     </ClCompile>
@@ -370,6 +370,18 @@
       <Filter>BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="BalloonChatWnd\ChatBubble.cpp">
+      <Filter>BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatDropController.cpp">
+      <Filter>BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatDropModel.cpp">
+      <Filter>BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatLinkDetect.cpp">
+      <Filter>BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatTimeSeparator.cpp">
       <Filter>BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="BalloonChatWnd\ChatFileLocation.cpp">
@@ -600,6 +612,15 @@
     <ClCompile Include="BalloonMain\AboutDlgModel.cpp">
       <Filter>BalloonMain</Filter>
     </ClCompile>
+    <ClCompile Include="Update\UpdateManager.cpp">
+      <Filter>Update</Filter>
+    </ClCompile>
+    <ClCompile Include="Update\UpdateViewModel.cpp">
+      <Filter>Update</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonUpdate\BalloonUpdateWindow.cpp">
+      <Filter>BalloonUpdate</Filter>
+    </ClCompile>
     <ClCompile Include="BalloonMain\AvatarGray.cpp">
       <Filter>BalloonMain</Filter>
     </ClCompile>
@@ -672,6 +693,18 @@
     <ClCompile Include="BalloonMain\GroupRowText.cpp">
       <Filter>BalloonMain</Filter>
     </ClCompile>
+    <ClCompile Include="BalloonMain\StarredModel.cpp">
+      <Filter>BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\CornerPopupPlacement.cpp">
+      <Filter>BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\StarredPopupModel.cpp">
+      <Filter>BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\StarredPopupWindow.cpp">
+      <Filter>BalloonMain</Filter>
+    </ClCompile>
     <ClCompile Include="BalloonMain\KickoutNotice.cpp">
       <Filter>BalloonMain</Filter>
     </ClCompile>
@@ -709,6 +742,18 @@
       <Filter>BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="BalloonMain\MainPanelStatusMenu.cpp">
+      <Filter>BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\PresenceBadge.cpp">
+      <Filter>BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\AutoAwayPolicy.cpp">
+      <Filter>BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\KeepAwakePolicy.cpp">
+      <Filter>BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\KeepAwakeSession.cpp">
       <Filter>BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="BalloonMain\MainPanelSystemMenu.cpp">
@@ -751,6 +796,9 @@
       <Filter>BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="BalloonMain\PopupMenuPlacement.cpp">
+      <Filter>BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\UnknownSenderRefreshPolicy.cpp">
       <Filter>BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="BalloonMain\SignatureEditModel.cpp">
@@ -844,6 +892,15 @@
       <Filter>BalloonSearch</Filter>
     </ClCompile>
     <ClCompile Include="BalloonSettings\BalloonSystemSettingDlg.cpp">
+      <Filter>BalloonSettings</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonSettings\CacheCleanPlan.cpp">
+      <Filter>BalloonSettings</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonSettings\CacheCleanExecutor.cpp">
+      <Filter>BalloonSettings</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonSettings\BalloonCacheCleanDlg.cpp">
       <Filter>BalloonSettings</Filter>
     </ClCompile>
     <ClCompile Include="BalloonSettings\SettingsBinding.cpp">
@@ -957,6 +1014,9 @@
     <ClCompile Include="net\FavoriteProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
+    <ClCompile Include="net\StarredProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
     <ClCompile Include="net\FileProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
@@ -985,6 +1045,15 @@
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="net\ImageTransfer.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="net\UserCachePath.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="net\StorageLocation.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="net\CurrentUserAccount.cpp">
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="net\ImageUploadDriver.cpp">
@@ -1286,11 +1355,11 @@
     <ClInclude Include="IULog.h">
       <Filter>Utils</Filter>
     </ClInclude>
+    <ClInclude Include="Crash.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
     <ClInclude Include="LoginAccountList.h">
       <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="LoginDlg.h">
-      <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="LoginSettingsDlg.h">
       <Filter>UI</Filter>
@@ -1403,12 +1472,6 @@
     <ClInclude Include="UIText.h">
       <Filter>UI</Filter>
     </ClInclude>
-    <ClInclude Include="UpdateDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
-    <ClInclude Include="Updater.h">
-      <Filter>Update</Filter>
-    </ClInclude>
     <ClInclude Include="UserConfig.h">
       <Filter>UserData</Filter>
     </ClInclude>
@@ -1457,6 +1520,9 @@
     <ClInclude Include="BalloonAuth\BalloonLoginLayout.h">
       <Filter>BalloonAuth</Filter>
     </ClInclude>
+    <ClInclude Include="BalloonAuth\AccountRemoval.h">
+      <Filter>BalloonAuth</Filter>
+    </ClInclude>
     <ClInclude Include="BalloonChat\BalloonBuddyChatDlg.h">
       <Filter>BalloonChat</Filter>
     </ClInclude>
@@ -1494,6 +1560,18 @@
       <Filter>BalloonChatWnd</Filter>
     </ClInclude>
     <ClInclude Include="BalloonChatWnd\ChatFileAction.h">
+      <Filter>BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonChatWnd\ChatDropController.h">
+      <Filter>BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonChatWnd\ChatDropModel.h">
+      <Filter>BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonChatWnd\ChatLinkDetect.h">
+      <Filter>BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonChatWnd\ChatTimeSeparator.h">
       <Filter>BalloonChatWnd</Filter>
     </ClInclude>
     <ClInclude Include="BalloonChatWnd\ChatFileLocation.h">
@@ -1733,6 +1811,18 @@
     <ClInclude Include="BalloonMain\AboutDlgModel.h">
       <Filter>BalloonMain</Filter>
     </ClInclude>
+    <ClInclude Include="Update\UpdateManager.h">
+      <Filter>Update</Filter>
+    </ClInclude>
+    <ClInclude Include="Update\UpdateViewModel.h">
+      <Filter>Update</Filter>
+    </ClInclude>
+    <ClInclude Include="Update\UpdateTaskResult.h">
+      <Filter>Update</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonUpdate\BalloonUpdateWindow.h">
+      <Filter>BalloonUpdate</Filter>
+    </ClInclude>
     <ClInclude Include="BalloonMain\AvatarGray.h">
       <Filter>BalloonMain</Filter>
     </ClInclude>
@@ -1808,6 +1898,18 @@
     <ClInclude Include="BalloonMain\FavoritesModel.h">
       <Filter>BalloonMain</Filter>
     </ClInclude>
+    <ClInclude Include="BalloonMain\StarredModel.h">
+      <Filter>BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonMain\CornerPopupPlacement.h">
+      <Filter>BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonMain\StarredPopupModel.h">
+      <Filter>BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonMain\StarredPopupWindow.h">
+      <Filter>BalloonMain</Filter>
+    </ClInclude>
     <ClInclude Include="BalloonMain\GroupRowText.h">
       <Filter>BalloonMain</Filter>
     </ClInclude>
@@ -1850,6 +1952,18 @@
     <ClInclude Include="BalloonMain\MainPanelStatusMenu.h">
       <Filter>BalloonMain</Filter>
     </ClInclude>
+    <ClInclude Include="BalloonMain\PresenceBadge.h">
+      <Filter>BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonMain\AutoAwayPolicy.h">
+      <Filter>BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonMain\KeepAwakePolicy.h">
+      <Filter>BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonMain\KeepAwakeSession.h">
+      <Filter>BalloonMain</Filter>
+    </ClInclude>
     <ClInclude Include="BalloonMain\MainPanelSystemMenu.h">
       <Filter>BalloonMain</Filter>
     </ClInclude>
@@ -1887,6 +2001,9 @@
       <Filter>BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="BalloonMain\PopupMenuPlacement.h">
+      <Filter>BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonMain\UnknownSenderRefreshPolicy.h">
       <Filter>BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="BalloonMain\SignatureEditModel.h">
@@ -1986,6 +2103,15 @@
       <Filter>BalloonSettings</Filter>
     </ClInclude>
     <ClInclude Include="BalloonSettings\SettingsBinding.h">
+      <Filter>BalloonSettings</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonSettings\CacheCleanPlan.h">
+      <Filter>BalloonSettings</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonSettings\CacheCleanExecutor.h">
+      <Filter>BalloonSettings</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonSettings\BalloonCacheCleanDlg.h">
       <Filter>BalloonSettings</Filter>
     </ClInclude>
     <ClInclude Include="BalloonSettings\SettingsNavList.h">
@@ -2132,6 +2258,9 @@
     <ClInclude Include="net\FavoriteProtocolClient.h">
       <Filter>net</Filter>
     </ClInclude>
+    <ClInclude Include="net\StarredProtocolClient.h">
+      <Filter>net</Filter>
+    </ClInclude>
     <ClInclude Include="net\FileMsg.h">
       <Filter>net</Filter>
     </ClInclude>
@@ -2163,6 +2292,15 @@
       <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="net\ImageTransfer.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="net\UserCachePath.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="net\StorageLocation.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="net\CurrentUserAccount.h">
       <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="net\ImageUploadDriver.h">
@@ -2425,5 +2563,16 @@
     <ResourceCompile Include="flamingo.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="res\flamingo.ico" />
+    <Image Include="res\BCF_Title16.ico" />
+    <Image Include="res\BCF_Title32.ico" />
+    <Image Include="res\Group32.ico" />
+    <Image Include="res\Group16.ico" />
+    <Image Include="res\sys.ico" />
+    <Image Include="res\100.ico" />
+    <Image Include="res\Multi16.ico" />
+    <Image Include="res\Multi32.ico" />
   </ItemGroup>
 </Project>

@@ -8,12 +8,13 @@
 // Generated from the TEXTINCLUDE 2 resource.
 //
 #include "atlres.h"
+#include "ClientVersion.h"
 
 /////////////////////////////////////////////////////////////////////////////
 #undef APSTUDIO_READONLY_SYMBOLS
 
 /////////////////////////////////////////////////////////////////////////////
-// Chinese (Simplified, PRC) resources
+// Chinese (Simplified, China) resources
 
 #if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_CHS)
 LANGUAGE LANG_CHINESE, SUBLANG_CHINESE_SIMPLIFIED
@@ -901,14 +902,23 @@ END
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
 IDR_MAINFRAME           ICON                    "res\\flamingo.ico"
+
 IDI_BUDDYCHATDLG_16     ICON                    "res\\BCF_Title16.ico"
+
 IDI_BUDDYCHATDLG_32     ICON                    "res\\BCF_Title32.ico"
+
 IDI_GROUPCHATDLG_32     ICON                    "res\\Group32.ico"
+
 IDI_GROUPCHATDLG_16     ICON                    "res\\Group16.ico"
+
 IDI_SYS                 ICON                    "res\\sys.ico"
+
 IDI_BUDDY               ICON                    "res\\100.ico"
+
 IDI_MULTICHATDLG_16     ICON                    "res\\Multi16.ico"
+
 IDI_MULTICHATDLG_32     ICON                    "res\\Multi32.ico"
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -938,7 +948,7 @@ BEGIN
     VK_RETURN,      ID_BTN_SEND,            VIRTKEY, CONTROL, NOINVERT
 END
 
-#endif    // Chinese (Simplified, PRC) resources
+#endif    // Chinese (Simplified, China) resources
 /////////////////////////////////////////////////////////////////////////////
 
 
@@ -963,6 +973,7 @@ END
 2 TEXTINCLUDE 
 BEGIN
     "#include ""atlres.h""\r\n"
+    "#include ""ClientVersion.h""\r\n"
     "\0"
 END
 
@@ -980,8 +991,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,0,1
- PRODUCTVERSION 1,0,0,1
+ FILEVERSION FLAMINGO_CLIENT_VERSION_RC
+ PRODUCTVERSION FLAMINGO_CLIENT_VERSION_RC
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -996,14 +1007,14 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            VALUE "FileDescription", "Hootina Flamingo"
-            VALUE "FileVersion", "1.0.0.1"
+            VALUE "FileDescription", "FlamingoIM"
+            VALUE "FileVersion", FLAMINGO_CLIENT_VERSION_RC_STR
             VALUE "InternalName", "Flamingo"
-            VALUE "LegalCopyright", "Copyright 2017"
-            VALUE "LegalTrademarks", "hootina.org"
+            VALUE "LegalCopyright", "Copyright 2017-2026"
+            VALUE "LegalTrademarks", "FlamingoIM"
             VALUE "OriginalFilename", "Flamingo.exe"
-            VALUE "ProductName", "Hootina Flamingo"
-            VALUE "ProductVersion", "1.0.0.1"
+            VALUE "ProductName", "FlamingoIM"
+            VALUE "ProductVersion", FLAMINGO_CLIENT_VERSION_RC_STR
         END
     END
     BLOCK "VarFileInfo"

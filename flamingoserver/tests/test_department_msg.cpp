@@ -138,3 +138,25 @@ TEST_CASE("B7 build 1203 org-structure-changed notify")
     CHECK(n["changetype"].asInt() == 1);
     CHECK(n["deptid"].asInt64() == 1009);
 }
+
+TEST_CASE("B8 org-structure-changed notify 覆盖成员变更与无部门归属两种取值")
+{
+    //changetype=2（成员归属变更）：管理控制台改员工资料 / 启停用 / 设角色时用这一种。
+    Json::Value member = ParseToJson(
+        dept::BuildOrgStructureNotify(dept::org_change_member, 2001));
+    CHECK(member["changetype"].asInt() == dept::org_change_member);
+    CHECK(member["deptid"].asInt64() == 2001);
+
+    //deptid=0：本次变更不针对某个具体部门（典型：改员工资料、删除员工、改企业名称）。
+    //0 是合法取值而非"缺失"，客户端据此整棵通讯录重拉，不能把它当成解析失败。
+    Json::Value noDept = ParseToJson(
+        dept::BuildOrgStructureNotify(dept::org_change_member, 0));
+    CHECK(noDept["changetype"].asInt() == dept::org_change_member);
+    CHECK(noDept["deptid"].asInt64() == 0);
+
+    //部门ID 超出 32 位后仍须原样保留，不能在 JSON 编码环节被截断。
+    const int64_t BIG_DEPT_ID = 4300000000LL;   //略大于 2^32，用来暴露 32 位截断
+    Json::Value big = ParseToJson(
+        dept::BuildOrgStructureNotify(dept::org_change_department, BIG_DEPT_ID));
+    CHECK(big["deptid"].asInt64() == BIG_DEPT_ID);
+}

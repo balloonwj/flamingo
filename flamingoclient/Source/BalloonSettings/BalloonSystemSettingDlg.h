@@ -22,6 +22,7 @@
 
 #include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "../../balloonui/balloonui/DuiNotify.h"
+#include "BalloonCacheCleanDlg.h"   // m_cacheCleanDlg 按值持有，需完整类型
 
 #include <vector>
 
@@ -94,8 +95,12 @@ private:
     // 造一行的左侧"标题 + 可选副标题"文字块（整体垂直居中）。
     //   title：行标题（必填）。
     //   subtitle：副标题（灰色小字），为 NULL 或空串时不画。
+    //   subtitleCtrlId：副标题控件的 id；传 0 表示不需要（默认）。只有事后要换副标题
+    //                   文案的行才需要给 id —— 目前只有「自动离开」那行（被「禁止机器
+    //                   休眠」置灰时要换成解释文案）。
     //   返回：文字块容器（DuiVBox），所有权移交调用方。
-    std::unique_ptr<balloonwjui::DuiVBox> BuildRowTextBlock(LPCTSTR title, LPCTSTR subtitle);
+    std::unique_ptr<balloonwjui::DuiVBox> BuildRowTextBlock(LPCTSTR title, LPCTSTR subtitle,
+                                                            UINT subtitleCtrlId = 0);
 
     // 往页里追加一条 1px 行分隔线。
     void AddRowDivider(balloonwjui::DuiVBox* page);
@@ -104,8 +109,28 @@ private:
     //   ctrlId：开关控件 id（用于 OnDuiNotify 分发）。
     //   on：开关初始状态。
     //   addDivider：是否在行下追加分隔线（末行传 false）。
+    //   subtitleCtrlId：副标题控件 id，见 BuildRowTextBlock 说明；不需要时不传。
     void AddSwitchRow(balloonwjui::DuiVBox* page, LPCTSTR title, LPCTSTR subtitle,
-                      UINT ctrlId, bool on, bool addDivider);
+                      UINT ctrlId, bool on, bool addDivider, UINT subtitleCtrlId = 0);
+
+    /**
+     *  按「禁止机器休眠」的当前状态，联动更新「自动离开」那两行的可用性与文案。
+     *
+     *  两者互斥（2026-08-12 与用户确认）：本功能通过周期性合成输入事件推迟锁屏，而
+     *  自动离开正是依据"多久没有输入"判定空闲，合成会把该计时器重置为 0，自动离开将
+     *  永远不会触发。与其让用户面对一个已开启却不产生效果的开关，不如明确置为禁用。
+     *
+     *  互斥是<u>单向</u>的：只有「禁止机器休眠」会禁用「自动离开」，反向不作限制 ——
+     *  自动离开默认为开启状态，若反向也加限制，用户要使用本功能就得先关闭它。
+     *
+     *  禁用期间<u>不</u>修改自动离开在配置中的取值，开关也保持在原有位置（仅整行变淡
+     *  显示），这样关闭禁止休眠后它原样恢复，不丢失用户此前的选择。
+     *
+     *    keepAwakeOn：「禁止机器休眠」是否开启。
+     *  副作用：修改控件的可用状态与副标题文案（控件内部会自行标脏重绘）。
+     *          控件尚未创建时静默返回。
+     */
+    void ApplyKeepAwakeExclusion(bool keepAwakeOn);
 
     // 往页里追加一行"下拉行"（左标题/副标题，右 DuiComboBox）。
     //   options/count：下拉选项文本表首元素指针与项数。
@@ -137,12 +162,20 @@ private:
     //   返回：是否为本对话框已知的按钮（true 表示已处理）。
     bool HandleButtonClick(UINT ctrlId);
 
-    // 算"文件保存位置"当前生效路径：配置里设了自定义目录则用它，否则用默认推导路径
-    //（我的文档\Flamingo\FileRecv\账号）。仅用于显示。
-    CString EffectiveRecvPath();
+    // 本次会话真正在用的数据根目录（g_szDataRoot）。它在进程启动时按 flamingo.ini 的
+    // [storage] datapath 算好，运行期不再变。
+    CString EffectiveDataRoot();
 
-    // "更改"按钮：弹系统选目录框；选中后写回配置并即时生效（同步给 UserMgr），刷新显示。
-    void ChooseRecvPath();
+    // flamingo.ini 里当前写着的数据存储位置；未配置过时为空串。
+    CString ConfiguredDataRoot();
+
+    // 存储页那一行要显示的文本：一般就是生效路径；用户刚改完还没重启时显示新路径并
+    // 标注"（重启后生效）"，免得他以为没改上。
+    CString DataRootDisplayText();
+
+    // "更改"按钮：弹选目录框 → 确认框（讲清后果与手动迁移步骤）→ 写 flamingo.ini →
+    // 刷新显示并提示重启。<u>不</u>改动本次会话的任何行为，也不做数据迁移。
+    void ChooseDataRoot();
 
     // 仅切换各分页的可见性 + 更新 m_curPage，不触发重新布局（建窗期用）。
     //   index：要显示的页索引（会经夹取）。
@@ -164,4 +197,9 @@ private:
     balloonwjui::DuiVBox*              m_pContentHost;  // 右侧内容容器（承载 7 分页）
     std::vector<balloonwjui::DuiControl*> m_pages;      // 7 个分页容器，按页序号索引
     balloonwjui::DuiLabel*             m_pRecvPathLabel; // 存储页"文件保存位置"路径标签（借用），改路径后就地刷新
+    HBITMAP                            m_hTitleIcon;     // 标题栏左侧图标位图（程序图标合成到标题栏底色，本类持有、析构释放）
+
+    // 「立即清理」弹出的清理对话框。按值持有（与主面板持有改密对话框同套路），
+    // 由本窗负责其生命周期；未打开时不占任何资源。
+    CBalloonCacheCleanDlg              m_cacheCleanDlg;
 };

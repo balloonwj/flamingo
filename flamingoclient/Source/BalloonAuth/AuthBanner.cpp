@@ -46,7 +46,8 @@ extern CAppModule _Module;
 #pragma comment(lib, "gdiplus.lib")
 
 #include "AuthBanner.h"
-#include "../BalloonMain/MainPanelStatusMenu.h"   // GetPresenceVisual（状态胶囊圆点色/文字，与主面板同源）
+#include "../BalloonMain/MainPanelStatusMenu.h"   // GetPresenceVisual（状态胶囊文字，与主面板同源）
+#include "../BalloonMain/PresenceBadge.h"         // DrawPresenceBadge（状态胶囊上的状态徽标）
 #include "../net/Protocol.h"                       // presence_type（状态默认值 presence_online）
 
 namespace balloonauth {
@@ -88,6 +89,10 @@ const float kNameFontFactor      = 0.062f;            // 用户名字号占控�
 const float kPillTopRatio        = 208.0f / 240.0f;   // 状态胶囊上沿距顶占比
 const float kPillHeightRatio     = 22.0f / 240.0f;    // 状态胶囊高度占比
 const float kPillWidthRatio      = 62.0f / 240.0f;    // 状态胶囊宽度占比
+// 状态徽标绘制方框的边长，占胶囊高度的比例。徽标圆底只占方框的 20/24，取 0.41 时
+// 设计稿尺寸（胶囊高 22）下方框约 9px、圆底约 7.5px，与主面板 Header 的胶囊一致。
+// 改版前这里是半径 pillH * 0.15 的纯色圆点（直径约 6.6px），字形在那个尺寸下糊成一团。
+const float kBadgeBoxRatio       = 0.41f;
 
 // 圆角矩形圆角半径相对边长的比例（design 头像 borderRadius 22%）。
 const float kRoundRectRadiusRatio = 0.22f;
@@ -227,9 +232,9 @@ void AuthBanner::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     const float pillH = (float)rectH * kPillHeightRatio;
     const float pillX = centerX - pillW / 2.0f;
     const float pillY = (float)top + (float)rectH * kPillTopRatio;
-    const float dotR  = pillH * 0.15f;
-    const float dotCx = pillX + pillH * 0.46f;
-    const float dotCy = pillY + pillH / 2.0f;
+    const float badgeBox = pillH * kBadgeBoxRatio;      // 状态徽标绘制方框边长
+    const float dotCx    = pillX + pillH * 0.46f;       // 徽标中心 X（胶囊左内缘处）
+    const float dotCy    = pillY + pillH / 2.0f;        // 徽标中心 Y（胶囊垂直居中）
 
     // ====================================================================
     // 第一层：GDI+ 形状（作用域结束时 Graphics 析构并 flush）
@@ -302,16 +307,18 @@ void AuthBanner::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
                            GetGValue(m_avatarColor), GetBValue(m_avatarColor)));
         g.FillPath(&avatarBrush, &avatarPath);
 
-        // 4. 状态胶囊底 + 状态点（颜色随当前在线状态：在线绿 / 离开橙 / 忙碌红）。
+        // 4. 状态胶囊底 + 状态徽标（形状与颜色随当前在线状态：在线实心圆 / 离开时钟 /
+        //    忙碌横杠 / 离线空心环，与主面板、列表、菜单四处同源）。
         Gdiplus::GraphicsPath pillPath;
         AddRoundRectPath(pillPath, pillX, pillY, pillW, pillH, pillH / 2.0f);
         Gdiplus::SolidBrush pillBgBrush(Gdiplus::Color(12, 0, 0, 0));
         g.FillPath(&pillBgBrush, &pillPath);
 
-        const COLORREF dotColor = balloonmain::GetPresenceVisual(m_presence).dotColor;
-        Gdiplus::SolidBrush dotBrush(Gdiplus::Color(255,
-            GetRValue(dotColor), GetGValue(dotColor), GetBValue(dotColor)));
-        g.FillEllipse(&dotBrush, dotCx - dotR, dotCy - dotR, dotR * 2.0f, dotR * 2.0f);
+        // 登录窗只表达用户挑选的状态，不涉及掉线重连那套连接态，故直接按 m_presence 画。
+        balloonmain::DrawPresenceBadge(g, m_presence, false,
+                                       dotCx - badgeBox / 2.0f,
+                                       dotCy - badgeBox / 2.0f,
+                                       badgeBox);
     }
 
     // ====================================================================
@@ -356,8 +363,8 @@ void AuthBanner::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
                     DT_CENTER | DT_TOP | DT_SINGLELINE | DT_NOCLIP);
     }
 
-    // 状态胶囊文字（圆点右侧），随当前在线状态变化（在线 / 离开 / 忙碌）。
-    RECT pillTextRc = { (int)(dotCx + dotR), (int)pillY,
+    // 状态胶囊文字（徽标右侧），随当前在线状态变化（在线 / 离开 / 忙碌）。
+    RECT pillTextRc = { (int)(dotCx + badgeBox / 2.0f), (int)pillY,
                         (int)(pillX + pillW - pillH * 0.18f), (int)(pillY + pillH) };
     DrawGdiText(hdc, balloonmain::GetPresenceVisual(m_presence).text, pillTextRc,
                 (int)(pillH * 0.52f), false,

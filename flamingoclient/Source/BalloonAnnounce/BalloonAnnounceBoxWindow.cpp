@@ -10,8 +10,12 @@
 #include "../FlamingoClient.h"
 #include "../BalloonMain/BalloonMainPanel.h"
 #include "../BalloonMain/TitleBarIcon.h"     // CreateProgramIconBitmap（标题栏左侧图标）
+#include "../BalloonMain/MainPanelScrollView.h"        // 两栏的悬浮式自动隐藏滚动视口
+#include "../BalloonMain/OverlayScrollBarGeometry.h"   // ComputeOverlayScrollBar / ComputeResizeBorderInsetPx
 #include "../net/IUSocket.h"                 // SendMarkAnnouncementRead（已读上报）
 #include "../IULog.h"
+#include "../BalloonChatWnd/ChatLinkDetect.h" // IsSafeLinkUrl（打开链接前的协议白名单）
+#include <shellapi.h>                        // ShellExecuteW（打开链接）
 
 #include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
 #include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
@@ -31,10 +35,6 @@ const int kAnnMinWidth      = 640;   // 最小宽：再窄右栏正文就没法�
 const int kAnnMinHeight     = 420;   // 最小高
 const int kAnnTitleBarH     = 38;    // 标题栏高
 const int kAnnTitleIconSize = 16;    // 标题栏左侧图标边长
-
-//正文滚动条占的宽度。算正文折行高度时要从视口宽里扣掉它，否则算出的高度偏小、
-//长公告末尾会被截掉一点。须与 AnnounceBoxLayout.cpp 里 SetScrollBarWidth 的取值一致。
-const int kAnnScrollBarWidth = 10;
 
 // ---- 标题栏配色 ----
 const COLORREF kAnnCaptionColor = RGB(0x33, 0x33, 0x33);   // 标题文字与 min/max/close 字形
@@ -162,6 +162,8 @@ bool CBalloonAnnounceBoxWindow::BuildWindow()
 
     //布局已落定（ResizeClient 触发过一次重排），此时控件矩形有效，正文高度才算得准。
     SyncDetailBodyHeight();
+    //滚动条要给窗口缩放边框让出的宽度同样得等布局落定才算得出。
+    SyncScrollBarEdgeInset();
     return true;
 }
 
@@ -176,7 +178,7 @@ void CBalloonAnnounceBoxWindow::InitUi()
     balloonwjui::DuiControl* content = GetClientContent();
     if (content != NULL)
     {
-        m_pScroll = dynamic_cast<balloonwjui::DuiScrollView*>(
+        m_pScroll = dynamic_cast<balloonmain::MainPanelScrollView*>(
             content->FindCtrlById(kIdAnnScroll));
     }
 }
@@ -261,15 +263,49 @@ void CBalloonAnnounceBoxWindow::BuildViewData(AnnounceBoxViewData& out) const
 
 void CBalloonAnnounceBoxWindow::RefreshContent()
 {
+    //本方法只服务于"公告的集合变了"这一类场景（收到新公告、公告被撤回），要新增 / 删除
+    //行控件，只能整棵重建。单纯的选中变化与已读变化走 ApplyStateToUi 定点更新，不到这里。
+    //
+    //重建会新建滚动视口，滚动位置随之归零，故先把它记下来。恢复时不必自己夹范围，
+    //DuiScrollBar::SetPos 会夹到 [0, 内容高 - 视口高]：公告被撤回导致列表变短时，
+    //位置会自动落到新的底部。
+    const int savedListScrollPos = (m_pScroll != NULL) ? m_pScroll->GetScrollPos() : 0;
+
     ReloadRows();
 
-    //整窗重建最省事，也不会有"局部换了列表、顶部信息还是旧的"这类不一致。
-    //公告条数不会像聊天记录那样多，重建的开销可以接受。
     //布局不必自己动手：SetClientContent 内部会 LayoutSkeleton()（见 DuiFrameWindow.cpp）。
     InitUi();
     //换了公告就换了正文，折行高度跟着变，重算一次滚动范围。
     SyncDetailBodyHeight();
+    //控件树是新建的，让位宽度也要重新告诉这两个新的滚动视口。
+    SyncScrollBarEdgeInset();
+
+    //滚动位置要在布局落定、内容高度算好之后再恢复，否则此刻滚动范围还是 0，设了也白设。
+    if (m_pScroll != NULL && savedListScrollPos > 0)
+    {
+        m_pScroll->SetScrollPos(savedListScrollPos);
+    }
+
     Invalidate();
+}
+
+void CBalloonAnnounceBoxWindow::ApplyStateToUi(bool refreshDetail)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+
+    balloonannounce::AnnounceBoxViewData data;
+    BuildViewData(data);
+
+    balloonannounce::ApplyAnnounceListState(content, data);
+    if (refreshDetail)
+    {
+        balloonannounce::ApplyAnnounceDetail(content, data);
+    }
+    //各控件的 setter 自己会把变脏的那块标出来重绘，这里不必再整窗 Invalidate。
 }
 
 void CBalloonAnnounceBoxWindow::SelectRow(int index)
@@ -280,6 +316,13 @@ void CBalloonAnnounceBoxWindow::SelectRow(int index)
     }
 
     const bool wasUnread = m_rows[index].m_unread;
+    //点的还是当前这条、而且早就读过了：界面上没有任何东西会变，直接返回。
+    const bool selectionChanged = (index != m_selectedIndex);
+    if (!selectionChanged && !wasUnread)
+    {
+        return;
+    }
+
     m_selectedIndex = index;
 
     if (wasUnread)
@@ -301,8 +344,15 @@ void CBalloonAnnounceBoxWindow::SelectRow(int index)
         }
     }
 
-    //延迟刷新：本方法是在行控件的点击处理链路里被调到的，直接重建会销毁那个行控件。
-    ::PostMessage(m_hWnd, WM_ANNBOX_REFRESH_CONTENT, 0, 0);
+    //定点更新，不重建控件树 —— 选中一行时公告的集合并没有变，变的只是每行的选中态与
+    //未读点、顶部计数、底部按钮，以及右栏那三项。重建整棵树既要重查本地库、重新排版、
+    //重新测正文高度，还会把列表的滚动位置清零：用户点了靠下的一行，列表却跳回顶部
+    //（2026-08-12 用户实测反馈）。定点更新没有这个副作用。
+    //
+    //另外，本方法是在行控件的点击处理链路里被调到的。老做法要绕一圈 PostMessage
+    //延迟到事件解栈之后才刷，正是因为重建会销毁正被点击的那个行控件；定点更新只改
+    //控件状态、不销毁任何控件，可以就地做完。
+    ApplyStateToUi(selectionChanged);
 }
 
 void CBalloonAnnounceBoxWindow::MarkAllRead()
@@ -329,7 +379,9 @@ void CBalloonAnnounceBoxWindow::MarkAllRead()
         m_pMainPanel->RefreshAnnounceBadge();
     }
 
-    ::PostMessage(m_hWnd, WM_ANNBOX_REFRESH_CONTENT, 0, 0);
+    //同样是定点更新：公告的集合没变，只是未读标记全清了 —— 各行的小圆点、顶部计数、
+    //底部按钮的可用性跟着变，右栏显示的还是原来那条，不必动。
+    ApplyStateToUi(false);
 }
 
 LRESULT CBalloonAnnounceBoxWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
@@ -425,10 +477,80 @@ LRESULT CBalloonAnnounceBoxWindow::OnSizeMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
     return 0;
 }
 
+LRESULT CBalloonAnnounceBoxWindow::OnChatOpenLinkMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                                     LPARAM lParam, BOOL& /*bHandled*/)
+{
+    std::wstring* pUrl = (std::wstring*)lParam;
+    if (pUrl == NULL)
+    {
+        return 0;
+    }
+
+    // 协议白名单：只放行 http / https，与聊天窗、消息记录窗、公告弹窗同一口径。
+    if (balloonchatwnd::IsSafeLinkUrl(*pUrl))
+    {
+        ::ShellExecuteW(m_hWnd, L"open", pUrl->c_str(), NULL, NULL, SW_SHOWNORMAL);
+    }
+    else
+    {
+        LOG_ERROR("消息盒子拒绝打开非 http/https 链接。");
+    }
+    delete pUrl;
+    return 0;
+}
+
 LRESULT CBalloonAnnounceBoxWindow::OnSyncBodyHeightMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
                                                        LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
     SyncDetailBodyHeight();
+    //尺寸变了，视口右缘与窗口缩放边框的相对关系也可能变，重算一次让位宽度。
+    SyncScrollBarEdgeInset();
+    return 0;
+}
+
+LRESULT CBalloonAnnounceBoxWindow::OnScrollBarAnimTimer(UINT /*uMsg*/, WPARAM wParam,
+                                                        LPARAM /*lParam*/, BOOL& bHandled)
+{
+    if ((UINT_PTR)wParam != balloonmain::kScrollbarAnimTimerId)
+    {
+        //别人的定时器，放行给基类 / DefWindowProc。
+        bHandled = FALSE;
+        return 0;
+    }
+
+    bHandled = TRUE;
+
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        KillTimer(balloonmain::kScrollbarAnimTimerId);
+        return 0;
+    }
+
+    //左右两栏各推进一帧。只要还有一个需要下一帧，定时器就继续跑。
+    const UINT scrollIds[2] = { kIdAnnScroll, kIdAnnDetailScroll };
+    bool needMore = false;
+    for (int i = 0; i < 2; ++i)
+    {
+        balloonmain::MainPanelScrollView* sv =
+            dynamic_cast<balloonmain::MainPanelScrollView*>(
+                content->FindCtrlById(scrollIds[i]));
+        if (sv == NULL)
+        {
+            continue;
+        }
+        if (sv->TickScrollBarFade((int)balloonmain::kScrollbarAnimIntervalMs))
+        {
+            needMore = true;
+        }
+    }
+
+    if (!needMore)
+    {
+        //两条滚动条都已稳定（淡出到底 / 无内容可滚），停掉 pulse 省电；
+        //下次滚动或鼠标移到滚动条上时，视口会自己把它重新起起来。
+        KillTimer(balloonmain::kScrollbarAnimTimerId);
+    }
     return 0;
 }
 
@@ -442,29 +564,73 @@ void CBalloonAnnounceBoxWindow::SyncDetailBodyHeight()
 
     balloonwjui::DuiScrollView* sv = dynamic_cast<balloonwjui::DuiScrollView*>(
         content->FindCtrlById(kIdAnnDetailScroll));
-    balloonwjui::DuiLabel* body = dynamic_cast<balloonwjui::DuiLabel*>(
-        content->FindCtrlById(kIdAnnDetailBody));
-    if (sv == NULL || body == NULL)
+    balloonhistory::HistoryContentView* body =
+        dynamic_cast<balloonhistory::HistoryContentView*>(
+            content->FindCtrlById(kIdAnnDetailBody));
+    //真正的算法在布局模块里（那边才拿得到正文区内边距这些布局常量，也才能被
+    //FlamingoUnit 直接测到）。本方法只负责把两个控件取出来递过去。
+    balloonannounce::SyncAnnounceDetailBodyHeight(sv, body);
+}
+
+void CBalloonAnnounceBoxWindow::SyncScrollBarEdgeInset()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
     {
         return;
     }
 
-    //可用宽度取滚动视口的宽度，再扣掉滚动条占的那一条，否则算出来的高度会偏小
-    //（文字实际能用的宽度比视口窄），长公告的末尾会被截掉一点。
-    const RECT svRc = sv->GetRect();
-    int width = svRc.right - svRc.left - kAnnScrollBarWidth;
-    if (width <= 0)
+    //与 DuiFrameWindow::OnNcHitTestMsg 同一口径：边框宽度是 96-dpi 逻辑像素，
+    //按当前显示器 DPI 折算成物理像素后才能和布局矩形对得上。
+    const int borderPx = balloonmain::ComputeResizeBorderInsetPx(GetBorderPx(),
+                                                                 GetDpi(),
+                                                                 IsResizable());
+
+    RECT rcClient;
+    GetClientRect(&rcClient);
+
+    const UINT scrollIds[2] = { kIdAnnScroll, kIdAnnDetailScroll };
+    for (int i = 0; i < 2; ++i)
     {
-        //布局还没落定（GetRect 为空），等下一次调用。
-        return;
+        balloonmain::MainPanelScrollView* sv =
+            dynamic_cast<balloonmain::MainPanelScrollView*>(
+                content->FindCtrlById(scrollIds[i]));
+        if (sv == NULL)
+        {
+            continue;
+        }
+
+        //视口右缘离客户区右缘还有多远。右栏视口本就内缩了一段内边距，左栏视口更是
+        //远在窗口中间，这段距离往往已经盖过整个缩放边框，那就一点都不用让。
+        const RECT svRc = sv->GetRect();
+        const int gap = rcClient.right - svRc.right;
+        int inset = borderPx - gap;
+        if (inset < 0)
+        {
+            inset = 0;
+        }
+        sv->SetEdgeInsetPx(inset);
+    }
+}
+
+bool CBalloonAnnounceBoxWindow::PointOnListScrollBar(POINT pt) const
+{
+    if (m_pScroll == NULL)
+    {
+        return false;
     }
 
-    //MeasureHeight 按当前字体与 word-wrap 标志算出折行后的高度。
-    const int textH = body->MeasureHeight(width);
-
-    //加上内容 vbox 的上下 padding（与 AnnounceBoxLayout 里 SetPadding(0,10,0,10) 对齐）。
-    const int kBodyBoxPadV = 10 + 10;
-    sv->SetContentHeight(textH + kBodyBoxPadV);
+    const balloonmain::OverlayScrollBarMetrics bar =
+        balloonmain::ComputeOverlayScrollBar(m_pScroll->GetRect(),
+                                             m_pScroll->GetContentHeight(),
+                                             m_pScroll->GetScrollPos(),
+                                             m_pScroll->GetEdgeInsetPx());
+    //内容没溢出时列表根本没有滚动条，此时不该凭空排掉一条能点的区域。
+    if (!bar.m_visible)
+    {
+        return false;
+    }
+    return ::PtInRect(&bar.m_rcHit, pt) != FALSE;
 }
 
 int CBalloonAnnounceBoxWindow::HitTestRow(POINT pt) const
@@ -484,6 +650,13 @@ int CBalloonAnnounceBoxWindow::HitTestRow(POINT pt) const
     const RECT viewRc = m_pScroll->GetRect();
     if (pt.x < viewRc.left || pt.x >= viewRc.right
         || pt.y < viewRc.top || pt.y >= viewRc.bottom)
+    {
+        return -1;
+    }
+
+    //落在悬浮滚动条的命中带上就不算点中任何一行 —— 那一下是冲着滑块去的，
+    //拖完松手不该顺带把滑块底下那条公告选中。
+    if (PointOnListScrollBar(pt))
     {
         return -1;
     }
@@ -520,9 +693,12 @@ void CBalloonAnnounceBoxWindow::UpdateRowHover(POINT pt)
         return;
     }
 
+    //鼠标压在悬浮滚动条上时不点亮任何一行 —— 此刻用户是在操作滚动条，
+    //底下那行跟着亮起来只会让人以为要点它。
     const RECT viewRc = m_pScroll->GetRect();
     const bool inView = (pt.x >= viewRc.left && pt.x < viewRc.right
-                         && pt.y >= viewRc.top && pt.y < viewRc.bottom);
+                         && pt.y >= viewRc.top && pt.y < viewRc.bottom)
+                        && !PointOnListScrollBar(pt);
 
     const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = content->Children();
     for (size_t i = 0; i < kids.size(); ++i)

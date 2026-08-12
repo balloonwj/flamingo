@@ -18,6 +18,19 @@
 //前向声明：数据库连接类，仅在 .cpp 中需要其完整定义。
 class IDatabase;
 
+//企业状态（t_enterprise.f_status）。管理控制台的「停用 / 启用企业」改的就是它，
+//IM 侧登录时据此决定放不放行 —— 只有「活跃」的企业其员工才能登录。
+enum enterprise_status
+{
+    //待审核：企业刚建出来、尚未通过审核。其员工不允许登录 IM；自助注册时也
+    //不允许选这类企业加入（见 error_code_enterprise_disabled 的注释）。
+    kEnterpriseStatusPending  = 0,
+    //活跃：正常营业中，唯一允许员工登录 IM 的状态。
+    kEnterpriseStatusActive   = 1,
+    //已停用：被平台管理员停服。其员工会被立即踢下线，且不允许再登录。
+    kEnterpriseStatusDisabled = 2
+};
+
 //企业信息（用于列表/详情的输出，也用作新建/修改的输入载体）。
 struct EnterpriseInfo
 {

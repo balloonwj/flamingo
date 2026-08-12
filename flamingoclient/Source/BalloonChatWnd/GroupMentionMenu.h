@@ -11,7 +11,8 @@
  *
  *  行为约定（与用户确认过）：
  *    · @ 的是本人   → 只留「查看资料」。自己跟自己聊天、自己 @ 自己都没意义。
- *    · 成员已退群   → 四项照常列出，但「@TA」置灰（他收不到）。
+ *    · 成员已退群   → 各项照常列出，但「@TA」置灰（他收不到）；「特别关注」不受影响
+ *                     —— 关注的是这位同事本人，跟他还在不在这个群无关。
  *    · @所有人      → 压根不弹菜单（没有具体的人），由调用方据 ShouldShowMentionMenu 判断。
  *
  *  balloonwj@qq.com   2026-08-03
@@ -35,6 +36,7 @@ enum MentionMenuId
     kMentionMenuSetAdmin    = 5,   // 设为管理员：仅群主可见，且目标是普通成员时
     kMentionMenuCancelAdmin = 6,   // 撤销管理员：仅群主可见，且目标已是管理员时
     kMentionMenuKick        = 7,   // 移出本群：群主可移任何非群主；管理员只能移普通成员
+    kMentionMenuStarred     = 8,   // 特别关注 / 取消特别关注：文案随当前关注状态取反；被关注者上下线时桌面右下角弹提示
 };
 
 /**
@@ -100,6 +102,9 @@ bool ShouldShowMentionMenu(long long mentionUid);
  *    myNetRole：   本人在本群的角色，取值见 grouprole::NetGroupRole（<u>网络侧</u>
  *                  取值：0 成员 1 管理员 2 群主）；负值表示未知 / 不在本群。
  *    targetNetRole：被 @ 成员在本群的角色，取值同上；负值表示未知 / 已不在本群。
+ *    isStarred：    该成员当前是否已被本人特别关注，决定「特别关注 / 取消特别关注」
+ *                   一项的文案正反。缺省 false —— 取不到关注名单时按"未关注"显示，
+ *                   点下去就是去关注，是这两种误判里代价较小的那个。
  *
  *  @return 行模型（值语义，调用方拥有）；mentionUid 为 @所有人 时返回空 vector。
  */
@@ -107,6 +112,7 @@ std::vector<MentionMenuEntry> BuildMentionMenuModel(long long mentionUid,
                                                     long long selfUid,
                                                     bool stillInGroup,
                                                     int myNetRole,
-                                                    int targetNetRole);
+                                                    int targetNetRole,
+                                                    bool isStarred = false);
 
 } // namespace balloonchatwnd

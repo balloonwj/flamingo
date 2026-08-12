@@ -27,21 +27,44 @@
     <ClCompile Include="..\tests\test_framecodec.cpp" />
     <ClCompile Include="..\tests\test_framecompress.cpp" />
     <ClCompile Include="..\tests\test_passwordhasher.cpp" />
+    <ClCompile Include="..\tests\test_sha256.cpp" />
     <ClCompile Include="..\net\FrameCodec.cpp" />
     <ClCompile Include="..\utils\PasswordHasher.cpp" />
+    <ClCompile Include="..\utils\Sha256.cpp" />
     <ClCompile Include="..\utils\MD5.cpp" />
     <ClCompile Include="..\tests\test_loginprotocol.cpp" />
     <ClCompile Include="..\chatserversrc\LoginProtocol.cpp" />
     <ClCompile Include="..\tests\test_contactsprotocol.cpp" />
     <ClCompile Include="..\chatserversrc\ContactsProtocol.cpp" />
     <ClCompile Include="..\tests\test_favoriteprotocol.cpp" />
+    <ClCompile Include="..\tests\test_starredprotocol.cpp" />
+    <ClCompile Include="..\tests\test_starredmanager.cpp" />
+    <ClCompile Include="..\tests\test_conversationbench.cpp" />
+    <ClCompile Include="..\tests\test_conversationunread.cpp" />
+    <ClCompile Include="..\tests\test_conversationbriefs.cpp" />
+    <ClCompile Include="..\tests\test_dbbackend.cpp" />
     <ClCompile Include="..\chatserversrc\FavoriteProtocol.cpp" />
+    <ClCompile Include="..\chatserversrc\StarredProtocol.cpp" />
+    <ClCompile Include="..\chatserversrc\StarredManager.cpp" />
     <ClCompile Include="..\tests\test_contactremarkmanager.cpp" />
     <ClCompile Include="..\chatserversrc\ContactRemarkManager.cpp" />
+    <ClCompile Include="..\tests\test_updateprotocol.cpp" />
+    <ClCompile Include="..\chatserversrc\UpdateProtocol.cpp" />
+    <ClCompile Include="..\tests\test_clientversionmanager.cpp" />
+    <ClCompile Include="..\chatserversrc\ClientVersionManager.cpp" />
+    <ClCompile Include="..\tests\test_updatepackageindex.cpp" />
+    <ClCompile Include="..\fileserversrc\UpdatePackageIndex.cpp" />
+    <ClCompile Include="..\tests\test_updatepackagescanner.cpp" />
+    <ClCompile Include="..\chatserversrc\UpdatePackageScanner.cpp" />
+    <ClCompile Include="..\utils\FileEnum.cpp" />
     <ClCompile Include="..\tests\test_adminbootstrap.cpp" />
     <ClCompile Include="..\chatserversrc\AdminManager.cpp" />
     <ClCompile Include="..\tests\test_apppath.cpp" />
+    <ClCompile Include="..\tests\test_serverconfigloader.cpp" />
+    <ClCompile Include="..\tests\test_asynclog.cpp" />
     <ClCompile Include="..\utils\AppPath.cpp" />
+    <ClCompile Include="..\utils\ServerConfigLoader.cpp" />
+    <ClCompile Include="..\base\ConfigFileReader.cpp" />
     <ClCompile Include="..\tests\test_profileprotocol.cpp" />
     <ClCompile Include="..\chatserversrc\ProfileProtocol.cpp" />
     <ClCompile Include="..\tests\test_registerprotocol.cpp" />
@@ -56,6 +79,7 @@
     <ClCompile Include="..\tests\test_announcementprotocol.cpp" />
     <ClCompile Include="..\chatserversrc\AnnouncementProtocol.cpp" />
     <ClCompile Include="..\tests\test_messageprotocol.cpp" />
+    <ClCompile Include="..\chatserversrc\MessageManager.cpp" />
     <ClCompile Include="..\chatserversrc\MessageProtocol.cpp" />
     <ClCompile Include="..\tests\test_messagepinmanager.cpp" />
     <ClCompile Include="..\chatserversrc\MessagePinManager.cpp" />
@@ -125,10 +149,13 @@
     <ClInclude Include="..\chatserversrc\Protocol.h" />
     <ClInclude Include="..\net\FrameCodec.h" />
     <ClInclude Include="..\utils\PasswordHasher.h" />
+    <ClInclude Include="..\utils\Sha256.h" />
     <ClInclude Include="..\utils\MD5.h" />
     <ClInclude Include="..\chatserversrc\LoginProtocol.h" />
     <ClInclude Include="..\chatserversrc\ContactsProtocol.h" />
     <ClInclude Include="..\chatserversrc\FavoriteProtocol.h" />
+    <ClInclude Include="..\chatserversrc\StarredProtocol.h" />
+    <ClInclude Include="..\chatserversrc\StarredManager.h" />
     <ClInclude Include="..\chatserversrc\ProfileProtocol.h" />
     <ClInclude Include="..\chatserversrc\RegisterProtocol.h" />
     <ClInclude Include="..\chatserversrc\RegisterService.h" />
@@ -145,6 +172,8 @@
     <ClInclude Include="..\chatserversrc\GroupPermission.h" />
     <ClInclude Include="..\chatserversrc\CardProtocol.h" />
     <ClInclude Include="..\utils\FileToken.h" />
+    <ClInclude Include="..\utils\ServerConfigLoader.h" />
+    <ClInclude Include="..\base\ConfigFileReader.h" />
     <ClInclude Include="..\utils\RelayToken.h" />
     <ClInclude Include="..\chatserversrc\FileProtocol.h" />
     <ClInclude Include="..\chatserversrc\GroupFileProtocol.h" />
@@ -216,9 +245,15 @@
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
+    <!-- x64 的产物与中间文件都放进各自的子目录，免得与 Win32 的同名产物互相覆盖 -->
+    <OutDir>x64\$(Configuration)\</OutDir>
+    <IntDir>Tests\x64\$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
+    <!-- x64 的产物与中间文件都放进各自的子目录，免得与 Win32 的同名产物互相覆盖 -->
+    <OutDir>x64\$(Configuration)\</OutDir>
+    <IntDir>Tests\x64\$(Configuration)\</IntDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -265,13 +300,16 @@
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;FLAMINGO_NO_MYSQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    <!-- WIN32 必须定义：全仓库判断平台用的是裸 WIN32（见 base/Platform.h），而不是 MSVC 自带的
+         _WIN32。x64 下不定义它会走进 POSIX 分支，编译必然失败 -->
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;FLAMINGO_NO_MYSQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -282,8 +320,13 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
+      <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
+      <WholeProgramOptimization>true</WholeProgramOptimization>
+      <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;FLAMINGO_NO_MYSQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    <!-- WIN32 必须定义：全仓库判断平台用的是裸 WIN32（见 base/Platform.h），而不是 MSVC 自带的
+         _WIN32。x64 下不定义它会走进 POSIX 分支，编译必然失败 -->
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;FLAMINGO_NO_MYSQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
@@ -292,6 +335,7 @@
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
     </Link>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

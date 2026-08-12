@@ -184,6 +184,90 @@ static std::string notDeletedClause(int32_t userid)
     return os.str();
 }
 
+//静态常量的定义。类内已经给了初值，这里再给一份定义是为了让它可以被取地址 / 绑引用 ——
+//doctest 的 CHECK 宏会把两边表达式按引用捕获，只有类内初值时 g++ 会在链接期报
+//undefined reference（MSVC 恰好能过，故这类问题只在 Linux 全量构建时暴露）。
+const int MessageManager::kMaxUnreadCount;
+const int MessageManager::kDetailBatchSize;
+
+void MessageManager::fetchLastMsgDetails(IDatabase* pConn,
+                                         const std::vector<int64_t>& msgids,
+                                         std::map<int64_t, LastMsgDetail>& out)
+{
+    out.clear();
+    if (pConn == NULL || msgids.empty())
+    {
+        return;
+    }
+
+    //先去重：同一个 msgid 被要两次没有意义，还会把 IN 列表撑长。
+    std::vector<int64_t> uniq;
+    {
+        std::map<int64_t, bool> seen;
+        for (size_t i = 0; i < msgids.size(); ++i)
+        {
+            if (msgids[i] <= 0)
+                continue;
+            if (seen.find(msgids[i]) != seen.end())
+                continue;
+            seen[msgids[i]] = true;
+            uniq.push_back(msgids[i]);
+        }
+    }
+
+    //分批拼 IN 列表。一条 SQL 的长度有上限，会话极多时不分批会拼出超长语句被拒。
+    for (size_t begin = 0; begin < uniq.size(); begin += kDetailBatchSize)
+    {
+        const size_t end = (begin + kDetailBatchSize < uniq.size())
+                           ? (begin + kDetailBatchSize) : uniq.size();
+
+        std::ostringstream osSql;
+        osSql << "SELECT f_msgid, f_from, f_msgtype, f_content, f_create_time "
+                 "FROM t_chatmsg WHERE f_msgid IN (";
+        for (size_t i = begin; i < end; ++i)
+        {
+            if (i > begin)
+                osSql << ",";
+            osSql << uniq[i];
+        }
+        osSql << ")";
+
+        QueryResult* pResult = pConn->query(osSql.str().c_str());
+        if (pResult == NULL)
+        {
+            continue;
+        }
+        while (true)
+        {
+            Field* pRow = pResult->fetch();
+            if (pRow == NULL)
+                break;
+
+            const int64_t msgid = static_cast<int64_t>(pRow[0].getUInt64());
+            LastMsgDetail detail;
+            detail.from    = pRow[1].getInt32();
+            detail.msgtype = pRow[2].getInt32();
+
+            //f_content 是打包过的（content/mentions/mentionall/quote），
+            //会话摘要只要 content 那一层，其余解出来即丢。
+            const std::string blob = pRow[3].getCppString();
+            std::vector<int64_t> ignoreMentions;
+            bool ignoreMentionAll = false;
+            std::string ignoreQuote;
+            MessageProtocol::parseStoredContent(blob, detail.content,
+                                                ignoreMentions, ignoreMentionAll, ignoreQuote);
+
+            detail.timestamp = static_cast<int64_t>(pRow[4].getUInt64());
+            out[msgid] = detail;
+
+            if (!pResult->nextRow())
+                break;
+        }
+        pResult->endQuery();
+        delete pResult;
+    }
+}
+
 bool MessageManager::getConversationBriefs(int32_t userid, std::vector<ConversationBrief>& out)
 {
     std::unique_ptr<IDatabase> pConn;
@@ -260,7 +344,20 @@ bool MessageManager::getConversationBriefs(int32_t userid, std::vector<Conversat
         delete pResult;
     }
 
-    //3) 逐个会话补全 lastmsg 详情与未读数
+    //3) 一次批量取回所有会话"最后一条消息"的详情。原先是每个会话一条 SQL，
+    //   会话一多就线性变慢。这里先把 msgid 收齐，下面的循环直接查表拼装。
+    //   未读数仍是逐会话一条 —— 理由同群聊侧（见 getGroupConversationBriefs 的说明）。
+    std::map<int64_t, LastMsgDetail> detailMap;
+    {
+        std::vector<int64_t> wanted;
+        for (size_t i = 0; i < peers.size(); ++i)
+        {
+            wanted.push_back(peers[i].second);
+        }
+        fetchLastMsgDetails(pConn.get(), wanted, detailMap);
+    }
+
+    //4) 逐个会话拼出摘要
     for (size_t i = 0; i < peers.size(); ++i)
     {
         int64_t peer      = peers[i].first;
@@ -283,38 +380,30 @@ bool MessageManager::getConversationBriefs(int32_t userid, std::vector<Conversat
         brief.mute      = (st.mute != 0);
         brief.lastmsgid = lastmsgid;
 
-        //lastmsg 详情（生成 digest 只需 content，故从 f_content 解出 content 部分）
+        //lastmsg 详情：上面已经整批取回，这里直接查表。查不到就保持默认值 ——
+        //消息刚好在这两步之间被删掉才会出现，摘要少一行预览，不该整条会话丢掉。
         {
-            std::ostringstream osSql;
-            osSql << "SELECT f_from, f_msgtype, f_content, f_create_time FROM t_chatmsg "
-                     "WHERE f_msgid = " << lastmsgid;
-            QueryResult* pResult = pConn->query(osSql.str().c_str());
-            if (pResult != NULL)
+            std::map<int64_t, LastMsgDetail>::iterator itDetail = detailMap.find(lastmsgid);
+            if (itDetail != detailMap.end())
             {
-                Field* pRow = pResult->fetch();
-                if (pRow != NULL)
-                {
-                    brief.lastfrom    = pRow[0].getInt32();
-                    brief.lastmsgtype = pRow[1].getInt32();
-                    std::string blob  = pRow[2].getCppString();
-                    std::vector<int64_t> ignoreMentions;
-                    bool ignoreMentionAll = false;
-                    std::string ignoreQuote;
-                    MessageProtocol::parseStoredContent(blob, brief.lastcontent,
-                                                        ignoreMentions, ignoreMentionAll, ignoreQuote);
-                    brief.lasttimestamp = static_cast<int64_t>(pRow[3].getUInt64());
-                }
-                pResult->endQuery();
-                delete pResult;
+                brief.lastfrom      = itDetail->second.from;
+                brief.lastmsgtype   = itDetail->second.msgtype;
+                brief.lastcontent   = itDetail->second.content;
+                brief.lasttimestamp = itDetail->second.timestamp;
             }
         }
 
-        //未读数：来自对端、msgid 大于已读位点的消息条数
+        //未读数：来自对端、msgid 大于已读位点的消息条数。
+        //数到 kMaxUnreadCount 就停 —— 内层子查询带 LIMIT，外层只数子查询吐出来的行，
+        //于是无论积压多少条，这条查询的工作量都是固定的。理由见 MessageManager.h 上
+        //kMaxUnreadCount 的说明。
         {
             std::ostringstream osSql;
-            osSql << "SELECT COUNT(*) FROM t_chatmsg WHERE f_ctype = 1 AND f_from = " << peer
+            osSql << "SELECT COUNT(*) FROM (SELECT 1 FROM t_chatmsg"
+                     " WHERE f_ctype = 1 AND f_from = " << peer
                   << " AND f_to = " << userid << " AND f_msgid > " << st.readmsgid
-                  << notDeletedClause(userid);
+                  << notDeletedClause(userid)
+                  << " LIMIT " << kMaxUnreadCount << ") t";
             QueryResult* pResult = pConn->query(osSql.str().c_str());
             if (pResult != NULL)
             {
@@ -875,7 +964,61 @@ bool MessageManager::getGroupConversationBriefs(int32_t userid, const std::vecto
         }
     }
 
-    //2) 逐群补全 lastmsg 与未读数；无任何消息的群不纳入会话列表（与单聊口径一致）
+    //2) 一次查出每个群的最新 msgid（排除本人已删除的），再一次批量取回这些消息的详情。
+    //   原先是逐群两条 SQL，群一多就线性变慢；现在这两步与群数量无关，只剩下面的
+    //   未读数还是逐群一条 —— 那条经 kMaxUnreadCount 封顶后是固定小开销，
+    //   硬要合并得为每个群拼各自的已读位点阈值，SQL 变得难读难维护，收益却有限。
+    std::map<int64_t, int64_t> lastMsgIdMap;   //群id → 该群最新一条的 msgid
+    if (!groupids.empty())
+    {
+        for (size_t begin = 0; begin < groupids.size(); begin += kDetailBatchSize)
+        {
+            const size_t end = (begin + kDetailBatchSize < groupids.size())
+                               ? (begin + kDetailBatchSize) : groupids.size();
+
+            std::ostringstream osSql;
+            osSql << "SELECT f_to, MAX(f_msgid) FROM t_chatmsg WHERE f_ctype = "
+                  << conversation_group << " AND f_to IN (";
+            for (size_t i = begin; i < end; ++i)
+            {
+                if (i > begin)
+                    osSql << ",";
+                osSql << groupids[i];
+            }
+            osSql << ")" << notDeletedClause(userid) << " GROUP BY f_to";
+
+            QueryResult* pResult = pConn->query(osSql.str().c_str());
+            if (pResult == NULL)
+            {
+                continue;
+            }
+            while (true)
+            {
+                Field* pRow = pResult->fetch();
+                if (pRow == NULL)
+                    break;
+                lastMsgIdMap[static_cast<int64_t>(pRow[0].getUInt64())] =
+                    static_cast<int64_t>(pRow[1].getUInt64());
+                if (!pResult->nextRow())
+                    break;
+            }
+            pResult->endQuery();
+            delete pResult;
+        }
+    }
+
+    std::map<int64_t, LastMsgDetail> detailMap;
+    {
+        std::vector<int64_t> wanted;
+        for (std::map<int64_t, int64_t>::iterator it = lastMsgIdMap.begin();
+             it != lastMsgIdMap.end(); ++it)
+        {
+            wanted.push_back(it->second);
+        }
+        fetchLastMsgDetails(pConn.get(), wanted, detailMap);
+    }
+
+    //3) 逐群拼出摘要；无任何消息的群不纳入会话列表（与单聊口径一致）
     for (size_t i = 0; i < groupids.size(); ++i)
     {
         int64_t groupid = groupids[i];
@@ -884,41 +1027,30 @@ bool MessageManager::getGroupConversationBriefs(int32_t userid, const std::vecto
         std::map<int64_t, ConvState>::iterator it = stateMap.find(groupid);
         if (it != stateMap.end())
             st = it->second;
-        //注意：已删除会话的判定挪到取到 lastmsgid 之后——要拿最后消息与删除锚点比，
+        //注意：已删除会话的判定放在取到 lastmsgid 之后——要拿最后消息与删除锚点比，
         //才能判断"删除之后有没有来新消息"。
 
-        //lastmsg：本群最新一条（排除本人已删除的）
         ConversationBrief brief;
         brief.ctype     = conversation_group;
         brief.cid       = groupid;
         brief.pinned    = (st.pinned != 0);
         brief.mute      = (st.mute != 0);
+
         bool hasMsg = false;
+        std::map<int64_t, int64_t>::iterator itLast = lastMsgIdMap.find(groupid);
+        if (itLast != lastMsgIdMap.end() && itLast->second > 0)
         {
-            std::ostringstream osSql;
-            osSql << "SELECT f_msgid, f_from, f_msgtype, f_content, f_create_time FROM t_chatmsg "
-                     "WHERE f_ctype = " << conversation_group << " AND f_to = " << groupid
-                  << notDeletedClause(userid) << " ORDER BY f_msgid DESC LIMIT 1";
-            QueryResult* pResult = pConn->query(osSql.str().c_str());
-            if (pResult != NULL)
+            brief.lastmsgid = itLast->second;
+            hasMsg = true;
+
+            std::map<int64_t, LastMsgDetail>::iterator itDetail =
+                detailMap.find(brief.lastmsgid);
+            if (itDetail != detailMap.end())
             {
-                Field* pRow = pResult->fetch();
-                if (pRow != NULL)
-                {
-                    brief.lastmsgid   = static_cast<int64_t>(pRow[0].getUInt64());
-                    brief.lastfrom    = pRow[1].getInt32();
-                    brief.lastmsgtype = pRow[2].getInt32();
-                    std::string blob  = pRow[3].getCppString();
-                    std::vector<int64_t> ignoreMentions;
-                    bool ignoreMentionAll = false;
-                    std::string ignoreQuote;
-                    MessageProtocol::parseStoredContent(blob, brief.lastcontent,
-                                                        ignoreMentions, ignoreMentionAll, ignoreQuote);
-                    brief.lasttimestamp = static_cast<int64_t>(pRow[4].getUInt64());
-                    hasMsg = true;
-                }
-                pResult->endQuery();
-                delete pResult;
+                brief.lastfrom      = itDetail->second.from;
+                brief.lastmsgtype   = itDetail->second.msgtype;
+                brief.lastcontent   = itDetail->second.content;
+                brief.lasttimestamp = itDetail->second.timestamp;
             }
         }
         //群尚无任何消息：不纳入会话列表（用户可从通讯录的群列表进入该群）
@@ -929,12 +1061,16 @@ bool MessageManager::getGroupConversationBriefs(int32_t userid, const std::vecto
         if (isConversationHidden(st, brief.lastmsgid))
             continue;
 
-        //未读数：来自他人、msgid 大于已读位点的群消息条数
+        //未读数：来自他人、msgid 大于已读位点的群消息条数。
+        //与单聊那条同一套写法：数到 kMaxUnreadCount 就停，工作量与积压量无关。
+        //群聊是这次优化的主要受益方 —— 实测里"越用越慢"那条曲线就是这条查询画出来的。
         {
             std::ostringstream osSql;
-            osSql << "SELECT COUNT(*) FROM t_chatmsg WHERE f_ctype = " << conversation_group
+            osSql << "SELECT COUNT(*) FROM (SELECT 1 FROM t_chatmsg"
+                     " WHERE f_ctype = " << conversation_group
                   << " AND f_to = " << groupid << " AND f_from != " << userid
-                  << " AND f_msgid > " << st.readmsgid << notDeletedClause(userid);
+                  << " AND f_msgid > " << st.readmsgid << notDeletedClause(userid)
+                  << " LIMIT " << kMaxUnreadCount << ") t";
             QueryResult* pResult = pConn->query(osSql.str().c_str());
             if (pResult != NULL)
             {

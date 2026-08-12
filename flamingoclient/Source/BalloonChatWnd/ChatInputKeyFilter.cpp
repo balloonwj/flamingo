@@ -5,6 +5,7 @@
 #include "stdafx.h"
 #include "ChatInputKeyFilter.h"
 #include "ChatSendMode.h"   // GetChatSendMode（按当前模式决定回车是发送还是换行）
+#include "../CustomMsgDef.h"   // WM_CHAT_COPY_SELECTION（Ctrl+C 时问一句消息区有没有选区）
 #include <commctrl.h>   // SetWindowSubclass / DefSubclassProc 等
 
 // SetWindowSubclass 系列在 comctl32 里；客户端为 MFC 程序通常已链接，
@@ -44,6 +45,21 @@ struct EnterFilterState
 };
 
 /**
+ *  告诉宿主窗"用户现在在发送框操作"（进焦点 / 点击 / 打字时调）。
+ *  state 为空、或宿主窗已销毁时安静返回。
+ */
+void NotifyFocusInput(EnterFilterState* state)
+{
+    if (state == NULL || state->m_hNotifyTarget == NULL
+        || !::IsWindow(state->m_hNotifyTarget))
+    {
+        return;
+    }
+    ::PostMessage(state->m_hNotifyTarget, WM_CHAT_FOCUS_AREA,
+                  (WPARAM)CHAT_FOCUS_INPUT, 0);
+}
+
+/**
  *  EDIT 子窗口的子类过程：拦回车，区分 Enter（发送）与 Ctrl+Enter（换行）。
  */
 LRESULT CALLBACK EnterFilterProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
@@ -65,7 +81,35 @@ LRESULT CALLBACK EnterFilterProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
             state->m_imeComposing = false;
         break;
 
+    case WM_SETFOCUS:
+        // 焦点进到输入框：告诉宿主窗"用户现在在发送框操作"。
+        NotifyFocusInput(state);
+        break;
+
+    case WM_LBUTTONDOWN:
+        // 点输入框同样算"回到发送框" —— 光靠 WM_SETFOCUS 不够：点消息区时输入框
+        // <u>并没有</u>失去系统焦点（DuiHost 不调 ::SetFocus），再点回输入框自然
+        // 也就不会有 WM_SETFOCUS。
+        NotifyFocusInput(state);
+        break;
+
     case WM_KEYDOWN:
+        // Ctrl+C：问一句宿主窗这一下归谁 —— 焦点在接收框（用户刚在气泡上拖选完）
+        // 就由消息区复制并吞掉按键；焦点在发送框则不拦，输入框照常复制自己的
+        // 选中文字。焦点归属由窗口维护（见 WM_CHAT_FOCUS_AREA 的说明）。
+        //
+        // 用<u>同步</u> SendMessage 而不是 Post：要拿它的返回值决定这次按键吞不吞。
+        if (wParam == 'C' && state != NULL
+            && (::GetKeyState(VK_CONTROL) & 0x8000) != 0
+            && state->m_hNotifyTarget != NULL && ::IsWindow(state->m_hNotifyTarget))
+        {
+            const LRESULT copied = ::SendMessage(state->m_hNotifyTarget,
+                                                 WM_CHAT_COPY_SELECTION, 0, 0);
+            if (copied != 0)
+            {
+                return 0;   // 已由消息区复制，吞掉这次按键
+            }
+        }
         if (wParam == VK_RETURN && state != NULL && !state->m_imeComposing)
         {
             bool ctrlDown = (::GetKeyState(VK_CONTROL) & 0x8000) != 0;
@@ -95,6 +139,13 @@ LRESULT CALLBACK EnterFilterProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPar
         if ((wParam == VK_RETURN || wParam == 0x0A)
             && state != NULL && !state->m_imeComposing)
             return 0;
+        // 真的在输入框里打字，也算"回到发送框"。只认可见字符：Ctrl+C 之类的控制键
+        // 同样会产生 WM_CHAR（Ctrl+C 是 0x03），若一并算上，按一次 Ctrl+C 就会把
+        // 焦点标记改成"发送框"，紧接着再按一次就复制不到气泡了。
+        if (wParam >= 0x20)
+        {
+            NotifyFocusInput(state);
+        }
         break;
 
     case WM_NCDESTROY:

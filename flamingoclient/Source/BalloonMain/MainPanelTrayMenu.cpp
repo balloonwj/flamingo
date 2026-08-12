@@ -13,6 +13,7 @@
 
 #include "MainPanelTrayMenu.h"
 #include "MainPanelIcons.h"        // IconKind（各项左侧图标类型）
+#include "PresenceBadge.h"         // GetPresenceBadgeIconKind（在线状态项的徽标字形）
 #include "MainPanelStatusMenu.h"   // GetPresenceVisual / GetPresenceMenuLabel /
                                    // NormalizePresenceForMenu（在线状态项的配色、文字与
                                    // "当前项"判定，与主面板状态菜单同源）
@@ -37,12 +38,14 @@ void PushIconItem(std::vector<TrayMenuEntry>& items, UINT id,
     e.enabled     = true;
     e.dotColor    = dotColor;
     e.isCurrent   = false;   // 非在线状态项，永远不是"当前状态"
+    e.presence    = 0;       // 非在线状态项，本字段无意义（判据是 dotColor == 0）
     items.push_back(e);
 }
 
-// 追加一行"在线状态"项。文字、圆点色、图标类型都取自 MainPanelStatusMenu 的共用
-// 映射，与主面板状态菜单 / 胶囊逐字同源：当前所处的那一项用带外环的
-// kIconStatusCurrent 加"（当前）"后缀，其余项用普通实心点 kIconOnline。
+// 追加一行"在线状态"项。文字、颜色、徽标字形都取自 MainPanelStatusMenu /
+// PresenceBadge 的共用映射，与主面板状态菜单、胶囊逐字同源：图标是本行所代表状态的
+// 徽标（四种字形各不相同），当前所处的那一项文字带"（当前）"后缀、渲染期再给徽标
+// 套一圈外环。
 //   presence：       本行代表的在线状态（v2 presence_type）。
 //   currentPresence：用户当前所处的在线状态，须由调用方先经 NormalizePresenceForMenu 归一。
 void PushStatusItem(std::vector<TrayMenuEntry>& items, UINT id,
@@ -54,10 +57,11 @@ void PushStatusItem(std::vector<TrayMenuEntry>& items, UINT id,
     e.id          = id;
     e.isSeparator = false;
     e.label       = GetPresenceMenuLabel(presence, isCurrent);
-    e.iconKind    = isCurrent ? kIconStatusCurrent : kIconOnline;
+    e.iconKind    = GetPresenceBadgeIconKind(presence);
     e.enabled     = true;
     e.dotColor    = GetPresenceVisual(presence).dotColor;
     e.isCurrent   = isCurrent;
+    e.presence    = presence;
     items.push_back(e);
 }
 
@@ -72,6 +76,7 @@ void PushSeparator(std::vector<TrayMenuEntry>& items)
     e.enabled     = true;
     e.dotColor    = 0;
     e.isCurrent   = false;
+    e.presence    = 0;       // 分隔条，本字段无意义
     items.push_back(e);
 }
 

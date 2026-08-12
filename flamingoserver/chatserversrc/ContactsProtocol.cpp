@@ -92,6 +92,17 @@ std::string ContactsProtocol::buildContactsResponse(const ContactsData& data)
     }
     root["favorites"] = favorites;
 
+    //「特别关注」的联系人列表，按标记时间倒序。与 favorites 不同，这里是<u>扁平的
+    //ID 数组</u>而不是对象数组 —— 特别关注只能是人，不存在"是人还是群"的歧义，
+    //多带一个 ctype 反而会让人误以为群也能标。
+    //客户端据本数组判断某人上下线时要不要弹右下角提示（服务端不参与该判断）。
+    Json::Value starred(Json::arrayValue);
+    for (int64_t uid : data.starred)
+    {
+        starred.append(std::to_string(uid));
+    }
+    root["starred"] = starred;
+
     //服务号的用户ID列表，客户端据此渲染"服务号"分区
     Json::Value serviceaccounts(Json::arrayValue);
     for (int64_t id : data.serviceaccounts)

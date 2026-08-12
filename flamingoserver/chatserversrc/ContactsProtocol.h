@@ -80,6 +80,7 @@ struct ContactsData
     std::vector<DepartmentInfo> departments;     //企业部门（扁平数组，靠 parentdeptid 还原成树）
     std::vector<ContactInfo>    contacts;        //去重的联系人资料池
     std::vector<FavoriteItem>   favorites;       //「我的收藏」列表，含联系人与群组两类，按收藏时间倒序
+    std::vector<int64_t>        starred;         //「特别关注」的联系人userid列表，按标记时间倒序。只装人（群没有上下线，标记它没意义），故不带 ctype；客户端据它决定这些人上下线时弹不弹右下角提示
     std::vector<int64_t>        serviceaccounts; //服务号的用户ID列表
     std::vector<GroupInfo>      groups;          //登录用户所属的群组列表
 };

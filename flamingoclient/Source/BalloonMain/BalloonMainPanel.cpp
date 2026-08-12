@@ -11,6 +11,7 @@
 #include "stdafx.h"
 #include "BalloonMainPanel.h"
 
+#include <shobjidl.h>                 // ITaskbarList / CLSID_TaskbarList（方案 C 验证：摘任务栏按钮）
 #include <memory>
 #include <string>
 #include <map>
@@ -29,7 +30,9 @@
 #include "MainPanelConversationMenu.h" // BuildConversationMenuModel / ConversationMenuId（会话右键菜单行模型）
 #include "MainPanelContactMenu.h"     // BuildContactMenuModel / ContactMenuId（联系人右键菜单行模型）
 #include "ConversationListOps.h"    // 会话列表纯操作（排序 / 查找 / 删除 / 置顶 / 免打扰）
+#include "../BalloonChatWnd/ChatLinkDetect.h"  // SetChatLinkOptionEnabled（链接识别开关改动后转发到各会话窗）
 #include "MainPanelStatusMenu.h"    // BuildStatusMenuModel / StatusMenuEntry / GetPresenceVisual（状态菜单）
+#include "PresenceBadge.h"          // CreatePresenceBadgeBitmap（树里行右端的状态徽标位图）
 #include "OnlineCapability.h"       // 离线门禁：连接态、被拦操作的提示文案
 #include "MainPanelMenuIcons.h"     // CreateMenuIconImage（系统菜单项图标渲染）
 #include "MainPanelIcons.h"         // IconKind / kIconOnline（状态菜单彩色圆点图标）
@@ -67,7 +70,8 @@
 #include "../net/AnnounceProtocolClient.h"  // net::AnnouncementsResult / AnnouncementNotify / AnnounceMarkReadResult（平台公告 = 消息盒子）
 #include "../net/FileTransfer.h"            // net::GroupFileUploadResult / GroupFileDownloadResult
 #include "../net/IUSocket.h"               // CIUSocket::RequestGroupInfo 等
-#include "../net/ImageTransfer.h"          // net::ImageSendProgress / net::ImageSendResult
+#include "../net/ImageTransfer.h"
+#include "../net/CurrentUserAccount.h"   // net::CurrentUserAccount（本地缓存目录按登录账号分）          // net::ImageSendProgress / net::ImageSendResult
 #include "../net/FileTransfer.h"           // net::FileSendProgress / net::FileSendResult / net::FileDownload*
 #include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
 #include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"   // 通讯录标题刷新
@@ -85,7 +89,7 @@
 
 // ---- 文件作用域常量 -----------------------------------------------------
 
-// 主面板固定客户区尺寸（逻辑像素）—— 对照设计稿的窄高 QQ 风格面板。
+// 主面板固定客户区尺寸（逻辑像素）—— 对照设计稿的窄高面板。
 static const int kMainPanelWidth  = 320;
 static const int kMainPanelHeight = 680;
 
@@ -113,6 +117,12 @@ static const WPARAM kSysCommandMask = 0xFFF0;
 // 联系人树 monogram 头像边长（逻辑像素）—— 与 FillContactsTree 的 mock 头像同尺寸。
 static const int kContactAvatarSizePx = 32;
 
+// 树里行右端状态徽标位图的边长（逻辑像素）。徽标圆底只占绘制方框的 20/24，故 12 对应
+// 一个直径 10px 的圆点 —— 与改版前 DuiTreeView 那个纯色圆点（kStatusDotR = 5，直径 10）
+// 一样大，行的观感不变，多出来的只是圆点里的字形。
+// 取 12 而不是 10：10 的方框只剩 8.3px 的圆底，时钟指针会糊成一团（2026-08-12 实拍确认）。
+static const int kPresenceBadgeSizePx = 12;
+
 // 联系人页标题行高（逻辑像素）—— 取 0，因为联系人页 treeview 之上已经没有独立的
 // 标题 label："通讯录 · N 人"那一行已去掉，人数改为跟在树里公司根节点的名字后面
 // （见 BalloonMainLayout.cpp 的 BuildContactsListXml 注释）。SyncPaneContentHeight
@@ -139,6 +149,17 @@ const UINT kCMenuViewProfile  = balloonmain::kContactMenuViewProfile;
 const UINT kCMenuMute         = balloonmain::kContactMenuMute;
 const UINT kCMenuViewHistory  = balloonmain::kContactMenuViewHistory;
 const UINT kCMenuFavorite     = balloonmain::kContactMenuFavorite;
+const UINT kCMenuStarred      = balloonmain::kContactMenuStarred;
+
+// 调试入口（--mainpanel）的假数据里每隔几行标一个「特别关注」。取 3 只是为了让
+// 标记行与未标记行同屏出现、便于核对观感；正式数据不走这个值。
+const int kMockStarredStride = 3;
+
+// 刚登录（或断线重连回来）之后多久之内不弹「特别关注」的上下线提示，毫秒。
+// 通讯录还没拉回来时，OnPresenceChanged 对查不到的人一律按离线处理，此时收到的
+// presence 推送会被判成"刚上线"——不静默的话，登录瞬间会把在线的同事全弹一遍。
+// 取 10 秒：够通讯录应答回来，短到不至于漏掉登录后不久真正发生的上下线。
+const DWORD kStarredSilenceMs = 10 * 1000;
 const UINT kCMenuRemark       = balloonmain::kContactMenuRemark;
 
 // 群聊右键菜单项 id（必须非 0；结构对照 design/群聊右键菜单.png）。
@@ -377,7 +398,14 @@ CBalloonMainPanel::CBalloonMainPanel(CFlamingoClient* pFMGClient)
     , m_groupInfoDlgGroupId(0)
     , m_presenceBeforeChange(kMyPresenceOnline)   // 默认在线(与 v2 presence_online 同值)；ShowStatusMenu 改状态前会刷新它
     , m_connUiState(0)                            // kConnUiOnline：主面板是登录成功后才创建的
+    // 主面板是登录成功后才创建的，故构造这一刻就是"刚登录"，静默期从这里起算。
+    , m_starredSilenceUntilTick(::GetTickCount() + kStarredSilenceMs)
 {
+    // 状态徽标位图按需创建（见 GetPresenceBadgeBitmap），构造期先全部置空。
+    for (int i = 0; i < kPresenceBadgeSlotCount; ++i)
+    {
+        m_presenceBadges[i] = NULL;
+    }
 }
 
 CBalloonMainPanel::~CBalloonMainPanel()
@@ -454,6 +482,16 @@ CBalloonMainPanel::~CBalloonMainPanel()
     if (m_aboutDlg.IsWindow())
         m_aboutDlg.DestroyWindow();
 
+    // 状态徽标位图缓存由本类持有（DuiTreeView 只借用指针），这里统一释放。
+    for (int i = 0; i < kPresenceBadgeSlotCount; ++i)
+    {
+        if (m_presenceBadges[i] != NULL)
+        {
+            ::DeleteObject(m_presenceBadges[i]);
+            m_presenceBadges[i] = NULL;
+        }
+    }
+
     // 客户区控件树与 HWND 由 DuiFrameWindow 基类析构兜底。
     // monogram avatar HBITMAP 池由本类持有,这里统一释放。
     for (size_t i = 0; i < m_avatarBitmaps.size(); ++i)
@@ -497,16 +535,93 @@ CBalloonMainPanel::~CBalloonMainPanel()
 // 创建 / 显示
 // =======================================================================
 
+/**
+ *  把指定窗口的任务栏按钮摘掉（走 ITaskbarList::DeleteTab）。
+ *
+ *  主面板不该占用任务栏按钮（它由系统托盘图标调出），但<u>不能</u>用
+ *  WS_EX_TOOLWINDOW 来实现这一点 —— 那个样式会连带改掉窗口的激活语义，引出
+ *  "最小化聊天窗后主面板被别的程序盖住"的问题，来龙去脉见
+ *  `docs/主面板被其它窗口盖住问题排查.md`。本函数是它的替代品：窗口保持普通
+ *  顶层窗口（激活语义不变），只把任务栏里那个按钮摘掉。
+ *
+ *  两个实现上的坑：
+ *    · UI 线程并没有全局初始化过 COM（客户端只在个别对话框里就地 CoInitialize），
+ *      所以这里自行初始化并配平；已初始化时返回 S_FALSE，同样要 CoUninitialize
+ *      才不改变引用计数语义。
+ *    · 任务栏按钮是在窗口<u>显示之后</u>才存在的，且每次重新显示都会再长出来
+ *      （托盘收起再调出主面板即属此列），故建窗显示后与后续每次 WM_SHOWWINDOW
+ *      都要各调一次，见 CreateAndShow 与 OnShowWindowForTaskbar。
+ *
+ *    hWnd：要摘掉任务栏按钮的窗口；NULL / 无效窗口时直接返回。
+ */
+static void RemoveFromTaskbar(HWND hWnd)
+{
+    if (hWnd == NULL || !::IsWindow(hWnd))
+    {
+        return;
+    }
+
+    const HRESULT hrCo = ::CoInitialize(NULL);
+    const bool bNeedUninit = SUCCEEDED(hrCo);
+
+    HRESULT hr = E_FAIL;
+    ITaskbarList* pTaskbar = NULL;
+    hr = ::CoCreateInstance(CLSID_TaskbarList, NULL, CLSCTX_INPROC_SERVER,
+                            IID_ITaskbarList, (void**)&pTaskbar);
+    if (SUCCEEDED(hr) && pTaskbar != NULL)
+    {
+        hr = pTaskbar->HrInit();
+        if (SUCCEEDED(hr))
+        {
+            hr = pTaskbar->DeleteTab(hWnd);
+        }
+        pTaskbar->Release();
+    }
+
+    // 失败不影响功能（顶多任务栏上多一个按钮），但要留痕：这类问题只在特定
+    // 系统 / 时序下出现，没有日志根本无从查起。
+    if (FAILED(hr))
+    {
+        LOG_WARNING(_T("摘除主面板任务栏按钮失败: hwnd=0x%p hr=0x%08X。"),
+                    (void*)hWnd, (unsigned int)hr);
+    }
+
+    if (bNeedUninit)
+    {
+        ::CoUninitialize();
+    }
+}
+
 void CBalloonMainPanel::CreateAndShow(HWND hMainDlg)
 {
     m_hMainDlg = hMainDlg;
 
-    // 扩展样式带 WS_EX_TOOLWINDOW：主面板不在任务栏显示窗口图标（也不进 Alt+Tab），
-    // 改由系统托盘图标 / 托盘左键调出，观感对齐 QQ 主面板。owner 仍为 NULL（无 owner
-    // 的顶层窗口本会进任务栏，靠工具窗口样式排除；该样式在建窗时一次设定、不再改动，
-    // 故后续 隐藏 / 显示 主面板都不会再分到任务栏按钮）。
+    // 主面板不占用任务栏按钮（由系统托盘图标 / 托盘左键调出），但实现方式是
+    // <u>普通窗口 + ITaskbarList::DeleteTab</u>，扩展样式必须留空。
+    //
+    // <u>这里曾经用的是 WS_EX_TOOLWINDOW，2026-08-12 因下述问题改掉，不要改回去</u>
+    // （完整排查记录见 `docs/主面板被其它窗口盖住问题排查.md`）：
+    //
+    //   工具窗口会被系统排除在"最小化某个窗口之后该激活谁"的候选之外。于是在主
+    //   面板前面打开一个聊天窗、再最小化该聊天窗时，激活权<u>不会</u>回到紧挨其下
+    //   的主面板，而是落到 Z 序里下一个普通窗口（复现时是资源管理器）；那个窗口被
+    //   激活后浮到主面板上方，观感上就是"主面板沉到了最底层"。
+    //
+    //   注意主面板此时既没有被移动、也没有被隐藏 —— 日志实测它一条 Z 序变动消息都
+    //   没收到、始终可见。所以排查这类现象时不要去找"哪里把主面板压下去了"，那里
+    //   什么都没有，症结是它<u>拿不到激活权</u>。该机理波及所有在主面板前面打开、
+    //   又可被最小化的独立顶层窗口（群聊窗、历史记录窗等），不止单聊窗。
+    //
+    //   改成普通窗口后，最小化聊天窗时主面板会正常收到 WM_ACTIVATE 并浮到最前，
+    //   已实测确认。<u>已知代价</u>：Alt+Tab 的收录规则与任务栏不是一回事，主面板
+    //   会出现在 Alt+Tab 列表里 —— 这一点是权衡后接受的。
+    //
+    // owner 仍为 NULL：无 owner 的普通顶层窗口本会进任务栏，靠建窗后与每次显示时
+    // 调 RemoveFromTaskbar 摘掉按钮（按钮在窗口显示后才存在，且每次重新显示都会
+    // 再长出来，故两处都要调）。
+    const DWORD dwMainPanelExStyle = 0;
     if (Create(NULL, CWindow::rcDefault, _T("FlamingoIM"),
-               WS_OVERLAPPEDWINDOW, WS_EX_TOOLWINDOW) == NULL)
+               WS_OVERLAPPEDWINDOW, dwMainPanelExStyle) == NULL)
     {
         LOG_ERROR(_T("主面板窗口 Create 失败。"));
         return;
@@ -543,6 +658,10 @@ void CBalloonMainPanel::CreateAndShow(HWND hMainDlg)
     ShowWindow(SW_SHOW);
     UpdateWindow();
     ::SetForegroundWindow(m_hWnd);
+
+    // 窗口已显示，任务栏按钮此时才存在，摘掉它。后续每次重新显示（托盘调出主面板）
+    // 都会再长出来，那一路由 OnShowWindowForTaskbar 兜住。
+    RemoveFromTaskbar(m_hWnd);
 
     LOG_INFO(_T("主面板窗口已创建并显示。"));
 }
@@ -710,9 +829,19 @@ void CBalloonMainPanel::FillContactsTree()
             {
                 tv->SetItemSubLabel(id, c.title);
             }
-            // 在线状态点:用 mock status 映射到色彩。离线时颜色仍画(灰),
-            // 与原 MainPanelListItem 视觉一致。
-            tv->SetItemStatusColor(id, balloonmain::MockStatusColor(c.status));
+            // 在线状态徽标:mock status 先换算到 presence,再取徽标位图,与登录后
+            // 真实数据那条路径逐字同源 —— 否则调试入口里核对过的观感到了正式环境又变一副样子。
+            tv->SetItemStatusIcon(id, GetPresenceBadgeBitmap(
+                balloonmain::MockPresenceFromStatus(c.status)));
+            // 「特别关注」星标：调试入口没有真实关注名单，按下标每隔两个标一个，
+            // 好让 --mainpanel 能直接核对观感（标记行与未标记行同屏对照）。
+            // 正式数据那条路走 ApplyStarredMark，读的是 m_starred 名单。
+            balloonmain::MainPanelTreeView* mtv =
+                dynamic_cast<balloonmain::MainPanelTreeView*>(tv);
+            if (mtv != NULL)
+            {
+                mtv->SetItemStarred(id, (i % kMockStarredStride) == 0);
+            }
             // monogram avatar(底色 + 单字)。HBITMAP 存入池,析构释放。
             HBITMAP hAvatar = balloonmain::MakeMonogramAvatar(
                 c.avatarText, c.avatarColor, kAvatarSizePx);
@@ -887,6 +1016,10 @@ void CBalloonMainPanel::FillMessagesTree()
 
     const std::vector<balloonmain::MockConversation>& convs = balloonmain::MockConversations();
 
+    // 假数据里标「特别关注」时按<u>单聊行</u>计数，而不是按数组下标 —— 下标里混着群会话，
+    // 按下标隔几个标一个，很可能一连几次都落在群上（群不能被关注），一个星也标不出来。
+    int mockSingleIndex = 0;
+
     for (size_t i = 0; i < convs.size(); ++i)
     {
         const balloonmain::MockConversation& c = convs[i];
@@ -909,10 +1042,20 @@ void CBalloonMainPanel::FillMessagesTree()
         {
             tv->SetItemRightText(id, rightText);
         }
-        // 单聊带在线状态点(同 MockContact 的逻辑);群会话不带。
+        // 单聊带在线状态徽标(同 MockContact 的逻辑);群会话不带。
         if (!c.isGroup)
         {
-            tv->SetItemStatusColor(id, balloonmain::MockStatusColor(c.status));
+            tv->SetItemStatusIcon(id, GetPresenceBadgeBitmap(
+                balloonmain::MockPresenceFromStatus(c.status)));
+            // 「特别关注」星标：与通讯录树的假数据同一口径，每隔几行标一个，
+            // 好在 --mainpanel 下核对会话行的观感（星标 + 时间 + 未读同时在场）。
+            balloonmain::MainPanelTreeView* mtv =
+                dynamic_cast<balloonmain::MainPanelTreeView*>(tv);
+            if (mtv != NULL)
+            {
+                mtv->SetItemStarred(id, (mockSingleIndex % kMockStarredStride) == 0);
+            }
+            ++mockSingleIndex;
         }
         // monogram avatar。会话树用自己的位图池(m_msgAvatarBitmaps),与通讯录
         // 树的池分开,避免一方刷新清池误删另一方仍引用的位图。
@@ -1038,6 +1181,22 @@ LRESULT CBalloonMainPanel::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
     if (exitWhenClose && m_hMainDlg != NULL && ::IsWindow(m_hMainDlg))
     {
         ::PostMessage(m_hMainDlg, WM_CLOSE_MAINDLG, 0, 0);
+    }
+    return 0;
+}
+
+LRESULT CBalloonMainPanel::OnShowWindowForTaskbar(UINT /*uMsg*/, WPARAM wParam,
+                                                  LPARAM /*lParam*/, BOOL& bHandled)
+{
+    // 只搭便车、不消费消息：置 FALSE 让它继续沿消息映射交给后面的 handler 与基类。
+    bHandled = FALSE;
+
+    // 任务栏按钮在窗口每次重新显示时都会再长出来（托盘收起主面板再调出即属此列），
+    // 所以每次显示都要补摘一次。建窗那一次的调用在 CreateAndShow 里，两处配合才稳 ——
+    // 本消息是在窗口"正在被显示"的过程中到达的，此刻按钮未必已经建好。
+    if (wParam != FALSE)
+    {
+        RemoveFromTaskbar(m_hWnd);
     }
     return 0;
 }
@@ -1391,6 +1550,13 @@ LRESULT CBalloonMainPanel::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
     // 节点展开 / 折叠完成 —— treeview 内部可见行数变了,scrollview 的
     // m_contentH 必须跟着更新,否则花屏 / 滚不到底。按通知来源 ctrlId
     // 分发到对应 pane。
+    //
+    // 注意这里<u>只在 ctrlId 确实是那三棵树之一时才 return</u>：自定义通知码是按控件
+    // 各自编号的（每个控件都从 balloonwjui::DUIN_CUSTOM 起算），所以 DUITVN_EXPAND_TOGGLED
+    // 与 MainPanelHeader::DUIN_HEADER_SIGN_CLICK、DuiEditHost::DUIEN_LEFT_ICON_CLICK 等
+    // 数值完全相同。原先此处无条件 return，等于把本面板内其它控件发出的同值通知统统
+    // 吞掉，症状是"点了没反应"且不报错、不崩溃——登录窗的状态胶囊就栽在同一个坑上
+    // （2026-08-12 定位并修复，见 CBalloonLoginDlg::OnDuiNotify 的注释）。
     if (pNotify != NULL &&
         pNotify->code == balloonwjui::DuiTreeView::DUITVN_EXPAND_TOGGLED)
     {
@@ -1399,19 +1565,22 @@ LRESULT CBalloonMainPanel::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
             SyncPaneContentHeight(balloonmain::kIdPaneContacts,
                                   balloonmain::kIdContactsTree,
                                   kContactsPaneTitleHeight);
+            return 0;
         }
         else if (pNotify->ctrlId == balloonmain::kIdGroupsTree)
         {
             SyncPaneContentHeight(balloonmain::kIdPaneGroups,
                                   balloonmain::kIdGroupsTree,
                                   kGroupsPaneTitleHeight);
+            return 0;
         }
         else if (pNotify->ctrlId == balloonmain::kIdMessagesTree)
         {
             SyncPaneContentHeight(balloonmain::kIdPaneMessages,
                                   balloonmain::kIdMessagesTree, 0);
+            return 0;
         }
-        return 0;
+        // 其它控件发来的同值通知：交给后面的分支继续判，不能在这里截断。
     }
 
     // 搜索框文字变化 —— 实时驱动搜索结果下拉：去空白后为空则隐藏下拉（"空内容
@@ -1772,7 +1941,7 @@ void CBalloonMainPanel::ApplySelfAvatarBitmap(int facetype, const std::string& c
     {
         //customface 即 fileid；从本地头像缓存载图（本端刚上传或上次登录已缓存）。
         std::wstring path = net::ImageTransfer::AvatarCacheFilePathForFileId(
-            (int64_t)userid, customfaceUtf8);
+            net::CurrentUserAccount(), customfaceUtf8);
         HBITMAP hbm = NULL;
         if (!path.empty())
         {
@@ -1994,6 +2163,10 @@ void CBalloonMainPanel::OnContactsArrived(const net::ContactsResult& result)
     LOG_INFO("收藏已灌入: 应答 %u 条, 模型 %d 条, 含群=%d。",
              (uint32_t)result.m_favorites.size(), m_favorites.Count(),
              m_favorites.HasGroupFavorite() ? 1 : 0);
+    //「特别关注」同理，也随通讯录一起下发、整体替换。
+    m_starred.Reset(result.m_starred);
+    LOG_INFO("特别关注已灌入: 应答 %u 条, 模型 %d 条。",
+             (uint32_t)result.m_starred.size(), m_starred.Count());
     m_departments = result.m_departments;
 
     // 通讯录与会话列表是两条相互独立、各自异步到达的应答。若会话先到、通讯录
@@ -2255,6 +2428,33 @@ void CBalloonMainPanel::AddDepartmentSubtree(
     }
 }
 
+HBITMAP CBalloonMainPanel::GetPresenceBadgeBitmap(int presence)
+{
+    // 先归一：隐身与一切越界值都落到"离线"，这样槽位下标一定在 0..3 内，
+    // 也与 GetPresenceBadgeIconKind / GetPresenceVisual 的兜底口径一致。
+    const int slot = balloonmain::NormalizePresenceForMenu(presence);
+    if (slot < 0 || slot >= kPresenceBadgeSlotCount)
+    {
+        // 归一之后不该走到这里。真走到了说明 presence_type 的取值范围变了（新增了
+        // 某个状态而 NormalizePresenceForMenu 没跟上），记一条日志便于定位，不画徽标。
+        LOG_ERROR("presence badge slot out of range: presence=%d, slot=%d.", presence, slot);
+        return NULL;
+    }
+
+    if (m_presenceBadges[slot] == NULL)
+    {
+        m_presenceBadges[slot] =
+            balloonmain::CreatePresenceBadgeBitmap(slot, kPresenceBadgeSizePx);
+        if (m_presenceBadges[slot] == NULL)
+        {
+            LOG_ERROR("failed to create presence badge bitmap: presence=%d, sizePx=%d.",
+                slot, kPresenceBadgeSizePx);
+        }
+    }
+
+    return m_presenceBadges[slot];
+}
+
 HBITMAP CBalloonMainPanel::MakeEntityAvatarBitmap(int64_t id, const CString& displayName,
                                                   int facetype, const std::string& customface,
                                                   int sizePx)
@@ -2265,7 +2465,8 @@ HBITMAP CBalloonMainPanel::MakeEntityAvatarBitmap(int64_t id, const CString& dis
     {
         int64_t selfId = (m_lpFMGClient != NULL)
                          ? (int64_t)m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
-        std::wstring path = net::ImageTransfer::AvatarCacheFilePathForFileId(selfId, customface);
+        std::wstring path =
+            net::ImageTransfer::AvatarCacheFilePathForFileId(net::CurrentUserAccount(), customface);
         if (!path.empty() && ::GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES)
         {
             // 缓存命中：画圆形真图（圆角半径=半边长即圆，匹配树里 monogram 的圆形）。
@@ -2278,7 +2479,8 @@ HBITMAP CBalloonMainPanel::MakeEntityAvatarBitmap(int64_t id, const CString& dis
         // 未缓存：触发下载（完成后 OnAvatarDownloadResult 刷新本节点），先回退 monogram 占位。
         if (selfId > 0)
         {
-            net::ImageTransfer::GetInstance().EnqueueAvatarDownload(customface, selfId);
+            net::ImageTransfer::GetInstance().EnqueueAvatarDownload(
+                customface, net::CurrentUserAccount());
         }
         return balloonmain::MakeMonogramAvatar(spec.m_glyph, spec.m_color, sizePx);
     }
@@ -2327,10 +2529,15 @@ void CBalloonMainPanel::AddContactLeaf(balloonwjui::DuiTreeView* tv, int parentN
         tv->SetItemSubLabel(node, sign);
     }
 
-    // 右侧在线状态点：按好友真实 presence（v2 presence_type，来自 cmd_get_contacts）着色，
-    // 复用与状态胶囊 / 状态菜单同一套配色（在线绿 / 离开橙 / 勿扰红 / 离线灰；隐身按离线灰）。
-    // 收到 cmd_presence_changed_notify(1109) 时由 OnPresenceChanged 重着此节点实现实时刷新。
-    tv->SetItemStatusColor(node, balloonmain::GetPresenceVisual((int)c.m_presence).dotColor);
+    // 右侧在线状态徽标：按好友真实 presence（v2 presence_type，来自 cmd_get_contacts）取，
+    // 复用与状态胶囊 / 状态菜单同一套字形与配色（在线实心圆 / 离开时钟 / 忙碌横杠 /
+    // 离线空心环；隐身按离线）。位图由本类缓存持有，树只借用指针，不可在此释放。
+    // 收到 cmd_presence_changed_notify(1109) 时由 OnPresenceChanged 换此节点的徽标实现实时刷新。
+    tv->SetItemStatusIcon(node, GetPresenceBadgeBitmap((int)c.m_presence));
+
+    // 「特别关注」星标：画在姓名之后。标记在别处（右键菜单）改动时由
+    // RefreshStarredMarks 就地刷新，不必整树重建。
+    ApplyStarredMark(tv, node, (int64_t)c.m_userid);
 
     // 记录"节点 → userid"，供点击开聊。
     m_contactNodeUserId[node] = (UINT)c.m_userid;
@@ -2421,6 +2628,22 @@ void CBalloonMainPanel::OnRecvChatMessage(const net::MessageNotify& notify)
     // 静音位）。下面在"他人发来新消息、且其聊天窗未打开"时据此决定是否播放新消息提示音。
     bool bMuted = (m_lpFMGClient != NULL) ? (m_lpFMGClient->m_UserConfig.IsEnableMute() != FALSE) : false;
 
+    // 发送方不在通讯录缓存里：多半是本端登录之后才进组织架构的新同事（自助注册、
+    // 或管理台新建的员工）。此时消息上只能显示"用户<userid>"这种兜底名字，补拉一次
+    // 通讯录就能把真名换回来。正常路径是服务端推 cmd_org_structure_notify（见
+    // OnOrgStructureChanged），这里管的是那条推送没到时的补救 —— 典型是变更恰好
+    // 发生在本端掉线重连期间。节流交给 m_unknownSenderPolicy，同一个陌生人只补拉
+    // 一次、两次补拉之间还有冷却。
+    if (notify.m_from > 0
+        && (UINT)notify.m_from != selfId
+        && FindCachedContact((UINT)notify.m_from) == NULL
+        && m_unknownSenderPolicy.ShouldRefreshContacts(notify.m_from, (int64_t)::GetTickCount64()))
+    {
+        LOG_INFO("OnRecvChatMessage: sender %lld not in contacts cache, refetch contacts.",
+                 (long long)notify.m_from);
+        CIUSocket::GetInstance().RequestContacts();
+    }
+
     // 落本地库：实时收到的消息（含自己在别端发出、同步回来的）按会话归属持久化，
     // 供历史消息记录窗口离线查询。仅持久化已带服务器 msgid 的消息。会话归属与本函数
     // 下方口径一致：单聊取发送方 userid（peerUserId=notify.m_from），群聊取群 id
@@ -2489,6 +2712,14 @@ void CBalloonMainPanel::OnRecvChatMessage(const net::MessageNotify& notify)
         // 群聊都打扰我"，而点名到我头上的那条恰恰是用户设了免打扰也想知道的。提示音
         // 仍受全局静音位约束（bMuted），这里不动。
         const bool bConvMuted = balloonmain::IsConversationMuted(m_conversations, 2, groupId);
+
+        // 判据逐条打日志，理由同单聊分支（见下方 OnRecvChatMessage 单聊部分的注释）。
+        LOG_INFO("群聊托盘闪烁判据: group=%lld, from=%u, self=%u, 群窗已开=%d, "
+                 "免打扰=%d, @我=%d, 正看着=%d。",
+                 (long long)groupId, (UINT)notify.m_from, selfId,
+                 bGroupWindowOpen ? 1 : 0, bConvMuted ? 1 : 0, bAtMe ? 1 : 0,
+                 bGroupWatching ? 1 : 0);
+
         if (!bGroupWindowOpen && (UINT)notify.m_from != selfId && (!bConvMuted || bAtMe))
         {
             PostTrayFlash(2, groupId, groupDigest);
@@ -2546,6 +2777,14 @@ void CBalloonMainPanel::OnRecvChatMessage(const net::MessageNotify& notify)
     // 免打扰"的会话同样不闪不响（未读数仍照常累加）。
     const bool bConvMuted =
         balloonmain::IsConversationMuted(m_conversations, 1, (int64_t)peerUserId);
+
+    // 这四项决定"闪不闪"，任何一项不满足都静默地不闪。逐条打出来 —— 排查
+    // "收到消息托盘不闪"时，光看现象分不清是判据没过还是后面链路断了。
+    LOG_INFO("单聊托盘闪烁判据: peer=%u, self=%u, 窗口已开=%d, 消息类型=%d(抖动=%d), "
+             "免打扰=%d, 正看着=%d。",
+             peerUserId, selfId, (pWin != NULL) ? 1 : 0, notify.m_msgtype,
+             (int)kRecvMsgTypeShake, bConvMuted ? 1 : 0, bWatching ? 1 : 0);
+
     if (pWin == NULL && notify.m_msgtype != kRecvMsgTypeShake && peerUserId != selfId
         && !bConvMuted)
     {
@@ -3977,7 +4216,9 @@ void CBalloonMainPanel::AddConversationNode(balloonmain::MainPanelTreeView* tv,
                 break;
             }
         }
-        tv->SetItemStatusColor(id, balloonmain::GetPresenceVisual(presence).dotColor);
+        tv->SetItemStatusIcon(id, GetPresenceBadgeBitmap(presence));
+        //单聊会话行带「特别关注」星标（群会话不带 —— 群不能被关注）。
+        ApplyStarredMark(tv, id, conv.m_cid);
     }
 
     // 记录"节点 → (ctype, cid)"，供点击分流开聊 / 清未读。
@@ -4021,6 +4262,9 @@ void CBalloonMainPanel::PostTrayFlash(int ctype, int64_t cid, const std::string&
 {
     if (m_hMainDlg == NULL || cid <= 0)
     {
+        // 这里返回等于"该闪却没闪"，且不留任何痕迹，排查时极难定位，必须记一笔。
+        LOG_WARNING("托盘闪烁请求被丢弃: ctype=%d, cid=%lld, hMainDlg=%p。",
+                    ctype, (long long)cid, m_hMainDlg);
         return;
     }
 
@@ -4039,6 +4283,10 @@ void CBalloonMainPanel::PostTrayFlash(int ctype, int64_t cid, const std::string&
     pData->avatarText  = (LPCTSTR)glyph;
     pData->avatarColor = color;
     ::PostMessage(m_hMainDlg, FMG_MSG_TRAY_FLASH, 0, (LPARAM)pData);
+
+    LOG_INFO("已投递托盘闪烁请求: ctype=%d, cid=%lld, 名称=%s, 首字=%s。",
+             ctype, (long long)cid, CStrToUtf8(name).c_str(),
+             CStrToUtf8(glyph).c_str());
 }
 
 void CBalloonMainPanel::PostTrayClear(int ctype, int64_t cid)
@@ -4376,8 +4624,11 @@ void CBalloonMainPanel::AddFavoritesSection(balloonwjui::DuiTreeView* tv)
 
         if (row.m_showStatusDot)
         {
-            //联系人行画在线状态点，配色与部门树里的联系人行、状态胶囊三处同源。
-            tv->SetItemStatusColor(node, balloonmain::GetPresenceVisual(row.m_presence).dotColor);
+            //联系人行画在线状态徽标，字形与配色跟部门树里的联系人行、状态胶囊三处同源。
+            tv->SetItemStatusIcon(node, GetPresenceBadgeBitmap(row.m_presence));
+            //收藏分区里的联系人行同样带星标 —— 同一个人在树上出现两次（收藏区一次、
+            //部门树一次），两处的标记必须一致，否则用户会以为是两个不同的人。
+            ApplyStarredMark(tv, node, row.m_cid);
             //登记进联系人节点表：双击开单聊、右键弹联系人菜单两条既有路径直接复用，
             //不必为收藏区另写一套。
             m_contactNodeUserId[node] = (UINT)row.m_cid;
@@ -4403,6 +4654,8 @@ void CBalloonMainPanel::RebuildContactsTree()
     //把收藏模型的现状写回缓存：OnContactsArrived 会用缓存里的 favorites 做 Reset，
     //不同步的话刚做的乐观更新会被服务端当初下发的旧值覆盖掉。
     m_favorites.ExportItems(m_lastContactsResult.m_favorites);
+    //「特别关注」同理：不写回缓存，刚点下去的标记会被上一次应答里的旧名单覆盖。
+    m_starred.ExportItems(m_lastContactsResult.m_starred);
 
     LOG_INFO("重建联系人树: 收藏 %d 条, 群列表 %u 个。",
              m_favorites.Count(), (uint32_t)m_myGroups.size());
@@ -4454,6 +4707,184 @@ void CBalloonMainPanel::OnSetFavoriteResult(const net::SetFavoriteResult& result
     if (result.m_code == error_code_favorite_limit)
     {
         tip = _T("收藏数量已达上限，请先取消一些收藏再试。");
+    }
+    ::MessageBox(m_hWnd, tip, _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+}
+
+bool CBalloonMainPanel::IsContactStarred(int64_t userid) const
+{
+    return m_starred.IsStarred(userid);
+}
+
+void CBalloonMainPanel::ApplyStarredMark(balloonwjui::DuiTreeView* tv, int node, int64_t userid)
+{
+    //星标是 MainPanelTreeView 的扩展，裸 DuiTreeView 没有这个能力。三棵树建出来的
+    //都是子类（XML 里写的是 <main-treeview>），转不过去说明有人换了控件，
+    //此时安静跳过而不是崩掉 —— 少一个装饰不该让整棵树填不出来。
+    balloonmain::MainPanelTreeView* mtv = dynamic_cast<balloonmain::MainPanelTreeView*>(tv);
+    if (mtv == NULL)
+    {
+        return;
+    }
+    mtv->SetItemStarred(node, m_starred.IsStarred(userid));
+}
+
+void CBalloonMainPanel::RefreshStarredMarks(int64_t userid)
+{
+    if (userid <= 0)
+    {
+        return;
+    }
+
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+
+    const bool starred = m_starred.IsStarred(userid);
+
+    //通讯录树：同一个人可能挂着两个节点（部门树里一个、收藏分区里一个），
+    //故遍历整张"节点 → userid"表把命中的都改掉，不能找到一个就收工。
+    balloonmain::MainPanelTreeView* ctv = dynamic_cast<balloonmain::MainPanelTreeView*>(
+        content->FindCtrlById(balloonmain::kIdContactsTree));
+    if (ctv != NULL)
+    {
+        for (std::map<int, UINT>::iterator it = m_contactNodeUserId.begin();
+             it != m_contactNodeUserId.end(); ++it)
+        {
+            if (it->second == (UINT)userid)
+            {
+                ctv->SetItemStarred(it->first, starred);
+            }
+        }
+    }
+
+    //会话树：只有单聊会话（ctype==1）才有星标，其 cid 即对端 userid。
+    balloonmain::MainPanelTreeView* mtv = dynamic_cast<balloonmain::MainPanelTreeView*>(
+        content->FindCtrlById(balloonmain::kIdMessagesTree));
+    if (mtv != NULL)
+    {
+        for (std::map<int, std::pair<int, int64_t> >::iterator it = m_msgNodeConv.begin();
+             it != m_msgNodeConv.end(); ++it)
+        {
+            if (it->second.first == 1 && it->second.second == userid)
+            {
+                mtv->SetItemStarred(it->first, starred);
+            }
+        }
+    }
+
+    LOG_INFO("刷新特别关注星标: userid=%lld, starred=%d。",
+             (long long)userid, (int)starred);
+}
+
+void CBalloonMainPanel::MaybeShowStarredPresencePopup(int64_t userid, int oldPresence,
+                                                      int newPresence, UINT selfId)
+{
+    // 一、只对被特别关注的人弹。名单为空时这一步就挡住了，后面几项都不必判。
+    if (!m_starred.IsStarred(userid))
+    {
+        return;
+    }
+
+    // 二、排除自己。自己的状态变化走 OnChangePresenceResult 那条路、本不该经过这里，
+    //     但多设备登录时会有回声推送进来，不排除就会给自己弹"我已上线"。
+    if ((UINT)userid == selfId)
+    {
+        return;
+    }
+
+    // 三、只认真正的上下线跳变。在线↔离开↔忙碌之间的来回切换不弹 —— 对方锁个屏就
+    //     弹一次，一上午能弹十几次。两个判定共用同一套"可见在线"口径，见
+    //     NotificationSound.h。
+    const bool cameOnline  = balloonmain::IsBuddyJustCameOnline(oldPresence, newPresence);
+    const bool wentOffline = balloonmain::IsBuddyJustWentOffline(oldPresence, newPresence);
+    if (!cameOnline && !wentOffline)
+    {
+        return;
+    }
+
+    // 四、登录初期静默。通讯录还没回来时上面那个 oldPresence 一律取 0（离线），
+    //     此刻收到的推送会被判成"刚上线"，不静默就会在登录瞬间把在线的同事全弹一遍。
+    //     GetTickCount 会在约 49.7 天后回绕，用相减再比较而不是直接比大小，回绕时也对。
+    if ((int)(::GetTickCount() - m_starredSilenceUntilTick) < 0)
+    {
+        LOG_INFO("特别关注提示被登录静默期挡下: userid=%lld, online=%d。",
+                 (long long)userid, (int)cameOnline);
+        return;
+    }
+
+    // 五、本人处于「勿扰」时不弹。本客户端里的勿扰就是用户自己选的在线状态
+    //     presence_busy（状态菜单里的那一项，见 MainPanelStatusMenu.h），不是某个配置
+    //     开关。用户既然选了勿扰，就是不想被浮窗打断，而不是只不想收消息。
+    //     读 Header 里那份"用户自己选的状态"——它不受掉线影响（掉线只说明连不上，
+    //     用户选的状态没变），拿连接态去判会在断线重连时误伤。
+    balloonmain::MainPanelHeader* header = FindMainPanelHeader(GetClientContent());
+    if (header != NULL && header->GetPresence() == presence_busy)
+    {
+        LOG_INFO("特别关注提示被勿扰挡下: userid=%lld, online=%d。",
+                 (long long)userid, (int)cameOnline);
+        return;
+    }
+
+    // 显示名取备注优先的那一份，与通讯录树 / 会话列表同一口径。
+    m_starredPopup.AddPresenceEvent(m_hWnd, userid,
+                                    ContactDisplayName((UINT)userid), cameOnline);
+}
+
+void CBalloonMainPanel::ToggleStarred(int64_t userid)
+{
+    if (userid <= 0)
+    {
+        return;
+    }
+
+    //关注自己没有意义（自己的上下线自己清楚），服务端也会直接拒掉。四处菜单本来
+    //就不会对自己出这一项，这里再兜一道，免得将来新加入口时漏判。
+    if (IsSelfUserId((UINT)userid))
+    {
+        LOG_ERROR(_T("忽略对自己的特别关注请求: userid=%lld。"), (long long)userid);
+        return;
+    }
+
+    const bool wantStarred = !m_starred.IsStarred(userid);
+
+    //先本地生效再发协议：菜单文案下次弹出来立刻是对的，不必等一个来回。
+    //应答失败时按服务端回带的 target/starred 回滚（见 OnSetStarredResult）。
+    m_starred.SetStarred(userid, wantStarred);
+    RefreshStarredMarks(userid);
+
+    CIUSocket::GetInstance().SendSetStarred(userid, wantStarred);
+
+    LOG_INFO("切换特别关注: userid=%lld, starred=%d, 当前共 %d 人。",
+             (long long)userid, (int)wantStarred, m_starred.Count());
+}
+
+void CBalloonMainPanel::OnSetStarredResult(const net::SetStarredResult& result)
+{
+    if (result.m_code == 0)
+    {
+        //成功：乐观更新已经是对的，什么都不用做。
+        return;
+    }
+
+    //失败：把这一条回滚。服务端原样回带了 target/starred，据此定位到底是哪一个人 ——
+    //用户连点几个人时会有多条请求在途，只看"最后一次操作"会回滚错对象。
+    //本次请求的意图是 m_starred，回滚就是把它设成相反值。
+    const bool intended = (result.m_starred != 0);
+    m_starred.SetStarred(result.m_target, !intended);
+    RefreshStarredMarks(result.m_target);
+
+    LOG_ERROR(_T("特别关注设置失败，已回滚: target=%lld, starred=%d, code=%d。"),
+              (long long)result.m_target, result.m_starred, result.m_code);
+
+    //关注人数超限要给用户一句明确的话，否则他只会看到"点了没反应"。
+    //其余失败（不同企业 / 对方不存在 / 服务器内部错误）给一句通用提示即可。
+    LPCTSTR tip = _T("特别关注设置失败，请稍后重试。");
+    if (result.m_code == error_code_starred_limit)
+    {
+        tip = _T("特别关注人数已达上限，请先取消一些再试。");
     }
     ::MessageBox(m_hWnd, tip, _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
 }
@@ -4681,6 +5112,7 @@ void CBalloonMainPanel::ShowContactContextMenu(UINT peerUserId)
     state.m_isSelf   = isSelf;
     state.m_muted    = muted;
     state.m_favorite = !isSelf && m_favorites.IsFavorite(1, (int64_t)peerUserId);
+    state.m_starred  = !isSelf && m_starred.IsStarred((int64_t)peerUserId);
 
     const std::vector<balloonmain::ContactMenuEntry> model =
         balloonmain::BuildContactMenuModel(state);
@@ -4730,6 +5162,12 @@ void CBalloonMainPanel::ShowContactContextMenu(UINT peerUserId)
 
     case kCMenuFavorite:
         ToggleFavorite(1, (int64_t)peerUserId);
+        break;
+
+    // 特别关注：菜单文案是按当前状态取反给出的，ToggleStarred 内部同样取反，
+    // 故这里直接调、不用再传目标状态。
+    case kCMenuStarred:
+        ToggleStarred((int64_t)peerUserId);
         break;
 
     case kCMenuMute:
@@ -4937,6 +5375,9 @@ void CBalloonMainPanel::ShowConversationContextMenu(int ctype, int64_t cid)
     //收藏状态与会话缓存无关，直接问收藏模型。会话的 (ctype,cid) 与收藏的 (ctype,cid)
     //是同一套口径，可以直接传。
     state.m_favorite = m_favorites.IsFavorite(ctype, cid);
+    //特别关注只对人有效，群会话上这一项根本不出现（由行模型据 m_isGroup 决定），
+    //这里也就只在单聊时去问一次名单。
+    state.m_starred  = (ctype == 1) && m_starred.IsStarred(cid);
 
     balloonwjui::DuiMenu menu;
 
@@ -4988,6 +5429,12 @@ void CBalloonMainPanel::ShowConversationContextMenu(int ctype, int64_t cid)
 
     case balloonmain::kConvMenuFavorite:
         ToggleFavorite(ctype, cid);
+        break;
+
+    // 特别关注：只有单聊会话会出这一项（群会话的行模型里压根没有它），故 cid
+    // 就是对端 userid，可以直接传。
+    case balloonmain::kConvMenuStarred:
+        ToggleStarred(cid);
         break;
 
     case balloonmain::kConvMenuPin:
@@ -5375,7 +5822,7 @@ CString CBalloonMainPanel::GetUserConfigPath() const
     const TCHAR* pszAccount = m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount.c_str();
     TCHAR szConfigPath[MAX_PATH] = { 0 };
     _stprintf_s(szConfigPath, MAX_PATH, _T("%sUsers\\%s\\%s.cfg"),
-                g_szHomePath, pszAccount, pszAccount);
+                g_szDataRoot, pszAccount, pszAccount);
     return CString(szConfigPath);
 }
 
@@ -5893,7 +6340,11 @@ void CBalloonMainPanel::ShowStatusMenu()
     // 那里（ApplyPresenceOptimistic）才能保证两条路表现一致。
     if (m_hMainDlg != NULL)
     {
-        ::PostMessage(m_hMainDlg, FMG_MSG_CHANGE_MY_PRESENCE, (WPARAM)targetPresence, 0);
+        //lParam 是切换来源：状态菜单是用户手动选的，故传 kPresenceChangeManual。
+        //CMainDlg 据此把"当前的离开是自动切过去的"标志清掉 —— 用户手动改过状态之后，
+        //"无操作自动离开"就不该再擅自把他切回在线（见 CMainDlg::OnChangeMyPresence）。
+        ::PostMessage(m_hMainDlg, FMG_MSG_CHANGE_MY_PRESENCE, (WPARAM)targetPresence,
+                      (LPARAM)kPresenceChangeManual);
     }
 }
 
@@ -5925,7 +6376,22 @@ bool CBalloonMainPanel::CheckOnlineFor(int action)
 
 void CBalloonMainPanel::ApplyConnectionState(int state)
 {
+    const int prevState = m_connUiState;
     m_connUiState = state;
+
+    // 「特别关注」提示的两件事跟着连接态走：
+    //   · 断线 / 正在连接：把已经弹着的提示收掉。那批状态是断线前的旧账，连回来时
+    //     服务端会重新推一遍当前状态，留着只会让人看着过期信息。
+    //   · 由非在线态回到在线：重新起一个静默期。重连后服务端会把在线的同事重推一遍，
+    //     与刚登录时是同一个局面，不静默就会弹一大片。
+    if (state != balloonmain::kConnUiOnline)
+    {
+        m_starredPopup.HideAndClear();
+    }
+    else if (prevState != balloonmain::kConnUiOnline)
+    {
+        m_starredSilenceUntilTick = ::GetTickCount() + kStarredSilenceMs;
+    }
 
     LOG_INFO("主面板应用连接态：state=%d(0=在线 1=正在连接 2=离线)，"
              "单聊窗 %u 个、群聊窗 %u 个。",
@@ -6113,6 +6579,24 @@ LRESULT CBalloonMainPanel::OnOpenContactProfileMsg(UINT /*uMsg*/, WPARAM wParam,
     return 0;
 }
 
+LRESULT CBalloonMainPanel::OnQueryStarredMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                             LPARAM lParam, BOOL& /*bHandled*/)
+{
+    const int64_t* pUserId = (const int64_t*)lParam;
+    if (pUserId == NULL)
+    {
+        return 0;
+    }
+    return m_starred.IsStarred(*pUserId) ? 1 : 0;
+}
+
+LRESULT CBalloonMainPanel::OnToggleStarredMsg(UINT /*uMsg*/, WPARAM wParam,
+                                              LPARAM /*lParam*/, BOOL& /*bHandled*/)
+{
+    ToggleStarred((int64_t)wParam);
+    return 0;
+}
+
 LRESULT CBalloonMainPanel::OnOpenChatMsg(UINT /*uMsg*/, WPARAM wParam,
                                          LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
@@ -6280,6 +6764,36 @@ LRESULT CBalloonMainPanel::OnRefreshSelfHeaderMsg(UINT /*uMsg*/, WPARAM /*wParam
     // 个人信息对话框乐观保存后转发到此：按已更新的 m_UserInfo 立即刷新本人 Header
     // （昵称/签名/头像），不必等服务端应答，主面板即时反映改动。
     RefreshSelfAvatar();
+    return 0;
+}
+
+LRESULT CBalloonMainPanel::OnLinkOptionChangedMsg(UINT /*uMsg*/, WPARAM wParam,
+                                                  LPARAM /*lParam*/, BOOL& /*bHandled*/)
+{
+    const bool enabled = (wParam != 0);
+    // 先更新进程级开关：随后各窗重新测量时，气泡才会按新口径决定要不要识别链接。
+    balloonchatwnd::SetChatLinkOptionEnabled(enabled);
+
+    // 再让已经打开的会话窗逐个重新测量重绘。没开窗时这两个 map 是空的，什么都不做。
+    for (std::map<UINT, CBalloonChatWindow*>::iterator it = m_chatWindows.begin();
+         it != m_chatWindows.end(); ++it)
+    {
+        if (it->second != NULL)
+        {
+            it->second->RefreshLinkRendering();
+        }
+    }
+    for (std::map<int64_t, CBalloonGroupChatWindow*>::iterator it = m_groupChatWindows.begin();
+         it != m_groupChatWindows.end(); ++it)
+    {
+        if (it->second != NULL)
+        {
+            it->second->RefreshLinkRendering();
+        }
+    }
+
+    LOG_INFO("聊天链接识别开关已切换: enabled=%d, 已刷新单聊窗 %d 个、群聊窗 %d 个。",
+             enabled ? 1 : 0, (int)m_chatWindows.size(), (int)m_groupChatWindows.size());
     return 0;
 }
 
@@ -6802,6 +7316,11 @@ void CBalloonMainPanel::OnPresenceChanged(int64_t userid, int presence)
         balloonmain::PlayNotifySound(balloonmain::kNotifySoundBuddyOnline, bMuted);
     }
 
+    // 1.6) 「特别关注」的桌面提示：被关注的人上线 / 下线时，右下角弹一条。
+    //      与上面的上线提示音同一处，但判定条件更严 —— 提示音只在上线时响一声，
+    //      而这个弹窗会挡住屏幕右下角，故抑制条件要齐全，缺一条都会变成骚扰。
+    MaybeShowStarredPresencePopup(userid, oldPresence, presence, selfId);
+
     // 2) 单聊窗：若与该好友的单聊窗正开着，刷新其头部状态胶囊。聊天窗是独立窗口、不依赖
     //    面板客户区，故放在下面取面板控件（可能早退）之前先做，确保不被跳过。
     std::map<UINT, CBalloonChatWindow*>::iterator wit = m_chatWindows.find((UINT)userid);
@@ -6824,14 +7343,14 @@ void CBalloonMainPanel::OnPresenceChanged(int64_t userid, int presence)
         return;
     }
 
-    COLORREF dotColor = balloonmain::GetPresenceVisual(presence).dotColor;
+    HBITMAP hBadge = GetPresenceBadgeBitmap(presence);
     bool changed = false;
     for (std::map<int, UINT>::iterator it = m_contactNodeUserId.begin();
          it != m_contactNodeUserId.end(); ++it)
     {
         if (it->second == (UINT)userid)
         {
-            tv->SetItemStatusColor(it->first, dotColor);
+            tv->SetItemStatusIcon(it->first, hBadge);
             changed = true;
         }
     }
@@ -6852,7 +7371,7 @@ void CBalloonMainPanel::OnPresenceChanged(int64_t userid, int presence)
         {
             if (it->second.first == 1 && it->second.second == userid)
             {
-                mtv->SetItemStatusColor(it->first, dotColor);
+                mtv->SetItemStatusIcon(it->first, hBadge);
                 convChanged = true;
             }
         }
@@ -7021,6 +7540,24 @@ void CBalloonMainPanel::OnUserInfoChanged(const net::UserInfoChangedNotify& noti
         CString newSign = Utf8ToCStr(notify.m_signature);
         cit->second->UpdatePeerInfo(newName, newSign, notify.m_facetype, notify.m_customface);
     }
+}
+
+void CBalloonMainPanel::OnOrgStructureChanged(const net::OrgStructureChangedNotify& notify)
+{
+    // 关键路径日志：这条推送是"新同事出现在通讯录里"的唯一触发点，出问题时要能
+    // 从日志上直接看出它到底有没有到达 UI 层（对照 IUSocket 那条 "Recv v2
+    // org-structure-changed notify"，两条都在才说明四层管道通了）。
+    LOG_INFO("OnOrgStructureChanged: changetype=%d, deptid=%lld, refetch contacts.",
+             notify.m_changetype, (long long)notify.m_deptid);
+
+    // 整份重拉。应答经 FMG_MSG_V2_CONTACTS 回到 OnContactsArrived，那里会重建
+    // 联系人树、m_contacts 缓存与部门列表，与登录时走的是同一条路径。
+    CIUSocket::GetInstance().RequestContacts();
+}
+
+void CBalloonMainPanel::ResetUnknownSenderPolicy()
+{
+    m_unknownSenderPolicy.Reset();
 }
 
 void CBalloonMainPanel::OnSearchPick(void* userdata, UINT peerUserId)

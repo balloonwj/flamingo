@@ -145,6 +145,8 @@ private:
     void onSetBlacklist(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //添加/取消收藏（cmd_set_favorite）：收藏对象为联系人或群组，见 docs/收藏接入方案.md
     void onSetFavorite(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //加入/取消特别关注（cmd_set_starred）：对象只能是联系人，见 docs/特别关注接入方案.md
+    void onSetStarred(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //发送消息（cmd_send_message）：按 ctype 分流到单聊 / 群聊
     void onSendMessage(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //发送群聊消息：onSendMessage 在 ctype=2 时调用
@@ -299,6 +301,10 @@ private:
     void onRequestUpload(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //申请下载文件（cmd_request_download）：签发下载令牌、指明目标服务器
     void onRequestDownload(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //检查客户端更新（cmd_check_update）：查版本表、比版本号，有新版则直接签发下载令牌。
+    //本命令<u>允许未登录调用</u>——版本过低的客户端登录会被拒，若检查更新也要求登录，
+    //这类客户端就再无自救途径。未登录时签出的令牌载荷里 uid 为 0。
+    void onCheckUpdate(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //查询群文件列表（cmd_get_group_files）：分页 + 按类型筛选
     void onGetGroupFiles(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //登记群文件（cmd_add_group_file）：把已上传文件登记进群文件库并推送全群

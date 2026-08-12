@@ -42,7 +42,9 @@ extern CAppModule _Module;
 #include "MainPanelHeader.h"
 #include "MainPanelMockData.h"
 #include "MainPanelStatusMenu.h"    // GetPresenceVisual（状态胶囊文字/圆点色映射）
-#include "OnlineCapability.h"       // GetConnectionPresenceVisual / ShouldGrayAvatar（按连接态渲染）
+#include "PresenceBadge.h"          // DrawPresenceBadge（状态胶囊上的状态徽标）
+#include "OnlineCapability.h"       // GetConnectionPresenceVisual / GetConnectionBadgePresence /
+                                    // ShouldGrayAvatar（按连接态渲染）
 #include "AvatarGray.h"             // MakeGrayColor / MakeGrayAvatarBitmap（离线头像置灰）
 #include "../net/Protocol.h"        // presence_type（状态默认值 presence_online）
 
@@ -349,7 +351,10 @@ void MainPanelHeader::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     const wchar_t* pillStatusText = pillVisual.text;
     const int pillTextPx = 12;
     int pillTextW = MeasureTextWidth(hdc, pillStatusText, pillTextPx, false);
-    const int pillDotD = 6;                                // 状态点直径
+    // 状态徽标的绘制方框边长。徽标圆底只占方框的 20/24，故 9 对应约 7.5px 的圆点
+    // （改版前是 6px 的纯色圆点）。之所以要放大：6px 下时钟指针与横杠糊成一团，
+    // 看不出字形，这一枚就与列表 / 菜单里的徽标不像同一套东西了。
+    const int pillDotD = 9;
     // 左padding(9) + 点 + 点字间距(5) + 字 + 文字与箭头间距 + 下拉箭头 + 右padding(9)
     const int pillW = 9 + pillDotD + 5 + pillTextW
                       + kPillTextChevronGap + kPillChevronW + 9;
@@ -403,14 +408,17 @@ void MainPanelHeader::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         Gdiplus::Pen pillPen(kPillBorder, 1.0f);
         g.DrawPath(&pillPen, &pillPath);
 
-        // 状态点：颜色取自 GetPresenceVisual（绿/橙/红/灰），COLORREF → GDI+ Color。
-        Gdiplus::SolidBrush dotBrush(Gdiplus::Color(255,
-            GetRValue(pillVisual.dotColor), GetGValue(pillVisual.dotColor),
-            GetBValue(pillVisual.dotColor)));
-        g.FillEllipse(&dotBrush,
-                      (Gdiplus::REAL)(textX + 9),
-                      (Gdiplus::REAL)(pillY + (pillH - pillDotD) / 2),
-                      (Gdiplus::REAL)pillDotD, (Gdiplus::REAL)pillDotD);
+        // 状态徽标：字形与颜色都由"该画哪个状态"决定，与列表、菜单里的徽标同源。
+        // 注意取的是 GetConnectionBadgePresence 而非 m_presence —— 掉线重连期间用户
+        // 选的仍是"在线"，但胶囊文字已经是"正在连接"、点是灰的，形状必须跟着走灰环，
+        // 否则会出现"灰点画成在线实心圆"的矛盾。
+        balloonmain::DrawPresenceBadge(
+            g,
+            balloonmain::GetConnectionBadgePresence(effPresence, m_connUiState),
+            false,
+            (Gdiplus::REAL)(textX + 9),
+            (Gdiplus::REAL)(pillY + (pillH - pillDotD) / 2),
+            (Gdiplus::REAL)pillDotD);
 
         // 下拉箭头 "˅"：两段短线在文字右侧画一个朝下的折线，颜色同胶囊文字（白）。
         const Gdiplus::REAL chevCx = (Gdiplus::REAL)pillChevronX + kPillChevronW / 2.0f;

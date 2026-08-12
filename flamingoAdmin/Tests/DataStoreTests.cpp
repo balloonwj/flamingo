@@ -167,6 +167,72 @@ void Test_ServicesAccessor()
     FA_EXPECT_EQ(store.Services(_T("ent-999")).size(), 0);
 }
 
+// 用例⑳㉑：SetOrgTree 覆盖同一企业的组织树 —— 树对象地址稳定，且被删掉的
+// 节点查不到。
+//
+// 这两条是「刷新组织架构」按钮的正确性前提：刷新走
+// AdminFrame::OnOrgTreeReloaded → DataStore::SetOrgTree → OrgTree::Rebuild，
+// 而 Widgets/OrgTree 持有的是 DataStore 里那棵树的裸指针 m_root，中途并不会
+// 重新 SetRoot。m_orgTrees 是 std::map，对已存在的键赋值不会重建 map 节点，
+// 因此 mapped 对象地址不变、裸指针不会悬空 —— 这条用例把该假设钉住，将来若
+// 有人把容器换成 vector / unordered_map 触发 rehash 搬迁，这里会先红。
+void Test_SetOrgTreeKeepsAddress()
+{
+    BeginCase("DataStore：SetOrgTree 覆盖后地址稳定");
+    DataStore& store = DataStore::Instance();
+
+    // 用一个种子里没有的企业 ID，避免干扰其它用例对 ent-001 等的断言。
+    const CString kEntId = _T("ent-reload-test");
+    FA_EXPECT_NULL(store.OrgTree(kEntId));
+
+    // 第一版树：公司根 + 一个部门 + 部门下一名员工。
+    OrgNode userA;
+    userA.m_kind = OrgNodeKind::User;
+    userA.m_id   = _T("u-1");
+    userA.m_name = _T("张三");
+
+    OrgNode dept;
+    dept.m_kind = OrgNodeKind::Dept;
+    dept.m_id   = _T("d-1");
+    dept.m_name = _T("研发部");
+    dept.m_children.push_back(userA);
+
+    OrgNode rootV1;
+    rootV1.m_kind          = OrgNodeKind::Dept;
+    rootV1.m_id            = _T("d-0");
+    rootV1.m_name          = _T("测试企业");
+    rootV1.m_isCompanyRoot = true;
+    rootV1.m_children.push_back(dept);
+
+    store.SetOrgTree(kEntId, rootV1);
+    const OrgNode* first = store.OrgTree(kEntId);
+    FA_EXPECT_NOTNULL(first);
+    FA_EXPECT_NOTNULL(store.FindOrgNode(kEntId, _T("u-1")));
+
+    // 第二版树：模拟服务端那边员工 u-1 已被删除，只剩空的研发部。
+    OrgNode deptEmpty;
+    deptEmpty.m_kind = OrgNodeKind::Dept;
+    deptEmpty.m_id   = _T("d-1");
+    deptEmpty.m_name = _T("研发部");
+
+    OrgNode rootV2;
+    rootV2.m_kind          = OrgNodeKind::Dept;
+    rootV2.m_id            = _T("d-0");
+    rootV2.m_name          = _T("测试企业");
+    rootV2.m_isCompanyRoot = true;
+    rootV2.m_children.push_back(deptEmpty);
+
+    store.SetOrgTree(kEntId, rootV2);
+    const OrgNode* second = store.OrgTree(kEntId);
+
+    // ⑳ 覆盖后树对象地址不变 —— OrgTree::m_root 不会悬空。
+    FA_EXPECT_TRUE(first == second);
+
+    // ㉑ 新树的内容确实生效：部门还在，被删的员工查不到了。
+    FA_EXPECT_NOTNULL(store.FindOrgNode(kEntId, _T("d-1")));
+    FA_EXPECT_NULL(store.FindOrgNode(kEntId, _T("u-1")));
+}
+
 // 用例⑨⑩⑪：CreateEnterprise —— 企业 +1 且居首、自动建空组织树、自动记审计。
 void Test_CreateEnterprise()
 {
@@ -287,6 +353,7 @@ void RunAllDataStoreTests()
     Test_ServicesAccessor();
 
     // 变更类用例（改变单例状态，全部采用前后差值断言）。
+    Test_SetOrgTreeKeepsAddress();
     Test_CreateEnterprise();
     Test_SendAnnouncement();
     Test_PushAudit();

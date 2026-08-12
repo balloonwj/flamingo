@@ -142,6 +142,37 @@ void DrawInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& seg
                        int maxLines = 0);
 
 /**
+ *  把已排好版的内容里<u>某一段字符区间</u>用另一种样式重画一遍。
+ *
+ *  做法是「按该区间占的矩形设裁剪区、再把整段内容重画一遍」，而不是只画那几个字的
+ *  子串 —— 后者遇到区间跨行就得自己按行拆、还得复刻本引擎的折行规则；裁剪重画沿用
+ *  同一次排版，落在矩形里的字形恰好就是那几个字，跨行天然正确。
+ *
+ *  代价是每个矩形都要重跑一次 DrawInlineContent（内含一次折行排版）。一条消息里
+ *  这类区间（@提醒、超链接）通常个位数，且整行绘制结果有渲染缓存兜着、不是每帧都跑，
+ *  这个代价可以接受。
+ *
+ *  <u>本函数是 @提醒高亮与超链接渲染共用的那一份</u> —— 两处都要"把某几个字换个样子
+ *  画"，实现必须只有一份，否则两边的折行 / 裁剪细节迟早漂移。
+ *
+ *    hdc：       目标设备上下文。
+ *    segs：      正文解析出的段序列（与 DrawInlineContent 用的同一份）。
+ *    layout：    字符级排版模型（BuildSelLayoutFromPlaced 的产物）。
+ *    charBegin： 区间起始字符下标（扁平文本口径）。
+ *    charEnd：   区间结束字符下标（右开）。charEnd <= charBegin 时不画。
+ *    rcText：    文本区矩形（绝对坐标），须与排版时用的是同一块。
+ *    style：     这一段要用的样式（颜色 / 下划线等）。
+ *    faceSize：  内联表情显示边长（像素）。
+ */
+void DrawInlineContentRestyledRange(HDC hdc,
+                                    const std::vector<balloonchat::ChatSegment>& segs,
+                                    const SelLayout& layout,
+                                    int charBegin, int charEnd,
+                                    const RECT& rcText,
+                                    const InlineTextStyle& style,
+                                    int faceSize);
+
+/**
  *  把消息段序列拼成"扁平文本"：文字原样拼接，每个表情占一个 U+FFFC 占位字符。
  *  选中区间就是这个串上的下标区间，复制时再把占位符换成可读文案（如 "[表情]"，
  *  见 ChatTextSelection.h 的 ExtractSelectedText）。

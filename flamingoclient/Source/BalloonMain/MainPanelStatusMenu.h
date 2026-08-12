@@ -47,10 +47,15 @@ enum StatusMenuId : UINT
 /**
  *  StatusMenuEntry —— 状态菜单里的一行。本菜单无分隔条，故不设 isSeparator 字段。
  *
- *  "当前所处的那一项"用<u>图标 + 文字</u>双通道标记：iconKind 换成带外环的
- *  kIconStatusCurrent、label 带"（当前）"后缀。之所以不用 balloonui 自带的勾选
+ *  "当前所处的那一项"用<u>图标 + 文字</u>双通道标记：label 带"（当前）"后缀，
+ *  图标则在该状态的徽标外圈多画一环（渲染期按 isCurrent 决定，见
+ *  MainPanelMenuIcons::CreateStatusIconImage）。之所以不用 balloonui 自带的勾选
  *  标记，是因为 DuiMenu 的左侧列里"图标"与"勾选标记"互斥（DuiMenu.cpp 绘制时
- *  有图标就只画图标），而状态项的彩色圆点必须保留 —— 它是辨认状态的主要线索。
+ *  有图标就只画图标），而状态徽标必须保留 —— 它是辨认状态的主要线索。
+ *
+ *  2026-08-12 改版前，"当前"是靠把 iconKind 换成 kIconStatusCurrent（外环 + 内点）
+ *  表达的；改版后 iconKind 这一列要用来表达"这一行是哪个状态"（四种字形各不相同），
+ *  腾不出手再兼表"当前"，故当前项的外环挪到渲染期叠加。
  */
 struct StatusMenuEntry
 {
@@ -59,8 +64,9 @@ struct StatusMenuEntry
     int            presence;   // 该项对应的 v2 在线状态（presence_type，见 net/Protocol.h）
     COLORREF       dotColor;   // 该项左侧圆点颜色（RGB）；同时复用为胶囊圆点色
     bool           isCurrent;  // 是否为用户当前所处的状态；一份模型里至多一项为 true
-    int            iconKind;   // 左侧图标类型（MainPanelIcons.h 的 IconKind）：当前项取
-                               // kIconStatusCurrent（外环 + 内点），其余取 kIconOnline（实心点）
+    int            iconKind;   // 左侧图标类型（MainPanelIcons.h 的 IconKind）：恒为本行
+                               // 所代表状态的徽标字形（kIconPresenceOnline / Away /
+                               // Busy / Offline 之一），不随 isCurrent 变化
 };
 
 /**
@@ -79,8 +85,8 @@ struct PresenceVisual
  *  逐行喂给 DuiMenu，圆点图标用 iconKind + dotColor 渲染。
  *
  *    currentPresence：用户当前所处的在线状态（v2 presence_type）。与之相符的那一行
- *                     被标记为当前项（isCurrent = true、图标换成 kIconStatusCurrent、
- *                     文字带"（当前）"后缀）。取值先经 NormalizePresenceForMenu 归一，
+ *                     被标记为当前项（isCurrent = true、文字带"（当前）"后缀，
+ *                     渲染期再给徽标套一圈外环）。取值先经 NormalizePresenceForMenu 归一，
  *                     故隐身 / 越界值会落到"离线"行上，与胶囊的显示保持一致。
  *
  *  返回：行模型 vector（值语义，调用方拥有）。label 指向静态常量串，进程级生命周期。
@@ -127,6 +133,10 @@ const wchar_t* GetPresenceMenuLabel(int presence, bool isCurrent);
  *    presence：v2 在线状态（presence_type）。在线 / 离开 / 勿扰 / 离线分别映射到
  *              绿 / 橙 / 红 / 灰；其它取值（含不可由本菜单选中的"隐身"）一律退化为
  *              "离线"灰点 —— 正常流程不会出现，仅作兜底。
+ *
+ *  注意：颜色只是<u>辅助</u>通道。四个状态真正的区分靠字形（在线实心圆 / 离开时钟 /
+ *  忙碌横杠 / 离线空心环），取字形请用 PresenceBadge.h 的 GetPresenceBadgeIconKind，
+ *  两者的兜底口径一致（隐身与越界值都落到"离线"）。
  *
  *  返回：对应的 PresenceVisual；text 指向静态常量串，进程级生命周期。
  */

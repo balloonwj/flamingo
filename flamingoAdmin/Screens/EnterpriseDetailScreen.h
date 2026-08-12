@@ -26,6 +26,8 @@ namespace balloonwjui { class DuiEditHost; } // 组织树搜索框(寄宿真 EDI
 
 namespace flamingoadmin {
 
+namespace ui { class IconButton; }           // 组织树工具条上的三个图标按钮
+
 class OrgDetailPanel;
 class ServicesPanel;
 
@@ -95,6 +97,14 @@ public:
     // 读搜索框当前文本,按部门名 / 员工姓名过滤组织树。
     void OnOrgSearchChanged();
 
+    // 展开组织树的全部部门。工具条「展开全部」按钮的 DUIN_CLICK 直接发到
+    // AdminFrame(NotifyParent 只通知宿主窗口,不沿控件父链冒泡),故由
+    // AdminFrame 收到通知后转调本方法。
+    void ExpandAllOrg();
+
+    // 折叠组织树(只保留根节点展开)。调用来源同 ExpandAllOrg。
+    void CollapseAllOrg();
+
     void Layout(const RECT& rcAvail) override;
     void OnPaint(HDC hdc, const RECT& rcDirty) override;
     bool OnLButtonUp(POINT pt, UINT mkFlags) override;
@@ -121,6 +131,12 @@ private:
 
     OrgTree*         m_tree  = nullptr;          // 组织树（子控件）
     balloonwjui::DuiEditHost* m_orgSearch = nullptr;  // 组织树搜索框（工具条左侧,子控件）
+
+    // 组织树工具条右侧的三个图标按钮（子控件，从左到右）。仅在「组织架构」
+    // 子 tab 下可见，切到「服务号」tab 时由 SetSubTab 隐藏。
+    ui::IconButton*  m_btnOrgRefresh   = nullptr;   // 刷新：重新拉取部门树
+    ui::IconButton*  m_btnOrgExpandAll = nullptr;   // 展开全部
+    ui::IconButton*  m_btnOrgCollapse  = nullptr;   // 折叠
     OrgDetailPanel*  m_panel = nullptr;          // 组织详情面板（子控件）
     ServicesPanel*   m_servicesPanel = nullptr;  // 服务号面板（子控件）
     balloonwjui::DuiButton*  m_btnBack     = nullptr;    // 返回
@@ -129,11 +145,10 @@ private:
     balloonwjui::DuiButton*  m_btnCreateGroup = nullptr; // 新建群（仅组织 tab 显示）
     balloonwjui::DuiButton*  m_btnPrimary  = nullptr;    // 主操作（新增员工 / 新建服务号）
 
-    // Layout 时算好的可点装饰区（host 客户区坐标）。
+    // Layout 时算好的可点装饰区（host 客户区坐标）。工具条上的展开 / 折叠
+    // 原本也是这样的自绘热区，现已换成 ui::IconButton 子控件。
     RECT m_rcTabOrg{};      // 子 tab：组织架构
     RECT m_rcTabSvc{};      // 子 tab：服务号
-    RECT m_rcExpandAll{};   // 工具条：展开全部
-    RECT m_rcCollapse{};    // 工具条：折叠
     RECT m_rcAddTopDept{};  // 页脚：新增顶级部门
 
     Pending m_pending = Pending::None;   // 上一次上报的动作

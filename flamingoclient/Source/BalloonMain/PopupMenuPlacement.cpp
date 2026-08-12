@@ -1,86 +1,36 @@
 /**
  *  PopupMenuPlacement.cpp
  *
- *  弹出菜单落点夹取的实现。核心 ClampMenuOriginToRect 为纯坐标运算，
- *  与 FlamingoUnit 测试工程共用、不 include stdafx.h，PCH 设 NotUsing。
- *  ClampPopupMenuToWorkArea 走 MonitorFromPoint / GetMonitorInfo 取工作区。
+ *  弹出菜单落点修正的实现。<u>几何运算本身已经下沉到 balloonui</u>
+ *  （balloonui/Controls/List/DuiMenuPlacement.h），本文件的同名函数只是转发 ——
+ *  这样 balloonui 内部（DuiMenuPopup 弹出前的自动修正落点）与客户端这一侧
+ *  （托盘浮窗定位等）共用同一份实现，不会各写一份然后慢慢走样。
  *
- *  balloonwj@qq.com   2026-06-03
+ *  纯坐标运算部分与 FlamingoUnit 测试工程共用、不 include stdafx.h，PCH 设
+ *  NotUsing；被转发的头文件只依赖 <windows.h>，不会把控件体系带进这个 TU。
+ *
+ *  balloonwj@qq.com   2026-06-03（2026-08-12 改为转发到 balloonui）
  */
 
 #include "PopupMenuPlacement.h"
 
-namespace balloonmain {
+#include "../../balloonui/balloonui/Controls/List/DuiMenuPlacement.h"
 
-// 菜单与工作区边缘（尤其任务栏一侧）之间预留的间隙，单位：像素。让菜单浮在
-// 任务栏 / 屏幕边缘之上留一道缝，观感对齐 QQ 托盘菜单，也避开 popup 系统阴影
-// 往下溢出到任务栏造成"底部被吃掉"的错觉。
-static const int kMenuEdgeGap = 4;
+namespace balloonmain {
 
 RECT GetMenuPlacementArea(POINT anchor)
 {
-    RECT work;
-
-    // 取锚点所在显示器的工作区（排除任务栏），多显示器安全。
-    HMONITOR hMonitor = ::MonitorFromPoint(anchor, MONITOR_DEFAULTTONEAREST);
-    MONITORINFO mi;
-    mi.cbSize = sizeof(mi);
-    if (hMonitor != NULL && ::GetMonitorInfo(hMonitor, &mi))
-    {
-        work = mi.rcWork;
-    }
-    else if (!::SystemParametersInfo(SPI_GETWORKAREA, 0, &work, 0))
-    {
-        // 再退化：用主屏整屏尺寸。
-        work.left   = 0;
-        work.top    = 0;
-        work.right  = ::GetSystemMetrics(SM_CXSCREEN);
-        work.bottom = ::GetSystemMetrics(SM_CYSCREEN);
-    }
-
-    // 四周向内缩一道缝（缩过头则退化为零宽/零高，由后续夹取兜底）。
-    if (work.right - work.left > 2 * kMenuEdgeGap)
-    {
-        work.left  += kMenuEdgeGap;
-        work.right -= kMenuEdgeGap;
-    }
-    if (work.bottom - work.top > 2 * kMenuEdgeGap)
-    {
-        work.top    += kMenuEdgeGap;
-        work.bottom -= kMenuEdgeGap;
-    }
-
-    return work;
+    return balloonwjui::GetMenuPlacementArea(anchor);
 }
 
 POINT ClampMenuOriginToRect(POINT anchor, SIZE menuSize, RECT area)
 {
-    POINT pt = anchor;
-
-    // 水平：默认向右展开；右边放不下则翻到锚点左侧；仍越界则贴右边缘；
-    // 最后保证不越过左边缘（菜单比工作区还宽时取左边缘）。
-    if (pt.x + menuSize.cx > area.right)
-        pt.x = anchor.x - menuSize.cx;
-    if (pt.x + menuSize.cx > area.right)
-        pt.x = area.right - menuSize.cx;
-    if (pt.x < area.left)
-        pt.x = area.left;
-
-    // 垂直：默认向下展开；下边放不下则翻到锚点上方；仍越界则贴下边缘；
-    // 最后保证不越过上边缘（菜单比工作区还高时取上边缘）。
-    if (pt.y + menuSize.cy > area.bottom)
-        pt.y = anchor.y - menuSize.cy;
-    if (pt.y + menuSize.cy > area.bottom)
-        pt.y = area.bottom - menuSize.cy;
-    if (pt.y < area.top)
-        pt.y = area.top;
-
-    return pt;
+    return balloonwjui::ClampMenuOriginToRect(anchor, menuSize, area);
 }
 
 POINT ClampPopupMenuToWorkArea(POINT anchor, SIZE menuSize)
 {
-    return ClampMenuOriginToRect(anchor, menuSize, GetMenuPlacementArea(anchor));
+    return balloonwjui::ClampMenuOriginToWorkArea(anchor, menuSize);
 }
 
 POINT ComputeTrayAnchoredOrigin(RECT trayIcon, SIZE size, RECT area)
@@ -94,7 +44,7 @@ POINT ComputeTrayAnchoredOrigin(RECT trayIcon, SIZE size, RECT area)
         pt.x = area.right - size.cx;
         pt.y = area.bottom - size.cy;
 
-        //浮窗比可放置矩形还大时会算出负向越界，统一夹到左上角（与下面同一口径）。
+        //浮窗比可放置矩形还大时会算出负向越界，统一收到左上角（与下面同一口径）。
         if (pt.x < area.left)
             pt.x = area.left;
         if (pt.y < area.top)
@@ -103,7 +53,7 @@ POINT ComputeTrayAnchoredOrigin(RECT trayIcon, SIZE size, RECT area)
         return pt;
     }
 
-    //以托盘图标左上角为锚点，交给与菜单共用的夹取逻辑：右 / 下放不下会自动翻到锚点的
+    //以托盘图标左上角为锚点，交给与菜单共用的落点修正逻辑：右 / 下放不下会自动翻到锚点的
     //左 / 上，正是任务栏在下时"浮窗贴在托盘图标左上方"的期望效果。
     POINT anchor;
     anchor.x = trayIcon.left;

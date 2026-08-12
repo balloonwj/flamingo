@@ -1,9 +1,10 @@
-/**
+﻿/**
  *  聊天文件传输管理器（客户端侧，收发双向）实现，FileTransfer.cpp
  *  balloonwj@qq.com   2026-06-05
  */
 #include "stdafx.h"
 #include "FileTransfer.h"
+#include "FileServerConn.h"   //独立 fileserver 连接（原内联在本文件，已抽出共用）
 
 #include "IUSocket.h"
 #include "TransferOwnerRegistry.h"  // transfer_owner_file
@@ -14,6 +15,7 @@
 #include "../IULog.h"               // LOG_INFO / LOG_ERROR
 #include "../MD5Sum.h"              // MD5Init / MD5Update / MD5Final
 #include "../EncodeUtil.h"          // UnicodeToUtf8 / Utf8ToUnicode
+#include "UserCachePath.h"          // UserCacheDir（Users\<登录账号>\ 的统一口径）
 
 #include <fstream>
 #include <chrono>
@@ -125,20 +127,21 @@ static std::string sanitizeFileName(const std::string& name)
     return base;
 }
 
-std::wstring FileTransfer::CacheFilePathFor(int64_t userId, const std::string& md5,
+std::wstring FileTransfer::CacheFilePathFor(const std::wstring& account, const std::string& md5,
                                             const std::string& filename)
 {
-    if (userId <= 0 || md5.empty())
+    if (md5.empty())
         return std::wstring();
 
-    //缓存按登录用户分隔、按内容 MD5 分目录、按原始文件名命名：
-    //<g_szHomePath>Users\<userId>\ChatFile\<md5>\<filename>。md5 为 ASCII 十六进制，
-    //逐字符宽化；filename 为 UTF-8，经 EncodeUtil 转宽字符。本方法只拼路径、不创建
-    //目录、不判断存在。
-    std::wstring path = g_szHomePath;   //约定以反斜杠结尾
-    path += L"Users\\";
-    path += std::to_wstring(userId);
-    path += L"\\ChatFile\\";
+    //缓存按登录账号分隔、按内容 MD5 分目录、按原始文件名命名：
+    //<g_szHomePath>Users\<账号>\ChatFile\<md5>\<filename>。目录那一截统一由
+    //UserCacheDir 拼（Users 下的命名口径只此一处），账号为空时它返回空串，
+    //本方法据此一并返回空串。md5 为 ASCII 十六进制，逐字符宽化；filename 为 UTF-8，
+    //经 EncodeUtil 转宽字符。本方法只拼路径、不创建目录、不判断存在。
+    std::wstring path = net::UserCacheDir(g_szDataRoot, account, L"ChatFile");
+    if (path.empty())
+        return std::wstring();
+
     for (size_t i = 0; i < md5.size(); ++i)
         path.push_back(static_cast<wchar_t>(md5[i]));
     path += L"\\";
@@ -146,24 +149,32 @@ std::wstring FileTransfer::CacheFilePathFor(int64_t userId, const std::string& m
     return path;
 }
 
-//构造下载落地路径，并按需逐级创建 Users、Users\<userId>、ChatFile、ChatFile\<md5>
+//构造下载落地路径，并按需逐级创建 Users、Users\<账号>、ChatFile、ChatFile\<md5>
 //四级目录。落地写文件前调用。
-static std::wstring buildFileCachePath(int64_t userId, const std::string& md5,
+static std::wstring buildFileCachePath(const std::wstring& account, const std::string& md5,
                                        const std::string& filename)
 {
-    std::wstring dir = g_szHomePath;   //约定以反斜杠结尾
-    dir += L"Users\\";
-    ::CreateDirectoryW(dir.c_str(), NULL);   //已存在返回失败，忽略即可
-    dir += std::to_wstring(userId);
-    dir += L"\\";
-    ::CreateDirectoryW(dir.c_str(), NULL);
-    dir += L"ChatFile\\";
-    ::CreateDirectoryW(dir.c_str(), NULL);
+    //先拿到 <主目录>Users\<账号>\ChatFile\，再逐级建目录。账号为空时拼不出路径，
+    //直接返回空串——调用方会把它当成落地失败，而不是往当前工作目录乱写。
+    const std::wstring chatFileDir = net::UserCacheDir(g_szDataRoot, account, L"ChatFile");
+    if (chatFileDir.empty())
+        return std::wstring();
+
+    //CreateDirectoryW 只建最后一级，故从 Users 往下逐级调用；已存在会返回失败，忽略即可。
+    const std::wstring userDir = net::UserCacheDir(g_szDataRoot, account, NULL);
+    std::wstring usersRoot = g_szDataRoot;
+    usersRoot += L"Users\\";
+    ::CreateDirectoryW(usersRoot.c_str(), NULL);
+    ::CreateDirectoryW(userDir.c_str(), NULL);
+    ::CreateDirectoryW(chatFileDir.c_str(), NULL);
+
+    std::wstring md5Dir = chatFileDir;
     for (size_t i = 0; i < md5.size(); ++i)
-        dir.push_back(static_cast<wchar_t>(md5[i]));
-    dir += L"\\";
-    ::CreateDirectoryW(dir.c_str(), NULL);
-    return FileTransfer::CacheFilePathFor(userId, md5, filename);
+        md5Dir.push_back(static_cast<wchar_t>(md5[i]));
+    md5Dir += L"\\";
+    ::CreateDirectoryW(md5Dir.c_str(), NULL);
+
+    return FileTransfer::CacheFilePathFor(account, md5, filename);
 }
 
 //注：文件上传已改为 streamUploadFile 流式实现（分片从磁盘读、内联组帧发送），不再经
@@ -198,197 +209,8 @@ private:
     FileTransfer* m_owner;   //回主类收一整帧（共享 socket）
 };
 
-//独立 fileserver 连接：群文件并发池里每笔传输各持有一条、传完即断，自带 socket，不碰
-//CIUSocket 的共享 m_hFileSocket。连接 / 发送 / 收帧的实现照搬 CIUSocket 的
-//ConnectToFileServer / SendOnFilePort / RecvOnFilePort / RecvOneFileFrame，只是作用在
-//本对象自己的 m_sock 上。
-class FileServerConn : public IFileFrameChannel
-{
-public:
-    FileServerConn()
-        : m_sock(INVALID_SOCKET)
-    {
-    }
-
-    ~FileServerConn() override
-    {
-        Close();
-    }
-
-    //连到 fileserver（地址 / 端口取自 CIUSocket）。非阻塞 connect + select 等待，
-    //语义与 CIUSocket::ConnectToFileServer 一致。成功返回 true。
-    bool Connect(const std::string& addr, short port, int timeoutSec)
-    {
-        Close();
-
-        m_sock = ::socket(AF_INET, SOCK_STREAM, 0);
-        if (m_sock == INVALID_SOCKET)
-            return false;
-
-        long tmSend  = 3 * 1000L;
-        long tmRecv  = 3 * 1000L;
-        long noDelay = 1;
-        setsockopt(m_sock, IPPROTO_TCP, TCP_NODELAY, (LPSTR)&noDelay, sizeof(long));
-        setsockopt(m_sock, SOL_SOCKET, SO_SNDTIMEO, (LPSTR)&tmSend, sizeof(long));
-        setsockopt(m_sock, SOL_SOCKET, SO_RCVTIMEO, (LPSTR)&tmRecv, sizeof(long));
-
-        //非阻塞：与共享 socket 同口径，收发用 WSAEWOULDBLOCK + Sleep + 超时轮询
-        unsigned long on = 1;
-        if (::ioctlsocket(m_sock, FIONBIO, &on) == SOCKET_ERROR)
-        {
-            Close();
-            return false;
-        }
-
-        struct sockaddr_in addrSrv = { 0 };
-        struct hostent* pHostent = NULL;
-        if ((addrSrv.sin_addr.s_addr = inet_addr(addr.c_str())) == INADDR_NONE)
-        {
-            pHostent = ::gethostbyname(addr.c_str());
-            if (pHostent == NULL)
-            {
-                LOG_ERROR("FileServerConn: resolve fileserver %s failed.", addr.c_str());
-                Close();
-                return false;
-            }
-            addrSrv.sin_addr.s_addr = *((unsigned long*)pHostent->h_addr);
-        }
-        addrSrv.sin_family = AF_INET;
-        addrSrv.sin_port   = htons((u_short)port);
-
-        int ret = ::connect(m_sock, (struct sockaddr*)&addrSrv, sizeof(addrSrv));
-        if (ret == 0)
-            return true;
-        if (ret == SOCKET_ERROR && ::WSAGetLastError() != WSAEWOULDBLOCK)
-        {
-            LOG_ERROR("FileServerConn: connect fileserver %s:%d failed.", addr.c_str(), (int)port);
-            Close();
-            return false;
-        }
-
-        fd_set writeset;
-        FD_ZERO(&writeset);
-        FD_SET(m_sock, &writeset);
-        struct timeval tv = { timeoutSec, 0 };
-        if (::select((int)m_sock + 1, NULL, &writeset, NULL, &tv) != 1)
-        {
-            LOG_ERROR("FileServerConn: connect fileserver %s:%d timeout.", addr.c_str(), (int)port);
-            Close();
-            return false;
-        }
-        return true;
-    }
-
-    //关闭本连接（幂等）。Stop 时可从别的线程调以解阻塞正在收发的池线程。
-    void Close()
-    {
-        if (m_sock != INVALID_SOCKET)
-        {
-            ::closesocket(m_sock);
-            m_sock = INVALID_SOCKET;
-        }
-    }
-
-    bool SendBytes(const char* data, int64_t size, int timeoutSec) override
-    {
-        if (m_sock == INVALID_SOCKET)
-            return false;
-
-        int64_t startTime = (int64_t)time(NULL);
-        int64_t sent = 0;
-        while (sent < size)
-        {
-            int nRet = ::send(m_sock, data + sent, (int)(size - sent), 0);
-            if (nRet == SOCKET_ERROR && ::WSAGetLastError() == WSAEWOULDBLOCK)
-            {
-                ::Sleep(1);
-                if ((int64_t)time(NULL) - startTime >= (int64_t)timeoutSec)
-                {
-                    Close();
-                    return false;
-                }
-                continue;
-            }
-            if (nRet < 1)
-            {
-                Close();
-                return false;
-            }
-            sent += (int64_t)nRet;
-        }
-        return true;
-    }
-
-    bool RecvFrame(std::string& body, int timeoutSec) override
-    {
-        //先收 24 字节帧头
-        char hdr[FRAME_HEADER_SIZE] = { 0 };
-        if (!RecvBytes(hdr, FRAME_HEADER_SIZE, timeoutSec))
-            return false;
-
-        //bodylen 为大端 uint32，位于帧头偏移 12
-        uint32_t bodylen = (static_cast<uint32_t>(static_cast<unsigned char>(hdr[12])) << 24)
-                         | (static_cast<uint32_t>(static_cast<unsigned char>(hdr[13])) << 16)
-                         | (static_cast<uint32_t>(static_cast<unsigned char>(hdr[14])) << 8)
-                         |  static_cast<uint32_t>(static_cast<unsigned char>(hdr[15]));
-        if (bodylen > MAX_BODY_FILESERVER)
-            return false;
-
-        std::string buf;
-        buf.resize(FRAME_HEADER_SIZE + bodylen);
-        memcpy(&buf[0], hdr, FRAME_HEADER_SIZE);
-        if (bodylen > 0)
-        {
-            if (!RecvBytes(&buf[FRAME_HEADER_SIZE], static_cast<int64_t>(bodylen), timeoutSec))
-                return false;
-        }
-
-        frame_header header;
-        std::string decoded;
-        size_t consumed = 0;
-        if (net::decodeFrame(buf.data(), buf.size(), header, decoded, consumed,
-                             MAX_BODY_FILESERVER) != net::frame_decode_ok)
-            return false;
-
-        body.swap(decoded);
-        return true;
-    }
-
-private:
-    //在本连接上收满 nSize 字节（语义同 CIUSocket::RecvOnFilePort）。成功返回 true。
-    bool RecvBytes(char* buf, int64_t nSize, int timeoutSec)
-    {
-        if (m_sock == INVALID_SOCKET)
-            return false;
-
-        int64_t startTime = (int64_t)time(NULL);
-        int64_t got = 0;
-        while (got < nSize)
-        {
-            int nRet = ::recv(m_sock, buf + got, (int)(nSize - got), 0);
-            if (nRet == SOCKET_ERROR && ::WSAGetLastError() == WSAEWOULDBLOCK)
-            {
-                ::Sleep(1);
-                if ((int64_t)time(NULL) - startTime >= (int64_t)timeoutSec)
-                {
-                    Close();
-                    return false;
-                }
-                continue;
-            }
-            if (nRet < 1)
-            {
-                Close();
-                return false;
-            }
-            got += (int64_t)nRet;
-        }
-        return true;
-    }
-
-private:
-    SOCKET m_sock;   //本连接独占的阻塞收发 socket（非阻塞 + 轮询超时）
-};
+//独立 fileserver 连接类 FileServerConn 已移到 net/FileServerConn.h：
+//升级包下载（Update/UpdateManager）也要用它，再抄一份 socket 代码不划算。
 
 //把上传进度回投到 UI 的进度 sink。
 class PostingUploadProgressSink : public IUploadProgressSink
@@ -608,16 +430,16 @@ void FileTransfer::EnqueueSend(int ctype, int64_t cid, const std::string& client
 
 void FileTransfer::EnqueueDownload(int64_t msgid, const std::string& fileid,
                                    const std::string& filename, const std::string& expectMd5,
-                                   int64_t expectSize, int64_t selfUserId)
+                                   int64_t expectSize, const std::wstring& selfAccount)
 {
     Task task;
-    task.m_kind       = task_download;
-    task.m_msgid      = msgid;
-    task.m_fileid     = fileid;
-    task.m_filename   = filename;
-    task.m_expectMd5  = expectMd5;
-    task.m_expectSize = expectSize;
-    task.m_selfUserId = selfUserId;
+    task.m_kind        = task_download;
+    task.m_msgid       = msgid;
+    task.m_fileid      = fileid;
+    task.m_filename    = filename;
+    task.m_expectMd5   = expectMd5;
+    task.m_expectSize  = expectSize;
+    task.m_selfAccount = selfAccount;
 
     {
         std::lock_guard<std::mutex> guard(m_queueMtx);
@@ -1061,7 +883,7 @@ void FileTransfer::ProcessDownload(const Task& task)
         return;
     }
 
-    std::wstring cachePath = buildFileCachePath(task.m_selfUserId, expect, task.m_filename);
+    std::wstring cachePath = buildFileCachePath(task.m_selfAccount, expect, task.m_filename);
 
     MainFileChannel channel(this);
     PostingDownloadProgressSink sink(CIUSocket::GetInstance().GetUIProxyWnd(), task.m_msgid);
