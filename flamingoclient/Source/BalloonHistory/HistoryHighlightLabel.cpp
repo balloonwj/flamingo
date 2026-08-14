@@ -5,7 +5,7 @@
 #include "stdafx.h"
 #include "HistoryHighlightLabel.h"
 
-#include "../../balloonui/balloonui/DuiResMgr.h"
+#include "../../../third-party/balloonui/balloonui/DuiResMgr.h"
 
 namespace balloonhistory {
 

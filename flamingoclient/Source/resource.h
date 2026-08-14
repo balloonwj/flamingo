@@ -45,7 +45,6 @@
 #define IDD_CHANGEPICDLG                233
 #define IDD_DIALOG1                     235
 #define IDD_SYSTEMSETTINGS              235
-#define IDD_CLOSEPROMPT                 236
 #define IDD_USERSNAPINFO                237
 #define IDD_LOGONUSERINFO               238
 #define IDD_MOBILESTATUS                239
@@ -238,8 +237,6 @@
 #define IDC_REMEMBERCHOICE              1141
 #define IDC_INFOICON                    1142
 #define IDC_INFOTEXT                    1143
-#define IDC_MINIMIZE                    1144
-#define IDC_EXIT                        1145
 #define IDC_EXITPROMP                   1146
 #define IDC_MINIMIZEWHENCLOSE           1147
 #define IDC_THUMB                       1148

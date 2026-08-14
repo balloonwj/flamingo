@@ -7,7 +7,7 @@
 
 #include <gdiplus.h>
 
-#include "../../balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 #include "../BalloonChatWnd/ChatIcons.h"       // kChatIconPin / DrawChatIcon
 #include "../BalloonChatWnd/ChatFileVisual.h"  // FileTypeColor（与文件气泡共用配色）
 #include "../BalloonChatWnd/ChatImageCache.h"  // 缩略图的后台解码与缓存

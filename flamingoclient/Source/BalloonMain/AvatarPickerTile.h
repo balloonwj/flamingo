@@ -17,7 +17,7 @@
  */
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Basic/DuiAvatar.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
 
 namespace balloonmain {
 

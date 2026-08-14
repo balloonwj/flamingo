@@ -37,7 +37,6 @@ extern CAppModule _Module;
 #pragma comment(lib, "gdiplus.lib")
 
 #include "MainPanelSectionHeader.h"
-#include "MainPanelScrollView.h"
 
 namespace balloonmain {
 
@@ -117,11 +116,6 @@ void MainPanelSectionHeader::SetCount(int online, int total)
     m_online = online;
     m_total  = total;
     Invalidate();
-}
-
-bool MainPanelSectionHeader::OnMouseWheel(POINT pt, short zDelta, UINT mkFlags)
-{
-    return ForwardWheelToScrollView(this, pt, zDelta, mkFlags);
 }
 
 void MainPanelSectionHeader::OnPaint(HDC hdc, const RECT& /*rcDirty*/)

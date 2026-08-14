@@ -24,8 +24,8 @@
 #include "../CustomMsgDef.h"             // WM_CLOSE_MAINDLG（退出时投递给 CMainDlg）
 #include "MainPanelIcons.h"              // DrawLineIcon / kIconPanel / kIconExit
 #include "ClosePromptDecision.h"         // DecideOnConfirm / DefaultSelection / CloseAction
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 
 // ---- 对话框固定尺寸（逻辑像素）-----------------------------------------
 static const int kDlgWidth     = 380;   // 客户区宽

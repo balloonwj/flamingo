@@ -24,7 +24,7 @@
 
 #include <vector>
 
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "CacheCleanPlan.h"
 
 class CFlamingoClient;
@@ -50,15 +50,12 @@ public:
 
     BEGIN_MSG_MAP(CBalloonCacheCleanDlg)
         MESSAGE_HANDLER(WM_CLOSE, OnCloseMsg)
-        // 开关的滑动动画要靠宿主周期性推进 DuiAnimMgr，否则点了不动（与系统设置窗同处理）。
-        MESSAGE_HANDLER(WM_TIMER, OnTimerMsg)
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
         CHAIN_MSG_MAP(balloonwjui::DuiFrameWindow)
     END_MSG_MAP()
 
 private:
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
-    LRESULT OnTimerMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnDuiNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     // 扫描各类缓存的占用量，结果填进 m_sizes（与 m_plan 一一对应）。同步执行。

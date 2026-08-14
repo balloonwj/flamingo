@@ -52,9 +52,9 @@ extern CAppModule _Module;
 #include "ChatMessageList.h"
 #include "ChatBubble.h"
 #include "ChatMockData.h"
-#include "../../balloonui/balloonui/DuiXmlBuilder.h"
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"  // 引用卡片的灰底圆角
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"   // 引用条取消按钮设 ModeLink
+#include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"  // 引用卡片的灰底圆角
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"   // 引用条取消按钮设 ModeLink
 
 namespace balloonchatwnd {
 
@@ -119,6 +119,7 @@ const char* const kChatWindowBodyXml = u8R"xml(
         <chat-iconbtn id="420" kind="emoji" fixedWidth="32"/>
         <chat-iconbtn id="421" kind="image" fixedWidth="32"/>
         <chat-iconbtn id="422" kind="file"  fixedWidth="32"/>
+        <chat-iconbtn id="428" kind="folder" fixedWidth="32"/>
         <chat-iconbtn id="423" kind="cut"   fixedWidth="32"/>
         <chat-iconbtn id="424" kind="mic"   fixedWidth="32"/>
         <chat-iconbtn id="427" kind="font"  fixedWidth="32"/>
@@ -163,6 +164,7 @@ int ChatIconKindFromAttr(const std::string& kind)
     if (kind == "emoji")   { return kChatIconEmoji; }
     if (kind == "image")   { return kChatIconImage; }
     if (kind == "file")    { return kChatIconFile; }
+    if (kind == "folder")  { return kChatIconFolder; }   // 发送文件夹（工具栏 id=428，排在文件按钮之后）
     if (kind == "cut")     { return kChatIconCut; }
     if (kind == "mic")     { return kChatIconMic; }
     if (kind == "plus")    { return kChatIconPlus; }

@@ -102,6 +102,20 @@ private:
 	 */
 	void WriteNickNameSection(FILE* fp, int nCount);
 
+	/**
+	 *  丢弃用户名为空的账号记录，并同步修正最后登录索引。
+	 *
+	 *  用户名为空的记录不该存在 —— 它在登录窗的账号下拉框里表现为一个空白
+	 *  行，若最后登录索引又恰好指向它，登录窗启动时便预填出一个空账号，看起来
+	 *  就像"历史账号没加载"。2026-08-13 客户端曾因登录成功时账号信息尚未回填
+	 *  而写出过这样一条记录（已在 CMainDlg::OnLoginResult 修正），但已经落盘的
+	 *  坏数据仍在用户机器上，故读取时一并清理，下次保存即写回干净的文件。
+	 *
+	 *  须在姓名尾块读完之后调用：尾块按位置与主体记录一一对应，提前删记录会
+	 *  让姓名整体错位。
+	 */
+	void PurgeBlankAccounts();
+
 	void Encrypt(char* lpBuf, int nLen);					// 加密
 	void Decrypt(char* lpBuf, int nLen);					// 解密
 	int _fread(void* lpBuf, int nSize, int nCount, FILE* fp);

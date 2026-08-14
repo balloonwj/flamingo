@@ -39,8 +39,8 @@ extern CAppModule _Module;
 
 #include "GroupFileItem.h"
 #include "../CustomMsgDef.h"                          // WM_GROUP_FILE_DOWNLOAD / WM_GROUP_FILE_UPLOAD_CANCEL
-#include "../../balloonui/balloonui/DuiHost.h"        // GetHost()->m_hWnd（向宿主投递下载 / 取消上传消息）
-#include "../../balloonui/balloonui/Controls/Feedback/DuiToolTip.h"  // 文件名/说明放不下时挂 tooltip
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"        // GetHost()->m_hWnd（向宿主投递下载 / 取消上传消息）
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"  // 文件名/说明放不下时挂 tooltip
 
 namespace balloonchatwnd {
 

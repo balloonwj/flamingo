@@ -36,14 +36,13 @@
 #include "SettingsPageModel.h"
 #include "SettingsBinding.h"
 #include "../BalloonMain/TitleBarIcon.h"   // CreateProgramIconBitmap（标题栏左侧图标）
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"        // DuiVBox / DuiHBox
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiSeparator.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiBadge.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiSwitch.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiComboBox.h"
-#include "../../balloonui/balloonui/DuiAnimation.h"                    // DuiAnimMgr::TickAll（开关滑动动画需 host 周期性驱动）
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"        // DuiVBox / DuiHBox
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiSeparator.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiBadge.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 
 // ---- 对话框尺寸（逻辑像素）---------------------------------------------
 static const int kDlgClientW  = 720;   // 客户区宽（较初版收紧，去掉过宽留白）
@@ -60,13 +59,12 @@ static const int kTitleIconSize = 16;
 // background 一段），故取同值。缘由详见 BalloonMain/TitleBarIcon.h。
 static const COLORREF kTitleBarBg = RGB(245, 246, 250);
 
-// ---- 动画时钟 ----------------------------------------------------------
+// ---- 动画的推进方式 ----------------------------------------------------
 // 开关（DuiSwitch）等动画控件鼠标翻转时走 150ms 滑动动画，由 DuiAnimMgr / DuiDoubleAnim
-// 驱动；host 必须周期性调 DuiAnimMgr::Inst().TickAll(GetTickCount()) 才推进中间帧（见
-// DuiSwitch.h 注释，与 balloonui 的 LoginFrame / GalleryFrame 同套路）。否则开关点击后逻辑
-// 状态翻转、DUIN_VALUECHANGED 也发出来了，但滑块 / 底色停在原处，视觉上像"拨不动、没反应"。
-static const UINT_PTR kAnimTickTimerId    = 0xA10;   // 动画 pulse 定时器 id（与业务 timer 不撞即可）
-static const UINT     kAnimTickIntervalMs = 16;      // 帧间隔（毫秒），约 60Hz
+// 推进。本对话框不必为此挂定时器：DuiAnimMgr 自 2026-08-14 起自带脉冲定时器（见
+// balloonui/DuiAnimation.cpp 的 StartPulse / PulseProc），有动画在跑时它自己按 16ms 发
+// WM_TIMER，跑完即停。它用的是线程定时器（SetTimer 的 hwnd 传 NULL），任何转发未过滤
+// 消息的消息循环都能驱动它。
 
 // ---- 左右分区（逻辑像素）-----------------------------------------------
 static const int kNavWidth    = 156;   // 左侧导航固定宽
@@ -472,10 +470,6 @@ void CBalloonSystemSettingDlg::OpenSettings(HWND owner)
         BuildUiOnce();
         ResizeClient(kDlgClientW, kDlgClientH);
         CenterWindow();
-
-        // 启动动画 pulse 定时器：开关等动画控件的滑动中间帧靠它周期性 TickAll 推进。
-        // 跟随窗口生命周期：本窗口在 OnCloseMsg 里 DestroyWindow，KillTimer 同处收尾。
-        SetTimer(kAnimTickTimerId, kAnimTickIntervalMs);
     }
 
     ShowWindow(SW_SHOW);
@@ -487,28 +481,11 @@ void CBalloonSystemSettingDlg::OpenSettings(HWND owner)
 LRESULT CBalloonSystemSettingDlg::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
                                              LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
-    // 关闭 = 隐藏并销毁本窗口（对象由主面板持有，下次打开重建）。先停掉动画 pulse 定时器。
+    // 关闭 = 隐藏并销毁本窗口（对象由主面板持有，下次打开重建）。
     if (IsWindow())
     {
-        KillTimer(kAnimTickTimerId);
         DestroyWindow();
     }
-    return 0;
-}
-
-LRESULT CBalloonSystemSettingDlg::OnTimerMsg(UINT /*uMsg*/, WPARAM wParam,
-                                             LPARAM /*lParam*/, BOOL& bHandled)
-{
-    if (wParam == kAnimTickTimerId)
-    {
-        // 推进所有在跑的 DuiAnimMgr 动画一帧（开关滑动 / 底色渐变等）。无在跑动画时本调用
-        // 廉价、不产生重绘。
-        balloonwjui::DuiAnimMgr::Inst().TickAll(::GetTickCount());
-        return 0;
-    }
-
-    // 非动画定时器：放行 chain，交给 DuiFrameWindow / 其它处理。
-    bHandled = FALSE;
     return 0;
 }
 

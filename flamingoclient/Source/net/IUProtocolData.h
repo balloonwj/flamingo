@@ -21,7 +21,7 @@ enum ONLINE_STATUS
 {
 	STATUS_OFFLINE		  = 0,			//离线
 	STATUS_ONLINE		  = 1,			//在线
-	STATUS_INVISIBLE	  = 2,			//隐身
+	//取值 2 曾经是「隐身」，本产品不提供该功能，2026-08-13 去掉；该编号作废不再使用
 	STATUS_BUSY			  = 3,			//忙碌
 	STATUS_AWAY			  = 4,			//离开
 	STATUS_MOBILE_ONLINE  = 5,			//移动版在线
@@ -304,6 +304,11 @@ public:
     char m_szPhoneNumber[64];
     char m_szMail[256];
 	long m_nStatus;
+    //发起这次登录时拿到的轮次号，由登录线程原样带回。登录窗据它判断这个结果
+    //是不是自己还在等的那一个——用户点过取消、或已发起了新的一轮时，
+    //迟到的旧结果必须丢弃。详见 BalloonAuth/LoginProgressState.h。
+    //0 表示"不带轮次号"，用于自动登录这类不经登录窗的路径。
+    unsigned int m_uLoginGeneration;
 };
 
 class CUserBasicInfoRequest : public CNetData

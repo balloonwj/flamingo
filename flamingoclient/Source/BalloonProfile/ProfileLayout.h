@@ -16,7 +16,7 @@
 #pragma once
 
 #include <memory>
-#include "../../balloonui/balloonui/DuiControl.h"
+#include "../../../third-party/balloonui/balloonui/DuiControl.h"
 
 namespace balloonprofile {
 
@@ -29,11 +29,12 @@ enum ProfileCtrlId
     // ---- 头部区 -------------------------------------------------------
     kIdAvatar       = 900,   // 头像（带铅笔角标的自绘控件 ProfileAvatar）
 
-    // ---- 状态胶囊（四个，下标对应 ProfileStatus）---------------------
+    // ---- 状态胶囊（三个，下标对应 ProfileStatus）---------------------
+    // 编号 913 曾经是"隐身"胶囊，本产品不提供该功能，2026-08-13 去掉；
+    // 该编号就此空出，新增控件请另取编号，避免与老布局 XML 混淆
     kIdPillOnline    = 910,  // "在线"状态胶囊（ProfileStatusPill）
     kIdPillAway      = 911,  // "离开"状态胶囊（ProfileStatusPill）
     kIdPillBusy      = 912,  // "勿扰"状态胶囊（ProfileStatusPill）
-    kIdPillInvisible = 913,  // "隐身"状态胶囊（ProfileStatusPill）
 
     // ---- 字段区：查看态的只读值文本（ProfileText）---------------------
     kIdViewNickname  = 920,  // 昵称 —— 查看态只读文本

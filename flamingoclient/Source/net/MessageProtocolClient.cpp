@@ -4,6 +4,9 @@
  */
 #include "MessageProtocolClient.h"
 #include "Protocol.h"                   // conversation_single / message_type_text
+//文件夹传输记录条（msgtype=18）的 content 校验与归一只有这一份实现，本文件转调它，
+//不在这里另抄一遍字段名。
+#include "FolderProtocolClient.h"       // net::FolderRecordContent / parseRecordContent
 #include <stdlib.h>                     // strtoll
 //vendored 的 jsoncpp/json.h 含非 UTF-8 字节，当本文件作为 UTF-8 编译单元
 //时 MSVC 会对其报 C4828；该告警仅涉及 json.h 内注释、不影响代码，故就地
@@ -438,6 +441,11 @@ std::string MessageProtocolClient::digestForMsgType(int msgtype, const std::stri
         return u8"[表情]";
     case message_type_shake:
         return u8"[抖一抖]";
+    case message_type_folder:
+        //文件夹传输记录：这里只给类型占位。会话列表上真正显示的是"[文件夹] 项目资料"
+        //那种带名字的写法，由 balloonmain::BuildFolderInviteDigest 在主面板那一层拼出来
+        //（本函数拿不到文件夹名，它在 content 里而不在正文里）。两处的方括号措辞一致。
+        return u8"[文件夹]";
     default:
         return u8"[消息]";
     }
@@ -599,6 +607,27 @@ static bool fillMessageFromObject(const Json::Value& root, MessageNotify& notify
             notify.m_fileName = content["filename"].isString() ? content["filename"].asString() : std::string();
             notify.m_fileSize = content["filesize"].isNumeric() ? content["filesize"].asInt64() : 0;
             notify.m_fileMd5  = content["md5"].isString() ? content["md5"].asString() : std::string();
+        }
+        else if (notify.m_msgtype == message_type_folder)
+        {
+            //文件夹传输记录条：字段校验与归一集中在 FolderProtocolClient::parseRecordContent，
+            //本处不另抄一份 —— 那边与服务端 FolderTransferProtocol 是逐字对应的镜像。
+            //之所以先把 content 序列化回文本再交给它：该函数的入参是 JSON 文本（它要能被
+            //单元测试直接喂字符串），而这里手上是已经解析好的 Json::Value。多一次序列化在
+            //这条路径上无所谓——记录条一次传输才产生一条，不是热路径。
+            FolderRecordContent record;
+            if (FolderProtocolClient::parseRecordContent(writeCompact(content), record))
+            {
+                notify.m_folderSessionId  = record.m_sessionId;
+                notify.m_folderName       = record.m_folderName;
+                notify.m_folderTotalDirs  = record.m_totalDirs;
+                notify.m_folderTotalFiles = record.m_totalFiles;
+                notify.m_folderTotalSize  = record.m_totalSize;
+                notify.m_folderResult     = record.m_result;
+                notify.m_folderErrCode    = record.m_errCode;
+            }
+            //解析不出来时各字段保持默认（m_folderResult 为 0），调用方据此按"内容不可用"
+            //降级渲染；整条消息仍然有效，不因 content 脏了就把它从聊天记录里抹掉
         }
         else if (content["text"].isString())
         {

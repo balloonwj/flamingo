@@ -5,8 +5,8 @@
  *
  *  从资源管理器拖进来的是一串路径，里面什么都可能有：几个文件、一个文件夹、
  *  刚被删掉的残留项、0 字节的空文件。聊天窗要据此决定每一条各走哪条发送链路
- *  （图片消息还是文件消息），哪些发不了、发不了的原因是什么（好给用户一句提示），
- *  以及一次拖太多时要不要先弹确认。
+ *  （图片消息、文件消息还是文件夹传输），哪些发不了、发不了的原因是什么
+ *  （好给用户一句提示），以及一次拖太多时要不要先弹确认。
  *
  *  分成三段，好让绝大部分逻辑不碰磁盘：
  *    · ProbeDropPath      —— 唯一碰磁盘的一步，把一条路径查成 DropPathInfo。
@@ -15,8 +15,11 @@
  *  单元测试主要打 BuildDropPlan（见 flamingoclient/Source/Tests/ChatDropModelTests.cpp，
  *  Suite CDM），不必在测试里真造文件、真建目录。
  *
- *  本期不支持发送文件夹（已与用户对齐）：文件夹一律归入跳过项，由聊天窗提示
- *  「暂不支持发送文件夹」。等后续做了打包能力再改这里的归类。
+ *  文件夹是<u>单独一类落点</u>（DropPlan::m_folders），不再归入跳过项：单聊的文件夹
+ *  传输链路（cmd_folder_* 1810~1817，见 docs/单聊文件夹传输方案.md）已经落地，拖进来的
+ *  文件夹与工具栏「发送文件夹」按钮走同一条路。本模块只负责把文件夹拣出来，<u>发不发</u>
+ *  由各个聊天窗自己决定：单聊窗逐个发起传输，群聊窗按「群聊暂不支持发送文件夹」拦下 ——
+ *  文件夹传输一期只做单聊。
  *
  *  balloonwj@qq.com   2026-08-11
  */
@@ -43,12 +46,14 @@ enum DropSendKind
 
 /**
  *  一条路径发不出去的原因。聊天窗据此给用户一句人话提示。
+ *
+ *  注意这里<u>没有</u>"是文件夹"这一项：文件夹已改为单独一类落点（DropPlan::m_folders），
+ *  由聊天窗按文件夹传输链路处理，不再算发不出去。
  */
 enum DropSkipReason
 {
-    kDropSkipNotFound  = 0,   // 路径不存在：拖动过程中文件被移走 / 删除，或来源本就是虚拟项
-    kDropSkipDirectory = 1,   // 是文件夹：本期不支持发送文件夹
-    kDropSkipEmpty     = 2    // 0 字节文件：发送链路拒收空文件（见 CBalloonChatWindow::SendFileData）
+    kDropSkipNotFound = 0,   // 路径不存在：拖动过程中文件被移走 / 删除，或来源本就是虚拟项
+    kDropSkipEmpty    = 1    // 0 字节文件：发送链路拒收空文件（见 CBalloonChatWindow::SendFileData）
 };
 
 /**
@@ -104,13 +109,18 @@ struct DropSkippedItem
 struct DropPlan
 {
     //可发送项，<u>按拖入顺序</u>排列。顺序要保住 —— 用户一次拖三个文件进来，
-    //期望消息也按那个顺序出现。
+    //期望消息也按那个顺序出现。文件夹<u>不</u>在这个列表里，见 m_folders。
     std::vector<DropSendItem>    m_items;
+
+    //拖进来的文件夹完整路径，同样按拖入顺序。单聊窗逐个交给文件夹传输链路发起
+    //（与工具栏「发送文件夹」按钮同一条路），群聊窗一律拦下并提示暂不支持。
+    std::vector<std::wstring>    m_folders;
 
     //发不出去的项及原因，同样按拖入顺序。聊天窗据它提示用户。
     std::vector<DropSkippedItem> m_skipped;
 
     //可发送项数量是否超过 kDropConfirmThreshold —— 超过则聊天窗先弹确认框。
+    //只看 m_items：文件夹另有一道本机并发笔数闸门，不受这个阈值约束。
     bool                         m_needConfirm;
 
     DropPlan()
@@ -139,9 +149,12 @@ DropPathInfo ProbeDropPath(const std::wstring& path);
 /**
  *  把一组已查好的路径归类成处理计划。纯函数、无副作用、不碰磁盘。
  *
- *  归类规则：不存在 / 是目录 / 0 字节的进跳过项；其余按扩展名分到图片链路或文件
- *  链路；forceAsFile 为真时图片也走文件链路（用户按住 Shift 拖入，想把图片当原
- *  文件发而不是压成聊天图片）。
+ *  归类规则：不存在 / 0 字节的进跳过项；目录进 m_folders（交文件夹传输链路）；
+ *  其余按扩展名分到图片链路或文件链路；forceAsFile 为真时图片也走文件链路（用户
+ *  按住 Shift 拖入，想把图片当原文件发而不是压成聊天图片）。
+ *
+ *  forceAsFile 只影响图片，<u>不影响目录</u> —— 按住 Shift 拖一个文件夹进来，它仍然
+ *  是文件夹传输，没有"把目录当单个文件发"这回事。
  *
  *    infos：       各路径的磁盘状态，顺序即用户拖入顺序。
  *    forceAsFile： true 表示图片也按普通文件发送。
@@ -160,10 +173,10 @@ DropPlan BuildDropPlanFromPaths(const std::vector<std::wstring>& paths, bool for
 /**
  *  把跳过项汇总成一句可直接显示给用户的中文提示。纯函数、无副作用。
  *
- *  按原因分组计数而不是逐条罗列 —— 一次拖进来十几个文件夹时，逐条提示既占地方
- *  又没有额外信息量。同时存在多种原因时用顿号连接，如"2 个文件夹暂不支持发送、
- *  1 个文件已不存在"。
- *    skipped：跳过项列表。
+ *  按原因分组计数而不是逐条罗列 —— 一次拖进来十几个失效路径时，逐条提示既占地方
+ *  又没有额外信息量。同时存在多种原因时用顿号连接，如"2 个文件已不存在、
+ *  1 个空文件未发送"。
+ *    skipped：跳过项列表；文件夹不在其中（见 DropPlan::m_folders）。
  *  @return 提示文案；列表为空时返回空串（调用方据此决定要不要弹提示）。
  */
 std::wstring DescribeDropSkipped(const std::vector<DropSkippedItem>& skipped);

@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+//SOCKET 类型来自这里：Windows 下是 winsock 的 UINT_PTR，POSIX 下是 int
+#include "../base/Platform.h"
 #include <memory>
 #include <functional>
 
@@ -15,7 +17,7 @@ namespace net
         typedef std::function<void()> EventCallback;
         typedef std::function<void(Timestamp)> ReadEventCallback;
 
-        Channel(EventLoop* loop, int fd);
+        Channel(EventLoop* loop, SOCKET fd);
         ~Channel();
 
         void handleEvent(Timestamp receiveTime);
@@ -36,7 +38,7 @@ namespace net
             m_errorCallback = cb;
         }
 
-        int fd() const { return m_fd; }
+        SOCKET fd() const { return m_fd; }
         int events() const { return m_events; }
         void set_revents(int revt) { m_revents = revt; }
         void add_revents(int revt) { m_revents |= revt; }
@@ -67,7 +69,7 @@ namespace net
         static const int            kWriteEvent;
 
         EventLoop* m_loop;
-        const int                   m_fd;
+        const SOCKET                m_fd;
         int                         m_events;
         int                         m_revents;
         int                         m_index;

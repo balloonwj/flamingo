@@ -45,13 +45,13 @@ extern CAppModule _Module;
 
 #include "BalloonProfileLayout.h"
 #include "MainPanelUserData.h"   // GetUserAvatarColor
-#include "../../balloonui/balloonui/DuiXmlBuilder.h"
-#include "../../balloonui/balloonui/DuiResMgr.h"   // GetFontByPointSize
-#include "../../balloonui/balloonui/Controls/Basic/DuiAvatar.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiComboBox.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
+#include "../../../third-party/balloonui/balloonui/DuiResMgr.h"   // GetFontByPointSize
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
 
 namespace balloonmain {
 
@@ -140,7 +140,7 @@ std::string BuildXml(int fieldLabelWidth)
     xml += "\"/>\n";
 
     // 右侧 vbox:昵称 / 账号,gap 4。原来下面还有一行"在线状态胶囊"(在线/离开/勿扰/
-    // 隐身),按用户要求已去掉。
+    // 已作废的第四态),按用户要求已去掉。
     xml += "    <vbox weight=\"1\" gap=\"4\">\n";
     xml += "      <label id=\"";
     xml += std::to_string((int)kIdProfileNickname);

@@ -15,8 +15,8 @@
 #include "../CustomMsgDef.h"          // WM_CLOSE_MAINDLG
 #include "../IULog.h"                 // LOG_INFO / LOG_WARNING / LOG_ERROR
 #include "ProfileLayout.h"            // BuildProfileBody / ProfileCtrlId / helper
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiComboBox.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 
 using namespace balloonwjui;
 using namespace balloonprofile;
@@ -156,10 +156,10 @@ void CBalloonProfileWindow::LoadModelIntoUi()
     }
     SetProfileAvatarLetter(content, kIdAvatar, letter);
 
-    // 状态胶囊：按模型当前状态刷新四个胶囊的选中态。
+    // 状态胶囊：按模型当前状态刷新三个胶囊的选中态。
     const UINT pillIds[kProfileStatusCount] =
     {
-        kIdPillOnline, kIdPillAway, kIdPillBusy, kIdPillInvisible,
+        kIdPillOnline, kIdPillAway, kIdPillBusy,
     };
     for (int i = 0; i < kProfileStatusCount; ++i)
     {
@@ -373,10 +373,6 @@ LRESULT CBalloonProfileWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
             return 0;
         case kIdPillBusy:
             m_model.SetStatus(kProfileStatusBusy);
-            LoadModelIntoUi();
-            return 0;
-        case kIdPillInvisible:
-            m_model.SetStatus(kProfileStatusInvisible);
             LoadModelIntoUi();
             return 0;
 

@@ -24,7 +24,7 @@
 #include "../net/IUSocket.h"          // CIUSocket::Register
 #include "../net/Protocol.h"          // enum error_code
 #include "../net/RegisterProtocolClient.h"   // 注册报文编解码
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
 
 using namespace balloonwjui;
 using namespace balloonregister;

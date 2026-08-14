@@ -175,7 +175,7 @@ void HttpSession::send(const char* data, size_t length)
     if (!m_tmpConn.expired())
     {
         std::shared_ptr<TcpConnection> conn = m_tmpConn.lock();
-        conn->send(data, length);
+        conn->send(data, static_cast<int>(length));
     }
 }
 
@@ -331,8 +331,6 @@ bool HttpSession::processAdminRequest(const std::shared_ptr<TcpConnection>& conn
         onAdminClientVersionUpdate(body, conn);
     else if (url == "/admin/clientversion/setenabled.do")
         onAdminClientVersionSetEnabled(body, conn);
-    else if (url == "/admin/clientversion/republish.do")
-        onAdminClientVersionRepublish(body, conn);
     else
         sendAdminResult(conn, error_code_unknown, "admin endpoint not implemented yet");
 
@@ -3379,53 +3377,3 @@ void HttpSession::onAdminClientVersionSetEnabled(const std::string& body,
     sendAdminResult(conn, 0, "ok");
 }
 
-void HttpSession::onAdminClientVersionRepublish(const std::string& body,
-                                                const std::shared_ptr<TcpConnection>& conn)
-{
-    Json::Value root;
-    if (!ParseJsonBody(body, root) || !root.isObject())
-    {
-        sendAdminResult(conn, error_code_unknown, "invalid request body");
-        return;
-    }
-    AdminInfo admin;
-    if (!AdminCheckToken(root, admin))
-    {
-        sendAdminResult(conn, error_code_notlogin, "not login or token expired");
-        return;
-    }
-    if (admin.enterpriseid != 0)
-    {
-        sendAdminResult(conn, error_code_dept_permissiondenied, "platform admin required");
-        return;
-    }
-
-    const int64_t id = JInt(root, "id", 0);
-    if (id <= 0)
-    {
-        sendAdminResult(conn, error_code_unknown, "id is required");
-        return;
-    }
-
-    //数据层与"发布"是同一个动作：置为已发布并把发布时间刷到当前，使该条立刻成为
-    //取数规则下的最新发布。分成两个接口是为了让审计日志能区分"首次发布"与"回滚"。
-    //发布时间必须取<u>真毫秒</u>：这一列是"哪条记录更新"的唯一判据，而 time(NULL)*1000
-    //只有秒级精度——同一秒内先发布新版本、再回滚旧版本，两条记录的发布时间会一模一样，
-    //随后按 f_id 兜底就会选中后插入的那条，回滚静默失效。
-    const int64_t nowMs = Timestamp::now().microSecondsSinceEpoch() / 1000;
-    int errorCode = 0;
-    if (!Singleton<ClientVersionManager>::Instance().setEnabled(id, true, nowMs, errorCode))
-    {
-        LOGE("republish client version failed, id: %lld, manager errorcode: %d",
-             (long long)id, errorCode);
-        sendAdminResult(conn, error_code_unknown, "republish client version failed, check the id");
-        return;
-    }
-
-    Singleton<AdminManager>::Instance().writeAudit(admin.adminid, admin.name,
-        conn->peerAddress().toIpPort(), 0, "clientversion.republish",
-        std::to_string(static_cast<long long>(id)),
-        CLIENT_VERSION_AUDIT_SEVERITY, u8"回滚：重新发布旧版本客户端");
-
-    sendAdminResult(conn, 0, "ok");
-}

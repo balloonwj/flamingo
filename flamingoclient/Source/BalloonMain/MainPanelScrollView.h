@@ -25,7 +25,7 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Window/DuiScrollBar.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"
 #include "OverlayScrollBarGeometry.h"
 
 namespace balloonmain {
@@ -124,19 +124,5 @@ private:
     int  m_dragGrabOffsetY;  // 按下点到滑块顶边的距离（像素），拖动期间保持不变
     int  m_edgeInsetPx;      // 右侧给窗口缩放边框让出的宽度（物理像素）
 };
-
-/**
- *  把滚轮事件转发给 from 的祖先链里最近的滚动视口。
- *
- *  DuiHost 的滚轮只投递给"最深命中控件"、不向上冒泡（见 DuiHost::
- *  OnMouseWheel）；而列表项 / 分组标题铺满了滚动视口，滚轮几乎总是落在
- *  它们身上。故这些控件须在自己的 OnMouseWheel 里调用本函数，把滚轮
- *  交还祖先里的滚动视口。
- *
- *    from：发起转发的控件（通常是列表项本身）。
- *  返回：祖先里的滚动视口消费了滚轮则返 true，否则 false。
- */
-bool ForwardWheelToScrollView(balloonwjui::DuiControl* from,
-                              POINT pt, short zDelta, UINT mkFlags);
 
 } // namespace balloonmain

@@ -39,7 +39,7 @@ extern CAppModule _Module;
 #pragma comment(lib, "gdiplus.lib")
 
 #include "MainPanelScrollView.h"
-#include "../../balloonui/balloonui/DuiHost.h"
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"
 
 namespace balloonmain {
 
@@ -217,9 +217,18 @@ balloonwjui::DuiControl* MainPanelScrollView::HitTest(POINT ptHostClient)
 bool MainPanelScrollView::OnMouseWheel(POINT pt, short zDelta, UINT mkFlags)
 {
     // 先让基类完成实际滚动。
+    //
+    // 返回值要原样交回去，不能一律返回 true：内容放得下（没有可滚范围）时基类
+    // 返回 false，DuiHost::DispatchMouseWheel 据此把滚轮继续交给父链上更外层的
+    // 容器（见 DuiScrollBar::OnMouseWheel 里 m_max <= m_min 的分支）。改成一律
+    // 返回 true 会让一个滚不动的面板把滚轮拦下，外层跟着也滚不动。
     const bool handled = DuiScrollView::OnMouseWheel(pt, zDelta, mkFlags);
 
     // 滚动 → 滚动条淡入显现，并重新开始空闲计时。
+    //
+    // 这两句不按 handled 分流：内容放得下时 CurrentScrollBar() 算出的
+    // m_visible 为 false，OnPaint 会提前返回，唤出动作画不出任何东西，
+    // 因此无须为这种情况单开一条分支。
     WakeScrollBar();
     Invalidate();
     return handled;
@@ -341,23 +350,6 @@ void MainPanelScrollView::OnPaint(HDC hdc, const RECT& rcDirty)
     Gdiplus::Color thumbColor((BYTE)m_alpha, kThumbColorR, kThumbColorG, kThumbColorB);
     Gdiplus::SolidBrush brush(thumbColor);
     g.FillPath(&brush, &path);
-}
-
-bool ForwardWheelToScrollView(balloonwjui::DuiControl* from,
-                              POINT pt, short zDelta, UINT mkFlags)
-{
-    balloonwjui::DuiControl* p = (from != NULL) ? from->GetParent() : NULL;
-    while (p != NULL)
-    {
-        balloonwjui::DuiScrollView* sv =
-            dynamic_cast<balloonwjui::DuiScrollView*>(p);
-        if (sv != NULL)
-        {
-            return sv->OnMouseWheel(pt, zDelta, mkFlags);
-        }
-        p = p->GetParent();
-    }
-    return false;
 }
 
 } // namespace balloonmain

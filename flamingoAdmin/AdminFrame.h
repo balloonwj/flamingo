@@ -103,7 +103,7 @@ enum class Screen
     // 客户端版本：仅平台超管可见。位置必须排在 EnterpriseDetail 之前 ——
     // 前 6 项与侧栏导航项 kIdNav* 一一对应且数值连续，EnterpriseDetail 是
     // 没有导航项的子屏，只能挂在末尾。
-    ClientVersions,   // 客户端版本（发布升级包、发布 / 撤回 / 回滚）
+    ClientVersions,   // 客户端版本（发布升级包、发布 / 撤回）
     EnterpriseDetail, // 企业详情（企业管理的子屏）
 };
 
@@ -304,12 +304,12 @@ private:
     void StartLoadClientVersions();
     // 扫描服务器升级包目录；点「新建版本」时先扫一次，拿到候选包再开弹窗。
     void StartScanPackages();
-    // 对某条版本记录执行发布 / 撤回 / 回滚。
+    // 对某条版本记录执行发布 / 撤回。
     //   action：动作种类；id：目标记录 ID。
     void StartClientVersionAction(int action, long long id);
     void OnClientVersionsLoaded(const HttpResult& http);
     void OnPackagesScanned(const HttpResult& http);
-    // 发布 / 撤回 / 回滚 / 修改 的应答统一走这里：成功就提示并重拉列表。
+    // 发布 / 撤回 / 修改 的应答统一走这里：成功就提示并重拉列表。
     void OnClientVersionActionDone(const HttpResult& http);
     // 处理「客户端版本」界面上报的行内操作：取出待处理动作后发对应请求。
     void HandleClientVersionRowAction();

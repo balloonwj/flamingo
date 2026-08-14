@@ -21,13 +21,13 @@
 #include "../IULog.h"          // LOG_INFO / LOG_ERROR
 #include "../BalloonChatWnd/ChatLinkDetect.h"   // IsSafeLinkUrl（打开链接前的协议白名单）
 
-#include "../../balloonui/balloonui/DuiNotify.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiComboBox.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiSpinBox.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSpinBox.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
 
 #include "HistoryView.h"       // PreviewFromContent / FullTextFromContent / TimeRangeFromComboIndex
 #include "HistoryRow.h"        // 列表行（悬停态由本窗按落点驱动）
@@ -47,6 +47,7 @@
 #include "../BalloonChatWnd/ChatMessageMenu.h"   // MakeImageSaveAsDefaultName
 #include "../BalloonImageViewer/BalloonImageViewerWindow.h"  // 看图窗（双击图片放大）
 #include "FileLocalStore.h"                    // 文件本地落点登记库
+#include "FolderLocalStore.h"                  // 文件夹本地落点登记库（按会话 id 记根目录）
 #include "../net/FileTransfer.h"               // 文件下载 / 取消
 #include "../ClipboardText.h"                  // CopyTextToClipboard（复制正文）
 #include "../ClipboardImage.h"                 // CopyImageFileToClipboard（复制图片）
@@ -229,6 +230,24 @@ bool PathExistsOnDisk(LPCWSTR path)
         return false;
     }
     return (attr & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
+//某个路径在磁盘上是否是一个真的存在的<u>目录</u>。文件夹传输记录行据它决定要不要给
+//「打开文件夹」——登记表里有落点不代表目录还在，用户随时会把它改名或删掉。
+//与 PathExistsOnDisk 分开两个函数而不加参数，是因为两处的判据恰好相反，合成一个再传
+//个布尔量，调用点读起来反而要多想一步。
+bool DirectoryExistsOnDisk(LPCWSTR path)
+{
+    if (path == NULL || path[0] == 0)
+    {
+        return false;
+    }
+    const DWORD attr = ::GetFileAttributesW(path);
+    if (attr == INVALID_FILE_ATTRIBUTES)
+    {
+        return false;
+    }
+    return (attr & FILE_ATTRIBUTE_DIRECTORY) != 0;
 }
 
 //由发送者 id 取一个稳定的头像底色（小调色板取模）。
@@ -673,6 +692,13 @@ HistoryViewData CBalloonHistoryWindow::BuildViewData()
             }
             row.m_previewText = text;
         }
+        else if (::message_type_folder == recs[i].m_msgtype)
+        {
+            //文件夹传输记录：把预览换成"[文件夹] 名字 · N 个文件 · 大小 · 结局"。
+            //这条记录没有可下载的内容，也没有缩略图，一行文字就是它的全部信息，
+            //故规模与结局都写进去（拼装口径见 BuildFolderRowText，有单测）。
+            row.m_previewText = Utf8ToCString(BuildFolderRowText(brief));
+        }
         row.m_msgid = recs[i].m_msgid;
         row.m_pinned = recs[i].m_pinned;
 
@@ -681,6 +707,12 @@ HistoryViewData CBalloonHistoryWindow::BuildViewData()
         //文件行上面已经把预览换成了"名字 · 大小"，正文也跟着用那一份 —— 否则
         //展开的时候会突然变回"[文件] 名字"，前后不一致。
         if (recs[i].m_msgtype == ::message_type_file && !brief.m_fileName.empty())
+        {
+            row.m_fullText = row.m_previewText;
+        }
+        //文件夹记录同理：展开态与收起态显示同一行文字，否则展开时会突然从
+        //"[文件夹] 名字 · 128 个文件 · 2.4 GB · 已完成" 变回只剩 "[文件夹] 名字"
+        else if (recs[i].m_msgtype == ::message_type_folder)
         {
             row.m_fullText = row.m_previewText;
         }
@@ -1088,6 +1120,29 @@ bool CBalloonHistoryWindow::ResolveRowLocalFile(int row, CString& outPath) const
         return true;
     }
 
+    if (IsHistoryRowFolderType(rec.m_msgtype))
+    {
+        //文件夹传输记录只有一处落点：本机按会话 id 登记的那个根目录。发送端记的是源
+        //目录、接收端记的是落地目录，各记各的。换一台机器一律查不到 —— 那台机器上从
+        //来没有过这个目录，只显示记录、不给「打开文件夹」，这是预期行为。
+        if (brief.m_folderSessionId.empty())
+        {
+            return false;
+        }
+        std::wstring registered;
+        if (!CFolderLocalStore::GetInstance().Query(brief.m_folderSessionId, registered))
+        {
+            return false;
+        }
+        //登记在、目录却已被改名或删除时同样不给按钮，免得点下去打开一个空白窗口
+        if (!DirectoryExistsOnDisk(registered.c_str()))
+        {
+            return false;
+        }
+        outPath = registered.c_str();
+        return true;
+    }
+
     return false;   //其余类型没有"本地文件"这一说
 }
 
@@ -1159,6 +1214,18 @@ void CBalloonHistoryWindow::ExecuteRowMenuCommand(int menuId, int row)
 
     case kHistoryRowMenuOpenFolder:
         OpenRowFolder(localPath, hasLocal);
+        break;
+
+    //文件夹传输记录：打开那个目录<u>本身</u>，而不是像文件那样打开父目录再选中它。
+    //路径必须带引号，否则含空格的路径会被 explorer 拆成多个参数。
+    case kHistoryRowMenuOpenFolderRoot:
+        if (hasLocal && !localPath.IsEmpty())
+        {
+            CString folderParam;
+            folderParam.Format(_T("\"%s\""), (LPCTSTR)localPath);
+            ::ShellExecute(m_hWnd, _T("open"), _T("explorer.exe"), folderParam,
+                           NULL, SW_SHOWNORMAL);
+        }
         break;
 
     case kHistoryRowMenuSaveFileAs:

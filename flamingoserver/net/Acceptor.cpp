@@ -45,12 +45,12 @@ void Acceptor::handleRead()
 {
     m_loop->assertInLoopThread();
     InetAddress peerAddr;
-    int connfd = m_acceptSocket.accept(&peerAddr);
+    SOCKET connfd = m_acceptSocket.accept(&peerAddr);
     if (connfd >= 0)
     {
         string hostport = peerAddr.toIpPort();
         LOGD("Accepts of %s", hostport.c_str());
-        //newConnectionCallback_实际指向TcpServer::newConnection(int sockfd, const InetAddress& peerAddr)
+        //newConnectionCallback_实际指向TcpServer::newConnection(SOCKET sockfd, const InetAddress& peerAddr)
         if (m_newConnectionCallback)
         {
             m_newConnectionCallback(connfd, peerAddr);

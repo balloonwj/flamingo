@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/DuiControl.h"
+#include "../../../third-party/balloonui/balloonui/DuiControl.h"
 
 //真图头像解码用的 GDI+ 位图前置声明，避免在头文件引入 <gdiplus.h>。
 namespace Gdiplus { class Bitmap; }

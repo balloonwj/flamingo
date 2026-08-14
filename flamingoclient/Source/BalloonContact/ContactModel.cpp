@@ -197,6 +197,16 @@ CString ContactModel::Tag(int index) const
     return m_tags[index];
 }
 
+const std::vector<CString>& ContactModel::Tags() const
+{
+    return m_tags;
+}
+
+void ContactModel::SetTags(const std::vector<CString>& tags)
+{
+    m_tags = tags;
+}
+
 bool ContactModel::AddTag(LPCTSTR tag)
 {
     if (tag == NULL)

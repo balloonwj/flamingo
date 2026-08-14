@@ -19,6 +19,30 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\net\FrameCrypto.cpp" />
+    <ClCompile Include="..\net\FramePayload.cpp" />
+    <ClCompile Include="..\zlib1.2.11\zutil.c" />
+    <ClCompile Include="..\zlib1.2.11\uncompr.c" />
+    <ClCompile Include="..\zlib1.2.11\trees.c" />
+    <ClCompile Include="..\zlib1.2.11\inftrees.c" />
+    <ClCompile Include="..\zlib1.2.11\inflate.c" />
+    <ClCompile Include="..\zlib1.2.11\inffast.c" />
+    <ClCompile Include="..\zlib1.2.11\infback.c" />
+    <!-- zlib 原版源码，size_t 收窄的告警属于上游写法，不改第三方代码，只在本工程里压制 -->
+    <ClCompile Include="..\zlib1.2.11\gzwrite.c">
+      <DisableSpecificWarnings>4267</DisableSpecificWarnings>
+    </ClCompile>
+    <!-- zlib 原版源码，size_t 收窄的告警属于上游写法，不改第三方代码，只在本工程里压制 -->
+    <ClCompile Include="..\zlib1.2.11\gzread.c">
+      <DisableSpecificWarnings>4267</DisableSpecificWarnings>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\gzlib.c" />
+    <ClCompile Include="..\zlib1.2.11\gzclose.c" />
+    <ClCompile Include="..\zlib1.2.11\deflate.c" />
+    <ClCompile Include="..\zlib1.2.11\crc32.c" />
+    <ClCompile Include="..\zlib1.2.11\compress.c" />
+    <ClCompile Include="..\zlib1.2.11\adler32.c" />
+    <ClCompile Include="..\zlib1.2.11\ZlibUtil.cpp" />
     <ClCompile Include="..\base\AsyncLog.cpp" />
     <ClCompile Include="..\base\ConfigFileReader.cpp" />
     <ClCompile Include="..\base\CountDownLatch.cpp" />
@@ -29,6 +53,7 @@
     <ClCompile Include="..\utils\FileEnum.cpp" />
     <ClCompile Include="..\fileserversrc\FileServer.cpp" />
     <ClCompile Include="..\fileserversrc\FileSession.cpp" />
+    <ClCompile Include="..\fileserversrc\FolderRelayEndpoint.cpp" />
     <ClCompile Include="..\fileserversrc\TcpSession.cpp" />
     <ClCompile Include="..\imgserversrc\main.cpp" />
     <ClCompile Include="..\imgserversrc\RelayServer.cpp" />
@@ -63,11 +88,16 @@
     <ClCompile Include="..\utils\AppPath.cpp" />
     <ClCompile Include="..\utils\ServerConfigLoader.cpp" />
     <ClCompile Include="..\utils\RelayToken.cpp" />
-    <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp" />
+    <!-- jsoncpp 原版源码，同上 -->
+    <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp">
+      <DisableSpecificWarnings>4244</DisableSpecificWarnings>
+    </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_value.cpp" />
     <ClCompile Include="..\jsoncpp1.9.0\json_writer.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\net\FrameCrypto.h" />
+    <ClInclude Include="..\net\FramePayload.h" />
     <ClInclude Include="..\base\AsyncLog.h" />
     <ClInclude Include="..\base\ConfigFileReader.h" />
     <ClInclude Include="..\base\CountDownLatch.h" />
@@ -195,15 +225,19 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
+      <AdditionalIncludeDirectories>..\deps\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_CONSOLE;WIN32;_DEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;_CONSOLE;WIN32;_DEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
+      <AdditionalDependencies>libsodium.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\deps\libsodium\lib\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <OutputFile>./$(TargetName)$(TargetExt)</OutputFile>
@@ -211,6 +245,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
+      <AdditionalIncludeDirectories>..\deps\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -218,10 +254,12 @@
       <SDLCheck>true</SDLCheck>
     <!-- WIN32 必须定义：全仓库判断平台用的是裸 WIN32（见 base/Platform.h），而不是 MSVC 自带的
          _WIN32。x64 下不定义它会走进 POSIX 分支，编译必然失败 -->
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
+      <AdditionalDependencies>libsodium.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\deps\libsodium\lib\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
@@ -229,6 +267,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
+      <AdditionalIncludeDirectories>..\deps\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -236,10 +276,12 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
+      <AdditionalDependencies>libsodium.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\deps\libsodium\lib\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
@@ -249,6 +291,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
+      <AdditionalIncludeDirectories>..\deps\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -261,10 +305,12 @@
       <SDLCheck>true</SDLCheck>
     <!-- WIN32 必须定义：全仓库判断平台用的是裸 WIN32（见 base/Platform.h），而不是 MSVC 自带的
          _WIN32。x64 下不定义它会走进 POSIX 分支，编译必然失败 -->
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
+      <AdditionalDependencies>libsodium.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\deps\libsodium\lib\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>

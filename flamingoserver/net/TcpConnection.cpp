@@ -26,7 +26,7 @@ void net::defaultMessageCallback(const TcpConnectionPtr&, ByteBuffer* buf, Times
     buf->retrieveAll();
 }
 
-TcpConnection::TcpConnection(EventLoop* loop, const string& nameArg, int sockfd, const InetAddress& localAddr, const InetAddress& peerAddr)
+TcpConnection::TcpConnection(EventLoop* loop, const string& nameArg, SOCKET sockfd, const InetAddress& localAddr, const InetAddress& peerAddr)
     : m_loop(loop),
     m_name(nameArg),
     m_state(kConnecting),
@@ -129,7 +129,7 @@ void TcpConnection::sendInLoop(const void* data, size_t len)
     // if no thing in output queue, try writing directly
     if (!m_channel->isWriting() && m_outputBuffer.readableBytes() == 0)
     {
-        nwrote = sockets::write(m_channel->fd(), data, len);
+        nwrote = sockets::write(m_channel->fd(), data, static_cast<int32_t>(len));
         //TODO: 打印threadid用于调试，后面去掉
         //std::stringstream ss;
         //ss << std::this_thread::get_id();
@@ -330,7 +330,8 @@ void TcpConnection::handleWrite()
     m_loop->assertInLoopThread();
     if (m_channel->isWriting())
     {
-        int32_t n = sockets::write(m_channel->fd(), m_outputBuffer.peek(), m_outputBuffer.readableBytes());
+        int32_t n = sockets::write(m_channel->fd(), m_outputBuffer.peek(),
+                                   static_cast<int32_t>(m_outputBuffer.readableBytes()));
         if (n > 0)
         {
             m_outputBuffer.retrieve(n);

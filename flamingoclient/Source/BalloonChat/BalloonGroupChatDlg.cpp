@@ -19,9 +19,9 @@
 #include "../UserSessionData.h"         // CBuddyMessage / CContent / CMessageList ...
 #include "../CustomMsgDef.h"            // WM_DEL_MSG_SENDER
 #include "../net/IUProtocolData.h"      // FMG_MSG_TYPE_GROUP
-#include "../../balloonui/balloonui/Controls/Input/DuiRichEditHost.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/List/DuiTreeView.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiTreeView.h"
 
 CBalloonGroupChatDlg::CBalloonGroupChatDlg()
     : m_lpFMGClient(NULL)

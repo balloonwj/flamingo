@@ -12,6 +12,7 @@
 #include "MessageProtocolClient.h"   // net::TextFont（发送文本可带字体设置）
 #include "TransferOwnerRegistry.h"   // net::TransferOwner / net::TransferOwnerRegistry（1801/1802 应答路由）
 #include "GroupProtocolClient.h"     // net::UpdateGroupInfoParams（SendUpdateGroupInfo 按值传引用，需完整类型）
+#include "FrameCrypto.h"             // net::IDENTITY_PUBLICKEY_BYTES（服务端公钥成员需完整尺寸）
 
 class CRecvMsgThread;
 
@@ -58,6 +59,39 @@ public:
 
     //开启和关闭聊天服务器断线自动重连
     void    EnableReconnect(bool bEnable);
+
+    /**
+     *  取 flamingo.ini 里配置的服务端身份公钥，供各条链路发起握手时验签用。
+     *
+     *  四条链路（主连接、文件传输、图片传输、中转通道）共用同一把公钥——服务端
+     *  三个服务也共用同一份身份密钥文件，见 docs/协议加密方案.md 第 6 节。文件传输
+     *  与中转通道的实现不在本类里，故以只读访问器的形式提供出去。
+     *
+     *  @return 指向 IDENTITY_PUBLICKEY_BYTES 字节公钥的指针；<u>未配置 serverpubkey
+     *          时返回 NULL</u>，调用方据此判断本链路走明文还是先握手。
+     *          返回的内存由本单例持有，进程存续期间一直有效，调用方不得释放。
+     *  副作用：无。线程安全：公钥只在 LoadConfig 里写一次，之后只读。
+     */
+    const unsigned char* GetServerPublicKey() const;
+
+    /**
+     *  取文件传输共享连接（m_hFileSocket）的帧体加解密器。
+     *
+     *  文件传输的组帧逻辑在 net/FileStreamTransfer 里，socket 与加密器却都归本类
+     *  持有，故以访问器的形式交出去。握手未完成时返回的对象其 ready() 为假，
+     *  组帧会自动走明文，调用方不必自己判断。
+     *
+     *  @return 指向本类持有的加解密器，恒非空；生命周期同本单例，调用方不得释放。
+     *  副作用：无。
+     */
+    net::FrameCipher* GetFileCipher();
+
+    /**
+     *  取图片传输共享连接（m_hImgSocket）的帧体加解密器。语义同 GetFileCipher。
+     *  @return 指向本类持有的加解密器，恒非空；生命周期同本单例，调用方不得释放。
+     *  副作用：无。
+     */
+    net::FrameCipher* GetImgCipher();
 
     /** 
     *@param timeout 超时时间，单位为s
@@ -178,6 +212,63 @@ public:
     void    SendRemoteDesktopClose(const std::string& sessionId);
 
     /**
+     *  发起一次文件夹传输邀请（v2，cmd_folder_invite=1810）。线程安全。组帧发出后立即
+     *  返回所用的帧 seq；应答（成功带 sessionid，失败如规模超限 / 对方不在线 / 服务器
+     *  繁忙）经 cmd_folder_invite 异步回投 FMG_MSG_V2_FOLDER_INVITE_ACK，<u>wParam 即
+     *  本次的 seq</u>，调用方据它把应答对回是哪一笔发起的。
+     *
+     *  之所以要把 seq 交出去：应答包体里只有结果码与服务端分配的会话 id，没有任何能对回
+     *  发起方的字段，而本机同时可以有多笔传输在等应答。按 seq 关联与 RequestUpload /
+     *  RequestDownload / SendCheckUpdate 的做法一致，不依赖"应答顺序等于请求顺序"。
+     *  @param peerUserId 接收方 userid（>0）
+     *  @param folderName 根目录名（只有名字、不含路径，UTF-8，非空）
+     *  @param totalDirs  目录总数（含空目录、不含根目录自身），单位：个
+     *  @param totalFiles 文件总数，单位：个
+     *  @param totalSize  全部文件字节数合计，单位：字节
+     *  @return 本次邀请所用的帧 seq；包体构造不出来（入参不合契约）时返回 0 并只记一条
+     *          错误日志、不发包，调用方据此当作"这次没发出去"
+     */
+    uint32_t SendFolderInvite(int64_t peerUserId, const std::string& folderName,
+                              int64_t totalDirs, int64_t totalFiles, int64_t totalSize);
+
+    /**
+     *  接收方应答文件夹传输邀请（v2，cmd_folder_response=1812）。线程安全。同意后双方
+     *  收 cmd_folder_relay_info，拒绝时发送方收 cmd_folder_state_notify。
+     *  @param sessionId 邀请推送里带来的会话 id
+     *  @param accept    true 接收 / false 拒绝
+     */
+    void    SendFolderResponse(const std::string& sessionId, bool accept);
+
+    /**
+     *  发送方在接收方应答前撤回邀请（v2，cmd_folder_cancel=1813）。线程安全。
+     *  传输已经开始之后的取消不走这条，而是按失败流程发 SendFolderClose，
+     *  错误码取 error_code_folder_canceled。
+     *  @param sessionId 会话 id
+     */
+    void    SendFolderCancel(const std::string& sessionId);
+
+    /**
+     *  结束一次文件夹传输（v2，cmd_folder_close=1814），收发两端均可调。线程安全。
+     *  成功结束时服务端立即销毁会话；失败结束时会话保留 folderretrywindow（默认 10 分钟）
+     *  供重试续传，失败原因由服务端原样透传给对端，两端因而看到同一条原因。
+     *  @param sessionId 会话 id
+     *  @param success   true 成功结束 / false 失败结束
+     *  @param errCode   失败原因，取值须落在 error_code_folder_*（606~620）之内；
+     *                   success 为 true 时本参数被忽略
+     *  @param errMsg    英文诊断串，可为空；success 为 true 时本参数被忽略
+     */
+    void    SendFolderClose(const std::string& sessionId, bool success,
+                            int errCode, const std::string& errMsg);
+
+    /**
+     *  保留期内重试续传（v2，cmd_folder_retry=1817），由发送方发起。线程安全。
+     *  服务端校验会话未过期、双方仍在线后重签令牌并向双方各再推一帧
+     *  cmd_folder_relay_info，全程不再打扰接收方。
+     *  @param sessionId 失败会话的会话 id
+     */
+    void    SendFolderRetry(const std::string& sessionId);
+
+    /**
      *  发起一次音视频通话邀请（v2，cmd_call_invite=1701）。线程安全。应答（成功带
      *  sessionid，失败如对方离线 / 忙）经 cmd_call_invite 异步回投 FMG_MSG_V2_CALL_INVITE_ACK。
      *  @param peerUserId 被叫用户 userid（>0）
@@ -254,6 +345,32 @@ public:
     //  body：请求包体，由 net::UpdateProtocolClient::buildCheckUpdateRequest 组。
     //应答异步回到 HandleV2Frame，再按 seq 转交 update::UpdateManager。
     uint32_t SendCheckUpdate(const std::string& body);
+
+    /**
+     *  异步收帧线程是否已经在跑。
+     *
+     *  @return 已启动返回 true。
+     *
+     *  它在 Init() 里启动，而 Init() 要<u>登录成功之后</u>才被调用（见
+     *  CMainDlg::OnLoginResult 的 LOGIN_SUCCESS 分支）。登录前这条线程不能起 ——
+     *  它会把 Login() 正等着同步收取的那一帧应答抢走。所以凡是"登录前也要能用"的
+     *  请求（目前只有检查更新），都必须据本函数判断走同步收发那条路。
+     */
+    bool    IsAsyncRecvRunning() const;
+
+    /**
+     *  同步发一次检查更新请求并等应答（登录前专用）。
+     *
+     *    reqBody：   已组好的请求体 JSON（见 net::UpdateProtocolClient::buildCheckUpdateRequest）
+     *    respBody：  [出参] 应答体 JSON；返回 false 时内容未定义
+     *    nTimeoutSec：超时秒数，与登录取同一口径
+     *
+     *  @return 收到完整应答返回 true；连不上、发不出去、超时都返回 false。
+     *
+     *  与 Login() 同构：Connect → 编帧 → SendData → RecvOneFrame。
+     *  <u>只能在异步收帧线程未启动时调用</u>，否则会与它抢同一条连接上的帧。
+     */
+    bool    CheckUpdateSync(const std::string& reqBody, std::string& respBody, int nTimeoutSec);
 
     /**
      *  发送一条图片消息（v2，cmd_send_message=1503，msgtype=2）。线程安全。图片须
@@ -434,6 +551,26 @@ public:
      *  @param remarkUtf8  新备注名（UTF-8）；<u>空串表示清除备注</u>，是合法取值
      */
     void    SendSetFriendRemark(int64_t userid, const std::string& remarkUtf8);
+
+    /**
+     *  发送"设置联系人标签"请求（v2，cmd_set_contact_tags=1217）。线程安全，可在
+     *  UI 线程调用。应答经同一 cmd 异步回投到 UI（FMG_MSG_V2_SET_TAGS_RESULT，
+     *  lParam 为堆上的 net::SetContactTagsResult*），主面板据其中原样回带的 userid
+     *  判断是哪一条请求的结果。
+     *
+     *  本请求是<u>整份覆盖</u>：传的是该联系人在本人视角下的完整标签列表，服务端把
+     *  旧的全删掉再按本列表重建。增、改、删三种操作共用本接口，客户端不必自己算差异。
+     *
+     *  标签是单向的（只影响本人看该联系人的显示），改完<u>不走推送</u>；本端的显示
+     *  靠发起时的乐观更新加应答回带的归一结果，重登后靠通讯录应答里的
+     *  contacts[].tags 读回。
+     *
+     *  @param userid    目标联系人 userid（>0，且不能是自己 —— 服务端会拒绝）
+     *  @param tagsUtf8  完整标签列表（UTF-8）；<u>空列表表示清空</u>，是合法取值。
+     *                   本接口不做归一（不 trim、不去重、不判长度），原样发出，
+     *                   归一由服务端完成并随应答回带。
+     */
+    void    SendSetContactTags(int64_t userid, const std::vector<std::string>& tagsUtf8);
 
     /**
      *  发送「拉取发给本人的平台公告」请求（v2，cmd_get_announcements=2101）。线程安全，
@@ -886,15 +1023,122 @@ private:
 
     //——以下为 v2 协议相关的内部方法——
 
+    /**
+     *  解析并保存 flamingo.ini 里读到的服务端公钥文本，由 LoadConfig 调用。
+     *  拆成单独一个函数是为了让解析与配置读取分开，解析逻辑可单独测试。
+     *
+     *  @param pubKeyText serverpubkey 的原始值（base64）。空串表示未配置，
+     *                    此时各链路走明文；非空但解析失败时记错误日志并同样
+     *                    不置公钥——但那属于配置写错，各链路会连不上服务端
+     *  副作用：改写 m_serverPubKey 与 m_bHasServerPubKey，并输出一条日志。
+     */
+    //握手收发要转接到哪条链路的收发函数上，见 HandshakeChannel。
+    //本类持有三条各自独立的连接，它们的收发函数不同，但握手流程完全一样，
+    //故用一个适配器加这个标识区分，而不是写三份几乎相同的适配器。
+    enum handshake_link_kind
+    {
+        //主连接（chatserver），走 SendData / RecvData
+        handshake_link_main = 0,
+        //文件传输共享连接（fileserver），走 SendOnFilePort / RecvOnFilePort
+        handshake_link_file = 1,
+        //图片传输共享连接（imgserver），走 SendOnImgPort / RecvOnImgPort
+        handshake_link_img  = 2,
+    };
+
+    //握手期间的字节收发适配器，把 net::IHandshakeChannel 转接到本类相应链路的
+    //收发方法上。定义在 IUSocket.cpp 里——做成嵌套类是因为它要访问本类的私有
+    //收发方法，放在匿名 namespace 里够不着。
+    class HandshakeChannel;
+
+    void    ApplyServerPublicKey(const std::string& pubKeyText);
+
+    /**
+     *  在刚建好的主连接上同步走完三帧协议加密握手。
+     *
+     *  <u>只能由 Connect() 在把 m_bConnected 置真之前调用</u>。这个时序是必须的：
+     *  收取线程循环顶部判的是 IsClosed()，而它就是 !m_bConnected，所以标志置真
+     *  之前收取线程一直在睡，本函数才能安全地同步收服务端那一帧应答；一旦挪到
+     *  Connect() 外面（例如放进 Login），就会与收取线程抢同一份数据。
+     *
+     *  未配置服务端公钥时直接返回成功且不做任何收发，此时本连接走明文。
+     *
+     *  @param nTimeout 每一次收发的超时时间，单位秒
+     *  @return 成功返回 true。失败表示对端不是我们认识的服务器、或握手被中途破坏，
+     *          调用方<u>必须放弃这条连接</u>，不得退回明文继续用
+     *  副作用：在 socket 上收发三帧；改写 m_handshake 的状态。
+     */
+    bool    PerformHandshake(int nTimeout);
+
+    /**
+     *  在刚建好的文件传输共享连接上同步走完三帧握手。
+     *
+     *  <u>只能由 ConnectToFileServer 在 m_bConnectedOnFileSocket 置真之后调用</u>，
+     *  与主连接的顺序相反：SendOnFilePort / RecvOnFilePort 一进来就判
+     *  IsFileServerClosed，标志没置真的话它们会直接拒绝收发。这样放没有风险，
+     *  因为文件链路是纯同步收发，不存在会来抢数据的独立收取线程。
+     *
+     *  未配置服务端公钥时直接返回成功且不做任何收发，此时本连接走明文。
+     *
+     *  @param nTimeout 每次收发的超时时间，单位秒
+     *  @return 成功返回 true；失败时调用方须关闭这条连接，不得退回明文继续用
+     *  副作用：在文件连接上收发三帧；改写 m_fileHandshake 的状态。
+     */
+    bool    PerformFileHandshake(int nTimeout);
+
+    /**
+     *  在刚建好的图片传输共享连接上同步走完三帧握手。
+     *  时序与注意事项同 PerformFileHandshake，只是作用在图片连接上。
+     *
+     *  @param nTimeout 每次收发的超时时间，单位秒
+     *  @return 成功返回 true；失败时调用方须关闭这条连接，不得退回明文继续用
+     *  副作用：在图片连接上收发三帧；改写 m_imgHandshake 的状态。
+     */
+    bool    PerformImgHandshake(int nTimeout);
+
+    /**
+     *  把一条消息编码成一个完整的 v2 帧。<u>主连接上发出的每一帧都必须经过这里</u>。
+     *
+     *  之所以强制走同一个出口，是因为压缩与（后续的）加密两件事的判断都只写在这里
+     *  一处。别处再自行调 net::encodeFrame，就会出现同一条连接上明文帧与密文帧混发，
+     *  服务端收到后会直接断开连接，而使用者看到的现象只是"登录偶尔失败"，很难往
+     *  加密上想。
+     *
+     *  包体达到 COMPRESS_THRESHOLD 且压缩后确实更小时才采用压缩。登录 / 注册 /
+     *  检查更新这几个同步请求的包体通常远小于阈值，与收敛之前逐字节一致；个别
+     *  超过阈值的情形会被压缩，服务端的解压是在按 cmd 分发之前统一做的，不区分
+     *  cmd，故行为等价。
+     *
+     *  @param cmd      消息类型，取值见 net/Protocol.h 的 enum msg_type
+     *  @param seq      序列号，应答时由服务端回填
+     *  @param body     包体明文（UTF-8 JSON 文本）
+     *  @param frameOut [出参] 编码结果，整帧字节；函数内部会先清空它
+     *  @return 成功返回 true；编码失败返回 false 并已记录日志
+     */
+    bool    BuildFrame(uint16_t cmd, uint32_t seq, const std::string& body,
+                       std::string& frameOut);
+
+    /**
+     *  把一个收到的帧的线上包体还原成明文。<u>主连接上收到的每一帧都必须经过这里</u>，
+     *  理由与 BuildFrame 相同。
+     *
+     *  @param header   该帧的帧头，其中 flags 与 originlen 决定如何还原
+     *  @param rawBody  线上包体字节
+     *  @param plainOut [出参] 还原出的明文包体；函数内部会先清空它
+     *  @return 成功返回 true；还原失败返回 false 并已记录日志，
+     *          调用方应视作连接数据已错乱并关闭连接
+     */
+    bool    RestoreFrameBody(const frame_header& header, const std::string& rawBody,
+                             std::string& plainOut);
+
     //同步收取一个完整的 v2 帧，供登录这类同步请求使用。
     //@param header  [出参] 解析出的帧头
-    //@param body    [出参] 包体（线上字节，未解压）
+    //@param body    [出参] 包体<u>明文</u>，内部已调 RestoreFrameBody 还原
     //@param nTimeout 收取超时时间，单位秒
-    //@return 成功返回 true；收取失败或帧头非法返回 false
+    //@return 成功返回 true；收取失败、帧头非法或包体还原失败返回 false
     bool    RecvOneFrame(frame_header& header, std::string& body, int nTimeout);
 
-    //把一条消息编码成 v2 帧，追加进发送缓冲并唤醒发送线程。
-    //包体达到压缩阈值时会先做 zlib 压缩。cmd 取值见 net/Protocol.h。
+    //把一条消息编码成 v2 帧，追加进发送缓冲并唤醒发送线程。编码走 BuildFrame。
+    //cmd 取值见 net/Protocol.h。
     void    EnqueueFrame(uint16_t cmd, uint32_t seq, const std::string& body);
 
     //分发一个收到的 v2 帧（在接收线程中调用）。本期只处理心跳/被踢/
@@ -946,6 +1190,30 @@ private:
     bool                            m_bStop;
 
     bool                            m_bEnableReconnect;     //聊天服务器断线是否重连
+
+    //服务端身份公钥（Ed25519），取自 flamingo.ini 的 serverpubkey，进程启动时读一次。
+    //m_bHasServerPubKey 为假表示没配，此时各条链路一律走明文——客户端<u>没有</u>独立的
+    //加密开关，"配了公钥"本身就是"要加密"，这样与服务端 .conf 里的 encryption 天然配对。
+    //生命周期同本单例；仅 LoadConfig 写入，之后只读，故各链路线程可无锁读取。
+    unsigned char                   m_serverPubKey[net::IDENTITY_PUBLICKEY_BYTES];
+    bool                            m_bHasServerPubKey;
+
+    //主连接的协议加密状态。每次 Connect 真正新建 socket 之后就地走完三帧握手，
+    //握手成功前 m_handshake.cipher().ready() 为假，收发自然是明文——握手帧本身
+    //正是靠这一点走明文的。Close 时调 reset()，因为重连是一条全新的连接、
+    //必须重新协商密钥，沿用旧密钥会让每一帧都解密失败。
+    //做成值成员而不是指针，是为了不给发送线程与收取线程留下对象被销毁的窗口，
+    //详见 net::ClientHandshake::reset 的注释。生命周期同本单例。
+    net::ClientHandshake            m_handshake;
+
+    //文件传输共享连接（m_hFileSocket）的协议加密状态。与主连接各持一个：两条是
+    //互相独立的连接，各有各的会话密钥。这条连接是一笔传输一建一断，故在
+    //CloseFileServerConnection 里调 reset()，否则下一笔会拿着上一条连接的密钥去解帧。
+    net::ClientHandshake            m_fileHandshake;
+
+    //图片传输共享连接（m_hImgSocket）的协议加密状态。与前两条各持一个，理由同上。
+    //同样是一张图一建一断，故在 CloseImgServerConnection 里调 reset()。
+    net::ClientHandshake            m_imgHandshake;
 
     std::string                     m_strRecordUser;
     std::string                     m_strRecordPassword;

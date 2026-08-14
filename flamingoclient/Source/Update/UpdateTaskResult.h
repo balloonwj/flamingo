@@ -37,6 +37,13 @@ struct UpdateTaskResult
     //按 64 位存：超过 2GiB 的包用 32 位会溢出成负数。
     int64_t     m_size;
 
+    //本次任务是否真的尝试过下载。取 false 表示调用方只要一个检查结果
+    //（CheckAndDownload(false)，如关于页的「检查更新」）。
+    //
+    //它把 m_downloaded 为 false 的两种情形区分开：一种是"压根没下"，一种是"下了但
+    //失败了"。两者的其余字段完全相同（都是 hasUpdate=1、packageUsable=1、
+    //downloaded=0），界面若只看 m_downloaded，就会把纯检查的结果误报成下载失败。
+    bool        m_downloadAttempted;
     bool        m_downloaded;    //升级包是否已下载并校验通过
     std::wstring m_localPath;    //下载落地的完整路径（m_downloaded 为 true 时有效）
     std::string m_errmsg;        //失败时的诊断信息，仅供日志
@@ -44,7 +51,8 @@ struct UpdateTaskResult
     UpdateTaskResult()
         : m_valid(false), m_transportOk(false), m_code(0)
         , m_hasUpdate(false), m_forced(false)
-        , m_packageUsable(false), m_size(0), m_downloaded(false)
+        , m_packageUsable(false), m_size(0)
+        , m_downloadAttempted(false), m_downloaded(false)
     {
     }
 };

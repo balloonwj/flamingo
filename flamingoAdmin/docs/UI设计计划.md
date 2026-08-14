@@ -11,7 +11,7 @@ flamingoAdmin 是 **FlamingoIM 的企业管理控制台**，与 `flamingoserver`
 `flamingoclient` / `flamingoAndroid` 并列，是仓库根目录下的一个新组件。
 
 - **形态**：Windows 桌面应用（无边框自绘窗口）。
-- **UI 框架**：`balloonui`（仓内 `flamingoclient/balloonui/` 的无 HWND DUI 控件库）。
+- **UI 框架**：`balloonui`（仓内 `third-party/balloonui/` 的无 HWND DUI 控件库，与 PC 客户端共用同一份）。
 - **数据**：当前阶段**全部 mock**，由内存数据层 `Mock/DataStore` 提供；
   数据层与 UI 解耦，未来接真实服务端时只替换数据层实现，界面层不动。
 

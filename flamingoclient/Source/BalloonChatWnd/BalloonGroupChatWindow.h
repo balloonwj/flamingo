@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
-#include "../../balloonui/balloonui/DuiNotify.h"   // WM_DUI_NOTIFY / DuiNotify
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"   // WM_DUI_NOTIFY / DuiNotify
 #include "../CustomMsgDef.h"                        // WM_VIEW_CHAT_IMAGE（双击图片打开看图窗）
 #include "FontSettingPopup.h"                       // 字体设置浮层（成员需完整类型；含 net::TextFont）
 #include "FaceImagePickerPopup.h"                   // Bin/Face 图片表情浮层（成员需完整类型）
@@ -770,8 +770,12 @@ private:
      *  IChatDropSink 覆写：文件被放下。图片作为群图片消息发出；其余文件<u>上传到
      *  群文件库</u>并把边栏切到「群文件」—— 与工具栏「文件」按钮的语义一致，群里
      *  发文件就是入群文件库，不在消息区发文件气泡。
-     *    paths：      拖进来的路径列表。
-     *    forceAsFile：落手时按住了 Shift —— 图片也按群文件上传。
+     *
+     *  <u>文件夹一律不处理</u>：文件夹传输一期只做单聊，这里拖进来的文件夹只会得到
+     *  一句「群聊暂不支持发送文件夹」的提示。归类模块（ChatDropModel）是两个聊天窗
+     *  共用的，它只把文件夹拣出来，拦不拦由各窗口自己决定。
+     *    paths：      拖进来的路径列表，可以混着文件与文件夹。
+     *    forceAsFile：落手时按住了 Shift —— 图片也按群文件上传（不影响文件夹）。
      */
     void OnChatFilesDropped(const std::vector<std::wstring>& paths,
                             bool forceAsFile) override;

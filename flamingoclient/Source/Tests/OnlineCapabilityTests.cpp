@@ -3,10 +3,11 @@
  *
  *  "当前状态下哪些功能可用"判定（OnlineCapability）的测试：
  *    · 三态推导 —— 在线且连接就绪 / 状态在线但连接未就绪（恢复中、断线重连中）/
- *      用户主动离线，以及隐身与越界 presence 的兜底。
+ *      用户主动离线，以及越界 presence 的兜底。
  *    · 五类操作的放行矩阵 —— 在线放行、离线全拦、"连接未就绪"同样全拦。
  *    · 提示条文案与可点击性、被拦操作的提示文案完整性。
  *    · 托盘图标选择（离线用灰色图标）。
+ *    · 托盘状态徽标叠加 —— 只有"连接就绪 + 离开 / 忙碌"才在图标右下角叠徽标。
  *    · 自动重连守卫 —— 用户主动离线时恒不重连。
  *
  *  用 Catch2 v3（amalgamated）作框架，纯内存断言，不创建窗口 / 不依赖消息循环。
@@ -48,6 +49,9 @@ const int kAllActions[5] =
 // CAP1 ~ CAP3 —— 三态推导
 // =====================================================================
 
+// 已作废的在线状态取值：4 曾经是「隐身」，本产品不提供该功能（见 net/Protocol.h）。
+// 老服务端仍可能推上来，故保留这些用例，确认它被当作越界值归到"离线"。
+static const int kRetiredPresence = 4;
 TEST_CASE("CAP1 在线/离开/忙碌 + 连接就绪 = 在线态", "[onlinecap]")
 {
     for (int i = 0; i < 3; ++i)
@@ -74,8 +78,8 @@ TEST_CASE("CAP3 离线态与未知取值的兜底", "[onlinecap]")
     CHECK(ComputeConnectionUiState(presence_offline, false) == kConnUiOffline);
     CHECK(ComputeConnectionUiState(presence_offline, true)  == kConnUiOffline);
 
-    // 隐身与越界取值按离线处理，与 NormalizePresenceForMenu 的兜底口径一致。
-    CHECK(ComputeConnectionUiState(presence_invisible, true) == kConnUiOffline);
+    // 越界取值按离线处理，与 NormalizePresenceForMenu 的兜底口径一致。
+    CHECK(ComputeConnectionUiState(kRetiredPresence, true) == kConnUiOffline);
     CHECK(ComputeConnectionUiState(999, true)                == kConnUiOffline);
     CHECK(ComputeConnectionUiState(-1, true)                 == kConnUiOffline);
 }
@@ -104,8 +108,8 @@ TEST_CASE("CAP5 离线时五类操作全部拦住", "[onlinecap][action]")
         CHECK(!IsActionAllowed(presence_offline, false, kAllActions[a]));
         // 即便连接侥幸还在（正在关闭的瞬间），用户选了离线就不该再放行。
         CHECK(!IsActionAllowed(presence_offline, true, kAllActions[a]));
-        // 隐身与越界 presence 同样按离线拦住。
-        CHECK(!IsActionAllowed(presence_invisible, true, kAllActions[a]));
+        // 越界 presence 同样按离线拦住。
+        CHECK(!IsActionAllowed(kRetiredPresence, true, kAllActions[a]));
         CHECK(!IsActionAllowed(999, true, kAllActions[a]));
     }
 }
@@ -207,9 +211,9 @@ TEST_CASE("CAP11b 托盘图标与在线状态的组合结果", "[onlinecap][tray
     CHECK(::wcscmp(GetTrayIconFileName(
         ComputeConnectionUiState(presence_online, false)), L"offline.ico") == 0);
 
-    // 隐身与越界取值按离线处理。
+    // 越界取值按离线处理。
     CHECK(::wcscmp(GetTrayIconFileName(
-        ComputeConnectionUiState(presence_invisible, true)), L"offline.ico") == 0);
+        ComputeConnectionUiState(kRetiredPresence, true)), L"offline.ico") == 0);
     CHECK(::wcscmp(GetTrayIconFileName(
         ComputeConnectionUiState(999, true)), L"offline.ico") == 0);
 }
@@ -293,9 +297,9 @@ TEST_CASE("CAP14 掉线 / 重连中显示正在连接，主动离线显示离线
     const PresenceVisual bad = GetConnectionPresenceVisual(presence_online, 999);
     CHECK(::wcscmp(bad.text, L"离线") == 0);
 
-    // 隐身等本菜单表达不了的 presence，在连接就绪时也退化为"离线"（沿用既有兜底口径）。
+    // 本菜单表达不了的 presence，在连接就绪时也退化为"离线"（沿用既有兜底口径）。
     CHECK(::wcscmp(
-        GetConnectionPresenceVisual(presence_invisible, kConnUiOnline).text, L"离线") == 0);
+        GetConnectionPresenceVisual(kRetiredPresence, kConnUiOnline).text, L"离线") == 0);
 }
 
 TEST_CASE("CAP15 头像置灰与托盘图标同一个口径", "[onlinecap][presence]")
@@ -316,11 +320,11 @@ TEST_CASE("CAP15 头像置灰与托盘图标同一个口径", "[onlinecap][prese
 TEST_CASE("CAP16 托盘彩色图标 / 胶囊在线文字 / 头像不灰，三者永远同真同假",
           "[onlinecap][presence][tray]")
 {
-    // 遍历所有可能的 presence（含隐身与越界）× 连接是否就绪。
+    // 遍历所有可能的 presence（含越界值）× 连接是否就绪。
     const int kAllPresences[6] =
     {
         presence_online, presence_away, presence_busy,
-        presence_offline, presence_invisible, 999,
+        presence_offline, kRetiredPresence, 999,
     };
     const bool kConnectedValues[2] = { true, false };
 
@@ -344,6 +348,78 @@ TEST_CASE("CAP16 托盘彩色图标 / 胶囊在线文字 / 头像不灰，三者
 
             CHECK(bTrayColored == bAvatarColor);
             CHECK(bTrayColored == bPillOnline);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CAP17~CAP19  托盘图标右下角的在线状态徽标
+//
+// 离开与忙碌跟在线共用同一张彩色底图，靠叠加徽标区分。判定必须只认
+// "连接就绪 + 离开 / 忙碌"这一种组合：底图是灰的时候贴徽标会自相矛盾。
+// ---------------------------------------------------------------------------
+
+TEST_CASE("CAP17 连接就绪时，只有离开与忙碌叠加徽标", "[onlinecap][trayoverlay]")
+{
+    // 离开 / 忙碌：叠加各自的徽标。
+    CHECK(GetTrayOverlayPresence(presence_away, kConnUiOnline) == presence_away);
+    CHECK(GetTrayOverlayPresence(presence_busy, kConnUiOnline) == presence_busy);
+
+    // 在线不叠 —— 彩色底图本身就表示在线，再贴徽标是冗余。
+    CHECK(GetTrayOverlayPresence(presence_online, kConnUiOnline) == kNoTrayOverlay);
+
+    // 用户主动离线不叠 —— 那一路底图已经是灰的。
+    CHECK(GetTrayOverlayPresence(presence_offline, kConnUiOnline) == kNoTrayOverlay);
+
+    // 越界取值（含已作废的编号 4）一律不叠，与本模块其它函数的保守兜底一致。
+    const int kProbes[5] = { kRetiredPresence, 999, -1, 7, -42 };
+    for (int i = 0; i < 5; ++i)
+    {
+        CHECK(GetTrayOverlayPresence(kProbes[i], kConnUiOnline) == kNoTrayOverlay);
+    }
+}
+
+TEST_CASE("CAP18 连接未就绪时一律不叠徽标", "[onlinecap][trayoverlay]")
+{
+    // 连接中与掉线两种状态下，无论用户选的是什么，都不叠 —— 此刻消息收发不了，
+    // 灰底图上贴一枚"离开"徽标会让人以为还能正常用。
+    const int kNotReady[2] = { kConnUiConnecting, kConnUiOffline };
+    const int kPresences[5] =
+    {
+        presence_online, presence_away, presence_busy, presence_offline, kRetiredPresence
+    };
+
+    for (int s = 0; s < 2; ++s)
+    {
+        for (int p = 0; p < 5; ++p)
+        {
+            CHECK(GetTrayOverlayPresence(kPresences[p], kNotReady[s]) == kNoTrayOverlay);
+        }
+    }
+
+    // 越界的连接态同样按"未就绪"处理。
+    CHECK(GetTrayOverlayPresence(presence_away, 999) == kNoTrayOverlay);
+    CHECK(GetTrayOverlayPresence(presence_busy, -1)  == kNoTrayOverlay);
+}
+
+TEST_CASE("CAP19 叠徽标时底图必然是彩色图标", "[onlinecap][trayoverlay]")
+{
+    // 这条锁的是两个函数之间的一致性：一旦有人改了其中一个的口径，
+    // 就会出现"灰图标上贴着离开徽标"这种自相矛盾的组合。
+    const int kStates[3]    = { kConnUiOnline, kConnUiConnecting, kConnUiOffline };
+    const int kPresences[4] =
+    {
+        presence_online, presence_away, presence_busy, presence_offline
+    };
+
+    for (int s = 0; s < 3; ++s)
+    {
+        for (int p = 0; p < 4; ++p)
+        {
+            if (GetTrayOverlayPresence(kPresences[p], kStates[s]) == kNoTrayOverlay)
+                continue;
+
+            CHECK(::wcscmp(GetTrayIconFileName(kStates[s]), L"imonline.ico") == 0);
         }
     }
 }

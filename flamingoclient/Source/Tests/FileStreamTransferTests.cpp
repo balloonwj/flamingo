@@ -134,6 +134,13 @@ public:
         return true;
     }
 
+    //假通道不做加密：本组用例验的是分片切分、续传位点与 MD5 校验这些流程逻辑，
+    //与包体加密无关。返回空指针会让组帧走明文，帧内容仍是可直接断言的字节。
+    net::FrameCipher* GetCipher() override
+    {
+        return NULL;
+    }
+
     int                m_sendCount;     //SendBytes 被调用的次数（= 实际发出的分片帧数）
     int                m_recvCount;     //RecvFrame 被调用的次数
     int                m_cancelAtRecv;  //在第几次收回执后置位取消标志（<=0 表示不置位）
@@ -183,6 +190,13 @@ public:
         if (m_cancelAtRecv > 0 && m_recvCount == m_cancelAtRecv && m_cancelFlag != NULL)
             m_cancelFlag->store(true);
         return true;
+    }
+
+    //假通道不做加密：本组用例验的是分片切分、续传位点与 MD5 校验这些流程逻辑，
+    //与包体加密无关。返回空指针会让组帧走明文，帧内容仍是可直接断言的字节。
+    net::FrameCipher* GetCipher() override
+    {
+        return NULL;
     }
 
     int                m_sendCount;

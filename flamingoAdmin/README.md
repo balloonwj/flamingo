@@ -13,7 +13,7 @@ FlamingoIM 的企业管理控制台 —— Windows 桌面应用，基于 `balloo
 打开 flamingoAdmin.sln  →  选择 Debug | x64  →  生成
 ```
 
-`flamingoAdmin.sln` 已把 `balloonui_static`（`../flamingoclient/balloonui/`）列为
+`flamingoAdmin.sln` 已把 `balloonui_static`（`../third-party/balloonui/`）列为
 依赖项，会先编出 `balloonui_static.lib` 再编 flamingoAdmin。
 
 flamingoAdmin.exe 采用**全静态链接**：balloonui 链接 `balloonui_static.lib`、

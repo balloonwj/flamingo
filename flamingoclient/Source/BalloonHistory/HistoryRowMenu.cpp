@@ -22,6 +22,7 @@ const wchar_t* const kLabelCopyImage      = L"复制图片";
 const wchar_t* const kLabelSaveImageAs    = L"图片另存为";
 const wchar_t* const kLabelOpenFile       = L"打开文件";
 const wchar_t* const kLabelOpenFolder     = L"打开所在文件夹";
+const wchar_t* const kLabelOpenFolderRoot = L"打开文件夹";
 const wchar_t* const kLabelSaveFileAs     = L"另存为";
 const wchar_t* const kLabelDownload       = L"下载";
 const wchar_t* const kLabelCancelDownload = L"取消下载";
@@ -133,6 +134,18 @@ void AppendContentGroup(std::vector<HistoryRowMenuItem>& out, const HistoryRowMe
         return;
     }
 
+    if (IsHistoryRowFolderType(ctx.m_msgType))
+    {
+        //文件夹传输记录：服务端只记了动作、没记内容，因此<u>没有</u>下载与另存为这两条路。
+        //本机登记过这次传输的根目录、且目录还在（由调用方查好后填进 m_hasLocalFile）时
+        //给一个「打开文件夹」；换了台机器、或目录已被删改时内容组为空，只显示记录。
+        if (ctx.m_hasLocalFile)
+        {
+            AppendItem(out, kHistoryRowMenuOpenFolderRoot, kLabelOpenFolderRoot);
+        }
+        return;
+    }
+
     //语音 / 大表情 / 位置 / 名片 / 投票 / 接龙 / 待办 / 抖动 / 合并转发 / 通话记录 /
     //系统提示等尚未在消息记录窗单独支持的类型：内容组为空，菜单只剩通用组。
     //宁可少给项，也不给一个点下去没反应的项。
@@ -149,6 +162,11 @@ bool IsHistoryRowImageType(int msgType)
 bool IsHistoryRowFileType(int msgType)
 {
     return msgType == ::message_type_file;
+}
+
+bool IsHistoryRowFolderType(int msgType)
+{
+    return msgType == ::message_type_folder;
 }
 
 std::vector<HistoryRowMenuItem> BuildHistoryRowMenuModel(const HistoryRowMenuContext& ctx)

@@ -101,8 +101,40 @@ BOOL CLoginAccountList::LoadFile(LPCTSTR lpszFileName)
 	// 老版本客户端写的文件到此就结束了，姓名留空。
 	ReadNickNameSection(fp, nLoaded);
 
+	// 姓名补齐之后再清理空账号 —— 尾块按位置对应主体记录，先删会让姓名错位。
+	PurgeBlankAccounts();
+
 	fclose(fp);
 	return TRUE;
+}
+
+// 丢弃用户名为空的账号记录，并同步修正最后登录索引
+void CLoginAccountList::PurgeBlankAccounts()
+{
+	// 从后往前遍历：删除某一项不会改变它前面各项的下标，循环变量因而不必回退。
+	for (int i = (int)m_arrLoginAccount.size() - 1; i >= 0; i--)
+	{
+		LOGIN_ACCOUNT_INFO* lpAccount = m_arrLoginAccount[i];
+		if (lpAccount != NULL && lpAccount->szUser[0] != _T('\0'))
+			continue;
+
+		if (lpAccount != NULL)
+			delete lpAccount;
+		m_arrLoginAccount.erase(m_arrLoginAccount.begin() + i);
+
+		// 修正最后登录索引，口径与 Del 一致：被删的排在它前面则整体前移一位；
+		// 被删的正是它指向的那条，则退回第一个账号 —— 真正的最后登录账号已
+		// 无从考证，让登录窗至少有个存在的账号可预填。
+		if (m_nLastLoginUser > i)
+			m_nLastLoginUser--;
+		else if (m_nLastLoginUser == i)
+			m_nLastLoginUser = 0;
+	}
+
+	// 兜底夹取：删到列表变短（含删空）时下标不能越界。列表空了取 0 也无妨，
+	// GetAccountInfo 会因越界返回 NULL，调用方本就要判空。
+	if (m_nLastLoginUser < 0 || m_nLastLoginUser >= (int)m_arrLoginAccount.size())
+		m_nLastLoginUser = 0;
 }
 
 // 按条数读取账号记录并追加到列表，返回实际读出的条数
@@ -271,7 +303,10 @@ void CLoginAccountList::WriteNickNameSection(FILE* fp, int nCount)
 BOOL CLoginAccountList::Add(LPCTSTR lpszUser, LPCTSTR lpszPwd, 
 							int nStatus, BOOL bRememberPwd, BOOL bAutoLogin)
 {
-	if (NULL == lpszUser)
+	// 用户名为空的账号一律不收 —— 这种记录在登录窗的账号下拉框里是一个空白行，
+	// 一旦又被设成最后登录账号，登录窗启动时便预填出空账号。调用方传进空串通常
+	// 意味着它那边的账号信息还没填好，属于上游的问题，在此挡住不让其落盘。
+	if (NULL == lpszUser || _T('\0') == *lpszUser)
 		return FALSE;
 
 	LOGIN_ACCOUNT_INFO* lpAccount = Find(lpszUser);

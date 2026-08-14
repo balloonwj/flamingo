@@ -12,13 +12,15 @@
 #include "HttpSession.h"
 #include "HttpServer.h"
 
-bool HttpServer::init(const char* ip, short port, EventLoop* loop)
+bool HttpServer::init(const char* ip, short port, EventLoop* loop, int ioThreadCount)
 {
     InetAddress addr(ip, port);
     m_server.reset(new TcpServer(loop, addr, "ZYL-MYHTTPSERVER", TcpServer::kReusePort));
     m_server->setConnectionCallback(std::bind(&HttpServer::onConnected, this, std::placeholders::_1));
-    //启动侦听
-    m_server->start();
+    //启动侦听。改造前这里调的是不带参数的 start()，用的是它声明里的默认参数 4；
+    //现在改为显式传入，线程数由调用方从配置项 httpiothreadnum 取得，非法取值已在
+    //那里回落成 kDefaultIoThreadCount
+    m_server->start(ioThreadCount);
 
     return true;
 }

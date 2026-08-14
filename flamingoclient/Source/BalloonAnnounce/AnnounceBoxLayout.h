@@ -34,7 +34,7 @@
 #include <vector>
 #include <stdint.h>
 
-#include "../../balloonui/balloonui/DuiControl.h"
+#include "../../../third-party/balloonui/balloonui/DuiControl.h"
 
 namespace balloonwjui { class DuiScrollView; }
 namespace balloonhistory { class HistoryContentView; }

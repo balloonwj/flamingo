@@ -77,7 +77,7 @@ void TcpServer::stop()
     m_started = 0;
 }
 
-void TcpServer::newConnection(int sockfd, const InetAddress& peerAddr)
+void TcpServer::newConnection(SOCKET sockfd, const InetAddress& peerAddr)
 {
     m_loop->assertInLoopThread();
     EventLoop* ioLoop = m_eventLoopThreadPool->getNextLoop();

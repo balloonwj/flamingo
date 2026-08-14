@@ -12,15 +12,17 @@
 #include "MonitorSession.h"
 #include "MonitorServer.h"
 
-bool MonitorServer::init(const char* ip, short port, EventLoop* loop, const char* token)
+bool MonitorServer::init(const char* ip, short port, EventLoop* loop, const char* token,
+                         int ioThreadCount)
 {
     m_token = token;
      
     InetAddress addr(ip, port);
     m_server.reset(new TcpServer(loop, addr, "ZYL-MYIMMONITORSERVER", TcpServer::kReusePort));
     m_server->setConnectionCallback(std::bind(&MonitorServer::onConnected, this, std::placeholders::_1));
-    //启动侦听
-    m_server->start(1);
+    //启动侦听。线程数由调用方从配置项 monitoriothreadnum 取得，非法取值已在那里回落成
+    //kDefaultIoThreadCount，这里直接使用
+    m_server->start(ioThreadCount);
 
     return true;
 }

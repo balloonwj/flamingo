@@ -56,6 +56,20 @@ std::string PreviewFromContent(int msgtype, const std::string& contentJson)
             }
         }
         return "[文件]";
+    case ::message_type_folder:
+        //文件夹传输记录：带上文件夹名，体例与文件那条一致（"[文件] 名字"）。
+        //只写名字、不写规模统计与结局 —— 列表一行的横向空间有限，规模与结局由
+        //窗口侧另行拼在名字后面（见 CBalloonHistoryWindow 的行组装）。
+        if (ok && root.isMember("folder") && root["folder"].isObject())
+        {
+            const Json::Value& folder = root["folder"];
+            if (folder.isMember("foldername") && folder["foldername"].isString()
+                && !folder["foldername"].asString().empty())
+            {
+                return std::string("[文件夹] ") + folder["foldername"].asString();
+            }
+        }
+        return "[文件夹]";
     case ::message_type_voice:
         return "[语音]";
     case ::message_type_emoji:
@@ -170,8 +184,133 @@ HistoryContentBrief ParseContentBrief(int msgtype, const std::string& contentJso
                 brief.m_fileMd5 = file["md5"].asString();
             }
         }
+        return brief;
+    }
+
+    if (msgtype == ::message_type_folder)
+    {
+        if (root.isMember("folder") && root["folder"].isObject())
+        {
+            const Json::Value& folder = root["folder"];
+            //会话 id：拿它去 CFolderLocalStore 查本机的根目录落点，决定这一行要不要给
+            //「打开文件夹」。键名与落库时的 BuildContentJson（V2MsgQuery.cpp 的文件夹
+            //分支，那边又转调 net::FolderProtocolClient::buildRecordContent）一致。
+            if (folder.isMember("sessionid") && folder["sessionid"].isString())
+            {
+                brief.m_folderSessionId = folder["sessionid"].asString();
+            }
+            if (folder.isMember("foldername") && folder["foldername"].isString())
+            {
+                brief.m_folderName = folder["foldername"].asString();
+            }
+            //规模统计与结局都是 JSON 整数（不是文件那边的字符串编码），因为它们由
+            //buildRecordContent 以 Json::Int64 写入；仍然容错地接受字符串形式。
+            if (folder.isMember("totalfiles"))
+            {
+                if (folder["totalfiles"].isString())
+                {
+                    brief.m_folderTotalFiles =
+                        ::_strtoi64(folder["totalfiles"].asString().c_str(), NULL, 10);
+                }
+                else if (folder["totalfiles"].isIntegral())
+                {
+                    brief.m_folderTotalFiles = (int64_t)folder["totalfiles"].asInt64();
+                }
+            }
+            if (folder.isMember("totalsize"))
+            {
+                if (folder["totalsize"].isString())
+                {
+                    brief.m_folderTotalSize =
+                        ::_strtoi64(folder["totalsize"].asString().c_str(), NULL, 10);
+                }
+                else if (folder["totalsize"].isIntegral())
+                {
+                    brief.m_folderTotalSize = (int64_t)folder["totalsize"].asInt64();
+                }
+            }
+            if (folder.isMember("result") && folder["result"].isInt())
+            {
+                brief.m_folderResult = folder["result"].asInt();
+            }
+        }
     }
     return brief;
+}
+
+std::string FolderResultText(int result)
+{
+    switch (result)
+    {
+    //接收端在气泡上点了「拒绝」，一个字节都没有传
+    case ::folder_state_rejected:
+        return "已拒绝";
+
+    //发送端在对方应答前撤回了邀请
+    case ::folder_state_canceled:
+        return "已撤回";
+
+    //发起邀请时对方无在线连接，或响铃期间对方退出登录
+    case ::folder_state_peer_offline:
+        return "对方不在线";
+
+    //邀请在服务端配置的时限内无人应答，服务端自动结束了会话
+    case ::folder_state_timeout:
+        return "邀请已超时";
+
+    //传输过程中任一端出错、通道断开，或用户中途取消（协议侧都按失败 + 错误码表达）
+    case ::folder_state_failed:
+        return "传输失败";
+
+    //全部文件传完并通过校验
+    case ::folder_state_completed:
+        return "已完成";
+
+    //非终态（响铃中 / 传输中）与未知取值：记录条按协议只会带终态，走到这里说明
+    //content 是脏的，此时宁可不显示结局，也不要显示一个编不出名字的状态
+    default:
+        return std::string();
+    }
+}
+
+//往一行文字后面追加一段，段与段之间以 " · " 分隔；待追加的段为空时什么都不做。
+//集中在这里判空，各调用点就不必各自小心"别留下一个孤零零的分隔点"。
+static void AppendRowSegment(std::string& line, const std::string& segment)
+{
+    if (segment.empty())
+    {
+        return;
+    }
+    if (!line.empty())
+    {
+        line += " · ";
+    }
+    line += segment;
+}
+
+std::string BuildFolderRowText(const HistoryContentBrief& brief)
+{
+    std::string line;
+    //类型前缀与文件夹名连在一起，中间不加分隔点 —— 与会话列表摘要的
+    //"[文件夹] 项目资料" 逐字一致
+    if (brief.m_folderName.empty())
+    {
+        line = "[文件夹]";
+    }
+    else
+    {
+        line = "[文件夹] " + brief.m_folderName;
+    }
+
+    //文件数为 0 是合法的（发送了一个空目录），此时不写这一段，免得出现"0 个文件"
+    if (brief.m_folderTotalFiles > 0)
+    {
+        AppendRowSegment(line, std::to_string((long long)brief.m_folderTotalFiles) + " 个文件");
+    }
+    //FormatFileSize 对 0 与负数返回空串，AppendRowSegment 因而自动略过这一段
+    AppendRowSegment(line, FormatFileSize(brief.m_folderTotalSize));
+    AppendRowSegment(line, FolderResultText(brief.m_folderResult));
+    return line;
 }
 
 std::string FileExtensionOf(const std::string& fileName)

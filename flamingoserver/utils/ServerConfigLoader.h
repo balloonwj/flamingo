@@ -179,6 +179,112 @@ std::string StripTrailingSeparators(const std::string& path);
 bool EnsureDirectoryExists(const std::string& dir, std::string& outError);
 
 /**
+ *  按配置装载协议加密（读 encryption / serverkeyfile 两项，加载服务端身份密钥）。
+ *
+ *  三个服务的这段启动逻辑完全一致，收在这里免得各写一份、改漏一处。行为要点：
+ *
+ *  - `encryption` <u>缺省为开启</u>。安全开关的默认值必须偏保守，否则有人漏配
+ *    一行就在不知情的情况下裸奔。写 0 才是关闭。
+ *  - `serverkeyfile` 缺省为 "server_key"，相对路径按<u>实际加载的那个配置文件
+ *    所在目录</u>解析（通常就是 etc/），<u>不是</u> logfiledir / dbpath 用的可执行
+ *    文件目录 —— 三个服务的 .conf 本来就在同一个 etc/ 里，这样默认值天然就落到
+ *    同一个文件上，满足「**三个服务必须指向同一个文件**」的要求，否则客户端要为
+ *    每个服务各配一把公钥。文件不存在时会生成一份新的。
+ *
+ *  @param config   已加载完成的配置源。
+ *  @param outError [出参] 失败原因（英文，可直接进报错信息），成功时清空。
+ *  @return 成功返回 true。开着加密却拿不到密钥时返回 false —— 此时调用方应
+ *          ReportStartupFailure 后退出，<u>不可退回明文继续跑</u>，那会让管理员
+ *          以为链路已加密。
+ *  副作用：读取（必要时创建）身份密钥文件；设置进程级的加密配置。
+ */
+bool InitProtocolEncryption(CConfigFileReader& config, std::string& outError);
+
+//网络 I/O 工作线程数的取值下界，单位：条线程。这个数会原样交给 TcpServer::start，
+//由它建出同样条数的 EventLoopThreadPool；写 0 或负数在语义上等于「不要工作线程」，
+//故下界取 1
+const int MIN_IO_THREAD_COUNT = 1;
+
+//网络 I/O 工作线程数的取值上界，单位：条线程。
+//依据：Windows 上 EventLoop 建的是 SelectPoller（见 net/EventLoop.cpp 第 48 行），
+//而 select 每个线程最多盯 FD_SETSIZE（winsock 下默认 64）条连接（见 net/SelectPoller.cpp
+//的 poll 实现），线程数超过几十条之后再往上加已无实际意义，只是白白多出线程栈与调度开销。
+//取 256 是在此之上留足余量，同时挡住「把端口号或字节数误填进线程数」这类笔误 ——
+//那类值动辄上万，真按它建线程会让服务在启动阶段就耗光资源
+const int MAX_IO_THREAD_COUNT = 256;
+
+//网络 I/O 工作线程数配置项的取值判定结果，调用方据此决定日志措辞
+enum IoThreadCountStatus
+{
+    //取值合法：配置项存在、是十进制整数、且落在 [MIN_IO_THREAD_COUNT, MAX_IO_THREAD_COUNT]
+    //之内，此时原样采用配置里写的值
+    io_thread_count_ok = 0,
+
+    //配置项整项缺失，或写成 "key=" 这种空值（CConfigFileReader 会把这样的行整条丢掉，
+    //效果与整项缺失相同）。老配置文件不加这一项时走的就是这一条
+    io_thread_count_missing = 1,
+
+    //取值不是十进制整数，如 "abc"、"4x"、"1.5"。单列一类是因为它与「写了个非法数量」
+    //是两种不同的配错方式，报错时分开说，运维才知道该往哪个方向改
+    io_thread_count_not_number = 2,
+
+    //取值是整数但越界：0、负数，或大于 MAX_IO_THREAD_COUNT
+    io_thread_count_out_of_range = 3
+};
+
+/**
+ *  把配置文件里写的网络 I/O 工作线程数换算成实际采用的线程数。
+ *
+ *  纯函数，不读配置文件、不写日志、不访问文件系统，判定结果完全由入参决定，
+ *  因此可以直接单元测试（见 tests/test_iothreadcount.cpp）。
+ *
+ *  取值非法时一律<u>回落到默认值</u>而不是截断到边界：截断之后实际生效的线程数与
+ *  配置文件里写的对不上，而排查问题的人手上往往只有配置文件，据此会得出错误结论；
+ *  回落到默认值、再配上调用方打的那条告警日志，「配的值没被采用」这件事才看得见。
+ *
+ *  @param configuredValue 配置项的原始值，直接传 CConfigFileReader::getConfigName 的
+ *                         返回值即可。允许为 NULL，表示配置项缺失。
+ *  @param defaultValue    配置项缺失或取值非法时采用的线程数，单位：条线程。由调用方
+ *                         给出，各服务传的就是改造前写死在代码里的那个数。
+ *  @param outStatus       [出参] 判定结果，取值见 enum IoThreadCountStatus。
+ *  @return 实际应当采用的线程数，单位：条线程。判定结果为 io_thread_count_ok 时是
+ *          配置项解析出来的值，其余情况一律是 defaultValue。
+ *  副作用：无。
+ */
+int ResolveIoThreadCount(const char* configuredValue, int defaultValue,
+                         IoThreadCountStatus& outStatus);
+
+/**
+ *  把线程数配置项的判定结果翻译成一句英文原因，供日志直接引用。
+ *
+ *  @param status 判定结果，取值见 enum IoThreadCountStatus。
+ *  @return 指向静态字符串的指针，永不为 NULL，调用方不负责释放。日志按仓库约定
+ *          用英文书写，故本函数返回的也是英文。
+ *  副作用：无。
+ */
+const char* DescribeIoThreadCountStatus(IoThreadCountStatus status);
+
+/**
+ *  读取一个网络 I/O 工作线程数配置项：取值合法就采用它，非法则回落默认值并记一条告警日志。
+ *
+ *  三个服务的五个线程数配置项（chatserver 的主服务 / 监控端口 / HTTP 端口、fileserver 与
+ *  imgserver 的文件端口、imgserver 的中转端口）都走这里，免得各写一份判定与日志、
+ *  改的时候漏掉一处。
+ *
+ *  日志里<u>同时给出配置的值与实际采用的值</u>：只写其中一个的话，运维要么不知道自己
+ *  配的值被弃用了，要么不知道服务最终起了几条线程。
+ *
+ *  @param config       已装载完成的配置源。
+ *  @param key          配置项名，如 "iothreadnum"，不得为 NULL。
+ *  @param defaultValue 配置项缺失或取值非法时采用的线程数，单位：条线程。
+ *  @return 实际应当采用的线程数，单位：条线程，可直接交给 TcpServer::start。
+ *  副作用：输出一条日志。要求调用方已完成 CAsyncLog::init()，否则这条日志只会堆在
+ *          内存队列里没人写出去 —— 三个服务的 main() 都是先初始化日志再起服务，
+ *          满足该前提。
+ */
+int ReadIoThreadCountConfig(CConfigFileReader& config, const char* key, int defaultValue);
+
+/**
  *  打印启动失败的原因。
  *
  *  这条信息之所以不用 LOGF / LOGE 输出，是因为启动失败往往发生在 CAsyncLog::init()

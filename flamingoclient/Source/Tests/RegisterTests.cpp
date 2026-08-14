@@ -22,8 +22,8 @@
 #include "../BalloonRegister/RegisterLayout.h"
 #include "../BalloonRegister/RegisterModel.h"
 #include "../net/RegisterProtocolClient.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 
 using namespace balloonwjui;
 using namespace balloonregister;

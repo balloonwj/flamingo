@@ -28,7 +28,7 @@
 #include <memory>
 #include <string>
 #include <vector>
-#include "../../balloonui/balloonui/DuiControl.h"
+#include "../../../third-party/balloonui/balloonui/DuiControl.h"
 
 namespace net { struct GroupMemberItem; }   // ResolveXxx 入参,前置声明免引头
 

@@ -15,6 +15,7 @@
 #define _WIN32_WINNT    0x0601
 
 #include "MemberPickerTreeModel.h"
+#include "ContactRemarkModel.h"   // ResolveContactDisplayName（显示名口径全局唯一）
 
 #include "../BalloonSearch/PinyinFull.h"       // 全拼与首字母（"sumuchen" / "muchen" / "smc" → 苏沐辰）
 
@@ -49,21 +50,14 @@ CString Utf8ToCStr(const std::string& utf8)
     return out;
 }
 
-// 联系人的显示名：昵称 → 账号 → "用户<id>"，与对话框原有口径一致。
+// 联系人的显示名：「真名（备注）」，与通讯录树 / 会话列表 / 收藏区同一口径。
+// 选人时看到的名字必须与用户在通讯录里看到的一致，否则他按备注去找人会找不到。
+// 真名本身的逐级兜底（昵称 → 账号 → "用户<id>"）由该纯函数内部完成。
 CString DisplayNameOf(const net::ContactItem& c)
 {
-    CString name = Utf8ToCStr(c.m_nickname);
-    if (!name.IsEmpty())
-    {
-        return name;
-    }
-    name = Utf8ToCStr(c.m_username);
-    if (!name.IsEmpty())
-    {
-        return name;
-    }
-    name.Format(kFmtFallbackName, (UINT)c.m_userid);
-    return name;
+    return balloonmain::ResolveContactDisplayName(
+        Utf8ToCStr(c.m_remark), Utf8ToCStr(c.m_nickname),
+        Utf8ToCStr(c.m_username), (UINT)c.m_userid);
 }
 
 // 部门排序：m_deptorder 小者靠前；并列时按部门ID，保证结果稳定可复现。

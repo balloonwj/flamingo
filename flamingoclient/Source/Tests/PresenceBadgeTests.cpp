@@ -4,7 +4,7 @@
  *  在线状态徽标（PresenceBadge）的测试。本次改版的核心主张是"四个状态靠<u>形状</u>
  *  就能区分、不依赖颜色"，故这里的重头戏是两条不变量：
  *    · 四种 presence 映射到四种<u>两两不同</u>的字形；
- *    · 隐身与一切越界取值都归到"离线"，且与 NormalizePresenceForMenu /
+ *    · 一切越界取值都归到"离线"，且与 NormalizePresenceForMenu /
  *      GetPresenceVisual 的兜底口径一致（三者一旦分叉，就会出现"胶囊说离线、
  *      图标却画成别的状态"）。
  *  另外覆盖改版后的配色（四色两两不同、离线灰足够深）、连接态下该画哪个徽标，
@@ -73,6 +73,12 @@ double ContrastAgainstWhite(COLORREF c)
 // PB1-PB3. 字形映射 —— 本次改版的核心保证
 // =====================================================================
 
+// 已作废的在线状态取值：4 曾经是「隐身」，本产品不提供该功能（见 net/Protocol.h）。
+// 老服务端仍可能推上来，故保留这些用例，确认它被当作越界值归到"离线"。
+static const int kRetiredPresence = 4;
+// 已作废的 mock 状态取值：3 曾经是「隐身」，见 BalloonMain/MainPanelMockData.h。
+static const int kRetiredMockStatus = 3;
+
 TEST_CASE("PB1 四个状态各有各的字形", "[presencebadge][shape]")
 {
     CHECK(GetPresenceBadgeIconKind(presence_online)  == kIconPresenceOnline);
@@ -97,14 +103,14 @@ TEST_CASE("PB2 四种字形两两不同 —— 去掉颜色也能区分", "[pres
     }
 }
 
-TEST_CASE("PB3 隐身与越界取值都画成离线的空心环", "[presencebadge][shape]")
+TEST_CASE("PB3 越界取值都画成离线的空心环", "[presencebadge][shape]")
 {
-    CHECK(GetPresenceBadgeIconKind(presence_invisible) == kIconPresenceOffline);
+    CHECK(GetPresenceBadgeIconKind(kRetiredPresence) == kIconPresenceOffline);
     CHECK(GetPresenceBadgeIconKind(999)                == kIconPresenceOffline);
     CHECK(GetPresenceBadgeIconKind(-1)                 == kIconPresenceOffline);
 
     // 与另外两处兜底同口径：任取一个值，"归一后的状态"与"直接取字形"必须指向同一种字形。
-    const int probes[6] = { presence_invisible, 999, -1, 7, 100, -42 };
+    const int probes[6] = { kRetiredPresence, 999, -1, 7, 100, -42 };
     for (int i = 0; i < 6; ++i)
     {
         INFO("presence = " << probes[i]);
@@ -177,11 +183,11 @@ TEST_CASE("PB7 mock 状态换算到 presence 后与真实数据画法一致", "[
     CHECK(MockPresenceFromStatus(kMockAway)      == presence_away);
     CHECK(MockPresenceFromStatus(kMockBusy)      == presence_busy);
     CHECK(MockPresenceFromStatus(kMockOffline)   == presence_offline);
-    CHECK(MockPresenceFromStatus(kMockInvisible) == presence_offline);   // 隐身对外显示离线
+    CHECK(MockPresenceFromStatus(kRetiredMockStatus) == presence_offline);   // 已作废取值按离线
 
     // mock 的状态点颜色必须与正式配色逐字相同，否则调试入口里核对过的观感到了
     // 登录后又变一副样子。
-    const int mocks[5] = { kMockOnline, kMockAway, kMockBusy, kMockInvisible, kMockOffline };
+    const int mocks[5] = { kMockOnline, kMockAway, kMockBusy, kRetiredMockStatus, kMockOffline };
     for (int i = 0; i < 5; ++i)
     {
         INFO("mock status = " << mocks[i]);

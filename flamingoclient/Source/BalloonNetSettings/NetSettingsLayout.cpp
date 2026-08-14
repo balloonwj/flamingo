@@ -45,9 +45,9 @@ extern CAppModule _Module;
 #include "NetSettingsLayout.h"
 #include "NetSettingsModel.h"
 #include "NetServerCard.h"
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/DuiXmlBuilder.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
 
 namespace balloonnetsettings {
 

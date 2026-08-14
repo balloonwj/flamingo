@@ -66,7 +66,7 @@ enum ConnectionUiState
 /**
  *  推导界面连接态。
  *
- *    presence： 用户当前选择的在线状态（v2 presence_type）。隐身与一切未知取值按
+ *    presence： 用户当前选择的在线状态（v2 presence_type）。一切未知取值按
  *               "离线"处理，与 NormalizePresenceForMenu 的兜底口径一致。
  *    connected：与聊天服务器的连接是否已就绪（已连上且登录成功）。
  *
@@ -120,10 +120,34 @@ const wchar_t* GetConnectionBannerText(int state);
  *  之所以按<u>连接态</u>而不是按在线状态取：断线重连期间用户选的仍是"在线"，但此刻
  *  根本连不上服务器，托盘还显示彩色图标会误导人（原有代码在重连时也是显示灰色的）。
  *
- *  说明：目前只有这两个图标资源，离开 / 忙碌暂与在线共用彩色图标；若日后为它们各配
- *  一只图标，只需改本函数，所有取图标的地方自动跟上。
+ *  说明：只有这两个图标资源。离开 / 忙碌与在线共用同一张彩色底图，它们的区分靠在
+ *  底图右下角叠加状态徽标实现，见 GetTrayOverlayPresence。
  */
 const wchar_t* GetTrayIconFileName(int state);
+
+//GetTrayOverlayPresence 的返回值：托盘图标不叠加任何徽标。
+//取 -1 而不是某个 presence 值，是为了与"要叠加的那个状态"彻底区分开，
+//调用方拿到它就该原样使用底图。
+const int kNoTrayOverlay = -1;
+
+/**
+ *  取托盘图标右下角该叠加哪个在线状态的徽标。
+ *
+ *    presence：   用户当前选择的在线状态（v2 presence_type）。
+ *    connUiState：界面连接态，取值见 ConnectionUiState。
+ *
+ *  @return presence_away 或 presence_busy 表示叠加对应徽标；kNoTrayOverlay 表示不叠加。
+ *
+ *  只有"连接就绪 + 离开 / 忙碌"这一种组合才叠加，理由：
+ *    · 在线不叠 —— 彩色底图本身就表示在线，再贴个徽标是冗余；
+ *    · 离线不叠 —— 用户主动离线时底图已经是灰的（见 GetTrayIconFileName）；
+ *    · 连接未就绪（连接中 / 掉线）一律不叠 —— 此刻底图是灰的、消息也收发不了，
+ *      灰底图上贴着"离开"徽标会自相矛盾；
+ *    · 一切越界取值（含已作废的编号 4）按不叠加处理，与本模块其它函数的保守兜底一致。
+ *
+ *  本函数无副作用。合成图标的实现见 MainPanelAvatar.h 的 MakePresenceOverlayIcon。
+ */
+int GetTrayOverlayPresence(int presence, int connUiState);
 
 /**
  *  取当前<u>连接态</u>下状态胶囊与托盘悬停提示该显示的视觉（文字 + 圆点色）。

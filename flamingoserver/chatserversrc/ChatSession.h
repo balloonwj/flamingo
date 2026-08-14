@@ -12,6 +12,7 @@
 
 #include <stdint.h>
 #include <string>
+#include <vector>
 #include <time.h>
 #include "../net/ByteBuffer.h"
 #include "../net/TimerId.h"
@@ -26,6 +27,13 @@ struct GroupRecord;   //群资料记录，定义在 GroupProtocol.h；此处仅�
 struct GroupAnnouncementRecord;
 //一条完整消息体，定义见 MessageProtocol.h；前向声明供卡片互动相关 helper 形参使用
 struct MessageRecord;
+//一条活跃的单聊文件夹传输会话，定义在 FolderTransferManager.h；此处仅按 const 引用传递。
+//与上面几个前向声明同理：本头文件不方便再多引一个业务头，用到实体的地方都在 .cpp 里
+struct FolderTransferSessionInfo;
+//v2 帧头，定义在 Protocol.h；此处仅按 const 引用传递。
+//注意<u>不能</u>在本头文件里直接包含 Protocol.h ——它与遗留的 v1 协议头 Msg.h
+//定义了同名的 msg_type / error_code 等枚举，同时进一个翻译单元会重定义冲突。
+struct frame_header;
 
 //在线用户信息：登录成功后填充
 struct OnlineUserInfo
@@ -84,6 +92,72 @@ public:
     //会话是否有效（userid>0 视为有效）
     bool isSessionValid();
 
+    /**
+     *  本连接下线（正常登出或链路断开）时，清理本会话名下正在进行的那笔单聊文件夹传输。
+     *
+     *  文件夹传输的续传位点存在双方客户端的内存与接收端的半成品文件里，服务端只记会话，
+     *  故任一端的连接一断，这笔传输就不可能再继续（见 docs/协议设计-v2.md 12.7 不变式 2）。
+     *  本方法按 docs/协议设计-v2.md 12.2.6 的推送时机表向仍在线的对端推一帧
+     *  cmd_folder_state_notify，随后销毁会话：会话还在响铃中时推 folder_state_peer_offline
+     *  （对方离线），已经进入传输中 / 失败待重试时推 folder_state_failed 并带
+     *  error_code_folder_peer_offline，使对端与本端看到的失败原因一致。
+     *
+     *  <b>调用约束：禁止在持有 ChatServer::m_sessionMutex 期间调用。</b>本方法内部经
+     *  sendToUser 遍历在线会话表，那里会再加一次 m_sessionMutex；该锁是非递归锁，同一
+     *  线程重复加锁会抛 resource_deadlock_would_occur 并终止进程。ChatServer::onDisconnected
+     *  为此在锁内先留一份会话的 shared_ptr，出锁之后才调用本方法。
+     *
+     *  本会话从未参与过文件夹传输、或那笔传输早已收尾时，本方法什么都不做，可安全重复调用。
+     */
+    void cleanupFolderTransferOnOffline();
+
+    /**
+     *  单聊文件夹传输会话走到终态时的<u>唯一</u>收口：把「向相关方推一帧
+     *  cmd_folder_state_notify」与「在双方单聊会话里留下一条传输记录」这两件事绑在一起，
+     *  任何一条终态分支都必须经由本方法，不得自己另写一份推送。
+     *
+     *  之所以收口：终态分支散落在六处（1812 拒绝、1813 撤回、1814 结束、1817 重试时对端
+     *  已离线、连接断开时的收尾、以及主循环定时器判定的邀请超时），各写各的推送时，日后
+     *  新增一条终态分支极容易漏掉留记录，而漏掉的表现只是"聊天记录里少了一条"，不报错、
+     *  不崩溃，几乎不可能被测出来。
+     *
+     *  记录条由服务端生成而不是由客户端补发：邀请超时是服务端定时器判定的、对方离线是
+     *  服务端发现的，这两种结局下发送方客户端可能根本不在线。记录只写这次传输的动作与
+     *  结局（会话 id、目录名、目录数 / 文件数 / 总字节数、终态、失败原因），<u>不写</u>
+     *  文件清单与文件内容，故"字节不落盘、不入库"这条不变式没有被打破。
+     *
+     *  幂等：clientmsgid 取由「会话 id + 本次尝试的序号」派生的固定串（见
+     *  FolderTransferProtocol::buildRecordClientMsgId），落库前先按「发送方 userid +
+     *  clientmsgid」查一次，已有记录即跳过。<u>同一次尝试</u>被判定多次终态（典型是双方各
+     *  发一帧 cmd_folder_close）只会留下一条记录，以最先到达的那个终态为准；而<u>不同次
+     *  尝试</u>的序号不同，故一笔传输先失败（序号 1）、在保留期内重试又成功（序号 2）时，
+     *  聊天记录里会依次留下失败与完成两条，过程完整。序号由 FolderTransferManager 维护
+     *  （见其 beginRetryAttempt），本方法只从会话快照里取用。
+     *
+     *  写成静态方法是因为主循环那条超时清理路径没有 ChatSession 可用（超时与任何一条
+     *  客户端连接都无关，发起邀请的那一端完全可能早已断开）；本方法只用到 ChatServer 与
+     *  MessageManager 两个单例，不依赖任何会话状态。
+     *
+     *  <b>调用约束：禁止在持有 ChatServer::m_sessionMutex 期间调用。</b>本方法内部经
+     *  ChatServer::pushToUsers 遍历在线会话表，那里会再加一次 m_sessionMutex，该锁不可重入。
+     *
+     *  本方法内部会做一次数据库写入，耗时与 cmd_send_message 的落库相当。
+     *
+     *  @param s           会话快照，须含双方 userid、目录名与三项规模统计；调用方通常在
+     *                     销毁会话之前取一份（本方法只读不持有）
+     *  @param state       终态取值，见 enum folder_transfer_state 的 3~8；传入过程态
+     *                     （响铃中 / 传输中）时本方法只推送、不留记录，并记一条告警日志
+     *  @param errcode     失败原因，取值见 error_code_folder_*（606~620）；仅
+     *                     state 为 folder_state_failed 时写入，其余终态一律按 0 处理
+     *  @param errmsg      面向排查的英文诊断串，可为空；同样仅失败态写入
+     *  @param notifyUsers 要收到 cmd_folder_state_notify 的 userid 列表；空列表表示本次
+     *                     不推状态变更（例如重试时发起方由 1817 的应答得知结果、对端已离线），
+     *                     此时仍照常留记录
+     */
+    static void finishFolderTransferSession(const FolderTransferSessionInfo& s,
+                                            int state, int errcode, const std::string& errmsg,
+                                            const std::vector<int64_t>& notifyUsers);
+
     //启用掉线检测定时器
     void enableHearbeatCheck();
     //停止掉线检测定时器
@@ -92,6 +166,22 @@ public:
     void checkHeartbeat(const std::shared_ptr<TcpConnection>& conn);
 
 private:
+    /**
+     *  协议加密的收包入口：在业务分发之前处理握手帧、校验加密状态、把密文包体
+     *  还原成明文。<u>必须在 zlib 解压之前调用</u>——线上顺序是先压缩后加密，
+     *  收包时自然要先解密再解压。
+     *
+     *  @param conn    当前连接
+     *  @param header  已解出的帧头，其中的字段会被用来构造附加认证数据
+     *  @param body    入参为线上包体；本帧为密文且解密成功时，被替换为明文
+     *  @param handled 出参。为 true 表示本帧是握手帧、已在本函数内应答完毕，
+     *                 调用方不应再往下走解压与业务分发
+     *  @return false 表示协议出错且<u>本函数已关闭连接</u>，调用方须立即返回
+     */
+    bool processFrameSecurity(const std::shared_ptr<TcpConnection>& conn,
+                              const frame_header& header,
+                              std::string& body, bool& handled);
+
     /**
      *  按 cmd 分发一个已解出的 v2 帧。
      *  @param conn 当前连接
@@ -141,6 +231,9 @@ private:
     void onMarkAnnouncementRead(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //设置联系人备注名（cmd_set_friend_remark）：落 t_contact_remark，见 ContactRemarkManager
     void onSetFriendRemark(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //设置联系人标签（cmd_set_contact_tags）：整份覆盖某个联系人的标签列表，落 t_contact_tag，
+    //见 ContactTagManager。标签与备注名一样是单向的，只影响本人这一侧的显示
+    void onSetContactTags(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //加入/移出黑名单（cmd_set_blacklist）
     void onSetBlacklist(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //添加/取消收藏（cmd_set_favorite）：收藏对象为联系人或群组，见 docs/收藏接入方案.md
@@ -189,6 +282,35 @@ private:
     void onCallCancel(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //音视频通话：接通后任一端挂断（通知对端、清会话）
     void onCallHangup(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+
+    //单聊文件夹传输：发送端发起邀请（cmd_folder_invite）。规模上限、双方是否已有传输在进行、
+    //服务器活跃会话数三项准入校验集中在 FolderTransferManager::checkInvite 里，本方法只负责
+    //判对端在线、建会话、回应答（带 sessionid），并向接收端推 cmd_folder_invite_notify
+    void onFolderInvite(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //单聊文件夹传输：接收端应答邀请（cmd_folder_response）。同意则把会话置为传输中、给双方
+    //各签一枚角色相反的中转令牌并分别下发 cmd_folder_relay_info；拒绝则向发送端推
+    //cmd_folder_state_notify（已拒绝）并立即销毁会话
+    void onFolderResponse(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //单聊文件夹传输：发送端在接收端应答前撤回邀请（cmd_folder_cancel）。只在会话仍处于
+    //响铃中时可用；传输开始之后要取消须走 cmd_folder_close，错误码填 error_code_folder_canceled
+    void onFolderCancel(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //单聊文件夹传输：任一端结束本次传输（cmd_folder_close）。成功结束即向对端推"已完成"
+    //并销毁会话；失败结束则置为失败态并<u>保留会话</u>（保留期内发送端可重试续传），
+    //同时把请求里的 errcode / errmsg 原样透传给对端，保证两端看到同一条失败原因
+    void onFolderClose(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //单聊文件夹传输：发送端在保留期内重试续传（cmd_folder_retry）。受理条件由
+    //FolderTransferManager::canRetry 统一判定，通过后重新签发两枚令牌、向双方各再推一帧
+    //cmd_folder_relay_info，接收方不再被询问是否同意
+    void onFolderRetry(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+
+    /**
+     *  给一笔文件夹传输的两端各签一枚中转令牌，并各推一帧 cmd_folder_relay_info。
+     *  接收端同意（1812）与保留期内重试（1817）都要做这件事，抽成一处避免两边口径不一致。
+     *  @param s   目标会话的快照，只读取其 sessionid 与双方 userid
+     *  @param now 当前时间，Unix 毫秒；用于计算令牌的过期时刻
+     *  @return 两枚令牌均签发并推送成功返回 true；会话已不在会话表里（签发失败）返回 false
+     */
+    bool pushFolderRelayInfo(const FolderTransferSessionInfo& s, int64_t now);
 
     //通话中切换媒体类型（cmd_call_switch_media）：校验由 CallManager::switchMedia 统一做，
     //本方法只负责回应答、并在真的发生变更时向双方（含发起者）推 cmd_call_media_changed_notify
@@ -352,4 +474,12 @@ private:
     bool           m_isLogin;            //本会话是否已登录
     time_t         m_lastPackageTime;    //上一次收到数据包的时间，用于掉线检测
     TimerId        m_checkOnlineTimerId; //掉线检测定时器ID
+    //本连接最近一次参与的那笔单聊文件夹传输的会话 id；未参与任何传输时为空串。
+    //本端发出邀请（1810）或应答同意（1812）时写入，会话正常收尾（拒绝 / 撤回 / 成功结束）
+    //时清空；失败结束时<u>不清</u>——会话要保留 folderretrywindow 供重试续传，期内本端掉线
+    //仍须通知对端。生命周期与本 ChatSession 相同。
+    //一个用户现在可同时参与至多 foldermaxperuser 笔传输（默认 5 笔），本字段只记得住
+    //最近的那一笔，故 cleanupFolderTransferOnOffline 除了据它定位，还要按 userid 反查
+    //本用户参与的全部会话，逐笔收尾
+    std::string    m_folderTransferSessionId;
 };

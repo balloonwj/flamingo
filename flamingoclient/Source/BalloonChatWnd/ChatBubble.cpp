@@ -46,6 +46,7 @@ extern CAppModule _Module;
 #include "ChatFileVisual.h"   // FileTypeColor（与消息记录窗共用同一套配色）
 #include "ChatMessageList.h"
 #include "ChatFileAction.h"    // ChatFileActionKind / ChatFileActionData（文件气泡按钮动作负载）
+#include "ChatFolderAction.h"  // ChatFolderActionKind / ChatFolderActionData（文件夹气泡按钮动作负载）
 #include "ChatFaceTag.h"       // kFaceDisplayPx（内联表情显示边长）
 #include "ChatInlineText.h"    // 「文字 + 内联表情」的排版与绘制（与消息记录窗共用）
 #include "ChatTextSelection.h" // 选中文字的纯逻辑（命中测试 / 选区矩形 / 取文本）
@@ -56,7 +57,7 @@ extern CAppModule _Module;
 #include "../BalloonChat/BalloonChatMsgFormat.h"  // ParseSendBody / ChatSegment（解析内联表情）
 #include "../net/MessageProtocolClient.h"  // canRecallMessage（右键菜单里"撤回"项的时限判断）
 #include <ctime>               // time —— 取当前时刻做撤回时限比较
-#include "../../balloonui/balloonui/DuiHost.h"
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"
 
 #include <map>
 
@@ -175,6 +176,237 @@ int FileBubbleHeight(int st, bool fromMe)
     if (FileStateButtonCount(st, fromMe) > 0)
         h += kFileBtnTopGap + kFileBtnH + kFileBtnBottomPad;
     return h;
+}
+
+// ---- 文件夹气泡（kMsgFolder）几何与状态布局 ----------------------------
+//
+// 注：文件夹传输状态取值（kFolderInviting / kFolderTransferring / ... / kFolderUserCanceled）
+// 与「状态 → 可用操作」的映射（FolderStateHasProgress / FolderStateButtonCount /
+// FolderButtonActions / FolderRetryEnabled / FolderErrorText）已在 ChatFolderStateModel.h/.cpp，
+// 那是可单元测试的纯逻辑；本文件经 ChatFolderAction.h 取用，绝不在绘制代码里另写一份状态判断。
+
+// 文件夹气泡几何常量（逻辑像素）。整体沿用文件气泡那一套，只有下面三处不同：
+//   · 气泡更宽（344 而非 300）—— 状态行要放下"正在传输 <文件名>（第 i / 共 n 个）"，
+//     实测 320 宽时这一串在文件名之后就被省略号截断，"共 n 个"看不见了；
+//   · 头部之下多一行状态行（当前文件名、第 i / 共 n 个），传输中才有内容；
+//   · 失败态再多一行失败原因。
+const int kFolderBubbleW     = 344;  // 文件夹气泡固定宽
+const int kFolderPadH        = 14;   // 气泡水平内边距（每侧）
+const int kFolderIconSize    = 40;   // 图标底块边长（圆角方块，与文件气泡的类型块同尺寸）
+const int kFolderIconTop     = 10;   // 图标底块距气泡顶
+const int kFolderGlyphSize   = 24;   // 底块内文件夹图标的绘制边长（kChatIconFolder 按 viewBox 24 缩放到此尺寸）
+const int kFolderNameTop     = 12;   // 文件夹名距气泡顶
+const int kFolderNameH       = 20;   // 文件夹名行高
+const int kFolderSummaryTop  = 34;   // 摘要行（文件数 / 目录数 / 总大小）距气泡顶
+const int kFolderSummaryH    = 18;   // 摘要行行高
+const int kFolderTextGap     = 12;   // 图标底块与右侧文字之间的间距
+const int kFolderHeaderH     = 60;   // 头部区高（图标 + 文件夹名 + 摘要行）
+const int kFolderProgressH   = 5;    // 进度条厚
+const int kFolderStatusTopGap = 8;   // 状态行距上方（进度条或头部）
+const int kFolderStatusH     = 18;   // 状态行行高
+const int kFolderPctW        = 44;   // 状态行右端为百分比预留的宽度。百分比右对齐画在这一格里，
+                                     // 左侧的状态文字相应收窄并以省略号收尾，两者永不叠字
+                                     // （"100%" 在 11px 字号下约 28px，余量给中文括号留出空隙）
+const int kFolderCounterGap  = 8;    // 状态行主文字与右侧"第 i / 共 n 个"计数段之间的间距
+const int kFolderErrorTopGap = 4;    // 失败原因行距状态行
+const int kFolderErrorH      = 18;   // 失败原因行行高
+const int kFolderBtnTopGap   = 8;    // 按钮行距上方
+const int kFolderBtnH        = 30;   // 按钮行高（同时是按钮的命中矩形高）
+const int kFolderBtnBottomPad = 10;  // 按钮行下边距
+const int kFolderLinkPx      = 13;   // 底部操作链接文字字号
+const int kFolderLinkGap     = 18;   // 相邻操作链接的水平间距
+
+// 文件夹图标底块的底色（暖琥珀）。文件气泡按扩展名取色（见 ChatFileVisual），文件夹
+// 没有扩展名可言，故固定一色；选暖琥珀是因为它与主题橙同色系但更沉，两种气泡并排时
+// 一眼能分出"这是一个文件夹"而不是又一个文件。
+const COLORREF kFolderBlockColor = RGB(0xE8, 0x9C, 0x3A);
+
+// 本状态下是否要单独画一行失败原因。
+// 只对"没有正常传完"的几种终态给这一行，且要求宿主确实带回了错误码 —— errcode 为 0
+// 时 FolderErrorText 只会返回一句兜底文案，画出来等于占着一行说废话。
+// 发送端在应答前主动撤回邀请（kFolderInviteCanceled）不算失败，不给这一行。
+//   state：   传输状态，取值见 ChatFolderState
+//   errcode： 失败原因错误码（error_code_folder_*），0=宿主未记录
+bool FolderBubbleHasErrorLine(int state, int errcode)
+{
+    if (errcode == 0)
+    {
+        return false;
+    }
+    return state == kFolderFailed
+        || state == kFolderExpired
+        || state == kFolderUserCanceled
+        || state == kFolderRejected
+        || state == kFolderPeerOffline
+        || state == kFolderTimeout;
+}
+
+// 文件夹气泡总高（随状态变化：有无进度条 / 失败原因行 / 按钮行）。
+// 三处可变项<u>必须</u>与 RenderContent 里排布这三块时问的是同一批函数，否则会出现
+// 「按钮画出来了却被裁在气泡外面点不到」这种错位——文件气泡的注释里说的就是这件事。
+// 按钮全部排在<u>同一行</u>内（RenderContent 里按各自文字宽度从左往右顺排），故这里只按
+// 「有没有按钮」加一次行高，与按钮具体有几个无关；2026-08-14 把邀请态接收端从两个按钮
+// 加到三个（接收 / 另存为 / 拒绝）时，高度因此不必改动。
+//   state：   传输状态，取值见 ChatFolderState
+//   fromMe：  本行是否本端发起（影响按钮数：接收端在邀请态有三个、失败态一个都没有）
+//   errcode： 失败原因错误码，决定要不要留出失败原因那一行
+int FolderBubbleHeight(int state, bool fromMe, int errcode)
+{
+    int h = kFolderHeaderH;
+    if (FolderStateHasProgress(state))
+    {
+        h += kFolderProgressH;
+    }
+    //状态行任何状态都有（等待应答 / 正在创建目录 / 正在传输 / 已完成 / 已取消……），
+    //故不设条件；它是用户判断"这次传输眼下到哪一步了"的唯一一行字。
+    h += kFolderStatusTopGap + kFolderStatusH;
+    if (FolderBubbleHasErrorLine(state, errcode))
+    {
+        h += kFolderErrorTopGap + kFolderErrorH;
+    }
+    if (FolderStateButtonCount(state, fromMe) > 0)
+    {
+        h += kFolderBtnTopGap + kFolderBtnH + kFolderBtnBottomPad;
+    }
+    return h;
+}
+
+//文件夹气泡状态行的一行文字及其配色。之所以把三样打包返回，是因为它们必须一起决定：
+//同一句话在不同状态下颜色与字重都不同（进行中用主题橙半粗、失败用红、已结束用灰）。
+struct FolderStatusLine
+{
+    CString  m_text;      // 状态行主文字（已按状态拼好，绘制侧直接画；过长时以省略号收尾）
+    CString  m_counter;   // "第 i / 共 n 个"计数段，仅传输中且已知序号时非空。它<u>不</u>并进
+                          // m_text：文件名长短不可控，并成一串时先被省略号吃掉的正是这一段，
+                          // 而"传到第几个了"恰恰是用户最想看的。绘制侧把它右对齐单独成段，
+                          // 只让文件名那部分收缩
+    COLORREF m_color;     // 文字颜色（主文字与计数段同色）
+    bool     m_bold;      // 是否用半粗字重（进行中与失败的状态需要，其余不需要）
+};
+
+/**
+ *  按文件夹传输状态拼出气泡里的状态行。
+ *  @param msg 本行承载的消息（读 folderState / fromMe / folderCurFile / folderCurIndex /
+ *             folderFileCount 五个字段）
+ *  @return 状态行的主文字、计数段与配色。未知状态返回一句中性文案，保证这一行不会空着
+ */
+FolderStatusLine BuildFolderStatusLine(const ChatMessage& msg)
+{
+    FolderStatusLine line;
+    line.m_color = RGB(0x8A, 0x8A, 0x8A);   // 默认灰：已结束、不再变化的那几种状态
+    line.m_bold  = false;
+
+    switch (msg.folderState)
+    {
+    //邀请已发出、等待应答：发送端在等，接收端要当场决定收不收
+    case kFolderInviting:
+        line.m_text  = msg.fromMe ? _T("等待对方接收…") : _T("对方想给你发送一个文件夹");
+        line.m_color = RGB(0xFF, 0x7A, 0x45);
+        line.m_bold  = true;
+        break;
+
+    //接收端正在逐级建目录，还没有字节传出去
+    case kFolderPreparing:
+        line.m_text  = msg.fromMe ? _T("对方正在创建目录…") : _T("正在创建目录…");
+        line.m_color = RGB(0xFF, 0x7A, 0x45);
+        line.m_bold  = true;
+        break;
+
+    //正在数据通道上收发文件字节：报当前传的是哪个文件、排第几个
+    case kFolderTransferring:
+        if (!msg.folderCurFile.IsEmpty())
+        {
+            line.m_text.Format(_T("正在传输 %s"), (LPCTSTR)msg.folderCurFile);
+        }
+        else
+        {
+            line.m_text = _T("正在传输…");
+        }
+        if (msg.folderCurIndex > 0)
+        {
+            //序号没报上来时（刚开始传第一个文件）这一段留空，不硬凑一个"第 0 个"
+            line.m_counter.Format(_T("第 %d / 共 %d 个"),
+                                  msg.folderCurIndex, msg.folderFileCount);
+        }
+        line.m_color = RGB(0xFF, 0x6A, 0x3D);
+        line.m_bold  = true;
+        break;
+
+    //全部文件传完并通过校验
+    case kFolderCompleted:
+        line.m_text  = msg.fromMe ? _T("全部发送完成") : _T("全部接收完成");
+        line.m_color = RGB(0x3B, 0xA5, 0x5D);   // 绿：这次传输已经安全落地
+        line.m_bold  = true;
+        break;
+
+    //接收端点了「拒绝」，一个字节都没传
+    case kFolderRejected:
+        line.m_text = msg.fromMe ? _T("对方已拒绝接收") : _T("已拒绝接收");
+        break;
+
+    //发送端在对方应答前撤回了邀请
+    case kFolderInviteCanceled:
+        line.m_text = msg.fromMe ? _T("已撤回邀请") : _T("对方已撤回邀请");
+        break;
+
+    //发起邀请时对方无在线连接，或响铃期间对方退出登录
+    case kFolderPeerOffline:
+        line.m_text = _T("对方不在线，传输未开始");
+        break;
+
+    //限定时间内无人应答，服务端自动结束了会话
+    case kFolderTimeout:
+        line.m_text = _T("邀请已超时");
+        break;
+
+    //传到一半失败：具体原因由下面单独的一行给出，这里只给状态本身
+    case kFolderFailed:
+        line.m_text  = _T("传输失败");
+        line.m_color = RGB(0xE5, 0x39, 0x35);
+        line.m_bold  = true;
+        break;
+
+    //失败且已超出保留期：续传位点作废，措辞要让用户明白"重试已经没用了"
+    case kFolderExpired:
+        line.m_text  = _T("传输失败，已超过可续传的时限");
+        line.m_color = RGB(0xE5, 0x39, 0x35);
+        break;
+
+    //任一端在传输过程中点了「取消」
+    case kFolderUserCanceled:
+        line.m_text = _T("已取消");
+        break;
+
+    //未知状态：宿主漏填 folderState（留了 0），或今后新增状态而本表没跟上。
+    //给一句中性文案，好过让这一行空着
+    default:
+        line.m_text = _T("文件夹传输");
+        break;
+    }
+    return line;
+}
+
+/**
+ *  拼出文件夹气泡的摘要行文字，形如「128 个文件 · 12 个目录 · 共 2.4 GB」。
+ *  目录数为 0 时省掉中间那一段——单层目录的文件夹说"0 个目录"没有意义。
+ *  @param msg 本行承载的消息（读 folderFileCount / folderDirCount / folderSize）
+ *  @return 摘要行文字
+ */
+CString BuildFolderSummaryText(const ChatMessage& msg)
+{
+    CString text;
+    if (msg.folderDirCount > 0)
+    {
+        text.Format(_T("%d 个文件 · %d 个目录 · 共 %s"),
+                    msg.folderFileCount, msg.folderDirCount,
+                    (LPCTSTR)msg.folderSize);
+    }
+    else
+    {
+        text.Format(_T("%d 个文件 · 共 %s"),
+                    msg.folderFileCount, (LPCTSTR)msg.folderSize);
+    }
+    return text;
 }
 
 // 向 path 添加一个圆角矩形。
@@ -496,6 +728,9 @@ CString MessageCopyText(const ChatMessage& msg)
         return msg.text;
     case kMsgFile:
         return msg.fileName;
+    case kMsgFolder:
+        //与文件同理：给文件夹名比给"[文件夹]"有信息量，一个会话里可能发过好几个文件夹
+        return msg.folderName;
     case kMsgImage:
         return msg.imageCaption.IsEmpty()
                    ? CString(_T("[图片]")) : msg.imageCaption;
@@ -532,6 +767,8 @@ ChatBubble::ChatBubble()
     , m_avatarLoadTried(false)
     , m_fileBtnCount(0)
     , m_fileHoverIdx(-1)
+    , m_folderBtnCount(0)
+    , m_folderHoverIdx(-1)
     , m_renderDC(NULL)
     , m_renderBmp(NULL)
     , m_renderOldBmp(NULL)
@@ -554,6 +791,12 @@ ChatBubble::ChatBubble()
     {
         ::SetRectEmpty(&m_fileBtnRect[i]);
         m_fileBtnAction[i] = 0;
+    }
+    for (int i = 0; i < kMaxChatFolderActions; ++i)
+    {
+        ::SetRectEmpty(&m_folderBtnRect[i]);
+        m_folderBtnAction[i]  = 0;
+        m_folderBtnEnabled[i] = false;
     }
 }
 
@@ -583,7 +826,8 @@ bool ChatBubble::IsRenderCacheable() const
     }
 
     // 文字 / emoji / 时间分隔行绘制时不记录任何宿主坐标系命中矩形，可安全缓存。
-    // 图片 / 文件行绘制时要写 m_imageRect / m_fileBtnRect 供命中测试，不能缓存。
+    // 图片 / 文件 / 文件夹行绘制时要写 m_imageRect / m_fileBtnRect / m_folderBtnRect
+    // 供命中测试，不能缓存。
     return m_msg.kind == kMsgText
         || m_msg.kind == kMsgEmoji
         || m_msg.kind == kMsgTime;
@@ -1246,6 +1490,10 @@ int ChatBubble::GetRowHeight() const
         // 文件气泡高随状态变化（有无进度条 / 按钮行）。
         bubbleH = FileBubbleHeight(m_msg.fileState, m_msg.fromMe);
         break;
+    case kMsgFolder:
+        // 文件夹气泡高随状态变化（有无进度条 / 失败原因行 / 按钮行）。
+        bubbleH = FolderBubbleHeight(m_msg.folderState, m_msg.fromMe, m_msg.folderErrCode);
+        break;
     default:
         bubbleH = kTextBubbleH;
         break;
@@ -1268,12 +1516,6 @@ int ChatBubble::GetRowHeight() const
         stackH = kAvatarSize;
     }
     return stackH + kRowVMargin * 2;
-}
-
-bool ChatBubble::OnMouseWheel(POINT pt, short zDelta, UINT mkFlags)
-{
-    DuiControl* parent = GetParent();
-    return (parent != NULL) ? parent->OnMouseWheel(pt, zDelta, mkFlags) : false;
 }
 
 bool ChatBubble::OnLButtonDown(POINT pt, UINT /*mkFlags*/)
@@ -1356,6 +1598,19 @@ bool ChatBubble::OnLButtonDown(POINT pt, UINT /*mkFlags*/)
             return true;
         }
     }
+
+    // 非多选：文件夹气泡底部操作链接命中 → 发动作给宿主聊天窗（接收 / 另存为 / 拒绝 /
+    // 取消 / 重试续传 / 重新发送 / 打开文件夹）。不可用的按钮在 FolderLinkAtPoint 里就已被
+    // 排除，走不到这里。
+    if (m_msg.kind == kMsgFolder)
+    {
+        int idx = FolderLinkAtPoint(pt);
+        if (idx >= 0)
+        {
+            HandleFolderButton(m_folderBtnAction[idx]);
+            return true;
+        }
+    }
     return false;
 }
 
@@ -1398,6 +1653,53 @@ int ChatBubble::FileLinkAtPoint(POINT pt) const
     return -1;
 }
 
+void ChatBubble::HandleFolderButton(int action)
+{
+    balloonwjui::DuiHost* host = GetHost();
+    HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+    if (hwnd == NULL)
+    {
+        return;
+    }
+
+    // 组负载发给宿主聊天窗；宿主处理后 delete（异步 PostMessage，故堆分配传递）。
+    // 气泡不认识传输会话，也不碰资源管理器与网络，只如实上报"这条气泡上点了哪个动作"。
+    ChatFolderActionData* d = new ChatFolderActionData();
+    d->action     = action;
+    d->fromMe     = m_msg.fromMe;
+    d->sessionId  = m_msg.folderSessionId;
+    d->folderName = m_msg.folderName;
+    d->localRoot  = m_msg.folderLocalRoot;
+    d->fileCount  = m_msg.folderFileCount;
+    d->sizeBytes  = m_msg.folderSizeBytes;
+    if (!::PostMessage(hwnd, WM_CHAT_FOLDER_ACTION, 0, (LPARAM)d))
+    {
+        delete d;
+    }
+}
+
+int ChatBubble::FolderLinkAtPoint(POINT pt) const
+{
+    if (m_msg.kind != kMsgFolder)
+    {
+        return -1;
+    }
+    for (int bi = 0; bi < m_folderBtnCount; ++bi)
+    {
+        //置灰的按钮只是告知"有这条路、眼下走不通"，不参与命中：既不给手型光标，
+        //也不给悬停高亮，更不该点得动
+        if (!m_folderBtnEnabled[bi])
+        {
+            continue;
+        }
+        if (::PtInRect(&m_folderBtnRect[bi], pt))
+        {
+            return bi;
+        }
+    }
+    return -1;
+}
+
 bool ChatBubble::OnMouseMove(POINT pt, UINT /*mkFlags*/)
 {
     // 正在拖拽选择文字：把当前点映射成字符下标作为选区另一端。
@@ -1419,6 +1721,17 @@ bool ChatBubble::OnMouseMove(POINT pt, UINT /*mkFlags*/)
         if (idx != m_fileHoverIdx)
         {
             m_fileHoverIdx = idx;
+            Invalidate();
+        }
+    }
+
+    // 文件夹行：同上，各自维护自己的悬停下标。
+    if (m_msg.kind == kMsgFolder)
+    {
+        const int idx = FolderLinkAtPoint(pt);
+        if (idx != m_folderHoverIdx)
+        {
+            m_folderHoverIdx = idx;
             Invalidate();
         }
     }
@@ -1474,10 +1787,15 @@ void ChatBubble::OpenLinkByIndex(int index)
 
 bool ChatBubble::OnMouseLeave()
 {
-    // 光标离开本行：清除文件链接悬停态并重绘。
+    // 光标离开本行：清除文件 / 文件夹链接的悬停态并重绘。
     if (m_fileHoverIdx != -1)
     {
         m_fileHoverIdx = -1;
+        Invalidate();
+    }
+    if (m_folderHoverIdx != -1)
+    {
+        m_folderHoverIdx = -1;
         Invalidate();
     }
     return false;
@@ -1487,6 +1805,12 @@ bool ChatBubble::OnSetCursor(POINT pt)
 {
     // 光标落在文件操作链接上：显示手型光标（超链接感）。
     if (FileLinkAtPoint(pt) >= 0)
+    {
+        ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+        return true;
+    }
+    // 文件夹操作链接同理（置灰的按钮不在其中，故不会给出可点的暗示）。
+    if (FolderLinkAtPoint(pt) >= 0)
     {
         ::SetCursor(::LoadCursor(NULL, IDC_HAND));
         return true;
@@ -2100,6 +2424,10 @@ void ChatBubble::RenderContent(HDC hdc)
         bubbleW = kFileBubbleW;
         bubbleH = FileBubbleHeight(m_msg.fileState, m_msg.fromMe);
         break;
+    case kMsgFolder:
+        bubbleW = kFolderBubbleW;
+        bubbleH = FolderBubbleHeight(m_msg.folderState, m_msg.fromMe, m_msg.folderErrCode);
+        break;
     default:
         break;
     }
@@ -2348,6 +2676,80 @@ void ChatBubble::RenderContent(HDC hdc)
         m_fileBtnCount = 0;
         for (int bi = 0; bi < 3; ++bi)
             ::SetRectEmpty(&m_fileBtnRect[bi]);
+    }
+    else if (m_msg.kind == kMsgFolder)
+    {
+        const int st    = m_msg.folderState;
+        const int iconX = bubbleX + kFolderPadH;
+        const int iconY = bubbleY + kFolderIconTop;
+
+        // ---- 图标底块（圆角方块）+ 块内的文件夹图标 ----
+        // 与文件气泡的类型色块同尺寸同圆角，只是底色固定、块内画的是线性图标而不是
+        // 扩展名文字 —— 两种气泡并排时，形状一致而内容有别，一眼分得清。
+        {
+            Gdiplus::GraphicsPath blockPath;
+            AddRoundRect(blockPath, (Gdiplus::REAL)iconX, (Gdiplus::REAL)iconY,
+                         (Gdiplus::REAL)kFolderIconSize, (Gdiplus::REAL)kFolderIconSize, 6.0f);
+            Gdiplus::SolidBrush blockBrush(Gdiplus::Color(255,
+                GetRValue(kFolderBlockColor), GetGValue(kFolderBlockColor),
+                GetBValue(kFolderBlockColor)));
+            g.FillPath(&blockBrush, &blockPath);
+        }
+        {
+            //图标在底块内居中；描边宽度按 viewBox 24 的口径给（与工具栏那枚同一套画法）
+            const Gdiplus::REAL glyphX = (Gdiplus::REAL)(iconX + (kFolderIconSize - kFolderGlyphSize) / 2);
+            const Gdiplus::REAL glyphY = (Gdiplus::REAL)(iconY + (kFolderIconSize - kFolderGlyphSize) / 2);
+            DrawChatIcon(g, kChatIconFolder, glyphX, glyphY,
+                         (Gdiplus::REAL)kFolderGlyphSize,
+                         Gdiplus::Color(255, 255, 255, 255), 2.0f);
+        }
+
+        // ---- 进度条（传输中 / 失败 / 已过保留期 / 用户取消）----
+        // 画不画一律问 FolderStateHasProgress，绝不在这里另写一份状态判断 —— 它与
+        // FolderBubbleHeight 里留高度的那次判断必须是同一个答案。
+        if (FolderStateHasProgress(st))
+        {
+            const int barX = bubbleX + kFolderPadH;
+            const int barY = bubbleY + kFolderHeaderH;
+            const int barW = bubbleW - kFolderPadH * 2;
+            {
+                Gdiplus::GraphicsPath track;
+                AddRoundRect(track, (Gdiplus::REAL)barX, (Gdiplus::REAL)barY,
+                             (Gdiplus::REAL)barW, (Gdiplus::REAL)kFolderProgressH, 2.5f);
+                Gdiplus::SolidBrush trackBrush(Gdiplus::Color(255, 0xE3, 0xE0, 0xDC));
+                g.FillPath(&trackBrush, &track);
+            }
+            int pct = m_msg.folderProgress;
+            if (pct < 0)
+                pct = 0;
+            if (pct > 100)
+                pct = 100;
+            const int fillW = barW * pct / 100;
+            if (fillW > 0)
+            {
+                //传输中用主题橙，失败用红（停在中断处），已过保留期与用户取消用灰 ——
+                //后两者点不动续传了，颜色上就不该再显得"还在进行"
+                COLORREF pc = (st == kFolderTransferring) ? RGB(0xFF, 0x7A, 0x45)
+                            : (st == kFolderFailed)       ? RGB(0xE5, 0x39, 0x35)
+                            :                               RGB(0xB0, 0xAD, 0xA8);
+                Gdiplus::GraphicsPath fill;
+                AddRoundRect(fill, (Gdiplus::REAL)barX, (Gdiplus::REAL)barY,
+                             (Gdiplus::REAL)fillW, (Gdiplus::REAL)kFolderProgressH, 2.5f);
+                Gdiplus::SolidBrush fb(Gdiplus::Color(255,
+                    GetRValue(pc), GetGValue(pc), GetBValue(pc)));
+                g.FillPath(&fb, &fill);
+            }
+        }
+
+        // ---- 底部操作与文件气泡同为文字超链接：文字与命中矩形在下面的 GDI 文字层
+        //      按各自文字宽度从左到右排布、就地填 m_folderBtnRect / m_folderBtnCount；
+        //      此处先清空（仅文件夹行需要）。----
+        m_folderBtnCount = 0;
+        for (int bi = 0; bi < kMaxChatFolderActions; ++bi)
+        {
+            ::SetRectEmpty(&m_folderBtnRect[bi]);
+            m_folderBtnEnabled[bi] = false;
+        }
     }
 
     // ---- 文字层（GDI）----
@@ -2735,8 +3137,183 @@ void ChatBubble::RenderContent(HDC hdc)
         }
     }
 
+    else if (m_msg.kind == kMsgFolder)
+    {
+        const int st      = m_msg.folderState;
+        const int iconX   = bubbleX + kFolderPadH;
+        const int textX   = iconX + kFolderIconSize + kFolderTextGap;   // 文件夹名 / 摘要行左
+        const int textR   = bubbleX + bubbleW - kFolderPadH;            // 气泡内文字右边界
+        const int rowLeft = bubbleX + kFolderPadH;                      // 状态行 / 失败原因行 / 按钮行左
+
+        // ---- 标题行：文件夹名 ----
+        RECT nameRc = { textX, bubbleY + kFolderNameTop,
+                        textR, bubbleY + kFolderNameTop + kFolderNameH };
+        DrawGdiText(hdc, (LPCWSTR)m_msg.folderName, nameRc, 14, false, kBubbleText,
+                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+        // ---- 副标题行：文件数 / 目录数 / 总大小 ----
+        const CString summary = BuildFolderSummaryText(m_msg);
+        RECT sumRc = { textX, bubbleY + kFolderSummaryTop,
+                       textR, bubbleY + kFolderSummaryTop + kFolderSummaryH };
+        DrawGdiText(hdc, (LPCWSTR)summary, sumRc, 11, false, RGB(0x8A, 0x8A, 0x8A),
+                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+        // ---- 状态行：眼下进行到哪一步（传输中还带右端的百分比）----
+        // 有没有进度条一律问 FolderStateHasProgress，与上面 GDI+ 层画进度条、以及
+        // FolderBubbleHeight 里留高度问的是同一个函数，三处不会走偏。
+        const bool hasProgress   = FolderStateHasProgress(st);
+        const int  statusTop     = bubbleY + kFolderHeaderH
+                                 + (hasProgress ? kFolderProgressH : 0)
+                                 + kFolderStatusTopGap;
+        const int  statusBottom  = statusTop + kFolderStatusH;
+        const FolderStatusLine statusLine = BuildFolderStatusLine(m_msg);
+
+        //状态行从右往左分三段：百分比（有进度条时）、"第 i / 共 n 个"计数段、主文字。
+        //先把右侧两段的位置定下来，主文字用剩下的宽度并以省略号收尾 —— 这样被截断的
+        //只会是文件名，"传到第几个了"与百分比始终完整可见。
+        int statusRight = textR;
+        if (hasProgress)
+        {
+            statusRight -= kFolderPctW;
+        }
+        if (!statusLine.m_counter.IsEmpty())
+        {
+            const int counterW = MeasureTextWidth(hdc, (LPCWSTR)statusLine.m_counter, 11);
+            RECT counterRc = { statusRight - counterW, statusTop, statusRight, statusBottom };
+            DrawGdiText(hdc, (LPCWSTR)statusLine.m_counter, counterRc, 11, statusLine.m_bold,
+                        statusLine.m_color,
+                        DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+            statusRight -= counterW + kFolderCounterGap;
+        }
+        RECT stRc = { rowLeft, statusTop, statusRight, statusBottom };
+        DrawGdiText(hdc, (LPCWSTR)statusLine.m_text, stRc, 11, statusLine.m_bold,
+                    statusLine.m_color,
+                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+        if (hasProgress)
+        {
+            int pct = m_msg.folderProgress;
+            if (pct < 0)
+                pct = 0;
+            if (pct > 100)
+                pct = 100;
+            CString pctText;
+            pctText.Format(_T("%d%%"), pct);
+            RECT pctRc = { textR - kFolderPctW, statusTop, textR, statusBottom };
+            DrawGdiText(hdc, (LPCWSTR)pctText, pctRc, 11, statusLine.m_bold,
+                        statusLine.m_color,
+                        DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+        }
+
+        // ---- 失败原因行：只在"没有正常传完 + 宿主带回了错误码"时出现 ----
+        // 文案一律取自 FolderErrorText：同一个错误码在收发两端映射出的是同一句话，
+        // 两个人对着屏幕说"我这边写着什么"时才对得上。
+        const bool hasErrorLine = FolderBubbleHasErrorLine(st, m_msg.folderErrCode);
+        if (hasErrorLine)
+        {
+            const int errTop = statusBottom + kFolderErrorTopGap;
+            RECT errRc = { rowLeft, errTop, textR, errTop + kFolderErrorH };
+            DrawGdiText(hdc, FolderErrorText(m_msg.folderErrCode), errRc, 11, false,
+                        RGB(0xE5, 0x39, 0x35),
+                        DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+        }
+
+        // ---- 底部操作：与文件气泡同为文字超链接，按各自文字宽度从左到右排布，
+        //      整行高度作命中矩形（便于点击），就地填 m_folderBtnRect / m_folderBtnAction /
+        //      m_folderBtnEnabled。按钮数与动作全部取自 FolderButtonActions，本处不做
+        //      任何状态判断 —— 这正是把那套映射抽成纯逻辑模块的目的。----
+        int acts[kMaxChatFolderActions];
+        m_folderBtnCount = FolderButtonActions(st, m_msg.fromMe, acts);
+        if (m_folderBtnCount > 0)
+        {
+            const int rowTop    = statusBottom
+                                + (hasErrorLine ? (kFolderErrorTopGap + kFolderErrorH) : 0)
+                                + kFolderBtnTopGap;
+            const int rowBottom = rowTop + kFolderBtnH;
+            int linkX = rowLeft;
+            for (int bi = 0; bi < m_folderBtnCount; ++bi)
+            {
+                const int act = acts[bi];
+                CString   label;
+                COLORREF  lblColor = RGB(0xFF, 0x7A, 0x45);   // 默认主题橙（可点链接）
+                bool      enabled  = true;                     // 默认可用；只有「重试」会被置灰
+                switch (act)
+                {
+                //接收：接收端同意接收，直接落到本机默认的文件夹接收目录，不再打断用户
+                //选位置。主动作，用主题橙
+                case kChatFolderAccept:
+                    label = _T("接收");
+                    break;
+
+                //另存为：同样是同意接收，但先由宿主弹出「选择保存位置」。它与「接收」
+                //只差落地目录从哪来，属于同一类动作的次要入口，故用灰色链接，把主题橙
+                //留给「接收」
+                case kChatFolderSaveAs:
+                    label    = _T("另存为");
+                    lblColor = RGB(0x8A, 0x8A, 0x8A);
+                    break;
+
+                //拒绝：次要动作，灰色链接，免得与「接收」抢注意力
+                case kChatFolderReject:
+                    label    = _T("拒绝");
+                    lblColor = RGB(0x8A, 0x8A, 0x8A);
+                    break;
+
+                //取消：邀请态是撤回邀请、传输中是中止传输，两端都可能出现。同为次要动作
+                case kChatFolderCancel:
+                    label    = _T("取消");
+                    lblColor = RGB(0x8A, 0x8A, 0x8A);
+                    break;
+
+                //打开文件夹：完成后两端都有。接收端开落地目录、发送端开源目录，
+                //开哪个由宿主按 fromMe 决定，气泡这一层不区分
+                case kChatFolderOpenFolder:
+                    label = _T("打开文件夹");
+                    break;
+
+                //重新发送：会话已不可续传（保留期过 / 被取消），从零发起一次完整传输。
+                //\x21BB = ↻ 循环箭头，与文件气泡的重试用同一枚字符
+                case kChatFolderResend:
+                    label = _T("\x21BB 重新发送");
+                    break;
+
+                //重试续传：仅失败态的发送端有。可用性问 FolderRetryEnabled ——
+                //保留期已过时按钮仍画出来（让用户知道有这条路），但置灰且点不动
+                case kChatFolderRetry:
+                default:
+                    label   = _T("\x21BB 重试");
+                    enabled = FolderRetryEnabled(st, m_msg.fromMe, m_msg.folderWithinRetry);
+                    lblColor = enabled ? RGB(0xE5, 0x39, 0x35) : RGB(0xB8, 0xB5, 0xB1);
+                    break;
+                }
+
+                const int linkW = MeasureTextWidth(hdc, (LPCWSTR)label, kFolderLinkPx);
+                RECT linkRc = { linkX, rowTop, linkX + linkW, rowBottom };
+                // 悬停的链接：颜色加深（×4/5）+ 加下划线，作 hover 反馈。置灰的按钮
+                // 不参与悬停（FolderLinkAtPoint 已把它排除），故这里恒为 false。
+                const bool hover = (bi == m_folderHoverIdx);
+                const COLORREF drawColor = hover
+                    ? RGB(GetRValue(lblColor) * 4 / 5, GetGValue(lblColor) * 4 / 5,
+                          GetBValue(lblColor) * 4 / 5)
+                    : lblColor;
+                //文字垂直居中于按钮行；命中矩形取满行高，整列可点
+                DrawGdiText(hdc, (LPCWSTR)label, linkRc, kFolderLinkPx, false, drawColor,
+                            DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP,
+                            false /*italic*/, hover /*underline*/, false /*strike*/);
+                m_folderBtnRect[bi]    = linkRc;
+                m_folderBtnAction[bi]  = act;
+                m_folderBtnEnabled[bi] = enabled;
+                linkX += linkW + kFolderLinkGap;
+            }
+        }
+    }
+
     // ---- "已读"回执（自己消息）----
-    if (isMe)
+    //
+    // 文件夹行不画：它是本地气泡，既不发 cmd_send_message、也不进服务端消息表，压根不存在
+    // 「对方读没读」这回事（见 docs/单聊文件夹传输方案.md 7.2 节「本地气泡」）。它的进展
+    // 全部由气泡自己的状态行与进度条表达。
+    if (isMe && m_msg.kind != kMsgFolder)
     {
         const int rcY = bubbleY + bubbleH + 2;
         const int txtW = MeasureTextWidth(hdc, L"已读", 10);

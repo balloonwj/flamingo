@@ -18,7 +18,7 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/DuiControl.h"
+#include "../../../third-party/balloonui/balloonui/DuiControl.h"
 
 // 只用到 Gdiplus::Bitmap 的指针，前置声明以免在头文件里拉入沉重的 <gdiplus.h>。
 namespace Gdiplus { class Bitmap; }

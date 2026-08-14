@@ -34,7 +34,7 @@ namespace balloonmain {
 /**
  *  取某个在线状态对应的徽标字形（MainPanelIcons.h 的 IconKind 取值）。
  *
- *    presence：v2 在线状态（presence_type，见 net/Protocol.h）。隐身与一切越界取值
+ *    presence：v2 在线状态（presence_type，见 net/Protocol.h）。一切越界取值
  *              统一归到"离线"的空心环 —— 与 NormalizePresenceForMenu / GetPresenceVisual
  *              的兜底口径一致，保证"胶囊显示离线"与"图标画成离线环"不会互相矛盾。
  *

@@ -19,6 +19,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\net\FrameCrypto.cpp" />
+    <ClCompile Include="..\net\FramePayload.cpp" />
     <ClCompile Include="..\base\AsyncLog.cpp" />
     <ClCompile Include="..\base\ConfigFileReader.cpp" />
     <ClCompile Include="..\base\CountDownLatch.cpp" />
@@ -34,6 +36,8 @@
     <ClCompile Include="..\chatserversrc\StarredProtocol.cpp" />
     <ClCompile Include="..\chatserversrc\StarredManager.cpp" />
     <ClCompile Include="..\chatserversrc\ContactRemarkManager.cpp" />
+    <ClCompile Include="..\chatserversrc\ContactTagProtocol.cpp" />
+    <ClCompile Include="..\chatserversrc\ContactTagManager.cpp" />
     <ClCompile Include="..\chatserversrc\UpdateProtocol.cpp" />
     <ClCompile Include="..\chatserversrc\ClientVersionManager.cpp" />
     <ClCompile Include="..\chatserversrc\UpdatePackageScanner.cpp" />
@@ -50,6 +54,8 @@
     <ClCompile Include="..\chatserversrc\RemoteDesktopManager.cpp" />
     <ClCompile Include="..\chatserversrc\CallProtocol.cpp" />
     <ClCompile Include="..\chatserversrc\CallManager.cpp" />
+    <ClCompile Include="..\chatserversrc\FolderTransferManager.cpp" />
+    <ClCompile Include="..\chatserversrc\FolderTransferProtocol.cpp" />
     <ClCompile Include="..\chatserversrc\MessageManager.cpp" />
     <ClCompile Include="..\chatserversrc\MessagePinManager.cpp" />
     <ClCompile Include="..\chatserversrc\GroupProtocol.cpp" />
@@ -81,7 +87,10 @@
     <ClCompile Include="..\chatserversrc\MonitorSession.cpp" />
     <ClCompile Include="..\chatserversrc\TcpSession.cpp" />
     <ClCompile Include="..\chatserversrc\UserManager.cpp" />
-    <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp" />
+    <!-- jsoncpp 原版源码，同上 -->
+    <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp">
+      <DisableSpecificWarnings>4244</DisableSpecificWarnings>
+    </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_value.cpp" />
     <ClCompile Include="..\jsoncpp1.9.0\json_writer.cpp" />
     <ClCompile Include="..\dbapi\DbConfig.cpp" />
@@ -134,8 +143,14 @@
     <ClCompile Include="..\zlib1.2.11\deflate.c" />
     <ClCompile Include="..\zlib1.2.11\gzclose.c" />
     <ClCompile Include="..\zlib1.2.11\gzlib.c" />
-    <ClCompile Include="..\zlib1.2.11\gzread.c" />
-    <ClCompile Include="..\zlib1.2.11\gzwrite.c" />
+    <!-- zlib 原版源码，size_t 收窄的告警属于上游写法，不改第三方代码，只在本工程里压制 -->
+    <ClCompile Include="..\zlib1.2.11\gzread.c">
+      <DisableSpecificWarnings>4267</DisableSpecificWarnings>
+    </ClCompile>
+    <!-- zlib 原版源码，size_t 收窄的告警属于上游写法，不改第三方代码，只在本工程里压制 -->
+    <ClCompile Include="..\zlib1.2.11\gzwrite.c">
+      <DisableSpecificWarnings>4267</DisableSpecificWarnings>
+    </ClCompile>
     <ClCompile Include="..\zlib1.2.11\infback.c" />
     <ClCompile Include="..\zlib1.2.11\inffast.c" />
     <ClCompile Include="..\zlib1.2.11\inflate.c" />
@@ -147,6 +162,8 @@
     <ClCompile Include="..\zlib1.2.11\zutil.c" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\net\FrameCrypto.h" />
+    <ClInclude Include="..\net\FramePayload.h" />
     <ClInclude Include="..\base\AsyncLog.h" />
     <ClInclude Include="..\base\ConfigFileReader.h" />
     <ClInclude Include="..\utils\ServerConfigLoader.h" />
@@ -165,6 +182,8 @@
     <ClInclude Include="..\chatserversrc\StarredProtocol.h" />
     <ClInclude Include="..\chatserversrc\StarredManager.h" />
     <ClInclude Include="..\chatserversrc\ContactRemarkManager.h" />
+    <ClInclude Include="..\chatserversrc\ContactTagProtocol.h" />
+    <ClInclude Include="..\chatserversrc\ContactTagManager.h" />
     <ClInclude Include="..\chatserversrc\UpdateProtocol.h" />
     <ClInclude Include="..\chatserversrc\ClientVersionManager.h" />
     <ClInclude Include="..\chatserversrc\UpdatePackageScanner.h" />
@@ -228,6 +247,8 @@
     <ClInclude Include="..\jsoncpp1.9.0\writer.h" />
     <ClInclude Include="..\dbapi\DbConfig.h" />
     <ClInclude Include="..\dbapi\DbFactory.h" />
+    <ClInclude Include="..\dbapi\DbRetryPolicy.h" />
+    <ClInclude Include="..\dbapi\DbTransaction.h" />
     <ClInclude Include="..\dbapi\SqlDialect.h" />
     <ClInclude Include="..\dbapi\Field.h" />
     <ClInclude Include="..\dbapi\IDatabase.h" />
@@ -347,8 +368,6 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>./</OutDir>
-    <IncludePath>../mysql-5.1.73-win32/;$(IncludePath)</IncludePath>
-    <LibraryPath>../mysql-5.1.73-win32/lib/debug/;$(LibraryPath)</LibraryPath>
     <IntDir>chatserver/$(Configuration)\</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -356,49 +375,42 @@
     <!-- x64 的产物与中间文件都放进各自的子目录，免得与 Win32 的同名产物互相覆盖 -->
     <OutDir>x64\$(Configuration)\</OutDir>
     <IntDir>chatserver\x64\$(Configuration)\</IntDir>
-    <!-- x64 的 MySQL 客户端用 MariaDB Connector/C 3.4.9（源码在 ../mariadb-connector-c-3.4.9，
-         编译产物装在 ../mariadb-connector-x64）。仓库自带的 mysql-5.1.73-win32 只有 32 位库，
-         x64 用不了。第二个包含目录是给连接器头文件之间的平铺互相引用（如 #include <mariadb_com.h>）用的 -->
-    <IncludePath>..\mariadb-connector-x64\include;..\mariadb-connector-x64\include\mysql;$(IncludePath)</IncludePath>
-    <LibraryPath>..\mariadb-connector-x64\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>./</OutDir>
     <IntDir>chatserver/$(Configuration)\</IntDir>
-    <IncludePath>../mysql-5.1.73-win32/;$(IncludePath)</IncludePath>
-    <LibraryPath>../mysql-5.1.73-win32/lib/debug/;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <!-- x64 的产物与中间文件都放进各自的子目录，免得与 Win32 的同名产物互相覆盖 -->
     <OutDir>x64\$(Configuration)\</OutDir>
     <IntDir>chatserver\x64\$(Configuration)\</IntDir>
-    <!-- x64 的 MySQL 客户端用 MariaDB Connector/C 3.4.9（源码在 ../mariadb-connector-c-3.4.9，
-         编译产物装在 ../mariadb-connector-x64）。仓库自带的 mysql-5.1.73-win32 只有 32 位库，
-         x64 用不了。第二个包含目录是给连接器头文件之间的平铺互相引用（如 #include <mariadb_com.h>）用的 -->
-    <IncludePath>..\mariadb-connector-x64\include;..\mariadb-connector-x64\include\mysql;$(IncludePath)</IncludePath>
-    <LibraryPath>..\mariadb-connector-x64\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
+      <AdditionalIncludeDirectories>..\deps\mariadb-connector\include;..\deps\mariadb-connector\include\mysql;..\deps\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_LIB;__LCC__;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_DEBUG;_CONSOLE;_LIB;__LCC__;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
+      <AdditionalLibraryDirectories>..\deps\mariadb-connector\lib\$(Platform)\$(Configuration);..\deps\libsodium\lib\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <OutputFile>./$(TargetName)$(TargetExt)</OutputFile>
-      <AdditionalDependencies>libmysql.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>mariadbclient.lib;libsodium.lib;ws2_32.lib;shlwapi.lib;crypt32.lib;bcrypt.lib;secur32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
+      <AdditionalIncludeDirectories>..\deps\mariadb-connector\include;..\deps\mariadb-connector\include\mysql;..\deps\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -406,22 +418,21 @@
       <SDLCheck>true</SDLCheck>
     <!-- WIN32 必须定义：全仓库判断平台用的是裸 WIN32（见 base/Platform.h），而不是 MSVC 自带的
          _WIN32。x64 下不定义它会走进 POSIX 分支，编译必然失败 -->
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
+      <AdditionalLibraryDirectories>..\deps\mariadb-connector\lib\$(Platform)\$(Configuration);..\deps\libsodium\lib\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
-      <AdditionalDependencies>libmariadb.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>mariadbclient.lib;libsodium.lib;ws2_32.lib;shlwapi.lib;crypt32.lib;bcrypt.lib;secur32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
-    <PostBuildEvent>
-      <Command>copy /Y "$(ProjectDir)..\mariadb-connector-x64\lib\libmariadb.dll" "$(OutDir)" &gt;nul</Command>
-      <Message>copy MariaDB Connector/C runtime dll to output dir</Message>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
+      <AdditionalIncludeDirectories>..\deps\mariadb-connector\include;..\deps\mariadb-connector\include\mysql;..\deps\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -429,23 +440,26 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;__LCC__;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;NDEBUG;_CONSOLE;__LCC__;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <InlineFunctionExpansion>OnlyExplicitInline</InlineFunctionExpansion>
       <WholeProgramOptimization>true</WholeProgramOptimization>
       <FavorSizeOrSpeed>Speed</FavorSizeOrSpeed>
     </ClCompile>
     <Link>
+      <AdditionalLibraryDirectories>..\deps\mariadb-connector\lib\$(Platform)\$(Configuration);..\deps\libsodium\lib\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <OutputFile>./$(TargetName)$(TargetExt)</OutputFile>
-      <AdditionalDependencies>libmysql.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>mariadbclient.lib;libsodium.lib;ws2_32.lib;shlwapi.lib;crypt32.lib;bcrypt.lib;secur32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
+      <AdditionalIncludeDirectories>..\deps\mariadb-connector\include;..\deps\mariadb-connector\include\mysql;..\deps\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -458,21 +472,18 @@
       <SDLCheck>true</SDLCheck>
     <!-- WIN32 必须定义：全仓库判断平台用的是裸 WIN32（见 base/Platform.h），而不是 MSVC 自带的
          _WIN32。x64 下不定义它会走进 POSIX 分支，编译必然失败 -->
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
     </ClCompile>
     <Link>
+      <AdditionalLibraryDirectories>..\deps\mariadb-connector\lib\$(Platform)\$(Configuration);..\deps\libsodium\lib\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
-      <AdditionalDependencies>libmariadb.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>mariadbclient.lib;libsodium.lib;ws2_32.lib;shlwapi.lib;crypt32.lib;bcrypt.lib;secur32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
-    <PostBuildEvent>
-      <Command>copy /Y "$(ProjectDir)..\mariadb-connector-x64\lib\libmariadb.dll" "$(OutDir)" &gt;nul</Command>
-      <Message>copy MariaDB Connector/C runtime dll to output dir</Message>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

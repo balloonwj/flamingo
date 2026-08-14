@@ -11,6 +11,7 @@
 #include "ImageUploadDriver.h"      // 上传分片驱动（按"图片/文件"通用设计，文件复用）
 #include "ImageDownloadDriver.h"    // 下载分片驱动（同上）
 #include "FrameCodec.h"             // encodeFrame / encodeAttachmentBody / decodeFrame（内含 Protocol.h）
+#include "FramePayload.h"           // decodeFramePayload（收包时的解密与解压）
 #include "../UserSessionData.h"     // FMG_MSG_V2_FILE_*
 #include "../IULog.h"               // LOG_INFO / LOG_ERROR
 #include "../MD5Sum.h"              // MD5Init / MD5Update / MD5Final
@@ -203,6 +204,13 @@ public:
     bool RecvFrame(std::string& body, int timeoutSec) override
     {
         return m_owner->RecvOneFileFrame(body, timeoutSec);
+    }
+
+    //共享文件连接的加解密器由 CIUSocket 持有（socket 也在它那儿），
+    //本通道只是转发壳、每笔传输新建一个，不能自己持有加密器
+    net::FrameCipher* GetCipher() override
+    {
+        return CIUSocket::GetInstance().GetFileCipher();
     }
 
 private:
@@ -1263,8 +1271,22 @@ bool FileTransfer::RecvOneFileFrame(std::string& body, int timeoutSec)
                          MAX_BODY_FILESERVER) != net::frame_decode_ok)
         return false;
 
-    //上传 ack / 下载分片描述符帧均不压缩，包体即明文
-    body.swap(decoded);
+    //还原包体：握手完成后服务端发来的包体是加密的，须在此解出明文再交给业务层。
+    //解压也一并由 FramePayload 处理（本链路的帧目前都不压缩，但按标志位走才不会
+    //在服务端哪天开了压缩之后悄悄解错）。
+    std::string err;
+    if (!net::decodeFramePayload(header.cmd, header.seq, header.flags, header.originlen,
+                                 decoded, CIUSocket::GetInstance().GetFileCipher(),
+                                 body, err))
+    {
+        LOG_ERROR("RecvOneFileFrame: restore body failed: %s, cmd=%u, bodylen=%u.",
+                  err.c_str(), header.cmd, (uint32_t)decoded.size());
+        //解密失败意味着这个方向的流已不可恢复，连接不能再用。关掉它，
+        //下一笔传输会重新建连并重新握手。
+        CIUSocket::GetInstance().CloseFileServerConnection();
+        return false;
+    }
+
     return true;
 }
 

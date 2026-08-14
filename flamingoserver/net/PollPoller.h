@@ -1,6 +1,8 @@
 ﻿#pragma once
 
 #ifndef WIN32
+//SOCKET 类型来自这里：Windows 下是 winsock 的 UINT_PTR，POSIX 下是 int
+#include "../base/Platform.h"
 #include "Poller.h"
 
 #include <vector>
@@ -32,7 +34,7 @@ namespace net
 
     private:
         typedef std::vector<struct pollfd>  PollFdList;
-        typedef std::map<int, Channel*>     ChannelMap;
+        typedef std::map<SOCKET, Channel*>  ChannelMap;
 
         ChannelMap                          m_channels;
         PollFdList                          m_pollfds;

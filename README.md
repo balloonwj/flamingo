@@ -65,7 +65,7 @@ flamingoclient/
 ├── Source/         客户端主程序。Balloon* 子目录按界面模块划分（主面板、聊天窗、
 │                   通讯录、群管理、历史记录、截图、远程桌面等），net/ 为协议层
 ├── balloonui/      自绘控件库（独立的 git 仓库，见下文说明）
-├── iAutoUpdate/    自动升级用的 zip 解压工具
+├── FlamingoUpdater/    自动升级用的 zip 解压工具
 └── Bin/            运行目录，含 Skins / Image / Face / Sound / config 等资源
 
 flamingoAdmin/
@@ -212,7 +212,7 @@ Windows 下编译 `Tests` 工程后运行 `windowsproj/Tests.exe` 即可。
 | `Flamingo` | PC 客户端主程序 |
 | `balloonui_static` | 自绘控件库，客户端界面由它绘制 |
 | `FlamingoUnit` | 客户端单元测试（Catch2） |
-| `iUpdateAuto` | 自动升级用的 zip 解压工具 |
+| `FlamingoUpdater` | 自动升级用的 zip 解压工具 |
 | `opus_static` / `speexdsp_static` | 音视频通话用的第三方音频库 |
 
 ##### 输出目录
@@ -253,7 +253,7 @@ Flamingo.exe --profile         # 个人资料
 
 ##### 关于 balloonui
 
-`flamingoclient/balloonui/` 是客户端使用的自绘控件库，**它是一个独立的 git 仓库**，有自己的提交历史与远端，不随主仓库一起提交。修改该目录下的代码需要单独提交到它自己的仓库。
+`third-party/balloonui/` 是自绘控件库，PC 客户端与 flamingoAdmin 控制台共用同一份。**它是一个独立的 git 仓库**，有自己的提交历史与远端，不随主仓库一起提交。修改该目录下的代码需要单独提交到它自己的仓库。（2026-08-13 之前它位于 `flamingoclient/balloonui/`。）
 
 #### 企业管理控制台
 

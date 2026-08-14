@@ -15,6 +15,7 @@
 #include "../sqliteapi/SqliteManager.h"
 #include "../utils/AppPath.h"
 #include "../utils/ServerConfigLoader.h"
+#include "../net/FrameCrypto.h"          //协议加密：进程级配置装载
 
 //FLAMINGO_NO_MYSQL 由 CMake 在 -DWITH_MYSQL=OFF 时定义，
 //用于编出一份不依赖 libmysqlclient 的纯本地版本，见 CMakeLists.txt 顶部的说明
@@ -38,6 +39,14 @@
 #include "RemoteDesktopManager.h"
 #include "CallManager.h"
 #include "CallProtocol.h"
+//单聊文件夹传输：内存会话表（含邀请超时与失败保留期的清理）+ 八条信令的报文构造。
+//邀请超时会话的状态推送与留记录已收口到 ChatSession::finishFolderTransferSession，
+//本文件不再直接构造报文；FolderTransferProtocol.h 仍要留着 —— 超时清理用到的
+//folder_state_timeout 与 error_code_folder_invite_timeout 定义在 Protocol.h，
+//而本文件正是经它间接引入 Protocol.h 的（ChatSession.h 因与遗留的 Msg.h 枚举同名，
+//刻意不包含 Protocol.h）
+#include "FolderTransferManager.h"
+#include "FolderTransferProtocol.h"
 #include "DepartmentManager.h"
 #include "AdminManager.h"
 #include "EnterpriseManager.h"
@@ -89,6 +98,89 @@ static void PublishDueAnnouncementsTick()
     for (size_t i = 0; i < publishedIds.size(); ++i)
     {
         Singleton<ChatServer>::Instance().broadcastAnnouncementPublished(publishedIds[i]);
+    }
+}
+
+//单聊文件夹传输的会话清理扫描周期（微秒）。邀请超时默认 30 分钟、失败会话保留期默认
+//10 分钟，两者都远大于本周期，故 5 秒一轮足以让"到点"与"实际被清理"之间的偏差可以忽略；
+//会话表本身很小（上限即配置项 foldermaxsessions），扫描代价可以不计。
+//取值与音视频通话的超时扫描（CALL_TIMEOUT_SCAN_INTERVAL_US）同一量级
+static const int64_t FOLDER_TRANSFER_SCAN_INTERVAL_US = 5LL * 1000 * 1000;
+
+//一秒折合的毫秒数：文件夹传输会话表一律以 Unix 毫秒计时，而 time(NULL) 给出的是秒
+static const int64_t MILLISECONDS_PER_SECOND = 1000;
+
+/**
+ *  读取一个整型配置项；配置项缺失或写成空值时返回给定的默认值。
+ *
+ *  chatserver 的必填项走 CRequiredConfig 统一校验，而文件夹传输那几项都是可选的
+ *  （老配置文件不改也要能启动），故单独走本函数取值。
+ *
+ *  @param config       已装载好的配置文件读取器
+ *  @param key          配置项名
+ *  @param defaultValue 配置项缺失或为空时的取值
+ *  @return 配置项按十进制解析出的整数值；缺失或为空时为 defaultValue
+ */
+static int64_t ReadOptionalInt64Config(CConfigFileReader& config, const char* key, int64_t defaultValue)
+{
+    const char* value = config.getConfigName(key);
+    if (value == NULL || value[0] == '\0')
+        return defaultValue;
+
+    //foldermaxsize 默认 50 GiB，超出 32 位，故一律按 64 位解析
+    return static_cast<int64_t>(atoll(value));
+}
+
+/**
+ *  单聊文件夹传输的会话清理一轮工作：把邀请超时的会话结束掉并通知双方，把已过失败
+ *  保留期的会话静默销毁。
+ *
+ *  由 main() 注册为 EventLoop 的周期任务（周期见 FOLDER_TRANSFER_SCAN_INTERVAL_US）。
+ *  之所以由 chatserver 主循环驱动而不是挂在某条会话上：超时的判定与任何一条客户端连接
+ *  都无关，发起邀请的那一端完全可能在超时之前就断开；FolderTransferManager 本身又是纯
+ *  逻辑、不持有定时器，时间必须由外部传入。音视频通话的响铃超时清理也是这么做的
+ *  （见下面的 CALL_TIMEOUT_SCAN_INTERVAL_US），两者放在一处便于对照。
+ *
+ *  写成具名函数而不是 lambda，与 PublishDueAnnouncementsTick 一致。
+ */
+static void ReapFolderTransferSessionsTick()
+{
+    int64_t now = static_cast<int64_t>(time(NULL)) * MILLISECONDS_PER_SECOND;
+
+    std::vector<FolderTransferSessionInfo> timedOut;
+    std::vector<FolderTransferSessionInfo> expired;
+    Singleton<FolderTransferManager>::Instance().tick(now, timedOut, expired);
+
+    //（1）邀请超时：会话已被 tick 移出会话表，这里只负责通知。按 docs/协议设计-v2.md
+    //12.2.6 的推送时机表推给<u>双方</u> —— 发送端要把气泡转成"已超时"，接收端也要把
+    //还挂着的「接收 / 拒绝」气泡收起来
+    for (size_t i = 0; i < timedOut.size(); ++i)
+    {
+        std::vector<int64_t> users;
+        users.push_back(timedOut[i].senderId);
+        users.push_back(timedOut[i].receiverId);
+
+        //推终态与留记录一并交给 ChatSession::finishFolderTransferSession —— 全部终态分支
+        //都收口在那一个函数里，本条路径不自己拼推送。它是静态方法，正是为了让这条没有
+        //ChatSession 可用的定时器路径也能走同一个出口（超时的判定与任何一条客户端连接
+        //都无关，发起邀请的那一端完全可能早已断开）
+        ChatSession::finishFolderTransferSession(timedOut[i], folder_state_timeout,
+                                                 error_code_folder_invite_timeout,
+                                                 "invite timeout", users);
+
+        LOGI("folder transfer invite timed out, session: %s, sender: %lld, receiver: %lld.",
+             timedOut[i].sessionid.c_str(),
+             (long long)timedOut[i].senderId, (long long)timedOut[i].receiverId);
+    }
+
+    //（2）失败会话的保留期届满：不推送，客户端的「重试」按钮到点自行置灰；这里只记一条
+    //日志，使"用户点重试却被回 618"能在服务端日志里找到对应的销毁记录
+    for (size_t i = 0; i < expired.size(); ++i)
+    {
+        LOGI("folder transfer session destroyed after retry window, session: %s, "
+             "sender: %lld, receiver: %lld.",
+             expired[i].sessionid.c_str(),
+             (long long)expired[i].senderId, (long long)expired[i].receiverId);
     }
 }
 
@@ -166,6 +258,16 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    //协议加密：读 encryption / serverkeyfile 并加载身份密钥，默认开启。
+    //开着加密却拿不到密钥时必须让启动失败，不能退回明文继续跑。
+    std::string cryptoError;
+    if (!serverconfig::InitProtocolEncryption(config, cryptoError))
+    {
+        serverconfig::ReportStartupFailure(SERVER_NAME,
+            std::string("protocol encryption setup failed: ") + cryptoError);
+        return 1;
+    }
+
     const char* logbinarypackage = config.getConfigName("logbinarypackage");
     if (logbinarypackage != NULL)
     {
@@ -193,11 +295,14 @@ int main(int argc, char* argv[])
 
     std::string logFileFullPath = apppath::ResolveAgainstDirectory(resolvedLogDir, logfilename);
 
-#ifdef _DEBUG
-    CAsyncLog::init();
-#else
+    //<u>不区分 Debug / Release，一律写日志文件</u>。这里原先在 _DEBUG 下调无参的
+    //init()（只输出到 stdout、不落盘），结果是 Debug 版从资源管理器双击、或从
+    //Visual Studio 启动时，stdout 无人接收，logs 目录建了却始终是空的，排查问题时
+    //手上一条日志都没有——现象上很像日志功能坏了。
+    //传文件名<u>不会</u>损失终端输出：CAsyncLog 的写线程里 std::cout 与
+    //OutputDebugStringA 都是无条件执行的，文件只是多出来的一路（见 base/AsyncLog.cpp
+    //的写线程主体）。fileserver 一直就是这么做的，这里与它拉齐。
     CAsyncLog::init(logFileFullPath.c_str());
-#endif
 
     //初始化数据库配置
     const char* dbserver = config.getConfigName("dbserver");
@@ -341,6 +446,45 @@ int main(int argc, char* argv[])
             imgserverhost != NULL ? imgserverhost : "",
             relayport != NULL ? atoi(relayport) : 0);
     }
+    {
+        //单聊文件夹传输的运行参数。
+        //令牌密钥复用 relaytokenkey：中转令牌的格式与签发 / 验签流程与远程桌面、音视频
+        //完全一致，只是角色编号续到 5 / 6，没有理由再配一把。
+        //中转地址与端口复用 fileserverhost / fileserverport：文件夹的字节走 fileserver
+        //<u>现有的那个监听端口</u>，不新开端口，而 cmd_request_upload 的应答里告诉客户端
+        //去哪里收发文件用的正是这两项 —— 同一个服务在配置里只该有一份对外地址，
+        //另立一份迟早会出现"上传能通、文件夹传输连不上"这类两边不一致的故障。
+        //几个上限与超时项都允许缺失：缺时传 0 / 传内置默认值，由 configure 回落到默认值，
+        //老配置文件不改也能启动（folderlanes 特意传默认值而非 0，避免每次启动都记一条
+        //"配置值非法"的告警）。
+        const char* relaytokenkey  = config.getConfigName("relaytokenkey");
+        const char* fileserverhost = config.getConfigName("fileserverhost");
+        const char* fileserverport = config.getConfigName("fileserverport");
+
+        int dataLanes = static_cast<int>(ReadOptionalInt64Config(
+            config, "folderlanes", FolderTransferManager::kDefaultDataLanes));
+        int64_t maxFiles = ReadOptionalInt64Config(
+            config, "foldermaxfiles", FolderTransferManager::kDefaultMaxFiles);
+        int64_t maxSize = ReadOptionalInt64Config(
+            config, "foldermaxsize", FolderTransferManager::kDefaultMaxSize);
+        int maxSessions = static_cast<int>(ReadOptionalInt64Config(
+            config, "foldermaxsessions", FolderTransferManager::kDefaultMaxSessions));
+        //每个用户同时可参与的笔数上限：作发送方与作接收方各算一笔，与整台服务器的
+        //会话总数上限是两道相互独立的闸门
+        int maxSessionsPerUser = static_cast<int>(ReadOptionalInt64Config(
+            config, "foldermaxperuser", FolderTransferManager::kDefaultMaxSessionsPerUser));
+        int64_t inviteTimeoutMs = ReadOptionalInt64Config(
+            config, "folderinvitetimeout", FolderTransferManager::kDefaultInviteTimeoutMs);
+        int64_t retryWindowMs = ReadOptionalInt64Config(
+            config, "folderretrywindow", FolderTransferManager::kDefaultRetryWindowMs);
+
+        Singleton<FolderTransferManager>::Instance().configure(
+            relaytokenkey != NULL ? relaytokenkey : "",
+            fileserverhost != NULL ? fileserverhost : "",
+            fileserverport != NULL ? atoi(fileserverport) : 0,
+            dataLanes, maxFiles, maxSize, maxSessions, maxSessionsPerUser,
+            inviteTimeoutMs, retryWindowMs);
+    }
 
     //初始化群文件存储管理器：v2 t_group_file 表的落库与查询
     if (!Singleton<GroupFileManager>::Instance().init())
@@ -437,15 +581,33 @@ int main(int argc, char* argv[])
             }
         });
 
+    //注册单聊文件夹传输的会话清理：周期扫描邀请超时与失败保留期届满的会话，
+    //前者通知双方、后者静默销毁（见 ReapFolderTransferSessionsTick 的说明）
+    g_mainLoop.runEvery(FOLDER_TRANSFER_SCAN_INTERVAL_US, ReapFolderTransferSessionsTick);
+
+    //三个监听端口各自的网络 I/O 工作线程数。都是可选配置项：缺失或取值非法时回落到各自的
+    //默认值（即本项改造前写死在代码里的那个数）并记一条告警日志，老配置文件不改也能启动、
+    //且行为与改造前完全一致。判定与日志收在 ReadIoThreadCountConfig 里，见
+    //utils/ServerConfigLoader.h。
+    //这段必须放在 CAsyncLog::init() 之后：取值非法时的那条告警要真的写得出来才有意义
+    int ioThreadCount = serverconfig::ReadIoThreadCountConfig(
+                            config, "iothreadnum", ChatServer::kDefaultIoThreadCount);
+    int monitorIoThreadCount = serverconfig::ReadIoThreadCountConfig(
+                                   config, "monitoriothreadnum", MonitorServer::kDefaultIoThreadCount);
+    int httpIoThreadCount = serverconfig::ReadIoThreadCountConfig(
+                                config, "httpiothreadnum", HttpServer::kDefaultIoThreadCount);
+
     //几个监听地址与端口在函数开头已随其它必需配置项一并取出并校验过，这里直接用
-    Singleton<ChatServer>::Instance().init(listenip.c_str(), (short)listenport, &g_mainLoop);
+    Singleton<ChatServer>::Instance().init(listenip.c_str(), (short)listenport, &g_mainLoop,
+                                           ioThreadCount);
 
     Singleton<MonitorServer>::Instance().init(monitorlistenip.c_str(), (short)monitorlistenport,
-                                              &g_mainLoop, monitortoken.c_str());
+                                              &g_mainLoop, monitortoken.c_str(), monitorIoThreadCount);
 
     //注意：HTTP 监听用的是 monitorlistenip 而不是 httplistenip，这是既有行为，
     //改动它会影响现网部署的监听地址，须先与使用方确认，故此处照原样保留
-    Singleton<HttpServer>::Instance().init(monitorlistenip.c_str(), (short)httplistenport, &g_mainLoop);
+    Singleton<HttpServer>::Instance().init(monitorlistenip.c_str(), (short)httplistenport,
+                                           &g_mainLoop, httpIoThreadCount);
 
     LOGI("chatserver initialization completed, now you can use client to connect it.");
 

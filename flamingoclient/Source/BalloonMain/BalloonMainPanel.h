@@ -28,8 +28,8 @@
 #include <utility>
 #include <stdint.h>
 
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
-#include "../../balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 #include "../BalloonChatWnd/BalloonChatWindow.h"
 #include "../BalloonChatWnd/BalloonGroupChatWindow.h"
 #include "../BalloonGroupManage/BalloonGroupManageWindow.h"  // 群管理对话框（成员指针需完整类型）
@@ -41,6 +41,7 @@
 #include "../net/FavoriteProtocolClient.h"          // net::SetFavoriteResult（应答回调形参）
 #include "../net/StarredProtocolClient.h"           // net::SetStarredResult（应答回调形参）
 #include "../net/FriendProtocolClient.h"            // net::SetFriendRemarkResult（设置备注名应答回调形参）
+#include "../net/ContactTagProtocolClient.h"       // net::SetContactTagsResult（设置联系人标签应答回调形参）
 #include "ContactRemarkModel.h"                    // 显示名解析 / 备注提交判定（纯函数）
 #include "UnknownSenderRefreshPolicy.h"            // 陌生发送方补拉通讯录的节流器（成员按值持有，需完整类型）
 #include "OnlineCapability.h"                      // kConnUiOnline（备注提交前的连接态门禁）
@@ -59,6 +60,7 @@
 #include "SignatureEditPopup.h"  // 个性签名内联编辑弹层（成员需完整类型）
 #include "../BalloonHistory/V2MsgStore.h"  // v2 历史消息本地库（成员需完整类型）
 #include "../BalloonHistory/FileLocalStore.h"  // 文件本地落点登记库（单例，传输收尾时登记）
+#include "../BalloonHistory/FolderLocalStore.h"  // 文件夹本地落点登记库（单例，按会话 id 记根目录）
 #include "../BalloonHistory/AnnounceStore.h"   // 平台公告本地库（单例，消息盒子的数据落点）
 #include "../BalloonAnnounce/BalloonAnnounceBoxWindow.h"  // 消息盒子窗口（成员按值持有，需完整类型）
 #include "../BalloonAnnounce/AnnouncePopupWindow.h"       // 新公告桌面提示窗（成员按值持有，需完整类型）
@@ -92,8 +94,16 @@ namespace net { struct ContactsResult; struct MessageNotify; struct SendMessageR
                 struct GroupAnnouncementsResult; struct GroupAnnouncementNotify;
                 //平台公告（消息盒子）；注意与上一行的<u>群</u>公告不是一回事
                 struct AnnouncementsResult; struct AnnouncementNotify; struct AnnounceMarkReadResult;
+                //单聊文件夹传输（cmd_folder_* 1810~1817）的两条推送
+                struct FolderInviteNotify; struct FolderStateNotify;
+
                 struct AnnouncementItem;
                 struct TypingNotify; }
+//单聊文件夹传输的本端事件投递载体（定义在 FolderTransfer/FolderTransferManager.h）。
+//这里只按 const 引用传参，前置声明即可 —— 那个头文件把整套会话管理都带进来，
+//没必要让每一个包含主面板头文件的编译单元都背上。
+namespace foldertransfer { struct FolderScanNotice; struct FolderBindNotice;
+                           struct FolderProgressNotice; struct FolderResultNotice; }
 namespace balloonwjui { class DuiTreeView; }
 
 /**
@@ -197,6 +207,59 @@ public:
     //对方收取本端所发文件的状态（cmd_file_transfer_ack 推送）：按 msgid 向所有已开
     //聊天窗广播，命中那条本端发出的文件气泡、更新其状态行。
     void OnFileTransferAck(const net::FileTransferAckNotify& notify);
+
+    // ---- v2 单聊文件夹传输（cmd_folder_* 1810~1817）：路由到对应聊天窗 ----
+    //
+    // 除邀请推送要按发送方 userid 找（找不到就开一个）之外，其余五条一律<u>向所有
+    // 已打开的单聊窗广播</u>：会话 id 全局唯一，命中的那个窗口更新自己那条气泡，其余
+    // 窗口按会话 id 查不到本行、静默忽略。这与文件收发进度的做法同一套路，省得为了
+    // 一条进度再维护一张"会话 id → 窗口"的表。
+
+    /**
+     *  收到文件夹传输邀请（cmd_folder_invite_notify 1811）：按发送方 userid 找到 / 打开
+     *  单聊窗，在其中追加一条带「接收 / 拒绝」的邀请气泡。
+     *    notify：邀请推送解析结果（已由管理器判定可以接下）。
+     */
+    void OnFolderInviteNotify(const net::FolderInviteNotify& notify);
+
+    /**
+     *  本地目录扫描完成：把文件数 / 目录数 / 总大小补进那条按本地占位 id 建出来的气泡；
+     *  扫描失败时把它转成失败态。
+     *    notice：扫描结果。
+     */
+    void OnFolderScanned(const foldertransfer::FolderScanNotice& notice);
+
+    /**
+     *  发起邀请的应答已到：把气泡上的本地占位 id 换成服务端分配的会话 id；
+     *  被拒绝（规模超限 / 对方不在线 / 服务器繁忙）时把它转成失败态并提示。
+     *    bind：管理器回填的定位信息。
+     */
+    void OnFolderBound(const foldertransfer::FolderBindNotice& bind);
+
+    /**
+     *  会话状态推送（cmd_folder_state_notify 1815）：按会话 id 把气泡切到对应状态。
+     *    notify：状态推送解析结果。
+     */
+    void OnFolderStateNotify(const net::FolderStateNotify& notify);
+
+    /**
+     *  中转参数已下发、通道正在建立：把气泡切到「传输中」，好让用户立刻看到进展，
+     *  不必等第一片字节的进度回调。
+     *    sessionId：本次传输的会话 id（UTF-8）。
+     */
+    void OnFolderTransferStarted(const std::string& sessionId);
+
+    /**
+     *  传输进度（收发共用）：按会话 id 更新气泡的进度条、当前文件与序号。
+     *    progress：进度快照。
+     */
+    void OnFolderProgress(const foldertransfer::FolderProgressNotice& progress);
+
+    /**
+     *  传输最终结果（收发共用）：按会话 id 把气泡切成完成 / 失败 / 已取消态。
+     *    result：结果快照。
+     */
+    void OnFolderResult(const foldertransfer::FolderResultNotice& result);
 
     /**
      *  对端「正在输入」状态变化（cmd_typing_notify 推送）：按 notify.m_cid（即正在
@@ -503,6 +566,31 @@ public:
     void SetContactRemark(UINT peerUserId, const CString& remark);
 
     /**
+     *  设置某个联系人的标签（整份覆盖）。
+     *
+     *    peerUserId：目标联系人 userid，0 直接返回。
+     *    tagsUtf8：  该联系人在本人视角下的<u>完整</u>标签列表（UTF-8，未归一）。
+     *                空列表表示清空该联系人的全部标签，是合法取值。
+     *
+     *  与备注名同一分工：资料窗只负责把用户改好的列表报上来，该不该发、发不出去
+     *  怎么办、失败怎么退回来全在本函数判定 —— 通讯录缓存（原值）、连接态与 socket
+     *  都在主面板手上，两处各判一份日后必走岔。
+     *
+     *  副作用：真发包时先做乐观更新，并把改动前的列表记进 m_pendingTagsRollback，
+     *  供应答里 userid 缺失（老服务端）时回滚用。
+     */
+    void SetContactTags(UINT peerUserId, const std::vector<std::string>& tagsUtf8);
+
+    /**
+     *  处理 cmd_set_contact_tags 应答。由 CMainDlg 收到 FMG_MSG_V2_SET_TAGS_RESULT 后转交。
+     *
+     *    result：应答解析结果。其中的 m_tags 无论成败都是<u>服务端侧的真值</u>
+     *            （成功时是归一后的最终列表，失败时是当前实际存着的那一份），
+     *            故两种情形都直接拿它覆盖本地缓存即可，不必区分"对齐"还是"回滚"。
+     */
+    void OnSetContactTagsResult(const net::SetContactTagsResult& result);
+
+    /**
      *  解析某联系人在界面上显示的名字（备注优先，其次昵称、账号，最后"用户<id>"）。
      *  通讯录树、会话列表、单聊窗标题三处都该走它，免得同一个人在三处叫三个名字。
      *    peerUserId： 联系人 userid。
@@ -700,6 +788,7 @@ public:
         MESSAGE_HANDLER(FMG_MSG_QUERY_STARRED, OnQueryStarredMsg)
         MESSAGE_HANDLER(FMG_MSG_TOGGLE_STARRED, OnToggleStarredMsg)
         MESSAGE_HANDLER(FMG_MSG_SET_CONTACT_REMARK, OnSetContactRemarkMsg)
+        MESSAGE_HANDLER(FMG_MSG_SET_CONTACT_TAGS, OnSetContactTagsMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_CHAT, OnOpenChatMsg)
         MESSAGE_HANDLER(FMG_MSG_CONV_SEND_BUMP, OnConvSendBumpMsg)
         MESSAGE_HANDLER(FMG_MSG_CONV_MARK_READ, OnConvMarkReadMsg)
@@ -715,6 +804,9 @@ public:
         MESSAGE_HANDLER(FMG_MSG_CALL_START_VIDEO_INVITE, OnCallStartVideoInviteMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_HISTORY, OnOpenHistoryMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_ANNOUNCE_BOX, OnOpenAnnounceBoxMsg)
+        // WM_SETFOCUS：拦掉基类"没有已聚焦控件时自动聚焦第一个控件"的回退行为，
+        // 详见 OnPanelSetFocusMsg 的说明。须排在 CHAIN_MSG_MAP 之前才能拦得住。
+        MESSAGE_HANDLER(WM_SETFOCUS, OnPanelSetFocusMsg)
         CHAIN_MSG_MAP(balloonwjui::DuiFrameWindow)
     END_MSG_MAP()
 
@@ -775,6 +867,24 @@ private:
      *  返回：HT* 命中码（直接作为 WM_NCHITTEST 的返回值）。
      */
     LRESULT OnPanelNcHitTestMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_SETFOCUS 处理：本面板不做"窗口获得焦点时自动聚焦第一个控件"。
+     *
+     *  基类 DuiHost::OnSetFocus 的逻辑是：面板内已有控件持有 DUI 焦点就恢复给它，
+     *  否则调 FocusNext(false) 把焦点交给控件树里第一个 tab stop。主面板的第一个
+     *  tab stop 正是顶部的搜索框，而面板平时并没有任何控件持有焦点，于是每次窗口
+     *  获得焦点（首次激活、从别的程序切回来、关掉自己弹出的对话框）搜索框都会被
+     *  自动聚焦，光标在里面闪 —— 用户并没有要搜索。2026-08-14 由"关闭退出确认框后
+     *  搜索框自动获得焦点"这一现象查出，实测激活面板同样会触发。
+     *
+     *  故这里只拦"没有已聚焦控件"这一种情形：把消息就地消费掉，不让基类走那条
+     *  回退分支。已有控件持有焦点时（例如用户本来就在搜索框里打字，切走再切回来）
+     *  置 bHandled = FALSE 交回基类，恢复焦点的原有行为不变。
+     *
+     *  返回：恒为 0；实际生效的是 bHandled。
+     */
+    LRESULT OnPanelSetFocusMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
      *  WM_NCLBUTTONDBLCLK 处理：吞掉落在可拖区里的双击。
@@ -1142,6 +1252,18 @@ private:
     LRESULT OnSetContactRemarkMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
+     *  FMG_MSG_SET_CONTACT_TAGS 处理：联系人资料窗提交了整份标签列表。
+     *  wParam 为对端 userid，lParam 为堆上的 std::vector<std::string>*（UTF-8，未归一），
+     *  本函数处理完后 delete。实际处理转交 SetContactTags。
+     */
+    LRESULT OnSetContactTagsMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    //按缓存里的最新标签刷新已打开的联系人资料窗。标签只出现在资料窗里，不上通讯录树、
+    //也不上会话列表，故不必像备注名那样整棵树重建。
+    //  peerUserId：目标联系人 userid。
+    void RefreshContactTagsDisplay(UINT peerUserId);
+
+    /**
      *  某联系人的显示名可能变了：重刷通讯录树与会话列表，并把已打开的单聊窗标题、
      *  正开着该人的资料窗一并更新。改备注（含失败回滚）后调用。
      *    peerUserId： 显示名发生变化的联系人 userid。
@@ -1306,7 +1428,7 @@ private:
      *  （DuiTreeView::SetItemStatusIcon）。四种徽标是常量图形，本方法按 presence
      *  缓存复用，首次用到时才创建，位图归本类所有、析构时统一释放 —— 调用方
      *  <u>不得</u> DeleteObject，也不要存进 m_avatarBitmaps 那几个随刷新清空的池子里。
-     *    presence：v2 在线状态（presence_type）；隐身与越界值按"离线"取，
+     *    presence：v2 在线状态（presence_type）；越界值按"离线"取，
      *              与 GetPresenceBadgeIconKind 的兜底口径一致。
      *  返回：徽标位图；创建失败返回 NULL（此时调用方跳过挂图即可，树会退回不画状态点）。
      */
@@ -1597,7 +1719,7 @@ private:
     /**
      *  弹出在线状态选择菜单 —— Banner 上"状态胶囊"（kIdHeader 内）点击时调用。菜单
      *  内容由 BuildStatusMenuModel() 给出（在线 / 离开 / 勿扰 / 离线，各带彩色圆点，
-     *  <u>不含隐身</u>），其中当前所处的那一项带外环圆点与"（当前）"后缀（当前状态取
+     *  共四项），其中当前所处的那一项带外环圆点与"（当前）"后缀（当前状态取
      *  胶囊上正在显示的那个），锚定在胶囊<u>正下方</u>弹出（同步阻塞）。选中后：先把胶囊乐观
      *  更新成目标状态，再把目标 presence（v2 presence_type）经 m_hMainDlg 投递
      *  FMG_MSG_CHANGE_MY_PRESENCE 给 CMainDlg，由其决定走 GoOffline / GoOnline /
@@ -1737,6 +1859,14 @@ private:
     // 重刷显示名。用 map 而不是单个成员，是因为用户可以连着改几个人、多条请求同时
     // 在途，只记"最后一次"会把别人的备注退错。
     std::map<UINT, CString> m_pendingRemarkRollback;
+
+    // 标签乐观更新的回滚快照："userid → 改动前的标签列表"。SetContactTags 发请求前
+    // 记一份，应答到达后无论成败都清掉。
+    //
+    // 正常情况下用不到它：应答会回带服务端侧的真值（成功是归一后的结果、失败是当前
+    // 实际存着的那一份），直接覆盖缓存即可。它只在<u>老服务端不回带 userid</u> 时兜底
+    // —— 那时无从判断应答对应哪一次请求，只能靠本地快照把这一条退回去。
+    std::map<UINT, std::vector<std::string> > m_pendingTagsRollback;
     // 缓存的部门列表（OnContactsArrived 存入），算联系人职位/部门路径用。
     std::vector<net::DepartmentItem> m_departments;
     // "收到陌生人消息就补拉通讯录"这个兜底动作的节流器。正常情况下新同事是靠
@@ -1843,7 +1973,7 @@ private:
     std::vector<HBITMAP> m_groupAvatarBitmaps;
 
     // 状态徽标缓存的槽位数 —— 对应 presence_type 的 0..3（离线 / 在线 / 离开 / 忙碌）。
-    // 隐身（4）与一切越界值都归到离线槽，故四个槽够用。
+    // 一切越界值（含已作废的取值 4）都归到离线槽，故四个槽够用。
     static const int kPresenceBadgeSlotCount = 4;
 
     // 在线状态徽标位图缓存，按 presence 取值（0 离线 / 1 在线 / 2 离开 / 3 忙碌）直接

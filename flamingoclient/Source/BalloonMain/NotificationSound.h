@@ -28,7 +28,7 @@ namespace balloonmain {
 enum NotifySoundKind
 {
     kNotifySoundNewMessage   = 0,   // 收到他人发来的新单聊 / 群聊消息 → Sound\msg.wav
-    kNotifySoundBuddyOnline  = 1,   // 好友从离线 / 隐身跳变为在线 / 离开 / 忙碌（上线）→ Sound\global.wav
+    kNotifySoundBuddyOnline  = 1,   // 好友从离线跳变为在线 / 离开 / 忙碌（上线）→ Sound\global.wav
     kNotifySoundAnnouncement = 2,   // 收到公告通知 → Sound\system.wav（本期暂不接入，留作后续公告功能调用）
 
     // ---- 音视频通话音效 ----------------------------------------------------
@@ -65,12 +65,12 @@ bool IsLoopSound(NotifySoundKind kind);
 const wchar_t* NotifySoundRelativePath(NotifySoundKind kind);
 
 /**
- *  判断好友的一次 presence 变化是否构成"刚上线" —— 即由不可见态（离线 / 隐身）
+ *  判断好友的一次 presence 变化是否构成"刚上线" —— 即由不可见态（离线）
  *  跳变为可见在线态（在线 / 离开 / 忙碌），据此决定是否播放上线提示音。纯函数。
  *
  *  设计意图：只在"真正上线"这一跳变响一次，避免在线↔离开↔忙碌之间来回切换、或本来
  *  就在线又收到一条状态刷新时反复出声。presence 取值对齐 presence_type
- *  （离线 0 / 在线 1 / 离开 2 / 忙碌 3 / 隐身 4，见 net/Protocol.h）。
+ *  （离线 0 / 在线 1 / 离开 2 / 忙碌 3，见 net/Protocol.h）。
  *
  *    oldPresence：变化前的 presence 值（通讯录缓存里的旧值；查不到时调用方按离线 0 传入）。
  *    newPresence：变化后的 presence 值（服务端推送的新值）。
@@ -81,14 +81,14 @@ bool IsBuddyJustCameOnline(int oldPresence, int newPresence);
 
 /**
  *  判断好友的一次 presence 变化是否构成"刚下线" —— 即由可见在线态（在线 / 离开 /
- *  忙碌）跳变为不可见态（离线 / 隐身）。与上面那条<u>严格对称</u>，共用同一套
+ *  忙碌）跳变为不可见态（离线）。与上面那条<u>严格对称</u>，共用同一套
  *  "可见在线"口径（IsVisibleOnline），故两者不会对同一次跳变都成立、也不会都不成立。
  *
  *  用途：「特别关注」的桌面提示要在被关注者上线<u>和</u>下线时各弹一次，故需要这条。
  *  上线提示音不用它（下线不出声）。
  *
  *  与上线同理，在线↔离开↔忙碌之间的来回切换<u>不算</u>下线 —— 对方锁个屏就提示一次，
- *  一上午能弹十几次。隐身算下线：对外表现就是"这个人不在了"，与真下线没有区别。
+ *  一上午能弹十几次。
  *
  *    oldPresence：变化前的 presence 值（通讯录缓存里的旧值；查不到时调用方按离线 0 传入）。
  *    newPresence：变化后的 presence 值（服务端推送的新值）。

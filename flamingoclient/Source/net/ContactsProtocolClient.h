@@ -37,6 +37,12 @@ struct ContactItem
     //备注、否则用昵称"取名，统一走 BalloonMain/ContactDisplayName.h。
     std::string m_remark;
 
+    //本端登录用户给该联系人贴的标签（UTF-8），未贴过则为空数组。经
+    //cmd_set_contact_tags(1217) 整份设置，随本应答读回。与备注名同为单向数据——
+    //只影响"本人看该联系人"的显示，对方看不到也不受影响，故同一个联系人在不同人的
+    //通讯录里标签可以完全不同。顺序即服务端存的显示顺序，界面照此顺序排胶囊。
+    std::vector<std::string> m_tags;
+
     ContactItem()
         : m_userid(0)
         , m_usertype(0)

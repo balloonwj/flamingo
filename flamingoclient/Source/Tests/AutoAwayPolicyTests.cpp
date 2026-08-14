@@ -53,6 +53,9 @@ AutoAwayInput MakeInput(int presence, bool isAutoAway, DWORD idleMs)
 // AA1-AA3. 在线 → 离开
 // =====================================================================
 
+// 已作废的在线状态取值：4 曾经是「隐身」，本产品不提供该功能（见 net/Protocol.h）。
+// 老服务端仍可能推上来，故保留这些用例，确认它被当作越界值归到"离线"。
+static const int kRetiredPresence = 4;
 TEST_CASE("AA1 在线且空闲满阈值：自动切到离开", "[autoaway]")
 {
     AutoAwayInput in = MakeInput(presence_online, false, 5 * kOneMinuteMs);
@@ -89,13 +92,13 @@ TEST_CASE("AA4 忙碌下空闲再久也不动", "[autoaway]")
     CHECK(DecideAutoAway(in) == kAutoAwayNone);
 }
 
-TEST_CASE("AA5 离线 / 隐身下空闲再久也不动", "[autoaway]")
+TEST_CASE("AA5 离线与已作废取值下空闲再久也不动", "[autoaway]")
 {
     AutoAwayInput off = MakeInput(presence_offline, false, 60 * kOneMinuteMs);
     CHECK(DecideAutoAway(off) == kAutoAwayNone);
 
-    AutoAwayInput invisible = MakeInput(presence_invisible, false, 60 * kOneMinuteMs);
-    CHECK(DecideAutoAway(invisible) == kAutoAwayNone);
+    AutoAwayInput retired = MakeInput(kRetiredPresence, false, 60 * kOneMinuteMs);
+    CHECK(DecideAutoAway(retired) == kAutoAwayNone);
 }
 
 // =====================================================================

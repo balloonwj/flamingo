@@ -1,41 +1,11 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="net">
-      <UniqueIdentifier>{f9a1b4b3-7ed0-485a-a67d-0e7220f2b131}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="jsoncpp1.9.0">
-      <UniqueIdentifier>{36a86ddf-5bf8-4344-a962-14916ed54e46}</UniqueIdentifier>
-    </Filter>
     <Filter Include="base">
       <UniqueIdentifier>{25dd53c6-6062-45bb-a73f-96de33c45a2b}</UniqueIdentifier>
     </Filter>
-    <Filter Include="dbapi">
-      <UniqueIdentifier>{6b1c9f4a-3d27-4a51-9c8e-2f7b5a0d81c3}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="sqliteapi">
-      <UniqueIdentifier>{9d4e7c21-5a83-42b6-b0f7-1e6c8d3a90f5}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="sqlite3">
-      <UniqueIdentifier>{3f8a62d5-7b19-4e0c-8d24-5c9f1b7e46a8}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="mysqlapi">
-      <UniqueIdentifier>{1f037ea0-8622-4ceb-8f00-caab409c8398}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="mysqlmgr">
-      <UniqueIdentifier>{e52fe5c5-81e6-4383-85cd-d6e4fe457acb}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="utils">
-      <UniqueIdentifier>{a326b564-ca39-44d7-9145-103f19f980ab}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="zlib1.2.11">
-      <UniqueIdentifier>{30e2c29a-7a26-4543-8a51-cc1f851c4f37}</UniqueIdentifier>
-    </Filter>
     <Filter Include="chatserversrc">
       <UniqueIdentifier>{d9196d7f-1f47-46ce-aa16-ea105de881c4}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="chatserversrc\core">
-      <UniqueIdentifier>{cd15beb5-6b80-4c4e-9d6b-d7c793339659}</UniqueIdentifier>
     </Filter>
     <Filter Include="chatserversrc\admin">
       <UniqueIdentifier>{426cf0c0-6fad-4ed0-bcf7-be0c17e9d2a3}</UniqueIdentifier>
@@ -43,8 +13,47 @@
     <Filter Include="chatserversrc\app">
       <UniqueIdentifier>{3281e529-1d00-423c-a92a-d359142f8e8c}</UniqueIdentifier>
     </Filter>
+    <Filter Include="chatserversrc\core">
+      <UniqueIdentifier>{cd15beb5-6b80-4c4e-9d6b-d7c793339659}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="dbapi">
+      <UniqueIdentifier>{6b1c9f4a-3d27-4a51-9c8e-2f7b5a0d81c3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="mysqlapi">
+      <UniqueIdentifier>{1f037ea0-8622-4ceb-8f00-caab409c8398}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="mysqlmgr">
+      <UniqueIdentifier>{e52fe5c5-81e6-4383-85cd-d6e4fe457acb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="net">
+      <UniqueIdentifier>{f9a1b4b3-7ed0-485a-a67d-0e7220f2b131}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="sqliteapi">
+      <UniqueIdentifier>{9d4e7c21-5a83-42b6-b0f7-1e6c8d3a90f5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third-party">
+      <UniqueIdentifier>{91ac5d15-dd05-42ce-9331-add7a66b5c93}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third-party\jsoncpp1.9.0">
+      <UniqueIdentifier>{f36a8527-c4eb-4bae-88bd-3848858e757b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third-party\sqlite3">
+      <UniqueIdentifier>{0a5af0ed-fbc2-4021-becb-deaac7c2c83f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third-party\zlib1.2.11">
+      <UniqueIdentifier>{9f01eb1f-26de-47c1-afb4-9000813e5e99}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="utils">
+      <UniqueIdentifier>{a326b564-ca39-44d7-9145-103f19f980ab}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\net\FrameCrypto.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\FramePayload.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
     <ClCompile Include="..\base\AsyncLog.cpp">
       <Filter>base</Filter>
     </ClCompile>
@@ -75,16 +84,58 @@
     <ClCompile Include="..\chatserversrc\ContactsProtocol.cpp">
       <Filter>chatserversrc\app</Filter>
     </ClCompile>
+    <ClCompile Include="..\chatserversrc\FavoriteProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\FavoriteManager.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\StarredProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\StarredManager.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\ContactRemarkManager.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\ContactTagProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\ContactTagManager.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\UpdateProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\ClientVersionManager.cpp">
+      <Filter>chatserversrc\admin</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\UpdatePackageScanner.cpp">
+      <Filter>chatserversrc\admin</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\FileEnum.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
     <ClCompile Include="..\chatserversrc\ProfileProtocol.cpp">
       <Filter>chatserversrc\app</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\RegisterProtocol.cpp">
       <Filter>chatserversrc\app</Filter>
     </ClCompile>
+    <ClCompile Include="..\chatserversrc\RegisterService.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\AccountName.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
     <ClCompile Include="..\chatserversrc\SmsCodeManager.cpp">
       <Filter>chatserversrc\app</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\FriendProtocol.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\AnnouncementProtocol.cpp">
       <Filter>chatserversrc\app</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\MessageProtocol.cpp">
@@ -100,6 +151,12 @@
       <Filter>chatserversrc\app</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\CallManager.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\FolderTransferManager.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\FolderTransferProtocol.cpp">
       <Filter>chatserversrc\app</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\MessageManager.cpp">
@@ -145,6 +202,9 @@
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="..\utils\PasswordHasher.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\Sha256.cpp">
       <Filter>utils</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\DepartmentManager.cpp">
@@ -193,22 +253,13 @@
       <Filter>chatserversrc\app</Filter>
     </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp">
-      <Filter>jsoncpp1.9.0</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_value.cpp">
-      <Filter>jsoncpp1.9.0</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_writer.cpp">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClCompile>
-    <ClCompile Include="..\mysqlapi\DatabaseMysql.cpp">
-      <Filter>mysqlapi</Filter>
-    </ClCompile>
-    <ClCompile Include="..\dbapi\Field.cpp">
-      <Filter>dbapi</Filter>
-    </ClCompile>
-    <ClCompile Include="..\dbapi\QueryResult.cpp">
-      <Filter>dbapi</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClCompile>
     <ClCompile Include="..\dbapi\DbConfig.cpp">
       <Filter>dbapi</Filter>
@@ -216,23 +267,41 @@
     <ClCompile Include="..\dbapi\DbFactory.cpp">
       <Filter>dbapi</Filter>
     </ClCompile>
+    <ClCompile Include="..\dbapi\SqlDialect.cpp">
+      <Filter>dbapi</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dbapi\Field.cpp">
+      <Filter>dbapi</Filter>
+    </ClCompile>
+    <ClCompile Include="..\dbapi\QueryResult.cpp">
+      <Filter>dbapi</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mysqlapi\DatabaseMysql.cpp">
+      <Filter>mysqlapi</Filter>
+    </ClCompile>
     <ClCompile Include="..\mysqlapi\MysqlQueryResult.cpp">
       <Filter>mysqlapi</Filter>
     </ClCompile>
-    <ClCompile Include="..\sqliteapi\DatabaseSqlite.cpp">
-      <Filter>sqliteapi</Filter>
+    <ClCompile Include="..\sqlite3\sqlite3.c">
+      <Filter>third-party\sqlite3</Filter>
     </ClCompile>
-    <ClCompile Include="..\sqliteapi\SqliteQueryResult.cpp">
+    <ClCompile Include="..\sqliteapi\DatabaseSqlite.cpp">
       <Filter>sqliteapi</Filter>
     </ClCompile>
     <ClCompile Include="..\sqliteapi\SqliteFunctions.cpp">
       <Filter>sqliteapi</Filter>
     </ClCompile>
+    <ClCompile Include="..\sqliteapi\SqliteQueryResult.cpp">
+      <Filter>sqliteapi</Filter>
+    </ClCompile>
     <ClCompile Include="..\sqliteapi\SqliteSqlTranslator.cpp">
       <Filter>sqliteapi</Filter>
     </ClCompile>
-    <ClCompile Include="..\sqlite3\sqlite3.c">
-      <Filter>sqlite3</Filter>
+    <ClCompile Include="..\sqliteapi\SqliteSchema.cpp">
+      <Filter>sqliteapi</Filter>
+    </ClCompile>
+    <ClCompile Include="..\sqliteapi\SqliteManager.cpp">
+      <Filter>sqliteapi</Filter>
     </ClCompile>
     <ClCompile Include="..\mysqlmgr\MysqlManager.cpp">
       <Filter>mysqlmgr</Filter>
@@ -303,6 +372,12 @@
     <ClCompile Include="..\net\TimerQueue.cpp">
       <Filter>net</Filter>
     </ClCompile>
+    <ClCompile Include="..\utils\AppPath.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\ServerConfigLoader.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
     <ClCompile Include="..\utils\DaemonRun.cpp">
       <Filter>utils</Filter>
     </ClCompile>
@@ -319,63 +394,72 @@
       <Filter>utils</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\adler32.c">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\compress.c">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\crc32.c">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\deflate.c">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\gzclose.c">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\gzlib.c">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\gzread.c">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\gzwrite.c">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\infback.c">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\inffast.c">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\inflate.c">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\inftrees.c">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\trees.c">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\uncompr.c">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\zlibdemo.c">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\ZlibUtil.cpp">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
     <ClCompile Include="..\zlib1.2.11\zutil.c">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\net\FrameCrypto.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\FramePayload.h">
+      <Filter>net</Filter>
+    </ClInclude>
     <ClInclude Include="..\base\AsyncLog.h">
       <Filter>base</Filter>
     </ClInclude>
     <ClInclude Include="..\base\ConfigFileReader.h">
       <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\ServerConfigLoader.h">
+      <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="..\base\CountDownLatch.h">
       <Filter>base</Filter>
@@ -407,16 +491,58 @@
     <ClInclude Include="..\chatserversrc\ContactsProtocol.h">
       <Filter>chatserversrc\app</Filter>
     </ClInclude>
+    <ClInclude Include="..\chatserversrc\FavoriteProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\FavoriteManager.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\StarredProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\StarredManager.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\ContactRemarkManager.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\ContactTagProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\ContactTagManager.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\UpdateProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\ClientVersionManager.h">
+      <Filter>chatserversrc\admin</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\UpdatePackageScanner.h">
+      <Filter>chatserversrc\admin</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\FileEnum.h">
+      <Filter>utils</Filter>
+    </ClInclude>
     <ClInclude Include="..\chatserversrc\ProfileProtocol.h">
       <Filter>chatserversrc\app</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\RegisterProtocol.h">
       <Filter>chatserversrc\app</Filter>
     </ClInclude>
+    <ClInclude Include="..\chatserversrc\RegisterService.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\AccountName.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
     <ClInclude Include="..\chatserversrc\SmsCodeManager.h">
       <Filter>chatserversrc\app</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\FriendProtocol.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\AnnouncementProtocol.h">
       <Filter>chatserversrc\app</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\MessageProtocol.h">
@@ -482,6 +608,9 @@
     <ClInclude Include="..\utils\PasswordHasher.h">
       <Filter>utils</Filter>
     </ClInclude>
+    <ClInclude Include="..\utils\Sha256.h">
+      <Filter>utils</Filter>
+    </ClInclude>
     <ClInclude Include="..\chatserversrc\DepartmentManager.h">
       <Filter>chatserversrc\admin</Filter>
     </ClInclude>
@@ -531,52 +660,40 @@
       <Filter>chatserversrc\app</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\allocator.h">
-      <Filter>jsoncpp1.9.0</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\assertions.h">
-      <Filter>jsoncpp1.9.0</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\autolink.h">
-      <Filter>jsoncpp1.9.0</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\config.h">
-      <Filter>jsoncpp1.9.0</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\features.h">
-      <Filter>jsoncpp1.9.0</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\forwards.h">
-      <Filter>jsoncpp1.9.0</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\json.h">
-      <Filter>jsoncpp1.9.0</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\json_tool.h">
-      <Filter>jsoncpp1.9.0</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\reader.h">
-      <Filter>jsoncpp1.9.0</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\value.h">
-      <Filter>jsoncpp1.9.0</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\version.h">
-      <Filter>jsoncpp1.9.0</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\jsoncpp1.9.0\writer.h">
-      <Filter>jsoncpp1.9.0</Filter>
-    </ClInclude>
-    <ClInclude Include="..\mysqlapi\DatabaseMysql.h">
-      <Filter>mysqlapi</Filter>
-    </ClInclude>
-    <ClInclude Include="..\dbapi\Field.h">
-      <Filter>dbapi</Filter>
-    </ClInclude>
-    <ClInclude Include="..\dbapi\QueryResult.h">
-      <Filter>dbapi</Filter>
-    </ClInclude>
-    <ClInclude Include="..\dbapi\IDatabase.h">
-      <Filter>dbapi</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClInclude>
     <ClInclude Include="..\dbapi\DbConfig.h">
       <Filter>dbapi</Filter>
@@ -584,23 +701,50 @@
     <ClInclude Include="..\dbapi\DbFactory.h">
       <Filter>dbapi</Filter>
     </ClInclude>
+    <ClInclude Include="..\dbapi\DbRetryPolicy.h">
+      <Filter>dbapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dbapi\DbTransaction.h">
+      <Filter>dbapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dbapi\SqlDialect.h">
+      <Filter>dbapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dbapi\Field.h">
+      <Filter>dbapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dbapi\IDatabase.h">
+      <Filter>dbapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\dbapi\QueryResult.h">
+      <Filter>dbapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mysqlapi\DatabaseMysql.h">
+      <Filter>mysqlapi</Filter>
+    </ClInclude>
     <ClInclude Include="..\mysqlapi\MysqlQueryResult.h">
       <Filter>mysqlapi</Filter>
     </ClInclude>
-    <ClInclude Include="..\sqliteapi\DatabaseSqlite.h">
-      <Filter>sqliteapi</Filter>
+    <ClInclude Include="..\sqlite3\sqlite3.h">
+      <Filter>third-party\sqlite3</Filter>
     </ClInclude>
-    <ClInclude Include="..\sqliteapi\SqliteQueryResult.h">
+    <ClInclude Include="..\sqliteapi\DatabaseSqlite.h">
       <Filter>sqliteapi</Filter>
     </ClInclude>
     <ClInclude Include="..\sqliteapi\SqliteFunctions.h">
       <Filter>sqliteapi</Filter>
     </ClInclude>
+    <ClInclude Include="..\sqliteapi\SqliteQueryResult.h">
+      <Filter>sqliteapi</Filter>
+    </ClInclude>
     <ClInclude Include="..\sqliteapi\SqliteSqlTranslator.h">
       <Filter>sqliteapi</Filter>
     </ClInclude>
-    <ClInclude Include="..\sqlite3\sqlite3.h">
-      <Filter>sqlite3</Filter>
+    <ClInclude Include="..\sqliteapi\SqliteSchema.h">
+      <Filter>sqliteapi</Filter>
+    </ClInclude>
+    <ClInclude Include="..\sqliteapi\SqliteManager.h">
+      <Filter>sqliteapi</Filter>
     </ClInclude>
     <ClInclude Include="..\mysqlmgr\MysqlManager.h">
       <Filter>mysqlmgr</Filter>
@@ -699,50 +843,50 @@
       <Filter>utils</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.2.11\crc32.h">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.2.11\deflate.h">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.2.11\gzguts.h">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.2.11\inffast.h">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.2.11\inffixed.h">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.2.11\inflate.h">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.2.11\inftrees.h">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.2.11\trees.h">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.2.11\zconf.h">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.2.11\zlib.h">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.2.11\ZlibUtil.h">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClInclude>
     <ClInclude Include="..\zlib1.2.11\zutil.h">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\jsoncpp1.9.0\json_valueiterator.inl">
-      <Filter>jsoncpp1.9.0</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\zlib1.2.11\文件概览.txt">
-      <Filter>zlib1.2.11</Filter>
+      <Filter>third-party\zlib1.2.11</Filter>
     </Text>
   </ItemGroup>
 </Project>

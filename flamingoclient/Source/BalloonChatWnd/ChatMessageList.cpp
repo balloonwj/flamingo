@@ -49,7 +49,7 @@ extern CAppModule _Module;
 #include "ChatTimeSeparator.h"    // 时间分隔行的判定与文案（何时插、插什么字）
 #include <time.h>                // time（取当前时刻，用于"今天 / 昨天"的判定）
 #include "../CustomMsgDef.h"   // WM_CHAT_RECALL_REQUEST（撤回请求转交宿主聊天窗）
-#include "../../balloonui/balloonui/DuiHost.h"
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"
 
 namespace balloonchatwnd {
 
@@ -131,6 +131,7 @@ ChatMessageList::ChatMessageList()
     , m_prependMarkCount(0)
     , m_prependMarkHeight(0)
     , m_lastMsgTimestampMs(0)
+    , m_prependSavedLastMs(0)
 {
 }
 
@@ -417,6 +418,12 @@ void ChatMessageList::BeginPrependBatch()
     ForceLayout(GetRect());
     m_prependMarkCount  = Children().size();
     m_prependMarkHeight = m_contentHeight;
+
+    // 时间分隔行的基准要临时换一套：本批消息最终会被挪到列表<u>最前面</u>，其第一条
+    // 就是整个消息流的开头，理应带一行时间；若沿用实时消息那条基准，会拿它去和末尾
+    // 最新消息的时间相比，判出来的结果没有意义。故先存下原基准再清零，收尾时还原。
+    m_prependSavedLastMs = m_lastMsgTimestampMs;
+    m_lastMsgTimestampMs = 0;
     m_prependActive     = true;
 }
 
@@ -431,8 +438,48 @@ void ChatMessageList::EndPrependBatch()
     const size_t total = Children().size();
     if (total <= m_prependMarkCount)
     {
+        m_lastMsgTimestampMs = m_prependSavedLastMs;   // 基准原样还回去
         return;   // 本批一行都没追加（服务端返回空页）
     }
+
+    // 补新旧交界处的时间分隔行。
+    //
+    // 本批消息之间的分隔行在 AppendMessage 里已经逐条判过了，唯独"本批最后一条"与
+    // "翻页前原本的第一条"之间没人判过 —— 那两条在旋转后才相邻。不补的话，翻上去
+    // 会看到交界处凭空缺一行。
+    //
+    // 此刻本批还挂在末尾，现在追加的行旋转后正好落在整批的最后、也就是原第一条之前，
+    // 位置天然正确，不必额外挪动。
+    if (m_prependMarkCount > 0)
+    {
+        ChatBubble* oldHead = dynamic_cast<ChatBubble*>(m_children[0].get());
+        // 原第一条本身若已是分隔行，说明那个位置早有时间了，不必再补一行。
+        if (oldHead != NULL && oldHead->GetMessage().kind != kMsgTime)
+        {
+            const long long oldHeadMs = oldHead->GetMessage().timestampMs;
+            if (ShouldInsertTimeSeparator(m_lastMsgTimestampMs, oldHeadMs,
+                                          kChatTimeSeparatorThresholdMs))
+            {
+                const long long nowMs = (long long)::time(NULL) * 1000LL;
+                const CString timeText = FormatChatSeparatorTime(oldHeadMs, nowMs);
+                if (!timeText.IsEmpty())
+                {
+                    ChatMessage sep;
+                    sep.kind   = kMsgTime;
+                    sep.fromMe = false;
+                    sep.text   = timeText;
+
+                    std::unique_ptr<ChatBubble> sepBubble(new ChatBubble());
+                    sepBubble->SetMessage(sep);
+                    AddChild(std::unique_ptr<balloonwjui::DuiControl>(sepBubble.release()));
+                }
+            }
+        }
+    }
+
+    // 基准还原成翻页前那条：后续实时消息要与消息流<u>末尾</u>比，而不是与刚灌进来的
+    // 这批历史消息比。
+    m_lastMsgTimestampMs = m_prependSavedLastMs;
 
     // balloonui 的 DuiControl 只有 AddChild（追加），没有 InsertChild，而
     // SetParent_ 是 protected、没法从子类对着别的对象调 —— 所以本批是先追加到
@@ -874,6 +921,87 @@ bool ChatMessageList::SetFilePeerStateByMsgid(long long msgid, int peerState)
             Invalidate();
             return true;
         }
+    }
+    return false;
+}
+
+//这一行就是"活的本地文件夹气泡"的判据，本文件三处定位共用一份：会话 id 对得上，
+//且还没有被服务端的传输记录条接管（msgid 仍为 0）。同一次传输可能留下多条记录（每次
+//尝试各一条），不加 msgid 这一半，第二条记录会去改第一条那个已经定格的气泡。
+static bool IsLiveFolderBubble(const ChatBubble* bubble, const std::string& sessionId)
+{
+    return bubble != NULL
+        && bubble->FolderSessionId() == sessionId
+        && bubble->Msgid() == 0;
+}
+
+bool ChatMessageList::GetFolderMessage(const std::string& sessionId, ChatMessage& out) const
+{
+    if (sessionId.empty())
+        return false;
+
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (IsLiveFolderBubble(b, sessionId))
+        {
+            out = b->GetMessage();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ChatMessageList::SetFolderMessage(const std::string& sessionId, const ChatMessage& msg)
+{
+    if (sessionId.empty())
+        return false;
+
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (IsLiveFolderBubble(b, sessionId))
+        {
+            b->SetMessage(msg);
+            //文件夹气泡的高度随状态变化（进度条 / 失败原因行 / 按钮行的有无），
+            //只 Invalidate 的话新出现的按钮会被裁在气泡外面、点不到。
+            ForceLayout(GetRect());
+            Invalidate();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool ChatMessageList::ReviveFolderMessage(const std::string& sessionId)
+{
+    if (sessionId.empty())
+        return false;
+
+    //从后往前找：同一会话若有多条气泡（翻历史把这一笔早先几次尝试的记录也拉了进来），
+    //最后那条才是刚被接管、马上要复用的那一条。
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = kids.size(); i > 0; --i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i - 1].get());
+        if (b == NULL || b->FolderSessionId() != sessionId)
+        {
+            continue;
+        }
+
+        ChatMessage msg = b->GetMessage();
+        //已经是活的就不必再动，直接算成功——调用方只关心"这条气泡现在能被更新了"。
+        if (msg.msgid != 0)
+        {
+            msg.msgid = 0;
+            msg.timestampMs = 0;
+            b->SetMessage(msg);
+            ForceLayout(GetRect());
+            Invalidate();
+        }
+        return true;
     }
     return false;
 }

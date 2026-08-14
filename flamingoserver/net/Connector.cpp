@@ -67,14 +67,14 @@ void Connector::stopInLoop()
     if (m_state == kConnecting)
     {
         setState(kDisconnected);
-        int sockfd = removeAndResetChannel();
+        SOCKET sockfd = removeAndResetChannel();
         retry(sockfd);
     }
 }
 
 void Connector::connect()
 {
-    int sockfd = sockets::createNonblockingOrDie();
+    SOCKET sockfd = sockets::createNonblockingOrDie();
     int ret = sockets::connect(sockfd, m_serverAddr.getSockAddrInet());
 #ifdef WIN32
     int savedErrno = ::WSAGetLastError();
@@ -136,7 +136,7 @@ void Connector::restart()
     startInLoop();
 }
 
-void Connector::connecting(int sockfd)
+void Connector::connecting(SOCKET sockfd)
 {
     setState(kConnecting);
     //assert(!channel_);
@@ -149,11 +149,11 @@ void Connector::connecting(int sockfd)
     m_channel->enableWriting();
 }
 
-int Connector::removeAndResetChannel()
+SOCKET Connector::removeAndResetChannel()
 {
     m_channel->disableAll();
     m_channel->remove();
-    int sockfd = m_channel->fd();
+    SOCKET sockfd = m_channel->fd();
     // Can't reset channel_ here, because we are inside Channel::handleEvent
     m_loop->queueInLoop(std::bind(&Connector::resetChannel, shared_from_this())); // FIXME: unsafe
     return sockfd;
@@ -170,7 +170,7 @@ void Connector::handleWrite()
 
     if (m_state == kConnecting)
     {
-        int sockfd = removeAndResetChannel();
+        SOCKET sockfd = removeAndResetChannel();
         int err = sockets::getSocketError(sockfd);
         if (err)
         {
@@ -210,7 +210,7 @@ void Connector::handleError()
     LOGE("Connector::handleError state=%d", m_state);
     if (m_state == kConnecting)
     {
-        int sockfd = removeAndResetChannel();
+        SOCKET sockfd = removeAndResetChannel();
         int err = sockets::getSocketError(sockfd);
         LOGD("SO_ERROR = %d %s", err, strerror(err));
         LOGE("Connector::handleError state=%d", m_state);
@@ -218,7 +218,7 @@ void Connector::handleError()
     }
 }
 
-void Connector::retry(int sockfd)
+void Connector::retry(SOCKET sockfd)
 {
     sockets::close(sockfd);
     setState(kDisconnected);

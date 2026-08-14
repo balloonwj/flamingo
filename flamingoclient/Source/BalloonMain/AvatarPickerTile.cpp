@@ -13,7 +13,7 @@
 #pragma comment(lib, "gdiplus.lib")
 #pragma comment(lib, "msimg32.lib")   // AlphaBlend
 
-#include "../../balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 
 namespace balloonmain {
 

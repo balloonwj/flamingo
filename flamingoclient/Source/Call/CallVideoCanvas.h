@@ -24,7 +24,7 @@
  */
 #pragma once
 
-#include "../../balloonui/balloonui/DuiControl.h"
+#include "../../../third-party/balloonui/balloonui/DuiControl.h"
 
 #include <atlstr.h>   //CString（占位提示文字）
 #include <vector>

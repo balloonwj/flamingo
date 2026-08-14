@@ -541,7 +541,7 @@ void CBuddyChatDlg::OnUpdateBuddyHeadPic()
     if (pBuddyInfo != NULL)
     {
         nFaceID = pBuddyInfo->m_nFace;
-        if (pBuddyInfo->m_nStatus == STATUS_INVISIBLE || pBuddyInfo->m_nStatus == STATUS_OFFLINE)
+        if (pBuddyInfo->m_nStatus == STATUS_OFFLINE)
             bGray = TRUE;
 
         if (pBuddyInfo->m_nStatus == STATUS_MOBILE_ONLINE)

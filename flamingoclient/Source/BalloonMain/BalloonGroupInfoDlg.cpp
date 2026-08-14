@@ -16,10 +16,9 @@
 #include "../EncodeUtil.h"                // CString → UTF-8(发往服务端)
 #include "../IULog.h"                     // LOG_INFO / LOG_ERROR
 #include "../net/IUSocket.h"             // CIUSocket::SendSetConversation / SendSetMemberCard / SendLeaveGroup
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiSwitch.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../balloonui/balloonui/DuiAnimation.h"    // DuiAnimMgr::TickAll(开关滑动动画需 host 周期性驱动)
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
 
 #include <vector>                        // CStrToUtf8 缓冲
 #include <gdiplus.h>                     // 退群按钮浅红圆角底位图用 GDI+ 抗锯齿绘制
@@ -44,9 +43,10 @@ static const int kFooterIconSize        = 16;
 static const COLORREF kTitleBarBgColor  = RGB(245, 246, 250);
 static const int kTitleIconSize         = 16;
 
-// ---- 动画时钟(开关滑动中间帧靠它周期 TickAll;同系统设置对话框套路) ----
-static const UINT_PTR kAnimTickTimerId    = 0xA11;   // 与系统设置(0xA10)/业务 timer 不撞即可
-static const UINT     kAnimTickIntervalMs = 16;      // 约 60Hz
+// ---- 动画的推进方式 ----
+// 开关(DuiSwitch)翻转的滑动中间帧由 DuiAnimMgr 推进。本对话框不必为此挂定时器:
+// DuiAnimMgr 自 2026-08-14 起自带脉冲定时器(见 balloonui/DuiAnimation.cpp 的
+// StartPulse / PulseProc),有动画在跑时它自己按 16ms 发 WM_TIMER,跑完即停。
 
 namespace {
 
@@ -439,7 +439,11 @@ void CBalloonGroupInfoDlg::OpenForGroup(HWND hParent, CFlamingoClient* pFMGClien
 
     SetTitle(_T("群资料"));
     SetTitleBarHeight(kGroupInfoTitleBarH);
-    SetButtons(false, false, true);   // 只关闭按钮
+    //最小化 + 关闭。本窗口是无属主的独立顶层窗口（上面 Create 的第一个参数为 NULL、
+    //也没有 WS_EX_TOOLWINDOW），最小化后在任务栏上有自己的按钮，点回来即可还原；
+    //再次从主面板打开时上面的 IsIconic 分支也会把它还原出来。
+    //不给最大化：窗口内容是固定版式的资料卡，拉大只会留一片空白。
+    SetButtons(true, false, true);
     SetMinSize(kGroupInfoMinWidth, kGroupInfoMinHeight);
 
     // 标题栏图标(程序图标合成到标题栏底色),只建一次跨"关闭再打开"复用。
@@ -512,9 +516,6 @@ void CBalloonGroupInfoDlg::OpenForGroup(HWND hParent, CFlamingoClient* pFMGClien
     ShowWindow(SW_SHOW);
     UpdateWindow();
     ::SetForegroundWindow(m_hWnd);
-
-    // 启动动画 pulse 定时器(开关滑动中间帧)。WM_DESTROY 里 KillTimer 收尾。
-    SetTimer(kAnimTickTimerId, kAnimTickIntervalMs);
 }
 
 void CBalloonGroupInfoDlg::ApplyData(const GroupInfoViewData& data)
@@ -801,19 +802,6 @@ LRESULT CBalloonGroupInfoDlg::OnLButtonDown(UINT /*uMsg*/, WPARAM /*wParam*/,
     return 0;
 }
 
-LRESULT CBalloonGroupInfoDlg::OnTimer(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/,
-                                      BOOL& bHandled)
-{
-    if (wParam == kAnimTickTimerId)
-    {
-        // 推进所有在跑的动画一帧(开关滑动 / 底色渐变)。无在跑动画时本调用廉价、不重绘。
-        balloonwjui::DuiAnimMgr::Inst().TickAll(::GetTickCount());
-        return 0;
-    }
-    bHandled = FALSE;
-    return 0;
-}
-
 LRESULT CBalloonGroupInfoDlg::OnCardCommitDeferred(UINT /*uMsg*/, WPARAM /*wParam*/,
                                                    LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
@@ -835,14 +823,6 @@ LRESULT CBalloonGroupInfoDlg::OnCardCommitDeferred(UINT /*uMsg*/, WPARAM /*wPara
         }
     }
     CommitCardEdit();
-    return 0;
-}
-
-LRESULT CBalloonGroupInfoDlg::OnDestroy(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/,
-                                        BOOL& bHandled)
-{
-    KillTimer(kAnimTickTimerId);
-    bHandled = FALSE;   // 交回 DuiFrameWindow 继续收尾
     return 0;
 }
 

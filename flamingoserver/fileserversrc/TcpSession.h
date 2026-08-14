@@ -14,6 +14,7 @@
 #include <memory>
 #include <stddef.h>
 #include "../net/TcpConnection.h"
+#include "../net/FrameCrypto.h"   //协议加密：握手状态与帧体加解密
 
 using namespace net;
 
@@ -47,4 +48,8 @@ protected:
 protected:
     //对 TcpConnection 的弱引用，见类注释
     std::weak_ptr<TcpConnection> tmpConn_;
+
+    //本连接的协议加密状态。握手完成前 ready() 为 false，此时收发都走明文——
+    //握手帧本身必须明文发，否则双方都没有密钥、无从谈起。
+    net::ServerHandshake         m_handshake;
 };

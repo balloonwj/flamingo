@@ -17,7 +17,7 @@
 #pragma once
 
 #include <memory>
-#include "../../balloonui/balloonui/DuiControl.h"
+#include "../../../third-party/balloonui/balloonui/DuiControl.h"
 
 namespace balloonauth {
 
@@ -45,7 +45,13 @@ enum CtrlId : UINT
     kIdAutoLogin     = 111,   // “自动登录”复选框：checkbox 风格 DuiButton
 
     // ---- 主操作 ----
-    kIdLoginButton   = 120,   // “登录”按钮：push 风格 DuiButton
+    kIdLoginButton   = 120,   // “登录”按钮：push 风格 DuiButton。登录期间文字变为
+                              // “取消登录”，点击即中止本轮等待（见 LoginProgressState）
+
+    // ---- 状态区（登录按钮下方，平时整块隐藏）----
+    kIdStatusArea    = 150,   // 状态区容器（vbox）：登录中与登录失败时才显示
+    kIdStatusText    = 151,   // 状态文字：登录中显示“正在登录…”，失败显示具体原因
+    kIdStatusProgress = 152,  // 不确定进度条（marquee），仅登录中显示；相位由对话框定时器驱动
 
     // ---- 底部链接 ----
     kIdLinkRegister  = 130,   // “注册账号”链接：点击打开注册对话框

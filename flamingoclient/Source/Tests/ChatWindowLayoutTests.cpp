@@ -27,11 +27,11 @@
 #include "../BalloonChatWnd/ChatMessageList.h"
 #include "../BalloonChatWnd/ChatMockData.h"
 #include "../net/MessageProtocolClient.h"   // canRecallMessage（验证回填前后撤回条件的变化）
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiRichEditHost.h"
-#include "../../balloonui/balloonui/Controls/Layout/DuiSplitter.h"   // 消息区/输入区可拖分隔
-#include "../../balloonui/balloonui/HwndHostControl.h"               // 断言消息区非 HWND 寄宿
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiSplitter.h"   // 消息区/输入区可拖分隔
+#include "../../../third-party/balloonui/balloonui/HwndHostControl.h"               // 断言消息区非 HWND 寄宿
 
 using namespace balloonwjui;
 using namespace balloonchatwnd;

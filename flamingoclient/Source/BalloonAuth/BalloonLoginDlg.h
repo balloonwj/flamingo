@@ -18,15 +18,20 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
-#include "../../balloonui/balloonui/DuiNotify.h"   // WM_DUI_NOTIFY / struct DuiNotify
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"   // WM_DUI_NOTIFY / struct DuiNotify
 #include "../LoginAccountList.h"      // LOGIN_ACCOUNT_INFO / CLoginAccountList
 #include "../UserSessionData.h"       // FMG_MSG_UPDATE_RESULT / FMG_MSG_UPDATE_LOGIN_CONTINUE
+#include "LoginProgressState.h"       // auth::LoginProgressState（登录中状态机）
 
 class CFlamingoClient;
 
 // balloonui 控件 —— 仅作成员指针类型用，前置声明即可，真定义在 .cpp 引入。
-namespace balloonwjui { class DuiComboBox; class DuiEditHost; class DuiButton; }
+// 新增成员指针时务必同时补进这一行：漏了的话，凡是在引入对应控件头之前先包含本
+// 文件的 .cpp（典型是经 BalloonMainPanel.h 间接包含）都会编不过，报的是"DuiXxx
+// 不是 balloonwjui 的成员"、位置指向本文件，与那个 .cpp 看不出关系，很难查。
+namespace balloonwjui { class DuiComboBox; class DuiEditHost; class DuiButton;
+                        class DuiLabel; class DuiProgressBar; }
 // 自绘 Banner 控件 —— 同上，前置声明即可。
 namespace balloonauth { class AuthBanner; }
 
@@ -99,6 +104,51 @@ public:
     void DoLogin();
 
     /**
+     *  接收一个登录结果，按需就地更新界面。
+     *
+     *  登录失败时<u>不再弹 MessageBox、也不再销毁重建登录窗</u>，而是把失败原因显示在
+     *  窗口内的状态区，界面回到可输入，账号与口令都还在，用户改完直接重试即可。
+     *  这也顺带消掉了旧写法里的一个隐患：旧代码在失败时销毁本窗口再 StartLogin
+     *  重建一个，两者时序稍有交错就会撞上 ATL 的 m_hWnd 断言。
+     *
+     *  @param nLoginResultCode 登录结果码，取值见 enum LOGIN_RESULT_CODE
+     *  @param uGeneration      发起该次登录时拿到的轮次号，由登录线程原样带回
+     *  @return true  表示该结果已被采纳并处理（成功时调用方应关闭本窗口）；
+     *          false 表示这是一个<u>过期结果</u>（用户已取消、或已有更新的一轮），
+     *                调用方应当直接丢弃，不要做任何界面变更。
+     *  副作用：改变状态机与界面；成功时会停掉进度条定时器。
+     */
+    bool OnLoginResultArrived(long nLoginResultCode, uint32_t uGeneration);
+
+    /**
+     *  本窗口当前是否正处于「登录中」。
+     */
+    bool IsLogining() const;
+
+    /**
+     *  本窗口的模态循环当前是否在运行，即登录窗是否还摆在用户面前。
+     *
+     *  CMainDlg 用它判断一条登录结果该不该交给本窗口处理。<u>不能改用
+     *  IsLogining</u>：用户点过「取消登录」之后阶段已回到空闲，可后台线程仍会
+     *  在几秒后把结果投回来。若那时按「不归登录窗管」处理，结果就会漏进旧路径
+     *  的「弹 MessageBox + StartLogin」，而登录窗此刻还活着，StartLogin 再
+     *  Create 一次即撞上 ATL 的 m_hWnd == 0 断言（atlwin.h）。2026-08-14
+     *  反复「登录 —— 取消」实测复现过。
+     *
+     *  只要窗口还开着，登录结果一律由它自己按轮次号决定采纳还是丢弃。
+     */
+    bool IsLoginWindowActive() const { return m_modalRunning; }
+
+    /**
+     *  登录成功后关闭本窗口，由 CMainDlg 在接管后续流程之前调用。
+     *
+     *  单独开这个方法而不是把 EndModal 放开，是因为「关掉登录窗」这件事从外部看
+     *  只该有这一个理由；EndModal 是模态循环的实现细节，暴露出去容易被用在别处。
+     *  副作用：结束模态消息循环，窗口随后被销毁。
+     */
+    void CloseAfterLoginSuccess();
+
+    /**
      *  模态显示登录窗口。
      *    hWndParent：  父窗口句柄，模态期间被禁用；可为 NULL。
      *    dwInitParam： 兼容旧 CDialogImpl::DoModal 的第二参，本实现未使用。
@@ -111,6 +161,7 @@ public:
     // WM_SYSCOMMAND / WM_CLOSE 自行处理（最小化转隐藏、关闭结束模态）；
     // 其余消息（含标题栏 min/close 按钮通知）经 CHAIN 交回 DuiFrameWindow。
     BEGIN_MSG_MAP(CBalloonLoginDlg)
+        MESSAGE_HANDLER(WM_TIMER,      OnTimerMsg)
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
         MESSAGE_HANDLER(WM_SYSCOMMAND, OnSysCommand)
         MESSAGE_HANDLER(WM_CLOSE,      OnCloseMsg)
@@ -180,8 +231,44 @@ private:
      */
     LRESULT OnDuiNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
-    // “登录”按钮点击：校验输入 → 采集账号信息 → 发起登录 → 结束模态。
+    // WM_TIMER 处理：推进登录中那条 marquee 进度条的相位（该控件不自驱动）。
+    LRESULT OnTimerMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // “登录”按钮点击：登录中时它是「取消登录」，否则校验输入 → 采集账号信息 → 发起登录。
     void OnLoginClicked();
+
+    /**
+     *  把界面切到「登录中」：状态区显示“正在登录…”与滚动进度条，输入区与选项禁用，
+     *  主按钮文字改为“取消登录”，并启动驱动进度条相位的定时器。
+     *  副作用：改动多个控件的状态；启动定时器。
+     */
+    void EnterLoginingUi();
+
+    /**
+     *  把界面切回可输入：输入区与选项恢复，主按钮文字改回“登 录”，停掉进度条定时器。
+     *    pszMessage：状态区要显示的文字；传 NULL 表示整块隐藏状态区（例如用户取消后
+     *                不需要再留一行提示），非空时以提示色显示（失败原因走这条）。
+     *  副作用：改动多个控件的状态；停止定时器。
+     */
+    void LeaveLoginingUi(PCTSTR pszMessage);
+
+    /**
+     *  统一设置输入区与选项的可用性，供上面两个方法调用。
+     *    enabled：true 恢复可用，false 禁用（登录期间不允许改账号口令）。
+     */
+    void SetInputEnabled(bool enabled);
+
+    /**
+     *  按当前客户区尺寸把客户区控件树重排一遍。
+     *
+     *  <u>状态区显隐之后必须调它</u>：DuiControl::SetVisible 只置标志位并 Invalidate、
+     *  不触发重新布局，而竖直布局排版时会跳过不可见的子控件。两者叠加的后果是，
+     *  控件被隐藏期间若发生过一次重排，它就停在一份过时的矩形上，再显示出来时
+     *  那份矩形也不会被重新算过。实测表现为进度条右侧顶到窗口边框。
+     *
+     *  副作用：对客户区控件树强制重排并重绘。窗口尚未创建时直接返回。
+     */
+    void RelayoutClientContent();
 
     // 点击头像下方"在线状态胶囊"后弹出在线状态选择菜单（在线 / 离开 / 忙碌）。锚定在胶囊
     // 正下方；选中后把所选 v2 状态存入 m_loginPresence、并刷新 Banner 胶囊的颜色与文字。
@@ -278,7 +365,20 @@ private:
     void EndModal(INT_PTR result);
 
     /**
-     *  登录工作线程入口。pParam 为 CBalloonLoginDlg*。
+     *  交给登录线程的参数。DoLogin 堆分配，线程用完即释放。
+     *
+     *  轮次号必须随线程走、<u>不能让线程回头去读成员</u>：用户可能在结果回来之前
+     *  又发起了新的一轮，那时成员里已经是新号了，线程再去读就会把自己的结果
+     *  错认成新一轮的。
+     */
+    struct LoginThreadParam
+    {
+        CBalloonLoginDlg* m_pDlg;         //发起本次登录的窗口，不拥有
+        uint32_t          m_uGeneration;  //本轮轮次号，随结果原样带回
+    };
+
+    /**
+     *  登录工作线程入口。pParam 为 LoginThreadParam*，由本函数释放。
      *  返回值仅用于满足 _beginthreadex 的签名，调用方不关心。
      */
     static UINT WINAPI LoginThreadProc(void* pParam);
@@ -293,6 +393,17 @@ private:
     balloonwjui::DuiButton*   m_pRememberPwd;    // “记住密码”复选框
     balloonwjui::DuiButton*   m_pAutoLogin;      // “自动登录”复选框
     balloonauth::AuthBanner*  m_pBanner;         // 顶部品牌 / 头像 Banner（含可点击的在线状态胶囊）
+    balloonwjui::DuiControl*  m_pStatusArea;     // 状态区容器：登录中与登录失败时才显示
+    balloonwjui::DuiLabel*    m_pStatusText;     // 状态文字：“正在登录…”或失败原因
+    balloonwjui::DuiProgressBar* m_pStatusProgress;  // 不确定进度条，仅登录中显示
+
+    // 登录流程状态机：管「空闲 / 登录中 / 已登录」的流转，以及迟到结果的作废判定。
+    // 纯逻辑、有单元测试（Tests/LoginProgressStateTests.cpp），本类只按它的状态画界面。
+    auth::LoginProgressState  m_loginProgress;
+
+    // marquee 进度条的驱动定时器 id；0 表示未启动。DuiProgressBar 的 marquee 不自驱动，
+    // 相位得由调用方按固定间隔推进，见该控件的头文件注释。
+    UINT_PTR           m_dwMarqueeTimerId;
 
     // 本次登录选择的在线状态（v2 presence_type，见 net/Protocol.h；与 UserSessionData.h 的
     // kMyPresence* 同值）。OnLoginClicked 据状态下拉填好，LoginThreadProc 取它作登录 presence。

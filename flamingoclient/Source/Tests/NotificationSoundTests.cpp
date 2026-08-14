@@ -7,7 +7,7 @@
  *      可见在线态"的跳变才算上线，在线态之间互切、或掉线、或无变化都不算。
  *
  *  用 Catch2 v3（amalgamated），纯内存断言、不出声。presence 取值与 net/Protocol.h
- *  的 presence_type 对齐（离线 0 / 在线 1 / 离开 2 / 忙碌 3 / 隐身 4），此处用字面量
+ *  的 presence_type 对齐（离线 0 / 在线 1 / 离开 2 / 忙碌 3；4 已作废），此处用字面量
  *  以保持测试自包含、不引 Protocol.h。全局 _Module 由 BalloonChatLayoutTests.cpp
  *  统一定义，本文件只引用。
  *
@@ -29,7 +29,7 @@ static const int kOffline   = 0;   // 离线
 static const int kOnline    = 1;   // 在线
 static const int kAway      = 2;   // 离开
 static const int kBusy      = 3;   // 忙碌（勿扰）
-static const int kInvisible = 4;   // 隐身（对外显示离线）
+static const int kRetired = 4;     // 已作废的取值（曾经是隐身），按不可见态处理
 
 // =====================================================================
 // NSND-PATH. 种类 → wav 相对路径
@@ -52,8 +52,8 @@ TEST_CASE("NSND-ONLINE1 不可见态跳变为可见在线态算上线", "[notify
     CHECK(IsBuddyJustCameOnline(kOffline, kOnline) == true);
     CHECK(IsBuddyJustCameOnline(kOffline, kAway) == true);
     CHECK(IsBuddyJustCameOnline(kOffline, kBusy) == true);
-    // 隐身 → 在线：也算上线（隐身对外等同离线）
-    CHECK(IsBuddyJustCameOnline(kInvisible, kOnline) == true);
+    // 已作废取值 → 在线：也算上线（该取值按不可见态处理）
+    CHECK(IsBuddyJustCameOnline(kRetired, kOnline) == true);
 }
 
 TEST_CASE("NSND-ONLINE2 可见在线态之间互切不算上线", "[notifysound]")
@@ -67,14 +67,14 @@ TEST_CASE("NSND-ONLINE2 可见在线态之间互切不算上线", "[notifysound]
     CHECK(IsBuddyJustCameOnline(kOnline, kOnline) == false);
 }
 
-TEST_CASE("NSND-ONLINE3 掉线 / 转隐身 / 仍不可见都不算上线", "[notifysound]")
+TEST_CASE("NSND-ONLINE3 掉线 / 转不可见态 / 仍不可见都不算上线", "[notifysound]")
 {
-    // 在线 → 离线 / 隐身：是下线，不响
+    // 在线 → 不可见态：是下线，不响
     CHECK(IsBuddyJustCameOnline(kOnline, kOffline) == false);
-    CHECK(IsBuddyJustCameOnline(kOnline, kInvisible) == false);
-    // 不可见态之间变（离线 → 隐身 / 隐身 → 离线 / 离线 → 离线）：始终不可见，不响
-    CHECK(IsBuddyJustCameOnline(kOffline, kInvisible) == false);
-    CHECK(IsBuddyJustCameOnline(kInvisible, kOffline) == false);
+    CHECK(IsBuddyJustCameOnline(kOnline, kRetired) == false);
+    // 不可见态之间变：始终不可见，不响
+    CHECK(IsBuddyJustCameOnline(kOffline, kRetired) == false);
+    CHECK(IsBuddyJustCameOnline(kRetired, kOffline) == false);
     CHECK(IsBuddyJustCameOnline(kOffline, kOffline) == false);
 }
 

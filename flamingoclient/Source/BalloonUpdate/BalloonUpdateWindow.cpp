@@ -15,12 +15,12 @@
 #include "../UserSessionData.h"                 // g_szHomePath（更新器与主程序同目录）
 #include "../Update/UpdateManager.h"
 #include "../BalloonChatWnd/FileBubbleFormat.h" // FormatFileSize（复用，不另写一份）
-#include "../../balloonui/balloonui/DuiResMgr.h"
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Feedback/DuiProgressBar.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiRichEditHost.h"
+#include "../../../third-party/balloonui/balloonui/DuiResMgr.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiProgressBar.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEditHost.h"
 
 // ---- 窗口固定尺寸（逻辑像素）-------------------------------------------
 static const int kDlgWidth      = 420;   // 客户区宽
@@ -35,16 +35,30 @@ static const int kTitleH        = 32;    // 标题行高
 static const int kTitleGap      = 8;     // 标题与版本行之间的间距
 static const int kInfoLineH     = 22;    // 版本行 / 包大小行 行高
 static const int kNoteTopGap    = 12;    // 包大小与「更新说明」小标题之间的间距
-static const int kNoteCaptionH  = 20;    // 「更新说明」小标题行高
+//「更新说明」小标题行高。比文字本身高出一截，文字顶部对齐，多出来的部分就是它与
+//下面正文框之间的留白 —— 这样不必单独放一个间隔控件，也就不用让那个控件跟着
+//说明区一起显隐。
+static const int kNoteCaptionH  = 28;
 static const int kNoteH         = 120;   // 更新说明正文高度（可滚动，不够就滚）
 static const int kProgressTopGap= 12;    // 更新说明与进度条之间的间距
-static const int kProgressH     = 14;    // 进度条高
-static const int kProgressTextH = 20;    // 进度文字行高
+//进度条高。取 20 而不是更细的 14：进度条内部要画「53%」这样的百分比文字，
+//条比字还矮的话文字会从上下两边溢出条外，看着像画糊了。
+static const int kProgressH     = 20;
+//进度文字行高。文字在行内垂直居中，行高比文字高出来的部分自然成为它与上方进度条
+//之间的留白 —— 与「更新说明」小标题同一手法，不必单独放间隔控件。
+static const int kProgressTextH = 26;
 static const int kButtonRowH    = 36;    // 按钮行高
 static const int kButtonH       = 32;    // 按钮高
 static const int kBtnLaterW     = 88;    // 「稍后」按钮宽
 static const int kBtnUpdateW    = 110;   // 「立即更新」按钮宽
 static const int kButtonGap     = 10;    // 两个按钮之间的间距
+
+// ---- 假进度调试入口（--updatewindow --progress）--------------------------
+// 定时器 id。取 1 即可：本窗口目前只有这一个定时器。
+static const UINT kMockProgressTimerId = 1;
+// 每跳间隔（毫秒）与总跳数。60 跳 × 120ms 约 7 秒走完，够看清进度条的行进过程。
+static const UINT kMockProgressIntervalMs = 120;
+static const int  kMockProgressSteps      = 60;
 
 // ---- 按钮命令 id --------------------------------------------------------
 // 须 >= 10：DuiFrameWindow 标题栏保留了 1/2/3（最小化 / 最大化 / 关闭），
@@ -129,14 +143,17 @@ CBalloonUpdateWindow::CBalloonUpdateWindow()
     : m_built(false)
     , m_blockClose(false)
     , m_packageSize(0)
+    , m_mockReceived(0)
+    , m_mockTotal(0)
     , m_readyToInstall(false)
+    , m_installAfterDownload(false)
     , m_hostWnd(NULL)
-    , m_loginGateWnd(NULL)
+    , m_gatedWnd(NULL)
+    , m_gatedKind(kGatedNone)
     , m_titleIconBmp(NULL)
     , m_labTitle(NULL)
     , m_labVersion(NULL)
     , m_labSize(NULL)
-    , m_labNoteCaption(NULL)
     , m_editNote(NULL)
     , m_progress(NULL)
     , m_labProgress(NULL)
@@ -167,9 +184,102 @@ void CBalloonUpdateWindow::SetHostWindow(HWND hWnd)
     m_hostWnd = hWnd;
 }
 
-void CBalloonUpdateWindow::SetLoginGateWindow(HWND hWnd)
+void CBalloonUpdateWindow::SetGatedWindow(HWND hWnd, GatedWindowKind kind)
 {
-    m_loginGateWnd = hWnd;
+    m_gatedWnd = hWnd;
+    m_gatedKind = (hWnd != NULL) ? kind : kGatedNone;
+
+    //立刻禁用：调用方紧接着就会 ShowResult / ShowChecking 把本窗口摆出来。
+    if (m_gatedWnd != NULL && ::IsWindow(m_gatedWnd))
+    {
+        ::EnableWindow(m_gatedWnd, FALSE);
+    }
+}
+
+void CBalloonUpdateWindow::ExitApplication()
+{
+    //先把两个判断依据取下来：下面 ReleaseGatedWindow 会把它们清掉。
+    const GatedWindowKind gatedKind = m_gatedKind;
+    const HWND            gatedWnd  = m_gatedWnd;
+
+    //被挡的窗口恢复可用：它马上要收到退出请求，禁用状态下有些收尾动作走不通。
+    //这里先把类别降级成"普通模态窗"，免得 ReleaseGatedWindow 请它继续登录 ——
+    //用户选的是退出，不是稍后。
+    m_gatedKind = kGatedModalDlg;
+    ReleaseGatedWindow();
+
+    RequestApplicationExit(gatedKind, gatedWnd);
+}
+
+void CBalloonUpdateWindow::RequestApplicationExit(GatedWindowKind gatedKind, HWND gatedWnd)
+{
+    //先同步销毁本窗口：无论走哪条路，它都不该再留在屏幕上；也避免程序退出时
+    //这个静态单实例仍持有有效 HWND 而触发 ATL 的析构断言。
+    //m_blockClose 必须先撤，否则 OnCloseMsg 会把这次关闭拦掉。
+    m_blockClose = false;
+    if (IsWindow())
+    {
+        SendMessage(WM_CLOSE, 0, 0);
+    }
+
+    if (gatedKind == kGatedLoginDlg && gatedWnd != NULL && ::IsWindow(gatedWnd))
+    {
+        //登录前：交给登录窗自己关。它退出模态循环后，CMainDlg::StartLogin 会统一
+        //收尾一次。详见本函数在头文件里的说明。
+        LOG_INFO(_T("升级窗：登录前退出，交由登录窗收尾。"));
+        ::PostMessage(gatedWnd, WM_CLOSE, 0, 0);
+        return;
+    }
+
+    //登录后从关于框一类的模态对话框里拉起本窗口：先请那个对话框关闭。它的模态循环
+    //还在运行，主窗口若在它下面先被销毁，模态循环返回时对着已销毁的窗口收尾会出问题。
+    //这条消息只是排进消息队列，主窗口的退出请求排在它后面，顺序上是安全的。
+    if (gatedKind == kGatedModalDlg && gatedWnd != NULL && ::IsWindow(gatedWnd))
+    {
+        LOG_INFO(_T("升级窗：退出前先请被挡的模态对话框关闭。"));
+        ::PostMessage(gatedWnd, WM_CLOSE, 0, 0);
+    }
+
+    //登录后：请主窗口直接退出，不弹退出提示框
+    if (m_hostWnd != NULL && ::IsWindow(m_hostWnd))
+    {
+        LOG_INFO(_T("升级窗：登录后退出，请主窗口收尾。"));
+        ::PostMessage(m_hostWnd, FMG_MSG_EXIT_FOR_UPDATE, 0, 0);
+        return;
+    }
+
+    LOG_ERROR(_T("升级窗：既没有登录窗也没有主窗口可请，无法退出程序。"));
+}
+
+void CBalloonUpdateWindow::ReleaseGatedWindow()
+{
+    if (m_gatedWnd == NULL)
+    {
+        return;
+    }
+
+    if (::IsWindow(m_gatedWnd))
+    {
+        //先恢复可用再谈别的：哪怕下面投消息失败，用户也不至于对着一个点不动的窗口发呆
+        ::EnableWindow(m_gatedWnd, TRUE);
+        if (m_gatedKind == kGatedLoginDlg)
+        {
+            ::PostMessage(m_gatedWnd, FMG_MSG_UPDATE_LOGIN_CONTINUE, 0, 0);
+        }
+    }
+
+    //只处理一次
+    m_gatedWnd           = NULL;
+    m_gatedKind = kGatedNone;
+}
+
+bool CBalloonUpdateWindow::IsVersionPostponed(const std::string& version) const
+{
+    if (version.empty() || m_postponedVersion.empty())
+    {
+        return false;
+    }
+    return m_postponedVersion == version;
 }
 
 bool CBalloonUpdateWindow::IsShowing() const
@@ -257,6 +367,8 @@ void CBalloonUpdateWindow::ShowResult(const update::UpdateTaskResult& r)
         return;
     }
 
+    m_shownVersion = r.m_latestVersion;
+
     //记下包大小供进度文字用。无可用包时为 0，进度文字会退化成只显示已收字节。
     m_packageSize = r.m_packageUsable ? static_cast<long long>(r.m_size) : 0;
 
@@ -264,15 +376,16 @@ void CBalloonUpdateWindow::ShowResult(const update::UpdateTaskResult& r)
         update::BuildUpdateViewState(r, FLAMINGO_CLIENT_VERSION_W);
     ApplyViewState(st);
 
-    //更新说明是 UTF-8，转宽串后填进只读 RichEdit。没有说明时（已是最新 / 检查失败，
-    //或者发布侧没填）连同小标题一起隐掉——留一个空框在那里既难看，又会带出一个
-    //闪烁的光标让人以为可以往里打字。
+    //更新说明是 UTF-8，转宽串后填进只读 RichEdit。
+    //
+    //<u>说明区始终显示、高度固定</u>，即便发布侧没填说明也留着那个空框。早先是"没内容
+    //就整块隐掉"，结果窗口布局会随内容有无而变，下方控件跟着上下挪 —— 实测出现过
+    //进度条压住进度文字、只剩半截的花屏。固定高度换来的是布局恒定，代价只是空框占位。
     const std::wstring note = EncodeUtil::Utf8ToUnicode(r.m_releaseNote);
     if (m_editNote != NULL)
     {
         m_editNote->SetText(note.c_str());
     }
-    SetNoteAreaVisible(!note.empty());
 
     ShowWindow(SW_SHOW);
     UpdateWindow();
@@ -281,6 +394,10 @@ void CBalloonUpdateWindow::ShowResult(const update::UpdateTaskResult& r)
 
     LOG_INFO(_T("升级窗已显示：kind=%d，强制=%d。"),
              (int)st.kind, st.closable ? 0 : 1);
+
+    //强制升级的自动流程放在最后：它可能一路走到"拉起更新器并请程序退出"，
+    //那之后本窗口已被销毁、控件指针全部置空，不能再有后续的界面操作。
+    AutoRunForcedUpdate(r);
 }
 
 // =======================================================================
@@ -351,8 +468,8 @@ void CBalloonUpdateWindow::BuildUiOnce()
         {
             lab->SetFont(capFont);
         }
-        lab->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-        m_labNoteCaption = lab.get();
+        //顶部对齐：行高比文字高，空出来的部分落在文字下方，与正文框拉开距离
+        lab->SetTextAlign(DT_LEFT | DT_TOP | DT_SINGLELINE);
         root->AddChild(std::move(lab), balloonwjui::DuiLayout::Hint().Fixed(kNoteCaptionH));
     }
 
@@ -496,10 +613,31 @@ void CBalloonUpdateWindow::ApplyViewState(const update::UpdateViewState& st)
 
     if (m_btnLater != NULL)
     {
-        //强制升级时隐藏「稍后」；其余形态下该按钮同时充当"知道了"的关闭按钮
-        m_btnLater->SetVisible(st.showLaterButton);
-        m_btnLater->SetText(st.canDownload ? _T("稍后") : _T("知道了"));
+        if (st.showLaterButton)
+        {
+            //非强制：这个按钮兼作"稍后"与"知道了"的关窗出口
+            m_btnLater->SetVisible(true);
+            m_btnLater->SetText(st.canDownload ? _T("稍后") : _T("知道了"));
+        }
+        else if (st.canDownload)
+        {
+            //强制升级且升级包可用：下载与安装全程自动完成，用户没有任何需要做的
+            //选择，因此不给按钮 —— 既没有「稍后」，也不提供退出程序的出口。
+            m_btnLater->SetVisible(false);
+        }
+        else
+        {
+            //强制升级、但服务端给的升级包信息不全（缺下载令牌 / MD5 / 大小），自动
+            //升级无从进行。这种情况下再不给出口，用户就只能去任务管理器结束进程了，
+            //所以保留一条退出途径。属于发布侧的记录有问题，正常不会走到。
+            m_btnLater->SetVisible(true);
+            m_btnLater->SetText(_T("退出程序"));
+        }
     }
+
+    //强制升级期间置顶：此时其它窗口都被禁用，升级窗一旦被别的窗口盖住，用户既看不到
+    //进度、又点不动任何东西，会以为程序卡死。非强制形态取消置顶，不去妨碍用户干活。
+    SetWindowTopMost(m_blockClose);
 
     //切换形态时隐藏上一轮的下载进度
     if (m_progress != NULL)
@@ -515,19 +653,9 @@ void CBalloonUpdateWindow::ApplyViewState(const update::UpdateViewState& st)
     //强制升级时连标题栏的关闭按钮也去掉，只留一个"必须升级"的出口
     SetButtons(false, false, st.closable);
 
+    //上面改了一堆控件的显隐，必须重排，否则新露出来的控件没有矩形、画不出来
+    RelayoutClientContent();
     Invalidate();
-}
-
-void CBalloonUpdateWindow::SetNoteAreaVisible(bool hasNote)
-{
-    if (m_labNoteCaption != NULL)
-    {
-        m_labNoteCaption->SetVisible(hasNote);
-    }
-    if (m_editNote != NULL)
-    {
-        m_editNote->SetVisible(hasNote);
-    }
 }
 
 void CBalloonUpdateWindow::TakeFocusFromNote()
@@ -577,8 +705,6 @@ void CBalloonUpdateWindow::ApplyCheckingUi()
     {
         m_editNote->SetText(_T(""));
     }
-    //还没查到任何东西，说明区整块收起来
-    SetNoteAreaVisible(false);
     if (m_progress != NULL)
     {
         m_progress->SetVisible(false);
@@ -600,7 +726,96 @@ void CBalloonUpdateWindow::ApplyCheckingUi()
         m_btnLater->SetText(_T("取消"));
     }
 
+    RelayoutClientContent();
     Invalidate();
+}
+
+void CBalloonUpdateWindow::RelayoutClientContent()
+{
+    balloonwjui::DuiControl* root = GetClientContent();
+    if (root == NULL)
+    {
+        return;
+    }
+    //用它当前的矩形重排一遍：矩形没变，变的是哪些子控件参与布局。
+    root->ForceLayout(root->GetRect());
+
+    //再强制整窗擦除重绘。ForceLayout 内部那次 Invalidate 力度不够：控件位置变了之后，
+    //原地留下的旧像素不会被擦掉 —— 实测表现为进度条压在进度文字上、文字只剩半截，
+    //以及隐藏掉的更新说明框仍留一个灰色方框在屏幕上。erase 传 TRUE 才会先刷背景。
+    if (m_hWnd != NULL && ::IsWindow(m_hWnd))
+    {
+        ::InvalidateRect(m_hWnd, NULL, TRUE);
+        ::UpdateWindow(m_hWnd);
+    }
+}
+
+void CBalloonUpdateWindow::StartMockProgress(long long totalBytes)
+{
+    if (totalBytes <= 0)
+    {
+        return;
+    }
+
+    m_packageSize  = totalBytes;
+    m_mockTotal    = totalBytes;
+    m_mockReceived = 0;
+
+    EnterDownloadingUi();
+    SetTimer(kMockProgressTimerId, kMockProgressIntervalMs);
+    LOG_INFO(_T("升级窗：假进度演示开始，总字节 %lld。"), totalBytes);
+}
+
+LRESULT CBalloonUpdateWindow::OnTimerMsg(UINT /*uMsg*/, WPARAM wParam,
+                                         LPARAM /*lParam*/, BOOL& bHandled)
+{
+    if (wParam != kMockProgressTimerId)
+    {
+        //不是假进度的定时器：放行给基类，别把别人的定时器吃掉
+        bHandled = FALSE;
+        return 0;
+    }
+
+    bHandled = TRUE;
+
+    const long long step = m_mockTotal / kMockProgressSteps + 1;
+    m_mockReceived += step;
+
+    const bool done = (m_mockReceived >= m_mockTotal);
+    if (done)
+    {
+        m_mockReceived = m_mockTotal;
+        KillTimer(kMockProgressTimerId);
+    }
+
+    //刻意走真实消息通路：这样看到的就是真下载时的样子
+    update::UpdateProgressInfo* info = new update::UpdateProgressInfo();
+    info->m_received = m_mockReceived;
+    info->m_total    = m_mockTotal;
+    if (!PostMessage(FMG_MSG_UPDATE_PROGRESS, 0, (LPARAM)info))
+    {
+        delete info;
+    }
+
+    if (done)
+    {
+        //把"下载完成"那一档也演出来：主按钮变「立即重启并安装」
+        update::UpdateTaskResult* r = new update::UpdateTaskResult();
+        r->m_valid         = true;
+        r->m_transportOk   = true;
+        r->m_hasUpdate     = true;
+        r->m_packageUsable = true;
+        r->m_size          = m_mockTotal;
+        r->m_downloaded    = true;
+        r->m_localPath     = L"（演示用，未真正下载）";
+        if (!PostMessage(FMG_MSG_UPDATE_RESULT, 0, (LPARAM)r))
+        {
+            delete r;
+        }
+        LOG_INFO(_T("升级窗：假进度演示结束。"));
+    }
+
+    return 0;
 }
 
 void CBalloonUpdateWindow::EnterDownloadingUi()
@@ -621,6 +836,8 @@ void CBalloonUpdateWindow::EnterDownloadingUi()
         m_btnUpdateNow->SetEnabled(false);
     }
 
+    //进度条与进度文字刚从隐藏切到显示，必须重排才画得出来
+    RelayoutClientContent();
     Invalidate();
 }
 
@@ -633,11 +850,53 @@ void CBalloonUpdateWindow::OnClickUpdateNow()
         return;
     }
 
-    //第一阶段：先把包下下来
+    //第一阶段：先把包下下来。记下"这是用户主动要升级"，下载完成后直接装，
+    //不再要求他再点一次。
+    StartDownloadAndInstall();
+    LOG_INFO(_T("升级窗：用户点击「立即更新」，已投递下载任务。"));
+}
+
+void CBalloonUpdateWindow::StartDownloadAndInstall()
+{
+    m_installAfterDownload = true;
     EnterDownloadingUi();
     //true = 发现新版本就顺带下载。结果与进度都会经窗口消息回到本窗口。
     update::UpdateManager::GetInstance().CheckAndDownload(true);
-    LOG_INFO(_T("升级窗：用户点击「立即更新」，已投递下载任务。"));
+}
+
+void CBalloonUpdateWindow::SetWindowTopMost(bool topMost)
+{
+    if (m_hWnd == NULL || !::IsWindow(m_hWnd))
+    {
+        return;
+    }
+
+    //SWP_NOACTIVATE：只改 Z 序，不抢走当前的键盘焦点。
+    ::SetWindowPos(m_hWnd, topMost ? HWND_TOPMOST : HWND_NOTOPMOST,
+                   0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+
+void CBalloonUpdateWindow::AutoRunForcedUpdate(const update::UpdateTaskResult& r)
+{
+    //非强制：升不升级由用户决定，这里什么都不做。
+    if (!r.m_forced || !r.m_hasUpdate || !r.m_packageUsable)
+    {
+        return;
+    }
+
+    //包已经下好了（登录后静默检查那条路会顺带下载）：直接进安装。
+    if (r.m_downloaded && !r.m_localPath.empty())
+    {
+        m_readyToInstall = true;
+        m_packagePath    = r.m_localPath;
+        LOG_INFO(_T("升级窗：强制升级且升级包已就绪，自动进入安装。路径 %s。"),
+                 m_packagePath.c_str());
+        LaunchUpdaterAndExit();
+        return;
+    }
+
+    LOG_INFO(_T("升级窗：强制升级，自动开始下载升级包。"));
+    StartDownloadAndInstall();
 }
 
 bool CBalloonUpdateWindow::LaunchUpdaterAndExit()
@@ -656,7 +915,7 @@ bool CBalloonUpdateWindow::LaunchUpdaterAndExit()
         updater += L'\\';
     }
     const std::wstring installDir = updater;   //以分隔符结尾的安装目录
-    updater += L"iUpdateAuto.exe";
+    updater += L"FlamingoUpdater.exe";
 
     if (::GetFileAttributesW(updater.c_str()) == INVALID_FILE_ATTRIBUTES)
     {
@@ -718,22 +977,18 @@ bool CBalloonUpdateWindow::LaunchUpdaterAndExit()
     LOG_INFO(_T("升级窗：更新器已启动，命令行 %s。请主程序退出以便覆盖文件。"),
              cmdline.c_str());
 
-    //更新器要等主进程退出才能动文件。这里请主窗口关闭；主窗口没登记时只能靠用户
-    //自己关，更新器等 30 秒后会如实提示并放弃，不会损坏任何文件。
-    if (m_hostWnd != NULL && ::IsWindow(m_hostWnd))
-    {
-        //专用消息而非 WM_CLOSE：后者会先弹「退出程序还是最小化到托盘？」，
-        //用户选「最小化」的话程序不退出，更新器等 30 秒后放弃，升级白做一场。
-        ::PostMessage(m_hostWnd, FMG_MSG_EXIT_FOR_UPDATE, 0, 0);
-    }
-    else
-    {
-        LOG_ERROR(_T("升级窗：未登记主窗口句柄，无法自动退出主程序。"));
-        if (m_labProgress != NULL)
-        {
-            m_labProgress->SetText(_T("请手动退出程序以完成安装"));
-        }
-    }
+    //更新器要等主进程退出才能动文件，这里请程序退出。走与「退出程序」按钮同一套
+    //逻辑：登录前交给登录窗自己关，登录后请主窗口直接收尾 —— 两条路混用会把程序
+    //收尾两遍，第二遍对着已销毁的窗口调 DestroyWindow 直接崩（详见
+    //RequestApplicationExit 的说明）。
+    //
+    //退出不了也不会损坏任何文件：更新器等 30 秒后会如实提示并放弃。
+    const GatedWindowKind gatedKind = m_gatedKind;
+    const HWND            gatedWnd  = m_gatedWnd;
+    //先降级成"普通模态窗"：这次是去安装升级包，不是回头继续登录。
+    m_gatedKind = kGatedModalDlg;
+    ReleaseGatedWindow();
+    RequestApplicationExit(gatedKind, gatedWnd);
 
     return true;
 }
@@ -755,17 +1010,16 @@ LRESULT CBalloonUpdateWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
         return 0;
     }
 
-    //关窗即"用户选择了稍后"：放行那个被挡住的登录。强制升级走不到这里（上面已拦下），
-    //所以强制升级时登录会一直被挡着。
-    if (m_loginGateWnd != NULL)
+    //关窗即"用户选择了稍后"：记下这个版本，登录后的静默检查不再对它重复弹窗。
+    //强制升级走不到这里（上面已拦下），所以不会误记。
+    if (!m_shownVersion.empty())
     {
-        if (::IsWindow(m_loginGateWnd))
-        {
-            ::PostMessage(m_loginGateWnd, FMG_MSG_UPDATE_LOGIN_CONTINUE, 0, 0);
-        }
-        //只放行一次
-        m_loginGateWnd = NULL;
+        m_postponedVersion = m_shownVersion;
     }
+
+    //把被挡住的窗口恢复可用，并放行那次被拦下的登录。
+    //强制升级走不到这里（上面已拦下），所以强制升级时它一直是禁用的。
+    ReleaseGatedWindow();
 
     //摘掉投递目标要在销毁窗口之前：否则工作线程可能正好往这个 HWND 投消息，
     //消息被系统丢弃，lParam 上的堆对象就此泄漏且没有任何报错。
@@ -776,7 +1030,6 @@ LRESULT CBalloonUpdateWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
     m_labTitle     = NULL;
     m_labVersion   = NULL;
     m_labSize      = NULL;
-    m_labNoteCaption = NULL;
     m_editNote     = NULL;
     m_progress     = NULL;
     m_labProgress  = NULL;
@@ -786,6 +1039,7 @@ LRESULT CBalloonUpdateWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
 
     //安装态不跨越"关窗再打开"：重开时应当从头走一遍检查，而不是拿上一次的包直接装。
     m_readyToInstall = false;
+    m_installAfterDownload = false;
     m_packagePath.clear();
 
     DestroyWindow();
@@ -811,7 +1065,15 @@ LRESULT CBalloonUpdateWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
             OnClickUpdateNow();
             return 0;
         case kIdLater:
-            //「稍后」等价于关闭窗口；强制升级时该按钮不显示，不会执行到此处
+            if (m_blockClose)
+            {
+                //强制升级形态下这个按钮是「退出程序」：直接退出，不回到登录窗 /
+                //主面板 —— 那两个此刻都被禁用着，回去也没法用。
+                LOG_INFO(_T("升级窗：强制升级下用户选择退出程序。"));
+                ExitApplication();
+                return 0;
+            }
+            //非强制：「稍后」等价于关闭窗口，关闭时会恢复被挡窗口并续上登录
             PostMessage(WM_CLOSE, 0, 0);
             return 0;
         default:
@@ -887,17 +1149,53 @@ LRESULT CBalloonUpdateWindow::OnUpdateResult(UINT /*uMsg*/, WPARAM /*wParam*/,
         {
             m_labProgress->SetText(_T("下载完成，可以安装了"));
         }
+        //用户点过「立即更新」：下完直接装，不再要他确认第二次
+        if (m_installAfterDownload)
+        {
+            //先把"正在启动安装"画出来再去起进程：CreateProcess 加上随后的退出收尾
+            //会占住 UI 线程，不先刷一次的话这段时间界面还停在"下载完成"上。
+            if (m_labProgress != NULL)
+            {
+                m_labProgress->SetText(_T("下载完成，正在启动安装..."));
+            }
+            if (m_btnUpdateNow != NULL)
+            {
+                m_btnUpdateNow->SetEnabled(false);
+            }
+            Invalidate();
+            UpdateWindow();
+
+            LOG_INFO(_T("升级窗：升级包下载完成，用户已选升级，自动进入安装。路径 %s。"),
+                     m_packagePath.c_str());
+            if (LaunchUpdaterAndExit())
+            {
+                delete r;
+                return 0;
+            }
+
+            //起更新器失败（找不到 FlamingoUpdater.exe、CreateProcess 失败等）。
+            //失败原因 LaunchUpdaterAndExit 内部已写进进度文字，这里退回"等用户确认"
+            //的样子，把按钮还给他重试，而不是让界面停在"正在启动安装"上不动。
+            m_installAfterDownload = false;
+        }
+
+        //自动下载（autodownloadupdate=1）那条路：包已备好，但装不装由用户决定
         if (m_btnUpdateNow != NULL)
         {
             m_btnUpdateNow->SetText(_T("立即重启并安装"));
             m_btnUpdateNow->SetVisible(true);
             m_btnUpdateNow->SetEnabled(true);
+            RelayoutClientContent();
         }
-        LOG_INFO(_T("升级窗：升级包下载完成并校验通过，路径 %s。"), m_packagePath.c_str());
+        LOG_INFO(_T("升级窗：升级包下载完成并校验通过，等待用户确认安装。路径 %s。"),
+                 m_packagePath.c_str());
     }
-    else if (r->m_hasUpdate && r->m_packageUsable)
+    else if (r->m_downloadAttempted && r->m_hasUpdate && r->m_packageUsable)
     {
-        //升级包可用但下载失败：把按钮恢复为可用以便重试，并在进度文字处说明失败
+        //升级包可用但下载失败：把按钮恢复为可用以便重试，并在进度文字处说明失败。
+        //这里必须先看 m_downloadAttempted：纯检查的结果同样是 hasUpdate=1、
+        //packageUsable=1、downloaded=0，不加这一条就会把关于页「检查更新」查到的
+        //新版本误报成"下载失败"（实测现象是关于页点检查后提示失败，查不出新版本）。
         if (m_labProgress != NULL)
         {
             m_labProgress->SetText(_T("下载失败，请重试"));
@@ -906,6 +1204,8 @@ LRESULT CBalloonUpdateWindow::OnUpdateResult(UINT /*uMsg*/, WPARAM /*wParam*/,
         {
             m_btnUpdateNow->SetEnabled(true);
         }
+        //撤掉"下完就装"的意图：这次没下成，用户要重试得重新点一次
+        m_installAfterDownload = false;
         LOG_ERROR(_T("升级窗：升级包下载失败。"));
     }
     else
@@ -913,6 +1213,15 @@ LRESULT CBalloonUpdateWindow::OnUpdateResult(UINT /*uMsg*/, WPARAM /*wParam*/,
         //本次是一次纯检查（或检查本身失败）：按新结果重新呈现界面
         m_packageSize = r->m_packageUsable ? static_cast<long long>(r->m_size) : 0;
         ApplyViewState(update::BuildUpdateViewState(*r, FLAMINGO_CLIENT_VERSION_W));
+        Invalidate();
+
+        //查出来是强制升级：不等用户点，直接开始下载并安装。关于页的「检查更新」查到
+        //强制版本时走的就是这条路。放在 Invalidate 之后，因为它可能一路走到程序退出，
+        //那之后本窗口已销毁、控件指针全部置空，不能再有界面操作。
+        const update::UpdateTaskResult snapshot = *r;
+        delete r;
+        AutoRunForcedUpdate(snapshot);
+        return 0;
     }
 
     Invalidate();

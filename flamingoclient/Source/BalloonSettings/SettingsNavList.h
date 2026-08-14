@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/List/DuiListBox.h"   // balloonwjui::DuiVirtualList
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiListBox.h"   // balloonwjui::DuiVirtualList
 #include <vector>
 
 namespace balloonsettings {

@@ -112,9 +112,9 @@
     </Midl>
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>..\balloonui\balloonui;..\..\third-party\sqlite-src-3530100;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;..\..\third-party\balloonui\balloonui;..\..\third-party\sqlite-src-3530100;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessToFile>false</PreprocessToFile>
       <PreprocessSuppressLineNumbers>false</PreprocessSuppressLineNumbers>
       <MinimalRebuild>
@@ -131,7 +131,8 @@
       <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>RichEd20.Lib;version.lib;odbc32.lib;odbccp32.lib;IMM32.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\bin\Win32\Debug\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libsodium.lib;RichEd20.Lib;version.lib;odbc32.lib;odbccp32.lib;IMM32.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
     </Link>
@@ -154,9 +155,9 @@
            speexdsp 的头文件；缺 /utf-8 则源码里的 UTF-8 中文注释被按系统代码页
            (GBK) 解读，行尾字节被吃掉后 // 注释会连吞下一行真代码，报出一堆
            "非法 else""语法错误 }" 之类完全对不上号的错。两条都补齐，与 Debug 一致。 -->
-      <AdditionalIncludeDirectories>..\balloonui\balloonui;..\..\third-party\sqlite-src-3530100;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;..\..\third-party\balloonui\balloonui;..\..\third-party\sqlite-src-3530100;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 /EHsc %(AdditionalOptions)</AdditionalOptions>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;STRICT;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;STRICT;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ExceptionHandling />
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -169,9 +170,10 @@
       <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
+      <AdditionalLibraryDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\bin\Win32\Release\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <!-- gdiplus.lib / comctl32.lib 同样是 Release 缺、Debug 有；界面代码用了
            GDI+ 与通用控件，不补上链接期必然一片无法解析的外部符号。 -->
-      <AdditionalDependencies>riched20.lib;version.lib;odbc32.lib;odbccp32.lib;IMM32.lib;Ws2_32.lib;gdiplus.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libsodium.lib;riched20.lib;version.lib;odbc32.lib;odbccp32.lib;IMM32.lib;Ws2_32.lib;gdiplus.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
     </Link>
@@ -194,9 +196,9 @@
     </Midl>
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>..\balloonui\balloonui;..\..\third-party\sqlite-src-3530100;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;..\..\third-party\balloonui\balloonui;..\..\third-party\sqlite-src-3530100;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessToFile>false</PreprocessToFile>
       <PreprocessSuppressLineNumbers>false</PreprocessSuppressLineNumbers>
       <MinimalRebuild>
@@ -213,7 +215,8 @@
       <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
-      <AdditionalDependencies>RichEd20.Lib;version.lib;odbc32.lib;odbccp32.lib;IMM32.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\bin\x64\Debug\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies>libsodium.lib;RichEd20.Lib;version.lib;odbc32.lib;odbccp32.lib;IMM32.lib;ws2_32.lib;gdiplus.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
     </Link>
@@ -236,9 +239,9 @@
            speexdsp 的头文件；缺 /utf-8 则源码里的 UTF-8 中文注释被按系统代码页
            (GBK) 解读，行尾字节被吃掉后 // 注释会连吞下一行真代码，报出一堆
            "非法 else""语法错误 }" 之类完全对不上号的错。两条都补齐，与 Debug 一致。 -->
-      <AdditionalIncludeDirectories>..\balloonui\balloonui;..\..\third-party\sqlite-src-3530100;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;..\..\third-party\balloonui\balloonui;..\..\third-party\sqlite-src-3530100;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 /EHsc %(AdditionalOptions)</AdditionalOptions>
-      <PreprocessorDefinitions>WIN32;_WINDOWS;STRICT;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;STRICT;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ExceptionHandling />
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -251,14 +254,24 @@
       <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ResourceCompile>
     <Link>
+      <AdditionalLibraryDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\bin\x64\Release\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <!-- gdiplus.lib / comctl32.lib 同样是 Release 缺、Debug 有；界面代码用了
            GDI+ 与通用控件，不补上链接期必然一片无法解析的外部符号。 -->
-      <AdditionalDependencies>riched20.lib;version.lib;odbc32.lib;odbccp32.lib;IMM32.lib;Ws2_32.lib;gdiplus.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libsodium.lib;riched20.lib;version.lib;odbc32.lib;odbccp32.lib;IMM32.lib;Ws2_32.lib;gdiplus.lib;comctl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="net\FrameCrypto.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\FramePayload.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="net\HandshakeRunner.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="AboutDlg.cpp" />
     <ClCompile Include="BuddyInfoDlg.cpp" />
     <ClCompile Include="BuddyInfoFloatWnd.cpp" />
@@ -268,7 +281,6 @@
     <ClCompile Include="ChatDlgCommon.cpp" />
     <ClCompile Include="ChatTabMgr.cpp" />
     <ClCompile Include="CheckNetworkStatusTask.cpp" />
-    <ClCompile Include="ClosePromptDlg.cpp" />
     <ClCompile Include="Crash.cpp" />
     <ClCompile Include="CreateNewGroupDlg.cpp" />
     <ClCompile Include="CriticalSection.cpp" />
@@ -349,6 +361,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="BalloonAuth\BalloonLoginDlg.cpp" />
+    <ClCompile Include="BalloonAuth\LoginProgressState.cpp" />
     <ClCompile Include="BalloonAuth\BalloonLoginLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -498,6 +511,10 @@
     <ClCompile Include="BalloonContact\ContactModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="BalloonContact\ContactTagModel.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonContact\TagEditPopup.cpp" />
     <ClCompile Include="BalloonContact\TagChip.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -535,6 +552,9 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="BalloonHistory\FileLocalStore.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonHistory\FolderLocalStore.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="BalloonHistory\HistoryHighlightLabel.cpp">
@@ -614,6 +634,9 @@
     </ClCompile>
     <ClCompile Include="BalloonMain\CreateGroupDlg.cpp" />
     <ClCompile Include="BalloonMain\FavoritesModel.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\FolderInviteNotifyPolicy.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="BalloonMain\GroupRowText.cpp">
@@ -897,6 +920,9 @@
     <ClCompile Include="net\StarredProtocolClient.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="net\ContactTagProtocolClient.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="net\FileStreamTransfer.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -949,6 +975,9 @@
     <ClCompile Include="net\RemoteDesktopProtocolClient.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="net\FolderProtocolClient.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="net\Sha256.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -977,6 +1006,27 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="RemoteDesktop\RdRelayFraming.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="FolderTransfer\FolderManifest.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatFolderStateModel.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="FolderTransfer\FolderRelayFraming.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="FolderTransfer\FolderRelayClient.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="FolderTransfer\FolderRecvSession.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="FolderTransfer\FolderSendSession.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="FolderTransfer\FolderTransferManager.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="RemoteDesktop\RdRelaySelfTest.cpp">
@@ -1065,6 +1115,9 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="net\FrameCrypto.h" />
+    <ClInclude Include="net\FramePayload.h" />
+    <ClInclude Include="net\HandshakeRunner.h" />
     <ClInclude Include="AboutDlg.h" />
     <ClInclude Include="BuddyChatDlg.h" />
     <ClInclude Include="BuddyInfoDlg.h" />
@@ -1077,7 +1130,6 @@
     <ClInclude Include="ChatTabMgr.h" />
     <ClInclude Include="CheckNetworkStatusTask.h" />
     <ClInclude Include="ClipboardText.h" />
-    <ClInclude Include="ClosePromptDlg.h" />
     <ClInclude Include="CreateNewGroupDlg.h" />
     <ClInclude Include="CRegisterSkinHyperLink.h" />
     <ClInclude Include="CriticalSection.h" />
@@ -1159,6 +1211,7 @@
     <ClInclude Include="BalloonAuth\AuthButtons.h" />
     <ClInclude Include="BalloonAuth\AuthInputField.h" />
     <ClInclude Include="BalloonAuth\BalloonLoginDlg.h" />
+    <ClInclude Include="BalloonAuth\LoginProgressState.h" />
     <ClInclude Include="BalloonAuth\BalloonLoginLayout.h" />
     <ClInclude Include="BalloonAuth\AccountRemoval.h" />
     <ClInclude Include="BalloonChat\BalloonBuddyChatDlg.h" />
@@ -1226,6 +1279,8 @@
     <ClInclude Include="BalloonContact\ContactIcons.h" />
     <ClInclude Include="BalloonContact\ContactLayout.h" />
     <ClInclude Include="BalloonContact\ContactModel.h" />
+    <ClInclude Include="BalloonContact\ContactTagModel.h" />
+    <ClInclude Include="BalloonContact\TagEditPopup.h" />
     <ClInclude Include="BalloonContact\TagChip.h" />
     <ClInclude Include="BalloonGroupManage\AnnouncePopupPolicy.h" />
     <ClInclude Include="BalloonGroupManage\BalloonAnnouncePopupDlg.h" />
@@ -1242,6 +1297,7 @@
     <ClInclude Include="BalloonHistory\AnnounceStore.h" />
     <ClInclude Include="BalloonHistory\BalloonHistoryWindow.h" />
     <ClInclude Include="BalloonHistory\FileLocalStore.h" />
+    <ClInclude Include="BalloonHistory\FolderLocalStore.h" />
     <ClInclude Include="BalloonHistory\HistoryHighlightLabel.h" />
     <ClInclude Include="BalloonHistory\HistoryModel.h" />
     <ClInclude Include="BalloonHistory\HistoryContentView.h" />
@@ -1282,6 +1338,7 @@
     <ClInclude Include="BalloonMain\ConversationListOps.h" />
     <ClInclude Include="BalloonMain\CreateGroupDlg.h" />
     <ClInclude Include="BalloonMain\FavoritesModel.h" />
+    <ClInclude Include="BalloonMain\FolderInviteNotifyPolicy.h" />
     <ClInclude Include="BalloonMain\StarredModel.h" />
     <ClInclude Include="BalloonMain\CornerPopupPlacement.h" />
     <ClInclude Include="BalloonMain\StarredPopupModel.h" />
@@ -1406,6 +1463,7 @@
     <ClInclude Include="net\ConversationsProtocolClient.h" />
     <ClInclude Include="net\FavoriteProtocolClient.h" />
     <ClInclude Include="net\StarredProtocolClient.h" />
+    <ClInclude Include="net\ContactTagProtocolClient.h" />
     <ClInclude Include="net\FileMsg.h" />
     <ClInclude Include="net\FileProtocolClient.h" />
     <ClInclude Include="net\FileStreamTransfer.h" />
@@ -1435,6 +1493,9 @@
     <ClInclude Include="net\ProtocolStream.h" />
     <ClInclude Include="net\RegisterProtocolClient.h" />
     <ClInclude Include="net\RemoteDesktopProtocolClient.h" />
+    <ClInclude Include="net\FolderProtocolClient.h" />
+    <ClInclude Include="FolderTransfer\FolderTransferManager.h" />
+    <ClInclude Include="BalloonChatWnd\ChatFolderAction.h" />
     <ClInclude Include="net\Sha256.h" />
     <ClInclude Include="net\TransferOwnerRegistry.h" />
     <ClInclude Include="RemoteDesktop\CaptureFallbackPolicy.h" />
@@ -1514,7 +1575,7 @@
     <ResourceCompile Include="flamingo.rc" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\balloonui\balloonui\balloonui_static.vcxproj">
+    <ProjectReference Include="..\..\third-party\balloonui\balloonui\balloonui_static.vcxproj">
       <Project>{e5f9b2a1-6c84-4de3-9c75-3b8a4d2e7f60}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\third-party\opus-1.5.2\opus_static.vcxproj">

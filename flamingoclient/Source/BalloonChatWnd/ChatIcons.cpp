@@ -154,6 +154,38 @@ void DrawChatIcon(Gdiplus::Graphics& g, int kind,
         }
         break;
 
+    case kChatIconFolder:
+        // 发送文件夹：文件夹外框（带左上页签）+ 夹内一支向上的箭头。
+        // 箭头两翼开口取得比常规箭头大（左右各 3.6、下探 2.9），是为了在按钮实际
+        // 显示的 18px 下仍能看出是箭头 —— 开口小的话三笔会糊成一个十字，实测确认过。
+        {
+            const Gdiplus::REAL kFolderTop    = 9.6f;   // 夹体顶边 y（页签右侧那条水平边）
+            const Gdiplus::REAL kFolderBottom = 20.2f;  // 夹体底边 y
+            const Gdiplus::REAL kTabTop       = 6.8f;   // 左上页签顶边 y（= 夹体顶边上移一个页签高度）
+            const Gdiplus::REAL kArrowTail    = 19.0f;  // 箭杆下端 y
+            const Gdiplus::REAL kArrowTip     = 13.4f;  // 箭尖 y
+            const Gdiplus::REAL kArrowWingDx  = 3.6f;   // 箭头两翼相对箭尖的水平展开量
+            const Gdiplus::REAL kArrowWingDy  = 2.9f;   // 箭头两翼相对箭尖的下探量
+            const Gdiplus::REAL kArrowCx      = 12.0f;  // 箭头中轴 x（夹体水平居中）
+
+            Gdiplus::GraphicsPath folder;
+            folder.AddLine(3.0f, kFolderBottom, 3.0f, kTabTop);
+            folder.AddLine(3.0f, kTabTop, 9.0f, kTabTop);
+            folder.AddLine(9.0f, kTabTop, 11.3f, kFolderTop);
+            folder.AddLine(11.3f, kFolderTop, 21.0f, kFolderTop);
+            folder.AddLine(21.0f, kFolderTop, 21.0f, kFolderBottom);
+            folder.CloseFigure();
+            g.DrawPath(&pen, &folder);
+
+            g.DrawLine(&pen, kArrowCx, kArrowTail, kArrowCx, kArrowTip);
+
+            Gdiplus::GraphicsPath head;
+            head.AddLine(kArrowCx - kArrowWingDx, kArrowTip + kArrowWingDy, kArrowCx, kArrowTip);
+            head.AddLine(kArrowCx, kArrowTip, kArrowCx + kArrowWingDx, kArrowTip + kArrowWingDy);
+            g.DrawPath(&pen, &head);
+        }
+        break;
+
     case kChatIconMore:
         // 三个实心圆点。
         g.FillEllipse(&brush, 4.8f, 10.8f, 2.4f, 2.4f);

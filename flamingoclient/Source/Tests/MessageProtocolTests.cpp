@@ -1149,3 +1149,94 @@ TEST_CASE("MP-PIN8 非 0 结果码的应答不解析消息列表")
     CHECK(out.m_items.empty());
     CHECK(out.m_total == 0);
 }
+
+// ===================================================================
+// 文件夹传输记录条（msgtype = message_type_folder = 18）在消息推送里的解析
+// ===================================================================
+
+TEST_CASE("MP-FOLDER1 parseMessageNotify 解析 msgtype=18 的 content 七个字段")
+{
+    const std::string body =
+        "{\"msgid\":\"90001\",\"clientmsgid\":\"folder-sess-8811-1\",\"ctype\":1,"
+        "\"cid\":\"20002\",\"from\":\"10001\",\"to\":\"20002\",\"msgtype\":18,"
+        "\"timestamp\":1755100000000,"
+        "\"content\":{\"sessionid\":\"sess-8811\",\"foldername\":\"\xE9\xA1\xB9\xE7\x9B\xAE\xE8\xB5\x84\xE6\x96\x99\","
+        "\"totaldirs\":12,\"totalfiles\":128,\"totalsize\":2576980378,"
+        "\"result\":8,\"errcode\":0}}";
+
+    MessageNotify notify;
+    REQUIRE(MessageProtocolClient::parseMessageNotify(body, notify));
+    CHECK(notify.m_msgtype == message_type_folder);
+    CHECK(notify.m_folderSessionId == "sess-8811");
+    CHECK(notify.m_folderName == u8"项目资料");
+    CHECK(notify.m_folderTotalDirs == 12);
+    CHECK(notify.m_folderTotalFiles == 128);
+    CHECK(notify.m_folderTotalSize == 2576980378LL);
+    CHECK(notify.m_folderResult == folder_state_completed);
+    CHECK(notify.m_folderErrCode == 0);
+
+    //记录条不带正文、也不带文件字段：这条守住"文件夹记录别被当成文件消息渲染"
+    CHECK(notify.m_text.empty());
+    CHECK(notify.m_fileName.empty());
+    CHECK(notify.m_fileFileId.empty());
+}
+
+TEST_CASE("MP-FOLDER2 失败结局带回错误码，非失败结局的错误码被归一成 0")
+{
+    {
+        MessageNotify notify;
+        REQUIRE(MessageProtocolClient::parseMessageNotify(
+            "{\"msgid\":\"1\",\"from\":\"10001\",\"msgtype\":18,"
+            "\"content\":{\"sessionid\":\"s\",\"foldername\":\"f\",\"totaldirs\":0,"
+            "\"totalfiles\":0,\"totalsize\":0,\"result\":7,\"errcode\":613}}", notify));
+        CHECK(notify.m_folderResult == folder_state_failed);
+        CHECK(notify.m_folderErrCode == error_code_folder_write_fail);
+    }
+    {
+        //已完成却带着失败原因：解析侧归一成 0，界面不会显示一条本不该存在的失败原因
+        MessageNotify notify;
+        REQUIRE(MessageProtocolClient::parseMessageNotify(
+            "{\"msgid\":\"1\",\"from\":\"10001\",\"msgtype\":18,"
+            "\"content\":{\"sessionid\":\"s\",\"foldername\":\"f\",\"totaldirs\":0,"
+            "\"totalfiles\":0,\"totalsize\":0,\"result\":8,\"errcode\":613}}", notify));
+        CHECK(notify.m_folderErrCode == 0);
+    }
+}
+
+TEST_CASE("MP-FOLDER3 content 脏时整条消息仍然解析成功，只是文件夹字段保持默认")
+{
+    //content 解析不出来不该把整条消息从聊天记录里抹掉 —— 消息本体（msgid / from /
+    //时间）仍然有效，界面据 m_folderResult 为 0 按"内容不可用"降级
+    MessageNotify notify;
+    REQUIRE(MessageProtocolClient::parseMessageNotify(
+        "{\"msgid\":\"77\",\"from\":\"10001\",\"msgtype\":18,"
+        "\"content\":{\"sessionid\":\"\",\"result\":2}}", notify));
+    CHECK(notify.m_msgid == 77);
+    CHECK(notify.m_folderResult == 0);
+    CHECK(notify.m_folderSessionId.empty());
+
+    //content 根本不是对象时同理
+    MessageNotify noContent;
+    REQUIRE(MessageProtocolClient::parseMessageNotify(
+        "{\"msgid\":\"78\",\"from\":\"10001\",\"msgtype\":18,\"content\":\"oops\"}", noContent));
+    CHECK(noContent.m_folderResult == 0);
+}
+
+TEST_CASE("MP-FOLDER4 digestForMsgType 对文件夹记录给出 [文件夹] 占位")
+{
+    //会话列表上真正显示的是带名字的 "[文件夹] 项目资料"（由主面板拼），
+    //本函数拿不到名字，只保证类型占位与方括号体例与 "[文件]" 一致
+    CHECK(MessageProtocolClient::digestForMsgType(message_type_folder, "") == u8"[文件夹]");
+    CHECK(MessageProtocolClient::digestForMsgType(message_type_folder, "ignored") == u8"[文件夹]");
+}
+
+TEST_CASE("MP-FOLDER5 超大总字节数经推送解析不丢精度")
+{
+    //50 GiB：JSON 数值若被按双精度解析，这里会差出几个字节
+    MessageNotify notify;
+    REQUIRE(MessageProtocolClient::parseMessageNotify(
+        "{\"msgid\":\"1\",\"from\":\"10001\",\"msgtype\":18,"
+        "\"content\":{\"sessionid\":\"s\",\"foldername\":\"f\",\"totaldirs\":1,"
+        "\"totalfiles\":1,\"totalsize\":53687091200,\"result\":8,\"errcode\":0}}", notify));
+    CHECK(notify.m_folderTotalSize == 53687091200LL);
+}

@@ -30,11 +30,11 @@
 
 #include "../BalloonMain/BalloonProfileLayout.h"
 #include "../BalloonMain/MainPanelUserData.h"   // GetUserAvatarColor
-#include "../../balloonui/balloonui/Controls/Basic/DuiAvatar.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiComboBox.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
 
 using namespace balloonwjui;
 using namespace balloonmain;

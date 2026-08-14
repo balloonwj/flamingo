@@ -96,7 +96,6 @@ enum ApiTag
     kApiTagCvCreate          = 58, // 新建版本记录 clientversion/create.do
     kApiTagCvUpdate          = 59, // 修改版本记录 clientversion/update.do
     kApiTagCvSetEnabled      = 60, // 发布 / 撤回 clientversion/setenabled.do
-    kApiTagCvRepublish       = 61, // 回滚（重新发布旧版本）clientversion/republish.do
 };
 
 // 当前登录管理员的会话信息（进程级单例）。
@@ -1293,12 +1292,6 @@ HttpRequest MakeClientVersionUpdateRequest(const ServerConfig& server, const CSt
 // 应答复用 ParseEnterpriseActionResponse。
 HttpRequest MakeClientVersionSetEnabledRequest(const ServerConfig& server, const CString& token,
                                                long long id, bool enabled);
-
-// 构造回滚请求（POST /admin/clientversion/republish.do）：把旧版本重新发布一次，
-// 使其立刻成为"最新发布"。数据层与"发布"是同一个动作，分成两个接口是为了让
-// 审计日志能区分意图。应答复用 ParseEnterpriseActionResponse。
-HttpRequest MakeClientVersionRepublishRequest(const ServerConfig& server,
-                                              const CString& token, long long id);
 
 // 把字节数格式化成人能读的大小文本，如 36 -> "36 B"、1536 -> "1.5 KB"、
 // 3221225472 -> "3.00 GB"。列表与下拉里显示包大小用。

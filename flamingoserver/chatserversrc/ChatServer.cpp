@@ -27,13 +27,14 @@ ChatServer::ChatServer()
     m_logPackageBinary = false;
 }
 
-bool ChatServer::init(const char* ip, short port, EventLoop* loop)
+bool ChatServer::init(const char* ip, short port, EventLoop* loop, int ioThreadCount)
 {   
     InetAddress addr(ip, port);
     m_server.reset(new TcpServer(loop, addr, "FLAMINGO-SERVER", TcpServer::kReusePort));
     m_server->setConnectionCallback(std::bind(&ChatServer::onConnected, this, std::placeholders::_1));
-    //启动侦听
-    m_server->start(6);
+    //启动侦听。线程数由调用方从配置项 iothreadnum 取得，非法取值已在那里回落成
+    //kDefaultIoThreadCount，这里直接使用
+    m_server->start(ioThreadCount);
 
     return true;
 }
@@ -83,6 +84,13 @@ void ChatServer::onDisconnected(const std::shared_ptr<TcpConnection>& conn)
     int32_t disconnectedUserId = 0;
     int32_t disconnectedClientType = 0;
 
+    //本次断开的那个会话对象。文件夹传输的收尾（向对端推 cmd_folder_state_notify 并销毁
+    //会话）同样要在<u>解锁之后</u>做——它内部经 ChatSession::sendToUser 遍历在线会话表，
+    //会再取一次 m_sessionMutex，持锁期间调用即自我死锁。故先在锁内留一份 shared_ptr，
+    //把会话对象的存活期延到临界区之外，出锁后再收尾。
+    //顺带的效果是 ChatSession 的析构也移出了临界区（此前它随 m_sessions.erase 在锁内发生）。
+    std::shared_ptr<ChatSession> offlineSession;
+
     //TODO: 这样的代码逻辑太混乱，需要优化
     {
         std::lock_guard<std::mutex> guard(m_sessionMutex);
@@ -97,6 +105,9 @@ void ChatServer::onDisconnected(const std::shared_ptr<TcpConnection>& conn)
             //通过比对connection对象找到对应的session
             if ((*iter)->getConnectionPtr() == conn)
             {
+                //留一份指针供解锁后收尾（文件夹传输作废等），理由见上面的声明处
+                offlineSession = *iter;
+
                 //该Session不是之前被踢下线的有效Session，才认为是正常下线，才广播其下线消息
                 if ((*iter)->isSessionValid())
                 {
@@ -139,6 +150,14 @@ void ChatServer::onDisconnected(const std::shared_ptr<TcpConnection>& conn)
         }
 
         LOGI("current online user count: %d", (int)m_sessions.size());
+    }
+
+    //解锁后：作废本连接名下正在进行的单聊文件夹传输，并向仍在线的对端推一帧状态变更。
+    //这一步对被顶号踢下线的旧会话同样要做（它名下那笔传输的续传位点随连接一并消失），
+    //故不受上面 isSessionValid 判定的约束，与企业离线广播分开处理。
+    if (offlineSession)
+    {
+        offlineSession->cleanupFolderTransferOnOffline();
     }
 
     //解锁后：向同企业的在线同事广播本用户离线（presence=0），让其联系人树/会话列表上该用户

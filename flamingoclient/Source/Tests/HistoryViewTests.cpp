@@ -658,3 +658,140 @@ TEST_CASE("V2Q-BRIEF7 既有的文件名 / 大小 / 图片 md5 行为不变（�
     CHECK(none.m_fileSize == 0);
     CHECK(ParseContentBrief(::message_type_image, "{oops").m_imageMd5.empty());
 }
+
+// ===================================================================
+// 文件夹传输记录条（::message_type_folder）在消息记录窗里的展示
+// ===================================================================
+
+namespace {
+
+//按落库时的 BuildContentJson 口径拼一份文件夹记录的归一化 content。
+static std::string MakeFolderContentJson(const std::string& sessionId,
+                                         const std::string& folderName,
+                                         long long files, long long bytes, int result)
+{
+    std::string json = "{\"folder\":{";
+    json += "\"sessionid\":\"" + sessionId + "\",";
+    json += "\"foldername\":\"" + folderName + "\",";
+    json += "\"totaldirs\":1,";
+    json += "\"totalfiles\":" + std::to_string(files) + ",";
+    json += "\"totalsize\":" + std::to_string(bytes) + ",";
+    json += "\"result\":" + std::to_string(result) + ",";
+    json += "\"errcode\":0";
+    json += "}}";
+    return json;
+}
+
+} // namespace
+
+TEST_CASE("V2V-FOLDER1 PreviewFromContent 对文件夹记录带出文件夹名")
+{
+    CHECK(PreviewFromContent(::message_type_folder,
+                             MakeFolderContentJson("s1", u8"项目资料", 128, 1024,
+                                                   ::folder_state_completed))
+          == u8"[文件夹] 项目资料");
+
+    //缺文件夹名 / 缺 folder 子对象 / 非法 JSON：一律退化成不带名字的占位
+    CHECK(PreviewFromContent(::message_type_folder,
+                             MakeFolderContentJson("s1", "", 0, 0, ::folder_state_completed))
+          == u8"[文件夹]");
+    CHECK(PreviewFromContent(::message_type_folder, "{}") == u8"[文件夹]");
+    CHECK(PreviewFromContent(::message_type_folder, "not a json") == u8"[文件夹]");
+}
+
+TEST_CASE("V2V-FOLDER2 FullTextFromContent 对文件夹记录与预览逐字相同")
+{
+    //非文本类型一律转调 PreviewFromContent，两处口径不会漂移
+    const std::string content =
+        MakeFolderContentJson("s1", u8"项目资料", 128, 1024, ::folder_state_completed);
+    CHECK(FullTextFromContent(::message_type_folder, content)
+          == PreviewFromContent(::message_type_folder, content));
+}
+
+TEST_CASE("V2V-FOLDER3 ParseContentBrief 取出会话 id / 名字 / 规模 / 结局")
+{
+    const HistoryContentBrief brief =
+        ParseContentBrief(::message_type_folder,
+                          MakeFolderContentJson("sess-8811", u8"项目资料", 128,
+                                                2576980378LL, ::folder_state_completed));
+    CHECK(brief.m_folderSessionId == "sess-8811");
+    CHECK(brief.m_folderName == u8"项目资料");
+    CHECK(brief.m_folderTotalFiles == 128);
+    CHECK(brief.m_folderTotalSize == 2576980378LL);
+    CHECK(brief.m_folderResult == ::folder_state_completed);
+
+    //文件夹记录不该带出图片 / 文件那几项 —— 带出来会让菜单给出下载、另存为这类
+    //点下去必然无效的项
+    CHECK(brief.m_imageMd5.empty());
+    CHECK(brief.m_fileName.empty());
+    CHECK(brief.m_fileId.empty());
+}
+
+TEST_CASE("V2V-FOLDER4 ParseContentBrief 对缺字段与非法 JSON 安全降级")
+{
+    const HistoryContentBrief none = ParseContentBrief(::message_type_folder, "not a json");
+    CHECK(none.m_folderSessionId.empty());
+    CHECK(none.m_folderResult == 0);
+
+    const HistoryContentBrief empty = ParseContentBrief(::message_type_folder, "{\"folder\":{}}");
+    CHECK(empty.m_folderSessionId.empty());
+    CHECK(empty.m_folderName.empty());
+    CHECK(empty.m_folderTotalFiles == 0);
+    CHECK(empty.m_folderResult == 0);
+}
+
+TEST_CASE("V2V-FOLDER5 FolderResultText 六种终态各有文案、非终态返回空串")
+{
+    CHECK(FolderResultText(::folder_state_rejected) == u8"已拒绝");
+    CHECK(FolderResultText(::folder_state_canceled) == u8"已撤回");
+    CHECK(FolderResultText(::folder_state_peer_offline) == u8"对方不在线");
+    CHECK(FolderResultText(::folder_state_timeout) == u8"邀请已超时");
+    CHECK(FolderResultText(::folder_state_failed) == u8"传输失败");
+    CHECK(FolderResultText(::folder_state_completed) == u8"已完成");
+
+    //过程状态与越界值：不显示结局，好过显示一个编不出名字的状态
+    CHECK(FolderResultText(0).empty());
+    CHECK(FolderResultText(::folder_state_ringing).empty());
+    CHECK(FolderResultText(::folder_state_transferring).empty());
+    CHECK(FolderResultText(::folder_state_completed + 1).empty());
+}
+
+TEST_CASE("V2V-FOLDER6 BuildFolderRowText 各段齐全时按 · 顺排")
+{
+    HistoryContentBrief brief;
+    brief.m_folderName       = u8"项目资料";
+    brief.m_folderTotalFiles = 128;
+    brief.m_folderTotalSize  = 2576980378LL;
+    brief.m_folderResult     = ::folder_state_completed;
+
+    //大小文字复用 FormatFileSize，故这里按它的输出拼期望值，避免把格式化口径抄成两份
+    const std::string expected =
+        u8"[文件夹] 项目资料 · 128 个文件 · " + FormatFileSize(2576980378LL) + u8" · 已完成";
+    CHECK(BuildFolderRowText(brief) == expected);
+}
+
+TEST_CASE("V2V-FOLDER7 BuildFolderRowText 缺哪一段就少哪一段、不留悬空分隔点")
+{
+    //空目录（0 个文件、0 字节）且结局是被拒绝：只剩类型前缀 + 名字 + 结局
+    {
+        HistoryContentBrief brief;
+        brief.m_folderName   = u8"空目录";
+        brief.m_folderResult = ::folder_state_rejected;
+        CHECK(BuildFolderRowText(brief) == u8"[文件夹] 空目录 · 已拒绝");
+    }
+    //连文件夹名都没有、结局也不可用：只剩类型前缀，且不以分隔点开头或结尾
+    {
+        HistoryContentBrief brief;
+        const std::string line = BuildFolderRowText(brief);
+        CHECK(line == u8"[文件夹]");
+        CHECK(line.find(u8" · ") == std::string::npos);
+    }
+    //有名字有大小、结局不可用：末尾不留分隔点
+    {
+        HistoryContentBrief brief;
+        brief.m_folderName      = u8"资料";
+        brief.m_folderTotalSize = 1024;
+        const std::string line = BuildFolderRowText(brief);
+        CHECK(line == u8"[文件夹] 资料 · " + FormatFileSize(1024));
+    }
+}

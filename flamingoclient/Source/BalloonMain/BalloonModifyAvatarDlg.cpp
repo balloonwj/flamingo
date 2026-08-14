@@ -37,10 +37,10 @@
 #include "../net/IUSocket.h"              // CIUSocket::SendChangeAvatar
 #include "../net/ImageTransfer.h"
 #include "../net/CurrentUserAccount.h"   // net::CurrentUserAccount（本地缓存目录按登录账号分）         // net::ImageTransfer / net::AvatarUploadResult（本地上传走图片服务器）
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
 
 // ---- 对话框固定尺寸（逻辑像素）-----------------------------------------
 static const int kDlgWidth      = 560;

@@ -1,5 +1,5 @@
 /**
- *  更新器 iUpdateAuto 三块纯逻辑的单元测试，UpdaterCoreTests.cpp
+ *  更新器 FlamingoUpdater 三块纯逻辑的单元测试，UpdaterCoreTests.cpp
  *
  *  覆盖范围与 docs/客户端自动更新方案.md 第 9 节确认过的清单一致：
  *    · Suite UCL —— 命令行解析：带空格的路径、参数顺序颠倒、缺参数、--pid 非法值；
@@ -22,9 +22,9 @@
 #include <string>
 #include <vector>
 
-#include "../../iAutoUpdate/CommandLine.h"
-#include "../../iAutoUpdate/ZipPathSafety.h"
-#include "../../iAutoUpdate/ZipReader.h"
+#include "../../FlamingoUpdater/CommandLine.h"
+#include "../../FlamingoUpdater/ZipPathSafety.h"
+#include "../../FlamingoUpdater/ZipReader.h"
 
 using namespace iupdate;
 
@@ -147,7 +147,7 @@ std::vector<unsigned char> MakeEmptyZip()
 TEST_CASE("UCL1 四个必填参数齐备时解析成功", "[updater]")
 {
     wchar_t* argv[] = {
-        (wchar_t*)L"iUpdateAuto.exe",
+        (wchar_t*)L"FlamingoUpdater.exe",
         (wchar_t*)L"--zip",    (wchar_t*)L"D:\\app\\update\\Flamingo-3.3.0.zip",
         (wchar_t*)L"--target", (wchar_t*)L"D:\\app",
         (wchar_t*)L"--exec",   (wchar_t*)L"D:\\app\\Flamingo.exe",
@@ -171,7 +171,7 @@ TEST_CASE("UCL2 带空格的路径与顺序颠倒都能正确解析", "[updater]
     //路径带空格是常态（Program Files）。这里的 argv 是 CommandLineToArgvW 拆好的结果，
     //引号已被系统去掉，所以元素里直接就是含空格的完整路径。
     wchar_t* argv[] = {
-        (wchar_t*)L"iUpdateAuto.exe",
+        (wchar_t*)L"FlamingoUpdater.exe",
         (wchar_t*)L"--silent",
         (wchar_t*)L"--pid",    (wchar_t*)L"7",
         (wchar_t*)L"--exec",   (wchar_t*)L"C:\\Program Files\\Flamingo IM\\Flamingo.exe",
@@ -192,7 +192,7 @@ TEST_CASE("UCL3 缺任一必填参数都失败，且错误信息指明缺了哪�
 {
     //缺 --pid
     wchar_t* noPid[] = {
-        (wchar_t*)L"iUpdateAuto.exe",
+        (wchar_t*)L"FlamingoUpdater.exe",
         (wchar_t*)L"--zip",    (wchar_t*)L"a.zip",
         (wchar_t*)L"--target", (wchar_t*)L"C:\\app",
         (wchar_t*)L"--exec",   (wchar_t*)L"C:\\app\\a.exe"
@@ -204,7 +204,7 @@ TEST_CASE("UCL3 缺任一必填参数都失败，且错误信息指明缺了哪�
 
     //缺 --zip
     wchar_t* noZip[] = {
-        (wchar_t*)L"iUpdateAuto.exe",
+        (wchar_t*)L"FlamingoUpdater.exe",
         (wchar_t*)L"--target", (wchar_t*)L"C:\\app",
         (wchar_t*)L"--exec",   (wchar_t*)L"C:\\app\\a.exe",
         (wchar_t*)L"--pid",    (wchar_t*)L"1"
@@ -213,7 +213,7 @@ TEST_CASE("UCL3 缺任一必填参数都失败，且错误信息指明缺了哪�
     CHECK(err.find(L"--zip") != std::wstring::npos);
 
     //完全没有参数
-    wchar_t* bare[] = { (wchar_t*)L"iUpdateAuto.exe" };
+    wchar_t* bare[] = { (wchar_t*)L"FlamingoUpdater.exe" };
     CHECK_FALSE(ParseCommandLine(1, bare, args, err));
     CHECK_FALSE(err.empty());
 }
@@ -222,7 +222,7 @@ TEST_CASE("UCL4 带值参数后面没有值、以及 --pid 取值非法", "[upda
 {
     //--zip 是最后一个参数，后面没有值
     wchar_t* dangling[] = {
-        (wchar_t*)L"iUpdateAuto.exe",
+        (wchar_t*)L"FlamingoUpdater.exe",
         (wchar_t*)L"--target", (wchar_t*)L"C:\\app",
         (wchar_t*)L"--exec",   (wchar_t*)L"C:\\app\\a.exe",
         (wchar_t*)L"--pid",    (wchar_t*)L"1",
@@ -235,7 +235,7 @@ TEST_CASE("UCL4 带值参数后面没有值、以及 --pid 取值非法", "[upda
 
     //--pid 不是纯数字：与其当成 12 处理，不如判非法，免得去等一个错误的进程
     wchar_t* badPid[] = {
-        (wchar_t*)L"iUpdateAuto.exe",
+        (wchar_t*)L"FlamingoUpdater.exe",
         (wchar_t*)L"--zip",    (wchar_t*)L"a.zip",
         (wchar_t*)L"--target", (wchar_t*)L"C:\\app",
         (wchar_t*)L"--exec",   (wchar_t*)L"C:\\app\\a.exe",
@@ -245,7 +245,7 @@ TEST_CASE("UCL4 带值参数后面没有值、以及 --pid 取值非法", "[upda
 
     //--pid 为 0：0 不是有效的进程 id
     wchar_t* zeroPid[] = {
-        (wchar_t*)L"iUpdateAuto.exe",
+        (wchar_t*)L"FlamingoUpdater.exe",
         (wchar_t*)L"--zip",    (wchar_t*)L"a.zip",
         (wchar_t*)L"--target", (wchar_t*)L"C:\\app",
         (wchar_t*)L"--exec",   (wchar_t*)L"C:\\app\\a.exe",
@@ -258,7 +258,7 @@ TEST_CASE("UCL5 未知参数被忽略而不是报错", "[updater]")
 {
     //将来加了新开关，旧版更新器碰到它不该直接罢工
     wchar_t* argv[] = {
-        (wchar_t*)L"iUpdateAuto.exe",
+        (wchar_t*)L"FlamingoUpdater.exe",
         (wchar_t*)L"--brandnew",
         (wchar_t*)L"--zip",    (wchar_t*)L"a.zip",
         (wchar_t*)L"--target", (wchar_t*)L"C:\\app",

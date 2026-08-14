@@ -18,7 +18,7 @@
 
 #include <memory>
 #include <string>
-#include "../../balloonui/balloonui/DuiControl.h"
+#include "../../../third-party/balloonui/balloonui/DuiControl.h"
 
 namespace balloonchatwnd {
 
@@ -72,6 +72,8 @@ enum CtrlId : UINT
     kIdTbPlus        = 425,   // 更多
     kIdTbShake       = 426,   // 窗口抖动
     kIdTbFont        = 427,   // 字体设置（AF）
+    kIdTbFolder      = 428,   // 发送文件夹（选一个本地目录整体发给对方，走 cmd_folder_* 1810~1817
+                              // 那条独立链路；与 kIdTbFile 的单个文件传输不是一回事）
 };
 
 /**

@@ -31,23 +31,21 @@ namespace balloonprofile {
 
 namespace {
 
-// 四个在线状态的中文显示名，下标对应 ProfileStatus。
+// 三个在线状态的中文显示名，下标对应 ProfileStatus。
 const TCHAR* const kStatusText[kProfileStatusCount] =
 {
     _T("在线"),   // kProfileStatusOnline
     _T("离开"),   // kProfileStatusAway
     _T("忙碌"),   // kProfileStatusBusy
-    _T("隐身"),   // kProfileStatusInvisible
 };
 
-// 四个在线状态的圆点颜色，下标对应 ProfileStatus。取自设计稿主题色板：
-//   在线 #22C55E、离开 #F59E0B、勿扰 #EF4444、隐身 #94A3B8。
+// 三个在线状态的圆点颜色，下标对应 ProfileStatus。取自设计稿主题色板：
+//   在线 #22C55E、离开 #F59E0B、勿扰 #EF4444。
 const COLORREF kStatusColor[kProfileStatusCount] =
 {
     RGB(0x22, 0xC5, 0x5E),   // kProfileStatusOnline：绿
     RGB(0xF5, 0x9E, 0x0B),   // kProfileStatusAway：橙
     RGB(0xEF, 0x44, 0x44),   // kProfileStatusBusy：红
-    RGB(0x94, 0xA3, 0xB8),   // kProfileStatusInvisible：灰蓝
 };
 
 } // anonymous namespace

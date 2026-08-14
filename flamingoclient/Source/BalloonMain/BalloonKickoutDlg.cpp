@@ -17,9 +17,9 @@
 #include "../resource.h"                 // IDR_MAINFRAME（标题栏程序图标）
 #include "KickoutNotice.h"               // GetKickoutNoticeTitle / GetKickoutNoticeText
 #include "PopupMenuPlacement.h"          // PlaceTrayAnchoredWindow（贴托盘落点）
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 
 // ---- 对话框固定尺寸（逻辑像素）-----------------------------------------
 static const int kDlgWidth     = 360;   // 客户区宽（正文按此宽度折行）

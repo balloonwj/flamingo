@@ -21,7 +21,7 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 
 namespace balloonchatwnd {
 

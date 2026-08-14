@@ -25,8 +25,8 @@
 
 #include <stdint.h>
 
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
-#include "../../balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 #include "../CustomMsgDef.h"                    // WM_CHAT_OPEN_LINK（消息映射里要用）
 
 namespace balloonwjui {

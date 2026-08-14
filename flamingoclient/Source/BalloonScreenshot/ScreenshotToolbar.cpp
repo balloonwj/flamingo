@@ -10,7 +10,7 @@
 #include "stdafx.h"
 #include "ScreenshotToolbar.h"
 #include "AnnotationModel.h"   // 复用 ComputeArrowHead 算箭头翼点
-#include "../../balloonui/balloonui/DuiNotify.h"   // DUIN_CLICK
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"   // DUIN_CLICK
 
 #include <gdiplus.h>
 #include <math.h>

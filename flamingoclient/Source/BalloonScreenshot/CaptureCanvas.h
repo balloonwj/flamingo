@@ -17,8 +17,8 @@
  */
 #pragma once
 
-#include "../../balloonui/balloonui/DuiControl.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"  // 文字标注复用的多行编辑框
+#include "../../../third-party/balloonui/balloonui/DuiControl.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"  // 文字标注复用的多行编辑框
 #include "AnnotationModel.h"      // 标注数据模型（撤销重做栈 / 工具状态 / 箭头几何）
 #include "ScreenshotGeometry.h"   // SelHitZone（选区移动 / 缩放命中区）
 #include "ScreenshotToolbar.h"    // ITipSink（按钮悬停提示接收方接口）

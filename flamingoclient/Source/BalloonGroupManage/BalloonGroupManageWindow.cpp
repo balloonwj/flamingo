@@ -19,10 +19,10 @@
 #include "GroupManageModel.h"         // FillMockData
 #include "GroupManageMapping.h"       // MemberIndexFromCardId：成员卡右键时由卡片 id 反算成员下标
 
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiSeparator.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiSeparator.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
 #include "GroupManageNavItem.h"
 
 using namespace balloonwjui;

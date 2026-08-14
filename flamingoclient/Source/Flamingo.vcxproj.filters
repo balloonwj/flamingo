@@ -58,6 +58,9 @@
     <Filter Include="RemoteDesktop">
       <UniqueIdentifier>{5ca78015-f867-251c-7448-a11b26803dc9}</UniqueIdentifier>
     </Filter>
+    <Filter Include="FolderTransfer">
+      <UniqueIdentifier>{7b2e41d9-3c86-4f52-9a17-5d0c8e6b41af}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Resource Files">
       <UniqueIdentifier>{fa3635ce-6c7c-7de5-ddeb-60602507503f}</UniqueIdentifier>
     </Filter>
@@ -128,9 +131,6 @@
     </ClCompile>
     <ClCompile Include="CheckNetworkStatusTask.cpp">
       <Filter>Tasks</Filter>
-    </ClCompile>
-    <ClCompile Include="ClosePromptDlg.cpp">
-      <Filter>UI</Filter>
     </ClCompile>
     <ClCompile Include="Crash.cpp">
       <Filter>Source Files</Filter>
@@ -390,6 +390,9 @@
     <ClCompile Include="BalloonChatWnd\ChatFileStateModel.cpp">
       <Filter>BalloonChatWnd</Filter>
     </ClCompile>
+    <ClCompile Include="BalloonChatWnd\ChatFolderStateModel.cpp">
+      <Filter>BalloonChatWnd</Filter>
+    </ClCompile>
     <ClCompile Include="BalloonChatWnd\ChatFileVisual.cpp">
       <Filter>BalloonChatWnd</Filter>
     </ClCompile>
@@ -525,6 +528,12 @@
     <ClCompile Include="BalloonContact\ContactModel.cpp">
       <Filter>BalloonContact</Filter>
     </ClCompile>
+    <ClCompile Include="BalloonContact\ContactTagModel.cpp">
+      <Filter>BalloonContact</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonContact\TagEditPopup.cpp">
+      <Filter>BalloonContact</Filter>
+    </ClCompile>
     <ClCompile Include="BalloonContact\TagChip.cpp">
       <Filter>BalloonContact</Filter>
     </ClCompile>
@@ -568,6 +577,9 @@
       <Filter>BalloonHistory</Filter>
     </ClCompile>
     <ClCompile Include="BalloonHistory\FileLocalStore.cpp">
+      <Filter>BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonHistory\FolderLocalStore.cpp">
       <Filter>BalloonHistory</Filter>
     </ClCompile>
     <ClCompile Include="BalloonHistory\HistoryHighlightLabel.cpp">
@@ -688,6 +700,9 @@
       <Filter>BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="BalloonMain\FavoritesModel.cpp">
+      <Filter>BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\FolderInviteNotifyPolicy.cpp">
       <Filter>BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="BalloonMain\GroupRowText.cpp">
@@ -1017,6 +1032,9 @@
     <ClCompile Include="net\StarredProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
+    <ClCompile Include="net\ContactTagProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
     <ClCompile Include="net\FileProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
@@ -1083,6 +1101,9 @@
     <ClCompile Include="net\RemoteDesktopProtocolClient.cpp">
       <Filter>net</Filter>
     </ClCompile>
+    <ClCompile Include="net\FolderProtocolClient.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
     <ClCompile Include="net\Sha256.cpp">
       <Filter>net</Filter>
     </ClCompile>
@@ -1112,6 +1133,24 @@
     </ClCompile>
     <ClCompile Include="RemoteDesktop\RdRelayFraming.cpp">
       <Filter>RemoteDesktop</Filter>
+    </ClCompile>
+    <ClCompile Include="FolderTransfer\FolderManifest.cpp">
+      <Filter>FolderTransfer</Filter>
+    </ClCompile>
+    <ClCompile Include="FolderTransfer\FolderRelayFraming.cpp">
+      <Filter>FolderTransfer</Filter>
+    </ClCompile>
+    <ClCompile Include="FolderTransfer\FolderRelayClient.cpp">
+      <Filter>FolderTransfer</Filter>
+    </ClCompile>
+    <ClCompile Include="FolderTransfer\FolderRecvSession.cpp">
+      <Filter>FolderTransfer</Filter>
+    </ClCompile>
+    <ClCompile Include="FolderTransfer\FolderSendSession.cpp">
+      <Filter>FolderTransfer</Filter>
+    </ClCompile>
+    <ClCompile Include="FolderTransfer\FolderTransferManager.cpp">
+      <Filter>FolderTransfer</Filter>
     </ClCompile>
     <ClCompile Include="RemoteDesktop\RdRelaySelfTest.cpp">
       <Filter>RemoteDesktop</Filter>
@@ -1270,9 +1309,6 @@
     </ClInclude>
     <ClInclude Include="ClipboardText.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ClosePromptDlg.h">
-      <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="CreateNewGroupDlg.h">
       <Filter>UI</Filter>
@@ -1580,6 +1616,12 @@
     <ClInclude Include="BalloonChatWnd\ChatFileStateModel.h">
       <Filter>BalloonChatWnd</Filter>
     </ClInclude>
+    <ClInclude Include="BalloonChatWnd\ChatFolderStateModel.h">
+      <Filter>BalloonChatWnd</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonChatWnd\ChatFolderAction.h">
+      <Filter>BalloonChatWnd</Filter>
+    </ClInclude>
     <ClInclude Include="BalloonChatWnd\ChatFileVisual.h">
       <Filter>BalloonChatWnd</Filter>
     </ClInclude>
@@ -1718,6 +1760,12 @@
     <ClInclude Include="BalloonContact\ContactModel.h">
       <Filter>BalloonContact</Filter>
     </ClInclude>
+    <ClInclude Include="BalloonContact\ContactTagModel.h">
+      <Filter>BalloonContact</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonContact\TagEditPopup.h">
+      <Filter>BalloonContact</Filter>
+    </ClInclude>
     <ClInclude Include="BalloonContact\TagChip.h">
       <Filter>BalloonContact</Filter>
     </ClInclude>
@@ -1764,6 +1812,9 @@
       <Filter>BalloonHistory</Filter>
     </ClInclude>
     <ClInclude Include="BalloonHistory\FileLocalStore.h">
+      <Filter>BalloonHistory</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonHistory\FolderLocalStore.h">
       <Filter>BalloonHistory</Filter>
     </ClInclude>
     <ClInclude Include="BalloonHistory\HistoryHighlightLabel.h">
@@ -1896,6 +1947,9 @@
       <Filter>BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="BalloonMain\FavoritesModel.h">
+      <Filter>BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonMain\FolderInviteNotifyPolicy.h">
       <Filter>BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="BalloonMain\StarredModel.h">
@@ -2261,6 +2315,9 @@
     <ClInclude Include="net\StarredProtocolClient.h">
       <Filter>net</Filter>
     </ClInclude>
+    <ClInclude Include="net\ContactTagProtocolClient.h">
+      <Filter>net</Filter>
+    </ClInclude>
     <ClInclude Include="net\FileMsg.h">
       <Filter>net</Filter>
     </ClInclude>
@@ -2336,6 +2393,9 @@
     <ClInclude Include="net\RemoteDesktopProtocolClient.h">
       <Filter>net</Filter>
     </ClInclude>
+    <ClInclude Include="net\FolderProtocolClient.h">
+      <Filter>net</Filter>
+    </ClInclude>
     <ClInclude Include="net\Sha256.h">
       <Filter>net</Filter>
     </ClInclude>
@@ -2380,6 +2440,24 @@
     </ClInclude>
     <ClInclude Include="RemoteDesktop\RdRelayFraming.h">
       <Filter>RemoteDesktop</Filter>
+    </ClInclude>
+    <ClInclude Include="FolderTransfer\FolderManifest.h">
+      <Filter>FolderTransfer</Filter>
+    </ClInclude>
+    <ClInclude Include="FolderTransfer\FolderRelayFraming.h">
+      <Filter>FolderTransfer</Filter>
+    </ClInclude>
+    <ClInclude Include="FolderTransfer\FolderRelayClient.h">
+      <Filter>FolderTransfer</Filter>
+    </ClInclude>
+    <ClInclude Include="FolderTransfer\FolderRecvSession.h">
+      <Filter>FolderTransfer</Filter>
+    </ClInclude>
+    <ClInclude Include="FolderTransfer\FolderSendSession.h">
+      <Filter>FolderTransfer</Filter>
+    </ClInclude>
+    <ClInclude Include="FolderTransfer\FolderTransferManager.h">
+      <Filter>FolderTransfer</Filter>
     </ClInclude>
     <ClInclude Include="RemoteDesktop\RdRelaySelfTest.h">
       <Filter>RemoteDesktop</Filter>

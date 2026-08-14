@@ -13,7 +13,7 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 
 namespace balloonmain {
 
@@ -39,9 +39,6 @@ public:
 
     // DuiControl 覆写：绘制展开三角 + 分组名 + 右侧计数。
     void OnPaint(HDC hdc, const RECT& rcDirty) override;
-
-    // DuiControl 覆写：把滚轮转发给祖先里的滚动视口。
-    bool OnMouseWheel(POINT pt, short zDelta, UINT mkFlags) override;
 
     // DuiControl 覆写：分组标题用普通箭头光标，不用 DuiButton 默认手型。
     bool OnSetCursor(POINT pt) override { return false; }

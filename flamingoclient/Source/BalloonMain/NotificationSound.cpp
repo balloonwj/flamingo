@@ -13,14 +13,14 @@
 
 #include "NotificationSound.h"
 
-#include "../net/Protocol.h"   // presence_type（离线/在线/离开/忙碌/隐身的取值，用于"刚上线"判定）
+#include "../net/Protocol.h"   // presence_type（离线/在线/离开/忙碌的取值，用于"刚上线"判定）
 
 namespace balloonmain {
 
 namespace {
 
 // 判断某个 presence 是否为"可见在线态" —— 在线 / 离开 / 忙碌均算（对外可见且在线）；
-// 离线、隐身（对外显示离线）不算。与 v1 OnStatusChangeMsg 里 bOnline 的语义保持一致。
+// 离线不算。与 v1 OnStatusChangeMsg 里 bOnline 的语义保持一致。
 bool IsVisibleOnline(int presence)
 {
     return presence == presence_online

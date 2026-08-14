@@ -36,7 +36,6 @@ enum class CvRowAction
     None,       // 没有待处理动作
     Publish,    // 发布（草稿 → 已发布）
     Disable,    // 撤回（已发布 → 草稿态，不再下发）
-    Republish,  // 回滚：把这条旧记录重新发布一次，使其成为最新发布
     Edit,       // 编辑：改最低版本与更新说明
 };
 

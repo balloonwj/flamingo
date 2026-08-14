@@ -318,7 +318,7 @@ ScreenInfo GetScreenInfo(Screen screen)
                  _T("域名、SSO、安全策略、品牌定制等") };
     case Screen::ClientVersions:
         return { kIdNavClientVersions, ui::Icon::Download, _T("客户端版本"),
-                 _T("发布 PC 客户端升级包，控制发布 / 撤回与回滚") };
+                 _T("发布 PC 客户端升级包，控制发布与撤回") };
     case Screen::EnterpriseDetail:
     default:
         // 企业详情是「企业管理」的子屏：侧栏高亮 / 面包屑沿用企业管理。
@@ -1735,7 +1735,6 @@ LRESULT AdminFrame::OnApiResult(UINT, WPARAM wParam, LPARAM lParam,
     case kApiTagCvCreate:
     case kApiTagCvUpdate:
     case kApiTagCvSetEnabled:
-    case kApiTagCvRepublish:
         OnClientVersionActionDone(*http);
         break;
     case kApiTagOrgNodeDelete:
@@ -5047,9 +5046,6 @@ void AdminFrame::StartClientVersionAction(int action, long long id)
     case CvRowAction::Disable:
         request = adminapi::MakeClientVersionSetEnabledRequest(server, token, id, false);
         break;
-    case CvRowAction::Republish:
-        request = adminapi::MakeClientVersionRepublishRequest(server, token, id);
-        break;
     default:
         // Edit 不走这里（它开弹窗，不直接发请求）
         return;
@@ -5135,7 +5131,7 @@ void AdminFrame::OnClientVersionActionDone(const HttpResult& http)
     }
 
     ShowToast(_T("操作已生效"), ToastKind::Info);
-    // 发布 / 撤回 / 回滚都会改变"当前生效"是哪一条，必须重拉列表才能把
+    // 发布 / 撤回都会改变"当前生效"是哪一条，必须重拉列表才能把
     // 状态列与徽标刷新对，否则界面显示的还是操作前的样子。
     StartLoadClientVersions();
 }

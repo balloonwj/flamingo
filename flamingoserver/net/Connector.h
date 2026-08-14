@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+//SOCKET 类型来自这里：Windows 下是 winsock 的 UINT_PTR，POSIX 下是 int
+#include "../base/Platform.h"
 #include "InetAddress.h"
 #include <functional>
 #include <memory>
@@ -13,7 +15,7 @@ namespace net
     class Connector : public std::enable_shared_from_this<Connector>
     {
     public:
-        typedef std::function<void(int sockfd)> NewConnectionCallback;
+        typedef std::function<void(SOCKET sockfd)> NewConnectionCallback;
 
         Connector(EventLoop* loop, const InetAddress& serverAddr);
         ~Connector();
@@ -38,11 +40,11 @@ namespace net
         void startInLoop();
         void stopInLoop();
         void connect();
-        void connecting(int sockfd);
+        void connecting(SOCKET sockfd);
         void handleWrite();
         void handleError();
-        void retry(int sockfd);
-        int removeAndResetChannel();
+        void retry(SOCKET sockfd);
+        SOCKET removeAndResetChannel();
         void resetChannel();
 
     private:

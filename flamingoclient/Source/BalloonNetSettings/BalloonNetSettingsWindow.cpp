@@ -20,7 +20,7 @@
 #include "../FlamingoClient.h"        // CFlamingoClient::SetServer / SetPort 等
 #include "NetSettingsLayout.h"        // BuildNetSettingsBody / NetCtrlId
 #include "NetServerCard.h"            // NetServerCard
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
 #include "../net/IUSocket.h"            // CIUSocket::TestConnect
 
 using namespace balloonwjui;

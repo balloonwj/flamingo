@@ -331,6 +331,32 @@ TEST_CASE("FAVM8 BuildRows 的边界：空收藏、空资料、缺昵称、成�
     CHECK(rows[1].m_subLabel.IsEmpty());           //成员数未知则不显示 "0 人"
 }
 
+TEST_CASE("FAVM8b 收藏行显示名带备注，与通讯录树口径一致", "[favorites]")
+{
+    //改动前收藏区只取昵称、完全不看备注，于是同一个人在收藏区显示真名、在部门树里
+    //显示备注，两处对不上号。现在两处都走 ResolveContactDisplayName。
+    std::vector<net::ContactItem> contacts;
+    contacts.push_back(MakeContact(5081, "苏沐辰", "", presence_online));
+    contacts[0].m_remark = "数据组";
+    contacts.push_back(MakeContact(5082, "谢知行", "", presence_online));
+
+    std::vector<net::UserGroupItem> groups;
+
+    std::vector<net::FavoriteItem> items;
+    items.push_back(MakeFav(conversation_single, 5081));
+    items.push_back(MakeFav(conversation_single, 5082));
+
+    FavoritesModel model;
+    model.Reset(items);
+
+    std::vector<FavoriteRow> rows;
+    model.BuildRows(contacts, groups, rows);
+
+    REQUIRE(rows.size() == 2);
+    CHECK(rows[0].m_displayName == _T("苏沐辰（数据组）"));   //有备注：真名（备注）
+    CHECK(rows[1].m_displayName == _T("谢知行"));             //无备注：只有真名
+}
+
 // =====================================================================
 // FAVM9 ~ FAVM11 —— cmd_set_favorite 的请求构造与应答解析
 // =====================================================================

@@ -17,12 +17,20 @@ bool ZlibUtil::compressBuf(const char* pSrcBuf, size_t nSrcBufLength, char* pDes
 
     //计算缓冲区大小，并为其分配内存
     //压缩后的长度是不会超过nDestBufLength的
-    nDestBufLength = compressBound(nSrcBufLength);
+    //zlib 的长度参数类型是 uLong：Windows 上 32 位、Linux 上 64 位，与 size_t 都不一定同宽。
+    //以前把 size_t* 直接强转成 uLongf* 交给 zlib，Linux 下等于让它往一个 4 字节的对象写 8 字节，
+    //Windows x64 下则只写低 32 位，都是碰巧没出事。改用 uLong 中转变量，压缩完再写回
+    uLong nSrcLen = static_cast<uLong>(nSrcBufLength);
+    uLong nDestLen = compressBound(nSrcLen);
+    nDestBufLength = nDestLen;
 
     //压缩
-    int ret = compress((Bytef*)pDestBuf, (uLongf*)& nDestBufLength, (const Bytef*)pSrcBuf, nSrcBufLength);
+    int ret = compress((Bytef*)pDestBuf, &nDestLen, (const Bytef*)pSrcBuf, nSrcLen);
     if (ret != Z_OK)
         return false;
+
+    //compress 会把实际压缩后的长度写回第二个参数
+    nDestBufLength = nDestLen;
 
     return true;
 }
@@ -32,19 +40,20 @@ bool ZlibUtil::compressBuf(const std::string& strSrcBuf, std::string& strDestBuf
     if (strSrcBuf.empty())
         return false;
 
-    int nSrcLength = strSrcBuf.length();
-    if (nSrcLength > MAX_COMPRESS_BUF_SIZE)
+    //长度一律用 zlib 自己的 uLong，理由见上面 compressBuf 里的说明
+    uLong nSrcLength = static_cast<uLong>(strSrcBuf.length());
+    if (nSrcLength > static_cast<uLong>(MAX_COMPRESS_BUF_SIZE))
         return false;
 
-    int nDestBufLength = compressBound(nSrcLength);
-    if (nDestBufLength <= 0)
+    uLong nDestBufLength = compressBound(nSrcLength);
+    if (nDestBufLength == 0)
         return false;
 
     char* pDestBuf = new char[nDestBufLength];
     memset(pDestBuf, 0, nDestBufLength * sizeof(char));
 
     //压缩
-    int ret = compress((Bytef*)pDestBuf, (uLongf*)& nDestBufLength, (const Bytef*)strSrcBuf.c_str(), nSrcLength);
+    int ret = compress((Bytef*)pDestBuf, &nDestBufLength, (const Bytef*)strSrcBuf.c_str(), nSrcLength);
     if (ret != Z_OK)
     {
         delete[] pDestBuf;
@@ -61,9 +70,12 @@ bool ZlibUtil::uncompressBuf(const std::string& strSrcBuf, std::string& strDestB
 {
     char* pDestBuf = new char[nDestBufLength];
     memset(pDestBuf, 0, nDestBufLength * sizeof(char));
-    int nPrevDestBufLength = nDestBufLength;
+    //长度一律用 zlib 自己的 uLong，理由见上面 compressBuf 里的说明
+    uLong nDestLen = static_cast<uLong>(nDestBufLength);
     //解压缩
-    int ret = uncompress((Bytef*)pDestBuf, (uLongf*)& nDestBufLength, (const Bytef*)strSrcBuf.c_str(), strSrcBuf.length());
+    int ret = uncompress((Bytef*)pDestBuf, &nDestLen, (const Bytef*)strSrcBuf.c_str(),
+                         static_cast<uLong>(strSrcBuf.length()));
+    nDestBufLength = nDestLen;
     if (ret != Z_OK)
     {
         delete[] pDestBuf;
@@ -99,7 +111,7 @@ bool ZlibUtil::deflate(const std::string& strSrc, std::string& strDest)
     }
     // Use whatever input is provided
     zS.next_in = (Bytef*)(strSrc.c_str());
-    zS.avail_in = strSrc.length();
+    zS.avail_in = static_cast<uInt>(strSrc.length());
 
     do {
         try
@@ -201,7 +213,7 @@ bool ZlibUtil::inflate(const std::string& strSrc, std::string& strDest)
 
     // Use whatever input is provided
     zS.next_in = (Bytef*)(strSrc.c_str());
-    zS.avail_in = strSrc.length();
+    zS.avail_in = static_cast<uInt>(strSrc.length());
 
     do {
         try

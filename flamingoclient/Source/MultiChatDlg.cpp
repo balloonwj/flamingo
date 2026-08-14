@@ -33,7 +33,7 @@ CMultiChatDlg::CMultiChatDlg(void)
 	m_cyPicBarDlg = 24;
 
 	m_nGroupId = m_nGroupNumber = 0;
-	m_strGroupName = _T("Èº·¢ÏûÏ¢");
+	m_strGroupName = _T("Èºï¿½ï¿½ï¿½ï¿½Ï¢");
 	m_strUserName = _T("");
 	m_nMemberCnt = m_nOnlineMemberCnt = 0;
 
@@ -61,24 +61,24 @@ BOOL CMultiChatDlg::PreTranslateMessage(MSG* pMsg)
 
 	if (pMsg->hwnd == m_richRecv.m_hWnd || pMsg->hwnd == m_richSend.m_hWnd)
 	{
-		if (pMsg->message == WM_MOUSEMOVE)			// ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êÒÆ¶¯ÏûÏ¢
+		if (pMsg->message == WM_MOUSEMOVE)			// ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ¶ï¿½ï¿½ï¿½Ï¢
 		{
 			if (OnRichEdit_MouseMove(pMsg))
 				return TRUE;
 		}
-		else if (pMsg->message == WM_LBUTTONDBLCLK) // ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êË«»÷ÏûÏ¢
+		else if (pMsg->message == WM_LBUTTONDBLCLK) // ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë«ï¿½ï¿½ï¿½ï¿½Ï¢
 		{
 			if (OnRichEdit_LBtnDblClk(pMsg))
 				return TRUE;
 		}
-		else if (pMsg->message == WM_RBUTTONDOWN)	// ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êÓÒ¼ü°´ÏÂÏûÏ¢
+		else if (pMsg->message == WM_RBUTTONDOWN)	// ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
 		{
 			if (OnRichEdit_RBtnDown(pMsg))
 				return TRUE;
 		}
 		
 		if ((pMsg->hwnd == m_richSend.m_hWnd) && (pMsg->message == WM_KEYDOWN) 
-			&& (pMsg->wParam == 'V'))	// ·¢ËÍÎÄ±¾¿òµÄCtrl+VÏûÏ¢
+			&& (pMsg->wParam == 'V'))	// ï¿½ï¿½ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½ï¿½Ctrl+Vï¿½ï¿½Ï¢
 		{
 			BOOL bCtrlPressed = ::GetAsyncKeyState(VK_CONTROL) & 0x8000;
 			if(bCtrlPressed)
@@ -135,13 +135,13 @@ BOOL CMultiChatDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
 	Init();
 	UpdateGroupMemberList();
 
-	//ÔÊÐíÍÏ×§ÎÄ¼þ½ø´°¿Ú
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×§ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	::DragAcceptFiles(m_hWnd, TRUE); 
 
 	SetHotRgn();
 
 
-	PostMessage(WM_SETDLGINITFOCUS, 0, 0);		// ÉèÖÃ¶Ô»°¿ò³õÊ¼½¹µã
+	PostMessage(WM_SETDLGINITFOCUS, 0, 0);		// ï¿½ï¿½ï¿½Ã¶Ô»ï¿½ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½
 
 	m_bPressEnterToSendMessage = m_lpFMGClient->m_UserConfig.IsEnablePressEnterToSend();
 
@@ -157,14 +157,14 @@ BOOL CMultiChatDlg::OnCopyData(CWindow wnd, PCOPYDATASTRUCT pCopyDataStruct)
 
 	switch (pCopyDataStruct->dwData)
 	{
-	case IPC_CODE_MSGLOG_PASTE:			// ÏûÏ¢¼ÇÂ¼ä¯ÀÀ´°¿ÚÕ³ÌùÏûÏ¢
+	case IPC_CODE_MSGLOG_PASTE:			// ï¿½ï¿½Ï¢ï¿½ï¿½Â¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Õ³ï¿½ï¿½ï¿½ï¿½Ï¢
 		{
 			if (pCopyDataStruct->lpData != NULL && pCopyDataStruct->cbData > 0)
 				AddMsgToSendEdit((LPCTSTR)pCopyDataStruct->lpData);
 		}
 		break;
 
-	case IPC_CODE_MSGLOG_EXIT:			// ÏûÏ¢¼ÇÂ¼ä¯ÀÀ´°¿ÚÍË³öÏûÏ¢
+	case IPC_CODE_MSGLOG_EXIT:			// ï¿½ï¿½Ï¢ï¿½ï¿½Â¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë³ï¿½ï¿½ï¿½Ï¢
 		{
 			m_tbMid.SetItemCheckState(11, FALSE);
 			m_tbMid.Invalidate();
@@ -355,14 +355,14 @@ void CMultiChatDlg::SetHotRgn()
 	m_SkinDlg.SetHotRegion(m_HotRgn);
 }
 
-//»Ø³µ¼ü·¢ËÍÏûÏ¢
+//ï¿½Ø³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
 void CMultiChatDlg::OnPressEnterMenuItem(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	m_bPressEnterToSendMessage = TRUE;
 	m_lpFMGClient->m_UserConfig.EnablePressEnterToSend(m_bPressEnterToSendMessage);
 }
 
-//ctrl+»Ø³µ¼ü·¢ËÍÏûÏ¢
+//ctrl+ï¿½Ø³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
 void CMultiChatDlg::OnPressCtrlEnterMenuItem(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	m_bPressEnterToSendMessage = FALSE;
@@ -394,7 +394,7 @@ void CMultiChatDlg::OnDestroy()
 	ATLASSERT(pLoop != NULL);
 	pLoop->RemoveMessageFilter(this);
 
-	UnInit();	// ·´³õÊ¼»¯¿Ø¼þ
+	UnInit();	// ï¿½ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½Ø¼ï¿½
 
 	if (m_hDlgIcon != NULL)
 	{
@@ -409,7 +409,7 @@ void CMultiChatDlg::OnDestroy()
 	}
 }
 
-// ¡°×ÖÌåÑ¡Ôñ¹¤¾ßÀ¸¡±°´Å¥
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ¡ï¿½ñ¹¤¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Å¥
 void CMultiChatDlg::OnBtn_Font(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	RECT rtRichRecv;
@@ -429,7 +429,7 @@ void CMultiChatDlg::OnBtn_Font(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ¡°±íÇé¡±°´Å¥
+// ï¿½ï¿½ï¿½ï¿½ï¿½é¡±ï¿½ï¿½Å¥
 void CMultiChatDlg::OnBtn_Face(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	if (BN_PUSHED == uNotifyCode)
@@ -458,24 +458,24 @@ void CMultiChatDlg::OnBtn_Face(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ¡°·¢ËÍÍ¼Æ¬¡±°´Å¥
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¼Æ¬ï¿½ï¿½ï¿½ï¿½Å¥
 void CMultiChatDlg::OnBtn_Image(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	BOOL bOpenFileDialog = TRUE;
 	LPCTSTR lpszDefExt = NULL;
 	LPCTSTR lpszFileName = NULL;
 	DWORD dwFlags = OFN_HIDEREADONLY|OFN_OVERWRITEPROMPT|OFN_NOCHANGEDIR|OFN_EXTENSIONDIFFERENT;
-	LPCTSTR lpszFilter = _T("Í¼ÏñÎÄ¼þ(*.bmp;*.jpg;*.jpeg;*.gif;*.png)\0*.bmp;*.jpg;*.jpeg;*.gif;*.png\0\0");;
+	LPCTSTR lpszFilter = _T("Í¼ï¿½ï¿½ï¿½Ä¼ï¿½(*.bmp;*.jpg;*.jpeg;*.gif;*.png)\0*.bmp;*.jpg;*.jpeg;*.gif;*.png\0\0");;
 	HWND hWndParent = m_hWnd;
 
 	CFileDialog fileDlg(bOpenFileDialog, lpszDefExt, lpszFileName, dwFlags, lpszFilter, hWndParent);
-	fileDlg.m_ofn.lpstrTitle = _T("´ò¿ªÍ¼Æ¬");
+	fileDlg.m_ofn.lpstrTitle = _T("ï¿½ï¿½Í¼Æ¬");
 	if (fileDlg.DoModal() == IDOK)
 	{
 		UINT64 nFileSize = IUGetFileSize2(fileDlg.m_ofn.lpstrFile);
 		if(nFileSize > MAX_CHAT_IMAGE_SIZE)
 		{
-			::MessageBox(m_hWnd, _T("Í¼Æ¬´óÐ¡³¬¹ý10M£¬ÇëÊ¹ÓÃ½ØÍ¼¹¤¾ß»òÊ¹ÓÃÎÄ¼þ·½Ê½¸ø¶Ô·½·¢ËÍ¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+			::MessageBox(m_hWnd, _T("Í¼Æ¬ï¿½ï¿½Ð¡ï¿½ï¿½ï¿½ï¿½10Mï¿½ï¿½ï¿½ï¿½Ê¹ï¿½Ã½ï¿½Í¼ï¿½ï¿½ï¿½ß»ï¿½Ê¹ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½Ê½ï¿½ï¿½ï¿½Ô·ï¿½ï¿½ï¿½ï¿½Í¡ï¿½"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 			return;
 		}
 		_RichEdit_InsertFace(m_richSend.m_hWnd, fileDlg.m_ofn.lpstrFile, -1, -1);
@@ -483,7 +483,7 @@ void CMultiChatDlg::OnBtn_Image(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ¡°À´ÏûÏ¢²»ÌáÊ¾¡±°´Å¥
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½Å¥
 void CMultiChatDlg::OnBtn_MsgNotPrompt(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	CSkinMenu PopupMenu = PopupMenu = m_SkinMenu.GetSubMenu(1).GetSubMenu(5);
@@ -497,7 +497,7 @@ void CMultiChatDlg::OnBtn_MsgNotPrompt(UINT uNotifyCode, int nID, CWindow wndCtl
 	}
 }
 
-//½ØÍ¼¹¤¾ß
+//ï¿½ï¿½Í¼ï¿½ï¿½ï¿½ï¿½
 void CMultiChatDlg::OnBtn_ScreenShot(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	DWORD dwSucceedExitCode = 2;
@@ -507,7 +507,7 @@ void CMultiChatDlg::OnBtn_ScreenShot(UINT uNotifyCode, int nID, CWindow wndCtl)
 	PROCESS_INFORMATION pi = {0};
 	if(!CreateProcess(NULL, strCatchScreen.GetBuffer(), NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi))
 	{
-		::MessageBox(m_hWnd, _T("Æô¶¯½ØÍ¼¹¤¾ßÊ§°Ü£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
+		::MessageBox(m_hWnd, _T("ï¿½ï¿½ï¿½ï¿½ï¿½Í¼ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
 	}
 	if(pi.hProcess != NULL)
 	{
@@ -520,19 +520,19 @@ void CMultiChatDlg::OnBtn_ScreenShot(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ¡°µã»÷Áí´æÎª¡±°´Å¥
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½Å¥
 void CMultiChatDlg::OnBtn_SaveAs(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	OnMenu_SaveAs(uNotifyCode, nID, wndCtl);
 }
 
-// ¡°¹Ø±Õ¡±°´Å¥
+// ï¿½ï¿½ï¿½Ø±Õ¡ï¿½ï¿½ï¿½Å¥
 void CMultiChatDlg::OnBtn_Close(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	PostMessage(WM_CLOSE);
 }
 
-// ¡°·¢ËÍ¡±°´Å¥
+// ï¿½ï¿½ï¿½ï¿½ï¿½Í¡ï¿½ï¿½ï¿½Å¥
 void CMultiChatDlg::OnBtn_Send(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	if (NULL == m_lpFMGClient)
@@ -541,7 +541,7 @@ void CMultiChatDlg::OnBtn_Send(UINT uNotifyCode, int nID, CWindow wndCtl)
 	int nCustomPicCnt = RichEdit_GetCustomPicCount(m_richSend.m_hWnd);
 	if (nCustomPicCnt > 1)
 	{
-		MessageBox(_T("Ã¿ÌõÏûÏ¢×î¶à°üº¬1ÕÅÍ¼Æ¬£¬¶àÕÅÍ¼Æ¬Çë·ÖÌõ·¢ËÍ¡£"), _T("ÌáÊ¾"));
+		MessageBox(_T("Ã¿ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½1ï¿½ï¿½Í¼Æ¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¼Æ¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¡ï¿½"), _T("ï¿½ï¿½Ê¾"));
 		return;
 	}
 
@@ -573,7 +573,7 @@ void CMultiChatDlg::OnBtn_Send(UINT uNotifyCode, int nID, CWindow wndCtl)
 	m_richSend.SetFocus();
 }
 
-// ¡°¼ýÍ·¡±°´Å¥
+// ï¿½ï¿½ï¿½ï¿½Í·ï¿½ï¿½ï¿½ï¿½Å¥
 void CMultiChatDlg::OnBtn_Arrow(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	CSkinMenu PopupMenu = m_SkinMenu.GetSubMenu(5);
@@ -645,7 +645,7 @@ LRESULT CMultiChatDlg::OnToolbarDropDown(LPNMHDR pnmh)
 	return 0;
 }
 
-// ¸üÐÂ×ÖÌåÐÅÏ¢
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
 LRESULT CMultiChatDlg::OnUpdateFontInfo(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	CFontInfo fontInfo = m_FontSelDlg.GetFontInfo();
@@ -655,7 +655,7 @@ LRESULT CMultiChatDlg::OnUpdateFontInfo(UINT uMsg, WPARAM wParam, LPARAM lParam)
 	return 0;
 }
 
-// ¡°±íÇé¡±¿Ø¼þÑ¡È¡ÏûÏ¢
+// ï¿½ï¿½ï¿½ï¿½ï¿½é¡±ï¿½Ø¼ï¿½Ñ¡È¡ï¿½ï¿½Ï¢
 LRESULT CMultiChatDlg::OnFaceCtrlSel(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	int nFaceId = m_FaceSelDlg.GetSelFaceId();
@@ -673,14 +673,14 @@ LRESULT CMultiChatDlg::OnFaceCtrlSel(UINT uMsg, WPARAM wParam, LPARAM lParam)
 	return 0;
 }
 
-// ÉèÖÃ¶Ô»°¿ò³õÊ¼½¹µã
+// ï¿½ï¿½ï¿½Ã¶Ô»ï¿½ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½
 LRESULT CMultiChatDlg::OnSetDlgInitFocus(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	m_richSend.SetFocus();
 	return 0;
 }
 
-//	¡°½ÓÊÕÏûÏ¢¡±¸»ÎÄ±¾¿òÁ´½Óµã»÷ÏûÏ¢
+//	ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Óµï¿½ï¿½ï¿½ï¿½Ï¢
 LRESULT CMultiChatDlg::OnRichEdit_Recv_Link(LPNMHDR pnmh)
 {
 	if (pnmh->code == EN_LINK)
@@ -724,7 +724,7 @@ LRESULT CMultiChatDlg::OnRichEdit_Send_Paste(LPNMHDR pnmh)
 	return 0;
 }
 
-// ¡°Èº³ÉÔ±¡±ÁÐ±íË«»÷ÏûÏ¢
+// ï¿½ï¿½Èºï¿½ï¿½Ô±ï¿½ï¿½ï¿½Ð±ï¿½Ë«ï¿½ï¿½ï¿½ï¿½Ï¢
 LRESULT CMultiChatDlg::OnGMemberList_DblClick(LPNMHDR pnmh)
 {
 	int nCurSel = m_ListCtrl.GetCurSelItemIndex();
@@ -733,18 +733,18 @@ LRESULT CMultiChatDlg::OnGMemberList_DblClick(LPNMHDR pnmh)
 		UINT nUTalkUin = (UINT)m_ListCtrl.GetItemData(nCurSel, 0);
 		if(nUTalkUin == m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID)
 		{
-			::MessageBox(m_hWnd, _T("²»ÄÜºÍ×Ô¼ºÁÄÌì¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+			::MessageBox(m_hWnd, _T("ï¿½ï¿½ï¿½Üºï¿½ï¿½Ô¼ï¿½ï¿½ï¿½ï¿½ì¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 			return 0;
 		}
 		
-		//ÆóÒµ°æ£ºÍ¨Ñ¶Â¼ÀïµÄÈË¶¼¿ÉÒÔÖ±½ÓÁÄÌì£¨²»ÔÙÓÐ"ÊÇ²»ÊÇºÃÓÑ"ÕâÒ»Ëµ£©£¬
-		//Ô­ÏÈµÄ IsFriend ÅÐ¶ÏÓë"ÇëÏÈ¼ÓÎªºÃÓÑ"ÌáÊ¾Ëæ v1 ºÃÓÑÌåÏµÒ»²¢É¾³ý¡£
+		//ï¿½ï¿½Òµï¿½æ£ºÍ¨Ñ¶Â¼ï¿½ï¿½ï¿½ï¿½Ë¶ï¿½ï¿½ï¿½ï¿½ï¿½Ö±ï¿½ï¿½ï¿½ï¿½ï¿½ì£¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½"ï¿½Ç²ï¿½ï¿½Çºï¿½ï¿½ï¿½"ï¿½ï¿½Ò»Ëµï¿½ï¿½ï¿½ï¿½
+		//Ô­ï¿½Èµï¿½ IsFriend ï¿½Ð¶ï¿½ï¿½ï¿½"ï¿½ï¿½ï¿½È¼ï¿½Îªï¿½ï¿½ï¿½ï¿½"ï¿½ï¿½Ê¾ï¿½ï¿½ v1 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÏµÒ»ï¿½ï¿½É¾ï¿½ï¿½ï¿½ï¿½
 		::SendMessage(m_hMainDlg, WM_SHOW_BUDDYCHATDLG, 0, nUTalkUin);
 	}
 	return 0;
 }
 
-// ¡°Èº³ÉÔ±¡±ÁÐ±íÓÒ¼üµ¥»÷ÏûÏ¢
+// ï¿½ï¿½Èºï¿½ï¿½Ô±ï¿½ï¿½ï¿½Ð±ï¿½ï¿½Ò¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
 LRESULT CMultiChatDlg::OnGMemberList_RClick(LPNMHDR pnmh)
 {
 	int nCurSel = m_ListCtrl.GetCurSelItemIndex();
@@ -759,13 +759,13 @@ LRESULT CMultiChatDlg::OnGMemberList_RClick(LPNMHDR pnmh)
 	return 0;
 }
 
-// ¡°¼ôÇÐ¡±²Ëµ¥
+// ï¿½ï¿½ï¿½ï¿½ï¿½Ð¡ï¿½ï¿½Ëµï¿½
 void CMultiChatDlg::OnMenu_Cut(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	m_richSend.Cut();
 }
 
-// ¡°¸´ÖÆ¡±²Ëµ¥
+// ï¿½ï¿½ï¿½ï¿½ï¿½Æ¡ï¿½ï¿½Ëµï¿½
 void CMultiChatDlg::OnMenu_Copy(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	HWND hWnd = GetFocus();
@@ -779,13 +779,13 @@ void CMultiChatDlg::OnMenu_Copy(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ¡°Õ³Ìù¡±²Ëµ¥
+// ï¿½ï¿½Õ³ï¿½ï¿½ï¿½ï¿½ï¿½Ëµï¿½
 void CMultiChatDlg::OnMenu_Paste(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	m_richSend.PasteSpecial(CF_TEXT);
 }
 
-// ¡°È«²¿Ñ¡Ôñ¡±²Ëµ¥
+// ï¿½ï¿½È«ï¿½ï¿½Ñ¡ï¿½ñ¡±²Ëµï¿½
 void CMultiChatDlg::OnMenu_SelAll(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	HWND hWnd = GetFocus();
@@ -799,13 +799,13 @@ void CMultiChatDlg::OnMenu_SelAll(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}
 }
 
-// ¡°ÇåÆÁ¡±²Ëµ¥
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ëµï¿½
 void CMultiChatDlg::OnMenu_Clear(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	m_richRecv.SetWindowText(_T(""));
 }
 
-// ¡°ÏÔÊ¾±ÈÀý¡±²Ëµ¥
+// ï¿½ï¿½ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ëµï¿½
 void CMultiChatDlg::OnMenu_ZoomRatio(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	switch (nID)
@@ -845,7 +845,7 @@ void CMultiChatDlg::OnMenu_ZoomRatio(UINT uNotifyCode, int nID, CWindow wndCtl)
 	}	
 }
 
-// ¡°Áí´æÎª¡±²Ëµ¥
+// ï¿½ï¿½ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½Ëµï¿½
 void CMultiChatDlg::OnMenu_SaveAs(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	IImageOle* pImageOle = NULL;
@@ -877,26 +877,26 @@ void CMultiChatDlg::OnMenu_SaveAs(UINT uNotifyCode, int nID, CWindow wndCtl)
 	if (InlineIsEqualGUID(guid, Gdiplus::ImageFormatJPEG))
 	{
 		lpszDefExt = _T(".jpg");
-		lpszFilter = _T("Í¼ÏñÎÄ¼þ(*.jpg)\0*.jpg\0Í¼ÏñÎÄ¼þ(*.bmp)\0*.bmp\0\0");
+		lpszFilter = _T("Í¼ï¿½ï¿½ï¿½Ä¼ï¿½(*.jpg)\0*.jpg\0Í¼ï¿½ï¿½ï¿½Ä¼ï¿½(*.bmp)\0*.bmp\0\0");
 	}
 	else if (InlineIsEqualGUID(guid, Gdiplus::ImageFormatPNG))
 	{
 		lpszDefExt = _T(".png");
-		lpszFilter = _T("Í¼ÏñÎÄ¼þ(*.png)\0*.png\0\0");
+		lpszFilter = _T("Í¼ï¿½ï¿½ï¿½Ä¼ï¿½(*.png)\0*.png\0\0");
 	}
 	else if (InlineIsEqualGUID(guid, Gdiplus::ImageFormatGIF))
 	{
 		lpszDefExt = _T(".gif");
-		lpszFilter = _T("Í¼ÏñÎÄ¼þ(*.gif)\0*.gif\0Í¼ÏñÎÄ¼þ(*.jpg)\0*.jpg\0Í¼ÏñÎÄ¼þ(*.bmp)\0*.bmp\0\0");
+		lpszFilter = _T("Í¼ï¿½ï¿½ï¿½Ä¼ï¿½(*.gif)\0*.gif\0Í¼ï¿½ï¿½ï¿½Ä¼ï¿½(*.jpg)\0*.jpg\0Í¼ï¿½ï¿½ï¿½Ä¼ï¿½(*.bmp)\0*.bmp\0\0");
 	}
 	else
 	{
 		lpszDefExt = _T(".jpg");
-		lpszFilter = _T("Í¼ÏñÎÄ¼þ(*.jpg)\0*.jpg\0Í¼ÏñÎÄ¼þ(*.bmp)\0*.bmp\0\0");
+		lpszFilter = _T("Í¼ï¿½ï¿½ï¿½Ä¼ï¿½(*.jpg)\0*.jpg\0Í¼ï¿½ï¿½ï¿½Ä¼ï¿½(*.bmp)\0*.bmp\0\0");
 	}
 
 	CFileDialog fileDlg(bOpenFileDialog, lpszDefExt, strFileNamePrefix, dwFlags, lpszFilter, hWndParent);
-	fileDlg.m_ofn.lpstrTitle = _T("±£´æÍ¼Æ¬");
+	fileDlg.m_ofn.lpstrTitle = _T("ï¿½ï¿½ï¿½ï¿½Í¼Æ¬");
 	if (fileDlg.DoModal() == IDOK)
 	{
 		CString strSavePath = fileDlg.m_ofn.lpstrFile;
@@ -922,7 +922,7 @@ void CMultiChatDlg::OnMenu_SaveAs(UINT uNotifyCode, int nID, CWindow wndCtl)
 		pImageOle->Release();
 }
 
-// ¡°²é¿´×ÊÁÏ¡±²Ëµ¥
+// ï¿½ï¿½ï¿½é¿´ï¿½ï¿½ï¿½Ï¡ï¿½ï¿½Ëµï¿½
 void CMultiChatDlg::OnMenu_ViewInfo(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	DWORD dwPos = GetMessagePos();
@@ -954,12 +954,12 @@ void CMultiChatDlg::OnMenu_ViewInfo(UINT uNotifyCode, int nID, CWindow wndCtl)
 	if(nUTalkUin == 0)
 		return;
 
-	//ÆóÒµ°æ£ºÍ¨Ñ¶Â¼ÀïµÄÈË×ÊÁÏ¶¼¿ÉÒÔ¿´£¨²»ÔÙÓÐ"ÊÇ²»ÊÇºÃÓÑ"ÕâÒ»Ëµ£©£¬
-	//Ô­ÏÈµÄ IsFriend ÅÐ¶ÏÓë"ÔÝ²»Ö§³Ö²é¿´·ÇºÃÓÑ×ÊÁÏ"ÌáÊ¾Ëæ v1 ºÃÓÑÌåÏµÒ»²¢É¾³ý¡£
+	//ï¿½ï¿½Òµï¿½æ£ºÍ¨Ñ¶Â¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¶ï¿½ï¿½ï¿½ï¿½Ô¿ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½"ï¿½Ç²ï¿½ï¿½Çºï¿½ï¿½ï¿½"ï¿½ï¿½Ò»Ëµï¿½ï¿½ï¿½ï¿½
+	//Ô­ï¿½Èµï¿½ IsFriend ï¿½Ð¶ï¿½ï¿½ï¿½"ï¿½Ý²ï¿½Ö§ï¿½Ö²é¿´ï¿½Çºï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½"ï¿½ï¿½Ê¾ï¿½ï¿½ v1 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÏµÒ»ï¿½ï¿½É¾ï¿½ï¿½ï¿½ï¿½
 	::PostMessage(m_hMainDlg, WM_SHOW_BUDDYINFODLG, 0, nUTalkUin);
 }
 
-// ¡°·¢ËÍÏûÏ¢¡±²Ëµ¥
+// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½ï¿½Ëµï¿½
 void CMultiChatDlg::OnMenu_SendMsg(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	DWORD dwPos = GetMessagePos();
@@ -991,15 +991,15 @@ void CMultiChatDlg::OnMenu_SendMsg(UINT uNotifyCode, int nID, CWindow wndCtl)
 	if(nUTalkUin == 0)
 		return;
 
-	//ÆóÒµ°æ£ºÍ¨Ñ¶Â¼ÀïµÄÈË¶¼¿ÉÒÔÖ±½ÓÁÄÌì£¨²»ÔÙÓÐ"ÊÇ²»ÊÇºÃÓÑ"ÕâÒ»Ëµ£©£¬Ô­ÏÈµÄ
-	//IsFriend ÅÐ¶ÏÒÑÉ¾³ý£»Ö»±£Áô"²»ÄÜºÍ×Ô¼ºÁÄÌì"ÕâÒ»ÌõÈÔÈ»ÓÐÒâÒåµÄÀ¹½Ø¡£
+	//ï¿½ï¿½Òµï¿½æ£ºÍ¨Ñ¶Â¼ï¿½ï¿½ï¿½ï¿½Ë¶ï¿½ï¿½ï¿½ï¿½ï¿½Ö±ï¿½ï¿½ï¿½ï¿½ï¿½ì£¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½"ï¿½Ç²ï¿½ï¿½Çºï¿½ï¿½ï¿½"ï¿½ï¿½Ò»Ëµï¿½ï¿½ï¿½ï¿½Ô­ï¿½Èµï¿½
+	//IsFriend ï¿½Ð¶ï¿½ï¿½ï¿½É¾ï¿½ï¿½ï¿½ï¿½Ö»ï¿½ï¿½ï¿½ï¿½"ï¿½ï¿½ï¿½Üºï¿½ï¿½Ô¼ï¿½ï¿½ï¿½ï¿½ï¿½"ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½È»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø¡ï¿½
 	if(nUTalkUin == m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID)
-		::MessageBox(m_hWnd, _T("²»ÄÜºÍ×Ô¼ºÁÄÌì¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+		::MessageBox(m_hWnd, _T("ï¿½ï¿½ï¿½Üºï¿½ï¿½Ô¼ï¿½ï¿½ï¿½ï¿½ì¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 	else
 		::SendMessage(m_hMainDlg, WM_SHOW_BUDDYCHATDLG, 0, nUTalkUin);
 }
 
-// ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êÒÆ¶¯ÏûÏ¢
+// ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ¶ï¿½ï¿½ï¿½Ï¢
 BOOL CMultiChatDlg::OnRichEdit_MouseMove(MSG* pMsg)
 {
 	IImageOle* pNewImageOle = NULL;
@@ -1048,23 +1048,23 @@ BOOL CMultiChatDlg::OnRichEdit_MouseMove(MSG* pMsg)
 	return FALSE;
 }
 
-// ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êË«»÷ÏûÏ¢
+// ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ë«ï¿½ï¿½ï¿½ï¿½Ï¢
 BOOL CMultiChatDlg::OnRichEdit_LBtnDblClk(MSG* pMsg)
 {
 	POINT pt = {GET_X_LPARAM(pMsg->lParam), GET_Y_LPARAM(pMsg->lParam)};
 
 	IImageOle* pImageOle = NULL;
 	BOOL bRet = RichEdit_GetImageOle(pMsg->hwnd, pt, &pImageOle);
-	if (bRet && pImageOle != NULL)					// Ë«»÷µÄÊÇÍ¼Æ¬
+	if (bRet && pImageOle != NULL)					// Ë«ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¼Æ¬
 	{
 		LONG nFaceId = -1, nFaceIndex = -1;
 		pImageOle->GetFaceId(&nFaceId);
 		pImageOle->GetFaceIndex(&nFaceIndex);
-		if (-1 == nFaceId && -1 == nFaceIndex)		// ·ÇÏµÍ³±íÇé
+		if (-1 == nFaceId && -1 == nFaceIndex)		// ï¿½ï¿½ÏµÍ³ï¿½ï¿½ï¿½ï¿½
 		{
-			BSTR bstrFileName = NULL;				// »ñÈ¡Í¼Æ¬ÎÄ¼þÃû
+			BSTR bstrFileName = NULL;				// ï¿½ï¿½È¡Í¼Æ¬ï¿½Ä¼ï¿½ï¿½ï¿½
 			HRESULT hr = pImageOle->GetFileName(&bstrFileName);
-			if (SUCCEEDED(hr))						// µ÷ÓÃÍ¼Æ¬ä¯ÀÀÆ÷³ÌÐò´ò¿ªÍ¼Æ¬
+			if (SUCCEEDED(hr))						// ï¿½ï¿½ï¿½ï¿½Í¼Æ¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¼Æ¬
 			{
 				CString strExeName = Hootina::CPath::GetAppPath().c_str();
 				strExeName += _T("picView.exe");
@@ -1093,7 +1093,7 @@ BOOL CMultiChatDlg::OnRichEdit_LBtnDblClk(MSG* pMsg)
 	return bRet;
 }
 
-// ·¢ËÍ/½ÓÊÕÎÄ±¾¿òµÄÊó±êÓÒ¼ü°´ÏÂÏûÏ¢
+// ï¿½ï¿½ï¿½ï¿½/ï¿½ï¿½ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
 BOOL CMultiChatDlg::OnRichEdit_RBtnDown(MSG* pMsg)
 {
 	if (pMsg->hwnd == m_richSend.m_hWnd)
@@ -1147,13 +1147,13 @@ BOOL CMultiChatDlg::OnRichEdit_RBtnDown(MSG* pMsg)
 	return FALSE;
 }
 
-// ¸üÐÂ¶Ô»°¿ò±êÌâÀ¸
+// ï¿½ï¿½ï¿½Â¶Ô»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 void CMultiChatDlg::UpdateDlgTitle()
 {
 	SetWindowText(m_strGroupName);
 }
 
-// ¸üÐÂÈºÃû³Æ³¬Á´½Ó¿Ø¼þ
+// ï¿½ï¿½ï¿½ï¿½Èºï¿½ï¿½ï¿½Æ³ï¿½ï¿½ï¿½ï¿½Ó¿Ø¼ï¿½
 BOOL CMultiChatDlg::UpdateGroupNameCtrl()
 {
 	CString strText;
@@ -1165,11 +1165,11 @@ BOOL CMultiChatDlg::UpdateGroupNameCtrl()
 	return TRUE;
 }
 
-// ¸üÐÂÈº³ÉÔ±ÁÐ±í
+// ï¿½ï¿½ï¿½ï¿½Èºï¿½ï¿½Ô±ï¿½Ð±ï¿½
 BOOL CMultiChatDlg::UpdateGroupMemberList()
 {
 	CString strText, strFileName;
-	CString strTargetDesc(_T("Èº·¢¸ø"));
+	CString strTargetDesc(_T("Èºï¿½ï¿½ï¿½ï¿½"));
 
  	long nOnlineMemberCnt = 0;
 	long nMemberCnt = 0;
@@ -1207,7 +1207,7 @@ BOOL CMultiChatDlg::UpdateGroupMemberList()
 			
 		strText.Format(_T("%s(%s)"), strNickName.c_str(), strAccount.c_str());
 		
-		if(nStatus!=STATUS_OFFLINE && nStatus!=STATUS_INVISIBLE)
+		if(nStatus!=STATUS_OFFLINE)
 		{
 			bGray = FALSE;
 			++nOnlineMemberCnt;
@@ -1222,20 +1222,20 @@ BOOL CMultiChatDlg::UpdateGroupMemberList()
 		if(nMemberCnt <= 3)
 		{
 			strTargetDesc += strNickName.c_str();
-			strTargetDesc += _T("¡¢");
+			strTargetDesc += _T("ï¿½ï¿½");
 		}
 			
 		
 	}
 	
-	strText.Format(_T("  Èº·¢³ÉÔ±(%d/%d)"), nOnlineMemberCnt, nMemberCnt);
+	strText.Format(_T("  Èºï¿½ï¿½ï¿½ï¿½Ô±(%d/%d)"), nOnlineMemberCnt, nMemberCnt);
 	m_staMemberTitle.SetWindowText(strText);
 	m_ListCtrl.SetRedraw(TRUE);
 	m_ListCtrl.Invalidate();
 
-	strTargetDesc.TrimRight(_T("¡¢"));
+	strTargetDesc.TrimRight(_T("ï¿½ï¿½"));
 	if(nMemberCnt > 3)
-		strTargetDesc += _T("µÈÈË.");
+		strTargetDesc += _T("ï¿½ï¿½ï¿½ï¿½.");
 	else
 		strTargetDesc += _T(".");
 
@@ -1245,14 +1245,14 @@ BOOL CMultiChatDlg::UpdateGroupMemberList()
 	return TRUE;
 }
 
-// ³õÊ¼»¯Top¹¤¾ßÀ¸
+// ï¿½ï¿½Ê¼ï¿½ï¿½Topï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 BOOL CMultiChatDlg::InitTopToolBar()
 {
 #ifdef _DEBUG
 	int nIndex = m_tbTop.AddItem(101, STBI_STYLE_DROPDOWN);
 	m_tbTop.SetItemSize(nIndex, 38, 28, 28, 10);
 	m_tbTop.SetItemPadding(nIndex, 1);
-	m_tbTop.SetItemToolTipText(nIndex, _T("ÈºÉçÇø"));
+	m_tbTop.SetItemToolTipText(nIndex, _T("Èºï¿½ï¿½ï¿½ï¿½"));
 	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbTop.SetItemLeftBgPic(nIndex, _T("aio_toolbar_leftnormal.png"), 
@@ -1265,7 +1265,7 @@ BOOL CMultiChatDlg::InitTopToolBar()
 	nIndex = m_tbTop.AddItem(102, STBI_STYLE_BUTTON);
 	m_tbTop.SetItemSize(nIndex, 38, 28);
 	m_tbTop.SetItemPadding(nIndex, 1);
-	m_tbTop.SetItemToolTipText(nIndex, _T("Èº¹²Ïí"));
+	m_tbTop.SetItemToolTipText(nIndex, _T("Èºï¿½ï¿½ï¿½ï¿½"));
 	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbTop.SetItemIconPic(nIndex, _T("GroupTopToolBar\\GroupShare.png"));
@@ -1273,7 +1273,7 @@ BOOL CMultiChatDlg::InitTopToolBar()
 	nIndex = m_tbTop.AddItem(103, STBI_STYLE_BUTTON);
 	m_tbTop.SetItemSize(nIndex, 38, 28);
 	m_tbTop.SetItemPadding(nIndex, 1);
-	m_tbTop.SetItemToolTipText(nIndex, _T("ÈºÏà²á"));
+	m_tbTop.SetItemToolTipText(nIndex, _T("Èºï¿½ï¿½ï¿½"));
 	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbTop.SetItemIconPic(nIndex, _T("GroupTopToolBar\\GroupAlbum.png"));
@@ -1281,7 +1281,7 @@ BOOL CMultiChatDlg::InitTopToolBar()
 	nIndex = m_tbTop.AddItem(104, STBI_STYLE_BUTTON);
 	m_tbTop.SetItemSize(nIndex, 38, 28);
 	m_tbTop.SetItemPadding(nIndex, 2);
-	m_tbTop.SetItemToolTipText(nIndex, _T("ÐÝÏÐÐ¡ÓÎÏ·"));
+	m_tbTop.SetItemToolTipText(nIndex, _T("ï¿½ï¿½ï¿½ï¿½Ð¡ï¿½ï¿½Ï·"));
 	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbTop.SetItemIconPic(nIndex, _T("GroupTopToolBar\\Game.png"));
@@ -1289,7 +1289,7 @@ BOOL CMultiChatDlg::InitTopToolBar()
 	nIndex = m_tbTop.AddItem(105, STBI_STYLE_BUTTON);
 	m_tbTop.SetItemSize(nIndex, 38, 28);
 	m_tbTop.SetItemPadding(nIndex, 2);
-	m_tbTop.SetItemToolTipText(nIndex, _T("´´½¨ÌÖÂÛ×é"));
+	m_tbTop.SetItemToolTipText(nIndex, _T("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½"));
 	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbTop.SetItemIconPic(nIndex, _T("GroupTopToolBar\\create_disc_group.png"));
@@ -1297,7 +1297,7 @@ BOOL CMultiChatDlg::InitTopToolBar()
 	nIndex = m_tbTop.AddItem(106, STBI_STYLE_BUTTON);
 	m_tbTop.SetItemSize(nIndex, 38, 28);
 	m_tbTop.SetItemPadding(nIndex, 2);
-	m_tbTop.SetItemToolTipText(nIndex, _T("·¢Æð¶àÈËÓïÒô»á»°"));
+	m_tbTop.SetItemToolTipText(nIndex, _T("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½á»°"));
 	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbTop.SetItemIconPic(nIndex, _T("GroupTopToolBar\\MultiAudio.png"));
@@ -1305,7 +1305,7 @@ BOOL CMultiChatDlg::InitTopToolBar()
 	nIndex = m_tbTop.AddItem(107, STBI_STYLE_BUTTON);
 	m_tbTop.SetItemSize(nIndex, 38, 28);
 	m_tbTop.SetItemPadding(nIndex, 2);
-	m_tbTop.SetItemToolTipText(nIndex, _T("ËÑË÷"));
+	m_tbTop.SetItemToolTipText(nIndex, _T("ï¿½ï¿½ï¿½ï¿½"));
 	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbTop.SetItemIconPic(nIndex, _T("GroupTopToolBar\\soso.png"));
@@ -1313,7 +1313,7 @@ BOOL CMultiChatDlg::InitTopToolBar()
 	nIndex = m_tbTop.AddItem(108, STBI_STYLE_DROPDOWN);
 	m_tbTop.SetItemSize(nIndex, 38, 28, 28, 10);
 	m_tbTop.SetItemPadding(nIndex, 2);
-	m_tbTop.SetItemToolTipText(nIndex, _T("ÈºÉèÖÃ"));
+	m_tbTop.SetItemToolTipText(nIndex, _T("Èºï¿½ï¿½ï¿½ï¿½"));
 	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbTop.SetItemLeftBgPic(nIndex, _T("aio_toolbar_leftnormal.png"), 
@@ -1326,7 +1326,7 @@ BOOL CMultiChatDlg::InitTopToolBar()
 	nIndex = m_tbTop.AddItem(109, STBI_STYLE_BUTTON);
 	m_tbTop.SetItemSize(nIndex, 38, 28);
 	m_tbTop.SetItemPadding(nIndex, 2);
-	m_tbTop.SetItemToolTipText(nIndex, _T("¾Ù±¨"));
+	m_tbTop.SetItemToolTipText(nIndex, _T("ï¿½Ù±ï¿½"));
 	m_tbTop.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbTop.SetItemIconPic(nIndex, _T("GroupTopToolBar\\Report.png"));
@@ -1342,13 +1342,13 @@ BOOL CMultiChatDlg::InitTopToolBar()
 	return TRUE;
 }
 
-// ³õÊ¼»¯Middle¹¤¾ßÀ¸
+// ï¿½ï¿½Ê¼ï¿½ï¿½Middleï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 BOOL CMultiChatDlg::InitMidToolBar()
 {
 	int nIndex = m_tbMid.AddItem(201, STBI_STYLE_BUTTON|STBI_STYLE_CHECK);
 	m_tbMid.SetItemSize(nIndex, 30, 27);
 	m_tbMid.SetItemPadding(nIndex, 1);
-	m_tbMid.SetItemToolTipText(nIndex, _T("×ÖÌåÑ¡Ôñ¹¤¾ßÀ¸"));
+	m_tbMid.SetItemToolTipText(nIndex, _T("ï¿½ï¿½ï¿½ï¿½Ñ¡ï¿½ñ¹¤¾ï¿½ï¿½ï¿½"));
 	m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbMid.SetItemIconPic(nIndex, _T("MidToolBar\\aio_quickbar_font.png"));
@@ -1356,7 +1356,7 @@ BOOL CMultiChatDlg::InitMidToolBar()
 	nIndex = m_tbMid.AddItem(202, STBI_STYLE_BUTTON|STBI_STYLE_CHECK);
 	m_tbMid.SetItemSize(nIndex, 30, 27);
 	m_tbMid.SetItemPadding(nIndex, 1);
-	m_tbMid.SetItemToolTipText(nIndex, _T("Ñ¡Ôñ±íÇé"));
+	m_tbMid.SetItemToolTipText(nIndex, _T("Ñ¡ï¿½ï¿½ï¿½ï¿½ï¿½"));
 	m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbMid.SetItemIconPic(nIndex, _T("MidToolBar\\aio_quickbar_face.png"));
@@ -1364,7 +1364,7 @@ BOOL CMultiChatDlg::InitMidToolBar()
 	nIndex = m_tbMid.AddItem(203, STBI_STYLE_BUTTON);
 	m_tbMid.SetItemSize(nIndex, 30, 27);
 	m_tbMid.SetItemPadding(nIndex, 1);
-	m_tbMid.SetItemToolTipText(nIndex, _T("ÏòºÃÓÑ·¢ËÍ´°¿Ú¶¶¶¯"));
+	m_tbMid.SetItemToolTipText(nIndex, _T("ï¿½ï¿½ï¿½ï¿½Ñ·ï¿½ï¿½Í´ï¿½ï¿½Ú¶ï¿½ï¿½ï¿½"));
 	m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbMid.SetItemIconPic(nIndex, _T("MidToolBar\\aio_quickbar_twitter.png"));
@@ -1373,7 +1373,7 @@ BOOL CMultiChatDlg::InitMidToolBar()
 	nIndex = m_tbMid.AddItem(204, STBI_STYLE_BUTTON);
 	m_tbMid.SetItemSize(nIndex, 30, 27);
 	m_tbMid.SetItemPadding(nIndex, 1);
-	m_tbMid.SetItemToolTipText(nIndex, _T("·¢ËÍÍ¼Æ¬"));
+	m_tbMid.SetItemToolTipText(nIndex, _T("ï¿½ï¿½ï¿½ï¿½Í¼Æ¬"));
 	m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbMid.SetItemIconPic(nIndex, _T("MidToolBar\\aio_quickbar_sendpic.png"));
@@ -1381,7 +1381,7 @@ BOOL CMultiChatDlg::InitMidToolBar()
 	nIndex = m_tbMid.AddItem(205, STBI_STYLE_BUTTON);
 	m_tbMid.SetItemSize(nIndex, 30, 27, 27, 0);
 	m_tbMid.SetItemPadding(nIndex, 1);
-	m_tbMid.SetItemToolTipText(nIndex, _T("ÆÁÄ»½ØÍ¼"));
+	m_tbMid.SetItemToolTipText(nIndex, _T("ï¿½ï¿½Ä»ï¿½ï¿½Í¼"));
 	m_tbMid.SetItemBgPic(nIndex, NULL, _T("aio_toolbar_highligh.png"), 
 		_T("aio_toolbar_down.png"), CRect(3,3,3,3));
 	m_tbMid.SetItemIconPic(nIndex, _T("MidToolBar\\aio_quickbar_cut.png"));
@@ -1398,7 +1398,7 @@ BOOL CMultiChatDlg::InitMidToolBar()
 	return TRUE;
 }
 
-// ³õÊ¼»¯IRichEditOleCallback½Ó¿Ú
+// ï¿½ï¿½Ê¼ï¿½ï¿½IRichEditOleCallbackï¿½Ó¿ï¿½
 BOOL CMultiChatDlg::InitRichEditOleCallback()
 {
 	IRichEditOleCallback2* pRichEditOleCallback2 = NULL;
@@ -1427,7 +1427,7 @@ BOOL CMultiChatDlg::InitRichEditOleCallback()
 	return SUCCEEDED(hr);
 }
 
-// ³õÊ¼»¯
+// ï¿½ï¿½Ê¼ï¿½ï¿½
 BOOL CMultiChatDlg::Init()
 {
 	m_SkinDlg.SubclassWindow(m_hWnd);
@@ -1448,7 +1448,7 @@ BOOL CMultiChatDlg::Init()
 	m_picHead.SetShowCursor(TRUE);
 	m_picHead.SetBgPic(_T("HeadCtrl\\Padding4Normal.png"), _T("HeadCtrl\\Padding4Hot.png"), _T("HeadCtrl\\Padding4Hot.png"));
 	m_picHead.MoveWindow(10, 10, 54, 54, FALSE);
-	m_picHead.SetToolTipText(_T("Èº·¢ÏûÏ¢"));
+	m_picHead.SetToolTipText(_T("Èºï¿½ï¿½ï¿½ï¿½Ï¢"));
 	tstring strFileName(Hootina::CPath::GetAppPath() + _T("Image\\DefMultiChatHeadPic.png"));
 	m_picHead.SetBitmap(strFileName.c_str());
 
@@ -1467,7 +1467,7 @@ BOOL CMultiChatDlg::Init()
 	m_staGroupCategory.MoveWindow(70, 38, 537, 20, FALSE);
 	m_staGroupCategory.SetTransparent(TRUE, hDlgBgDC);
 	m_staGroupCategory.SetFont(hFontGroupCategory);
-	//m_staGroupCategory.SetWindowText(_T("Èº·¢¸øxxx¡¢yyyµÈ"));
+	//m_staGroupCategory.SetWindowText(_T("Èºï¿½ï¿½ï¿½ï¿½xxxï¿½ï¿½yyyï¿½ï¿½"));
 
 	m_staMemberTitle.SubclassWindow(GetDlgItem(ID_STATIC_MERBERTITLE));
 	m_staMemberTitle.MoveWindow(rcClient.right-200, 267, MULTICHATDLG_MEMBER_LIST_WIDTH-2, 35, FALSE);
@@ -1503,9 +1503,9 @@ BOOL CMultiChatDlg::Init()
 	m_SkinMenu.SetTextColor(RGB(0, 20, 35));
 	m_SkinMenu.SetSelTextColor(RGB(254, 254, 254));
 
-	InitTopToolBar();				// ³õÊ¼»¯Top¹¤¾ßÀ¸
-	InitMidToolBar();				// ³õÊ¼»¯Middle¹¤¾ßÀ¸
-	m_PicBarDlg.Create(m_hWnd);		// ´´½¨Í¼Æ¬Ðü¸¡¹¤¾ßÀ¸
+	InitTopToolBar();				// ï¿½ï¿½Ê¼ï¿½ï¿½Topï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	InitMidToolBar();				// ï¿½ï¿½Ê¼ï¿½ï¿½Middleï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	m_PicBarDlg.Create(m_hWnd);		// ï¿½ï¿½ï¿½ï¿½Í¼Æ¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
 	//CRect rcRecv = CRect(CPoint(6, rcClient.top+44+44), CSize(rcClient.Width()-6-209, rcClient.Height()-228));
 	CRect rcRecv(6, 107, 583-MULTICHATDLG_MEMBER_LIST_WIDTH-2, 366);
@@ -1513,7 +1513,7 @@ BOOL CMultiChatDlg::Init()
 	m_richRecv.Create(m_hWnd, rcRecv, NULL, dwStyle, WS_EX_TRANSPARENT, ID_RICHEDIT_RECV);
 	m_richRecv.SetTransparent(TRUE, hDlgBgDC);
 
-	//½ÓÊÕricheditÓëmidToolbarÖ®¼äµÄ·Ö¸ôÌõ
+	//ï¿½ï¿½ï¿½ï¿½richeditï¿½ï¿½midToolbarÖ®ï¿½ï¿½Ä·Ö¸ï¿½ï¿½ï¿½
 	CRect rcSplitter(2, MULTICHATDLG_HEIGHT-135, MULTICHATDLG_WIDTH-MULTICHATDLG_MEMBER_LIST_WIDTH, MULTICHATDLG_HEIGHT-130);
 	m_SplitterCtrl.Create(m_hWnd, rcSplitter, NULL, WS_CHILD|WS_VISIBLE, 0, ID_SPLITTER_CTRL);
 	
@@ -1535,7 +1535,7 @@ BOOL CMultiChatDlg::Init()
 	long nCustomFontNameIndex = -1;
 	if(arrSysFont.empty())
 	{
-		::MessageBox(m_hWnd, _T("³õÊ¼»¯ÁÄÌì¶Ô»°¿òÊ§°Ü£¡"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
+		::MessageBox(m_hWnd, _T("ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô»ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½"), g_strAppTitle.c_str(), MB_OK|MB_ICONERROR);
 		return FALSE;
 	}
 	
@@ -1555,10 +1555,10 @@ BOOL CMultiChatDlg::Init()
 		}
 
 		if(!bFound)
-			strCustomFontName = _T("Î¢ÈíÑÅºÚ");
+			strCustomFontName = _T("Î¢ï¿½ï¿½ï¿½Åºï¿½");
 	}
 	else
-		strCustomFontName = _T("Î¢ÈíÑÅºÚ");
+		strCustomFontName = _T("Î¢ï¿½ï¿½ï¿½Åºï¿½");
 
 	
 	m_lpFMGClient->m_UserConfig.SetFontName(strCustomFontName);
@@ -1573,7 +1573,7 @@ BOOL CMultiChatDlg::Init()
 		fontInfo.m_nSize, fontInfo.m_clrText, fontInfo.m_bBold,
 		fontInfo.m_bItalic, fontInfo.m_bUnderLine, FALSE);
 
-	// ½ÓÊÕÏûÏ¢¸»ÎÄ±¾¿ò¿Ø¼þ
+	// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½Ø¼ï¿½
 	DWORD dwMask = m_richRecv.GetEventMask();
 	dwMask = dwMask | ENM_LINK  | ENM_MOUSEEVENTS | ENM_SCROLLEVENTS | ENM_KEYEVENTS;
 	m_richRecv.SetEventMask(dwMask);
@@ -1586,21 +1586,21 @@ BOOL CMultiChatDlg::Init()
 	m_ListCtrl.SetBgPic(_T("ListCtrl\\listctrlbg.png"));
 	m_ListCtrl.SetItemSelBgPic(_T("ListCtrl\\listitem_select.png"));
 	m_ListCtrl.SetHeadVisible(FALSE);
-	m_ListCtrl.AddColumn(_T("Èº³ÉÔ±"), NULL, DT_LEFT, 184);
+	m_ListCtrl.AddColumn(_T("Èºï¿½ï¿½Ô±"), NULL, DT_LEFT, 184);
 
-	UpdateGroupNameCtrl();	// ¸üÐÂÈºÃû³Æ¿Ø¼þ
-	UpdateDlgTitle();		// ¸üÐÂ¶Ô»°¿ò±êÌâ
+	UpdateGroupNameCtrl();	// ï¿½ï¿½ï¿½ï¿½Èºï¿½ï¿½ï¿½Æ¿Ø¼ï¿½
+	UpdateDlgTitle();		// ï¿½ï¿½ï¿½Â¶Ô»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
 	m_Accelerator.LoadAccelerators(ID_ACCE_CHATDLG);
 
-	InitRichEditOleCallback();	// ³õÊ¼»¯IRichEditOleCallback½Ó¿Ú
+	InitRichEditOleCallback();	// ï¿½ï¿½Ê¼ï¿½ï¿½IRichEditOleCallbackï¿½Ó¿ï¿½
 
 	OnSize(SIZE_RESTORED, CSize(rcClient.Width(), rcClient.Height()));
 
 	return TRUE;
 }
 
-// ·´³õÊ¼»¯
+// ï¿½ï¿½ï¿½ï¿½Ê¼ï¿½ï¿½
 BOOL CMultiChatDlg::UnInit()
 {
 	if (m_PicBarDlg.IsWindow())
@@ -1829,7 +1829,7 @@ BOOL CMultiChatDlg::HandleFontInfo(LPCTSTR& p, tstring& strText, std::vector<CCo
 	if (!strTemp.empty())
 	{
 		LPCTSTR lpFontFmt = _T("%[^,],%d,%[^,],%d,%d,%d");
-		TCHAR szName[32] = _T("ËÎÌå");
+		TCHAR szName[32] = _T("ï¿½ï¿½ï¿½ï¿½");
 		TCHAR szColor[32] = _T("000000");
 		int nSize = 9;
 		BOOL bBold = FALSE, bItalic = FALSE, bUnderLine = FALSE;
@@ -1871,7 +1871,7 @@ BOOL CMultiChatDlg::HandleFontInfo(LPCTSTR& p, tstring& strText, std::vector<CCo
 	return FALSE;
 }
 
-// "/f["ÏµÍ³±íÇéid"] /s["ÏµÍ³±íÇéindex"] /c["×Ô¶¨ÒåÍ¼Æ¬Â·¾¶"]"
+// "/f["ÏµÍ³ï¿½ï¿½ï¿½ï¿½id"] /s["ÏµÍ³ï¿½ï¿½ï¿½ï¿½index"] /c["ï¿½Ô¶ï¿½ï¿½ï¿½Í¼Æ¬Â·ï¿½ï¿½"]"
 void CMultiChatDlg::AddMsg(HWND hRichEditWnd, LPCTSTR lpText)
 {
 	if (NULL == lpText || NULL ==*lpText)
@@ -1910,7 +1910,7 @@ void CMultiChatDlg::AddMsg(HWND hRichEditWnd, LPCTSTR lpText)
 
 	if (!strText.IsEmpty())
 	{
-		//¼ÓÒ»¸ö@XXXÐ§¹û
+		//ï¿½ï¿½Ò»ï¿½ï¿½@XXXÐ§ï¿½ï¿½
 		//CString strChatContent(strText);
 		//long nStartIndex = -1;
 		//long nEndIndex = -1;
@@ -1961,7 +1961,7 @@ void CMultiChatDlg::AddMsgToRecvEdit(time_t nTime, LPCTSTR lpText)
 
 	RichEdit_SetSel(m_richRecv.m_hWnd, -1, -1);
 	RichEdit_ReplaceSel(m_richRecv.m_hWnd, strText, 
-		_T("Î¢ÈíÑÅºÚ"), 10, RGB(0,128,64), FALSE, FALSE, FALSE, FALSE, 0);
+		_T("Î¢ï¿½ï¿½ï¿½Åºï¿½"), 10, RGB(0,128,64), FALSE, FALSE, FALSE, FALSE, 0);
 	strText = _T("");
 
 	AddMsg(m_richRecv.m_hWnd, lpText);
@@ -1976,19 +1976,19 @@ LRESULT CMultiChatDlg::OnSendChatMsgResult(UINT uMsg, WPARAM wParam, LPARAM lPar
 	CString strInfo;
 	if(wParam == SEND_WHOLE_MSG_FAILED)
 	{
-		strInfo = _T("                                            ¡ïÏûÏ¢·¢ËÍÊ§°Ü£¬ÇëÖØÊÔ£¡¡ï\r\n");
+		strInfo = _T("                                            ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô£ï¿½ï¿½ï¿½\r\n");
 	}
 	else if(wParam == SEND_IMGAE_FAILED)
 	{
-		strInfo = _T("                                            ¡ïÍ¼Æ¬·¢ËÍÊ§°Ü£¬ÇëÖØÊÔ£¡¡ï\r\n");
+		strInfo = _T("                                            ï¿½ï¿½Í¼Æ¬ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô£ï¿½ï¿½ï¿½\r\n");
 	}
 	else if(wParam == SEND_FILE_FAILED)
 	{
-		strInfo = _T("                                            ¡ïÎÄ¼þ·¢ËÍÊ§°Ü£¬ÇëÖØÊÔ£¡¡ï\r\n");
+		strInfo = _T("                                            ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½Ê§ï¿½Ü£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô£ï¿½ï¿½ï¿½\r\n");
 	}
 
 	RichEdit_SetSel(m_richRecv.m_hWnd, -1, -1);
-	RichEdit_ReplaceSel(m_richRecv.m_hWnd, strInfo, _T("Î¢ÈíÑÅºÚ"), 10, RGB(255,0,0), FALSE, FALSE, FALSE, FALSE, 0);
+	RichEdit_ReplaceSel(m_richRecv.m_hWnd, strInfo, _T("Î¢ï¿½ï¿½ï¿½Åºï¿½"), 10, RGB(255,0,0), FALSE, FALSE, FALSE, FALSE, 0);
 
 	return (LRESULT)1;
 }
@@ -2017,15 +2017,15 @@ LRESULT CMultiChatDlg::OnSendChatMsgResult(UINT uMsg, WPARAM wParam, LPARAM lPar
 //
 //	strText.Format(_T("%s("), strSenderName);
 //	RichEdit_ReplaceSel(m_richRecv.m_hWnd, strText, 
-//		_T("ËÎÌå"), 10, RGB(0, 0, 255), FALSE, FALSE, FALSE, FALSE, 0);
+//		_T("ï¿½ï¿½ï¿½ï¿½"), 10, RGB(0, 0, 255), FALSE, FALSE, FALSE, FALSE, 0);
 //
 //	strText.Format(_T("%s"), strAccountName.c_str());
 //	RichEdit_ReplaceSel(m_richRecv.m_hWnd, strText, 
-//		_T("ËÎÌå"), 10, RGB(0, 114, 193), FALSE, FALSE, TRUE, TRUE, 0);
+//		_T("ï¿½ï¿½ï¿½ï¿½"), 10, RGB(0, 114, 193), FALSE, FALSE, TRUE, TRUE, 0);
 //	
 //	strText.Format(_T(")  %s\r\n"), cTime);
 //	RichEdit_ReplaceSel(m_richRecv.m_hWnd, strText, 
-//		_T("ËÎÌå"), 10, RGB(0, 0, 255), FALSE, FALSE, FALSE, FALSE, 0);
+//		_T("ï¿½ï¿½ï¿½ï¿½"), 10, RGB(0, 0, 255), FALSE, FALSE, FALSE, FALSE, 0);
 //
 //	m_richRecv.SetAutoURLDetect(TRUE);
 //
@@ -2115,15 +2115,15 @@ void CMultiChatDlg::AddMsgToRecvEdit(CBuddyMessage* lpGroupMsg)
 	{
 		strText.Format(_T("%s("), strSenderName);
 		RichEdit_ReplaceSel(m_richRecv.m_hWnd, strText, 
-			_T("Î¢ÈíÑÅºÚ"), 10, RGB(0, 0, 255), FALSE, FALSE, FALSE, FALSE, 0);
+			_T("Î¢ï¿½ï¿½ï¿½Åºï¿½"), 10, RGB(0, 0, 255), FALSE, FALSE, FALSE, FALSE, 0);
 
 		strText.Format(_T("%s"), strAccountName.c_str());
 		RichEdit_ReplaceSel(m_richRecv.m_hWnd, strText, 
-			_T("Î¢ÈíÑÅºÚ"), 10, RGB(0, 114, 193), FALSE, FALSE, TRUE, TRUE, 0);
+			_T("Î¢ï¿½ï¿½ï¿½Åºï¿½"), 10, RGB(0, 114, 193), FALSE, FALSE, TRUE, TRUE, 0);
 		
 		strText.Format(_T(")  %s\r\n"), cTime);
 		RichEdit_ReplaceSel(m_richRecv.m_hWnd, strText, 
-			_T("Î¢ÈíÑÅºÚ"), 10, RGB(0, 0, 255), FALSE, FALSE, FALSE, FALSE, 0);
+			_T("Î¢ï¿½ï¿½ï¿½Åºï¿½"), 10, RGB(0, 0, 255), FALSE, FALSE, FALSE, FALSE, 0);
 	}
 
 	m_richRecv.SetAutoURLDetect(TRUE);
@@ -2131,7 +2131,7 @@ void CMultiChatDlg::AddMsgToRecvEdit(CBuddyMessage* lpGroupMsg)
 	CBuddyMessage* lpBuddyMsg = lpGroupMsg;
 	CString strInfo;
 	tstring	strFileName;
-	//£¡£¡×ÖÌåÐÅÏ¢±ØÐë·ÅÔÚÎÄ±¾ÐÅÏ¢µÄÇ°Ãæ
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½Ç°ï¿½ï¿½
 	for (int i = 0; i < (int)lpBuddyMsg->m_arrContent.size(); i++)
 	{
 		CContent* lpContent = lpBuddyMsg->m_arrContent[i];
@@ -2232,12 +2232,12 @@ LRESULT CMultiChatDlg::OnSendFileProgress(UINT uMsg, WPARAM wParam, LPARAM lPara
 	long nPercent = pFileProgress->nPercent;
 	
 	//std::map<CString, long>::const_iterator iter=m_mapSendFileInfo.find(pFileProgress->szDestPath);
-	////·¢ËÍÁÄÌìÍ¼Æ¬µÄ½ø¶È
+	////ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¼Æ¬ï¿½Ä½ï¿½ï¿½ï¿½
 	//if(iter == m_mapSendFileInfo.end())
 	//{
 	//	//m_staPicUploadProgress.ShowWindow(SW_SHOW);
 	//	TCHAR szProgressInfo[MAX_PATH] = {0};
-	//	_stprintf_s(szProgressInfo, ARRAYSIZE(szProgressInfo), _T("ÕýÔÚ·¢ËÍÍ¼Æ¬%s£º%d%%."), Hootina::CPath::GetFileName(pszFileName).c_str(), nPercent);
+	//	_stprintf_s(szProgressInfo, ARRAYSIZE(szProgressInfo), _T("ï¿½ï¿½ï¿½Ú·ï¿½ï¿½ï¿½Í¼Æ¬%sï¿½ï¿½%d%%."), Hootina::CPath::GetFileName(pszFileName).c_str(), nPercent);
 
 	//	m_staPicUploadProgress.SetWindowText(szProgressInfo);
 
@@ -2256,7 +2256,7 @@ LRESULT CMultiChatDlg::OnSendFileResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
 	if(pResult == NULL)
 		return (LRESULT)0;
 	
-	//ÉÏ´«Í¼Æ¬½á¹û
+	//ï¿½Ï´ï¿½Í¼Æ¬ï¿½ï¿½ï¿½
 	std::map<CString, long>::const_iterator iter=m_mapSendFileInfo.find(pResult->m_szLocalName);
 	if(iter == m_mapSendFileInfo.end())
 	{
@@ -2266,11 +2266,11 @@ LRESULT CMultiChatDlg::OnSendFileResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
 			{
 				//AtlTrace(_T("Fail to send file:%s.\n"), pResult->m_szLocalName);
 				TCHAR szInfo[MAX_PATH] = {0};
-				_stprintf_s(szInfo, ARRAYSIZE(szInfo), _T("                                            ¡î·¢ËÍÍ¼Æ¬[%s]Ê§°Ü£¬ÇëÖØÊÔ£¡¡î\r\n"), ::PathFindFileName(pResult->m_szLocalName));
+				_stprintf_s(szInfo, ARRAYSIZE(szInfo), _T("                                            ï¿½î·¢ï¿½ï¿½Í¼Æ¬[%s]Ê§ï¿½Ü£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ô£ï¿½ï¿½ï¿½\r\n"), ::PathFindFileName(pResult->m_szLocalName));
 				RichEdit_SetSel(m_richRecv.m_hWnd, -1, -1);
-				RichEdit_ReplaceSel(m_richRecv.m_hWnd, szInfo, _T("Î¢ÈíÑÅºÚ"), 10, RGB(255,0,0), FALSE, FALSE, FALSE, FALSE, 0);
+				RichEdit_ReplaceSel(m_richRecv.m_hWnd, szInfo, _T("Î¢ï¿½ï¿½ï¿½Åºï¿½"), 10, RGB(255,0,0), FALSE, FALSE, FALSE, FALSE, 0);
 			}
-            //·¢ËÍÍ¼Æ¬ÉÏ´«³É¹¦ÏûÏ¢
+            //ï¿½ï¿½ï¿½ï¿½Í¼Æ¬ï¿½Ï´ï¿½ï¿½É¹ï¿½ï¿½ï¿½Ï¢
             else
             {
                 SendConfirmMessage(pResult);
@@ -2315,7 +2315,7 @@ LRESULT CMultiChatDlg::OnRecvFileResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
 	if(iter == m_mapRecvFileInfo.end())
 		return 0;
 	
-	//ÁÄÌìÍ¼Æ¬ÏÂÔØ½á¹û
+	//ï¿½ï¿½ï¿½ï¿½Í¼Æ¬ï¿½ï¿½ï¿½Ø½ï¿½ï¿½
 	if(iter->second > 0)
 	{
 		if(wParam == RECV_FILE_SUCCESS)
@@ -2338,14 +2338,14 @@ LRESULT CMultiChatDlg::OnRecvFileResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
 	return 1;
 }
 
-// "/f["ÏµÍ³±íÇéid"] /c["×Ô¶¨Òå±íÇéÎÄ¼þÃû"] /o[×ÖÌåÃû³Æ£¬´óÐ¡£¬ÑÕÉ«£¬¼Ó´Ö£¬ÇãÐ±£¬ÏÂ»®Ïß]"
+// "/f["ÏµÍ³ï¿½ï¿½ï¿½ï¿½id"] /c["ï¿½Ô¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½"] /o[ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ£ï¿½ï¿½ï¿½Ð¡ï¿½ï¿½ï¿½ï¿½É«ï¿½ï¿½ï¿½Ó´Ö£ï¿½ï¿½ï¿½Ð±ï¿½ï¿½ï¿½Â»ï¿½ï¿½ï¿½]"
 void CMultiChatDlg::AnalyseContent(tstring& strContent, HWND hRichWnd/*=NULL*/)
 {
-	//CONTENT_TYPE m_nType;			// ÄÚÈÝÀàÐÍ
-	//CFontInfo m_FontInfo;			// ×ÖÌåÐÅÏ¢
-	//tstring m_strText;			// ÎÄ±¾ÐÅÏ¢
-	//int m_nFaceId;				// ÏµÍ³±íÇéId
-	//CCustomFaceInfo m_CFaceInfo;	// ×Ô¶¨Òå±íÇéÐÅÏ¢
+	//CONTENT_TYPE m_nType;			// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+	//CFontInfo m_FontInfo;			// ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
+	//tstring m_strText;			// ï¿½Ä±ï¿½ï¿½ï¿½Ï¢
+	//int m_nFaceId;				// ÏµÍ³ï¿½ï¿½ï¿½ï¿½Id
+	//CCustomFaceInfo m_CFaceInfo;	// ï¿½Ô¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
 
 	tstring strText;
 	CContent* lpContent = NULL;
@@ -2396,7 +2396,7 @@ void CMultiChatDlg::AnalyseContent(tstring& strContent, HWND hRichWnd/*=NULL*/)
 					continue;
 				}
 			}
-			//else if (*(p+1) == _T('s'))						//´°¿Ú¶¶¶¯
+			//else if (*(p+1) == _T('s'))						//ï¿½ï¿½ï¿½Ú¶ï¿½ï¿½ï¿½
 			//{
 			//	//arrContent.clear();
 			//	if (HandleShake(p, strText, arrContent))
@@ -2408,7 +2408,7 @@ void CMultiChatDlg::AnalyseContent(tstring& strContent, HWND hRichWnd/*=NULL*/)
 			//		continue;
 			//	}
 			//}
-			//else if (*(p+1) == _T('i'))					   //ÎÄ¼þ
+			//else if (*(p+1) == _T('i'))					   //ï¿½Ä¼ï¿½
 			//{
 			//	if (HandleFile(p, strText, arrContent))
 			//	{
@@ -2506,7 +2506,7 @@ BOOL CMultiChatDlg::HandleCustomPic(LPCTSTR& p, tstring& strText, std::vector<CC
 
 void CMultiChatDlg::AddMsgToRecvEdit(std::vector<CContent*>& arrContent)
 {
-	//£¡£¡×ÖÌåÐÅÏ¢±ØÐë·ÅÔÚÎÄ±¾ÐÅÏ¢µÄÇ°Ãæ
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½Ï¢ï¿½ï¿½Ç°ï¿½ï¿½
 	static CFontInfo fontInfo;
 	for (long i = 0; i < (long)arrContent.size(); i++)
 	{
@@ -2517,7 +2517,7 @@ void CMultiChatDlg::AddMsgToRecvEdit(std::vector<CContent*>& arrContent)
 			{
 			case CONTENT_TYPE_SHAKE_WINDOW:
 				{
-					RichEdit_ReplaceSel(m_richRecv.m_hWnd, _T("¶¶ÁËÄúÒ»ÏÂ¡£"), _T("Î¢ÈíÑÅºÚ"), 10,  0, TRUE, FALSE, FALSE, FALSE, 300);
+					RichEdit_ReplaceSel(m_richRecv.m_hWnd, _T("ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½Â¡ï¿½"), _T("Î¢ï¿½ï¿½ï¿½Åºï¿½"), 10,  0, TRUE, FALSE, FALSE, FALSE, 300);
 				}
 				break;
 
@@ -2558,8 +2558,8 @@ void CMultiChatDlg::AddMsgToRecvEdit(std::vector<CContent*>& arrContent)
 			case CONTENT_TYPE_CHAT_IMAGE:
 				{
 					tstring strFileName;
-					//°²×¿·¢ËÍ¹ýÀ´µÄÂ·¾¶ÀàËÆÕâÑù£º/storage/sdcard/windows/BstSharedFolder/]FHGGRBAA@85{PP{W3S]8C52.jpg
-					//ÏÈ¼ì²âÊÇ·ñÊÇÀàËÆÓÚC:\dd\xx.pngµÄÂ·¾¶
+					//ï¿½ï¿½×¿ï¿½ï¿½ï¿½Í¹ï¿½ï¿½ï¿½ï¿½ï¿½Â·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½/storage/sdcard/windows/BstSharedFolder/]FHGGRBAA@85{PP{W3S]8C52.jpg
+					//ï¿½È¼ï¿½ï¿½ï¿½Ç·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½C:\dd\xx.pngï¿½ï¿½Â·ï¿½ï¿½
 					if(::PathIsRelative(lpContent->m_CFaceInfo.m_strName.c_str()))
 						strFileName	= m_lpFMGClient->m_UserMgr.GetChatPicFullName(::PathFindFileName(lpContent->m_CFaceInfo.m_strName.c_str()));
 					else
@@ -2622,7 +2622,7 @@ void CMultiChatDlg::SendConfirmMessage(const CUploadFileResult* pUploadFileResul
     if (pUploadFileResult == NULL)
         return;
 
-    //ÉÏ´«Í¼Æ¬½á¹û
+    //ï¿½Ï´ï¿½Í¼Æ¬ï¿½ï¿½ï¿½
     if (pUploadFileResult->m_nFileType == FILE_ITEM_UPLOAD_CHAT_IMAGE)
     {
         time_t nTime = time(NULL);
@@ -2669,7 +2669,7 @@ void CMultiChatDlg::SendConfirmMessage(const CUploadFileResult* pUploadFileResul
 
 BOOL CMultiChatDlg::GetImageDisplaySizeInRichEdit(PCTSTR pszFileName, HWND hWnd, long& nWidth, long& nHeight)
 {
-	//1ÏñËØÔ¼µÈÓÚ20ç¾
+	//1ï¿½ï¿½ï¿½ï¿½Ô¼ï¿½ï¿½ï¿½ï¿½20ï¿½
 	const long TWIPS = 20;
 	long nWidthImage = 0;
 	long nHeightImage = 0;
@@ -2679,21 +2679,21 @@ BOOL CMultiChatDlg::GetImageDisplaySizeInRichEdit(PCTSTR pszFileName, HWND hWnd,
 	{
 		CRect rtRichSend;
 		::GetClientRect(hWnd, &rtRichSend);
-		//Í¼Æ¬Ì«Ð¡£¬²»Ëõ·Å
+		//Í¼Æ¬Ì«Ð¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		if(nHeightImage <= rtRichSend.Height())
 		{
 			nWidth = 0;
 			nHeight = 0;
 			return TRUE;
 		}
-		//³ö´í
+		//ï¿½ï¿½ï¿½ï¿½
 		if(nHeightImage == 0)
 		{
 			nWidth = 0;
 			nHeight = 0;
 			return FALSE;
 		}
-		//°´±ÈÀýËõ·Å
+		//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		nWidth = rtRichSend.Height()*nWidthImage/nHeightImage*TWIPS;
 		nHeight = rtRichSend.Height()*TWIPS;
 	}
@@ -2702,22 +2702,22 @@ BOOL CMultiChatDlg::GetImageDisplaySizeInRichEdit(PCTSTR pszFileName, HWND hWnd,
 		CRect rtRecv;
 		::GetClientRect(hWnd, &rtRecv);
 
-		//Í¼Æ¬Ì«Ð¡£¬²»Ëõ·Å
+		//Í¼Æ¬Ì«Ð¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 		if(nHeightImage <= rtRecv.Height())
 		{
 			nWidth = 0;
 			nHeight = 0;
 			return TRUE;
 		}
-		//³ö´í
+		//ï¿½ï¿½ï¿½ï¿½
 		if(nHeightImage == 0)
 		{
 			nWidth = 0;
 			nHeight = 0;
 			return FALSE;
 		}
-		//°´±ÈÀýËõ·Å
-		//Í¼Æ¬¿í¶ÈÎª´°¿ÚµÄËÄ·ÖÖ®Èý
+		//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+		//Í¼Æ¬ï¿½ï¿½ï¿½Îªï¿½ï¿½ï¿½Úµï¿½ï¿½Ä·ï¿½Ö®ï¿½ï¿½
 		nWidth = rtRecv.Height()*3/4*nWidthImage/nHeightImage*TWIPS;
 		nHeight = rtRecv.Height()*3/4*TWIPS;
 	}
@@ -2727,14 +2727,14 @@ BOOL CMultiChatDlg::GetImageDisplaySizeInRichEdit(PCTSTR pszFileName, HWND hWnd,
 
 void CMultiChatDlg::OnDropFiles(HDROP hDropInfo)
 { 
-	UINT nFileNum = ::DragQueryFile(hDropInfo, 0xFFFFFFFF, NULL, 0); // ÍÏ×§ÎÄ¼þ¸öÊý  
+	UINT nFileNum = ::DragQueryFile(hDropInfo, 0xFFFFFFFF, NULL, 0); // ï¿½ï¿½×§ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½  
     TCHAR szFileName[MAX_PATH];  
     for (UINT i=0; i<nFileNum; ++i)    
     {  
-		::DragQueryFile(hDropInfo, i, szFileName, MAX_PATH);//»ñµÃÍÏÒ·µÄÎÄ¼þÃû  
+		::DragQueryFile(hDropInfo, i, szFileName, MAX_PATH);//ï¿½ï¿½ï¿½ï¿½ï¿½Ò·ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½  
         HandleFileDragResult(szFileName);    
     }  
-    DragFinish(hDropInfo);      //ÊÍ·ÅhDropInfo  
+    DragFinish(hDropInfo);      //ï¿½Í·ï¿½hDropInfo  
 
     //InvalidateRect(hwnd, NULL, TRUE); 
 }
@@ -2744,17 +2744,17 @@ BOOL CMultiChatDlg::HandleFileDragResult(PCTSTR lpszFileName)
 	if(lpszFileName == NULL) 
 		return FALSE;
 	
-	//Èç¹ûÊÇÎÄ¼þ¼Ð£¬Ôò·¢ËÍÎÄ¼þ¼Ð
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½Ð£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½
 	if(Hootina::CPath::IsDirectory(lpszFileName))
 	{
-		//TODO: ·¢ËÍÎÄ¼þ¼Ð
+		//TODO: ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½
 		return TRUE;
 	}
 
 	CString strFileExtension(Hootina::CPath::GetExtension(lpszFileName).c_str());
 	strFileExtension.MakeLower();
 	
-	//Èç¹ûÊÇÍ¼Æ¬¸ñÊ½£¬Ôò²åÈëÍ¼Æ¬
+	//ï¿½ï¿½ï¿½ï¿½ï¿½Í¼Æ¬ï¿½ï¿½Ê½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¼Æ¬
 	if( strFileExtension==_T("jpg")  ||
 		strFileExtension==_T("jpeg") ||
 	    strFileExtension==_T("png")  ||
@@ -2764,14 +2764,14 @@ BOOL CMultiChatDlg::HandleFileDragResult(PCTSTR lpszFileName)
 		UINT64 nFileSize = IUGetFileSize2(lpszFileName);
 		if(nFileSize > MAX_CHAT_IMAGE_SIZE)
 		{
-			::MessageBox(m_hWnd, _T("Í¼Æ¬´óÐ¡³¬¹ý10M£¬ÇëÊ¹ÓÃ½ØÍ¼¹¤¾ß¡£"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
+			::MessageBox(m_hWnd, _T("Í¼Æ¬ï¿½ï¿½Ð¡ï¿½ï¿½ï¿½ï¿½10Mï¿½ï¿½ï¿½ï¿½Ê¹ï¿½Ã½ï¿½Í¼ï¿½ï¿½ï¿½ß¡ï¿½"), g_strAppTitle.c_str(), MB_OK|MB_ICONINFORMATION);
 			return FALSE;
 		}
 		_RichEdit_InsertFace(m_richSend.m_hWnd, lpszFileName, -1, -1);
 		m_richSend.SetFocus();
 		return TRUE;
 	}
-	//TODO: ½«À´ÓÃÓÚÖ§³ÖÈºÎÄ¼þ¹¦ÄÜ
+	//TODO: ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ö§ï¿½ï¿½Èºï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½
 	//else
 	//{
 	//	return SendOfflineFile(lpszFileName);
@@ -2813,9 +2813,9 @@ void CMultiChatDlg::AddMsgToRecvEdit(std::vector<GROUP_MSG_LOG*>& arrMsgLog)
 
 		RichEdit_SetSel(m_richRecv.m_hWnd, -1, -1);
 		if(nUTalkNum == m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID)
-			RichEdit_ReplaceSel(m_richRecv.m_hWnd, strText, _T("Î¢ÈíÑÅºÚ"), 10, RGB(0,128,64), FALSE, FALSE, FALSE, FALSE, 0);
+			RichEdit_ReplaceSel(m_richRecv.m_hWnd, strText, _T("Î¢ï¿½ï¿½ï¿½Åºï¿½"), 10, RGB(0,128,64), FALSE, FALSE, FALSE, FALSE, 0);
 		else
-			RichEdit_ReplaceSel(m_richRecv.m_hWnd, strText, _T("Î¢ÈíÑÅºÚ"), 10, RGB(0, 0, 255), FALSE, FALSE, FALSE, FALSE, 0);
+			RichEdit_ReplaceSel(m_richRecv.m_hWnd, strText, _T("Î¢ï¿½ï¿½ï¿½Åºï¿½"), 10, RGB(0, 0, 255), FALSE, FALSE, FALSE, FALSE, 0);
 		strText = _T("");
 
 		AnalyseContent(strContent, m_richRecv.m_hWnd);
@@ -2829,11 +2829,11 @@ void CMultiChatDlg::AddMsgToRecvEdit(std::vector<GROUP_MSG_LOG*>& arrMsgLog)
 	if(nSize > 0)
 	{
 		RichEdit_SetSel(m_richRecv.m_hWnd, -1, -1);
-		RichEdit_ReplaceSel(m_richRecv.m_hWnd, _T("                                            ¡ª¡ª¡ª¡ªÒÔÉÏÊÇÀúÊ·ÏûÏ¢¡ª¡ª¡ª¡ª\r\n"), _T("Î¢ÈíÑÅºÚ"), 9, RGB(128,128,128), FALSE, FALSE, FALSE, FALSE, 0);
+		RichEdit_ReplaceSel(m_richRecv.m_hWnd, _T("                                            ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê·ï¿½ï¿½Ï¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½\r\n"), _T("Î¢ï¿½ï¿½ï¿½Åºï¿½"), 9, RGB(128,128,128), FALSE, FALSE, FALSE, FALSE, 0);
 		m_richRecv.PostMessage(WM_VSCROLL, SB_BOTTOM, 0);
 	}
 	//RichEdit_ReplaceSel(m_richRecv.m_hWnd, _T("\n"));
-	////TODO: Ææ¹Ö£¬¹ö¶¯ÌõÎªÊ²Ã´²»ÄÜ¹öµ½µÍ£¿
+	////TODO: ï¿½ï¿½Ö£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÎªÊ²Ã´ï¿½ï¿½ï¿½Ü¹ï¿½ï¿½ï¿½ï¿½Í£ï¿½
 	//m_richRecv.PostMessage(WM_VSCROLL, SB_BOTTOM, 0);
 }
 
@@ -2842,7 +2842,7 @@ void CMultiChatDlg::ReCaculateCtrlPostion(long nMouseY)
 		CRect rtClient;
 	::GetClientRect(m_hWnd, &rtClient);
 	
-	//²»ÔÊÐí½«·¢ËÍ¿ò³ß´çÀ­µÄÌ«´ó»òÕßÌ«Ð¡£¬ÄÇÑù»áÓ°ÏìÄ³Ð©¿Ø¼þÄÚ²¿µÄ»­·¨£¨Ä³Ð©¿Ø¼þÄÚ²¿»­·¨ÒªÇó±ØÐëÂú×ãÒ»¶¨µÄ³ß´ç£©
+	//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Í¿ï¿½ß´ï¿½ï¿½ï¿½ï¿½ï¿½Ì«ï¿½ï¿½ï¿½ï¿½ï¿½Ì«Ð¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ó°ï¿½ï¿½Ä³Ð©ï¿½Ø¼ï¿½ï¿½Ú²ï¿½ï¿½Ä»ï¿½ï¿½ï¿½ï¿½ï¿½Ä³Ð©ï¿½Ø¼ï¿½ï¿½Ú²ï¿½ï¿½ï¿½ï¿½ï¿½Òªï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½Ä³ß´ç£©
 	if(nMouseY<=280 || nMouseY>= rtClient.Height()-95)
 		return;
 
@@ -2860,11 +2860,11 @@ void CMultiChatDlg::ReCaculateCtrlPostion(long nMouseY)
 	::GetClientRect(m_tbMid, &rtMidToolbar);
 	::GetClientRect(m_richSend, &rtRichSend);
 	HDWP hdwp = ::BeginDeferWindowPos(5);
-	//½ÓÊÕ¿ò
+	//ï¿½ï¿½ï¿½Õ¿ï¿½
 	if(m_FontSelDlg.IsWindowVisible())
 	{
 		//AtlTrace(_T("nMouseY-ptBase.y-3*CHATDLG_TOOLBAR_HEIGHT: %d\n"), nMouseY-ptBase.y-3*CHATDLG_TOOLBAR_HEIGHT);
-		//TODO: nMouseY-ptBase.y-2*CHATDLG_TOOLBAR_HEIGHTÎªÊ²Ã´²»Æð×÷ÓÃÄØ£¿
+		//TODO: nMouseY-ptBase.y-2*CHATDLG_TOOLBAR_HEIGHTÎªÊ²Ã´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø£ï¿½
 		::DeferWindowPos(hdwp, m_richRecv, NULL, 0, 0, rtRichRecv.Width(), nMouseY-ptBase.y-2*CHATDLG_TOOLBAR_HEIGHT, SWP_NOMOVE|SWP_NOZORDER);
 		::DeferWindowPos(hdwp, m_FontSelDlg, NULL, 0, ptBase.y+rtRichRecv.Height()-CHATDLG_TOOLBAR_HEIGHT, 0, CHATDLG_TOOLBAR_HEIGHT, SWP_NOSIZE|SWP_NOZORDER);
 	}
@@ -2875,11 +2875,11 @@ void CMultiChatDlg::ReCaculateCtrlPostion(long nMouseY)
 	::GetClientRect(m_SplitterCtrl, &rtSplitter);
 	//AtlTrace(_T("ptBase.y+rtRichRecv.Height()+rtSplitter.Height(): %d\n"), ptBase.y+rtRichRecv.Height()+rtSplitter.Height());
 	::DeferWindowPos(hdwp, m_tbMid, NULL, 3, ptBase.y+rtRichRecv.Height(), 0, 0, SWP_NOSIZE|SWP_NOZORDER);
-	//·Ö¸îÏß
+	//ï¿½Ö¸ï¿½ï¿½ï¿½
 	::GetClientRect(m_richRecv, &rtRichRecv);
 	//AtlTrace(_T("ptBase.y+rtRichRecv.Height(): %d\n"), ptBase.y+rtRichRecv.Height());
 	::DeferWindowPos(hdwp, m_SplitterCtrl, NULL, 6, ptBase.y+rtRichRecv.Height()+rtMidToolbar.Height(), 0, 0, SWP_NOSIZE|SWP_NOZORDER);
-	//·¢ËÍ¿ò
+	//ï¿½ï¿½ï¿½Í¿ï¿½
 	long nHeightRichSend = rtClient.Height()-100-44-(rtRichRecv.Height()+rtSplitter.Height()+rtMidToolbar.Height());
 	::GetClientRect(m_tbMid, &rtMidToolbar);
 	//AtlTrace(_T("RichSend top: %d\n"), ptBase.y+rtRichRecv.bottom-rtRichRecv.top+rtSplitter.top-rtSplitter.bottom+rtMidToolbar.bottom-rtMidToolbar.top);
@@ -2888,7 +2888,7 @@ void CMultiChatDlg::ReCaculateCtrlPostion(long nMouseY)
 
 	ResizeImageInRecvRichEdit();
 
-	//¼ÇÂ¼ÏÂ×îÐÂµÄ½ÓÊÜÎÄ±¾¿ò¡¢midTooBarºÍ·¢ËÍÎÄ±¾¿òµÄ×îÐÂÎ»ÖÃ
+	//ï¿½ï¿½Â¼ï¿½ï¿½ï¿½ï¿½ï¿½ÂµÄ½ï¿½ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½midTooBarï¿½Í·ï¿½ï¿½ï¿½ï¿½Ä±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½
 	m_bDraged = TRUE;
 	::GetWindowRect(m_richRecv, &m_rtRichRecv);
 	::ScreenToClient(m_hWnd, m_rtRichRecv);
@@ -2904,20 +2904,20 @@ void CMultiChatDlg::ReCaculateCtrlPostion(long nMouseY)
 }
 
 
-//²Î¿¼£ºhttp://www.rupeng.com/forum/thread-6423-1-1.html
+//ï¿½Î¿ï¿½ï¿½ï¿½http://www.rupeng.com/forum/thread-6423-1-1.html
 void CMultiChatDlg::OnBtn_ShakeWindow(UINT uNotifyCode, int nID, CWindow wndCtl)
 {
 	if (m_lpFMGClient->IsOffline())
 	{
-		MessageBox(_T("ÄúÒÑ¾­´¦ÓÚÀëÏß×´Ì¬£¬ÎÞ·¨·¢ËÍ´°¿Ú¶¶¶¯£¬ÇëÉÏÏßºóÔÙ´Î³¢ÊÔ¡£"), g_strAppTitle.c_str());
+		MessageBox(_T("ï¿½ï¿½ï¿½Ñ¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×´Ì¬ï¿½ï¿½ï¿½Þ·ï¿½ï¿½ï¿½ï¿½Í´ï¿½ï¿½Ú¶ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ßºï¿½ï¿½Ù´Î³ï¿½ï¿½Ô¡ï¿½"), g_strAppTitle.c_str());
 		return;
 	}
 	
 	ShakeWindow(m_hWnd, 1);
 
 	RichEdit_SetSel(m_richRecv.m_hWnd, -1, -1);
-	RichEdit_ReplaceSel(m_richRecv.m_hWnd, _T("                                            ¡îÄú·¢ËÍÁËÒ»¸ö´°¿Ú¶¶¶¯¡î\r\n"), 
-		_T("Î¢ÈíÑÅºÚ"), 10, RGB(0,0,0), FALSE, FALSE, FALSE, FALSE, 0);
+	RichEdit_ReplaceSel(m_richRecv.m_hWnd, _T("                                            ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½Ú¶ï¿½ï¿½ï¿½ï¿½ï¿½\r\n"), 
+		_T("Î¢ï¿½ï¿½ï¿½Åºï¿½"), 10, RGB(0,0,0), FALSE, FALSE, FALSE, FALSE, 0);
 	m_richRecv.PostMessage(WM_VSCROLL, SB_BOTTOM, 0);
 	time_t nTime = time(NULL);
 	//m_lpFMGClient->SendBuddyMsg(m_nUTalkUin, nTime, _T("/s[\"1\"]"), m_hWnd);

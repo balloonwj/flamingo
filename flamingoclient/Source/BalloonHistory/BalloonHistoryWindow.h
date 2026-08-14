@@ -24,7 +24,7 @@
 #include <set>
 #include <string>
 
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "../CustomMsgDef.h"       // WM_CHAT_OPEN_LINK（消息映射里要用）
 #include "HistoryWindowLayout.h"   // balloonhistory::HistoryViewData / HistoryRowView
 #include "HistoryModel.h"          // balloonhistory::HistoryModel

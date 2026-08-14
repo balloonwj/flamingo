@@ -12,7 +12,7 @@
 #include <commctrl.h>   // SetWindowSubclass（给输入框 EDIT 挂 回车/ESC 拦截）
 #include <memory>
 
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
 #include "SignatureEditModel.h"   // kSignatureMaxLen
 #include "../IULog.h"
 

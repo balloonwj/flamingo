@@ -106,6 +106,17 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    //协议加密：读 encryption / serverkeyfile 并加载身份密钥，默认开启。
+    //密钥文件必须与 chatserver 指向同一份，否则客户端要为每个服务各配一把公钥。
+    //开着加密却拿不到密钥时必须让启动失败，不能退回明文继续跑。
+    std::string cryptoError;
+    if (!serverconfig::InitProtocolEncryption(config, cryptoError))
+    {
+        serverconfig::ReportStartupFailure(SERVER_NAME,
+            std::string("protocol encryption setup failed: ") + cryptoError);
+        return 1;
+    }
+
     //日志目录的解析与创建规则同 chatserver，见 chatserversrc/main.cpp 的说明
     std::string resolvedLogDir = serverconfig::StripTrailingSeparators(
                                      apppath::ResolveAgainstDirectory(
@@ -148,12 +159,27 @@ int main(int argc, char* argv[])
     Singleton<UpdatePackageIndex>::Instance().init(
         updatecachedir, static_cast<int64_t>(time(NULL)) * 1000);
 
+    //relaytokenkey 是单聊文件夹传输中转令牌的 HMAC 校验密钥，须与 chatserver.conf 的同名项
+    //一致：令牌由 chatserver 在接收端同意之后签发，由 fileserver 本地验签。
+    //它是可选项而不是必需项——老部署的配置文件里没有这一行，此时本服务照常提供上传下载，
+    //只是不承载文件夹中转（FileServer::init 会为此记一条日志）
+    const char* relaytokenkey = config.getConfigName("relaytokenkey");
+
+    //文件端口的网络 I/O 工作线程数。可选配置项：缺失或取值非法时回落到
+    //FileServer::kDefaultIoThreadCount（即改造前写死的 6）并记一条告警日志。
+    //imgserver 复用 FileServer，但读的是 imgserver.conf 里<u>自己那一份</u> iothreadnum，
+    //两个服务各配各的。这段放在 CAsyncLog::init() 之后，告警才写得出来
+    int ioThreadCount = serverconfig::ReadIoThreadCountConfig(
+                            config, "iothreadnum", FileServer::kDefaultIoThreadCount);
+
     //监听地址、端口与令牌密钥在函数开头已随其它必需配置项一并取出并校验过，这里直接用。
     //filetokenkey 是上传 / 下载令牌的 HMAC 校验密钥，须与 chatserver.conf 的同名项一致。
     //fileserver 以 file_server_kind_file 启动，只放行聊天文件 / 群文件场景
     Singleton<FileServer>::Instance().init(listenip.c_str(), (short)listenport, &g_mainLoop,
                                            filecachedir.c_str(), filetokenkey.c_str(),
-                                           file_server_kind_file);
+                                           file_server_kind_file,
+                                           relaytokenkey != NULL ? relaytokenkey : "",
+                                           ioThreadCount);
 
     LOGI("fileserver initialization completed, now you can use client to connect it.");
     

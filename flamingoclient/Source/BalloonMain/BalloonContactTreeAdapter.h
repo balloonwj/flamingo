@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/List/DuiTreeView.h"
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiTreeView.h"
 
 class CUserMgr;
 

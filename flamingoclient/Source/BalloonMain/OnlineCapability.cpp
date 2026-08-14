@@ -19,7 +19,7 @@ namespace balloonmain {
 
 ConnectionUiState ComputeConnectionUiState(int presence, bool connected)
 {
-    // 先归一：隐身与一切越界取值都当作离线，与状态菜单 / 胶囊的兜底口径保持一致，
+    // 先归一：一切越界取值都当作离线，与状态菜单 / 胶囊的兜底口径保持一致，
     // 免得出现"胶囊显示离线、功能却按在线放行"这种自相矛盾。
     const int cur = NormalizePresenceForMenu(presence);
 
@@ -100,6 +100,28 @@ const wchar_t* GetTrayIconFileName(int state)
     // 主动离线与"连接尚未就绪"（恢复中 / 重连中）都用灰色图标：此刻都收发不了消息，
     // 托盘显示彩色会让人以为一切正常。
     return L"offline.ico";
+}
+
+int GetTrayOverlayPresence(int presence, int connUiState)
+{
+    // 连接没就绪时底图本来就是灰的（见 GetTrayIconFileName），此刻消息收发不了，
+    // 再在灰底图上贴一个"离开 / 忙碌"徽标是自相矛盾的说法。
+    if (connUiState != kConnUiOnline)
+    {
+        return kNoTrayOverlay;
+    }
+
+    switch (presence)
+    {
+    case presence_away:
+        return presence_away;
+    case presence_busy:
+        return presence_busy;
+    default:
+        // 在线：彩色底图本身就表示在线，不叠。
+        // 离线与一切越界取值：同样不叠（离线那一路底图已经是灰的）。
+        return kNoTrayOverlay;
+    }
 }
 
 PresenceVisual GetConnectionPresenceVisual(int presence, int connUiState)

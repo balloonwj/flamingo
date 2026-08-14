@@ -21,12 +21,12 @@
 #include "GroupChatWindowLayout.h"    // BuildGroupChatWindowBody / GroupCtrlId
 #include "ChatWindowLayout.h"         // RememberChatSplitFraction（单/群共用分割记忆）
 #include "ChatImageCache.h"           // 图片后台解码缓存：注册监听 + 就绪重绘
-#include "../../balloonui/balloonui/Controls/Layout/DuiSplitter.h"  // 拖动完成后算回分割比例
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiSplitter.h"  // 拖动完成后算回分割比例
 #include "ChatMessageList.h"          // ChatMessageList::AppendMessage
 #include "ChatDropModel.h"            // 拖进来的路径归类成 DropPlan
 #include "ChatLinkDetect.h"           // IsSafeLinkUrl（打开链接前的协议白名单）
 #include <windowsx.h>                 // GET_X_LPARAM / GET_Y_LPARAM（旁听点击定焦点区域）
-#include "../../balloonui/balloonui/Controls/Basic/DuiToast.h"   // 拖放跳过项的轻量提示
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiToast.h"   // 拖放跳过项的轻量提示
 #include "ChatMockData.h"             // ChatMessage / MakeTextMessage / MakeGroupAutoReply
 #include "ChatFontUtil.h"             // 当前聊天字体的载入/保存/应用到输入框
 #include "GroupMentionMenu.h"         // MentionMenuId / MentionActionData（气泡里 @某人 右键菜单的分发负载）
@@ -42,8 +42,8 @@
 #include "GroupFileList.h"            // 群文件列表堆叠容器（DuiScrollView 内容）
 #include "GroupFileItem.h"            // 群文件行
 #include "FileBubbleFormat.h"         // FormatFileSize / FormatRelativeDayTime（文件行说明文字）
-#include "../../balloonui/balloonui/Controls/Window/DuiScrollBar.h"  // DuiScrollView（文件列表滚动视口）
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"      // 分类筛选 chips 选中态切换
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"  // DuiScrollView（文件列表滚动视口）
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"      // 分类筛选 chips 选中态切换
 #include "ChatTitleIcon.h"            // MakeRoundTitleIcon / IconFromBitmap（共用标题图标）
 #include "../BalloonMain/MainPanelAvatar.h"  // MakeMonogramAvatar（任务栏图标）
 #include "../BalloonMain/AvatarImageUtil.h"   // MakeRoundedAvatarFromFile（群头像真图的任务栏图标）
@@ -52,8 +52,8 @@
 #include "../BalloonHistory/V2MsgQuery.h"      // HistoryTypeFilter：打开消息记录窗时预选哪个类型胶囊
 #include "../net/IUSocket.h"          // CIUSocket::SendGroupTextMessage / RequestGroupMembers
 #include "../BalloonMain/OnlineCapability.h"   // 离线门禁：连接态、提示条文案、被拦提示
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"   // 顶部离线提示条
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"  // DuiLayout::SetHint（引用条人名段按内容定宽）
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"   // 顶部离线提示条
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"  // DuiLayout::SetHint（引用条人名段按内容定宽）
 
 // 顶部提示带配色，与单聊窗同一套值（见 BalloonChatWindow.cpp 的同名常量与说明）：
 // 离线用琥珀色系（需要用户处理），正在连接用中性灰（仅告知）。每种三个色 ——
@@ -79,8 +79,8 @@ static const COLORREF kGroupConnectingBannerBorderColor = RGB(0xE5, 0xE7, 0xEB);
 #include <time.h>
 #include <gdiplus.h>                       // 读图片真实宽高以算展示尺寸
 #pragma comment(lib, "gdiplus.lib")
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"      // 成员搜索框
-#include "../../balloonui/balloonui/Controls/Input/DuiRichEditHost.h"  // 消息输入框（富文本）
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"      // 成员搜索框
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEditHost.h"  // 消息输入框（富文本）
 #include "../BalloonScreenshot/ScreenCaptureOverlay.h"  // 截图浮层（截图按钮调起）
 #include "ChatRichContentSplit.h"     // 输入框图文混排的有序拆分（发送用）
 #include "ChatFaceTag.h"              // 内联表情的 dwUser 标记编码 + 显示尺寸
@@ -89,9 +89,9 @@ static const COLORREF kGroupConnectingBannerBorderColor = RGB(0xE5, 0xE7, 0xEB);
 #include "ChatInputKeyFilter.h"       // 输入框 Enter 发送 / Ctrl+Enter 换行
 #include "ChatSendMode.h"             // 发送键模式（Enter / Ctrl+Enter）
 #include "ChatSendButton.h"           // ChatSendButton::DUIN_SENDBTN_DROPDOWN
-#include "../../balloonui/balloonui/Controls/List/DuiMenu.h"      // 发送模式切换菜单
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"    // 提示文字 SetText
-#include "../../balloonui/balloonui/Controls/Feedback/DuiToolTip.h"
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"      // 发送模式切换菜单
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"    // 提示文字 SetText
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"
 #include <objbase.h>                  // CoCreateGuid（生成 clientmsgid）
 #include <shellapi.h>                 // ShellExecuteW（群文件下载完成后打开文件）
 #pragma comment(lib, "shell32.lib")
@@ -1182,14 +1182,35 @@ void CBalloonGroupChatWindow::OnChatFilesDropped(const std::vector<std::wstring>
         SwitchSideTab(balloonchatwnd::kGIdTabFiles);
     }
 
-    if (!plan.m_skipped.empty() && m_dropToast != NULL)
+    // 文件夹传输一期只做单聊（见 docs/单聊文件夹传输方案.md 第 13 节），群聊里拖进来的
+    // 文件夹一律不处理。归类模块是两个聊天窗共用的，它只负责把文件夹拣出来，拦不拦由
+    // 各窗口自己定 —— 这里必须显式拦下并说明原因，否则用户拖了没反应，还以为在传。
+    CString folderNote;
+    if (!plan.m_folders.empty())
     {
-        const std::wstring note = balloonchatwnd::DescribeDropSkipped(plan.m_skipped);
-        m_dropToast->Show(note.c_str());
+        folderNote.Format(_T("群聊暂不支持发送文件夹（%d 个未发送）"), (int)plan.m_folders.size());
     }
 
-    LOG_INFO("群聊窗拖放处理完成: 处理 %d 个, 跳过 %d 个, shift=%d。",
-             (int)plan.m_items.size(), (int)plan.m_skipped.size(), forceAsFile ? 1 : 0);
+    // 提示只有一条浮层可用，故把"文件夹没发"与"另有几项发不出去"拼成一句，
+    // 免得后一句把前一句顶掉。
+    if (m_dropToast != NULL && (!folderNote.IsEmpty() || !plan.m_skipped.empty()))
+    {
+        CString note = folderNote;
+        if (!plan.m_skipped.empty())
+        {
+            const std::wstring skippedNote = balloonchatwnd::DescribeDropSkipped(plan.m_skipped);
+            if (!note.IsEmpty() && !skippedNote.empty())
+            {
+                note += _T("、");
+            }
+            note += skippedNote.c_str();
+        }
+        m_dropToast->Show((LPCTSTR)note);
+    }
+
+    LOG_INFO("Group chat drop handled: files %d, folders %d (not supported here), skipped %d, shift=%d.",
+             (int)plan.m_items.size(), (int)plan.m_folders.size(),
+             (int)plan.m_skipped.size(), forceAsFile ? 1 : 0);
 }
 
 // =======================================================================

@@ -3,7 +3,7 @@
  *
  *  主面板"状态胶囊"弹出菜单（在线状态选择器）纯数据模型的测试：
  *    · BuildStatusMenuModel() 产出的行模型 —— 恰好 4 项、顺序为 在线/离开/勿扰/离线、
- *      命令 id 非 0 且互不重复、各项 presence 对应正确，并<u>不含"隐身"</u>。
+ *      命令 id 非 0 且互不重复、各项 presence 对应正确，且只有四项。
  *    · GetPresenceVisual() 的"在线状态 → 文字 + 圆点色"映射，以及与菜单行 dotColor 的一致性。
  *    · "当前所处状态"的标记 —— isCurrent / iconKind / label 后缀三者一致、每份模型至多标
  *      一项、未知取值的兜底（归到"离线"），以及登录窗专用的三项模型
@@ -39,9 +39,12 @@ const int kCurrentOnline = presence_online;
 } // anonymous namespace
 
 // =====================================================================
-// STM. 状态菜单行模型契约（对照 design/主面板状态菜单.png，去掉"隐身"）
+// STM. 状态菜单行模型契约（对照 design/主面板状态菜单.png，只有四项）
 // =====================================================================
 
+// 已作废的在线状态取值：4 曾经是「隐身」，本产品不提供该功能（见 net/Protocol.h）。
+// 老服务端仍可能推上来，故保留这些用例，确认它被当作越界值归到"离线"。
+static const int kRetiredPresence = 4;
 TEST_CASE("STM1 状态菜单恰好 4 项：在线/离开/勿扰/离线", "[statusmenu]")
 {
     std::vector<StatusMenuEntry> items = BuildStatusMenuModel(kCurrentOnline);
@@ -65,14 +68,14 @@ TEST_CASE("STM1 状态菜单恰好 4 项：在线/离开/勿扰/离线", "[statu
     CHECK(items[3].presence == presence_offline);
 }
 
-TEST_CASE("STM2 菜单不含\"隐身\"（presence_invisible 不出现）", "[statusmenu]")
+TEST_CASE("STM2 菜单只含四项，不出现已作废的取值", "[statusmenu]")
 {
     std::vector<StatusMenuEntry> items = BuildStatusMenuModel(kCurrentOnline);
     for (size_t i = 0; i < items.size(); ++i)
     {
         INFO("行 index = " << i);
-        CHECK(items[i].presence != presence_invisible);
-        CHECK(::wcscmp(items[i].label, L"隐身") != 0);
+        CHECK(items[i].presence != kRetiredPresence);
+        CHECK(::wcscmp(items[i].label, L"隐身") != 0);   //防止有人把它加回来
     }
 }
 
@@ -127,14 +130,14 @@ TEST_CASE("STM6 GetPresenceVisual 圆点色与菜单行 dotColor 一致", "[stat
     }
 }
 
-TEST_CASE("STM7 GetPresenceVisual 兜底：隐身/未知值退化为\"离线\"灰点", "[statusmenu][visual]")
+TEST_CASE("STM7 GetPresenceVisual 兜底：未知值退化为\"离线\"灰点", "[statusmenu][visual]")
 {
     PresenceVisual offlineV = GetPresenceVisual(presence_offline);
 
-    // 隐身（本菜单不可选）与越界值都退化到"离线"的文字与颜色。
-    PresenceVisual invisibleV = GetPresenceVisual(presence_invisible);
-    CHECK(::wcscmp(invisibleV.text, L"离线") == 0);
-    CHECK(invisibleV.dotColor == offlineV.dotColor);
+    // 本菜单不可选的越界值都退化到"离线"的文字与颜色。
+    PresenceVisual retiredV = GetPresenceVisual(kRetiredPresence);
+    CHECK(::wcscmp(retiredV.text, L"离线") == 0);
+    CHECK(retiredV.dotColor == offlineV.dotColor);
 
     PresenceVisual unknownV = GetPresenceVisual(999);
     CHECK(::wcscmp(unknownV.text, L"离线") == 0);
@@ -208,19 +211,19 @@ TEST_CASE("STM10 NormalizePresenceForMenu：四态原样返回，其余归到\"�
     CHECK(NormalizePresenceForMenu(presence_busy)    == presence_busy);
     CHECK(NormalizePresenceForMenu(presence_offline) == presence_offline);
 
-    // 隐身与越界值统一归到"离线"，与 GetPresenceVisual 的兜底口径一致。
-    CHECK(NormalizePresenceForMenu(presence_invisible) == presence_offline);
+    // 越界值统一归到"离线"，与 GetPresenceVisual 的兜底口径一致。
+    CHECK(NormalizePresenceForMenu(kRetiredPresence) == presence_offline);
     CHECK(NormalizePresenceForMenu(999)                == presence_offline);
     CHECK(NormalizePresenceForMenu(-1)                 == presence_offline);
 }
 
-TEST_CASE("STM11 隐身 / 越界取值下，被标记的是\"离线\"项", "[statusmenu][current]")
+TEST_CASE("STM11 越界取值下，被标记的是\"离线\"项", "[statusmenu][current]")
 {
-    std::vector<StatusMenuEntry> invisible = BuildStatusMenuModel(presence_invisible);
-    REQUIRE(invisible.size() == 4);
-    CHECK(invisible[3].isCurrent);                                    // 第 4 行即"离线"
-    CHECK(::wcscmp(invisible[3].label, L"离线（当前）") == 0);
-    CHECK(!invisible[0].isCurrent);
+    std::vector<StatusMenuEntry> retired = BuildStatusMenuModel(kRetiredPresence);
+    REQUIRE(retired.size() == 4);
+    CHECK(retired[3].isCurrent);                                    // 第 4 行即"离线"
+    CHECK(::wcscmp(retired[3].label, L"离线（当前）") == 0);
+    CHECK(!retired[0].isCurrent);
 
     std::vector<StatusMenuEntry> unknown = BuildStatusMenuModel(999);
     REQUIRE(unknown.size() == 4);

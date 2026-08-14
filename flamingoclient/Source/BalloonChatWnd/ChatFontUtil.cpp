@@ -8,8 +8,8 @@
 
 #include "../IniFile.h"
 #include "../UserSessionData.h"   // g_szHomePath
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiRichEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEditHost.h"
 
 namespace balloonchatwnd {
 

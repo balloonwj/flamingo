@@ -26,6 +26,10 @@
 #include <vector>
 #include <gdiplus.h>
 
+#include "MainPanelIcons.h"        // DrawLineIcon（徽标字形的唯一一份画法）
+#include "PresenceBadge.h"         // GetPresenceBadgeIconKind（状态 → 字形）
+#include "MainPanelStatusMenu.h"   // GetPresenceVisual（状态 → 徽标配色）
+
 #pragma comment(lib, "gdiplus.lib")
 
 namespace balloonmain {
@@ -323,6 +327,119 @@ HICON MakeMonogramIcon(LPCTSTR text, COLORREF bgColor, int sizePx)
 
     // CreateIconIndirect 内部会拷贝位图，传入的 color / mask 位图由调用方负责
     // 释放（无论成功失败都要释放，否则泄漏）。
+    ::DeleteObject(hColor);
+    ::DeleteObject(hMask);
+
+    return hIcon;
+}
+
+// ---- 托盘图标叠加在线状态徽标 -------------------------------------------------
+
+namespace {
+
+// 徽标方块边长占图标边长的比例。0.6 是权衡出来的：再小，16×16 托盘图标下时钟指针
+// 就糊成一团看不出是哪个状态；再大，底图被盖掉太多、一眼认不出是本程序的图标。
+const Gdiplus::REAL kOverlayBoxRatio = 0.6f;
+
+// 徽标外面那圈白环的宽度，按图标边长的比例取，保证高 DPI 下跟着变粗。
+// 96 dpi 下 16×16 图标算出来约 1 像素，正好是"能看出有条边、又不喧宾夺主"的粗细。
+const Gdiplus::REAL kOverlayRingRatio = 0.065f;
+
+// 徽标圆底在其 viewBox 里的半径占比（viewBox 24 里半径 10，见 MainPanelIcons.cpp
+// 的 kBadgeRadius）。白环要正好套在这个圆外面，故这里必须与那边保持一致。
+const Gdiplus::REAL kBadgeDiscRatioInBox = 10.0f / 24.0f;
+
+} // anonymous namespace
+
+HICON MakePresenceOverlayIcon(HICON hBaseIcon, int presence, int sizePx)
+{
+    if (hBaseIcon == NULL || sizePx <= 0)
+    {
+        return NULL;
+    }
+
+    EnsureGdiplus();
+
+    // 与 MakeMonogramAvatar 同样的 32bpp top-down DIB：图标的 color 面要求预乘 alpha。
+    BITMAPINFO bi = {};
+    bi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth       = sizePx;
+    bi.bmiHeader.biHeight      = -sizePx;
+    bi.bmiHeader.biPlanes      = 1;
+    bi.bmiHeader.biBitCount    = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+
+    void* bits = NULL;
+    HBITMAP hColor = ::CreateDIBSection(NULL, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
+    if (hColor == NULL || bits == NULL)
+    {
+        if (hColor != NULL)
+        {
+            ::DeleteObject(hColor);
+        }
+        return NULL;
+    }
+    ::ZeroMemory(bits, (size_t)sizePx * sizePx * 4);
+
+    {
+        const int stride = sizePx * 4;
+        Gdiplus::Bitmap bitmap(sizePx, sizePx, stride, PixelFormat32bppPARGB,
+                               static_cast<BYTE*>(bits));
+        Gdiplus::Graphics g(&bitmap);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
+
+        // 第一步：把底图整张画进来。走 Bitmap::FromHICON 而不是 DrawIconEx ——
+        // 后者往 DIB 上画 32 位带 alpha 的图标时不保证保留 alpha 通道，
+        // 结果是图标四角本该透明的地方变成黑块。
+        Gdiplus::Bitmap* pBase = Gdiplus::Bitmap::FromHICON(hBaseIcon);
+        if (pBase != NULL)
+        {
+            g.DrawImage(pBase, 0, 0, sizePx, sizePx);
+            delete pBase;
+        }
+
+        // 第二步：右下角贴徽标。方块贴着右下两条边，不留外边距 —— 托盘只有十几个
+        // 像素，留了边距徽标就得再缩小一圈。
+        const Gdiplus::REAL box  = static_cast<Gdiplus::REAL>(sizePx) * kOverlayBoxRatio;
+        const Gdiplus::REAL left = static_cast<Gdiplus::REAL>(sizePx) - box;
+        const Gdiplus::REAL top  = static_cast<Gdiplus::REAL>(sizePx) - box;
+
+        // 白环先画：一个比徽标圆略大的白色实心圆，徽标盖上去之后露出的就是一圈白边。
+        const Gdiplus::REAL discRadius = box * kBadgeDiscRatioInBox;
+        const Gdiplus::REAL ringWidth  = static_cast<Gdiplus::REAL>(sizePx) * kOverlayRingRatio;
+        const Gdiplus::REAL ringRadius = discRadius + ringWidth;
+        const Gdiplus::REAL cx = left + box / 2.0f;
+        const Gdiplus::REAL cy = top  + box / 2.0f;
+        Gdiplus::SolidBrush ringBrush(Gdiplus::Color(255, 255, 255, 255));
+        g.FillEllipse(&ringBrush, cx - ringRadius, cy - ringRadius,
+                      ringRadius * 2.0f, ringRadius * 2.0f);
+
+        // 徽标本体：字形与颜色都取自与状态胶囊同一套映射，托盘与界面里长得一样。
+        const COLORREF dot = GetPresenceVisual(presence).dotColor;
+        const Gdiplus::Color badgeColor(255, GetRValue(dot), GetGValue(dot), GetBValue(dot));
+        DrawLineIcon(g, GetPresenceBadgeIconKind(presence), left, top, box, badgeColor,
+                     1.0f);   // 线宽对本组字形不起作用（白色字形宽度由绘制实现内部固定）
+    }
+
+    // AND 掩码取全 0，可见性完全交给 color 面的 alpha，理由同 MakeMonogramIcon。
+    const int kMonoAlignBits = 16;
+    int maskStride = ((sizePx + kMonoAlignBits - 1) / kMonoAlignBits) * (kMonoAlignBits / 8);
+    std::vector<BYTE> maskBits((size_t)maskStride * sizePx, 0);
+    HBITMAP hMask = ::CreateBitmap(sizePx, sizePx, 1, 1, maskBits.empty() ? NULL : &maskBits[0]);
+    if (hMask == NULL)
+    {
+        ::DeleteObject(hColor);
+        return NULL;
+    }
+
+    ICONINFO ii = {};
+    ii.fIcon    = TRUE;
+    ii.hbmColor = hColor;
+    ii.hbmMask  = hMask;
+
+    HICON hIcon = ::CreateIconIndirect(&ii);
+
     ::DeleteObject(hColor);
     ::DeleteObject(hMask);
 

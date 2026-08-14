@@ -20,9 +20,9 @@
 #pragma once
 
 #include <string>
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
-#include "../../balloonui/balloonui/DuiControl.h"
-#include "../../balloonui/balloonui/DuiNotify.h"   // WM_DUI_NOTIFY / DuiNotify / DUIN_CLICK
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/DuiControl.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"   // WM_DUI_NOTIFY / DuiNotify / DUIN_CLICK
 
 namespace balloonwjui
 {

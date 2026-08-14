@@ -13,7 +13,7 @@ void StringUtil::split(const std::string& str, std::vector<std::string>& v, cons
     std::string buf(str);
     size_t pos = std::string::npos;
     std::string substr;
-    int delimiterlength = strlen(delimiter);
+    int delimiterlength = static_cast<int>(strlen(delimiter));
     while (true)
     {
         pos = buf.find(delimiter);
@@ -40,7 +40,7 @@ void StringUtil::cut(const std::string& str, std::vector<std::string>& v, const 
         return;
 
     std::string buf(str);
-    int delimiterlength = strlen(delimiter);
+    int delimiterlength = static_cast<int>(strlen(delimiter));
     size_t pos = buf.find(delimiter);
     if (pos == std::string::npos)
         return;

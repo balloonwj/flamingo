@@ -9,6 +9,7 @@
 
 #include "FileProtocolClient.h"     // buildUploadChunkDescriptor / parseUploadChunkAck 等
 #include "FrameCodec.h"             // encodeFrame / encodeAttachmentBody / decodeAttachmentBody（内含 Protocol.h）
+#include "FramePayload.h"           // encodeFramePayload（包体的压缩与加密管线）
 #include "ImageUploadDriver.h"      // IUploadProgressSink
 #include "ImageDownloadDriver.h"    // IDownloadProgressSink
 //取 MD5 的纯 C 接口（下载侧增量校验用）。刻意不引 MD5Sum.h——那里的 MD5Sum 类依赖
@@ -83,10 +84,26 @@ bool FileStreamTransfer::uploadFile(IFileFrameChannel& channel, const std::wstri
             errmsg  = "encode attachment failed";
             return false;
         }
+        //包体先过 FramePayload 这条管线（握手完成后即为加密），再套帧头。
+        //压缩策略取 never：分片里多半已是压缩过的文件内容，再走一遍 zlib 压不动、
+        //只白费 CPU，这也与接入加密之前的行为一致。
+        const uint32_t uploadSeq = frameSeq++;
+        std::string wire;
+        uint8_t     flags = 0;
+        uint32_t    originlen = 0;
+        if (!net::encodeFramePayload(cmd_file_upload, uploadSeq, attBody, channel.GetCipher(),
+                                     frame_flag_has_attachment, net::payload_compress_never,
+                                     wire, flags, originlen))
+        {
+            errcode = error_code_upload_fail;
+            errmsg  = "encrypt frame payload failed";
+            return false;
+        }
+
         std::string frame;
-        if (!net::encodeFrame(cmd_file_upload, frameSeq++, frame_flag_has_attachment,
-                              attBody.data(), static_cast<uint32_t>(attBody.size()),
-                              static_cast<uint32_t>(attBody.size()), frame))
+        if (!net::encodeFrame(cmd_file_upload, uploadSeq, flags,
+                              wire.data(), static_cast<uint32_t>(wire.size()),
+                              originlen, frame))
         {
             errcode = error_code_upload_fail;
             errmsg  = "encode frame failed";
@@ -196,10 +213,26 @@ bool FileStreamTransfer::downloadFile(IFileFrameChannel& channel, const std::str
             break;
         }
 
-        //请求帧：普通 JSON 包体 { downloadtoken, offset }，无附件、不压缩
+        //请求帧：普通 JSON 包体 { downloadtoken, offset }，无附件、不压缩。
+        //握手完成后包体由 FramePayload 加密，未握手时它自然产出明文。
         std::string descriptor = FileProtocolClient::buildDownloadChunkDescriptor(downloadToken, offset);
+        const uint32_t downloadSeq = frameSeq++;
+        std::string wire;
+        uint8_t     flags = 0;
+        uint32_t    originlen = 0;
+        if (!net::encodeFramePayload(cmd_file_download, downloadSeq, descriptor,
+                                     channel.GetCipher(), 0, net::payload_compress_never,
+                                     wire, flags, originlen))
+        {
+            errcode = error_code_server_internal;
+            errmsg  = "encrypt download frame payload failed";
+            break;
+        }
+
         std::string frame;
-        if (!net::encodeFrame(cmd_file_download, frameSeq++, descriptor, frame))
+        if (!net::encodeFrame(cmd_file_download, downloadSeq, flags,
+                              wire.data(), static_cast<uint32_t>(wire.size()),
+                              originlen, frame))
         {
             errcode = error_code_server_internal;
             errmsg  = "encode download frame failed";

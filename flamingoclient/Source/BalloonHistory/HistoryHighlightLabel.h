@@ -25,7 +25,7 @@
 
 #include <vector>
 
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "HistoryView.h"   // HighlightRange
 
 namespace balloonhistory {

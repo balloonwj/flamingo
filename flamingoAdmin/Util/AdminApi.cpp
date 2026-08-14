@@ -34,7 +34,6 @@ const wchar_t* const kPathClientVersionList       = L"/admin/clientversion/list.
 const wchar_t* const kPathClientVersionCreate     = L"/admin/clientversion/create.do";
 const wchar_t* const kPathClientVersionUpdate     = L"/admin/clientversion/update.do";
 const wchar_t* const kPathClientVersionSetEnabled = L"/admin/clientversion/setenabled.do";
-const wchar_t* const kPathClientVersionRepublish  = L"/admin/clientversion/republish.do";
 const wchar_t* const kPathAnnList          = L"/admin/announcement/list.do";
 const wchar_t* const kPathAnnDetail        = L"/admin/announcement/detail.do";
 const wchar_t* const kPathAnnRecall        = L"/admin/announcement/recall.do";
@@ -2806,15 +2805,6 @@ HttpRequest MakeClientVersionSetEnabledRequest(const ServerConfig& server, const
     root["id"]      = static_cast<Json::Int64>(id);
     root["enabled"] = enabled;
     return MakeRequest(server, kPathClientVersionSetEnabled, root, kEnterpriseTimeoutMs);
-}
-
-HttpRequest MakeClientVersionRepublishRequest(const ServerConfig& server,
-                                              const CString& token, long long id)
-{
-    Json::Value root;
-    root["token"] = Utf8FromWide(token);
-    root["id"]    = static_cast<Json::Int64>(id);
-    return MakeRequest(server, kPathClientVersionRepublish, root, kEnterpriseTimeoutMs);
 }
 
 CString FormatPackageSize(long long bytes)

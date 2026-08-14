@@ -36,10 +36,10 @@
 #pragma once
 
 #include <string>
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 #include "CallVideoCanvas.h"        //远端 / 本端画面自绘控件
 #include "CallVideoDisplaySink.h"   //视频帧显示去向接口（本类实现之）
 #include "CallDlgLayout.h"          //标题 / 提示文字组装与画面去向判定（纯函数，有单测）

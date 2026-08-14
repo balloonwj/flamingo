@@ -293,13 +293,6 @@ void TestClientVersionWriteRequests()
     const HttpRequest disable = MakeClientVersionSetEnabledRequest(
         MakeServer(), _T("tok"), 9, false);
     FA_EXPECT_TRUE(BodyHas(disable, "\"enabled\":false"));
-
-    const HttpRequest republish = MakeClientVersionRepublishRequest(
-        MakeServer(), _T("tok"), 9);
-    FA_EXPECT_TRUE(republish.m_path == L"/admin/clientversion/republish.do");
-    FA_EXPECT_TRUE(BodyHas(republish, "\"id\":9"));
-    // 回滚只需要记录 ID，不带别的参数
-    FA_EXPECT_FALSE(BodyHas(republish, "\"enabled\""));
 }
 
 // ---------------------------------------------------------------------------

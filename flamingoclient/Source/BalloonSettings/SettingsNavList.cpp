@@ -10,8 +10,8 @@
 #include "stdafx.h"
 #include "SettingsNavList.h"
 
-#include "../../balloonui/balloonui/DuiResMgr.h"                 // 默认字体
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h" // DuiVBox::PaintBackground
+#include "../../../third-party/balloonui/balloonui/DuiResMgr.h"                 // 默认字体
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h" // DuiVBox::PaintBackground
 
 namespace balloonsettings {
 

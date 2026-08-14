@@ -71,6 +71,20 @@ struct ChatMessageMenuEntry
 //单独取一份名字。两处哪天不一致，ChatImageMenuTests 的 CIM1 会立刻失败。
 const int kChatMenuKindImage = 3;
 
+//文件夹传输消息的 kind 取值。与 ChatMockData.h 里 ChatMsgKind 的 kMsgFolder 必须一致，
+//单列一份的理由同上面的 kChatMenuKindImage（本模型不引依赖 CString 的那个头文件）。
+//
+//文件夹气泡在传输<u>进行中</u>是纯本地的：它不发 cmd_send_message、不进服务端消息表，
+//压根没有 msgid，凡是"拿服务端那条消息说事"的菜单项 ——「引用回复」「转发」
+//「Pin / 取消 Pin」「撤回」—— 点了必被服务端判 message_not_exist。
+//
+//传输走到终态后，服务端会另落一条 msgtype=18 的传输记录条，气泡被它就地接管、
+//于是带上了 msgid（见 docs/单聊文件夹传输方案.md 7.4）。即便如此，上面那几项<u>仍然
+//一律不出现</u>：这条记录是服务端生成的一次"动作留痕"，引用它、转发它、撤回它都没有
+//对应的产品语义。这些项一律不出现，与「撤回」超时即整项消失是同一种处理，菜单里
+//不留点不动的项。
+const int kChatMenuKindFolder = 5;
+
 //图片就绪态。与 ChatMessage::imageState 的取值一一对应（见 ChatMockData.h，那边是
 //裸数字加注释），这里给它们名字，供本模型与其测试引用。
 const int kChatImageStateReady       = 0;   // 正常 / 已就绪：本地文件可用，两个图片项才出现
@@ -97,6 +111,8 @@ bool ShouldShowImageActions(int msgKind, int imageState, bool hasLocalPath);
  *
  *  固定骨架是：复制 / 引用回复 / 转发 / [Pin] / 分隔线 / [撤回] / 删除 / 分隔线 / 多选。
  *  图片行且已就绪时，在「复制」之后插入「图片另存为」「再次发送」两项。
+ *  <u>文件夹行是例外</u>：它是本地气泡、没有服务端 msgid，故只保留「复制」「删除」
+ *  「多选」三项，理由见上面 kChatMenuKindFolder 的注释。
  *
  *    msgKind：      消息类型，取值见 ChatMockData.h 的 ChatMsgKind。
  *    imageState：   图片就绪态，取值见 kChatImageState*；非图片行忽略此参数。

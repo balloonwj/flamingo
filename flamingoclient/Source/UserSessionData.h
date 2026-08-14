@@ -188,6 +188,28 @@ extern std::wstring g_strAppTitle;
 #define     FMG_MSG_QUERY_STARRED           WM_USER + 559			//群聊窗→主面板：查某联系人是否被特别关注（弹右键菜单前取文案用），lParam=const int64_t* userid（借用，指向调用栈），返回 1 已关注 / 0 未关注。关注名单只有主面板那一份，群聊窗与气泡都不认识它，故代问
 #define     FMG_MSG_TOGGLE_STARRED          WM_USER + 560			//群聊窗→主面板：请求切换某联系人的特别关注状态（群成员列表 / 气泡的 @片段与发送者头像三处右键菜单点了那一项），wParam=userid，lParam=0，无堆负载。目标状态由主面板按名单现状取反并发 cmd_set_starred，故无需传
 #define     FMG_MSG_V2_TYPING_NOTIFY        WM_USER + 554		//v2 推送：对端正在 / 停止输入(cmd_typing_notify 1510)，lParam=堆 net::TypingNotify*（UI 处理后 delete）；m_cid 是"正在输入的那个人"的 userid，主面板据它找单聊窗刷新头部提示。这条提示不可靠（服务端不落库不重发），对端掉线时 state=0 收不到，故聊天窗侧另有过期兜底
+#define     FMG_MSG_V2_SET_TAGS_RESULT      WM_USER + 561			//v2 设置联系人标签应答(cmd_set_contact_tags 1217)，lParam=堆 net::SetContactTagsResult*（UI 处理后 delete）；成功时用应答回带的<u>归一后</u>列表把本地缓存对齐到服务端真值（服务端会去首尾空白、丢空串、忽略大小写去重，本地乐观更新算出来的那份未必与它逐字相同），失败时用回带的<u>当前</u>列表回滚。标签改完不走推送，读回靠下次通讯录应答里的 contacts[].tags
+#define     FMG_MSG_SET_CONTACT_TAGS        WM_USER + 562			//联系人资料窗→主面板：标签整份提交，wParam=对端 userid，lParam=堆 std::vector<std::string>*（该联系人在本人视角下的完整标签列表，UTF-8，未归一；主面板处理后 delete）。空列表表示清空。增、改、删三种操作都走这一条——协议本身就是整份覆盖语义。该不该发、发不出去怎么办、失败怎么退回来全由主面板判定，口径与备注名(553)一致
+
+//——v2 单聊文件夹传输(cmd_folder_* 1810~1817)。前五条由网络层解析后回投，后五条由
+//  foldertransfer::FolderTransferManager 从它自己的工作线程回投；两者都投给代理窗口，
+//  走「代理窗 → 主窗口 → 主面板 → 聊天窗」同一条既有通路。lParam 一律是堆上结构体
+//  指针，由 UI 线程处理后 delete。
+//
+//  本组取 581~590（580 已被 FMG_MSG_LAST 这道闸门占用，故不能从 580 起排；562 之后的
+//  563~579 虽然空着，但留给号段更靠前的那几块继续顺排，文件夹这一整组另起一段更好找）。
+//  <u>注意 FMG_MSG_LAST 已随本组一并上抬到 620</u>——不抬的话这十条会在代理窗口门口
+//  被静默丢弃（见文件末尾那段闸门说明），且 lParam 上的堆对象一并泄漏。
+#define     FMG_MSG_V2_FOLDER_INVITE_ACK    WM_USER + 581			//v2 文件夹传输邀请应答(cmd_folder_invite 1810)，wParam=本次邀请请求所用的帧 seq（uint32_t，应答包体里没有任何能对回发起方的字段，本机又可能有多笔传输同时在等应答，故一律按它定位是哪一笔发起的），lParam=堆 net::FolderInviteResponse*（处理后 delete）；成功带 sessionid，规模超限时带服务端配置的 maxfiles / maxsize 供提示
+#define     FMG_MSG_V2_FOLDER_INVITE_NOTIFY WM_USER + 582			//v2 文件夹传输邀请推送(cmd_folder_invite_notify 1811)，lParam=堆 net::FolderInviteNotify*（处理后 delete）；接收端据此在会话里出一条带「接收 / 拒绝」的邀请气泡，不弹独立授权窗
+#define     FMG_MSG_V2_FOLDER_SESSION_ACK   WM_USER + 583			//v2 文件夹传输通用应答（应答 1812 / 撤回 1813 / 结束 1814 / 重试 1817 四条共用一种应答体），wParam=发出的那条命令的协议号，lParam=堆 net::FolderSessionResponse*（处理后 delete）
+#define     FMG_MSG_V2_FOLDER_STATE_NOTIFY  WM_USER + 584			//v2 文件夹传输状态推送(cmd_folder_state_notify 1815)，lParam=堆 net::FolderStateNotify*（处理后 delete）；响铃/传输中/拒绝/撤回/对方离线/超时/失败/完成，失败时带双方一致的错误码
+#define     FMG_MSG_V2_FOLDER_RELAY_INFO    WM_USER + 585			//v2 文件夹传输中转参数下发(cmd_folder_relay_info 1816)，lParam=堆 net::FolderRelayInfo*（处理后 delete）；双方据此连 fileserver 建 1 条控制通道 + N 条数据通道
+#define     FMG_MSG_V2_FOLDER_SCANNED       WM_USER + 586			//本地目录扫描完成（发送端，扫描跑在 FolderTransferManager 的工作线程上），lParam=堆 foldertransfer::FolderScanNotice*（处理后 delete）；界面据 localid 把文件数 / 目录数 / 总大小补进那条刚建出来的气泡，扫描失败时据 m_scanError 把它转成失败态
+#define     FMG_MSG_V2_FOLDER_SEND_PROGRESS WM_USER + 587			//文件夹发送进度，lParam=堆 foldertransfer::FolderProgressNotice*（处理后 delete）；分子以接收端的回执为准，故对方回退续传位点时它会相应减少
+#define     FMG_MSG_V2_FOLDER_SEND_RESULT   WM_USER + 588			//文件夹发送最终结果，lParam=堆 foldertransfer::FolderResultNotice*（处理后 delete）；UI 线程收到后须回调 FolderTransferManager::FinishSend 停线程并发 cmd_folder_close
+#define     FMG_MSG_V2_FOLDER_RECV_PROGRESS WM_USER + 589			//文件夹接收进度，lParam=堆 foldertransfer::FolderProgressNotice*（处理后 delete）
+#define     FMG_MSG_V2_FOLDER_RECV_RESULT   WM_USER + 590			//文件夹接收最终结果，lParam=堆 foldertransfer::FolderResultNotice*（处理后 delete）；UI 线程收到后须回调 FolderTransferManager::FinishRecv，成功时其中的 m_localRoot 即落地目录，供「打开文件夹」
 
 // FMG_MSG_CHANGE_MY_PRESENCE 的 wParam 取值（与 v2 协议 net/Protocol.h 的 presence_type
 // 同值）。单列一份命名常量，是因为 CMainDlg 等编译单元包含 v1 net/Msg.h，无法再 include
@@ -320,10 +342,11 @@ enum PresenceChangeSource
 // 消息（如 539 群公告、541 修改群头像，由某个窗口 PostMessage 给主面板）不经代理窗，
 // 越界也照常工作，很容易让人误以为这个号段没问题。
 //
-// 上界留足余量（原为 560，2026-08-12 特别关注用掉 558-560 后上抬到 580），免得每加
-// 一条消息都要动它一次；闸门放宽本身无风险：switch 里没有匹配 case 的消息一律走
-// default → DefWindowProc，与被闸门挡掉的效果相同。
-#define		FMG_MSG_LAST					WM_USER + 580
+// 上界留足余量（原为 560，2026-08-12 特别关注用掉 558-560 后上抬到 580；2026-08-14
+// 单聊文件夹传输用掉 581-590 后再上抬到 620），免得每加一条消息都要动它一次；闸门放宽
+// 本身无风险：switch 里没有匹配 case 的消息一律走 default → DefWindowProc，与被闸门
+// 挡掉的效果相同。
+#define		FMG_MSG_LAST					WM_USER + 620
 
 //聊天窗 → 主面板 的"会话冒泡"载荷（FMG_MSG_CONV_SEND_BUMP 的 lParam，堆分配，
 //主面板处理后 delete）。承载本端刚发出的一条消息，用于刷新会话列表的最后预览。

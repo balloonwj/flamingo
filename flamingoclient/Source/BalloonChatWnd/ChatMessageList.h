@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/DuiControl.h"
+#include "../../../third-party/balloonui/balloonui/DuiControl.h"
 #include "ChatMockData.h"
 
 namespace balloonchatwnd {
@@ -171,6 +171,68 @@ public:
     // 返回是否命中了某条气泡 —— 调用方据此把"本窗口没有这条消息"与"更新了但没生效"
     // 区分开，这两类问题的排查方向完全不同。
     bool SetFilePeerStateByMsgid(long long msgid, int peerState);
+
+    // ---- 文件夹气泡（kMsgFolder）的状态更新 ---------------------------
+    //
+    // 传输<u>进行中</u>的文件夹气泡是纯本地的：不走 cmd_send_message、没有服务器 msgid，
+    // 定位一律靠<u>会话 id</u>。发起之初用的是本地占位 id，服务端分配了真会话 id 之后换成
+    // 后者（见 CBalloonChatWindow::OnFolderBound）。
+    // 更新分成"取出来改—写回去"两步而不是给每种状态各开一个接口：文件夹传输的状态字段有
+    // 十来个（状态 / 进度 / 当前文件 / 序号 / 失败原因 / 落地目录…），一次事件往往要改好几个，
+    // 逐个开接口只会让宿主分不清哪些该一起改。
+    //
+    // 传输走到终态后，服务端会在双方会话里落一条 msgtype=18 的传输记录条推下来，聊天窗
+    // 用它<u>就地接管</u>那条本地气泡（填上 msgid 与服务端时间戳、切到对应终态），界面上
+    // 因而始终只有一条、位置也不跳。接管之后那条气泡就带上了 msgid，本组的两个接口<u>不再
+    // 认它</u>——见下面各自的说明。
+
+    /**
+     *  按会话 id 取回<u>尚未被服务端记录接管</u>的那条文件夹气泡（即 msgid 仍为 0 的
+     *  本地气泡）。
+     *
+     *  为什么要把带 msgid 的排除在外：同一次传输可能留下<u>多条</u>服务端记录（每次尝试
+     *  各一条：先失败落一条，保留期内重试成功再落一条），它们的会话 id 完全相同。若不加
+     *  这道限制，第二条记录就会把第一条那个已经定格的气泡再改一遍；翻历史时同一会话的
+     *  多条记录一起渲染进来，实时进度也会更新到最早那条上去。
+     *
+     *    sessionId：本次传输的会话 id（UTF-8）；空串一律返回 false。
+     *    out：      [出参] 命中时填入该行的消息。
+     *  @return 找到返回 true；列表里没有这条会话的<u>本地</u>气泡（从未有过、或已被记录
+     *          接管）返回 false。
+     */
+    bool GetFolderMessage(const std::string& sessionId, ChatMessage& out) const;
+
+    /**
+     *  按会话 id 把改好的消息写回那条<u>尚未被记录接管</u>的文件夹气泡，并重排 + 重绘。
+     *  命中条件与 GetFolderMessage 完全一致（会话 id 相同且 msgid 仍为 0），两者成对使用。
+     *
+     *  <u>必须重排而不能只重绘</u>：文件夹气泡的高度随状态变化（有没有进度条、有没有
+     *  失败原因那一行、底部有几个按钮），只 Invalidate 的话新出现的按钮会被裁在气泡外面、
+     *  点不到，看上去就是"点了没反应"。
+     *
+     *    sessionId：定位用的会话 id（UTF-8，即写回<u>之前</u>那条气泡上的那个）。
+     *    msg：      改好的整条消息。msgid 可以在本次写回时一并填上——那正是"接管"这一步，
+     *               写回之后本方法与 GetFolderMessage 就都不再认这条气泡了。
+     *  @return 命中并写回返回 true；找不到返回 false。
+     */
+    bool SetFolderMessage(const std::string& sessionId, const ChatMessage& msg);
+
+    /**
+     *  把某条已被服务端记录接管的文件夹气泡放回"活的本地气泡"状态：清掉它身上的 msgid
+     *  与消息时间，使 GetFolderMessage / SetFolderMessage 重新认得它。
+     *
+     *  用在<u>重试续传</u>这一步：一笔传输失败后服务端已经落过一条 result=7 的记录、把
+     *  气泡接管了；用户点「重试」、传输重新开始时，这条气泡要重新变成活的，本次尝试
+     *  结束时到达的那条新记录才能再接管它。不这么做的话，重试期间的进度更新一条也落不
+     *  到气泡上（表现为点了重试界面纹丝不动）。
+     *
+     *    sessionId：本次传输的会话 id（UTF-8）；空串一律返回 false。
+     *  @return 找到并清掉返回 true；列表里没有这条会话的气泡返回 false。
+     *          同一会话有多条气泡时（翻历史把这一笔早先几次尝试的记录也拉了进来）取
+     *          <u>最后</u>那条——它才是刚被接管、马上要复用的那一条，更早的几条属于
+     *          已经过去的尝试，不该被改动。
+     */
+    bool ReviveFolderMessage(const std::string& sessionId);
 
     // ---- 真图头像下载完成后刷新气泡 ----------------------------------
 
@@ -465,6 +527,10 @@ private:
     // 只记真实消息：分隔行自身不参与判定，时间未知（0）的消息也不更新它，否则
     // 后面一条正常消息会与 0 相比、被判成"没有上一条"而多插一行。
     long long m_lastMsgTimestampMs;
+
+    // 向上翻页期间临时寄存的原基准（BeginPrependBatch 存、EndPrependBatch 还原）。
+    // 翻页批次会被整体挪到列表最前面，判定基准必须临时清零，收尾后再还给实时消息用。
+    long long m_prependSavedLastMs;
 
     int  m_scrollY;        // 当前纵向滚动偏移
     int  m_contentHeight;  // 全部消息行的总高

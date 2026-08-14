@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  StarredPopupTests.cpp
  *
  *  「特别关注」上下线提示相关纯逻辑的测试：
@@ -20,7 +20,7 @@
 #include "../BalloonMain/StarredPopupModel.h"
 #include "../BalloonMain/CornerPopupPlacement.h"
 #include "../BalloonMain/NotificationSound.h"
-#include "../net/Protocol.h"   // presence_offline / presence_online / presence_away / presence_busy / presence_invisible
+#include "../net/Protocol.h"   // presence_offline / presence_online / presence_away / presence_busy
 
 using namespace balloonmain;
 
@@ -41,6 +41,10 @@ StarredPresenceEvent MakeEvent(int64_t userid, LPCTSTR name, bool online)
 // =====================================================================
 // SPM 组：提示窗的行模型
 // =====================================================================
+
+// 已作废的在线状态取值：4 曾经是「隐身」，本产品不提供该功能（见 net/Protocol.h）。
+// 老服务端仍可能推上来，故保留这些用例，确认它被当作越界值归到"离线"。
+static const int kRetiredPresence = 4;
 
 TEST_CASE("SPM1 单条事件排成一行", "[starred][popup]")
 {
@@ -194,8 +198,8 @@ TEST_CASE("SPT1 下线判定与上线判定严格对称", "[starred][presence]")
     CHECK(IsBuddyJustWentOffline(presence_online, presence_offline));
     CHECK(IsBuddyJustWentOffline(presence_away, presence_offline));
     CHECK(IsBuddyJustWentOffline(presence_busy, presence_offline));
-    //隐身对外表现就是"这个人不在了"，与真下线没有区别
-    CHECK(IsBuddyJustWentOffline(presence_online, presence_invisible));
+    //已作废的取值按不可见态处理，与真下线没有区别
+    CHECK(IsBuddyJustWentOffline(presence_online, kRetiredPresence));
 
     //不可见 → 可见在线：是上线，不是下线
     CHECK_FALSE(IsBuddyJustWentOffline(presence_offline, presence_online));
@@ -216,9 +220,9 @@ TEST_CASE("SPT2 在线态之间来回切换既不算上线也不算下线", "[st
         }
     }
 
-    //不可见态之间同理（离线↔隐身）
-    CHECK_FALSE(IsBuddyJustCameOnline(presence_offline, presence_invisible));
-    CHECK_FALSE(IsBuddyJustWentOffline(presence_offline, presence_invisible));
+    //不可见态之间同理（离线↔已作废取值）
+    CHECK_FALSE(IsBuddyJustCameOnline(presence_offline, kRetiredPresence));
+    CHECK_FALSE(IsBuddyJustWentOffline(presence_offline, kRetiredPresence));
 }
 
 // =====================================================================

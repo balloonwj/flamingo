@@ -21,7 +21,7 @@
 #include "../BalloonNetSettings/NetSettingsLayout.h"
 #include "../BalloonNetSettings/NetSettingsModel.h"
 #include "../BalloonNetSettings/NetServerCard.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
 
 using namespace balloonwjui;
 using namespace balloonnetsettings;

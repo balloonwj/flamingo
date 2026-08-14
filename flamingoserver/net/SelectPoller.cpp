@@ -45,9 +45,9 @@ Timestamp SelectPoller::poll(int timeoutMs, ChannelList* activeChannels)
     FD_ZERO(&writefds);
 
     //获取最大fd 
-    int maxfd = 0;
+    SOCKET maxfd = 0;
 
-    int tmpfd;
+    SOCKET tmpfd;
     for (const auto& iter : m_channels)
     {
         tmpfd = iter.first;
@@ -64,7 +64,9 @@ Timestamp SelectPoller::poll(int timeoutMs, ChannelList* activeChannels)
     struct timeval timeout;
     timeout.tv_sec = timeoutMs / 1000;
     timeout.tv_usec = (timeoutMs - timeoutMs / 1000 * 1000) * 1000;
-    int numEvents = select(maxfd + 1, &readfds, &writefds, NULL, &timeout);
+    //select 的第一个参数在 POSIX 上是「最大描述符 + 1」，Windows 上则被忽略；
+    //maxfd 是 SOCKET（Windows x64 下 64 位），这里显式收窄成接口要的 int
+    int numEvents = select(static_cast<int>(maxfd) + 1, &readfds, &writefds, NULL, &timeout);
     Timestamp now(Timestamp::now());
     if (numEvents > 0)
     {
@@ -137,7 +139,7 @@ bool SelectPoller::updateChannel(Channel* channel)
     if (index == kNew || index == kDeleted)
     {
         // a new one, add with XEPOLL_CTL_ADD
-        int fd = channel->fd();
+        SOCKET fd = channel->fd();
         if (index == kNew)
         {
             //assert(channels_.find(fd) == channels_.end())
@@ -174,7 +176,7 @@ bool SelectPoller::updateChannel(Channel* channel)
     else
     {
         // update existing one with XEPOLL_CTL_MOD/DEL
-        int fd = channel->fd();
+        SOCKET fd = channel->fd();
         //assert(channels_.find(fd) != channels_.end());
         //assert(channels_[fd] == channel);
         //assert(index == kAdded);
@@ -203,7 +205,7 @@ bool SelectPoller::updateChannel(Channel* channel)
 void SelectPoller::removeChannel(Channel* channel)
 {
     assertInLoopThread();
-    int fd = channel->fd();
+    SOCKET fd = channel->fd();
     //LOG_TRACE << "fd = " << fd;
     //assert(channels_.find(fd) != channels_.end());
     if (m_channels.find(fd) == m_channels.end())
@@ -237,7 +239,7 @@ void SelectPoller::removeChannel(Channel* channel)
 
 bool SelectPoller::update(int operation, Channel* channel)
 {
-    int fd = channel->fd();
+    SOCKET fd = channel->fd();
     if (operation == XEPOLL_CTL_ADD)
     {
         struct epoll_event event;

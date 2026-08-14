@@ -24,10 +24,11 @@
 #include "../BalloonMain/BalloonMainLayout.h"
 #include "../BalloonMain/MainPanelScrollView.h"
 #include "../BalloonMain/MainPanelTreeView.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox
-#include "../../balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"                    // DispatchMouseWheel（滚轮派发入口）
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
 
 using namespace balloonwjui;
 using namespace balloonmain;
@@ -159,21 +160,21 @@ TEST_CASE("M7 三个 Tab 内容面板都是 DuiScrollView 子类(单列 DuiTreeV
     }
 }
 
-// 用例 M8 / M9 复现的根因 ──
-//   DuiHost::OnMouseWheel 只把滚轮投给"最深命中控件",<u>不冒泡</u>
-//   (见 DuiHost.cpp OnMouseWheel 注释);而单列 DuiTreeView::OnMouseWheel
-//   直接 return false(见 DuiTreeView.cpp:3439-3456,!IsMultiCol 时
-//   直接 return)。三个 Tab 面板里 treeview 又铺满了 scrollview 视口,
-//   滚轮命中点几乎总落在 treeview 身上 —— 于是滚轮永远到不了外层
-//   MainPanelScrollView,overlay 滚动条没机会显示,treeview 也滚不动。
+// 用例 M8 / M9 覆盖的链路 ──
+//   单列 DuiTreeView::OnMouseWheel 直接 return false(见 DuiTreeView.cpp
+//   的 !IsMultiCol 短路),它自己不滚,靠外层 scrollview 滚。三个 Tab 面板里
+//   treeview 又铺满了 scrollview 视口,滚轮命中点几乎总落在 treeview 身上,
+//   因此滚轮能不能到达外层 MainPanelScrollView 决定了这三个列表滚不滚得动
+//   (滚不动的同时,overlay 滚动条也没机会显示)。
 //
-//   修复:业务侧子类化 DuiTreeView -> MainPanelTreeView,覆写 OnMouseWheel
-//   让基类未消化时调 ForwardWheelToScrollView 把滚轮交给祖先 scrollview。
-//   BalloonMainLayout 把 <treeview> 改成自定义 tag <main-treeview>(内置
-//   <treeview> 工厂会先截住,不走 CustomFactory)由 CreateMainCustomControl
-//   建子类实例。
+//   2026-08-14 之前库里的滚轮不冒泡,业务侧靠 MainPanelTreeView 覆写
+//   OnMouseWheel 手工转发;之后 DuiHost::DispatchMouseWheel 会沿父链上冒,
+//   那段转发代码已删除,改由库承担。M9 走的正是库的派发入口。
+//
+//   M8 仍然要求这三处是 MainPanelTreeView:该子类如今的职责是行右侧列的
+//   绘制与会话行装饰(见 MainPanelTreeView.h),与滚轮无关。
 
-TEST_CASE("M8 三个 Tab 面板下的 treeview 都是 MainPanelTreeView 子类(单列上抛滚轮)",
+TEST_CASE("M8 三个 Tab 面板下的 treeview 都是 MainPanelTreeView 子类",
           "[p1a][main][scroll][wheel]")
 {
     std::unique_ptr<DuiControl> root = BuildMainPanelBody();
@@ -196,9 +197,8 @@ TEST_CASE("M8 三个 Tab 面板下的 treeview 都是 MainPanelTreeView 子类(�
              << ", under pane = " << kPairs[i].paneId);
         DuiControl* tv = root->FindCtrlById(kPairs[i].treeId);
         REQUIRE(tv != nullptr);
-        // 单列 DuiTreeView 基类不上抛滚轮 —— 三个 pane 下必须是
-        // MainPanelTreeView 子类(其 OnMouseWheel 会把基类未消化的滚轮
-        // 转发给祖先 scrollview)。
+        // 三个 pane 下必须是 MainPanelTreeView 子类:会话树的时间 / 未读红点 /
+        // 置顶与免打扰标记、群树的成员数,都由该子类的 OnPaint 画。
         CHECK(dynamic_cast<balloonmain::MainPanelTreeView*>(tv) != nullptr);
     }
 }
@@ -211,8 +211,11 @@ TEST_CASE("M9 MainPanelTreeView 在父链 scrollview 上时,滚轮触发祖先�
     //     └─ DuiVBox(内容)
     //         └─ MainPanelTreeView(单列)
     // 给 scrollview 一个 200x200 的视口 + 1000 的内容高度(必溢出),
-    // 然后直接调 treeview->OnMouseWheel 下滚一格;若上抛链路正常,
-    // scrollview->GetScrollPos() 必 > 0。
+    // 然后按产品里滚轮真正的派发路径(DuiHost::DispatchMouseWheel,命中控件
+    // 为 treeview)下滚一格;若上冒链路正常,scrollview->GetScrollPos() 必 > 0。
+    //
+    // 必须走 DispatchMouseWheel 而不是直接调 tv->OnMouseWheel:单列 treeview
+    // 自己一律返回 false,直接调它测不出滚轮到底有没有到达外层滚动视口。
     std::unique_ptr<balloonmain::MainPanelScrollView> sv(
         new balloonmain::MainPanelScrollView());
     std::unique_ptr<balloonwjui::DuiVBox> vbox(new balloonwjui::DuiVBox());
@@ -231,7 +234,7 @@ TEST_CASE("M9 MainPanelTreeView 在父链 scrollview 上时,滚轮触发祖先�
     REQUIRE(sv->GetScrollPos() == 0);
     POINT pt = { 100, 100 };
     // zDelta = -WHEEL_DELTA 表示向下滚一格。
-    tv->OnMouseWheel(pt, -WHEEL_DELTA, 0);
+    CHECK(balloonwjui::DuiHost::DispatchMouseWheel(tv, pt, -WHEEL_DELTA, 0) == true);
     CHECK(sv->GetScrollPos() > 0);
 }
 

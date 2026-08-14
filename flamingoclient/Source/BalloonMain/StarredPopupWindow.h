@@ -34,8 +34,8 @@
 #include <stdint.h>
 #include <vector>
 
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
-#include "../../balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 #include "StarredPopupModel.h"    // StarredPresenceEvent（成员按值持有，需完整类型）
 
 namespace balloonwjui {

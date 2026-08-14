@@ -106,8 +106,8 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(ProjectDir);..\..\balloonui\wtl9.0;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;$(ProjectDir);..\..\..\third-party\balloonui\wtl9.0;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <ExceptionHandling>Sync</ExceptionHandling>
@@ -119,16 +119,17 @@
       <AdditionalOptions>/utf-8 /bigobj /FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
+      <AdditionalLibraryDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\bin\Win32\Debug\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libsodium.lib;gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>$(ProjectDir);..\..\balloonui\wtl9.0;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;$(ProjectDir);..\..\..\third-party\balloonui\wtl9.0;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
       <ExceptionHandling>Sync</ExceptionHandling>
@@ -140,9 +141,10 @@
       <AdditionalOptions>/utf-8 /bigobj /FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
+      <AdditionalLibraryDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\bin\x64\Debug\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libsodium.lib;gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -150,8 +152,8 @@
       <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FunctionLevelLinking>true</FunctionLevelLinking>
-      <AdditionalIncludeDirectories>$(ProjectDir);..\..\balloonui\wtl9.0;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;$(ProjectDir);..\..\..\third-party\balloonui\wtl9.0;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <ExceptionHandling>Sync</ExceptionHandling>
       <PrecompiledHeader />
@@ -162,9 +164,10 @@
       <AdditionalOptions>/utf-8 /bigobj /FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
+      <AdditionalLibraryDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\bin\Win32\Release\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libsodium.lib;gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -172,8 +175,8 @@
       <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FunctionLevelLinking>true</FunctionLevelLinking>
-      <AdditionalIncludeDirectories>$(ProjectDir);..\..\balloonui\wtl9.0;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;$(ProjectDir);..\..\..\third-party\balloonui\wtl9.0;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <ExceptionHandling>Sync</ExceptionHandling>
       <PrecompiledHeader />
@@ -184,12 +187,73 @@
       <AdditionalOptions>/utf-8 /bigobj /FS %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
+      <AdditionalLibraryDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\bin\x64\Release\v143\static;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>libsodium.lib;gdiplus.lib;comctl32.lib;msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="FrameCryptoTests.cpp" />
+    <ClCompile Include="HandshakeLiveTests.cpp" />
+    <ClCompile Include="RelayForwardLiveTests.cpp" />
+    <!-- 中转通道联调用例要自己签一枚中转令牌，直接编进服务端 utils/ 下那份签发实现，
+         而不是在测试里按同样算法重写一遍：令牌格式改动时两边不会各错各的。
+         RelayToken 是纯逻辑，只依赖同目录的 MD5，故连它一起编进来即可。 -->
+    <ClCompile Include="..\..\..\flamingoserver\utils\RelayToken.cpp" />
+    <ClCompile Include="..\..\..\flamingoserver\utils\MD5.cpp" />
+    <ClCompile Include="CryptoBenchTests.cpp" />
+    <ClCompile Include="LoginProgressStateTests.cpp" />
+    <ClCompile Include="..\BalloonAuth\LoginProgressState.cpp" />
+    <ClCompile Include="..\net\FrameCrypto.cpp" />
+    <ClCompile Include="..\net\FramePayload.cpp" />
+    <ClCompile Include="..\net\HandshakeRunner.cpp" />
+    <ClCompile Include="..\ZlibUtil.cpp" />
+    <ClCompile Include="..\zlib1.2.11\adler32.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\compress.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\crc32.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\deflate.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\gzclose.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\gzlib.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\gzread.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\gzwrite.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\infback.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\inffast.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\inflate.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\inftrees.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\trees.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\uncompr.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\zutil.c">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="AboutDlgModelTests.cpp" />
     <ClCompile Include="AccountProtocolTests.cpp" />
     <ClCompile Include="AnnotationModelTests.cpp" />
@@ -237,6 +301,7 @@
     <ClCompile Include="ContactRemarkModelTests.cpp" />
     <ClCompile Include="ContactsOrgStatsTests.cpp" />
     <ClCompile Include="ContactsProtocolTests.cpp" />
+    <ClCompile Include="ContactTagModelTests.cpp" />
     <ClCompile Include="ContactTests.cpp" />
     <ClCompile Include="ConversationListOpsTests.cpp" />
     <ClCompile Include="ConversationsProtocolTests.cpp" />
@@ -248,6 +313,7 @@
     <ClCompile Include="MsgStoreWriteBenchTests.cpp" />
     <ClCompile Include="FileBubbleFormatTests.cpp" />
     <ClCompile Include="FileLocalStoreTests.cpp" />
+    <ClCompile Include="FolderLocalStoreTests.cpp" />
     <ClCompile Include="FileProtocolClientTests.cpp" />
     <ClCompile Include="FileStreamTransferTests.cpp" />
     <ClCompile Include="FrameCodecTests.cpp" />
@@ -286,6 +352,7 @@
     <ClCompile Include="MainPanelUserDataTests.cpp" />
     <ClCompile Include="MemberPickerTreeModelTests.cpp" />
     <ClCompile Include="MessageProtocolTests.cpp" />
+    <ClCompile Include="MouseWheelBubbleTests.cpp" />
     <ClCompile Include="NetSettingsTests.cpp" />
     <ClCompile Include="NotificationSoundTests.cpp" />
     <ClCompile Include="OnlineCapabilityTests.cpp" />
@@ -306,6 +373,15 @@
     <ClCompile Include="RdInputTests.cpp" />
     <ClCompile Include="RichEditContextMenuPlacementTests.cpp" />
     <ClCompile Include="RdRelayFramingTests.cpp" />
+    <ClCompile Include="FolderManifestTests.cpp" />
+    <ClCompile Include="FolderRelayFramingTests.cpp" />
+    <ClCompile Include="ChatFolderStateModelTests.cpp" />
+    <ClCompile Include="FolderRelayClientTests.cpp" />
+    <ClCompile Include="FolderRecvSessionTests.cpp" />
+    <ClCompile Include="FolderSendSessionTests.cpp" />
+    <ClCompile Include="FolderProtocolClientTests.cpp" />
+    <ClCompile Include="FolderInviteNotifyPolicyTests.cpp" />
+    <ClCompile Include="FolderTransferManagerTests.cpp" />
     <ClCompile Include="RdScreenDecoderTests.cpp" />
     <ClCompile Include="RdScreenEncoderTests.cpp" />
     <ClCompile Include="RegisterTests.cpp" />
@@ -346,6 +422,7 @@
     <ClCompile Include="..\BalloonChatWnd\ChatTimeSeparator.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatFileLocation.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatFileStateModel.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatFolderStateModel.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatFileVisual.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatFontMap.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatHeaderInfo.cpp" />
@@ -380,6 +457,7 @@
     <ClCompile Include="..\BalloonContact\ContactIcons.cpp" />
     <ClCompile Include="..\BalloonContact\ContactLayout.cpp" />
     <ClCompile Include="..\BalloonContact\ContactModel.cpp" />
+    <ClCompile Include="..\BalloonContact\ContactTagModel.cpp" />
     <ClCompile Include="..\BalloonContact\TagChip.cpp" />
     <ClCompile Include="..\BalloonGroupManage\AnnouncePopupPolicy.cpp" />
     <ClCompile Include="..\BalloonGroupManage\GroupManageButton.cpp" />
@@ -391,6 +469,7 @@
     <ClCompile Include="..\BalloonGroupManage\GroupManagePaint.cpp" />
     <ClCompile Include="..\BalloonHistory\AnnounceStore.cpp" />
     <ClCompile Include="..\BalloonHistory\FileLocalStore.cpp" />
+    <ClCompile Include="..\BalloonHistory\FolderLocalStore.cpp" />
     <ClCompile Include="..\BalloonHistory\HistoryHighlightLabel.cpp" />
     <ClCompile Include="..\BalloonHistory\HistoryModel.cpp" />
     <ClCompile Include="..\BalloonHistory\HistoryContentView.cpp" />
@@ -416,6 +495,7 @@
     <ClCompile Include="..\BalloonMain\ContactRemarkModel.cpp" />
     <ClCompile Include="..\BalloonMain\ContactsOrgStats.cpp" />
     <ClCompile Include="..\BalloonMain\ConversationListOps.cpp" />
+    <ClCompile Include="..\BalloonMain\FolderInviteNotifyPolicy.cpp" />
     <ClCompile Include="..\BalloonMain\FavoritesModel.cpp" />
     <ClCompile Include="..\BalloonMain\StarredModel.cpp" />
     <ClCompile Include="..\BalloonMain\StarredPopupModel.cpp" />
@@ -488,6 +568,8 @@
     <ClCompile Include="..\net\ConversationsProtocolClient.cpp" />
     <ClCompile Include="..\net\FavoriteProtocolClient.cpp" />
     <ClCompile Include="..\net\StarredProtocolClient.cpp" />
+    <ClCompile Include="..\net\ContactTagProtocolClient.cpp" />
+    <ClCompile Include="ContactTagProtocolClientTests.cpp" />
     <ClCompile Include="..\net\FileProtocolClient.cpp" />
     <ClCompile Include="..\net\FileStreamTransfer.cpp" />
     <ClCompile Include="..\net\FrameCodec.cpp" />
@@ -500,25 +582,28 @@
     <ClCompile Include="..\net\LoginProtocolClient.cpp" />
     <ClCompile Include="..\net\UpdateProtocolClient.cpp" />
     <ClCompile Include="..\Update\UpdateViewModel.cpp" />
-    <ClCompile Include="..\..\iAutoUpdate\CommandLine.cpp" />
-    <ClCompile Include="..\..\iAutoUpdate\ZipPathSafety.cpp" />
-    <ClCompile Include="..\..\iAutoUpdate\ZipReader.cpp" />
+    <ClCompile Include="..\..\FlamingoUpdater\CommandLine.cpp" />
+    <ClCompile Include="..\..\FlamingoUpdater\ZipPathSafety.cpp" />
+    <ClCompile Include="..\..\FlamingoUpdater\ZipReader.cpp" />
     <ClCompile Include="..\net\MessageProtocolClient.cpp" />
     <ClCompile Include="..\net\ProfileProtocolClient.cpp" />
     <ClCompile Include="..\net\RegisterProtocolClient.cpp" />
     <ClCompile Include="..\net\RemoteDesktopProtocolClient.cpp" />
+    <ClCompile Include="..\net\FolderProtocolClient.cpp" />
     <ClCompile Include="..\net\Sha256.cpp" />
     <ClCompile Include="..\net\TransferOwnerRegistry.cpp" />
     <ClCompile Include="..\RemoteDesktop\CaptureFallbackPolicy.cpp" />
     <ClCompile Include="..\RemoteDesktop\RdInputEncoder.cpp" />
     <ClCompile Include="..\RemoteDesktop\RdInputInjector.cpp" />
     <ClCompile Include="..\RemoteDesktop\RdRelayFraming.cpp" />
+    <ClCompile Include="..\FolderTransfer\FolderManifest.cpp" />
+    <ClCompile Include="..\FolderTransfer\FolderRelayFraming.cpp" />
     <ClCompile Include="..\RemoteDesktop\RdScreenDecoder.cpp" />
     <ClCompile Include="..\RemoteDesktop\ScreenFrameEncoder.cpp" />
     <ClCompile Include="..\..\..\third-party\sqlite-src-3530100\sqlite3.c" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\balloonui\balloonui\balloonui_static.vcxproj">
+    <ProjectReference Include="..\..\..\third-party\balloonui\balloonui\balloonui_static.vcxproj">
       <Project>{e5f9b2a1-6c84-4de3-9c75-3b8a4d2e7f60}</Project>
     </ProjectReference>
     <ProjectReference Include="..\..\..\third-party\opus-1.5.2\opus_static.vcxproj">

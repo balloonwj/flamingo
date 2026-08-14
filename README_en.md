@@ -64,7 +64,7 @@ flamingoclient/
 │                   (main panel, chat window, contacts, group management, history, screenshot,
 │                   remote desktop, ...); net/ holds the protocol layer
 ├── balloonui/      Owner-drawn control library (a separate git repository, see below)
-├── iAutoUpdate/    Zip extractor used by the auto-updater
+├── FlamingoUpdater/    Zip extractor used by the auto-updater
 └── Bin/            Run directory with Skins / Image / Face / Sound / config resources
 
 flamingoAdmin/
@@ -233,7 +233,7 @@ Open `flamingoclient/FlamingoClient.sln` with Visual Studio 2022. The solution h
 | `Flamingo` | The PC client itself |
 | `balloonui_static` | Owner-drawn control library that renders the client UI |
 | `FlamingoUnit` | Client unit tests (Catch2) |
-| `iUpdateAuto` | Zip extractor used by the auto-updater |
+| `FlamingoUpdater` | Zip extractor used by the auto-updater |
 | `opus_static` / `speexdsp_static` | Third-party audio libraries used by audio/video calls |
 
 ##### Output directories
@@ -282,9 +282,10 @@ resulting `FlamingoUnit.exe`; it can filter by test name or tag.
 
 ##### About balloonui
 
-`flamingoclient/balloonui/` is the owner-drawn control library used by the client. **It is a separate git
-repository** with its own history and remote, and is not committed together with the main repository.
-Changes inside that directory must be committed to its own repository.
+`third-party/balloonui/` is the owner-drawn control library, shared by the PC client and the flamingoAdmin
+console. **It is a separate git repository** with its own history and remote, and is not committed together
+with the main repository. Changes inside that directory must be committed to its own repository. (Before
+2026-08-13 it lived at `flamingoclient/balloonui/`.)
 
 #### Enterprise Admin Console
 

@@ -177,6 +177,7 @@ static void readCell(sqlite3_stmt* stmt, int col, sqliteapi::SqliteCell& cell)
 
 CDatabaseSqlite::CDatabaseSqlite(void)
     : m_db(NULL)
+    , m_bInTransaction(false)
 {
 }
 
@@ -201,6 +202,31 @@ void CDatabaseSqlite::logDbError(const char* operation, const char* sql)
     LOGSYSE("db error, operation: %s, rc: %d, error: %s, sql: %s",
             operation, sqlite3_errcode(m_db), sqlite3_errmsg(m_db),
             sql != NULL ? sql : "(none)");
+}
+
+void CDatabaseSqlite::noteTransactionAbortedBySqlite(const char* sql)
+{
+    //本来就没在事务里，无从谈起
+    if (!m_bInTransaction)
+        return;
+
+    if (m_db == NULL)
+    {
+        m_bInTransaction = false;
+        return;
+    }
+
+    //返回 0 表示仍处于事务中（非自动提交状态），说明只是这一条语句失败，事务还在，
+    //调用方仍可以选择继续、或者显式回滚
+    if (sqlite3_get_autocommit(m_db) == 0)
+        return;
+
+    //连接已经回到自动提交状态，说明 SQLite 把整个事务回滚掉了。
+    //此后再发的语句都是各自独立提交的，整批操作的原子性已经不存在，必须整体判失败
+    m_bInTransaction = false;
+    LOGE("db error: sqlite rolled the whole transaction back automatically after this statement failed, "
+         "so the operation must be treated as failed as a whole; any further statement would be committed on its own, sql: %s",
+         sql != NULL ? sql : "(none)");
 }
 
 bool CDatabaseSqlite::execSimpleSql(const char* sql)
@@ -295,6 +321,9 @@ bool CDatabaseSqlite::initialize(const std::string& dbPath)
         m_db = NULL;
     }
 
+    //连接一关，它上面开着的事务就随之消失了，标志不能跨着重新打开留下来
+    m_bInTransaction = false;
+
     m_strDbPath = dbPath;
 
     if (!ensureParentDirectory(dbPath))
@@ -358,6 +387,7 @@ QueryResult* CDatabaseSqlite::query(const char* sql)
     if (rc != SQLITE_OK)
     {
         logDbError("query(prepare)", translated.c_str());
+        noteTransactionAbortedBySqlite(translated.c_str());
         return NULL;
     }
 
@@ -374,6 +404,9 @@ QueryResult* CDatabaseSqlite::query(const char* sql)
         if (rc != SQLITE_DONE)
         {
             logDbError("query(step)", translated.c_str());
+            sqlite3_finalize(stmt);
+            noteTransactionAbortedBySqlite(translated.c_str());
+            return NULL;
         }
 
         sqlite3_finalize(stmt);
@@ -413,6 +446,7 @@ QueryResult* CDatabaseSqlite::query(const char* sql)
 
         logDbError("query(step)", translated.c_str());
         sqlite3_finalize(stmt);
+        noteTransactionAbortedBySqlite(translated.c_str());
         return NULL;
     }
 
@@ -486,6 +520,8 @@ bool CDatabaseSqlite::execute(const char* sql, uint32_t& uAffectedCount, int& nE
             sqlite3_free(szErrMsg);
         }
 
+        //语句失败时，SQLite 可能顺手把整个事务也回滚掉了，核对一次并记日志
+        noteTransactionAbortedBySqlite(translated.c_str());
         return false;
     }
 
@@ -519,6 +555,108 @@ bool CDatabaseSqlite::pexecute(const char* format, ...)
 
     //复用 execute()，把错误日志集中在一处
     return execute(szQuery);
+}
+
+bool CDatabaseSqlite::beginTransaction()
+{
+    if (m_db == NULL)
+    {
+        LOGSYSE("begin transaction failed, sqlite not opened");
+        return false;
+    }
+
+    //嵌套一律禁止，语义见 dbapi/IDatabase.h。SQLite 自己也会对事务里再开事务报
+    //"cannot start a transaction within a transaction"，这里提前拦下并给出统一的日志
+    if (inTransaction())
+    {
+        LOGE("begin transaction failed, a transaction is already active on this connection, nesting is not supported");
+        return false;
+    }
+
+    //刻意用 BEGIN IMMEDIATE 而不是 SQLite 默认的 BEGIN（deferred）。
+    //deferred 事务开启时只拿读锁，写锁推迟到第一条写语句才去拿；而在 WAL 模式下，
+    //一个已经持有读快照的事务再去升级写锁时，如果期间别的连接写过库，SQLite 直接返回
+    //SQLITE_BUSY_SNAPSHOT，**并且不会调用 busy handler**（见 sqlite3/sqlite3.c 中
+    //btreeBeginTrans 结尾的循环条件：`(rc&0xFF)==SQLITE_BUSY && pBt->inTransaction==TRANS_NONE
+    //&& btreeInvokeBusyHandler(pBt)` —— 已经开着事务时 inTransaction 不为 TRANS_NONE，
+    //整个重试循环被跳过）。也就是说 applyConnectionSettings 里设的 busy_timeout
+    //在这条路径上完全不起作用，并发稍高就会立刻失败。
+    //BEGIN IMMEDIATE 在事务尚未开启时就去拿写锁，此时 inTransaction 仍是 TRANS_NONE，
+    //busy handler 正常生效，会按 busy_timeout 退避重试。
+    //代价是所有事务（哪怕只读）都会互相串行，本项目目前的事务都是写事务，可以接受
+    if (!execute("BEGIN IMMEDIATE"))
+    {
+        //失败原因已由 execute 打过日志
+        LOGE("begin transaction failed");
+        return false;
+    }
+
+    m_bInTransaction = true;
+    LOGD("sqlite transaction begun");
+    return true;
+}
+
+bool CDatabaseSqlite::commit()
+{
+    if (!inTransaction())
+    {
+        //可能是压根没开事务，也可能是事务已经被 SQLite 自动回滚掉了
+        m_bInTransaction = false;
+        LOGW("commit ignored, no active transaction on this connection");
+        return false;
+    }
+
+    bool bCommitted = execute("COMMIT");
+
+    //这里**不能**像 MySQL 那样无条件清标志：SQLite 的 COMMIT 失败（典型是撞上
+    //SQLITE_BUSY，别的连接还持着读快照）之后事务是<u>仍然开着</u>的，必须再显式回滚
+    //一次才算了结。所以以 SQLite 自己的状态为准来更新标志位
+    m_bInTransaction = (sqlite3_get_autocommit(m_db) == 0);
+
+    if (!bCommitted)
+    {
+        LOGE("commit transaction failed, the whole operation must be treated as failed, transaction still active: %d",
+             m_bInTransaction ? 1 : 0);
+        return false;
+    }
+
+    LOGD("sqlite transaction committed");
+    return true;
+}
+
+bool CDatabaseSqlite::rollback()
+{
+    if (!inTransaction())
+    {
+        //事务已经不在了 —— 要么压根没开，要么之前某条语句出错时被 SQLite 自动回滚掉了。
+        //这种情况下再发 ROLLBACK 只会换来一条 "no transaction is active" 的错误日志
+        m_bInTransaction = false;
+        LOGW("rollback ignored, no active transaction on this connection");
+        return false;
+    }
+
+    bool bRolledBack = execute("ROLLBACK");
+    m_bInTransaction = (sqlite3_get_autocommit(m_db) == 0);
+
+    if (!bRolledBack)
+    {
+        LOGE("rollback transaction failed, transaction still active: %d", m_bInTransaction ? 1 : 0);
+        return false;
+    }
+
+    LOGD("sqlite transaction rolled back");
+    return true;
+}
+
+bool CDatabaseSqlite::inTransaction() const
+{
+    if (m_db == NULL)
+        return false;
+
+    //以 SQLite 自己的状态为准，而不是以本类的 m_bInTransaction 为准：
+    //事务可能被 SQLite 在出错时自动回滚掉（见 noteTransactionAbortedBySqlite 的注释），
+    //也可能被别处直接发裸 SQL 开启。sqlite3_get_autocommit 返回 0 即表示事务进行中
+    return sqlite3_get_autocommit(m_db) == 0;
 }
 
 uint32_t CDatabaseSqlite::getInsertID()

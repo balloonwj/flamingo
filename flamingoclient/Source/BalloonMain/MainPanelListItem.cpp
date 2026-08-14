@@ -40,7 +40,6 @@ extern CAppModule _Module;
 #include "MainPanelListItem.h"
 #include "MainPanelMockData.h"
 #include "PresenceBadge.h"          // DrawPresenceBadge（头像右下角的状态徽标）
-#include "MainPanelScrollView.h"
 
 namespace balloonmain {
 
@@ -273,11 +272,6 @@ void MainPanelListItem::SetHoverFill(COLORREF c)
 {
     m_hoverFill = c;
     Invalidate();
-}
-
-bool MainPanelListItem::OnMouseWheel(POINT pt, short zDelta, UINT mkFlags)
-{
-    return ForwardWheelToScrollView(this, pt, zDelta, mkFlags);
 }
 
 bool MainPanelListItem::OnMouseEnter()

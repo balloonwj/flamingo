@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  ProfileTests.cpp
  *
  *  个人信息对话框的契约测试：
@@ -21,8 +21,8 @@
 
 #include "../BalloonProfile/ProfileLayout.h"
 #include "../BalloonProfile/ProfileModel.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiComboBox.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 
 using namespace balloonwjui;
 using namespace balloonprofile;
@@ -87,7 +87,8 @@ TEST_CASE("P3 查看态 / 编辑态都含四个状态胶囊", "[profile]")
     CHECK(viewRoot->FindCtrlById(kIdPillOnline)    != nullptr);
     CHECK(viewRoot->FindCtrlById(kIdPillAway)      != nullptr);
     CHECK(viewRoot->FindCtrlById(kIdPillBusy)      != nullptr);
-    CHECK(viewRoot->FindCtrlById(kIdPillInvisible) != nullptr);
+    // 隐身状态已去掉，编号 913 的胶囊不应再存在（防止有人把它加回来）
+    CHECK(viewRoot->FindCtrlById(913)              == nullptr);
 
     // 胶囊代表的状态值应与 id 顺序一致。
     CHECK(GetProfilePillStatus(viewRoot.get(), kIdPillOnline)
@@ -96,8 +97,6 @@ TEST_CASE("P3 查看态 / 编辑态都含四个状态胶囊", "[profile]")
           == kProfileStatusAway);
     CHECK(GetProfilePillStatus(viewRoot.get(), kIdPillBusy)
           == kProfileStatusBusy);
-    CHECK(GetProfilePillStatus(viewRoot.get(), kIdPillInvisible)
-          == kProfileStatusInvisible);
 }
 
 TEST_CASE("P4 查看态含六个只读值文本控件", "[profile]")
@@ -230,8 +229,8 @@ TEST_CASE("P12 ProfileModel.SetStatus 合法值生效", "[profile][model]")
     model.SetStatus(kProfileStatusBusy);
     CHECK(model.Status() == kProfileStatusBusy);
 
-    model.SetStatus(kProfileStatusInvisible);
-    CHECK(model.Status() == kProfileStatusInvisible);
+    model.SetStatus(kProfileStatusAway);
+    CHECK(model.Status() == kProfileStatusAway);
 }
 
 TEST_CASE("P13 ProfileModel.SetStatus 越界被忽略", "[profile][model]")
@@ -257,8 +256,6 @@ TEST_CASE("P14 ProfileStatusText / ProfileStatusColor 边界正确", "[profile][
           == CString(_T("离开")));
     CHECK(CString(ProfileStatusText(kProfileStatusBusy))
           == CString(_T("忙碌")));
-    CHECK(CString(ProfileStatusText(kProfileStatusInvisible))
-          == CString(_T("隐身")));
 
     // 越界回退到"在线"。
     CHECK(CString(ProfileStatusText(999)) == CString(_T("在线")));

@@ -30,18 +30,12 @@ bool PickNonBlank(const CString& s, CString& out)
 
 } // anonymous namespace
 
-CString ResolveContactDisplayName(const CString& remark,
-                                  const CString& nickname,
-                                  const CString& username,
-                                  UINT userid)
+CString ResolveContactRealName(const CString& nickname,
+                               const CString& username,
+                               UINT userid)
 {
     CString name;
 
-    //备注优先——这正是"改备注"这个功能的意义所在：本人给对方起的名字要盖过昵称。
-    if (PickNonBlank(remark, name))
-    {
-        return name;
-    }
     if (PickNonBlank(nickname, name))
     {
         return name;
@@ -51,9 +45,37 @@ CString ResolveContactDisplayName(const CString& remark,
         return name;
     }
 
-    //三者都没有：拼一个能让人对上号的兜底名，总好过显示空白。
+    //两者都没有：拼一个能让人对上号的兜底名，总好过显示空白。
     name.Format(_T("用户%u"), userid);
     return name;
+}
+
+CString ResolveContactDisplayName(const CString& remark,
+                                  const CString& nickname,
+                                  const CString& username,
+                                  UINT userid)
+{
+    const CString realName = ResolveContactRealName(nickname, username, userid);
+
+    //没有备注（或备注只有空白字符）：就显示真名，末尾不要留一对空括号。
+    CString trimmedRemark;
+    if (!PickNonBlank(remark, trimmedRemark))
+    {
+        return realName;
+    }
+
+    //备注与真名一模一样时不再重复一遍，否则会显示成"张三（张三）"。
+    if (trimmedRemark == realName)
+    {
+        return realName;
+    }
+
+    //括号用全角：显示名两侧多是中文，半角括号夹在中文之间会显得两边贴得太紧。
+    CString display = realName;
+    display += _T("（");
+    display += trimmedRemark;
+    display += _T("）");
+    return display;
 }
 
 RemarkCommitDecision DecideRemarkCommit(const CString& edited,

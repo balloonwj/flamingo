@@ -27,8 +27,8 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
-#include "../../balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 
 /**
  *  CBalloonKickoutDlg —— 被踢下线提示框（模态，owner 一般为主面板）。

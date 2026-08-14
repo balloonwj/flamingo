@@ -364,6 +364,18 @@ CREATE TABLE IF NOT EXISTS t_contact_remark
 
 CREATE INDEX IF NOT EXISTS t_contact_remark_idx_user ON t_contact_remark(f_userid);
 
+CREATE TABLE IF NOT EXISTS t_contact_tag
+(
+    f_userid INTEGER NOT NULL,    -- 标签归属用户userid（谁贴的）
+    f_target_userid INTEGER NOT NULL,    -- 被贴标签的联系人userid（贴给谁）
+    f_tag VARCHAR(16) COLLATE NOCASE NOT NULL DEFAULT '',    -- 标签文本，去掉首尾空白后的内容
+    f_order INTEGER NOT NULL DEFAULT 0,    -- 同一联系人下的显示顺序，值小者靠前，从0起算
+    f_update_time INTEGER NOT NULL DEFAULT 0,    -- 最近一次整份覆盖的时间(Unix毫秒)
+    PRIMARY KEY (f_userid, f_target_userid, f_tag)
+);
+
+CREATE INDEX IF NOT EXISTS t_contact_tag_idx_user ON t_contact_tag(f_userid);
+
 CREATE TABLE IF NOT EXISTS t_blacklist
 (
     f_userid INTEGER NOT NULL,    -- 拉黑发起方userid

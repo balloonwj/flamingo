@@ -26,11 +26,11 @@ void Socket::listen()
     sockets::listenOrDie(m_sockfd);
 }
 
-int Socket::accept(InetAddress* peeraddr)
+SOCKET Socket::accept(InetAddress* peeraddr)
 {
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof addr);
-    int connfd = sockets::accept(m_sockfd, &addr);
+    SOCKET connfd = sockets::accept(m_sockfd, &addr);
     if (connfd >= 0)
     {
         peeraddr->setSockAddrInet(addr);
@@ -259,7 +259,7 @@ void sockets::setReusePort(SOCKET sockfd, bool on)
 #endif
 }
 
-SOCKET sockets::connect(SOCKET sockfd, const struct sockaddr_in& addr)
+int sockets::connect(SOCKET sockfd, const struct sockaddr_in& addr)
 {
     return ::connect(sockfd, sockaddr_cast(&addr), static_cast<socklen_t>(sizeof addr));
 }

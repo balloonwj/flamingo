@@ -21,9 +21,9 @@
 #include <vector>
 #include "../RemoteDesktop/RdRelayClient.h"      // winsock2.h + RdRelayClient / RdRelayClientHandler
 #include "../RemoteDesktop/RdScreenDecoder.h"     // RdScreenDecoder（含 windows.h）
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
-#include "../../balloonui/balloonui/DuiControl.h"
-#include "../../balloonui/balloonui/DuiNotify.h"   // WM_DUI_NOTIFY / DuiNotify（全屏按钮点击）
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/DuiControl.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"   // WM_DUI_NOTIFY / DuiNotify（全屏按钮点击）
 #include "RdViewerToolbar.h"                        // CRdViewerToolbar（m_toolbar 成员需完整类型）
 
 //自绘画面控件：把当前解码画面按本控件矩形缩放绘制；未就绪时填黑底。

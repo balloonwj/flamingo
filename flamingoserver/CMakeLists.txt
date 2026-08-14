@@ -22,6 +22,14 @@ link_directories(
 # 到处加条件编译，不划算。
 option(WITH_MYSQL "编译 MySQL 数据库后端" ON)
 
+# 协议加密依赖 libsodium（net/FrameCrypto.cpp），三个服务与单元测试都要链它。
+# 头文件与静态库都随仓库提供，放在 deps/libsodium 下：源码包在 ../third-party，
+# 编译产物统一收在这里，Windows 四个变体与 Linux 各一份，见 deps/libsodium/README.txt。
+# 用完整路径链静态库而不是写库名，是为了避免链接器在系统目录里找到另一份 libsodium。
+set(LIBSODIUM_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/deps/libsodium/include)
+set(LIBSODIUM_LIB ${PROJECT_SOURCE_DIR}/deps/libsodium/lib/linux/libsodium.a)
+include_directories(${LIBSODIUM_INCLUDE_DIR})
+
 if (WITH_MYSQL)
     # 推荐使用 CentOS 7.0 及以上系统
     # CentOS 7.0 及以上系统默认安装的是mariadb，安装方法
@@ -59,6 +67,8 @@ net/Poller.cpp
 net/PollPoller.cpp
 net/ProtocolStream.cpp
 net/FrameCodec.cpp
+net/FrameCrypto.cpp
+net/FramePayload.cpp
 net/SelectPoller.cpp
 net/Sockets.cpp
 net/TcpClient.cpp
@@ -183,6 +193,7 @@ set(fileserver_srcs
 fileserversrc/main.cpp
 fileserversrc/FileServer.cpp
 fileserversrc/FileSession.cpp
+fileserversrc/FolderRelayEndpoint.cpp
 fileserversrc/FileManager.cpp
 fileserversrc/UpdatePackageIndex.cpp
 fileserversrc/TcpSession.cpp)
@@ -194,28 +205,29 @@ imgserversrc/RelaySession.cpp
 imgserversrc/RelayHub.cpp
 fileserversrc/FileServer.cpp
 fileserversrc/FileSession.cpp
+fileserversrc/FolderRelayEndpoint.cpp
 fileserversrc/FileManager.cpp
 fileserversrc/UpdatePackageIndex.cpp
 fileserversrc/TcpSession.cpp)
 
 
-add_executable(chatserver ${net_srcs} ${json_srcs}  ${chatserver_srcs} ${dbapi_srcs} ${mysqlapi_srcs} ${sqliteapi_srcs} ${mysqlmgr_srcs} ${zlib_srcs} ${utils_srcs} chatserversrc/LoginProtocol.cpp utils/PasswordHasher.cpp utils/Sha256.cpp chatserversrc/ContactsProtocol.cpp chatserversrc/FavoriteProtocol.cpp chatserversrc/FavoriteManager.cpp chatserversrc/StarredProtocol.cpp chatserversrc/StarredManager.cpp chatserversrc/ContactRemarkManager.cpp chatserversrc/UpdateProtocol.cpp chatserversrc/ClientVersionManager.cpp chatserversrc/UpdatePackageScanner.cpp chatserversrc/ProfileProtocol.cpp chatserversrc/RegisterProtocol.cpp chatserversrc/RegisterService.cpp chatserversrc/AccountName.cpp chatserversrc/SmsCodeManager.cpp chatserversrc/FriendProtocol.cpp chatserversrc/MessageProtocol.cpp chatserversrc/GroupProtocol.cpp chatserversrc/GroupPermission.cpp chatserversrc/CardProtocol.cpp chatserversrc/FileProtocol.cpp chatserversrc/FileStoreManager.cpp chatserversrc/GroupFileProtocol.cpp chatserversrc/GroupFileManager.cpp chatserversrc/RemoteDesktopProtocol.cpp chatserversrc/RemoteDesktopManager.cpp chatserversrc/CallProtocol.cpp chatserversrc/CallManager.cpp)
+add_executable(chatserver ${net_srcs} ${json_srcs}  ${chatserver_srcs} ${dbapi_srcs} ${mysqlapi_srcs} ${sqliteapi_srcs} ${mysqlmgr_srcs} ${zlib_srcs} ${utils_srcs} chatserversrc/LoginProtocol.cpp utils/PasswordHasher.cpp utils/Sha256.cpp chatserversrc/ContactsProtocol.cpp chatserversrc/FavoriteProtocol.cpp chatserversrc/FavoriteManager.cpp chatserversrc/StarredProtocol.cpp chatserversrc/StarredManager.cpp chatserversrc/ContactRemarkManager.cpp chatserversrc/ContactTagProtocol.cpp chatserversrc/ContactTagManager.cpp chatserversrc/UpdateProtocol.cpp chatserversrc/ClientVersionManager.cpp chatserversrc/UpdatePackageScanner.cpp chatserversrc/ProfileProtocol.cpp chatserversrc/RegisterProtocol.cpp chatserversrc/RegisterService.cpp chatserversrc/AccountName.cpp chatserversrc/SmsCodeManager.cpp chatserversrc/FriendProtocol.cpp chatserversrc/MessageProtocol.cpp chatserversrc/GroupProtocol.cpp chatserversrc/GroupPermission.cpp chatserversrc/CardProtocol.cpp chatserversrc/FileProtocol.cpp chatserversrc/FileStoreManager.cpp chatserversrc/GroupFileProtocol.cpp chatserversrc/GroupFileManager.cpp chatserversrc/RemoteDesktopProtocol.cpp chatserversrc/RemoteDesktopManager.cpp chatserversrc/CallProtocol.cpp chatserversrc/CallManager.cpp chatserversrc/FolderTransferManager.cpp chatserversrc/FolderTransferProtocol.cpp)
 #光包含库目录是没用的，还必须使用TARGET_LINK_LIBRARIES链接该库
 #dl / pthread 是 sqlite3 amalgamation 在 Linux 上的依赖：前者用于动态加载扩展，
 #后者用于 SQLITE_THREADSAFE 的互斥实现。sqlite3.c 走 C 编译器，拿不到 CMAKE_CXX_FLAGS
 #里的 -pthread，所以这里显式链上，不依赖链接阶段的传递
 if (WITH_MYSQL)
-    TARGET_LINK_LIBRARIES(chatserver mysqlclient dl pthread)
+    TARGET_LINK_LIBRARIES(chatserver mysqlclient dl pthread ${LIBSODIUM_LIB})
 else()
-    TARGET_LINK_LIBRARIES(chatserver dl pthread)
+    TARGET_LINK_LIBRARIES(chatserver dl pthread ${LIBSODIUM_LIB})
 endif()
 
 # fileserver / imgserver 自 v2 起需 jsoncpp 解析附件描述符
-add_executable(fileserver ${net_srcs} ${json_srcs} ${fileserver_srcs} ${utils_srcs})
-TARGET_LINK_LIBRARIES(fileserver)
+add_executable(fileserver ${net_srcs} ${json_srcs} ${fileserver_srcs} ${utils_srcs} ${zlib_srcs})
+TARGET_LINK_LIBRARIES(fileserver ${LIBSODIUM_LIB})
 
-add_executable(imgserver ${net_srcs} ${json_srcs} ${imgserver_srcs} ${utils_srcs})
-TARGET_LINK_LIBRARIES(imgserver)
+add_executable(imgserver ${net_srcs} ${json_srcs} ${imgserver_srcs} ${utils_srcs} ${zlib_srcs})
+TARGET_LINK_LIBRARIES(imgserver ${LIBSODIUM_LIB})
 # ===== unit tests (doctest) =====
 # Standalone test runner for the enterprise org-structure pure-logic modules.
 # Independent of the chatserver / fileserver / imgserver binaries.
@@ -224,6 +236,11 @@ tests/test_main.cpp
 tests/test_department_path.cpp
 tests/test_department_msg.cpp
 tests/test_framecodec.cpp
+# 帧压缩往返用例（Suite FC）。windowsproj/Tests.vcxproj 一直列着它，只有这里漏了，
+# 于是 FC1 / FC2 两条用例在 Linux 上从未被编译进测试程序、也就从未运行过。
+# 它依赖的实现（net/FrameCodec.cpp 与 zlib1.2.11/ZlibUtil.cpp）本来就在清单里，
+# 补上这一行即可，不需要额外添加实现文件。
+tests/test_framecompress.cpp
 tests/test_passwordhasher.cpp
 tests/test_loginprotocol.cpp
 tests/test_contactsprotocol.cpp
@@ -242,9 +259,14 @@ tests/test_accountname.cpp
 tests/test_friendprotocol.cpp
 tests/test_sha256.cpp
 tests/test_contactremarkmanager.cpp
+tests/test_contacttagprotocol.cpp
+tests/test_contacttagmanager.cpp
 tests/test_adminbootstrap.cpp
 tests/test_apppath.cpp
 tests/test_serverconfigloader.cpp
+# 网络 I/O 工作线程数配置项的取值判定用例（Suite IOT）。被测的两个函数就在
+# utils/ServerConfigLoader.cpp 里，而该文件已在下方的实现清单中，不需要再补实现文件
+tests/test_iothreadcount.cpp
 tests/test_asynclog.cpp
 tests/test_messageprotocol.cpp
 tests/test_messagepinmanager.cpp
@@ -253,6 +275,8 @@ tests/test_grouppermission.cpp
 tests/test_cardprotocol.cpp
 tests/test_filetoken.cpp
 tests/test_relaytoken.cpp
+tests/test_filesessionremoval.cpp
+tests/test_folderrelayhub.cpp
 tests/test_remotedesktopprotocol.cpp
 tests/test_callprotocol.cpp
 tests/test_callmanager.cpp
@@ -262,6 +286,10 @@ tests/test_sqlite_translator.cpp
 tests/test_sqlite_database.cpp
 tests/test_sqlite_schema.cpp
 tests/test_sqldialect.cpp
+# 事务接口（Suite DBT）与断线重试策略（Suite DRP）的用例。
+# DRP 那一套只依赖 dbapi/DbRetryPolicy.h 里的纯函数，不需要链接 MySQL 客户端库，
+# 所以带 FLAMINGO_NO_MYSQL 编出来的默认测试目标也能跑
+tests/test_dbtransaction.cpp
 tests/test_announcementprotocol.cpp
 tests/test_updateprotocol.cpp
 tests/test_clientversionmanager.cpp
@@ -287,6 +315,10 @@ chatserversrc/SmsCodeManager.cpp
 chatserversrc/FriendProtocol.cpp
 # ContactRemarkManager 走 DbFactory 取连接，测试里对着临时 .db 文件真的读写 t_contact_remark
 chatserversrc/ContactRemarkManager.cpp
+# tests/test_contacttagprotocol.cpp 与 tests/test_contacttagmanager.cpp 用到的实现。
+# ContactTagManager 同样走 DbFactory，测试里对着临时 .db 文件真的读写 t_contact_tag
+chatserversrc/ContactTagProtocol.cpp
+chatserversrc/ContactTagManager.cpp
 # AdminManager 同样走 DbFactory，ADB 套用例对着临时 .db 文件真的读写 t_admin
 chatserversrc/AdminManager.cpp
 # MessageManager 走 DbFactory 取连接，CVB 套计时用例对着临时 .db 文件真的建会话、灌消息
@@ -302,6 +334,10 @@ chatserversrc/RemoteDesktopProtocol.cpp
 chatserversrc/RemoteDesktopManager.cpp
 chatserversrc/CallProtocol.cpp
 chatserversrc/CallManager.cpp
+tests/test_foldertransfermanager.cpp
+chatserversrc/FolderTransferManager.cpp
+tests/test_foldertransferprotocol.cpp
+chatserversrc/FolderTransferProtocol.cpp
 chatserversrc/AnnouncementProtocol.cpp
 chatserversrc/UpdateProtocol.cpp
 # ClientVersionManager 经 DbFactory 取连接，CVM 套用例对着临时 .db 文件真的读 t_client_version
@@ -311,6 +347,10 @@ fileserversrc/UpdatePackageIndex.cpp
 chatserversrc/UpdatePackageScanner.cpp
 utils/FileEnum.cpp
 net/FrameCodec.cpp
+# ServerConfigLoader 的 InitProtocolEncryption 依赖 FrameCrypto；
+# FramePayload 与 FrameCodec 同属帧处理模块，一并编进来（它依赖下面的 zlib）
+net/FrameCrypto.cpp
+net/FramePayload.cpp
 utils/PasswordHasher.cpp
 utils/MD5.cpp
 # 管理端建员工 / 重置口令时由服务端自己算 SHA256(明文)，故测试程序也要编进来
@@ -341,13 +381,13 @@ dbapi/SqlDialect.cpp
 base/AsyncLog.cpp
 base/Platform.cpp
 )
-add_executable(flamingo_tests ${test_srcs} ${json_srcs})
+add_executable(flamingo_tests ${test_srcs} ${json_srcs} ${zlib_srcs})
 # 测试程序只跑 SQLite（MPM 套用临时 .db 文件），不需要也不该拖上 libmysqlclient。
 # 这里单独给测试目标定义 FLAMINGO_NO_MYSQL，使 DbFactory 编出不含 MySQL 分支的版本 ——
 # 与全局的 WITH_MYSQL 开关互不影响，主程序仍照常带 MySQL 后端。
 target_compile_definitions(flamingo_tests PRIVATE FLAMINGO_NO_MYSQL)
 #理由同 chatserver：测试程序里编进了 sqlite3 amalgamation
-TARGET_LINK_LIBRARIES(flamingo_tests dl pthread)
+TARGET_LINK_LIBRARIES(flamingo_tests dl pthread ${LIBSODIUM_LIB})
 
 # 第二个测试目标：带 MySQL 后端的同一套用例。
 #
@@ -361,6 +401,6 @@ TARGET_LINK_LIBRARIES(flamingo_tests dl pthread)
 # 不设 FLAMINGO_TEST_MYSQL 时它跑的仍是 SQLite，与 flamingo_tests 等价。
 if (WITH_MYSQL)
     add_executable(flamingo_tests_mysql ${test_srcs} ${json_srcs} ${mysqlapi_srcs}
-                   mysqlmgr/MysqlManager.cpp)
-    TARGET_LINK_LIBRARIES(flamingo_tests_mysql dl pthread ${MYSQL_LIB})
+                   ${zlib_srcs} mysqlmgr/MysqlManager.cpp)
+    TARGET_LINK_LIBRARIES(flamingo_tests_mysql dl pthread ${MYSQL_LIB} ${LIBSODIUM_LIB})
 endif()

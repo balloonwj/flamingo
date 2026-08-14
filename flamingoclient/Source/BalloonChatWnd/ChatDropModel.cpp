@@ -131,11 +131,9 @@ DropPlan BuildDropPlan(const std::vector<DropPathInfo>& infos, bool forceAsFile)
 
         if (info.m_isDirectory)
         {
-            //本期不支持发文件夹（已与用户对齐），一律跳过并给出原因。
-            DropSkippedItem skipped;
-            skipped.m_path   = info.m_path;
-            skipped.m_reason = kDropSkipDirectory;
-            plan.m_skipped.push_back(skipped);
+            //文件夹单独成一类落点，交由聊天窗按文件夹传输链路处理（单聊逐个发起、
+            //群聊拦下提示）。这里不看 forceAsFile：按住 Shift 也不会把目录当文件发。
+            plan.m_folders.push_back(info.m_path);
             continue;
         }
 
@@ -158,27 +156,26 @@ DropPlan BuildDropPlan(const std::vector<DropPathInfo>& infos, bool forceAsFile)
         plan.m_items.push_back(item);
     }
 
-    //确认阈值只看真正要发出去的条数：拖进来一堆文件夹却只有两个文件时，不该
-    //因为"拖了很多东西"就拦一道。
+    //确认阈值只看真正要发出去的<u>文件</u>条数：拖进来一堆文件夹却只有两个文件时，
+    //不该因为"拖了很多东西"就拦一道；文件夹那一侧另有本机并发笔数闸门把关。
     plan.m_needConfirm = ((int)plan.m_items.size() > kDropConfirmThreshold);
     return plan;
 }
 
 std::wstring DescribeDropSkipped(const std::vector<DropSkippedItem>& skipped)
 {
-    int dirCount     = 0;   // 文件夹
     int missingCount = 0;   // 路径已不存在
     int emptyCount   = 0;   // 0 字节文件
     for (std::vector<DropSkippedItem>::size_type i = 0; i < skipped.size(); ++i)
     {
         switch (skipped[i].m_reason)
         {
-        case kDropSkipDirectory:
-            ++dirCount;
-            break;
+        //0 字节文件：发送链路本来就会拒收，这里替它说明原因
         case kDropSkipEmpty:
             ++emptyCount;
             break;
+
+        //路径已不存在，以及将来万一冒出的未知原因，都并到"已不存在"这一类
         case kDropSkipNotFound:
         default:
             ++missingCount;
@@ -187,17 +184,8 @@ std::wstring DescribeDropSkipped(const std::vector<DropSkippedItem>& skipped)
     }
 
     std::wstring text;
-    if (dirCount > 0)
-    {
-        text += std::to_wstring((long long)dirCount);
-        text += L" 个文件夹暂不支持发送";
-    }
     if (missingCount > 0)
     {
-        if (!text.empty())
-        {
-            text += L"、";
-        }
         text += std::to_wstring((long long)missingCount);
         text += L" 个文件已不存在";
     }

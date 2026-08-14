@@ -42,6 +42,8 @@ extern CAppModule _Module;
 #include <atlmisc.h>
 
 #include <string>
+#include <vector>
+#include <memory>
 #include <tchar.h>
 #include <stdio.h>
 
@@ -50,9 +52,9 @@ extern CAppModule _Module;
 #include "AuthButtons.h"
 #include "AuthInputField.h"
 #include "../BalloonMain/AvatarPalette.h"   // 头像底色调色板（与主面板共用一份）
-#include "../../balloonui/balloonui/DuiXmlBuilder.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiComboBox.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
 
 namespace balloonauth {
 
@@ -70,7 +72,16 @@ namespace {
 //   · 顶部品牌 Banner（AuthBanner 自绘控件：橙色渐变 + 火烈鸟 + 标题）。
 //   · 表单 vbox（weight=1，吃掉 Banner 以下的全部高度）：
 //       账号下拉框 / 密码框 / 「记住密码·自动登录·忘记密码」一行 /
-//       登录按钮 / 弹性 spacer / 「注册账号·网络设置」一行。
+//       登录按钮 / 状态区 / 弹性 spacer / 「注册账号·网络设置」一行。
+//
+// 状态区（id 150）平时整块隐藏，登录期间显示「正在登录…」加一条不确定进度条，
+// 登录失败时显示失败原因。它占的是原先那块弹性空白的一部分，<u>高度固定</u>，
+// 所以显隐时上方的输入区不会跳动 —— 只有底部两个链接会被推下去一点。
+//
+// 进度条高 14 像素并关掉百分比文字（show-percent="false"）。DuiProgressBar 默认
+// 会在条上画 "NN%"，而 marquee 模式下压根没有确定的进度值，那个数字既无意义、
+// 在原先 4 像素的条高下又挤成一团看不清（2026-08-14 用户反馈）。说明文字由上方
+// 的状态标签承担，条本身只表达"正在进行中"。
 //
 // builder 内置标签只有 vbox / hbox / label / button / edit；品牌 Banner、
 // 账号下拉框、底部弹性占位都不是内置标签，通过自定义标签经
@@ -96,6 +107,10 @@ const char* const kLoginBodyXml = u8R"xml(
       <auth-link id="132" text="忘记密码？" link-color="255,122,69" weight="1"/>
     </hbox>
     <auth-button id="120" text="登 录" fixedHeight="42"/>
+    <vbox id="150" fixedHeight="44" padding="0,8,0,0" gap="6">
+      <label id="151" fixedHeight="16" text="" text-color="107,107,107"/>
+      <progress id="152" fixedHeight="14" marquee="true" show-percent="false"/>
+    </vbox>
     <control weight="1"/>
     <hbox fixedHeight="20" gap="12">
       <auth-link id="130" text="注册账号" link-color="255,122,69" weight="1"/>
@@ -145,6 +160,33 @@ COLORREF ParseRgbColor(const std::string& s, COLORREF def)
 
 // 圆角输入框内嵌控件的填充色 #F5F4F1（design Input 背景 --bg-list）。
 const COLORREF kFieldFillColor = RGB(0xF5, 0xF4, 0xF1);
+
+// 账号下拉框的占位文字。与密码框的"密码"对称，账号框为空时显示。
+const wchar_t* const kAccountPlaceholder = L"账号";
+
+// 取出下拉框内嵌的那个真 EDIT 宿主控件。
+//
+// DuiComboBox 在 editable 风格下会把一个 DuiEditHost 子类挂到自己名下（见
+// balloonui 的 DuiComboBox::EnsureEditChild），但它既没有公开取用该子控件的
+// 接口，也没有转发 SetPlaceholder。这里顺着公开的 Children() 走一层把它找
+// 出来，从而在不改动 balloonui 的前提下给账号框设占位文字。
+//   pCombo：下拉框，可为 NULL。
+// 返回：内嵌的 EDIT 宿主控件；下拉框为 NULL、或还没有内嵌控件（read-only
+//       风格下就没有）时返回 NULL。所有权属于下拉框，调用方不得释放。
+DuiEditHost* FindComboEditHost(DuiComboBox* pCombo)
+{
+    if (pCombo == NULL)
+        return NULL;
+
+    const std::vector<std::unique_ptr<DuiControl> >& children = pCombo->Children();
+    for (size_t i = 0; i < children.size(); ++i)
+    {
+        DuiEditHost* pEdit = dynamic_cast<DuiEditHost*>(children[i].get());
+        if (pEdit != NULL)
+            return pEdit;
+    }
+    return NULL;
+}
 
 // 自定义标签工厂 —— 把 XML 里 builder 不认识的标签翻译成对应控件实例。
 // 未知标签返回 nullptr，让 builder 走默认的"跳过未知标签"路径。
@@ -224,6 +266,16 @@ std::unique_ptr<DuiControl> CreateLoginCustomControl(const DuiXmlBuilder::Node& 
             combo->SetShowItemDelete(true);
             combo->SetBgColor(kFieldFillColor);
             combo->SetShowBorder(false);
+
+            // 占位文字。上面的 SetEditable(true) 已经把内嵌 EDIT 建好，此刻
+            // 取得到；EDIT 的 HWND 要等布局时才创建，SetPlaceholder 会先缓存、
+            // 由 EnsureCreated 一并同步过去，故这里设是安全的。
+            DuiEditHost* accountEdit = FindComboEditHost(combo.get());
+            if (accountEdit != NULL)
+            {
+                accountEdit->SetPlaceholder(kAccountPlaceholder);
+            }
+
             field->AddChild(std::unique_ptr<DuiControl>(combo.release()));
         }
         return std::unique_ptr<DuiControl>(field.release());

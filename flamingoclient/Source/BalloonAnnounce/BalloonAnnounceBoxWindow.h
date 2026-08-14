@@ -25,7 +25,7 @@
 
 #include <vector>
 
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "AnnounceBoxLayout.h"                 // balloonannounce::AnnounceBoxViewData / AnnounceRowView
 #include "../BalloonHistory/AnnounceStore.h"   // balloonhistory::CAnnounceStore
 #include "../CustomMsgDef.h"                   // WM_CHAT_OPEN_LINK（消息映射里要用）

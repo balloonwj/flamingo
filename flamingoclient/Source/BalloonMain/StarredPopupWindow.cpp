@@ -13,9 +13,9 @@
 #include "../IULog.h"              // LOG_INFO / LOG_ERROR
 #include "../UserSessionData.h"    // FMG_MSG_OPEN_CHAT
 
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/List/DuiListBox.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiListBox.h"
 
 using balloonwjui::DuiControl;
 using balloonwjui::DuiLayout;

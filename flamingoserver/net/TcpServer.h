@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+//SOCKET 类型来自这里：Windows 下是 winsock 的 UINT_PTR，POSIX 下是 int
+#include "../base/Platform.h"
 #include <atomic>
 #include <map>
 #include <memory>
@@ -66,7 +68,7 @@ namespace net
 
     private:
         /// Not thread safe, but in loop
-        void newConnection(int sockfd, const InetAddress& peerAddr);
+        void newConnection(SOCKET sockfd, const InetAddress& peerAddr);
         /// Thread safe.
 
         /// Not thread safe, but in loop

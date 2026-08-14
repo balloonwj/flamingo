@@ -21,8 +21,8 @@
  */
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
-#include "../../balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 #include "MemberPickerTreeModel.h"   // MemberPickerNode（m_treeNodes 成员需完整类型）
 
 #include <vector>

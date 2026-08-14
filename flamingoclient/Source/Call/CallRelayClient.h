@@ -29,6 +29,8 @@
 #include <atomic>
 #include <memory>
 
+#include "../net/FrameCrypto.h"   // net::ClientHandshake（本连接自己的会话密钥）
+
 namespace call {
 
 //中转通道事件回调接口。
@@ -100,7 +102,26 @@ private:
     //在已连接 socket 上把整段字节全部发出（处理部分发送）；失败 / 断开返回 false。
     bool SendAll(const char* data, size_t len);
 
+    /**
+     *  在刚建好的中转连接上同步走完三帧协议加密握手。
+     *
+     *  <u>必须排在 relay 报到帧（cmd_av_relay_hello）之前</u>：报到帧里带的是中转令牌，
+     *  明文发出去等于把凭据白送，抓到它的人可以抢先冒充一端接进本次通话。也<u>必须
+     *  排在接收线程启动之前</u>，否则会与它抢同一份数据。
+     *
+     *  未配置服务端公钥时直接返回成功且不做任何收发，此时本连接走明文。
+     *
+     *  @param timeoutSec 每次收发的超时时间，单位秒
+     *  @return 成功返回 true；失败时调用方须放弃这条连接
+     *  副作用：在中转连接上收发三帧；改写 m_handshake 的状态。
+     */
+    bool PerformHandshake(int timeoutSec);
+
 private:
+    //握手期间的字节收发适配器，定义在 .cpp 里。做成嵌套类是因为它要用本类的
+    //私有 SendAll 与 socket。
+    class HandshakeChannel;
+
     SOCKET                       m_sock;        //中转连接套接字；INVALID_SOCKET 表示未连接
     std::atomic<bool>            m_connected;   //是否已握手成功且未断开（收发与 IsConnected 的判据）
     std::atomic<bool>            m_stopping;    //是否正在主动关闭（接收线程据此区分主动关 vs 异常断；主动关不回调 OnRelayClosed）
@@ -108,6 +129,13 @@ private:
     std::unique_ptr<std::thread> m_recvThread;  //接收线程
     std::mutex                   m_sendMtx;     //串行化发送，避免多线程交错写同一 socket
     std::string                  m_recvBuf;     //接收累积缓冲（接收线程私有，处理粘包 / 半包）
+
+    //本连接的协议加密状态。每个实例各一个——自测场景下同进程会同时存在两条连接，
+    //共用会让两条流互相踩踏。
+    //<u>发送方向的加密必须在 m_sendMtx 之内做</u>：本类的发送方是音频采集线程与
+    //视频采集线程两条，若在锁外加密、锁内发送，密文上线顺序会与加密顺序错开，
+    //服务端一定解不开。详见 SendData 的注释。
+    net::ClientHandshake         m_handshake;
 };
 
 } // namespace call

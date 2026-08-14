@@ -18,7 +18,7 @@ void TcpSession::sendData(const char* data, size_t len)
 {
     std::shared_ptr<TcpConnection> conn = tmpConn_.lock();
     if (conn)
-        conn->send(data, len);
+        conn->send(data, static_cast<int>(len));
 	else
 		LOGE("TcpConnection is destroyed, drop sending %u bytes", (unsigned)len);
 }

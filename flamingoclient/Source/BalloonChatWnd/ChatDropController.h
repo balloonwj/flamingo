@@ -37,7 +37,7 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/DuiDropTarget.h"
+#include "../../../third-party/balloonui/balloonui/DuiDropTarget.h"
 #include <string>
 #include <vector>
 

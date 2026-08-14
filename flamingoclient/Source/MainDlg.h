@@ -161,6 +161,7 @@ public:
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_FAVORITE_RESULT, OnV2SetFavoriteResult)	//v2 收藏设置应答：失败时让主面板回滚乐观更新
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_STARRED_RESULT, OnV2SetStarredResult)		//v2 特别关注设置应答：失败时让主面板按回带的 target 回滚那一个人的关注状态
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_REMARK_RESULT, OnV2SetRemarkResult)		//v2 设置好友备注名应答：失败时让主面板按回带的 userid 回滚那一个人的备注
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_TAGS_RESULT, OnV2SetTagsResult)		//v2 设置联系人标签应答：主面板拿回带的列表覆盖本地缓存（成功对齐归一结果、失败退回服务端真值）
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILES, OnV2GroupFiles)				//v2 群文件列表应答：路由到群聊窗
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILES_CHANGED, OnV2GroupFilesChanged)	//v2 群文件变更推送：路由到群聊窗
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILE_UPLOAD_RESULT, OnV2GroupFileUploadResult)		//v2 群文件上传结果：路由到群聊窗
@@ -226,6 +227,18 @@ public:
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_FILE_DOWNLOAD_PROGRESS, OnV2FileDownloadProgress)	//v2 收文件下载进度：路由到聊天窗更新进度
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_FILE_DOWNLOAD_RESULT, OnV2FileDownloadResult)	//v2 收文件下载结果：路由到聊天窗回填渲染
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_FILE_TRANSFER_ACK, OnV2FileTransferAck)		//v2 对方收取本端所发文件的状态：路由到聊天窗更新文件气泡状态行
+		//——v2 单聊文件夹传输(cmd_folder_* 1810~1817)：每条都先交 FolderTransferManager
+		//  处理会话生命周期，再路由到聊天窗更新那条文件夹气泡——
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_INVITE_ACK, OnV2FolderInviteAck)		//v2 文件夹邀请应答：绑定服务端会话 id，或按 code 把气泡标失败
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_INVITE_NOTIFY, OnV2FolderInviteNotify)	//v2 文件夹邀请推送：接收端会话里出一条带「接收 / 拒绝」的邀请气泡
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_SESSION_ACK, OnV2FolderSessionAck)		//v2 文件夹通用应答（应答 / 撤回 / 结束 / 重试四条共用）
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_STATE_NOTIFY, OnV2FolderStateNotify)	//v2 文件夹状态推送：按 state 把气泡切成拒绝 / 取消 / 失败 / 完成等
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_RELAY_INFO, OnV2FolderRelayInfo)		//v2 文件夹中转参数：起收发状态机，气泡转传输中
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_SCANNED, OnV2FolderScanned)			//本地目录扫描完成：把文件数 / 目录数 / 总大小补进气泡
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_SEND_PROGRESS, OnV2FolderSendProgress)	//文件夹发送进度：更新气泡进度条与状态行
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_SEND_RESULT, OnV2FolderSendResult)		//文件夹发送结果：收尾气泡并回调管理器停线程、发 cmd_folder_close
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_RECV_PROGRESS, OnV2FolderRecvProgress)	//文件夹接收进度：同上
+		MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_RECV_RESULT, OnV2FolderRecvResult)		//文件夹接收结果：同上，成功时把落地目录写回气泡供「打开文件夹」
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_TYPING_NOTIFY, OnV2TypingNotify)				//v2 对端正在/停止输入：路由到对应单聊窗刷新头部提示
 		MESSAGE_HANDLER_EX(FMG_MSG_TRAY_FLASH, OnV2TrayFlash)					//v2 有新消息：托盘闪发送方头像
 		MESSAGE_HANDLER_EX(FMG_MSG_TRAY_CLEAR, OnV2TrayClear)					//v2 某会话已读：从托盘闪烁集合移除
@@ -388,6 +401,7 @@ private:
 	// net::SetFriendRemarkResult*，本方法负责 delete。转交主面板：成功只记日志
 	// （乐观更新在发起时已生效），失败要按应答里回带的 userid 把那一个人的备注退回去。
 	LRESULT OnV2SetRemarkResult(UINT uMsg, WPARAM wParam, LPARAM lParam);
+	LRESULT OnV2SetTagsResult(UINT uMsg, WPARAM wParam, LPARAM lParam);
 	LRESULT OnV2GroupFiles(UINT uMsg, WPARAM wParam, LPARAM lParam);			// v2 群文件列表应答(lParam=net::GetGroupFilesResult*，处理后 delete)
 	LRESULT OnV2GroupFilesChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 群文件变更推送(lParam=net::GroupFilesChangedNotify*，处理后 delete)
 	LRESULT OnV2GroupFileUploadResult(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 群文件上传结果(lParam=net::GroupFileUploadResult*，处理后 delete)
@@ -458,6 +472,18 @@ private:
 	LRESULT OnV2FileDownloadProgress(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 收文件下载进度(lParam=net::FileDownloadProgress*，处理后 delete)
 	LRESULT OnV2FileDownloadResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 收文件下载结果(lParam=net::FileDownloadResult*，处理后 delete)
 	LRESULT OnV2FileTransferAck(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 对方收取本端所发文件的状态(lParam=net::FileTransferAckNotify*，处理后 delete)
+	// ---- v2 单聊文件夹传输：会话生命周期交 foldertransfer::FolderTransferManager，
+	//      界面更新交主面板路由到对应聊天窗；每个处理器都负责 delete 自己的堆负载 ----
+	LRESULT OnV2FolderInviteAck(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 文件夹邀请应答(wParam=本次邀请请求的帧 seq，管理器按它对回是哪一笔发起的；lParam=net::FolderInviteResponse*，处理后 delete)
+	LRESULT OnV2FolderInviteNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 文件夹邀请推送(lParam=net::FolderInviteNotify*，处理后 delete)
+	LRESULT OnV2FolderSessionAck(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 文件夹通用应答(wParam=命令协议号，lParam=net::FolderSessionResponse*，处理后 delete)
+	LRESULT OnV2FolderStateNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 文件夹状态推送(lParam=net::FolderStateNotify*，处理后 delete)
+	LRESULT OnV2FolderRelayInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 文件夹中转参数(lParam=net::FolderRelayInfo*，处理后 delete)
+	LRESULT OnV2FolderScanned(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 本地目录扫描完成(lParam=foldertransfer::FolderScanNotice*，处理后 delete)
+	LRESULT OnV2FolderSendProgress(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 文件夹发送进度(lParam=foldertransfer::FolderProgressNotice*，处理后 delete)
+	LRESULT OnV2FolderSendResult(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 文件夹发送结果(lParam=foldertransfer::FolderResultNotice*，处理后 delete)
+	LRESULT OnV2FolderRecvProgress(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 文件夹接收进度(lParam=foldertransfer::FolderProgressNotice*，处理后 delete)
+	LRESULT OnV2FolderRecvResult(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 文件夹接收结果(lParam=foldertransfer::FolderResultNotice*，处理后 delete)
 	LRESULT OnV2TypingNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);			// v2 对端正在/停止输入(lParam=net::TypingNotify*，处理后 delete)
 	// v2 有应在托盘闪烁的新消息：把发送方记入 m_trayFlash 并启动托盘头像闪烁。
 	// lParam=堆上 TrayFlashData*（处理后 delete）。

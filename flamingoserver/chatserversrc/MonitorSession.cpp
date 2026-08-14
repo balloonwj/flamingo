@@ -154,7 +154,7 @@ void MonitorSession::send(const char* data, size_t length)
     if (!m_tmpConn.expired())
     {
         std::shared_ptr<TcpConnection> conn = m_tmpConn.lock();
-        conn->send(data, length);
+        conn->send(data, static_cast<int>(length));
     }
 }
 

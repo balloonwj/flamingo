@@ -4,8 +4,8 @@
  */
 #include "stdafx.h"
 #include "ScreenCaptureOverlay.h"
-#include "../../balloonui/balloonui/DuiNotify.h"   // WM_DUI_NOTIFY / DuiNotify / DUIN_CLICK
-#include "../../balloonui/balloonui/DuiResMgr.h"    // 截图期间临时改全局 DPI，结束后恢复
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"   // WM_DUI_NOTIFY / DuiNotify / DUIN_CLICK
+#include "../../../third-party/balloonui/balloonui/DuiResMgr.h"    // 截图期间临时改全局 DPI，结束后恢复
 #include "../IULog.h"                               // LOG_INFO（截图 DPI 诊断）
 
 #include <gdiplus.h>

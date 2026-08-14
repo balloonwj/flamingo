@@ -28,42 +28,10 @@
  */
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../BalloonHistory/HistoryContentView.h"   // 右栏正文控件（网址可点）的基类
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 
 namespace balloonannounce {
-
-/**
- *  AnnounceWheelLabel —— 会把滚轮上抛给祖先滚动视口的 DuiLabel。
- *
- *  存在理由与 AnnounceRow 的滚轮覆写同源：DuiHost 只把滚轮投给<u>最深命中控件</u>，
- *  返回 false 就放弃、<u>不向上冒泡</u>（见 DuiHost::OnMouseWheel）。右栏正文是一整块
- *  铺满滚动视口的 Label，鼠标停在正文上滚动时事件落在它身上，不转发的话长公告根本
- *  滚不动。裸 DuiLabel 不处理滚轮，故子类化补这一个虚函数。
- *
- *  只覆写 OnMouseWheel 一个函数，其余行为与 DuiLabel 完全一致。
- */
-class AnnounceWheelLabel : public balloonwjui::DuiLabel
-{
-public:
-    //DuiControl 覆写：把滚轮上抛给祖先里的滚动视口。
-    bool OnMouseWheel(POINT pt, short zDelta, UINT mkFlags) override;
-};
-
-/**
- *  AnnounceWheelContentView —— 会把滚轮上抛给祖先滚动视口的 HistoryContentView。
- *
- *  右栏正文从 DuiLabel 换成了 HistoryContentView（要把正文里的网址渲染成可点的
- *  链接，DuiLabel 没有字符级排版模型、做不到），于是 AnnounceWheelLabel 那个滚轮
- *  不冒泡的坑原样跟了过来 —— 理由见上面那个类的注释，这里同样只覆写一个虚函数。
- */
-class AnnounceWheelContentView : public balloonhistory::HistoryContentView
-{
-public:
-    //DuiControl 覆写：把滚轮上抛给祖先里的滚动视口。
-    bool OnMouseWheel(POINT pt, short zDelta, UINT mkFlags) override;
-};
 
 /**
  *  AnnounceRow —— 消息盒子公告列表的一行。
@@ -106,9 +74,10 @@ public:
     /**
      *  设置本行底部要不要画一条分隔线。列表里除最后一行外都要画。
      *
-     *  这条线由行自己画、而不是在列表里插一个独立的分隔线控件：独立控件会成为滚轮的
-     *  "死线"—— DuiHost 只把滚轮投给最深命中控件、返回 false 就丢掉（不向上冒泡），
-     *  鼠标恰好停在那 1 像素上时整个列表滚不动，看着像滚轮失灵。
+     *  这条线由行自己画、而不是在列表里插一个独立的分隔线控件，于是列表的直接子控件
+     *  与公告条目一一对应（ANB17 用例钉住这一点）。该写法最初是为绕开「滚轮落在分隔线
+     *  控件上就丢失」的问题；2026-08-14 库里补上滚轮沿父链上冒（DuiHost::
+     *  DispatchMouseWheel）之后那个问题已不存在，此处沿用原写法。
      *
      *  只改内存状态，调用方负责随后 Invalidate（一般在构建时就设好，不必单独刷）。
      *    show：true 表示画。
@@ -130,17 +99,6 @@ public:
      *  顺序不能反 —— 反过来底色会把刚画好的文字盖掉。
      */
     void OnPaint(HDC hdc, const RECT& rcDirty) override;
-
-    /**
-     *  DuiControl 覆写：把滚轮上抛给祖先里的滚动视口。
-     *
-     *  DuiHost 的滚轮只投递给「最深命中控件」、<u>不向上冒泡</u>（见 DuiHost::OnMouseWheel），
-     *  而公告行铺满了整个列表视口，滚轮几乎总是落在行（或行内的 Label）身上，
-     *  不转发的话列表根本滚不动。与主面板 MainPanelTreeView 同一解法。
-     *
-     *  返回：祖先里的滚动视口消费了滚轮则 true，否则 false。
-     */
-    bool OnMouseWheel(POINT pt, short zDelta, UINT mkFlags) override;
 
 private:
     bool m_hovered;         // 是否悬停

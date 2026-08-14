@@ -14,8 +14,8 @@
 #include "../BalloonMain/NotificationSound.h"   // StopLoopSound（关窗 / 接听时停回铃、来电铃声）
 #include "VideoFrameConvert.h"    // call::Nv12ToBgra（远端 / 本端帧 NV12→BGRA）
 #include "../BalloonChatWnd/ChatIcons.h"   // DrawChatIcon（复用单聊窗那套线性图标：摄像机 / 听筒）
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 
 // ---- 纯语音态固定尺寸（逻辑像素）-----------------------------------------
 static const int kDlgWidth     = 340;   // 客户区宽

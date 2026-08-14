@@ -12,6 +12,10 @@
  *  协调器在收到服务端应答 / 推送（邀请应答 / 中转参数 / 状态变更）时调用 CloseDlg
  *  主动关闭本对话框，并在邀请应答回来后用 SetSessionId 回填会话 id（发起方取消时用）。
  *
+ *  弹出位置为鼠标所在显示器工作区的右下角（不再居中于主面板），并置顶显示，做法与
+ *  「新公告」提示窗一致 —— 邀请需要当场应答，被别的窗口盖住就等于没弹。置顶不妨碍
+ *  最小化：标题栏保留最小化按钮，最小化后在任务栏有自己的按钮，还原后仍保持置顶。
+ *
  *  仿 CBalloonClosePromptDlg 实现（DuiFrameWindow + 程序化控件树 + OnDuiNotify 派发）。
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL。
  *
@@ -20,10 +24,10 @@
 #pragma once
 
 #include <string>
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 
 class CBalloonRemoteDesktopDlg : public balloonwjui::DuiFrameWindow
 {
@@ -80,6 +84,22 @@ private:
     //据当前 m_mode 设置提示文字与两个按钮的文案 / 可见性。
     void ApplyMode();
 
+    /**
+     *  把窗口调到固定尺寸、贴到鼠标所在显示器工作区的右下角，然后显示并置顶。
+     *
+     *  两个入口（OpenCalling / OpenAuth）的收尾动作完全一样，故收成一处 —— 分开写
+     *  两份的话，日后改落点或改置顶方式只改了一处，就会出现"呼叫时弹右下角、被邀请
+     *  时弹屏幕中央"这种不一致。
+     *
+     *  落点复用 BalloonMain/CornerPopupPlacement.h 的公共算法，与「新公告」提示窗、
+     *  「特别关注」上下线提示窗贴同一个角、留同样的边距。工作区已排除任务栏，故不会
+     *  被任务栏压住。
+     *
+     *  置顶（HWND_TOPMOST）是有意为之：这是一条需要当场应答的邀请，被别的窗口盖住
+     *  就等于没弹。置顶不影响最小化 —— 标题栏的最小化按钮照常可用，还原后仍保持置顶。
+     */
+    void ShowAtWorkAreaCorner();
+
 private:
     int         m_mode;         //对话框用途，见 enum Mode
     std::string m_sessionId;    //会话 id
@@ -90,4 +110,9 @@ private:
     balloonwjui::DuiLabel*  m_msgLabel;   //主提示文字（切模式时改）
     balloonwjui::DuiButton* m_btnLeft;    //次按钮：auth=拒绝；calling 隐藏
     balloonwjui::DuiButton* m_btnRight;   //主按钮：auth=接受；calling=取消
+
+    HBITMAP     m_titleIconBmp;   //标题栏图标位图（程序图标合成到标题栏底色上）。
+                                  //本类持有，跨"关闭再打开"复用，析构时 DeleteObject
+    HICON       m_hTaskIconBig;   //任务栏 / Alt-Tab 大图标（本类持有，析构 DestroyIcon）
+    HICON       m_hTaskIconSmall; //任务栏 / Alt-Tab 小图标（本类持有，析构 DestroyIcon）
 };

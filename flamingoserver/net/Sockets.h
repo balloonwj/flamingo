@@ -13,7 +13,7 @@ namespace net
     class Socket
     {
     public:
-        explicit Socket(int sockfd) : m_sockfd(sockfd) { }
+        explicit Socket(SOCKET sockfd) : m_sockfd(sockfd) { }
         ~Socket();
 
         SOCKET fd() const { return m_sockfd; }
@@ -21,7 +21,7 @@ namespace net
         void bindAddress(const InetAddress& localaddr);
         void listen();
 
-        int accept(InetAddress* peeraddr);
+        SOCKET accept(InetAddress* peeraddr);
 
         void shutdownWrite();
         void setTcpNoDelay(bool on);
@@ -43,7 +43,7 @@ namespace net
         void setReuseAddr(SOCKET sockfd, bool on);
         void setReusePort(SOCKET sockfd, bool on);
 
-        SOCKET connect(SOCKET sockfd, const struct sockaddr_in& addr);
+        int connect(SOCKET sockfd, const struct sockaddr_in& addr);
         void bindOrDie(SOCKET sockfd, const struct sockaddr_in& addr);
         void listenOrDie(SOCKET sockfd);
         SOCKET accept(SOCKET sockfd, struct sockaddr_in* addr);

@@ -20,9 +20,9 @@
 #include "../net/IUSocket.h"             // CIUSocket::SendUpdateProfile
 #include "../net/ProfileProtocolClient.h" // net::UpdateProfileResponse
 #include "../ClipboardText.h"            // 点击账号复制到剪贴板
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"   // 编辑框 EnsureCreated
-#include "../../balloonui/balloonui/Controls/Input/DuiComboBox.h"   // 性别下拉 GetCurSel / SetBgColor
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"   // 编辑框 EnsureCreated
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"   // 性别下拉 GetCurSel / SetBgColor
 
 #include <vector>                        // CStrToUtf8 缓冲
 #include <gdiplus.h>                     // 主按钮圆角橙底位图用 GDI+ 抗锯齿绘制
@@ -312,7 +312,11 @@ void CBalloonProfileDlg::OpenForCurrentUser(HWND hParent, CFlamingoClient* pFMGC
 
     UpdateTitleFromUserInfo();         // 标题栏文字 = "用户名 - 个人信息"
     SetTitleBarHeight(kProfileTitleBarHeight);
-    SetButtons(false, false, true);   // 只关闭按钮
+    //最小化 + 关闭。本窗口是无属主的独立顶层窗口（上面 Create 的第一个参数为 NULL、
+    //也没有 WS_EX_TOOLWINDOW），最小化后在任务栏上有自己的按钮，点回来即可还原；
+    //再次从主面板头像打开时上面的 IsIconic 分支也会把它还原出来。
+    //不给最大化：窗口内容是固定版式的资料卡，拉大只会留一片空白。
+    SetButtons(true, false, true);
     SetMinSize(kProfileMinWidth, kProfileMinHeight);
 
     // 标题栏图标:程序图标 IDR_MAINFRAME 合成到标题栏底色上,只建一次,跨

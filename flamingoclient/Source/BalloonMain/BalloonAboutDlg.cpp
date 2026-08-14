@@ -33,12 +33,12 @@
 #include "../IniFile.h"                    // CIniFile（读 flamingo.ini 的官网地址）
 #include "../UserSessionData.h"            // g_szHomePath（flamingo.ini 所在目录）
 #include "../resource.h"                   // IDR_MAINFRAME（app 图标）
-#include "../../balloonui/balloonui/DuiResMgr.h"                       // 字体
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox / DuiHBox
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiSeparator.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiAvatar.h"
+#include "../../../third-party/balloonui/balloonui/DuiResMgr.h"                       // 字体
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox / DuiHBox
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiSeparator.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
 
 // ---- 对话框固定尺寸（逻辑像素）-----------------------------------------
 static const int kDlgWidth      = 430;   // 客户区宽
@@ -652,8 +652,15 @@ LRESULT CBalloonAboutDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
             return 0;
 
         case kIdCheckUpdate:
+            // 把本对话框登记为被挡窗口：升级窗一出现就把关于框禁用，升级窗关闭后再恢复，
+            // 效果上就是"升级窗相对关于框模态"。不这么做的话，升级窗还开着时用户仍能
+            // 在关于框上操作，包括再点一次「检查更新」，弹出第二轮检查。
+            CBalloonUpdateWindow::GetInstance().SetGatedWindow(
+                m_hWnd, CBalloonUpdateWindow::kGatedModalDlg);
+
             // 拉起升级窗并立即发起一次检查（只检查、不下载）。查的结果——有新版本、
             // 已是最新、还是检查失败——都由升级窗自己呈现，本对话框不再弹提示框。
+            // 若查出来是强制升级，升级窗会自行开始下载并在完成后安装重启。
             CBalloonUpdateWindow::GetInstance().ShowChecking();
             return 0;
 

@@ -18,18 +18,19 @@ namespace balloonprofile {
 /**
  *  用户在线状态。枚举值同时用作状态胶囊数组的下标。逐值对应设计稿
  *  components.jsx 的 STATUS_LABEL（不含 offline —— 个人信息对话框里只
- *  允许在"在线 / 离开 / 勿扰 / 隐身"四态间切换）。
+ *  允许在"在线 / 离开 / 勿扰"三态间切换）。
+ *
+ *  本产品不提供隐身功能，原先的第四态「隐身」已于 2026-08-13 去掉。
  */
 enum ProfileStatus
 {
     kProfileStatusOnline    = 0,   // 在线：绿点，正常可被联系
     kProfileStatusAway      = 1,   // 离开：橙点，暂时离开座位
     kProfileStatusBusy      = 2,   // 勿扰：红点，不希望被打扰
-    kProfileStatusInvisible = 3,   // 隐身：灰点，对外显示为离线
 };
 
 // 在线状态的总数（即状态胶囊的个数）。
-const int kProfileStatusCount = 4;
+const int kProfileStatusCount = 3;
 
 /**
  *  ProfileModel —— 个人信息数据模型。
@@ -117,7 +118,7 @@ private:
     int     m_nStatus;        // 当前在线状态，取值见 ProfileStatus
 };
 
-// 某个在线状态的中文显示名（"在线" / "离开" / "勿扰" / "隐身"）。
+// 某个在线状态的中文显示名（"在线" / "离开" / "勿扰"）。
 // status 越界时返回"在线"。
 const TCHAR* ProfileStatusText(int status);
 

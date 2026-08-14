@@ -29,8 +29,8 @@
 #pragma once
 
 #include "BalloonGroupInfoLayout.h"   // GroupInfoViewData / GroupInfoCtrlId
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
-#include "../../balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 
 class CFlamingoClient;
 class CBalloonMainPanel;   // 写操作回主面板的宿主(更新会话缓存 / 退群清理);前置声明免引头
@@ -90,14 +90,12 @@ public:
      */
     __int64 GroupId() const { return m_data.groupid; }
 
-    // WM_DUI_NOTIFY 自处理(开关 / 名片编辑 / 按钮);WM_TIMER 驱动开关动画;
-    // WM_DESTROY 收尾定时器。其余消息经 CHAIN 交回 DuiFrameWindow。
+    // WM_DUI_NOTIFY 自处理(开关 / 名片编辑 / 按钮)。其余消息经 CHAIN 交回
+    // DuiFrameWindow。开关滑动动画不需要本对话框驱动,DuiAnimMgr 自带脉冲定时器。
     BEGIN_MSG_MAP(CBalloonGroupInfoDlg)
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
         MESSAGE_HANDLER(WM_LBUTTONDOWN, OnLButtonDown)
-        MESSAGE_HANDLER(WM_TIMER, OnTimer)
         MESSAGE_HANDLER(WM_GROUPINFO_CARD_COMMIT, OnCardCommitDeferred)
-        MESSAGE_HANDLER(WM_DESTROY, OnDestroy)
         CHAIN_MSG_MAP(balloonwjui::DuiFrameWindow)
     END_MSG_MAP()
 
@@ -115,16 +113,6 @@ private:
      *  让 DuiFrameWindow/DuiHost 继续正常处理这次点击(如切换开关)。
      */
     LRESULT OnLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
-
-    /**
-     *  WM_TIMER:动画 pulse 定时器到点时推进 DuiAnimMgr 一帧(开关滑动 / 底色渐变)。
-     */
-    LRESULT OnTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
-
-    /**
-     *  WM_DESTROY:KillTimer 收尾动画定时器。
-     */
-    LRESULT OnDestroy(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
      *  WM_GROUPINFO_CARD_COMMIT(去抖自投):群名片编辑框失焦后延后一拍的提交检查。

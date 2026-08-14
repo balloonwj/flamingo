@@ -14,8 +14,8 @@
 
 #include "../IULog.h"
 #include "../BalloonMain/PopupMenuPlacement.h"   // ClampPopupMenuToWorkArea（浮层不越屏）
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
-#include "../../balloonui/balloonui/Controls/List/DuiListBox.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiListBox.h"
 
 namespace balloonchatwnd {
 

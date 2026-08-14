@@ -19,10 +19,10 @@
 #include "ChatWindowLayout.h"         // BuildChatWindowBody / CtrlId / 分割记忆
 #include "ChatImageCache.h"           // 图片后台解码缓存：注册监听 + 就绪重绘
 #include "ChatHeaderInfo.h"           // ChatHeaderInfo::SetPresence/SetSignature（头部对端真实状态）
-#include "../../balloonui/balloonui/Controls/Layout/DuiSplitter.h"  // 拖动完成后算回分割比例
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiSplitter.h"  // 拖动完成后算回分割比例
 #include "ChatMessageList.h"          // ChatMessageList::AppendMessage
 #include "ChatQuoteModel.h"     // FillQuoteForRender（引用回复的统一入口）
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"  // DuiLayout::SetHint（引用条人名段按内容定宽）
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"  // DuiLayout::SetHint（引用条人名段按内容定宽）
 #include "ChatMockData.h"             // ChatMessage / MakeTextMessage / MockAutoReply
 #include "ChatFontUtil.h"             // 当前聊天字体的载入/保存/应用到输入框
 #include "../FlamingoClient.h"        // CFlamingoClient::m_UserMgr（取对方/自己昵称）
@@ -34,7 +34,7 @@
 #include "ChatTitleIcon.h"            // MakeRoundTitleIcon / MakeRoundTitleIconFromImage / IconFromBitmap
 #include "../net/IUSocket.h"          // CIUSocket::SendChatTextMessage
 #include "../BalloonMain/OnlineCapability.h"   // 离线门禁：连接态、提示条文案、被拦提示
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"   // 顶部离线提示条
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"   // 顶部离线提示条
 
 // 顶部提示带配色。离线用琥珀色系（与状态胶囊的"离开"同色系，是"需要你处理"的语气），
 // 正在连接用中性灰（只是告知，不需要用户动作）。每种各三个色：整条底色、文字色、
@@ -50,21 +50,28 @@ static const COLORREF kConnectingBannerBorderColor = RGB(0xE5, 0xE7, 0xEB);
 #include "../net/MessageProtocolClient.h"  // net::MessageNotify
 #include "../net/ImageTransfer.h"
 #include "../net/CurrentUserAccount.h"   // net::CurrentUserAccount（本地缓存目录按登录账号分）     // net::ImageTransfer（发图工作线程）/ ImageSend* 结构
+#include "../net/UserCachePath.h"     // net::UserCacheDir（文件夹接收的默认落地目录与 ChatFile / ChatImage 同一口径）
 #include "../net/FileTransfer.h"      // net::FileTransfer（收发文件工作线程）/ FileSend* 结构
 #include "ChatFileAction.h"           // ChatFileActionKind / ChatFileActionData（文件气泡按钮动作）
+#include "ChatFolderAction.h"         // ChatFolderActionKind / ChatFolderActionData / ChatFolderState（文件夹气泡按钮动作与状态）
+#include "FileBubbleFormat.h"         // FormatFileSize（文件夹总大小文字，与文件气泡同一口径）
+#include "../net/FolderProtocolClient.h"           // net::FolderInviteNotify / FolderStateNotify（文件夹传输推送载体）
+#include "../FolderTransfer/FolderTransferManager.h" // 文件夹传输会话管理器（发起 / 应答 / 取消 / 重试都转交它）
+#include <shlobj.h>                   // SHBrowseForFolder / SHGetPathFromIDList（选目录框）
 #include "ChatMessageMenu.h"          // ChatImageActionData / ChatMessageMenuId（图片气泡右键动作）
 #include "ChatImageSaveAs.h"          // SaveChatImageAs（图片另存为，与群聊窗共用）
 #include "ChatFileLocation.h"         // ResolveLocalFilePath（本地落点优先级与回退）
 #include "ChatDropModel.h"            // 拖进来的路径归类成 DropPlan
 #include "ChatLinkDetect.h"           // IsSafeLinkUrl（打开链接前的协议白名单）
 #include <windowsx.h>                 // GET_X_LPARAM / GET_Y_LPARAM（旁听点击定焦点区域）
-#include "../../balloonui/balloonui/Controls/Basic/DuiToast.h"   // 拖放跳过项的轻量提示
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiToast.h"   // 拖放跳过项的轻量提示
 #include "../BalloonHistory/FileLocalStore.h"  // 文件本地落点登记库（按 md5+文件名查路径）
+#include "../BalloonHistory/FolderLocalStore.h"  // 文件夹本地落点登记库（按会话 id 查根目录）
 #include "../BalloonHistory/V2MsgQuery.h"      // HistoryTypeFilter：打开消息记录窗时预选哪个类型胶囊
 #include <gdiplus.h>                  // 读图片真实宽高以算展示尺寸
 #include <shellapi.h>                 // ShellExecute（文件气泡"打开文件"）
 #pragma comment(lib, "gdiplus.lib")
-#include "../../balloonui/balloonui/Controls/Input/DuiRichEditHost.h"  // 输入框（富文本，支持内联图片）
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEditHost.h"  // 输入框（富文本，支持内联图片）
 #include "../BalloonScreenshot/ScreenCaptureOverlay.h"  // 截图浮层（截图按钮调起）
 #include "../BalloonImageViewer/BalloonImageViewerWindow.h"  // 看图窗（双击图片放大）
 #include "ChatRichContentSplit.h"     // 输入框图文混排的有序拆分（发送用）
@@ -75,9 +82,9 @@ static const COLORREF kConnectingBannerBorderColor = RGB(0xE5, 0xE7, 0xEB);
 #include "ChatSendMode.h"             // 发送键模式（Enter / Ctrl+Enter）
 #include "ChatBannerLabel.h"          // 顶部离线 / 正在连接提示带（带底色的 DuiLabel 子类）
 #include "ChatSendButton.h"           // ChatSendButton::DUIN_SENDBTN_DROPDOWN
-#include "../../balloonui/balloonui/Controls/List/DuiMenu.h"      // 发送模式切换菜单
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"    // 提示文字 SetText
-#include "../../balloonui/balloonui/Controls/Feedback/DuiToolTip.h"
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"      // 发送模式切换菜单
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"    // 提示文字 SetText
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"
 #include <objbase.h>                  // CoCreateGuid（生成 clientmsgid）
 #include <vector>
 #include <string>
@@ -202,6 +209,7 @@ static const int kMsgTypeText  = 1;    // message_type_text
 static const int kMsgTypeImage = 2;    // message_type_image
 static const int kMsgTypeFile  = 3;    // message_type_file
 static const int kMsgTypeShake = 13;   // message_type_shake
+static const int kMsgTypeFolder = 18;  // message_type_folder：文件夹传输记录条（服务端在传输走到终态后生成）
 
 // 会话类型常量，与 net::conversation_type（net/Protocol.h）对齐。本窗口是单聊窗，
 // 发撤回请求时固定取单聊；同上，不 include Protocol.h 而是就地取值。
@@ -212,6 +220,31 @@ static const int kConvTypeSingle = 1;  // conversation_single
 static const int kFileAckReceiving = 1;   // file_ack_receiving：对方点了接收、正在下载
 static const int kFileAckReceived  = 2;   // file_ack_received：对方已完整收到并校验通过
 static const int kFileAckRejected  = 3;   // file_ack_rejected：对方点了拒绝
+
+// 文件夹传输的会话状态，与 net/Protocol.h 的 enum folder_transfer_state 对齐。理由同上 ——
+// 本文件刻意不 include Protocol.h，故就地复述一份取值。这几个值同时也与
+// ChatFolderStateModel.h 里 ChatFolderState 的 1~8 号逐值相同，故转换是恒等映射；
+// 仍然分两套名字，是因为一个来自协议、一个属于界面，两者今后未必继续同步。
+static const int kFolderStateRinging      = 1;   // folder_state_ringing：邀请已送达，等对方应答
+static const int kFolderStateTransferring = 2;   // folder_state_transferring：目录已建好，正在收发字节
+static const int kFolderStateRejected     = 3;   // folder_state_rejected：对方点了拒绝
+static const int kFolderStateCanceled     = 4;   // folder_state_canceled：发送方在应答前撤回了邀请
+static const int kFolderStatePeerOffline  = 5;   // folder_state_peer_offline：对方不在线
+static const int kFolderStateTimeout      = 6;   // folder_state_timeout：邀请超时无人应答
+static const int kFolderStateFailed       = 7;   // folder_state_failed：传输失败，保留期内可重试续传
+static const int kFolderStateCompleted    = 8;   // folder_state_completed：全部传完并通过校验
+
+// 文件夹传输用到的结果码，与 net/Protocol.h 的 error_code / error_code_folder_* 对齐。
+// 同样是就地复述，理由见上。
+static const int kFolderErrOk             = 0;     // kFolderErrOk：成功
+static const int kFolderErrTooManyFiles   = 609;   // kFolderErrTooManyFiles：文件数超出服务端上限
+static const int kFolderErrTooLarge       = 610;   // kFolderErrTooLarge：总字节数超出服务端上限
+static const int kFolderErrReadFail       = 614;   // kFolderErrReadFail：本端读源目录 / 源文件失败
+static const int kFolderErrCanceled       = 617;   // kFolderErrCanceled：用户取消
+static const int kFolderErrSessionExpired = 618;   // kFolderErrSessionExpired：会话已超出保留期，不能再续传
+
+// 进度百分比的满值。气泡的 folderProgress 取值区间是 0~100，完成时置满。
+static const int kFolderFullPercent = 100;
 
 // 图片气泡内图片的最大展示尺寸（逻辑像素）：超出按比例缩小，小图保持原尺寸。
 static const int kImageDisplayMaxW = 220;
@@ -642,6 +675,12 @@ void CBalloonChatWindow::CreateAndShow(HWND hMainDlg)
         // 更早的老消息 —— 不单独拉一次，历史里那些气泡就不会带图钉标记。应答经主面板
         // 的 OnPinnedMessagesArrived 落库并回投到本窗口。
         CIUSocket::GetInstance().GetPinnedMessages(kConvTypeSingle, (int64_t)m_peerUserId);
+
+        // 补出对方此前发来、仍在等本端应答的文件夹邀请气泡。收到邀请不再弹窗（见
+        // CBalloonMainPanel::OnFolderInviteNotify），用户多半是看到会话列表未读之后才
+        // 点进来的，这一步是他唯一能看到「接收 / 另存为 / 拒绝」的机会。历史那一页回来时会先
+        // 清空列表，故 OnHistoryMessages 渲染完首屏后还要再补一次。
+        RestorePendingFolderInvite();
     }
 
     LOG_INFO(_T("单聊窗口已创建并显示。"));
@@ -724,6 +763,7 @@ void CBalloonChatWindow::InitUi()
     RegisterTip(content, balloonchatwnd::kIdTbEmoji,      _T("表情"));
     RegisterTip(content, balloonchatwnd::kIdTbImage,      _T("图片"));
     RegisterTip(content, balloonchatwnd::kIdTbFile,       _T("文件"));
+    RegisterTip(content, balloonchatwnd::kIdTbFolder,     _T("发送文件夹"));
     RegisterTip(content, balloonchatwnd::kIdTbScreenshot, _T("截图"));
     RegisterTip(content, balloonchatwnd::kIdTbVoice,      _T("语音消息"));
     RegisterTip(content, balloonchatwnd::kIdTbFont,       _T("字体设置"));
@@ -905,11 +945,13 @@ void CBalloonChatWindow::OnChatFilesDropped(const std::vector<std::wstring>& pat
         return;
     }
 
-    // 归类：图片走图片消息、其余走文件消息；文件夹 / 失效路径 / 空文件进跳过项。
+    // 归类：图片走图片消息、普通文件走文件消息、文件夹走文件夹传输；失效路径与空文件
+    // 进跳过项。三条链路互不影响，混着拖进来时各发各的。
     const balloonchatwnd::DropPlan plan =
         balloonchatwnd::BuildDropPlanFromPaths(paths, forceAsFile);
 
-    // 一次拖太多先问一句，避免误把整个目录拖进来把对方刷屏。
+    // 一次拖太多先问一句，避免误把整个目录拖进来把对方刷屏。这道确认只管文件，
+    // 文件夹另有一道本机并发笔数闸门。
     if (plan.m_needConfirm)
     {
         CString ask;
@@ -938,6 +980,11 @@ void CBalloonChatWindow::OnChatFilesDropped(const std::vector<std::wstring>& pat
         }
     }
 
+    // 文件夹逐个走文件夹传输链路，与工具栏「发送文件夹」按钮同一条路（本机并发笔数
+    // 达到上限后剩下的不再发起，由该方法给出提示）。放在文件之后处理，是因为它可能
+    // 弹出模态提示框，先把不需要用户过问的那些发出去。
+    SendDroppedFolders(plan.m_folders);
+
     // 有发不出去的，汇总成一句话提示。逐条弹窗会很烦，故只报"几个 + 主要原因"。
     if (!plan.m_skipped.empty() && m_dropToast != NULL)
     {
@@ -945,8 +992,9 @@ void CBalloonChatWindow::OnChatFilesDropped(const std::vector<std::wstring>& pat
         m_dropToast->Show(note.c_str());
     }
 
-    LOG_INFO("单聊窗拖放处理完成: 发送 %d 个, 跳过 %d 个, shift=%d。",
-             (int)plan.m_items.size(), (int)plan.m_skipped.size(), forceAsFile ? 1 : 0);
+    LOG_INFO("Single chat drop handled: files %d, folders %d, skipped %d, shift=%d.",
+             (int)plan.m_items.size(), (int)plan.m_folders.size(),
+             (int)plan.m_skipped.size(), forceAsFile ? 1 : 0);
 }
 
 // =======================================================================
@@ -1662,6 +1710,971 @@ LRESULT CBalloonChatWindow::OnChatFileAction(UINT /*uMsg*/, WPARAM /*wParam*/,
     return 0;
 }
 
+// =======================================================================
+// 单聊文件夹传输（cmd_folder_* 1810~1817）
+//
+// 本窗口只做两件事：把用户在气泡上的点击转交 foldertransfer::FolderTransferManager，
+// 以及把管理器 / 网络层回投上来的事件画到那条文件夹气泡上。会话生命周期（扫描、建通道、
+// 收发字节、重试续传、保留期）一概不在这里，全在管理器手上。
+//
+// 定位一律靠<u>会话 id</u>：文件夹气泡是本地气泡，不进服务端消息表、没有 msgid。发起
+// 之初用的是管理器给的本地占位 id，服务端分配了真会话 id 之后由 OnFolderBound 换掉。
+// =======================================================================
+
+bool CBalloonChatWindow::GetFolderMessage(const std::string& sessionId,
+                                          balloonchatwnd::ChatMessage& out)
+{
+    balloonchatwnd::ChatMessageList* list = GetMessageList();
+    if (list == NULL)
+    {
+        return false;
+    }
+    return list->GetFolderMessage(sessionId, out);
+}
+
+bool CBalloonChatWindow::SetFolderMessage(const std::string& sessionId,
+                                          const balloonchatwnd::ChatMessage& msg)
+{
+    balloonchatwnd::ChatMessageList* list = GetMessageList();
+    if (list == NULL)
+    {
+        return false;
+    }
+    return list->SetFolderMessage(sessionId, msg);
+}
+
+void CBalloonChatWindow::ApplyFolderFailure(const std::string& sessionId, int errCode)
+{
+    balloonchatwnd::ChatMessage msg;
+    if (!GetFolderMessage(sessionId, msg))
+    {
+        //这笔传输不属于本会话（主面板是向所有已打开的聊天窗广播的），安静忽略。
+        return;
+    }
+
+    //用户取消要与真正的传输失败分开：两者的气泡措辞不同（「已取消」而不是「传输失败」），
+    //且取消之后不该再给「重试」。会话已过保留期同理，单独一档，按钮换成「重新发送」。
+    if (errCode == kFolderErrCanceled)
+    {
+        msg.folderState = balloonchatwnd::kFolderUserCanceled;
+    }
+    else if (errCode == kFolderErrSessionExpired)
+    {
+        msg.folderState = balloonchatwnd::kFolderExpired;
+    }
+    else
+    {
+        msg.folderState = balloonchatwnd::kFolderFailed;
+    }
+
+    msg.folderErrCode = errCode;
+    //「重试」可用与否由管理器手里的保留期计时说了算，界面不自己算 —— 那份计时是与
+    //服务端 folderretrywindow 对齐的唯一一处。
+    msg.folderWithinRetry =
+        foldertransfer::FolderTransferManager::GetInstance().IsWithinRetryWindow(sessionId);
+
+    SetFolderMessage(sessionId, msg);
+}
+
+// 「同时进行的文件夹传输已达上限」的提示文案。上限来自配置项（flamingo.ini 的
+// [app] foldermaxconcurrent），故文案里的笔数一律向管理器现取，界面不写死 —— 改了配置
+// 提示自然跟着变。发起、重新发送、重试三处共用本函数，三处措辞因而必然一致。
+static CString FolderBusyTipText()
+{
+    CString tip;
+    tip.Format(_T("同时进行的文件夹传输已达上限（最多 %d 笔），请等其中一笔结束后再试。"),
+               foldertransfer::FolderTransferManager::GetInstance().GetMaxConcurrent());
+    return tip;
+}
+
+// 文件夹接收的默认落地目录名。与聊天文件缓存的 ChatFile、图片缓存的 ChatImage 同级，
+// 都挂在 Users\<登录账号>\ 之下（这条口径的唯一出处是 net/UserCachePath.h），因而一个
+// 账号收到的文件夹不会落进另一个账号的目录里。
+static const wchar_t* const kFolderReceiveSubDir = L"ChatFolder";
+
+/**
+ *  取本机「文件夹接收」的默认落地位置 <数据根目录>Users\<登录账号>\ChatFolder\，
+ *  并按需逐级创建 Users、Users\<账号>、ChatFolder 三级目录。
+ *
+ *  气泡上点「接收」走的就是这条路：不打断用户去选位置，直接落到这里。根目录重名时
+ *  由接收端状态机自动改名（xxx(2) / xxx(3)……，见 FolderRecvSession::PrepareRootDirectory），
+ *  本函数只负责把<u>父目录</u>准备好。
+ *
+ *  @param out [出参] 目录完整路径，以反斜杠结尾；返回 false 时被清空
+ *  @return 目录已就位返回 true；尚未登录（拼不出账号目录）或建目录失败返回 false
+ */
+static bool EnsureDefaultFolderReceiveDir(std::wstring& out)
+{
+    out.clear();
+
+    //账号为空（尚未登录）时 UserCacheDir 返回空串，据此判定拼不出有效路径，
+    //绝不退回到当前工作目录去写。
+    const std::wstring account = net::CurrentUserAccount();
+    const std::wstring targetDir =
+        net::UserCacheDir(g_szDataRoot, account, kFolderReceiveSubDir);
+    if (targetDir.empty())
+    {
+        LOG_ERROR("Folder recv: cannot build the default receive directory, account is empty.");
+        return false;
+    }
+
+    //CreateDirectoryW 只建最后一级，故从 Users 往下逐级调用；中间某级已存在会返回失败，
+    //忽略即可，成败以最后对目标目录的属性检查为准（与 net/FileTransfer 的下载落地同一套写法）。
+    std::wstring usersRoot = g_szDataRoot;
+    usersRoot += L"Users\\";
+    ::CreateDirectoryW(usersRoot.c_str(), NULL);
+
+    const std::wstring userDir = net::UserCacheDir(g_szDataRoot, account, NULL);
+    ::CreateDirectoryW(userDir.c_str(), NULL);
+    ::CreateDirectoryW(targetDir.c_str(), NULL);
+
+    const DWORD attr = ::GetFileAttributesW(targetDir.c_str());
+    if (attr == INVALID_FILE_ATTRIBUTES || (attr & FILE_ATTRIBUTE_DIRECTORY) == 0)
+    {
+        LOG_ERROR("Folder recv: create default receive directory failed, win32 error %lu.",
+                  ::GetLastError());
+        return false;
+    }
+
+    out = targetDir;
+    return true;
+}
+
+void CBalloonChatWindow::AcceptFolderInvite(const balloonchatwnd::ChatFolderActionData& data,
+                                            const std::wstring& saveParentDir)
+{
+    const int verdict = foldertransfer::FolderTransferManager::GetInstance()
+                            .AcceptInvite(data.sessionId, saveParentDir);
+    if (verdict == foldertransfer::kFolderStartOk)
+    {
+        LOG_INFO("Folder recv: invite accepted, session=%s.", data.sessionId.c_str());
+        return;
+    }
+
+    LOG_ERROR("Folder recv: accept refused by manager, session=%s, verdict=%d.",
+              data.sessionId.c_str(), verdict);
+    ::MessageBox(m_hWnd, _T("这次文件夹传输已经结束，无法再接收。"),
+                 g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+    //会话已不存在：把气泡收到「已取消」一档，免得「接收 / 另存为 / 拒绝」三个按钮一直挂着。
+    ApplyFolderFailure(data.sessionId, kFolderErrCanceled);
+}
+
+LRESULT CBalloonChatWindow::OnChatFolderAction(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                               LPARAM lParam, BOOL& /*bHandled*/)
+{
+    // 文件夹气泡按钮点击冒泡上来：lParam 为堆上 ChatFolderActionData，处理后 delete。
+    balloonchatwnd::ChatFolderActionData* d = (balloonchatwnd::ChatFolderActionData*)lParam;
+    if (d == NULL)
+    {
+        return 0;
+    }
+
+    foldertransfer::FolderTransferManager& mgr =
+        foldertransfer::FolderTransferManager::GetInstance();
+
+    switch (d->action)
+    {
+    //接收：不弹选目录框，直接落到本机默认的文件夹接收目录
+    //（<数据根目录>Users\<登录账号>\ChatFolder\<文件夹名>，同名时由接收端状态机自动
+    //改名成 xxx(2) / xxx(3)……），随后发 cmd_folder_response(accept=1)。想自己挑位置的
+    //用户走旁边的「另存为」。
+    case balloonchatwnd::kChatFolderAccept:
+    {
+        std::wstring saveDir;
+        if (!EnsureDefaultFolderReceiveDir(saveDir))
+        {
+            //默认目录建不出来（尚未登录、数据根目录只读或已被删除等）：如实告知，
+            //并指出「另存为」这条退路，不能什么都不发生让用户以为按钮点坏了。
+            ::MessageBox(m_hWnd,
+                         _T("无法创建默认的接收目录，请改用「另存为」选择其他保存位置。"),
+                         g_strAppTitle.c_str(), MB_OK | MB_ICONWARNING);
+            break;
+        }
+
+        AcceptFolderInvite(*d, saveDir);
+        break;
+    }
+
+    //另存为：同样是同意接收，只是先弹「选择保存位置」由用户挑落地位置 —— 一个文件夹
+    //可能有几十 GB，想放到别的盘时走这条路。选定之后的流程与「接收」完全一致。
+    case balloonchatwnd::kChatFolderSaveAs:
+    {
+        std::wstring saveDir;
+        if (!PickFolderPath(_T("选择保存位置"), saveDir))
+        {
+            LOG_INFO("Folder recv: user canceled the save-location dialog, session=%s.",
+                     d->sessionId.c_str());
+            break;
+        }
+
+        AcceptFolderInvite(*d, saveDir);
+        break;
+    }
+
+    //拒绝：发 cmd_folder_response(accept=0)，会话立即结束，不产生任何中转连接。
+    case balloonchatwnd::kChatFolderReject:
+    {
+        LOG_INFO("Folder recv: user rejected invite, session=%s.", d->sessionId.c_str());
+        mgr.RejectInvite(d->sessionId);
+
+        balloonchatwnd::ChatMessage msg;
+        if (GetFolderMessage(d->sessionId, msg))
+        {
+            msg.folderState = balloonchatwnd::kFolderRejected;
+            SetFolderMessage(d->sessionId, msg);
+        }
+        break;
+    }
+
+    //取消：应答前是撤回邀请（发 cmd_folder_cancel），传输中则停本端状态机、按失败流程收场。
+    //两种情形都由管理器判定，界面不预判；气泡状态等结果回投到达时再改，避免这里先改一次、
+    //稍后又被结果覆盖成另一种。
+    case balloonchatwnd::kChatFolderCancel:
+        LOG_INFO("Folder transfer: user canceled from bubble, session=%s, fromme=%d.",
+                 d->sessionId.c_str(), d->fromMe ? 1 : 0);
+        mgr.CancelTransfer(d->sessionId);
+        //撤回邀请这条路服务端只回一个通用应答、不再推状态，故这里就把气泡收掉。
+        ApplyFolderFailure(d->sessionId, kFolderErrCanceled);
+        break;
+
+    //重试续传：发 cmd_folder_retry，服务端校验通过后重新下发中转参数，双方复用上次的
+    //清单与已落盘进度接着传，全程不再打扰接收方。
+    case balloonchatwnd::kChatFolderRetry:
+    {
+        const int retryVerdict = mgr.RetryTransfer(d->sessionId);
+        if (retryVerdict == foldertransfer::kFolderStartOk)
+        {
+            //这一笔上一次失败时，服务端已经落过一条 result=7 的记录、把气泡接管走了
+            //（气泡身上带着那条记录的 msgid）。重试意味着它重新变成一条活的本地气泡：
+            //先把 msgid 清掉，后续的进度更新才落得进去，本次尝试结束时到达的那条新记录
+            //也才接管得了它。没被接管过的气泡走这一步什么都不会变。
+            balloonchatwnd::ChatMessageList* retryList = GetMessageList();
+            if (retryList != NULL)
+            {
+                retryList->ReviveFolderMessage(d->sessionId);
+            }
+
+            balloonchatwnd::ChatMessage msg;
+            if (GetFolderMessage(d->sessionId, msg))
+            {
+                //先回到「传输中」，让用户立刻看到点下去有反应；真正的进度随后就来。
+                msg.folderState   = balloonchatwnd::kFolderTransferring;
+                msg.folderErrCode = 0;
+                SetFolderMessage(d->sessionId, msg);
+            }
+            break;
+        }
+
+        LOG_WARNING("Folder transfer: retry refused, session=%s, verdict=%d.",
+                    d->sessionId.c_str(), retryVerdict);
+        if (retryVerdict == foldertransfer::kFolderStartBusy)
+        {
+            //名额被别的几笔占满：这一笔并没有过期，气泡照旧停在失败态，等用户稍后再点。
+            ::MessageBox(m_hWnd, (LPCTSTR)FolderBusyTipText(),
+                         g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+            break;
+        }
+
+        ::MessageBox(m_hWnd,
+                     _T("这次传输已超过可续传的时限，请重新发送该文件夹。"),
+                     g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+        ApplyFolderFailure(d->sessionId, kFolderErrSessionExpired);
+        break;
+    }
+
+    //打开文件夹：发送端开的是源目录，接收端开的是落地目录，两端同一个动作 id，
+    //开哪个由气泡里记着的 localRoot 决定（收发两侧写进去的本就不是同一个路径）。
+    case balloonchatwnd::kChatFolderOpenFolder:
+        if (d->localRoot.IsEmpty())
+        {
+            LOG_WARNING("Folder transfer: open folder skipped, local root is empty, session=%s.",
+                        d->sessionId.c_str());
+            break;
+        }
+        ::ShellExecuteW(m_hWnd, L"open", L"explorer.exe", (LPCWSTR)d->localRoot,
+                        NULL, SW_SHOWNORMAL);
+        break;
+
+    //重新发送：会话已不可续传（超过保留期），从零发起一次完整传输，重新征求对方同意。
+    //沿用气泡里记着的源目录，省得用户再选一次。
+    case balloonchatwnd::kChatFolderResend:
+    {
+        if (d->localRoot.IsEmpty())
+        {
+            //源目录没记住（例如是接收端那条气泡），退回让用户重新选。
+            PickAndSendFolder();
+            break;
+        }
+
+        std::string localId;
+        const int verdict = mgr.StartSend((int64_t)m_peerUserId,
+                                          std::wstring((LPCWSTR)d->localRoot), localId);
+        if (verdict != foldertransfer::kFolderStartOk)
+        {
+            LOG_WARNING("Folder send: resend refused, verdict=%d.", verdict);
+            ::MessageBox(m_hWnd, (LPCTSTR)FolderBusyTipText(),
+                         g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+            break;
+        }
+
+        //另起一条新气泡：这是一次全新的传输（重新征求同意、从零开始），与旧那条不是同一笔。
+        balloonchatwnd::ChatMessageList* list = GetMessageList();
+        if (list != NULL)
+        {
+            balloonchatwnd::ChatMessage msg;
+            msg.kind            = balloonchatwnd::kMsgFolder;
+            msg.fromMe          = true;
+            msg.folderName      = d->folderName;
+            msg.folderState     = balloonchatwnd::kFolderInviting;
+            msg.folderSessionId = localId;
+            msg.folderLocalRoot = d->localRoot;
+            FillSenderAvatar(msg, true);
+            list->AppendMessage(msg);
+        }
+        break;
+    }
+
+    //未知动作：气泡与本窗口的动作枚举对不上，只可能是一方漏改，记日志好定位。
+    default:
+        LOG_ERROR("Folder transfer: unknown bubble action %d, session=%s.",
+                  d->action, d->sessionId.c_str());
+        break;
+    }
+
+    delete d;
+    return 0;
+}
+
+bool CBalloonChatWindow::PickFolderPath(LPCTSTR title, std::wstring& out)
+{
+    out.clear();
+
+    // 弹系统选目录框。BIF_NEWDIALOGSTYLE 需调用线程已初始化 OLE，故就地配平
+    // CoInitialize / CoUninitialize（已初始化时返回 S_FALSE，仍需配平以不改引用计数语义）。
+    // 与「系统设置 → 存储」里选数据目录用的是同一套写法，不另造一份。
+    HRESULT hrCo = ::CoInitialize(NULL);
+
+    BROWSEINFO bi;
+    ::ZeroMemory(&bi, sizeof(bi));
+    bi.hwndOwner = m_hWnd;
+    bi.lpszTitle = title;
+    bi.ulFlags   = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+
+    LPITEMIDLIST pidl = ::SHBrowseForFolder(&bi);
+    TCHAR szPath[MAX_PATH] = { 0 };
+    BOOL  gotPath = FALSE;
+    if (pidl != NULL)
+    {
+        gotPath = ::SHGetPathFromIDList(pidl, szPath);
+        ::CoTaskMemFree(pidl);
+    }
+
+    if (SUCCEEDED(hrCo))
+    {
+        ::CoUninitialize();
+    }
+
+    if (!gotPath || szPath[0] == _T('\0'))
+    {
+        return false;
+    }
+
+    out = szPath;
+    return true;
+}
+
+int CBalloonChatWindow::StartFolderTransfer(const std::wstring& folderPath)
+{
+    std::string localId;
+    const int verdict = foldertransfer::FolderTransferManager::GetInstance().StartSend(
+        (int64_t)m_peerUserId, folderPath, localId);
+    if (verdict != foldertransfer::kFolderStartOk)
+    {
+        LOG_WARNING("Folder send: start refused, verdict=%d, peer=%u.", verdict, m_peerUserId);
+        return verdict;
+    }
+
+    // 扫描在工作线程上跑，规模统计要等 FMG_MSG_V2_FOLDER_SCANNED 才有；这里先把气泡建
+    // 出来（挂本地占位会话 id），用户立刻能看到"已经在发了"，随后由扫描结果补齐数字。
+    balloonchatwnd::ChatMessageList* list = GetMessageList();
+    if (list != NULL)
+    {
+        balloonchatwnd::ChatMessage msg;
+        msg.kind            = balloonchatwnd::kMsgFolder;
+        msg.fromMe          = true;
+        msg.folderName      = CString(foldertransfer::ExtractFolderName(folderPath).c_str());
+        msg.folderState     = balloonchatwnd::kFolderInviting;
+        msg.folderSessionId = localId;
+        msg.folderLocalRoot = CString(folderPath.c_str());
+        FillSenderAvatar(msg, true);
+        list->AppendMessage(msg);
+    }
+
+    LOG_INFO("Folder send: bubble created, peer=%u, localid=%s.", m_peerUserId, localId.c_str());
+    return foldertransfer::kFolderStartOk;
+}
+
+void CBalloonChatWindow::PickAndSendFolder()
+{
+    // 文件夹传输要与对方建中转通道，离线时这一步根本走不了。
+    if (!CheckOnlineFor(balloonmain::kActionTransferFile))
+    {
+        return;
+    }
+
+    // 调试入口（无对端绑定）不支持真实发文件夹。
+    if (m_peerUserId == 0)
+    {
+        return;
+    }
+
+    // 本机同时可进行的文件夹传输有笔数上限（发送与接收各算一笔，上限见 flamingo.ini 的
+    // [app] foldermaxconcurrent）。先在这里拦一道给出明确提示，免得用户白选一次目录；
+    // 管理器与服务端另有两道同样的校验，服务端是权威方。
+    if (foldertransfer::FolderTransferManager::GetInstance().IsBusy())
+    {
+        ::MessageBox(m_hWnd, (LPCTSTR)FolderBusyTipText(),
+                     g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+
+    std::wstring folderPath;
+    if (!PickFolderPath(_T("选择要发送的文件夹"), folderPath))
+    {
+        return;
+    }
+
+    const int verdict = StartFolderTransfer(folderPath);
+    if (verdict != foldertransfer::kFolderStartOk)
+    {
+        const CString tip = (verdict == foldertransfer::kFolderStartBusy)
+                            ? FolderBusyTipText()
+                            : CString(_T("无法发送这个文件夹，请换一个目录再试。"));
+        ::MessageBox(m_hWnd, (LPCTSTR)tip, g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+    }
+}
+
+// 提示文案里最多点名列出几个文件夹。多于这个数就写成「素材、备份、日志 等 8 个」——
+// 一次拖十几个文件夹进来时全列出来会把提示框拉得很长，前几个名字加上总数已经够用户
+// 认出是哪一批了。
+static const int kMaxNamedFoldersInTip = 3;
+
+/**
+ *  把一组文件夹名拼成提示里用的一句话，最多点名 kMaxNamedFoldersInTip 个，多出来的
+ *  只报总数。
+ *
+ *  @param names 文件夹名（不含路径），顺序即用户拖入顺序
+ *  @return 形如「素材、备份」或「素材、备份、日志 等 8 个」的文本；names 为空时返回空串
+ */
+static CString DescribeFolderNames(const std::vector<std::wstring>& names)
+{
+    CString text;
+    const int total  = (int)names.size();
+    const int listed = (total < kMaxNamedFoldersInTip) ? total : kMaxNamedFoldersInTip;
+    for (int i = 0; i < listed; ++i)
+    {
+        if (i > 0)
+        {
+            text += _T("、");
+        }
+        text += CString(names[i].c_str());
+    }
+    if (total > listed)
+    {
+        CString more;
+        more.Format(_T(" 等 %d 个"), total);
+        text += more;
+    }
+    return text;
+}
+
+void CBalloonChatWindow::SendDroppedFolders(const std::vector<std::wstring>& folders)
+{
+    if (folders.empty())
+    {
+        return;
+    }
+
+    // 调试入口（无对端绑定）与离线态都发不了文件夹，门禁与工具栏「发送文件夹」按钮一致。
+    if (m_peerUserId == 0)
+    {
+        return;
+    }
+    if (!CheckOnlineFor(balloonmain::kActionTransferFile))
+    {
+        return;
+    }
+
+    std::vector<std::wstring> busyNames;      // 因本机并发笔数已达上限而没发起的
+    std::vector<std::wstring> refusedNames;   // 被管理器以别的理由拒绝的（如拖进来的是盘符根目录）
+    int startedCount = 0;
+
+    for (std::vector<std::wstring>::size_type i = 0; i < folders.size(); ++i)
+    {
+        const int verdict = StartFolderTransfer(folders[i]);
+        if (verdict == foldertransfer::kFolderStartOk)
+        {
+            ++startedCount;
+            continue;
+        }
+
+        if (verdict == foldertransfer::kFolderStartBusy)
+        {
+            // 名额已满：本笔连同<u>后面所有</u>都不再发起。名额只有等已在跑的某一笔结束
+            // 才会放开，继续往下试只是把同一个失败重复若干次。
+            for (std::vector<std::wstring>::size_type j = i; j < folders.size(); ++j)
+            {
+                busyNames.push_back(foldertransfer::ExtractFolderName(folders[j]));
+            }
+            break;
+        }
+
+        // 其余理由（路径非法等）只影响这一个，后面的照发。
+        refusedNames.push_back(foldertransfer::ExtractFolderName(folders[i]));
+    }
+
+    LOG_INFO("Folder send by drop: total %d, started %d, busy %d, refused %d, peer=%u.",
+             (int)folders.size(), startedCount, (int)busyNames.size(),
+             (int)refusedNames.size(), m_peerUserId);
+
+    if (busyNames.empty() && refusedNames.empty())
+    {
+        return;
+    }
+
+    // 没发起的要说清是哪几个、为什么 —— 只说"有几个没发出去"，用户还得自己一个个核对。
+    CString tip;
+    if (!busyNames.empty())
+    {
+        tip.Format(_T("同时进行的文件夹传输已达上限（最多 %d 笔），以下 %d 个文件夹未发起：%s。")
+                   _T("请等其中一笔结束后再把它们拖进来。"),
+                   foldertransfer::FolderTransferManager::GetInstance().GetMaxConcurrent(),
+                   (int)busyNames.size(),
+                   (LPCTSTR)DescribeFolderNames(busyNames));
+    }
+    if (!refusedNames.empty())
+    {
+        CString refusedText;
+        refusedText.Format(_T("以下 %d 个文件夹无法发送，请确认它不是磁盘根目录后再试：%s。"),
+                           (int)refusedNames.size(),
+                           (LPCTSTR)DescribeFolderNames(refusedNames));
+        if (!tip.IsEmpty())
+        {
+            tip += _T("\n");
+        }
+        tip += refusedText;
+    }
+    ::MessageBox(m_hWnd, (LPCTSTR)tip, g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+}
+
+void CBalloonChatWindow::AppendFolderInviteBubble(const std::string& sessionIdUtf8,
+                                                  const std::string& folderNameUtf8,
+                                                  long long totalDirs, long long totalFiles,
+                                                  long long totalBytes)
+{
+    balloonchatwnd::ChatMessageList* list = GetMessageList();
+    if (list == NULL)
+    {
+        return;
+    }
+
+    std::wstring folderName;
+    foldertransfer::Utf8ToUtf16(folderNameUtf8, folderName);
+
+    balloonchatwnd::ChatMessage msg;
+    msg.kind             = balloonchatwnd::kMsgFolder;
+    msg.fromMe           = false;
+    msg.folderName       = CString(folderName.c_str());
+    msg.folderFileCount  = (int)totalFiles;
+    msg.folderDirCount   = (int)totalDirs;
+    msg.folderSizeBytes  = totalBytes;
+    msg.folderSize       = CString(balloonchatwnd::FormatFileSize(totalBytes).c_str());
+    msg.folderTotalBytes = totalBytes;
+    //邀请态：接收端此时看到的是「接收 / 另存为 / 拒绝」三个按钮，没有进度条。
+    msg.folderState      = balloonchatwnd::kFolderInviting;
+    msg.folderSessionId  = sessionIdUtf8;
+    FillSenderAvatar(msg, false);
+    list->AppendMessage(msg);
+}
+
+void CBalloonChatWindow::OnFolderInvite(const net::FolderInviteNotify& notify)
+{
+    //走到这里说明本窗口<u>已经打开着</u>：主面板只把邀请交给已打开的聊天窗，窗口没开
+    //时改由会话列表未读 + 托盘闪烁提醒（见 CBalloonMainPanel::OnFolderInviteNotify）。
+    //故这里既不建窗、也不再把窗口弹到前台 —— 用户没有主动打开会话时不打扰他。
+    AppendFolderInviteBubble(notify.m_sessionId, notify.m_folderName,
+                             (long long)notify.m_totalDirs, (long long)notify.m_totalFiles,
+                             (long long)notify.m_totalSize);
+
+    LOG_INFO("Folder recv: invite bubble created, session=%s, files=%lld, bytes=%lld.",
+             notify.m_sessionId.c_str(), (long long)notify.m_totalFiles,
+             (long long)notify.m_totalSize);
+}
+
+void CBalloonChatWindow::RestorePendingFolderInvite()
+{
+    //调试入口（--chatwindow，无对端绑定）没有真实会话可查。
+    if (m_peerUserId == 0)
+    {
+        return;
+    }
+
+    //可能有多条：同一个人先后发来两个文件夹时，两条邀请会同时挂着（本机同时可进行多笔
+    //文件夹传输），都要补画出来，只画一条会让另一条永远没机会被应答。
+    std::vector<foldertransfer::FolderPendingInvite> invites;
+    if (foldertransfer::FolderTransferManager::GetInstance().GetPendingInvites(
+            (int64_t)m_peerUserId, invites) == 0)
+    {
+        //与本会话对端之间没有待应答的邀请，属最常见情形，不必记日志。
+        return;
+    }
+
+    for (size_t i = 0; i < invites.size(); ++i)
+    {
+        const foldertransfer::FolderPendingInvite& invite = invites[i];
+
+        //已经画过了（本方法在建窗与首屏历史渲染完之后各调一次，实时推送也可能已经补上）：
+        //按会话 id 查得到本行即说明气泡在，跳过，避免同一条邀请画出两遍。
+        balloonchatwnd::ChatMessage existing;
+        if (GetFolderMessage(invite.m_sessionId, existing))
+        {
+            continue;
+        }
+
+        AppendFolderInviteBubble(invite.m_sessionId, invite.m_folderNameUtf8,
+                                 (long long)invite.m_dirCount, (long long)invite.m_fileCount,
+                                 (long long)invite.m_totalBytes);
+
+        LOG_INFO("Folder recv: pending invite restored, session=%s, peer=%u, files=%lld, bytes=%lld.",
+                 invite.m_sessionId.c_str(), m_peerUserId,
+                 (long long)invite.m_fileCount, (long long)invite.m_totalBytes);
+    }
+}
+
+void CBalloonChatWindow::OnFolderScanned(const foldertransfer::FolderScanNotice& notice)
+{
+    balloonchatwnd::ChatMessage msg;
+    if (!GetFolderMessage(notice.m_localId, msg))
+    {
+        //本地占位 id 只存在于发起这次传输的那个窗口里，别的窗口查不到属正常情形。
+        return;
+    }
+
+    if (notice.m_scanError != foldertransfer::kFolderScanOk)
+    {
+        //扫描失败即整个文件夹失败（需求：任一错误即整体失败）。用「读源文件失败」这个
+        //错误码 —— 无权限、目录不存在、枚举出错都属于"本端读不出来"这一类。
+        LOG_ERROR("Folder send: scan failed, localid=%s, error=%d, path=%s.",
+                  notice.m_localId.c_str(), notice.m_scanError, notice.m_errorPath.c_str());
+        msg.folderState   = balloonchatwnd::kFolderFailed;
+        msg.folderErrCode = kFolderErrReadFail;
+        //本地扫描失败没有服务端会话，谈不上续传，「重试」不给。
+        msg.folderWithinRetry = false;
+        SetFolderMessage(notice.m_localId, msg);
+        return;
+    }
+
+    msg.folderName       = CString(notice.m_folderName.c_str());
+    msg.folderFileCount  = (int)notice.m_fileCount;
+    msg.folderDirCount   = (int)notice.m_dirCount;
+    msg.folderSizeBytes  = notice.m_totalBytes;
+    msg.folderSize       = CString(balloonchatwnd::FormatFileSize(notice.m_totalBytes).c_str());
+    msg.folderTotalBytes = notice.m_totalBytes;
+    msg.folderLocalRoot  = CString(notice.m_rootPath.c_str());
+    SetFolderMessage(notice.m_localId, msg);
+}
+
+void CBalloonChatWindow::OnFolderBound(const foldertransfer::FolderBindNotice& bind)
+{
+    balloonchatwnd::ChatMessage msg;
+    if (!GetFolderMessage(bind.m_localId, msg))
+    {
+        return;
+    }
+
+    if (bind.m_code == kFolderErrOk)
+    {
+        //把气泡上的本地占位 id 换成服务端分配的真会话 id，此后所有信令都按它定位本行。
+        msg.folderSessionId = bind.m_sessionId;
+        SetFolderMessage(bind.m_localId, msg);
+
+        //真会话 id 到手的这一刻，把发送端的<u>源目录</u>按它登记进本地落点库。日后翻
+        //聊天记录 / 消息记录窗时，那条 msgtype=18 的传输记录条据此才给得出「打开文件夹」
+        //——记录条本身不含任何路径，服务端也不记。
+        if (!msg.folderLocalRoot.IsEmpty())
+        {
+            balloonhistory::CFolderLocalStore::GetInstance().Upsert(
+                bind.m_sessionId, std::wstring((LPCWSTR)msg.folderLocalRoot));
+        }
+
+        LOG_INFO("Folder send: bubble bound to server session %s (localid=%s).",
+                 bind.m_sessionId.c_str(), bind.m_localId.c_str());
+        return;
+    }
+
+    //被服务端拒绝：气泡转失败态，失败原因用服务端给的码，双方看到的是同一条文案。
+    msg.folderState       = balloonchatwnd::kFolderFailed;
+    msg.folderErrCode     = bind.m_code;
+    msg.folderWithinRetry = false;
+    SetFolderMessage(bind.m_localId, msg);
+
+    //规模超限时另给一次提示，把服务端配置的上限值原样告诉用户 —— 客户端不硬编码上限，
+    //改了服务端配置提示文案自然跟着变。
+    if (bind.m_code == kFolderErrTooManyFiles
+        || bind.m_code == kFolderErrTooLarge)
+    {
+        CString tip;
+        tip.Format(_T("这个文件夹超出了服务器的限制：单次最多 %lld 个文件、总大小不超过 %s。"),
+                   (long long)bind.m_maxFiles,
+                   balloonchatwnd::FormatFileSize(bind.m_maxSize).c_str());
+        ::MessageBox(m_hWnd, (LPCTSTR)tip, g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+    }
+}
+
+void CBalloonChatWindow::OnFolderState(const net::FolderStateNotify& notify)
+{
+    balloonchatwnd::ChatMessage msg;
+    if (!GetFolderMessage(notify.m_sessionId, msg))
+    {
+        return;
+    }
+
+    switch (notify.m_state)
+    {
+    //响铃中：邀请已送达对方，发送端显示「等待对方接收」。
+    case kFolderStateRinging:
+        msg.folderState = balloonchatwnd::kFolderInviting;
+        break;
+
+    //传输中：目录已建好、正在收发字节，气泡开始显示进度条。
+    case kFolderStateTransferring:
+        msg.folderState = balloonchatwnd::kFolderTransferring;
+        break;
+
+    //对方拒绝接收。
+    case kFolderStateRejected:
+        msg.folderState = balloonchatwnd::kFolderRejected;
+        break;
+
+    //发送方在对方应答前撤回了邀请。
+    case kFolderStateCanceled:
+        msg.folderState = balloonchatwnd::kFolderInviteCanceled;
+        break;
+
+    //对方不在线：发起时就不在线，或响铃期间退出登录。
+    case kFolderStatePeerOffline:
+        msg.folderState = balloonchatwnd::kFolderPeerOffline;
+        break;
+
+    //邀请超时无人应答，服务端已自动结束会话。
+    case kFolderStateTimeout:
+        msg.folderState = balloonchatwnd::kFolderTimeout;
+        break;
+
+    //传输失败：失败原因与「重试」可用与否由 ApplyFolderFailure 统一处理，
+    //本分支直接转交，不在这里另写一份。
+    case kFolderStateFailed:
+        ApplyFolderFailure(notify.m_sessionId, notify.m_errCode);
+        return;
+
+    //全部完成并通过校验。
+    case kFolderStateCompleted:
+        msg.folderState    = balloonchatwnd::kFolderCompleted;
+        msg.folderProgress = kFolderFullPercent;
+        break;
+
+    //越界状态：解析层已按 1~8 校验过，走到这里说明协议实现不一致，记日志后不动界面。
+    default:
+        LOG_ERROR("Folder transfer: unexpected state %d for session %s.",
+                  notify.m_state, notify.m_sessionId.c_str());
+        return;
+    }
+
+    SetFolderMessage(notify.m_sessionId, msg);
+}
+
+void CBalloonChatWindow::OnFolderTransferStarted(const std::string& sessionId)
+{
+    balloonchatwnd::ChatMessage msg;
+    if (!GetFolderMessage(sessionId, msg))
+    {
+        return;
+    }
+
+    msg.folderState   = balloonchatwnd::kFolderTransferring;
+    msg.folderErrCode = 0;
+    SetFolderMessage(sessionId, msg);
+}
+
+void CBalloonChatWindow::OnFolderProgress(const foldertransfer::FolderProgressNotice& progress)
+{
+    balloonchatwnd::ChatMessage msg;
+    if (!GetFolderMessage(progress.m_sessionId, msg))
+    {
+        return;
+    }
+
+    msg.folderState      = balloonchatwnd::kFolderTransferring;
+    msg.folderSentBytes  = progress.m_doneBytes;
+    msg.folderTotalBytes = progress.m_totalBytes;
+    msg.folderProgress   = (progress.m_totalBytes > 0)
+                           ? (int)(progress.m_doneBytes * kFolderFullPercent / progress.m_totalBytes)
+                           : 0;
+    //完成文件数从 0 起，而气泡上写的是"第 i 个"，故显示序号取"已完成数 + 1"，
+    //并夹到文件总数之内，免得最后一个文件传完时冒出"第 n+1 个"。
+    msg.folderCurIndex   = (int)(progress.m_doneFiles + 1);
+    if (progress.m_totalFiles > 0 && msg.folderCurIndex > (int)progress.m_totalFiles)
+    {
+        msg.folderCurIndex = (int)progress.m_totalFiles;
+    }
+
+    //状态行只显示文件名，清单里的相对路径太长会把那一行挤爆。
+    std::wstring current;
+    foldertransfer::Utf8ToUtf16(progress.m_currentFile, current);
+    const std::wstring::size_type cut = current.find_last_of(L"\\/");
+    if (cut != std::wstring::npos)
+    {
+        current = current.substr(cut + 1);
+    }
+    msg.folderCurFile = CString(current.c_str());
+
+    SetFolderMessage(progress.m_sessionId, msg);
+}
+
+void CBalloonChatWindow::OnFolderResult(const foldertransfer::FolderResultNotice& result)
+{
+    //本地根目录一律先登记：接收端在这里才第一次拿到落地目录（含重名自动改名之后的名字），
+    //发送端登记的则是绑定会话时那个源目录（这里再写一遍，覆盖成同一个值，无副作用）。
+    //放在成功 / 失败分叉<u>之前</u>：失败的那一笔在保留期内还能重试，重试成功时的记录条
+    //仍要能打开这个目录；接收端即便这次失败，已落盘的那部分也在这个目录里。
+    if (!result.m_sessionId.empty() && !result.m_localRoot.empty())
+    {
+        balloonhistory::CFolderLocalStore::GetInstance().Upsert(result.m_sessionId,
+                                                                result.m_localRoot);
+    }
+
+    if (!result.m_success)
+    {
+        ApplyFolderFailure(result.m_sessionId, result.m_errCode);
+        return;
+    }
+
+    balloonchatwnd::ChatMessage msg;
+    if (!GetFolderMessage(result.m_sessionId, msg))
+    {
+        return;
+    }
+
+    msg.folderState    = balloonchatwnd::kFolderCompleted;
+    msg.folderProgress = kFolderFullPercent;
+    msg.folderErrCode  = 0;
+    msg.folderCurFile.Empty();
+    if (!result.m_localRoot.empty())
+    {
+        //接收端在这里才第一次拿到落地目录（含自动改名之后的名字），「打开文件夹」要用它。
+        msg.folderLocalRoot = CString(result.m_localRoot.c_str());
+    }
+    SetFolderMessage(result.m_sessionId, msg);
+
+    LOG_INFO("Folder transfer: bubble marked completed, session=%s, files=%lld, bytes=%lld.",
+             result.m_sessionId.c_str(), (long long)result.m_totalFiles,
+             (long long)result.m_totalBytes);
+}
+
+void CBalloonChatWindow::OnFolderRecord(const net::MessageNotify& notify, bool fromMe)
+{
+    //content 解析不出来（字段缺失、结局非终态等）时 m_folderResult 保持 0。这种记录画
+    //出来只会是一条什么都说不清的气泡，不如不画，留一条日志供回查。
+    const int state = balloonchatwnd::FolderStateFromRecord(notify.m_folderResult,
+                                                            notify.m_folderErrCode);
+    if (state == 0)
+    {
+        LOG_WARNING("Folder record: unusable content, msgid=%lld, result=%d, errcode=%d.",
+                    (long long)notify.m_msgid, notify.m_folderResult, notify.m_folderErrCode);
+        return;
+    }
+
+    balloonchatwnd::ChatMessageList* list = GetMessageList();
+    if (list == NULL)
+    {
+        return;
+    }
+
+    //先看会话里有没有那条还没被接管过的本地气泡。有就在它原地改，界面上不多出一条、
+    //位置也不跳；没有就下面新建一条。
+    balloonchatwnd::ChatMessage msg;
+    const bool adopting = !notify.m_folderSessionId.empty()
+                          && list->GetFolderMessage(notify.m_folderSessionId, msg);
+    if (!adopting)
+    {
+        //新建的这条记录气泡：规模统计只能取记录里带来的那份（本机没有这笔传输的现场）。
+        msg = balloonchatwnd::ChatMessage();
+        msg.kind            = balloonchatwnd::kMsgFolder;
+        msg.folderSessionId = notify.m_folderSessionId;
+        FillSenderAvatar(msg, fromMe);
+    }
+
+    msg.fromMe = fromMe;
+
+    //文件夹名与三项规模统计一律以服务端记录为准：本地气泡上那份是扫描时算的，
+    //两者正常相同；真不同时服务端那份才是双方都看得到的那一份。
+    std::wstring folderName;
+    foldertransfer::Utf8ToUtf16(notify.m_folderName, folderName);
+    msg.folderName      = CString(folderName.c_str());
+    msg.folderDirCount  = (int)notify.m_folderTotalDirs;
+    msg.folderFileCount = (int)notify.m_folderTotalFiles;
+    msg.folderSizeBytes = notify.m_folderTotalSize;
+    msg.folderSize      = CString(balloonchatwnd::FormatFileSize(notify.m_folderTotalSize).c_str());
+
+    msg.folderState   = state;
+    msg.folderErrCode = notify.m_folderErrCode;
+    //完成态把进度条置满：接管的那条气泡可能停在 99%（最后一片的回调与记录到达谁先谁后
+    //说不准），新建的那条则本来就没有进度。
+    if (state == balloonchatwnd::kFolderCompleted)
+    {
+        msg.folderProgress = kFolderFullPercent;
+        msg.folderCurFile.Empty();
+    }
+
+    //「重试」可用与否仍由管理器手里的保留期计时说了算 —— 那是与服务端 folderretrywindow
+    //对齐的唯一一处。翻历史看到的老记录在管理器里查不到会话，自然得到 false，按钮置灰。
+    msg.folderWithinRetry =
+        foldertransfer::FolderTransferManager::GetInstance().IsWithinRetryWindow(
+            notify.m_folderSessionId);
+
+    //本地根目录：接管时气泡上多半已经有了；新建时（换机器、或窗口是传完才打开的）
+    //去本机的落点登记库里查一次。查不到就没有「打开文件夹」——那台机器上从来没有过
+    //这个目录，这是预期行为。
+    if (msg.folderLocalRoot.IsEmpty() && !notify.m_folderSessionId.empty())
+    {
+        std::wstring registered;
+        if (balloonhistory::CFolderLocalStore::GetInstance().Query(notify.m_folderSessionId,
+                                                                   registered))
+        {
+            msg.folderLocalRoot = CString(registered.c_str());
+        }
+    }
+
+    //填上服务器 msgid 与消息时间 —— 这一步之后本条气泡就不再是"活的本地气泡"，
+    //同一会话后续到达的记录（下一次尝试留下的那条）不会再改动它。
+    msg.msgid       = (long long)notify.m_msgid;
+    msg.timestampMs = (long long)notify.m_timestamp;
+
+    if (adopting)
+    {
+        list->SetFolderMessage(notify.m_folderSessionId, msg);
+        LOG_INFO("Folder record: adopted the live bubble, session=%s, msgid=%lld, result=%d.",
+                 notify.m_folderSessionId.c_str(), (long long)notify.m_msgid,
+                 notify.m_folderResult);
+        return;
+    }
+
+    list->AppendMessage(msg);
+    LOG_INFO("Folder record: appended as a new row, session=%s, msgid=%lld, result=%d.",
+             notify.m_folderSessionId.c_str(), (long long)notify.m_msgid,
+             notify.m_folderResult);
+}
+
 LRESULT CBalloonChatWindow::OnChatImageAction(UINT /*uMsg*/, WPARAM /*wParam*/,
                                               LPARAM lParam, BOOL& /*bHandled*/)
 {
@@ -1977,6 +2990,16 @@ LRESULT CBalloonChatWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         && pNotify->ctrlId == balloonchatwnd::kIdTbFile)
     {
         PickAndSendFile();
+        return 0;
+    }
+
+    // 点击"发送文件夹"工具栏按钮 → 选一个本地目录整体发给对方（走 cmd_folder_* 那条
+    // 独立链路，与单个文件传输不是一回事）。
+    if (pNotify != NULL
+        && pNotify->code == balloonwjui::DUIN_CLICK
+        && pNotify->ctrlId == balloonchatwnd::kIdTbFolder)
+    {
+        PickAndSendFolder();
         return 0;
     }
 
@@ -3395,6 +4418,19 @@ void CBalloonChatWindow::OnRecvMessage(const net::MessageNotify& notify)
         return;
     }
 
+    // 文件夹传输记录：优先就地接管会话里那条还没被接管过的本地文件夹气泡，接管不了才
+    // 追加一条新的（详见 OnFolderRecord 的说明）。这条记录由服务端生成、<u>向双方各推
+    // 一帧</u>，其 from 恒为文件夹发送方，故本端到底是发送方还是接收方要与登录用户比对
+    // 才知道 —— 不能像别的推送那样一律当成"对方发来的"。
+    if (notify.m_msgtype == kMsgTypeFolder)
+    {
+        const UINT selfId = (m_lpFMGClient != NULL)
+                            ? m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
+        const bool fromMe = (selfId != 0 && (UINT)notify.m_from == selfId);
+        OnFolderRecord(notify, fromMe);
+        return;
+    }
+
     // 其余非文本类型（解析层未填 m_text）暂不渲染（后续轮次补）。
     if (notify.m_text.empty())
     {
@@ -3792,6 +4828,15 @@ void CBalloonChatWindow::OnHistoryMessages(const net::SyncMessagesResult& result
             continue;
         }
 
+        // 文件夹传输记录：与实时推送共用 OnFolderRecord，两条路看到的样子因而一致。
+        // 同一次传输的多次尝试各有一条记录，翻历史时会依次渲染出多条 —— 这是预期行为
+        // （见 OnFolderRecord 的说明），不是重复消息。
+        if (m.m_msgtype == kMsgTypeFolder)
+        {
+            OnFolderRecord(m, fromMe);
+            continue;
+        }
+
         // 文本取正文；其余非文本（文件/语音等，m_text 空）用占位文字渲染成文本气泡，
         // 避免历史出现空洞。
         CString text;
@@ -3822,6 +4867,11 @@ void CBalloonChatWindow::OnHistoryMessages(const net::SyncMessagesResult& result
     }
 
     balloonchatwnd::OnFirstPageLoaded(m_paging, oldestInBatch, result.m_hasmore);
+
+    // 首屏渲染前把列表整个清空过，建窗时补出的那条文件夹邀请气泡也一并没了；在这里
+    // 再补一次。文件夹气泡不进服务端消息表，历史里不会有它，故只能这样重建。
+    RestorePendingFolderInvite();
+
     list->ScrollToBottom();
     // 历史已渲染：若有从历史窗"定位"过来、当时消息还没加载的待办，现在补定位，成功则清。
     if (m_pendingLocateMsgid != 0 && list->ScrollToMsgid(m_pendingLocateMsgid))

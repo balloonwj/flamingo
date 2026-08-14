@@ -20,8 +20,8 @@
 #include "../EncodeUtil.h"              // UnicodeToUtf8：界面文本转协议侧 UTF-8
 #include "../UserSessionData.h"         // FMG_MSG_OPEN_CHAT / FMG_MSG_OPEN_CONTACT_PROFILE
 #include "../BalloonMain/PopupMenuPlacement.h"   // ClampPopupMenuToWorkArea
-#include "../../balloonui/balloonui/Controls/List/DuiMenu.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
 #include "../FlamingoClient.h"          // 取本人 userid
 #include "../net/IUSocket.h"            // 各 Send / Request 方法
 #include "../net/GroupProtocolClient.h" // 应答与推送的解析结构

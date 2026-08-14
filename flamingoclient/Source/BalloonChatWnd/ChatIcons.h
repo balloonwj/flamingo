@@ -38,6 +38,7 @@ enum ChatIconKind
     kChatIconFont    = 14,  // 大写字母 A —— 字体设置
     kChatIconRemoteDesktop = 15,  // 显示器 —— 远程桌面
     kChatIconPin     = 16,  // 图钉 —— 被 Pin 住的消息（画在气泡右上角外侧）
+    kChatIconFolder  = 17,  // 文件夹 + 向上箭头 —— 发送文件夹
 };
 
 /**

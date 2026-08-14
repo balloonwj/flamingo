@@ -37,7 +37,7 @@ extern CAppModule _Module;
 
 #include "ChatIconButton.h"
 #include "ChatIcons.h"
-#include "../../balloonui/balloonui/Controls/Feedback/DuiToolTip.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"
 
 namespace balloonchatwnd {
 

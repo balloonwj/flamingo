@@ -98,7 +98,7 @@ public:
      *  构造"修改在线状态"的 cmd_change_presence 请求 JSON 包体（紧凑、UTF-8）。
      *  服务端据 presence 更新会话运行态并向好友广播；该状态不入库。
      *  @param presence 目标在线状态（v2 presence_type，取值见 net/Protocol.h：
-     *                  0 离线 / 1 在线 / 2 离开 / 3 勿扰 / 4 隐身）
+     *                  0 离线 / 1 在线 / 2 离开 / 3 勿扰）
      *  @return 紧凑 JSON 文本：{"presence":N}
      */
     static std::string buildChangePresenceRequest(int presence);

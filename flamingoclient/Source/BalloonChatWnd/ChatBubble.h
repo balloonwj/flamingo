@@ -3,7 +3,7 @@
  *
  *  单聊窗里的一条消息行 —— 对照 design 07 / chat.jsx 的 MessageBubble。
  *  一条消息一个 ChatBubble：可能是居中时间分隔，也可能是带头像的气泡
- *  （对方靠左 / 自己靠右），气泡内容支持文字 / emoji / 图片 / 文件，
+ *  （对方靠左 / 自己靠右），气泡内容支持文字 / emoji / 图片 / 文件 / 文件夹传输，
  *  气泡上方可带引用块、自己消息下方带"✓ 已读"回执。
  *
  *  文字气泡支持自动折行：超过气泡最大宽度的长文字在气泡内换行、气泡
@@ -20,8 +20,9 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/DuiControl.h"
+#include "../../../third-party/balloonui/balloonui/DuiControl.h"
 #include "ChatMockData.h"
+#include "ChatFolderStateModel.h"  // kMaxChatFolderActions（文件夹按钮命中矩形数组的长度）
 #include "ChatTextSelection.h"   // SelLayout（成员需完整类型）
 #include "ChatLinkDetect.h"      // LinkSpan（成员需完整类型）
 #include <string>
@@ -120,6 +121,13 @@ public:
 
     // 文件已删除 / 失效（服务端已不存在）：置"已删除"态、文件名加删除线；触发重绘。
     void SetFileDeleted();
+
+    // ---- 文件夹气泡（kMsgFolder）----
+    // 注：文件夹气泡的高度同样随状态变化（有无进度条 / 失败原因行 / 按钮行），故宿主
+    // 更新完状态后须 ForceLayout 重排，不能只 Invalidate。
+
+    // 取本行文件夹传输的会话 id（状态推送到达后宿主按它定位本行）。空=无。
+    const std::string& FolderSessionId() const { return m_msg.folderSessionId; }
 
     // 只读取回本行承载的消息（右键菜单复制 / 引用等需要）。
     const ChatMessage& GetMessage() const { return m_msg; }
@@ -238,10 +246,6 @@ public:
     // 框架经 DuiControl* 发起的非内容重绘走基类、不置脏（缓存仍有效，语义正确）。
     void Invalidate();
 
-    // DuiControl 覆写：滚轮转发给祖先消息列表（气泡铺满列表，滚轮多落在
-    // 气泡上，须主动交还）。
-    bool OnMouseWheel(POINT pt, short zDelta, UINT mkFlags) override;
-
     // DuiControl 覆写：左键点击 —— 文字气泡开始拖拽选择；多选模式下切换本行选中态。
     bool OnLButtonDown(POINT pt, UINT mkFlags) override;
 
@@ -358,6 +362,11 @@ private:
     // 供悬停高亮（OnMouseMove）、手型光标（OnSetCursor）、点击（OnLButtonDown）共用。
     int FileLinkAtPoint(POINT pt) const;
 
+    // 取落点 pt（宿主客户区坐标）命中的文件夹操作链接下标；未命中返回 -1。用途与
+    // FileLinkAtPoint 相同。<u>不可用的按钮（如保留期已过的「重试」）一律返回 -1</u>：
+    // 它画成灰色只是让用户知道有这条路、暂时走不通，不该给悬停高亮、手型光标和点击。
+    int FolderLinkAtPoint(POINT pt) const;
+
     // 确保渲染缓存位图存在且为 w×h；尺寸变化则重建。ref 提供兼容 DC。
     void EnsureRenderCache(HDC ref, int w, int h);
     // 释放渲染缓存位图（尺寸变 / SetMessage 等内容变 / 析构时）。
@@ -369,6 +378,11 @@ private:
     // 文件气泡底部按钮被点击：组 ChatFileActionData 经 WM_CHAT_FILE_ACTION 发给宿主
     // 聊天窗集中处理（打开 / 另存为 / 取消 / 重试）。action 取值见 ChatFileActionKind。
     void HandleFileButton(int action);
+
+    // 文件夹气泡底部按钮被点击：组 ChatFolderActionData 经 WM_CHAT_FOLDER_ACTION 发给
+    // 宿主聊天窗集中处理（接收 / 另存为 / 拒绝 / 取消 / 重试续传 / 重新发送 / 打开文件夹）。
+    // action 取值见 ChatFolderActionKind。气泡不认识传输会话，只负责把点击如实上报。
+    void HandleFolderButton(int action);
 
     // 图片气泡右键选了「图片另存为」/「再次发送」：组 ChatImageActionData 经
     // WM_CHAT_IMAGE_ACTION 发给宿主聊天窗执行。默认另存名在这里就按本行的
@@ -403,6 +417,21 @@ private:
     // kMsgFile 行底部操作链接当前悬停的下标（0~2）；-1=无。OnMouseMove / OnMouseLeave
     // 维护，OnPaint 据它把悬停链接画成深色 + 下划线。
     int              m_fileHoverIdx;
+
+    // kMsgFolder 行最近一次绘制时底部各按钮在宿主客户区坐标系里的矩形、动作与可用性，
+    // 供左键命中测试（接收 / 另存为 / 拒绝 / 取消 / 重试 / 重新发送 / 打开文件夹）。按钮数与动作
+    // 一律取自 FolderButtonActions，随传输状态与 fromMe 变化；m_folderBtnEnabled 为 false
+    // 的那个画成灰色且不可点（目前只有保留期已过的「重试」会这样，见 FolderRetryEnabled）。
+    // 仅文件夹行有效。动作取值见 ChatFolderActionKind。
+    RECT             m_folderBtnRect[kMaxChatFolderActions];
+    int              m_folderBtnAction[kMaxChatFolderActions];
+    bool             m_folderBtnEnabled[kMaxChatFolderActions];
+    int              m_folderBtnCount;
+
+    // kMsgFolder 行底部操作链接当前悬停的下标；-1=无。与 m_fileHoverIdx 分开两个成员
+    // 而不共用一个：两者的下标空间不同（按钮数上限不同），共用会在同一行既是文件又是
+    // 文件夹这种本不该发生的情形下越界，分开则各自封闭。
+    int              m_folderHoverIdx;
 
     // ---- Measure() 产出的文字气泡折行布局缓存 ----
     int  m_measuredWidth;         // 上次 Measure 的 availWidth；-1=未测量

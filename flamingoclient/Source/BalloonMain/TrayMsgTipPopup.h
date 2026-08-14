@@ -26,8 +26,8 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/DuiHost.h"
-#include "../../balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 #include "TrayFlashController.h"      // balloonmain::TrayFlashEntry（ShowForEntries 入参）
 
 #include <vector>

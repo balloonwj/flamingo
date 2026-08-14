@@ -96,7 +96,7 @@ enum msg_type
     cmd_update_profile           = 1104,        //更新本人资料（昵称/签名/性别等）
     cmd_change_password          = 1105,        //修改登录密码
     cmd_change_avatar            = 1106,        //修改头像
-    cmd_change_presence          = 1107,        //修改在线状态（在线/离开/勿扰/隐身）
+    cmd_change_presence          = 1107,        //修改在线状态（在线/离开/勿扰）
     cmd_user_info_changed_notify = 1108,        //推送：某联系人资料发生变更
     cmd_presence_changed_notify  = 1109,        //推送：某联系人在线状态发生变更
     cmd_reset_password           = 1110,        //忘记密码：凭短信验证码重置登录密码
@@ -114,6 +114,7 @@ enum msg_type
     cmd_set_blacklist                  = 1213,  //加入/移出黑名单（服务端发消息时据此拦截；客户端当前无入口）
     cmd_set_favorite                   = 1215,  //添加/取消收藏（收藏对象为联系人或群组）
     cmd_set_starred                    = 1216,  //添加/取消特别关注（对象<u>只能是联系人</u>）。被关注者上下线时，本端在桌面右下角弹提示；名单随 cmd_get_contacts 应答的 starred 数组一起下发
+    cmd_set_contact_tags               = 1217,  //设置某个联系人的标签（形如"设计""外包"）。与备注名一样是<u>单向</u>的：只影响本人这一侧的显示，对方看不到也不受影响。请求体带的是该联系人在本人视角下的<u>完整</u>标签列表，服务端整份覆盖，空数组表示清空；增、改、删共用本条命令。读取不另设命令，标签随 cmd_get_contacts 应答的每个 contacts[] 元素一起下发
 
     //==== 群组 1300-1399 ====
     cmd_create_group                 = 1301,    //创建群聊
@@ -206,12 +207,35 @@ enum msg_type
     cmd_add_group_file            = 1804,       //将已上传文件登记为群文件
     cmd_delete_group_file         = 1805,       //删除群文件
     cmd_group_files_changed_notify = 1806,      //推送：群文件列表变更
+
+    //==== 单聊文件夹传输 1810-1817（信令走 chatserver；文件字节走 fileserver 中转）====
+    //一整个目录的传输须先征得接收方同意，同意后双方各建 1 条控制通道 + N 条数据通道连到
+    //fileserver，字节只在服务端内存里转发，<u>不落盘、不入库</u>；会话随任一端退出登录作废。
+    //完整交互见 docs/协议设计-v2.md「文件夹传输协议（单聊）」一章与 docs/单聊文件夹传输方案.md。
+    cmd_folder_invite        = 1810,            //发起文件夹传输：发送端→服务器，带目录名与规模统计，
+                                                //应答回带本次会话 sessionid；规模超限时回带服务端配置的上限值
+    cmd_folder_invite_notify = 1811,            //推送：接收端收到文件夹传输邀请（带发送端 userid / 昵称与规模统计）
+    cmd_folder_response      = 1812,            //接收端应答邀请：accept 字段 1 接收 / 0 拒绝
+    cmd_folder_cancel        = 1813,            //发送端在接收端应答前撤回邀请
+    cmd_folder_close         = 1814,            //任一端结束本次传输：带成功 / 失败结果与失败原因错误码
+    cmd_folder_state_notify  = 1815,            //推送：会话状态变更，取值见 enum folder_transfer_state
+                                                //（响铃 / 传输中 / 拒绝 / 取消 / 对方离线 / 超时 / 失败 / 完成）
+    cmd_folder_relay_info    = 1816,            //推送：接收端同意后下发给双方的中转参数（fileserver 地址 +
+                                                //relay 令牌 + 角色 + 数据通道条数），双方据此建通道
+    cmd_folder_retry         = 1817,            //失败会话在保留期内重试：服务端校验会话未过期、双方仍在线后
+                                                //重签令牌并再下发一次 cmd_folder_relay_info，不再打扰接收方
+
     cmd_file_upload               = 1851,       //上传文件分片（仅 fileserver/imgserver 连接）
     cmd_file_download             = 1852,       //下载文件分片（仅 fileserver/imgserver 连接）
     cmd_rd_relay_hello            = 1853,       //远程桌面中转握手：连上 imgserver 后首帧报到，body 带 relay 令牌
     cmd_rd_relay_data             = 1854,       //远程桌面中转数据：屏幕帧 / 控制命令，imgserver 按会话配对原样转发、不解析
     cmd_av_relay_hello            = 1855,       //音视频中转握手：连上 imgserver 后首帧报到，body 带 relay 令牌（与 cmd_rd_relay_hello 同结构，imgserver 同样处理）
     cmd_av_relay_data             = 1856,       //音视频中转数据：编码后的音频 / 视频帧，imgserver 按会话配对原样转发、不解析（与 cmd_rd_relay_data 同处理）
+    cmd_folder_relay_hello        = 1857,       //文件夹中转握手：连上 fileserver 后首帧报到，body 为 {token, lane}；
+                                                //服务端验签、验角色，按 (sessionid, lane) 把两端配对。与远程桌面 /
+                                                //音视频不同的是一次会话有多条通道，故握手帧多一个 lane 序号
+    cmd_folder_relay_data         = 1858,       //文件夹中转数据：包体为通道内的应用帧（清单 / 分片 / 回执等），
+                                                //fileserver 不解析包体，解密后用配对端的会话密钥重新加密转发
 
     //==== 收藏与其它 1900-1999 ====
     cmd_add_favorite    = 1901,                 //收藏消息
@@ -274,6 +298,7 @@ enum error_code
     error_code_in_blacklist        = 204,  //已被对方拉黑（服务端发消息 / 转发 / 群发时据此拦截）
     error_code_favorite_limit      = 209,  //收藏数量已达上限（见 kMaxFavoriteCount）
     error_code_starred_limit       = 210,  //特别关注人数已达上限（服务端 kMaxStarredCount）。特别关注的意义就是"少数几个人"，标满几百人等于没关注，上限同时也防刷表
+    error_code_tag_limit           = 211,  //给单个联系人贴的标签条数超出上限。判定发生在<u>归一之后</u>：服务端先去掉首尾空白、丢掉空串、不区分大小写去重，再数条数，所以提交里含重复标签不会白白占掉名额。单条标签文本超长归 error_code_bad_request，不占本码
 
     //==== 群组 300-399 ====
     error_code_create_group_fail   = 300,  //创建群失败
@@ -318,6 +343,30 @@ enum error_code
     error_code_storage_quota       = 604,  //存储空间不足
     error_code_md5_mismatch        = 605,  //文件 MD5 校验不一致
 
+    //606-620 为单聊文件夹传输（cmd_folder_* 1810~1817）专用。这组码同时出现在两个地方：
+    //信令应答的 code 字段，以及失败时经 cmd_folder_close / cmd_folder_state_notify 与中转
+    //通道内 ft_abort 帧带给双方的 errcode，两条路径用同一张表，保证双方看到的是同一个原因。
+    //上面 600-605 那几个是"走 fileserver 上传下载链路"的错误，与本组语义不同，不要混用：
+    //例如 604 指服务端存储配额不足，而 612 指接收端本机磁盘写不下；605 指服务端校验上传文件
+    //的 MD5 不符，而 615 指接收端校验收到的文件内容不符。
+    error_code_folder_rejected       = 606, //对方拒绝接收本文件夹（接收端在气泡上点了「拒绝」）
+    error_code_folder_peer_offline   = 607, //对方不在线：发起邀请时对方无在线连接，或传输中对方退出登录
+    error_code_folder_invite_timeout = 608, //邀请在 folderinvitetimeout 毫秒内无应答，服务端自动结束会话
+    error_code_folder_too_many_files = 609, //文件数超过服务端配置的 foldermaxfiles 上限，应答回带 maxfiles 供客户端提示
+    error_code_folder_too_large      = 610, //总字节数超过服务端配置的 foldermaxsize 上限，应答回带 maxsize 供客户端提示
+    error_code_folder_mkdir_fail     = 611, //接收端建目录失败（无写权限、目标只读、路径过长、含非法字符等），传字节之前即失败
+    error_code_folder_disk_full      = 612, //接收端本机磁盘剩余空间不足以容纳整个文件夹
+    error_code_folder_write_fail     = 613, //接收端写盘失败（磁盘 I/O 出错、文件被占用、中途被删等）
+    error_code_folder_read_fail      = 614, //发送端读源文件失败（文件在扫描后被删 / 被移走 / 被独占打开）
+    error_code_folder_verify_fail    = 615, //接收端校验收到的文件内容不符：字节数与清单不等，或 MD5 与发送端给的不一致
+    error_code_folder_relay_broken   = 616, //中转通道断开：任一条 lane 断链即整个会话失败，本功能<u>不做</u>自动重连
+    error_code_folder_canceled       = 617, //用户取消：任一端在传输过程中点了「取消」，双方气泡显示"已取消"
+    error_code_folder_session_expired = 618,//会话已超出 folderretrywindow 保留期（默认 10 分钟），不能再重试续传，只能重新发起
+    error_code_folder_server_busy    = 619, //服务器繁忙：同时进行的文件夹传输会话数已达 foldermaxsessions 上限，拒绝新会话
+    error_code_folder_busy           = 620, //发起方或接收方同时进行的文件夹传输已达每用户上限（服务端 foldermaxperuser，默认 5 笔，发送与接收各算一笔）。
+                                            //与 619 的区别：619 是整台服务器的会话数到顶，本码是这两个人当中有一个已经满额。
+                                            //客户端本地按 flamingo.ini 的 [app] foldermaxconcurrent 先拦一道，本码兜住绕过本地拦截直接发上来的请求
+
     //==== 音视频 700-799 ====
     error_code_call_fail           = 700,  //通话发起失败
     error_code_peer_busy           = 701,  //对方正在通话中
@@ -348,14 +397,16 @@ enum platform_type
     platform_web     = 5,   //Web 客户端
 };
 
-//用户在线状态，登录及状态变更时使用
+//用户在线状态，登录及状态变更时使用。
+//取值 4 曾经是「隐身」，本产品不提供该功能，已于 2026-08-13 移除；
+//该编号就此作废，不得再用于其它状态 —— 服务端仍可能推上来 4（老客户端发的），
+//本端一律按越界值处理（归到离线），不要为它恢复语义。
 enum presence_type
 {
     presence_offline   = 0,   //离线
     presence_online    = 1,   //在线
     presence_away      = 2,   //离开
     presence_busy      = 3,   //勿扰（busy / Do-Not-Disturb）
-    presence_invisible = 4,   //隐身（对外显示离线，实际在线）
 };
 
 //被踢下线原因，对应 cmd_kickout 推送包体的 reason 字段
@@ -399,6 +450,9 @@ enum message_type
     message_type_merged     = 15,   //合并转发（内容为子消息列表）
     message_type_rtc        = 16,   //通话记录（语音/视频通话结束后留下的记录条）
     message_type_system     = 17,   //系统提示（入群欢迎、撤回提示等，服务器生成）
+    message_type_folder     = 18,   //文件夹传输记录（单聊「发送文件夹」走到终态后由服务端在双方会话里各留一条，
+                                    //content 只记文件夹名 / 目录数 / 文件数 / 总字节数 / 结局，不记文件清单与内容，
+                                    //故不提供从历史重新下载。字段口径见 net::FolderRecordContent）
 };
 
 //会话类型，位于会话/消息 JSON 的 ctype 字段
@@ -455,6 +509,22 @@ enum group_file_change_type
 
 //这里原有一个 friend_request_action 枚举（加好友申请的同意 / 拒绝），随
 //cmd_handle_friend_request(1205) 一并移除 —— 企业版没有加好友这一步。
+
+//单聊文件夹传输的会话状态，随 cmd_folder_state_notify（1815）推送给两端，
+//也是服务端会话表里那条记录的当前状态。状态推送里除 state 外还带 errcode / errmsg：
+//只有 folder_state_failed 会填有意义的错误码，其余状态 errcode 为 0。
+//本枚举与服务端 chatserversrc/Protocol.h 的同名枚举必须逐值一致。
+enum folder_transfer_state
+{
+    folder_state_ringing      = 1,   //响铃中：邀请已送达接收端，正等待其接收 / 拒绝；超过 folderinvitetimeout 无应答则转 folder_state_timeout
+    folder_state_transferring = 2,   //传输中：接收端已同意，中转参数已下发，双方正在通道上收发文件字节；重试续传成功后也回到本状态
+    folder_state_rejected     = 3,   //已拒绝：接收端在气泡上点了「拒绝」，会话立即结束，不产生任何中转连接
+    folder_state_canceled     = 4,   //已取消：发送端在接收端应答前撤回邀请（cmd_folder_cancel）；传输中途取消<u>不</u>用本状态，而是按失败处理、错误码为 error_code_folder_canceled
+    folder_state_peer_offline = 5,   //对方离线：发起邀请时对方无在线连接，或响铃期间对方退出登录，会话作废
+    folder_state_timeout      = 6,   //已超时：邀请在限定时间内无人应答，服务端自动结束会话并通知发送端
+    folder_state_failed       = 7,   //已失败：传输过程中任一端报错或中转通道断开，整个文件夹判失败；会话保留 folderretrywindow（默认 10 分钟）供重试续传，期满销毁
+    folder_state_completed    = 8,   //已完成：全部文件传完并通过校验，双方气泡转完成态，会话正常销毁
+};
 
 //群成员角色
 enum group_member_role

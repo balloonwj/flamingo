@@ -221,11 +221,9 @@ int MockPresenceFromStatus(int status)
         return presence_away;
     case kMockBusy:
         return presence_busy;
-    case kMockInvisible:
-        // 隐身对外一律显示成离线 —— 与 NormalizePresenceForMenu / GetPresenceBadgeIconKind
-        // 的兜底口径一致。
-        return presence_offline;
     default:
+        // 离线、以及一切越界取值（含已作废的旧状态 3）一律归到离线 ——
+        // 与 NormalizePresenceForMenu / GetPresenceBadgeIconKind 的兜底口径一致。
         return presence_offline;
     }
 }

@@ -23,7 +23,7 @@
 
 #include "../BalloonMain/MainPanelSystemMenu.h"
 #include "../BalloonMain/MainPanelIcons.h"   // IconKind（断言各项图标）
-#include "../../balloonui/balloonui/Controls/List/DuiMenu.h"
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"
 
 using namespace balloonmain;
 

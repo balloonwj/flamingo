@@ -123,6 +123,18 @@ bool ContactsProtocolClient::parseContactsResponse(const std::string& jsonbody, 
             //备注名：字段整体缺失是合法情形（旧服务端不带它），此时按"未设备注"
             //处理，显示时自然回落到昵称。
             item.m_remark    = c["remark"].isString()    ? c["remark"].asString()    : std::string();
+            //标签：与备注名同理，字段整体缺失是合法情形（旧服务端不带它），按"未贴过
+            //标签"处理。数组里混进非字符串元素时只跳过那一个元素，不整条作废——一条
+            //脏数据不该让整个联系人从通讯录里消失。
+            if (c["tags"].isArray())
+            {
+                const Json::Value& jtags = c["tags"];
+                for (Json::ArrayIndex t = 0; t < jtags.size(); ++t)
+                {
+                    if (jtags[t].isString())
+                        item.m_tags.push_back(jtags[t].asString());
+                }
+            }
             //userid 非法（缺失/为 0）的条目跳过，避免产生无法发起会话的死项
             if (item.m_userid <= 0)
                 continue;

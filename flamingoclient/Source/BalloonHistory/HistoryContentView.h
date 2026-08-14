@@ -32,7 +32,7 @@
 
 #include <vector>
 
-#include "../../balloonui/balloonui/DuiControl.h"
+#include "../../../third-party/balloonui/balloonui/DuiControl.h"
 #include "../BalloonChat/BalloonChatMsgFormat.h"   // balloonchat::ChatSegment
 #include "../BalloonChatWnd/ChatInlineText.h"      // 排版 / 绘制引擎与 InlinePlaced
 #include "../BalloonChatWnd/ChatLinkDetect.h"      // LinkSpan（成员需完整类型）

@@ -8,7 +8,7 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "flamingoAdmin", "flamingoAd
 		{E5F9B2A1-6C84-4DE3-9C75-3B8A4D2E7F60} = {E5F9B2A1-6C84-4DE3-9C75-3B8A4D2E7F60}
 	EndProjectSection
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "balloonui_static", "..\flamingoclient\balloonui\balloonui\balloonui_static.vcxproj", "{E5F9B2A1-6C84-4DE3-9C75-3B8A4D2E7F60}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "balloonui_static", "..\third-party\balloonui\balloonui\balloonui_static.vcxproj", "{E5F9B2A1-6C84-4DE3-9C75-3B8A4D2E7F60}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "flamingoAdminTests", "Tests\flamingoAdminTests.vcxproj", "{EC99AC2C-4BF0-4BB8-8B6B-8EE93C9F2034}"
 EndProject

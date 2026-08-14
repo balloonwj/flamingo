@@ -6,9 +6,9 @@
 #include "RdViewerToolbar.h"
 
 #include "../IULog.h"              // LOG_ERROR
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"  // DuiVBox / DuiHBox / DuiLayout::Hint
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"  // DuiVBox / DuiHBox / DuiLayout::Hint
 
 #include <memory>
 

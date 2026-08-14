@@ -16,8 +16,8 @@
 
 #include "../IULog.h"
 #include "../Path.h"   // Hootina::CPath::GetAppPath
-#include "../../balloonui/balloonui/Controls/Feedback/DuiEmojiPanel.h"
-#include "../../balloonui/balloonui/Controls/Feedback/DuiToolTip.h"   // DuiToolTipMgr（逐格 tooltip）
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiEmojiPanel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"   // DuiToolTipMgr（逐格 tooltip）
 
 // ---- 文件作用域常量 -----------------------------------------------------
 

@@ -410,7 +410,7 @@ namespace net
         ///
         /// It may implement with readv(2)
         /// @return result of read(2), @c errno is saved
-        int32_t readFd(int fd, int* savedErrno);
+        int32_t readFd(SOCKET fd, int* savedErrno);
 
     private:
         char* begin()

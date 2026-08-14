@@ -17,7 +17,7 @@
  */
 #pragma once
 
-#include "../../balloonui/balloonui/DuiHost.h"
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"
 #include "CaptureCanvas.h"
 
 namespace balloonscreenshot {

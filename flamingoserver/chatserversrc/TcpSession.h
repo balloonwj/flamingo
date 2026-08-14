@@ -7,6 +7,7 @@
 
 #include <memory>
 #include "../net/TcpConnection.h"
+#include "../net/FrameCrypto.h"   //协议加密：握手状态与帧体加解密
 
 using namespace net;
 
@@ -39,5 +40,11 @@ private:
 protected:
     //TcpSession引用TcpConnection类必须是弱指针，因为TcpConnection可能会因网络出错自己销毁，此时TcpSession应该也要销毁
     std::weak_ptr<TcpConnection>    tmpConn_;
+
+    //本连接的协议加密状态。握手完成前 ready() 为 false，此时 send 走明文——
+    //握手帧本身必须明文发，否则双方都没有密钥、无从谈起。
+    //放在基类而不是 ChatSession，是因为发送漏斗 send() 在这里，子类各自持有的话
+    //发送时还要绕回子类去取，反而绕。
+    net::ServerHandshake            m_handshake;
     //std::shared_ptr<TcpConnection>    tmpConn_;
 };

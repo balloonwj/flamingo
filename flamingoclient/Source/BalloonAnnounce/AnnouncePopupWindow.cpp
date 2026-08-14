@@ -16,11 +16,11 @@
 #include "../BalloonChatWnd/ChatLinkDetect.h"       // IsSafeLinkUrl（打开链接前的协议白名单）
 #include <shellapi.h>                      // ShellExecuteW（打开链接）
 
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiBadge.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiSeparator.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiBadge.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiSeparator.h"
 
 using balloonwjui::DuiControl;
 using balloonwjui::DuiLayout;

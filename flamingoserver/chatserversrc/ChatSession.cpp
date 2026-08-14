@@ -27,6 +27,9 @@
 #include "StarredManager.h"
 //联系人备注名（cmd_set_friend_remark 落库 / cmd_get_contacts 读出）
 #include "ContactRemarkManager.h"
+//联系人标签（cmd_set_contact_tags 落库 / cmd_get_contacts 读出）
+#include "ContactTagProtocol.h"
+#include "ContactTagManager.h"
 #include "UpdateProtocol.h"
 #include "ClientVersionManager.h"
 #include "ProfileProtocol.h"
@@ -51,6 +54,9 @@
 #include "RemoteDesktopManager.h"
 #include "CallProtocol.h"
 #include "CallManager.h"
+//单聊文件夹传输（cmd_folder_* 1810~1817）：八条信令的 JSON 编解码 + 内存会话表
+#include "FolderTransferProtocol.h"
+#include "FolderTransferManager.h"
 #include "../utils/RelayToken.h"
 #include "GroupFileProtocol.h"
 #include "GroupFileManager.h"
@@ -96,6 +102,10 @@ constexpr int MSGTYPE_MERGED_FORWARD = 15;
 constexpr const char* DEFAULT_MERGED_TITLE = u8"聊天记录";
 //cmd_handle_join_group 的 action 值：1=同意加群申请 0=拒绝
 constexpr int GROUP_JOIN_ACTION_ACCEPT = 1;
+
+//一秒折合的毫秒数。文件夹传输的会话表、令牌过期与保留期一律以 Unix 毫秒计时，
+//而 time(NULL) 给出的是秒，两者之间的换算统一走本常量
+constexpr int64_t MILLISECONDS_PER_SECOND = 1000;
 
 ChatSession::ChatSession(const std::shared_ptr<TcpConnection>& conn, int sessionid) :
     TcpSession(conn),
@@ -151,24 +161,18 @@ void ChatSession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer*
         pBuffer->retrieve(consumed);
         m_lastPackageTime = time(NULL);
 
-        //包体可能被发送方 zlib 压缩：客户端在包体 >= COMPRESS_THRESHOLD 时压缩，
-        //并置 frame_flag_compressed、originlen 填未压缩前的原始长度。FrameCodec
-        //只透传不解压，须在此由会话层按 originlen 解压还原明文，再交 process 解析
-        //JSON。originlen 已被 decodeFrame 校验不超过包体上限，分配安全。
-        if ((header.flags & frame_flag_compressed) != 0)
-        {
-            std::string plainBody;
-            if (!ZlibUtil::uncompressBuf(body, plainBody, header.originlen))
-            {
-                LOGE("uncompress v2 frame body failed, cmd: %d, bodylen: %u, originlen: %u, "
-                     "close connection, client: %s",
-                     (int)header.cmd, (unsigned)body.size(), header.originlen,
-                     conn->peerAddress().toIpPort().c_str());
-                conn->forceClose();
-                return;
-            }
-            body.swap(plainBody);
-        }
+        //协议加密：握手、加密状态校验与解密。必须排在解压之前——线上顺序是
+        //先压缩后加密，收包时反过来走。
+        bool securityHandled = false;
+        if (!processFrameSecurity(conn, header, body, securityHandled))
+            return;
+
+        //本帧是握手帧，已在上面处理并应答完毕，不进业务分发
+        if (securityHandled)
+            continue;
+
+        //走到这里 body 已是明文：解密与解压都在 processFrameSecurity 里做完了，
+        //顺序（先解密、后解压）由 net::decodeFramePayload 一处定死。
 
         if (!process(conn, header.cmd, header.seq, body))
         {
@@ -178,6 +182,49 @@ void ChatSession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer*
             return;
         }
     }
+}
+
+bool ChatSession::processFrameSecurity(const std::shared_ptr<TcpConnection>& conn,
+                                       const frame_header& header,
+                                       std::string& body, bool& handled)
+{
+    handled = false;
+
+    const std::string peer = conn->peerAddress().toIpPort();
+
+    std::string response;
+    std::string err;
+    net::frame_security_result r =
+        net::processInboundFrame(m_handshake, header.cmd, header.seq, header.flags,
+                                 header.originlen, body, response, err);
+
+    if (r == net::frame_security_error)
+    {
+        LOGE("frame security check failed: %s, cmd: %u, close connection, client: %s",
+             err.c_str(), (unsigned)header.cmd, peer.c_str());
+        conn->forceClose();
+        return false;
+    }
+
+    if (r == net::frame_security_handled)
+    {
+        handled = true;
+
+        //三帧握手里只有第 2 帧有应答，第 3 帧没有。
+        //这条应答必须明文发出，而此刻 m_handshake.ready() 仍为 false（产出应答的那一步
+        //只把状态推进到「等客户端流头」），send 走的正是明文分支——顺序天然成立。
+        //改动握手状态机时<u>不要破坏这个前提</u>，否则客户端会收到一个它还解不开的包。
+        if (!response.empty())
+            send(cmd_handshake, static_cast<int32_t>(header.seq), response);
+
+        if (m_handshake.ready())
+        {
+            LOGI("handshake done, frame encryption is now active, client: %s, key fingerprint: %s",
+                 peer.c_str(), net::cryptoServerIdentity().fingerprint().c_str());
+        }
+    }
+
+    return true;
 }
 
 bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
@@ -284,6 +331,12 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
 
         case cmd_set_friend_remark:
             onSetFriendRemark(body, conn);
+            break;
+
+        //整份覆盖本人给某个联系人贴的标签列表。增、改、删共用本条命令，
+        //请求带的是完整列表、空数组即清空；标签只影响本人这一侧的显示，不推送给对方
+        case cmd_set_contact_tags:
+            onSetContactTags(body, conn);
             break;
 
         case cmd_set_blacklist:
@@ -516,6 +569,35 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
             onDeleteGroupFile(body, conn);
             break;
 
+        //发送端选中一个目录、发起文件夹传输：校验规模上限与双方是否已有传输在进行，
+        //建会话后把邀请推给接收端。字节本身不走这条连接，走 fileserver 的中转通道
+        case cmd_folder_invite:
+            onFolderInvite(body, conn);
+            break;
+
+        //接收端在会话气泡上点了「接收」或「拒绝」：同意则给双方下发中转参数，
+        //拒绝则通知发送端并销毁会话
+        case cmd_folder_response:
+            onFolderResponse(body, conn);
+            break;
+
+        //发送端在接收端还没应答（会话仍在响铃）时撤回邀请，让接收端那侧的气泡收起
+        case cmd_folder_cancel:
+            onFolderCancel(body, conn);
+            break;
+
+        //任一端结束本次传输：全部传完是成功结束，中途出错或用户取消是失败结束，
+        //后者带错误码并保留会话供重试续传
+        case cmd_folder_close:
+            onFolderClose(body, conn);
+            break;
+
+        //发送端在失败气泡上点「重试」：保留期内重新签发令牌、再下发一次中转参数，
+        //接收端复用上次那个目录做断点续传，不再被询问是否同意
+        case cmd_folder_retry:
+            onFolderRetry(body, conn);
+            break;
+
         default:
             //该 cmd 对应的业务尚未从 v1 迁移到 v2，暂忽略
             LOGI("cmd %u not implemented in v2 yet, ignored, userid: %d",
@@ -718,6 +800,12 @@ void ChatSession::onLogout(const std::shared_ptr<TcpConnection>& conn)
          m_userinfo.userid, conn->peerAddress().toIpPort().c_str());
     send(cmd_logout, m_seq, std::string("{\"code\":0,\"msg\":\"ok\"}"));
     m_isLogin = false;
+
+    //本连接名下若还挂着一笔文件夹传输，此刻即作废：续传位点存在客户端内存里，退出登录
+    //就丢了。此处主动清一次而不是等连接断开，是因为客户端可以只登出、不断开连接（换账号
+    //登录走的就是这条路），那样对端会一直停在"传输中"直到中转通道超时才发现不对
+    cleanupFolderTransferOnOffline();
+
     //登出通常紧跟连接断开，设备下线通知由 ChatServer::onDisconnected 统一推送
 }
 
@@ -1016,8 +1104,11 @@ void ChatSession::onResetPassword(const std::string& body, const std::shared_ptr
 //  remarks：本次请求发起人的"联系人 → 备注名"映射（见 ContactRemarkManager::getRemarks）。
 //           备注名是单向的，同一个联系人在不同人的通讯录里备注不同，故要按
 //           发起人的映射来填；不在映射里（没给这个人设过备注）则留空串。
+//  tags：   本次请求发起人的"联系人 → 标签列表"映射（见 ContactTagManager::getTagsAll）。
+//           标签同样是单向的，填法与备注名一致；没贴过标签则留空列表。
 static void fillContactInfo(ContactInfo& c, const User& u, ChatServer& server,
-                            const std::map<int32_t, std::string>& remarks)
+                            const std::map<int32_t, std::string>& remarks,
+                            const std::map<int32_t, std::vector<std::string> >& tags)
 {
     c.userid      = u.userid;
     c.username    = u.username;
@@ -1038,6 +1129,11 @@ static void fillContactInfo(ContactInfo& c, const User& u, ChatServer& server,
     //备注名：没给这个联系人设过备注就留空串，客户端据此退回显示 nickname。
     std::map<int32_t, std::string>::const_iterator it = remarks.find(u.userid);
     c.remark = (it != remarks.end()) ? it->second : std::string();
+
+    //标签：没给这个联系人贴过标签就留空列表，客户端据此不渲染标签区。
+    std::map<int32_t, std::vector<std::string> >::const_iterator itTag = tags.find(u.userid);
+    if (itTag != tags.end())
+        c.tags = itTag->second;
 }
 
 void ChatSession::onGetContacts(const std::shared_ptr<TcpConnection>& conn)
@@ -1064,6 +1160,13 @@ void ChatSession::onGetContacts(const std::shared_ptr<TcpConnection>& conn)
     //   通讯录下发。取不到（数据库不可用）就当没有任何备注，通讯录照发。
     std::map<int32_t, std::string> remarks;
     Singleton<ContactRemarkManager>::Instance().getRemarks(m_userinfo.userid, remarks);
+
+    //2b. 本人给各联系人贴的标签，同样一次取全。标签与备注名性质相同（单向、属于
+    //    发起人而不属于联系人本身），所以走同一个口径：一次查完按 target 归组，
+    //    下面填联系人时逐个取用，避免每个联系人查一次把登录拖慢。
+    //    取不到（数据库不可用）就当没有任何标签，通讯录照发。
+    std::map<int32_t, std::vector<std::string> > contactTags;
+    Singleton<ContactTagManager>::Instance().getTagsAll(m_userinfo.userid, contactTags);
 
     //3. 部门树 + 部门成员；同时把成员去重收进联系人资料池
     std::vector<dept::DepartmentInfo> orgDepts;
@@ -1096,7 +1199,7 @@ void ChatSession::onGetContacts(const std::shared_ptr<TcpConnection>& conn)
                 if (userMgr.getUserInfoByUserId(static_cast<int32_t>(om.userid), u))
                 {
                     ContactInfo c;
-                    fillContactInfo(c, u, server, remarks);
+                    fillContactInfo(c, u, server, remarks, contactTags);
                     data.contacts.push_back(c);
                 }
             }
@@ -1133,11 +1236,14 @@ void ChatSession::onGetContacts(const std::shared_ptr<TcpConnection>& conn)
     std::string resp = ContactsProtocol::buildContactsResponse(data);
     send(cmd_get_contacts, m_seq, resp);
 
-    LOGI("get contacts ok, userid: %d, departments: %u, contacts: %u, groups: %u, favorites: %u, client: %s",
+    //tagged 是"有标签的联系人个数"而不是标签总条数：排查时关心的是标签有没有随
+    //通讯录发出去，逐条数意义不大，也免得把用户贴的内容规模写进日志。
+    LOGI("get contacts ok, userid: %d, departments: %u, contacts: %u, groups: %u, favorites: %u, tagged: %u, client: %s",
          m_userinfo.userid, static_cast<unsigned>(data.departments.size()),
          static_cast<unsigned>(data.contacts.size()),
          static_cast<unsigned>(data.groups.size()),
          static_cast<unsigned>(data.favorites.size()),
+         static_cast<unsigned>(contactTags.size()),
          conn->peerAddress().toIpPort().c_str());
 }
 
@@ -1560,6 +1666,110 @@ void ChatSession::onSetFriendRemark(const std::string& body, const std::shared_p
          FriendProtocol::buildSetFriendRemarkResponse(0, "ok", req.userid));
     LOGI("set contact remark ok, userid: %d, target: %d, remark: %s",
          m_userinfo.userid, targetId, req.remark.c_str());
+}
+
+//取"userid 当前给 targetUserId 贴的标签"的落库现状，供 cmd_set_contact_tags 的
+//失败应答回带。写失败时客户端界面上还留着用户刚编辑的那一份，得把服务端真正
+//存着的这一份发回去，它才知道该回滚成什么样子。
+//  out：[出参] 进函数先清空；查不到（数据库不可用、或本来就没贴过）则保持为空。
+static void loadCurrentContactTags(int64_t userid, int64_t targetUserId,
+                                   std::vector<std::string>& out)
+{
+    out.clear();
+
+    std::map<int32_t, std::vector<std::string> > all;
+    if (!Singleton<ContactTagManager>::Instance().getTagsAll(userid, all))
+        return;
+
+    std::map<int32_t, std::vector<std::string> >::const_iterator it =
+        all.find(static_cast<int32_t>(targetUserId));
+    if (it != all.end())
+        out = it->second;
+}
+
+void ChatSession::onSetContactTags(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+
+    //失败应答里回带的标签列表：解析都没过时无从查起，留空数组即可。
+    std::vector<std::string> respTags;
+
+    SetContactTagsRequest req;
+    if (!ContactTagProtocol::parseSetContactTagsRequest(body, req))
+    {
+        //解析都没过，req.userid 多半是 0；照样回带，客户端对不上号会直接丢弃，
+        //不会误伤别的在途请求。
+        send(cmd_set_contact_tags, m_seq,
+             ContactTagProtocol::buildSetContactTagsResponse(error_code_bad_request,
+                                                             "bad request", req.userid, respTags));
+        return;
+    }
+
+    const int32_t targetId = static_cast<int32_t>(req.userid);
+
+    //不能给自己贴标签：通讯录里本就不显示本人，贴了也没有任何地方会用到。
+    if (targetId == m_userinfo.userid)
+    {
+        send(cmd_set_contact_tags, m_seq,
+             ContactTagProtocol::buildSetContactTagsResponse(error_code_bad_request,
+                                                             "cannot tag yourself",
+                                                             req.userid, respTags));
+        return;
+    }
+
+    //企业版没有好友关系，通讯录里的人全部来自组织架构，所以这里<u>不</u>校验"是不是好友"，
+    //只要求目标用户确实存在。口径与 cmd_set_friend_remark 完全一致：标签与备注名
+    //都是贴在"本人怎么看这个人"上的，够不着的人贴了也只是几行无人读取的数据。
+    User target;
+    target.userid = 0;
+    Singleton<UserManager>::Instance().getUserInfoByUserId(targetId, target);
+    if (target.userid == 0)
+    {
+        send(cmd_set_contact_tags, m_seq,
+             ContactTagProtocol::buildSetContactTagsResponse(error_code_not_found,
+                                                             "target user not found",
+                                                             req.userid, respTags));
+        return;
+    }
+
+    //一秒合多少毫秒。标签的更新时间与本文件其它落库时间戳同一口径。
+    const int64_t kMillisPerSecond = 1000;
+    const int64_t nowMs = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+
+    //整份覆盖：请求里带的就是该联系人在本人视角下的完整标签列表，空数组表示清空。
+    int errorCode = error_code_ok;
+    if (!Singleton<ContactTagManager>::Instance().setTags(
+            m_userinfo.userid, targetId, req.tags, nowMs, errorCode))
+    {
+        const char* msg = "set contact tags failed";
+        if (errorCode == error_code_tag_limit)
+            msg = "tag count limit reached";
+
+        //一条都没写进去，客户端界面上却已经是用户刚编辑的样子，故回带服务端现存的那一份
+        loadCurrentContactTags(m_userinfo.userid, targetId, respTags);
+
+        LOGI("set contact tags failed, userid: %d, target: %d, submitted: %u, code: %d",
+             m_userinfo.userid, targetId, static_cast<unsigned>(req.tags.size()), errorCode);
+
+        send(cmd_set_contact_tags, m_seq,
+             ContactTagProtocol::buildSetContactTagsResponse(errorCode, msg,
+                                                             req.userid, respTags));
+        return;
+    }
+
+    //应答回带服务端归一后的最终列表（去首尾空白、丢空串、忽略大小写去重之后的样子），
+    //客户端据它把界面刷成与服务端一致。复用存储层的同一份归一逻辑，不必为拿这份
+    //列表再查一次库 —— setTags 成功即意味着落库内容与它逐条相同。
+    ContactTagManager::normalizeTags(req.tags, respTags);
+
+    send(cmd_set_contact_tags, m_seq,
+         ContactTagProtocol::buildSetContactTagsResponse(error_code_ok, "ok",
+                                                         req.userid, respTags));
+
+    //标签文本可能含姓名、项目代号一类敏感内容，日志只记条数，不记内容
+    LOGI("set contact tags ok, userid: %d, target: %d, submitted: %u, stored: %u",
+         m_userinfo.userid, targetId, static_cast<unsigned>(req.tags.size()),
+         static_cast<unsigned>(respTags.size()));
 }
 
 void ChatSession::onSetStarred(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -3056,6 +3266,741 @@ void ChatSession::onCallSwitchMedia(const std::string& body, const std::shared_p
 
     LOGI("call switch media ok, session: %s, by: %d, media: %d",
          sessionId.c_str(), m_userinfo.userid, media);
+}
+
+void ChatSession::onFolderInvite(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    FolderInviteRequest req;
+    if (!FolderTransferProtocol::parseInviteRequest(body, req))
+    {
+        send(cmd_folder_invite, m_seq,
+             FolderTransferProtocol::buildInviteResponse(error_code_bad_request, "bad request",
+                                                         "", folder_state_ringing));
+        LOGE("folder invite: bad request, userid: %d, body: %s", m_userinfo.userid, body.c_str());
+        return;
+    }
+
+    //不能把文件夹发给自己：两端会被中转层配成同一条连接的一对，语义上也没有意义
+    if (req.peerid == m_userinfo.userid)
+    {
+        send(cmd_folder_invite, m_seq,
+             FolderTransferProtocol::buildInviteResponse(error_code_bad_request, "cannot send folder to self",
+                                                         "", folder_state_ringing));
+        LOGI("folder invite rejected, sending folder to self, userid: %d.", m_userinfo.userid);
+        return;
+    }
+
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+
+    //规模上限、双方各自的并发笔数、服务器活跃会话总数三项校验集中在 checkInvite 里，
+    //本方法按它给出的错误码回话即可，不必自己逐项判，避免与单元测试里的口径分叉
+    int code = mgr.checkInvite(m_userinfo.userid, req.peerid, req.totalfiles, req.totalsize);
+    if (code != error_code_ok)
+    {
+        //规模超限的那两种失败要回带服务端配置的上限值：上限是配置项、随部署环境变化，
+        //客户端一律用应答里带回的数值做提示，不得硬编码
+        if (code == error_code_folder_too_many_files || code == error_code_folder_too_large)
+        {
+            send(cmd_folder_invite, m_seq,
+                 FolderTransferProtocol::buildInviteLimitResponse(code, "folder scale exceeds limit",
+                                                                   mgr.getMaxFiles(), mgr.getMaxSize()));
+        }
+        else
+        {
+            send(cmd_folder_invite, m_seq,
+                 FolderTransferProtocol::buildInviteResponse(code, "folder invite rejected",
+                                                             "", folder_state_ringing));
+        }
+
+        LOGI("folder invite rejected, from: %d, to: %lld, files: %lld, size: %lld, code: %d.",
+             m_userinfo.userid, (long long)req.peerid,
+             (long long)req.totalfiles, (long long)req.totalsize, code);
+        return;
+    }
+
+    //校验接收端是否在线：其名下无任何在线会话即视为离线。判定口径与远程桌面
+    //onRemoteDesktopInvite、音视频 onCallInvite 完全一致
+    std::list<std::shared_ptr<ChatSession>> peerSessions;
+    Singleton<ChatServer>::Instance().getSessionsByUserId(peerSessions, static_cast<int32_t>(req.peerid));
+    if (peerSessions.empty())
+    {
+        send(cmd_folder_invite, m_seq,
+             FolderTransferProtocol::buildInviteResponse(error_code_folder_peer_offline, "peer offline",
+                                                         "", folder_state_ringing));
+        LOGI("folder invite failed, peer offline, from: %d, to: %lld.",
+             m_userinfo.userid, (long long)req.peerid);
+        return;
+    }
+
+    //建会话：发送端=本人，接收端=peer，初始状态为响铃中
+    FolderTransferScale scale;
+    scale.folderName = req.foldername;
+    scale.totalDirs  = req.totaldirs;
+    scale.totalFiles = req.totalfiles;
+    scale.totalSize  = req.totalsize;
+
+    int64_t now = static_cast<int64_t>(time(NULL)) * MILLISECONDS_PER_SECOND;
+    std::string sessionId = mgr.createSession(m_userinfo.userid, req.peerid, scale, now);
+
+    //把会话 id 记在本连接上：本连接断开时据此判定"这笔传输的一端已离线"并通知对端
+    m_folderTransferSessionId = sessionId;
+
+    send(cmd_folder_invite, m_seq,
+         FolderTransferProtocol::buildInviteResponse(error_code_ok, "ok", sessionId, folder_state_ringing));
+
+    sendToUser(static_cast<int32_t>(req.peerid), cmd_folder_invite_notify,
+               FolderTransferProtocol::buildInviteNotify(sessionId, m_userinfo.userid,
+                                                          m_userinfo.nickname, req));
+
+    LOGI("folder invite, from: %d, to: %lld, sessionid: %s, dirs: %lld, files: %lld, size: %lld, "
+         "invite timeout: %lld ms.",
+         m_userinfo.userid, (long long)req.peerid, sessionId.c_str(),
+         (long long)req.totaldirs, (long long)req.totalfiles, (long long)req.totalsize,
+         (long long)mgr.getInviteTimeoutMs());
+}
+
+void ChatSession::onFolderResponse(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    std::string sessionId;
+    int accept = folder_response_reject;
+    if (!FolderTransferProtocol::parseResponseRequest(body, sessionId, accept))
+    {
+        send(cmd_folder_response, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_bad_request, "bad request", ""));
+        LOGE("folder response: bad request, userid: %d, body: %s", m_userinfo.userid, body.c_str());
+        return;
+    }
+
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+    FolderTransferSessionInfo s;
+    if (!mgr.getSession(sessionId, s))
+    {
+        //会话不存在：发送端已撤回、邀请已超时被清理，或对端掉线时会话已被销毁
+        send(cmd_folder_response, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_not_found, "folder session not found",
+                                                          sessionId));
+        LOGI("folder response on unknown session: %s, userid: %d.", sessionId.c_str(), m_userinfo.userid);
+        return;
+    }
+
+    //只有本次会话的接收端本人可以应答，别人拿着 sessionid 来应答一律拒绝
+    if (m_userinfo.userid != s.receiverId)
+    {
+        send(cmd_folder_response, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_permission_denied,
+                                                          "not the receiver of this folder session", sessionId));
+        LOGW("folder response from non-receiver, session: %s, userid: %d, receiver: %lld.",
+             sessionId.c_str(), m_userinfo.userid, (long long)s.receiverId);
+        return;
+    }
+
+    //拒绝：向发送端推"已拒绝"，随后立即销毁会话。拒绝不进重试保留期，发送端只能重新发起
+    if (accept == folder_response_reject)
+    {
+        send(cmd_folder_response, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_ok, "ok", sessionId));
+
+        //终态收口：向发送端推"已拒绝"，并在双方会话里留下这条传输记录。
+        //接收端不在推送名单里 —— 拒绝是它自己的动作，结果由上面那条应答告诉它；
+        //它同样会经记录条的 cmd_message_notify 看到聊天记录里多出的那一条。
+        //按协议约定只有"已失败"态才带有意义的失败原因，故这里传入的
+        //error_code_folder_rejected 会被归一成 0；照常传是为了让调用点一眼看出这次
+        //结束的原因，那条不变式集中由 buildStateNotify / buildRecordContent 保证
+        std::vector<int64_t> notifySender;
+        notifySender.push_back(s.senderId);
+        finishFolderTransferSession(s, folder_state_rejected, error_code_folder_rejected,
+                                    "rejected by receiver", notifySender);
+
+        mgr.removeSession(sessionId);
+        m_folderTransferSessionId.clear();
+
+        LOGI("folder invite rejected by receiver, session: %s, receiver: %d, sender: %lld.",
+             sessionId.c_str(), m_userinfo.userid, (long long)s.senderId);
+        return;
+    }
+
+    //同意：会话转入传输中，并把会话 id 记在接收端这条连接上，供其掉线时通知发送端
+    int64_t now = static_cast<int64_t>(time(NULL)) * MILLISECONDS_PER_SECOND;
+    mgr.setState(sessionId, folder_state_transferring, now);
+    m_folderTransferSessionId = sessionId;
+
+    //先下发中转参数再回应答：签发失败时还来得及把失败码回给接收端，不至于让它以为
+    //已经同意成功、却永远等不到 cmd_folder_relay_info
+    if (!pushFolderRelayInfo(s, now))
+    {
+        send(cmd_folder_response, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_server_internal,
+                                                          "sign relay token failed", sessionId));
+
+        //签不出令牌就建不起中转通道，这笔传输到此为止，也是一个终态：向发送端推"已失败"
+        //并留记录。失败原因取"中转通道断开"—— 这组错误码里没有更贴切的一项，而从两端
+        //用户的角度看，结果确实是通道没能建起来
+        std::vector<int64_t> notifySender;
+        notifySender.push_back(s.senderId);
+        finishFolderTransferSession(s, folder_state_failed, error_code_folder_relay_broken,
+                                    "sign relay token failed", notifySender);
+
+        mgr.removeSession(sessionId);
+        m_folderTransferSessionId.clear();
+        LOGE("folder response accepted but relay token sign failed, session: %s, receiver: %d.",
+             sessionId.c_str(), m_userinfo.userid);
+        return;
+    }
+
+    send(cmd_folder_response, m_seq,
+         FolderTransferProtocol::buildSessionResponse(error_code_ok, "ok", sessionId));
+
+    //按协议不再另推一帧"传输中"状态：cmd_folder_relay_info 送达本身已表明会话被接受，
+    //两帧含义重复只会让客户端状态机多一条分支（见 docs/协议设计-v2.md 12.2.3）
+    LOGI("folder invite accepted, session: %s, sender: %lld, receiver: %lld.",
+         sessionId.c_str(), (long long)s.senderId, (long long)s.receiverId);
+}
+
+void ChatSession::onFolderCancel(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    std::string sessionId;
+    if (!FolderTransferProtocol::parseSessionRequest(body, sessionId))
+    {
+        send(cmd_folder_cancel, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_bad_request, "bad request", ""));
+        LOGE("folder cancel: bad request, userid: %d, body: %s", m_userinfo.userid, body.c_str());
+        return;
+    }
+
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+    FolderTransferSessionInfo s;
+    if (!mgr.getSession(sessionId, s))
+    {
+        send(cmd_folder_cancel, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_not_found, "folder session not found",
+                                                          sessionId));
+        LOGI("folder cancel on unknown session: %s, userid: %d.", sessionId.c_str(), m_userinfo.userid);
+        return;
+    }
+
+    //只有本次会话的发送端可以撤回自己发出的邀请
+    if (m_userinfo.userid != s.senderId)
+    {
+        send(cmd_folder_cancel, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_permission_denied,
+                                                          "not the sender of this folder session", sessionId));
+        LOGW("folder cancel from non-sender, session: %s, userid: %d, sender: %lld.",
+             sessionId.c_str(), m_userinfo.userid, (long long)s.senderId);
+        return;
+    }
+
+    //只有还在响铃时才谈得上"撤回邀请"。传输已经开始之后再取消要走 cmd_folder_close 并把
+    //errcode 填成 error_code_folder_canceled —— 那时已建了通道、可能已落盘一部分，
+    //与"还没开始就撤回"是两种收尾（见 docs/协议设计-v2.md 12.2.4）
+    if (s.state != folder_state_ringing)
+    {
+        send(cmd_folder_cancel, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_bad_request,
+                                                          "folder session is not ringing", sessionId));
+        LOGW("folder cancel rejected, session %s is in state %d, not ringing.",
+             sessionId.c_str(), s.state);
+        return;
+    }
+
+    send(cmd_folder_cancel, m_seq,
+         FolderTransferProtocol::buildSessionResponse(error_code_ok, "ok", sessionId));
+
+    //终态收口：通知接收端邀请已被撤回，让它那侧的气泡收起，同时在双方会话里留下记录。
+    //发送端不在推送名单里 —— 撤回是它自己的动作，结果由上面那条应答告诉它
+    std::vector<int64_t> notifyReceiver;
+    notifyReceiver.push_back(s.receiverId);
+    finishFolderTransferSession(s, folder_state_canceled, error_code_ok, "", notifyReceiver);
+
+    mgr.removeSession(sessionId);
+    m_folderTransferSessionId.clear();
+
+    LOGI("folder invite canceled by sender, session: %s, sender: %d, receiver: %lld.",
+         sessionId.c_str(), m_userinfo.userid, (long long)s.receiverId);
+}
+
+void ChatSession::onFolderClose(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    FolderCloseRequest req;
+    if (!FolderTransferProtocol::parseCloseRequest(body, req))
+    {
+        send(cmd_folder_close, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_bad_request, "bad request", ""));
+        LOGE("folder close: bad request, userid: %d, body: %s", m_userinfo.userid, body.c_str());
+        return;
+    }
+
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+    FolderTransferSessionInfo s;
+    if (!mgr.getSession(req.sessionid, s))
+    {
+        //正常收尾时双方会各发一帧 cmd_folder_close，服务端以先到的那一帧为准并销毁会话；
+        //后到的这一帧按幂等处理、照常回成功，不视为错误（见 docs/协议设计-v2.md 12.2.5）
+        send(cmd_folder_close, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_ok, "ok", req.sessionid));
+        m_folderTransferSessionId.clear();
+        LOGI("folder close on unknown session (treated as idempotent), session: %s, userid: %d, result: %d.",
+             req.sessionid.c_str(), m_userinfo.userid, req.result);
+        return;
+    }
+
+    //只有本次会话的两个参与方可以结束它
+    if (m_userinfo.userid != s.senderId && m_userinfo.userid != s.receiverId)
+    {
+        send(cmd_folder_close, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_permission_denied,
+                                                          "not a participant of this folder session",
+                                                          req.sessionid));
+        LOGW("folder close from non-participant, session: %s, userid: %d, sender: %lld, receiver: %lld.",
+             req.sessionid.c_str(), m_userinfo.userid,
+             (long long)s.senderId, (long long)s.receiverId);
+        return;
+    }
+
+    int64_t peerId = (m_userinfo.userid == s.senderId) ? s.receiverId : s.senderId;
+    int64_t now = static_cast<int64_t>(time(NULL)) * MILLISECONDS_PER_SECOND;
+
+    send(cmd_folder_close, m_seq,
+         FolderTransferProtocol::buildSessionResponse(error_code_ok, "ok", req.sessionid));
+
+    //成功结束：向对端推"已完成"并留记录，会话立即销毁，不留重试余地。
+    //正常收尾时双方各发一帧 cmd_folder_close，第二帧到达时会话已被销毁、走的是上面那条
+    //幂等分支，故不会重复推送；即便重复走到这里，留记录那一步本身也是幂等的
+    if (req.result == folder_close_success)
+    {
+        std::vector<int64_t> notifyPeer;
+        notifyPeer.push_back(peerId);
+        finishFolderTransferSession(s, folder_state_completed, error_code_ok, "", notifyPeer);
+
+        mgr.removeSession(req.sessionid);
+        m_folderTransferSessionId.clear();
+
+        LOGI("folder transfer completed, session: %s, closed by: %d, peer: %lld, files: %lld, size: %lld.",
+             req.sessionid.c_str(), m_userinfo.userid, (long long)peerId,
+             (long long)s.totalFiles, (long long)s.totalSize);
+        return;
+    }
+
+    //失败结束：置为失败态但<u>不销毁会话</u> —— 会话要保留 folderretrywindow 供发送端点
+    //「重试」做断点续传，期满由定时器扫描销毁。失败原因原样透传给对端，保证两端看到的
+    //是同一个 errcode（中转通道还通时对端已从 ft_abort 收到过一份，本推送是兜底通路）
+    mgr.setState(req.sessionid, folder_state_failed, now);
+
+    //终态收口：向对端推"已失败"并留记录。<u>留记录以最先到达的终态为准</u>——本笔若在
+    //保留期内重试并最终成功，那条成功的 cmd_folder_close 会因幂等键相同而不再另留记录，
+    //聊天记录里留下的仍是这一条失败记录（见 docs/协议设计-v2.md 12.8）
+    std::vector<int64_t> notifyPeer;
+    notifyPeer.push_back(peerId);
+    finishFolderTransferSession(s, folder_state_failed, req.errcode, req.errmsg, notifyPeer);
+
+    //本连接与这笔传输的绑定<u>不解除</u>：保留期内本端掉线仍要通知对端，
+    //故此处不清 m_folderTransferSessionId
+    LOGI("folder transfer failed, session: %s, closed by: %d, peer: %lld, errcode: %d, errmsg: %s, "
+         "session kept %lld ms for retry.",
+         req.sessionid.c_str(), m_userinfo.userid, (long long)peerId,
+         req.errcode, req.errmsg.c_str(), (long long)mgr.getRetryWindowMs());
+}
+
+void ChatSession::onFolderRetry(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    std::string sessionId;
+    if (!FolderTransferProtocol::parseSessionRequest(body, sessionId))
+    {
+        send(cmd_folder_retry, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_bad_request, "bad request", ""));
+        LOGE("folder retry: bad request, userid: %d, body: %s", m_userinfo.userid, body.c_str());
+        return;
+    }
+
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+    int64_t now = static_cast<int64_t>(time(NULL)) * MILLISECONDS_PER_SECOND;
+
+    //会话是否还在、请求者是不是发送方、会话是否处于失败态、是否仍在保留期内，
+    //四项判定连同各自的失败码都由 canRetry 一次给出
+    int errCode = error_code_ok;
+    if (!mgr.canRetry(sessionId, m_userinfo.userid, now, errCode))
+    {
+        send(cmd_folder_retry, m_seq,
+             FolderTransferProtocol::buildSessionResponse(errCode, "folder retry rejected", sessionId));
+        LOGI("folder retry rejected, session: %s, userid: %d, code: %d.",
+             sessionId.c_str(), m_userinfo.userid, errCode);
+        return;
+    }
+
+    //canRetry 通过即说明会话仍在表里，这里取出它是为了拿到双方 userid 与当前的尝试序号
+    FolderTransferSessionInfo s;
+    if (!mgr.getSession(sessionId, s))
+    {
+        send(cmd_folder_retry, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_folder_session_expired,
+                                                          "folder session expired", sessionId));
+        LOGW("folder retry: session %s vanished right after canRetry passed, userid: %d.",
+             sessionId.c_str(), m_userinfo.userid);
+        return;
+    }
+
+    //续传要双方重新建通道，接收端已退出登录则重试没有意义：告知发送端并销毁会话。
+    //正常情况下接收端掉线时 cleanupFolderTransferOnOffline 已经把会话销毁了，
+    //这一步是为它没来得及执行（例如接收端刚断、清理尚未跑到）时兜底
+    std::list<std::shared_ptr<ChatSession>> peerSessions;
+    Singleton<ChatServer>::Instance().getSessionsByUserId(peerSessions, static_cast<int32_t>(s.receiverId));
+    if (peerSessions.empty())
+    {
+        send(cmd_folder_retry, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_folder_peer_offline, "peer offline",
+                                                          sessionId));
+
+        //终态收口：会话就此销毁。推送名单为空 —— 发起重试的发送端由上面那条应答得知结果，
+        //接收端已经离线、推了也收不到。本笔在转入失败态时已经留过一条记录，故这次调用
+        //只会命中幂等判定并记一条日志；照常走收口是为了不给"新增终态分支忘了留记录"留缺口
+        std::vector<int64_t> noNotify;
+        finishFolderTransferSession(s, folder_state_peer_offline, error_code_ok, "", noNotify);
+
+        mgr.removeSession(sessionId);
+        m_folderTransferSessionId.clear();
+        LOGI("folder retry failed, receiver %lld is offline, session destroyed: %s.",
+             (long long)s.receiverId, sessionId.c_str());
+        return;
+    }
+
+    //会话回到传输中、尝试序号加一，随后重新签发两枚令牌并向双方各再推一帧中转参数。
+    //接收端不再被询问是否同意，它复用上一次那个目录做断点续传。
+    //序号加一必须赶在签发令牌之前：从这一刻起本次会话进入新一次尝试，此后无论成功还是
+    //失败，留下的记录条都归入新序号，与上一次失败那条各自成立（"每次尝试各留一条记录"）
+    int attemptSeq = 0;
+    if (!mgr.beginRetryAttempt(sessionId, now, attemptSeq))
+    {
+        send(cmd_folder_retry, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_folder_session_expired,
+                                                          "folder session expired", sessionId));
+        LOGW("folder retry: session %s vanished before the retry attempt began, userid: %d.",
+             sessionId.c_str(), m_userinfo.userid);
+        return;
+    }
+
+    //本地这份会话快照是加一之前取的，同步成新序号，使下面失败分支里留的记录挂在本次尝试上
+    s.attemptSeq = attemptSeq;
+
+    if (!pushFolderRelayInfo(s, now))
+    {
+        send(cmd_folder_retry, m_seq,
+             FolderTransferProtocol::buildSessionResponse(error_code_server_internal,
+                                                          "sign relay token failed", sessionId));
+
+        //终态收口：理由同 onFolderResponse 里的同名分支 —— 令牌签不出来就建不起通道。
+        //只推给接收端，发起重试的发送端由上面那条应答得知结果
+        std::vector<int64_t> notifyReceiver;
+        notifyReceiver.push_back(s.receiverId);
+        finishFolderTransferSession(s, folder_state_failed, error_code_folder_relay_broken,
+                                    "sign relay token failed", notifyReceiver);
+
+        mgr.removeSession(sessionId);
+        m_folderTransferSessionId.clear();
+        LOGE("folder retry accepted but relay token sign failed, session: %s, sender: %d.",
+             sessionId.c_str(), m_userinfo.userid);
+        return;
+    }
+
+    send(cmd_folder_retry, m_seq,
+         FolderTransferProtocol::buildSessionResponse(error_code_ok, "ok", sessionId));
+
+    LOGI("folder transfer retry accepted, session: %s, attempt: %d, sender: %lld, receiver: %lld.",
+         sessionId.c_str(), attemptSeq, (long long)s.senderId, (long long)s.receiverId);
+}
+
+bool ChatSession::pushFolderRelayInfo(const FolderTransferSessionInfo& s, int64_t now)
+{
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+
+    //两端各一枚令牌：sessionid 相同、role 相反、uid 与 peeruid 对调，
+    //fileserver 的中转层据此校验配对关系
+    std::string tokenSender;
+    std::string tokenReceiver;
+    if (!mgr.signTokenFor(s.sessionid, RelayToken::role_folder_sender, now, tokenSender)
+        || !mgr.signTokenFor(s.sessionid, RelayToken::role_folder_receiver, now, tokenReceiver))
+    {
+        LOGE("folder relay info: sign relay token failed, session: %s.", s.sessionid.c_str());
+        return false;
+    }
+
+    //中转地址即 fileserver 对客户端公布的那个上传下载地址，本功能不新开端口
+    const std::string& relayIp = mgr.getRelayHost();
+    int relayPort = mgr.getRelayPort();
+    //数据通道条数不含 lane 0 那条控制通道，客户端据此共建 lanes + 1 条连接
+    int lanes = mgr.getDataLanes();
+
+    sendToUser(static_cast<int32_t>(s.senderId), cmd_folder_relay_info,
+               FolderTransferProtocol::buildRelayInfo(s.sessionid, RelayToken::role_folder_sender,
+                                                      relayIp, relayPort, tokenSender, lanes));
+    sendToUser(static_cast<int32_t>(s.receiverId), cmd_folder_relay_info,
+               FolderTransferProtocol::buildRelayInfo(s.sessionid, RelayToken::role_folder_receiver,
+                                                      relayIp, relayPort, tokenReceiver, lanes));
+
+    LOGI("folder relay info pushed, session: %s, sender: %lld, receiver: %lld, relay: %s:%d, lanes: %d.",
+         s.sessionid.c_str(), (long long)s.senderId, (long long)s.receiverId,
+         relayIp.c_str(), relayPort, lanes);
+
+    return true;
+}
+
+void ChatSession::finishFolderTransferSession(const FolderTransferSessionInfo& s,
+                                              int state, int errcode, const std::string& errmsg,
+                                              const std::vector<int64_t>& notifyUsers)
+{
+    //（1）推终态：名单为空表示本次不推（pushToUsers 对空名单本就直接返回，这里显式
+    //判一次是为了让"不推"这条路径在代码里看得见）
+    if (!notifyUsers.empty())
+    {
+        Singleton<ChatServer>::Instance().pushToUsers(
+            notifyUsers, cmd_folder_state_notify,
+            FolderTransferProtocol::buildStateNotify(s.sessionid, state, errcode, errmsg));
+    }
+
+    //（2）留记录。过程态不该走到这里，出现即说明某条调用路径传错了参数：照常推送、
+    //但不留记录，并记一条告警使它能被发现
+    if (!FolderTransferProtocol::isTerminalState(state))
+    {
+        LOGW("folder transfer record skipped, state %d is not a terminal state, session: %s.",
+             state, s.sessionid.c_str());
+        return;
+    }
+
+    //幂等键由会话 id 与本次尝试的序号一起派生，两个层面各自成立：同一次尝试的终态判定
+    //可能被触发多次（典型是双方各发一帧 cmd_folder_close），键固定即保证只落一条；而
+    //不同次尝试的序号不同，故一笔传输先失败、重试又成功时会各留一条，过程完整
+    const std::string clientMsgId =
+        FolderTransferProtocol::buildRecordClientMsgId(s.sessionid, s.attemptSeq);
+
+    //记录挂在"发送方 → 接收方"这条单聊会话上：from 取文件夹发送方、to 取接收方，
+    //两端渲染出来的左右位置因而与传输方向一致
+    const int32_t fromId = static_cast<int32_t>(s.senderId);
+    const int32_t toId   = static_cast<int32_t>(s.receiverId);
+
+    MessageManager& msgMgr = Singleton<MessageManager>::Instance();
+
+    //落库前先按「发送方 userid + clientmsgid」查一次，已有记录就跳过 —— 去重键与
+    //cmd_send_message 的重发去重是同一个（MessageManager::getMsgIdByClientId）
+    const int64_t existedId = msgMgr.getMsgIdByClientId(fromId, clientMsgId);
+    if (existedId > 0)
+    {
+        LOGI("folder transfer record already saved, session: %s, attempt: %d, msgid: %lld, "
+             "state: %d, duplicate terminal decision ignored.",
+             s.sessionid.c_str(), s.attemptSeq, (long long)existedId, state);
+        return;
+    }
+
+    FolderTransferRecord record;
+    record.sessionid  = s.sessionid;
+    record.foldername = s.folderName;
+    record.totaldirs  = s.totalDirs;
+    record.totalfiles = s.totalFiles;
+    record.totalsize  = s.totalSize;
+    record.result     = state;
+
+    //只有"已失败"这一种结局才带有意义的失败原因。buildRecordContent 内部同样会做这一步
+    //归一（那条不变式由它统一保证），此处先归一一次是为了让下面那条日志打出来的 errcode
+    //与真正落库的内容一致，排查时不会被误导
+    record.errcode = 0;
+    if (state == folder_state_failed)
+        record.errcode = errcode;
+
+    //content 只有动作与结局，没有文件清单、路径与 md5
+    const std::string content = FolderTransferProtocol::buildRecordContent(record);
+
+    //落库前还要再套一层 buildStoredContent 的外壳（content/mentions/mentionall/quote），
+    //与单聊 / 群聊 / 转发那几条落库路径口径一致。读回时 parseStoredContent 只认最外层的
+    //content 字段，若把裸 content 直接存进去，重新登录同步会话列表时摘要会退化成
+    //"[消息]"、翻历史时这条记录的正文也会是空的。本记录不带 @ 与引用
+    std::vector<int64_t> noMentions;
+    const std::string storedContent =
+        MessageProtocol::buildStoredContent(content, noMentions, false, "");
+
+    const int64_t now = static_cast<int64_t>(time(NULL)) * MILLISECONDS_PER_SECOND;
+
+    //落 t_chatmsg。会话列表的摘要与未读不另做处理：会话集合、最后一条消息与未读数都由
+    //t_chatmsg 派生（见 MessageManager::getConversationBriefs），这条记录一入库，双方的
+    //会话列表下次拉取时自然带上它，接收方的未读也照常计入
+    const int64_t msgId = msgMgr.saveMessage(clientMsgId, CHAT_TYPE_SINGLE, fromId, toId,
+                                             message_type_folder, storedContent, now);
+    if (msgId == 0)
+    {
+        LOGE("save folder transfer record failed, session: %s, attempt: %d, from: %d, to: %d, "
+             "state: %d.",
+             s.sessionid.c_str(), s.attemptSeq, fromId, toId, state);
+        return;
+    }
+
+    MessageRecord rec;
+    rec.msgid       = msgId;
+    rec.clientmsgid = clientMsgId;
+    rec.ctype       = CHAT_TYPE_SINGLE;
+    rec.from        = s.senderId;
+    rec.to          = s.receiverId;
+    rec.msgtype     = message_type_folder;
+    rec.content     = content;
+    rec.mentionall  = false;
+    rec.timestamp   = now;
+    rec.recalled    = false;
+
+    //双方都要收到。服务端生成的消息没有"发送方的发送回执"这一说，故发送方也走
+    //cmd_message_notify；两帧的差别只在会话 id ——各自视角下的会话 id 都是对端 userid，
+    //推给接收方时取发送方、推给发送方时取接收方
+    std::vector<int64_t> receiverOnly;
+    receiverOnly.push_back(s.receiverId);
+    Singleton<ChatServer>::Instance().pushToUsers(
+        receiverOnly, cmd_message_notify, MessageProtocol::buildMessageNotify(rec, s.senderId));
+
+    std::vector<int64_t> senderOnly;
+    senderOnly.push_back(s.senderId);
+    Singleton<ChatServer>::Instance().pushToUsers(
+        senderOnly, cmd_message_notify, MessageProtocol::buildMessageNotify(rec, s.receiverId));
+
+    LOGI("folder transfer record saved, session: %s, attempt: %d, msgid: %lld, from: %d, to: %d, "
+         "folder: %s, dirs: %lld, files: %lld, size: %lld, result: %d, errcode: %d.",
+         s.sessionid.c_str(), s.attemptSeq, (long long)msgId, fromId, toId,
+         s.folderName.c_str(), (long long)s.totalDirs, (long long)s.totalFiles,
+         (long long)s.totalSize, state, record.errcode);
+}
+
+void ChatSession::cleanupFolderTransferOnOffline()
+{
+    //先取出再清空：本方法可能被登出与连接断开各调用一次，清空使第二次成为空操作
+    std::string recordedSessionId = m_folderTransferSessionId;
+    m_folderTransferSessionId.clear();
+
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+
+    //本次待收尾的会话。一个用户现在可同时参与至多 foldermaxperuser 笔文件夹传输
+    //（配置项默认 5 笔，作发送方与作接收方各算一笔），故这里是一个列表、要逐笔收尾。
+    //只处理其中一笔的话，漏掉的那几笔的对端会一直干等到邀请超时（默认 30 分钟）
+    //才知道这一方已经离线
+    std::vector<FolderTransferSessionInfo> pending;
+
+    //（1）本连接自己记着的那笔：本端发出过邀请（1810）或应答同意过（1812）
+    if (!recordedSessionId.empty())
+    {
+        FolderTransferSessionInfo recorded;
+        if (mgr.getSession(recordedSessionId, recorded))
+        {
+            pending.push_back(recorded);
+        }
+        else
+        {
+            //这一笔已正常收尾，或已被邀请超时 / 失败保留期的清理销毁，无人需要通知
+            LOGI("folder transfer cleanup on offline: session %s already gone, userid: %d.",
+                 recordedSessionId.c_str(), m_userinfo.userid);
+        }
+    }
+
+    //（2）按 userid 反查本用户参与的全部会话。这一步有两重必要性：
+    //     其一，尚未应答邀请的接收端手里没有会话 id（会话是发送端那条连接建的），
+    //     它在响铃阶段掉线时只能靠 userid 定位；不做这层兜底的话，发送端只能一直等到
+    //     邀请超时才知道对方已经离线，而协议要求这种情况下发送端收到的是"对方离线"
+    //     （见 docs/协议设计-v2.md 12.2.6）。
+    //     其二，m_folderTransferSessionId 只记得住最近的那一笔，本用户同时参与的其余
+    //     几笔同样要收尾。
+    //     未登录的连接（登录流程尚未走完就断开）没有 userid 可查，也不可能参与传输
+    if (m_userinfo.userid != 0)
+    {
+        //多端登录（PC 与手机可同时在线）时，不能仅凭本连接断开就断定用户已离线：
+        //反查是按 userid 命中的，那些会话可能属于本账号的另一端，或者邀请仍在另一端
+        //响铃。本账号还有别的在线连接时不做反查收尾，留给真正参与的那条连接断开时
+        //处理，或由邀请超时兜底。被顶号踢下线的旧连接 userid 已被置 0，不算作在线。
+        //会话快照由 getSessions 在其内部加锁拷贝出来，返回时 ChatServer::m_sessionMutex
+        //已经释放，故下面的推送与销毁不会与该锁构成嵌套
+        std::list<std::shared_ptr<ChatSession>> allSessions;
+        Singleton<ChatServer>::Instance().getSessions(allSessions);
+
+        bool hasAnotherOnlineSession = false;
+        for (std::list<std::shared_ptr<ChatSession>>::iterator it = allSessions.begin();
+             it != allSessions.end(); ++it)
+        {
+            //本连接自身要排除在外：退出登录（1002）时它还挂在会话表里，
+            //连接断开时它已被 ChatServer::onDisconnected 摘除
+            if (!(*it) || (*it)->getSessionId() == m_id)
+                continue;
+
+            if ((*it)->getUserId() == m_userinfo.userid)
+            {
+                LOGI("folder transfer cleanup on offline skipped, userid %d still has another "
+                     "online session %d.",
+                     m_userinfo.userid, (*it)->getSessionId());
+                hasAnotherOnlineSession = true;
+                break;
+            }
+        }
+
+        if (!hasAnotherOnlineSession)
+        {
+            //反查结果追加进一个独立的容器，再逐条并入待收尾列表：（1）里已经收进来的
+            //那笔必然也在反查结果里，重复收尾会给对端推两帧状态变更
+            std::vector<FolderTransferSessionInfo> byUser;
+            mgr.findSessionsByUser(m_userinfo.userid, byUser);
+
+            for (size_t i = 0; i < byUser.size(); ++i)
+            {
+                bool duplicated = false;
+                for (size_t j = 0; j < pending.size(); ++j)
+                {
+                    if (pending[j].sessionid == byUser[i].sessionid)
+                    {
+                        duplicated = true;
+                        break;
+                    }
+                }
+
+                if (!duplicated)
+                    pending.push_back(byUser[i]);
+            }
+        }
+    }
+
+    //（3）逐笔收尾：向对端推一帧状态变更，随后销毁会话。绝大多数连接的 pending 都是空的
+    for (size_t i = 0; i < pending.size(); ++i)
+    {
+        const FolderTransferSessionInfo& s = pending[i];
+
+        //本人须确实是这笔传输的参与方，避免因会话 id 记串而销毁了别人的会话。
+        //不匹配时只跳过这一笔，其余几笔照常收尾
+        if (m_userinfo.userid != s.senderId && m_userinfo.userid != s.receiverId)
+        {
+            LOGW("folder transfer cleanup on offline: userid %d is not a participant of session %s, "
+                 "sender: %lld, receiver: %lld.",
+                 m_userinfo.userid, s.sessionid.c_str(),
+                 (long long)s.senderId, (long long)s.receiverId);
+            continue;
+        }
+
+        int64_t peerId = (m_userinfo.userid == s.senderId) ? s.receiverId : s.senderId;
+
+        //推给对端的状态按会话当时处于哪个阶段区分，取值见 docs/协议设计-v2.md 12.2.6 的推送时机表：
+        //  还在响铃（邀请尚未被应答）—— 一个字节都还没传，推"对方离线"，errcode 恒为 0；
+        //  已进入传输中或失败待重试 —— 已经建过通道、可能已落盘一部分，按整体失败处理，
+        //                              推"已失败"并带 error_code_folder_peer_offline，
+        //                              使对端与本端看到同一条失败原因。
+        int notifyState = folder_state_failed;
+        if (s.state == folder_state_ringing)
+            notifyState = folder_state_peer_offline;
+
+        //终态收口：推给对端的同时在双方会话里留下这条传输记录
+        std::vector<int64_t> notifyPeer;
+        notifyPeer.push_back(peerId);
+        finishFolderTransferSession(s, notifyState, error_code_folder_peer_offline,
+                                    "peer offline", notifyPeer);
+
+        //续传位点存在双方客户端的内存与接收端的半成品文件里，服务端只记会话；本端连接一断
+        //这些位点即作废，会话留着也无法再续传，故直接销毁而不是留进保留期
+        //（见 docs/协议设计-v2.md 12.7 不变式 2）
+        mgr.removeSession(s.sessionid);
+
+        LOGI("folder transfer aborted because a participant went offline, session: %s, offline user: %d, "
+             "notified peer: %lld, session state was: %d, notify state: %d.",
+             s.sessionid.c_str(), m_userinfo.userid, (long long)peerId, s.state, notifyState);
+    }
 }
 
 void ChatSession::onSetConversation(const std::string& body, const std::shared_ptr<TcpConnection>& conn)

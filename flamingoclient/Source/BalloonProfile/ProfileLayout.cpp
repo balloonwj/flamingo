@@ -47,11 +47,11 @@ extern CAppModule _Module;
 
 #include "ProfileLayout.h"
 #include "ProfileModel.h"
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiComboBox.h"
-#include "../../balloonui/balloonui/DuiXmlBuilder.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
+#include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
 
 namespace balloonprofile {
 
@@ -405,7 +405,7 @@ private:
 };
 
 /**
- *  ProfileStatusPill —— 一个在线状态胶囊（在线 / 离开 / 勿扰 / 隐身）。
+ *  ProfileStatusPill —— 一个在线状态胶囊（在线 / 离开 / 勿扰）。
  *  胶囊：高 22、全圆角、左右内边距 8；内部左侧 6×6 状态色圆点 + 右侧
  *  中文文字。选中态 accent-soft 底 + accent 粗体字；未选中 rgba(0,0,0,.04)
  *  底 + text-muted 字。继承 DuiButton 复用点击 / DUIN_CLICK 通知。
@@ -707,10 +707,7 @@ int StatusKindFromAttr(const std::string& s)
     {
         return kProfileStatusBusy;
     }
-    if (s == "invisible")
-    {
-        return kProfileStatusInvisible;
-    }
+    //其余取值（含老布局里写过的 "invisible"，该状态已去掉）一律按"在线"处理
     return kProfileStatusOnline;
 }
 
@@ -819,7 +816,6 @@ const char* const kProfileViewXml = u8R"xml(
           <profile-pill id="910" status="online"    selected="true"  fixedWidth="58"/>
           <profile-pill id="911" status="away"      fixedWidth="58"/>
           <profile-pill id="912" status="busy"      fixedWidth="58"/>
-          <profile-pill id="913" status="invisible" fixedWidth="58"/>
           <control weight="1"/>
         </hbox>
       </vbox>
@@ -882,7 +878,6 @@ const char* const kProfileEditXml = u8R"xml(
           <profile-pill id="910" status="online"    selected="true"  fixedWidth="58"/>
           <profile-pill id="911" status="away"      fixedWidth="58"/>
           <profile-pill id="912" status="busy"      fixedWidth="58"/>
-          <profile-pill id="913" status="invisible" fixedWidth="58"/>
           <control weight="1"/>
         </hbox>
       </vbox>

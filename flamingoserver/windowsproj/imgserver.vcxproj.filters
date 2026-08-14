@@ -1,24 +1,138 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="net">
-      <UniqueIdentifier>{0ab8b0d7-881a-4598-ac12-b4d1c24ba0ad}</UniqueIdentifier>
+    <Filter Include="base">
+      <UniqueIdentifier>{2f8d5821-199f-464a-a3d9-cffd7283edef}</UniqueIdentifier>
     </Filter>
-    <Filter Include="utils">
-      <UniqueIdentifier>{50d8d07d-a617-45c6-b0ca-651d6ccda2b4}</UniqueIdentifier>
+    <Filter Include="chatserversrc">
+      <UniqueIdentifier>{82864245-30d2-4f63-a17a-7730bd32791a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="fileserversrc">
+      <UniqueIdentifier>{e7e4623e-a61e-4686-8081-7c017b2815b8}</UniqueIdentifier>
     </Filter>
     <Filter Include="imgserversrc">
       <UniqueIdentifier>{1dc8cd04-7152-4b83-8c70-f088c0b78326}</UniqueIdentifier>
     </Filter>
-    <Filter Include="base">
-      <UniqueIdentifier>{2f8d5821-199f-464a-a3d9-cffd7283edef}</UniqueIdentifier>
+    <Filter Include="net">
+      <UniqueIdentifier>{0ab8b0d7-881a-4598-ac12-b4d1c24ba0ad}</UniqueIdentifier>
     </Filter>
-    <Filter Include="jsoncpp">
-      <UniqueIdentifier>{7c3e9a14-2b6d-4f81-9a05-3d2e6f8b1c40}</UniqueIdentifier>
+    <Filter Include="third-party">
+      <UniqueIdentifier>{f121dc71-c8a3-4c61-aa85-759b5a15c032}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third-party\jsoncpp1.9.0">
+      <UniqueIdentifier>{e4584df0-048d-44a5-a37f-b55abd3cf2af}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third-party\zlib1.2.11">
+      <UniqueIdentifier>{ee7ec224-1a4e-48a0-8c02-e7343faa9dfc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="utils">
+      <UniqueIdentifier>{50d8d07d-a617-45c6-b0ca-651d6ccda2b4}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\net\FrameCrypto.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\FramePayload.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\zutil.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\uncompr.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\trees.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\inftrees.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\inflate.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\inffast.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\infback.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\gzwrite.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\gzread.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\gzlib.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\gzclose.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\deflate.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\crc32.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\compress.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\adler32.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\ZlibUtil.cpp">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\AsyncLog.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\ConfigFileReader.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\CountDownLatch.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\Platform.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\Timestamp.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\FileManager.cpp">
+      <Filter>fileserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\UpdatePackageIndex.cpp">
+      <Filter>fileserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\FileEnum.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\FileServer.cpp">
+      <Filter>fileserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\FileSession.cpp">
+      <Filter>fileserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\TcpSession.cpp">
+      <Filter>fileserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imgserversrc\main.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imgserversrc\RelayServer.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imgserversrc\RelaySession.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\imgserversrc\RelayHub.cpp">
+      <Filter>imgserversrc</Filter>
+    </ClCompile>
     <ClCompile Include="..\net\Acceptor.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\ByteBuffer.cpp">
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="..\net\Channel.cpp">
@@ -84,50 +198,8 @@
     <ClCompile Include="..\utils\URLEncodeUtil.cpp">
       <Filter>utils</Filter>
     </ClCompile>
-    <ClCompile Include="..\imgserversrc\main.cpp">
-      <Filter>imgserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\imgserversrc\RelayServer.cpp">
-      <Filter>imgserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\imgserversrc\RelaySession.cpp">
-      <Filter>imgserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\imgserversrc\RelayHub.cpp">
-      <Filter>imgserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\fileserversrc\FileManager.cpp">
-      <Filter>imgserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\fileserversrc\FileServer.cpp">
-      <Filter>imgserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\fileserversrc\FileSession.cpp">
-      <Filter>imgserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\fileserversrc\TcpSession.cpp">
-      <Filter>imgserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\base\AsyncLog.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\base\ConfigFileReader.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\base\CountDownLatch.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\base\Platform.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\base\Timestamp.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
     <ClCompile Include="..\utils\UUIDGenerator.cpp">
       <Filter>utils</Filter>
-    </ClCompile>
-    <ClCompile Include="..\net\ByteBuffer.cpp">
-      <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="..\net\FrameCodec.cpp">
       <Filter>net</Filter>
@@ -135,21 +207,87 @@
     <ClCompile Include="..\utils\FileToken.cpp">
       <Filter>utils</Filter>
     </ClCompile>
+    <ClCompile Include="..\utils\AppPath.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\ServerConfigLoader.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
     <ClCompile Include="..\utils\RelayToken.cpp">
       <Filter>utils</Filter>
     </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp">
-      <Filter>jsoncpp</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_value.cpp">
-      <Filter>jsoncpp</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_writer.cpp">
-      <Filter>jsoncpp</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\net\FrameCrypto.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\FramePayload.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\AsyncLog.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\ConfigFileReader.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\CountDownLatch.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\Platform.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\RAIIWrapper.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\Singleton.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\Timestamp.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\FileManager.h">
+      <Filter>fileserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\UpdatePackageIndex.h">
+      <Filter>fileserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\FileEnum.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\FileMsg.h">
+      <Filter>fileserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\FileServer.h">
+      <Filter>fileserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\imgserversrc\RelayServer.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\imgserversrc\RelaySession.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\imgserversrc\RelayHub.h">
+      <Filter>imgserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\FileSession.h">
+      <Filter>fileserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\TcpSession.h">
+      <Filter>fileserversrc</Filter>
+    </ClInclude>
     <ClInclude Include="..\net\Acceptor.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\ByteBuffer.h">
       <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="..\net\Callbacks.h">
@@ -224,68 +362,26 @@
     <ClInclude Include="..\utils\URLEncodeUtil.h">
       <Filter>utils</Filter>
     </ClInclude>
-    <ClInclude Include="..\fileserversrc\FileManager.h">
-      <Filter>imgserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\fileserversrc\FileMsg.h">
-      <Filter>imgserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\fileserversrc\FileServer.h">
-      <Filter>imgserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\imgserversrc\RelayServer.h">
-      <Filter>imgserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\imgserversrc\RelaySession.h">
-      <Filter>imgserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\imgserversrc\RelayHub.h">
-      <Filter>imgserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\fileserversrc\FileSession.h">
-      <Filter>imgserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\fileserversrc\TcpSession.h">
-      <Filter>imgserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\AsyncLog.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\ConfigFileReader.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\CountDownLatch.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\Platform.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\RAIIWrapper.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\Singleton.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\Timestamp.h">
-      <Filter>base</Filter>
-    </ClInclude>
     <ClInclude Include="..\utils\UUIDGenerator.h">
       <Filter>utils</Filter>
     </ClInclude>
-    <ClInclude Include="..\net\ByteBuffer.h">
-      <Filter>net</Filter>
-    </ClInclude>
     <ClInclude Include="..\net\FrameCodec.h">
-      <Filter>net</Filter>
-    </ClInclude>
-    <ClInclude Include="..\chatserversrc\Protocol.h">
       <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="..\utils\FileToken.h">
       <Filter>utils</Filter>
     </ClInclude>
+    <ClInclude Include="..\utils\AppPath.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\ServerConfigLoader.h">
+      <Filter>utils</Filter>
+    </ClInclude>
     <ClInclude Include="..\utils\RelayToken.h">
       <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\Protocol.h">
+      <Filter>chatserversrc</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -14,7 +14,8 @@
  *    ANB10 置顶公告的标题带「[置顶]」前缀；
  *    ANB11 右栏正文喂进内容高度后，名义内容矩形跟着变高，滚到底仍与视口相交；
  *    ANB12 左右两栏的滚动视口都是悬浮式自动隐藏的 MainPanelScrollView；
- *    ANB13 列表行里的两行文字是会把滚轮上抛给滚动视口的那种标签；
+ *    ANB13 滚轮落在列表行的文字上时，事件仍上冒到列表的滚动视口；
+ *    ANB18 滚轮落在右栏正文上时，事件仍上冒到右栏的滚动视口；
  *    ANB14 点选另一条公告（定点更新）不会改变列表的滚动位置；
  *    ANB15 定点更新同步行的选中态 / 未读点、顶部计数与底部按钮可用性；
  *    ANB16 定点更新换掉右栏三项、重算滚动范围并把正文滚回顶部；
@@ -31,9 +32,10 @@
 #include "../BalloonAnnounce/AnnounceBoxLayout.h"
 #include "../BalloonAnnounce/AnnounceRow.h"
 #include "../BalloonHistory/HistoryContentView.h"   // 右栏正文控件（读正文用 GetFlatText）
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView（ANB11 要滚动）
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"                        // DispatchMouseWheel（滚轮派发入口）
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView（ANB11 要滚动）
 #include "../BalloonMain/MainPanelScrollView.h"                       // 两栏用的悬浮式滚动视口（ANB12）
 
 using namespace balloonannounce;
@@ -401,27 +403,45 @@ TEST_CASE("ANB12 两栏滚动视口都是悬浮式自动隐藏的那种", "[anno
     CHECK(bodySv->GetAutoContentHeight() == false);
 }
 
-TEST_CASE("ANB13 列表行里的文字会把滚轮上抛给滚动视口", "[announce][layout][scroll]")
+TEST_CASE("ANB18 滚轮落在右栏正文上时正文照样滚得动", "[announce][layout][scroll]")
 {
-    std::vector<AnnounceRowView> rows;
-    rows.push_back(MakeRow(3001, _T("第一条")));
-    rows.push_back(MakeRow(3002, _T("第二条")));
+    //右栏正文是一整块铺满滚动视口的 HistoryContentView，它自己不消化滚轮，
+    //长公告能不能滚全靠事件上冒到右栏的滚动视口。理由同 ANB13。
+    CString longBody;
+    for (int i = 0; i < kLongBodyLines; ++i)
+    {
+        CString line;
+        line.Format(_T("第 %d 行：这是一条很长的公告正文，用来把内容高度撑到远超视口。\n"),
+                    i + 1);
+        longBody += line;
+    }
 
-    std::unique_ptr<DuiControl> list = BuildAnnounceListContent(rows, -1, _T(""), _T(""));
-    REQUIRE(list != nullptr);
+    AnnounceBoxViewData d = MakeData();
+    d.m_detailBody = longBody;
 
-    DuiControl* row0 = list->FindCtrlById(kIdAnnRowBase + 0);
-    REQUIRE(row0 != nullptr);
-    REQUIRE(row0->Children().size() >= 1);
-    DuiControl* texts = row0->Children()[0].get();
-    REQUIRE(texts != nullptr);
-    REQUIRE(texts->Children().size() >= 2);
+    std::unique_ptr<DuiControl> root = BuildAnnounceBoxBody(d);
+    REQUIRE(root != nullptr);
 
-    //两行字几乎铺满整行，滚轮十有八九落在它们身上。DuiHost 只把滚轮投给最深命中
-    //控件、返回 false 就丢掉（不向上冒泡），所以这两个标签必须是会转发滚轮的那种，
-    //否则鼠标停在列表上滚轮纹丝不动 —— 那条自动隐藏的滚动条也就永远不会出现。
-    CHECK(dynamic_cast<AnnounceWheelLabel*>(texts->Children()[0].get()) != nullptr);
-    CHECK(dynamic_cast<AnnounceWheelLabel*>(texts->Children()[1].get()) != nullptr);
+    RECT rcClient = { 0, 0, kTestClientW, kTestClientH };
+    root->SetRect(rcClient);
+
+    balloonwjui::DuiScrollView* sv = dynamic_cast<balloonwjui::DuiScrollView*>(
+        root->FindCtrlById(kIdAnnDetailScroll));
+    balloonhistory::HistoryContentView* body =
+        dynamic_cast<balloonhistory::HistoryContentView*>(
+            root->FindCtrlById(kIdAnnDetailBody));
+    REQUIRE(sv != nullptr);
+    REQUIRE(body != nullptr);
+
+    //按窗口那边的口径把内容高度喂进去，滚动范围才非零。
+    const int contentH = SyncAnnounceDetailBodyHeight(sv, body);
+    const RECT svRc = sv->GetRect();
+    REQUIRE(contentH > (svRc.bottom - svRc.top));
+    REQUIRE(sv->GetScrollPos() == 0);
+
+    POINT pt = { (kTestClientW * 3) / 4, kTestClientH / 2 };
+    CHECK(balloonwjui::DuiHost::DispatchMouseWheel(body, pt, -WHEEL_DELTA, 0) == true);
+    CHECK(sv->GetScrollPos() > 0);
 }
 
 namespace {
@@ -447,6 +467,45 @@ AnnounceBoxViewData MakeScrollableData()
 
 } // namespace
 
+TEST_CASE("ANB13 滚轮落在列表行的文字上时列表照样滚得动", "[announce][layout][scroll]")
+{
+    //两行字几乎铺满整行，滚轮十有八九落在它们身上，而 DuiLabel 自己不消化滚轮。
+    //事件要靠 DuiHost::DispatchMouseWheel 沿父链上冒（Label → 文字 VBox → 行 HBox
+    //→ 列表 VBox → 滚动视口）才到得了滚动视口；到不了的话鼠标停在列表上滚轮纹丝
+    //不动，那条自动隐藏的滚动条也永远不会出现。
+    //
+    //这一条按行为断言、不按控件类型断言：类型只是手段，2026-08-14 之前是靠一个
+    //会转发滚轮的 DuiLabel 子类做到的，之后改由库的默认上冒承担，而契约没变。
+    AnnounceBoxViewData d = MakeScrollableData();
+    std::unique_ptr<DuiControl> root = BuildAnnounceBoxBody(d);
+    REQUIRE(root != nullptr);
+
+    RECT rcClient = { 0, 0, kTestClientW, kTestClientH };
+    root->SetRect(rcClient);
+
+    balloonmain::MainPanelScrollView* listSv =
+        dynamic_cast<balloonmain::MainPanelScrollView*>(root->FindCtrlById(kIdAnnScroll));
+    REQUIRE(listSv != nullptr);
+    REQUIRE(listSv->GetScrollPos() == 0);
+
+    //取第一行里的标题标签作为滚轮命中控件 —— 它是这棵树里最深的那一层。
+    DuiControl* content = listSv->GetContent();
+    REQUIRE(content != nullptr);
+    DuiControl* row0 = content->FindCtrlById(kIdAnnRowBase + 0);
+    REQUIRE(row0 != nullptr);
+    REQUIRE(row0->Children().size() >= 1);
+    DuiControl* texts = row0->Children()[0].get();
+    REQUIRE(texts != nullptr);
+    REQUIRE(texts->Children().size() >= 2);
+    DuiControl* titleLbl = texts->Children()[0].get();
+    REQUIRE(titleLbl != nullptr);
+
+    //zDelta 取 -WHEEL_DELTA 表示向下滚一格。
+    POINT pt = { kTestClientW / 4, kTestClientH / 2 };
+    CHECK(balloonwjui::DuiHost::DispatchMouseWheel(titleLbl, pt, -WHEEL_DELTA, 0) == true);
+    CHECK(listSv->GetScrollPos() > 0);
+}
+
 TEST_CASE("ANB17 列表里只有行控件，行间分隔线由行自己画", "[announce][layout][scroll]")
 {
     std::vector<AnnounceRowView> rows;
@@ -457,9 +516,10 @@ TEST_CASE("ANB17 列表里只有行控件，行间分隔线由行自己画", "[a
     std::unique_ptr<DuiControl> list = BuildAnnounceListContent(rows, -1, _T(""), _T(""));
     REQUIRE(list != nullptr);
 
-    //列表的直接子控件必须清一色是行 —— 中间夹独立的分隔线控件会把滚轮吃掉：
-    //DuiHost 只把滚轮投给最深命中控件、返回 false 就丢掉（不向上冒泡），鼠标恰好
-    //停在那 1 像素上时整个列表滚不动（2026-08-12 实测踩到）。
+    //列表的直接子控件必须清一色是行，行间那条线由行自己在底边画。这么定最初是
+    //因为夹在中间的独立分隔线控件会把滚轮吃掉（2026-08-12 实测踩到：库当时不冒泡，
+    //鼠标恰好停在那 1 像素上时整个列表滚不动）。2026-08-14 库补上滚轮上冒后那个
+    //问题已不存在，但保持子控件与公告条目一一对应仍便于按下标核对，故契约保留。
     const std::vector<std::unique_ptr<DuiControl> >& kids = list->Children();
     REQUIRE(kids.size() == rows.size());
     for (size_t i = 0; i < kids.size(); ++i)

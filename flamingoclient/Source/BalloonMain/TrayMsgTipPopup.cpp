@@ -16,8 +16,8 @@
 #include "MainPanelListItem.h"     // 会话行（彩色字母头像 + 名 + 副行 + 悬停 + 点击）
 #include "PopupMenuPlacement.h"    // ClampMenuOriginToRect / GetMenuPlacementArea（落点夹取）
 #include "../IULog.h"
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox / Hint
-#include "../../balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox / Hint
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
 
 // ---- 文件作用域常量 -----------------------------------------------------
 

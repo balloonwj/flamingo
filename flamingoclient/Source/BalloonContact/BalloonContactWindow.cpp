@@ -13,14 +13,19 @@
 #include <memory>
 
 #include "../CustomMsgDef.h"          // WM_CLOSE_MAINDLG
-#include "../UserSessionData.h"       // FMG_MSG_OPEN_CHAT（"发消息"路由）/ FMG_MSG_SET_CONTACT_REMARK（备注提交回投）
-#include <string>                     // 备注回投的 UTF-8 堆负载
+#include "../UserSessionData.h"       // FMG_MSG_OPEN_CHAT（"发消息"路由）/ FMG_MSG_SET_CONTACT_REMARK（备注提交回投）/ FMG_MSG_SET_CONTACT_TAGS（标签整份提交回投）
+#include <string>                     // 备注 / 标签回投的 UTF-8 堆负载
+#include <vector>                     // 标签整份提交的列表
 #include "../IULog.h"                 // LOG_INFO / LOG_ERROR / LOG_WARNING
+#include "../BalloonMain/TitleBarIcon.h"   // CreateProgramIconBitmap（标题栏程序图标）
+#include "../resource.h"                   // IDR_MAINFRAME（任务栏 / Alt-Tab 图标）
 #include "ContactLayout.h"            // BuildContactBody / ContactCtrlId 等
-#include "../../balloonui/balloonui/Controls/Basic/DuiAvatar.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiSwitch.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiComboBox.h"
+#include "ContactTagModel.h"          // 标签的归一与增 / 改判定（纯函数）
+#include "TagChip.h"                  // TagChip::DUIN_TAGCHIP_DELETE / DUIN_TAGCHIP_EDIT
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 
 using namespace balloonwjui;
 using namespace ballooncontact;
@@ -29,27 +34,40 @@ using namespace ballooncontact;
 
 namespace {
 
-// 联系人资料对话框固定客户区尺寸（逻辑像素）。宽度照设计稿 width:420；
-// 高度按各区块排满精确累计（与 ContactLayout.cpp 内嵌 XML 一一对应）：
-//   客户区上内边距 18
-//   头部行 84 + 头部下边距 spacer 14 + 分隔线 1
-//   标签区 vbox 76 + 分隔线 1
-//   备注名 / 分组区 vbox 132 + 分隔线 1
-//   其它开关区 vbox 170 + 分隔线 1
-//   底部按钮行 58
-//   客户区下内边距 18
-// 合计 = 18 + 99 + 77 + 133 + 171 + 58 + 18 = 574。
-// 头部行取 84 而非 64：设计稿头部 4 行文字块（姓名 + 职务 + 账号 +
-// 签名）整体约 82px，比头像 64 更高 —— 设计稿 alignItems:center 让头像
-// 在该高度内垂直居中，行高不足会裁掉第 4 行签名。
-const int kContactWindowWidth  = 420;
-const int kContactWindowHeight = 574;
+// 联系人资料对话框的客户区宽度（逻辑像素）。与布局侧共用同一份常量，
+// 免得两处各写一个 420 日后走岔。
+// 高度不是固定值：部门路径整宽区块的行数决定窗口要高多少，由
+// ballooncontact::ContactBodyHeight(行数) 算出，见 ApplyBodyHeight。
+const int kContactWindowWidth = ballooncontact::kContactBodyWidth;
 
 // 标题栏高度（逻辑像素，照设计稿 Modal header 44）。
 const int kContactTitleBarHeight = 44;
 
-// 「+ 添加标签」点击时为 mock 追加的标签前缀（真实输入框待接入）。
-const TCHAR* const kMockNewTagPrefix = _T("新标签");
+// 标题栏左侧程序图标的边长（逻辑像素）。balloonui 最终按 16x16 绘制，取同值可免去缩放。
+const int kTitleIconSize = 16;
+
+// 标题栏底色。本窗口没有把标题栏设成透明，balloonui 画的就是这个颜色
+// （见 DuiFrameWindow.cpp 的 Title strip background 一段）。图标位图必须合成到
+// 同色底上，否则图标四周会出现一块与标题栏不同色的方块，缘由详见 TitleBarIcon.h。
+const COLORREF kTitleBarBgColor = RGB(245, 246, 250);
+
+// ---- 动画的推进方式 ----------------------------------------------------
+// 复制成功的轻量提示（DuiToast）走渐入 / 渐出动画、开关（DuiSwitch）鼠标翻转走
+// 150ms 滑动动画，两者都由 DuiAnimMgr 推进。本窗口<u>不</u>需要为此挂定时器：
+// DuiAnimMgr 自 2026-08-14 起自带脉冲定时器（见 balloonui/DuiAnimation.cpp 的
+// StartPulse / PulseProc），有动画在跑时它自己按 16ms 发 WM_TIMER，跑完即停。
+// 该定时器是线程定时器（SetTimer 的 hwnd 传 NULL），任何转发未过滤消息的消息循环
+// 都能驱动它，本窗口用的正是这种循环。
+
+// ---- 标签相关的提示文案 ------------------------------------------------
+// 标签操作被判定拦下时弹给用户看的一句话。含具体数字的两条（"最长 N 个字符"、
+// "最多 N 个"）在用到的地方按上限常量拼出来，改上限时不必回来改文案，故这里
+// 只放不含数字的这一条。
+
+const TCHAR* const kTipTagDuplicate = _T("该标签已存在");
+
+// "新增标签"时用来表示"这次不是在改某一枚已有标签"的下标值。
+const int kTagIndexNone = -1;
 
 // CString（宽字符）转 UTF-8 字节。备注名要跨窗口回投给主面板、并最终进 JSON 报文，
 // 两处都以 UTF-8 为准。空串原样返回空串。
@@ -86,7 +104,15 @@ CBalloonContactWindow::CBalloonContactWindow(CFlamingoClient* pFMGClient)
     , m_hostPanel(NULL)
     , m_peerUserId(0)
     , m_remarkEditing(false)
+    , m_deptLineCount(0)
+    , m_tagRowCount(1)
+    , m_editingTagIndex(kTagIndexNone)
+    , m_titleIconBmp(NULL)
+    , m_hTaskIconBig(NULL)
+    , m_hTaskIconSmall(NULL)
 {
+    // 标签输入弹层的提交回调只需注册一次，弹层本身随窗口存活。
+    m_tagPopup.SetCommitCallback(&CBalloonContactWindow::OnTagPopupCommitThunk, this);
 }
 
 void CBalloonContactWindow::OpenForContact(HWND hostPanel, UINT peerUserId,
@@ -101,6 +127,9 @@ void CBalloonContactWindow::OpenForContact(HWND hostPanel, UINT peerUserId,
     if (IsWindow())
     {
         InitUi();
+        // 换了联系人，部门路径的行数可能跟着变，窗口高度要重算 —— 漏掉这一步的话，
+        // 从部门路径只有一行的联系人切到三行的联系人，底部按钮会被挤出窗口。
+        ApplyBodyHeight();
         if (IsIconic())
         {
             ShowWindow(SW_RESTORE);
@@ -130,6 +159,8 @@ void CBalloonContactWindow::RefreshContactData(const ballooncontact::ContactMode
     }
     m_model = model;
     InitUi();        // 用新数据重建客户区
+    // 推送来的新资料可能换了部门，部门路径行数变了窗口高度也要跟着变。
+    ApplyBodyHeight();
     // 不调 SetForegroundWindow —— 后台静默刷新,不抢用户当前焦点。
     ::InvalidateRect(m_hWnd, NULL, FALSE);
 }
@@ -137,6 +168,24 @@ void CBalloonContactWindow::RefreshContactData(const ballooncontact::ContactMode
 CBalloonContactWindow::~CBalloonContactWindow()
 {
     // 客户区控件树与 HWND 由 DuiFrameWindow 基类析构兜底。
+
+    // 标题栏图标位图与任务栏图标由本类持有：DuiFrameWindow::SetIcon 只借用不释放，
+    // WM_SETICON 交给系统的图标同样不由系统释放，都要在这里还回去。
+    if (m_titleIconBmp != NULL)
+    {
+        ::DeleteObject(m_titleIconBmp);
+        m_titleIconBmp = NULL;
+    }
+    if (m_hTaskIconBig != NULL)
+    {
+        ::DestroyIcon(m_hTaskIconBig);
+        m_hTaskIconBig = NULL;
+    }
+    if (m_hTaskIconSmall != NULL)
+    {
+        ::DestroyIcon(m_hTaskIconSmall);
+        m_hTaskIconSmall = NULL;
+    }
 }
 
 // =======================================================================
@@ -154,15 +203,63 @@ void CBalloonContactWindow::CreateAndShow(HWND hMainDlg)
         return;
     }
 
-    SetTitle(_T("联系人资料"));
+    // 先按当前模型摆一个标题：InitUi 末尾还会再刷一次，但 InitUi 有可能在客户区
+    // 构建失败时提前返回，那种情况下标题栏也不该是空的。
+    UpdateWindowTitle();
     SetTitleBarHeight(kContactTitleBarHeight);
-    SetButtons(false, false, true);   // 只保留关闭按钮（居中模态风格）
+    //最小化 + 关闭。本窗口是无属主的独立顶层窗口（上面 Create 的第一个参数为 NULL、
+    //也没有 WS_EX_TOOLWINDOW），最小化后在任务栏上有自己的按钮，点回来即可还原。
+    //不给最大化：窗口尺寸由内容算出、SetResizable(false) 也不允许缩放。
+    SetButtons(true, false, true);
     SetResizable(false);              // 固定尺寸对话框
-    SetMinSize(kContactWindowWidth, kContactWindowHeight);
 
+    //标题栏左侧的程序图标。位图只建一次，跨"关闭再打开"复用；本类持有，析构时释放。
+    if (m_titleIconBmp == NULL)
+    {
+        m_titleIconBmp = balloonmain::CreateProgramIconBitmap(kTitleIconSize, kTitleBarBgColor);
+    }
+    if (m_titleIconBmp != NULL)
+    {
+        SetIcon(m_titleIconBmp);
+    }
+
+    //任务栏 / Alt-Tab 图标。balloonui 的窗口类没有关联类图标，不显式设置的话，
+    //窗口最小化后在任务栏上是一块空白 —— 本窗口现在有最小化按钮，这一步不能省。
+    if (m_hTaskIconBig == NULL)
+    {
+        m_hTaskIconBig = AtlLoadIconImage(IDR_MAINFRAME, LR_DEFAULTCOLOR,
+                                          ::GetSystemMetrics(SM_CXICON),
+                                          ::GetSystemMetrics(SM_CYICON));
+    }
+    if (m_hTaskIconSmall == NULL)
+    {
+        m_hTaskIconSmall = AtlLoadIconImage(IDR_MAINFRAME, LR_DEFAULTCOLOR,
+                                            ::GetSystemMetrics(SM_CXSMICON),
+                                            ::GetSystemMetrics(SM_CYSMICON));
+    }
+    if (m_hTaskIconBig != NULL)
+    {
+        ::SendMessage(m_hWnd, WM_SETICON, ICON_BIG, (LPARAM)m_hTaskIconBig);
+    }
+    if (m_hTaskIconSmall != NULL)
+    {
+        ::SendMessage(m_hWnd, WM_SETICON, ICON_SMALL, (LPARAM)m_hTaskIconSmall);
+    }
+
+    // 先把客户区调整到对话框真实的宽度，再构建客户区内容。窗口是以
+    // CWindow::rcDefault 建出来的，此刻客户区宽度还是系统给的默认值（实测一千四百
+    // 多像素）；而 InitUi 里同步标签区时要按滚动视口实际布局出来的宽度数标签占几行，
+    // 量到那个默认宽度就会把十来个标签算成一行。高度这时还不知道（取决于部门路径与
+    // 标签各占几行），先按"没有部门、标签一行"的基准高度占位，InitUi 之后由
+    // ApplyBodyHeight 改写成真实高度。
+    ResizeClient(kContactWindowWidth, ballooncontact::ContactBodyHeight(0, 1));
+
+    // 窗口高度取决于部门路径折了几行，只有 InitUi 把资料灌进控件之后才知道，
+    // 故 SetMinSize / 真实高度的 ResizeClient 都放在 InitUi 之后由 ApplyBodyHeight 统一做。
     InitUi();
-    ResizeClient(kContactWindowWidth, kContactWindowHeight);
+    ApplyBodyHeight();
     CenterWindow();
+
     ShowWindow(SW_SHOW);
     UpdateWindow();
     ::SetForegroundWindow(m_hWnd);
@@ -220,7 +317,31 @@ void CBalloonContactWindow::InitUi()
                        remark.IsEmpty() ? _T("未设置") : (LPCTSTR)remark);
     }
 
+    // 标题随联系人走。放在这里而不是只放在 CreateAndShow 里：窗口已经开着时切换到
+    // 另一个联系人（OpenForContact）或收到资料变更推送（RefreshContactData），走的
+    // 都是重新调 InitUi 这条路，标题必须跟着一起换。
+    UpdateWindowTitle();
+
     LOG_INFO(_T("联系人资料对话框客户区 UI 初始化完成。"));
+}
+
+void CBalloonContactWindow::UpdateWindowTitle()
+{
+    if (!IsWindow())
+    {
+        return;
+    }
+
+    const CString& name = m_model.Name();
+    if (name.IsEmpty())
+    {
+        SetTitle(_T("联系人资料"));
+        return;
+    }
+
+    CString title = name;
+    title += _T("的资料");
+    SetTitle(title);
 }
 
 void CBalloonContactWindow::FillHeader()
@@ -261,27 +382,30 @@ void CBalloonContactWindow::FillHeader()
 
     // 头部右侧多行资料块 —— 各行文本由模型拼出，交自由函数按 id 配置。
 
-    // 主名：备注名优先，否则真名。
-    const CString& remark = m_model.Remark();
-    CString primaryName = remark.IsEmpty() ? m_model.Name() : remark;
+    // 主名是真名，备注跟在后面的括号里 —— 与通讯录树 / 会话列表的「真名（备注）」
+    // 同一形态。2026-08-13 之前是反过来的（备注作主名、真名进括号），改动的理由是
+    // 企业场景下认人靠真实姓名，备注只是个人给自己加的记号，不该把真名挤掉。
+    CString primaryName = m_model.Name();
 
-    // 括号真名：仅当备注名非空（主名 != 真名）时显示。
-    CString realNameParen;
-    if (!remark.IsEmpty())
+    // 括号内容：备注名。只有空白字符的备注按没有处理，免得画出一对空括号。
+    CString remark = m_model.Remark();
+    remark.Trim();
+
+    CString parenText;
+    // 备注与真名一模一样时不再重复一遍，否则会显示成「张三（张三）」。
+    if (!remark.IsEmpty() && remark != primaryName)
     {
-        realNameParen = _T("(");
-        realNameParen += m_model.Name();
-        realNameParen += _T(")");
+        // 括号用全角：主名两侧多是中文，半角括号夹在中文之间两边贴得太紧。
+        parenText = _T("（");
+        parenText += remark;
+        parenText += _T("）");
     }
 
-    // 第 2 行「职务 · 部门」—— 职务与部门均非空才显示。
-    CString titleDept;
-    if (!m_model.Title().IsEmpty() && !m_model.Dept().IsEmpty())
-    {
-        titleDept = m_model.Title();
-        titleDept += _T(" · ");
-        titleDept += m_model.Dept();
-    }
+    // 第 2 行只放职务。2026-08-14 之前这一行是「职务 · 部门路径」，且要求职务与
+    // 部门<u>都</u>非空才显示 —— 于是有部门却没填职务的人，部门一个字也看不到。
+    // 现在部门路径独立成整宽区块（下面的 ConfigureContactDeptPath），两者各自
+    // 判空：职务非空就显示这一行，部门非空就显示那一块，互不牵连。
+    CString title = m_model.Title();
 
     // 第 3 行「账号 XXX · 地区」。
     CString accountRegion;
@@ -293,8 +417,32 @@ void CBalloonContactWindow::FillHeader()
         accountRegion += m_model.Region();
     }
 
-    ConfigureContactHeader(content, primaryName, realNameParen, titleDept,
+    ConfigureContactHeader(content, primaryName, parenText, title,
                            accountRegion, m_model.Signature(), m_model.Account());
+
+    // 部门路径整宽区块。行数决定这一块占多高，也决定整个窗口要多高，记下来给
+    // ApplyBodyHeight 用。
+    m_deptLineCount = ConfigureContactDeptPath(content, m_model.Dept());
+    LOG_INFO("contact dialog: dept path wrapped into %d line(s).", m_deptLineCount);
+}
+
+void CBalloonContactWindow::ApplyBodyHeight()
+{
+    if (!IsWindow())
+    {
+        return;
+    }
+
+    const int height = ballooncontact::ContactBodyHeight(m_deptLineCount, m_tagRowCount);
+    SetMinSize(kContactWindowWidth, height);
+    ResizeClient(kContactWindowWidth, height);
+
+    // 高度变了要让控件树按新矩形重排一次，否则新腾出来的空间没人认领。
+    DuiControl* content = GetClientContent();
+    if (content != NULL)
+    {
+        RelayoutContactBody(content);
+    }
 }
 
 void CBalloonContactWindow::RebuildTags()
@@ -319,26 +467,52 @@ void CBalloonContactWindow::RebuildTags()
         flow->RemoveChild(flow->Children().front().get());
     }
 
-    // 按模型标签列表逐个建胶囊；ctrlId = kIdTagChipBase + 下标。
+    // 按模型标签列表逐个建胶囊；ctrlId = kIdTagChipBase + 下标。超出 ctrlId 预留
+    // 区间的部分不建 —— 服务端理应保证不超上限，真收到超量数据时宁可少画几枚，
+    // 也不能让胶囊的 ctrlId 撞进后面别的控件的编号里去。
     const int tagCount = m_model.TagCount();
-    for (int i = 0; i < tagCount; ++i)
+    const int chipCount = (tagCount > kContactTagMaxCount) ? kContactTagMaxCount : tagCount;
+    for (int i = 0; i < chipCount; ++i)
     {
         std::unique_ptr<DuiControl> chip =
             CreateTagChip(m_model.Tag(i), (UINT)(kIdTagChipBase + i));
         flow->AddChild(std::move(chip));
     }
 
-    // 末尾追加「+ 添加标签」按钮。
-    std::unique_ptr<DuiControl> addBtn = CreateAddTagButton();
-    flow->AddChild(std::move(addBtn));
+    // 末尾追加「+ 添加标签」按钮；标签数已达上限时改为一行说明文字 —— 按钮还在
+    // 却一按就弹"加不了了"是很差的体验，不如直接把原因写在原位置上。
+    if (tagCount >= kContactTagMaxCount)
+    {
+        flow->AddChild(CreateTagLimitHint());
+    }
+    else
+    {
+        flow->AddChild(CreateAddTagButton());
+    }
 
-    // 标签数量变化会影响流式换行 —— 先强制整树重排。
-    RelayoutContactBody(content);
+    // 重算标签占几行，同步滚动范围与标签区高度提示，再按新行数调整窗口高度。
+    // ApplyBodyHeight 内部会做一次整树重排。
+    m_tagRowCount = SyncContactTagArea(content);
+    ApplyBodyHeight();
 
-    // 再单独对标签容器强制重排：整树重排经各容器的 SetRect 下传，若标签
-    // 容器自身矩形未变（标签通常单行、不影响外层高度），SetRect 的
-    // EqualRect 判等会短路掉对其 Layout 的调用，新建胶囊便拿不到矩形。
-    // ForceLayout 无条件重跑 Layout，确保新胶囊被定位。
+    // 整树重排是经各容器的 SetRect 一层层下传的，而 SetRect 有 EqualRect 判等
+    // 短路：矩形没变就不再调 Layout。标签区有两种"矩形没变但内容变了"的情形，
+    // 都要靠 ForceLayout 无条件重跑 Layout 补上：
+    //
+    //   · 标签行数已经封顶（第 4 行往后只增内容不增高度），标签区 vbox 的矩形
+    //     一模一样，滚动视口便收不到 Layout，SyncContactTagArea 刚设进去的内容
+    //     总高度也就没机会落到内容控件的矩形上 —— 表现为多出来的那几行既显示
+    //     不出来、又滚不到。
+    //   · 行数没变、只是换了几枚胶囊，流式容器自身矩形不变，新建的胶囊拿不到
+    //     矩形，OnPaint 在宽高为 0 处直接返回，整片标签区都不显示。
+    //
+    // 顺序不能反：先让滚动视口按新的内容总高度摆好内容矩形，再让流式容器在这个
+    // 矩形里重排各枚胶囊。
+    DuiControl* scrollToLayout = content->FindCtrlById(kIdTagScroll);
+    if (scrollToLayout != NULL)
+    {
+        scrollToLayout->ForceLayout(scrollToLayout->GetRect());
+    }
     DuiControl* flowToLayout = content->FindCtrlById(kIdTagFlow);
     if (flowToLayout != NULL)
     {
@@ -346,7 +520,12 @@ void CBalloonContactWindow::RebuildTags()
         flowToLayout->Invalidate();
     }
 
-    LOG_INFO(_T("联系人资料对话框标签区已重建。"));
+    // 行数是按测量出来的胶囊宽度数出来的，出问题时光看界面很难判断是"数错了"
+    // 还是"排错了"，故把行数与流式容器实际拿到的矩形一起记下来。
+    const RECT rcFlow = (flowToLayout != NULL) ? flowToLayout->GetRect() : RECT();
+    LOG_INFO("contact dialog: tag area rebuilt, %d tag(s) in %d row(s), flow rect %d,%d-%d,%d.",
+             tagCount, m_tagRowCount,
+             (int)rcFlow.left, (int)rcFlow.top, (int)rcFlow.right, (int)rcFlow.bottom);
 }
 
 void CBalloonContactWindow::FillGroupCombo()
@@ -547,6 +726,39 @@ void CBalloonContactWindow::RefreshRemarkDisplay()
 // 标签增删
 // =======================================================================
 
+bool CBalloonContactWindow::GetTagCtrlScreenRect(UINT ctrlId, RECT& outRectScreen)
+{
+    ::SetRectEmpty(&outRectScreen);
+
+    DuiControl* content = GetClientContent();
+    if (content == NULL || !IsWindow())
+    {
+        return false;
+    }
+    DuiControl* ctrl = content->FindCtrlById(ctrlId);
+    if (ctrl == NULL)
+    {
+        return false;
+    }
+
+    // DUI 控件的矩形是宿主客户区坐标，换算成屏幕坐标才能交给 WS_POPUP 弹层。
+    RECT rc = ctrl->GetRect();
+    if (rc.right <= rc.left || rc.bottom <= rc.top)
+    {
+        return false;   // 尚未布局过，位置无意义
+    }
+    POINT topLeft     = { rc.left,  rc.top };
+    POINT bottomRight = { rc.right, rc.bottom };
+    ::ClientToScreen(m_hWnd, &topLeft);
+    ::ClientToScreen(m_hWnd, &bottomRight);
+
+    outRectScreen.left   = topLeft.x;
+    outRectScreen.top    = topLeft.y;
+    outRectScreen.right  = bottomRight.x;
+    outRectScreen.bottom = bottomRight.y;
+    return true;
+}
+
 void CBalloonContactWindow::OnTagDeleteClicked(UINT chipCtrlId)
 {
     // 胶囊 ctrlId = kIdTagChipBase + 标签下标 —— 反推下标。
@@ -555,25 +767,192 @@ void CBalloonContactWindow::OnTagDeleteClicked(UINT chipCtrlId)
         return;
     }
     const int index = (int)(chipCtrlId - (UINT)kIdTagChipBase);
+    if (index < 0 || index >= m_model.TagCount())
+    {
+        return;
+    }
 
-    m_model.RemoveTag(index);
-    RebuildTags();   // 删除后下标整体前移，整区重建最稳妥
+    // 删除同样走"整份提交"：把去掉这一枚之后的完整列表报上去。协议本身就是整份
+    // 覆盖语义，增、改、删三种操作共用同一条路径。
+    std::vector<CString> tags = m_model.Tags();
+    tags.erase(tags.begin() + index);
+    CommitTagList(tags);
 
-    LOG_INFO(_T("联系人资料对话框已删除一个标签。"));
+    LOG_INFO("contact dialog: delete tag at index %d.", index);
+}
+
+void CBalloonContactWindow::OnTagEditClicked(UINT chipCtrlId)
+{
+    if (chipCtrlId < (UINT)kIdTagChipBase)
+    {
+        return;
+    }
+    const int index = (int)(chipCtrlId - (UINT)kIdTagChipBase);
+    if (index < 0 || index >= m_model.TagCount())
+    {
+        return;
+    }
+
+    RECT rcScreen;
+    if (!GetTagCtrlScreenRect(chipCtrlId, rcScreen))
+    {
+        return;
+    }
+
+    m_editingTagIndex = index;
+    m_tagPopup.OpenAt(rcScreen, m_hWnd, m_model.Tag(index));
+    LOG_INFO("contact dialog: open tag editor at index %d.", index);
 }
 
 void CBalloonContactWindow::OnAddTagClicked()
 {
-    // mock：真实「弹输入框」待接入，此处按当前标签数生成一个占位标签名，
-    // 保证「增」这条路径功能可用、可被测试与人工核验。
-    CString newTag;
-    newTag.Format(_T("%s%d"), kMockNewTagPrefix, m_model.TagCount() + 1);
-
-    if (m_model.AddTag(newTag))
+    RECT rcScreen;
+    if (!GetTagCtrlScreenRect((UINT)kIdAddTagButton, rcScreen))
     {
-        RebuildTags();
-        LOG_INFO(_T("联系人资料对话框已添加一个标签（mock）。"));
+        return;
     }
+
+    m_editingTagIndex = kTagIndexNone;
+    m_tagPopup.OpenAt(rcScreen, m_hWnd, _T(""));
+    LOG_INFO("contact dialog: open tag editor for a new tag.");
+}
+
+void CBalloonContactWindow::OnTagPopupCommitThunk(void* userdata, const CString& text)
+{
+    CBalloonContactWindow* self = (CBalloonContactWindow*)userdata;
+    if (self != NULL)
+    {
+        self->OnTagPopupCommit(text);
+    }
+}
+
+void CBalloonContactWindow::OnTagPopupCommit(const CString& text)
+{
+    DuiControl* content = GetClientContent();
+    std::vector<CString> tags = m_model.Tags();
+
+    // 本窗口不判定连接态 —— 该不该发、发不出去怎么办全由主面板决定（见
+    // CommitTagList 的说明），故这里恒按"可以发"判定。判定函数留着 online 这个
+    // 参数，是为了让主面板侧将来能复用同一份判定。
+    const bool kAssumeOnline = true;
+
+    if (m_editingTagIndex == kTagIndexNone)
+    {
+        // ---- 新增标签 ----
+        const TagAddDecision decision = DecideTagAdd(tags, text, kAssumeOnline,
+                                                     kContactTagMaxLen,
+                                                     kContactTagMaxCount);
+        switch (decision.m_action)
+        {
+        //归一后是个新标签：追加到末尾并提交整份列表。
+        case kTagAddAppend:
+            tags.push_back(decision.m_normalized);
+            CommitTagList(tags);
+            break;
+
+        //与已有标签重复：不追加，给一句轻提示，免得用户以为点击没生效。
+        case kTagAddDuplicate:
+            ShowContactTipToast(content, kTipTagDuplicate);
+            break;
+
+        //超长：输入框已 SetMaxLength 限死长度，正常敲不出来，粘贴等路径才会走到。
+        case kTagAddTooLong:
+            {
+                CString tip;
+                tip.Format(_T("标签最长 %d 个字符"), kContactTagMaxLen);
+                ShowContactTipToast(content, tip);
+            }
+            break;
+
+        //已达条数上限：满额时界面本来就不显示「+ 添加标签」按钮，属防御性分支。
+        case kTagAddFull:
+            {
+                CString tip;
+                tip.Format(_T("标签最多 %d 个"), kContactTagMaxCount);
+                ShowContactTipToast(content, tip);
+            }
+            break;
+
+        //用户什么都没输入、或本窗口判定为不可发起联网操作：都不提示、不发包。
+        default:
+            break;
+        }
+        return;
+    }
+
+    // ---- 修改已有标签 ----
+    const TagEditDecision decision = DecideTagEdit(tags, m_editingTagIndex, text,
+                                                   kAssumeOnline, kContactTagMaxLen);
+    switch (decision.m_action)
+    {
+    //改成了一个新值：就地替换该下标的文本并提交。
+    case kTagEditUpdate:
+        tags[m_editingTagIndex] = decision.m_normalized;
+        CommitTagList(tags);
+        break;
+
+    //内容被全删光：等价于删除这一枚标签。
+    case kTagEditRemove:
+        tags.erase(tags.begin() + m_editingTagIndex);
+        CommitTagList(tags);
+        break;
+
+    //改成了与另一枚等价的文本：两枚合并成一枚。先把留下来的那一枚改成用户这次
+    //输入的写法，再删掉被编辑的这一枚 —— 顺序反过来的话下标会先失效。
+    case kTagEditMerge:
+        if (decision.m_mergeIndex >= 0 && decision.m_mergeIndex < (int)tags.size())
+        {
+            tags[decision.m_mergeIndex] = decision.m_normalized;
+            tags.erase(tags.begin() + m_editingTagIndex);
+            CommitTagList(tags);
+        }
+        break;
+
+    //超长：与新增同样处理。
+    case kTagEditTooLong:
+        {
+            CString tip;
+            tip.Format(_T("标签最长 %d 个字符"), kContactTagMaxLen);
+            ShowContactTipToast(content, tip);
+        }
+        break;
+
+    //一个字没动、下标越界、或本窗口判定为不可发起联网操作：都不提示、不发包。
+    default:
+        break;
+    }
+}
+
+void CBalloonContactWindow::CommitTagList(const std::vector<CString>& tags)
+{
+    // 有宿主主面板（正常登录态）时，"该不该发、发不出去怎么办、失败怎么退回来"
+    // 全部交给主面板判定与执行 —— 它才同时握着通讯录缓存（原值）、连接态与 socket。
+    // 本窗口只负责把改好的完整列表报上去。主面板处理完会回头调 RefreshContactData
+    // 把本窗刷成最终状态。
+    if (m_hostPanel != NULL && ::IsWindow(m_hostPanel) && m_peerUserId != 0)
+    {
+        // 跨窗口传 CString 不安全（生命周期与线程），堆上传一份 UTF-8 字节，
+        // 由主面板侧 delete —— 与备注名回投一致。
+        std::vector<std::string>* pTags = new std::vector<std::string>();
+        pTags->reserve(tags.size());
+        for (size_t i = 0; i < tags.size(); ++i)
+        {
+            pTags->push_back(CStrToUtf8(tags[i]));
+        }
+        ::PostMessage(m_hostPanel, FMG_MSG_SET_CONTACT_TAGS,
+                      (WPARAM)m_peerUserId, (LPARAM)pTags);
+        // 标签内容可能含用户隐私，日志只记条数不记内容。
+        LOG_INFO("contact dialog: submit tags, userid=%u, count=%d.",
+                 m_peerUserId, (int)tags.size());
+        return;
+    }
+
+    // 调试入口（--contact）没有宿主主面板，也没有真实连接：就地改内存并重建标签区，
+    // 好让这条交互在调试入口下仍然能走通、能人工核对界面。
+    m_model.SetTags(tags);
+    RebuildTags();
+    LOG_INFO("contact dialog: no host panel, tags updated in memory only, count=%d.",
+             (int)tags.size());
 }
 
 // =======================================================================
@@ -653,32 +1032,51 @@ LRESULT CBalloonContactWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         return 0;
     }
 
+    // ---- 标签胶囊的两个自定义通知 ----
+    // 判定条件里必须<u>同时</u>写上 code 与 ctrlId，且 ctrlId 的上下界都要判：
+    // balloonui 的自定义通知码按控件各自从 DUIN_CUSTOM 起编号，不同控件的同一档
+    // 数值必然相同，只比 code、或者只判 ctrlId 下界，都会把别的控件发来的同值
+    // 通知一并收下（症状是"点了没反应"，不报错也不进日志）。
+    const UINT chipIdLow  = (UINT)kIdTagChipBase;
+    const UINT chipIdHigh = (UINT)(kIdTagChipBase + kContactTagMaxCount);
+
+    if (pNotify->code == (UINT)TagChip::DUIN_TAGCHIP_DELETE
+        && pNotify->ctrlId >= chipIdLow && pNotify->ctrlId < chipIdHigh)
+    {
+        OnTagDeleteClicked(pNotify->ctrlId);
+        return 0;
+    }
+
+    if (pNotify->code == (UINT)TagChip::DUIN_TAGCHIP_EDIT
+        && pNotify->ctrlId >= chipIdLow && pNotify->ctrlId < chipIdHigh)
+    {
+        OnTagEditClicked(pNotify->ctrlId);
+        return 0;
+    }
+
     // ---- 点击类通知 ----
     if (pNotify->code == DUIN_CLICK)
     {
-        // 标签胶囊的「×」删除 —— ctrlId 落在 [kIdTagChipBase, ...] 区间。
-        if (pNotify->ctrlId >= (UINT)kIdTagChipBase)
-        {
-            OnTagDeleteClicked(pNotify->ctrlId);
-            return 0;
-        }
-
         switch (pNotify->ctrlId)
         {
+        //点「+ 添加标签」—— 在按钮位置弹出输入框，输入完提交整份标签列表。
+        //标签数已达上限时这个按钮压根不存在（换成了说明文字），故不会走到这里。
         case kIdAddTagButton:
             OnAddTagClicked();
             return 0;
+        //点铅笔按钮 —— 进入备注名行内编辑态。
         case kIdRemarkEditBtn:
-            // 点铅笔 —— 进入备注名行内编辑态。
             SetRemarkEditing(true);
             return 0;
+        //点底部「关闭」按钮 —— 等价于标题栏的关闭按钮。
         case kIdBtnClose:
-            // 「关闭」按钮 —— 等价标题栏关闭。
             PostMessage(WM_CLOSE, 0, 0);
             return 0;
+        //点底部「发消息」按钮 —— 请主面板按 userid 打开单聊。
         case kIdBtnSend:
             DoSendMessage();
             return 0;
+        //其余控件的点击本分支不处理，落到函数后面的分支继续判定。
         default:
             break;
         }

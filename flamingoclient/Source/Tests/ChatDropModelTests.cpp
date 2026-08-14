@@ -6,13 +6,18 @@
  *    CDM2  单张图片走图片链路；
  *    CDM3  图片与文件混拖时各归各类、且顺序与拖入顺序一致；
  *    CDM4  按住 Shift（forceAsFile）时图片也走文件链路；
- *    CDM5  文件夹归入跳过项，原因为"不支持文件夹"；
+ *    CDM5  文件夹归入 m_folders（单独一类落点，不再算跳过项）；
  *    CDM6  路径不存在归入跳过项；
  *    CDM7  空列表产出空计划且不要确认；
  *    CDM8  可发送项超过阈值时要确认，恰好等于阈值时不要；
  *    CDM9  0 字节文件归入跳过项；
  *    CDM10 扩展名大小写不敏感，且目录名里的点号不算扩展名；
- *    CDM11 ProbeDropPath 对真实文件 / 目录 / 不存在路径的判定（本条碰磁盘）。
+ *    CDM11 ProbeDropPath 对真实文件 / 目录 / 不存在路径的判定（本条碰磁盘）；
+ *    CDM12 只拖一个文件夹：进 m_folders，其余两个列表都空；
+ *    CDM13 拖多个文件夹：全部按拖入顺序进 m_folders；
+ *    CDM14 文件与文件夹混拖：各归各类、两侧顺序都不乱、互不影响；
+ *    CDM15 文件夹与不存在的路径混拖：文件夹进 m_folders、失效路径进跳过项，
+ *          且汇总文案里不再出现"文件夹"字样。
  *  框架 Catch2 v3。
  *  balloonwj@qq.com   2026-08-11
  */
@@ -117,7 +122,7 @@ TEST_CASE("CDM4 forceAsFile 时图片也走文件链路")
     CHECK(plan.m_items[1].m_kind == kDropSendFile);
 }
 
-TEST_CASE("CDM5 文件夹归入跳过项且原因正确")
+TEST_CASE("CDM5 文件夹归入 m_folders 而不是跳过项")
 {
     std::vector<DropPathInfo> infos;
     infos.push_back(MakeDir(L"D:\\work\\素材"));
@@ -125,10 +130,11 @@ TEST_CASE("CDM5 文件夹归入跳过项且原因正确")
 
     const DropPlan plan = BuildDropPlan(infos, false);
 
-    REQUIRE(plan.m_skipped.size() == 1);
-    CHECK(plan.m_skipped[0].m_path == L"D:\\work\\素材");
-    CHECK(plan.m_skipped[0].m_reason == kDropSkipDirectory);
-    //文件夹发不了，不影响同一批里正常文件的发送
+    //文件夹交给文件夹传输链路，不再算"发不出去"
+    REQUIRE(plan.m_folders.size() == 1);
+    CHECK(plan.m_folders[0] == L"D:\\work\\素材");
+    CHECK(plan.m_skipped.empty());
+    //同一批里的普通文件照旧走文件链路，两条链路互不影响
     REQUIRE(plan.m_items.size() == 1);
     CHECK(plan.m_items[0].m_path == L"D:\\work\\report.zip");
 }
@@ -189,6 +195,9 @@ TEST_CASE("CDM8 可发送项超过阈值才要确认")
     dirsAndOne.push_back(MakeFile(L"D:\\only.txt"));
     const DropPlan planDirs = BuildDropPlan(dirsAndOne, false);
     CHECK_FALSE(planDirs.m_needConfirm);
+    //那些文件夹都进了 m_folders，笔数闸门由聊天窗那一层把关，与本阈值无关
+    CHECK((int)planDirs.m_folders.size() == kDropConfirmThreshold + 5);
+    REQUIRE(planDirs.m_items.size() == 1);
 }
 
 TEST_CASE("CDM9 零字节文件归入跳过项")
@@ -257,4 +266,95 @@ TEST_CASE("CDM11 ProbeDropPath 判定真实文件 / 目录 / 不存在路径")
     CHECK_FALSE(ProbeDropPath(std::wstring()).m_exists);
 
     ::DeleteFileW(filePath.c_str());
+}
+
+TEST_CASE("CDM12 只拖一个文件夹时它是唯一落点")
+{
+    //最常见的一次操作：把一个目录拖进发送框，期望它走文件夹传输链路
+    std::vector<DropPathInfo> infos;
+    infos.push_back(MakeDir(L"D:\\work\\项目资料"));
+
+    const DropPlan plan = BuildDropPlan(infos, false);
+
+    REQUIRE(plan.m_folders.size() == 1);
+    CHECK(plan.m_folders[0] == L"D:\\work\\项目资料");
+    CHECK(plan.m_items.empty());
+    CHECK(plan.m_skipped.empty());
+    CHECK_FALSE(plan.m_needConfirm);
+    //跳过项为空时汇总文案也应为空，聊天窗据此不弹提示
+    CHECK(DescribeDropSkipped(plan.m_skipped).empty());
+}
+
+TEST_CASE("CDM13 拖多个文件夹时全部保留且顺序不乱")
+{
+    //单聊窗会按这个顺序逐个发起，达到本机并发笔数上限后剩下的不再发起，
+    //故顺序必须与用户拖入的一致，否则"哪几个没发起"就对不上了
+    std::vector<DropPathInfo> infos;
+    infos.push_back(MakeDir(L"D:\\a"));
+    infos.push_back(MakeDir(L"D:\\b"));
+    infos.push_back(MakeDir(L"D:\\c"));
+
+    const DropPlan plan = BuildDropPlan(infos, false);
+
+    REQUIRE(plan.m_folders.size() == 3);
+    CHECK(plan.m_folders[0] == L"D:\\a");
+    CHECK(plan.m_folders[1] == L"D:\\b");
+    CHECK(plan.m_folders[2] == L"D:\\c");
+    CHECK(plan.m_items.empty());
+    CHECK(plan.m_skipped.empty());
+}
+
+TEST_CASE("CDM14 文件与文件夹混拖时各归各类且两侧顺序都不乱")
+{
+    std::vector<DropPathInfo> infos;
+    infos.push_back(MakeFile(L"D:\\a.txt"));
+    infos.push_back(MakeDir(L"D:\\素材"));
+    infos.push_back(MakeFile(L"D:\\b.png"));
+    infos.push_back(MakeDir(L"D:\\备份"));
+
+    const DropPlan plan = BuildDropPlan(infos, false);
+
+    //文件那一侧：普通文件走文件链路、图片走图片链路，顺序与拖入一致
+    REQUIRE(plan.m_items.size() == 2);
+    CHECK(plan.m_items[0].m_path == L"D:\\a.txt");
+    CHECK(plan.m_items[0].m_kind == kDropSendFile);
+    CHECK(plan.m_items[1].m_path == L"D:\\b.png");
+    CHECK(plan.m_items[1].m_kind == kDropSendImage);
+
+    //文件夹那一侧独立成列，顺序同样保持
+    REQUIRE(plan.m_folders.size() == 2);
+    CHECK(plan.m_folders[0] == L"D:\\素材");
+    CHECK(plan.m_folders[1] == L"D:\\备份");
+
+    CHECK(plan.m_skipped.empty());
+
+    //按住 Shift 只改图片的走向，文件夹照旧是文件夹
+    const DropPlan forced = BuildDropPlan(infos, true);
+    REQUIRE(forced.m_items.size() == 2);
+    CHECK(forced.m_items[1].m_kind == kDropSendFile);
+    REQUIRE(forced.m_folders.size() == 2);
+    CHECK(forced.m_folders[0] == L"D:\\素材");
+}
+
+TEST_CASE("CDM15 文件夹与不存在的路径混拖时互不干扰")
+{
+    //拖动过程中某一项被移走 / 删掉：它进跳过项，文件夹照常发起
+    std::vector<DropPathInfo> infos;
+    infos.push_back(MakeMissing(L"D:\\gone.txt"));
+    infos.push_back(MakeDir(L"D:\\work\\素材"));
+    infos.push_back(MakeMissing(L"D:\\gone2.txt"));
+
+    const DropPlan plan = BuildDropPlan(infos, false);
+
+    REQUIRE(plan.m_folders.size() == 1);
+    CHECK(plan.m_folders[0] == L"D:\\work\\素材");
+    CHECK(plan.m_items.empty());
+    REQUIRE(plan.m_skipped.size() == 2);
+    CHECK(plan.m_skipped[0].m_reason == kDropSkipNotFound);
+    CHECK(plan.m_skipped[1].m_reason == kDropSkipNotFound);
+
+    //汇总文案只说失效的那两条，不能再冒出"文件夹暂不支持发送"这句旧话
+    const std::wstring note = DescribeDropSkipped(plan.m_skipped);
+    CHECK(note == L"2 个文件已不存在");
+    CHECK(note.find(L"文件夹") == std::wstring::npos);
 }

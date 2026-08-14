@@ -53,7 +53,23 @@ public:
     ChatServer(const ChatServer& rhs) = delete;
     ChatServer& operator =(const ChatServer& rhs) = delete;
 
-    bool init(const char* ip, short port, EventLoop* loop);
+    //客户端连接所用网络 I/O 工作线程数的默认值，单位：条线程。取 6 是为了与本项改造前
+    //写死在 ChatServer::init 里的那个数完全一致，从而不改配置文件的部署行为不变。
+    //配置项 iothreadnum 缺失或取值非法时回落到这里，见 utils/ServerConfigLoader.h
+    static const int kDefaultIoThreadCount = 6;
+
+    /**
+     *  启动客户端连接的侦听。
+     *  @param ip             监听地址，取自配置项 listenip
+     *  @param port           监听端口，取自配置项 listenport
+     *  @param loop           主事件循环，本类只使用不接管其生命周期
+     *  @param ioThreadCount  网络 I/O 工作线程数，单位：条线程，取值范围见
+     *                        serverconfig::MIN_IO_THREAD_COUNT / MAX_IO_THREAD_COUNT。
+     *                        调用方须先用 serverconfig::ReadIoThreadCountConfig 把配置里
+     *                        的非法取值挡掉，本函数不再校验
+     *  @return 恒返回 true
+     */
+    bool init(const char* ip, short port, EventLoop* loop, int ioThreadCount);
     void uninit();
 
     void enableLogPackageBinary(bool enable);

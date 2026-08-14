@@ -9,6 +9,9 @@
 #include "../net/Protocol.h"            // cmd_av_relay_* / MAX_BODY_FILESERVER
 #include "../net/FrameCodec.h"          // net::encodeFrame / decodeFrame
 #include "../net/CallProtocolClient.h"  // buildRelayHello / parseRelayHelloAck / CallRelayHelloAck
+#include "../net/FramePayload.h"        // encodeFramePayload / decodeFramePayload
+#include "../net/HandshakeRunner.h"     // performClientHandshake / IHandshakeChannel
+#include "../net/IUSocket.h"            // CIUSocket::GetServerPublicKey
 #include "../IULog.h"                   // LOG_INFO / LOG_ERROR
 
 #pragma comment(lib, "ws2_32.lib")
@@ -108,6 +111,72 @@ bool CallRelayClient::SendAll(const char* data, size_t len)
     return true;
 }
 
+/**
+ *  握手期间的字节收发适配器：把 net::performClientHandshake 需要的收发转接到
+ *  本连接的 socket 上。只在 Connect() 里活着，那时接收线程还没启动，不涉及并发。
+ */
+class CallRelayClient::HandshakeChannel : public net::IHandshakeChannel
+{
+public:
+    //  owner：宿主连接，生命周期覆盖本对象；timeoutSec：收取超时，单位秒
+    HandshakeChannel(CallRelayClient* owner, int timeoutSec)
+        : m_owner(owner), m_timeoutSec(timeoutSec)
+    {
+    }
+
+    virtual bool SendAll(const char* data, size_t len)
+    {
+        return m_owner->SendAll(data, len);
+    }
+
+    //收满 len 个字节。socket 此刻已被 DoConnect 切回阻塞模式并设了 SO_RCVTIMEO，
+    //所以这里直接循环 recv 即可；超时会让 recv 返回错误，据此判失败。
+    virtual bool RecvAll(char* buf, size_t len)
+    {
+        (void)m_timeoutSec;
+
+        size_t got = 0;
+        while (got < len)
+        {
+            const int n = ::recv(m_owner->m_sock, buf + got, (int)(len - got), 0);
+            if (n > 0)
+            {
+                got += (size_t)n;
+                continue;
+            }
+            //握手是一来一回的短交互，超时即视为对端没有按协议应答，不再续等
+            return false;
+        }
+        return true;
+    }
+
+private:
+    CallRelayClient* m_owner;       //宿主连接，不拥有
+    int              m_timeoutSec;  //收取超时，单位秒（socket 上已设，故仅作记录）
+};
+
+bool CallRelayClient::PerformHandshake(int timeoutSec)
+{
+    const unsigned char* pServerPubKey = CIUSocket::GetInstance().GetServerPublicKey();
+    if (pServerPubKey == NULL)
+    {
+        //没配服务端公钥就是不加密，本连接全程明文
+        return true;
+    }
+
+    HandshakeChannel channel(this, timeoutSec);
+
+    std::string err;
+    if (!net::performClientHandshake(channel, pServerPubKey, m_handshake, err))
+    {
+        LOG_ERROR("CallRelayClient: handshake failed: %s.", err.c_str());
+        return false;
+    }
+
+    LOG_INFO("CallRelayClient: handshake done, relay traffic is now encrypted.");
+    return true;
+}
+
 bool CallRelayClient::Connect(const std::string& ip, int port, const std::string& token,
                               CallRelayClientHandler* handler, int timeoutSec)
 {
@@ -130,10 +199,33 @@ bool CallRelayClient::Connect(const std::string& ip, int port, const std::string
         return false;
     }
 
-    //发握手帧（cmd_av_relay_hello，包体 {"token":"..."}）
+    //协议加密握手：必须排在下面的 relay 报到帧之前——报到帧里带的是中转令牌，
+    //明文发出去等于把凭据白送。此刻接收线程还没启动，同步收发不会与它抢数据。
+    if (!PerformHandshake(timeoutSec))
+    {
+        ::closesocket(m_sock);
+        m_sock = INVALID_SOCKET;
+        return false;
+    }
+
+    //发报到帧（cmd_av_relay_hello，包体 {"token":"..."}）。包体走加密。
+    const std::string helloBody = net::CallProtocolClient::buildRelayHello(token);
+    std::string helloWire;
+    uint8_t     helloFlags = 0;
+    uint32_t    helloOriginLen = 0;
+    if (!net::encodeFramePayload(cmd_av_relay_hello, 0, helloBody, &m_handshake.cipher(),
+                                 0, net::payload_compress_never,
+                                 helloWire, helloFlags, helloOriginLen))
+    {
+        LOG_ERROR("CallRelayClient: encrypt hello failed, relay %s:%d.", ip.c_str(), port);
+        ::closesocket(m_sock);
+        m_sock = INVALID_SOCKET;
+        return false;
+    }
+
     std::string hello;
-    if (!net::encodeFrame(cmd_av_relay_hello, 0,
-                          net::CallProtocolClient::buildRelayHello(token), hello))
+    if (!net::encodeFrame(cmd_av_relay_hello, 0, helloFlags, helloWire.data(),
+                          static_cast<uint32_t>(helloWire.size()), helloOriginLen, hello))
     {
         ::closesocket(m_sock);
         m_sock = INVALID_SOCKET;
@@ -178,8 +270,21 @@ bool CallRelayClient::Connect(const std::string& ip, int port, const std::string
                 acc.erase(0, consumed);
                 if (h.cmd == cmd_av_relay_hello)
                 {
+                    //报到应答的包体同样是加密的，先还原成明文再解析
+                    std::string plain;
+                    std::string decErr;
+                    if (!net::decodeFramePayload(h.cmd, h.seq, h.flags, h.originlen, body,
+                                                 &m_handshake.cipher(), plain, decErr))
+                    {
+                        LOG_ERROR("CallRelayClient: decrypt hello ack failed: %s.",
+                                  decErr.c_str());
+                        gotAck = true;   //跳出等待循环，下面会因 code != 0 判失败
+                        code = -1;
+                        break;
+                    }
+
                     net::CallRelayHelloAck ackobj;
-                    if (net::CallProtocolClient::parseRelayHelloAck(body, ackobj))
+                    if (net::CallProtocolClient::parseRelayHelloAck(plain, ackobj))
                         code = ackobj.m_code;
                     gotAck = true;
                     break;
@@ -225,18 +330,39 @@ bool CallRelayClient::SendData(const unsigned char* data, size_t len)
     if (!m_connected.load())
         return false;
 
+    const std::string body(reinterpret_cast<const char*>(data), len);
+
+    //<u>加密必须在发送锁之内做</u>：本类的发送方有两条线程（音频采集线程与视频采集
+    //线程，见 CallMediaSession 的 OnEncodedAudio / OnEncodedVideo），流加密按调用
+    //顺序推进内部计数器，若在锁外加密、锁内发送，写到 socket 的先后就可能与加密的
+    //先后相反，服务端按流顺序解密必然失败并断开连接。FrameCipher 内部那把锁只保证
+    //单次加密是原子的，保证不了这个顺序。
+    std::lock_guard<std::mutex> guard(m_sendMtx);
+    if (!m_connected.load())
+        return false;
+
+    //中转数据帧不压缩：音视频帧本身已由编码器压过，再走一遍 zlib 压不动。
+    //服务端也不解压，压缩标志与 originlen 原样透传到对端客户端。
+    std::string wire;
+    uint8_t     flags = 0;
+    uint32_t    originlen = 0;
+    if (!net::encodeFramePayload(cmd_av_relay_data, 0, body, &m_handshake.cipher(), 0,
+                                 net::payload_compress_never, wire, flags, originlen))
+    {
+        LOG_ERROR("CallRelayClient: encrypt data frame failed, len=%u.",
+                  static_cast<unsigned>(len));
+        return false;
+    }
+
     //封成单个 cmd_av_relay_data 帧（音频帧小，不分片）
     std::string frame;
-    if (!net::encodeFrame(cmd_av_relay_data, 0,
-                          std::string(reinterpret_cast<const char*>(data), len), frame))
+    if (!net::encodeFrame(cmd_av_relay_data, 0, flags, wire.data(),
+                          static_cast<uint32_t>(wire.size()), originlen, frame))
     {
         LOG_ERROR("CallRelayClient: encode data frame failed, len=%u.", static_cast<unsigned>(len));
         return false;
     }
 
-    std::lock_guard<std::mutex> guard(m_sendMtx);
-    if (!m_connected.load())
-        return false;
     return SendAll(frame.data(), frame.size());
 }
 
@@ -266,9 +392,27 @@ void CallRelayClient::RecvProc()
                     break;
                 }
                 m_recvBuf.erase(0, consumed);
-                if (h.cmd == cmd_av_relay_data && m_handler != NULL)
-                    m_handler->OnRelayData(
-                        reinterpret_cast<const unsigned char*>(body.data()), body.size());
+                if (h.cmd == cmd_av_relay_data)
+                {
+                    //先把线上包体还原成明文再交给上层。中转通道上服务端会用各自的
+                    //密钥重新加密，所以这里解的是「服务端到本端」这个方向的流。
+                    std::string plain;
+                    std::string decErr;
+                    if (!net::decodeFramePayload(h.cmd, h.seq, h.flags, h.originlen, body,
+                                                 &m_handshake.cipher(), plain, decErr))
+                    {
+                        //解密失败意味着这个方向的流已不可恢复，只能断开重来，
+                        //不能跳过本帧继续解下一帧
+                        LOG_ERROR("CallRelayClient: decrypt relay data failed: %s, closing.",
+                                  decErr.c_str());
+                        protoErr = true;
+                        break;
+                    }
+
+                    if (m_handler != NULL)
+                        m_handler->OnRelayData(
+                            reinterpret_cast<const unsigned char*>(plain.data()), plain.size());
+                }
             }
 
             if (protoErr)

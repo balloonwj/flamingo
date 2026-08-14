@@ -276,7 +276,7 @@ namespace net
             return false;
 
         unsigned int value;
-        read7BitEncoded(buf, headlen, value);
+        read7BitEncoded(buf, static_cast<uint32_t>(headlen), value);
         outlen = value;
 
         /*if ( cur + BINARY_PACKLEN_LEN_2 > ptr + len ) {
@@ -396,7 +396,7 @@ namespace net
     void BinaryStreamWriter::Flush()
     {
         char* ptr = &(*m_data)[0];
-        unsigned int ulen = htonl(m_data->length());
+        unsigned int ulen = htonl(static_cast<uint32_t>(m_data->length()));
         memcpy(ptr, &ulen, sizeof(ulen));
     }
     void BinaryStreamWriter::Clear()

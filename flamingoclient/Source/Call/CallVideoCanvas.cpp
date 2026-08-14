@@ -8,8 +8,8 @@
 #include <algorithm>   //std::swap（大 / 小画面对调时交换帧缓冲）
 #include <atlstr.h>    //DuiToolTip.h 声明里用到 CString；本 .cpp 不走 PCH，故先显式引入
 
-#include "../../balloonui/balloonui/Controls/Feedback/DuiToolTip.h"   //DuiToolTipMgr
-#include "../../balloonui/balloonui/DuiResMgr.h"                      //DuiResMgr::GetDefaultFont（占位提示用字体）
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"   //DuiToolTipMgr
+#include "../../../third-party/balloonui/balloonui/DuiResMgr.h"                      //DuiResMgr::GetDefaultFont（占位提示用字体）
 
 namespace call {
 

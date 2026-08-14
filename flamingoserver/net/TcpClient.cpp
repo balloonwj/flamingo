@@ -117,7 +117,7 @@ void TcpClient::stop()
     m_connector->stop();
 }
 
-void TcpClient::newConnection(int sockfd)
+void TcpClient::newConnection(SOCKET sockfd)
 {
     m_loop->assertInLoopThread();
     InetAddress peerAddr(sockets::getPeerAddr(sockfd));

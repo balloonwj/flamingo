@@ -39,14 +39,14 @@ extern CAppModule _Module;
 #include "BalloonGroupInfoLayout.h"
 #include "MainPanelUserData.h"   // GetUserAvatarColor
 #include "../net/GroupProtocolClient.h"   // net::GroupMemberItem(ResolveXxx 用)
-#include "../../balloonui/balloonui/DuiResMgr.h"   // GetFontByPointSize
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
-#include "../../balloonui/balloonui/Controls/Basic/DuiAvatar.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiSeparator.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiSwitch.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/DuiResMgr.h"   // GetFontByPointSize
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiSeparator.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
 
 namespace balloonmain {
 

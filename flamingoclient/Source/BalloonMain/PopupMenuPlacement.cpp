@@ -14,7 +14,7 @@
 
 #include "PopupMenuPlacement.h"
 
-#include "../../balloonui/balloonui/Controls/List/DuiMenuPlacement.h"
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenuPlacement.h"
 
 namespace balloonmain {
 

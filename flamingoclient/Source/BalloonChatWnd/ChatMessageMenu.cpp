@@ -61,6 +61,16 @@ std::vector<ChatMessageMenuEntry> BuildChatMessageMenuModel(int msgKind,
 
     AppendItem(model, kChatMsgMenuCopy, L"复制");
 
+    //文件夹行：本地气泡，没有服务端 msgid，「引用回复」「转发」「Pin」「撤回」四项对它
+    //都无从谈起（见头文件 kChatMenuKindFolder 的注释），故只留下这三项就收尾。
+    if (msgKind == kChatMenuKindFolder)
+    {
+        AppendItem(model, kChatMsgMenuDelete, L"删除");
+        AppendSeparator(model);
+        AppendItem(model, kChatMsgMenuMultiSelect, L"多选");
+        return model;
+    }
+
     //图片专属的两项紧跟在「复制」之后：都属于"拿这张图做点什么"，放在一起最顺手。
     if (ShouldShowImageActions(msgKind, imageState, hasLocalPath))
     {

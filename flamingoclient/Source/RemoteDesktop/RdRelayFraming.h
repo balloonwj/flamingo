@@ -35,9 +35,16 @@ struct RdRelayInboundFrame
 {
     uint16_t                   m_cmd;    //帧命令：cmd_rd_relay_hello(1853) 或 cmd_rd_relay_data(1854)
     std::vector<unsigned char> m_body;   //帧包体：hello 帧为握手应答 JSON；data 帧为「分片标志 + 分片数据」
+                                         //接入协议加密后，这里是<u>线上</u>包体，调用方须自行解密
+
+    //以下三个字段是接入协议加密之后补的：解密要按帧头字段重建「附加认证数据」，
+    //少任何一个都拼不出与发送方一致的那 16 字节，解密必然失败。
+    uint32_t                   m_seq;        //帧序列号
+    uint8_t                    m_flags;      //帧标志位，决定要不要解密 / 解压
+    uint32_t                   m_originlen;  //包体最原始的明文长度（压缩前、加密前）
 
     RdRelayInboundFrame()
-        : m_cmd(0)
+        : m_cmd(0), m_seq(0), m_flags(0), m_originlen(0)
     {
     }
 };
@@ -73,6 +80,26 @@ bool BuildChunkFrame(unsigned char chunkFlag, const unsigned char* data, size_t 
  */
 bool BuildEngineFrames(const unsigned char* data, size_t len, size_t chunkSize,
                        std::vector<std::string>& outFrames);
+
+/**
+ *  把一个完整引擎帧按 chunkSize 切成若干中转数据帧的<u>包体</u>（不含帧头）。
+ *  切分规则与 BuildEngineFrames 完全相同，区别只在于产出的是包体。
+ *
+ *  接入协议加密之后发送侧必须用这个版本：包体的加密要与写 socket 一起放在发送锁内
+ *  完成。流加密按调用顺序推进内部计数器，若在锁外加密、锁内发送，多条业务线程
+ *  （远程桌面的推流线程与控制命令线程）产出的密文上线顺序会与加密顺序错开，
+ *  对端解密必然失败。所以「切包体」与「加密并套帧头」这两步必须拆开，
+ *  前者可以在锁外做，后者只能在锁内做。
+ *
+ *  @param data      引擎帧字节起始地址；len 为 0 时可为 nullptr（产出一个空的 whole 包体）
+ *  @param len       引擎帧字节数
+ *  @param chunkSize 单个分片的数据字节上限（须 > 0）
+ *  @param outBodies [出参] 每项是一个包体（[1字节 chunkFlag] + 分片数据），
+ *                   调用方须按序逐个加密并发出。函数内部<u>不清空</u>该容器，追加写入
+ *  @return 成功返回 true；chunkSize 为 0 或任一包体超出中转上限返回 false
+ */
+bool BuildEngineBodies(const unsigned char* data, size_t len, size_t chunkSize,
+                       std::vector<std::string>& outBodies);
 
 /**
  *  从累积缓冲拆出尽可能多的完整中转帧。仅识别 cmd_rd_relay_hello /

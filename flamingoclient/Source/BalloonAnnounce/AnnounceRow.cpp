@@ -8,8 +8,6 @@
 
 #include <gdiplus.h>
 
-#include "../BalloonMain/MainPanelScrollView.h"   // ForwardWheelToScrollView（滚轮上抛）
-
 namespace balloonannounce {
 
 // ---- 配色（COLORREF）----
@@ -147,24 +145,6 @@ void AnnounceRow::OnPaint(HDC hdc, const RECT& rcDirty)
     // 5. 底色与装饰画完再交基类画子控件（标题、发布者·时间两行 Label）。
     //    顺序不能反：反过来底色会把刚画好的文字盖掉。
     balloonwjui::DuiHBox::OnPaint(hdc, rcDirty);
-}
-
-bool AnnounceRow::OnMouseWheel(POINT pt, short zDelta, UINT mkFlags)
-{
-    //DuiHBox 只是布局容器，自己不消化滚轮，直接上抛给祖先里的滚动视口。
-    return balloonmain::ForwardWheelToScrollView(this, pt, zDelta, mkFlags);
-}
-
-bool AnnounceWheelLabel::OnMouseWheel(POINT pt, short zDelta, UINT mkFlags)
-{
-    //DuiLabel 自己不消化滚轮，直接上抛给祖先里的滚动视口。
-    return balloonmain::ForwardWheelToScrollView(this, pt, zDelta, mkFlags);
-}
-
-bool AnnounceWheelContentView::OnMouseWheel(POINT pt, short zDelta, UINT mkFlags)
-{
-    //HistoryContentView 自己不消化滚轮，直接上抛给祖先里的滚动视口。
-    return balloonmain::ForwardWheelToScrollView(this, pt, zDelta, mkFlags);
 }
 
 } // namespace balloonannounce

@@ -13,10 +13,10 @@
 #include <memory>
 
 #include "../IULog.h"
-#include "../../balloonui/balloonui/DuiNotify.h"
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox / Hint
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"     // 末行补位用的空 spacer
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox / Hint
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"     // 末行补位用的空 spacer
 
 // ---- 文件作用域常量 -----------------------------------------------------
 

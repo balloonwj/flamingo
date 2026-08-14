@@ -47,14 +47,14 @@ extern CAppModule _Module;
 #include "GroupManagePaint.h"
 #include "GroupManageIcons.h"
 
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiAvatar.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiBadge.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiSeparator.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiSwitch.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiComboBox.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiSearchBox.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiBadge.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiSeparator.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSearchBox.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
 
 namespace balloongroupmanage {
 

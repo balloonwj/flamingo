@@ -15,7 +15,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 
 using balloonwjui::DuiButton;
 

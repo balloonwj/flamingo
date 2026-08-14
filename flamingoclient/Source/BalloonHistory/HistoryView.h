@@ -185,9 +185,28 @@ struct HistoryContentBrief
     //图片字节数；未知为 0。只用于下载时报给传输层做日志与校验，不参与界面显示。
     int64_t     m_imageSize;
 
+    //==== 文件夹传输记录（::message_type_folder）专用 ====
+    //本次传输的会话 id。拿它去 CFolderLocalStore 查这台机器上的根目录落点：查得到且
+    //目录还在，这一行才给「打开文件夹」；换了台机器一律查不到，只显示记录。非文件夹
+    //记录或缺字段时为空串。
+    std::string m_folderSessionId;
+    //根目录名（不含路径）。非文件夹记录或缺字段时为空串。
+    std::string m_folderName;
+    //文件夹内的文件总数；单位：个，未知为 0。与下面的字节数一起拼成行内的规模文字。
+    int64_t     m_folderTotalFiles;
+    //文件夹内全部文件的字节数之和；未知为 0。
+    int64_t     m_folderTotalSize;
+    //这次传输的结局，取值为 net/Protocol.h 的 folder_transfer_state 终态（3~8）；
+    //0 表示不是文件夹记录、或 content 里没有这个字段。行内据它显示"已完成 / 传输失败"
+    //这类结局文字 —— 只写"发过一个文件夹"而不说传成没传成，等于没说。
+    int         m_folderResult;
+
     HistoryContentBrief()
         : m_fileSize(0)
         , m_imageSize(0)
+        , m_folderTotalFiles(0)
+        , m_folderTotalSize(0)
+        , m_folderResult(0)
     {
     }
 };
@@ -203,6 +222,25 @@ struct HistoryContentBrief
 //@param contentJson  归一化内容JSON（UTF-8）
 //@return 取到的信息；JSON 非法或缺字段时对应项留空
 HistoryContentBrief ParseContentBrief(int msgtype, const std::string& contentJson);
+
+//把一次文件夹传输的结局翻成行内显示的中文文字。
+//
+//取值是 net/Protocol.h 的 folder_transfer_state 终态（3 已拒绝 / 4 应答前撤回 /
+//5 对方离线 / 6 邀请超时 / 7 传输失败 / 8 已完成）。措辞与聊天窗气泡上那一套一致，
+//同一次传输在两个界面里读到的说法因而相同。
+//@param result  结局取值；非终态与未知取值返回空串（调用方据此不显示结局那一段）
+//@return 结局文字（UTF-8）；未知取值返回空串
+std::string FolderResultText(int result);
+
+//拼装文件夹传输记录在消息记录窗列表里那一行的完整文字。
+//
+//体例：`[文件夹] 项目资料 · 128 个文件 · 2.4 GB · 已完成`。前缀与会话列表摘要一致，
+//后面依次是文件夹名、文件数、总大小、结局；缺哪一项就少哪一段，不留孤零零的分隔点。
+//规模统计与结局都写出来，是因为这条记录本身没有别的可点可看的内容 —— 只说"发过一个
+//文件夹"而不说多大、传成没传成，用户还得去别处找。
+//@param brief  从归一化 content JSON 里取出的文件夹字段（见 ParseContentBrief）
+//@return 一行文字（UTF-8）；文件夹名为空时退化为不带名字的那几段
+std::string BuildFolderRowText(const HistoryContentBrief& brief);
 
 //取文件名的小写扩展名（不含点）。没有扩展名、或点在开头（隐藏文件名）时返回空串。
 //用于挑类型色块的颜色与色块里那几个字。

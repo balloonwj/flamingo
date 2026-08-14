@@ -17,7 +17,7 @@
 
 #include <memory>
 #include <vector>
-#include "../../balloonui/balloonui/DuiControl.h"
+#include "../../../third-party/balloonui/balloonui/DuiControl.h"
 
 namespace balloonchat {
 

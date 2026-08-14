@@ -33,10 +33,13 @@
 #include "BalloonLoginLayout.h"      // BuildLoginBody / ValidateLoginInput / CtrlId
 #include "AccountRemoval.h"          // 删除历史账号的二次确认与本地数据清理
 #include "AuthBanner.h"              // AuthBanner（顶部 Banner，回填用户名 + 可点击状态胶囊）
-#include "../../balloonui/balloonui/Controls/Input/DuiComboBox.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/List/DuiMenu.h"     // 在线状态选择菜单
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"          // 状态区文字
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiProgressBar.h" // 登录中的不确定进度条
+#include "../UIText.h"                                                  // UI_LOGIN_* 文案
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"     // 在线状态选择菜单
 #include "../BalloonMain/MainPanelStatusMenu.h"  // GetPresenceVisual（状态色/文字，不含 Protocol.h，与 Msg.h 不冲突）
 #include "../BalloonMain/MainPanelMenuIcons.h"   // AppendStatusMenuItems（状态菜单装配，与主面板共用）
 #include "../BalloonMain/MainPanelIcons.h"       // kIconOnline（实心圆点图标）
@@ -48,7 +51,11 @@
 
 // 登录窗固定客户区尺寸（逻辑像素）—— 对应设计稿 AuthShell 的 380×520。
 static const int kLoginWindowWidth  = 380;
-static const int kLoginWindowHeight = 520;
+//窗口高度须容得下「状态区显示」那一屏：状态区（正在登录 / 失败原因）是固定高度，
+//它一出现就把下方的注册 / 网络设置一行往下推。高度不够时多出来的部分直接排到客户区
+//外面，那一行就看不见了。这个值由 Tests/BalloonLoginLayoutTests.cpp 的 LSA7 把关，
+//改动状态区高度后若那条用例报溢出，就按它给出的溢出量把这里加够。
+static const int kLoginWindowHeight = 562;
 
 // 账号下拉浮层一次最多显示几行。DuiComboBox 的行高默认 22 逻辑像素，故 20 行约
 // 442 像素高 —— 在 768 高的屏幕上，从账号框（约在窗口顶部往下 254 处）往下弹也
@@ -64,6 +71,15 @@ static const int kLoginTitleBarHeight = 28;
 
 // WM_SYSCOMMAND 的命令码在低 4 位保留作内部用途，取命令需与此掩码相与。
 static const WPARAM kSysCommandMask = 0xFFF0;
+
+// 驱动登录中那条 marquee 进度条的定时器 id。本窗口目前只有这一个定时器。
+static const UINT_PTR kMarqueeTimerId = 1;
+// 该定时器的间隔（毫秒）。约合 30Hz —— DuiProgressBar 的头文件里给的驱动示例就是
+// 这个频率，再快对观感没有帮助，只是多占 CPU。
+static const UINT kMarqueeIntervalMs = 33;
+// 每次定时器触发时相位前进多少。与间隔取同一个数，使一个完整循环的时长
+// 等于 DuiProgressBar::MarqueePeriod 个毫秒，滚动速度与该控件的设计一致。
+static const int kMarqueePhaseStep = 33;
 
 // 登录线程读取登录返回 JSON 时，业务成功对应的 code 值。
 static const int kLoginRespCodeOk = 0;
@@ -96,6 +112,10 @@ CBalloonLoginDlg::CBalloonLoginDlg(CFlamingoClient* pFMGClient)
     , m_pRememberPwd(NULL)
     , m_pAutoLogin(NULL)
     , m_pBanner(NULL)
+    , m_pStatusArea(NULL)
+    , m_pStatusText(NULL)
+    , m_pStatusProgress(NULL)
+    , m_dwMarqueeTimerId(0)
     , m_loginPresence(kMyPresenceOnline)   // 默认在线；由头像下状态胶囊菜单覆盖
     , m_preLoginUpdateChecked(false)
     , m_modalRunning(false)
@@ -159,6 +179,12 @@ INT_PTR CBalloonLoginDlg::DoModal(HWND hWndParent, LPARAM /*dwInitParam*/)
 {
     m_modalResult  = IDCANCEL;
     m_modalRunning = true;
+
+    //每次把登录窗摆出来都从空闲开始。自动登录那条路会在窗口尚未创建时直接调
+    //DoLogin 把状态机推进「登录中」，而它失败时结果不归本窗口处理，没人把状态
+    //推回来；不复位的话用户点第一下「登录」会被当成「取消登录」而毫无反应。
+    //详见 auth::LoginProgressState::reset 的说明。
+    m_loginProgress.reset();
 
     // 创建无边框 DUI 顶层窗口。WS_THICKFRAME 须保留 —— DuiFrameWindow 靠
     // WM_NCCALCSIZE 抠掉系统 chrome，但需要它维持 Aero snap / 最大化动画。
@@ -367,6 +393,15 @@ void CBalloonLoginDlg::InitLoginUi()
         content->FindCtrlById(balloonauth::kIdAutoLogin));
     m_pBanner = dynamic_cast<balloonauth::AuthBanner*>(
         content->FindCtrlById(balloonauth::kIdLoginBanner));
+    m_pStatusArea = content->FindCtrlById(balloonauth::kIdStatusArea);
+    m_pStatusText = dynamic_cast<balloonwjui::DuiLabel*>(
+        content->FindCtrlById(balloonauth::kIdStatusText));
+    m_pStatusProgress = dynamic_cast<balloonwjui::DuiProgressBar*>(
+        content->FindCtrlById(balloonauth::kIdStatusProgress));
+
+    // 状态区平时不占位置：只有登录中与登录失败时才显示
+    if (m_pStatusArea != NULL)
+        m_pStatusArea->SetVisible(false);
 
     // 密码框内嵌真 Win32 EDIT —— XML builder 只建控件对象、不调
     // EnsureCreated，须在 host HWND 就绪后由调用方显式建一次。
@@ -384,7 +419,7 @@ void CBalloonLoginDlg::InitLoginUi()
     // 填充历史账号下拉框并预填账号 / 密码。
     PopulateAccountCombo();
 
-    LOG_INFO(_T("登录窗客户区 UI 初始化完成 (combo=%p, pwd=%p)."),
+    LOG_INFO("login window client UI ready (combo=%p, pwd=%p).",
              m_pAccountCombo, m_pPasswordEdit);
 }
 
@@ -534,6 +569,20 @@ LRESULT CBalloonLoginDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
 
 void CBalloonLoginDlg::OnLoginClicked()
 {
+    //登录期间这个按钮是「取消登录」：把本轮作废、界面切回可输入。后台线程还阻塞在
+    //socket 上、停不下来，它稍后带回来的结果会因轮次号对不上而被丢弃，
+    //详见 auth::LoginProgressState 的说明。
+    if (m_loginProgress.phase() == auth::login_phase_logining)
+    {
+        if (m_loginProgress.cancelLogin())
+        {
+            LOG_INFO("User cancelled the login in progress.");
+            //取消是用户自己的动作，不必再留一行提示占着地方
+            LeaveLoginingUi(NULL);
+        }
+        return;
+    }
+
     // 这里原先调 DetectNewVersion() 走 v1 时代那套自动升级，且用 #ifndef _DEBUG
     // 把它挡在 Release 才生效。整条链路在 v2 改造后已经跑不通（协议与寻址方式都对不上），
     // 现已整体删除：检查更新改由登录成功后的静默检查、关于页按钮、以及登录被
@@ -581,16 +630,26 @@ void CBalloonLoginDlg::OnLoginClicked()
     //之后再点登录不该又被拦一遍，否则永远登不进去。
     if (!m_preLoginUpdateChecked)
     {
-        m_preLoginUpdateChecked = true;
         if (StartPreLoginUpdateCheck())
         {
+            //<u>真的发起了才算查过</u>。这行原先写在 StartPreLoginUpdateCheck 之前，
+            //于是那次检查因连不上服务器而没能发出去时，标志照样被消耗掉：此后再点
+            //登录也不会重试，用户直接登进去，升级提示改由登录成功后的静默检查弹出
+            //——表现就是"弹升级窗的同时人已经登录了"，而需求是可选更新须先弹窗、
+            //用户点过「稍后」才继续登录。2026-08-14 实测复现过。
+            m_preLoginUpdateChecked = true;
             //已发起，等应答回来再决定登不登
             return;
         }
+        //没发起成功（多半是连不上服务器）：不记为已查，下次点登录再试一次。
+        //本次照常登录——检查更新这条链路自己挂了不该把用户挡在门外。
     }
 
+    //发起登录后<u>不再立即关窗</u>：窗口就地切到「登录中」，等结果回来再决定去留。
+    //成功由 CMainDlg 关掉它，失败就地显示原因、界面回到可输入。
+    //旧写法是发起后立刻 EndModal、失败时再由 StartLogin 重建一个登录窗，两者时序
+    //稍有交错就会撞上 ATL 的 m_hWnd 断言——那个隐患也随之消掉了。
     DoLogin();
-    EndModal(IDOK);
 }
 
 void CBalloonLoginDlg::ShowLoginStatusMenu()
@@ -778,23 +837,231 @@ void CBalloonLoginDlg::OnNetworkClicked()
 
 bool CBalloonLoginDlg::StartPreLoginUpdateCheck()
 {
-    //检查更新走的是服务端的登录前白名单（cmd_check_update 1905），但仍然需要一条
-    //已建立的连接才能把帧发出去。CIUSocket::Login 内部本来也会先 Connect，这里提前
-    //连上，登录时那次 Connect 会直接复用。
-    if (!CIUSocket::GetInstance().Connect())
-    {
-        LOG_ERROR(_T("登录前检查更新：连接服务器失败，跳过检查直接登录。"));
-        return false;
-    }
+    //本函数<u>必须全程不阻塞</u>：它跑在 UI 线程上，是用户点下「登录」之后第一件
+    //发生的事，这里停多久界面就僵多久。
+    //
+    //这里原先先调一次 CIUSocket::Connect() 提前建连，连不上就跳过检查直接登录。
+    //那一句是同步的：gethostbyname 解析域名、connect 之后 select 最多等 3 秒、
+    //还要做完协议握手的一问一答；服务器没起来时实测卡住 4 秒（2026-08-14 用户
+    //反馈「点登录后界面卡一会儿」即由此而来）。而它其实是多余的 ——
+    //UpdateManager 的工作线程走 CIUSocket::CheckUpdateSync，那个函数进来第一件事
+    //就是自己 Connect()；连不上时结果里 transportOk 为假，OnPreLoginUpdateResult
+    //照样放行登录，与原先「跳过检查直接登录」的效果一致，只是不再占着 UI 线程。
+    //
+    //先切界面再投任务，让用户点下按钮的一瞬间就看到「正在检查更新...」。
+    SetLoginButtonChecking(true);
+
+    //必须在这里把更新管理器的工作线程启起来。它平时是在 CIUSocket::Init 里启动的，
+    //而那个函数要<u>登录成功之后</u>才被调用（CMainDlg::OnLoginResult 的 LOGIN_SUCCESS
+    //分支）—— 此刻还没登录，线程没起，投进去的任务没人处理，界面就会一直停在
+    //「正在检查更新...」再也不动。Init 可重复调用，登录成功后那次是空操作。
+    update::UpdateManager::GetInstance().Init();
 
     //结果投给本窗口
     update::UpdateManager::GetInstance().SetNotifyTarget(m_hWnd);
     //false = 只查不下。要不要下载由用户在升级窗里决定。
     update::UpdateManager::GetInstance().CheckAndDownload(false);
 
-    SetLoginButtonChecking(true);
     LOG_INFO(_T("登录前检查更新：已发起，登录暂缓。"));
     return true;
+}
+
+bool CBalloonLoginDlg::IsLogining() const
+{
+    return m_loginProgress.phase() == auth::login_phase_logining;
+}
+
+void CBalloonLoginDlg::CloseAfterLoginSuccess()
+{
+    EndModal(IDOK);
+}
+
+bool CBalloonLoginDlg::OnLoginResultArrived(long nLoginResultCode, uint32_t uGeneration)
+{
+    if (nLoginResultCode == LOGIN_SUCCESS)
+    {
+        if (!m_loginProgress.acceptSuccess(uGeneration))
+        {
+            //迟到的成功结果：用户已取消，或这是上一轮的。丢弃即可——上层不会关窗，
+            //界面停在用户当前看到的样子。
+            LOG_INFO("Login success result discarded, stale generation=%u.",
+                     (unsigned)uGeneration);
+            return false;
+        }
+
+        //成功之后窗口马上要关，只需把进度条定时器停掉，不必再改文字
+        if (m_dwMarqueeTimerId != 0)
+        {
+            KillTimer(kMarqueeTimerId);
+            m_dwMarqueeTimerId = 0;
+        }
+        return true;
+    }
+
+    if (!m_loginProgress.acceptFailure(uGeneration))
+    {
+        LOG_INFO("Login failure result discarded, stale generation=%u, code=%ld.",
+                 (unsigned)uGeneration, nLoginResultCode);
+        return false;
+    }
+
+    //就地显示失败原因：不弹 MessageBox，也不销毁重建本窗口。账号与口令都还在，
+    //用户改完直接重试即可。
+    LOG_INFO("Login failed, code=%ld, showing the reason in the login window.",
+             nLoginResultCode);
+    LeaveLoginingUi(auth::LoginErrorText(nLoginResultCode));
+    return true;
+}
+
+LRESULT CBalloonLoginDlg::OnTimerMsg(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/,
+                                     BOOL& bHandled)
+{
+    if (wParam != kMarqueeTimerId)
+    {
+        //不是本窗口的定时器，交回默认处理，别把别人的定时器吞掉
+        bHandled = FALSE;
+        return 0;
+    }
+
+    bHandled = TRUE;
+
+    //DuiProgressBar 的 marquee 不自驱动，相位由这里按固定步长推进；
+    //相位在控件内部按 MarqueePeriod 取模，无需自己回绕。
+    if (m_pStatusProgress != NULL && m_pStatusProgress->IsVisible())
+    {
+        m_pStatusProgress->SetMarqueePhase(m_pStatusProgress->GetMarqueePhase() + kMarqueePhaseStep);
+        m_pStatusProgress->Invalidate();
+    }
+
+    return 0;
+}
+
+void CBalloonLoginDlg::RelayoutClientContent()
+{
+    //<u>状态区显隐之后必须重排一次</u>。DuiControl::SetVisible 只置标志位并 Invalidate，
+    //<u>不会</u>触发重新布局（见 balloonui/DuiControl.cpp）。而竖直布局在排版时会跳过
+    //不可见的子控件、把空间分给别人，于是状态区被隐藏期间若发生过一次重排，它自己
+    //与两个子控件就停在了一份过时的矩形上；等 SetVisible(true) 时那份矩形并不会被
+    //重新算过，进度条就照着它画——实测表现为进度条左边留着正常的内边距、右边却一直
+    //顶到窗口边框（左 22 右 0，而同一容器里的登录按钮是左右各 22）。
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL || m_hWnd == NULL)
+        return;
+
+    //<u>重排要用客户区内容自己那份矩形，不能用整个窗口客户区</u>。
+    //DuiFrameWindow 的骨架是「标题栏 + 客户区内容」上下两块，客户区内容拿到的是
+    //标题栏<u>以下</u>那一块。这里若传 GetClientRect 的结果，等于把内容铺到整个
+    //客户区、把标题栏那一条盖掉，表现为登录失败回到登录界面后<u>右上角的最小化与
+    //关闭按钮不见了</u>（2026-08-14 用户反馈）。骨架分配给它的矩形就存在它自己的
+    //m_rcItem 里，原样再排一遍即可，无需在此重算标题栏高度。
+    const RECT rcContent = content->GetRect();
+    if (rcContent.right <= rcContent.left || rcContent.bottom <= rcContent.top)
+        return;   //还没被骨架布过局，此时无从重排，交给后续的正常布局
+
+    //必须用 ForceLayout 而不是 SetRect：后者在矩形未变时会直接 return，
+    //而这里矩形恰恰没变、变的是子控件的显隐，正需要强制重排一遍。
+    content->ForceLayout(rcContent);
+    content->Invalidate();
+}
+
+void CBalloonLoginDlg::SetInputEnabled(bool enabled)
+{
+    //登录期间禁用输入：一是避免用户改了账号却还在等上一个账号的结果，
+    //二是让「界面正忙」这件事一眼可见。
+    if (m_pAccountCombo != NULL)
+    {
+        m_pAccountCombo->SetEnabled(enabled);
+        m_pAccountCombo->Invalidate();
+    }
+    if (m_pPasswordEdit != NULL)
+    {
+        m_pPasswordEdit->SetEnabled(enabled);
+        m_pPasswordEdit->Invalidate();
+    }
+    if (m_pRememberPwd != NULL)
+    {
+        m_pRememberPwd->SetEnabled(enabled);
+        m_pRememberPwd->Invalidate();
+    }
+    if (m_pAutoLogin != NULL)
+    {
+        m_pAutoLogin->SetEnabled(enabled);
+        m_pAutoLogin->Invalidate();
+    }
+}
+
+void CBalloonLoginDlg::EnterLoginingUi()
+{
+    SetInputEnabled(false);
+
+    //主按钮就地变成「取消登录」。这里不另加一个取消按钮：主按钮占满整宽，
+    //旁边塞不下第二个，而登录期间再点「登录」本来也没有意义。
+    if (m_pLoginButton != NULL)
+    {
+        m_pLoginButton->SetText(UI_LOGIN_BTN_CANCEL);
+        m_pLoginButton->SetEnabled(true);
+        m_pLoginButton->Invalidate();
+    }
+
+    if (m_pStatusText != NULL)
+        m_pStatusText->SetText(UI_LOGIN_STATUS_LOGINING);
+
+    if (m_pStatusProgress != NULL)
+    {
+        m_pStatusProgress->SetMarquee(true);
+        m_pStatusProgress->SetVisible(true);
+    }
+
+    if (m_pStatusArea != NULL)
+    {
+        m_pStatusArea->SetVisible(true);
+        m_pStatusArea->Invalidate();
+    }
+
+    //DuiProgressBar 的 marquee 不自驱动，相位得由调用方按固定间隔推进
+    if (m_dwMarqueeTimerId == 0)
+        m_dwMarqueeTimerId = SetTimer(kMarqueeTimerId, kMarqueeIntervalMs, NULL);
+
+    RelayoutClientContent();
+}
+
+void CBalloonLoginDlg::LeaveLoginingUi(PCTSTR pszMessage)
+{
+    if (m_dwMarqueeTimerId != 0)
+    {
+        KillTimer(kMarqueeTimerId);
+        m_dwMarqueeTimerId = 0;
+    }
+
+    SetInputEnabled(true);
+
+    if (m_pLoginButton != NULL)
+    {
+        m_pLoginButton->SetText(UI_LOGIN_BTN_LOGIN);
+        m_pLoginButton->SetEnabled(true);
+        m_pLoginButton->Invalidate();
+    }
+
+    //进度条只在登录中有意义；留一行文字（失败原因）时也要把它收起来，
+    //否则界面上会有一条永远滚不动的进度条。
+    if (m_pStatusProgress != NULL)
+    {
+        m_pStatusProgress->SetMarquee(false);
+        m_pStatusProgress->SetVisible(false);
+    }
+
+    const bool bShowMessage = (pszMessage != NULL && pszMessage[0] != _T('\0'));
+    if (m_pStatusText != NULL)
+        m_pStatusText->SetText(bShowMessage ? pszMessage : _T(""));
+
+    if (m_pStatusArea != NULL)
+    {
+        m_pStatusArea->SetVisible(bShowMessage);
+        m_pStatusArea->Invalidate();
+    }
+
+    //显隐变化之后重排，理由见 RelayoutClientContent
+    RelayoutClientContent();
 }
 
 void CBalloonLoginDlg::SetLoginButtonChecking(bool checking)
@@ -840,8 +1107,10 @@ LRESULT CBalloonLoginDlg::OnPreLoginUpdateResult(UINT /*uMsg*/, WPARAM /*wParam*
     {
         //拦住登录，把升级窗摆出来。用户点「稍后」关掉它时会给本窗口投一条
         //FMG_MSG_UPDATE_LOGIN_CONTINUE，那时再继续登录；强制升级关不掉，于是登不进去。
+        //相对登录窗模态：显示期间把登录窗整个禁用，否则用户再点一次登录就能绕过去。
+        //关闭升级窗时恢复可用并续上这次登录（第二个参数 true）。
         CBalloonUpdateWindow& w = CBalloonUpdateWindow::GetInstance();
-        w.SetLoginGateWindow(m_hWnd);
+        w.SetGatedWindow(m_hWnd, CBalloonUpdateWindow::kGatedLoginDlg);
         w.ShowResult(*pResult);
         delete pResult;
         return 0;
@@ -849,6 +1118,10 @@ LRESULT CBalloonLoginDlg::OnPreLoginUpdateResult(UINT /*uMsg*/, WPARAM /*wParam*
 
     //已是最新 / 检查失败：照常登录。检查更新这条链路自己挂了不该把用户挡在门外。
     delete pResult;
+    //不再立即关窗，理由见 OnLoginClicked 末尾的说明：窗口就地切到「登录中」，
+    //由结果决定去留。原先那条「EndModal 必须紧跟 DoLogin」的约束是为了绕开
+    //「失败时窗口还活着、StartLogin 又建一个」引发的 ATL 断言，现在失败不再重建窗口，
+    //约束自然不成立了。
     DoLogin();
     return 0;
 }
@@ -858,6 +1131,7 @@ LRESULT CBalloonLoginDlg::OnUpdateLoginContinue(UINT /*uMsg*/, WPARAM /*wParam*/
 {
     bHandled = TRUE;
     LOG_INFO(_T("用户关闭升级窗，继续被拦下的登录。"));
+    //同上：不再立即关窗，理由见 OnPreLoginUpdateResult 里的说明。
     DoLogin();
     return 0;
 }
@@ -893,9 +1167,12 @@ void CBalloonLoginDlg::PopulateAccountCombo()
         }
     }
 
-    // 预填：优先用调用方设的默认账号 / 密码，否则用最后登录账号，再否则
-    // 兜底预填固定测试账号（v2 测试用：本机首次启动 / 无任何历史登录时，
-    // 让登录窗立即可点"登录"完成端到端测试，无需手工敲账号 / 密码）。
+    // 预填：优先用调用方设的默认账号 / 密码，否则用最后登录账号。
+    //
+    // 两者都没有时<u>不填任何内容</u>，让账号框与密码框各自显示自己的占位文字。
+    // 此处曾经兜底预填一组固定测试账号，方便本机首次启动就能直接点"登录"跑
+    // 端到端测试；但它使"本机尚无历史账号"这一场景下账号框永远非空，占位文字
+    // 因而永远显示不出来，2026-08-14 按用户要求移除。
     if (!m_strDefaultAccount.IsEmpty())
     {
         m_pAccountCombo->SetText(m_strDefaultAccount);
@@ -913,16 +1190,15 @@ void CBalloonLoginDlg::PopulateAccountCombo()
             m_pAccountCombo->SetText(lpLast->szUser);
             LoadAccountIntoUi(lpLast->szUser);
         }
-        else
-        {
-            // 本机尚无任何历史登录 —— 兜底预填固定测试账号
-            // （见 flamingoserver/migrations/测试账号.md）。
-            // 一旦用户走过一次真实登录、留下了历史账号，本分支不再被命中。
-            m_pAccountCombo->SetText(_T("test99990"));
-            if (m_pPasswordEdit != NULL)
-                m_pPasswordEdit->SetText(_T("test1234"));
-        }
     }
+
+    // 账号下拉框的填充结果记一条 —— "历史账号没加载"这类问题只看界面分不清是
+    // 文件没读到、还是读到了但预填的账号是空的，把条数与预填文本长度打出来即可
+    // 一眼区分（2026-08-13 排查空账号记录时正是靠这条定位的）。
+    LOG_INFO("PopulateAccountCombo: records=%d, comboItems=%d, prefilledLen=%d.",
+             (m_pLoginAccountList != NULL) ? m_pLoginAccountList->GetCount() : -1,
+             m_pAccountCombo->GetCount(),
+             m_pAccountCombo->GetText().GetLength());
 
     // 账号预填完毕 —— 把账号同步给 Banner（头像首字母 + 用户名）。这里不是
     // 由通知触发的，传 kComboExtraNoItem 表示"直接读下拉框现在的文本"。
@@ -1113,15 +1389,50 @@ void CBalloonLoginDlg::RemoveAccountFromHistory(int comboIndex)
 
 void CBalloonLoginDlg::DoLogin()
 {
+    //取一个新的轮次号。已经在登录中时它返回无效号，此处直接返回——重复点击
+    //不该起第二个登录线程。
+    const uint32_t uGeneration = m_loginProgress.startLogin();
+    if (uGeneration == auth::kInvalidLoginGeneration)
+    {
+        LOG_INFO("DoLogin ignored: a login is already in progress.");
+        return;
+    }
+
+    //线程参数用堆对象带走：轮次号必须随线程走，不能读成员——用户可能在结果回来
+    //之前又发起了新的一轮，那时成员里已经是新号了。线程负责释放它。
+    LoginThreadParam* pParam = new LoginThreadParam();
+    pParam->m_pDlg = this;
+    pParam->m_uGeneration = uGeneration;
+
     HANDLE hLoginThread =
-        (HANDLE)::_beginthreadex(NULL, 0, LoginThreadProc, this, 0, NULL);
-    if (hLoginThread != NULL)
-        ::CloseHandle(hLoginThread);
+        (HANDLE)::_beginthreadex(NULL, 0, LoginThreadProc, pParam, 0, NULL);
+    if (hLoginThread == NULL)
+    {
+        //线程都起不来，本轮就此作废，界面不要停在"登录中"
+        LOG_ERROR("DoLogin failed: cannot create login thread.");
+        delete pParam;
+        m_loginProgress.cancelLogin();
+        return;
+    }
+    ::CloseHandle(hLoginThread);
+
+    //窗口已创建时才切界面。自动登录路径会在窗口尚未创建时直接调本方法，
+    //那时没有控件可动，只需把状态机推进即可。
+    if (m_hWnd != NULL)
+        EnterLoginingUi();
 }
 
 UINT CBalloonLoginDlg::LoginThreadProc(void* pParam)
 {
-    CBalloonLoginDlg* pLoginDlg = (CBalloonLoginDlg*)pParam;
+    //参数是 DoLogin 堆分配的，无论走哪条返回路径都要释放
+    LoginThreadParam* pThreadParam = (LoginThreadParam*)pParam;
+    if (pThreadParam == NULL)
+        return 0;
+
+    CBalloonLoginDlg* pLoginDlg = pThreadParam->m_pDlg;
+    const uint32_t uGeneration = pThreadParam->m_uGeneration;
+    delete pThreadParam;
+
     if (pLoginDlg == NULL)
         return 0;
 
@@ -1193,6 +1504,10 @@ UINT CBalloonLoginDlg::LoginThreadProc(void* pParam)
              "(0=SUCCESS 1=FAILED 2=UNREG 3=PWD_ERR), userid=%u.",
              (int)pLoginResult->m_LoginResultCode,
              (unsigned int)pLoginResult->m_uAccountID);
+
+    //把本轮的轮次号带回去：登录窗据它判断这个结果是不是自己还在等的那一个。
+    //用户点了取消、或已经发起了新的一轮时，这个结果会被丢弃。
+    pLoginResult->m_uLoginGeneration = uGeneration;
 
     //临时排查用：把代理窗句柄与投递结果打出来，确认登录结果有没有真的进到消息队列
     const HWND hProxy = pLoginDlg->m_lpFMGClient->m_UserMgr.m_hProxyWnd;

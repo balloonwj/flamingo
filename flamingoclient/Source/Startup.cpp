@@ -18,9 +18,10 @@
 #include "Utils.h"
 #include "IniFile.h"
 #include "net/StorageLocation.h"      // ResolveDataRoot（本地数据根目录的归一）
+#include "net/FrameCrypto.h"          // net::cryptoInit（协议加密的一次性初始化）
 #include "UIText.h"
 #include "PerformanceCounter.h"
-#include "../balloonui/balloonui/DuiDpi.h"
+#include "../../third-party/balloonui/balloonui/DuiDpi.h"
 
 CAppModule _Module;
 
@@ -214,6 +215,18 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
     //未提权时静默跳过——不弹界面、不请求提权（详见 docs/崩溃转储方案.md）。放在这里是因为
     //它依赖 g_szHomePath 拼目录，又需要日志已初始化才记得下那两条说明。
     ConfigureCrashDumpEnvironment();
+
+    //初始化底层密码学库（libsodium）。协议加密的握手与帧体加解密全都依赖它，
+    //而它<u>必须在任何工作线程创建之前调用</u>——内部要做一次性的随机源与 CPU 特性
+    //探测，多线程环境下首次调用不是线程安全的。放在这里正好早于 InitSocket 与
+    //后面各个网络线程的启动。失败时直接终止启动：此时加密不可用，而服务端开着
+    //加密的话哪条链路也连不上，继续跑只会得到一堆莫名其妙的连接失败。
+    if (!net::cryptoInit())
+    {
+        LOG_ERROR("sodium_init failed, protocol encryption is unavailable.");
+        ::MessageBox(NULL, UI_MSG_CRYPTO_INIT_FAILED, g_strAppTitle.c_str(), MB_OK | MB_ICONERROR);
+        return 0;
+    }
 
     if (!InitSocket())
         return 0;

@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
-#include "../../balloonui/balloonui/DuiNotify.h"   // WM_DUI_NOTIFY / DuiNotify
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"   // WM_DUI_NOTIFY / DuiNotify
 #include "../CustomMsgDef.h"                        // WM_VIEW_CHAT_IMAGE（双击图片打开看图窗）
 #include "EmojiPickerPopup.h"                       // 旧 Unicode emoji 浮层（保留不再挂入；成员需完整类型）
 #include "FaceImagePickerPopup.h"                   // Bin/Face 图片表情浮层（成员需完整类型）
@@ -41,10 +41,17 @@ namespace balloonwjui { class DuiToast; }
 
 //v2 单聊消息推送 / 历史消息解析结果（由 BalloonMainPanel 路由进来）。
 namespace net { struct MessageNotify; struct SyncMessagesResult; }
+//v2 单聊文件夹传输的两条推送（同样由 BalloonMainPanel 路由进来）。
+namespace net { struct FolderInviteNotify; struct FolderStateNotify; }
+//文件夹传输的本端事件投递载体（定义在 FolderTransfer/FolderTransferManager.h）。只按
+//const 引用传参，前向声明即可 —— 那个头文件把整套会话管理都带进来，不该传染给使用方。
+namespace foldertransfer { struct FolderScanNotice; struct FolderBindNotice;
+                           struct FolderProgressNotice; struct FolderResultNotice; }
 //一条会话消息（结构定义在 ChatMockData.h）。ChatFileActionData 定义在 ChatFileAction.h，
 //此处只按 const 引用传参，前向声明即可——该头文件要求先引入 ATL/WTL，直接 include 会
 //把这个约束传染给所有包含本头文件的编译单元。
-namespace balloonchatwnd { struct ChatMessage; class ChatMessageList; struct ChatFileActionData; }
+namespace balloonchatwnd { struct ChatMessage; class ChatMessageList; struct ChatFileActionData;
+                           struct ChatFolderActionData; }
 
 /**
  *  CBalloonChatWindow
@@ -290,6 +297,88 @@ public:
      */
     void OnFilePeerAck(long long msgid, int peerState);
 
+    // ---- 单聊文件夹传输（cmd_folder_* 1810~1817）。全部由主面板广播进来，本窗口
+    //      按会话 id 在消息列表里找那条文件夹气泡；找不到即说明这笔传输不属于本会话，
+    //      安静忽略。
+    //
+    //      传输<u>进行中</u>的那条气泡是纯本地的（不发 cmd_send_message、没有 msgid）；
+    //      传输走到终态后，服务端会在双方会话里各落一条 msgtype=18 的传输记录条，那条
+    //      才是留在聊天记录里、翻历史还能看到的。两者由 OnFolderRecord 就地接合成一条，
+    //      详见该函数的说明。----
+
+    /**
+     *  收到对方发来的文件夹传输邀请：在会话里追加一条带「接收 / 另存为 / 拒绝」的邀请气泡。
+     *    notify：邀请推送解析结果（发送方 userid / 昵称、文件夹名与规模统计）。
+     */
+    void OnFolderInvite(const net::FolderInviteNotify& notify);
+
+    /**
+     *  本端目录扫描完成：把文件数 / 目录数 / 总大小补进那条按本地占位 id 建出来的气泡。
+     *  扫描失败时把它转成失败态并写上失败原因。
+     *    notice：扫描结果。
+     */
+    void OnFolderScanned(const foldertransfer::FolderScanNotice& notice);
+
+    /**
+     *  发起邀请的应答已到：把气泡上的本地占位会话 id 换成服务端分配的那个，此后所有
+     *  信令都按后者定位本行。被服务端拒绝时把气泡转成失败态；规模超限时另弹一次提示，
+     *  用的是<u>服务端回带的上限值</u>，客户端不硬编码。
+     *    bind：管理器回填的定位信息。
+     */
+    void OnFolderBound(const foldertransfer::FolderBindNotice& bind);
+
+    /**
+     *  会话状态推送到达：按会话 id 把气泡切到对应状态（响铃 / 传输中 / 拒绝 / 撤回 /
+     *  对方离线 / 超时 / 失败 / 完成）。
+     *    notify：状态推送解析结果。
+     */
+    void OnFolderState(const net::FolderStateNotify& notify);
+
+    /**
+     *  中转参数已下发、通道正在建立：把气泡切到「传输中」，让用户立刻看到进展，
+     *  不必等第一片字节的进度回调。
+     *    sessionId：本次传输的会话 id（UTF-8）。
+     */
+    void OnFolderTransferStarted(const std::string& sessionId);
+
+    /**
+     *  传输进度（收发共用）：更新气泡的进度条、已传字节数、当前文件名与序号。
+     *    progress：进度快照。
+     */
+    void OnFolderProgress(const foldertransfer::FolderProgressNotice& progress);
+
+    /**
+     *  传输最终结果（收发共用）：把气泡切成完成 / 失败 / 已取消态，并记下落地目录
+     *  （供「打开文件夹」）与失败原因。
+     *    result：结果快照。
+     */
+    void OnFolderResult(const foldertransfer::FolderResultNotice& result);
+
+    /**
+     *  渲染一条服务端发来的<u>文件夹传输记录条</u>（msgtype=message_type_folder=18）。
+     *  实时推送与翻历史两条路都走它，故同一笔传输在两处看到的样子必然一致。
+     *
+     *  行为分两种情形：
+     *    · 会话里已有一条<u>还没被任何记录接管过</u>的本地文件夹气泡（会话 id 相同、
+     *      msgid 仍为 0）：<u>就地接管</u>它 —— 填上服务器 msgid 与消息时间、按记录里的
+     *      结局切到对应终态，界面上因而只有一条、位置也不跳。
+     *    · 找不到那样的气泡（换了台机器、窗口是传完之后才打开的、或这一笔早先的尝试
+     *      已经各留下过一条记录）：当作一条新消息正常追加。
+     *
+     *  <u>同一次传输可能留下多条记录，这是预期行为，不是重复消息。</u>服务端按「会话 id +
+     *  尝试序号」做幂等，每次尝试各落一条：先失败落一条 result=7，10 分钟保留期内重试
+     *  成功再落一条 result=8。于是实时看到的是一条随状态变化的气泡（重试时经
+     *  ChatMessageList::ReviveFolderMessage 清掉 msgid 放回本地态，好被下一条记录再接管），
+     *  而重开窗口从历史加载时，会看到这一笔的每次尝试各一条记录。请勿把它当成重复消息去"修"。
+     *
+     *    notify：消息推送 / 历史条目的解析结果，其 m_folderXxx 系列字段由
+     *            net::FolderProtocolClient::parseRecordContent 填好；m_folderResult 为 0
+     *            表示 content 解析不出来，此时本方法只记一条日志、不渲染。
+     *    fromMe：本端是不是这次传输的<u>发送方</u>（由调用方按 notify.m_from 与当前登录
+     *            用户比对得出）。它决定气泡画在左边还是右边，也决定终态下给哪些按钮。
+     */
+    void OnFolderRecord(const net::MessageNotify& notify, bool fromMe);
+
     BEGIN_MSG_MAP(CBalloonChatWindow)
         MESSAGE_HANDLER(WM_CLOSE, OnCloseMsg)
         // 窗口被切到前台时通知主面板清该会话未读（handler 置 bHandled=FALSE，
@@ -305,6 +394,7 @@ public:
         MESSAGE_HANDLER(kInputChangedMsg, OnInputChanged)
         MESSAGE_HANDLER(WM_VIEW_CHAT_IMAGE, OnViewImageMsg)
         MESSAGE_HANDLER(WM_CHAT_FILE_ACTION, OnChatFileAction)
+        MESSAGE_HANDLER(WM_CHAT_FOLDER_ACTION, OnChatFolderAction)
         MESSAGE_HANDLER(WM_CHAT_IMAGE_ACTION, OnChatImageAction)
         MESSAGE_HANDLER(WM_CHAT_RECALL_REQUEST, OnChatRecallRequest)
         MESSAGE_HANDLER(WM_CHAT_PIN_REQUEST, OnChatPinRequest)
@@ -371,10 +461,11 @@ public:
     void OnChatDropHintChanged(bool visible) override;
 
     /**
-     *  IChatDropSink 覆写：文件被放下。按 ChatDropModel 归类后，图片走
-     *  SendImageFile、其余走 SendFileData；发不出去的项用 toast 汇总提示。
-     *    paths：      拖进来的路径列表。
-     *    forceAsFile：落手时按住了 Shift —— 图片也按原文件发。
+     *  IChatDropSink 覆写：文件被放下。按 ChatDropModel 归类后，图片走 SendImageFile、
+     *  普通文件走 SendFileData、文件夹走 SendDroppedFolders（即文件夹传输链路）；
+     *  发不出去的项用 toast 汇总提示。
+     *    paths：      拖进来的路径列表，可以混着文件与文件夹。
+     *    forceAsFile：落手时按住了 Shift —— 图片也按原文件发（不影响文件夹）。
      */
     void OnChatFilesDropped(const std::vector<std::wstring>& paths,
                             bool forceAsFile) override;
@@ -430,6 +521,129 @@ private:
      *  lParam=堆上 balloonchatwnd::ChatFileActionData*，处理后 delete。
      */
     LRESULT OnChatFileAction(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_CHAT_FOLDER_ACTION 处理：文件夹气泡底部按钮被点（接收 / 另存为 / 拒绝 /
+     *  取消 / 重试续传 / 重新发送 / 打开文件夹）。lParam=堆上
+     *  balloonchatwnd::ChatFolderActionData*，<u>本处理器负责 delete</u>。
+     *  气泡不认识传输会话，只把"哪一次传输、点了什么"如实上报，具体动作由本窗口
+     *  转交 foldertransfer::FolderTransferManager 执行。
+     */
+    LRESULT OnChatFolderAction(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  同意接收某一笔文件夹传输，并指定落地位置的父目录。
+     *
+     *  「接收」与「另存为」两个按钮只差落地目录从哪来（前者取本机默认的接收目录，
+     *  后者由用户在选目录框里挑），此后的应答、提示与失败收尾完全一致，故收口到本方法，
+     *  两处不再各写一遍。
+     *
+     *    data：         气泡上报的动作负载，本方法只读其 sessionId。
+     *    saveParentDir：落地位置的<u>父目录</u>（根目录将建在它下面），须已存在且非空；
+     *                   重名时由接收端状态机自动改名，本方法不处理重名。
+     *  副作用：受理失败时弹一个提示框，并把该条气泡置为「已取消」态。
+     */
+    void AcceptFolderInvite(const balloonchatwnd::ChatFolderActionData& data,
+                            const std::wstring& saveParentDir);
+
+    /**
+     *  对一个已经确定的本地目录发起一次「发送文件夹」：交 FolderTransferManager 起传输，
+     *  受理成功则就地建出一条发送方文件夹气泡（挂本地占位会话 id，等扫描结果补齐规模）。
+     *
+     *  工具栏按钮与拖放两条入口都收口到本方法，两者的受理与气泡形态因而必然一致；
+     *  提示文案由各自的调用方给（拖放要一次说清哪几个没发起，与单个目录的措辞不同）。
+     *
+     *    folderPath：要发送的本地目录完整路径，须非空且不是磁盘根目录。
+     *  @return 见 foldertransfer::FolderStartVerdict：kFolderStartOk 表示已受理并已建气泡；
+     *          kFolderStartBusy 表示本机并发笔数已达上限；其余为参数非法等。
+     *  副作用：受理成功时占住一个本机并发名额，并向消息列表追加一条气泡。
+     */
+    int StartFolderTransfer(const std::wstring& folderPath);
+
+    /**
+     *  弹系统选目录框选一个本地目录，并发起一次「发送文件夹」。工具栏「发送文件夹」
+     *  按钮（kIdTbFolder）点击时调用。仅真实会话（m_peerUserId != 0）且当前在线时生效；
+     *  本机已有一笔文件夹传输在跑时会被管理器拦下，此处给出提示。
+     */
+    void PickAndSendFolder();
+
+    /**
+     *  把拖进发送框的一批文件夹逐个发起传输（DropPlan::m_folders 就是这一批）。
+     *
+     *  本机同时进行的文件夹传输有笔数上限（配置项 foldermaxconcurrent，默认 5 笔，发送与
+     *  接收各算一笔）。按拖入顺序逐个发起，某一个因名额已满被拒时，它<u>连同后面所有</u>
+     *  都不再发起 —— 名额要等已在跑的某一笔结束才放开，继续试只是重复同一个失败。
+     *
+     *    folders：文件夹完整路径列表，顺序即用户拖入顺序；空列表时本方法什么都不做。
+     *  副作用：为每个受理成功的文件夹追加一条气泡；有未发起的文件夹时弹一个提示框，
+     *          列出其中前几个的名字与未发起的原因。
+     */
+    void SendDroppedFolders(const std::vector<std::wstring>& folders);
+
+    /**
+     *  弹系统选目录框（与「系统设置 → 存储」里选数据目录用的是同一套 SHBrowseForFolder，
+     *  不另造一份）。
+     *    title：对话框标题栏上方的提示文字。
+     *    out：  [出参] 用户选中的目录完整路径；返回 false 时被清空。
+     *  @return 用户选定了一个文件系统目录返回 true；取消或选中的不是真实目录返回 false。
+     */
+    bool PickFolderPath(LPCTSTR title, std::wstring& out);
+
+    /**
+     *  按会话 id 取回本窗口里那条文件夹气泡的消息。
+     *    sessionId：会话 id（UTF-8）。
+     *    out：      [出参] 命中时填入。
+     *  @return 找到返回 true；本会话里没有这条传输返回 false（属正常情形，不必记错误日志）。
+     */
+    bool GetFolderMessage(const std::string& sessionId, balloonchatwnd::ChatMessage& out);
+
+    /**
+     *  把改好的消息写回文件夹气泡并重排重绘。
+     *    sessionId：定位用的会话 id（写回<u>之前</u>那条气泡上的那个）。
+     *    msg：      改好的整条消息。
+     *  @return 命中并写回返回 true。
+     */
+    bool SetFolderMessage(const std::string& sessionId, const balloonchatwnd::ChatMessage& msg);
+
+    /**
+     *  在会话末尾追加一条<u>对方发来的</u>文件夹邀请气泡（带「接收 / 另存为 / 拒绝」三个按钮）。
+     *  实时收到推送与稍后点开会话补渲染共用它，两处的气泡形态因此必然一致。
+     *    sessionIdUtf8：  本次传输的会话 id（UTF-8），气泡按它接收后续信令。
+     *    folderNameUtf8：根目录名（UTF-8，不含路径）。
+     *    totalDirs：     子目录总数（含空目录、不含根目录自身），单位：个。
+     *    totalFiles：    文件总数，单位：个。
+     *    totalBytes：    全部文件字节数合计，单位：字节。
+     */
+    void AppendFolderInviteBubble(const std::string& sessionIdUtf8,
+                                  const std::string& folderNameUtf8,
+                                  long long totalDirs, long long totalFiles,
+                                  long long totalBytes);
+
+    /**
+     *  向 foldertransfer::FolderTransferManager 查一次"与本会话对端之间有哪些待应答的
+     *  文件夹邀请"，把查到的逐条补成邀请气泡。
+     *
+     *  存在理由：收到邀请<u>不再</u>弹出聊天窗（那是一次明显的打扰），于是用户往往是在
+     *  邀请到达之后才从会话列表点进来的；没有这一步，他看到的会是一个空会话，那些邀请
+     *  永远没机会被应答。
+     *
+     *  <u>可能有多条</u>：本机同时可进行多笔文件夹传输，同一个人先后发来两个文件夹时，
+     *  两条邀请会同时挂着，都要画出来。
+     *
+     *  调用时机有两处：窗口建好并显示之后调一次（历史那一页可能迟迟不回），首屏历史渲染
+     *  完之后再调一次（渲染首屏会先清空列表，把先补的那些一并清掉）。本方法逐条按会话 id
+     *  查重，重复调用不会画出两条。已被拒绝 / 撤回 / 超时的邀请管理器查不出来，故不会
+     *  补出已经失效的气泡。
+     */
+    void RestorePendingFolderInvite();
+
+    /**
+     *  把一次传输的失败 / 结束原因落到气泡上：切状态、写失败原因、按保留期决定「重试」
+     *  可用与否。失败、取消、过期三种收场共用它，免得三处各写一遍。
+     *    sessionId：会话 id。
+     *    errCode：  失败原因错误码（error_code_folder_*）；0 表示没有具体原因。
+     */
+    void ApplyFolderFailure(const std::string& sessionId, int errCode);
 
     /**
      *  WM_CHAT_IMAGE_ACTION 处理：图片气泡右键选了「图片另存为」/「再次发送」。

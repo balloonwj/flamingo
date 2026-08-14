@@ -37,19 +37,35 @@ bool BuildChunkFrame(unsigned char chunkFlag, const unsigned char* data, size_t 
                             static_cast<uint32_t>(body.size()), out);
 }
 
-bool BuildEngineFrames(const unsigned char* data, size_t len, size_t chunkSize,
-                       std::vector<std::string>& outFrames)
+//把一个分片拼成包体：[1字节 chunkFlag] + 分片数据。
+//超出中转包体上限返回 false —— 上限与服务端 RelaySession 的解帧上限一致。
+static bool buildChunkBody(unsigned char chunkFlag, const unsigned char* data, size_t len,
+                           std::string& out)
+{
+    if (len + 1 > MAX_BODY_FILESERVER)
+        return false;
+
+    out.clear();
+    out.reserve(1 + len);
+    out.push_back(static_cast<char>(chunkFlag));
+    if (len > 0)
+        out.append(reinterpret_cast<const char*>(data), len);
+    return true;
+}
+
+bool BuildEngineBodies(const unsigned char* data, size_t len, size_t chunkSize,
+                       std::vector<std::string>& outBodies)
 {
     if (chunkSize == 0)
         return false;
 
-    //不超过一个分片：单个 whole 帧（len==0 也产出一个空 whole 帧，语义上仍是一帧）
+    //不超过一个分片：单个 whole 包体（len==0 也产出一个空 whole 包体，语义上仍是一帧）
     if (len <= chunkSize)
     {
-        std::string frame;
-        if (!BuildChunkFrame(rd_relay_chunk_whole, data, len, frame))
+        std::string body;
+        if (!buildChunkBody(rd_relay_chunk_whole, data, len, body))
             return false;
-        outFrames.push_back(frame);
+        outBodies.push_back(body);
         return true;
     }
 
@@ -64,11 +80,36 @@ bool BuildEngineFrames(const unsigned char* data, size_t len, size_t chunkSize,
         bool isLast = (off + take >= len);
         unsigned char flag = isLast ? static_cast<unsigned char>(rd_relay_chunk_last)
                                     : static_cast<unsigned char>(rd_relay_chunk_more);
-        std::string frame;
-        if (!BuildChunkFrame(flag, data + off, take, frame))
+        std::string body;
+        if (!buildChunkBody(flag, data + off, take, body))
             return false;
-        outFrames.push_back(frame);
+        outBodies.push_back(body);
         off += take;
+    }
+    return true;
+}
+
+bool BuildEngineFrames(const unsigned char* data, size_t len, size_t chunkSize,
+                       std::vector<std::string>& outFrames)
+{
+    //切分规则只写在 BuildEngineBodies 一处，这里只负责给每个包体套上明文帧头。
+    //注意本函数产出的是<u>明文</u>帧，发送侧接入加密后已改用 BuildEngineBodies；
+    //保留它是因为单元测试用它构造可直接断言的帧。
+    std::vector<std::string> bodies;
+    if (!BuildEngineBodies(data, len, chunkSize, bodies))
+        return false;
+
+    for (size_t i = 0; i < bodies.size(); ++i)
+    {
+        std::string frame;
+        if (!net::encodeFrame(cmd_rd_relay_data, 0, 0,
+                              bodies[i].data(),
+                              static_cast<uint32_t>(bodies[i].size()),
+                              static_cast<uint32_t>(bodies[i].size()), frame))
+        {
+            return false;
+        }
+        outFrames.push_back(frame);
     }
     return true;
 }
@@ -108,6 +149,11 @@ size_t DrainFrames(const unsigned char* buf, size_t len,
 
         RdRelayInboundFrame f;
         f.m_cmd = header.cmd;
+        //帧头这三个字段要一并交出去：接入协议加密之后，调用方靠它们重建
+        //附加认证数据才解得开包体
+        f.m_seq       = header.seq;
+        f.m_flags     = header.flags;
+        f.m_originlen = header.originlen;
         f.m_body.assign(body.begin(), body.end());
         outFrames.push_back(f);
         consumed += one;

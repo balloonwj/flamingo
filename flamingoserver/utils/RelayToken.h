@@ -27,8 +27,10 @@
 //令牌承载的载荷字段；签发时由调用方填充，校验成功后回填给调用方
 struct RelayTokenPayload
 {
-    std::string  sessionid;   //远程桌面会话 id（同一会话两端相同；只含十六进制与连字符）
-    int          role;        //本端角色：取值见 RelayToken::role_*（控制端 / 被控端）
+    std::string  sessionid;   //中转会话 id，远程桌面 / 音视频 / 文件夹传输共用一套格式
+                              //（同一会话两端相同；只含十六进制与连字符）
+    int          role;        //本端角色：取值见 RelayToken::role_*
+                              //（控制端 / 被控端 / 主叫 / 被叫 / 文件夹发送端 / 文件夹接收端）
     int64_t      uid;         //本令牌持有者的用户 userid
     int64_t      peeruid;     //会话对端的用户 userid（供 imgserver 校验配对关系）
     int64_t      expire;      //过期时间，Unix 毫秒；校验时 now >= expire 即判定过期
@@ -52,6 +54,16 @@ public:
     static const int role_caller = 3;
     //角色：被叫，音视频通话的被邀请方；连上中转后与主叫双向收发音视频帧
     static const int role_callee = 4;
+    //角色：文件夹传输的发送端，连上中转后"发文件字节、收回执"（选中目录并发起邀请的一方）。
+    //单聊文件夹传输走 fileserver 中转（不走 imgserver），但令牌格式与签发 / 校验流程完全一致，
+    //故角色编号续接 5/6，六种角色全局不重复。
+    static const int role_folder_sender = 5;
+    //角色：文件夹传输的接收端，连上中转后"收文件字节、回回执并写盘"（同意接收的一方）。
+    //同一次传输的两端令牌：sessionid 相同、role 相反（5 对 6）、uid 与 peeruid 对调。
+    //与前四种角色的差别在于一枚令牌要开多条连接——发送端与接收端各用自己那一枚建
+    //1 条控制通道 + N 条数据通道，通道序号 lane 由各连接在中转握手帧
+    //（cmd_folder_relay_hello）里自报，<u>不</u>写进令牌，故不必按通道逐条签发。
+    static const int role_folder_receiver = 6;
 
     /**
      *  按 payload 与密钥签发一枚令牌。

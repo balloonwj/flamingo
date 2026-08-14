@@ -65,7 +65,7 @@ int DecideAutoAway(const AutoAwayInput& input)
 
     // 剩下的只处理"在线 → 离开"这一种切换。
     // 忙碌不动：那是用户刻意发出的"别打扰我"，降级成离开会把这层意思丢掉。
-    // 离线 / 隐身 / 用户手动选的离开，同样不动。
+    // 离线 / 用户手动选的离开，同样不动。
     if (input.m_presence != presence_online)
     {
         return kAutoAwayNone;

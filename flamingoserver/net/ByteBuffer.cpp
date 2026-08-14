@@ -11,7 +11,7 @@ const char ByteBuffer::kCRLF[] = "\r\n";
 const size_t ByteBuffer::kCheapPrepend;
 const size_t ByteBuffer::kInitialSize;
 
-int32_t ByteBuffer::readFd(int fd, int* savedErrno)
+int32_t ByteBuffer::readFd(SOCKET fd, int* savedErrno)
 {
     // saved an ioctl()/FIONREAD call to tell how much to read
     char extrabuf[65536];

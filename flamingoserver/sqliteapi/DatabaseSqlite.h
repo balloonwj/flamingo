@@ -5,11 +5,17 @@
  *  封装一条本地 SQLite 连接：打开（必要时创建）数据库文件、配置并发相关的 PRAGMA、
  *  注册 MySQL 兼容函数，然后按 IDatabase 的约定执行 SQL 并把结果集包成 SqliteQueryResult。
  *
- *  与 MySQL 实现的两处行为差异，实现时要留意：
+ *  与 MySQL 实现的几处行为差异，实现时要留意：
  *    1. 没有「断线重连」这回事。SQLite 是进程内库，连接就是一个打开的文件句柄，
  *       不存在 CR_SERVER_GONE_ERROR 那种服务端跑掉的情况，所以没有重试逻辑。
  *    2. 并发写会撞上 SQLITE_BUSY。本实现开 WAL 日志模式并设置 busy_timeout，
  *       由 SQLite 内部自动重试，超时才真正失败。
+ *    3. 事务中途出错时，SQLite 有可能<u>自己</u>把整个事务回滚掉，而调用方从返回值上
+ *       完全看不出来 —— 这与 MySQL「事务中途断线导致事务丢失」是同一类隐患：
+ *       事务没了却没人知道，后续语句于是各自独立提交。故本实现在语句失败后会核对
+ *       sqlite3_get_autocommit()，发现事务已被自动回滚就清掉标志并记一条错误日志。
+ *    4. 开启事务发的是 BEGIN IMMEDIATE 而不是默认的 BEGIN（deferred），
+ *       理由见 DatabaseSqlite.cpp 里 beginTransaction 的注释。
  *
  *  业务层不直接构造本类，而是通过 DbFactory::createConnection() 拿到 IDatabase*。
  */
@@ -50,6 +56,15 @@ public:
     virtual bool execute(const char* sql, uint32_t& uAffectedCount, int& nErrno);
     virtual bool pexecute(const char* format, ...);
 
+    //事务接口，语义见 dbapi/IDatabase.h 里逐个方法的说明。
+    //SQLite 一侧有两点与 MySQL 不同，调用方按 MySQL 的行为写代码之前要看清：
+    //  · beginTransaction 发的是 BEGIN IMMEDIATE（开启时就拿写锁）；
+    //  · commit 失败后事务<u>可能仍然开着</u>（典型是撞上 SQLITE_BUSY），必须再回滚一次。
+    virtual bool beginTransaction();
+    virtual bool commit();
+    virtual bool rollback();
+    virtual bool inTransaction() const;
+
     virtual uint32_t getInsertID();
     virtual int32_t escapeString(char* szDst, const char* szSrc, uint32_t uSize);
 
@@ -66,8 +81,23 @@ private:
     //执行一条不关心结果集的语句（PRAGMA 等），失败时打日志。
     bool execSimpleSql(const char* sql);
 
-    struct sqlite3* m_db;           //SQLite 连接句柄；NULL 表示尚未打开或已关闭
-    std::string     m_strDbPath;    //数据库文件路径，仅用于日志与重复打开时的记录
+    //一条语句执行失败之后，核对 SQLite 是不是顺手把整个事务也回滚掉了。
+    //SQLite 官方文档在 sqlite3_get_autocommit 的说明里写明：SQLITE_FULL / SQLITE_IOERR /
+    //SQLITE_NOMEM / SQLITE_BUSY / SQLITE_INTERRUPT 这几类错误发生在多语句事务中时，
+    //事务有可能被自动回滚，而「唯一能查出是否发生了自动回滚的办法就是调用本接口」
+    //（见 sqlite3/sqlite3.h 该接口的注释）。不核对的话，事务已经没了却没人知道，
+    //后续语句会各自独立提交 —— 与 MySQL 事务中途断线是同一类隐患。
+    //sql：刚刚失败的那条 SQL 原文，仅用于日志，可为 NULL。
+    void noteTransactionAbortedBySqlite(const char* sql);
+
+    struct sqlite3* m_db;               //SQLite 连接句柄；NULL 表示尚未打开或已关闭
+    std::string     m_strDbPath;        //数据库文件路径，仅用于日志与重复打开时的记录
+
+    //本连接上是否有一个由 beginTransaction() 开启、尚未了结的事务。
+    //注意它只是本类自己的记录，**不是**事务是否存在的权威来源 —— 权威来源是
+    //sqlite3_get_autocommit()，见 inTransaction()。保留这个标志是为了能识别出
+    //「本来开着事务，结果被 SQLite 自动回滚掉了」这一转变并记日志。
+    bool            m_bInTransaction;
 };
 
 #endif // __DATABASE_SQLITE_H__

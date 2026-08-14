@@ -27,8 +27,8 @@
 #pragma once
 
 #include "BalloonProfileLayout.h"   // ProfileVisualResources
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
-#include "../../balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 
 class CFlamingoClient;
 

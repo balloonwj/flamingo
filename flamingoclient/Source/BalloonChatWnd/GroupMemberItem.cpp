@@ -37,7 +37,7 @@ extern CAppModule _Module;
 #pragma comment(lib, "gdiplus.lib")
 
 #include "GroupMemberItem.h"
-#include "../../balloonui/balloonui/DuiHost.h"    // GetHost()->m_hWnd（弹菜单要宿主 HWND）
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"    // GetHost()->m_hWnd（弹菜单要宿主 HWND）
 #include "GroupMentionMenu.h"                     // 成员操作菜单模型与投递负载（与气泡共用）
 #include "../GroupRoleRules.h"                    // NetGroupRole：角色徽标与菜单门控用的角色取值
 #include "../CustomMsgDef.h"                      // WM_CHAT_MENTION_ACTION

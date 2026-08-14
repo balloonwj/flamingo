@@ -19,6 +19,10 @@
 
 #include "FileStreamTransfer.h"   // IFileFrameChannel
 #include "FrameCodec.h"          // FRAME_HEADER_SIZE / MAX_BODY_FILESERVER / decodeFrame（内含 Protocol.h）
+#include "FrameCrypto.h"         // net::ClientHandshake（本连接自己的会话密钥）
+#include "FramePayload.h"        // net::decodeFramePayload（收包时的解密与解压）
+#include "HandshakeRunner.h"     // net::performClientHandshake / IHandshakeChannel
+#include "IUSocket.h"            // CIUSocket::GetServerPublicKey（四条链路共用同一把公钥）
 #include "../IULog.h"            // LOG_INFO / LOG_ERROR
 
 #include <string>
@@ -86,7 +90,7 @@ public:
 
         int ret = ::connect(m_sock, (struct sockaddr*)&addrSrv, sizeof(addrSrv));
         if (ret == 0)
-            return true;
+            return PerformHandshake(timeoutSec);
         if (ret == SOCKET_ERROR && ::WSAGetLastError() != WSAEWOULDBLOCK)
         {
             LOG_ERROR("FileServerConn: connect fileserver %s:%d failed.", addr.c_str(), (int)port);
@@ -104,7 +108,7 @@ public:
             Close();
             return false;
         }
-        return true;
+        return PerformHandshake(timeoutSec);
     }
 
     //关闭本连接（幂等）。Stop 时可从别的线程调以解阻塞正在收发的池线程。
@@ -178,11 +182,88 @@ public:
                              MAX_BODY_FILESERVER) != net::frame_decode_ok)
             return false;
 
-        body.swap(decoded);
+        //还原包体：握手完成后服务端发来的包体是加密的，须在此解出明文再交给业务层。
+        //本连接的加密器是自己独占的，与别的并发连接互不干扰。
+        std::string err;
+        if (!net::decodeFramePayload(header.cmd, header.seq, header.flags, header.originlen,
+                                     decoded, &m_handshake.cipher(), body, err))
+        {
+            LOG_ERROR("FileServerConn: restore body failed: %s, cmd=%u, bodylen=%u.",
+                      err.c_str(), header.cmd, (uint32_t)decoded.size());
+            //解密失败意味着这个方向的流已不可恢复，本连接只能作废
+            Close();
+            return false;
+        }
+
         return true;
     }
 
+    //本连接自己的帧体加解密器（IFileFrameChannel）。每个实例各一个，
+    //因为群文件并发池同时能跑三条独立连接，共用会让流状态互相踩踏。
+    net::FrameCipher* GetCipher() override
+    {
+        return &m_handshake.cipher();
+    }
+
 private:
+    /**
+     *  握手期间的字节收发适配器，把 net::IHandshakeChannel 转接到本连接的
+     *  SendBytes / RecvBytes 上。只在 Connect() 里活着，是栈上对象，不涉及并发。
+     */
+    class HandshakeChannel : public net::IHandshakeChannel
+    {
+    public:
+        //  owner：宿主连接，生命周期覆盖本对象；timeoutSec：每次收发的超时，单位秒
+        HandshakeChannel(FileServerConn* owner, int timeoutSec)
+            : m_owner(owner), m_timeoutSec(timeoutSec)
+        {
+        }
+
+        virtual bool SendAll(const char* data, size_t len)
+        {
+            return m_owner->SendBytes(data, (int64_t)len, m_timeoutSec);
+        }
+
+        virtual bool RecvAll(char* buf, size_t len)
+        {
+            return m_owner->RecvBytes(buf, (int64_t)len, m_timeoutSec);
+        }
+
+    private:
+        FileServerConn* m_owner;       //宿主连接，不拥有
+        int             m_timeoutSec;  //每次收发的超时，单位秒
+    };
+
+    /**
+     *  在刚建好的连接上同步走完三帧协议加密握手。由 Connect 的两条成功路径调用。
+     *
+     *  <u>握手必须在这里做完</u>：本连接建好之后马上就会发第一个业务帧，而服务端在
+     *  握手完成前只收握手帧，晚一步就会被对端断开。
+     *
+     *  未配置服务端公钥时直接返回成功且不做任何收发，此时本连接走明文。
+     *
+     *  @param timeoutSec 每次收发的超时时间，单位秒
+     *  @return 成功返回 true；失败时已关闭连接，调用方应把它当作连接失败
+     */
+    bool PerformHandshake(int timeoutSec)
+    {
+        //四条链路共用同一把服务端公钥，因为三个服务共用同一份身份密钥文件
+        const unsigned char* pServerPubKey = CIUSocket::GetInstance().GetServerPublicKey();
+        if (pServerPubKey == NULL)
+            return true;
+
+        HandshakeChannel channel(this, timeoutSec);
+        std::string err;
+        if (!net::performClientHandshake(channel, pServerPubKey, m_handshake, err))
+        {
+            LOG_ERROR("FileServerConn: handshake failed: %s.", err.c_str());
+            Close();
+            return false;
+        }
+
+        return true;
+    }
+
     //在本连接上收满 nSize 字节（语义同 CIUSocket::RecvOnFilePort）。成功返回 true。
     bool RecvBytes(char* buf, int64_t nSize, int timeoutSec)
     {
@@ -216,6 +297,13 @@ private:
 
 private:
     SOCKET m_sock;   //本连接独占的阻塞收发 socket（非阻塞 + 轮询超时）
+
+    //本连接的协议加密状态。<u>必须每个实例各持一个</u>：群文件并发池同时最多跑三条
+    //FileServerConn，升级包下载还会再占一条，共用一个加密器会让几条连接的流状态
+    //互相踩踏，表现为随机的解密失败。
+    //Close() 刻意不碰它——Close 会被 FileTransfer::Stop 从别的线程调来解阻塞，
+    //在那里动加密器会与正在收发的池线程抢；本对象是用完即弃的，随析构一起走即可。
+    net::ClientHandshake m_handshake;
 };
 
 } // namespace net

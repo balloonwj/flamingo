@@ -134,7 +134,6 @@ private:
     void onAdminClientVersionSetEnabled(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //回滚：把旧版本重新发布一次。数据层与发布是同一个动作，
     //分两个接口是为了在审计日志里区分意图。
-    void onAdminClientVersionRepublish(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
 
     //群组管理：在企业详情页把企业成员拉进一个群，指定群主、可选管理员（/admin/group/create.do）。
     void onAdminGroupCreate(const std::string& body, const std::shared_ptr<TcpConnection>& conn);

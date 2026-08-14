@@ -23,7 +23,11 @@ namespace {
 // ---- 布局常量（96 dpi 逻辑像素）----
 const int kHeaderH   = 96;   // 页头高度
 const int kSidePad   = 24;   // 内容区左 / 右 / 下统一外边距
-const int kHintH     = 40;   // 「升级包放这里」提示条高度
+//提示条高度。条内排两行：第一行讲升级包放哪儿，第二行讲"发布后不要再动这个包"
+//（见 OnPaint 里的说明）。两行各 20 像素，加上下各 8 像素内边距。
+const int kHintH     = 64;
+const int kHintLineH = 20;   // 提示条内单行文字行高
+const int kHintPadY  = 8;    // 提示条内上 / 下内边距
 const int kRowH      = 48;   // 数据行高
 const int kTableHdrH = 38;   // 表头行高
 
@@ -50,7 +54,7 @@ const int kActBtnW = 56;   // 单个操作按钮宽度
 const int kActBtnH = 26;   // 单个操作按钮高度
 const int kActGap  = 6;    // 操作按钮之间的间距
 
-// 一行最多几个操作按钮（发布/撤回、回滚、编辑）。用于算「操作」列的宽度。
+// 一行最多几个操作按钮（发布/撤回、编辑）。用于算「操作」列的宽度。
 const int kMaxActions = 3;
 
 // 平台号 → 中文。取值见服务端 Protocol.h 的 enum platform_type。
@@ -228,18 +232,25 @@ void ClientVersionsScreen::OnPaint(HDC hdc, const RECT& rcDirty)
                            rc.left + kSidePad + 400, rc.top + 68 },
                      theme::kInk700, ui::UiFont(kPageTitlePt, true),
                      DT_LEFT | DT_VCENTER | DT_SINGLELINE);
-    ui::DrawTextLine(hdc, _T("发布 PC 客户端升级包，控制发布 / 撤回与回滚"),
+    ui::DrawTextLine(hdc, _T("发布 PC 客户端升级包，控制发布与撤回"),
                      RECT{ rc.left + kSidePad, rc.top + 68,
                            rc.left + kSidePad + 600, rc.top + 88 },
                      theme::kInk400, ui::UiFont(theme::kFontSizeNormal, false),
                      DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-    // ---- 提示条：升级包该放到哪儿 ----
-    // 控制台不负责上传，包由运维手工放进服务器目录，这条提示是唯一的指路牌，
+    // ---- 提示条：升级包该放到哪儿、发布后为什么不能再动它 ----
+    // 控制台不负责上传，包由运维手工放进服务器目录，第一行是唯一的指路牌，
     // 没有它管理员会不知道"新建版本"里的候选包从哪来。
+    //
+    // 第二行讲的是发布记录与包文件之间的绑定关系，这一层不写出来管理员多半想不到：
+    // 发布时存进数据库的是包内容的 MD5，客户端下载时服务端也是拿 MD5 反查文件，
+    // 文件名全程不参与。所以只要重新打了一次包（哪怕文件名一模一样、内容只差一个
+    // 字节），MD5 就变了，旧发布记录里那个 MD5 在目录里再也找不到对应文件，客户端
+    // 下载会拿到"文件不存在"。换包的正确做法是撤回该版本、重新发布一次。
     const RECT hint = { rc.left + kSidePad, rc.top + kHeaderH,
                         rc.right - kSidePad, rc.top + kHeaderH + kHintH - 8 };
     ui::FillSolidRect(hdc, hint, theme::kFlamingo50);
+
     CString hintText;
     if (m_dir.IsEmpty())
     {
@@ -250,9 +261,20 @@ void ClientVersionsScreen::OnPaint(HDC hdc, const RECT& rcDirty)
         hintText.Format(_T("把升级包（.zip）放到服务器的 %s 目录下，再点「新建版本」选择它"),
                         m_dir.GetString());
     }
+
+    HFONT hintFont = ui::UiFont(theme::kFontSizeSmall, false);
+    const int line1T = hint.top + kHintPadY;
     ui::DrawTextLine(hdc, hintText,
-                     RECT{ hint.left + 12, hint.top, hint.right - 12, hint.bottom },
-                     theme::kInk700, ui::UiFont(theme::kFontSizeSmall, false),
+                     RECT{ hint.left + 12, line1T, hint.right - 12, line1T + kHintLineH },
+                     theme::kInk700, hintFont,
+                     DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+
+    const int line2T = line1T + kHintLineH;
+    ui::DrawTextLine(hdc,
+                     _T("发布记录绑定的是包内容的 MD5，不是文件名 —— 发布后重新打包会让 MD5 变化，")
+                     _T("客户端将下载失败。要换包请先撤回该版本，再重新发布一次。"),
+                     RECT{ hint.left + 12, line2T, hint.right - 12, line2T + kHintLineH },
+                     theme::kInk400, hintFont,
                      DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
     // ---- 表格 ----
@@ -377,8 +399,9 @@ void ClientVersionsScreen::PaintTable(HDC hdc, const RECT& rc)
                          DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
         // ---- 行内操作按钮 ----
-        // 草稿：发布 / 编辑；已发布但不是当前生效：回滚 / 撤回 / 编辑；
-        // 当前生效：撤回 / 编辑（回滚到自己没有意义，不给这个按钮）。
+        // 草稿：发布 / 编辑；已发布：撤回 / 编辑。
+        // 把某个旧版本重新顶成"当前生效"用「撤回 + 发布」两步 —— 发布会把发布时间
+        // 刷到当前，取数规则按发布时间取最新，效果与从前那个「回滚」按钮完全一样。
         struct Act
         {
             LPCTSTR     m_text;
@@ -394,12 +417,6 @@ void ClientVersionsScreen::PaintTable(HDC hdc, const RECT& rc)
         }
         else
         {
-            if (!v.m_isCurrent)
-            {
-                acts[actCount].m_text = _T("回滚");
-                acts[actCount].m_action = CvRowAction::Republish;
-                ++actCount;
-            }
             acts[actCount].m_text = _T("撤回");
             acts[actCount].m_action = CvRowAction::Disable;
             ++actCount;

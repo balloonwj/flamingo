@@ -19,6 +19,8 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\net\FrameCrypto.cpp" />
+    <ClCompile Include="..\net\FramePayload.cpp" />
     <ClCompile Include="..\tests\test_main.cpp" />
     <ClCompile Include="..\tests\test_department_path.cpp" />
     <ClCompile Include="..\tests\test_department_msg.cpp" />
@@ -48,6 +50,10 @@
     <ClCompile Include="..\chatserversrc\StarredManager.cpp" />
     <ClCompile Include="..\tests\test_contactremarkmanager.cpp" />
     <ClCompile Include="..\chatserversrc\ContactRemarkManager.cpp" />
+    <ClCompile Include="..\tests\test_contacttagprotocol.cpp" />
+    <ClCompile Include="..\chatserversrc\ContactTagProtocol.cpp" />
+    <ClCompile Include="..\tests\test_contacttagmanager.cpp" />
+    <ClCompile Include="..\chatserversrc\ContactTagManager.cpp" />
     <ClCompile Include="..\tests\test_updateprotocol.cpp" />
     <ClCompile Include="..\chatserversrc\UpdateProtocol.cpp" />
     <ClCompile Include="..\tests\test_clientversionmanager.cpp" />
@@ -61,6 +67,7 @@
     <ClCompile Include="..\chatserversrc\AdminManager.cpp" />
     <ClCompile Include="..\tests\test_apppath.cpp" />
     <ClCompile Include="..\tests\test_serverconfigloader.cpp" />
+    <ClCompile Include="..\tests\test_iothreadcount.cpp" />
     <ClCompile Include="..\tests\test_asynclog.cpp" />
     <ClCompile Include="..\utils\AppPath.cpp" />
     <ClCompile Include="..\utils\ServerConfigLoader.cpp" />
@@ -101,6 +108,12 @@
     <ClCompile Include="..\utils\FileToken.cpp" />
     <ClCompile Include="..\tests\test_relaytoken.cpp" />
     <ClCompile Include="..\utils\RelayToken.cpp" />
+    <ClCompile Include="..\tests\test_filesessionremoval.cpp" />
+    <ClCompile Include="..\tests\test_foldertransfermanager.cpp" />
+    <ClCompile Include="..\chatserversrc\FolderTransferManager.cpp" />
+    <ClCompile Include="..\tests\test_foldertransferprotocol.cpp" />
+    <ClCompile Include="..\chatserversrc\FolderTransferProtocol.cpp" />
+    <ClCompile Include="..\tests\test_folderrelayhub.cpp" />
     <ClCompile Include="..\tests\test_fileprotocol.cpp" />
     <ClCompile Include="..\chatserversrc\FileProtocol.cpp" />
     <ClCompile Include="..\tests\test_groupfileprotocol.cpp" />
@@ -116,13 +129,17 @@
     <ClCompile Include="..\sqliteapi\SqliteManager.cpp" />
     <ClCompile Include="..\tests\test_sqlite_schema.cpp" />
     <ClCompile Include="..\tests\test_sqldialect.cpp" />
+    <ClCompile Include="..\tests\test_dbtransaction.cpp" />
     <ClCompile Include="..\dbapi\DbConfig.cpp" />
     <ClCompile Include="..\dbapi\SqlDialect.cpp" />
     <ClCompile Include="..\dbapi\Field.cpp" />
     <ClCompile Include="..\dbapi\QueryResult.cpp" />
     <ClCompile Include="..\base\AsyncLog.cpp" />
     <ClCompile Include="..\base\Platform.cpp" />
-    <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp" />
+    <!-- jsoncpp 原版源码，同上 -->
+    <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp">
+      <DisableSpecificWarnings>4244</DisableSpecificWarnings>
+    </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_value.cpp" />
     <ClCompile Include="..\jsoncpp1.9.0\json_writer.cpp" />
     <ClCompile Include="..\zlib1.2.11\adler32.c" />
@@ -131,8 +148,14 @@
     <ClCompile Include="..\zlib1.2.11\deflate.c" />
     <ClCompile Include="..\zlib1.2.11\gzclose.c" />
     <ClCompile Include="..\zlib1.2.11\gzlib.c" />
-    <ClCompile Include="..\zlib1.2.11\gzread.c" />
-    <ClCompile Include="..\zlib1.2.11\gzwrite.c" />
+    <!-- zlib 原版源码，size_t 收窄的告警属于上游写法，不改第三方代码，只在本工程里压制 -->
+    <ClCompile Include="..\zlib1.2.11\gzread.c">
+      <DisableSpecificWarnings>4267</DisableSpecificWarnings>
+    </ClCompile>
+    <!-- zlib 原版源码，size_t 收窄的告警属于上游写法，不改第三方代码，只在本工程里压制 -->
+    <ClCompile Include="..\zlib1.2.11\gzwrite.c">
+      <DisableSpecificWarnings>4267</DisableSpecificWarnings>
+    </ClCompile>
     <ClCompile Include="..\zlib1.2.11\infback.c" />
     <ClCompile Include="..\zlib1.2.11\inffast.c" />
     <ClCompile Include="..\zlib1.2.11\inflate.c" />
@@ -143,6 +166,8 @@
     <ClCompile Include="..\zlib1.2.11\ZlibUtil.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\net\FrameCrypto.h" />
+    <ClInclude Include="..\net\FramePayload.h" />
     <ClInclude Include="..\tests\doctest.h" />
     <ClInclude Include="..\chatserversrc\DepartmentPath.h" />
     <ClInclude Include="..\chatserversrc\DepartmentMsg.h" />
@@ -177,6 +202,8 @@
     <ClInclude Include="..\utils\RelayToken.h" />
     <ClInclude Include="..\chatserversrc\FileProtocol.h" />
     <ClInclude Include="..\chatserversrc\GroupFileProtocol.h" />
+    <ClInclude Include="..\dbapi\DbRetryPolicy.h" />
+    <ClInclude Include="..\dbapi\DbTransaction.h" />
     <ClInclude Include="..\zlib1.2.11\ZlibUtil.h" />
     <ClInclude Include="..\zlib1.2.11\zlib.h" />
     <ClInclude Include="..\zlib1.2.11\zconf.h" />
@@ -257,16 +284,20 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
+      <AdditionalIncludeDirectories>..\deps\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;FLAMINGO_NO_MYSQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;FLAMINGO_NO_MYSQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
+      <AdditionalDependencies>libsodium.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\deps\libsodium\lib\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <OutputFile>./$(TargetName)$(TargetExt)</OutputFile>
@@ -274,6 +305,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <ClCompile>
+      <AdditionalIncludeDirectories>..\deps\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -281,11 +314,13 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;FLAMINGO_NO_MYSQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;FLAMINGO_NO_MYSQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
+      <AdditionalDependencies>libsodium.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\deps\libsodium\lib\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
@@ -295,6 +330,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
+      <AdditionalIncludeDirectories>..\deps\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -302,11 +339,13 @@
       <SDLCheck>true</SDLCheck>
     <!-- WIN32 必须定义：全仓库判断平台用的是裸 WIN32（见 base/Platform.h），而不是 MSVC 自带的
          _WIN32。x64 下不定义它会走进 POSIX 分支，编译必然失败 -->
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;FLAMINGO_NO_MYSQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;FLAMINGO_NO_MYSQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
+      <AdditionalDependencies>libsodium.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\deps\libsodium\lib\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <OutputFile>$(OutDir)$(TargetName)$(TargetExt)</OutputFile>
@@ -314,6 +353,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
+      <AdditionalIncludeDirectories>..\deps\libsodium\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader>
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
@@ -326,11 +367,13 @@
       <SDLCheck>true</SDLCheck>
     <!-- WIN32 必须定义：全仓库判断平台用的是裸 WIN32（见 base/Platform.h），而不是 MSVC 自带的
          _WIN32。x64 下不定义它会走进 POSIX 分支，编译必然失败 -->
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;FLAMINGO_NO_MYSQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;FLAMINGO_NO_MYSQL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
+      <AdditionalDependencies>libsodium.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalLibraryDirectories>..\deps\libsodium\lib\$(Platform)\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <SubSystem>Console</SubSystem>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>

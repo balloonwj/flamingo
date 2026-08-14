@@ -16,6 +16,8 @@
 #include "net/MessageProtocolClient.h"    // net::MessageNotify / net::SendMessageResponse
 #include "net/RemoteDesktopProtocolClient.h" // net::RDInviteResponse / RDInviteNotify / RDRelayInfo / RDStateNotify
 #include "net/CallProtocolClient.h"          // net::CallInviteResponse / CallInviteNotify / CallSignalingInfo / CallStateNotify
+#include "net/FolderProtocolClient.h"        // net::FolderInviteResponse / FolderInviteNotify / FolderSessionResponse / FolderStateNotify / FolderRelayInfo
+#include "FolderTransfer/FolderTransferManager.h" // foldertransfer::FolderTransferManager（文件夹传输会话生命周期）
 #include "RemoteDesktop/RdRelaySelfTest.h"   // remotedesktop::RunRdRelaySelfTest（--rdrelayselftest 调试入口）
 #include "Call/CallMediaSession.h"           // call::CallMediaSession（接通后中转会话）/ call::CallRelayEvent
 #include "Call/CallRelaySelfTest.h"          // call::RunCallRelaySelfTest（--callrelayselftest 调试入口）
@@ -33,6 +35,7 @@
 #include "net/GroupFileProtocolClient.h"    // net::GetGroupFilesResult / GroupFilesChangedNotify
 #include "net/AnnounceProtocolClient.h"     // net::AnnouncementsResult / AnnouncementNotify / AnnounceMarkReadResult（平台公告 = 消息盒子）
 #include "net/FriendProtocolClient.h"       // net::SetFriendRemarkResult（设置好友备注名应答）
+#include "net/ContactTagProtocolClient.h"   // net::SetContactTagsResult（设置联系人标签应答）
 #include "net/StarredProtocolClient.h"      // net::SetStarredResult（「特别关注」设置应答）
 #include "net/FileTransfer.h"               // net::GroupFileUploadResult / GroupFileDownloadResult
 #include "net/AccountProtocolClient.h"      // net::ChangePasswordResponse
@@ -40,7 +43,6 @@
 #include "net/ImageTransfer.h"              // net::ImageSendProgress / net::ImageSendResult
 #include "net/FileTransfer.h"               // net::FileSendProgress / net::FileSendResult / net::FileDownload*
 #include "SystemSettingDlg.h"
-#include "ClosePromptDlg.h"
 #include "IULog.h"
 #include "MobileStatusDlg.h"
 #include "UserSessionData.h"
@@ -80,7 +82,7 @@
 #include "BalloonMain/KickoutNotice.h"                     // GetKickoutNoticeTitle / Text（被踢下线的提示文案）
 #include "BalloonMain/BalloonKickoutDlg.h"                  // CBalloonKickoutDlg（贴托盘弹出的被踢下线模态提示框）
 #include "BalloonMain/PopupMenuPlacement.h"                // ClampPopupMenuToWorkArea（保证菜单在桌面内）
-#include "../balloonui/balloonui/Controls/List/DuiMenu.h"  // balloonui 弹出菜单（重建托盘右键菜单）
+#include "../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"  // balloonui 弹出菜单（重建托盘右键菜单）
 
 #pragma comment(lib, "winmm.lib")
 
@@ -95,6 +97,10 @@ extern HWND g_hwndOwner;
 //"无操作自动离开"的轮询间隔（毫秒）。最短的可选阈值是 5 分钟，30 秒一跳足够 ——
 //最坏情况比设定时刻晚半分钟切过去，用户无感；跳得再密只是白耗电。
 #define AUTOAWAY_POLL_INTERVAL_MS 30000
+
+//自动登录期间托盘图标动画的换帧间隔（毫秒）。六帧循环播放，200 毫秒一帧，
+//整轮 1.2 秒 —— 快到能看出"正在忙"，又不至于闪得刺眼。
+#define LOGIN_ICON_ANIM_INTERVAL_MS 200
 
 //好友项信息浮动窗口宽和高
 #define BUDDYINFOFLOATWND_WIDTH   300
@@ -396,9 +402,24 @@ BOOL CMainDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
                                    "3. 优化了文件传输的断点续传逻辑，弱网下更稳定；\r\n"
                                    "4. 修复若干已知问题。";
             mock.m_forced = (::_tcsstr(::GetCommandLine(), _T("--forced")) != NULL);
+
+            //--emptynote：把更新说明置空，用来复现"发布时没填说明"那条路径 ——
+            //说明区整块隐藏后，下面各控件的位置会变，容易暴露重排相关的问题。
+            if (::_tcsstr(::GetCommandLine(), _T("--emptynote")) != NULL)
+            {
+                mock.m_releaseNote.clear();
+            }
         }
 
         CBalloonUpdateWindow::GetInstance().ShowResult(mock);
+
+        //再带 --progress 时用假数据把下载进度演一遍，便于目检进度条与进度文字。
+        //走的是与真实下载相同的消息通路，观感一致。
+        if (::_tcsstr(::GetCommandLine(), _T("--progress")) != NULL && mock.m_packageUsable)
+        {
+            CBalloonUpdateWindow::GetInstance().StartMockProgress(mock.m_size);
+        }
+
         ShowWindow(SW_HIDE);
         return TRUE;
     }
@@ -447,6 +468,25 @@ BOOL CMainDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
         seed.pinned      = true;
         // 调试入口无宿主主面板：pHost 传 NULL，开关 / 退群退化为直接发协议、不更新缓存。
         m_BalloonGroupInfoDlg.OpenForGroup(m_hWnd, &m_FMGClient, NULL, seed);
+        ShowWindow(SW_HIDE);
+        return TRUE;
+    }
+    // 调试入口：命令行带 --rddlg 时跳过登录，直接弹出远程桌面会话提示对话框（假数据），
+    // 便于核对它贴桌面右下角的落点、置顶效果与标题栏按钮，不必真的发起一次远程桌面。
+    // 默认弹被控端那一路（"XXX 请求远程控制你的电脑"，拒绝 / 接受两个按钮）；
+    // 再带 --calling 则弹发起方那一路（"正在呼叫 XXX…"，只有取消按钮）。
+    // 两路的显示收尾都走 ShowAtWorkAreaCorner，位置与置顶行为一致。
+    if (::_tcsstr(::GetCommandLine(), _T("--rddlg")) != NULL)
+    {
+        const bool bCalling = (::_tcsstr(::GetCommandLine(), _T("--calling")) != NULL);
+        if (bCalling)
+        {
+            m_rdDlg.OpenCalling(m_hWnd, _T("林知夏"), 700002);
+        }
+        else
+        {
+            m_rdDlg.OpenAuth(m_hWnd, _T("林知夏"), std::string("mock-rd-session"), 700002);
+        }
         ShowWindow(SW_HIDE);
         return TRUE;
     }
@@ -930,28 +970,17 @@ void CMainDlg::OnHotKey(int nHotKeyID, UINT uModifiers, UINT uVirtKey)
 
 void CMainDlg::OnClose()
 {
-    if (m_FMGClient.m_UserConfig.IsEnableExitPrompt())
-    {
-        CClosePromptDlg closePromptDlg;
-        closePromptDlg.m_pFMGClient = &m_FMGClient;
-        int nRet = closePromptDlg.DoModal(m_hWnd, NULL);
-
-        if (nRet == IDC_EXIT)
-        {
-            CloseDialog(IDOK);
-        }
-        else if (nRet == IDC_MINIMIZE)
-        {
-            ShowWindow(SW_HIDE);
-        }
-    }
-    else
-    {
-        if (m_FMGClient.m_UserConfig.IsEnableExitWhenCloseMainDlg())
-            CloseDialog(IDOK);
-        else
-            ShowWindow(SW_HIDE);
-    }
+    //本窗口是常态隐藏的消息中枢，用户看不见它，正常流程里也没有任何代码给它发
+    //WM_CLOSE —— 主面板点关闭走的是自己的关闭确认框（CBalloonClosePromptDlg），
+    //决定退出时投的是 WM_CLOSE_MAINDLG。所以走到这里只剩系统关机、任务管理器
+    //「结束任务」这类外部来源，此时直接退出即可。
+    //
+    //这里原先会弹「退出程序还是最小化到托盘？」（老的 CClosePromptDlg，SkinLib 版），
+    //已于 2026-08-12 连同那个类一起删除：对一个不可见的窗口问"要不要最小化"本就说不通，
+    //而且它真弹出来过一次 —— 升级流程曾用 WM_CLOSE 请本窗口退出，结果被这个框拦住，
+    //更新器等不到主进程退出、30 秒后放弃，升级白做一场。升级现在走
+    //FMG_MSG_EXIT_FOR_UPDATE，与本函数无关，但这个框留着迟早还会绊到别人。
+    CloseDialog(IDOK);
 }
 
 void CMainDlg::OnDestroy()
@@ -1142,6 +1171,11 @@ bool CMainDlg::StartLogin(BOOL bAutoLogin/* = FALSE*/)
             return true;
 
         m_LoginDlg.SetLoginAccountInfo(&m_stAccountInfo);
+
+        //置"登录中"必须在真正发起登录之前，理由见下面手动登录分支里的说明。
+        //自动登录这条路本身没有时序问题（DoLogin 起线程即返回，结果稍后才到），
+        //提前置位只是让两条路的写法一致。
+        m_nMainPanelStatus = MAINPANEL_STATUS_LOGINING;
         m_LoginDlg.DoLogin();
     }
     else
@@ -1158,6 +1192,18 @@ bool CMainDlg::StartLogin(BOOL bAutoLogin/* = FALSE*/)
         m_LoginDlg.m_pLoginAccountList = &m_LoginAccountList;
         m_LoginDlg.SetDefaultAccount(m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
         m_LoginDlg.SetDefaultPassword(m_FMGClient.m_UserMgr.m_UserInfo.m_strPassword.c_str());
+
+        //置"登录中"必须在 DoModal 之前。登录窗是模态的，且登录期间不关窗，登录结果是
+        //在它的模态消息循环内部派发到 OnLoginResult 的，那里已经把状态推进到
+        //MAINPANEL_STATUS_LOGIN；若等 DoModal 返回之后再置一次"登录中"，就把登录成功
+        //的状态盖了回去，此后 m_nMainPanelStatus 一直停在"登录中"。凡是以
+        //"m_bAlreadyLogin && m_nMainPanelStatus == MAINPANEL_STATUS_LOGIN" 为条件的分支
+        //都会走错，2026-08-14 实测到两处后果：切换到离开 / 忙碌时不发 cmd_change_presence
+        //而是误走"从离线恢复在线"分支、托盘图标也不刷新（徽标出不来）；
+        //"无操作自动离开"因判定为连接未就绪而永不触发。
+        //没有任何代码判断 MAINPANEL_STATUS_LOGINING 本身，故提前置位不影响其它逻辑。
+        m_nMainPanelStatus = MAINPANEL_STATUS_LOGINING;
+
         if (m_LoginDlg.DoModal(g_hwndOwner) != IDOK)	// 显示登录对话框
         {
             CloseDialog(IDOK);
@@ -1166,13 +1212,27 @@ bool CMainDlg::StartLogin(BOOL bAutoLogin/* = FALSE*/)
         m_LoginDlg.GetLoginAccountInfo(&m_stAccountInfo);
     }
 
-    m_nMainPanelStatus = MAINPANEL_STATUS_LOGINING;
-
     // PR7: 不再显示旧的 "正在登录" 进度面板。CMainDlg 主窗口始终隐藏。
-    // 服务器响应到达前的短暂中间态由托盘图标动画 (m_dwLoginTimerId) 提示。
-
-    LoadLoginIcon();
-    m_dwLoginTimerId = SetTimer(LOGIN_TIMER_ID, 200, NULL);
+    //
+    //托盘图标的登录动画只在自动登录这条路上启动，原因是两条路的时序不同：
+    //  自动登录：上面的 DoLogin 起一个后台线程就返回，登录结果稍后经消息队列
+    //            投递到 OnLoginResult，那里的 KillTimer 能正常停掉动画。
+    //  手动登录：登录窗是模态的，且登录期间不关窗，登录结果是在 DoModal 的模态
+    //            消息循环内部派发到 OnLoginResult 的（见该函数里的详细说明）。
+    //            结果到达时本函数还停在 DoModal 那一行，动画尚未启动，
+    //            OnLoginResult 里的 KillTimer 因而杀了个空；等 DoModal 返回、
+    //            执行到这里，动画反倒在登录成功之后才开始，并且再没有人停它。
+    //            表现为登录成功后托盘图标持续闪烁 —— Loading_1/3/5.ico 与
+    //            imonline.ico 是同一张图，Loading_2/4/6.ico 与 offline.ico 是
+    //            同一张图，所以看上去就是在线与离线两个图标每 200 毫秒交替。
+    //            手动登录本来就有登录窗自己显示"登录中"，托盘无须重复提示。
+    if (bAutoLogin)
+    {
+        LoadLoginIcon();
+        m_dwLoginTimerId = SetTimer(LOGIN_TIMER_ID, LOGIN_ICON_ANIM_INTERVAL_MS, NULL);
+        LOG_INFO("MainDlg::StartLogin: auto-login, tray login animation started, timerId=%u.",
+                 (unsigned)m_dwLoginTimerId);
+    }
 
     m_FMGClient.SetUser(m_stAccountInfo.szUser, m_stAccountInfo.szPwd);
 
@@ -1556,6 +1616,53 @@ LRESULT CMainDlg::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
         return 0;
     }
 
+    //本次结果是不是登录窗那条路发起的。判据是「登录窗还开着吗」而不是「它正在
+    //登录中吗」：用户点过「取消登录」之后阶段已回到空闲，可后台线程仍会在几秒后
+    //把结果投回来，那条迟到的结果照样属于登录窗，该由它按轮次号丢弃。若在这里
+    //按「不归登录窗管」放行，它就会落进下面的「弹 MessageBox + StartLogin」，
+    //而登录窗此刻还活着，StartLogin 再 Create 一次即撞 ATL 的 m_hWnd == 0 断言。
+    //
+    //「从离线恢复在线」那条路不经登录窗（主面板还开着、根本没有登录窗），
+    //IsLoginWindowActive 为假，自然落到下面原有的处理里，行为不变。
+    if (m_LoginDlg.IsLoginWindowActive())
+    {
+        //本消息的 lParam 是结果码（函数开头已取走），wParam 是登录轮次号 ——
+        //都是 CFlamingoClient::OnLoginResult 从 CLoginResult 里拆出来转发的，
+        //那个对象在转发之后立即被释放，所以这里<u>拿不到也不该去碰</u>它的指针。
+        const uint32_t uGeneration = (uint32_t)wParam;
+
+        if (!m_LoginDlg.OnLoginResultArrived(nCode, uGeneration))
+        {
+            //过期结果：登录窗已经丢弃它，这里也不能再动主面板状态与托盘图标
+            LOG_INFO("MainDlg::OnLoginResult: stale result discarded by the login window.");
+            return 0;
+        }
+
+        //登录失败已由登录窗就地显示，不再弹 MessageBox、也不再重建登录窗。
+        //把状态复位后返回，下面那套「弹窗 + StartLogin」不再执行。
+        if (nCode != LOGIN_SUCCESS)
+        {
+            KillTimer(m_dwLoginTimerId);
+            m_dwLoginTimerId = NULL;
+            LoadAppIcon(GetConnectionUiState());
+            m_bResumingOnline = false;
+            m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
+            return 0;
+        }
+
+        //登录成功：先把登录窗采集到的账号 / 密码 / 勾选项取回来，再关窗。
+        //
+        //这一步<u>必须</u>在这里做，不能只依赖 StartLogin 里 DoModal 返回之后的那次
+        //GetLoginAccountInfo。登录窗改成「登录期间不关窗」之后，登录结果是在模态
+        //消息循环<u>内部</u>派发到本函数的，此刻 DoModal 尚未返回，StartLogin 那行
+        //还没执行到，m_stAccountInfo 仍是上一轮的值（本进程首次登录时为全零）。
+        //下面保存历史账号一段直接用 m_stAccountInfo.szUser，取不到账号就会往
+        //LoginAccountList.dat 里追加一条用户名为空的记录，并把它设成最后登录账号；
+        //下次启动登录窗便预填出一个空账号。2026-08-13 实测踩过一次。
+        m_LoginDlg.GetLoginAccountInfo(&m_stAccountInfo);
+        m_LoginDlg.CloseAfterLoginSuccess();
+    }
+
     KillTimer(m_dwLoginTimerId);
     m_dwLoginTimerId = NULL;
 
@@ -1684,6 +1791,19 @@ LRESULT CMainDlg::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
         {
             update::UpdateManager::GetInstance().SetNotifyTarget(m_hWnd);
         }
+
+        // 文件夹传输管理器的回投目标登记成<u>代理窗口</u>，而不是主窗口：它自己的工作
+        // 线程投出来的进度 / 结果，要和网络层投来的那五条信令走同一条「代理窗 → 主窗口
+        // → 主面板 → 聊天窗」通路，两路混投到不同起点只会让排查时多一种可能性。
+        // 上一次登录残留的会话与保留期计时在这里一并作废 —— 按产品定稿，重试窗口只在
+        // 本次登录期间有效。
+        foldertransfer::FolderTransferManager::GetInstance().Reset();
+        foldertransfer::FolderTransferManager::GetInstance().SetNotifyTarget(
+            m_FMGClient.m_UserMgr.m_hProxyWnd);
+        // 本机同时可进行几笔文件夹传输由 flamingo.ini 的 [app] foldermaxconcurrent 决定
+        // （默认 5，发送与接收各算一笔）。每次登录都重读一次，改了配置重新登录即生效；
+        // 缺失或取值非法时管理器自行回落默认值并记一条日志。
+        foldertransfer::FolderTransferManager::GetInstance().LoadConfig();
         {
             CIniFile iniFile;
             CString strIniPath(g_szHomePath);
@@ -1876,8 +1996,30 @@ LRESULT CMainDlg::OnSilentUpdateResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM 
     //都只留日志——用户并没有主动要求检查，弹个"已是最新"或"检查失败"纯属打扰。
     if (pResult->m_hasUpdate && pResult->m_packageUsable)
     {
+        CBalloonUpdateWindow& w = CBalloonUpdateWindow::GetInstance();
+
+        //用户在点击登录那一步已经看过这个版本并选了「稍后」：不再弹第二次。
+        //点登录时查一次、登录成功后又静默查一次，两次拿到的是同一个版本，不拦的话
+        //用户刚关掉的窗立刻又冒出来。强制升级不受此限 —— 它没有「稍后」可点。
+        if (!pResult->m_forced && w.IsVersionPostponed(pResult->m_latestVersion))
+        {
+            LOG_INFO("MainDlg::OnSilentUpdateResult: 版本 %s 用户已选稍后，不再提示。",
+                     pResult->m_latestVersion.c_str());
+            delete pResult;
+            return 0;
+        }
+
+        //强制升级时把主面板一并禁用，直到升级完成 —— 否则用户把升级窗晾在一边照常
+        //聊天，"强制"就名不副实了。非强制不禁用：那只是个提示，不该妨碍人干活。
+        if (pResult->m_forced && m_BalloonMainPanel.IsWindow())
+        {
+            //主面板这边没有待续的登录，关窗只需恢复可用
+            w.SetGatedWindow(m_BalloonMainPanel.m_hWnd,
+                             CBalloonUpdateWindow::kGatedMainPanel);
+        }
+
         //ShowResult 内部会把消息投递目标改登记为升级窗自己，后续下载进度直接投给它。
-        CBalloonUpdateWindow::GetInstance().ShowResult(*pResult);
+        w.ShowResult(*pResult);
     }
 
     delete pResult;
@@ -2313,6 +2455,12 @@ void CMainDlg::ReturnToLoginWindow(int exitKind, int kickoutReason)
     //（收线程见 IsClosed 就短睡，发线程阻塞在条件变量上），下次登录 Connect 成功后
     //它们照常接着干活，与"掉线 / 主动离线后再上线"走的是同一条路。
     m_FMGClient.GoOffline();
+
+    //文件夹传输的会话、清单与断点续传进度都只在本次登录期间有效，登出 / 被踢下线时
+    //一并作废：停掉还在跑的收发状态机、回收其工作线程，再清空重试保留期。放在关子窗口
+    //之前做 —— 状态机的进度回调是投给代理窗口再转到聊天窗的，窗口先没了会白投一轮。
+    foldertransfer::FolderTransferManager::GetInstance().Reset();
+
     CloseAllDlg();
 
     //销毁主面板，避免它残留在屏幕上。下面 StartLogin 重新走登录流程，登录成功后由
@@ -2724,6 +2872,28 @@ LRESULT CMainDlg::OnV2SetRemarkResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM l
     if (m_BalloonMainPanel.IsWindow())
     {
         m_BalloonMainPanel.OnSetFriendRemarkResult(*pResult);
+    }
+
+    delete pResult;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2SetTagsResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    net::SetContactTagsResult* pResult = (net::SetContactTagsResult*)lParam;
+    if (pResult == NULL)
+    {
+        return 0;
+    }
+
+    //标签可能含用户隐私，日志只记结果码、目标与条数，不记内容。
+    LOG_INFO("MainDlg::OnV2SetTagsResult: code=%d, userid=%lld, tagcount=%d.",
+        pResult->m_code, (long long)pResult->m_userid, (int)pResult->m_tags.size());
+
+    //转交主面板：它拿应答回带的列表覆盖本地缓存并刷新资料窗。
+    if (m_BalloonMainPanel.IsWindow())
+    {
+        m_BalloonMainPanel.OnSetContactTagsResult(*pResult);
     }
 
     delete pResult;
@@ -3558,6 +3728,172 @@ LRESULT CMainDlg::OnV2FileTransferAck(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM l
              (long long)pNotify->m_msgid, pNotify->m_state);
     m_BalloonMainPanel.OnFileTransferAck(*pNotify);
     delete pNotify;
+    return 0;
+}
+
+// =======================================================================
+// v2 单聊文件夹传输（cmd_folder_* 1810~1817）
+//
+// 每个处理器都做同样的三件事，顺序固定不可颠倒：
+//   1. 先交 foldertransfer::FolderTransferManager 处理会话生命周期（记会话 id、起 /
+//      停状态机、发后续信令）——界面能显示什么，取决于管理器判定的结果；
+//   2. 再交主面板路由到对应聊天窗，更新那条文件夹气泡；
+//   3. 最后 delete 堆负载。
+// =======================================================================
+
+LRESULT CMainDlg::OnV2FolderInviteAck(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam)
+{
+    //wParam 为本次邀请请求所用的帧 seq，lParam 为堆分配的 net::FolderInviteResponse，
+    //处理后须 delete。
+    net::FolderInviteResponse* pResp = (net::FolderInviteResponse*)lParam;
+    if (pResp == NULL)
+        return 0;
+
+    //管理器按帧 seq 找到发起这笔邀请的那一条记录（应答包体里没有任何可对回的字段，而本机
+    //可能有多笔传输同时在等应答），据应答记下服务端分配的会话 id（成功）或就地放开名额
+    //（失败），并回填一份"界面要用的定位信息"——气泡此刻还挂着本地占位 id，得靠它换成
+    //真会话 id。
+    foldertransfer::FolderBindNotice bind;
+    foldertransfer::FolderTransferManager::GetInstance().OnInviteAck(
+        (uint32_t)wParam, *pResp, bind);
+    m_BalloonMainPanel.OnFolderBound(bind);
+
+    delete pResp;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2FolderInviteNotify(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 net::FolderInviteNotify，处理后须 delete。
+    net::FolderInviteNotify* pNotify = (net::FolderInviteNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+
+    //本机已有一笔文件夹传输在跑时管理器会就地回一个拒绝并返回 false，此时不必出气泡——
+    //出了反而让用户以为还能点「接收」。
+    if (foldertransfer::FolderTransferManager::GetInstance().OnInviteNotify(*pNotify))
+    {
+        LOG_INFO("Route folder invite to chat window, session=%s, from=%lld.",
+                 pNotify->m_sessionId.c_str(), (long long)pNotify->m_fromId);
+        m_BalloonMainPanel.OnFolderInviteNotify(*pNotify);
+    }
+
+    delete pNotify;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2FolderSessionAck(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam)
+{
+    //wParam 为发出的那条命令的协议号（1812 / 1813 / 1814 / 1817），
+    //lParam 为堆分配的 net::FolderSessionResponse，处理后须 delete。
+    net::FolderSessionResponse* pResp = (net::FolderSessionResponse*)lParam;
+    if (pResp == NULL)
+        return 0;
+
+    foldertransfer::FolderTransferManager::GetInstance().OnSessionAck((int)wParam, *pResp);
+
+    delete pResp;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2FolderStateNotify(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 net::FolderStateNotify，处理后须 delete。
+    net::FolderStateNotify* pNotify = (net::FolderStateNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+
+    foldertransfer::FolderTransferManager::GetInstance().OnStateNotify(*pNotify);
+    m_BalloonMainPanel.OnFolderStateNotify(*pNotify);
+
+    delete pNotify;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2FolderRelayInfo(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 net::FolderRelayInfo，处理后须 delete。
+    net::FolderRelayInfo* pInfo = (net::FolderRelayInfo*)lParam;
+    if (pInfo == NULL)
+        return 0;
+
+    //中转参数一到就建通道开传，界面上气泡随之转成「传输中」。
+    foldertransfer::FolderTransferManager::GetInstance().OnRelayInfo(*pInfo);
+    m_BalloonMainPanel.OnFolderTransferStarted(pInfo->m_sessionId);
+
+    delete pInfo;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2FolderScanned(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 foldertransfer::FolderScanNotice，处理后须 delete。
+    foldertransfer::FolderScanNotice* pNotice = (foldertransfer::FolderScanNotice*)lParam;
+    if (pNotice == NULL)
+        return 0;
+
+    //扫描是本端自己的事，管理器已经在工作线程上处理完了（失败时也已放开名额），
+    //这里只负责把结果画到气泡上。
+    m_BalloonMainPanel.OnFolderScanned(*pNotice);
+
+    delete pNotice;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2FolderSendProgress(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 foldertransfer::FolderProgressNotice，处理后须 delete。
+    foldertransfer::FolderProgressNotice* pProg = (foldertransfer::FolderProgressNotice*)lParam;
+    if (pProg == NULL)
+        return 0;
+
+    m_BalloonMainPanel.OnFolderProgress(*pProg);
+
+    delete pProg;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2FolderSendResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 foldertransfer::FolderResultNotice，处理后须 delete。
+    foldertransfer::FolderResultNotice* pResult = (foldertransfer::FolderResultNotice*)lParam;
+    if (pResult == NULL)
+        return 0;
+
+    //收尾必须在 UI 线程做：FinishSend 内部要等状态机的工作线程退出，在状态机自己的
+    //回调线程里调等于让它 join 自己（见 IFolderSendSessionHandler 的注释）。
+    foldertransfer::FolderTransferManager::GetInstance().FinishSend(*pResult);
+    m_BalloonMainPanel.OnFolderResult(*pResult);
+
+    delete pResult;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2FolderRecvProgress(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 foldertransfer::FolderProgressNotice，处理后须 delete。
+    foldertransfer::FolderProgressNotice* pProg = (foldertransfer::FolderProgressNotice*)lParam;
+    if (pProg == NULL)
+        return 0;
+
+    m_BalloonMainPanel.OnFolderProgress(*pProg);
+
+    delete pProg;
+    return 0;
+}
+
+LRESULT CMainDlg::OnV2FolderRecvResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为堆分配的 foldertransfer::FolderResultNotice，处理后须 delete。
+    foldertransfer::FolderResultNotice* pResult = (foldertransfer::FolderResultNotice*)lParam;
+    if (pResult == NULL)
+        return 0;
+
+    //理由同 OnV2FolderSendResult：FinishRecv 会等接收会话的工作线程退出。
+    foldertransfer::FolderTransferManager::GetInstance().FinishRecv(*pResult);
+    m_BalloonMainPanel.OnFolderResult(*pResult);
+
+    delete pResult;
     return 0;
 }
 
@@ -5372,12 +5708,39 @@ BOOL CMainDlg::LoadAppIcon(int nConnUiState)
     tstring strFileName = Hootina::CPath::GetAppPath() + _T("Image\\");
     strFileName += balloonmain::GetTrayIconFileName(nConnUiState);
 
+    const int nIconSize = ::GetSystemMetrics(SM_CXSMICON);
     m_hAppIcon = AtlLoadIconImage(strFileName.c_str(), LR_DEFAULTCOLOR | LR_LOADFROMFILE,
-        ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
+        nIconSize, ::GetSystemMetrics(SM_CYSMICON));
     if (m_hAppIcon == NULL)
     {
-        LOG_ERROR(_T("加载托盘图标失败：%s"), strFileName.c_str());
+        //格式串用窄字符（日志文件编码统一），路径是宽字符，故占位符写 %ls
+        LOG_ERROR("MainDlg::LoadAppIcon: failed to load tray icon file: %ls.",
+                  strFileName.c_str());
         return FALSE;
+    }
+
+    // 离开 / 忙碌在底图右下角叠一枚状态徽标 —— 这两个状态与在线共用同一张彩色底图，
+    // 不叠加的话托盘上根本看不出自己正处于哪个状态。叠不叠、叠哪个由
+    // GetTrayOverlayPresence 判定（在线不叠、离线与连接未就绪不叠）。
+    const int nPresence = GetCurrentPresence();
+    const int nOverlay = balloonmain::GetTrayOverlayPresence(nPresence, nConnUiState);
+    LOG_INFO("MainDlg::LoadAppIcon: connUiState=%d, presence=%d, overlay=%d "
+             "(-1 = no badge).", nConnUiState, nPresence, nOverlay);
+    if (nOverlay != balloonmain::kNoTrayOverlay)
+    {
+        HICON hOverlaid = balloonmain::MakePresenceOverlayIcon(m_hAppIcon, nOverlay, nIconSize);
+        if (hOverlaid != NULL)
+        {
+            // 合成成功才换手：合成失败（GDI 资源不足等）就照常用底图，
+            // 托盘少一枚徽标总好过没有图标。
+            ::DestroyIcon(m_hAppIcon);
+            m_hAppIcon = hOverlaid;
+        }
+        else
+        {
+            LOG_WARNING("MainDlg::LoadAppIcon: failed to compose presence badge, "
+                        "falling back to the plain icon. presence=%d.", nOverlay);
+        }
     }
     return TRUE;
 }

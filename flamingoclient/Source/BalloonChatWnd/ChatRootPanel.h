@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
 
 namespace balloonchatwnd {
 

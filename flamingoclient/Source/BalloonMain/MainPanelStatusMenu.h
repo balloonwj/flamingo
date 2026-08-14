@@ -7,8 +7,8 @@
  *  既便于被 FlamingoUnit 测试工程直接断言，又能被胶囊控件（MainPanelHeader）与
  *  弹出逻辑（CBalloonMainPanel::ShowStatusMenu）共用同一份"状态→视觉"映射。
  *
- *  设计稿：design/主面板状态菜单.png —— 在线 / 离开 / 勿扰 / 隐身 / 离线，各带一个
- *  彩色圆点。按需求<u>去掉"隐身"</u>，故本模型只产出 4 项：在线 / 离开 / 勿扰 / 离线。
+ *  设计稿：design/主面板状态菜单.png —— 在线 / 离开 / 勿扰 / 离线，各带一个
+ *  彩色圆点。本产品不提供隐身功能，故本模型只产出 4 项：在线 / 离开 / 勿扰 / 离线。
  *
  *  在线状态取值采用 v2 协议的 presence_type（见 net/Protocol.h），<u>不要</u>混用
  *  net/IUProtocolData.h 里的 v1 ONLINE_STATUS（两套枚举的 away/invisible 值是反的）。
@@ -81,13 +81,13 @@ struct PresenceVisual
 
 /**
  *  构造状态菜单的行模型 —— 按设计稿顺序返回 4 行：在线 / 离开 / 勿扰 / 离线
- *  （<u>不含隐身</u>）。纯函数、无副作用、不创建窗口；调用方（ShowStatusMenu）据此
+ *  （共四项）。纯函数、无副作用、不创建窗口；调用方（ShowStatusMenu）据此
  *  逐行喂给 DuiMenu，圆点图标用 iconKind + dotColor 渲染。
  *
  *    currentPresence：用户当前所处的在线状态（v2 presence_type）。与之相符的那一行
  *                     被标记为当前项（isCurrent = true、文字带"（当前）"后缀，
  *                     渲染期再给徽标套一圈外环）。取值先经 NormalizePresenceForMenu 归一，
- *                     故隐身 / 越界值会落到"离线"行上，与胶囊的显示保持一致。
+ *                     故越界值会落到"离线"行上，与胶囊的显示保持一致。
  *
  *  返回：行模型 vector（值语义，调用方拥有）。label 指向静态常量串，进程级生命周期。
  */
@@ -108,10 +108,10 @@ std::vector<StatusMenuEntry> BuildLoginStatusMenuModel(int currentPresence);
 /**
  *  把任意在线状态取值归一到状态菜单能表达的 4 种之一（在线 / 离开 / 忙碌 / 离线）。
  *
- *    presence：任意 v2 在线状态取值，含隐身与越界值。
+ *    presence：任意 v2 在线状态取值，含越界值。
  *
  *  返回：presence_online / presence_away / presence_busy / presence_offline 之一。
- *        隐身与一切未知取值统一归到 presence_offline —— 与 GetPresenceVisual 既有的
+ *        一切未知取值统一归到 presence_offline —— 与 GetPresenceVisual 既有的
  *        兜底约定一致，保证"胶囊显示离线"和"菜单里离线项被标记"不会互相矛盾。
  */
 int NormalizePresenceForMenu(int presence);
@@ -131,12 +131,12 @@ const wchar_t* GetPresenceMenuLabel(int presence, bool isCurrent);
  *  取某个在线状态在胶囊上的视觉表达（文字 + 圆点色）。
  *
  *    presence：v2 在线状态（presence_type）。在线 / 离开 / 勿扰 / 离线分别映射到
- *              绿 / 橙 / 红 / 灰；其它取值（含不可由本菜单选中的"隐身"）一律退化为
+ *              绿 / 橙 / 红 / 灰；其它取值（含本菜单不可选中的越界值）一律退化为
  *              "离线"灰点 —— 正常流程不会出现，仅作兜底。
  *
  *  注意：颜色只是<u>辅助</u>通道。四个状态真正的区分靠字形（在线实心圆 / 离开时钟 /
  *  忙碌横杠 / 离线空心环），取字形请用 PresenceBadge.h 的 GetPresenceBadgeIconKind，
- *  两者的兜底口径一致（隐身与越界值都落到"离线"）。
+ *  两者的兜底口径一致（越界值都落到"离线"）。
  *
  *  返回：对应的 PresenceVisual；text 指向静态常量串，进程级生命周期。
  */

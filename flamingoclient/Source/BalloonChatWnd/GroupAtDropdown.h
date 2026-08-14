@@ -25,8 +25,8 @@
 #include <vector>
 #include <string>
 
-#include "../../balloonui/balloonui/DuiHost.h"
-#include "../../balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 
 namespace balloonwjui { class DuiListBox; }
 

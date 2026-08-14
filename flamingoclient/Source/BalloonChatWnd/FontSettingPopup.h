@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Feedback/DuiPopupHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiPopupHost.h"
 #include "../net/MessageProtocolClient.h"   // net::TextFont
 
 // 与 CEmojiPickerPopup 等 C 前缀窗口类一致，置于全局命名空间（便于聊天窗作为

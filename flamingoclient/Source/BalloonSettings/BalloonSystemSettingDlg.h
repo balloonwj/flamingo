@@ -20,8 +20,8 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
-#include "../../balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 #include "BalloonCacheCleanDlg.h"   // m_cacheCleanDlg 按值持有，需完整类型
 
 #include <vector>
@@ -54,17 +54,12 @@ public:
 
     BEGIN_MSG_MAP(CBalloonSystemSettingDlg)
         MESSAGE_HANDLER(WM_CLOSE, OnCloseMsg)
-        MESSAGE_HANDLER(WM_TIMER, OnTimerMsg)
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
         CHAIN_MSG_MAP(balloonwjui::DuiFrameWindow)
     END_MSG_MAP()
 
 private:
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
-    // 动画 pulse 定时器：周期性驱动 DuiAnimMgr::TickAll，让开关等动画控件的滑动中间帧
-    // 真正推进（否则开关点了不动，详见 .cpp 顶部 kAnimTickTimerId 注释）。非本定时器
-    // 的 WM_TIMER 放行 chain，交给 DuiFrameWindow / 其它处理。
-    LRESULT OnTimerMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnDuiNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     // 构建一次静态骨架（左导航 + 右内容区 7 个分页）。

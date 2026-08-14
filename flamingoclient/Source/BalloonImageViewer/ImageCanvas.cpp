@@ -19,7 +19,7 @@
 #include "ImageCanvas.h"
 #include "ImageViewerToolbar.h"
 #include "ImageViewerGeometry.h"
-#include "../../balloonui/balloonui/DuiHost.h"
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"
 
 namespace balloonimageviewer {
 

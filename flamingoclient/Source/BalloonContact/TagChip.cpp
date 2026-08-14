@@ -210,17 +210,16 @@ bool TagChip::OnLButtonDown(POINT /*pt*/, UINT /*mkFlags*/)
 
 bool TagChip::OnLButtonUp(POINT pt, UINT /*mkFlags*/)
 {
-    // 只有点在「×」热区内才视为"删除本标签"。
+    // 落点决定语义：右侧「×」热区内是删除，其余（即左侧文字区）是就地编辑。
+    // 两种意图在通知层就分开，父窗口不必再重算一次落点。
     RECT zone = DeleteZoneRect();
     if (::PtInRect(&zone, pt))
     {
-        // 向父窗口冒 DUIN_CLICK —— 父窗口据本控件 ctrlId 删除对应标签。
-        // DUIN_CLICK 定义在 balloonwjui 命名空间，本文件在 ballooncontact
-        // 命名空间下，须显式限定。
-        NotifyParent(balloonwjui::DUIN_CLICK);
+        NotifyParent((UINT)DUIN_TAGCHIP_DELETE);
         return true;
     }
-    // 点在文字区：不发通知，但仍消费事件（胶囊整体没有其它点击语义）。
+
+    NotifyParent((UINT)DUIN_TAGCHIP_EDIT);
     return true;
 }
 

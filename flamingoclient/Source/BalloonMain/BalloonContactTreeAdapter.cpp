@@ -62,8 +62,6 @@ COLORREF BalloonContactTreeAdapter::BuddyStatusColor(long status)
         return RGB(0xF5, 0x9E, 0x0B);   // 离开 橙
     case STATUS_BUSY:
         return RGB(0xEF, 0x44, 0x44);   // 忙碌 红
-    case STATUS_INVISIBLE:
-        return RGB(0x94, 0xA3, 0xB8);   // 隐身 灰
     case STATUS_OFFLINE:
     default:
         return RGB(0x94, 0xA3, 0xB8);   // 离线 灰

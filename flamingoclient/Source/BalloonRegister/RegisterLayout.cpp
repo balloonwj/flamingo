@@ -57,10 +57,10 @@ extern CAppModule _Module;
 #include "RegisterLayout.h"
 #include "RegisterModel.h"
 #include "RegisterIcons.h"
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"   // 服务协议 / 隐私政策超链接（ModeLink）
-#include "../../balloonui/balloonui/DuiXmlBuilder.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"   // 服务协议 / 隐私政策超链接（ModeLink）
+#include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
 
 namespace balloonregister {
 

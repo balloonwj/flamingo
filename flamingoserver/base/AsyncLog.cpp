@@ -157,12 +157,8 @@ bool CAsyncLog::output(long nLevel, const char* pszFmt, ...)
     else
     {
         //为了让FATAL级别的日志能立即crash程序，采取同步写日志的方法
-        std::cout << strLine << std::endl;
-#ifdef _WIN32
-        OutputDebugStringA(strLine.c_str());
-        OutputDebugStringA("\n");
-#endif
-        
+        writeToConsole(strLine);
+
         if (!m_strFileName.empty())
         {
             if (m_hLogFile == nullptr)
@@ -260,11 +256,7 @@ bool CAsyncLog::output(long nLevel, const char* pszFileName, int nLineNo, const 
     else
     {
         //为了让FATAL级别的日志能立即crash程序，采取同步写日志的方法
-        std::cout << strLine << std::endl;
-#ifdef _WIN32
-        OutputDebugStringA(strLine.c_str());
-        OutputDebugStringA("\n");
-#endif
+        writeToConsole(strLine);
 
         if (!m_strFileName.empty())
         {
@@ -312,7 +304,7 @@ bool CAsyncLog::outputBinary(unsigned char* buffer, size_t size)
     size_t lsize = 0;
     size_t lprintbufsize = 0;
     int index = 0;
-    os << "address[" << (long)buffer << "] size[" << size << "] \n";
+    os << "address[" << static_cast<const void*>(buffer) << "] size[" << size << "] \n";
     while (true)
     {
         memset(szbuf, 0, sizeof(szbuf));
@@ -374,7 +366,7 @@ char* CAsyncLog::formLog(int& index, char* szbuf, size_t size_buf, unsigned char
 
             memset(szhead, 0, sizeof(szhead));
             strncpy(szhead, ullto4Str(index++), sizeof(szhead) - 1);
-            headlen = strlen(szhead);
+            headlen = static_cast<int>(strlen(szhead));
             szhead[headlen++] = ' ';
 
             strcat(szbuf, szhead);
@@ -480,13 +472,15 @@ bool CAsyncLog::writeToFile(const std::string& data)
 {
     //为了防止长文件一次性写不完，放在一个循环里面分批写
     std::string strLocal(data);
-    int ret = 0;
+    //fwrite 的返回值是 size_t，别用 int 接：x64 下会被窄化，
+    //一次写入的字节数虽然不可能超过 int，但类型该对上
+    size_t ret = 0;
     while (true)
     {
         ret = fwrite(strLocal.c_str(), 1, strLocal.length(), m_hLogFile);
-        if (ret <= 0)
+        if (ret == 0)
             return false;
-        else if (ret <= (int)strLocal.length())
+        else if (ret <= strLocal.length())
         {
             strLocal.erase(0, ret);
         }
@@ -507,6 +501,24 @@ void CAsyncLog::crash()
 {
     char* p = nullptr;
     *p = 0;
+}
+
+void CAsyncLog::writeToConsole(const std::string& strLine)
+{
+    //启用日志文件时 strLine 末尾自带一个 '\n'（写文件用的），此时不能再补换行，
+    //否则终端里每条日志之间会多空一行。未启用文件时末尾没有换行，需要自己补。
+    const bool bEndsWithNewline = !strLine.empty() && strLine[strLine.size() - 1] == '\n';
+
+    if (bEndsWithNewline)
+        std::cout << strLine << std::flush;
+    else
+        std::cout << strLine << std::endl;
+
+#ifdef _WIN32
+    OutputDebugStringA(strLine.c_str());
+    if (!bEndsWithNewline)
+        OutputDebugStringA("\n");
+#endif
 }
 
 void CAsyncLog::writeThreadProc()
@@ -567,12 +579,7 @@ void CAsyncLog::writeThreadProc()
         }
 
         
-        std::cout << strLine << std::endl;
-
-#ifdef _WIN32
-        OutputDebugStringA(strLine.c_str());
-        OutputDebugStringA("\n");
-#endif
+        writeToConsole(strLine);
 
         if (!m_strFileName.empty() && !m_bFileWriteDisabled)
         {

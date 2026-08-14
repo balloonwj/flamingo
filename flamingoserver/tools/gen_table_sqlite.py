@@ -45,6 +45,9 @@ NOCASE_COLUMNS = set([
     ('t_user', 'f_mail'),           #邮箱，找回密码与管理台按它查人
     ('t_admin', 'f_email'),         #管理台登录账号
     ('t_enterprise', 'f_name'),     #企业全称，注册时按用户填的公司名做等值匹配，且要求全局唯一
+    ('t_contact_tag', 'f_tag'),     #联系人标签，进了主键、参与唯一性判定。不加的话 UI 与 ui
+                                    #在 MySQL 侧算同一个标签（utf8_general_ci 不区分大小写）、
+                                    #在 SQLite 侧算两个，同一份数据在两个后端行为不一致
 ])
 
 #MySQL 类型到 SQLite 类型的映射规则，按顺序匹配（先匹配到的先用）。

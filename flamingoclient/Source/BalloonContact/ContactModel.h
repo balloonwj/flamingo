@@ -29,7 +29,7 @@ enum ContactStatus
     kContactStatusOnline    = 0,   // 在线：状态点绿
     kContactStatusAway      = 1,   // 离开：状态点橙（本对话框 mock 取此值）
     kContactStatusBusy      = 2,   // 勿扰：状态点红
-    kContactStatusInvisible = 3,   // 隐身：状态点灰
+    //编号 3 曾经是「隐身」，本产品不提供该功能，2026-08-13 去掉；此处留空不再复用
     kContactStatusOffline   = 4,   // 离线：不画状态点
 };
 
@@ -128,6 +128,15 @@ public:
     // 读取第 index 个标签文本。index 越界返回空 CString。
     //   index：取值 [0, TagCount())。
     CString Tag(int index) const;
+
+    // 读取整份标签列表（只读引用，生命周期同本模型对象）。窗口把它拷一份出来
+    // 交给判定函数，判定完再整份写回。
+    const std::vector<CString>& Tags() const;
+
+    // 用给定列表整份替换标签。标签的三种操作（增、改、删）在协议上都是整份
+    // 覆盖语义，故写接口也只提供"整份替换"这一个，不再逐项增删。
+    //   tags：新的完整标签列表；空列表表示这个联系人一个标签都没有。
+    void SetTags(const std::vector<CString>& tags);
 
     // 在末尾追加一个标签。空白文本（去首尾空格后为空）忽略，返回 false。
     //   tag：标签文本。

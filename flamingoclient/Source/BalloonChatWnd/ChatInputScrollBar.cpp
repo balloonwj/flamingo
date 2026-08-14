@@ -4,8 +4,8 @@
  */
 #include "stdafx.h"
 #include "ChatInputScrollBar.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiRichEditHost.h"   // 富文本输入框（RICHEDIT50W）
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEditHost.h"   // 富文本输入框（RICHEDIT50W）
 #include <commctrl.h>   // SetWindowSubclass / DefSubclassProc 等
 #include <windowsx.h>   // GET_X_LPARAM / GET_Y_LPARAM
 #include <gdiplus.h>

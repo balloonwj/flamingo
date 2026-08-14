@@ -42,15 +42,16 @@ extern CAppModule _Module;
 
 #include "AnnounceBoxLayout.h"
 #include "AnnounceRow.h"
+#include "../BalloonHistory/HistoryContentView.h"   //右栏正文控件（正文里的网址渲染成可点链接）
 //左右两栏的滚动视口都用主面板那套「悬浮式、滚动时淡入、空闲后淡出」的滚动视口，
 //观感与主面板三个列表一致，也免得再写一份一次性的滚动条（开发约定文档「UI 约定」第 1、2 条）。
 #include "../BalloonMain/MainPanelScrollView.h"
 
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiSeparator.h"
-#include "../../balloonui/balloonui/Controls/Window/DuiScrollBar.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiSeparator.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"
 
 namespace balloonannounce {
 
@@ -114,20 +115,6 @@ std::unique_ptr<DuiControl> MakeLabel(LPCTSTR text, COLORREF color, DWORD dtAlig
     return std::unique_ptr<DuiControl>(lbl.release());
 }
 
-// 造一个会把滚轮上抛给祖先滚动视口的文本标签。
-//
-// 列表行里的文字必须用这一种：DuiHost 只把滚轮投给<u>最深命中控件</u>，返回 false
-// 就丢掉、不向上冒泡（见 DuiHost::OnMouseWheel）。行里的两行字几乎铺满整行，滚轮
-// 十有八九落在它们身上，用裸 DuiLabel 的话鼠标停在列表上滚轮根本不动。
-std::unique_ptr<DuiControl> MakeWheelLabel(LPCTSTR text, COLORREF color, DWORD dtAlign)
-{
-    std::unique_ptr<AnnounceWheelLabel> lbl(new AnnounceWheelLabel());
-    lbl->SetText(text);
-    lbl->SetTextColor(color);
-    lbl->SetTextAlign(dtAlign);
-    return std::unique_ptr<DuiControl>(lbl.release());
-}
-
 // 右栏没选中任何一条公告时，正文位置显示的占位提示。
 // 建树与定点更新两条路都用它，免得两处文案对不上。
 const TCHAR* const kDetailPlaceholder = _T("从左侧选择一条公告查看详情。");
@@ -188,12 +175,14 @@ std::unique_ptr<DuiControl> MakeRow(const AnnounceRowView& row, int index, bool 
     //置顶的公告在标题前加一个标记，让它在一列里能与普通公告区分开
     //（置顶本来就排在最前，但翻到列表中段时看不出边界在哪）。
     CString titleText = row.m_pinned ? (CString(_T("[置顶] ")) + row.m_title) : row.m_title;
-    texts->AddChild(MakeWheelLabel(titleText,
-                                   row.m_unread ? kColorTitleUnread : kColorTitle,
-                                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS),
+    //这两行字铺满了整行，滚轮几乎总落在它们身上。裸 DuiLabel 不消化滚轮、如实返回
+    //false，事件随即由 DuiHost::DispatchMouseWheel 沿父链上冒到外层滚动视口。
+    texts->AddChild(MakeLabel(titleText,
+                              row.m_unread ? kColorTitleUnread : kColorTitle,
+                              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS),
                     Hint().Fixed(kRowTitleH));
-    texts->AddChild(MakeWheelLabel(row.m_metaText, kColorMeta,
-                                   DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS),
+    texts->AddChild(MakeLabel(row.m_metaText, kColorMeta,
+                              DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS),
                     Hint().Fixed(kRowMetaH));
 
     box->AddChild(std::unique_ptr<DuiControl>(texts.release()), Hint().Weight(1));
@@ -321,11 +310,13 @@ std::unique_ptr<DuiControl> BuildAnnounceBoxBody(const AnnounceBoxViewData& data
     std::unique_ptr<DuiVBox> bodyBox(new DuiVBox());
     bodyBox->SetPadding(0, kBodyPadV, kBodyPadRight, kBodyPadV);
 
-    //正文用会转发滚轮的内联文本控件（裸控件会把滚轮吃掉，长公告滚不动）。
-    //它取代了原先的 DuiLabel —— 换的理由是要把正文里的网址渲染成可点的链接，
-    //DuiLabel 没有字符级排版模型，做不到；折行由该控件自己按可用宽度完成，
-    //不再需要 DuiLabel 那个"必须显式 SetWordWrap(true)"的开关。
-    std::unique_ptr<AnnounceWheelContentView> bodyLbl(new AnnounceWheelContentView());
+    //正文用内联文本控件，它取代了原先的 DuiLabel —— 换的理由是要把正文里的网址
+    //渲染成可点的链接，DuiLabel 没有字符级排版模型，做不到；折行由该控件自己按
+    //可用宽度完成，不再需要 DuiLabel 那个"必须显式 SetWordWrap(true)"的开关。
+    //它自己不消化滚轮、如实返回 false，滚轮由 DuiHost::DispatchMouseWheel 沿父链
+    //上冒到外层滚动视口，长公告因此滚得动。
+    std::unique_ptr<balloonhistory::HistoryContentView> bodyLbl(
+        new balloonhistory::HistoryContentView());
     //公告是服务端原样存的纯文本，走纯文本入口（不解析聊天消息那套 '/' 转义）。
     bodyLbl->SetPlainContent(hasSelection ? data.m_detailBody : CString(kDetailPlaceholder));
     bodyLbl->SetTextColor(hasSelection ? kColorBody : kColorEmptySub);

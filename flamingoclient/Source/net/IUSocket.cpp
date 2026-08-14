@@ -9,6 +9,8 @@
 #include "../IULog.h"
 #include "../ZlibUtil.h"
 #include "FrameCodec.h"             // v2 帧编解码（内含 net/Protocol.h）
+#include "FramePayload.h"           // 包体的压缩与加密管线
+#include "HandshakeRunner.h"         // 三帧握手的共用流程（四条链路复用同一份）
 #include "Sha256.h"                 // 口令 SHA-256 哈希
 #include "LoginProtocolClient.h"    // v2 登录报文编解码
 #include "RegisterProtocolClient.h" // v2 注册报文编解码
@@ -18,12 +20,14 @@
 #include "GroupProtocolClient.h"         // v2 群组报文编解码（建群）
 #include "RemoteDesktopProtocolClient.h" // v2 远程桌面信令编解码
 #include "CallProtocolClient.h"          // v2 音视频通话信令编解码
+#include "FolderProtocolClient.h"        // v2 单聊文件夹传输信令编解码
 #include "GroupFileProtocolClient.h"     // v2 群文件库报文编解码（列表/变更推送）
 #include "AccountProtocolClient.h"       // v2 账号报文编解码（修改密码）
 #include "ProfileProtocolClient.h"       // v2 账号资料报文编解码（更新个性签名）
 #include "FavoriteProtocolClient.h"      // v2「我的收藏」报文编解码（cmd_set_favorite）
 #include "StarredProtocolClient.h"       // v2「特别关注」报文编解码（cmd_set_starred）
 #include "FriendProtocolClient.h"        // v2 好友管理报文编解码（cmd_set_friend_remark 设置备注名）
+#include "ContactTagProtocolClient.h"    // v2「联系人标签」报文编解码（cmd_set_contact_tags）
 #include "AnnounceProtocolClient.h"      // v2 平台公告报文编解码（消息盒子：2101/2102/2103）
 #include "FileProtocolClient.h"          // v2 文件/图片信令报文编解码（申请上传/下载）
 #include "ImageTransfer.h"               // 聊天图片传输管理器（发图工作线程）
@@ -44,6 +48,79 @@
 //取自 ClientVersion.h 这一个出处 —— 此前登录上报的、关于页显示的、exe 属性里的
 //三个版本号各写各的，自动更新下会直接表现为“升级完还提示有新版本”。
 static const char* const kClientVersionV2 = FLAMINGO_CLIENT_VERSION;
+
+//读 flamingo.ini 的 serverpubkey 时用的缓冲区长度（字符数）。32 字节公钥的标准
+//base64 恒为 44 个字符（含一个 '=' 填充），加结束符 45 个就够；取 64 是留出余量，
+//让手工在值末尾多敲了空格之类的情形也能完整读进来、再由解析函数判错，
+//而不是被截断成一个看起来合法的短串。
+static const int SERVER_PUBKEY_TEXT_BUF_LEN = 64;
+
+//协议加密握手中每一次收发的超时时间，单位秒。握手就在 Connect 里同步做，超时太长
+//会让"服务端在监听但不应答"这种情形把整个登录流程卡住；三帧握手只是一来一回，
+//正常在毫秒级完成，给 5 秒已经很宽裕。
+static const int HANDSHAKE_TIMEOUT_SEC = 5;
+
+/**
+ *  主连接的握手收发适配器：把 net::performClientHandshake 需要的字节收发
+ *  转接到 CIUSocket 自己的 SendData / RecvData 上。
+ *
+ *  只在 Connect() 里握手那一小段时间内活着，是个栈上对象，故不必考虑并发。
+ */
+class CIUSocket::HandshakeChannel : public net::IHandshakeChannel
+{
+public:
+    /**
+     *  @param owner    宿主连接，生命周期覆盖本对象（本对象是各 PerformXxxHandshake 的栈上局部量）
+     *  @param kind     本次握手走哪条链路的收发函数
+     *  @param nTimeout 每次收发的超时时间，单位秒
+     */
+    HandshakeChannel(CIUSocket* owner, handshake_link_kind kind, int nTimeout)
+        : m_owner(owner), m_kind(kind), m_nTimeout(nTimeout)
+    {
+    }
+
+    virtual bool SendAll(const char* data, size_t len)
+    {
+        switch (m_kind)
+        {
+        //文件传输共享连接
+        case handshake_link_file:
+            return m_owner->SendOnFilePort(data, (int64_t)len, m_nTimeout);
+
+        //图片传输共享连接
+        case handshake_link_img:
+            return m_owner->SendOnImgPort(data, (int64_t)len, m_nTimeout);
+
+        //主连接。放在 default 而不是单列一个 case，是为了让新增链路时忘记补分支
+        //的后果停留在编译告警级别之外——真要新增链路，两个 switch 都得改。
+        default:
+            return m_owner->SendData(data, (int)len, m_nTimeout);
+        }
+    }
+
+    virtual bool RecvAll(char* buf, size_t len)
+    {
+        switch (m_kind)
+        {
+        //文件传输共享连接
+        case handshake_link_file:
+            return m_owner->RecvOnFilePort(buf, (int64_t)len, m_nTimeout);
+
+        //图片传输共享连接
+        case handshake_link_img:
+            return m_owner->RecvOnImgPort(buf, (int64_t)len, m_nTimeout);
+
+        //主连接，理由同 SendAll
+        default:
+            return m_owner->RecvData(buf, (int)len, m_nTimeout);
+        }
+    }
+
+private:
+    CIUSocket*          m_owner;     //宿主连接，不拥有
+    handshake_link_kind m_kind;      //本次握手走哪条链路
+    int                 m_nTimeout;  //每次收发的超时，单位秒
+};
 
 CIUSocket::CIUSocket()
 {
@@ -69,6 +146,10 @@ CIUSocket::CIUSocket()
     m_bStop = false;
 
     m_bEnableReconnect = true;
+
+    //公钥在 LoadConfig 里读入；在那之前一律按"未配置"处理，即走明文
+    memset(m_serverPubKey, 0, sizeof(m_serverPubKey));
+    m_bHasServerPubKey = false;
 
     m_nRecordClientType = 1;
     m_nRecordOnlineStatus = 1;
@@ -184,6 +265,130 @@ void CIUSocket::LoadConfig()
         m_bEnableReconnect = true;
     else
         m_bEnableReconnect = false;
+
+    //公钥是 32 字节的标准 base64，恒为 44 个字符（含一个填充符）。缓冲区给到
+    //SERVER_PUBKEY_TEXT_BUF_LEN，容得下这 44 个字符加结束符，还留了余量。
+    TCHAR szPubKey[SERVER_PUBKEY_TEXT_BUF_LEN] = { 0 };
+    iniFile.ReadString(_T("server"), _T("serverpubkey"), _T(""),
+                       szPubKey, SERVER_PUBKEY_TEXT_BUF_LEN, strIniFilePath);
+    ApplyServerPublicKey(EncodeUtil::UnicodeToAnsi(std::wstring(szPubKey)));
+}
+
+void CIUSocket::ApplyServerPublicKey(const std::string& pubKeyText)
+{
+    memset(m_serverPubKey, 0, sizeof(m_serverPubKey));
+    m_bHasServerPubKey = false;
+
+    if (pubKeyText.empty())
+    {
+        //没配公钥就是不加密。客户端没有独立的加密开关，"配了公钥"本身就是"要加密"，
+        //这样与服务端 .conf 的 encryption 天然配成一对，不会出现两边开关配反、
+        //却要同时看两份配置才能判断原因的情况。
+        LOG_INFO("Protocol encryption is off: serverpubkey is not configured in flamingo.ini.");
+        return;
+    }
+
+    if (!net::parseServerPublicKey(pubKeyText, m_serverPubKey))
+    {
+        //配了但解析不出来（写错、被截断、混入空格），必须当作错误。这里若退回明文，
+        //使用者会以为链路已加密、实则裸奔，比直接连不上危险得多。
+        memset(m_serverPubKey, 0, sizeof(m_serverPubKey));
+        LOG_ERROR("Invalid serverpubkey in flamingo.ini: expect base64 of %u bytes. "
+                  "All connections will fail until it is fixed.",
+                  (unsigned)net::IDENTITY_PUBLICKEY_BYTES);
+        return;
+    }
+
+    m_bHasServerPubKey = true;
+    //只打指纹不打完整公钥：公钥本身可以公开，但统一口径能避免有人照抄这段代码去打私钥
+    LOG_INFO("Protocol encryption is on, server key fingerprint: %s.",
+             net::publicKeyFingerprint(m_serverPubKey).c_str());
+}
+
+const unsigned char* CIUSocket::GetServerPublicKey() const
+{
+    return m_bHasServerPubKey ? m_serverPubKey : NULL;
+}
+
+net::FrameCipher* CIUSocket::GetFileCipher()
+{
+    return &m_fileHandshake.cipher();
+}
+
+net::FrameCipher* CIUSocket::GetImgCipher()
+{
+    return &m_imgHandshake.cipher();
+}
+
+bool CIUSocket::PerformHandshake(int nTimeout)
+{
+    const unsigned char* pServerPubKey = GetServerPublicKey();
+    if (pServerPubKey == NULL)
+    {
+        //没配服务端公钥就是不加密，本连接全程明文，一个字节都不必收发
+        return true;
+    }
+
+    //握手流程本身在 net::performClientHandshake 里，各条链路共用同一份；
+    //本类只需提供一个把自己的收发函数包起来的适配器。
+    HandshakeChannel channel(this, handshake_link_main, nTimeout);
+
+    std::string err;
+    if (!net::performClientHandshake(channel, pServerPubKey, m_handshake, err))
+    {
+        LOG_ERROR("Handshake failed on main connection: %s. "
+                  "Server key fingerprint configured here is %s.",
+                  err.c_str(), net::publicKeyFingerprint(pServerPubKey).c_str());
+        return false;
+    }
+
+    LOG_INFO("Handshake done on main connection, server key fingerprint: %s.",
+             net::publicKeyFingerprint(pServerPubKey).c_str());
+    return true;
+}
+
+bool CIUSocket::PerformFileHandshake(int nTimeout)
+{
+    const unsigned char* pServerPubKey = GetServerPublicKey();
+    if (pServerPubKey == NULL)
+    {
+        //没配服务端公钥就是不加密，本连接全程明文
+        return true;
+    }
+
+    HandshakeChannel channel(this, handshake_link_file, nTimeout);
+
+    std::string err;
+    if (!net::performClientHandshake(channel, pServerPubKey, m_fileHandshake, err))
+    {
+        LOG_ERROR("Handshake failed on file connection: %s.", err.c_str());
+        return false;
+    }
+
+    LOG_INFO("Handshake done on file connection.");
+    return true;
+}
+
+bool CIUSocket::PerformImgHandshake(int nTimeout)
+{
+    const unsigned char* pServerPubKey = GetServerPublicKey();
+    if (pServerPubKey == NULL)
+    {
+        //没配服务端公钥就是不加密，本连接全程明文
+        return true;
+    }
+
+    HandshakeChannel channel(this, handshake_link_img, nTimeout);
+
+    std::string err;
+    if (!net::performClientHandshake(channel, pServerPubKey, m_imgHandshake, err))
+    {
+        LOG_ERROR("Handshake failed on image connection: %s.", err.c_str());
+        return false;
+    }
+
+    LOG_INFO("Handshake done on image connection.");
+    return true;
 }
 
 void CIUSocket::SetServer(PCTSTR lpszServer)
@@ -286,6 +491,14 @@ bool CIUSocket::Connect(int timeout /*= 3*/)
     if (ret == 0)
     {
         LOG_INFO("Connect to server:%s, port:%d successfully.", m_strServer.c_str(), m_nPort);
+
+        //握手必须在 m_bConnected 置真之前做完，理由见 PerformHandshake 的注释
+        if (!PerformHandshake(HANDSHAKE_TIMEOUT_SEC))
+        {
+            Close();
+            return false;
+        }
+
         m_bConnected = true;
         return true;
     } else if (ret == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK)
@@ -301,6 +514,13 @@ bool CIUSocket::Connect(int timeout /*= 3*/)
     if (::select(m_hSocket + 1, NULL, &writeset, NULL, &tv) != 1)
     {
         LOG_ERROR("Could not connect to server:%s, port:%d.", m_strServer.c_str(), m_nPort);
+        return false;
+    }
+
+    //与上面那条成功路径同理：握手要赶在 m_bConnected 置真之前做完
+    if (!PerformHandshake(HANDSHAKE_TIMEOUT_SEC))
+    {
+        Close();
         return false;
     }
 
@@ -445,6 +665,16 @@ bool CIUSocket::ConnectToFileServer(int timeout/* = 3*/)
     {
         LOG_INFO("Connect to file server:%s, port:%d successfully.", m_strFileServer.c_str(), m_nFilePort);
         m_bConnectedOnFileSocket = true;
+
+        //握手放在标志置真<u>之后</u>：SendOnFilePort / RecvOnFilePort 一进来就判
+        //IsFileServerClosed，标志没置真的话它们会直接拒绝收发。这与主连接的顺序相反，
+        //但没有风险——文件链路是纯同步收发，没有独立收取线程会来抢这条 socket 的数据。
+        if (!PerformFileHandshake(timeout))
+        {
+            CloseFileServerConnection();
+            return false;
+        }
+
         return true;
     } else if (ret == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK)
     {
@@ -465,6 +695,13 @@ bool CIUSocket::ConnectToFileServer(int timeout/* = 3*/)
     LOG_INFO("Connect to file server:%s, port:%d successfully.", m_strFileServer.c_str(), m_nFilePort);
 
     m_bConnectedOnFileSocket = true;
+
+    //与上面那条成功路径同理：握手要排在标志置真之后
+    if (!PerformFileHandshake(timeout))
+    {
+        CloseFileServerConnection();
+        return false;
+    }
 
     return true;
 }
@@ -512,6 +749,15 @@ bool CIUSocket::ConnectToImgServer(int timeout/* = 3*/)
     {
         LOG_INFO("Connect to img server:%s, port:%d successfully.", m_strImgServer.c_str(), m_nImgPort);
         m_bConnectedOnImgSocket = true;
+
+        //握手放在标志置真之后，理由同 ConnectToFileServer：SendOnImgPort /
+        //RecvOnImgPort 一进来就判 IsImgServerClosed，标志没置真就会直接拒绝收发。
+        if (!PerformImgHandshake(timeout))
+        {
+            CloseImgServerConnection();
+            return false;
+        }
+
         return true;
     } else if (ret == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK)
     {
@@ -532,6 +778,13 @@ bool CIUSocket::ConnectToImgServer(int timeout/* = 3*/)
     LOG_INFO("Connect to img server:%s, port:%d successfully.", m_strImgServer.c_str(), m_nImgPort);
 
     m_bConnectedOnImgSocket = true;
+
+    //与上面那条成功路径同理：握手要排在标志置真之后
+    if (!PerformImgHandshake(timeout))
+    {
+        CloseImgServerConnection();
+        return false;
+    }
 
     return true;
 }
@@ -895,6 +1148,11 @@ void CIUSocket::Close()
     m_hSocket = INVALID_SOCKET;
 
     m_bConnected = false;
+
+    //连接断了，本次协商的会话密钥就作废了。这里必须清掉：重连建的是一条全新连接、
+    //会重新握手，若沿用旧密钥，流状态与对端完全对不上，表现为重连后每一帧都解密失败。
+    //清理放在 m_bConnected 置假之后，此时收取线程已经会走 IsClosed 分支不再解帧。
+    m_handshake.reset();
 }
 
 void CIUSocket::CloseFileServerConnection()
@@ -909,6 +1167,10 @@ void CIUSocket::CloseFileServerConnection()
     LOG_ERROR("Disconnect file server:%s, port:%d.", m_strFileServer.c_str(), m_nFilePort);
 
     m_bConnectedOnFileSocket = false;
+
+    //本次协商的会话密钥随连接一起作废。文件链路是一笔传输一建一断，不清的话
+    //下一笔会拿着上一条连接的密钥去解新连接的帧，每一帧都会解密失败。
+    m_fileHandshake.reset();
 }
 
 void CIUSocket::CloseImgServerConnection()
@@ -923,6 +1185,9 @@ void CIUSocket::CloseImgServerConnection()
     LOG_ERROR("Disconnect img server:%s, port:%d.", m_strImgServer.c_str(), m_nImgPort);
 
     m_bConnectedOnImgSocket = false;
+
+    //会话密钥随连接一起作废，理由同 CloseFileServerConnection
+    m_imgHandshake.reset();
 }
 
 void CIUSocket::SendThreadProc()
@@ -1071,25 +1336,60 @@ bool CIUSocket::DecodePackages()
         //成功解出一帧，从接收缓冲移除该帧字节
         m_strRecvBuf.erase(0, consumed);
 
-        //按压缩标志还原包体
+        //还原包体明文（解压，后续还包括解密）
         std::string payload;
-        if ((header.flags & frame_flag_compressed) != 0)
+        if (!RestoreFrameBody(header, body, payload))
         {
-            if (!ZlibUtil::UncompressBuf(body, payload, header.originlen))
-            {
-                LOG_ERROR("Uncompress v2 frame body failed, cmd=%u, originlen=%u.",
-                          header.cmd, header.originlen);
-                m_strRecvBuf.clear();
-                return false;
-            }
+            m_strRecvBuf.clear();
+            return false;
         }
-        else
-            payload = body;
 
         //分发本帧
         HandleV2Frame(header.cmd, header.seq, payload);
     }
 
+    return true;
+}
+
+bool CIUSocket::IsAsyncRecvRunning() const
+{
+    return m_spRecvThread != nullptr;
+}
+
+bool CIUSocket::CheckUpdateSync(const std::string& reqBody, std::string& respBody,
+                                int nTimeoutSec)
+{
+    respBody.clear();
+
+    //与 Login() 同构。检查更新在服务端是登录前白名单命令，未登录也能调。
+    if (!Connect())
+    {
+        LOG_ERROR("CheckUpdateSync failed: connect server failed.");
+        return false;
+    }
+
+    uint32_t seq = (uint32_t)(++m_seq);
+    std::string sendBuf;
+    if (!BuildFrame(cmd_check_update, seq, reqBody, sendBuf))
+    {
+        LOG_ERROR("CheckUpdateSync failed: encode frame failed.");
+        return false;
+    }
+    if (!SendData(sendBuf.c_str(), (int)sendBuf.length(), nTimeoutSec))
+    {
+        LOG_ERROR("CheckUpdateSync failed: send frame failed.");
+        return false;
+    }
+
+    //RecvOneFrame 交回的已经是明文包体：解密与解压都在它内部做完了
+    frame_header header;
+    if (!RecvOneFrame(header, respBody, nTimeoutSec))
+    {
+        LOG_ERROR("CheckUpdateSync failed: recv response timeout.");
+        return false;
+    }
+
+    LOG_INFO("CheckUpdateSync ok, seq=%u, body bytes=%d.", seq, (int)respBody.size());
     return true;
 }
 
@@ -1126,9 +1426,63 @@ bool CIUSocket::RecvOneFrame(frame_header& header, std::string& body, int nTimeo
         return false;
     }
 
-    body.resize(header.bodylen);
-    if (!RecvData(&body[0], (int)header.bodylen, nTimeout))
+    std::string rawBody;
+    rawBody.resize(header.bodylen);
+    if (!RecvData(&rawBody[0], (int)header.bodylen, nTimeout))
         return false;
+
+    //包体还原（解压，后续还包括解密）统一在 RestoreFrameBody 里做，
+    //调用方拿到的一律是明文，不必各自判断压缩标志
+    if (!RestoreFrameBody(header, rawBody, body))
+    {
+        Close();
+        return false;
+    }
+
+    return true;
+}
+
+bool CIUSocket::BuildFrame(uint16_t cmd, uint32_t seq, const std::string& body,
+                           std::string& frameOut)
+{
+    frameOut.clear();
+
+    //包体的压缩与加密都由 FramePayload 这一条管线负责，处理顺序也在那里定死。
+    //加密器未就绪（未配置服务端公钥 / 握手未完成）时它自然产出明文。
+    std::string wire;
+    uint8_t     flags = 0;
+    uint32_t    originlen = 0;
+    if (!net::encodeFramePayload(cmd, seq, body, &m_handshake.cipher(), 0,
+                                 net::payload_compress_auto, wire, flags, originlen))
+    {
+        LOG_ERROR("Encode v2 frame payload failed, cmd=%u, bodylen=%u.",
+                  cmd, (uint32_t)body.size());
+        return false;
+    }
+
+    if (!net::encodeFrame(cmd, seq, flags, wire.data(), (uint32_t)wire.size(),
+                          originlen, frameOut))
+    {
+        LOG_ERROR("Encode v2 frame failed, cmd=%u, bodylen=%u.",
+                  cmd, (uint32_t)body.size());
+        frameOut.clear();
+        return false;
+    }
+
+    return true;
+}
+
+bool CIUSocket::RestoreFrameBody(const frame_header& header, const std::string& rawBody,
+                                 std::string& plainOut)
+{
+    std::string err;
+    if (!net::decodeFramePayload(header.cmd, header.seq, header.flags, header.originlen,
+                                 rawBody, &m_handshake.cipher(), plainOut, err))
+    {
+        LOG_ERROR("Restore v2 frame body failed: %s, cmd=%u, bodylen=%u, originlen=%u.",
+                  err.c_str(), header.cmd, (uint32_t)rawBody.size(), header.originlen);
+        return false;
+    }
 
     return true;
 }
@@ -1154,31 +1508,8 @@ void CIUSocket::EnqueueFrame(uint16_t cmd, uint32_t seq, const std::string& body
     }
 
     std::string frame;
-    bool encoded = false;
-
-    //包体达到阈值才尝试 zlib 压缩；压缩后确实更小才采用
-    if (body.size() >= COMPRESS_THRESHOLD)
-    {
-        std::string compressed;
-        if (ZlibUtil::CompressBuf(body, compressed) && compressed.size() < body.size())
-        {
-            encoded = net::encodeFrame(cmd, seq, frame_flag_compressed,
-                                       compressed.data(),
-                                       (uint32_t)compressed.size(),
-                                       (uint32_t)body.size(), frame);
-        }
-    }
-
-    //未压缩（或压缩不划算）：明文编码
-    if (!encoded)
-        encoded = net::encodeFrame(cmd, seq, body, frame);
-
-    if (!encoded)
-    {
-        LOG_ERROR("Encode v2 frame failed, cmd=%u, bodylen=%u.",
-                  cmd, (uint32_t)body.size());
+    if (!BuildFrame(cmd, seq, body, frame))
         return;
-    }
 
     std::lock_guard<std::mutex> guard(m_mtSendBuf);
     m_strSendBuf.append(frame);
@@ -1638,6 +1969,142 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         else
         {
             delete pState;
+        }
+        break;
+    }
+
+    case cmd_folder_invite:
+    {
+        //文件夹传输邀请应答：成功带 sessionid；规模超限时另带服务端配置的上限值，
+        //客户端一律用它们做提示、不硬编码。堆对象由 UI 处理后 delete。
+        //<u>wParam 必须带上本帧的 seq</u>：包体里没有任何能对回发起方的字段，而本机同时
+        //可以有多笔传输在等应答，管理器正是按这个 seq 找到发起它的那一笔（与
+        //cmd_request_upload / cmd_request_download 按 seq 找等待槽同理）。
+        net::FolderInviteResponse* pResp = new net::FolderInviteResponse();
+        if (!net::FolderProtocolClient::parseInviteResponse(body, *pResp))
+        {
+            LOG_ERROR("Parse v2 folder invite-ack failed, seq=%u, body=%s.", seq, body.c_str());
+            delete pResp;
+            break;
+        }
+        HWND hUI = (m_pRecvMsgThread != NULL) ? m_pRecvMsgThread->GetProxyWnd() : NULL;
+        if (hUI != NULL)
+        {
+            LOG_INFO("Recv v2 folder invite-ack, seq=%u, code=%d, session=%s, maxfiles=%lld, "
+                     "maxsize=%lld.",
+                     seq, pResp->m_code, pResp->m_sessionId.c_str(),
+                     (long long)pResp->m_maxFiles, (long long)pResp->m_maxSize);
+            ::PostMessage(hUI, FMG_MSG_V2_FOLDER_INVITE_ACK, (WPARAM)seq, (LPARAM)pResp);
+        }
+        else
+        {
+            delete pResp;
+        }
+        break;
+    }
+
+    case cmd_folder_invite_notify:
+    {
+        //文件夹传输邀请推送：接收端据此在会话里出一条带「接收 / 拒绝」的邀请气泡，
+        //不弹独立授权窗。堆对象由 UI 处理后 delete。
+        net::FolderInviteNotify* pNotify = new net::FolderInviteNotify();
+        if (!net::FolderProtocolClient::parseInviteNotify(body, *pNotify))
+        {
+            LOG_ERROR("Parse v2 folder invite-notify failed, body=%s.", body.c_str());
+            delete pNotify;
+            break;
+        }
+        HWND hUI = (m_pRecvMsgThread != NULL) ? m_pRecvMsgThread->GetProxyWnd() : NULL;
+        if (hUI != NULL)
+        {
+            LOG_INFO("Recv v2 folder invite-notify, session=%s, from=%lld, files=%lld, bytes=%lld.",
+                     pNotify->m_sessionId.c_str(), (long long)pNotify->m_fromId,
+                     (long long)pNotify->m_totalFiles, (long long)pNotify->m_totalSize);
+            ::PostMessage(hUI, FMG_MSG_V2_FOLDER_INVITE_NOTIFY, 0, (LPARAM)pNotify);
+        }
+        else
+        {
+            delete pNotify;
+        }
+        break;
+    }
+
+    case cmd_folder_response:
+    case cmd_folder_cancel:
+    case cmd_folder_close:
+    case cmd_folder_retry:
+    {
+        //应答邀请 / 撤回邀请 / 结束传输 / 重试续传四条命令的应答体同构（只有 code、msg
+        //与原样回带的 sessionid），故共用一条窗口消息，由 wParam 带上是哪条命令的应答，
+        //UI 侧据它决定失败时怎么收场。堆对象由 UI 处理后 delete。
+        net::FolderSessionResponse* pResp = new net::FolderSessionResponse();
+        if (!net::FolderProtocolClient::parseSessionResponse(body, *pResp))
+        {
+            LOG_ERROR("Parse v2 folder session-ack failed, cmd=%u, body=%s.", cmd, body.c_str());
+            delete pResp;
+            break;
+        }
+        HWND hUI = (m_pRecvMsgThread != NULL) ? m_pRecvMsgThread->GetProxyWnd() : NULL;
+        if (hUI != NULL)
+        {
+            LOG_INFO("Recv v2 folder session-ack, cmd=%u, code=%d, session=%s.",
+                     cmd, pResp->m_code, pResp->m_sessionId.c_str());
+            ::PostMessage(hUI, FMG_MSG_V2_FOLDER_SESSION_ACK, (WPARAM)cmd, (LPARAM)pResp);
+        }
+        else
+        {
+            delete pResp;
+        }
+        break;
+    }
+
+    case cmd_folder_state_notify:
+    {
+        //文件夹传输状态推送：响铃 / 传输中 / 拒绝 / 撤回 / 对方离线 / 超时 / 失败 / 完成。
+        //失败时带的错误码两端一致，界面据它给出同一条中文原因。堆对象由 UI 处理后 delete。
+        net::FolderStateNotify* pState = new net::FolderStateNotify();
+        if (!net::FolderProtocolClient::parseStateNotify(body, *pState))
+        {
+            LOG_ERROR("Parse v2 folder state-notify failed, body=%s.", body.c_str());
+            delete pState;
+            break;
+        }
+        HWND hUI = (m_pRecvMsgThread != NULL) ? m_pRecvMsgThread->GetProxyWnd() : NULL;
+        if (hUI != NULL)
+        {
+            LOG_INFO("Recv v2 folder state-notify, session=%s, state=%d, errcode=%d.",
+                     pState->m_sessionId.c_str(), pState->m_state, pState->m_errCode);
+            ::PostMessage(hUI, FMG_MSG_V2_FOLDER_STATE_NOTIFY, 0, (LPARAM)pState);
+        }
+        else
+        {
+            delete pState;
+        }
+        break;
+    }
+
+    case cmd_folder_relay_info:
+    {
+        //文件夹传输中转参数下发：双方据此连 fileserver 建 1 条控制通道 + N 条数据通道。
+        //重试续传成功后同样会再推一帧。堆对象由 UI 处理后 delete。
+        net::FolderRelayInfo* pInfo = new net::FolderRelayInfo();
+        if (!net::FolderProtocolClient::parseRelayInfo(body, *pInfo))
+        {
+            LOG_ERROR("Parse v2 folder relay-info failed, body=%s.", body.c_str());
+            delete pInfo;
+            break;
+        }
+        HWND hUI = (m_pRecvMsgThread != NULL) ? m_pRecvMsgThread->GetProxyWnd() : NULL;
+        if (hUI != NULL)
+        {
+            LOG_INFO("Recv v2 folder relay-info, session=%s, role=%d, %s:%d, lanes=%d.",
+                     pInfo->m_sessionId.c_str(), pInfo->m_role,
+                     pInfo->m_relayIp.c_str(), pInfo->m_relayPort, pInfo->m_lanes);
+            ::PostMessage(hUI, FMG_MSG_V2_FOLDER_RELAY_INFO, 0, (LPARAM)pInfo);
+        }
+        else
+        {
+            delete pInfo;
         }
         break;
     }
@@ -2414,6 +2881,35 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         break;
     }
 
+    //设置联系人标签的应答。除 userid 外还回带服务端<u>归一后</u>的最终列表（失败时
+    //回带服务端当前实际存着的那一份），主面板两种情形下都直接拿它覆盖本地缓存，
+    //不必自己维护回滚快照、也不必猜服务端把哪些标签去重或去空白了。
+    case cmd_set_contact_tags:
+    {
+        net::SetContactTagsResult* pResult = new net::SetContactTagsResult();
+        if (!net::ContactTagProtocolClient::parseSetContactTagsResponse(body, *pResult))
+        {
+            LOG_ERROR("Parse v2 set contact tags response failed, bodylen=%u.",
+                      (uint32_t)body.size());
+            delete pResult;
+            break;
+        }
+
+        HWND hUI = (m_pRecvMsgThread != NULL) ? m_pRecvMsgThread->GetProxyWnd() : NULL;
+        if (hUI != NULL)
+        {
+            LOG_INFO("Recv v2 set contact tags result, code=%d, userid=%lld, tagcount=%u.",
+                     pResult->m_code, (long long)pResult->m_userid,
+                     (uint32_t)pResult->m_tags.size());
+            ::PostMessage(hUI, FMG_MSG_V2_SET_TAGS_RESULT, 0, (LPARAM)pResult);
+        }
+        else
+        {
+            delete pResult;
+        }
+        break;
+    }
+
     case cmd_set_friend_remark:
     {
         //设置好友备注名的应答。与通用 {code,msg} 不同，本应答还原样回带 userid ——
@@ -2838,6 +3334,93 @@ void CIUSocket::SendRemoteDesktopClose(const std::string& sessionId)
     LOG_INFO("Send v2 rd close, session=%s.", sessionId.c_str());
 }
 
+uint32_t CIUSocket::SendFolderInvite(int64_t peerUserId, const std::string& folderName,
+                                     int64_t totalDirs, int64_t totalFiles, int64_t totalSize)
+{
+    //发起文件夹传输邀请：应答（带 sessionid 或错误）经 cmd_folder_invite 回投
+    //FMG_MSG_V2_FOLDER_INVITE_ACK，wParam 为本次的帧 seq。规模统计由调用方扫描本地目录树
+    //得出，服务端据它与配置的上限比对；客户端不硬编码上限。
+    std::string body = net::FolderProtocolClient::buildInviteRequest(
+        peerUserId, folderName, totalDirs, totalFiles, totalSize);
+    if (body.empty())
+    {
+        LOG_ERROR("Build v2 folder invite failed, to=%lld, dirs=%lld, files=%lld, bytes=%lld.",
+                  (long long)peerUserId, (long long)totalDirs,
+                  (long long)totalFiles, (long long)totalSize);
+        return 0;
+    }
+
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_folder_invite, seq, body);
+    LOG_INFO("Send v2 folder invite, to=%lld, dirs=%lld, files=%lld, bytes=%lld, seq=%u.",
+             (long long)peerUserId, (long long)totalDirs,
+             (long long)totalFiles, (long long)totalSize, seq);
+    return seq;
+}
+
+void CIUSocket::SendFolderResponse(const std::string& sessionId, bool accept)
+{
+    //接收方应答邀请：同意则双方收 cmd_folder_relay_info，拒绝则发送方收 cmd_folder_state_notify。
+    std::string body = net::FolderProtocolClient::buildResponse(sessionId, accept);
+    if (body.empty())
+    {
+        LOG_ERROR("Build v2 folder response failed, session=%s.", sessionId.c_str());
+        return;
+    }
+
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_folder_response, seq, body);
+    LOG_INFO("Send v2 folder response, session=%s, accept=%d.", sessionId.c_str(), accept ? 1 : 0);
+}
+
+void CIUSocket::SendFolderCancel(const std::string& sessionId)
+{
+    //发送方在接收方应答前撤回邀请。
+    std::string body = net::FolderProtocolClient::buildCancel(sessionId);
+    if (body.empty())
+    {
+        LOG_ERROR("Build v2 folder cancel failed, session=%s.", sessionId.c_str());
+        return;
+    }
+
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_folder_cancel, seq, body);
+    LOG_INFO("Send v2 folder cancel, session=%s.", sessionId.c_str());
+}
+
+void CIUSocket::SendFolderClose(const std::string& sessionId, bool success,
+                                int errCode, const std::string& errMsg)
+{
+    //任一端结束本次传输。失败结束时错误码由服务端透传给对端，两端看到同一条原因。
+    std::string body = net::FolderProtocolClient::buildClose(sessionId, success, errCode, errMsg);
+    if (body.empty())
+    {
+        LOG_ERROR("Build v2 folder close failed, session=%s, success=%d, errcode=%d.",
+                  sessionId.c_str(), success ? 1 : 0, errCode);
+        return;
+    }
+
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_folder_close, seq, body);
+    LOG_INFO("Send v2 folder close, session=%s, success=%d, errcode=%d, errmsg=%s.",
+             sessionId.c_str(), success ? 1 : 0, errCode, errMsg.c_str());
+}
+
+void CIUSocket::SendFolderRetry(const std::string& sessionId)
+{
+    //保留期内重试续传：服务端校验通过后重签令牌并再下发一次 cmd_folder_relay_info。
+    std::string body = net::FolderProtocolClient::buildRetry(sessionId);
+    if (body.empty())
+    {
+        LOG_ERROR("Build v2 folder retry failed, session=%s.", sessionId.c_str());
+        return;
+    }
+
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_folder_retry, seq, body);
+    LOG_INFO("Send v2 folder retry, session=%s.", sessionId.c_str());
+}
+
 void CIUSocket::SendCallInvite(int64_t peerUserId, int media)
 {
     //发起音视频通话邀请：应答（带 sessionid 或错误）经 cmd_call_invite 回投 FMG_MSG_V2_CALL_INVITE_ACK。
@@ -2972,6 +3555,18 @@ void CIUSocket::SendSetFriendRemark(int64_t userid, const std::string& remarkUtf
     //备注名可能含用户隐私，日志只记长度不记内容。
     LOG_INFO("Send v2 set friend remark, userid=%lld, remarklen=%u.",
              (long long)userid, (uint32_t)remarkUtf8.size());
+}
+
+void CIUSocket::SendSetContactTags(int64_t userid, const std::vector<std::string>& tagsUtf8)
+{
+    //组装 cmd_set_contact_tags 请求体并编码成 v2 帧发出。应答经同一 cmd 异步回投到
+    //UI（FMG_MSG_V2_SET_TAGS_RESULT），主面板据其中回带的 userid 对上号。
+    std::string body = net::ContactTagProtocolClient::buildSetContactTagsRequest(userid, tagsUtf8);
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_set_contact_tags, seq, body);
+    //标签可能含用户隐私，日志只记条数不记内容。
+    LOG_INFO("Send v2 set contact tags, userid=%lld, tagcount=%u.",
+             (long long)userid, (uint32_t)tagsUtf8.size());
 }
 
 void CIUSocket::SendGetAnnouncements(int64_t sinceId, int limit)
@@ -3518,7 +4113,7 @@ bool CIUSocket::Register(const net::RegisterRequestParams& params, int nTimeout,
     //编码 v2 帧（注册请求包体小，不压缩），seq 自增
     uint32_t seq = (uint32_t)(++m_seq);
     std::string sendBuf;
-    if (!net::encodeFrame(cmd_register, seq, body, sendBuf))
+    if (!BuildFrame(cmd_register, seq, body, sendBuf))
     {
         LOG_ERROR("Register failed: encode register frame failed.");
         return false;
@@ -3526,26 +4121,10 @@ bool CIUSocket::Register(const net::RegisterRequestParams& params, int nTimeout,
     if (!SendData(sendBuf.c_str(), (int)sendBuf.length(), nTimeout))
         return false;
 
-    //同步收取一个完整的应答帧
+    //同步收取一个完整的应答帧。RecvOneFrame 交回的已经是明文包体
     frame_header header;
-    std::string respBody;
-    if (!RecvOneFrame(header, respBody, nTimeout))
+    if (!RecvOneFrame(header, strReturnData, nTimeout))
         return false;
-
-    //按压缩标志还原应答包体
-    if ((header.flags & frame_flag_compressed) != 0)
-    {
-        std::string uncompressed;
-        if (!ZlibUtil::UncompressBuf(respBody, uncompressed, header.originlen))
-        {
-            Close();
-            LOG_ERROR("Register failed: uncompress register response failed.");
-            return false;
-        }
-        strReturnData = uncompressed;
-    }
-    else
-        strReturnData = respBody;
 
     //本连接注册阶段只应收到 cmd_register 应答；cmd 不符仅记日志，仍把包体回传
     if (header.cmd != cmd_register)
@@ -3591,10 +4170,10 @@ bool CIUSocket::Login(const char* pszUser, const char* pszPassword, int nClientT
     LOG_INFO("Request v2 logon: Account=%s, Password=*****, ClientType=%d, Presence=%d.",
              pszUser, nClientType, nOnlineStatus);
 
-    //编码 v2 帧（登录请求包体小，不压缩），seq 自增
+    //编码 v2 帧，seq 自增
     uint32_t seq = (uint32_t)(++m_seq);
     std::string sendBuf;
-    if (!net::encodeFrame(cmd_login, seq, body, sendBuf))
+    if (!BuildFrame(cmd_login, seq, body, sendBuf))
     {
         LOG_ERROR("Login failed: encode login frame failed.");
         return false;
@@ -3602,26 +4181,10 @@ bool CIUSocket::Login(const char* pszUser, const char* pszPassword, int nClientT
     if (!SendData(sendBuf.c_str(), (int)sendBuf.length(), nTimeout))
         return false;
 
-    //同步收取一个完整的应答帧
+    //同步收取一个完整的应答帧。RecvOneFrame 交回的已经是明文包体
     frame_header header;
-    std::string respBody;
-    if (!RecvOneFrame(header, respBody, nTimeout))
+    if (!RecvOneFrame(header, strReturnData, nTimeout))
         return false;
-
-    //按压缩标志还原应答包体
-    if ((header.flags & frame_flag_compressed) != 0)
-    {
-        std::string uncompressed;
-        if (!ZlibUtil::UncompressBuf(respBody, uncompressed, header.originlen))
-        {
-            Close();
-            LOG_ERROR("Login failed: uncompress login response failed.");
-            return false;
-        }
-        strReturnData = uncompressed;
-    }
-    else
-        strReturnData = respBody;
 
     //本连接登录阶段只应收到 cmd_login 应答；cmd 不符仅记日志，仍把包体回传
     if (header.cmd != cmd_login)

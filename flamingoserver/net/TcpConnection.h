@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+//SOCKET 类型来自这里：Windows 下是 winsock 的 UINT_PTR，POSIX 下是 int
+#include "../base/Platform.h"
 #include <memory>
 
 #include "Callbacks.h"
@@ -20,7 +22,7 @@ namespace net
     public:
         TcpConnection(EventLoop* loop,
             const string& name,
-            int sockfd,
+            SOCKET sockfd,
             const InetAddress& localAddr,
             const InetAddress& peerAddr);
         ~TcpConnection();

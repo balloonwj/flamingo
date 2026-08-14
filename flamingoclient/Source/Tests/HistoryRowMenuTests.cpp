@@ -429,3 +429,53 @@ TEST_CASE("HRM12 同一份菜单里各项 id 互不相同", "[historymenu]")
     //这个组合下五项应当全在：打开文件 / 打开所在文件夹 / 另存为 / 定位 / 取消 Pin
     CHECK(before == 5u);
 }
+
+TEST_CASE("HRM13 文件夹传输记录行：本机有落点才给「打开文件夹」")
+{
+    HistoryRowMenuContext ctx;
+    ctx.m_msgType      = ::message_type_folder;
+    ctx.m_msgId        = 5001;
+    ctx.m_hasLocalFile = true;   //调用方已经查过登记库、也确认了目录还在
+
+    const std::vector<HistoryRowMenuItem> model = BuildHistoryRowMenuModel(ctx);
+    const std::vector<int> ids = IdsOf(model);
+
+    //内容组只有这一项：记录条没有文件清单，下载与另存为都无从谈起
+    REQUIRE(ids.size() >= 1);
+    CHECK(ids[0] == (int)kHistoryRowMenuOpenFolderRoot);
+    CHECK(std::find(ids.begin(), ids.end(), (int)kHistoryRowMenuDownload) == ids.end());
+    CHECK(std::find(ids.begin(), ids.end(), (int)kHistoryRowMenuSaveFileAs) == ids.end());
+    CHECK(std::find(ids.begin(), ids.end(), (int)kHistoryRowMenuOpenFile) == ids.end());
+    //通用组照常
+    CHECK(std::find(ids.begin(), ids.end(), (int)kHistoryRowMenuLocate) != ids.end());
+    CHECK(std::find(ids.begin(), ids.end(), (int)kHistoryRowMenuPin) != ids.end());
+}
+
+TEST_CASE("HRM14 换台机器（本机没有落点）时文件夹记录行只剩通用组")
+{
+    //本机从来没有过这个目录 —— 这是预期行为，不是缺陷：记录仍然看得到，
+    //只是没有「打开文件夹」。此时也<u>不</u>给「下载」，服务端根本没存内容
+    HistoryRowMenuContext ctx;
+    ctx.m_msgType      = ::message_type_folder;
+    ctx.m_msgId        = 5001;
+    ctx.m_hasLocalFile = false;
+
+    const std::vector<int> ids = IdsOf(BuildHistoryRowMenuModel(ctx));
+    CHECK(std::find(ids.begin(), ids.end(), (int)kHistoryRowMenuOpenFolderRoot) == ids.end());
+    CHECK(std::find(ids.begin(), ids.end(), (int)kHistoryRowMenuDownload) == ids.end());
+    //内容组整组为空，故第一项就是通用组的「定位到聊天窗」，前面不该有分隔线
+    REQUIRE(ids.size() >= 1);
+    CHECK(ids[0] == (int)kHistoryRowMenuLocate);
+}
+
+TEST_CASE("HRM15 IsHistoryRowFolderType 只认 18，不与文件行混用")
+{
+    CHECK(IsHistoryRowFolderType(::message_type_folder));
+    CHECK_FALSE(IsHistoryRowFolderType(::message_type_file));
+    CHECK_FALSE(IsHistoryRowFolderType(::message_type_image));
+    CHECK_FALSE(IsHistoryRowFolderType(::message_type_text));
+
+    //反向：文件夹记录不能被当成文件行，否则菜单会给出下载 / 另存为这类无效项
+    CHECK_FALSE(IsHistoryRowFileType(::message_type_folder));
+    CHECK_FALSE(IsHistoryRowImageType(::message_type_folder));
+}

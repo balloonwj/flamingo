@@ -1,24 +1,132 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="net">
-      <UniqueIdentifier>{1af03fa3-4535-4021-aae6-ba20c9053e56}</UniqueIdentifier>
-    </Filter>
     <Filter Include="base">
       <UniqueIdentifier>{b38039ce-2321-48b2-b8a2-065690faf027}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="chatserversrc">
+      <UniqueIdentifier>{4031b6c2-cc77-463c-9fa5-c12e15f2f813}</UniqueIdentifier>
     </Filter>
     <Filter Include="fileserversrc">
       <UniqueIdentifier>{c0dc0a70-c533-486c-b6a9-f61f7f2dd741}</UniqueIdentifier>
     </Filter>
+    <Filter Include="net">
+      <UniqueIdentifier>{1af03fa3-4535-4021-aae6-ba20c9053e56}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third-party">
+      <UniqueIdentifier>{a8ab4e16-8f15-41a2-baba-363c151f80c0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third-party\jsoncpp1.9.0">
+      <UniqueIdentifier>{32484d61-5602-4692-8e5d-0ee274929f9a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third-party\zlib1.2.11">
+      <UniqueIdentifier>{dc41a04c-e898-48b3-8903-3a00c83bff67}</UniqueIdentifier>
+    </Filter>
     <Filter Include="utils">
       <UniqueIdentifier>{84f3d3f1-22cb-4172-b155-a4a704aef0c0}</UniqueIdentifier>
     </Filter>
-    <Filter Include="jsoncpp">
-      <UniqueIdentifier>{6b2f1d83-9c4a-4e07-bb18-2a7d5e3f9061}</UniqueIdentifier>
-    </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\net\FrameCrypto.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\FramePayload.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\zutil.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\uncompr.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\trees.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\inftrees.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\inflate.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\inffast.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\infback.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\gzwrite.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\gzread.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\gzlib.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\gzclose.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\deflate.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\crc32.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\compress.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\adler32.c">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\zlib1.2.11\ZlibUtil.cpp">
+      <Filter>third-party\zlib1.2.11</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\AsyncLog.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\ConfigFileReader.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\CountDownLatch.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\Platform.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\Timestamp.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\FileManager.cpp">
+      <Filter>fileserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\UpdatePackageIndex.cpp">
+      <Filter>fileserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\FileEnum.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\AppPath.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\utils\ServerConfigLoader.cpp">
+      <Filter>utils</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\FileServer.cpp">
+      <Filter>fileserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\FileSession.cpp">
+      <Filter>fileserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\main.cpp">
+      <Filter>fileserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\fileserversrc\TcpSession.cpp">
+      <Filter>fileserversrc</Filter>
+    </ClCompile>
     <ClCompile Include="..\net\Acceptor.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\ByteBuffer.cpp">
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="..\net\Channel.cpp">
@@ -72,21 +180,6 @@
     <ClCompile Include="..\net\TimerQueue.cpp">
       <Filter>net</Filter>
     </ClCompile>
-    <ClCompile Include="..\base\AsyncLog.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\base\ConfigFileReader.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\base\CountDownLatch.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\base\Platform.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
-    <ClCompile Include="..\base\Timestamp.cpp">
-      <Filter>base</Filter>
-    </ClCompile>
     <ClCompile Include="..\utils\DaemonRun.cpp">
       <Filter>utils</Filter>
     </ClCompile>
@@ -99,26 +192,8 @@
     <ClCompile Include="..\utils\URLEncodeUtil.cpp">
       <Filter>utils</Filter>
     </ClCompile>
-    <ClCompile Include="..\fileserversrc\FileManager.cpp">
-      <Filter>fileserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\fileserversrc\FileServer.cpp">
-      <Filter>fileserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\fileserversrc\FileSession.cpp">
-      <Filter>fileserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\fileserversrc\main.cpp">
-      <Filter>fileserversrc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\fileserversrc\TcpSession.cpp">
-      <Filter>fileserversrc</Filter>
-    </ClCompile>
     <ClCompile Include="..\utils\UUIDGenerator.cpp">
       <Filter>utils</Filter>
-    </ClCompile>
-    <ClCompile Include="..\net\ByteBuffer.cpp">
-      <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="..\net\FrameCodec.cpp">
       <Filter>net</Filter>
@@ -127,17 +202,74 @@
       <Filter>utils</Filter>
     </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp">
-      <Filter>jsoncpp</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_value.cpp">
-      <Filter>jsoncpp</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_writer.cpp">
-      <Filter>jsoncpp</Filter>
+      <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\net\FrameCrypto.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\FramePayload.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\AsyncLog.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\ConfigFileReader.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\CountDownLatch.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\Platform.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\RAIIWrapper.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\Singleton.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\base\Timestamp.h">
+      <Filter>base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\FileManager.h">
+      <Filter>fileserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\UpdatePackageIndex.h">
+      <Filter>fileserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\FileEnum.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\AppPath.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\utils\ServerConfigLoader.h">
+      <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\FileMsg.h">
+      <Filter>fileserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\FileServer.h">
+      <Filter>fileserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\FileSession.h">
+      <Filter>fileserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\fileserversrc\TcpSession.h">
+      <Filter>fileserversrc</Filter>
+    </ClInclude>
     <ClInclude Include="..\net\Acceptor.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\ByteBuffer.h">
       <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="..\net\Callbacks.h">
@@ -200,27 +332,6 @@
     <ClInclude Include="..\net\TimerQueue.h">
       <Filter>net</Filter>
     </ClInclude>
-    <ClInclude Include="..\base\AsyncLog.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\ConfigFileReader.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\CountDownLatch.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\Platform.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\RAIIWrapper.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\Singleton.h">
-      <Filter>base</Filter>
-    </ClInclude>
-    <ClInclude Include="..\base\Timestamp.h">
-      <Filter>base</Filter>
-    </ClInclude>
     <ClInclude Include="..\utils\DaemonRun.h">
       <Filter>utils</Filter>
     </ClInclude>
@@ -233,35 +344,17 @@
     <ClInclude Include="..\utils\URLEncodeUtil.h">
       <Filter>utils</Filter>
     </ClInclude>
-    <ClInclude Include="..\fileserversrc\FileManager.h">
-      <Filter>fileserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\fileserversrc\FileMsg.h">
-      <Filter>fileserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\fileserversrc\FileServer.h">
-      <Filter>fileserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\fileserversrc\FileSession.h">
-      <Filter>fileserversrc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\fileserversrc\TcpSession.h">
-      <Filter>fileserversrc</Filter>
-    </ClInclude>
     <ClInclude Include="..\utils\UUIDGenerator.h">
       <Filter>utils</Filter>
-    </ClInclude>
-    <ClInclude Include="..\net\ByteBuffer.h">
-      <Filter>net</Filter>
     </ClInclude>
     <ClInclude Include="..\net\FrameCodec.h">
       <Filter>net</Filter>
     </ClInclude>
-    <ClInclude Include="..\chatserversrc\Protocol.h">
-      <Filter>net</Filter>
-    </ClInclude>
     <ClInclude Include="..\utils\FileToken.h">
       <Filter>utils</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\Protocol.h">
+      <Filter>chatserversrc</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

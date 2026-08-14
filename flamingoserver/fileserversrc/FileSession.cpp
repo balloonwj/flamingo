@@ -10,6 +10,7 @@
 #include <vector>
 #include "../net/TcpConnection.h"
 #include "../net/FrameCodec.h"
+#include "../net/FramePayload.h"
 #include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
 #include "../utils/FileToken.h"
@@ -132,7 +133,8 @@ static std::string computeFileMd5(const std::string& path)
 }
 
 FileSession::FileSession(const std::shared_ptr<TcpConnection>& conn, const char* filebasedir,
-                         const std::string& tokenkey, int serverkind)
+                         const std::string& tokenkey, int serverkind,
+                         const std::string& relaytokenkey, FolderRelayHub* relayhub)
     : TcpSession(conn),
       m_strFileBaseDir(filebasedir),
       m_tokenKey(tokenkey),
@@ -140,7 +142,8 @@ FileSession::FileSession(const std::shared_ptr<TcpConnection>& conn, const char*
       m_mode(mode_idle),
       m_fp(NULL),
       m_expectSize(0),
-      m_uploadOffset(0)
+      m_uploadOffset(0),
+      m_relayEndpoint(relayhub, relaytokenkey)
 {
 }
 
@@ -173,8 +176,18 @@ void FileSession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer*
             return;
         }
 
-        //成功解出一帧，前移读指针并分发
+        //成功解出一帧，前移读指针
         pBuffer->retrieve(consumed);
+
+        //协议加密：握手、加密状态校验与解密，必须排在业务分发之前
+        bool securityHandled = false;
+        if (!processFrameSecurity(conn, header, framebody, securityHandled))
+            return;
+
+        //本帧是握手帧，已在上面处理并应答完毕，不进业务分发
+        if (securityHandled)
+            continue;
+
         if (!processFrame(conn, header.cmd, header.seq, framebody))
         {
             LOGE("process frame error, close connection, client: %s",
@@ -185,22 +198,154 @@ void FileSession::onRead(const std::shared_ptr<TcpConnection>& conn, ByteBuffer*
     }
 }
 
+bool FileSession::processFrameSecurity(const std::shared_ptr<TcpConnection>& conn,
+                                       const frame_header& header,
+                                       std::string& body, bool& handled)
+{
+    handled = false;
+
+    const std::string peer = conn->peerAddress().toIpPort();
+
+    std::string response;
+    std::string err;
+    net::frame_security_result r =
+        net::processInboundFrame(m_handshake, header.cmd, header.seq, header.flags,
+                                 header.originlen, body, response, err);
+
+    if (r == net::frame_security_error)
+    {
+        LOGE("frame security check failed: %s, cmd: %u, close connection, client: %s",
+             err.c_str(), static_cast<unsigned>(header.cmd), peer.c_str());
+        conn->forceClose();
+        return false;
+    }
+
+    if (r == net::frame_security_handled)
+    {
+        handled = true;
+
+        //三帧握手里只有第 2 帧有应答。此刻 m_handshake.ready() 仍为 false，
+        //sendFrame 走的正是明文分支——客户端那时也还没初始化接收流。
+        if (!response.empty())
+            sendFrame(cmd_handshake, header.seq, 0, response);
+
+        if (m_handshake.ready())
+        {
+            LOGI("handshake done, frame encryption is now active, client: %s, key fingerprint: %s",
+                 peer.c_str(), net::cryptoServerIdentity().fingerprint().c_str());
+        }
+    }
+
+    return true;
+}
+
 bool FileSession::processFrame(const std::shared_ptr<TcpConnection>& conn,
                                uint16_t cmd, uint32_t seq, const std::string& body)
 {
     switch (cmd)
     {
+    //客户端上传一片文件字节。模式互斥的一个方向在此判：中转连接不得再调文件接口，
+    //否则等于拿一枚中转令牌绕过了上传令牌里的场景校验（见方案第 6.2 节）
     case cmd_file_upload:
+        if (m_mode == mode_folder_relay)
+        {
+            LOGE("file upload rejected on a folder relay connection, session: %s, lane: %d, "
+                 "close connection, client: %s",
+                 m_relayEndpoint.sessionId().c_str(), m_relayEndpoint.lane(),
+                 conn->peerAddress().toIpPort().c_str());
+            return false;
+        }
         return onUploadChunk(conn, seq, body);
 
+    //客户端请求下载一片文件字节。模式互斥的判定与上传同理
     case cmd_file_download:
+        if (m_mode == mode_folder_relay)
+        {
+            LOGE("file download rejected on a folder relay connection, session: %s, lane: %d, "
+                 "close connection, client: %s",
+                 m_relayEndpoint.sessionId().c_str(), m_relayEndpoint.lane(),
+                 conn->peerAddress().toIpPort().c_str());
+            return false;
+        }
         return onDownloadChunk(conn, seq, body);
 
+    //文件夹传输的中转握手：本连接凭中转令牌报到，按 (sessionid, lane) 与对端配成一对。
+    //连上并完成协议加密握手之后的第一帧就应当是它
+    case cmd_folder_relay_hello:
+        return onFolderRelayHello(conn, seq, body);
+
+    //文件夹传输的中转数据帧：服务端不解析包体，只找到配对端、用它的会话密钥重新加密后发出
+    case cmd_folder_relay_data:
+        return onFolderRelayData(conn, seq, body);
+
+    //本连接不该出现的 cmd：文件连接只认上述四个命令，其余一律按协议错误关连接
     default:
         LOGE("unsupported cmd: %u, client: %s",
              static_cast<unsigned>(cmd), conn->peerAddress().toIpPort().c_str());
         return false;
     }
+}
+
+bool FileSession::onFolderRelayHello(const std::shared_ptr<TcpConnection>& conn,
+                                     uint32_t seq, const std::string& body)
+{
+    const std::string peer = conn->peerAddress().toIpPort();
+
+    //模式互斥的另一个方向：已经在传文件的连接不再受理中转握手；已经做过中转握手的连接
+    //也不许再报到一次（重复报到会在配对表里留下摘不掉的残留登记）。三种情形共用这一处
+    //判定，日志里带上当前所处的模式即可分辨是哪一种
+    if (m_mode != mode_idle)
+    {
+        LOGE("folder relay hello rejected: connection is already in transfer mode %d, "
+             "close connection, client: %s", m_mode, peer.c_str());
+        sendFolderRelayHelloAck(seq, error_code_permission_denied, "connection is busy");
+        return false;
+    }
+
+    //令牌校验、角色校验、通道序号校验与配对表登记都在端点类里，本处只按结果决定
+    //应答内容与去留。登记时交进去的必须是持有本会话的那个 shared_ptr——配对表保存弱引用
+    int code = m_relayEndpoint.handleHello(body, shared_from_this(), peer);
+    if (code != error_code_ok)
+    {
+        //失败原因已由 handleHello 逐条记过日志，这里只把错误码回给客户端并断开
+        sendFolderRelayHelloAck(seq, code, "folder relay hello rejected");
+        return false;
+    }
+
+    //本连接自此只做中转：后续 cmd_file_upload / cmd_file_download 一律拒绝
+    m_mode = mode_folder_relay;
+    sendFolderRelayHelloAck(seq, error_code_ok, "ok");
+    return true;
+}
+
+bool FileSession::onFolderRelayData(const std::shared_ptr<TcpConnection>& conn,
+                                    uint32_t seq, const std::string& body)
+{
+    //只有完成中转握手的连接才允许转发。空闲连接直接发数据帧属协议违规（握手必须是首帧），
+    //上传 / 下载中的连接发它则是想跳过令牌校验直接占用一条中转通道，两者一律断开
+    if (m_mode != mode_folder_relay)
+    {
+        LOGE("folder relay data rejected: connection is in transfer mode %d, not relay mode, "
+             "close connection, client: %s", m_mode, conn->peerAddress().toIpPort().c_str());
+        return false;
+    }
+
+    std::shared_ptr<FileSession> peerSession = m_relayEndpoint.getPeer(conn);
+    if (!peerSession)
+    {
+        //对端那条同序号通道还没连上、或已经断开：丢掉本帧但不关本连接。已断开的情形由
+        //FileServer::onDisconnected 连带关闭本次传输的全部通道，两端据此走失败路径
+        LOGW("folder relay data dropped: peer lane is not connected, session: %s, lane: %d, "
+             "bodylen: %u, client: %s",
+             m_relayEndpoint.sessionId().c_str(), m_relayEndpoint.lane(),
+             static_cast<unsigned>(body.size()), conn->peerAddress().toIpPort().c_str());
+        return true;
+    }
+
+    //转发成功的帧不打日志：一次文件夹传输的数据帧数以万计，逐帧记录会淹没日志文件，
+    //也拖慢转发本身。异常路径（丢帧、配对失败、通道断开）都有日志，排查够用
+    peerSession->sendRelayFrame(cmd_folder_relay_data, seq, body);
+    return true;
 }
 
 bool FileSession::onUploadChunk(const std::shared_ptr<TcpConnection>& conn,
@@ -547,15 +692,34 @@ bool FileSession::onDownloadChunk(const std::shared_ptr<TcpConnection>& conn,
 
 void FileSession::sendFrame(uint16_t cmd, uint32_t seq, uint8_t flags, const std::string& body)
 {
+    //本连接的「加密 + 投递」必须整体串行，理由见 m_sendMutex 的注释。本函数是本会话
+    //唯一的发送出口，所以锁加在这里就够了：上传应答、下载分片、中转应答与转发帧都经过它
+    std::lock_guard<std::mutex> guard(m_sendMutex);
+
+    //包体的压缩与加密都由 FramePayload 这一条管线负责，顺序也在那里定死。
+    //压缩策略取 never：文件分片本身多半已是压缩格式，再走一遍 zlib 既费 CPU 又压不动，
+    //而且这也与收敛到管线之前的行为一致。
+    //加密器未就绪（未启用加密 / 握手未完成）时它自然产出明文，握手应答正是走这条。
+    std::string wire;
+    uint8_t     finalFlags = 0;
+    uint32_t    originlen = 0;
+    if (!net::encodeFramePayload(cmd, seq, body, &m_handshake.cipher(), flags,
+                                 net::payload_compress_never, wire, finalFlags, originlen))
+    {
+        LOGE("encode v2 frame payload failed, cmd: %u, bodylen: %u",
+             static_cast<unsigned>(cmd), static_cast<unsigned>(body.size()));
+        return;
+    }
+
     std::string out;
-    if (!encodeFrame(cmd, seq, flags, body.data(),
-                     static_cast<uint32_t>(body.size()),
-                     static_cast<uint32_t>(body.size()), out))
+    if (!encodeFrame(cmd, seq, finalFlags, wire.data(),
+                     static_cast<uint32_t>(wire.size()), originlen, out))
     {
         LOGE("encodeFrame failed, cmd: %u, bodylen: %u",
              static_cast<unsigned>(cmd), static_cast<unsigned>(body.size()));
         return;
     }
+
     sendData(out.data(), out.size());
 }
 
@@ -575,6 +739,24 @@ void FileSession::sendDownloadError(uint32_t seq, int code, const std::string& m
     std::string attBody;
     encodeAttachmentBody(writeCompact(d), NULL, 0, attBody);
     sendFrame(cmd_file_download, seq, frame_flag_has_attachment, attBody);
+}
+
+void FileSession::sendFolderRelayHelloAck(uint32_t seq, int code, const std::string& msg)
+{
+    //中转握手应答为普通 JSON 帧（不带附件），cmd 与请求一致，seq 原样回带供客户端关联
+    Json::Value root;
+    root["code"] = code;
+    root["msg"]  = msg;
+    sendFrame(cmd_folder_relay_hello, seq, 0, writeCompact(root));
+}
+
+void FileSession::sendRelayFrame(uint16_t cmd, uint32_t seq, const std::string& plainBody)
+{
+    //转发的帧不带任何附加标志位：按协议约定（docs/协议设计-v2.md 第 12.3.2 节）
+    //cmd_folder_relay_data 的包体是一段不透明的应用帧，既不压缩、也不是附件包体布局，
+    //故这里只需交给 sendFrame 用本连接的会话密钥重新加密后发出。
+    //注意本函数运行在<u>配对端</u>的 I/O 线程上，串行由 sendFrame 里的 m_sendMutex 保证
+    sendFrame(cmd, seq, 0, plainBody);
 }
 
 void FileSession::abortUpload()

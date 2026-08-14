@@ -27,11 +27,15 @@ namespace {
 //登录路径正等它决定是否阻断登录，超时即按"本次未查到更新"处理并放行。
 const int kCheckAckTimeoutMs = 8000;
 
+//登录前那条同步路径的超时（秒）。与登录本身取同一口径（BalloonLoginDlg 的
+//kLoginTimeoutSeconds = 3）—— 用户点了登录正等着，这一步比登录还慢就说不过去。
+const int kSyncCheckTimeoutSec = 3;
+
 //连 fileserver 的超时（秒）。与群文件下载取同一口径。
 const int kConnectTimeoutSec = 5;
 
 //升级包在本地的存放子目录（相对程序主目录）。与旧版升级流程沿用同一个名字，
-//iUpdateAuto 解压时也认它。
+//FlamingoUpdater 解压时也认它。
 const wchar_t* const kUpdateSubDir = L"update";
 
 //把 UTF-8 窄串转成宽串，供路径拼接用。
@@ -258,34 +262,64 @@ void UpdateManager::DoCheck(bool autoDownload)
     UpdateTaskResult result;
     result.m_valid = true;
 
-    //① 发请求。登记等待的 seq 必须在发出之前，否则应答可能先于登记到达。
     const std::string body = net::UpdateProtocolClient::buildCheckUpdateRequest(
         platform_pc, FLAMINGO_CLIENT_VERSION);
-    uint32_t seq = 0;
-    {
-        std::lock_guard<std::mutex> guard(m_ackMtx);
-        m_ackArrived = false;
-        m_ackResult  = net::CheckUpdateResult();
-        seq = CIUSocket::GetInstance().SendCheckUpdate(body);
-        m_ackSeq = seq;
-    }
-    if (seq == 0)
-    {
-        result.m_errmsg = "send check-update failed (not connected)";
-        LOG_ERROR("Update: %s.", result.m_errmsg.c_str());
-        {
-            std::lock_guard<std::mutex> guard(m_ackMtx);
-            m_ackSeq = 0;
-        }
-        PublishResult(result);
-        return;
-    }
-    LOG_INFO("Update: check-update sent, seq=%u, version=%s.", seq, FLAMINGO_CLIENT_VERSION);
 
-    //② 等应答
     net::CheckUpdateResult ack;
     bool arrived = false;
+
+    //取应答有两条路，按<u>异步收帧线程是否已启动</u>分流。这条线程在 CIUSocket::Init 里
+    //启动，而 Init 要登录成功之后才被调用（见 CMainDlg::OnLoginResult 的 LOGIN_SUCCESS
+    //分支）—— 它不能提前起，否则会把 Login() 正等着同步收取的那一帧应答抢走。
+    if (!CIUSocket::GetInstance().IsAsyncRecvRunning())
     {
+        //—— 登录前：同步一问一答，与 Login() 同构 ——
+        //用于"点击登录时先检查"与"登录被版本过低拒绝后自救"这两个场景。此刻没有
+        //收帧线程会把应答喂给 OnCheckUpdateResponse，只能自己收。
+        std::string respBody;
+        if (!CIUSocket::GetInstance().CheckUpdateSync(body, respBody, kSyncCheckTimeoutSec))
+        {
+            result.m_errmsg = "sync check-update failed (connect/send/recv)";
+            LOG_ERROR("Update: %s.", result.m_errmsg.c_str());
+            PublishResult(result);
+            return;
+        }
+        if (!net::UpdateProtocolClient::parseCheckUpdateResponse(respBody, ack))
+        {
+            result.m_errmsg = "parse check-update response failed";
+            LOG_ERROR("Update: %s, body=%s.", result.m_errmsg.c_str(), respBody.c_str());
+            PublishResult(result);
+            return;
+        }
+        arrived = true;
+        LOG_INFO("Update: sync check-update done, version=%s.", FLAMINGO_CLIENT_VERSION);
+    }
+    else
+    {
+        //—— 登录后：走异步收帧线程，应答经 HandleV2Frame 转交本类的等待槽 ——
+        //① 发请求。登记等待的 seq 必须在发出之前，否则应答可能先于登记到达。
+        uint32_t seq = 0;
+        {
+            std::lock_guard<std::mutex> guard(m_ackMtx);
+            m_ackArrived = false;
+            m_ackResult  = net::CheckUpdateResult();
+            seq = CIUSocket::GetInstance().SendCheckUpdate(body);
+            m_ackSeq = seq;
+        }
+        if (seq == 0)
+        {
+            result.m_errmsg = "send check-update failed (not connected)";
+            LOG_ERROR("Update: %s.", result.m_errmsg.c_str());
+            {
+                std::lock_guard<std::mutex> guard(m_ackMtx);
+                m_ackSeq = 0;
+            }
+            PublishResult(result);
+            return;
+        }
+        LOG_INFO("Update: check-update sent, seq=%u, version=%s.", seq, FLAMINGO_CLIENT_VERSION);
+
+        //② 等应答
         std::unique_lock<std::mutex> lock(m_ackMtx);
         arrived = m_ackCv.wait_for(lock, std::chrono::milliseconds(kCheckAckTimeoutMs),
                                    [this]() { return m_ackArrived || !m_running; });
@@ -300,7 +334,8 @@ void UpdateManager::DoCheck(bool autoDownload)
     if (!arrived)
     {
         result.m_errmsg = "check-update timeout";
-        LOG_ERROR("Update: check-update timeout, seq=%u.", seq);
+        //seq 只在异步分支里有意义（同步分支根本不登记等待槽），故不再打印它
+        LOG_ERROR("Update: check-update timeout, version=%s.", FLAMINGO_CLIENT_VERSION);
         PublishResult(result);
         return;
     }
@@ -344,9 +379,11 @@ void UpdateManager::DoCheck(bool autoDownload)
              FLAMINGO_CLIENT_VERSION, ack.m_latestVersion.c_str(), ack.m_forced ? 1 : 0,
              (long long)ack.m_size, ack.m_md5.c_str());
 
-    //③ 下载
+    //③ 下载。只在调用方要求下载时才走这一步；纯检查（关于页的「检查更新」）到此为止。
+    //标记本次是否尝试过下载，界面据它区分"没下"与"下了但失败"，见 m_downloadAttempted。
     if (autoDownload)
     {
+        result.m_downloadAttempted = true;
         DoDownload(ack, result);
     }
     PublishResult(result);

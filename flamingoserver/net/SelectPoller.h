@@ -37,7 +37,7 @@ namespace net
         int             m_epollfd;
         EventList       m_events;
 
-        typedef std::map<int, Channel*> ChannelMap;
+        typedef std::map<SOCKET, Channel*> ChannelMap;
 
         ChannelMap      m_channels;
         EventLoop* m_ownerLoop;

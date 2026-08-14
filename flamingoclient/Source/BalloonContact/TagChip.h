@@ -5,9 +5,9 @@
  *  dialogs.jsx ContactInfoDialog 的 tags 区：accent-soft 浅橙底、accent
  *  橙字、全圆角胶囊，胶囊内文字右侧带一个「×」删除按钮。
  *
- *  胶囊本身可点击 —— 当且仅当点击落在右侧「×」热区内时，向父窗口冒一个
- *  DUIN_CLICK 通知；父窗口据本控件的 ctrlId 定位是哪一枚标签并删除它。
- *  点在文字区不发通知（标签胶囊整体没有"打开"语义）。
+ *  胶囊整体可点击，落点不同语义不同：点在右侧「×」热区内是"删除本标签"，
+ *  点在左侧文字区内是"就地编辑本标签"。两者各发一个<u>不同的</u>自定义通知码，
+ *  父窗口不必再自己判断落点，也不会把两种意图混在同一个分支里。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL。
  *
@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/DuiControl.h"
+#include "../../../third-party/balloonui/balloonui/DuiControl.h"
 
 namespace ballooncontact {
 
@@ -27,6 +27,21 @@ namespace ballooncontact {
 class TagChip : public balloonwjui::DuiControl
 {
 public:
+    // 本控件发给父 host 的两个自定义通知码。
+    //
+    // 取值特意从 DUIN_CUSTOM + 50 起，避开 DuiTreeView / DuiComboBox / DuiTab 等
+    // balloonui 内置控件已经占用的 +1..+11 那一段 —— balloonui 的自定义通知码是
+    // 按控件各自从 DUIN_CUSTOM 起编号的，不同控件的同一档数值必然相同，另开取值段
+    // 能从源头减少撞号。即便如此，父窗口分发时仍必须连 ctrlId 一起判（见
+    // CBalloonContactWindow::OnDuiNotify），另开取值段只是缓解、不是免除。
+    enum
+    {
+        // 点在右侧「×」热区内 —— 请求删除本枚标签。
+        DUIN_TAGCHIP_DELETE = balloonwjui::DUIN_CUSTOM + 50,
+        // 点在左侧文字区内 —— 请求就地编辑本枚标签的文字。
+        DUIN_TAGCHIP_EDIT   = balloonwjui::DUIN_CUSTOM + 51,
+    };
+
     TagChip();
 
     // 设置 / 读取胶囊上的标签文字。SetTagText 会触发重绘。
@@ -51,12 +66,14 @@ public:
     //   返回：恒为 true（已消费）。
     bool    OnLButtonDown(POINT pt, UINT mkFlags) override;
 
-    // 鼠标松开：若落在「×」热区内则向父冒 DUIN_CLICK（请求删除本标签）。
+    // 鼠标松开：落在「×」热区内向父冒 DUIN_TAGCHIP_DELETE，落在文字区内向父冒
+    // DUIN_TAGCHIP_EDIT。两种情况都由父窗口据本控件的 ctrlId 定位是哪一枚标签。
     //   pt：鼠标 host-客户区坐标；mkFlags：键鼠修饰位（未用）。
     //   返回：true 表示本控件已消费该事件。
     bool    OnLButtonUp(POINT pt, UINT mkFlags) override;
 
-    // 普通箭头光标。
+    // 普通箭头光标 —— 按产品要求，胶囊虽然整体可点，悬停时不变手型（与头部
+    // 姓名 / 账号两块可复制文字的处理一致）。
     bool    OnSetCursor(POINT pt) override { return false; }
 
 private:

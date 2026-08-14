@@ -153,6 +153,20 @@ struct MessageNotify
     int64_t     m_fileSize;     //文件字节数（发送方写入，供收方显示大小与作下载进度分母）
     std::string m_fileMd5;      //文件内容MD5（小写十六进制），下载完成后校验完整性
 
+    //==== 文件夹传输记录字段（仅 m_msgtype==message_type_folder 时有效）====
+    //一次单聊「发送文件夹」走到终态后，服务端在双方会话里各留一条这样的记录条，
+    //本端不发这条消息、只收。字段含义与取值范围见 net::FolderRecordContent
+    //（net/FolderProtocolClient.h），解析也是转调那边的 parseRecordContent。
+    //<u>同一次传输可能留下多条记录</u>：每次尝试各一条（失败一条、重试成功再一条），
+    //故 m_folderSessionId 在多条消息之间可以重复，不是唯一键。
+    std::string m_folderSessionId;   //本次传输的会话 id；聊天窗据它把记录与本地气泡对上
+    std::string m_folderName;        //根目录名（只有名字、不含路径，UTF-8）
+    int64_t     m_folderTotalDirs;   //目录总数，含空目录、不含根目录本身；单位：个
+    int64_t     m_folderTotalFiles;  //文件总数；单位：个
+    int64_t     m_folderTotalSize;   //全部文件字节数合计；单位：字节
+    int         m_folderResult;      //结局，取值为 folder_transfer_state 的终态（3~8）；0=非文件夹记录
+    int         m_folderErrCode;     //失败原因（error_code_folder_*）；仅结局为 7 时有意义
+
     //==== 群聊 @提醒 字段（仅文本消息、且发送方 @ 过人时非空；见 docs/群聊@提醒方案.md）====
     //老版本客户端发来的消息没有 content.at，这两项保持默认（false / 空），按纯文本渲染。
     bool m_atAll;                                       //本条是否 @所有人
@@ -181,6 +195,11 @@ struct MessageNotify
         , m_imageHeight(0)
         , m_imageSize(0)
         , m_fileSize(0)
+        , m_folderTotalDirs(0)
+        , m_folderTotalFiles(0)
+        , m_folderTotalSize(0)
+        , m_folderResult(0)
+        , m_folderErrCode(0)
         , m_atAll(false)
         , m_fileAckState(0)
     {

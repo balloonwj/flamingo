@@ -33,9 +33,9 @@
 
 #include <vector>
 
-#include "../../balloonui/balloonui/Controls/Input/EditContextMenu.h"
-#include "../../balloonui/balloonui/Controls/List/DuiMenu.h"
-#include "../../balloonui/balloonui/Controls/List/DuiMenuPlacement.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/EditContextMenu.h"
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenuPlacement.h"
 
 using balloonwjui::BuildEditContextMenu;
 using balloonwjui::ClampMenuOriginToRect;

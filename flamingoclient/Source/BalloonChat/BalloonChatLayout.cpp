@@ -41,10 +41,10 @@ extern CAppModule _Module;
 #include <gdiplus.h>   // PNG 皮肤 / 头像加载
 
 #include "BalloonChatLayout.h"
-#include "../../balloonui/balloonui/DuiXmlBuilder.h"
-#include "../../balloonui/balloonui/DuiHost.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Feedback/DuiToolTip.h"   // 工具栏 tooltip
+#include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"   // 工具栏 tooltip
 
 namespace balloonchat {
 

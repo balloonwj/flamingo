@@ -54,8 +54,8 @@ extern CAppModule _Module;
 #include "MainPanelMockData.h"
 #include "MainPanelScrollView.h"
 #include "MainPanelTreeView.h"
-#include "../../balloonui/balloonui/DuiXmlBuilder.h"
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox
+#include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox
 
 namespace balloonmain {
 
@@ -303,10 +303,10 @@ std::unique_ptr<DuiControl> CreateMainCustomControl(const DuiXmlBuilder::Node& n
 
     if (n.tag == "main-treeview")
     {
-        // MainPanelTreeView(继承 DuiTreeView),唯一职责是在单列模式下把
-        // 基类未消化的滚轮上抛给祖先 MainPanelScrollView ——
-        // DuiHost::OnMouseWheel 不冒泡 + 单列 DuiTreeView::OnMouseWheel
-        // 直接 return false,如果用裸 <treeview>,滚轮永远到不了外层 scrollview。
+        // MainPanelTreeView(继承 DuiTreeView),职责是行右侧列的绘制与会话行
+        // 装饰(时间 / 未读红点 / 置顶与免打扰标记),详见 MainPanelTreeView.h。
+        // 滚轮不需要它管:单列 DuiTreeView::OnMouseWheel 如实返回 false,
+        // DuiHost::DispatchMouseWheel 随即沿父链上冒到外层 MainPanelScrollView。
         //
         // 不能直接用 <treeview> 标签:内置工厂(DuiXmlBuilder::BuildOne)
         // 在 BUI_FEATURE_TREEVIEW 段就把 <treeview> 截住建裸 DuiTreeView,

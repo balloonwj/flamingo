@@ -58,7 +58,7 @@ StatusMenuEntry MakeStatusEntry(UINT id, int presence, int currentPresence)
 
 std::vector<StatusMenuEntry> BuildStatusMenuModel(int currentPresence)
 {
-    // 顺序严格对照 design/主面板状态菜单.png（去掉"隐身"后剩 4 项）：
+    // 顺序严格对照 design/主面板状态菜单.png（共 4 项）：
     //   在线 / 离开 / 勿扰 / 离线
     const int cur = NormalizePresenceForMenu(currentPresence);
 
@@ -97,9 +97,10 @@ int NormalizePresenceForMenu(int presence)
     case presence_offline:
         return presence_offline;
     default:
-        // 隐身（presence_invisible）以及一切越界取值统一归到"离线"，与
-        // GetPresenceVisual 的兜底口径一致 —— 否则会出现"胶囊显示离线、菜单里
-        // 却没有任何一项被标记"的自相矛盾。
+        // 一切越界取值统一归到"离线"，与 GetPresenceVisual 的兜底口径一致 ——
+        // 否则会出现"胶囊显示离线、菜单里却没有任何一项被标记"的自相矛盾。
+        // 取值 4 是已作废的旧状态（见 net/Protocol.h），老服务端仍可能推上来，
+        // 走的就是这条兜底。
         return presence_offline;
     }
 }
@@ -148,7 +149,7 @@ PresenceVisual GetPresenceVisual(int presence)
         v.dotColor = kDotOffline;
         break;
     default:
-        // presence_invisible 等本菜单不可选中的取值统一退化为"离线"灰点。
+        // 本菜单不可选中的取值（含已作废的旧状态 4）统一退化为"离线"灰点。
         // 正常流程不会走到这里（菜单只产出上面 4 种），仅作兜底防御。
         v.text     = L"离线";
         v.dotColor = kDotOffline;

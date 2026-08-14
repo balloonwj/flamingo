@@ -12,7 +12,7 @@ const int Channel::kNoneEvent = 0;
 const int Channel::kReadEvent = XPOLLIN | XPOLLPRI;
 const int Channel::kWriteEvent = XPOLLOUT;
 
-Channel::Channel(EventLoop* loop, int fd__) : m_loop(loop),
+Channel::Channel(EventLoop* loop, SOCKET fd__) : m_loop(loop),
 m_fd(fd__),
 m_events(0),
 m_revents(0),

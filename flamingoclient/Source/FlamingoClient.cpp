@@ -13,8 +13,11 @@
 #include "net/FileTransfer.h"               // net::FileSendProgress / FileSendResult / FileDownload*（v2 文件收发投递载体）
 #include "net/RemoteDesktopProtocolClient.h" // net::RDInviteResponse / RDInviteNotify / RDRelayInfo / RDStateNotify（v2 远程桌面投递载体）
 #include "net/CallProtocolClient.h"          // net::CallInviteResponse / CallInviteNotify / CallSignalingInfo / CallStateNotify（v2 音视频通话投递载体）
+#include "net/FolderProtocolClient.h"        // net::FolderInviteResponse / FolderInviteNotify / FolderSessionResponse / FolderStateNotify / FolderRelayInfo（v2 文件夹传输投递载体）
+#include "FolderTransfer/FolderTransferManager.h" // foldertransfer::FolderScanNotice / FolderProgressNotice / FolderResultNotice（文件夹传输本端事件投递载体）
 #include "net/AnnounceProtocolClient.h"      // net::AnnouncementsResult / AnnouncementNotify / AnnounceMarkReadResult（v2 平台公告投递载体）
 #include "net/FriendProtocolClient.h"        // net::SetFriendRemarkResult（v2 设置好友备注名应答投递载体）
+#include "net/ContactTagProtocolClient.h"    // net::SetContactTagsResult（v2 设置联系人标签应答投递载体）
 #include "net/FavoriteProtocolClient.h"      // net::SetFavoriteResult（v2「我的收藏」设置应答投递载体）
 #include "net/StarredProtocolClient.h"       // net::SetStarredResult（v2「特别关注」设置应答投递载体）
 #include "IULog.h"
@@ -355,7 +358,7 @@ void CFlamingoClient::Login(int nStatus/* = STATUS_ONLINE*/)
     //改状态时写入新值，故断线重连 / 主动重新上线会沿用上次选择的状态。
     //注意此处承载的是 v2 presence（0 离线/1 在线/2 离开/3 勿扰），不是 v1 ONLINE_STATUS——
     //两套枚举的 away/invisible 值是反的；HandleLogon 会把它原样传给 CIUSocket::Login 的
-    //nOnlineStatus（即 v2 presence）。旧实现写死 STATUS_AWAY(v1=4)，等于把自己登成 v2 隐身(4)。
+    //nOnlineStatus（即 v2 presence）。旧实现写死 STATUS_AWAY(v1=4)，等于把自己登成已作废的取值 4。
     //入参 nStatus 是历史遗留的 v1 形参，唯一调用方（重连定时器）按默认值传入，不再使用。
     (void)nStatus;
     pLoginRequest->m_nStatus = CIUSocket::GetInstance().GetRecordOnlineStatus();
@@ -963,7 +966,12 @@ void CFlamingoClient::OnLoginResult(UINT message, WPARAM wParam, LPARAM lParam)
 
 	}
 	
-    ::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_LOGIN_RESULT, 0, nLoginResultCode);
+    //转给 CMainDlg 时把结果对象拆开：lParam 传结果码，wParam 传本次登录的轮次号。
+    //<u>不能把 pLoginResult 指针本身传下去</u>——本函数末尾就会 delete 它，而下游
+    //是 SendMessage 同步调用、指针一旦被存下来就会变成野指针。轮次号是登录窗用来
+    //判断"这个结果是不是我还在等的那一个"的依据，见 BalloonAuth/LoginProgressState.h。
+    ::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_LOGIN_RESULT,
+                  (WPARAM)pLoginResult->m_uLoginGeneration, nLoginResultCode);
     ::SendMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_UPDATE_BUDDY_INFO, 0, (LPARAM)m_UserMgr.m_UserInfo.m_uUserID);
 
 	delete pLoginResult;
@@ -1717,8 +1725,7 @@ long CFlamingoClient::ParseBuddyStatus(long nFlag)
 	{
 		if(nFlag & 0x01)
 			nStatus = STATUS_ONLINE;
-		else if(nFlag & 0x02)
-			nStatus = STATUS_INVISIBLE;
+		//0x02 位原先表示隐身，该状态已去掉，此位不再有语义，落回离线
 		else if(nFlag & 0x03)
 			nStatus = STATUS_BUSY;
 		else if(nFlag & 0x04)
@@ -2156,6 +2163,15 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
             delete (net::AnnounceMarkReadResult*)lParam;
         break;
 
+    //v2 设置联系人标签的应答：转发给主窗口（主面板拿应答回带的列表覆盖本地缓存，
+    //成功是对齐归一结果、失败是退回服务端真值）；未就绪则就地释放。
+    case FMG_MSG_V2_SET_TAGS_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::SetContactTagsResult*)lParam;
+        break;
+
     //v2 设置好友备注名的应答：转发给主窗口（成功只记日志，失败时主面板据回带的
     //userid 把那一个人的备注回滚）；未就绪则就地释放。
     case FMG_MSG_V2_SET_REMARK_RESULT:
@@ -2338,6 +2354,78 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::RDStateNotify*)lParam;
+        break;
+
+    //——v2 单聊文件夹传输(cmd_folder_* 1810~1817)。前五条来自网络层，后五条来自
+    //  foldertransfer::FolderTransferManager 的工作线程，都在这里统一转投主窗口，
+    //  再由主窗口经主面板路由到对应聊天窗的那条文件夹气泡上。
+    //  <u>这一层历史上漏过</u>：漏了转发 case 的症状是"日志里收到了、界面纹丝不动"，
+    //  且 lParam 上的堆对象一并泄漏，全程不报错，排查时极易误判成别的原因。——
+
+    //v2 文件夹传输邀请应答：转发给主窗口（→绑定服务端会话 id，或按 code 把气泡标失败）；未就绪则就地释放。
+    case FMG_MSG_V2_FOLDER_INVITE_ACK:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::FolderInviteResponse*)lParam;
+        break;
+
+    //v2 文件夹传输邀请推送：转发给主窗口（→接收端会话里出一条带「接收 / 拒绝」的邀请气泡）；未就绪则就地释放。
+    case FMG_MSG_V2_FOLDER_INVITE_NOTIFY:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::FolderInviteNotify*)lParam;
+        break;
+
+    //v2 文件夹传输通用应答（应答 / 撤回 / 结束 / 重试四条共用）：转发给主窗口；未就绪则就地释放。
+    case FMG_MSG_V2_FOLDER_SESSION_ACK:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::FolderSessionResponse*)lParam;
+        break;
+
+    //v2 文件夹传输状态推送：转发给主窗口（→按 state 把气泡切成拒绝 / 取消 / 失败 / 完成等）；未就绪则就地释放。
+    case FMG_MSG_V2_FOLDER_STATE_NOTIFY:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::FolderStateNotify*)lParam;
+        break;
+
+    //v2 文件夹传输中转参数下发：转发给主窗口（→起收发状态机、气泡转传输中）；未就绪则就地释放。
+    case FMG_MSG_V2_FOLDER_RELAY_INFO:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::FolderRelayInfo*)lParam;
+        break;
+
+    //本地目录扫描完成：转发给主窗口（→把文件数 / 目录数 / 总大小补进气泡）；未就绪则就地释放。
+    case FMG_MSG_V2_FOLDER_SCANNED:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (foldertransfer::FolderScanNotice*)lParam;
+        break;
+
+    //文件夹发送 / 接收进度：转发给主窗口（→更新气泡进度条与状态行）；未就绪则就地释放。
+    case FMG_MSG_V2_FOLDER_SEND_PROGRESS:
+    case FMG_MSG_V2_FOLDER_RECV_PROGRESS:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (foldertransfer::FolderProgressNotice*)lParam;
+        break;
+
+    //文件夹发送 / 接收最终结果：转发给主窗口（→收尾气泡并回调管理器停线程、发 1814）；未就绪则就地释放。
+    case FMG_MSG_V2_FOLDER_SEND_RESULT:
+    case FMG_MSG_V2_FOLDER_RECV_RESULT:
+        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (foldertransfer::FolderResultNotice*)lParam;
         break;
 
     //v2 音视频通话邀请应答：转发给主窗口（→主叫呼叫窗按 code 置会话 / 提示失败）；未就绪则就地释放。

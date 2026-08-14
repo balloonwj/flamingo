@@ -29,7 +29,7 @@
 #include <memory>
 
 #include "MainPanelStatusMenu.h"                              // StatusMenuEntry（状态菜单行模型）
-#include "../../balloonui/balloonui/Controls/List/DuiMenu.h"  // DuiMenu（装配目标）
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"  // DuiMenu（装配目标）
 
 // CImageEx 在全局命名空间（ImageEx.h），前向声明须放命名空间外。
 class CImageEx;

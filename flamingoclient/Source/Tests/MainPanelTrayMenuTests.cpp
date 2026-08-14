@@ -1,4 +1,4 @@
-/**
+﻿/**
  *  MainPanelTrayMenuTests.cpp
  *
  *  系统托盘右键菜单（MainPanelTrayMenu）的测试：验证纯函数 BuildTrayMenuModel()
@@ -61,6 +61,10 @@ void CountRows(const std::vector<TrayMenuEntry>& items, int& funcs, int& seps)
 // =====================================================================
 // TRAY1 / TRAY2 —— 登录前 / 面板锁定：打开主面板 ── 退出（两态内容相同）
 // =====================================================================
+
+// 已作废的在线状态取值：4 曾经是「隐身」，本产品不提供该功能（见 net/Protocol.h）。
+// 老服务端仍可能推上来，故保留这些用例，确认它被当作越界值归到"离线"。
+static const int kRetiredPresence = 4;
 
 TEST_CASE("TRAY1 登录前托盘菜单 = 打开主面板 / 分隔 / 退出（3 行）", "[traymenu]")
 {
@@ -367,16 +371,16 @@ TEST_CASE("TRAY10 当前项文字带\"（当前）\"后缀，其余项是纯状�
     CHECK(::wcscmp(items[5].label, L"关闭所有声音") == 0);
 }
 
-TEST_CASE("TRAY11 隐身与越界取值退化为\"离线\"项被标记", "[traymenu][presence]")
+TEST_CASE("TRAY11 越界取值退化为\"离线\"项被标记", "[traymenu][presence]")
 {
     // 约定：未知状态一律归到"离线"，与 GetPresenceVisual 的兜底口径一致 —— 否则会
     // 出现"胶囊显示离线、菜单里却没有任何一项被标记"的自相矛盾。
-    std::vector<TrayMenuEntry> invisible =
-        BuildTrayMenuModel(kTrayNormal, false, presence_invisible);
-    REQUIRE(invisible.size() == 11);
-    CHECK(invisible[3].isCurrent);
-    CHECK(invisible[3].iconKind == kIconPresenceOffline);
-    CHECK(::wcscmp(invisible[3].label, L"离线（当前）") == 0);
+    std::vector<TrayMenuEntry> retired =
+        BuildTrayMenuModel(kTrayNormal, false, kRetiredPresence);
+    REQUIRE(retired.size() == 11);
+    CHECK(retired[3].isCurrent);
+    CHECK(retired[3].iconKind == kIconPresenceOffline);
+    CHECK(::wcscmp(retired[3].label, L"离线（当前）") == 0);
 
     std::vector<TrayMenuEntry> unknown = BuildTrayMenuModel(kTrayNormal, false, 999);
     REQUIRE(unknown.size() == 11);

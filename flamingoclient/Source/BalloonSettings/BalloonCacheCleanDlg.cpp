@@ -12,13 +12,12 @@
 #include "../UserSessionData.h"      // g_szDataRoot
 #include "../IULog.h"
 
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiSeparator.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiSwitch.h"
-#include "../../balloonui/balloonui/DuiAnimation.h"   // DuiAnimMgr::TickAll（开关滑动动画）
-#include "../../balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiSeparator.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 
 namespace {
 
@@ -54,9 +53,9 @@ const COLORREF kColorSub     = RGB(0x9A, 0x98, 0x93);
 const COLORREF kColorSepLine = RGB(0xEC, 0xEA, 0xE6);
 const COLORREF kAccentOrange = RGB(0xF2, 0x6B, 0x3E);   // 开关开启色，与系统设置窗一致
 
-// 开关滑动动画的 pulse 定时器（挂在本窗 HWND 上）。约 60Hz，与 balloonui 同一档位。
-const UINT_PTR kAnimTimerId       = 0xC001;
-const UINT     kAnimIntervalMs    = 16;
+// 开关滑动动画的中间帧由 DuiAnimMgr 推进，本对话框不必为此挂定时器：DuiAnimMgr
+// 自 2026-08-14 起自带脉冲定时器（见 balloonui/DuiAnimation.cpp 的 StartPulse /
+// PulseProc），有动画在跑时它自己按 16ms 发 WM_TIMER，跑完即停。
 
 // 造一个文本标签。
 std::unique_ptr<balloonwjui::DuiControl> MakeLabel(LPCTSTR text, COLORREF color, DWORD align)
@@ -123,9 +122,6 @@ void CBalloonCacheCleanDlg::OpenDialog(HWND owner)
     ShowWindow(SW_SHOW);
     UpdateWindow();
     ::SetForegroundWindow(m_hWnd);
-
-    // 开关的滑动动画要靠这个定时器推进，否则点了不动。
-    SetTimer(kAnimTimerId, kAnimIntervalMs, NULL);
 }
 
 void CBalloonCacheCleanDlg::ScanSizes()
@@ -289,21 +285,7 @@ void CBalloonCacheCleanDlg::DoClean()
 LRESULT CBalloonCacheCleanDlg::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
                                           LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
-    KillTimer(kAnimTimerId);
     DestroyWindow();
-    return 0;
-}
-
-LRESULT CBalloonCacheCleanDlg::OnTimerMsg(UINT /*uMsg*/, WPARAM wParam,
-                                          LPARAM /*lParam*/, BOOL& bHandled)
-{
-    if ((UINT_PTR)wParam != kAnimTimerId)
-    {
-        bHandled = FALSE;   // 别人的定时器，放行
-        return 0;
-    }
-    // 推进开关滑动动画的中间帧。没有在跑的动画时本调用是空转，开销可忽略。
-    balloonwjui::DuiAnimMgr::Inst().TickAll(::GetTickCount());
     return 0;
 }
 

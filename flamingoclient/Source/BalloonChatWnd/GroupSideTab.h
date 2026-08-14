@@ -12,7 +12,7 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 
 namespace balloonchatwnd {
 

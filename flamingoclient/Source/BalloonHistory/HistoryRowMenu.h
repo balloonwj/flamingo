@@ -71,6 +71,7 @@ enum HistoryRowMenuId
     kHistoryRowMenuCancelDownload = 8,   // 取消下载：本行正在下载时出现，停掉这次传输（此时不给「下载」与「打开」）
     kHistoryRowMenuLocate         = 9,   // 定位到聊天窗：所有类型的行都有，是本窗口的主操作 —— 跳到聊天窗并高亮这条
     kHistoryRowMenuPin            = 10,  // Pin / 取消 Pin：所有类型的行都有，文案随当前是否已钉住取反；msgid 未分配时整项不出现
+    kHistoryRowMenuOpenFolderRoot = 11,  // 打开文件夹：仅文件夹传输记录行、且本机登记过这次传输的根目录且目录还在时出现，在资源管理器里打开<u>那个目录本身</u>。与 kHistoryRowMenuOpenFolder（打开文件所在的父目录并选中文件）不是一回事，故另开一个 id
 };
 
 /**
@@ -171,5 +172,19 @@ bool IsHistoryRowImageType(int msgType);
  *  @return 算文件行返回 true。
  */
 bool IsHistoryRowFileType(int msgType);
+
+/**
+ *  判断某个消息类型在本窗口里算不算「文件夹传输记录行」。
+ *
+ *  文件夹传输记录（::message_type_folder）与文件消息完全是两回事：服务端只记了这次
+ *  传输这个动作（文件夹名 / 规模 / 结局），没有文件清单、没有 fileid、没有 MD5，因此
+ *  它<u>不支持下载、不支持另存为</u>，唯一可能的操作是"在本机打开当初那个目录"，而这
+ *  还得看这台机器上有没有登记过落点。故它不能并进 IsHistoryRowFileType，否则菜单会给
+ *  出一堆点下去必然无效的项。
+ *
+ *  @param msgType 消息内容类型，取值见 net/Protocol.h 的 enum message_type。
+ *  @return 算文件夹记录行返回 true。
+ */
+bool IsHistoryRowFolderType(int msgType);
 
 } // namespace balloonhistory

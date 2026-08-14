@@ -259,6 +259,41 @@ TEST_CASE("G7c 备注名含中文与需转义字符时 JSON 仍合法")
     CHECK(contacts[0]["remark"].asString() == "他说\"随便\"\\ 换行\n结束 · 中文");
 }
 
+TEST_CASE("G8 联系人标签：贴了就按提交顺序原样带出")
+{
+    //标签与备注名性质相同（单向、属于登录用户而不属于联系人本身），故同样随每个人
+    //各自的通讯录下发。改标签走 cmd_set_contact_tags(1217)，读回来就靠本字段——
+    //不带的话客户端重登后标签就丢了，而协议里并没有单独的读取命令。
+    ContactsData data = makeSampleData();
+    data.contacts[0].tags.push_back("设计");
+    data.contacts[0].tags.push_back("外包");
+
+    Json::Value root;
+    REQUIRE(parseJson(ContactsProtocol::buildContactsResponse(data), root));
+
+    const Json::Value& contacts = root["contacts"];
+    REQUIRE(contacts.size() == 1);
+    REQUIRE(contacts[0]["tags"].isArray());
+    REQUIRE(contacts[0]["tags"].size() == 2);
+    //顺序即 f_order 的顺序，也就是用户当初提交时的顺序，序列化不得重排
+    CHECK(contacts[0]["tags"][0].asString() == "设计");
+    CHECK(contacts[0]["tags"][1].asString() == "外包");
+}
+
+TEST_CASE("G8b 未贴标签：tags 字段仍在且为空数组")
+{
+    //与 remark 同样刻意不做"空则省略字段"的优化：客户端只需一条解析路径。
+    //makeSampleData 里的联系人没贴标签。
+    Json::Value root;
+    REQUIRE(parseJson(ContactsProtocol::buildContactsResponse(makeSampleData()), root));
+
+    const Json::Value& contacts = root["contacts"];
+    REQUIRE(contacts.size() == 1);
+    REQUIRE(contacts[0].isMember("tags"));
+    REQUIRE(contacts[0]["tags"].isArray());
+    CHECK(contacts[0]["tags"].size() == 0);
+}
+
 TEST_CASE("G6 空数据：各区块均为合法空数组")
 {
     ContactsData empty;

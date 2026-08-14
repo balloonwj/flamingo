@@ -248,6 +248,15 @@ const char* const SCHEMA_TABLE_STATEMENTS[] =
         "    f_update_time INTEGER NOT NULL DEFAULT 0,\n"
         "    PRIMARY KEY (f_userid, f_target_userid)\n"
         ");\n",
+    "CREATE TABLE IF NOT EXISTS t_contact_tag\n"
+        "(\n"
+        "    f_userid INTEGER NOT NULL,\n"
+        "    f_target_userid INTEGER NOT NULL,\n"
+        "    f_tag VARCHAR(16) COLLATE NOCASE NOT NULL DEFAULT '',\n"
+        "    f_order INTEGER NOT NULL DEFAULT 0,\n"
+        "    f_update_time INTEGER NOT NULL DEFAULT 0,\n"
+        "    PRIMARY KEY (f_userid, f_target_userid, f_tag)\n"
+        ");\n",
     "CREATE TABLE IF NOT EXISTS t_blacklist\n"
         "(\n"
         "    f_userid INTEGER NOT NULL,\n"
@@ -416,7 +425,7 @@ const char* const SCHEMA_TABLE_STATEMENTS[] =
         ");\n",
 };
 
-const int SCHEMA_TABLE_STATEMENT_COUNT = 33;
+const int SCHEMA_TABLE_STATEMENT_COUNT = 34;
 
 const char* const SCHEMA_POST_STATEMENTS[] =
 {
@@ -499,6 +508,7 @@ const char* const SCHEMA_POST_STATEMENTS[] =
         "END;\n",
     "CREATE INDEX IF NOT EXISTS t_service_account_binding_idx_service ON t_service_account_binding(f_service_id);\n",
     "CREATE INDEX IF NOT EXISTS t_contact_remark_idx_user ON t_contact_remark(f_userid);\n",
+    "CREATE INDEX IF NOT EXISTS t_contact_tag_idx_user ON t_contact_tag(f_userid);\n",
     "CREATE INDEX IF NOT EXISTS t_favorite_idx_favorite_user ON t_favorite(f_userid);\n",
     "CREATE INDEX IF NOT EXISTS t_starred_idx_starred_user ON t_starred(f_userid);\n",
     "CREATE INDEX IF NOT EXISTS t_group_announcement_idx_group_time ON t_group_announcement(f_groupid, f_publish_time);\n",
@@ -514,7 +524,7 @@ const char* const SCHEMA_POST_STATEMENTS[] =
     "CREATE INDEX IF NOT EXISTS t_client_version_idx_platform_enabled ON t_client_version(f_platform, f_enabled);\n",
 };
 
-const int SCHEMA_POST_STATEMENT_COUNT = 60;
+const int SCHEMA_POST_STATEMENT_COUNT = 61;
 
 const char* const SCHEMA_TABLES[] =
 {
@@ -535,6 +545,7 @@ const char* const SCHEMA_TABLES[] =
     "t_service_account",
     "t_service_account_binding",
     "t_contact_remark",
+    "t_contact_tag",
     "t_blacklist",
     "t_conversation",
     "t_message_deleted",
@@ -553,7 +564,7 @@ const char* const SCHEMA_TABLES[] =
     "t_client_version",
 };
 
-const int SCHEMA_TABLE_COUNT = 33;
+const int SCHEMA_TABLE_COUNT = 34;
 
 const SchemaColumn SCHEMA_COLUMNS[] =
 {
@@ -722,6 +733,11 @@ const SchemaColumn SCHEMA_COLUMNS[] =
     { "t_contact_remark", "f_target_userid", "INTEGER" },
     { "t_contact_remark", "f_remark", "VARCHAR(32) NOT NULL DEFAULT ''" },
     { "t_contact_remark", "f_update_time", "INTEGER NOT NULL DEFAULT 0" },
+    { "t_contact_tag", "f_userid", "INTEGER" },
+    { "t_contact_tag", "f_target_userid", "INTEGER" },
+    { "t_contact_tag", "f_tag", "VARCHAR(16) COLLATE NOCASE NOT NULL DEFAULT ''" },
+    { "t_contact_tag", "f_order", "INTEGER NOT NULL DEFAULT 0" },
+    { "t_contact_tag", "f_update_time", "INTEGER NOT NULL DEFAULT 0" },
     { "t_blacklist", "f_userid", "INTEGER" },
     { "t_blacklist", "f_blocked_userid", "INTEGER" },
     { "t_blacklist", "f_create_time", "TIMESTAMP" },
@@ -826,6 +842,6 @@ const SchemaColumn SCHEMA_COLUMNS[] =
     { "t_client_version", "f_create_time", "INTEGER NOT NULL DEFAULT 0" },
 };
 
-const int SCHEMA_COLUMN_COUNT = 267;
+const int SCHEMA_COLUMN_COUNT = 272;
 
 } // namespace sqliteapi

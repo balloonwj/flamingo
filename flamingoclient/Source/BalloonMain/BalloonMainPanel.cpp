@@ -30,6 +30,7 @@
 #include "MainPanelConversationMenu.h" // BuildConversationMenuModel / ConversationMenuId（会话右键菜单行模型）
 #include "MainPanelContactMenu.h"     // BuildContactMenuModel / ContactMenuId（联系人右键菜单行模型）
 #include "ConversationListOps.h"    // 会话列表纯操作（排序 / 查找 / 删除 / 置顶 / 免打扰）
+#include "FolderInviteNotifyPolicy.h" // 文件夹邀请的会话列表预览文字与"记未读 / 闪托盘"判据
 #include "../BalloonChatWnd/ChatLinkDetect.h"  // SetChatLinkOptionEnabled（链接识别开关改动后转发到各会话窗）
 #include "MainPanelStatusMenu.h"    // BuildStatusMenuModel / StatusMenuEntry / GetPresenceVisual（状态菜单）
 #include "PresenceBadge.h"          // CreatePresenceBadgeBitmap（树里行右端的状态徽标位图）
@@ -38,6 +39,8 @@
 #include "MainPanelIcons.h"         // IconKind / kIconOnline（状态菜单彩色圆点图标）
 #include "../CustomMsgDef.h"          // WM_CLOSE_MAINDLG
 #include "../IULog.h"                 // LOG_INFO
+#include "../net/FolderProtocolClient.h"           // net::FolderInviteNotify / FolderStateNotify（文件夹传输推送载体）
+#include "../FolderTransfer/FolderTransferManager.h" // foldertransfer::FolderScanNotice / FolderBindNotice / FolderProgressNotice / FolderResultNotice
 #include "../FlamingoClient.h"        // CFlamingoClient::m_UserMgr
 #include "../UserMgr.h"               // CUserMgr / CBuddyList / CGroupList / CRecentList
 #include "../EncodeUtil.h"            // UTF-8 → Unicode 转换（通讯录字段为 UTF-8）
@@ -73,11 +76,11 @@
 #include "../net/ImageTransfer.h"
 #include "../net/CurrentUserAccount.h"   // net::CurrentUserAccount（本地缓存目录按登录账号分）          // net::ImageSendProgress / net::ImageSendResult
 #include "../net/FileTransfer.h"           // net::FileSendProgress / net::FileSendResult / net::FileDownload*
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"   // 通讯录标题刷新
-#include "../../balloonui/balloonui/Controls/List/DuiTreeView.h"
-#include "../../balloonui/balloonui/Controls/List/DuiMenu.h"   // 联系人右键菜单
-#include "../../balloonui/balloonui/Controls/Window/DuiScrollBar.h"  // DuiScrollView
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"   // 通讯录标题刷新
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiTreeView.h"
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"   // 联系人右键菜单
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"  // DuiScrollView
 #include "PopupMenuPlacement.h"            // ClampPopupMenuToWorkArea（保证菜单在桌面内）
 #include "PanelDragZone.h"                 // IsPointInDragZone（空白处按住拖窗口的命中判定）
 #include "TitleBarIcon.h"                  // CreateProgramIconBitmap（标题栏左侧图标）
@@ -1303,6 +1306,23 @@ bool CBalloonMainPanel::IsPointInPanelDragZone(POINT ptScreen)
                                           excludeRects, excludeCount);
 }
 
+LRESULT CBalloonMainPanel::OnPanelSetFocusMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                              LPARAM /*lParam*/, BOOL& bHandled)
+{
+    //面板内已经有控件持有 DUI 焦点：交回基类，由它恢复给原来那个控件。
+    //典型场景是用户本来就在搜索框里打字，切到别的程序再切回来。
+    if (GetDuiFocus() != NULL)
+    {
+        bHandled = FALSE;
+        return 0;
+    }
+
+    //没有任何控件持有焦点：就地消费掉，不让基类走 FocusNext(false) 那条回退分支，
+    //否则焦点会落到控件树里第一个 tab stop（顶部搜索框）。详见头文件里的说明。
+    bHandled = TRUE;
+    return 0;
+}
+
 LRESULT CBalloonMainPanel::OnPanelNcHitTestMsg(UINT uMsg, WPARAM wParam,
                                                LPARAM lParam, BOOL& bHandled)
 {
@@ -2430,7 +2450,7 @@ void CBalloonMainPanel::AddDepartmentSubtree(
 
 HBITMAP CBalloonMainPanel::GetPresenceBadgeBitmap(int presence)
 {
-    // 先归一：隐身与一切越界值都落到"离线"，这样槽位下标一定在 0..3 内，
+    // 先归一：一切越界值都落到"离线"，这样槽位下标一定在 0..3 内，
     // 也与 GetPresenceBadgeIconKind / GetPresenceVisual 的兜底口径一致。
     const int slot = balloonmain::NormalizePresenceForMenu(presence);
     if (slot < 0 || slot >= kPresenceBadgeSlotCount)
@@ -2531,7 +2551,7 @@ void CBalloonMainPanel::AddContactLeaf(balloonwjui::DuiTreeView* tv, int parentN
 
     // 右侧在线状态徽标：按好友真实 presence（v2 presence_type，来自 cmd_get_contacts）取，
     // 复用与状态胶囊 / 状态菜单同一套字形与配色（在线实心圆 / 离开时钟 / 忙碌横杠 /
-    // 离线空心环；隐身按离线）。位图由本类缓存持有，树只借用指针，不可在此释放。
+    // 离线空心环）。位图由本类缓存持有，树只借用指针，不可在此释放。
     // 收到 cmd_presence_changed_notify(1109) 时由 OnPresenceChanged 换此节点的徽标实现实时刷新。
     tv->SetItemStatusIcon(node, GetPresenceBadgeBitmap((int)c.m_presence));
 
@@ -2588,6 +2608,16 @@ bool CBalloonMainPanel::EnsureMsgStoreOpen()
     {
         LOG_ERROR(_T("打开文件本地落点登记库失败: %s"), fileDbPath.c_str());
     }
+
+    //文件夹本地落点登记库：按会话 id 记住每一次文件夹传输在本机的根目录（发送端是源
+    //目录、接收端是落地目录），使传输记录条上的「打开文件夹」在事后翻记录时仍然可用。
+    //与上面两个库同目录、同样按账号隔离；打不开只是退化成"记录还在、但打不开目录"，
+    //不影响聊天主流程，故失败仅记日志、不阻断。
+    std::wstring folderDbPath = personal + _T("ChatLog\\folderlocal.db");
+    if (!balloonhistory::CFolderLocalStore::GetInstance().Open(folderDbPath.c_str()))
+    {
+        LOG_ERROR(_T("打开文件夹本地落点登记库失败: %s"), folderDbPath.c_str());
+    }
     return true;
 }
 
@@ -2620,6 +2650,15 @@ void CBalloonMainPanel::OnRecvChatMessage(const net::MessageNotify& notify)
     std::string digest = net::MessageProtocolClient::digestForMsgType(
         notify.m_msgtype, notify.m_text);
 
+    // 文件夹传输记录（msgtype=18）：摘要要带上文件夹名，写成 "[文件夹] 项目资料"。
+    // digestForMsgType 只按类型给占位、拿不到文件夹名（它在 content 里而不在正文里），
+    // 故在这里换成邀请阶段那份现成的拼装函数 —— 邀请与记录在会话列表上是同一种东西的
+    // 两个阶段，措辞必须逐字相同，两处各写一份迟早会走偏。
+    if (notify.m_msgtype == message_type_folder && !notify.m_folderName.empty())
+    {
+        digest = balloonmain::BuildFolderInviteDigest(notify.m_folderName);
+    }
+
     // 本端 userid —— 用于识别"自己在别的设备发出、同步回来的消息"：这类消息发送方即
     // 本人，不应在托盘闪头像提醒（否则会闪自己的头像、单击还打开和自己的会话）。
     UINT selfId = (m_lpFMGClient != NULL) ? m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
@@ -2648,9 +2687,19 @@ void CBalloonMainPanel::OnRecvChatMessage(const net::MessageNotify& notify)
     // 供历史消息记录窗口离线查询。仅持久化已带服务器 msgid 的消息。会话归属与本函数
     // 下方口径一致：单聊取发送方 userid（peerUserId=notify.m_from），群聊取群 id
     // （notify.m_cid）。
+    // 单聊会话的对端 userid。绝大多数消息里 from 就是对端（别人发给我的那条）；但
+    // <u>服务端生成的消息</u>会给双方各推一帧 —— 典型是文件夹传输记录条（msgtype=18），
+    // 本端是文件夹发送方的那一帧里 from 就是自己。此时对端只能取 cid：协议约定 cid 恒为
+    // 「收件方视角下的对端 userid」（见 docs/协议设计-v2.md）。不这么判的话，那一帧会被
+    // 归进"自己和自己"的会话里，聊天窗与会话列表都找不到它。
+    const int64_t singlePeerId =
+        ((UINT)notify.m_from == selfId && notify.m_cid > 0)
+        ? notify.m_cid
+        : (int64_t)notify.m_from;
+
     if (notify.m_msgid > 0 && EnsureMsgStoreOpen())
     {
-        int64_t convCid = (notify.m_ctype == 2) ? notify.m_cid : (int64_t)notify.m_from;
+        int64_t convCid = (notify.m_ctype == 2) ? notify.m_cid : singlePeerId;
         balloonhistory::HistoryRecord rec =
             balloonhistory::RecordFromNotify(notify, notify.m_ctype, convCid);
         m_msgStore.Upsert(rec);
@@ -2729,8 +2778,10 @@ void CBalloonMainPanel::OnRecvChatMessage(const net::MessageNotify& notify)
         return;
     }
 
-    // 单聊：收件人视角下发送方 userid 即本会话对端。
-    UINT peerUserId = (UINT)notify.m_from;
+    // 单聊：收件人视角下发送方 userid 即本会话对端。服务端生成、双方各推一帧的那类
+    // 消息（文件夹传输记录条）在本端是发送方时 from 就是自己，此时改取 cid，
+    // 判定收在上面的 singlePeerId 里，两处（落库与路由）用的是同一个值。
+    UINT peerUserId = (UINT)singlePeerId;
 
     // 收到消息默认不弹窗：只把消息渲染进“已经打开着”的聊天窗；窗口没开就不创建、
     // 不弹出，仅靠下面 BumpConversation 在会话列表做未读提示（用户点开会话时再建窗、
@@ -3081,6 +3132,160 @@ void CBalloonMainPanel::OnFileTransferAck(const net::FileTransferAckNotify& noti
         {
             it->second->OnFilePeerAck(notify.m_msgid, notify.m_state);
         }
+    }
+}
+
+// =======================================================================
+// v2 单聊文件夹传输（cmd_folder_* 1810~1817）—— 路由到对应聊天窗
+//
+// 除邀请推送要按发送方 userid 精确定位之外，其余一律向所有已打开的单聊窗广播：会话 id
+// 全局唯一，命中的那个窗口更新自己那条气泡，其余窗口查不到本行、静默忽略。群聊窗不参与
+// 文件夹传输（本期只做单聊），故不广播给它们。
+//
+// 本机同时可进行多笔文件夹传输（上限见 flamingo.ini 的 [app] foldermaxconcurrent），故
+// <u>同一个会话窗里可能同时挂着两条以上文件夹气泡</u>。这里的广播对此天然成立：每一跳都
+// 只带会话 id，聊天窗按会话 id 精确匹配到某一条气泡（ChatMessageList::GetFolderMessage /
+// SetFolderMessage 对空 id 一律不匹配），故多笔并存时进度与结果不会串到别人那条上。
+// 发送端在服务端分配会话 id 之前用的是本地占位 id，那个 id 同样逐笔唯一（见
+// FolderTransferManager 的 MakeLocalSessionId）。
+// =======================================================================
+
+void CBalloonMainPanel::OnFolderInviteNotify(const net::FolderInviteNotify& notify)
+{
+    LOG_INFO("Route folder invite, session=%s, from=%lld, files=%lld, bytes=%lld.",
+             notify.m_sessionId.c_str(), (long long)notify.m_fromId,
+             (long long)notify.m_totalFiles, (long long)notify.m_totalSize);
+
+    //收件人视角下邀请的发起方 userid 即本会话对端。
+    const UINT peerUserId = (UINT)notify.m_fromId;
+
+    //本端 userid 与全局静音位，两者的取法与收普通消息那条路径（OnRecvChatMessage）一致。
+    const UINT selfId = (m_lpFMGClient != NULL) ? m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
+    const bool bMuted = (m_lpFMGClient != NULL)
+                        ? (m_lpFMGClient->m_UserConfig.IsEnableMute() != FALSE) : false;
+
+    //收到邀请<u>不弹窗</u>：只把邀请气泡渲染进"已经打开着"的聊天窗；窗口没开就不建窗、
+    //不弹出。此前这里无条件 EnsureChatWindow，接收方会凭空弹出一个尚未渲染任何内容的
+    //聊天窗，是一次明显的打扰。窗口没开时改由下面的会话列表未读 + 托盘闪烁 + 提示音
+    //提醒，用户点开会话时再由 CBalloonChatWindow 向管理器查回这条待应答邀请补出气泡。
+    CBalloonChatWindow* pWin = NULL;
+    std::map<UINT, CBalloonChatWindow*>::iterator it = m_chatWindows.find(peerUserId);
+    if (it != m_chatWindows.end() && it->second != NULL && it->second->IsWindow())
+    {
+        pWin = it->second;
+    }
+    if (pWin != NULL)
+    {
+        pWin->OnFolderInvite(notify);
+    }
+
+    //用户此刻是不是正看着这个聊天窗，口径与收普通消息完全一致。
+    const bool bWatching = IsUserWatchingChatWindow((pWin != NULL) ? pWin->m_hWnd : NULL);
+
+    //会话列表预览形如 "[文件夹] 项目资料"，与文件消息显示 "[文件]" 同体例。
+    const std::string digest = balloonmain::BuildFolderInviteDigest(notify.m_folderName);
+
+    const bool bFromSelf = (peerUserId == selfId);
+    const bool bCountAsUnread = balloonmain::ShouldCountFolderInviteAsUnread(bFromSelf, bWatching);
+
+    //邀请<u>不是服务端消息</u>：它不进 t_chatmsg、没有 msgid，故 msgid 一律传 0。
+    //BumpConversation 只在 msgid 更大时推进已读上限锚点 m_lastmsgid，传 0 即保证不会
+    //污染真实消息序号 —— 与本端自己发出消息时的传法（那时 msgid 也还没回来）同理。
+    //消息类型取 message_type_folder：邀请本身仍然不进服务端消息表，但传输走到终态后
+    //服务端会在同一个会话里落一条这个类型的记录条，两个阶段用同一个类型，会话列表上
+    //前后就不会先显示成文件、又变成文件夹。预览文字直接用上面组装好的 digest，不由
+    //类型反推。
+    const int64_t nowMs = (int64_t)::time(NULL) * 1000;   // 秒 → 毫秒
+    BumpConversation(conversation_single, (int64_t)peerUserId, peerUserId, digest,
+                     message_type_folder, nowMs, 0, bCountAsUnread);
+
+    //正看着这个窗口：连同该会话此前累积的旧未读一并清零并上报已读位点，顺序要求同
+    //收普通消息那条路径（须在 BumpConversation 之后）。
+    if (bWatching)
+    {
+        MarkConversationRead(conversation_single, (int64_t)peerUserId);
+    }
+
+    const bool bConvMuted =
+        balloonmain::IsConversationMuted(m_conversations, conversation_single, (int64_t)peerUserId);
+    const bool bNotify =
+        balloonmain::ShouldNotifyFolderInvite(pWin != NULL, bFromSelf, bConvMuted);
+
+    //判据逐条打日志，理由同收普通消息那条路径：排查"收到邀请但托盘不闪"时，光看现象
+    //分不清是判据没过还是后面链路断了。
+    LOG_INFO("Folder invite tray flash check: peer=%u, self=%u, window open=%d, muted=%d, "
+             "watching=%d, notify=%d.",
+             peerUserId, selfId, (pWin != NULL) ? 1 : 0, bConvMuted ? 1 : 0,
+             bWatching ? 1 : 0, bNotify ? 1 : 0);
+
+    if (bNotify)
+    {
+        PostTrayFlash(conversation_single, (int64_t)peerUserId, digest);
+        //与收普通消息同样异步播放新消息提示音（受全局静音位约束，不阻塞 UI 线程）。
+        balloonmain::PlayNotifySound(balloonmain::kNotifySoundNewMessage, bMuted);
+    }
+}
+
+void CBalloonMainPanel::OnFolderScanned(const foldertransfer::FolderScanNotice& notice)
+{
+    for (std::map<UINT, CBalloonChatWindow*>::iterator it = m_chatWindows.begin();
+         it != m_chatWindows.end(); ++it)
+    {
+        if (it->second != NULL && it->second->IsWindow())
+            it->second->OnFolderScanned(notice);
+    }
+}
+
+void CBalloonMainPanel::OnFolderBound(const foldertransfer::FolderBindNotice& bind)
+{
+    for (std::map<UINT, CBalloonChatWindow*>::iterator it = m_chatWindows.begin();
+         it != m_chatWindows.end(); ++it)
+    {
+        if (it->second != NULL && it->second->IsWindow())
+            it->second->OnFolderBound(bind);
+    }
+}
+
+void CBalloonMainPanel::OnFolderStateNotify(const net::FolderStateNotify& notify)
+{
+    for (std::map<UINT, CBalloonChatWindow*>::iterator it = m_chatWindows.begin();
+         it != m_chatWindows.end(); ++it)
+    {
+        if (it->second != NULL && it->second->IsWindow())
+            it->second->OnFolderState(notify);
+    }
+}
+
+void CBalloonMainPanel::OnFolderTransferStarted(const std::string& sessionId)
+{
+    for (std::map<UINT, CBalloonChatWindow*>::iterator it = m_chatWindows.begin();
+         it != m_chatWindows.end(); ++it)
+    {
+        if (it->second != NULL && it->second->IsWindow())
+            it->second->OnFolderTransferStarted(sessionId);
+    }
+}
+
+void CBalloonMainPanel::OnFolderProgress(const foldertransfer::FolderProgressNotice& progress)
+{
+    for (std::map<UINT, CBalloonChatWindow*>::iterator it = m_chatWindows.begin();
+         it != m_chatWindows.end(); ++it)
+    {
+        if (it->second != NULL && it->second->IsWindow())
+            it->second->OnFolderProgress(progress);
+    }
+}
+
+void CBalloonMainPanel::OnFolderResult(const foldertransfer::FolderResultNotice& result)
+{
+    LOG_INFO("Route folder result, session=%s, success=%d, errcode=%d.",
+             result.m_sessionId.c_str(), result.m_success ? 1 : 0, result.m_errCode);
+
+    for (std::map<UINT, CBalloonChatWindow*>::iterator it = m_chatWindows.begin();
+         it != m_chatWindows.end(); ++it)
+    {
+        if (it->second != NULL && it->second->IsWindow())
+            it->second->OnFolderResult(result);
     }
 }
 
@@ -4345,7 +4550,8 @@ void CBalloonMainPanel::OnMessageRecalled(const net::MessageRecalledNotify& noti
         const net::ContactItem* pContact = FindCachedContact((UINT)notify.m_operator);
         if (pContact != NULL)
         {
-            operatorName = Utf8ToCStr(pContact->m_nickname);
+            //与其余各处同一口径的「真名（备注）」，不要在这里单独退化成只取昵称。
+            operatorName = ContactDisplayName((UINT)notify.m_operator);
         }
     }
     CString tipText = balloonchat::BuildRecallTipText(bIsSelf, operatorName);
@@ -4991,6 +5197,137 @@ LRESULT CBalloonMainPanel::OnSetContactRemarkMsg(UINT /*uMsg*/, WPARAM wParam,
     std::unique_ptr<std::string> guard(pRemark);
 
     SetContactRemark((UINT)wParam, Utf8ToCStr(*pRemark));
+    return 0;
+}
+
+void CBalloonMainPanel::SetContactTags(UINT peerUserId, const std::vector<std::string>& tagsUtf8)
+{
+    if (peerUserId == 0)
+    {
+        return;
+    }
+
+    //原值取自通讯录缓存 —— 它是本端"当前生效的标签"的唯一权威来源，资料窗里显示的
+    //那份只是它的一份拷贝。
+    std::vector<std::string> oldTags;
+    const net::ContactItem* pCached = FindCachedContact(peerUserId);
+    if (pCached != NULL)
+    {
+        oldTags = pCached->m_tags;
+    }
+
+    //一条没改：不发包。资料窗那边已经改完界面了，刷一次把它对回缓存值。
+    //这里按逐字相等判断，不做归一后再比 —— 归一是服务端的规则，本端跟着猜容易走岔；
+    //真发了一次内容等价的请求，服务端也是幂等处理，代价只是一个来回。
+    if (tagsUtf8 == oldTags)
+    {
+        RefreshContactTagsDisplay(peerUserId);
+        return;
+    }
+
+    //发不出去就不能让界面停在"改好了"的样子——否则用户以为成了，下次刷新又变回去。
+    if (m_connUiState != balloonmain::kConnUiOnline)
+    {
+        RefreshContactTagsDisplay(peerUserId);
+        ::MessageBox(m_hWnd, _T("当前网络不可用，标签未能保存。"),
+                     _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+        LOG_INFO("设置联系人标签被拦下（当前不可联网）: userid=%u。", peerUserId);
+        return;
+    }
+
+    //先本地生效再发协议：改完立刻能在资料窗上看到，不必等一个来回。改动前的列表记进
+    //回滚表，供应答里 userid 缺失（老服务端）时退回（见 OnSetContactTagsResult）。
+    for (size_t i = 0; i < m_contacts.size(); ++i)
+    {
+        if ((UINT)m_contacts[i].m_userid == peerUserId)
+        {
+            m_contacts[i].m_tags = tagsUtf8;
+            break;
+        }
+    }
+    m_pendingTagsRollback[peerUserId] = oldTags;
+
+    RefreshContactTagsDisplay(peerUserId);
+
+    CIUSocket::GetInstance().SendSetContactTags((int64_t)peerUserId, tagsUtf8);
+    //标签可能含用户隐私，日志只记条数不记内容。
+    LOG_INFO("设置联系人标签: userid=%u, 新标签条数=%d。", peerUserId, (int)tagsUtf8.size());
+}
+
+void CBalloonMainPanel::OnSetContactTagsResult(const net::SetContactTagsResult& result)
+{
+    const UINT peerUserId = (UINT)result.m_userid;
+
+    //老服务端不回带 userid：无从判断这条应答对应哪一次请求。此时只能靠本地快照兜底，
+    //而且只在失败时才退 —— 连着改几个人时"退错人"比"不退"更糟，所以宁可保守。
+    if (peerUserId == 0)
+    {
+        LOG_ERROR("OnSetContactTagsResult: 应答未回带 userid，code=%d，无法定位到具体联系人。",
+                  result.m_code);
+        return;
+    }
+
+    //应答里的 m_tags 无论成败都是服务端侧的真值：成功时是本次提交归一后的最终列表
+    //（服务端会去首尾空白、丢空串、忽略大小写去重，本端乐观更新算出来的那份未必与它
+    //逐字相同），失败时是服务端当前实际存着的那一份。两种情形都直接覆盖本地缓存，
+    //调用方不必区分是"对齐"还是"回滚"，也就不会出现两条路各写一半的中间状态。
+    for (size_t i = 0; i < m_contacts.size(); ++i)
+    {
+        if ((UINT)m_contacts[i].m_userid == peerUserId)
+        {
+            m_contacts[i].m_tags = result.m_tags;
+            break;
+        }
+    }
+    m_pendingTagsRollback.erase(peerUserId);
+    RefreshContactTagsDisplay(peerUserId);
+
+    if (result.m_code == 0)
+    {
+        return;
+    }
+
+    //失败要让用户知道，否则他只会看到标签自己变回去了、以为程序出错。
+    CString tip;
+    if (result.m_code == error_code_tag_limit)
+    {
+        tip = _T("标签数量已达上限，未能保存。");
+    }
+    else
+    {
+        tip = _T("标签未能保存，请稍后重试。");
+    }
+    ::MessageBox(m_hWnd, tip, _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+    LOG_ERROR("设置联系人标签失败: userid=%u, code=%d。", peerUserId, result.m_code);
+}
+
+void CBalloonMainPanel::RefreshContactTagsDisplay(UINT peerUserId)
+{
+    //标签只出现在资料窗里，不上通讯录树也不上会话列表，故不必像备注名那样整棵树重建。
+    if (!m_contactWindow.IsWindow() || m_contactWindow.GetPeerUserId() != peerUserId)
+    {
+        return;
+    }
+
+    ballooncontact::ContactModel model;
+    if (BuildContactModelFromCache(peerUserId, model))
+    {
+        m_contactWindow.RefreshContactData(model);
+    }
+}
+
+LRESULT CBalloonMainPanel::OnSetContactTagsMsg(UINT /*uMsg*/, WPARAM wParam,
+                                               LPARAM lParam, BOOL& /*bHandled*/)
+{
+    //联系人资料窗提交了整份标签列表：lParam 为堆上的 UTF-8 列表，处理后须 delete。
+    std::vector<std::string>* pTags = (std::vector<std::string>*)lParam;
+    if (pTags == NULL)
+    {
+        return 0;
+    }
+    std::unique_ptr<std::vector<std::string> > guard(pTags);
+
+    SetContactTags((UINT)wParam, *pTags);
     return 0;
 }
 
@@ -6082,28 +6419,18 @@ CString CBalloonMainPanel::ResolveSenderName(int64_t userid) const
             return self;
         }
     }
-    //联系人：备注 → 昵称 → 账号，与通讯录树 / 会话列表同一口径 —— 用户给谁起了
-    //备注，在消息记录里看到的也该是那个名字。
+    //联系人：与通讯录树 / 会话列表同一口径的「真名（备注）」—— 用户给谁起了备注，
+    //在消息记录里看到的也该带上那个记号。口径收敛到 ResolveContactDisplayName 一处，
+    //这里不再自己写一份逐级兜底，免得两处规则日后走岔。
     const net::ContactItem* pc = FindCachedContact((UINT)userid);
     if (pc != NULL)
     {
-        CString name = Utf8ToCStr(pc->m_remark);
-        name.Trim();
-        if (!name.IsEmpty())
-        {
-            return name;
-        }
-        name = Utf8ToCStr(pc->m_nickname);
-        if (!name.IsEmpty())
-        {
-            return name;
-        }
-        name = Utf8ToCStr(pc->m_username);
-        if (!name.IsEmpty())
-        {
-            return name;
-        }
+        return balloonmain::ResolveContactDisplayName(
+            Utf8ToCStr(pc->m_remark), Utf8ToCStr(pc->m_nickname),
+            Utf8ToCStr(pc->m_username), (UINT)userid);
     }
+
+    //不在通讯录缓存里（已离职 / 资料还没到）：拼一个能对上号的兜底名。
     CString fallback;
     fallback.Format(_T("用户%lld"), (long long)userid);
     return fallback;
@@ -6534,15 +6861,10 @@ bool CBalloonMainPanel::BuildContactModelFromCache(UINT peerUserId,
     CString deptPath;
     ComputeContactDeptInfo(peerUserId, position, deptPath);
 
-    CString name = Utf8ToCStr(c->m_nickname);
-    if (name.IsEmpty())
-    {
-        name = Utf8ToCStr(c->m_username);
-    }
-    if (name.IsEmpty())
-    {
-        name.Format(_T("用户%u"), peerUserId);
-    }
+    // 这里刻意只取真名、不含备注：资料窗头部要把真名与备注分开渲染（真名是大字
+    // 主名、备注跟在后面），备注另经下面的 SetRemark 灌进模型。
+    const CString name = balloonmain::ResolveContactRealName(
+        Utf8ToCStr(c->m_nickname), Utf8ToCStr(c->m_username), peerUserId);
 
     // 在线状态：presence 非 0 视为在线（点绿），否则离线（不画点）。
     int status = (c->m_presence > 0) ? ballooncontact::kContactStatusOnline
@@ -6553,7 +6875,14 @@ bool CBalloonMainPanel::BuildContactModelFromCache(UINT peerUserId,
     //备注名随通讯录应答一起带回来（contacts[].remark），这里灌进模型，资料窗打开
     //时那一行就显示已存的备注而不是恒为"未设置"。
     outModel.SetRemark(Utf8ToCStr(c->m_remark));
-    outModel.ClearTags();   // 真实数据暂无标签
+    //标签随通讯录应答一起下发（contacts[].tags），这里灌进模型，资料窗打开时那一排
+    //胶囊就显示已存的标签。逐条 AddTag 而不是整份塞：AddTag 内部会 trim 并丢掉空串，
+    //顺手挡住服务端万一下发的脏数据。
+    outModel.ClearTags();
+    for (size_t t = 0; t < c->m_tags.size(); ++t)
+    {
+        outModel.AddTag(Utf8ToCStr(c->m_tags[t]));
+    }
 
     // 分组下拉：用部门路径作唯一项（无部门则"未分组"）。
     std::vector<CString> groups;
@@ -7306,7 +7635,7 @@ void CBalloonMainPanel::OnPresenceChanged(int64_t userid, int presence)
         }
     }
 
-    // 1.5) 好友从离线 / 隐身跳变为可见在线（上线）时，异步播放上线提示音。放在下面取面板
+    // 1.5) 好友从离线跳变为可见在线（上线）时，异步播放上线提示音。放在下面取面板
     //      控件的若干 early-return 之前，保证即便主面板客户区暂不可用也照常出声。自己的状态
     //      变化走 OnChangePresenceResult 路径、不经此函数，这里再排除一次自身 id 以防多设备回声误响。
     UINT selfId = (m_lpFMGClient != NULL) ? m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
@@ -7445,16 +7774,16 @@ void CBalloonMainPanel::OnUserInfoChanged(const net::UserInfoChangedNotify& noti
             {
                 continue;
             }
-            CString name = Utf8ToCStr(pc->m_nickname);
-            if (name.IsEmpty())
-            {
-                name = Utf8ToCStr(pc->m_username);
-            }
-            // 显示名文字同步更新（昵称变了即时反映；ContactItem 无备注字段，名字即昵称）。
-            ctv->SetItemLabel(it->first, name);
+            // 真名（不含备注）—— 头像首字取的是姓，带上"（备注）"会取错字。
+            const CString realName = balloonmain::ResolveContactRealName(
+                Utf8ToCStr(pc->m_nickname), Utf8ToCStr(pc->m_username), (UINT)pc->m_userid);
+            // 显示名文字同步更新（昵称变了即时反映）。必须走 ContactDisplayName 取
+            // 「真名（备注）」，不能直接写昵称 —— 早先这里写死取昵称，于是每收到一条
+            // 资料变更推送，用户刚设的备注就被从树上冲掉，表现为"备注设了又没了"。
+            ctv->SetItemLabel(it->first, ContactDisplayName((UINT)pc->m_userid));
             // 副行个性签名同步更新（与 AddContactLeaf 一致：联系人节点副标签 = 签名）。
             ctv->SetItemSubLabel(it->first, Utf8ToCStr(pc->m_signature));
-            HBITMAP hbm = MakeEntityAvatarBitmap(pc->m_userid, name,
+            HBITMAP hbm = MakeEntityAvatarBitmap(pc->m_userid, realName,
                                                  pc->m_facetype, pc->m_customface, kContactAvatarSizePx);
             if (hbm != NULL)
             {
@@ -7488,23 +7817,24 @@ void CBalloonMainPanel::OnUserInfoChanged(const net::UserInfoChangedNotify& noti
                 continue;
             }
             const net::ContactItem* pc = FindCachedContact((UINT)notify.m_userid);
+            // 真名（不含备注）供头像首字用；带备注的显示名供会话行文字用。
             CString name;
+            CString display;
             int facetype = balloonmain::avatar_kind_auto;
             std::string customface;
             if (pc != NULL)
             {
-                name = Utf8ToCStr(pc->m_nickname);
-                if (name.IsEmpty())
-                {
-                    name = Utf8ToCStr(pc->m_username);
-                }
+                name = balloonmain::ResolveContactRealName(
+                    Utf8ToCStr(pc->m_nickname), Utf8ToCStr(pc->m_username), (UINT)pc->m_userid);
+                display    = ContactDisplayName((UINT)notify.m_userid);
                 facetype   = pc->m_facetype;
                 customface = pc->m_customface;
             }
-            // 会话名文字同步更新（与单聊窗标题一致）。
-            if (!name.IsEmpty())
+            // 会话名文字同步更新（与单聊窗标题一致）。同上，这里也必须带备注，
+            // 否则一条资料变更推送就会把会话列表里的备注冲掉。
+            if (!display.IsEmpty())
             {
-                mtv->SetItemLabel(it->first, name);
+                mtv->SetItemLabel(it->first, display);
             }
             HBITMAP hbm = MakeEntityAvatarBitmap(notify.m_userid, name, facetype, customface, kMsgAvatarSizePx);
             if (hbm != NULL)
@@ -7536,7 +7866,10 @@ void CBalloonMainPanel::OnUserInfoChanged(const net::UserInfoChangedNotify& noti
         m_chatWindows.find((UINT)notify.m_userid);
     if (cit != m_chatWindows.end() && cit->second != NULL)
     {
-        CString newName = Utf8ToCStr(notify.m_nickname);
+        // 标题上的名字走 ContactDisplayName 取「真名（备注）」，不能直接用推送里的
+        // 昵称 —— 那样每来一条资料变更推送就把聊天窗标题上的备注冲掉。此刻缓存里的
+        // 昵称已由本函数前半段更新过，取出来的是新值。
+        CString newName = ContactDisplayName((UINT)notify.m_userid);
         CString newSign = Utf8ToCStr(notify.m_signature);
         cit->second->UpdatePeerInfo(newName, newSign, notify.m_facetype, notify.m_customface);
     }

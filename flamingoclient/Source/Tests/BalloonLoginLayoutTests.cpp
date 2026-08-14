@@ -27,9 +27,10 @@
 
 #include "../BalloonAuth/BalloonLoginLayout.h"
 #include "../BalloonMain/AvatarPalette.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiComboBox.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiProgressBar.h"
 
 #include <set>
 
@@ -101,6 +102,33 @@ TEST_CASE("L3 登录页含密码输入框且为密码模式", "[p1a][login]")
     REQUIRE(edit != nullptr);
     CHECK(edit->IsPassword());
     CHECK_FALSE(edit->GetPlaceholder().IsEmpty());
+}
+
+TEST_CASE("L8 账号下拉框的内嵌输入框带占位文字", "[p1a][login]")
+{
+    // 账号框为空时应当像密码框一样给出提示文字，否则用户看到的是一个不知道
+    // 该填什么的空框。占位文字设在 DuiComboBox 内嵌的那个 EDIT 宿主控件上
+    // （下拉框本身没有转发 SetPlaceholder），故这里顺着 Children() 找过去。
+    std::unique_ptr<DuiControl> root = BuildLoginBody();
+    REQUIRE(root != nullptr);
+
+    DuiComboBox* combo = dynamic_cast<DuiComboBox*>(root->FindCtrlById(kIdAccountCombo));
+    REQUIRE(combo != nullptr);
+
+    DuiEditHost* accountEdit = NULL;
+    const std::vector<std::unique_ptr<DuiControl> >& children = combo->Children();
+    for (size_t i = 0; i < children.size(); ++i)
+    {
+        DuiEditHost* candidate = dynamic_cast<DuiEditHost*>(children[i].get());
+        if (candidate != NULL)
+        {
+            accountEdit = candidate;
+            break;
+        }
+    }
+
+    REQUIRE(accountEdit != NULL);
+    CHECK_FALSE(accountEdit->GetPlaceholder().IsEmpty());
 }
 
 TEST_CASE("L4 登录页含记住密码 / 自动登录复选框", "[p1a][login]")
@@ -468,4 +496,242 @@ TEST_CASE("MAP3 越出映射表范围时原样返回，由调用方判越界", "
     CHECK(DuiComboBox::MapPopupIndexWithFilter(-1, filtered) == -1);
     CHECK(DuiComboBox::MapPopupIndexWithFilter(2, filtered) == 2);
     CHECK(DuiComboBox::MapPopupIndexWithFilter(99, filtered) == 99);
+}
+
+// ======================= 状态区（登录中 / 登录失败）的布局 =======================
+//
+// 这几条量的是「登录中」那块状态区（状态文字 + 不确定进度条）在真实布局下的位置。
+// 起因是实机上看到进度条右侧一直顶到窗口边框，而同一个父容器里的登录按钮左右
+// 都规规矩矩留着内边距。用真窗口去核对这种问题很不划算——要起进程、模拟点击、
+// 抢前台焦点，任何一环不稳都会得出"看不出问题"的错误结论（实际排查时就连着栽了
+// 四次）。控件树本身是纯逻辑，给它一个固定尺寸跑一遍布局就能把坐标读出来。
+
+namespace {
+
+// 登录窗客户区的尺寸，与 BalloonLoginDlg.cpp 里 ResizeClient 用的一致。
+// 布局结果依赖它，所以两处要对得上。
+const int kTestClientWidth  = 380;
+const int kTestClientHeight = 562;
+
+// 标题栏高度，与 BalloonLoginDlg.cpp 里 SetTitleBarHeight 传的值一致。
+const int kTestTitleBarHeight = 28;
+
+// <u>客户区内容真正拿到的高度</u>。DuiFrameWindow 的骨架是「标题栏 + 客户区内容」
+// 上下两块，内容那块只占标题栏以下的部分。本文件早先按整个客户区高度布局，比实机
+// 多给了 28 像素，于是实机上排不下的布局在测试里排得下 —— 2026-08-14 那次
+// 「登录失败后标题栏按钮消失」就是这样被漏过去的。
+const int kTestContentHeight = kTestClientHeight - kTestTitleBarHeight;
+
+// 表单 vbox 的左右内边距，与 BalloonLoginLayout.cpp 里那句
+// padding="24,14,24,20" 的第 1、3 个数一致。状态区是它的子控件，
+// 因此左右都不该越过这条线。
+const int kFormPaddingLeft  = 24;
+const int kFormPaddingRight = 24;
+
+// 按登录窗的真实客户区尺寸把控件树布一遍，返回根控件。
+std::unique_ptr<DuiControl> LayoutLoginBody()
+{
+    std::unique_ptr<DuiControl> root = BuildLoginBody();
+    if (root == nullptr)
+        return root;
+
+    RECT rc;
+    rc.left   = 0;
+    rc.top    = kTestTitleBarHeight;    // 客户区内容从标题栏下方开始
+    rc.right  = kTestClientWidth;
+    rc.bottom = kTestClientHeight;
+    // 必须用 ForceLayout：SetRect 在矩形未变时会早早 return，
+    // 而这里的控件树是刚建出来的、矩形还是空的，走 SetRect 排不出来
+    root->ForceLayout(rc);
+    return root;
+}
+
+// 取子树里最靠下的那条边（只看可见控件）。用来判断内容有没有溢出容器底边。
+int MaxVisibleBottom(const DuiControl* node)
+{
+    if (node == NULL || !node->IsVisible())
+        return INT_MIN;
+
+    int bottom = node->GetRect().bottom;
+    const std::vector<std::unique_ptr<DuiControl> >& children = node->Children();
+    for (size_t i = 0; i < children.size(); ++i)
+    {
+        const int childBottom = MaxVisibleBottom(children[i].get());
+        if (childBottom > bottom)
+            bottom = childBottom;
+    }
+    return bottom;
+}
+
+} // anonymous namespace
+
+TEST_CASE("LSA1 状态区三个控件都能按 id 取到", "[login][statusarea]")
+{
+    std::unique_ptr<DuiControl> root = LayoutLoginBody();
+    REQUIRE(root != nullptr);
+
+    CHECK(root->FindCtrlById(kIdStatusArea) != nullptr);
+    CHECK(root->FindCtrlById(kIdStatusText) != nullptr);
+    CHECK(root->FindCtrlById(kIdStatusProgress) != nullptr);
+}
+
+TEST_CASE("LSA2 状态区不得越过表单的左右内边距", "[login][statusarea]")
+{
+    std::unique_ptr<DuiControl> root = LayoutLoginBody();
+    REQUIRE(root != nullptr);
+
+    DuiControl* area = root->FindCtrlById(kIdStatusArea);
+    REQUIRE(area != nullptr);
+
+    const RECT& rc = area->GetRect();
+    INFO("status area rect = (" << rc.left << "," << rc.top << ")-("
+         << rc.right << "," << rc.bottom << "), client width = " << kTestClientWidth);
+
+    CHECK(rc.left >= kFormPaddingLeft);
+    CHECK(rc.right <= kTestClientWidth - kFormPaddingRight);
+}
+
+TEST_CASE("LSA3 进度条与登录按钮左右对齐", "[login][statusarea]")
+{
+    std::unique_ptr<DuiControl> root = LayoutLoginBody();
+    REQUIRE(root != nullptr);
+
+    DuiControl* button = root->FindCtrlById(kIdLoginButton);
+    DuiControl* bar    = root->FindCtrlById(kIdStatusProgress);
+    REQUIRE(button != nullptr);
+    REQUIRE(bar != nullptr);
+
+    const RECT& rcButton = button->GetRect();
+    const RECT& rcBar    = bar->GetRect();
+    INFO("login button = (" << rcButton.left << "," << rcButton.right << "), "
+         << "progress bar = (" << rcBar.left << "," << rcBar.right << ")");
+
+    // 两者在同一个 vbox 里、都没有设固定宽度，所以左右边界应当一致。
+    // 实机上看到的"进度条比按钮宽、右侧顶到窗口边框"若成立，这两条会失败。
+    CHECK(rcBar.left == rcButton.left);
+    CHECK(rcBar.right == rcButton.right);
+}
+
+TEST_CASE("LSA7 状态区显示时，内容排得下、不溢出客户区底边", "[login][statusarea]")
+{
+    // 状态区一显示，表单就多出一块固定高度。它若把客户区撑破，多出来的部分会挤掉
+    // 别人 —— 实机上表现为登录失败后<u>标题栏的最小化 / 关闭按钮消失</u>。
+    // 这条用例按客户区内容真正拿到的高度（标题栏以下）布局，把这种溢出钉在测试里。
+    std::unique_ptr<DuiControl> root = LayoutLoginBody();
+    REQUIRE(root != nullptr);
+
+    DuiControl* status = root->FindCtrlById(kIdStatusArea);
+    REQUIRE(status != nullptr);
+    REQUIRE(status->IsVisible());   // 布局默认建出来就是可见的
+
+    const int contentBottom = root->GetRect().bottom;
+    const int deepestBottom = MaxVisibleBottom(root.get());
+    INFO("content bottom = " << contentBottom << ", deepest child bottom = " << deepestBottom
+         << " (overflow = " << (deepestBottom - contentBottom) << ")");
+    CHECK(deepestBottom <= contentBottom);
+}
+
+TEST_CASE("LSA8 状态区隐藏时，内容同样排得下", "[login][statusarea]")
+{
+    // 空闲态（没在登录、也没有失败提示）是用户看得最多的一屏，同样不许溢出。
+    std::unique_ptr<DuiControl> root = LayoutLoginBody();
+    REQUIRE(root != nullptr);
+
+    DuiControl* status = root->FindCtrlById(kIdStatusArea);
+    REQUIRE(status != nullptr);
+    status->SetVisible(false);
+
+    RECT rc = root->GetRect();
+    root->ForceLayout(rc);   // 显隐变化后必须重排，理由见 LSA5
+
+    const int contentBottom = root->GetRect().bottom;
+    const int deepestBottom = MaxVisibleBottom(root.get());
+    INFO("content bottom = " << contentBottom << ", deepest child bottom = " << deepestBottom
+         << " (slack = " << (contentBottom - deepestBottom) << ")");
+    CHECK(deepestBottom <= contentBottom);
+}
+
+TEST_CASE("LSA6 进度条不显示百分比，且高度够画得清楚", "[login][statusarea]")
+{
+    // DuiProgressBar 默认在条上画 "NN%"。marquee 模式下没有确定的进度值，那个
+    // 数字既无意义、条又矮，实机上挤成一团看不清（2026-08-14 用户反馈）。
+    std::unique_ptr<DuiControl> root = LayoutLoginBody();
+    REQUIRE(root != nullptr);
+
+    DuiProgressBar* bar =
+        dynamic_cast<DuiProgressBar*>(root->FindCtrlById(kIdStatusProgress));
+    REQUIRE(bar != nullptr);
+
+    CHECK_FALSE(bar->GetShowPercent());
+
+    // 高度下限取 10 像素：低于这个高度，圆角与滚动块都糊成一条线。
+    const int kMinBarHeight = 10;
+    const RECT& rcBar = bar->GetRect();
+    const int barHeight = rcBar.bottom - rcBar.top;
+    INFO("progress bar height = " << barHeight);
+    CHECK(barHeight >= kMinBarHeight);
+}
+
+TEST_CASE("LSA4 状态文字与进度条同宽且不重叠", "[login][statusarea]")
+{
+    std::unique_ptr<DuiControl> root = LayoutLoginBody();
+    REQUIRE(root != nullptr);
+
+    DuiControl* text = root->FindCtrlById(kIdStatusText);
+    DuiControl* bar  = root->FindCtrlById(kIdStatusProgress);
+    REQUIRE(text != nullptr);
+    REQUIRE(bar != nullptr);
+
+    const RECT& rcText = text->GetRect();
+    const RECT& rcBar  = bar->GetRect();
+    INFO("text = (" << rcText.left << "," << rcText.top << ")-(" << rcText.right << "," << rcText.bottom
+         << "), bar = (" << rcBar.left << "," << rcBar.top << ")-(" << rcBar.right << "," << rcBar.bottom << ")");
+
+    CHECK(rcText.left == rcBar.left);
+    CHECK(rcText.right == rcBar.right);
+    // 进度条在文字下方，两者不能压在一起
+    CHECK(rcBar.top >= rcText.bottom);
+}
+
+TEST_CASE("LSA5 状态区隐藏后再显示，重排过才拿得到正确宽度", "[login][statusarea]")
+{
+    std::unique_ptr<DuiControl> root = LayoutLoginBody();
+    REQUIRE(root != nullptr);
+
+    DuiControl* area   = root->FindCtrlById(kIdStatusArea);
+    DuiControl* bar    = root->FindCtrlById(kIdStatusProgress);
+    DuiControl* button = root->FindCtrlById(kIdLoginButton);
+    REQUIRE(area != nullptr);
+    REQUIRE(bar != nullptr);
+    REQUIRE(button != nullptr);
+
+    // 复现实机的时序：登录窗建好后先把状态区藏起来（InitLoginUi 就是这么做的），
+    // 藏着的时候发生一次重排（窗口尺寸变化、内容替换都会触发），点登录时再显示。
+    //
+    // 这一步是本组用例最初漏掉的：SetVisible 不触发重新布局，而竖直布局排版时会
+    // 跳过不可见的子控件，于是状态区在隐藏期间被排成了一份过时的矩形，显示回来
+    // 也不会重算。前面那几条用例因为状态区从未隐藏过，一直是绿的，实机上却能看到
+    // 进度条右侧顶到窗口边框。
+    area->SetVisible(false);
+
+    RECT rc;
+    rc.left   = 0;
+    rc.top    = 0;
+    rc.right  = kTestClientWidth;
+    rc.bottom = kTestClientHeight;
+    root->ForceLayout(rc);
+
+    area->SetVisible(true);
+    // 显示回来之后必须重排一次，这正是 CBalloonLoginDlg::RelayoutClientContent 做的事
+    root->ForceLayout(rc);
+
+    const RECT& rcBar    = bar->GetRect();
+    const RECT& rcButton = button->GetRect();
+    INFO("after hide/show: bar = (" << rcBar.left << "," << rcBar.right << "), "
+         << "button = (" << rcButton.left << "," << rcButton.right << "), "
+         << "client width = " << kTestClientWidth);
+
+    CHECK(rcBar.left == rcButton.left);
+    CHECK(rcBar.right == rcButton.right);
+    CHECK(rcBar.right <= kTestClientWidth - kFormPaddingRight);
 }

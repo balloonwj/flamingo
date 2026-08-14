@@ -653,6 +653,23 @@ CMysqlManager::CMysqlManager(void)
 		ver.m_strKeyString = "PRIMARY KEY (f_id), KEY idx_platform_enabled (f_platform, f_enabled)";
 		m_vecTableInfo.push_back(ver);
 	}
+
+	// 31. t_contact_tag —— 联系人标签表（企业版；一行=某人给某个联系人贴的一个标签）
+	//     与上面第 2 条的 t_contact_remark 是同族的两张表：都是单向的、只影响"本人看对方"
+	//     这一侧的显示。标签进主键是为了让"同一个联系人下不重复贴同一个标签"由主键保证，
+	//     不必在代码里再查一遍。列宽 varchar(16) 与 ContactTagManager 的字节上限校验对应。
+	{
+		STableInfo tag;
+		tag.m_strName = "t_contact_tag";
+		tag.m_mapField["f_userid"] = { "f_userid", "bigint(20) NOT NULL COMMENT '标签归属用户userid（谁贴的）'", "bigint(20)" };
+		tag.m_mapField["f_target_userid"] = { "f_target_userid", "bigint(20) NOT NULL COMMENT '被贴标签的联系人userid（贴给谁）'", "bigint(20)" };
+		tag.m_mapField["f_tag"] = { "f_tag", "varchar(16) NOT NULL DEFAULT '' COMMENT '标签文本，去掉首尾空白后的内容'", "varchar(16)" };
+		tag.m_mapField["f_order"] = { "f_order", "int(10) NOT NULL DEFAULT 0 COMMENT '同一联系人下的显示顺序，值小者靠前，从0起算'", "int(10)" };
+		tag.m_mapField["f_update_time"] = { "f_update_time", "bigint(20) NOT NULL DEFAULT 0 COMMENT '最近一次整份覆盖的时间(Unix毫秒)'", "bigint(20)" };
+
+		tag.m_strKeyString = "PRIMARY KEY (f_userid, f_target_userid, f_tag), KEY idx_user (f_userid)";
+		m_vecTableInfo.push_back(tag);
+	}
 }
 
 CMysqlManager::~CMysqlManager(void)

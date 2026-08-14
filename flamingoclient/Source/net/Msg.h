@@ -51,7 +51,7 @@ enum msg_type
 enum online_type{
     online_type_offline         = 0,    //离线
     online_type_pc_online       = 1,    //电脑在线
-    online_type_pc_invisible    = 2,    //电脑隐身
+    //取值 2 曾经是「电脑隐身」，本产品不提供该功能，2026-08-13 去掉；该编号作废不再使用
     online_type_android_cellular= 3,    //android 3G/4G/5G在线
     online_type_android_wifi    = 4,    //android wifi在线
     online_type_ios             = 5,    //ios 在线
@@ -122,7 +122,7 @@ enum error_code
  *  登录协议
  **/
 /*
-    //status: 在线状态 0离线 1在线 2忙碌 3离开 4隐身
+    //status: 在线状态 0离线 1在线 2忙碌 3离开（4 是已作废的取值，不再支持）
     //clienttype: 客户端类型,pc=1, android=2, ios=3
     cmd = 1002, seq = 0, {"username": "13917043329", "password": "123", "clienttype": 1, "status": 1}
     cmd = 1002, seq = 0, {"code": 0, "msg": "ok", "userid": 8, "username": "13917043320", "nickname": "zhangyl",
@@ -135,7 +135,7 @@ enum error_code
  **/
 /*
     //type 1用户在线状态改变 2离线 3用户签名、头像、昵称发生变化
-    //onlinestatus取值： 0离线 1上线 2隐身 3忙碌 4离开 5移动版在线 6移动版下线 7手机和电脑同时在线,
+    //onlinestatus取值： 0离线 1上线 3忙碌 4离开 5移动版在线 6移动版下线 7手机和电脑同时在线（2 已作废）,
     cmd = 1006, seq = 0, {"type": 1, "onlinestatus": 1, "clienttype": 1},  targetid(状态改变的用户信息)
     cmd = 1006, seq = 0, {"type": 3}, targetid(状态改变的用户信息)
 **/

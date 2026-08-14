@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+//SOCKET 类型来自这里：Windows 下是 winsock 的 UINT_PTR，POSIX 下是 int
+#include "../base/Platform.h"
 #include <functional>
 
 #include "Channel.h"
@@ -13,7 +15,7 @@ namespace net
     class Acceptor
     {
     public:
-        typedef std::function<void(int sockfd, const InetAddress&)> NewConnectionCallback;
+        typedef std::function<void(SOCKET sockfd, const InetAddress&)> NewConnectionCallback;
 
         Acceptor(EventLoop* loop, const InetAddress& listenAddr, bool reuseport);
         ~Acceptor();

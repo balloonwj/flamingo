@@ -6,17 +6,16 @@
 #include "../net/InetAddress.h"
 #include "../base/AsyncLog.h"
 
-//TcpServer 工作线程数：中转连接数远少于文件传输，取较小值
-static const int RELAY_SERVER_THREAD_NUM = 4;
-
-bool RelayServer::init(const char* ip, short port, EventLoop* loop, const char* tokenKey)
+bool RelayServer::init(const char* ip, short port, EventLoop* loop, const char* tokenKey,
+                       int ioThreadCount)
 {
     m_tokenKey = (tokenKey != NULL) ? tokenKey : "";
 
     InetAddress addr(ip, port);
     m_server.reset(new TcpServer(loop, addr, "ZYL-MYRelayServer", TcpServer::kReusePort));
     m_server->setConnectionCallback(std::bind(&RelayServer::onConnected, this, std::placeholders::_1));
-    m_server->start(RELAY_SERVER_THREAD_NUM);
+    //线程数由调用方从配置项 relayiothreadnum 取得，非法取值已在那里回落成 kDefaultIoThreadCount
+    m_server->start(ioThreadCount);
 
     return true;
 }
@@ -48,10 +47,15 @@ void RelayServer::onConnected(std::shared_ptr<TcpConnection> conn)
 
 void RelayServer::onDisconnected(const std::shared_ptr<TcpConnection>& conn)
 {
-    //从配对表摘除本连接；若对端仍在，连带关闭它，使两端一起收尾
-    std::shared_ptr<TcpConnection> peer = m_hub.leaveByConn(conn.get());
-    if (peer)
-        peer->forceClose();
+    //从配对表摘除本连接；若对端仍在，连带关闭它，使两端一起收尾。
+    //配对表保存的是会话，故要再从会话取出它所属的连接
+    std::shared_ptr<RelaySession> peerSession = m_hub.leaveByConn(conn.get());
+    if (peerSession)
+    {
+        std::shared_ptr<TcpConnection> peerConn = peerSession->getConnectionPtr();
+        if (peerConn)
+            peerConn->forceClose();
+    }
 
     //移除本连接对应的会话对象
     std::lock_guard<std::mutex> guard(m_sessionMutex);

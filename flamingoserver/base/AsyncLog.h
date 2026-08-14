@@ -99,7 +99,19 @@ private:
     static char* formLog(int& index, char* szbuf, size_t size_buf, unsigned char* buffer, size_t size);
 
     static void writeThreadProc();
-	
+
+    /**
+     *  把一行日志送到终端与调试器输出窗口。
+     *
+     *  收成一个函数是因为「该不该补换行」这件事有个容易踩的坑：启用了日志文件时，
+     *  strLine 末尾自带一个 '\n'（那是写文件用的），此时再补 std::endl，终端里
+     *  每条日志之间就会多空一行。三个输出点各写一遍必然漏改，故统一在此处理。
+     *
+     *  @param strLine 完整的一行日志，末尾可能已带 '\n'
+     *  副作用：向标准输出写入；Windows 下同时写调试器输出窗口。
+     */
+    static void writeToConsole(const std::string& strLine);
+
 private:
 	static FILE*                            m_hLogFile;
     static std::string                      m_strFileName;          //日志文件名

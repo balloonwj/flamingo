@@ -37,7 +37,7 @@ extern CAppModule _Module;
 #pragma comment(lib, "gdiplus.lib")
 
 #include "GroupMentionButton.h"
-#include "../../balloonui/balloonui/Controls/Feedback/DuiToolTip.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"
 
 namespace balloonchatwnd {
 

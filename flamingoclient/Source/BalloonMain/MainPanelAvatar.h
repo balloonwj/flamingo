@@ -75,4 +75,23 @@ HBITMAP MakeMonogramSquareAvatar(LPCTSTR text, COLORREF bgColor, int sizePx, int
  */
 HICON MakeMonogramIcon(LPCTSTR text, COLORREF bgColor, int sizePx);
 
+/**
+ *  在一枚已有图标的右下角叠加在线状态徽标，生成一枚新图标，供系统托盘显示
+ *  "我当前是离开 / 忙碌"用。底图本身不变（当前是 Image\imonline.ico）。
+ *
+ *  徽标的字形与颜色不在这里另定：字形取自 GetPresenceBadgeIconKind、颜色取自
+ *  GetPresenceVisual().dotColor —— 与主面板状态胶囊、联系人列表的状态点同源，
+ *  托盘上看到的徽标与界面里的必然长得一样。徽标外面套一圈白环，避免它与底图
+ *  深色部分糊在一起。
+ *
+ *    hBaseIcon: 底图图标；本函数只读它，所有权仍归调用方。
+ *    presence:  要叠加的在线状态（v2 presence_type），通常取
+ *               GetTrayOverlayPresence 的返回值；调用方须先排除 kNoTrayOverlay。
+ *    sizePx:    生成图标的边长，像素，>0；托盘请传 ::GetSystemMetrics(SM_CXSMICON)。
+ *
+ *    返回:      新建的 HICON，所有权归调用方，用完调 ::DestroyIcon。
+ *               入参非法或任何一步创建失败时返回 NULL，调用方据此回退到底图。
+ */
+HICON MakePresenceOverlayIcon(HICON hBaseIcon, int presence, int sizePx);
+
 } // namespace balloonmain

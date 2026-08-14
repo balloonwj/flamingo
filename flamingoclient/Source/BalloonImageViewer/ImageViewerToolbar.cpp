@@ -19,8 +19,8 @@
 
 #include "ImageViewerToolbar.h"
 #include "ImageCanvas.h"
-#include "../../balloonui/balloonui/DuiHost.h"                         // GetHost()->m_hWnd（ClientToScreen）
-#include "../../balloonui/balloonui/Controls/Feedback/DuiToolTip.h"    // DuiToolTipMgr（按钮 tooltip）
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"                         // GetHost()->m_hWnd（ClientToScreen）
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"    // DuiToolTipMgr（按钮 tooltip）
 
 namespace balloonimageviewer {
 

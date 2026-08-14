@@ -3,7 +3,7 @@ flamingoclient/CatchScreen/Release/
 flamingoclient/CatchScreen/debug/
 flamingoclient/Source/Release/
 flamingoclient/Source/flamingo.aps
-flamingoclient/iAutoUpdate/Release/
+flamingoclient/FlamingoUpdater/Release/
 
 flamingoserver/FlamingoServer.sdf
 flamingoserver/FlamingoServer.v12.suo
@@ -32,7 +32,7 @@ LoginAccountList.data
 flamingoclient/Bin/Users/
 *.ilk
 *.suo
-iUpdateAuto.exe
+FlamingoUpdater.exe
 *.tlog
 *.lastbuild
 *.ipch
@@ -41,7 +41,7 @@ iUpdateAuto.exe
 *.so
 *.dylib
 flamingoclient/Source/Debug/
-flamingoclient/iAutoUpdate/debug/
+flamingoclient/FlamingoUpdater/debug/
 flamingoclient/Bin/Flamingo.exe
 flamingoclient/Bin/CatchScreen.exe
 
@@ -202,24 +202,25 @@ flamingoAdmin/third-party/
 # 本地联调用的测试账号清单，含明文口令，不入库
 /测试账号.md
 
-# flamingoclient/balloonui 与 third-party/balloonui 都是**独立的 git 仓库**
-# （远端 git@github.com:balloonwj/balloonui.git），各自有自己的提交历史。
-# 必须在这里显式忽略：否则 `git add -A` 会把它们当成子模块、往索引里塞一个
+# third-party/balloonui 是**独立的 git 仓库**（远端 git@github.com:balloonwj/balloonui.git），
+# 有自己的提交历史，不随主仓库一起提交。
+# 必须在这里显式忽略：否则 `git add -A` 会把它当成子模块、往索引里塞一个
 # gitlink 引用，既提交不了内容，clone 下来也是空目录。
-# 注意不要改回 `!flamingoclient/balloonui/` 这种反向包含 —— 那正是会踩上面这个坑的写法。
-flamingoclient/balloonui/
+# 注意不要改成 `!third-party/balloonui/` 这种反向包含 —— 那正是会踩上面这个坑的写法。
+# 2026-08-13：该库原先另有一份放在 flamingoclient/balloonui/，已统一移到此处，
+# 旧路径的忽略规则随之删除。
 third-party/balloonui/
 
 # 会话过程中的临时产物（探针脚本、截图、备份等）。开发期需要临时目录时一律用它，
 # 不要写到系统 Temp 下 —— 放在项目内才好和对应项目对上号、一起清理。
 tmp/
 
-# 更新器 iUpdateAuto 四个配置的中间目录（2026-08-12 重写后按配置分开，旧的
-# iAutoUpdate/Release/ 已在上面列过，这里补齐其余三个 + x64）。
-flamingoclient/iAutoUpdate/Debug_x64/
-flamingoclient/iAutoUpdate/Release_x64/
-flamingoclient/iAutoUpdate/Debug_Win32/
-flamingoclient/iAutoUpdate/Release_Win32/
+# 更新器 FlamingoUpdater 四个配置的中间目录（2026-08-12 重写后按配置分开，旧的
+# FlamingoUpdater/Release/ 已在上面列过，这里补齐其余三个 + x64）。
+flamingoclient/FlamingoUpdater/Debug_x64/
+flamingoclient/FlamingoUpdater/Release_x64/
+flamingoclient/FlamingoUpdater/Debug_Win32/
+flamingoclient/FlamingoUpdater/Release_Win32/
 
 # 客户端下载的升级包与更新器日志。运行期产物，几十 MB，且每次升级都会变。
 flamingoclient/Bin/update/
@@ -238,3 +239,15 @@ flamingoserver/mariadb-connector-x64/
 
 # 跑单测时在源码目录里落下的临时 SQLite 库。
 flamingoclient/Source/flamingo_sqlite_*_test.db
+
+# 服务端协议加密的长期身份密钥（Ed25519 种子）与配套的公钥文件。
+# 种子是服务端的私有身份，泄露等于中间人可以冒充服务器，绝不能入库；
+# 文件缺失时服务端启动会自动生成一份新的。公钥（.pub）本身可以公开，
+# 但它随种子一起生成、每个部署各不相同，同样不该跟着源码走。
+flamingoserver/etc/server_key
+flamingoserver/etc/server_key.pub
+
+# 开发过程中给用户看的界面截图 / 效果图，只在本地留存，不进版本库。
+# 这些图是排查问题、核对界面时随手截的，数量多、体积大、时效性强，
+# 对克隆仓库的人没有价值；需要长期保留的图请另行归档并在文档中说明出处。
+snapshots/

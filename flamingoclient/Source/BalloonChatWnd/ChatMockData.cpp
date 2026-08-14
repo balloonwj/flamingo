@@ -27,6 +27,10 @@
 
 #include "ChatMockData.h"
 #include "FileBubbleFormat.h"   // FormatFileSize / FileTypeLabelFromName（文件气泡大小文字与类型标签）
+#include "ChatFolderStateModel.h"   // ChatFolderState（文件夹 mock 消息的传输状态取值）
+//文件夹失败原因的错误码取值。本 .cpp 不包含 v1 的 Msg.h，与 Protocol.h 不在同一编译
+//单元里冲突（两者的枚举名重叠，见 net/Protocol.h 文件头）。
+#include "../net/Protocol.h"
 
 namespace balloonchatwnd {
 
@@ -90,6 +94,38 @@ ChatMessage MakeFile(bool fromMe, LPCTSTR name, LPCTSTR size,
     m.fileType = type;
     m.fileProgress = progress;
     m.imageW = m.imageH = 0;
+    m.hasQuote = false;
+    m.senderAvatarColor = 0;   // 单聊消息无发送者信息
+    m.read = fromMe;
+    return m;
+}
+
+// 构造一条文件夹传输消息。大小文字由字节数经 FormatFileSize 算出，与真实收发路径
+// 同一个格式化函数，免得 mock 里手写的 "2.4 GB" 与线上算出来的对不上。
+//   fromMe：    true=本端发起的传输（右侧气泡），false=对方发来的邀请（左侧气泡）
+//   name：      文件夹名（只给最后一级目录名）
+//   fileCount： 文件夹内的文件总数，单位：个
+//   dirCount：  文件夹内的子目录总数，单位：个
+//   sizeBytes： 文件夹内全部文件的字节数之和
+//   state：     传输状态，取值见 ChatFolderState
+//   progress：  整体进度 0-100（无进度条的状态传 0 即可）
+ChatMessage MakeFolder(bool fromMe, LPCTSTR name, int fileCount, int dirCount,
+                       long long sizeBytes, int state, int progress)
+{
+    ChatMessage m;
+    m.kind             = kMsgFolder;
+    m.fromMe           = fromMe;
+    m.folderName       = name;
+    m.folderFileCount  = fileCount;
+    m.folderDirCount   = dirCount;
+    m.folderSizeBytes  = sizeBytes;
+    m.folderSize       = CString(FormatFileSize(sizeBytes).c_str());
+    m.folderState      = state;
+    m.folderProgress   = progress;
+    m.folderTotalBytes = sizeBytes;
+    m.folderSentBytes  = sizeBytes * progress / 100;
+    m.imageW = m.imageH = 0;
+    m.fileProgress = 0;
     m.hasQuote = false;
     m.senderAvatarColor = 0;   // 单聊消息无发送者信息
     m.read = fromMe;
@@ -228,6 +264,48 @@ const std::vector<ChatMessage>& ChatMessages()
         msgs.push_back(MakeText(kMsgText, false,
             _T("参考资料我放这儿了 https://example.com/brand/guide?v=2 ")
             _T("还有 www.example.org 这几个都看一下")));
+
+        // ---- 文件夹传输气泡的假数据（kMsgFolder）----
+        // 四条覆盖气泡的四种面貌：有进度条的传输中、带失败原因与「重试」的失败态、
+        // 对方发来的待应答邀请（「接收 / 另存为 / 拒绝」三个按钮）、以及已完成（「打开文件夹」）。
+        // 少了任何一条，调试入口下就有一条绘制分支永远走不到，界面坏了也看不出来。
+        //
+        // 字节数按"想要的展示文字"反推：2.4 GB = 2.4 × 1024³，其余同理，好让
+        // FormatFileSize 算出来的正是注释里写的那个数。
+        const long long kMockGiB = 1024LL * 1024LL * 1024LL;   // 1 GiB 的字节数
+        const long long kMockMiB = 1024LL * 1024LL;            // 1 MiB 的字节数
+
+        // 一、本端发出、正在传：进度条 + 「正在传输 <文件名>（第 i / 共 n 个）」状态行。
+        ChatMessage folderSending = MakeFolder(true, _T("项目资料"), 128, 12,
+            (long long)(2.4 * kMockGiB), kFolderTransferring, 46);
+        folderSending.folderCurFile     = _T("首页设计稿-v3.psd");
+        folderSending.folderCurIndex    = 46;
+        folderSending.folderSessionId   = "mock-folder-sending";
+        folderSending.folderLocalRoot   = _T("D:\\工作\\项目资料");
+        msgs.push_back(folderSending);
+
+        // 二、本端发出、传输失败且仍在保留期内：失败原因单占一行，按钮是可用的「重试」。
+        ChatMessage folderFailed = MakeFolder(true, _T("设计稿归档"), 86, 3,
+            (long long)(1.2 * kMockGiB), kFolderFailed, 63);
+        folderFailed.folderErrCode      = error_code_folder_relay_broken;
+        folderFailed.folderWithinRetry  = true;
+        folderFailed.folderSessionId    = "mock-folder-failed";
+        folderFailed.folderLocalRoot    = _T("D:\\工作\\设计稿归档");
+        msgs.push_back(folderFailed);
+
+        // 三、对方发来、等待本端应答：这是接收端唯一有多个按钮的状态（接收 / 另存为 / 拒绝），
+        //     也是气泡里按钮排得最满的一行，用它核对三个链接是否都完整落在气泡内。
+        ChatMessage folderInvite = MakeFolder(false, _T("客户资料备份"), 342, 27,
+            (long long)(5.6 * kMockGiB), kFolderInviting, 0);
+        folderInvite.folderSessionId    = "mock-folder-invite";
+        msgs.push_back(folderInvite);
+
+        // 四、对方发来、全部完成：无进度条，只留一个「打开文件夹」指向落地目录。
+        ChatMessage folderDone = MakeFolder(false, _T("培训课件"), 54, 6,
+            780 * kMockMiB, kFolderCompleted, 100);
+        folderDone.folderSessionId      = "mock-folder-done";
+        folderDone.folderLocalRoot      = _T("D:\\下载\\培训课件");
+        msgs.push_back(folderDone);
 
         //给各条补上假的服务器 msgid。真实会话里每条消息都带 msgid（见
         //CBalloonChatWindow::MakeRealTextMessage），而凡是"拿 msgid 说事"的界面

@@ -48,20 +48,30 @@ struct ChatPeer
  */
 enum ChatMsgKind
 {
-    kMsgTime  = 0,   // 居中时间分隔
-    kMsgText  = 1,   // 文字
-    kMsgEmoji = 2,   // 大 emoji
-    kMsgImage = 3,   // 图片
-    kMsgFile  = 4,   // 文件
+    kMsgTime   = 0,   // 居中时间分隔
+    kMsgText   = 1,   // 文字
+    kMsgEmoji  = 2,   // 大 emoji
+    kMsgImage  = 3,   // 图片
+    kMsgFile   = 4,   // 文件
+    kMsgFolder = 5,   // 文件夹整体传输。与 kMsgFile 是两回事：它不走 cmd_send_message、
+                      // 不进服务端消息表，只是本端会话里的一条本地气泡（退出登录后不再
+                      // 出现），承载「邀请 → 应答 → 建目录 → 传字节 → 收尾」整条链路的
+                      // 界面表达。设计见 docs/单聊文件夹传输方案.md 第 7.2 节
 };
 
 /**
  *  一条会话消息。kind 决定哪些字段有效。
+ *
+ *  本结构体的每个内置类型成员都必须给出默认值。构造方往往只填自己那一类消息用得上的
+ *  字段（例如文件夹气泡只填 folderXxx 那一批），缺默认值的成员就会保留栈上的垃圾值，
+ *  而气泡是按这些标志决定画什么的 —— 2026-08-14 实测到的现象是文件夹气泡左侧凭空多出
+ *  一条引用竖线：hasQuote 当时没有默认值，取到真值就把引用块的竖线画了出来，而引用
+ *  内容是空的，于是只剩一根孤零零的竖条。新增成员时请一并给默认值。
  */
 struct ChatMessage
 {
-    int      kind;          // 取值见 ChatMsgKind
-    bool     fromMe;        // true=自己发,false=对方发（kMsgTime 忽略）
+    int      kind = 0;      // 取值见 ChatMsgKind
+    bool     fromMe = false;  // true=自己发,false=对方发（kMsgTime 忽略）
 
     CString  text;          // kMsgText/kMsgEmoji 的内容；kMsgTime 的文字
 
@@ -81,8 +91,8 @@ struct ChatMessage
 
     // kMsgImage
     CString  imageCaption;  // 图片占位标签（真实图片渲染时一般留空，由 imageState 决定覆盖文字）
-    int      imageW;        // 图片显示宽（已按比例缩放后的展示像素，供气泡布局）
-    int      imageH;        // 图片显示高（同上）
+    int      imageW = 0;    // 图片显示宽（已按比例缩放后的展示像素，供气泡布局）
+    int      imageH = 0;    // 图片显示高（同上）
 
     // kMsgImage 真实渲染 / 发送态（v2 聊天图片）。imagePath 非空时 ChatBubble
     // 解码该文件按 imageW×imageH 缩放绘制；否则回退到占位块。
@@ -118,13 +128,45 @@ struct ChatMessage
     // "对端收得怎么样"，两者同时存在（自己传完了 ≠ 对方收了）。
     int         filePeerState = 0;
 
+    // ---- kMsgFolder —— 文件夹整体传输态。状态取值与「状态 → 可用操作」的映射都在
+    //      ChatFolderStateModel.h（ChatFolderState / FolderStateHasProgress /
+    //      FolderStateButtonCount / FolderButtonActions / FolderRetryEnabled），气泡
+    //      只照结果画。本组字段仅 kind == kMsgFolder 时有效，其余消息一律留默认值。----
+    CString     folderName;              // 文件夹名（只取所选目录的最后一级名字，显示在标题行）
+    int         folderFileCount = 0;     // 文件夹内的文件总数（含各级子目录里的文件），单位：个
+    int         folderDirCount = 0;      // 文件夹内的子目录总数（含空目录，不含根目录自身），单位：个
+    long long   folderSizeBytes = 0;     // 文件夹内全部文件的字节数之和
+    CString     folderSize;              // 总大小文字（如 "2.4 GB"），由 folderSizeBytes 经 FormatFileSize 格式化，
+                                         // 气泡直接画它，不在绘制时重复格式化
+    int         folderState = 0;         // 传输状态，取值见 ChatFolderState。0 不是合法状态（ChatFolderState 从 1 起），
+                                         // 出现 0 说明宿主漏填，此时气泡按"无进度条、无按钮"退化处理
+    int         folderProgress = 0;      // 整体进度 0-100（按字节数算）。仅 FolderStateHasProgress(folderState)
+                                         // 为真时有意义；失败 / 取消后停在中断处不再变
+    long long   folderSentBytes = 0;     // 本次传输已发出 / 已收到的字节数（断点续传时从续传位点继续累加）
+    long long   folderTotalBytes = 0;    // 本次传输应传的总字节数。断点续传时它小于 folderSizeBytes ——
+                                         // 已传过的部分不再重传，故进度条按本字段而不是按 folderSizeBytes 算
+    CString     folderCurFile;           // 当前正在传的那个文件的文件名（不含路径）。仅传输中有意义，
+                                         // 其余状态留空，状态行相应地不显示文件名
+    int         folderCurIndex = 0;      // 当前传的是第几个文件（从 1 起），与 folderFileCount 一起拼成
+                                         // "第 i / 共 n 个"。0=尚未开始传第一个文件，状态行不显示序号
+    int         folderErrCode = 0;       // 失败原因错误码，取值见 net/Protocol.h 的 error_code_folder_*（606~620）。
+                                         // 0=没有失败原因（正常流程，或宿主未记录），此时气泡不画失败原因那一行；
+                                         // 非 0 时经 FolderErrorText 映射成中文展示文案
+    std::string folderSessionId;         // 本次文件夹传输的会话 id（UTF-8）。服务端在应答里分配，此后
+                                         // 所有信令都带着它；上层按它在消息列表里定位到本条气泡再更新状态
+    CString     folderLocalRoot;         // 本地根目录完整路径。发送端是所选源目录，接收端是落地目录；
+                                         // 「打开文件夹」按钮据它在资源管理器里打开。空=尚未确定（如邀请还没被接受）
+    bool        folderWithinRetry = false;  // 本次会话是否仍在服务端的可重试保留期内（folderretrywindow，默认 10 分钟）。
+                                            // 由宿主按失败时刻与保留期时长算出；气泡把它交给 FolderRetryEnabled
+                                            // 决定「重试」按钮画成可用还是不可用
+
     // 引用回复（气泡上方的引用块）
     // ---- 引用回复（气泡上方的引用块）----
     // hasQuote 为假时其余 quote* 字段无意义。协议侧对应 content.quote，读写见
     // net::ReplyQuote 与 MessageProtocolClient 的 readQuoteFromContent。
     // 存的是<u>发送时的快照</u>而不是只存 msgid：原消息可能不在已加载范围内、也可能
     // 已被撤回，只有 msgid 的话引用块什么都显示不出来。
-    bool     hasQuote;      // 是否带引用
+    bool     hasQuote = false;  // 是否带引用
     CString  quoteName;     // 被引用者显示名快照（发送时定格，群名片改了也不影响）
     CString  quoteText;     // 被引用消息的摘要快照
 
@@ -144,13 +186,13 @@ struct ChatMessage
     // 为真时气泡右上角画一枚小图钉，右键菜单里那一项文案变为「取消 Pin」。
     bool     pinned = false;
 
-    bool     read;          // 自己消息是否已读（显示"✓ 已读"）
+    bool     read = false;  // 自己消息是否已读（显示"✓ 已读"）
 
     // ---- 群聊发送者（单聊消息留空 —— 此时气泡不显示发送者名、头像
     //      回退到单聊对象 ChatPartner）----
     CString  senderName;        // 发送者昵称
     CString  senderAvatarText;  // 发送者头像字
-    COLORREF senderAvatarColor; // 发送者头像底色（仅 senderName 非空时有效）
+    COLORREF senderAvatarColor = 0; // 发送者头像底色（仅 senderName 非空时有效）
 
     // ---- 发送者真实图片头像（facetype=2）。两字段配合：senderUserId 用于真图下载
     //      完成后按发送者定位本气泡刷新；senderAvatarImagePath 非空时气泡画真图、

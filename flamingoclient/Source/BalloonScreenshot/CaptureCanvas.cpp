@@ -6,8 +6,8 @@
 #include "CaptureCanvas.h"
 #include "ScreenshotGeometry.h"
 #include "ScreenshotToolbar.h"   // 深色风格工具栏控件（DarkBar / IconButton / ColorDot / WidthDot）
-#include "../../balloonui/balloonui/DuiNotify.h"   // DUIN_CLICK（双击确认通知）
-#include "../../balloonui/balloonui/DuiHost.h"     // GetHost()->m_hWnd（文字编辑框 EnsureCreated / 焦点）
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"   // DUIN_CLICK（双击确认通知）
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"     // GetHost()->m_hWnd（文字编辑框 EnsureCreated / 焦点）
 
 #include <gdiplus.h>             // 标注用 GDI+ 抗锯齿绘制
 

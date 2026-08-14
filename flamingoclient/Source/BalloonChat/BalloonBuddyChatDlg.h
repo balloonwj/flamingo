@@ -17,8 +17,8 @@
 #pragma once
 
 #include <vector>
-#include "../../balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
-#include "../../balloonui/balloonui/DuiNotify.h"     // WM_DUI_NOTIFY / struct DuiNotify
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"     // WM_DUI_NOTIFY / struct DuiNotify
 
 class CFlamingoClient;
 class CFaceList;

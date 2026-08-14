@@ -352,6 +352,22 @@ CREATE TABLE IF NOT EXISTS  t_contact_remark  (
          KEY  idx_user  ( f_userid )
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8
 
+//联系人标签表（企业版）：一行 = f_userid 给 f_target_userid 贴的一个标签（形如"设计""外包"）。
+//与 t_contact_remark 完全同构，同样是<单向>的 —— 只影响"本人看对方"这一侧的显示，
+//对方看不到也不受影响，故主键的第一列是 f_userid。
+//一行只存<一个>标签，不把多个标签打包成逗号串：打包串既没法按标签检索，
+//也会让"同一个标签重复添加"要靠字符串比对去重。
+//客户端一次提交某联系人的完整标签列表，服务端整份覆盖（先删后插），空列表即清空。
+CREATE TABLE IF NOT EXISTS  t_contact_tag  (
+         f_userid         bigint(20) NOT NULL COMMENT '标签归属用户userid（谁贴的）',
+         f_target_userid  bigint(20) NOT NULL COMMENT '被贴标签的联系人userid（贴给谁）',
+         f_tag            varchar(16) NOT NULL DEFAULT '' COMMENT '标签文本，去掉首尾空白后的内容',
+         f_order          int(10) NOT NULL DEFAULT 0 COMMENT '同一联系人下的显示顺序，值小者靠前，从0起算',
+         f_update_time    bigint(20) NOT NULL DEFAULT 0 COMMENT '最近一次整份覆盖的时间(Unix毫秒)',
+         PRIMARY KEY ( f_userid, f_target_userid, f_tag ),
+         KEY  idx_user  ( f_userid )
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8
+
 //黑名单表：一行表示 f_userid 把 f_blocked_userid 加入了自己的黑名单。
 //一行表示 f_userid 把 f_blocked_userid 加入了自己的黑名单；联合主键天然去重
 CREATE TABLE IF NOT EXISTS  t_blacklist  (

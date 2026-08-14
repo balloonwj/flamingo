@@ -16,6 +16,7 @@
 #include <map>
 
 #include "../net/Protocol.h"   // conversation_single / conversation_group
+#include "ContactRemarkModel.h"   // ResolveContactDisplayName（显示名口径全局唯一）
 
 namespace balloonmain {
 
@@ -205,12 +206,13 @@ void FavoritesModel::BuildRows(const std::vector<net::ContactItem>& contacts,
             FavoriteRow row;
             row.m_ctype         = fav.m_ctype;
             row.m_cid           = fav.m_cid;
-            //昵称缺失时退回账号，两者都空就跳过 —— 一行没有名字是没法用的。
-            row.m_displayName   = Utf8ToCStr(c->m_nickname);
-            if (row.m_displayName.IsEmpty())
-                row.m_displayName = Utf8ToCStr(c->m_username);
-            if (row.m_displayName.IsEmpty())
-                continue;
+            //显示名与通讯录树、会话列表取同一口径：「真名（备注）」。早先这里只取
+            //昵称、完全不看备注，于是同一个人在收藏区显示真名、在部门树里显示备注，
+            //两处对不上号。ResolveContactDisplayName 内部已含"昵称 → 账号 →
+            //用户<id>"的逐级兜底，故不必再在这里退一次，也就不会出现空名字的行。
+            row.m_displayName = balloonmain::ResolveContactDisplayName(
+                Utf8ToCStr(c->m_remark), Utf8ToCStr(c->m_nickname),
+                Utf8ToCStr(c->m_username), (UINT)c->m_userid);
 
             row.m_subLabel      = Utf8ToCStr(c->m_signature);
             row.m_showStatusDot = true;

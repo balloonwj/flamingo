@@ -22,9 +22,9 @@
 #include "../BalloonMain/ContactRemarkModel.h" // ResolveContactDisplayName：备注优先的统一取名口径
 #include "../net/ImageTransfer.h"
 #include "../net/CurrentUserAccount.h"   // net::CurrentUserAccount（本地缓存目录按登录账号分）              // 头像真图的本地缓存路径与下载
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox / DuiHBox / Hint
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox / DuiHBox / Hint
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
 
 // ---- 文件作用域常量 -----------------------------------------------------
 

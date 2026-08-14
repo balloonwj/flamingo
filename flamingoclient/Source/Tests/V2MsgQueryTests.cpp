@@ -332,3 +332,136 @@ TEST_CASE("V2Q11 Pin 分类下 Count 与 Page 的 WHERE 完全一致，排序仍
     CHECK(pageSql.find("ORDER BY timestamp DESC, msgid DESC") != std::string::npos);
     CHECK(pageSql.find("pin_time DESC") == std::string::npos);
 }
+
+// ===================================================================
+// 文件夹传输记录条（msgtype = message_type_folder = 18）落进本地历史库的那一段
+// ===================================================================
+
+namespace {
+
+//造一条文件夹传输记录条的 MessageNotify（服务端在传输走到终态后推下来的那种）。
+static net::MessageNotify MakeFolderNotify(const std::string& sessionId,
+                                           const std::string& folderName,
+                                           long long dirs, long long files,
+                                           long long bytes, int result, int errCode)
+{
+    net::MessageNotify notify;
+    notify.m_msgid   = 90001;
+    notify.m_ctype   = 1;
+    notify.m_cid     = 20002;
+    notify.m_from    = 10001;
+    notify.m_to      = 20002;
+    notify.m_msgtype = ::message_type_folder;
+    notify.m_timestamp = 1755100000000LL;
+
+    notify.m_folderSessionId  = sessionId;
+    notify.m_folderName       = folderName;
+    notify.m_folderTotalDirs  = dirs;
+    notify.m_folderTotalFiles = files;
+    notify.m_folderTotalSize  = bytes;
+    notify.m_folderResult     = result;
+    notify.m_folderErrCode    = errCode;
+    return notify;
+}
+
+} // namespace
+
+TEST_CASE("V2Q12 BuildSearchText 对文件夹记录返回文件夹名")
+{
+    //用户回头找的是"我给谁发过那个叫 xxx 的文件夹"，故搜索文本取文件夹名
+    const net::MessageNotify notify =
+        MakeFolderNotify("sess-1", u8"三期设计稿", 12, 128, 2576980378LL,
+                         ::folder_state_completed, 0);
+    CHECK(BuildSearchText(notify) == u8"三期设计稿");
+
+    //文件夹名为空时退化成空串，不至于把别的字段拿去当搜索文本
+    const net::MessageNotify noName =
+        MakeFolderNotify("sess-2", "", 0, 0, 0, ::folder_state_completed, 0);
+    CHECK(BuildSearchText(noName).empty());
+}
+
+TEST_CASE("V2Q13 BuildContentJson 对文件夹记录写 folder 子对象、且不含文件清单")
+{
+    const net::MessageNotify notify =
+        MakeFolderNotify("sess-8811", u8"项目资料", 12, 128, 2576980378LL,
+                         ::folder_state_completed, 0);
+
+    Json::Value root;
+    REQUIRE(ParseJson(BuildContentJson(notify), root));
+    REQUIRE(root.isMember("folder"));
+    const Json::Value& folder = root["folder"];
+    REQUIRE(folder.isObject());
+
+    //字段名须与线上那份逐字相同 —— 历史行要按 sessionid 去查本地落点登记
+    CHECK(folder["sessionid"].asString() == "sess-8811");
+    CHECK(folder["foldername"].asString() == u8"项目资料");
+    CHECK(folder["totaldirs"].asInt64() == 12);
+    CHECK(folder["totalfiles"].asInt64() == 128);
+    CHECK(folder["totalsize"].asInt64() == 2576980378LL);
+    CHECK(folder["result"].asInt() == ::folder_state_completed);
+    CHECK(folder["errcode"].asInt() == 0);
+
+    //"记动作、不记内容"：落库这一份同样不许出现文件清单与 MD5
+    CHECK(folder.getMemberNames().size() == 7);
+    CHECK_FALSE(folder.isMember("files"));
+    CHECK_FALSE(folder.isMember("md5"));
+}
+
+TEST_CASE("V2Q14 文件夹记录的失败原因与超大字节数落库不丢失")
+{
+    const long long kFiftyGiB = 53687091200LL;
+    const net::MessageNotify failed =
+        MakeFolderNotify("sess-fail", u8"归档", 3, 40, kFiftyGiB,
+                         ::folder_state_failed, ::error_code_folder_write_fail);
+
+    Json::Value root;
+    REQUIRE(ParseJson(BuildContentJson(failed), root));
+    CHECK(root["folder"]["totalsize"].asInt64() == kFiftyGiB);
+    CHECK(root["folder"]["result"].asInt() == ::folder_state_failed);
+    CHECK(root["folder"]["errcode"].asInt() == ::error_code_folder_write_fail);
+}
+
+TEST_CASE("V2Q15 文件夹记录 content 不可用时退化成空的 folder 子对象而不是崩掉")
+{
+    //m_folderResult 为 0（推送里的 content 当初就没解析出来）：构造侧会拒绝，
+    //本函数据此写一个空对象，历史行退化成只显示 "[文件夹]"
+    net::MessageNotify broken;
+    broken.m_msgid   = 1;
+    broken.m_from    = 10001;
+    broken.m_msgtype = ::message_type_folder;
+
+    Json::Value root;
+    REQUIRE(ParseJson(BuildContentJson(broken), root));
+    REQUIRE(root.isMember("folder"));
+    CHECK(root["folder"].isObject());
+    CHECK(root["folder"].getMemberNames().empty());
+}
+
+TEST_CASE("V2Q16 RecordFromNotify 对文件夹记录：类型 / 搜索文本正确且不算链接")
+{
+    const net::MessageNotify notify =
+        MakeFolderNotify("sess-1", u8"三期设计稿", 12, 128, 1024,
+                         ::folder_state_completed, 0);
+    const HistoryRecord rec = RecordFromNotify(notify, 1, 10001);
+
+    CHECK(rec.m_msgtype == ::message_type_folder);
+    CHECK(rec.m_searchText == u8"三期设计稿");
+    //"链接"只对文本消息有意义，文件夹名里即便出现 http:// 也不该被算成链接
+    CHECK_FALSE(rec.m_isLink);
+    CHECK(rec.m_msgid == notify.m_msgid);
+    CHECK(rec.m_timestamp == notify.m_timestamp);
+}
+
+TEST_CASE("V2Q17 类型筛选未新增「文件夹」一档，SQL 片段维持原样")
+{
+    //本轮<u>刻意不加</u>文件夹胶囊（理由见 docs/单聊文件夹传输方案.md 7.4）：
+    //记录条一次传输才一条、频次极低，而胶囊行是单选且宽度按"两字"排的，
+    //加一档三字胶囊要改整行布局，代价与收益不成比例。文件夹记录仍可经「全部」
+    //浏览、并按文件夹名被关键字搜到。
+    //这条用例守的是"没有人顺手把它塞进已有的某一档"——尤其别混进「文件」，
+    //那会让文件筛选里冒出一堆下载不了的行。
+    const std::string fileFrag = TypeFilterToSqlFragment(kHistoryTypeFile);
+    CHECK(fileFrag == "msgtype=3");
+    CHECK(fileFrag.find("18") == std::string::npos);
+    CHECK(TypeFilterToSqlFragment(kHistoryTypeAll).empty());
+}

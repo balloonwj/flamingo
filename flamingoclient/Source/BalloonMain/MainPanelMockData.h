@@ -25,7 +25,8 @@ enum MockStatus
     kMockOnline    = 0,   // 在线
     kMockAway      = 1,   // 离开
     kMockBusy      = 2,   // 忙碌
-    kMockInvisible = 3,   // 隐身
+    //编号 3 曾经是「隐身」，本产品不提供该功能，2026-08-13 去掉；此处留空不再复用，
+    //离线保持 4 不动，避免 design data.js 里既有的 status 取值对不上
     kMockOffline   = 4,   // 离线
 };
 
@@ -115,7 +116,7 @@ int MockContactsTotalCount();
  *    status：取值见 MockStatus（与 presence_type <u>不是</u>同一套编号，须显式换算）。
  *
  *  返回：presence_online / presence_away / presence_busy / presence_offline 之一；
- *        隐身与一切越界取值归到 presence_offline，与正式数据那条路径的兜底口径一致。
+ *        一切越界取值归到 presence_offline，与正式数据那条路径的兜底口径一致。
  *
  *  用途：mock 数据要画状态徽标（形状 + 颜色）时，先经本函数换到 presence，再交给
  *  PresenceBadge —— 这样 mock 与真实数据共用同一套"状态 → 视觉"映射，不会出现

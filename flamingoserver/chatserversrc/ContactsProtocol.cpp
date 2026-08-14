@@ -75,6 +75,13 @@ std::string ContactsProtocol::buildContactsResponse(const ContactsData& data)
         //只需一条 get("remark","") 的解析路径，且"清除备注"与"从未设置"在
         //显示上本就该是同一种效果，不必用字段有无来区分。
         jc["remark"]      = c.remark;
+        //标签同样一律写出（没贴过时为空数组），理由同上：客户端只需一条解析路径。
+        //与 remark 并列，是因为两者性质相同——都属于"本人怎么看这个联系人"，
+        //而不属于联系人自身的资料。
+        Json::Value jtags(Json::arrayValue);
+        for (const std::string& tag : c.tags)
+            jtags.append(tag);
+        jc["tags"] = jtags;
         contacts.append(jc);
     }
     root["contacts"] = contacts;

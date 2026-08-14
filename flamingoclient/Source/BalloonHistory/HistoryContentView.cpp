@@ -15,7 +15,7 @@
 #include "../BalloonChatWnd/ChatFaceTag.h"          // kFaceDisplayPx
 #include "../BalloonChatWnd/ChatTextSelection.h"    // SelLayout / BuildSelectionRects / HitTestCharRanges
 #include "../CustomMsgDef.h"                        // WM_CHAT_OPEN_LINK（点链接后请宿主窗打开）
-#include "../../balloonui/balloonui/DuiHost.h"      // GetHost()->m_hWnd（投消息给宿主窗）
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"      // GetHost()->m_hWnd（投消息给宿主窗）
 
 namespace balloonhistory {
 

@@ -16,7 +16,7 @@
  */
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Feedback/DuiPopupHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiPopupHost.h"
 
 #include <string>
 #include <map>

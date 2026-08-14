@@ -15,7 +15,7 @@
 
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 
 namespace balloonmain {
 
@@ -77,10 +77,6 @@ public:
 
     // DuiControl 覆写：绘制头像 + 名称 + 副行（+ 状态点 / 时间 / 角标）。
     void OnPaint(HDC hdc, const RECT& rcDirty) override;
-
-    // DuiControl 覆写：把滚轮转发给祖先里的滚动视口（列表项铺满视口，
-    // 滚轮多落在它身上，须主动交还）。
-    bool OnMouseWheel(POINT pt, short zDelta, UINT mkFlags) override;
 
     // DuiControl 覆写：鼠标进入 / 离开时，除基类维护 hover 态外主动重绘本行。
     // 基类 OnMouseEnter/OnMouseLeave 只改 m_bHover、<u>不</u>触发重绘——在频繁重绘的

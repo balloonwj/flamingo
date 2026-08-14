@@ -26,9 +26,9 @@ CAppModule _Module;
 #include "catch_amalgamated.hpp"
 
 #include "../BalloonChat/BalloonChatLayout.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiRichEditHost.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/List/DuiTreeView.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiTreeView.h"
 
 using namespace balloonwjui;
 using namespace balloonchat;

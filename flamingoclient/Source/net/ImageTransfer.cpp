@@ -9,6 +9,7 @@
 #include "ImageUploadDriver.h"
 #include "ImageDownloadDriver.h"    // 下载分片驱动
 #include "FrameCodec.h"             // encodeFrame / encodeAttachmentBody / decodeFrame（内含 Protocol.h）
+#include "FramePayload.h"           // encodeFramePayload / decodeFramePayload（压缩与加密管线）
 #include "../UserSessionData.h"     // FMG_MSG_V2_IMAGE_SEND_*
 #include "../IULog.h"               // LOG_INFO / LOG_ERROR
 #include "../MD5Sum.h"              // MD5Init / MD5Update / MD5Final
@@ -167,11 +168,23 @@ public:
                                        static_cast<uint32_t>(len), attBody))
             return false;
 
-        //套帧头，置 has_attachment；此类帧不压缩，originlen==bodylen
+        //包体先过 FramePayload 这条管线（握手完成后即为加密），再套帧头，置 has_attachment。
+        //压缩策略取 never：图片本身就是压缩格式，再走一遍 zlib 压不动、只白费 CPU，
+        //这也与接入加密之前的行为一致。
+        const uint32_t uploadSeq = m_seq++;
+        std::string wire;
+        uint8_t     flags = 0;
+        uint32_t    originlen = 0;
+        if (!net::encodeFramePayload(cmd_file_upload, uploadSeq, attBody,
+                                     CIUSocket::GetInstance().GetImgCipher(),
+                                     frame_flag_has_attachment, net::payload_compress_never,
+                                     wire, flags, originlen))
+            return false;
+
         std::string frame;
-        if (!net::encodeFrame(cmd_file_upload, m_seq++, frame_flag_has_attachment,
-                              attBody.data(), static_cast<uint32_t>(attBody.size()),
-                              static_cast<uint32_t>(attBody.size()), frame))
+        if (!net::encodeFrame(cmd_file_upload, uploadSeq, flags,
+                              wire.data(), static_cast<uint32_t>(wire.size()),
+                              originlen, frame))
             return false;
 
         if (!CIUSocket::GetInstance().SendOnImgPort(frame.data(),
@@ -234,10 +247,22 @@ public:
 
     bool downloadChunk(int64_t offset, DownloadChunkInfo& info, std::string& chunk) override
     {
-        //请求帧：普通 JSON 包体 { downloadtoken, offset }，无附件、不压缩
+        //请求帧：普通 JSON 包体 { downloadtoken, offset }，无附件、不压缩。
+        //握手完成后包体由 FramePayload 加密，未握手时它自然产出明文。
         std::string descriptor = FileProtocolClient::buildDownloadChunkDescriptor(m_token, offset);
+        const uint32_t downloadSeq = m_seq++;
+        std::string wire;
+        uint8_t     flags = 0;
+        uint32_t    originlen = 0;
+        if (!net::encodeFramePayload(cmd_file_download, downloadSeq, descriptor,
+                                     CIUSocket::GetInstance().GetImgCipher(), 0,
+                                     net::payload_compress_never, wire, flags, originlen))
+            return false;
+
         std::string frame;
-        if (!net::encodeFrame(cmd_file_download, m_seq++, descriptor, frame))
+        if (!net::encodeFrame(cmd_file_download, downloadSeq, flags,
+                              wire.data(), static_cast<uint32_t>(wire.size()),
+                              originlen, frame))
             return false;
         if (!CIUSocket::GetInstance().SendOnImgPort(frame.data(),
                                                     static_cast<int64_t>(frame.size()),
@@ -1084,8 +1109,20 @@ bool ImageTransfer::RecvOneImgFrame(std::string& body, int timeoutSec)
                          MAX_BODY_FILESERVER) != net::frame_decode_ok)
         return false;
 
-    //上传 ack / 下载分片描述符帧均不压缩，包体即明文
-    body.swap(decoded);
+    //还原包体：握手完成后服务端发来的包体是加密的，须在此解出明文再交给业务层
+    std::string err;
+    if (!net::decodeFramePayload(header.cmd, header.seq, header.flags, header.originlen,
+                                 decoded, CIUSocket::GetInstance().GetImgCipher(),
+                                 body, err))
+    {
+        LOG_ERROR("RecvOneImgFrame: restore body failed: %s, cmd=%u, bodylen=%u.",
+                  err.c_str(), header.cmd, (uint32_t)decoded.size());
+        //解密失败意味着这个方向的流已不可恢复，连接不能再用。关掉它，
+        //下一张图会重新建连并重新握手。
+        CIUSocket::GetInstance().CloseImgServerConnection();
+        return false;
+    }
+
     return true;
 }
 

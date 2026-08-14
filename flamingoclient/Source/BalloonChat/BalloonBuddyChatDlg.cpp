@@ -18,8 +18,8 @@
 #include "../UserSessionData.h"         // CBuddyMessage / CContent / CMessageList ...
 #include "../CustomMsgDef.h"            // WM_DEL_MSG_SENDER
 #include "../net/IUProtocolData.h"      // FMG_MSG_TYPE_BUDDY
-#include "../../balloonui/balloonui/Controls/Input/DuiRichEditHost.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 
 CBalloonBuddyChatDlg::CBalloonBuddyChatDlg()
     : m_lpFMGClient(NULL)

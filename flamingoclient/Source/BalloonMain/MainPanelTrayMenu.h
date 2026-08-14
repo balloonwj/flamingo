@@ -103,7 +103,7 @@ struct TrayMenuEntry
  *    currentPresence：用户当前所处的在线状态（v2 presence_type）。与之相符的那一个状态
  *                     项被标记为当前项（isCurrent = true、文字带"（当前）"后缀，
  *                     渲染期再给徽标套一圈外环）。取值先经 NormalizePresenceForMenu 归一，
- *                     故隐身 / 越界值会落到"离线"项上。kTrayBeforeLogin / kTrayLocked
+ *                     故越界值会落到"离线"项上。kTrayBeforeLogin / kTrayLocked
  *                     两种形态没有状态项，忽略该参数。
  *
  *  返回：行模型 vector（值语义，调用方拥有）。label 指向静态常量串，生命周期为

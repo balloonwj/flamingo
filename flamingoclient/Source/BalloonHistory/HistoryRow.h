@@ -28,7 +28,7 @@
 #include <string>
 #include <vector>
 
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
 
 namespace balloonhistory {
 

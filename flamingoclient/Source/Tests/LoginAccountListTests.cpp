@@ -83,6 +83,29 @@ BOOL ReadDecrypted(FILE* fp, void* buf, size_t len)
     return TRUE;
 }
 
+// 姓名尾块的起始魔数与版本号 —— 与 LoginAccountList.cpp 里的同名常量同值。
+// 测试自带一份，理由同 kXorKey：产品端改布局时，本文件仍在校验旧布局。
+const int kNickSectionMagic = 0x464C4131;
+const int kNickSectionVersion = 1;
+
+// 在手工拼出来的账号文件末尾追加姓名尾块。
+//   fp：      已打开的二进制写文件句柄，写入位置须停在主体记录之后；
+//   nicks：   逐条姓名，顺序与主体记录一一对应；
+//   nCount：  姓名条数，须与主体里的记录条数一致。
+void WriteNickTrailer(FILE* fp, const wchar_t* const* nicks, int nCount)
+{
+    WriteEncrypted(fp, &kNickSectionMagic, sizeof(kNickSectionMagic));
+    WriteEncrypted(fp, &kNickSectionVersion, sizeof(kNickSectionVersion));
+    WriteEncrypted(fp, &nCount, sizeof(nCount));
+
+    for (int i = 0; i < nCount; ++i)
+    {
+        TCHAR szNickName[kLoginAccountNickNameLen] = { 0 };
+        wcsncpy_s(szNickName, _countof(szNickName), nicks[i], _TRUNCATE);
+        WriteEncrypted(fp, szNickName, sizeof(szNickName));
+    }
+}
+
 // 填一条旧版磁盘记录，铺平兼容性用例的样板代码。
 LoginAccountRecordV1 MakeV1Record(const wchar_t* user, const wchar_t* pwd,
                                   int status, BOOL rememberPwd, BOOL autoLogin)
@@ -690,6 +713,180 @@ TEST_CASE("LAL-D7 删除后落盘，重新加载仍是删除后的样子", "[lal
         CHECK(loaded.Find(_T("carol")) != NULL);
         CHECK(loaded.GetLastLoginUser() == 1);
     }
+
+    ::DeleteFileW(path.c_str());
+}
+
+// ===========================================================================
+// Suite LAL-B：用户名为空的账号记录
+//
+// 2026-08-13 客户端曾在登录成功时账号信息尚未回填的情况下，往账号文件里追加
+// 过一条用户名为空的记录，并把它设成最后登录账号。表现是登录窗启动时账号框
+// 空空如也、账号下拉列表末尾多出一个空白行，看起来像"历史账号没加载"。
+// 产品端已从两头堵：Add 不再收空账号名，LoadFile 读到这种记录直接丢弃。
+// ===========================================================================
+
+TEST_CASE("LAL-B1 Add 拒收空账号名", "[lal][blank]")
+{
+    CLoginAccountList list;
+
+    // 空串与空指针都要挡住，且不能在列表里留下任何痕迹。
+    CHECK(list.Add(_T(""), _T("pwd"), 1, TRUE, FALSE) == FALSE);
+    CHECK(list.Add(NULL, _T("pwd"), 1, TRUE, FALSE) == FALSE);
+    CHECK(list.GetCount() == 0);
+
+    // 正常账号照收不误 —— 别把有效路径一起挡了。
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, FALSE));
+    CHECK(list.GetCount() == 1);
+}
+
+TEST_CASE("LAL-B2 文件里夹着空账号记录，读入后被丢弃", "[lal][blank]")
+{
+    const std::wstring path = FreshTempDat(L"flamingo_lal_b2.dat");
+
+    // 手工拼一个"中间夹着空记录"的文件 —— 这种文件用 Add 造不出来（已被
+    // LAL-B1 那条规则挡住），只能照磁盘布局直接写。
+    FILE* fp = _wfopen(path.c_str(), L"wb");
+    REQUIRE(fp != NULL);
+
+    int nCount = 3;
+    int nLastLoginUser = 0;
+    WriteEncrypted(fp, &nCount, sizeof(nCount));
+    WriteEncrypted(fp, &nLastLoginUser, sizeof(nLastLoginUser));
+
+    LoginAccountRecordV1 rec0 = MakeV1Record(L"alice", L"pwd_a", 1, TRUE, FALSE);
+    LoginAccountRecordV1 rec1 = MakeV1Record(L"", L"", 0, FALSE, FALSE);
+    LoginAccountRecordV1 rec2 = MakeV1Record(L"carol", L"pwd_c", 1, TRUE, FALSE);
+    WriteEncrypted(fp, &rec0, sizeof(rec0));
+    WriteEncrypted(fp, &rec1, sizeof(rec1));
+    WriteEncrypted(fp, &rec2, sizeof(rec2));
+    fclose(fp);
+
+    CLoginAccountList loaded;
+    REQUIRE(loaded.LoadFile(path.c_str()));
+    CHECK(loaded.GetCount() == 2);
+    CHECK(loaded.Find(_T("alice")) != NULL);
+    CHECK(loaded.Find(_T("carol")) != NULL);
+
+    // 剩下的每一条都必须有账号名 —— 空白行正是用户看到的那个症状。
+    for (int i = 0; i < loaded.GetCount(); ++i)
+    {
+        LOGIN_ACCOUNT_INFO* lpAccount = loaded.GetAccountInfo(i);
+        REQUIRE(lpAccount != NULL);
+        CHECK(wcslen(lpAccount->szUser) > 0);
+    }
+
+    ::DeleteFileW(path.c_str());
+}
+
+TEST_CASE("LAL-B3 最后登录索引指向空记录时，退回第一个账号", "[lal][blank]")
+{
+    const std::wstring path = FreshTempDat(L"flamingo_lal_b3.dat");
+
+    // 复现用户机器上那份文件的形态：空记录排在末尾，且正是最后登录账号。
+    FILE* fp = _wfopen(path.c_str(), L"wb");
+    REQUIRE(fp != NULL);
+
+    int nCount = 3;
+    int nLastLoginUser = 2;
+    WriteEncrypted(fp, &nCount, sizeof(nCount));
+    WriteEncrypted(fp, &nLastLoginUser, sizeof(nLastLoginUser));
+
+    LoginAccountRecordV1 rec0 = MakeV1Record(L"alice", L"pwd_a", 1, TRUE, FALSE);
+    LoginAccountRecordV1 rec1 = MakeV1Record(L"bob", L"pwd_b", 1, TRUE, FALSE);
+    LoginAccountRecordV1 rec2 = MakeV1Record(L"", L"", 0, FALSE, FALSE);
+    WriteEncrypted(fp, &rec0, sizeof(rec0));
+    WriteEncrypted(fp, &rec1, sizeof(rec1));
+    WriteEncrypted(fp, &rec2, sizeof(rec2));
+    fclose(fp);
+
+    CLoginAccountList loaded;
+    REQUIRE(loaded.LoadFile(path.c_str()));
+    CHECK(loaded.GetCount() == 2);
+
+    // 关键断言：最后登录账号必须是一个真实存在、账号名非空的账号，
+    // 登录窗才有东西可预填。真正的最后登录账号已无从考证，退回第一个。
+    LOGIN_ACCOUNT_INFO* lpLast = loaded.GetLastLoginAccountInfo();
+    REQUIRE(lpLast != NULL);
+    CHECK(wcslen(lpLast->szUser) > 0);
+    CHECK(wcscmp(lpLast->szUser, L"alice") == 0);
+
+    ::DeleteFileW(path.c_str());
+}
+
+TEST_CASE("LAL-B4 清理空记录不会让姓名错位", "[lal][blank]")
+{
+    const std::wstring path = FreshTempDat(L"flamingo_lal_b4.dat");
+
+    // 姓名尾块按位置与主体记录一一对应，所以清理空记录必须发生在尾块读完
+    // 之后。若提前删，尾块里 carol 的姓名就会被安到 alice 头上 —— 这条用例
+    // 就是钉住这个顺序的。
+    FILE* fp = _wfopen(path.c_str(), L"wb");
+    REQUIRE(fp != NULL);
+
+    int nCount = 3;
+    int nLastLoginUser = 0;
+    WriteEncrypted(fp, &nCount, sizeof(nCount));
+    WriteEncrypted(fp, &nLastLoginUser, sizeof(nLastLoginUser));
+
+    LoginAccountRecordV1 rec0 = MakeV1Record(L"alice", L"pwd_a", 1, TRUE, FALSE);
+    LoginAccountRecordV1 rec1 = MakeV1Record(L"", L"", 0, FALSE, FALSE);
+    LoginAccountRecordV1 rec2 = MakeV1Record(L"carol", L"pwd_c", 1, TRUE, FALSE);
+    WriteEncrypted(fp, &rec0, sizeof(rec0));
+    WriteEncrypted(fp, &rec1, sizeof(rec1));
+    WriteEncrypted(fp, &rec2, sizeof(rec2));
+
+    const wchar_t* nicks[3] = { L"张三", L"", L"王五" };
+    WriteNickTrailer(fp, nicks, 3);
+    fclose(fp);
+
+    CLoginAccountList loaded;
+    REQUIRE(loaded.LoadFile(path.c_str()));
+    REQUIRE(loaded.GetCount() == 2);
+
+    LOGIN_ACCOUNT_INFO* lpAlice = loaded.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    CHECK(wcscmp(lpAlice->szNickName, L"张三") == 0);
+
+    LOGIN_ACCOUNT_INFO* lpCarol = loaded.Find(_T("carol"));
+    REQUIRE(lpCarol != NULL);
+    CHECK(wcscmp(lpCarol->szNickName, L"王五") == 0);
+
+    ::DeleteFileW(path.c_str());
+}
+
+TEST_CASE("LAL-B5 读入后再落盘，坏文件被就地修好", "[lal][blank]")
+{
+    const std::wstring path = FreshTempDat(L"flamingo_lal_b5.dat");
+
+    FILE* fp = _wfopen(path.c_str(), L"wb");
+    REQUIRE(fp != NULL);
+
+    int nCount = 2;
+    int nLastLoginUser = 1;
+    WriteEncrypted(fp, &nCount, sizeof(nCount));
+    WriteEncrypted(fp, &nLastLoginUser, sizeof(nLastLoginUser));
+
+    LoginAccountRecordV1 rec0 = MakeV1Record(L"alice", L"pwd_a", 1, TRUE, FALSE);
+    LoginAccountRecordV1 rec1 = MakeV1Record(L"", L"", 0, FALSE, FALSE);
+    WriteEncrypted(fp, &rec0, sizeof(rec0));
+    WriteEncrypted(fp, &rec1, sizeof(rec1));
+    fclose(fp);
+
+    {
+        // 一次正常的"加载 —— 保存"往返即可把坏记录清出文件，用户不必手工
+        // 删账号文件、也不会丢掉其余历史账号。
+        CLoginAccountList loaded;
+        REQUIRE(loaded.LoadFile(path.c_str()));
+        REQUIRE(loaded.SaveFile(path.c_str()));
+    }
+
+    CLoginAccountList reloaded;
+    REQUIRE(reloaded.LoadFile(path.c_str()));
+    CHECK(reloaded.GetCount() == 1);
+    LOGIN_ACCOUNT_INFO* lpAccount = reloaded.GetAccountInfo(0);
+    REQUIRE(lpAccount != NULL);
+    CHECK(wcscmp(lpAccount->szUser, L"alice") == 0);
 
     ::DeleteFileW(path.c_str());
 }

@@ -3,17 +3,11 @@
  *
  *  主面板三个 Tab 内容面板里用的 DuiTreeView 子类。
  *
- *  存在唯一理由 —— 滚轮上抛:
- *    · 单列 DuiTreeView::OnMouseWheel 直接 return false(详见
- *      DuiTreeView.cpp 中的 OnMouseWheel 实现:!IsMultiCol 时 return);
- *    · DuiHost::OnMouseWheel 只把滚轮投给"最深命中控件",且<u>不冒泡</u>
- *      (见 DuiHost.cpp 的 OnMouseWheel 注释);
- *    · 主面板里 treeview 铺满了 scrollview 视口,滚轮总落在 treeview
- *      身上,于是滚轮永远到不了外层 MainPanelScrollView,overlay 滚动条
- *      没机会显示,treeview 也滚不动。
- *  本子类在 OnMouseWheel 中:先让基类尝试消化(多列模式自带滚动逻辑);
- *  基类返 false(单列模式)时,沿父链找最近的 DuiScrollView 子类把滚轮
- *  转发过去(复用 MainPanelScrollView.cpp 里的 ForwardWheelToScrollView)。
+ *  本子类只做绘制层面的扩展(右侧列文字 / 会话行装饰),滚轮不必自己管:
+ *  单列 DuiTreeView::OnMouseWheel 会如实返回 false(见 DuiTreeView.cpp 里
+ *  !IsMultiCol 的短路),DuiHost::DispatchMouseWheel 随即沿父链上冒,滚轮
+ *  自然落到外层 MainPanelScrollView 上。2026-08-14 之前库里的滚轮不冒泡,
+ *  本类曾覆写 OnMouseWheel 手工转发,库补上默认上冒后那段代码已删除。
  *
  *  本文件遵循 balloonui 头文件约定:include 它之前调用方须已引入
  *  ATL/WTL(Flamingo 侧由 stdafx.h 保证,FlamingoUnit 侧由其自定义 prolog
@@ -27,7 +21,7 @@
 #include <map>
 #include <set>
 
-#include "../../balloonui/balloonui/Controls/List/DuiTreeView.h"
+#include "../../../third-party/balloonui/balloonui/Controls/List/DuiTreeView.h"
 
 namespace balloonmain {
 
@@ -35,14 +29,13 @@ namespace balloonmain {
  *  MainPanelTreeView —— 主面板三个 Tab 树用的 DuiTreeView 子类，在基类之上
  *  做两件事：
  *
- *    1) 滚轮上抛（原始职责，见上方文件头说明）；
- *    2) 接管行右侧列的绘制 —— 基类把右侧文字强制按整行垂直居中，两行节点里它会落在
+ *    1) 接管行右侧列的绘制 —— 基类把右侧文字强制按整行垂直居中，两行节点里它会落在
  *       主标签与副标签之间的中缝上，做不出"右侧文字和主标签同高"的效果。本子类不修改
  *       balloonui，而是子类化扩展：调用方用 SetItemRightTopText 交进来的文字，本类画在
  *       上半行（与主标签同一垂直带，用基类同款默认字体 / 灰色，自动对齐）。为不让左侧
  *       文字顶进右侧列，本类用等宽空格占位塞进基类 rightText（空格不可见，仅让基类据此
  *       裁剪左侧文字）。目前两处在用：会话树放"时间"，群树放"群成员数"。
- *    3) 会话行专有的装饰 —— 未读红点画在下半行（与预览同高，用 SetItemRightStacked
+ *    2) 会话行专有的装饰 —— 未读红点画在下半行（与预览同高，用 SetItemRightStacked
  *       连同时间一起交进来），以及置顶（整行覆淡暗色 + 左侧强调竖条）/ 免打扰（红点转灰
  *       并在其左侧加静音图标）标记。这些只有会话树会用；群树只走上排文字那一条路。
  *
@@ -120,18 +113,6 @@ public:
      *  继承上一批节点的角标与标记。会话树与群树都要调。
      */
     void ClearAllRowDecorations();
-
-    /**
-     *  DuiControl 覆写:滚轮事件处理。
-     *    pt       命中点屏幕→客户区坐标(由 DuiHost 路由时已转换)。
-     *    zDelta   滚轮增量,正值表示远离用户(上滚),负值近用户(下滚);
-     *             一格为 WHEEL_DELTA(120)。
-     *    mkFlags  鼠标按键 / 修饰键状态位(MK_SHIFT / MK_CONTROL 等)。
-     *  返回:true 表示已消化(多列模式由基类内部水平/垂直滚动消化;单列
-     *       模式由祖先 scrollview 消化),false 表示父链上没有 scrollview
-     *       可承接(此情况下整个事件不会再有谁处理)。
-     */
-    bool OnMouseWheel(POINT pt, short zDelta, UINT mkFlags) override;
 
     /**
      *  DuiControl 覆写:绘制。先调基类把整行其余内容（行底色 / 头像 / 标题 /

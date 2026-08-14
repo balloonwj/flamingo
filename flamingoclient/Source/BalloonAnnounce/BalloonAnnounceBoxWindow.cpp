@@ -7,6 +7,7 @@
 #include "BalloonAnnounceBoxWindow.h"
 
 #include "AnnounceRow.h"
+#include "../BalloonHistory/HistoryContentView.h"   //右栏正文控件（按实际宽度测高、命中链接）
 #include "../FlamingoClient.h"
 #include "../BalloonMain/BalloonMainPanel.h"
 #include "../BalloonMain/TitleBarIcon.h"     // CreateProgramIconBitmap（标题栏左侧图标）
@@ -17,10 +18,10 @@
 #include "../BalloonChatWnd/ChatLinkDetect.h" // IsSafeLinkUrl（打开链接前的协议白名单）
 #include <shellapi.h>                        // ShellExecuteW（打开链接）
 
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Window/DuiScrollBar.h"
-#include "../../balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"
+#include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 
 #include <windowsx.h>   // GET_X_LPARAM / GET_Y_LPARAM
 

@@ -58,11 +58,11 @@ extern CAppModule _Module;
 #include "ChatMessageList.h"
 #include "ChatBubble.h"
 #include "ChatMockData.h"
-#include "../../balloonui/balloonui/DuiXmlBuilder.h"
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"  // 引用卡片的灰底圆角
-#include "../../balloonui/balloonui/Controls/Window/DuiScrollBar.h"  // DuiScrollView（文件列表滚动视口）
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"      // 分类筛选 chips 变体设置
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"       // 分页信息文字
+#include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"  // 引用卡片的灰底圆角
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"  // DuiScrollView（文件列表滚动视口）
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"      // 分类筛选 chips 变体设置
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"       // 分页信息文字
 
 namespace balloonchatwnd {
 

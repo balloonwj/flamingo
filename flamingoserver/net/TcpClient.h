@@ -1,5 +1,7 @@
 ﻿#pragma once
 
+//SOCKET 类型来自这里：Windows 下是 winsock 的 UINT_PTR，POSIX 下是 int
+#include "../base/Platform.h"
 #include <string>
 #include <mutex>
 #include "TcpConnection.h"
@@ -50,7 +52,7 @@ namespace net
         }
 
     private:
-        void newConnection(int sockfd);
+        void newConnection(SOCKET sockfd);
         void removeConnection(const TcpConnectionPtr& conn);
 
     private:

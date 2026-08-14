@@ -36,10 +36,9 @@ extern CAppModule _Module;
 #include <vector>
 
 #include "MainPanelTreeView.h"
-#include "MainPanelScrollView.h"   // ForwardWheelToScrollView
 #include "BadgeRender.h"           // FormatBadgeText / ComputeBadgeWidth / ComputeBadgeRect
 #include "MainPanelIcons.h"        // DrawLineIcon / kIconMute（免打扰会话的静音图标）
-#include "../../balloonui/balloonui/DuiResMgr.h"   // 取基类右侧文字默认字体(画时间/量宽)
+#include "../../../third-party/balloonui/balloonui/DuiResMgr.h"   // 取基类右侧文字默认字体(画时间/量宽)
 
 namespace balloonmain {
 
@@ -635,19 +634,6 @@ void MainPanelTreeView::OnPaint(HDC hdc, const RECT& rcDirty)
     {
         DrawBadgeText(hdc, (LPCWSTR)draws[i].m_text, draws[i].m_rc);
     }
-}
-
-bool MainPanelTreeView::OnMouseWheel(POINT pt, short zDelta, UINT mkFlags)
-{
-    // 多列模式:基类自带水平 / 垂直滚动消化,返回 true。
-    // 单列模式:基类直接 return false(详见 DuiTreeView.cpp 中 OnMouseWheel
-    //          的 !IsMultiCol 短路)。这条路径下沿父链找最近的 DuiScrollView
-    //          子类把滚轮上抛 —— 主面板里这就是 MainPanelScrollView。
-    if (DuiTreeView::OnMouseWheel(pt, zDelta, mkFlags))
-    {
-        return true;
-    }
-    return ForwardWheelToScrollView(this, pt, zDelta, mkFlags);
 }
 
 } // namespace balloonmain

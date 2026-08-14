@@ -85,7 +85,7 @@ int GetPresenceBadgeIconKind(int presence)
     case presence_offline:
         return kIconPresenceOffline;
     default:
-        // 隐身（presence_invisible）以及一切越界取值统一按"离线"画。口径与
+        // 一切越界取值（含已作废的旧状态 4）统一按"离线"画。口径与
         // NormalizePresenceForMenu / GetPresenceVisual 的兜底一致 —— 三者必须同步，
         // 否则会出现"胶囊说离线、图标却画成别的状态"这种自相矛盾。
         return kIconPresenceOffline;

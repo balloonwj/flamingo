@@ -3,9 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "iUpdateAuto", "iAutoUpdate\iUpdateAuto.vcxproj", "{8C607E23-1BFB-4CC8-8A78-C8F773E6D43D}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "FlamingoUpdater", "FlamingoUpdater\FlamingoUpdater.vcxproj", "{8C607E23-1BFB-4CC8-8A78-C8F773E6D43D}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "balloonui_static", "balloonui\balloonui\balloonui_static.vcxproj", "{E5F9B2A1-6C84-4DE3-9C75-3B8A4D2E7F60}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "balloonui_static", "..\third-party\balloonui\balloonui\balloonui_static.vcxproj", "{E5F9B2A1-6C84-4DE3-9C75-3B8A4D2E7F60}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "opus_static", "..\third-party\opus-1.5.2\opus_static.vcxproj", "{B1E2C3D4-0A1B-4C2D-9E3F-0A1B2C3D4E5F}"
 EndProject

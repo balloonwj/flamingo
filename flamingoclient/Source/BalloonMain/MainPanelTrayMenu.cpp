@@ -89,7 +89,7 @@ std::vector<TrayMenuEntry> BuildTrayMenuModel(TrayMenuKind kind, bool muted,
 
     if (kind == kTrayNormal)
     {
-        // 当前状态先归一：隐身与越界值一律落到"离线"项上，与胶囊显示保持一致
+        // 当前状态先归一：越界值一律落到"离线"项上，与胶囊显示保持一致
         // （见 NormalizePresenceForMenu 的说明）。
         const int cur = NormalizePresenceForMenu(currentPresence);
 

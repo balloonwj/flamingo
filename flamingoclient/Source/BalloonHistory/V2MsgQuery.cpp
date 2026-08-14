@@ -5,6 +5,8 @@
 #include "V2MsgQuery.h"
 #include "../net/MessageProtocolClient.h"   // net::MessageNotify / net::TextFont
 #include "../net/Protocol.h"                // ::message_type_* / conversation_*
+//文件夹传输记录条（msgtype=18）的 content 字段名与校验只有这一份出处，落库时转调它。
+#include "../net/FolderProtocolClient.h"    // net::FolderRecordContent / buildRecordContent
 #include <cctype>
 //见 MessageProtocolClient.cpp 同处说明：vendored 的 json.h 含非 UTF-8 字节，作为
 //UTF-8 编译单元时 MSVC 报 C4828；该告警仅涉及注释，就地屏蔽不污染编译输出。
@@ -118,6 +120,12 @@ std::string BuildSearchText(const net::MessageNotify& notify)
     {
         return notify.m_fileName;
     }
+    //文件夹传输记录：取文件夹名。这条记录里唯一有检索价值的就是它 —— 用户回头找的
+    //是"我给谁发过那个叫 xxx 的文件夹"，而规模统计与结局都不是会被拿来搜的词。
+    if (notify.m_msgtype == ::message_type_folder)
+    {
+        return notify.m_folderName;
+    }
     return std::string();
 }
 
@@ -159,6 +167,37 @@ std::string BuildContentJson(const net::MessageNotify& notify)
         file["size"] = Int64ToText(notify.m_fileSize);
         file["md5"] = notify.m_fileMd5;
         root["file"] = file;
+    }
+    else if (notify.m_msgtype == ::message_type_folder)
+    {
+        //文件夹传输记录：整条 content 原样落进 folder 子对象。字段名与线上那份逐字相同
+        //（sessionid / foldername / totaldirs / totalfiles / totalsize / result / errcode），
+        //构造与校验都转调 net::FolderProtocolClient::buildRecordContent，本文件不另写一份 ——
+        //历史行要按 sessionid 去查本地落点登记，键名一旦两处写岔就会静默查不到。
+        //<u>没有</u>文件清单与 MD5，故这条记录同样不支持从历史重新下载。
+        net::FolderRecordContent record;
+        record.m_sessionId  = notify.m_folderSessionId;
+        record.m_folderName = notify.m_folderName;
+        record.m_totalDirs  = notify.m_folderTotalDirs;
+        record.m_totalFiles = notify.m_folderTotalFiles;
+        record.m_totalSize  = notify.m_folderTotalSize;
+        record.m_result     = notify.m_folderResult;
+        record.m_errCode    = notify.m_folderErrCode;
+
+        const std::string folderJson = net::FolderProtocolClient::buildRecordContent(record);
+        //构造失败（会话 id 为空、结局非终态等）说明这条推送的 content 本就没解析出来，
+        //此时留一个空的 folder 子对象即可：历史行会退化成只显示"[文件夹]"，不至于崩。
+        Json::Value folder(Json::objectValue);
+        if (!folderJson.empty())
+        {
+            Json::CharReaderBuilder b;
+            JSONCPP_STRING errs;
+            Json::CharReader* reader = b.newCharReader();
+            reader->parse(folderJson.c_str(), folderJson.c_str() + folderJson.size(),
+                          &folder, &errs);
+            delete reader;
+        }
+        root["folder"] = folder;
     }
     //其它类型（语音/抖动/系统等）本期不带结构化内容，content 留空对象 {}。
     return WriteCompact(root);

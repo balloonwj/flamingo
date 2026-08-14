@@ -19,7 +19,7 @@
  */
 #pragma once
 
-#include "../../balloonui/balloonui/Controls/Feedback/DuiPopupHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiPopupHost.h"
 #include "../FaceList.h"   // CFaceList / CFaceInfo（表情库：id / tip / 文件路径）
 
 #include <vector>

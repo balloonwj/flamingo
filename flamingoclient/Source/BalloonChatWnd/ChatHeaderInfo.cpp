@@ -46,8 +46,8 @@ namespace balloonchatwnd {
 namespace {
 
 // 把 v2 在线状态（presence_type）映射到本头部用的 ChatStatus（两套枚举值不同：v2
-// 是 0离线/1在线/2离开/3勿扰/4隐身，ChatStatus 是 0在线/1离开/2忙碌/4离线）。
-// 隐身与其它未知值按离线处理（对外显示离线）。
+// 是 0离线/1在线/2离开/3勿扰，ChatStatus 是 0在线/1离开/2忙碌/4离线）。
+// 未知值一律按离线处理。
 int ChatStatusFromPresence(int presence)
 {
     switch (presence)

@@ -10,6 +10,7 @@
  */
 #include "stdafx.h"
 #include "CreateGroupDlg.h"
+#include "ContactRemarkModel.h"   // ResolveContactDisplayName（显示名口径全局唯一）
 #include "MemberPickerTreeView.h"   // 左侧候选树（滚轮上抛 + 复选框点击判定）
 #include "MemberPickerRow.h"        // 候选树的行内容（复选框 + 头像 + 姓名）
 
@@ -25,12 +26,12 @@
 #include "../net/ContactsProtocolClient.h"  // net::ContactItem / DepartmentItem / DeptMemberItem
 #include "../net/GroupProtocolClient.h"     // net::CreateGroupResponse
 #include "../net/IUSocket.h"            // CIUSocket::SendCreateGroup
-#include "../../balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox / DuiHBox / Hint
-#include "../../balloonui/balloonui/Controls/Basic/DuiLabel.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../balloonui/balloonui/Controls/Basic/DuiAvatar.h"
-#include "../../balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox / DuiHBox / Hint
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
 
 // ---- 对话框固定尺寸（逻辑像素）-----------------------------------------
 static const int kDlgWidth     = 760;
@@ -439,16 +440,12 @@ const net::ContactItem* CCreateGroupDlg::FindContact(UINT userId) const
 
 CString CCreateGroupDlg::DisplayNameOf(const net::ContactItem& c) const
 {
-    CString name = Utf8ToCStr(c.m_nickname);
-    if (name.IsEmpty())
-    {
-        name = Utf8ToCStr(c.m_username);
-    }
-    if (name.IsEmpty())
-    {
-        name.Format(_T("用户%lld"), (long long)c.m_userid);
-    }
-    return name;
+    //「真名（备注）」，与通讯录树 / 会话列表 / 收藏区同一口径 —— 建群选人时看到的
+    //名字必须与用户在通讯录里看到的一致，否则他按备注去找人会找不到。真名本身的
+    //逐级兜底（昵称 → 账号 → "用户<id>"）由该纯函数内部完成。
+    return balloonmain::ResolveContactDisplayName(
+        Utf8ToCStr(c.m_remark), Utf8ToCStr(c.m_nickname),
+        Utf8ToCStr(c.m_username), (UINT)c.m_userid);
 }
 
 // 成员行复选框：子类化 DuiButton，仅为屏蔽点击后四周的虚线焦点框

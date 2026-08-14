@@ -57,7 +57,9 @@ CLoginResult::CLoginResult()
 {
 	m_uType = NET_DATA_LOGIN;
 	m_LoginResultCode = LOGIN_FAILED;
-	m_uAccountID = 0;	
+	m_uAccountID = 0;
+	//默认不带轮次号：自动登录这类不经登录窗的路径就用这个值
+	m_uLoginGeneration = 0;
 	memset(m_szAccountName, 0, sizeof(m_szAccountName));
 	memset(m_szNickName, 0, sizeof(m_szNickName));
 	memset(m_szSignature, 0, sizeof(m_szSignature));

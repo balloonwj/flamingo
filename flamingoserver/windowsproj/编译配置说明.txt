@@ -1,0 +1,35 @@
+﻿服务端 Windows 侧的编译配置说明
+================================
+
+维护中的配置有三个，其余配置（Release|Win32）没有人维护，不要用：
+
+    Debug|Win32     产物在 windowsproj\                 32 位调试版，历史上的默认配置
+    Debug|x64       产物在 windowsproj\x64\Debug\       64 位调试版
+    Release|x64     产物在 windowsproj\x64\Release\     64 位发布版
+
+两个架构的产物放在各自的目录里，互不覆盖，可以同时存在。
+
+第三方依赖
+----------
+
+依赖库是编译好的静态库，随仓库一起提交，放在 flamingoserver\deps 下：
+
+    deps\libsodium           协议加密用，四个工程都链
+    deps\mariadb-connector   MySQL 客户端，只有 chatserver 链
+
+目录层级是 lib\$(Platform)\$(Configuration)\，与 MSBuild 的宏同名，所以工程里
+一行设置就覆盖四个配置。两个库都是静态链接，**运行期不需要携带任何第三方 DLL**。
+早先那份 32 位的 mysql-5.1.73-win32 已经删除，Win32 与 x64 现在统一用
+MariaDB Connector/C 3.4.9。库的来源与重编方法见 deps\README.txt。
+
+改动工程文件时有两条必须守住
+----------------------------
+
+一是每个配置的预处理器定义里都要有 WIN32。全仓库判断平台用的是裸 WIN32
+（见 base\Platform.h），不是 MSVC 自带的 _WIN32，x64 配置漏掉它会走进 POSIX 分支，
+一编就是满屏错误。
+
+二是每个配置都要有 SODIUM_STATIC，并且运行库（RuntimeLibrary）必须是静态 CRT
+（Debug 为 MultiThreadedDebug、Release 为 MultiThreaded）。前者不写，
+sodium\export.h 会把接口声明成 __declspec(dllimport)，链接静态库时符号对不上；
+后者不一致，进程里会出现两份 CRT，各有各的堆，属于早晚出事的搭法。

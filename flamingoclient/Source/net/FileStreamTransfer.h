@@ -25,6 +25,8 @@
 #include <string>
 #include <atomic>
 
+#include "FrameCrypto.h"   //net::FrameCipher（组帧时要拿本连接的加解密器）
+
 namespace net {
 
 //上传 / 下载分片进度 sink 接口（分别定义在 ImageUploadDriver.h / ImageDownloadDriver.h，
@@ -68,6 +70,22 @@ public:
      *  @return 收到完整帧返回 true；超时 / 帧非法返回 false
      */
     virtual bool RecvFrame(std::string& body, int timeoutSec) = 0;
+
+    /**
+     *  取本连接的帧体加解密器，供组帧时加密包体使用。
+     *
+     *  之所以要从这层接口交出来：上传 / 下载的组帧逻辑是共享连接与独立连接两条
+     *  链路共用的一份实现，而<u>加密器是每条连接各一个</u>（群文件并发池同时能跑三条
+     *  独立连接），组帧时只能问"我这条连接的加密器是哪个"。
+     *
+     *  接收方向不需要类似的接口：RecvFrame 的契约本来就是交回<u>明文</u>包体，
+     *  解密由各自的实现在内部做掉。
+     *
+     *  @return 本连接的加解密器；未配置服务端公钥、或握手尚未完成时可以返回 NULL，
+     *          也可以返回一个 ready() 为假的对象——两者都会让组帧走明文。
+     *          返回的对象由连接自己持有，调用方不得释放。
+     */
+    virtual net::FrameCipher* GetCipher() = 0;
 };
 
 /**
