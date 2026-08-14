@@ -267,7 +267,6 @@
     <ClCompile Include="AvatarSpecTests.cpp" />
     <ClCompile Include="BadgeRenderTests.cpp" />
     <ClCompile Include="BalloonChangePwdValidateTests.cpp" />
-    <ClCompile Include="BalloonChatLayoutTests.cpp" />
     <ClCompile Include="BalloonChatMsgFormatTests.cpp" />
     <ClCompile Include="BalloonGroupInfoLayoutTests.cpp" />
     <ClCompile Include="BalloonLoginLayoutTests.cpp" />
@@ -412,7 +411,6 @@
     <ClCompile Include="..\BalloonAuth\AuthButtons.cpp" />
     <ClCompile Include="..\BalloonAuth\AuthInputField.cpp" />
     <ClCompile Include="..\BalloonAuth\BalloonLoginLayout.cpp" />
-    <ClCompile Include="..\BalloonChat\BalloonChatLayout.cpp" />
     <ClCompile Include="..\BalloonChat\BalloonChatMsgFormat.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatBannerLabel.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatBubble.cpp" />

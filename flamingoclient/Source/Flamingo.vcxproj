@@ -335,9 +335,6 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="BalloonAuth\AccountRemoval.cpp" />
-    <ClCompile Include="BalloonChat\BalloonChatLayout.cpp">
-      <PrecompiledHeader>NotUsing</PrecompiledHeader>
-    </ClCompile>
     <ClCompile Include="BalloonChat\BalloonChatMsgFormat.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -1120,7 +1117,6 @@
     <ClInclude Include="BalloonAuth\LoginProgressState.h" />
     <ClInclude Include="BalloonAuth\BalloonLoginLayout.h" />
     <ClInclude Include="BalloonAuth\AccountRemoval.h" />
-    <ClInclude Include="BalloonChat\BalloonChatLayout.h" />
     <ClInclude Include="BalloonChat\BalloonChatMsgFormat.h" />
     <ClInclude Include="BalloonChatWnd\BalloonChatWindow.h" />
     <ClInclude Include="BalloonChatWnd\BalloonGroupChatWindow.h" />

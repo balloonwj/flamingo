@@ -243,9 +243,6 @@
     <ClCompile Include="BalloonAuth\AccountRemoval.cpp">
       <Filter>BalloonAuth</Filter>
     </ClCompile>
-    <ClCompile Include="BalloonChat\BalloonChatLayout.cpp">
-      <Filter>BalloonChat</Filter>
-    </ClCompile>
     <ClCompile Include="BalloonChat\BalloonChatMsgFormat.cpp">
       <Filter>BalloonChat</Filter>
     </ClCompile>
@@ -1276,9 +1273,6 @@
     </ClInclude>
     <ClInclude Include="BalloonAuth\AccountRemoval.h">
       <Filter>BalloonAuth</Filter>
-    </ClInclude>
-    <ClInclude Include="BalloonChat\BalloonChatLayout.h">
-      <Filter>BalloonChat</Filter>
     </ClInclude>
     <ClInclude Include="BalloonChat\BalloonChatMsgFormat.h">
       <Filter>BalloonChat</Filter>
