@@ -336,22 +336,10 @@
     <ClCompile Include="BalloonAuth\AccountRemoval.cpp">
       <Filter>BalloonAuth</Filter>
     </ClCompile>
-    <ClCompile Include="BalloonChat\BalloonBuddyChatDlg.cpp">
-      <Filter>BalloonChat</Filter>
-    </ClCompile>
     <ClCompile Include="BalloonChat\BalloonChatLayout.cpp">
       <Filter>BalloonChat</Filter>
     </ClCompile>
     <ClCompile Include="BalloonChat\BalloonChatMsgFormat.cpp">
-      <Filter>BalloonChat</Filter>
-    </ClCompile>
-    <ClCompile Include="BalloonChat\BalloonGroupChatDlg.cpp">
-      <Filter>BalloonChat</Filter>
-    </ClCompile>
-    <ClCompile Include="BalloonChat\BalloonMultiChatDlg.cpp">
-      <Filter>BalloonChat</Filter>
-    </ClCompile>
-    <ClCompile Include="BalloonChat\BalloonSessChatDlg.cpp">
       <Filter>BalloonChat</Filter>
     </ClCompile>
     <ClCompile Include="BalloonChatWnd\BalloonChatWindow.cpp">
@@ -1277,9 +1265,6 @@
     <ClInclude Include="AboutDlg.h">
       <Filter>UI</Filter>
     </ClInclude>
-    <ClInclude Include="BuddyChatDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
     <ClInclude Include="BuddyInfoDlg.h">
       <Filter>UI</Filter>
     </ClInclude>
@@ -1361,9 +1346,6 @@
     <ClInclude Include="GifImage.h">
       <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="GroupChatDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
     <ClInclude Include="GroupInfoDlg.h">
       <Filter>UI</Filter>
     </ClInclude>
@@ -1430,9 +1412,6 @@
     <ClInclude Include="MsgTipDlg.h">
       <Filter>UI</Filter>
     </ClInclude>
-    <ClInclude Include="MultiChatDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
     <ClInclude Include="MultiChatMemberSelectionDlg.h">
       <Filter>UI</Filter>
     </ClInclude>
@@ -1474,9 +1453,6 @@
     </ClInclude>
     <ClInclude Include="SendMsgThread.h">
       <Filter>Tasks</Filter>
-    </ClInclude>
-    <ClInclude Include="SessChatDlg.h">
-      <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="SplitterCtrl.h">
       <Filter>UI</Filter>
@@ -1559,22 +1535,10 @@
     <ClInclude Include="BalloonAuth\AccountRemoval.h">
       <Filter>BalloonAuth</Filter>
     </ClInclude>
-    <ClInclude Include="BalloonChat\BalloonBuddyChatDlg.h">
-      <Filter>BalloonChat</Filter>
-    </ClInclude>
     <ClInclude Include="BalloonChat\BalloonChatLayout.h">
       <Filter>BalloonChat</Filter>
     </ClInclude>
     <ClInclude Include="BalloonChat\BalloonChatMsgFormat.h">
-      <Filter>BalloonChat</Filter>
-    </ClInclude>
-    <ClInclude Include="BalloonChat\BalloonGroupChatDlg.h">
-      <Filter>BalloonChat</Filter>
-    </ClInclude>
-    <ClInclude Include="BalloonChat\BalloonMultiChatDlg.h">
-      <Filter>BalloonChat</Filter>
-    </ClInclude>
-    <ClInclude Include="BalloonChat\BalloonSessChatDlg.h">
       <Filter>BalloonChat</Filter>
     </ClInclude>
     <ClInclude Include="BalloonChatWnd\BalloonChatWindow.h">

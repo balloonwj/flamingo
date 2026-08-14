@@ -17,10 +17,6 @@
 #include "MsgTipDlg.h"
 #include "LogonUserInfoDlg.h"
 #include "ModifyPasswordDlg.h"
-#include "BalloonChat/BalloonBuddyChatDlg.h"
-#include "BalloonChat/BalloonGroupChatDlg.h"
-#include "BalloonChat/BalloonSessChatDlg.h"
-#include "BalloonChat/BalloonMultiChatDlg.h"
 #include "BalloonMain/BalloonMainPanel.h"
 #include "BalloonMain/TrayFlashController.h"		// 托盘"新消息闪头像"状态机（m_trayFlash 成员需完整类型）
 #include "BalloonMain/TrayMsgTipPopup.h"			// 托盘悬停未读消息提示浮窗（m_trayMsgTipPopup 成员需完整类型）
@@ -116,7 +112,6 @@ public:
 		COMMAND_ID_HANDLER_EX(IDM_SYSTEMSETTINGS, OnBtn_ShowSystemSettingDlg)	//打开系统设置对话框
 		COMMAND_ID_HANDLER_EX(IDM_MODIFYPASSWORD, OnBtn_ModifyPassword)			//修改密码
 		COMMAND_ID_HANDLER_EX(ID_MENU_NETSETTINGS, OnMenu_NetSettings)			//打开网络设置窗（主面板系统菜单转发）
-		COMMAND_ID_HANDLER_EX(ID_BTN_MULTI_CHAT, OnBtn_MultiChat)				//群发按钮
 		
 
 		
@@ -146,10 +141,8 @@ public:
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_BUDDY_SIGN, OnUpdateBuddySign)
 		MESSAGE_HANDLER_EX(FMG_MSG_SELF_STATUS_CHANGE, OnSelfStatusChange)
 
-		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_CHATDLG_USERINFO, OnUpdateChatDlgOnlineStatus)			//更新聊天窗口中用户状态
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_GROUP_LIST, OnUpdateGroupList)
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_RECENT_LIST, OnUpdateRecentList)	 //更新最近联系人列表
-		MESSAGE_HANDLER_EX(FMG_MSG_BUDDY_MSG, OnBuddyMsg)
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_CONTACTS, OnV2Contacts)					//v2 通讯录应答：填充联系人面板
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_CONVERSATIONS, OnV2Conversations)			//v2 会话列表应答：填充消息页
 		MESSAGE_HANDLER_EX(FMG_MSG_V2_CREATE_GROUP_RESULT, OnV2CreateGroupResult)	//v2 建群应答：提示建群结果
@@ -243,8 +236,6 @@ public:
 		MESSAGE_HANDLER_EX(FMG_MSG_TRAY_FLASH, OnV2TrayFlash)					//v2 有新消息：托盘闪发送方头像
 		MESSAGE_HANDLER_EX(FMG_MSG_TRAY_CLEAR, OnV2TrayClear)					//v2 某会话已读：从托盘闪烁集合移除
 		MESSAGE_HANDLER_EX(FMG_MSG_TRAY_MINIMIZE_TIP, OnTrayMinimizeTip)		//主面板首次最小化隐藏到托盘：弹一次托盘气泡提示
-		MESSAGE_HANDLER_EX(FMG_MSG_GROUP_MSG, OnGroupMsg)
-		MESSAGE_HANDLER_EX(FMG_MSG_SESS_MSG, OnSessMsg)
 		MESSAGE_HANDLER_EX(FMG_MSG_STATUS_CHANGE_MSG, OnStatusChangeMsg)
 		MESSAGE_HANDLER_EX(FMG_MSG_KICK_MSG, OnKickMsg)
         MESSAGE_HANDLER_EX(FMG_MSG_SCREENSHOT, OnScreenshotMsg)
@@ -299,7 +290,6 @@ private:
 	// 打开新版网络设置窗 —— 主面板系统菜单"网络设置"项经 WM_COMMAND 转发到此。
 	void OnMenu_NetSettings(UINT uNotifyCode, int nID, CWindow wndCtl);
 	void OnBtn_ModifyPassword(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnBtn_MultiChat(UINT uNotifyCode, int nId, CWindow wndCtl);
 	
 	void OnMainMenu_About(UINT uNotifyCode, int nID, CWindow wndCtl);			// 主菜单关于菜单点击
 	void OnMenu_Status(UINT uNotifyCode, int nID, CWindow wndCtl);				// “用户在线状态”菜单
@@ -381,7 +371,6 @@ private:
 	LRESULT OnUpdateUserInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 更新用户信息
 	LRESULT OnUpdateGroupList(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 更新群列表消息
 	LRESULT OnUpdateRecentList(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新最近联系人列表消息
-	LRESULT OnBuddyMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 好友消息
 	LRESULT OnV2Contacts(UINT uMsg, WPARAM wParam, LPARAM lParam);		// v2 通讯录应答(lParam=net::ContactsResult*，处理后 delete)
 	LRESULT OnV2Conversations(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 会话列表应答(lParam=net::ConversationsResult*，处理后 delete)
 	LRESULT OnV2CreateGroupResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// v2 建群应答(lParam=net::CreateGroupResponse*，处理后 delete)
@@ -494,8 +483,6 @@ private:
 	// 主面板最小化隐藏到托盘后弹一次气泡提示，告诉用户此后从托盘图标唤回。
 	// 由主面板判定"该账号是否已提示过"，本处收到即弹；无参。
 	LRESULT OnTrayMinimizeTip(UINT uMsg, WPARAM wParam, LPARAM lParam);
-	LRESULT OnGroupMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 群消息
-	LRESULT OnSessMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);				// 临时会话消息
 	LRESULT OnStatusChangeMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 好友状态改变消息
 	LRESULT OnKickMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);				// 被踢下线消息
     LRESULT OnScreenshotMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 屏幕截图消息   
@@ -506,7 +493,6 @@ private:
 	LRESULT OnUpdateBuddySign(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 更新好友个性签名
 	LRESULT OnUpdateGMemberSign(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新群成员个性签名
 	LRESULT OnUpdateBuddyInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 更新好友信息
-	LRESULT OnUpdateChatDlgOnlineStatus(UINT uMsg, WPARAM wParam, LPARAM lParam);	////更新聊天窗口中好友的在线与离线状态	
 	LRESULT OnUpdateGMemberInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新群成员信息
 	LRESULT OnUpdateGroupInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 更新群信息
 	LRESULT OnUpdateBuddyHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新好友头像图片
@@ -521,9 +507,6 @@ private:
 	LRESULT OnCancelFlash(UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 
-	void ShowBuddyChatDlg(UINT nUTalkUin, BOOL bShow, BOOL bShakeWindowMsg=FALSE, UINT nMsgID=1000);
-	void ShowGroupChatDlg(UINT nGroupCode, BOOL bShow);
-	void ShowSessChatDlg(UINT nGroupCode, UINT nUTalkUin, BOOL bShow);
 	void ShowSysGroupChatDlg(UINT nGroupCode, BOOL bShow);
 	void ShowBuddyInfoDlg(UINT nUTalkUin, BOOL bShow);
 																	 
@@ -531,10 +514,6 @@ private:
 	void ShowGMemberInfoDlg(UINT nGroupCode, UINT nUTalkUin, BOOL bShow);
 	void ShowGroupInfoDlg(UINT nGroupCode, BOOL bShow);
 
-	void NotifyBuddyChatDlg(UINT nUTalkUin, UINT uMsg);						// 通知好友聊天窗口更新
-	void NotifyGroupChatDlg(UINT nGroupCode,								// 通知群聊天窗口更新
-		UINT uMsg, WPARAM wParam, LPARAM lParam);
-	void NotifySessChatDlg(UINT nUTalkUin, UINT uMsg);						// 通知临时会话聊天窗口更新
 	void NotifyBuddyInfoDlg(UINT nUTalkUin, UINT uMsg);						// 通知好友信息窗口更新
 	void NotifyGMemberInfoDlg(UINT nGroupCode, UINT nUTalkUin, UINT uMsg);	// 通知群成员信息窗口更新
 	void NotifyGroupInfoDlg(UINT nGroupCode, UINT uMsg);					// 通知群信息窗口更新
@@ -673,7 +652,6 @@ private:
 	void SaveCurrentLogonUserToFile();										//将当前登录的账户保存到文件中
 	void DeleteCurrentUserFromFile();										//从文件中删除当前登录的账户
 
-	BOOL IsFilesTransferring();												//聊天对话框是否有文件正在进行传输
 public:
 
 private:
@@ -717,7 +695,6 @@ private:
 	CTrayMsgTipPopup		m_trayMsgTipPopup;
 	CLogonUserInfoDlg       m_LogonUserInfoDlg;
 	CModifyPasswordDlg		m_ModifyPasswordDlg;
-	CMultiChatDlg			m_MultiChatDlg;									//群发消息窗口
     CRemoteDesktopDlg*      m_pRemoteDesktopDlg;                            //远程桌面窗口
 
 	
@@ -728,9 +705,6 @@ private:
 
 
 
-	std::map<UINT, CBuddyChatDlg*> m_mapBuddyChatDlg;
-	std::map<UINT, CGroupChatDlg*> m_mapGroupChatDlg;
- 	std::map<UINT, CSessChatDlg*>	m_mapSessChatDlg;
  	std::map<UINT, CBuddyInfoDlg*> m_mapBuddyInfoDlg;
  	std::map<CGMemberInfoMapKey, CBuddyInfoDlg*> m_mapGMemberInfoDlg;
  	std::map<UINT, CGroupInfoDlg*> m_mapGroupInfoDlg;

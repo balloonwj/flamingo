@@ -366,16 +366,12 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="BalloonAuth\AccountRemoval.cpp" />
-    <ClCompile Include="BalloonChat\BalloonBuddyChatDlg.cpp" />
     <ClCompile Include="BalloonChat\BalloonChatLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="BalloonChat\BalloonChatMsgFormat.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChat\BalloonGroupChatDlg.cpp" />
-    <ClCompile Include="BalloonChat\BalloonMultiChatDlg.cpp" />
-    <ClCompile Include="BalloonChat\BalloonSessChatDlg.cpp" />
     <ClCompile Include="BalloonChatWnd\BalloonChatWindow.cpp" />
     <ClCompile Include="BalloonChatWnd\BalloonGroupChatWindow.cpp" />
     <ClCompile Include="BalloonChatWnd\ChatAvatarResolve.cpp" />
@@ -1119,7 +1115,6 @@
     <ClInclude Include="net\FramePayload.h" />
     <ClInclude Include="net\HandshakeRunner.h" />
     <ClInclude Include="AboutDlg.h" />
-    <ClInclude Include="BuddyChatDlg.h" />
     <ClInclude Include="BuddyInfoDlg.h" />
     <ClInclude Include="BuddyInfoFloatWnd.h" />
     <ClInclude Include="Buffer.h" />
@@ -1147,7 +1142,6 @@
     <ClInclude Include="FontSelDlg.h" />
     <ClInclude Include="GDIFactory.h" />
     <ClInclude Include="GifImage.h" />
-    <ClInclude Include="GroupChatDlg.h" />
     <ClInclude Include="GroupInfoDlg.h" />
     <ClInclude Include="GroupRoleRules.h" />
     <ClInclude Include="HeartbeatTask.h" />
@@ -1170,7 +1164,6 @@
     <ClInclude Include="MobileStatusDlg.h" />
     <ClInclude Include="ModifyPasswordDlg.h" />
     <ClInclude Include="MsgTipDlg.h" />
-    <ClInclude Include="MultiChatDlg.h" />
     <ClInclude Include="MultiChatMemberSelectionDlg.h" />
     <ClInclude Include="NetRecvHandleTask.h" />
     <ClInclude Include="NetSendTask.h" />
@@ -1185,7 +1178,6 @@
     <ClInclude Include="Result.h" />
     <ClInclude Include="RichEditUtil.h" />
     <ClInclude Include="SendMsgThread.h" />
-    <ClInclude Include="SessChatDlg.h" />
     <ClInclude Include="SplitterCtrl.h" />
     <ClInclude Include="SrcVersion.h" />
     <ClInclude Include="Startup.h" />
@@ -1214,12 +1206,8 @@
     <ClInclude Include="BalloonAuth\LoginProgressState.h" />
     <ClInclude Include="BalloonAuth\BalloonLoginLayout.h" />
     <ClInclude Include="BalloonAuth\AccountRemoval.h" />
-    <ClInclude Include="BalloonChat\BalloonBuddyChatDlg.h" />
     <ClInclude Include="BalloonChat\BalloonChatLayout.h" />
     <ClInclude Include="BalloonChat\BalloonChatMsgFormat.h" />
-    <ClInclude Include="BalloonChat\BalloonGroupChatDlg.h" />
-    <ClInclude Include="BalloonChat\BalloonMultiChatDlg.h" />
-    <ClInclude Include="BalloonChat\BalloonSessChatDlg.h" />
     <ClInclude Include="BalloonChatWnd\BalloonChatWindow.h" />
     <ClInclude Include="BalloonChatWnd\BalloonGroupChatWindow.h" />
     <ClInclude Include="BalloonChatWnd\ChatAvatarResolve.h" />

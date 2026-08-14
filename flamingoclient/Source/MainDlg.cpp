@@ -46,9 +46,6 @@
 #include "IULog.h"
 #include "MobileStatusDlg.h"
 #include "UserSessionData.h"
-#include "BalloonChat/BalloonBuddyChatDlg.h"
-#include "BalloonChat/BalloonGroupChatDlg.h"
-#include "BalloonChat/BalloonSessChatDlg.h"
 #include "FontSelDlg.h"
 #include "BuddyInfoDlg.h"
 #include "GroupInfoDlg.h"
@@ -687,8 +684,6 @@ BOOL CMainDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
     ModifyStyleEx(WS_EX_APPWINDOW, 0);
 
 
-    m_MultiChatDlg.m_lpFMGClient = &m_FMGClient;
-    m_MultiChatDlg.m_lpFaceList = &m_FaceList;
 
     return TRUE;
 }
@@ -1047,11 +1042,11 @@ void CMainDlg::OnDestroy()
 
 void CMainDlg::CloseDialog(int nVal)
 {
-    if (IsFilesTransferring())
-    {
-        if (IDNO == ::MessageBox(m_hWnd, _T("您还有文件正在传输，确认要退出Flamingo？"), g_strAppTitle.c_str(), MB_YESNO | MB_ICONQUESTION))
-            return;
-    }
+    //此处原先有一道「您还有文件正在传输，确认要退出」的拦截，判据是 v1 单聊窗
+    //（CBuddyChatDlg）里是否有传输中的文件。v1 聊天窗已随本次清理删除，那个判据
+    //恒为假、拦截早已不起作用，故一并移除。
+    //若要为 v2 的文件 / 文件夹传输恢复这道拦截，应改为向 FolderTransfer 的传输管理
+    //对象询问，而不是复活这段代码。
 
     if (m_dwLoginTimerId != NULL)
     {
@@ -1100,11 +1095,11 @@ void CMainDlg::CloseDialog(int nVal)
     //
     // 诊断日志：记录退出时各窗口对象是否仍持有 HWND（1=有窗口）。若退出仍崩，看本行
     // 即可定位残留的是哪个窗口；若某项为 1 而本函数又没有对应销毁，即为漏网者。
-    LOG_INFO("CloseDialog teardown alive: trayMsgTip=%d panel=%d msgTip=%d multiChat=%d "
+    LOG_INFO("CloseDialog teardown alive: trayMsgTip=%d panel=%d msgTip=%d "
         "remoteDesktop=%d chatWin=%d groupChatWin=%d netSet=%d reg=%d profile=%d contact=%d "
         "groupMgr=%d sysSet=%d imgViewer=%d.",
         (int)m_trayMsgTipPopup.IsWindow(), (int)m_BalloonMainPanel.IsWindow(),
-        (int)m_MsgTipDlg.IsWindow(), (int)m_MultiChatDlg.IsWindow(),
+        (int)m_MsgTipDlg.IsWindow(),
         (int)(m_pRemoteDesktopDlg != NULL && m_pRemoteDesktopDlg->IsWindow()),
         (int)m_BalloonChatWindow.IsWindow(), (int)m_BalloonGroupChatWindow.IsWindow(),
         (int)m_BalloonNetSettingsWindow.IsWindow(), (int)m_BalloonRegisterWindow.IsWindow(),
@@ -1138,8 +1133,6 @@ void CMainDlg::CloseDialog(int nVal)
         m_BalloonImageViewerWindow.DestroyWindow();
     if (m_MsgTipDlg.IsWindow())
         m_MsgTipDlg.DestroyWindow();
-    if (m_MultiChatDlg.IsWindow())
-        m_MultiChatDlg.DestroyWindow();
     if (m_pRemoteDesktopDlg != NULL && m_pRemoteDesktopDlg->IsWindow())
         m_pRemoteDesktopDlg->DestroyWindow();
     //ShowWindow(SW_HIDE);
@@ -1334,29 +1327,6 @@ void CMainDlg::OnMenu_Mute(UINT uNotifyCode, int nID, CWindow wndCtl)
     // 重启后保持（否则切了静音、重启又会按配置文件里的旧值复位）。
     m_FMGClient.m_UserConfig.EnableMute(!m_FMGClient.m_UserConfig.IsEnableMute());
     m_FMGClient.SaveUserConfig();
-}
-
-//点击更改个性签名
-void CMainDlg::OnBtn_MultiChat(UINT uNotifyCode, int nId, CWindow wndCtl)
-{
-    CMultiChatMemberSelectionDlg multiChatMemberSelectionDlg;
-    multiChatMemberSelectionDlg.m_pFMGClient = &m_FMGClient;
-    if (multiChatMemberSelectionDlg.DoModal(NULL, NULL) != IDOK)
-        return;
-
-    //弹出群发聊天窗口
-    if (multiChatMemberSelectionDlg.m_setSelectedIDs.empty())
-        return;
-
-    if (m_MultiChatDlg.IsWindow())
-    {
-        m_MultiChatDlg.DestroyWindow();
-    }
-    m_MultiChatDlg.m_setTargetIDs = multiChatMemberSelectionDlg.m_setSelectedIDs;
-    m_MultiChatDlg.Create(NULL);
-    m_MultiChatDlg.ShowWindow(SW_NORMAL);
-    ::SetForegroundWindow(m_MultiChatDlg.m_hWnd);
-    m_MultiChatDlg.SetFocus();
 }
 
 //弹出添加好友对话框
@@ -3911,179 +3881,6 @@ LRESULT CMainDlg::OnV2TypingNotify(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lPar
     return 0;
 }
 
-LRESULT CMainDlg::OnBuddyMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    CBuddyMessage* pBuddyMessage = (CBuddyMessage*)lParam;
-    if (pBuddyMessage == NULL)
-        return 0;
-    BOOL bShakeWindowMsg = pBuddyMessage->IsShakeWindowMsg();
-    BOOL bSynchronizeMsg = FALSE;
-
-    UINT nUTalkUin = 0;
-    UINT nSenderID = pBuddyMessage->m_nFromUin;
-    //别的平台上同步过来的消息
-    if (nSenderID == m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID)
-        bSynchronizeMsg = TRUE;
-
-    if (bSynchronizeMsg)
-        nUTalkUin = pBuddyMessage->m_nToUin;
-    //正常好友发来的消息
-    else
-        nUTalkUin = (UINT)wParam;
-
-    UINT nMsgID = pBuddyMessage->m_nMsgId;;
-    if (nUTalkUin <= 0/* || nMsgID<=0*/)
-        return 0;
-
-    //如果是窗口抖动消息，直接弹出聊天窗口并播放抖动动画，如果不是抖动消息则在状态栏进行闪动
-    if (bShakeWindowMsg)
-    {
-        ShowBuddyChatDlg(nUTalkUin, TRUE, TRUE, nMsgID);
-        return 0;
-    }
-    else
-    {
-        //是否启用静音
-        if (!m_FMGClient.m_UserConfig.IsEnableMute())
-        {
-            tstring strFileName = Hootina::CPath::GetAppPath() + _T("Sound\\msg.wav");	// 播放来消息提示音
-            ::sndPlaySound(strFileName.c_str(), SND_ASYNC);
-        }
-    }
-
-    std::map<UINT, CBuddyChatDlg*>::iterator iter;
-    iter = m_mapBuddyChatDlg.find(nUTalkUin);
-
-    if (iter != m_mapBuddyChatDlg.end())
-    {
-        CBuddyChatDlg* lpBuddyDlg = iter->second;
-        if (lpBuddyDlg != NULL && lpBuddyDlg->IsWindow())
-        {
-            if (bSynchronizeMsg)
-                lpBuddyDlg->OnRecvMsg(nSenderID, nMsgID);
-            else
-                lpBuddyDlg->OnRecvMsg(nUTalkUin, nMsgID);
-            return 0;
-        }
-    }
-
-    //其它设备同步过来的消息
-    if (bSynchronizeMsg)
-    {
-        CMessageList* lpMsgList = m_FMGClient.GetMessageList();
-        if (lpMsgList != NULL)
-        {
-            CMessageSender* lpMsgSender = lpMsgList->GetMsgSender(FMG_MSG_TYPE_BUDDY, nSenderID);
-            if (lpMsgSender != NULL)
-            {
-                lpMsgSender->DelMsgById(nMsgID);
-
-                if (lpMsgSender->GetMsgCount() <= 0)
-                    lpMsgList->DelMsgSender(FMG_MSG_TYPE_BUDDY, nSenderID);
-            }
-        }
-
-        return 1;
-    }
-
-    UpdateMsgIcon();
-
-    if (m_MsgTipDlg.IsWindow())
-        m_MsgTipDlg.AddMsgSender(FMG_MSG_TYPE_BUDDY, nUTalkUin);
-
-    if (0 == m_dwMsgTimerId)
-        m_dwMsgTimerId = SetTimer(RECVCHATMSG_TIMER_ID, ::GetCaretBlinkTime(), NULL);
-
-    return 0;
-}
-
-// 群消息
-LRESULT CMainDlg::OnGroupMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    UINT nGroupCode = (UINT)wParam;
-    UINT nMsgId = (UINT)lParam;
-    if (0 == nGroupCode/* || 0 == nMsgId*/)
-        return 0;
-
-    std::map<UINT, CGroupChatDlg*>::iterator iter;
-    iter = m_mapGroupChatDlg.find(nGroupCode);
-    if (iter != m_mapGroupChatDlg.end())
-    {
-        CGroupChatDlg* lpGroupDlg = iter->second;
-        if (lpGroupDlg != NULL && lpGroupDlg->IsWindow())
-        {
-            lpGroupDlg->OnRecvMsg(nGroupCode, nMsgId);
-            return 0;
-        }
-    }
-
-    CMessageList* lpMsgList = m_FMGClient.GetMessageList();
-    if (lpMsgList != NULL)
-    {
-        CMessageSender* lpMsgSender = lpMsgList->GetMsgSender(FMG_MSG_TYPE_GROUP, nGroupCode);
-        if (lpMsgSender != NULL)
-        {
-            if (lpMsgSender->GetMsgCount() == 1)
-            {
-                //是否启用静音
-                if (!m_FMGClient.m_UserConfig.IsEnableMute())
-                {
-                    tstring strFileName = Hootina::CPath::GetAppPath() + _T("Sound\\msg.wav");	// 播放来消息提示音
-                    ::sndPlaySound(strFileName.c_str(), SND_ASYNC);
-                }
-            }
-        }
-    }
-
-    UpdateMsgIcon();
-
-    if (m_MsgTipDlg.IsWindow())
-        m_MsgTipDlg.AddMsgSender(FMG_MSG_TYPE_GROUP, nGroupCode);
-
-    if (NULL == m_dwMsgTimerId)
-        m_dwMsgTimerId = SetTimer(2, ::GetCaretBlinkTime(), NULL);
-
-    return 0;
-}
-
-// 临时会话消息
-LRESULT CMainDlg::OnSessMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    UINT nUTalkUin = (UINT)wParam;
-    UINT nMsgId = (UINT)lParam;
-    if (0 == nUTalkUin || 0 == nMsgId)
-        return 0;
-
-    // 是否启用静音
-    if (!m_FMGClient.m_UserConfig.IsEnableMute())
-    {
-        tstring strFileName = Hootina::CPath::GetAppPath() + _T("Sound\\msg.wav");	// 播放来消息提示音
-        ::sndPlaySound(strFileName.c_str(), SND_ASYNC);
-    }
-
-    std::map<UINT, CSessChatDlg*>::iterator iter;
-    iter = m_mapSessChatDlg.find(nUTalkUin);
-    if (iter != m_mapSessChatDlg.end())
-    {
-        CSessChatDlg* lpSessChatDlg = iter->second;
-        if (lpSessChatDlg != NULL && lpSessChatDlg->IsWindow())
-        {
-            lpSessChatDlg->OnRecvMsg(nUTalkUin, nMsgId);
-            return 0;
-        }
-    }
-
-    UpdateMsgIcon();
-
-    if (m_MsgTipDlg.IsWindow())
-        m_MsgTipDlg.AddMsgSender(FMG_MSG_TYPE_SESS, nUTalkUin);
-
-    if (NULL == m_dwMsgTimerId)
-        m_dwMsgTimerId = SetTimer(2, ::GetCaretBlinkTime(), NULL);
-
-    return 0;
-}
-
 // 好友状态改变消息
 LRESULT CMainDlg::OnStatusChangeMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -4244,7 +4041,6 @@ LRESULT CMainDlg::OnUpdateBuddyNumber(UINT uMsg, WPARAM wParam, LPARAM lParam)
     if (0 == nUTalkUin)
         return 0;
 
-    NotifyBuddyChatDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_NUMBER);		// 通知好友聊天窗口更新
     NotifyBuddyInfoDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_NUMBER);		// 通知好友信息窗口更新
 
     return 0;
@@ -4258,9 +4054,7 @@ LRESULT CMainDlg::OnUpdateGMemberNumber(UINT uMsg, WPARAM wParam, LPARAM lParam)
     if (0 == nGroupCode || 0 == nUTalkUin)
         return 0;
 
-    NotifyGroupChatDlg(nGroupCode, FMG_MSG_UPDATE_GMEMBER_NUMBER, wParam, lParam);// 通知群聊天窗口更新
     NotifyGMemberInfoDlg(nGroupCode, nUTalkUin, FMG_MSG_UPDATE_GMEMBER_NUMBER);	// 通知群成员信息窗口更新
-    NotifySessChatDlg(nUTalkUin, FMG_MSG_UPDATE_GMEMBER_NUMBER);				// 通知群成员聊天窗口更新
 
     return 0;
 }
@@ -4272,7 +4066,6 @@ LRESULT CMainDlg::OnUpdateGroupNumber(UINT uMsg, WPARAM wParam, LPARAM lParam)
     if (0 == nGroupCode)
         return 0;
 
-    NotifyGroupChatDlg(nGroupCode, FMG_MSG_UPDATE_GROUP_NUMBER, 0, 0);// 通知群聊天窗口更新
     NotifyGroupInfoDlg(nGroupCode, FMG_MSG_UPDATE_GROUP_NUMBER);		// 通知群信息窗口更新
 
     return 0;
@@ -4294,7 +4087,6 @@ LRESULT CMainDlg::OnUpdateBuddySign(UINT uMsg, WPARAM wParam, LPARAM lParam)
     // 旧好友列表控件 m_BuddyListCtrl 的签名更新已一并删除。
     if (m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID != nUTalkUin)
     {
-        NotifyBuddyChatDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_SIGN);		// 通知好友聊天窗口更新
         NotifyBuddyInfoDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_SIGN);		// 通知好友信息窗口更新
     }
 
@@ -4376,41 +4168,6 @@ LRESULT CMainDlg::OnUpdateBuddyInfo(UINT uMsg, WPARAM wParam, LPARAM lParam)
     return 0;
 }
 
-LRESULT CMainDlg::OnUpdateChatDlgOnlineStatus(UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    UINT uAccountID = (UINT)wParam;
-    //long nStatus = (long)lParam;
-    std::map<UINT, CBuddyChatDlg*>::iterator iter;
-    iter = m_mapBuddyChatDlg.find(uAccountID);
-    if (iter != m_mapBuddyChatDlg.end())
-    {
-        CBuddyChatDlg* pBuddyChatDlg = iter->second;
-#ifndef _DEBUG
-        if (pBuddyChatDlg == NULL)
-        {
-            LOG_ERROR("Why 0x%08x is null pointer of a chat dlg？", pBuddyChatDlg);
-            return 0;
-        }
-#endif
-
-        pBuddyChatDlg->OnUpdateBuddyNumber();
-        pBuddyChatDlg->OnUpdateBuddySign();		// 更新好友签名通知
-        pBuddyChatDlg->OnUpdateBuddyHeadPic();
-        //pBuddyChatDlg->OnUpdateBuddyHeadPic();
-#ifndef _DEBUG
-        if (!pBuddyChatDlg->IsWindow())
-        {
-            LOG_ERROR("Why 0x%08x is a invalid window of a chat dlg？", pBuddyChatDlg);
-            return 0;
-        }
-#endif
-
-        pBuddyChatDlg->Invalidate(FALSE);
-    }
-
-    return 1;
-}
-
 // 更新群成员信息
 LRESULT CMainDlg::OnUpdateGMemberInfo(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
@@ -4429,7 +4186,6 @@ LRESULT CMainDlg::OnUpdateGroupInfo(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     UINT uAccountID = (UINT)wParam;
 
-    NotifyGroupChatDlg(uAccountID, FMG_MSG_UPDATE_GROUP_INFO, 0, 0);	// 通知群聊天窗口更新
     NotifyGroupInfoDlg(uAccountID, FMG_MSG_UPDATE_GROUP_INFO);		// 通知群信息窗口更新
     //	CGroupInfo* pGroupInfo = NULL;
     //	CBuddyInfo* pBuddyInfo = NULL;
@@ -4522,7 +4278,6 @@ LRESULT CMainDlg::OnUpdateBuddyHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam)
     if (m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID == nUTalkUin)
         return 0;
 
-    NotifyBuddyChatDlg(nUTalkUin, FMG_MSG_UPDATE_BUDDY_HEADPIC);		// 通知已打开的好友聊天窗同步头像
 
     return 0;
 }
@@ -4533,8 +4288,6 @@ LRESULT CMainDlg::OnUpdateGMemberHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam
     UINT nGroupCode = (UINT)wParam;
     UINT nUTalkUin = (UINT)lParam;
 
-    NotifyGroupChatDlg(nGroupCode, FMG_MSG_UPDATE_GMEMBER_HEADPIC, wParam, lParam);	// 通知群聊天窗口更新
-    NotifySessChatDlg(nUTalkUin, FMG_MSG_UPDATE_GMEMBER_HEADPIC);						// 通知群成员聊天窗口更新
 
     return 0;
 }
@@ -4546,7 +4299,6 @@ LRESULT CMainDlg::OnUpdateGroupHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     // 旧自绘群列表 / 最近联系人列表头像更新已随旧控件移除；群头像在新版面板由群列表 /
     // 会话刷新统一处理。这里只通知已打开的群聊窗同步头像。
-    NotifyGroupChatDlg(nGroupCode, FMG_MSG_UPDATE_GROUP_HEADPIC, wParam, lParam);// 通知群聊天窗口更新
 
     return 0;
 }
@@ -4652,15 +4404,6 @@ LRESULT CMainDlg::OnShowOrCloseDlg(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     switch (uMsg)
     {
-    case WM_SHOW_BUDDYCHATDLG:
-        ShowBuddyChatDlg(nUTalkUin, TRUE);
-        break;
-    case WM_SHOW_GROUPCHATDLG:
-        ShowGroupChatDlg(nGroupCode, TRUE);
-        break;
-    case WM_SHOW_SESSCHATDLG:
-        ShowSessChatDlg(nGroupCode, nUTalkUin, TRUE);
-        break;
     case WM_SHOW_SYSGROUPCHATDLG:
         ShowSysGroupChatDlg(nGroupCode, TRUE);
         break;
@@ -4672,15 +4415,6 @@ LRESULT CMainDlg::OnShowOrCloseDlg(UINT uMsg, WPARAM wParam, LPARAM lParam)
         break;
     case WM_SHOW_GROUPINFODLG:
         ShowGroupInfoDlg(nGroupCode, TRUE);
-        break;
-    case WM_CLOSE_BUDDYCHATDLG:
-        ShowBuddyChatDlg(nUTalkUin, FALSE);
-        break;
-    case WM_CLOSE_GROUPCHATDLG:
-        ShowGroupChatDlg(nGroupCode, FALSE);
-        break;
-    case WM_CLOSE_SESSCHATDLG:
-        ShowSessChatDlg(nGroupCode, nUTalkUin, FALSE);
         break;
     case WM_CLOSE_SYSGROUPCHATDLG:
         ShowSysGroupChatDlg(nGroupCode, FALSE);
@@ -4752,210 +4486,6 @@ LRESULT CMainDlg::OnCancelFlash(UINT uMsg, WPARAM wParam, LPARAM lParam)
     //先将任务栏图标恢复成正常状态
     UpdateTrayIconTip();
     return 0;
-}
-
-void CMainDlg::ShowBuddyChatDlg(UINT nUTalkUin, BOOL bShow, BOOL bShakeWindowMsg, UINT nMsgID)
-{
-    if (nUTalkUin == 0)
-        return;
-
-    if (bShow)
-    {
-        std::map<UINT, CBuddyChatDlg*>::iterator iter;
-        iter = m_mapBuddyChatDlg.find(nUTalkUin);
-        if (iter != m_mapBuddyChatDlg.end())
-        {
-            CBuddyChatDlg* lpBuddyChatDlg = iter->second;
-            if (lpBuddyChatDlg != NULL)
-            {
-                if (!lpBuddyChatDlg->IsWindow())
-                {
-                    // DuiFrameWindow（CWindowImpl）需显式给出窗口风格，
-                    // 否则得到 style=0 的不可用窗口；Create 后须 InitChatUi
-                    // 重建客户区控件树。
-                    lpBuddyChatDlg->Create(NULL, CWindow::rcDefault, NULL, WS_OVERLAPPEDWINDOW);
-                    lpBuddyChatDlg->InitChatUi();
-                }
-                //lpBuddyChatDlg->ShowWindow(SW_SHOW);
-                lpBuddyChatDlg->ShowWindow(SW_RESTORE);
-                ::SetForegroundWindow(lpBuddyChatDlg->m_hWnd);
-                if (bShakeWindowMsg)
-                {
-                    ::Sleep(3000);
-                    ShakeWindow(lpBuddyChatDlg->m_hWnd, 1);
-                    lpBuddyChatDlg->OnRecvMsg(nUTalkUin, nMsgID);
-                }
-            }
-        }
-        else
-        {
-            //首次走这个逻辑
-            CBuddyChatDlg* lpBuddyChatDlg = new CBuddyChatDlg;
-            if (lpBuddyChatDlg != NULL)
-            {
-                long nLastWidth = m_FMGClient.m_UserConfig.GetChatDlgWidth();
-                long nLastHeight = m_FMGClient.m_UserConfig.GetChatDlgHeight();
-                lpBuddyChatDlg->m_lpFMGClient = &m_FMGClient;
-                lpBuddyChatDlg->m_lpFaceList = &m_FaceList;
-                lpBuddyChatDlg->m_lpCascadeWinManager = &m_CascadeWinManager;
-                lpBuddyChatDlg->m_hMainDlg = m_hWnd;
-                lpBuddyChatDlg->m_nUTalkUin = nUTalkUin;
-                lpBuddyChatDlg->m_UserId = nUTalkUin;
-                lpBuddyChatDlg->m_LoginUserId = m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID;
-                m_mapBuddyChatDlg[nUTalkUin] = lpBuddyChatDlg;
-                lpBuddyChatDlg->Create(NULL, CWindow::rcDefault, NULL, WS_OVERLAPPEDWINDOW);
-                lpBuddyChatDlg->InitChatUi();
-                lpBuddyChatDlg->ShowWindow(SW_SHOW);
-                lpBuddyChatDlg->SetWindowPos(NULL, 0, 0, nLastWidth, nLastHeight, SWP_NOMOVE | SWP_NOZORDER | SWP_SHOWWINDOW);
-                SendMessage(lpBuddyChatDlg->m_hWnd, WM_SIZE, (WPARAM)SIZE_RESTORED, (LPARAM)MAKELONG(nLastWidth, nLastHeight));
-                ::SetForegroundWindow(lpBuddyChatDlg->m_hWnd);
-                if (bShakeWindowMsg)
-                {
-                    ShakeWindow(lpBuddyChatDlg->m_hWnd, 1);
-                    lpBuddyChatDlg->OnRecvMsg(nUTalkUin, nMsgID);
-                }
-            }
-        }
-    }
-    else
-    {
-        std::map<UINT, CBuddyChatDlg*>::iterator iter;
-        iter = m_mapBuddyChatDlg.find(nUTalkUin);
-        if (iter != m_mapBuddyChatDlg.end())
-        {
-            CBuddyChatDlg* lpBuddyChatDlg = iter->second;
-            if (lpBuddyChatDlg != NULL)
-            {
-                if (lpBuddyChatDlg->IsWindow())
-                {
-                    lpBuddyChatDlg->DestroyWindow();
-                    delete lpBuddyChatDlg;
-                }
-
-            }
-            m_mapBuddyChatDlg.erase(iter);
-        }
-
-    }
-}
-
-void CMainDlg::ShowGroupChatDlg(UINT nGroupCode, BOOL bShow)
-{
-    if (nGroupCode == 0)
-        return;
-
-    if (bShow)
-    {
-        std::map<UINT, CGroupChatDlg*>::iterator iter;
-        iter = m_mapGroupChatDlg.find(nGroupCode);
-        if (iter != m_mapGroupChatDlg.end())
-        {
-            CGroupChatDlg* lpGroupChatDlg = iter->second;
-            if (lpGroupChatDlg != NULL)
-            {
-                if (!lpGroupChatDlg->IsWindow())
-                {
-                    lpGroupChatDlg->Create(NULL, CWindow::rcDefault, NULL, WS_OVERLAPPEDWINDOW);
-                    lpGroupChatDlg->InitChatUi();
-                }
-                lpGroupChatDlg->ShowWindow(SW_RESTORE);
-                ::SetForegroundWindow(lpGroupChatDlg->m_hWnd);
-            }
-        }
-        else
-        {
-            CGroupChatDlg* lpGroupChatDlg = new CGroupChatDlg;
-            if (lpGroupChatDlg != NULL)
-            {
-                long nLastWidth = m_FMGClient.m_UserConfig.GetGroupDlgWidth();
-                long nLastHeight = m_FMGClient.m_UserConfig.GetGroupDlgHeight();
-                lpGroupChatDlg->m_lpFMGClient = &m_FMGClient;
-                lpGroupChatDlg->m_lpFaceList = &m_FaceList;
-                lpGroupChatDlg->m_lpCascadeWinManager = &m_CascadeWinManager;
-                lpGroupChatDlg->m_hMainDlg = m_hWnd;
-                lpGroupChatDlg->m_nGroupCode = nGroupCode;
-                m_mapGroupChatDlg[nGroupCode] = lpGroupChatDlg;
-                lpGroupChatDlg->Create(NULL, CWindow::rcDefault, NULL, WS_OVERLAPPEDWINDOW);
-                lpGroupChatDlg->InitChatUi();
-                lpGroupChatDlg->ShowWindow(SW_SHOW);
-                lpGroupChatDlg->SetWindowPos(NULL, 0, 0, nLastWidth, nLastHeight, SWP_NOMOVE | SWP_NOZORDER | SWP_SHOWWINDOW);
-                SendMessage(lpGroupChatDlg->m_hWnd, WM_SIZE, (WPARAM)SIZE_RESTORED, (LPARAM)MAKELONG(nLastWidth, nLastHeight));
-                ::SetForegroundWindow(lpGroupChatDlg->m_hWnd);
-            }
-        }
-    }
-    else
-    {
-        std::map<UINT, CGroupChatDlg*>::iterator iter;
-        iter = m_mapGroupChatDlg.find(nGroupCode);
-        if (iter != m_mapGroupChatDlg.end())
-        {
-            CGroupChatDlg* lpGroupChatDlg = iter->second;
-            if (lpGroupChatDlg != NULL)
-            {
-                if (lpGroupChatDlg->IsWindow())
-                    lpGroupChatDlg->DestroyWindow();
-                delete lpGroupChatDlg;
-            }
-            m_mapGroupChatDlg.erase(iter);
-        }
-    }
-}
-
-void CMainDlg::ShowSessChatDlg(UINT nGroupCode, UINT nUTalkUin, BOOL bShow)
-{
-    if (nUTalkUin == 0)
-        return;
-
-    if (bShow)
-    {
-        std::map<UINT, CSessChatDlg*>::iterator iter;
-        iter = m_mapSessChatDlg.find(nUTalkUin);
-        if (iter != m_mapSessChatDlg.end())
-        {
-            CSessChatDlg* lpSessChatDlg = iter->second;
-            if (lpSessChatDlg != NULL)
-            {
-                if (!lpSessChatDlg->IsWindow())
-                    lpSessChatDlg->Create(NULL);
-                lpSessChatDlg->ShowWindow(SW_SHOW);
-                ::SetForegroundWindow(lpSessChatDlg->m_hWnd);
-            }
-        }
-        else
-        {
-            CSessChatDlg* lpSessChatDlg = new CSessChatDlg;
-            if (lpSessChatDlg != NULL)
-            {
-                lpSessChatDlg->m_lpFMGClient = &m_FMGClient;
-                lpSessChatDlg->m_lpFaceList = &m_FaceList;
-                lpSessChatDlg->m_lpCascadeWinManager = &m_CascadeWinManager;
-                lpSessChatDlg->m_hMainDlg = m_hWnd;
-                lpSessChatDlg->m_nGroupCode = nGroupCode;
-                lpSessChatDlg->m_nUTalkUin = nUTalkUin;
-                m_mapSessChatDlg[nUTalkUin] = lpSessChatDlg;
-                lpSessChatDlg->Create(NULL);
-                lpSessChatDlg->ShowWindow(SW_SHOW);
-                ::SetForegroundWindow(lpSessChatDlg->m_hWnd);
-            }
-        }
-    }
-    else
-    {
-        std::map<UINT, CSessChatDlg*>::iterator iter;
-        iter = m_mapSessChatDlg.find(nUTalkUin);
-        if (iter != m_mapSessChatDlg.end())
-        {
-            CSessChatDlg* lpSessChatDlg = iter->second;
-            if (lpSessChatDlg != NULL)
-            {
-                if (lpSessChatDlg->IsWindow())
-                    lpSessChatDlg->DestroyWindow();
-                delete lpSessChatDlg;
-            }
-            m_mapSessChatDlg.erase(iter);
-        }
-    }
 }
 
 void CMainDlg::ShowSysGroupChatDlg(UINT nGroupCode, BOOL bShow)
@@ -5194,93 +4724,6 @@ void CMainDlg::ShowGroupInfoDlg(UINT nGroupCode, BOOL bShow)
                 delete lpGroupInfoDlg;
             }
             m_mapGroupInfoDlg.erase(iter);
-        }
-    }
-}
-
-// 通知好友聊天窗口更新
-void CMainDlg::NotifyBuddyChatDlg(UINT nUTalkUin, UINT uMsg)
-{
-    std::map<UINT, CBuddyChatDlg*>::iterator iter;
-    iter = m_mapBuddyChatDlg.find(nUTalkUin);
-    if (iter != m_mapBuddyChatDlg.end())
-    {
-        CBuddyChatDlg* lpBuddyChatDlg = iter->second;
-        if (lpBuddyChatDlg != NULL && lpBuddyChatDlg->IsWindow())
-        {
-            switch (uMsg)
-            {
-            case FMG_MSG_UPDATE_BUDDY_NUMBER:
-                lpBuddyChatDlg->OnUpdateBuddyNumber();
-                break;
-
-            case FMG_MSG_UPDATE_BUDDY_SIGN:
-                lpBuddyChatDlg->OnUpdateBuddySign();
-                break;
-
-            case FMG_MSG_UPDATE_BUDDY_HEADPIC:
-                lpBuddyChatDlg->OnUpdateBuddyHeadPic();
-                break;
-            }
-        }
-    }
-}
-
-// 通知群聊天窗口更新
-void CMainDlg::NotifyGroupChatDlg(UINT nGroupCode, UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    std::map<UINT, CGroupChatDlg*>::iterator iter;
-    iter = m_mapGroupChatDlg.find(nGroupCode);
-    if (iter != m_mapGroupChatDlg.end())
-    {
-        CGroupChatDlg* lpGroupChatDlg = iter->second;
-        if (lpGroupChatDlg != NULL && lpGroupChatDlg->IsWindow())
-        {
-            switch (uMsg)
-            {
-            case FMG_MSG_UPDATE_GROUP_INFO:
-                lpGroupChatDlg->OnUpdateGroupInfo();
-                break;
-
-            case FMG_MSG_UPDATE_GROUP_NUMBER:
-                lpGroupChatDlg->OnUpdateGroupNumber();
-                break;
-
-            case FMG_MSG_UPDATE_GROUP_HEADPIC:
-                lpGroupChatDlg->OnUpdateGroupHeadPic();
-                break;
-
-            case FMG_MSG_UPDATE_GMEMBER_NUMBER:
-                lpGroupChatDlg->OnUpdateGMemberNumber(wParam, lParam);
-                break;
-
-            case FMG_MSG_UPDATE_GMEMBER_HEADPIC:
-                lpGroupChatDlg->OnUpdateGMemberHeadPic(wParam, lParam);
-                break;
-            }
-        }
-    }
-}
-
-// 通知临时会话聊天窗口更新
-void CMainDlg::NotifySessChatDlg(UINT nUTalkUin, UINT uMsg)
-{
-    std::map<UINT, CSessChatDlg*>::iterator iter;
-    iter = m_mapSessChatDlg.find(nUTalkUin);
-    if (iter != m_mapSessChatDlg.end())
-    {
-        CSessChatDlg* lpSessChatDlg = iter->second;
-        if (lpSessChatDlg != NULL && lpSessChatDlg->IsWindow())
-        {
-            switch (uMsg)
-            {
-            case FMG_MSG_UPDATE_GMEMBER_NUMBER:
-                lpSessChatDlg->OnUpdateGMemberNumber();
-                break;
-            case FMG_MSG_UPDATE_GMEMBER_HEADPIC:
-                lpSessChatDlg->OnUpdateGMemberHeadPic();
-                break;
-            }
         }
     }
 }
@@ -5999,52 +5442,6 @@ HICON CMainDlg::ExtractIcon(LPCTSTR lpszFileName)
 void CMainDlg::CloseAllDlg()
 {
     {
-        std::map<UINT, CBuddyChatDlg*>::iterator iter;
-        for (iter = m_mapBuddyChatDlg.begin(); iter != m_mapBuddyChatDlg.end(); iter++)
-        {
-            CBuddyChatDlg* lpBuddyChatDlg = iter->second;
-            if (lpBuddyChatDlg != NULL)
-            {
-                if (lpBuddyChatDlg->IsWindow())
-                    lpBuddyChatDlg->DestroyWindow();
-
-                delete lpBuddyChatDlg;
-            }
-        }
-        m_mapBuddyChatDlg.clear();
-    }
-
-    {
-        std::map<UINT, CGroupChatDlg*>::iterator iter;
-        for (iter = m_mapGroupChatDlg.begin(); iter != m_mapGroupChatDlg.end(); iter++)
-        {
-            CGroupChatDlg* lpGroupChatDlg = iter->second;
-            if (lpGroupChatDlg != NULL)
-            {
-                if (lpGroupChatDlg->IsWindow())
-                    lpGroupChatDlg->DestroyWindow();
-                delete lpGroupChatDlg;
-            }
-        }
-        m_mapGroupChatDlg.clear();
-    }
-
-    {
-        std::map<UINT, CSessChatDlg*>::iterator iter;
-        for (iter = m_mapSessChatDlg.begin(); iter != m_mapSessChatDlg.end(); iter++)
-        {
-            CSessChatDlg* lpSessChatDlg = iter->second;
-            if (lpSessChatDlg != NULL)
-            {
-                if (lpSessChatDlg->IsWindow())
-                    lpSessChatDlg->DestroyWindow();
-                delete lpSessChatDlg;
-            }
-        }
-        m_mapSessChatDlg.clear();
-    }
-
-    {
         std::map<UINT, CBuddyInfoDlg*>::iterator iter;
         for (iter = m_mapBuddyInfoDlg.begin(); iter != m_mapBuddyInfoDlg.end(); iter++)
         {
@@ -6134,21 +5531,6 @@ void CMainDlg::DeleteCurrentUserFromFile()
     strCurrentAccount.Format(_T("%s;"), m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
     strAccountList.Replace(strCurrentAccount, _T(""));
     iniFile.WriteString(_T("LogonUserList"), _T("AccountName"), strAccountList, strIniFile);
-}
-
-BOOL CMainDlg::IsFilesTransferring()
-{
-    std::map<UINT, CBuddyChatDlg*>::iterator iter;
-    for (iter = m_mapBuddyChatDlg.begin(); iter != m_mapBuddyChatDlg.end(); iter++)
-    {
-        CBuddyChatDlg* lpBuddyChatDlg = iter->second;
-        if (lpBuddyChatDlg == NULL)
-            continue;
-        if (lpBuddyChatDlg->IsFilesTransferring())
-            return TRUE;
-    }
-
-    return FALSE;
 }
 
 void CMainDlg::CreateEssentialDirectories()
