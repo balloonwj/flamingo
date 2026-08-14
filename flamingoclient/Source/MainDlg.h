@@ -15,7 +15,6 @@
 #include "BalloonAuth/BalloonLoginDlg.h"
 //#include "VerifyCodeDlg.h"
 #include "MsgTipDlg.h"
-#include "LogonUserInfoDlg.h"
 #include "ModifyPasswordDlg.h"
 #include "BalloonMain/BalloonMainPanel.h"
 #include "BalloonMain/TrayFlashController.h"		// 托盘"新消息闪头像"状态机（m_trayFlash 成员需完整类型）
@@ -54,29 +53,7 @@ enum MAINPANEL_STATUS
     MAINPANEL_STATUS_USERGOOFFLINE //主面板用户主动下线
 };
 
-class CGMemberInfoMapKey
-{
-public:
-	CGMemberInfoMapKey(void):m_nGroupCode(0), m_nUTalkUin(0){}
-	~CGMemberInfoMapKey(void){}
 
-public:
-	bool operator < (const CGMemberInfoMapKey& rhs) const
-	{
-		if(m_nGroupCode < rhs.m_nGroupCode) return true;
-		if(m_nGroupCode > rhs.m_nGroupCode) return false;
-		return  m_nUTalkUin < rhs.m_nUTalkUin;
-	}
-
-public:
-	UINT m_nGroupCode;
-	UINT m_nUTalkUin;
-};
-
-class CBuddyInfoDlg;
-class CGroupInfoDlg;
-
-class CRemoteDesktopDlg;
 
 // "无操作自动离开"的判定输入（定义在 BalloonMain/AutoAwayPolicy.h）。这里只按引用
 // 传递，故前向声明即可，不必把该头文件拉进本头文件的所有包含方。
@@ -109,7 +86,6 @@ public:
 		MSG_WM_HOTKEY(OnHotKey)
 		MSG_WM_CLOSE(OnClose)
 		MSG_WM_DESTROY(OnDestroy)
-		COMMAND_ID_HANDLER_EX(IDM_SYSTEMSETTINGS, OnBtn_ShowSystemSettingDlg)	//打开系统设置对话框
 		COMMAND_ID_HANDLER_EX(IDM_MODIFYPASSWORD, OnBtn_ModifyPassword)			//修改密码
 		COMMAND_ID_HANDLER_EX(ID_MENU_NETSETTINGS, OnMenu_NetSettings)			//打开网络设置窗（主面板系统菜单转发）
 		
@@ -238,7 +214,6 @@ public:
 		MESSAGE_HANDLER_EX(FMG_MSG_TRAY_MINIMIZE_TIP, OnTrayMinimizeTip)		//主面板首次最小化隐藏到托盘：弹一次托盘气泡提示
 		MESSAGE_HANDLER_EX(FMG_MSG_STATUS_CHANGE_MSG, OnStatusChangeMsg)
 		MESSAGE_HANDLER_EX(FMG_MSG_KICK_MSG, OnKickMsg)
-        MESSAGE_HANDLER_EX(FMG_MSG_SCREENSHOT, OnScreenshotMsg)
         
 		MESSAGE_HANDLER_EX(FMG_MSG_SYS_GROUP_MSG, OnSysGroupMsg)
 		
@@ -286,7 +261,6 @@ private:
 	void OnMenu_ShowMainPanel(UINT uNotifyCode, int nID, CWindow wndCtl);
 	void OnMenu_Exit(UINT uNotifyCode, int nID, CWindow wndCtl);
 	void OnMenu_Mute(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnBtn_ShowSystemSettingDlg(UINT uNotifyCode, int nID, CWindow wndCtl);
 	// 打开新版网络设置窗 —— 主面板系统菜单"网络设置"项经 WM_COMMAND 转发到此。
 	void OnMenu_NetSettings(UINT uNotifyCode, int nID, CWindow wndCtl);
 	void OnBtn_ModifyPassword(UINT uNotifyCode, int nID, CWindow wndCtl);
@@ -306,7 +280,6 @@ private:
 
     //返回true,表示登录对话框走的是正常登录流程;返回false,表示直接关闭了登录对话框
 	bool StartLogin(BOOL bAutoLogin = FALSE);
-	void CloseAllDlg();
 
 	// 断开连接、关掉所有窗口、清空登录态并重新弹出登录窗 —— 用户主动登出(OnLogout)与
 	// 账号在别处登录被顶下线(OnV2Kickout)共用的收尾序列。调用方须跑在由 PostMessage
@@ -485,7 +458,6 @@ private:
 	LRESULT OnTrayMinimizeTip(UINT uMsg, WPARAM wParam, LPARAM lParam);
 	LRESULT OnStatusChangeMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 好友状态改变消息
 	LRESULT OnKickMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);				// 被踢下线消息
-    LRESULT OnScreenshotMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);		// 屏幕截图消息   
 	LRESULT OnSysGroupMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);			// 群系统消息
 	LRESULT OnUpdateBuddyNumber(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新好友号码
 	LRESULT OnUpdateGMemberNumber(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新群成员号码_
@@ -508,15 +480,8 @@ private:
 
 
 	void ShowSysGroupChatDlg(UINT nGroupCode, BOOL bShow);
-	void ShowBuddyInfoDlg(UINT nUTalkUin, BOOL bShow);
 																	 
-	void ShowUserInfoDlg(UINT nUTalkUin, BOOL bShow);						// 显示或者关闭个人信息对话框
-	void ShowGMemberInfoDlg(UINT nGroupCode, UINT nUTalkUin, BOOL bShow);
-	void ShowGroupInfoDlg(UINT nGroupCode, BOOL bShow);
 
-	void NotifyBuddyInfoDlg(UINT nUTalkUin, UINT uMsg);						// 通知好友信息窗口更新
-	void NotifyGMemberInfoDlg(UINT nGroupCode, UINT nUTalkUin, UINT uMsg);	// 通知群成员信息窗口更新
-	void NotifyGroupInfoDlg(UINT nGroupCode, UINT uMsg);					// 通知群信息窗口更新
 
 	void OnTrayIcon_LButtunUp();
 	void OnTrayIcon_RButtunUp();
@@ -693,9 +658,7 @@ private:
 	// 托盘悬停弹出的未读消息提示浮窗（balloonui 重写，取代旧 SkinLib 版 m_MsgTipDlg）；
 	// 数据来自 m_trayFlash，点击行经 OpenConvFromTrayPopup 打开会话。
 	CTrayMsgTipPopup		m_trayMsgTipPopup;
-	CLogonUserInfoDlg       m_LogonUserInfoDlg;
 	CModifyPasswordDlg		m_ModifyPasswordDlg;
-    CRemoteDesktopDlg*      m_pRemoteDesktopDlg;                            //远程桌面窗口
 
 	
 
@@ -705,9 +668,6 @@ private:
 
 
 
- 	std::map<UINT, CBuddyInfoDlg*> m_mapBuddyInfoDlg;
- 	std::map<CGMemberInfoMapKey, CBuddyInfoDlg*> m_mapGMemberInfoDlg;
- 	std::map<UINT, CGroupInfoDlg*> m_mapGroupInfoDlg;
 
 	Gdiplus::GdiplusStartupInput	m_gdiplusStartupInput;
 	ULONG_PTR						m_gdiplusToken;

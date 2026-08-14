@@ -105,9 +105,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="BuddyInfoDlg.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
     <ClCompile Include="BuddyInfoFloatWnd.cpp">
       <Filter>UI</Filter>
     </ClCompile>
@@ -116,9 +113,6 @@
     </ClCompile>
     <ClCompile Include="CascadeWinManager.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="ChangePicHeadDlg.cpp">
-      <Filter>UI</Filter>
     </ClCompile>
     <ClCompile Include="ChatDlgCommon.cpp">
       <Filter>UI</Filter>
@@ -134,9 +128,6 @@
     </ClCompile>
     <ClCompile Include="EncodeUtil.cpp">
       <Filter>Utils</Filter>
-    </ClCompile>
-    <ClCompile Include="FaceCtrl.cpp">
-      <Filter>UI</Filter>
     </ClCompile>
     <ClCompile Include="FaceList.cpp">
       <Filter>Source Files</Filter>
@@ -162,9 +153,6 @@
     <ClCompile Include="GifImage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="GroupInfoDlg.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
     <ClCompile Include="GroupRoleRules.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -184,9 +172,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="LoginSettingsDlg.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
-    <ClCompile Include="LogonUserInfoDlg.cpp">
       <Filter>UI</Filter>
     </ClCompile>
     <ClCompile Include="MainDlg.cpp">
@@ -231,9 +216,6 @@
     <ClCompile Include="RegisterDialog.cpp">
       <Filter>UI</Filter>
     </ClCompile>
-    <ClCompile Include="RemoteDesktopDlg.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
     <ClCompile Include="SendMsgThread.cpp">
       <Filter>Tasks</Filter>
     </ClCompile>
@@ -242,9 +224,6 @@
     </ClCompile>
     <ClCompile Include="stdafx.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="SystemSettingDlg.cpp">
-      <Filter>UI</Filter>
     </ClCompile>
     <ClCompile Include="Thread.cpp">
       <Filter>Tasks</Filter>
@@ -263,9 +242,6 @@
     </ClCompile>
     <ClCompile Include="UserSessionData.cpp">
       <Filter>UserData</Filter>
-    </ClCompile>
-    <ClCompile Include="UserSnapInfoDlg.cpp">
-      <Filter>UI</Filter>
     </ClCompile>
     <ClCompile Include="Utils.cpp">
       <Filter>Utils</Filter>
@@ -1232,9 +1208,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="BuddyInfoDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
     <ClInclude Include="BuddyInfoFloatWnd.h">
       <Filter>UI</Filter>
     </ClInclude>
@@ -1243,9 +1216,6 @@
     </ClInclude>
     <ClInclude Include="CascadeWinManager.h">
       <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ChangePicHeadDlg.h">
-      <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="ChatDlgCommon.h">
       <Filter>UI</Filter>
@@ -1264,9 +1234,6 @@
     </ClInclude>
     <ClInclude Include="EncodeUtil.h">
       <Filter>Utils</Filter>
-    </ClInclude>
-    <ClInclude Include="FaceCtrl.h">
-      <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="FaceList.h">
       <Filter>Source Files</Filter>
@@ -1292,14 +1259,8 @@
     <ClInclude Include="GifImage.h">
       <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="GroupInfoDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
     <ClInclude Include="GroupRoleRules.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="IImageOle.h">
-      <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="ImageEx.h">
       <Filter>Source Files</Filter>
@@ -1320,9 +1281,6 @@
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="LoginSettingsDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
-    <ClInclude Include="LogonUserInfoDlg.h">
       <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="MainDlg.h">
@@ -1370,9 +1328,6 @@
     <ClInclude Include="RegisterDialog.h">
       <Filter>UI</Filter>
     </ClInclude>
-    <ClInclude Include="RemoteDesktopDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
     <ClInclude Include="resource.h">
       <Filter>Source Files</Filter>
     </ClInclude>
@@ -1384,9 +1339,6 @@
     </ClInclude>
     <ClInclude Include="stdafx.h">
       <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="SystemSettingDlg.h">
-      <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="Thread.h">
       <Filter>Tasks</Filter>
@@ -1408,9 +1360,6 @@
     </ClInclude>
     <ClInclude Include="UserSessionData.h">
       <Filter>UserData</Filter>
-    </ClInclude>
-    <ClInclude Include="UserSnapInfoDlg.h">
-      <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="Utils.h">
       <Filter>Utils</Filter>

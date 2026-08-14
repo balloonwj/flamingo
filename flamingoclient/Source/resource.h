@@ -34,8 +34,6 @@
 #define ID_BTN_SYSTEM_SET               211
 #define ID_ACCE_CHATDLG                 218
 #define IDD_FONTSELDLG                  221
-#define IDD_GROUPINFODLG                222
-#define IDD_BUDDYINFODLG                223
 #define IDD_REGISTER                    228
 #define IDD_LOGSETDLG                   230
 #define IDD_UPDATEDLG                   231

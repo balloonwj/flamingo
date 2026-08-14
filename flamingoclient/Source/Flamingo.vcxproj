@@ -272,17 +272,14 @@
     <ClCompile Include="net\HandshakeRunner.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BuddyInfoDlg.cpp" />
     <ClCompile Include="BuddyInfoFloatWnd.cpp" />
     <ClCompile Include="Buffer.cpp" />
     <ClCompile Include="CascadeWinManager.cpp" />
-    <ClCompile Include="ChangePicHeadDlg.cpp" />
     <ClCompile Include="ChatDlgCommon.cpp" />
     <ClCompile Include="CheckNetworkStatusTask.cpp" />
     <ClCompile Include="Crash.cpp" />
     <ClCompile Include="CreateNewGroupDlg.cpp" />
     <ClCompile Include="EncodeUtil.cpp" />
-    <ClCompile Include="FaceCtrl.cpp" />
     <ClCompile Include="FaceList.cpp" />
     <ClCompile Include="File.cpp" />
     <ClCompile Include="File2.cpp" />
@@ -291,7 +288,6 @@
     <ClCompile Include="FontSelDlg.cpp" />
     <ClCompile Include="GDIFactory.cpp" />
     <ClCompile Include="GifImage.cpp" />
-    <ClCompile Include="GroupInfoDlg.cpp" />
     <ClCompile Include="GroupRoleRules.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -303,7 +299,6 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="LoginSettingsDlg.cpp" />
-    <ClCompile Include="LogonUserInfoDlg.cpp" />
     <ClCompile Include="MainDlg.cpp" />
     <ClCompile Include="MD5.cpp" />
     <ClCompile Include="MD5Sum.cpp" />
@@ -318,20 +313,17 @@
     <ClCompile Include="RecentListCtrl.cpp" />
     <ClCompile Include="RecvMsgThread.cpp" />
     <ClCompile Include="RegisterDialog.cpp" />
-    <ClCompile Include="RemoteDesktopDlg.cpp" />
     <ClCompile Include="SendMsgThread.cpp" />
     <ClCompile Include="Startup.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="SystemSettingDlg.cpp" />
     <ClCompile Include="Thread.cpp" />
     <ClCompile Include="ThreadPool.cpp" />
     <ClCompile Include="TrayIcon.cpp" />
     <ClCompile Include="UserConfig.cpp" />
     <ClCompile Include="UserMgr.cpp" />
     <ClCompile Include="UserSessionData.cpp" />
-    <ClCompile Include="UserSnapInfoDlg.cpp" />
     <ClCompile Include="Utils.cpp" />
     <ClCompile Include="XmlDocument.cpp" />
     <ClCompile Include="ZlibUtil.cpp" />
@@ -1104,18 +1096,15 @@
     <ClInclude Include="net\FrameCrypto.h" />
     <ClInclude Include="net\FramePayload.h" />
     <ClInclude Include="net\HandshakeRunner.h" />
-    <ClInclude Include="BuddyInfoDlg.h" />
     <ClInclude Include="BuddyInfoFloatWnd.h" />
     <ClInclude Include="Buffer.h" />
     <ClInclude Include="CascadeWinManager.h" />
-    <ClInclude Include="ChangePicHeadDlg.h" />
     <ClInclude Include="ChatDlgCommon.h" />
     <ClInclude Include="CheckNetworkStatusTask.h" />
     <ClInclude Include="ClipboardText.h" />
     <ClInclude Include="CreateNewGroupDlg.h" />
     <ClInclude Include="CustomMsgDef.h" />
     <ClInclude Include="EncodeUtil.h" />
-    <ClInclude Include="FaceCtrl.h" />
     <ClInclude Include="FaceList.h" />
     <ClInclude Include="File.h" />
     <ClInclude Include="File2.h" />
@@ -1124,9 +1113,7 @@
     <ClInclude Include="FontSelDlg.h" />
     <ClInclude Include="GDIFactory.h" />
     <ClInclude Include="GifImage.h" />
-    <ClInclude Include="GroupInfoDlg.h" />
     <ClInclude Include="GroupRoleRules.h" />
-    <ClInclude Include="IImageOle.h" />
     <ClInclude Include="ImageEx.h" />
     <ClInclude Include="ImageTaskThread.h" />
     <ClInclude Include="IniFile.h" />
@@ -1134,7 +1121,6 @@
     <ClInclude Include="Crash.h" />
     <ClInclude Include="LoginAccountList.h" />
     <ClInclude Include="LoginSettingsDlg.h" />
-    <ClInclude Include="LogonUserInfoDlg.h" />
     <ClInclude Include="MainDlg.h" />
     <ClInclude Include="MD5.h" />
     <ClInclude Include="MD5Core.h" />
@@ -1150,12 +1136,10 @@
     <ClInclude Include="RecentListCtrl.h" />
     <ClInclude Include="RecvMsgThread.h" />
     <ClInclude Include="RegisterDialog.h" />
-    <ClInclude Include="RemoteDesktopDlg.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="SendMsgThread.h" />
     <ClInclude Include="Startup.h" />
     <ClInclude Include="stdafx.h" />
-    <ClInclude Include="SystemSettingDlg.h" />
     <ClInclude Include="Thread.h" />
     <ClInclude Include="ThreadPool.h" />
     <ClInclude Include="TrayIcon.h" />
@@ -1163,7 +1147,6 @@
     <ClInclude Include="UserConfig.h" />
     <ClInclude Include="UserMgr.h" />
     <ClInclude Include="UserSessionData.h" />
-    <ClInclude Include="UserSnapInfoDlg.h" />
     <ClInclude Include="Utils.h" />
     <ClInclude Include="XmlDocument.h" />
     <ClInclude Include="ZlibUtil.h" />
