@@ -18,9 +18,9 @@
  *  介于两步之间的"手机验证"已随短信验证码一起去掉（短信验证码现在只服务
  *  于找回密码）。
  *
- *  与现有 CRegisterDialog（旧版 MFC 注册框）并存：本窗口是独立的
- *  balloonui 窗口，调试期由 CMainDlg 的 --register 入口直接弹出；接入
- *  登录流程 / 替换旧框另议。
+ *  本窗口是注册功能唯一的实现：旧版 MFC 注册框 CRegisterDialog 已于
+ *  2026-08-14 随 v1 清理删除。它是独立的 balloonui 窗口，调试期由 CMainDlg 的
+ *  --register 入口直接弹出；接入登录流程另议。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL
  *  （Flamingo 侧由 stdafx.h 保证）。

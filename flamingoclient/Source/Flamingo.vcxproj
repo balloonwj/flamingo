@@ -278,16 +278,14 @@
     <ClCompile Include="ChatDlgCommon.cpp" />
     <ClCompile Include="CheckNetworkStatusTask.cpp" />
     <ClCompile Include="Crash.cpp" />
-    <ClCompile Include="CreateNewGroupDlg.cpp" />
     <ClCompile Include="EncodeUtil.cpp" />
     <ClCompile Include="FaceList.cpp" />
-    <ClCompile Include="File.cpp" />
     <ClCompile Include="File2.cpp" />
+    <ClCompile Include="GifImage.cpp" />
     <ClCompile Include="FileTaskThread.cpp" />
     <ClCompile Include="FlamingoClient.cpp" />
     <ClCompile Include="FontSelDlg.cpp" />
     <ClCompile Include="GDIFactory.cpp" />
-    <ClCompile Include="GifImage.cpp" />
     <ClCompile Include="GroupRoleRules.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -305,13 +303,11 @@
     <ClCompile Include="MessageLogger.cpp" />
     <ClCompile Include="MinuBuffer.cpp" />
     <ClCompile Include="MobileStatusDlg.cpp" />
-    <ClCompile Include="ModifyPasswordDlg.cpp" />
     <ClCompile Include="MsgTipDlg.cpp" />
     <ClCompile Include="MultiChatMemberSelectionDlg.cpp" />
     <ClCompile Include="Path.cpp" />
     <ClCompile Include="PerformanceCounter.cpp" />
     <ClCompile Include="RecentListCtrl.cpp" />
-    <ClCompile Include="RegisterDialog.cpp" />
     <ClCompile Include="SendMsgThread.cpp" />
     <ClCompile Include="Startup.cpp" />
     <ClCompile Include="stdafx.cpp">
@@ -1101,17 +1097,16 @@
     <ClInclude Include="ChatDlgCommon.h" />
     <ClInclude Include="CheckNetworkStatusTask.h" />
     <ClInclude Include="ClipboardText.h" />
-    <ClInclude Include="CreateNewGroupDlg.h" />
     <ClInclude Include="CustomMsgDef.h" />
     <ClInclude Include="EncodeUtil.h" />
     <ClInclude Include="FaceList.h" />
     <ClInclude Include="File.h" />
     <ClInclude Include="File2.h" />
+    <ClInclude Include="GifImage.h" />
     <ClInclude Include="FileTaskThread.h" />
     <ClInclude Include="FlamingoClient.h" />
     <ClInclude Include="FontSelDlg.h" />
     <ClInclude Include="GDIFactory.h" />
-    <ClInclude Include="GifImage.h" />
     <ClInclude Include="GroupRoleRules.h" />
     <ClInclude Include="ImageEx.h" />
     <ClInclude Include="ImageTaskThread.h" />
@@ -1127,13 +1122,11 @@
     <ClInclude Include="MessageLogger.h" />
     <ClInclude Include="MiniBuffer.h" />
     <ClInclude Include="MobileStatusDlg.h" />
-    <ClInclude Include="ModifyPasswordDlg.h" />
     <ClInclude Include="MsgTipDlg.h" />
     <ClInclude Include="MultiChatMemberSelectionDlg.h" />
     <ClInclude Include="Path.h" />
     <ClInclude Include="PerformanceCounter.h" />
     <ClInclude Include="RecentListCtrl.h" />
-    <ClInclude Include="RegisterDialog.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="SendMsgThread.h" />
     <ClInclude Include="Startup.h" />

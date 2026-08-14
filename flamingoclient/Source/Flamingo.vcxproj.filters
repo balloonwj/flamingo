@@ -123,19 +123,19 @@
     <ClCompile Include="Crash.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="CreateNewGroupDlg.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
     <ClCompile Include="EncodeUtil.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
     <ClCompile Include="FaceList.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="File2.cpp">
+      <Filter>Utils</Filter>
+    </ClCompile>
     <ClCompile Include="File.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
-    <ClCompile Include="File2.cpp">
+    <ClCompile Include="GifImage.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
     <ClCompile Include="FileTaskThread.cpp">
@@ -148,9 +148,6 @@
       <Filter>UI</Filter>
     </ClCompile>
     <ClCompile Include="GDIFactory.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="GifImage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="GroupRoleRules.cpp">
@@ -192,9 +189,6 @@
     <ClCompile Include="MobileStatusDlg.cpp">
       <Filter>UI</Filter>
     </ClCompile>
-    <ClCompile Include="ModifyPasswordDlg.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
     <ClCompile Include="MsgTipDlg.cpp">
       <Filter>UI</Filter>
     </ClCompile>
@@ -208,9 +202,6 @@
       <Filter>Utils</Filter>
     </ClCompile>
     <ClCompile Include="RecentListCtrl.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
-    <ClCompile Include="RegisterDialog.cpp">
       <Filter>UI</Filter>
     </ClCompile>
     <ClCompile Include="SendMsgThread.cpp">
@@ -1223,9 +1214,6 @@
     <ClInclude Include="ClipboardText.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="CreateNewGroupDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
     <ClInclude Include="CustomMsgDef.h">
       <Filter>Source Files</Filter>
     </ClInclude>
@@ -1235,10 +1223,13 @@
     <ClInclude Include="FaceList.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="File2.h">
+      <Filter>Utils</Filter>
+    </ClInclude>
     <ClInclude Include="File.h">
       <Filter>Utils</Filter>
     </ClInclude>
-    <ClInclude Include="File2.h">
+    <ClInclude Include="GifImage.h">
       <Filter>Utils</Filter>
     </ClInclude>
     <ClInclude Include="FileTaskThread.h">
@@ -1251,9 +1242,6 @@
       <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="GDIFactory.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="GifImage.h">
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="GroupRoleRules.h">
@@ -1301,9 +1289,6 @@
     <ClInclude Include="MobileStatusDlg.h">
       <Filter>UI</Filter>
     </ClInclude>
-    <ClInclude Include="ModifyPasswordDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
     <ClInclude Include="MsgTipDlg.h">
       <Filter>UI</Filter>
     </ClInclude>
@@ -1317,9 +1302,6 @@
       <Filter>Utils</Filter>
     </ClInclude>
     <ClInclude Include="RecentListCtrl.h">
-      <Filter>UI</Filter>
-    </ClInclude>
-    <ClInclude Include="RegisterDialog.h">
       <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">

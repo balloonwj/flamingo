@@ -15,7 +15,6 @@
 #include "BalloonAuth/BalloonLoginDlg.h"
 //#include "VerifyCodeDlg.h"
 #include "MsgTipDlg.h"
-#include "ModifyPasswordDlg.h"
 #include "BalloonMain/BalloonMainPanel.h"
 #include "BalloonMain/TrayFlashController.h"		// 托盘"新消息闪头像"状态机（m_trayFlash 成员需完整类型）
 #include "BalloonMain/TrayMsgTipPopup.h"			// 托盘悬停未读消息提示浮窗（m_trayMsgTipPopup 成员需完整类型）
@@ -86,7 +85,6 @@ public:
 		MSG_WM_HOTKEY(OnHotKey)
 		MSG_WM_CLOSE(OnClose)
 		MSG_WM_DESTROY(OnDestroy)
-		COMMAND_ID_HANDLER_EX(IDM_MODIFYPASSWORD, OnBtn_ModifyPassword)			//修改密码
 		COMMAND_ID_HANDLER_EX(ID_MENU_NETSETTINGS, OnMenu_NetSettings)			//打开网络设置窗（主面板系统菜单转发）
 		
 
@@ -263,7 +261,6 @@ private:
 	void OnMenu_Mute(UINT uNotifyCode, int nID, CWindow wndCtl);
 	// 打开新版网络设置窗 —— 主面板系统菜单"网络设置"项经 WM_COMMAND 转发到此。
 	void OnMenu_NetSettings(UINT uNotifyCode, int nID, CWindow wndCtl);
-	void OnBtn_ModifyPassword(UINT uNotifyCode, int nID, CWindow wndCtl);
 	
 	void OnMainMenu_About(UINT uNotifyCode, int nID, CWindow wndCtl);			// 主菜单关于菜单点击
 	void OnMenu_Status(UINT uNotifyCode, int nID, CWindow wndCtl);				// “用户在线状态”菜单
@@ -658,7 +655,6 @@ private:
 	// 托盘悬停弹出的未读消息提示浮窗（balloonui 重写，取代旧 SkinLib 版 m_MsgTipDlg）；
 	// 数据来自 m_trayFlash，点击行经 OpenConvFromTrayPopup 打开会话。
 	CTrayMsgTipPopup		m_trayMsgTipPopup;
-	CModifyPasswordDlg		m_ModifyPasswordDlg;
 
 	
 

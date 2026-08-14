@@ -34,7 +34,6 @@
 #define ID_BTN_SYSTEM_SET               211
 #define ID_ACCE_CHATDLG                 218
 #define IDD_FONTSELDLG                  221
-#define IDD_REGISTER                    228
 #define IDD_LOGSETDLG                   230
 #define IDD_UPDATEDLG                   231
 #define IDD_CHANGEPICDLG                233
@@ -43,8 +42,6 @@
 #define IDD_USERSNAPINFO                237
 #define IDD_LOGONUSERINFO               238
 #define IDD_MOBILESTATUS                239
-#define IDD_MODIFYPASSWORD              243
-#define IDD_CREATENEWGROUP              244
 #define IDD_SELECTMULTICHATTARGET       245
 #define IDD_MULTICHATDLG                246
 #define IDI_MULTICHATDLG_16             247

@@ -179,106 +179,6 @@ void CFlamingoClient::SetCreateNewGroupWindow(HWND hwndCreateNewGroup)
 	m_hwndCreateNewGroup = hwndCreateNewGroup;
 }
 
-void CFlamingoClient::Register(PCTSTR pszAccountName, PCTSTR pszNickName, PCTSTR pszPassword)
-{
-	//TODO: 如果此时断网，则直接返回
-	CRegisterRequest* pRequest = new CRegisterRequest();
-	char szData[64] = {0};
-    EncodeUtil::UnicodeToUtf8(pszAccountName, szData, ARRAYSIZE(szData));
-	strcpy_s(pRequest->m_szAccountName, ARRAYSIZE(pRequest->m_szAccountName), szData);
-
-	memset(szData, 0, sizeof(szData));
-    EncodeUtil::UnicodeToUtf8(pszNickName, szData, ARRAYSIZE(szData));
-	strcpy_s(pRequest->m_szNickName, ARRAYSIZE(pRequest->m_szNickName), szData);
-
-	memset(szData, 0, sizeof(szData));
-    EncodeUtil::UnicodeToUtf8(pszPassword, szData, ARRAYSIZE(szData));
-	strcpy_s(pRequest->m_szPassword, ARRAYSIZE(pRequest->m_szPassword), szData);
-
-	m_SendMsgThread.AddItem(pRequest);
-}
-
-BOOL CFlamingoClient::UpdateLogonUserInfo(  PCTSTR pszNickName, 
-										 PCTSTR pszSignature, 
-										 UINT uGender, 
-										 long nBirthday, 
-										 PCTSTR pszAddress, 
-										 PCTSTR pszPhone, 
-										 PCTSTR pszMail, 
-										 UINT uSysFaceID, 
-										 PCTSTR pszCustomFacePath,
-										 BOOL bUseCustomThumb)
-{
-	if(!m_bNetworkAvailable)
-		return FALSE;
-	
-	CUpdateLogonUserInfoRequest* pRequest = new CUpdateLogonUserInfoRequest();
-	char szData[512] = {0};
-	if(pszNickName!=NULL &&*pszNickName!=NULL)
-	{
-        EncodeUtil::UnicodeToUtf8(pszNickName, szData, ARRAYSIZE(szData));
-		strcpy_s(pRequest->m_szNickName, ARRAYSIZE(pRequest->m_szNickName), szData);
-	}
-	
-	if(pszSignature!=NULL &&*pszSignature!=NULL)
-	{
-		memset(szData, 0, sizeof(szData));
-        EncodeUtil::UnicodeToUtf8(pszSignature, szData, ARRAYSIZE(szData));
-		strcpy_s(pRequest->m_szSignature, ARRAYSIZE(pRequest->m_szSignature), szData);
-	}
-
-	if(pszAddress!=NULL &&*pszAddress!=NULL)
-	{
-		memset(szData, 0, sizeof(szData));
-        EncodeUtil::UnicodeToUtf8(pszAddress, szData, ARRAYSIZE(szData));
-		strcpy_s(pRequest->m_szAddress, ARRAYSIZE(pRequest->m_szAddress), szData);
-	}
-
-	if(pszPhone!=NULL &&*pszPhone!=NULL)
-	{
-		memset(szData, 0, sizeof(szData));
-        EncodeUtil::UnicodeToUtf8(pszPhone, szData, ARRAYSIZE(szData));
-		strcpy_s(pRequest->m_szPhone, ARRAYSIZE(pRequest->m_szPhone), szData);
-	}
-	
-	if(pszMail!=NULL &&*pszMail!=NULL)
-	{
-		memset(szData, 0, sizeof(szData));
-        EncodeUtil::UnicodeToUtf8(pszMail, szData, ARRAYSIZE(szData));
-		strcpy_s(pRequest->m_szMail, ARRAYSIZE(pRequest->m_szMail), szData);
-	}
-
-	pRequest->m_uGender = uGender;
-	pRequest->m_nBirthday = nBirthday;
-	pRequest->m_uFaceID = uSysFaceID;
-	
-	if(!bUseCustomThumb)
-	{
-		pRequest->m_bUseCustomThumb = FALSE;
-		m_UserMgr.m_UserInfo.m_strCustomFace = _T("");
-		m_UserMgr.m_UserInfo.m_nFace = uSysFaceID;
-		m_UserMgr.m_UserInfo.m_bUseCustomFace = FALSE;
-	}
-	else
-	{
-		pRequest->m_bUseCustomThumb = TRUE;
-		if(pszCustomFacePath!=NULL && &pszCustomFacePath!=NULL)
-		{
-			_tcscpy_s(pRequest->m_szCustomFace, ARRAYSIZE(pRequest->m_szCustomFace), pszCustomFacePath);
-		}
-		else
-		{
-			pRequest->m_bUseCustomThumb = FALSE;
-			m_UserMgr.m_UserInfo.m_strCustomFace = _T("");
-			m_UserMgr.m_UserInfo.m_bUseCustomFace = FALSE;
-		}
-	}
-
-	m_SendMsgThread.AddItem(pRequest);
-
-	return TRUE;
-}
-
 void CFlamingoClient::StartCheckNetworkStatusTask()
 {
 	//m_CheckNetworkStatusTask.m_pProtocol = &m_IUProtocol;
@@ -300,33 +200,6 @@ void CFlamingoClient::SendHeartbeatMessage()
 	
 	CHeartbeatMessageRequest* pRequest = new CHeartbeatMessageRequest();
 	//m_SendMsgTask.AddItem(pRequest);
-}
-
-void CFlamingoClient::ModifyPassword(PCTSTR pszOldPassword, PCTSTR pszNewPassword)
-{
-	if(!m_bNetworkAvailable)
-		return;
-	
-	char szData[64] = {0};
-	CModifyPasswordRequest* pRequest = new CModifyPasswordRequest();
-    EncodeUtil::UnicodeToUtf8(pszOldPassword, szData, ARRAYSIZE(szData));
-	strcpy_s(pRequest->m_szOldPassword, ARRAYSIZE(pRequest->m_szOldPassword), szData);
-	memset(szData, 0, sizeof(szData));
-    EncodeUtil::UnicodeToUtf8(pszNewPassword, szData, ARRAYSIZE(szData));
-	strcpy_s(pRequest->m_szNewPassword, ARRAYSIZE(pRequest->m_szNewPassword), szData);
-	m_SendMsgThread.AddItem(pRequest);
-}
-
-void CFlamingoClient::CreateNewGroup(PCTSTR pszGroupName)
-{
-	if(!m_bNetworkAvailable)
-		return;
-	
-	char szData[64] = {0};
-	CCreateNewGroupRequest* pRequest = new CCreateNewGroupRequest();
-    EncodeUtil::UnicodeToUtf8(pszGroupName, szData, ARRAYSIZE(szData));
-	strcpy_s(pRequest->m_szGroupName, ARRAYSIZE(pRequest->m_szGroupName), szData);
-    m_SendMsgThread.AddItem(pRequest);
 }
 
 // 登录
@@ -366,21 +239,6 @@ void CFlamingoClient::Login(int nStatus/* = STATUS_ONLINE*/)
 	m_SendMsgThread.AddItem(pLoginRequest);
 }
 
-void CFlamingoClient::GetGroupMembers(int32_t groupid)
-{
-    CGroupBasicInfoRequest* pGroupInfoRequest = new CGroupBasicInfoRequest();
-    pGroupInfoRequest->m_groupid = groupid;
-    m_SendMsgThread.AddItem(pGroupInfoRequest);
-}
-
-void CFlamingoClient::ChangeStatus(int32_t nNewStatus)
-{
-    CChangeUserStatusRequest* pChangeStatusRequest = new CChangeUserStatusRequest();
-    pChangeStatusRequest->m_nNewStatus = nNewStatus;
-
-    m_SendMsgThread.AddItem(pChangeStatusRequest);
-}
-
 // 注销
 BOOL CFlamingoClient::Logout()
 {
@@ -394,13 +252,6 @@ BOOL CFlamingoClient::Logout()
 void CFlamingoClient::CancelLogin()
 {
 	//m_ThreadPool.RemoveAllTask();
-}
-
-// 改变在线状态
-void CFlamingoClient::ChangeStatus(long nStatus)
-{
-	if (IsOffline())
-		return;
 }
 
 // 更新好友列表
@@ -548,23 +399,6 @@ void CFlamingoClient::UpdateGroupMemberSign(UINT nGroupCode, UINT nUTalkUin)
 	//m_ThreadPool.AddTask(lpUTalkSignTask);
 }
 
-// 修改UTalk个性签名
-void CFlamingoClient::ModifyUTalkSign(LPCTSTR lpSign)
-{
-	const CBuddyInfo& currentLogonUser = m_UserMgr.m_UserInfo;
-
-	UpdateLogonUserInfo(currentLogonUser.m_strNickName.c_str(), 
-						lpSign, 
-						currentLogonUser.m_nGender,
-						currentLogonUser.m_nBirthday,
-						currentLogonUser.m_strAddress.c_str(),
-						currentLogonUser.m_strMobile.c_str(),
-						currentLogonUser.m_strEmail.c_str(),
-						currentLogonUser.m_nFace,
-						currentLogonUser.m_strRawCustomFace.c_str(),
-						currentLogonUser.m_bUseCustomFace);
-}
-
 // 更新好友头像
 void CFlamingoClient::UpdateBuddyHeadPic(UINT nUTalkUin, UINT nUTalkNum)
 {
@@ -620,24 +454,6 @@ void CFlamingoClient::UpdateGroupFaceSignal()
 		return;
 }
 
-// 发送好友消息
-BOOL CFlamingoClient::SendBuddyMsg(UINT nFromUin, const tstring& strFromNickName, UINT nToUin, const tstring& strToNickName, time_t nTime, const tstring& strChatMsg, HWND hwndFrom/* = NULL*/)
-{
-    return m_SendMsgThread.AddBuddyMsg(nFromUin, strFromNickName, nToUin, strToNickName, nTime, strChatMsg, hwndFrom);
-}
-
-// 发送群消息
-BOOL CFlamingoClient::SendGroupMsg(UINT nGroupId, time_t nTime, LPCTSTR lpMsg, HWND hwndFrom)
-{
-	if (IsOffline())
-		return FALSE;
-
-    //TODO: 原来的
-    //return m_SendMsgThread.AddBuddyMsg(nGroupId, nTime, lpMsg, hwndFrom);
-    //return m_SendMsgThread.AddGroupMsg(nGroupId, nTime, lpMsg, hwndFrom);
-    return m_SendMsgThread.AddBuddyMsg(m_UserMgr.m_UserInfo.m_uUserID, m_UserMgr.m_UserInfo.m_strAccount, nGroupId, _T(""), nTime, lpMsg, hwndFrom);
-}
-
 // 发送临时会话消息
 BOOL CFlamingoClient::SendSessMsg(UINT nGroupId, UINT nToUin, time_t nTime, LPCTSTR lpMsg)
 {
@@ -648,14 +464,6 @@ BOOL CFlamingoClient::SendSessMsg(UINT nGroupId, UINT nToUin, time_t nTime, LPCT
     return FALSE;
 }
 
-
-BOOL CFlamingoClient::SendMultiChatMsg(const std::set<UINT> setAccountID, time_t nTime, LPCTSTR lpMsg, HWND hwndFrom/*=NULL*/)
-{
-	if (IsOffline())
-		return FALSE;
-	//群发消息
-	return m_SendMsgThread.AddMultiMsg(setAccountID, nTime, lpMsg, hwndFrom);
-}
 
 // 是否离线状态
 BOOL CFlamingoClient::IsOffline()

@@ -42,12 +42,9 @@ public:
 	//void StartGetUserInfoTask(long nType);					//获取好友
 	void StartHeartbeatTask();
 
-	void Register(PCTSTR pszAccountName, PCTSTR pszNickName, PCTSTR pszPassword);
     void Login(int nStatus = STATUS_ONLINE);				    // 登录
 	BOOL Logout();												// 注销
 	void CancelLogin();											// 取消登录
-    void GetGroupMembers(int32_t groupid);                      // 获取群成员
-    void ChangeStatus(int32_t nNewStatus);                      // 更改自己的登录状态
 
 	BOOL UpdateLogonUserInfo(PCTSTR pszNickName,
 							 PCTSTR pszSignature,
@@ -61,9 +58,6 @@ public:
 							 BOOL bUseCustomThumb);
 
 	void SendHeartbeatMessage();
-	void ModifyPassword(PCTSTR pszOldPassword, PCTSTR pszNewPassword);
-	void CreateNewGroup(PCTSTR pszGroupName);
-	void ChangeStatus(long nStatus);							// 改变在线状态
 	void UpdateBuddyList();										// 更新好友列表
 	void UpdateGroupList();										// 更新群列表
 	void UpdateRecentList();									// 更新最近联系人列表
@@ -76,17 +70,13 @@ public:
 	void UpdateGroupNum(UINT nGroupCode);											// 更新群号码
 	void UpdateBuddySign(UINT nUTalkUin);											// 更新好友个性签名
 	void UpdateGroupMemberSign(UINT nGroupCode, UINT nUTalkUin);					// 更新群成员个性签名
-	void ModifyUTalkSign(LPCTSTR lpSign);											// 修改UTalk个性签名
 	void UpdateBuddyHeadPic(UINT nUTalkUin, UINT nUTalkNum);						// 更新好友头像
 	void UpdateGroupMemberHeadPic(UINT nGroupCode, UINT nUTalkUin, UINT nUTalkNum);	// 更新群成员头像
 	void UpdateGroupHeadPic(UINT nGroupCode, UINT nGroupNum);						// 更新群头像
 	void UpdateGroupFaceSignal();													// 更新群表情信令
 
 
-    BOOL SendBuddyMsg(UINT nFromUin, const tstring& strFromNickName, UINT nToUin, const tstring& strToNickName, time_t nTime, const tstring& strChatMsg, HWND hwndFrom = NULL);// 发送好友消息
-	BOOL SendGroupMsg(UINT nGroupId, time_t nTime, LPCTSTR lpMsg, HWND hwndFrom);	// 发送群消息
 	BOOL SendSessMsg(UINT nGroupId, UINT nToUin, time_t nTime, LPCTSTR lpMsg);		// 发送临时会话消息
-	BOOL SendMultiChatMsg(const std::set<UINT> setAccountID, time_t nTime, LPCTSTR lpMsg, HWND hwndFrom=NULL);//群发消息
 
 	BOOL IsOffline();											// 是否离线状态
 

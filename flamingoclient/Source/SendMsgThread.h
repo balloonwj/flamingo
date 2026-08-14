@@ -1,4 +1,23 @@
-﻿#pragma once
+﻿/**
+ *  重连登录 worker，SendMsgThread.h
+ *
+ *  本类原是 v1 的"发送队列线程"，各种请求（注册 / 改状态 / 发消息 / 心跳 / 建群
+ *  等）都投给它，由它序列化成 v1 报文发出。v2 改造后那些发送路径全部改走
+ *  CIUSocket 的 EnqueueFrame，构造这些请求对象的代码（v1 注册框 / 建群框 / 改密框、
+ *  v1 聊天窗、CFlamingoClient 的一批 v1 发送函数）已于 2026-08-14 删除。
+ *
+ *  现在它只剩一个用途：**把掉线自动重连的登录放到后台线程上跑**。
+ *  链路是 MainDlg 的重连定时器 → CFlamingoClient::Login() 投一个 CLoginRequest →
+ *  本线程 → HandleLogon → CIUSocket::Login()（走 v2 的 cmd_login）。
+ *  之所以还需要一个线程：CIUSocket::Login 是阻塞调用，要等服务端应答帧回来，
+ *  在 UI 线程上直接调会把界面卡住。
+ *
+ *  队列仍沿用 v1 的 CNetData 派生体系作为投递载体，仅因它现成可用；日后若要
+ *  彻底摆脱 v1 的数据结构，可把队列换成任务闭包，不影响外部调用方。
+ *
+ *  balloonwj@qq.com   2026-08-14（本轮 v1 清理后重写文件头）
+ */
+#pragma once
 #include <list>
 #include <vector>
 #include <mutex>
@@ -65,10 +84,6 @@ public:
 	void AddItem(CNetData* pItem);
 	void DeleteAllItems();
 	
-    BOOL AddBuddyMsg(UINT nFromUin, const tstring& strFromNickName, UINT nToUin, const tstring& strToNickName, time_t nTime, const tstring& strChatMsg, HWND hwndFrom = NULL);
-	BOOL AddGroupMsg(UINT nGroupId, time_t nTime, LPCTSTR lpMsg, HWND hwndFrom=NULL);
-	BOOL AddMultiMsg(const std::set<UINT> setAccountID, time_t nTime, LPCTSTR lpMsg, HWND hwndFrom=NULL);
-	BOOL AddSessMsg(UINT nGroupId, UINT nToUin, time_t nTime, LPCTSTR lpMsg);
 
 	virtual void Stop() override;
 
@@ -77,37 +92,12 @@ protected:
 
 private:
     void HandleItem(CNetData* pNetData);
-	void HandleRegister(const CRegisterRequest* pRegisterRequest);
     void HandleLogon(const CLoginRequest* pLoginRequest);
-    void HandleChangeUserStatus(const CChangeUserStatusRequest* pChangeUserStatusRequest);
-    void HandleGroupBasicInfo(const CGroupBasicInfoRequest* pGroupBasicInfo);
-	BOOL HandleSentChatMessage(const CSentChatMessage* pSentChatMessage);				
-	BOOL HandleSentConfirmImageMessage(const CSentChatConfirmImageMessage* pConfirmImageMessage);	//图片上传成功以后的确认信息
-	BOOL HandleHeartbeatMessage(const CHeartbeatMessageRequest* pHeartbeatRequest);
-	void HandleUpdateLogonUserInfoMessage(const CUpdateLogonUserInfoRequest* pRequest);
-	void HandleModifyPassword(const CModifyPasswordRequest* pModifyPassword);
-	void HandleCreateNewGroup(const CCreateNewGroupRequest* pCreateNewGroup);
 
-	BOOL HandleFontInfo(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);
-	BOOL HandleSysFaceId(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);
-	BOOL HandleShakeWindowMsg(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);
-	BOOL HandleCustomPic(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);
-	BOOL HandleFile(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);
-    BOOL HandleRemoteDesktop(LPCTSTR& p, tstring& strText, std::vector<CContent*>& arrContent);
-	BOOL CreateMsgContent(const tstring& strChatMsg, std::vector<CContent*>& arrContent);
 	
     //TODO: 这四个函数起始可以合并成一个函数
-    BOOL SendBuddyMsg(CMsgItem* lpMsgItem);			// 发送好友消息
-	BOOL SendGroupMsg(CMsgItem* lpMsgItem);			// 发送群消息
-	BOOL SendMultiMsg(CMsgItem* lpMsgItem);			// 群发消息
-    BOOL SendMultiChatMessage(const char* pszChatMsg, int nChatMsgLength, UINT* pAccountList, int nAccountNum);
-	BOOL SendSessMsg(CMsgItem* lpMsgItem);			// 发送群成员消息
     
 	
-	BOOL ProcessBuddyMsg(CBuddyMessage* pMsg);		//对发送的消息进行加工
-	BOOL ProcessMultiMsg(CMsgItem* pMsgItem);		//对群发消息进行加工
-	void AddItemToRecentSessionList(UINT uUserID, UINT uFaceID, PCTSTR pszNickName, PCTSTR pszText, time_t nMsgTime);		//向最近联系人列表中添加一项
-	std::wstring UnicodeToHexStr(const WCHAR* lpStr, BOOL bDblSlash);
 
 public:
 	CFlamingoClient*			m_lpFMGClient;

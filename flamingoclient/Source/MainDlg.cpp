@@ -45,7 +45,6 @@
 #include "MobileStatusDlg.h"
 #include "UserSessionData.h"
 #include "FontSelDlg.h"
-#include "CreateNewGroupDlg.h"
 #include "GDIFactory.h"
 #include "IULog.h"
 #include "Startup.h"
@@ -1067,8 +1066,6 @@ void CMainDlg::CloseDialog(int nVal)
     ::WTSUnRegisterSessionNotification(m_hWnd);
 
 
-    if (m_ModifyPasswordDlg.IsWindow())
-        m_ModifyPasswordDlg.DestroyWindow();
 
 
     m_TrayIcon.RemoveIcon();
@@ -1336,17 +1333,6 @@ void CMainDlg::OnMenu_NetSettings(UINT uNotifyCode, int nID, CWindow wndCtl)
     // 必须传 NULL，否则关掉这个小窗会把整个程序一起带走。与主面板开群管理窗 /
     // 资料窗的口径一致（见 CBalloonMainPanel 里的 CreateAndShow(NULL)）。
     m_BalloonNetSettingsWindow.CreateAndShow(NULL);
-}
-
-void CMainDlg::OnBtn_ModifyPassword(UINT uNotifyCode, int nID, CWindow wndCtl)
-{
-    m_ModifyPasswordDlg.m_pFMGClient = &m_FMGClient;
-    if (!m_ModifyPasswordDlg.IsWindow())
-        m_ModifyPasswordDlg.Create(NULL);
-
-    m_ModifyPasswordDlg.ShowWindow(SW_SHOW);
-    ::SetForegroundWindow(m_ModifyPasswordDlg.m_hWnd);
-    m_ModifyPasswordDlg.SetFocus();
 }
 
 
