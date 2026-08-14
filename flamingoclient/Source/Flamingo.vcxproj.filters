@@ -1415,12 +1415,6 @@
     <ClInclude Include="MultiChatMemberSelectionDlg.h">
       <Filter>UI</Filter>
     </ClInclude>
-    <ClInclude Include="NetRecvHandleTask.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="NetSendTask.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="Path.h">
       <Filter>Utils</Filter>
     </ClInclude>

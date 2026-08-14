@@ -1165,8 +1165,6 @@
     <ClInclude Include="ModifyPasswordDlg.h" />
     <ClInclude Include="MsgTipDlg.h" />
     <ClInclude Include="MultiChatMemberSelectionDlg.h" />
-    <ClInclude Include="NetRecvHandleTask.h" />
-    <ClInclude Include="NetSendTask.h" />
     <ClInclude Include="Path.h" />
     <ClInclude Include="PerformanceCounter.h" />
     <ClInclude Include="PicBarDlg.h" />
