@@ -19,7 +19,6 @@
 #include "../UserSessionData.h"      // FMG_MSG_LOGIN_RESULT / STATUS_ONLINE
 #include "../EncodeUtil.h"           // EncodeUtil::UnicodeToUtf8
 #include "../IULog.h"                // LOG_ERROR
-#include "../net/Msg.h"              // online_type_pc_online
 #include "../net/IUProtocolData.h"   // CLoginResult / LOGIN_FAILED 等
 #include "../net/IUSocket.h"         // CIUSocket
 #include "../net/LoginProtocolClient.h"  // v2 登录应答解析

@@ -9,7 +9,6 @@
 #include "FlamingoClient.h"
 #include "UserMgr.h"
 #include "File2.h"
-#include "net/Msg.h"
 #include "net/IUSocket.h"
 #include "net/ProtocolStream.h"
 #include "net/LoginProtocolClient.h"     // v2 登录应答解析（重连路径用）

@@ -27,7 +27,6 @@
 #include "Startup.h"
 #include "File2.h"
 #include "Path.h"
-#include "../net/Msg.h"
 #include <sstream>
 
 CFlamingoClient& CFlamingoClient::GetInstance()

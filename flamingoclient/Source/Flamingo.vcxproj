@@ -1389,7 +1389,6 @@
     <ClInclude Include="net\UpdateProtocolClient.h" />
     <ClInclude Include="ClientVersion.h" />
     <ClInclude Include="net\MessageProtocolClient.h" />
-    <ClInclude Include="net\Msg.h" />
     <ClInclude Include="net\ProfileProtocolClient.h" />
     <ClInclude Include="net\Protocol.h" />
     <ClInclude Include="net\ProtocolStream.h" />

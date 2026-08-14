@@ -50,7 +50,6 @@
 #include "EncodeUtil.h"
 #include "UIText.h"
 #include "PerformanceCounter.h"
-#include "net/Msg.h"
 #include <memory>                                          // std::unique_ptr（托盘菜单图标保活）
 #include "ImageEx.h"                                       // CImageEx（托盘菜单项图标）
 #include "BalloonMain/MainPanelTrayMenu.h"                 // BuildTrayMenuModel / TrayMenuId（托盘菜单行模型）

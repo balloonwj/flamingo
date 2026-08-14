@@ -2081,9 +2081,6 @@
     <ClInclude Include="net\MessageProtocolClient.h">
       <Filter>net</Filter>
     </ClInclude>
-    <ClInclude Include="net\Msg.h">
-      <Filter>net</Filter>
-    </ClInclude>
     <ClInclude Include="net\ProfileProtocolClient.h">
       <Filter>net</Filter>
     </ClInclude>
