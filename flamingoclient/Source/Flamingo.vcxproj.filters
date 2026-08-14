@@ -210,9 +210,6 @@
     <ClCompile Include="RecentListCtrl.cpp">
       <Filter>UI</Filter>
     </ClCompile>
-    <ClCompile Include="RecvMsgThread.cpp">
-      <Filter>Tasks</Filter>
-    </ClCompile>
     <ClCompile Include="RegisterDialog.cpp">
       <Filter>UI</Filter>
     </ClCompile>
@@ -1321,9 +1318,6 @@
     </ClInclude>
     <ClInclude Include="RecentListCtrl.h">
       <Filter>UI</Filter>
-    </ClInclude>
-    <ClInclude Include="RecvMsgThread.h">
-      <Filter>Tasks</Filter>
     </ClInclude>
     <ClInclude Include="RegisterDialog.h">
       <Filter>UI</Filter>

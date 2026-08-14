@@ -14,7 +14,6 @@
 #include "GroupProtocolClient.h"     // net::UpdateGroupInfoParams（SendUpdateGroupInfo 按值传引用，需完整类型）
 #include "FrameCrypto.h"             // net::IDENTITY_PUBLICKEY_BYTES（服务端公钥成员需完整尺寸）
 
-class CRecvMsgThread;
 
 //v2 协议帧头前置声明。本头文件被众多 .cpp 引用，其中部分仍包含旧
 //net/Msg.h；而 net/Protocol.h 与 Msg.h 的枚举同名冲突，故本头文件不能
@@ -39,7 +38,33 @@ private:
 public:
     static CIUSocket&  GetInstance();
 
-    void SetRecvMsgThread(CRecvMsgThread* pThread);
+    /**
+     *  登记 UI 代理窗口句柄。网络线程收到帧后一律用 PostMessage 把结果投给它，
+     *  再由 CFlamingoClient::ProxyWndProc 转到具体窗口 —— 网络线程不直接碰界面。
+     *  由 CFlamingoClient 在创建代理窗口后调用一次。
+     *    hWnd：代理窗口句柄；NULL 表示尚未创建，此后所有投递都会被静默跳过。
+     *
+     *  这两样东西（代理窗句柄、下面的网络错误标志）此前寄存在 v1 的
+     *  CRecvMsgThread 上，那个线程在 v2 下已收不到任何数据、2026-08-14 随 v1
+     *  清理一并删除，故搬到这里。
+     */
+    void SetUIProxyWnd(HWND hWnd);
+
+    /**
+     *  上报"网络已断"。向 UI 代理窗口投一条 FMG_MSG_NET_ERROR，由主窗口决定
+     *  是提示掉线还是起自动重连。
+     *
+     *  内部有去重标志：一次断线只上报一次，避免收发两侧同时发现断线时重复触发
+     *  重连。标志由 ResetNetError 在每次登录成功后复位。
+     */
+    void NotifyNetError();
+
+    /**
+     *  复位"网络已断"标志，使后续真实断线能再次经 NotifyNetError 上报。
+     *  由 CIUSocket::Login 收到成功应答帧后调用 —— 不复位的话，一次掉线或主动
+     *  离线之后标志一直是真，之后真断线就不再触发自动重连。
+     */
+    void ResetNetError();
 
     bool Init();
     void Uninit();
@@ -1232,5 +1257,13 @@ private:
     net::TransferOwnerRegistry      m_transferOwners;
     std::mutex                      m_transferOwnerMtx;
 
-	CRecvMsgThread*					m_pRecvMsgThread;
+    //UI 代理窗口句柄。网络线程把收到的消息 PostMessage 给它，由 ProxyWndProc
+    //转到具体窗口。由 CFlamingoClient 创建代理窗口后经 SetUIProxyWnd 登记，
+    //整个进程生命周期内只设一次；未设时为 NULL，投递会被静默跳过。
+    HWND                            m_hProxyWnd;
+
+    //"网络已断"去重标志：置真后 NotifyNetError 不再重复投递 FMG_MSG_NET_ERROR，
+    //由每次登录成功时的 ResetNetError 复位。收发两个方向可能同时发现断线，
+    //没有这个标志会重复触发自动重连。
+    bool                            m_bNetError;
 };

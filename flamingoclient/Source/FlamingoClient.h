@@ -4,7 +4,6 @@
 #include "UserConfig.h"
 #include "CheckNetworkStatusTask.h"
 #include "SendMsgThread.h"
-#include "RecvMsgThread.h"
 #include "FileTaskThread.h"
 #include "ImageTaskThread.h"
 #include "net/IUSocket.h"
@@ -167,9 +166,6 @@ private:
 	void OnChangeStatusResult(UINT message, WPARAM wParam, LPARAM lParam);
 	void OnTargetInfoChange(UINT message, WPARAM wParam, LPARAM lParam);
 
-	void OnInternal_GetBuddyData(UINT message, WPARAM wParam, LPARAM lParam);
-	void OnInternal_GetGroupData(UINT message, WPARAM wParam, LPARAM lParam);
-	void OnInternal_GetGMemberData(UINT message, WPARAM wParam, LPARAM lParam);
 	UINT OnInternal_GroupId2Code(UINT message, WPARAM wParam, LPARAM lParam);
 
 	BOOL CreateProxyWnd();		// 创建代理窗口
@@ -181,7 +177,6 @@ public:
 	CCheckNetworkStatusTask			m_CheckNetworkStatusTask;
 
     CSendMsgThread					m_SendMsgThread;
-    CRecvMsgThread                  m_RecvMsgThread;
     CFileTaskThread					m_FileTask;
     CImageTaskThread                m_ImageTask;
     

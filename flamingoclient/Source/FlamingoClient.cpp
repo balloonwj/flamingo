@@ -54,8 +54,6 @@ CFlamingoClient::CFlamingoClient(void)
 	m_bGroupMemberInfoAvailable = FALSE;
 
     m_SendMsgThread.m_lpUserMgr = &m_UserMgr;
-    m_RecvMsgThread.m_lpUserMgr = &m_UserMgr;
-    m_RecvMsgThread.m_pFMGClient = this;
     m_FileTask.m_lpFMGClient = this;
     m_ImageTask.m_lpFMGClient = this;
 }
@@ -79,11 +77,9 @@ bool CFlamingoClient::InitProxyWnd()
 
 bool CFlamingoClient::InitNetThreads()
 {
-    CIUSocket::GetInstance().SetRecvMsgThread(&m_RecvMsgThread);
     CIUSocket::GetInstance().Init();
 
     m_SendMsgThread.Start();
-    m_RecvMsgThread.Start();
 
     m_SendMsgThread.m_lpFMGClient = this;
 
@@ -103,13 +99,11 @@ void CFlamingoClient::Uninit()
 
     CIUSocket::GetInstance().Uninit();
     m_SendMsgThread.Stop();
-    m_RecvMsgThread.Stop();
 	m_FileTask.Stop();
     m_ImageTask.Stop();
 
     CIUSocket::GetInstance().Join();
     m_SendMsgThread.Join();
-    m_RecvMsgThread.Join();
 	m_FileTask.Join();
     m_ImageTask.Join();
 }
@@ -1601,56 +1595,6 @@ void CFlamingoClient::OnTargetInfoChange(UINT message, WPARAM wParam, LPARAM lPa
 	m_bGroupMemberInfoAvailable = FALSE;
 }
 
-void CFlamingoClient::OnInternal_GetBuddyData(UINT message, WPARAM wParam, LPARAM lParam)
-{
-	UINT nUTalkUin = (UINT)wParam;
-	RMT_BUDDY_DATA* lpBuddyData = (RMT_BUDDY_DATA*)lParam;
-	if (NULL == lpBuddyData)
-		return;
-
-	//企业版说明：数据源 v1 好友列表已删除，本查询恒等于"查不到"。调用方
-	//（CRecvMsgThread::GetBuddyData）本来就按"取不到就退回用账号ID显示"处理，
-	//故这里直接返回，保持同一语义。
-	(void)nUTalkUin;
-}
-
-void CFlamingoClient::OnInternal_GetGroupData(UINT message, WPARAM wParam, LPARAM lParam)
-{
-	UINT nGroupCode = (UINT)wParam;
-	RMT_GROUP_DATA* lpGroupData = (RMT_GROUP_DATA*)lParam;
-	if (NULL == lpGroupData)
-		return;
-
-	CGroupInfo* lpGroupInfo = m_UserMgr.m_GroupList.GetGroupByCode(nGroupCode);
-	if (NULL == lpGroupInfo)
-		return;
-
-	lpGroupData->bHasGroupInfo = lpGroupInfo->m_bHasGroupInfo;
-	lpGroupData->nGroupNum = lpGroupInfo->m_nGroupNumber;
-}
-
-void CFlamingoClient::OnInternal_GetGMemberData(UINT message, WPARAM wParam, LPARAM lParam)
-{
-	RMT_GMEMBER_REQ* lpGMemberReq = (RMT_GMEMBER_REQ*)wParam;
-	RMT_BUDDY_DATA* lpGMemberData = (RMT_BUDDY_DATA*)lParam;
-	if (NULL == lpGMemberReq || NULL == lpGMemberData)
-		return;
-
-	CGroupInfo* lpGroupInfo = m_UserMgr.m_GroupList.GetGroupByCode(lpGMemberReq->nGroupCode);
-	if (NULL == lpGroupInfo)
-		return;
-
-	CBuddyInfo* lpBuddyInfo = lpGroupInfo->GetMemberByUin(lpGMemberReq->nUTalkUin);
-	if (NULL == lpBuddyInfo)
-		return;
-
-	lpGMemberData->nUTalkNum = lpBuddyInfo->m_uUserID;
-
-	int nMaxCnt = sizeof(lpGMemberData->szNickName) / sizeof(TCHAR);
-	_tcsncpy(lpGMemberData->szNickName, lpBuddyInfo->m_strNickName.c_str(), nMaxCnt);
-	lpGMemberData->szNickName[nMaxCnt-1] = _T('\0');
-}
-
 UINT CFlamingoClient::OnInternal_GroupId2Code(UINT message, WPARAM wParam, LPARAM lParam)
 {
 	CGroupInfo* lpGroupInfo = m_UserMgr.m_GroupList.GetGroupById(lParam);
@@ -1833,7 +1777,8 @@ BOOL CFlamingoClient::CreateProxyWnd()
 
 	::SetWindowLongPtr(hWnd, GWLP_USERDATA, (LONG_PTR)this);
 	
-    m_RecvMsgThread.SetProxyWnd(hWnd);
+    //网络线程把收到的帧 PostMessage 给代理窗口，由 ProxyWndProc 转到具体窗口。
+    CIUSocket::GetInstance().SetUIProxyWnd(hWnd);
     m_UserMgr.m_hProxyWnd = hWnd;
 
 	return TRUE;
@@ -2568,15 +2513,6 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 		lpFMGClient->OnTargetInfoChange(message, wParam, lParam);
 		break;
 
-	case FMG_MSG_INTERNAL_GETBUDDYDATA:
-		lpFMGClient->OnInternal_GetBuddyData(message, wParam, lParam);
-		break;
-	case FMG_MSG_INTERNAL_GETGROUPDATA:
-		lpFMGClient->OnInternal_GetGroupData(message, wParam, lParam);
-		break;
-	case FMG_MSG_INTERNAL_GETGMEMBERDATA:
-		lpFMGClient->OnInternal_GetGMemberData(message, wParam, lParam);
-		break;
 	case FMG_MSG_INTERNAL_GROUPID2CODE:
 		return lpFMGClient->OnInternal_GroupId2Code(message, wParam, lParam);
 		break;

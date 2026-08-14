@@ -311,7 +311,6 @@
     <ClCompile Include="Path.cpp" />
     <ClCompile Include="PerformanceCounter.cpp" />
     <ClCompile Include="RecentListCtrl.cpp" />
-    <ClCompile Include="RecvMsgThread.cpp" />
     <ClCompile Include="RegisterDialog.cpp" />
     <ClCompile Include="SendMsgThread.cpp" />
     <ClCompile Include="Startup.cpp" />
@@ -1134,7 +1133,6 @@
     <ClInclude Include="Path.h" />
     <ClInclude Include="PerformanceCounter.h" />
     <ClInclude Include="RecentListCtrl.h" />
-    <ClInclude Include="RecvMsgThread.h" />
     <ClInclude Include="RegisterDialog.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="SendMsgThread.h" />

@@ -1663,10 +1663,10 @@ LRESULT CMainDlg::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
         //m_FMGClient.RequestServerTime();
 
 
-        //打开接收线程的 UI 闸门（放行登录期间缓存下来的消息）。原先靠
-        //FMG_MSG_UPDATE_BUDDY_LIST 的处理函数来开，那条消息已随 v1 好友列表一并删除，
-        //故改为登录成功时在此直接打开。
-        m_FMGClient.m_RecvMsgThread.EnableUI(true);
+        //此处原先要打开 v1 接收线程的"UI 闸门"，放行登录期间缓存下来的聊天消息。
+        //那个线程（CRecvMsgThread）在 v2 下收不到任何数据，2026-08-14 随 v1 清理
+        //一并删除，闸门与缓存也就不存在了：v2 的消息由 CIUSocket 收到即投给代理
+        //窗口，不经过任何缓存队列。
 
         //TODO: 这里调用时，网络线程一定都启动了吗？
         m_FMGClient.StartCheckNetworkStatusTask();

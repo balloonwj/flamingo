@@ -1,6 +1,7 @@
 ﻿#include "stdafx.h"
 #include <sstream>
 #include "SendMsgThread.h"
+#include "UserSessionData.h"
 #include "IULog.h"
 #include "MiniBuffer.h"
 #include "Path.h"
@@ -1578,4 +1579,181 @@ std::wstring CSendMsgThread::UnicodeToHexStr(const WCHAR* lpStr, BOOL bDblSlash)
     }
 
     return strRet;
+}
+
+// ===================================================================
+// 以下三个写聊天记录的自由函数与它们依赖的两个辅助，原先定义在
+// RecvMsgThread.cpp 里。那个文件是 v1 收消息线程，在 v2 下收不到任何数据，
+// 已于 2026-08-14 删除；本文件是这三个函数仅存的调用方（声明本来就在
+// SendMsgThread.h 里），故把定义一并挪来。本文件将来随 v1 发送链路一起
+// 清理时，它们也随之消失，不必再找新家。
+// ===================================================================
+tstring FormatContent(std::vector<CContent*>& arrContent)
+{
+    LPCTSTR lpFontFmt = _T("/o[\"%s,%d,%s,%d,%d,%d\"]");
+    LPCTSTR lpFaceFmt = _T("/f[\"%d\"]");
+    LPCTSTR lpCFaceFmt = _T("/c[\"%s\"]");
+    LPCTSTR lpShakeWindowFmt = _T("/s[\"1\"]");
+    //LPCTSTR lpCTextFmt = _T("/t[\"%s\"]");
+    LPCTSTR lpFileFmt = _T("/i[\"%s\"]");
+    TCHAR cBuf[1024];
+    TCHAR cColor[32];
+    tstring strMsg, strText;
+
+    for (int i = 0; i < (int)arrContent.size(); i++)
+    {
+        CContent* lpContent = arrContent[i];
+        if (NULL == lpContent)
+            continue;
+
+        switch (lpContent->m_nType)
+        {
+        case CONTENT_TYPE_FONT_INFO:
+        {
+            memset(cBuf, 0, sizeof(cBuf));
+            memset(cColor, 0, sizeof(cColor));
+
+            RGBToHexStr(lpContent->m_FontInfo.m_clrText, cColor, sizeof(cColor) / sizeof(TCHAR));
+
+            wsprintf(cBuf, lpFontFmt, lpContent->m_FontInfo.m_strName.c_str(),
+                lpContent->m_FontInfo.m_nSize, cColor,
+                lpContent->m_FontInfo.m_bBold, lpContent->m_FontInfo.m_bItalic,
+                lpContent->m_FontInfo.m_bUnderLine);
+            strMsg += cBuf;
+        }
+        break;
+
+        case CONTENT_TYPE_TEXT:
+        {
+            strText = lpContent->m_strText;
+            Replace(strText, _T("/"), _T("//"));
+            //wsprintf(cBuf, lpCTextFmt, strText.c_str());
+            //strMsg += cBuf;
+            strMsg += strText;
+        }
+        break;
+
+        case CONTENT_TYPE_FACE:
+        {
+            memset(cBuf, 0, sizeof(cBuf));
+            wsprintf(cBuf, lpFaceFmt, lpContent->m_nFaceId);
+            strMsg += cBuf;
+        }
+        break;
+
+        case CONTENT_TYPE_CHAT_IMAGE:
+        {
+            if (!lpContent->m_CFaceInfo.m_strFilePath.empty())
+            {
+                memset(cBuf, 0, sizeof(cBuf));
+                wsprintf(cBuf, lpCFaceFmt, lpContent->m_CFaceInfo.m_strFileName.c_str());
+                strMsg += cBuf;
+            }
+        }
+        break;
+
+        case CONTENT_TYPE_SHAKE_WINDOW:
+        {
+            strMsg += lpShakeWindowFmt;
+        }
+        break;
+
+        case CONTENT_TYPE_FILE:
+        {
+            strMsg += _T("发送文件：[");
+            memset(cBuf, 0, sizeof(cBuf));
+            wsprintf(cBuf, lpFileFmt, lpContent->m_CFaceInfo.m_strFileName.c_str());
+            strMsg += cBuf;
+            strMsg += _T("]");
+        }
+        break;
+        }
+    }
+
+    return strMsg;
+}
+
+BOOL CreateMsgLogFile(CMessageLogger& msgLogger, const tstring& strFileName)
+{
+    tstring strPath = Hootina::CPath::GetDirectoryName(strFileName.c_str());
+    if (!Hootina::CPath::IsDirectoryExist(strPath.c_str()))
+        Hootina::CPath::CreateDirectory(strPath.c_str(), NULL);
+
+    msgLogger.SetMsgLogFileName(strFileName.c_str());
+    return msgLogger.CreateMsgLogFile();
+}
+
+// 写入一条好友消息记录
+void WriteBuddyMsgLog(CUserMgr* lpUserMgr, UINT nUTalkNum,
+    LPCTSTR lpNickName, BOOL bSelf, CBuddyMessage* lpMsg)
+{
+    if (NULL == lpUserMgr || 0 == nUTalkNum || NULL == lpMsg)
+        return;
+
+    TCHAR szNickName[32] = { 0 };
+    if (NULL == lpNickName || NULL == *lpNickName)
+    {
+        wsprintf(szNickName, _T("%u"), nUTalkNum);
+        lpNickName = szNickName;
+    }
+
+    tstring strContent = FormatContent(lpMsg->m_arrContent);
+
+    if (!lpUserMgr->m_MsgLogger.IsMsgLogFileValid())
+        CreateMsgLogFile(lpUserMgr->m_MsgLogger, lpUserMgr->GetMsgLogFullName());
+
+    lpUserMgr->m_MsgLogger.Lock();
+    lpUserMgr->m_MsgLogger.WriteBuddyMsgLog(nUTalkNum, lpNickName,
+        lpMsg->m_nTime, bSelf, strContent.c_str());
+    lpUserMgr->m_MsgLogger.UnLock();
+}
+
+// 写入一条群消息记录
+void WriteGroupMsgLog(CUserMgr* lpUserMgr, UINT nGroupNum, UINT nUTalkNum,
+    LPCTSTR lpNickName, CBuddyMessage* lpMsg)
+{
+    if (NULL == lpUserMgr || 0 == nGroupNum || NULL == lpMsg)
+        return;
+
+    TCHAR szNickName[32] = { 0 };
+    if (NULL == lpNickName || NULL == *lpNickName)
+    {
+        wsprintf(szNickName, _T("%u"), nUTalkNum);
+        lpNickName = szNickName;
+    }
+
+    tstring strContent = FormatContent(lpMsg->m_arrContent);
+
+    if (!lpUserMgr->m_MsgLogger.IsMsgLogFileValid())
+        CreateMsgLogFile(lpUserMgr->m_MsgLogger, lpUserMgr->GetMsgLogFullName());
+
+    lpUserMgr->m_MsgLogger.Lock();
+    lpUserMgr->m_MsgLogger.WriteGroupMsgLog(nGroupNum, nUTalkNum,
+        lpNickName, lpMsg->m_nTime, strContent.c_str());
+    lpUserMgr->m_MsgLogger.UnLock();
+}
+
+// 写入一条临时会话(群成员)消息记录
+void WriteSessMsgLog(CUserMgr* lpUserMgr, UINT nUTalkNum,
+    LPCTSTR lpNickName, BOOL bSelf, CSessMessage* lpMsg)
+{
+    if (NULL == lpUserMgr || 0 == nUTalkNum || NULL == lpMsg)
+        return;
+
+    TCHAR szNickName[32] = { 0 };
+    if (NULL == lpNickName || NULL == *lpNickName)
+    {
+        wsprintf(szNickName, _T("%u"), nUTalkNum);
+        lpNickName = szNickName;
+    }
+
+    tstring strContent = FormatContent(lpMsg->m_arrContent);
+
+    if (!lpUserMgr->m_MsgLogger.IsMsgLogFileValid())
+        CreateMsgLogFile(lpUserMgr->m_MsgLogger, lpUserMgr->GetMsgLogFullName());
+
+    lpUserMgr->m_MsgLogger.Lock();
+    lpUserMgr->m_MsgLogger.WriteSessMsgLog(nUTalkNum, lpNickName,
+        lpMsg->m_nTime, bSelf, strContent.c_str());
+    lpUserMgr->m_MsgLogger.UnLock();
 }
