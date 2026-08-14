@@ -964,7 +964,7 @@ public:
         memberReq.isprimary   = 1;
         memberReq.memberorder = 0;
 
-        //注意 DepartmentManager 用的是 Msg.h 那套旧错误码，与本文件使用的 Protocol.h
+        //注意 DepartmentManager 用的是 AdminApiCodes.h 那套旧错误码，与本文件使用的 Protocol.h
         //新错误码数值并不通用，因此这里只把它折成成功/失败，绝不向上透传原始数值。
         int32_t code = Singleton<DepartmentManager>::Instance().addMember(memberReq);
         return code == 0;

@@ -31,7 +31,7 @@ struct MessageRecord;
 //与上面几个前向声明同理：本头文件不方便再多引一个业务头，用到实体的地方都在 .cpp 里
 struct FolderTransferSessionInfo;
 //v2 帧头，定义在 Protocol.h；此处仅按 const 引用传递。
-//注意<u>不能</u>在本头文件里直接包含 Protocol.h ——它与遗留的 v1 协议头 Msg.h
+//注意<u>不能</u>在本头文件里直接包含 Protocol.h ——它与遗留的 v1 协议头 AdminApiCodes.h
 //定义了同名的 msg_type / error_code 等枚举，同时进一个翻译单元会重定义冲突。
 struct frame_header;
 

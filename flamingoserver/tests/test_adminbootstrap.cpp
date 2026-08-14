@@ -23,7 +23,7 @@
 
 #include "doctest.h"
 #include "../chatserversrc/AdminManager.h"
-#include "../chatserversrc/Msg.h"           //error_code
+#include "../chatserversrc/AdminApiCodes.h"           //error_code
 #include "../dbapi/DbConfig.h"
 #include "../dbapi/IDatabase.h"
 #include "../dbapi/DbFactory.h"

@@ -147,7 +147,7 @@ public:
      *  @param enterpriseId 新部门所属企业ID（取操作者所属企业）。
      *  @param req          部门操作请求，使用其 parentdeptid/deptname/deptdesc/leaderuserid/deptorder。
      *  @param outDeptId    成功时输出服务器分配的新部门ID。
-     *  @return 错误码，0 表示成功，取值见 Msg.h 的 enum error_code。
+     *  @return 错误码，0 表示成功，取值见 AdminApiCodes.h 的 enum error_code。
      *
      *  关于 parentdeptid 为 0：整棵组织架构树的唯一根是"公司根部门"，业务上不再有
      *  第二个顶级部门。因此 parentdeptid 传 0 时，本方法会把新部门自动挂到该企业的
@@ -225,7 +225,7 @@ public:
      *  @param enterpriseId 租户过滤：非0时只重排该企业的部门；0表示不按企业过滤。
      *  @param parentDeptId 这批同级部门的父部门ID；0表示顶级部门。
      *  @param orderedIds   按目标先后顺序排列的部门ID数组。
-     *  @return 错误码，0 表示成功，取值见 Msg.h 的 enum error_code。
+     *  @return 错误码，0 表示成功，取值见 AdminApiCodes.h 的 enum error_code。
      */
     int32_t reorderDepartments(int64_t enterpriseId, int64_t parentDeptId,
                                const std::vector<int64_t>& orderedIds);

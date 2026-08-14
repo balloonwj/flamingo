@@ -650,7 +650,7 @@
     <ClInclude Include="..\chatserversrc\MonitorSession.h">
       <Filter>chatserversrc\core</Filter>
     </ClInclude>
-    <ClInclude Include="..\chatserversrc\Msg.h">
+    <ClInclude Include="..\chatserversrc\AdminApiCodes.h">
       <Filter>chatserversrc\core</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\TcpSession.h">

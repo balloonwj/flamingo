@@ -43,7 +43,7 @@
 //邀请超时会话的状态推送与留记录已收口到 ChatSession::finishFolderTransferSession，
 //本文件不再直接构造报文；FolderTransferProtocol.h 仍要留着 —— 超时清理用到的
 //folder_state_timeout 与 error_code_folder_invite_timeout 定义在 Protocol.h，
-//而本文件正是经它间接引入 Protocol.h 的（ChatSession.h 因与遗留的 Msg.h 枚举同名，
+//而本文件正是经它间接引入 Protocol.h 的（ChatSession.h 因与遗留的 AdminApiCodes.h 枚举同名，
 //刻意不包含 Protocol.h）
 #include "FolderTransferManager.h"
 #include "FolderTransferProtocol.h"

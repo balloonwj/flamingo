@@ -178,7 +178,7 @@ public:
      *  @param outUserId       输出新用户ID。
      *  @param outInitPassword 输出生成的明文初始密码（供控制台展示给用户）。
      *  @param outUsername     输出自动生成的登录账号（供控制台展示给用户）。
-     *  @return 错误码，0 表示成功，取值见 Msg.h 的 enum error_code。
+     *  @return 错误码，0 表示成功，取值见 AdminApiCodes.h 的 enum error_code。
      */
     int32_t createEmployee(const CreateEmployeeReq& req, int64_t& outUserId,
                            std::string& outInitPassword, std::string& outUsername);

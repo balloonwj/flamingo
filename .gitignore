@@ -51,6 +51,13 @@ flamingoclient/Bin/Logs/
 *.lai
 *.la
 *.a
+
+# 例外：deps 下的第三方库产物是随仓库一起提交的（见 flamingoserver/deps/README.txt，
+# 克隆下来不必先自己编依赖库）。Windows 的 .lib 不受上面 *.a 影响，Linux 的 .a 会被
+# 它一并吞掉，故在此显式放行 —— 此前 libsodium 的 Linux 静态库就是因为这条规则
+# 一直没能进版本库，Linux 上克隆完仍得自己编一遍。
+!flamingoserver/deps/libsodium/lib/linux/*.a
+!flamingoserver/deps/mariadb-connector/lib/linux/*.a
 *.sbr
 *.idb
 *.obj
@@ -140,6 +147,7 @@ flamingoserver/chatserver
 flamingoserver/fileserver
 flamingoserver/imgserver
 flamingoserver/flamingo_tests
+flamingoserver/flamingo_tests_mysql
 
 # Linux（含 WSL）下 out-of-source 构建的输出目录：
 #     cmake -S . -B build-linux && make -C build-linux

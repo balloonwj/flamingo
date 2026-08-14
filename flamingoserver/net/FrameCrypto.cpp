@@ -23,7 +23,7 @@
 
 #include "../jsoncpp1.9.0/json.h"
 //cmd_handshake 与 frame_flag_encrypted。只在 .cpp 里包含：Protocol.h 与遗留的
-//v1 协议头 Msg.h 定义了同名枚举，若放进 FrameCrypto.h 会污染包含它的会话头文件。
+//v1 协议头 AdminApiCodes.h 定义了同名枚举，若放进 FrameCrypto.h 会污染包含它的会话头文件。
 #include "../chatserversrc/Protocol.h"
 #include "FramePayload.h"
 

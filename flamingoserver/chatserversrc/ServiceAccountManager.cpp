@@ -5,7 +5,7 @@
 #include "ServiceAccountManager.h"
 #include <memory>
 #include <stdio.h>
-#include "Msg.h"
+#include "AdminApiCodes.h"
 #include "../dbapi/IDatabase.h"
 #include "../dbapi/DbFactory.h"
 #include "../dbapi/DbConfig.h"

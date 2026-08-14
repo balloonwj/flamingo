@@ -6,7 +6,7 @@
 #include <memory>
 #include <stdio.h>
 #include <time.h>
-#include "Msg.h"
+#include "AdminApiCodes.h"
 #include "../dbapi/IDatabase.h"
 #include "../dbapi/DbFactory.h"
 #include "../dbapi/DbConfig.h"

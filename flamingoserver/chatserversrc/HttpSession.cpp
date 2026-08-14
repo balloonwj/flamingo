@@ -16,7 +16,7 @@
 #include "../utils/StringUtil.h"
 #include "../utils/URLEncodeUtil.h"
 #include "../jsoncpp1.9.0/json.h"
-#include "Msg.h"
+#include "AdminApiCodes.h"
 #include "ChatServer.h"
 #include "UserManager.h"
 #include "BussinessLogic.h"
@@ -30,7 +30,7 @@
 #include "AnnouncementManager.h"
 #include "ServiceAccountManager.h"
 
-//被踢下线原因，与 Protocol.h 的 enum kickout_reason 逐条同值。本文件属 Msg.h 世界、
+//被踢下线原因，与 Protocol.h 的 enum kickout_reason 逐条同值。本文件属 AdminApiCodes.h 世界、
 //引不进 Protocol.h（两者的 msg_type / error_code 枚举冲突），而这些值要作为参数交给
 //ChatServer::kickUserSessions / kickEnterpriseSessions（Protocol.h 世界）下发，故在此
 //显式对齐取值。改 Protocol.h 里那些枚举值时，这里必须同步。
@@ -383,7 +383,7 @@ void HttpSession::onRegisterResponse(const std::string& data, const std::shared_
         makeupResponse(retData, response);
         conn->send(response);
 
-        LOGI("Response to client: cmd=msg_type_register, data: %s, client: %s", retData.c_str(), conn->peerAddress().toIpPort().c_str());
+        LOGI("Response to client: http register, data: %s, client: %s", retData.c_str(), conn->peerAddress().toIpPort().c_str());
     }
 }
 
@@ -1482,7 +1482,7 @@ static Json::Value EmployeeDetailToJson(const EmployeeDetail& e)
 //线的会话数。
 //
 //实际工作委托给 ChatServer::kickUserSessions —— 组 cmd_kickout 报文要用 Protocol.h
-//的 cmd 与 reason 取值，本文件属 Msg.h 世界、引不进 Protocol.h。历史上这里是自己
+//的 cmd 与 reason 取值，本文件属 AdminApiCodes.h 世界、引不进 Protocol.h。历史上这里是自己
 //遍历会话并 forceClose 的，那样客户端只会当成网络断线去自动重连，看不到下线提示、
 //也不退回登录窗（2026-08-11 现场：删企业后客户端自动重连）。
 static int32_t KickUserSessions(int64_t userId, int32_t clientTypeFilter, int32_t reason)
@@ -3004,8 +3004,8 @@ void HttpSession::onAdminGroupCreate(const std::string& body, const std::shared_
         return;
     }
 
-    //群协议与群存储属于 v2（Protocol.h）世界，交给 ChatServer 编排，避免本文件引入会与 Msg.h
-    //冲突的 Protocol.h；这里只负责 token / 企业裁决 / 审计 / 应答（均用 Msg.h 的错误码）。
+    //群协议与群存储属于 v2（Protocol.h）世界，交给 ChatServer 编排，避免本文件引入会与 AdminApiCodes.h
+    //冲突的 Protocol.h；这里只负责 token / 企业裁决 / 审计 / 应答（均用 AdminApiCodes.h 的错误码）。
     int64_t newGroupId = 0;
     AdminCreateGroupOutcome outcome =
         Singleton<ChatServer>::Instance().adminCreateGroup(enterpriseId, body, newGroupId);
@@ -3052,7 +3052,7 @@ void HttpSession::onAdminGroupCreate(const std::string& body, const std::shared_
 // 故本模块没有上传接口：scanpackages 把目录里的候选包连同大小与 MD5 列出来，
 // 管理员从中挑一个，这两个值不需要人工输入。
 //
-// 注意错误码：本文件用的是 Msg.h 里的 error_code（v1 那一套，admin 接口文档即按它
+// 注意错误码：本文件用的是 AdminApiCodes.h 里的 error_code（v1 那一套，admin 接口文档即按它
 // 编写），而 ClientVersionManager 返回的是 Protocol.h 里的 error_code。两套枚举不能
 // 在同一个编译单元里共存，故这里<u>不转发</u> manager 的原始码，一律回
 // error_code_unknown 并附一句能看懂的英文原因。

@@ -1,9 +1,9 @@
 ﻿/**
  *  FlamingoIM v2 通信协议定义：帧头、消息类型、错误码及各类枚举。
  *
- *  本文件是客户端与服务端 v2 协议的单一事实来源，是旧版 Msg.h 的后继。
+ *  本文件是客户端与服务端 v2 协议的单一事实来源，是旧版 Msg.h（现已缩减改名为 AdminApiCodes.h）的后继。
  *  完整设计见 docs/协议设计-v2.md。v1 与 v2 协议不兼容，迁移期内本文件
- *  不得与旧版 Msg.h 在同一编译单元（.cpp）内同时包含，否则枚举名冲突。
+ *  不得与 AdminApiCodes.h 在同一编译单元（.cpp）内同时包含，否则 error_code 枚举名冲突。
  *
  *  典型用法：帧层用 frame_header 收发；消息层按 msg_type 分发，包体为
  *  UTF-8 JSON 文本（不带 BOM）。
@@ -332,7 +332,7 @@ enum error_code
     error_code_enterprise_disabled = 408,  //企业存在但不可用（f_status 为 0 待审核或 2 已停用）；注册时禁止加入这类企业
     error_code_enterprise_no_root_dept = 409, //企业存在但尚未建立公司根部门（f_root_dept_id 为 0），新员工无处可挂，需运维补建
     //说明：企业"全称重名"没有在本表里占位。v2 客户端协议不含任何新建企业的命令，
-    //建企业只走 admin 控制台的 HTTP 接口，那条链路用的是 Msg.h 里的
+    //建企业只走 admin 控制台的 HTTP 接口，那条链路用的是 AdminApiCodes.h 里的
     //error_code_enterprise_nameexist(119)。这里不留一个服务端永远不会下发的码，
     //免得客户端写错误码映射表时凭空多出一个死分支。
 

@@ -5,7 +5,7 @@
 #include "EnterpriseManager.h"
 #include <memory>
 #include <stdio.h>
-#include "Msg.h"
+#include "AdminApiCodes.h"
 #include "AdminManager.h"
 #include "DepartmentManager.h"
 #include "../base/Singleton.h"

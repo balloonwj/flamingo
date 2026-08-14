@@ -479,8 +479,8 @@ void ChatServer::broadcastAnnouncementPublished(int64_t announcementId)
 
 int32_t ChatServer::recallAnnouncementAndNotify(int64_t announcementId)
 {
-    //与 Msg.h 的 error_code_unknown 同值。本文件属 Protocol.h 世界、引不进 Msg.h
-    //（两者的 error_code 枚举有冲突），而返回值要交给 HttpSession 按 Msg.h 的语义
+    //与 AdminApiCodes.h 的 error_code_unknown 同值。本文件属 Protocol.h 世界、引不进 AdminApiCodes.h
+    //（两者的 error_code 枚举有冲突），而返回值要交给 HttpSession 按 AdminApiCodes.h 的语义
     //解释后回给管理控制台，故在此显式对齐取值。
     const int32_t ANNOUNCEMENT_ERR_UNKNOWN = 1;
 

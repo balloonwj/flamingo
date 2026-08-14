@@ -120,7 +120,7 @@ public:
      *  @param senderAdminId 操作管理员ID（新建时记为发布者）。
      *  @param senderName    操作管理员姓名。
      *  @param outId         输出公告ID（新建时为新分配的ID）。
-     *  @return 错误码，0 表示成功，取值见 Msg.h 的 enum error_code。
+     *  @return 错误码，0 表示成功，取值见 AdminApiCodes.h 的 enum error_code。
      */
     int32_t saveAnnouncement(const SaveAnnouncementReq& req, int64_t senderAdminId,
                              const std::string& senderName, int64_t& outId);

@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <atomic>
-#include "Msg.h"
+#include "AdminApiCodes.h"
 #include "../dbapi/IDatabase.h"
 #include "../dbapi/DbFactory.h"
 #include "../dbapi/DbConfig.h"

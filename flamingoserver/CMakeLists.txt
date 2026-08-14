@@ -31,16 +31,29 @@ set(LIBSODIUM_LIB ${PROJECT_SOURCE_DIR}/deps/libsodium/lib/linux/libsodium.a)
 include_directories(${LIBSODIUM_INCLUDE_DIR})
 
 if (WITH_MYSQL)
-    # 推荐使用 CentOS 7.0 及以上系统
-    # CentOS 7.0 及以上系统默认安装的是mariadb，安装方法
-    # yum install mariadb-server mariadb mariadb-devel
-    # CentOS 7.0 以下系统默认安装mysql，安装方法：
-    # yum install mysql-server mysql mysql-devel
-    find_library(MYSQL_LIB libmysqlclient.so /usr/lib64/mysql/)
-    #如果你的数据库是mariadb，你还需要安装mariadb-devel库；如果你的数据库是mysql，你需要安装mysql-devel，否则会出现如下错误提示。
-    IF (NOT MYSQL_LIB)
-        MESSAGE(FATAL_ERROR "mysqlclient not found. If your mysql is mariadb, please install mariadb-devel otherwise install mysql-devel.")
-    ENDIF(NOT MYSQL_LIB)
+    # MySQL 客户端的头文件用随仓库自带的那份（MariaDB Connector/C 3.4.9），
+    # 与 Windows 侧四个 vcxproj 指向的是同一份，两个平台的声明因此不会走岔。
+    # 这样 Linux 上不装 mariadb-devel / mysql-devel 也能编译 —— 那两个包在不同发行版
+    # 里的头文件路径各不相同（/usr/include/mysql、/usr/include/mariadb 都有），
+    # 交给系统去找反而是构建失败的常见原因。来源与重建方式见 deps/README.txt。
+    set(MARIADB_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/deps/mariadb-connector/include)
+    include_directories(${MARIADB_INCLUDE_DIR})
+
+    # 客户端库也用随仓库自带的那份静态库，不再依赖系统装没装 mysql-devel /
+    # mariadb-devel。做法与上面的 libsodium 一致：用完整路径链接，不写库名，
+    # 免得链接器在系统目录里找到另一份版本不同的 libmysqlclient。
+    # 该库由 deps/mariadb-connector/build/build_mariadb_connector_linux.sh 编出。
+    set(MARIADB_LIB ${PROJECT_SOURCE_DIR}/deps/mariadb-connector/lib/linux/libmariadbclient.a)
+    IF (NOT EXISTS ${MARIADB_LIB})
+        MESSAGE(FATAL_ERROR "${MARIADB_LIB} not found. Run deps/mariadb-connector/build/build_mariadb_connector_linux.sh to build it, or configure with -DWITH_MYSQL=OFF for the sqlite-only variant.")
+    ENDIF()
+
+    # 静态库自身不含这些实现，链接可执行文件时要一并带上：
+    #   ssl / crypto  连接器编译时选的 TLS 后端是 OPENSSL
+    #   z             连接器自带的 zlib 用于压缩协议
+    #   dl            认证插件按 dlopen 的方式加载（本仓库全部编成静态，仍需该符号）
+    # 顺序有讲究：依赖方在前、被依赖方在后，GNU ld 按此顺序解析静态库。
+    set(MYSQL_LIB ${MARIADB_LIB} ssl crypto dl)
 else()
     # 用「关掉时才定义宏」的写法而不是「打开时定义」：这样 Windows 的 vcxproj 不用改，
     # 默认路径上也不存在「忘了定义宏导致两个后端都没编进去」这种失败模式
@@ -217,7 +230,7 @@ add_executable(chatserver ${net_srcs} ${json_srcs}  ${chatserver_srcs} ${dbapi_s
 #后者用于 SQLITE_THREADSAFE 的互斥实现。sqlite3.c 走 C 编译器，拿不到 CMAKE_CXX_FLAGS
 #里的 -pthread，所以这里显式链上，不依赖链接阶段的传递
 if (WITH_MYSQL)
-    TARGET_LINK_LIBRARIES(chatserver mysqlclient dl pthread ${LIBSODIUM_LIB})
+    TARGET_LINK_LIBRARIES(chatserver ${MYSQL_LIB} dl pthread ${LIBSODIUM_LIB})
 else()
     TARGET_LINK_LIBRARIES(chatserver dl pthread ${LIBSODIUM_LIB})
 endif()

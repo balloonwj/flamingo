@@ -33,7 +33,7 @@
 
 #include "FrameCrypto.h"   //FrameCipher
 
-//本头文件<u>刻意不包含 chatserversrc/Protocol.h</u>：它与遗留的 v1 协议头 Msg.h
+//本头文件<u>刻意不包含 chatserversrc/Protocol.h</u>：它与遗留的 v1 协议头 AdminApiCodes.h
 //定义了同名的 msg_type / error_code 等枚举，同时进一个翻译单元会重定义冲突。
 //故接口只收发基本类型，帧标志位等常量在 .cpp 里用。
 

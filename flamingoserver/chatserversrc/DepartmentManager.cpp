@@ -6,7 +6,7 @@
 #include <memory>
 #include <stdio.h>
 #include "DepartmentPath.h"
-#include "Msg.h"
+#include "AdminApiCodes.h"
 #include "EnterpriseManager.h"
 #include "../base/Singleton.h"
 #include "../dbapi/IDatabase.h"

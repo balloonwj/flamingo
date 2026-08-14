@@ -39,10 +39,27 @@
 
     ws2_32.lib shlwapi.lib crypt32.lib bcrypt.lib secur32.lib
 
-Linux 侧不用这里的东西：CMake 构建要么用系统的 libmysqlclient（WITH_MYSQL=ON），
-要么干脆关掉 MySQL 后端只跑 SQLite（WITH_MYSQL=OFF，联调常用）。
+Linux 侧同样用这里的产物（2026-08-14 起）：lib/linux/libmariadbclient.a，头文件与
+Windows 共用 include/mysql 那一份。CMakeLists.txt 按完整路径链接它，不再 find_library
+去系统里找，因此机器上不装 mysql-devel / mariadb-devel 也能编。仍然可以用
+cmake -DWITH_MYSQL=OFF . 关掉 MySQL 后端只跑 SQLite（联调常用）。
+
+Linux 侧的 TLS 后端选的是 OPENSSL（Windows 是 SCHANNEL）—— 连接器不接受
+WITH_SSL=OFF，必须选一个。由此带来两个要求：
+
+    编译该库时：装 libssl-dev（Debian/Ubuntu）或 openssl-devel（CentOS）
+    链接 chatserver 时：带上 -lssl -lcrypto -ldl（已写进 CMakeLists.txt 的 MYSQL_LIB）
 
 重新编译
 --------
 
+Windows：
+
     build\build_mariadb_connector_windows.ps1
+
+Linux / WSL：
+
+    build/build_mariadb_connector_linux.sh
+
+Linux 脚本只产出 lib/linux/libmariadbclient.a，不动 include —— 头文件两个平台共用，
+由 Windows 那份脚本产出。换连接器版本时，改两个脚本顶部的版本号。

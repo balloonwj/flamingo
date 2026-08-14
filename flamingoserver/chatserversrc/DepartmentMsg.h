@@ -2,7 +2,7 @@
  *  企业部门相关协议报文的结构体与 JSON 收发，DepartmentMsg.h
  *  balloonwj@qq.com   2026.05.21
  *
- *  对应 Msg.h 中 1200 系列协议（msg_type_getorgstructure 等）。
+ *  对应 Protocol.h 中 1200 系列协议（cmd_get_org_structure 等）。
  *  把 1200-1203 报文的 JSON 解析/拼装从网络处理器中抽离为独立函数，
  *  使其可脱离 TcpConnection、数据库单独做单元测试。
  */
@@ -38,7 +38,7 @@ struct DepartmentMember
     std::string nickname;     //用户昵称
     int32_t     facetype;     //头像类型
     std::string customface;   //自定义头像文件名
-    int32_t     status;       //在线状态，取值见 Msg.h 的 enum online_type
+    int32_t     status;       //在线状态，取值见 Protocol.h 的 enum presence_type
     int32_t     clienttype;   //客户端类型：1=PC 2=android 3=ios
     std::string position;     //该成员在本部门的职位/职务
     int32_t     isprimary;    //是否主部门：1=主部门 0=兼属部门
@@ -65,7 +65,7 @@ struct DepartmentInfo
 };
 
 //部门操作请求（msg_type_operatedepartment / cmd 1201 的请求体）。
-//不同 operationtype 用到的字段不同，详见 Msg.h 中 1201 的 JSON 示例。
+//不同 operationtype 用到的字段不同，详见 docs/协议设计-v2.md 中 1201 的 JSON 示例。
 struct OperateDepartmentReq
 {
     OperateDepartmentReq()
@@ -74,7 +74,7 @@ struct OperateDepartmentReq
     {
     }
 
-    int32_t     operationtype;    //操作类型，取值见 Msg.h 的 enum department_operation_type
+    int32_t     operationtype;    //操作类型，取值见 Protocol.h 的 enum department_operation_type
     int64_t     deptid;           //目标部门ID（新建时不填，由服务器分配）
     int64_t     parentdeptid;     //父部门ID（新建时使用）
     int64_t     newparentdeptid;  //新父部门ID（移动时使用）
@@ -93,7 +93,7 @@ struct OperateDeptMemberReq
     {
     }
 
-    int32_t     operationtype;  //操作类型，取值见 Msg.h 的 enum deptmember_operation_type
+    int32_t     operationtype;  //操作类型，取值见 Protocol.h 的 enum deptmember_operation_type
     int64_t     deptid;         //目标部门ID
     int64_t     newdeptid;      //新部门ID（移动成员时使用）
     int64_t     userid;         //被操作的用户ID
@@ -129,7 +129,7 @@ bool ParseGetOrgStructureResp(const std::string& json, std::vector<DepartmentInf
 
 /**
  *  拼装 cmd 1200（拉取企业组织架构）应答体 JSON。
- *  @param code  错误码，0 表示成功，取值见 Msg.h 的 enum error_code。
+ *  @param code  错误码，0 表示成功，取值见 AdminApiCodes.h 的 enum error_code。
  *  @param msg   错误描述。
  *  @param depts 部门数组（扁平，含各部门内嵌成员）。
  *  @return 应答体 JSON 字符串（无缩进）。
