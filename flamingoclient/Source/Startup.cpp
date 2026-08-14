@@ -9,7 +9,6 @@
 #include "Startup.h"
 
 #include "MainDlg.h"
-#include "LoginSettingsDlg.h"
 #include "File2.h"
 #include "IULog.h"
 #include "UserSessionData.h"
@@ -255,16 +254,11 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
     hRes = _Module.Init(NULL, hInstance);
     ATLASSERT(SUCCEEDED(hRes));
 
-    CSkinManager::Init();	// 初始化皮肤管理器
 
-    tstring strSkinPath = Hootina::CPath::GetAppPath() + _T("Skins\\");	// 设置皮肤文件夹路径
-    CSkinManager::GetInstance()->SetSkinPath(strSkinPath.c_str());
 
-    CSkinManager::GetInstance()->LoadConfigXml();	// 加载皮肤列表配置文件
 
     int nRet = Run(lpstrCmdLine, nCmdShow);
 
-    CSkinManager::UnInit();	// 反初始化皮肤管理器
 
     if (hRichEditDll != NULL)		// 卸载RichEdit控件DLL
     {

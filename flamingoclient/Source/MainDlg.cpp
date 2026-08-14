@@ -42,13 +42,10 @@
 #include "net/ImageTransfer.h"              // net::ImageSendProgress / net::ImageSendResult
 #include "net/FileTransfer.h"               // net::FileSendProgress / net::FileSendResult / net::FileDownload*
 #include "IULog.h"
-#include "MobileStatusDlg.h"
 #include "UserSessionData.h"
-#include "FontSelDlg.h"
 #include "GDIFactory.h"
 #include "IULog.h"
 #include "Startup.h"
-#include "MultiChatMemberSelectionDlg.h"
 #include "ChatDlgCommon.h"
 #include "EncodeUtil.h"
 #include "UIText.h"
@@ -92,6 +89,12 @@ extern HWND g_hwndOwner;
 //自动登录期间托盘图标动画的换帧间隔（毫秒）。六帧循环播放，200 毫秒一帧，
 //整轮 1.2 秒 —— 快到能看出"正在忙"，又不至于闪得刺眼。
 #define LOGIN_ICON_ANIM_INTERVAL_MS 200
+
+//「显示 / 隐藏主面板」全局热键的主键，与注册时给的 MOD_CONTROL | MOD_ALT 一起
+//构成 Ctrl+Alt+D（注册见本文件 RegisterHotKey 处，响应见 OnHotKey 的 1001 分支）。
+//此前它是全局变量 g_cHotKey，定义在 v1 的字体选择框 FontSelDlg.cpp 里，取值一直是
+//'D'、也没有任何界面能改它；该文件已随 v1 清理删除，故就地固化为常量。
+const TCHAR kShowPanelHotKey = _T('D');
 
 //好友项信息浮动窗口宽和高
 #define BUDDYINFOFLOATWND_WIDTH   300
@@ -1082,11 +1085,10 @@ void CMainDlg::CloseDialog(int nVal)
     //
     // 诊断日志：记录退出时各窗口对象是否仍持有 HWND（1=有窗口）。若退出仍崩，看本行
     // 即可定位残留的是哪个窗口；若某项为 1 而本函数又没有对应销毁，即为漏网者。
-    LOG_INFO("CloseDialog teardown alive: trayMsgTip=%d panel=%d msgTip=%d "
+    LOG_INFO("CloseDialog teardown alive: trayMsgTip=%d panel=%d "
         "remoteDesktop=%d chatWin=%d groupChatWin=%d netSet=%d reg=%d profile=%d contact=%d "
         "groupMgr=%d sysSet=%d imgViewer=%d.",
         (int)m_trayMsgTipPopup.IsWindow(), (int)m_BalloonMainPanel.IsWindow(),
-        (int)m_MsgTipDlg.IsWindow(),
         (int)m_BalloonChatWindow.IsWindow(), (int)m_BalloonGroupChatWindow.IsWindow(),
         (int)m_BalloonNetSettingsWindow.IsWindow(), (int)m_BalloonRegisterWindow.IsWindow(),
         (int)m_BalloonProfileWindow.IsWindow(), (int)m_BalloonContactWindow.IsWindow(),
@@ -1117,8 +1119,6 @@ void CMainDlg::CloseDialog(int nVal)
         m_BalloonGroupInfoDlg.DestroyWindow();
     if (m_BalloonImageViewerWindow.IsWindow())
         m_BalloonImageViewerWindow.DestroyWindow();
-    if (m_MsgTipDlg.IsWindow())
-        m_MsgTipDlg.DestroyWindow();
     //ShowWindow(SW_HIDE);
 
     //if (m_FMGClient.GetStatus() != STATUS_OFFLINE)
@@ -1685,7 +1685,7 @@ LRESULT CMainDlg::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
         //LoadMiscConfig(strFileName.c_str());
 
         // 注册提取消息热键(Ctrl+Alt+D)
-        ::RegisterHotKey(m_hWnd, 1001, MOD_CONTROL | MOD_ALT, g_cHotKey);
+        ::RegisterHotKey(m_hWnd, 1001, MOD_CONTROL | MOD_ALT, kShowPanelHotKey);
 
         //为了调试方便，调试版就不开启这个功能了- -！
 //#ifndef _DEBUG
@@ -3882,8 +3882,6 @@ LRESULT CMainDlg::OnSysGroupMsg(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
     //UpdateMsgIcon();
 
-    //if (m_MsgTipDlg.IsWindow())
-    //	m_MsgTipDlg.AddMsgSender(long_SYSGROUP, nGroupCode);
 
     //if (NULL == m_dwMsgTimerId)
     //	m_dwMsgTimerId = SetTimer(2, ::GetCaretBlinkTime(), NULL);
@@ -4167,78 +4165,6 @@ LRESULT CMainDlg::OnChangeStatusResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
     return 0;
 }
 
-LRESULT CMainDlg::OnSelfStatusChange(UINT message, WPARAM wParam, LPARAM lParam)
-{
-    //UINT uAccountID = (UINT)wParam;
-    //if(uAccountID != m_FMGClient.m_UserMgr.m_UserInfo.m_uUserID)
-    //	return (LRESULT)0;
-
-    long nStatus = (long)lParam;
-
-    //自己在另外的PC端上线
-    //处于重连状态，忽略服务器推送的下线通知
-    if (m_nMainPanelStatus != MAINPANEL_STATUS_RECONNECTING && nStatus != STATUS_MOBILE_ONLINE && nStatus != STATUS_MOBILE_OFFLINE)
-    {
-        m_FMGClient.GoOffline();
-        m_FMGClient.Uninit();
-
-        // PR7: 不再 ShowWindow(SW_SHOW) 显示 CMainDlg 主窗口 —— 它始终隐藏。
-        // 被踢下线后须先销毁新版 balloonui 主面板,避免它残留在屏幕上;
-        // 紧接其后的 StartLogin(FALSE) 会重新走登录流程。
-        if (m_BalloonMainPanel.IsWindow())
-            m_BalloonMainPanel.DestroyWindow();
-
-        CString strInfo;
-        strInfo.Format(_T("尊敬的%s(%s)\r\n    您的账号在另一台机器上登录，你被迫下线。如果这不是你本人亲自操作，建议你修改密码！"), m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.c_str(), m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
-
-        CMobileStatusDlg dlg;
-        dlg.SetWindowTitle(_T("下线通知"));
-        dlg.SetInfoText(strInfo);
-        dlg.EnableAutoDisappear(FALSE);
-        dlg.DoModal(m_hWnd, NULL);
-
-        m_FMGClient.m_UserMgr.ClearUserInfo();
-        m_FMGClient.m_UserMgr.m_UserInfo.Reset();
-
-        m_TrayIcon.RemoveIcon();
-        memset(&m_stAccountInfo, 0, sizeof(LOGIN_ACCOUNT_INFO));
-
-        //复位登录态。此前这里漏了这两行，导致被踢下线、登录窗弹出期间程序仍自认为
-        //"已登录"，进而有两个可见后果：
-        //  · 右键托盘弹出的仍是已登录那套菜单（在线 / 离线 / 登出 …），见
-        //    OnTrayIcon_RButtunUp 里据 m_bAlreadyLogin 选形态的分支；
-        //  · 在该菜单里选"在线 / 离开 / 忙碌"会命中 OnChangeMyPresence 中
-        //    "m_bAlreadyLogin && m_nMainPanelStatus == MAINPANEL_STATUS_LOGIN" 这一路，
-        //    对着一条已经关掉的连接发 cmd_change_presence。
-        //与用户主动登出(OnLogout)复位的是同两个字段，两条路径保持一致。
-        m_bAlreadyLogin    = FALSE;
-        m_nMainPanelStatus = MAINPANEL_STATUS_NOTLOGIN;
-
-        StartLogin(FALSE);
-
-        return (LRESULT)1;
-    }
-    else if (nStatus == STATUS_MOBILE_ONLINE)
-    {
-        CString strInfo;
-        strInfo.Format(_T("尊敬的%s(%s)\r\n    您的账号在手机端上线。\r\n    如果这不是你本人亲自操作，建议你修改密码。"), m_FMGClient.m_UserMgr.m_UserInfo.m_strNickName.c_str(), m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str());
-        CMobileStatusDlg dlg;
-
-        dlg.SetWindowTitle(_T("手机上线提示"));
-        dlg.SetInfoText(strInfo);
-        dlg.EnableAutoDisappear(TRUE);
-        dlg.DoModal(NULL, NULL);
-        return (LRESULT)1;
-    }
-    //else if(nStatus==STATUS_MOBILE_OFFLINE)
-    //{
-    //	::MessageBox(m_hWnd, _T("您的账号在移动端Flamingo下线。\r\n如果这不是你本人亲自操作，建议你修改密码！"), _T("温馨提示"), MB_OK|MB_ICONINFORMATION);
-    //	return (LRESULT)1;
-    //}
-
-    return (LRESULT)1;
-}
-
 LRESULT CMainDlg::OnShowOrCloseDlg(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     UINT nGroupCode = (UINT)wParam;
@@ -4273,8 +4199,6 @@ LRESULT CMainDlg::OnDelMsgSender(UINT uMsg, WPARAM wParam, LPARAM lParam)
     long nType = (long)wParam;
     UINT nSenderId = (UINT)lParam;
 
-    if (m_MsgTipDlg.IsWindow())
-        m_MsgTipDlg.DelMsgSender(nType, nSenderId);
 
     // 旧自绘好友 / 群列表的头像灭闪已随旧控件移除；仍转发刷新最近联系人（会话）列表。
     if (nType == FMG_MSG_TYPE_BUDDY || nType == FMG_MSG_TYPE_GROUP)
@@ -4289,8 +4213,6 @@ LRESULT CMainDlg::OnDelMsgSender(UINT uMsg, WPARAM wParam, LPARAM lParam)
     CMessageList* lpMsgList = m_FMGClient.GetMessageList();
     if (lpMsgList != NULL && lpMsgList->GetMsgSenderCount() <= 0)
     {
-        if (m_MsgTipDlg.IsWindow())
-            m_MsgTipDlg.DestroyWindow();
         KillTimer(m_dwMsgTimerId);
         m_dwMsgTimerId = NULL;
         m_nLastMsgType = FMG_MSG_TYPE_BUDDY;
@@ -4304,8 +4226,6 @@ LRESULT CMainDlg::OnDelMsgSender(UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 LRESULT CMainDlg::OnCancelFlash(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    if (m_MsgTipDlg.IsWindow())
-        ::PostMessage(m_MsgTipDlg.m_hWnd, WM_CLOSE, 0, 0);
 
     KillTimer(m_dwMsgTimerId);
     m_dwMsgTimerId = NULL;
@@ -4506,8 +4426,6 @@ int CMainDlg::GetCurrentPresence()
 
 void CMainDlg::OnTrayIcon_RButtunUp()
 {
-    if (m_MsgTipDlg.IsWindow())
-        m_MsgTipDlg.DestroyWindow();
 
     // 右键弹菜单前先收起悬停未读提示浮窗（否则要等它自己的轮询定时器才消失）。
     m_trayMsgTipPopup.HidePopup();

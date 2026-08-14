@@ -5,16 +5,13 @@
 #pragma once
 
 #include "CustomMsgDef.h"
-#include "SkinLib/SkinLib.h"
 #include "FlamingoClient.h"
 #include "TrayIcon.h"
 #include "FaceList.h"
 #include "LoginAccountList.h"
 #include "CascadeWinManager.h"
-#include "RecentListCtrl.h"
 #include "BalloonAuth/BalloonLoginDlg.h"
 //#include "VerifyCodeDlg.h"
-#include "MsgTipDlg.h"
 #include "BalloonMain/BalloonMainPanel.h"
 #include "BalloonMain/TrayFlashController.h"		// 托盘"新消息闪头像"状态机（m_trayFlash 成员需完整类型）
 #include "BalloonMain/TrayMsgTipPopup.h"			// 托盘悬停未读消息提示浮窗（m_trayMsgTipPopup 成员需完整类型）
@@ -37,7 +34,6 @@
 #include "Call/CallMediaSession.h"
 #include "BalloonRemoteDesktop/RdViewerWindow.h"
 #include "BalloonRemoteDesktop/RdControlledBar.h"
-#include "BuddyInfoFloatWnd.h"
 
 //分组菜单ID基数
 #define TEAM_MENU_ITEM_BASE       0xF001
@@ -113,7 +109,6 @@ public:
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_BUDDY_NUMBER, OnUpdateBuddyNumber)	 //更新用户昵称(TODO: 名字要改)
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_BUDDY_HEADPIC, OnUpdateBuddyHeadPic)
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_BUDDY_SIGN, OnUpdateBuddySign)
-		MESSAGE_HANDLER_EX(FMG_MSG_SELF_STATUS_CHANGE, OnSelfStatusChange)
 
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_GROUP_LIST, OnUpdateGroupList)
 		MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_RECENT_LIST, OnUpdateRecentList)	 //更新最近联系人列表
@@ -468,7 +463,6 @@ private:
 	LRESULT OnUpdateGMemberHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam);// 更新群成员头像图片
 	LRESULT OnUpdateGroupHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 更新群头像图片
 	LRESULT OnChangeStatusResult(UINT uMsg, WPARAM wParam, LPARAM lParam);	// 改变在线状态返回消息
-	LRESULT OnSelfStatusChange(UINT message, WPARAM wParam, LPARAM lParam); //自己在另外终端上下线通知
 	
 	LRESULT OnCloseDlg(UINT uMsg, WPARAM wParam, LPARAM lParam);
 	LRESULT OnShowOrCloseDlg(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -643,7 +637,6 @@ private:
 	CRdControlledBar			m_rdControlledBar;							//被控端受控提示条(本端=被控端时屏幕顶部置顶提示"正在被控制"+结束按钮)
 	std::wstring				m_rdControlledPeerName;						//被控端记录的控制方昵称(授权时由 cmd_rd_invite_notify 带来,显示在受控条文案)
 	std::string					m_rdControlledSessionId;					//被控端记录的会话 id(用户主动结束时发 cmd_rd_close 用)
-	CMsgTipDlg				m_MsgTipDlg;
 	// 托盘"新消息闪头像"状态机：记录哪些会话未读、最近一条（单击打开它）、闪烁状态。
 	// 由 v2 收消息回投的 FMG_MSG_TRAY_FLASH 填入、会话已读时移除；驱动 m_TrayIcon 的
 	// 头像闪烁与单击开窗。生命周期与本对话框一致。

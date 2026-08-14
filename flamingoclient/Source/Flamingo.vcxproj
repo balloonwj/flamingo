@@ -272,7 +272,6 @@
     <ClCompile Include="net\HandshakeRunner.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BuddyInfoFloatWnd.cpp" />
     <ClCompile Include="Buffer.cpp" />
     <ClCompile Include="CascadeWinManager.cpp" />
     <ClCompile Include="ChatDlgCommon.cpp" />
@@ -281,10 +280,8 @@
     <ClCompile Include="EncodeUtil.cpp" />
     <ClCompile Include="FaceList.cpp" />
     <ClCompile Include="File2.cpp" />
-    <ClCompile Include="GifImage.cpp" />
     <ClCompile Include="FileTaskThread.cpp" />
     <ClCompile Include="FlamingoClient.cpp" />
-    <ClCompile Include="FontSelDlg.cpp" />
     <ClCompile Include="GDIFactory.cpp" />
     <ClCompile Include="GroupRoleRules.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
@@ -296,18 +293,13 @@
     <ClCompile Include="LoginAccountList.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="LoginSettingsDlg.cpp" />
     <ClCompile Include="MainDlg.cpp" />
     <ClCompile Include="MD5.cpp" />
     <ClCompile Include="MD5Sum.cpp" />
     <ClCompile Include="MessageLogger.cpp" />
     <ClCompile Include="MinuBuffer.cpp" />
-    <ClCompile Include="MobileStatusDlg.cpp" />
-    <ClCompile Include="MsgTipDlg.cpp" />
-    <ClCompile Include="MultiChatMemberSelectionDlg.cpp" />
     <ClCompile Include="Path.cpp" />
     <ClCompile Include="PerformanceCounter.cpp" />
-    <ClCompile Include="RecentListCtrl.cpp" />
     <ClCompile Include="SendMsgThread.cpp" />
     <ClCompile Include="Startup.cpp" />
     <ClCompile Include="stdafx.cpp">
@@ -1020,21 +1012,6 @@
     <ClCompile Include="RemoteDesktop\ScreenManager.cpp" />
     <ClCompile Include="RemoteDesktop\ScreenSpy.cpp" />
     <ClCompile Include="RemoteDesktop\until.cpp" />
-    <ClCompile Include="SkinLib\SkinButton.cpp" />
-    <ClCompile Include="SkinLib\SkinComboBox.cpp" />
-    <ClCompile Include="SkinLib\SkinDialog.cpp" />
-    <ClCompile Include="SkinLib\SkinEdit.cpp" />
-    <ClCompile Include="SkinLib\SkinHyperLink.cpp" />
-    <ClCompile Include="SkinLib\SkinListCtrl.cpp" />
-    <ClCompile Include="SkinLib\SkinManager.cpp" />
-    <ClCompile Include="SkinLib\SkinMenu.cpp" />
-    <ClCompile Include="SkinLib\SkinMessageBox.cpp" />
-    <ClCompile Include="SkinLib\SkinPictureBox.cpp" />
-    <ClCompile Include="SkinLib\SkinScrollBar.cpp" />
-    <ClCompile Include="SkinLib\SkinStatic.cpp" />
-    <ClCompile Include="SkinLib\SkinTabCtrl.cpp" />
-    <ClCompile Include="SkinLib\SkinToolBar.cpp" />
-    <ClCompile Include="SkinLib\SkinWebBrowser.cpp" />
     <ClCompile Include="zlib1.2.11\adler32.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -1091,7 +1068,6 @@
     <ClInclude Include="net\FrameCrypto.h" />
     <ClInclude Include="net\FramePayload.h" />
     <ClInclude Include="net\HandshakeRunner.h" />
-    <ClInclude Include="BuddyInfoFloatWnd.h" />
     <ClInclude Include="Buffer.h" />
     <ClInclude Include="CascadeWinManager.h" />
     <ClInclude Include="ChatDlgCommon.h" />
@@ -1100,12 +1076,9 @@
     <ClInclude Include="CustomMsgDef.h" />
     <ClInclude Include="EncodeUtil.h" />
     <ClInclude Include="FaceList.h" />
-    <ClInclude Include="File.h" />
     <ClInclude Include="File2.h" />
-    <ClInclude Include="GifImage.h" />
     <ClInclude Include="FileTaskThread.h" />
     <ClInclude Include="FlamingoClient.h" />
-    <ClInclude Include="FontSelDlg.h" />
     <ClInclude Include="GDIFactory.h" />
     <ClInclude Include="GroupRoleRules.h" />
     <ClInclude Include="ImageEx.h" />
@@ -1114,19 +1087,14 @@
     <ClInclude Include="IULog.h" />
     <ClInclude Include="Crash.h" />
     <ClInclude Include="LoginAccountList.h" />
-    <ClInclude Include="LoginSettingsDlg.h" />
     <ClInclude Include="MainDlg.h" />
     <ClInclude Include="MD5.h" />
     <ClInclude Include="MD5Core.h" />
     <ClInclude Include="MD5Sum.h" />
     <ClInclude Include="MessageLogger.h" />
     <ClInclude Include="MiniBuffer.h" />
-    <ClInclude Include="MobileStatusDlg.h" />
-    <ClInclude Include="MsgTipDlg.h" />
-    <ClInclude Include="MultiChatMemberSelectionDlg.h" />
     <ClInclude Include="Path.h" />
     <ClInclude Include="PerformanceCounter.h" />
-    <ClInclude Include="RecentListCtrl.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="SendMsgThread.h" />
     <ClInclude Include="Startup.h" />
@@ -1453,23 +1421,6 @@
     <ClInclude Include="RemoteDesktop\ScreenManager.h" />
     <ClInclude Include="RemoteDesktop\ScreenSpy.h" />
     <ClInclude Include="RemoteDesktop\until.h" />
-    <ClInclude Include="SkinLib\SkinButton.h" />
-    <ClInclude Include="SkinLib\SkinComboBox.h" />
-    <ClInclude Include="SkinLib\SkinDialog.h" />
-    <ClInclude Include="SkinLib\SkinEdit.h" />
-    <ClInclude Include="SkinLib\SkinHyperLink.h" />
-    <ClInclude Include="SkinLib\SkinLib.h" />
-    <ClInclude Include="SkinLib\SkinListCtrl.h" />
-    <ClInclude Include="SkinLib\SkinManager.h" />
-    <ClInclude Include="SkinLib\SkinMenu.h" />
-    <ClInclude Include="SkinLib\SkinMessageBox.h" />
-    <ClInclude Include="SkinLib\SkinPictureBox.h" />
-    <ClInclude Include="SkinLib\SkinRichEdit.h" />
-    <ClInclude Include="SkinLib\SkinScrollBar.h" />
-    <ClInclude Include="SkinLib\SkinStatic.h" />
-    <ClInclude Include="SkinLib\SkinTabCtrl.h" />
-    <ClInclude Include="SkinLib\SkinToolBar.h" />
-    <ClInclude Include="SkinLib\SkinWebBrowser.h" />
     <ClInclude Include="wtl9.0\atlapp.h" />
     <ClInclude Include="wtl9.0\atlcrack.h" />
     <ClInclude Include="wtl9.0\atlctrls.h" />

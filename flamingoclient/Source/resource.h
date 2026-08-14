@@ -4,12 +4,7 @@
 //
 #define Flamingo_MINOR_VERSION          0
 #define Flamingo_MAJOR_VERSION          1
-#define IDD_LOGINDLG                    101
 #define IDD_MAINDLG                     102
-#define IDD_BUDDYCHATDLG                103
-#define IDD_GROUPCHATDLG                104
-#define IDD_VERIFYCODEDLG               105
-#define IDD_MSGTIPDLG                   107
 #define IDR_MAINFRAME                   128
 #define ID_MENU_LOGINSTATUS             130
 #define ID_MENU_BUDDYCHAT               132
@@ -33,21 +28,10 @@
 #define ID_BTN_LOGIN_STATUS             210
 #define ID_BTN_SYSTEM_SET               211
 #define ID_ACCE_CHATDLG                 218
-#define IDD_FONTSELDLG                  221
-#define IDD_LOGSETDLG                   230
-#define IDD_UPDATEDLG                   231
-#define IDD_CHANGEPICDLG                233
 #define IDD_DIALOG1                     235
-#define IDD_SYSTEMSETTINGS              235
-#define IDD_USERSNAPINFO                237
-#define IDD_LOGONUSERINFO               238
-#define IDD_MOBILESTATUS                239
-#define IDD_SELECTMULTICHATTARGET       245
-#define IDD_MULTICHATDLG                246
 #define IDI_MULTICHATDLG_16             247
 #define IDI_MULTICHATDLG_32             251
 #define IDD_DIALOG2                     252
-#define IDD_REMOTEDESKTOP               252
 #define ID_LEFT_CHAT_WINDOW             997
 #define ID_CHAT_TAB_MGR                 998
 #define ID_TABCTRL_CHAT                 999

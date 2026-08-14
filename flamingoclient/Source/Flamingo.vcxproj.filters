@@ -105,9 +105,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="BuddyInfoFloatWnd.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
     <ClCompile Include="Buffer.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
@@ -132,20 +129,11 @@
     <ClCompile Include="File2.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
-    <ClCompile Include="File.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
-    <ClCompile Include="GifImage.cpp">
-      <Filter>Utils</Filter>
-    </ClCompile>
     <ClCompile Include="FileTaskThread.cpp">
       <Filter>Tasks</Filter>
     </ClCompile>
     <ClCompile Include="FlamingoClient.cpp">
       <Filter>UserData</Filter>
-    </ClCompile>
-    <ClCompile Include="FontSelDlg.cpp">
-      <Filter>UI</Filter>
     </ClCompile>
     <ClCompile Include="GDIFactory.cpp">
       <Filter>Source Files</Filter>
@@ -168,9 +156,6 @@
     <ClCompile Include="LoginAccountList.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="LoginSettingsDlg.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
     <ClCompile Include="MainDlg.cpp">
       <Filter>UI</Filter>
     </ClCompile>
@@ -186,23 +171,11 @@
     <ClCompile Include="MinuBuffer.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
-    <ClCompile Include="MobileStatusDlg.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
-    <ClCompile Include="MsgTipDlg.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
-    <ClCompile Include="MultiChatMemberSelectionDlg.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
     <ClCompile Include="Path.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
     <ClCompile Include="PerformanceCounter.cpp">
       <Filter>Utils</Filter>
-    </ClCompile>
-    <ClCompile Include="RecentListCtrl.cpp">
-      <Filter>UI</Filter>
     </ClCompile>
     <ClCompile Include="SendMsgThread.cpp">
       <Filter>Tasks</Filter>
@@ -1098,51 +1071,6 @@
     <ClCompile Include="RemoteDesktop\until.cpp">
       <Filter>RemoteDesktop</Filter>
     </ClCompile>
-    <ClCompile Include="SkinLib\SkinButton.cpp">
-      <Filter>SkinLib</Filter>
-    </ClCompile>
-    <ClCompile Include="SkinLib\SkinComboBox.cpp">
-      <Filter>SkinLib</Filter>
-    </ClCompile>
-    <ClCompile Include="SkinLib\SkinDialog.cpp">
-      <Filter>SkinLib</Filter>
-    </ClCompile>
-    <ClCompile Include="SkinLib\SkinEdit.cpp">
-      <Filter>SkinLib</Filter>
-    </ClCompile>
-    <ClCompile Include="SkinLib\SkinHyperLink.cpp">
-      <Filter>SkinLib</Filter>
-    </ClCompile>
-    <ClCompile Include="SkinLib\SkinListCtrl.cpp">
-      <Filter>SkinLib</Filter>
-    </ClCompile>
-    <ClCompile Include="SkinLib\SkinManager.cpp">
-      <Filter>SkinLib</Filter>
-    </ClCompile>
-    <ClCompile Include="SkinLib\SkinMenu.cpp">
-      <Filter>SkinLib</Filter>
-    </ClCompile>
-    <ClCompile Include="SkinLib\SkinMessageBox.cpp">
-      <Filter>SkinLib</Filter>
-    </ClCompile>
-    <ClCompile Include="SkinLib\SkinPictureBox.cpp">
-      <Filter>SkinLib</Filter>
-    </ClCompile>
-    <ClCompile Include="SkinLib\SkinScrollBar.cpp">
-      <Filter>SkinLib</Filter>
-    </ClCompile>
-    <ClCompile Include="SkinLib\SkinStatic.cpp">
-      <Filter>SkinLib</Filter>
-    </ClCompile>
-    <ClCompile Include="SkinLib\SkinTabCtrl.cpp">
-      <Filter>SkinLib</Filter>
-    </ClCompile>
-    <ClCompile Include="SkinLib\SkinToolBar.cpp">
-      <Filter>SkinLib</Filter>
-    </ClCompile>
-    <ClCompile Include="SkinLib\SkinWebBrowser.cpp">
-      <Filter>SkinLib</Filter>
-    </ClCompile>
     <ClCompile Include="zlib1.2.11\adler32.c">
       <Filter>zlib1.2.11</Filter>
     </ClCompile>
@@ -1196,9 +1124,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="BuddyInfoFloatWnd.h">
-      <Filter>UI</Filter>
-    </ClInclude>
     <ClInclude Include="Buffer.h">
       <Filter>Utils</Filter>
     </ClInclude>
@@ -1226,20 +1151,11 @@
     <ClInclude Include="File2.h">
       <Filter>Utils</Filter>
     </ClInclude>
-    <ClInclude Include="File.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
-    <ClInclude Include="GifImage.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
     <ClInclude Include="FileTaskThread.h">
       <Filter>Tasks</Filter>
     </ClInclude>
     <ClInclude Include="FlamingoClient.h">
       <Filter>UserData</Filter>
-    </ClInclude>
-    <ClInclude Include="FontSelDlg.h">
-      <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="GDIFactory.h">
       <Filter>Source Files</Filter>
@@ -1265,9 +1181,6 @@
     <ClInclude Include="LoginAccountList.h">
       <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="LoginSettingsDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
     <ClInclude Include="MainDlg.h">
       <Filter>UI</Filter>
     </ClInclude>
@@ -1286,23 +1199,11 @@
     <ClInclude Include="MiniBuffer.h">
       <Filter>Utils</Filter>
     </ClInclude>
-    <ClInclude Include="MobileStatusDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
-    <ClInclude Include="MsgTipDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
-    <ClInclude Include="MultiChatMemberSelectionDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
     <ClInclude Include="Path.h">
       <Filter>Utils</Filter>
     </ClInclude>
     <ClInclude Include="PerformanceCounter.h">
       <Filter>Utils</Filter>
-    </ClInclude>
-    <ClInclude Include="RecentListCtrl.h">
-      <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">
       <Filter>Source Files</Filter>
@@ -2287,57 +2188,6 @@
     </ClInclude>
     <ClInclude Include="RemoteDesktop\until.h">
       <Filter>RemoteDesktop</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinButton.h">
-      <Filter>SkinLib</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinComboBox.h">
-      <Filter>SkinLib</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinDialog.h">
-      <Filter>SkinLib</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinEdit.h">
-      <Filter>SkinLib</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinHyperLink.h">
-      <Filter>SkinLib</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinLib.h">
-      <Filter>SkinLib</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinListCtrl.h">
-      <Filter>SkinLib</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinManager.h">
-      <Filter>SkinLib</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinMenu.h">
-      <Filter>SkinLib</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinMessageBox.h">
-      <Filter>SkinLib</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinPictureBox.h">
-      <Filter>SkinLib</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinRichEdit.h">
-      <Filter>SkinLib</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinScrollBar.h">
-      <Filter>SkinLib</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinStatic.h">
-      <Filter>SkinLib</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinTabCtrl.h">
-      <Filter>SkinLib</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinToolBar.h">
-      <Filter>SkinLib</Filter>
-    </ClInclude>
-    <ClInclude Include="SkinLib\SkinWebBrowser.h">
-      <Filter>SkinLib</Filter>
     </ClInclude>
     <ClInclude Include="wtl9.0\atlapp.h">
       <Filter>wtl9.0</Filter>
