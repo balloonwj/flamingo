@@ -105,9 +105,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="AboutDlg.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
     <ClCompile Include="BuddyInfoDlg.cpp">
       <Filter>UI</Filter>
     </ClCompile>
@@ -126,9 +123,6 @@
     <ClCompile Include="ChatDlgCommon.cpp">
       <Filter>UI</Filter>
     </ClCompile>
-    <ClCompile Include="ChatTabMgr.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
     <ClCompile Include="CheckNetworkStatusTask.cpp">
       <Filter>Tasks</Filter>
     </ClCompile>
@@ -137,9 +131,6 @@
     </ClCompile>
     <ClCompile Include="CreateNewGroupDlg.cpp">
       <Filter>UI</Filter>
-    </ClCompile>
-    <ClCompile Include="CriticalSection.cpp">
-      <Filter>Utils</Filter>
     </ClCompile>
     <ClCompile Include="EncodeUtil.cpp">
       <Filter>Utils</Filter>
@@ -150,9 +141,6 @@
     <ClCompile Include="FaceList.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="FaceSelDlg.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
     <ClCompile Include="File.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
@@ -161,9 +149,6 @@
     </ClCompile>
     <ClCompile Include="FileTaskThread.cpp">
       <Filter>Tasks</Filter>
-    </ClCompile>
-    <ClCompile Include="FileTransferCtrl.cpp">
-      <Filter>UI</Filter>
     </ClCompile>
     <ClCompile Include="FlamingoClient.cpp">
       <Filter>UserData</Filter>
@@ -182,9 +167,6 @@
     </ClCompile>
     <ClCompile Include="GroupRoleRules.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="HeartbeatTask.cpp">
-      <Filter>Tasks</Filter>
     </ClCompile>
     <ClCompile Include="ImageEx.cpp">
       <Filter>Source Files</Filter>
@@ -240,9 +222,6 @@
     <ClCompile Include="PerformanceCounter.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
-    <ClCompile Include="PicBarDlg.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
     <ClCompile Include="RecentListCtrl.cpp">
       <Filter>UI</Filter>
     </ClCompile>
@@ -255,14 +234,8 @@
     <ClCompile Include="RemoteDesktopDlg.cpp">
       <Filter>UI</Filter>
     </ClCompile>
-    <ClCompile Include="RichEditUtil.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="SendMsgThread.cpp">
       <Filter>Tasks</Filter>
-    </ClCompile>
-    <ClCompile Include="SplitterCtrl.cpp">
-      <Filter>UI</Filter>
     </ClCompile>
     <ClCompile Include="Startup.cpp">
       <Filter>Source Files</Filter>
@@ -278,9 +251,6 @@
     </ClCompile>
     <ClCompile Include="ThreadPool.cpp">
       <Filter>Tasks</Filter>
-    </ClCompile>
-    <ClCompile Include="Time.cpp">
-      <Filter>Utils</Filter>
     </ClCompile>
     <ClCompile Include="TrayIcon.cpp">
       <Filter>Tasks</Filter>
@@ -1262,9 +1232,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="AboutDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
     <ClInclude Include="BuddyInfoDlg.h">
       <Filter>UI</Filter>
     </ClInclude>
@@ -1277,16 +1244,10 @@
     <ClInclude Include="CascadeWinManager.h">
       <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="ChangePicHead.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="ChangePicHeadDlg.h">
       <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="ChatDlgCommon.h">
-      <Filter>UI</Filter>
-    </ClInclude>
-    <ClInclude Include="ChatTabMgr.h">
       <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="CheckNetworkStatusTask.h">
@@ -1298,16 +1259,7 @@
     <ClInclude Include="CreateNewGroupDlg.h">
       <Filter>UI</Filter>
     </ClInclude>
-    <ClInclude Include="CRegisterSkinHyperLink.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="CriticalSection.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
     <ClInclude Include="CustomMsgDef.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="DstVersion.h">
       <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="EncodeUtil.h">
@@ -1319,9 +1271,6 @@
     <ClInclude Include="FaceList.h">
       <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="FaceSelDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
     <ClInclude Include="File.h">
       <Filter>Utils</Filter>
     </ClInclude>
@@ -1330,9 +1279,6 @@
     </ClInclude>
     <ClInclude Include="FileTaskThread.h">
       <Filter>Tasks</Filter>
-    </ClInclude>
-    <ClInclude Include="FileTransferCtrl.h">
-      <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="FlamingoClient.h">
       <Filter>UserData</Filter>
@@ -1350,12 +1296,6 @@
       <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="GroupRoleRules.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="HeartbeatTask.h">
-      <Filter>Tasks</Filter>
-    </ClInclude>
-    <ClInclude Include="HideWindow.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="IImageOle.h">
@@ -1421,9 +1361,6 @@
     <ClInclude Include="PerformanceCounter.h">
       <Filter>Utils</Filter>
     </ClInclude>
-    <ClInclude Include="PicBarDlg.h">
-      <Filter>UI</Filter>
-    </ClInclude>
     <ClInclude Include="RecentListCtrl.h">
       <Filter>UI</Filter>
     </ClInclude>
@@ -1439,20 +1376,8 @@
     <ClInclude Include="resource.h">
       <Filter>Source Files</Filter>
     </ClInclude>
-    <ClInclude Include="Result.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="RichEditUtil.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
     <ClInclude Include="SendMsgThread.h">
       <Filter>Tasks</Filter>
-    </ClInclude>
-    <ClInclude Include="SplitterCtrl.h">
-      <Filter>UI</Filter>
-    </ClInclude>
-    <ClInclude Include="SrcVersion.h">
-      <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="Startup.h">
       <Filter>Source Files</Filter>
@@ -1468,9 +1393,6 @@
     </ClInclude>
     <ClInclude Include="ThreadPool.h">
       <Filter>Tasks</Filter>
-    </ClInclude>
-    <ClInclude Include="Time.h">
-      <Filter>Utils</Filter>
     </ClInclude>
     <ClInclude Include="TrayIcon.h">
       <Filter>Tasks</Filter>

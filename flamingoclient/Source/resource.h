@@ -4,13 +4,11 @@
 //
 #define Flamingo_MINOR_VERSION          0
 #define Flamingo_MAJOR_VERSION          1
-#define IDD_ABOUTBOX                    100
 #define IDD_LOGINDLG                    101
 #define IDD_MAINDLG                     102
 #define IDD_BUDDYCHATDLG                103
 #define IDD_GROUPCHATDLG                104
 #define IDD_VERIFYCODEDLG               105
-#define IDD_FACESELDLG                  106
 #define IDD_MSGTIPDLG                   107
 #define IDR_MAINFRAME                   128
 #define ID_MENU_LOGINSTATUS             130
@@ -38,7 +36,6 @@
 #define IDD_FONTSELDLG                  221
 #define IDD_GROUPINFODLG                222
 #define IDD_BUDDYINFODLG                223
-#define IDD_PICBARDLG                   224
 #define IDD_REGISTER                    228
 #define IDD_LOGSETDLG                   230
 #define IDD_UPDATEDLG                   231

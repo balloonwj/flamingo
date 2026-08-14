@@ -8,7 +8,6 @@
 #include "resource.h"
 #include "Startup.h"
 
-#include "aboutdlg.h"
 #include "MainDlg.h"
 #include "LoginSettingsDlg.h"
 #include "File2.h"

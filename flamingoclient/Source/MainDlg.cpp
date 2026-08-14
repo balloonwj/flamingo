@@ -5,7 +5,6 @@
 #include "stdafx.h"
 #include "resource.h"
 
-#include "aboutdlg.h"
 #include "MainDlg.h"
 #include "BalloonMain/NotificationSound.h"   // 通话音效：回铃 / 来电铃声（循环）与接通 / 结束 / 忙音（一次性）
 #include "IniFile.h"
