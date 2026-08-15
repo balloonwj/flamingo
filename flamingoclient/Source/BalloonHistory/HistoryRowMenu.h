@@ -21,10 +21,10 @@
  *      //balloonmain::ClampPopupMenuToWorkArea（开发约定文档 UI 约定第 3 条），
  *      //否则靠近窗口底边的行弹出来会跑到桌面外。
  *
- *  本头文件<u>不</u>引 net/Protocol.h：BalloonHistory 各头文件一律只在 .cpp 里引它
- *  （Protocol.h 与旧版 Msg.h 的枚举名冲突、两者不能同处一个编译单元），故 m_msgType
- *  声明成 int，取值口径写在字段注释里。实现文件 HistoryRowMenu.cpp 引 Protocol.h 后
- *  直接用 ::message_type_* 比对，不在本模块里另抄一份类型常量。
+ *  本头文件<u>不</u>引 net/Protocol.h，与 BalloonHistory 其它头文件一致，只在 .cpp 里引；
+ *  故 m_msgType 声明成 int，取值在旁边写成字段注释。实现文件 HistoryRowMenu.cpp 引了
+ *  Protocol.h，可直接与 ::message_type_* 比对。（此前还有一条理由是 Protocol.h 与旧版
+ *  Msg.h 枚举名冲突、两者不得同处一个编译单元；v1 协议头已于 2026-08-14 删除。）
  *
  *  行为约定（方案见 docs/消息记录内容交互方案.md §3.2、§5 的 F3/F4/F5，已与用户逐条确认）：
  *    · 文本 / 链接消息       → 复制、定位到聊天窗、Pin。

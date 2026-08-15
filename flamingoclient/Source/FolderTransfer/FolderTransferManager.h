@@ -63,9 +63,10 @@
 //该头文件是纯逻辑、不引 winsock2.h，可以安全地被引入过 windows.h 的编译单元包含。
 #include "FolderManifest.h"
 
-//信令解析结果（net::FolderInviteResponse / FolderInviteNotify / FolderSessionResponse /
-//FolderStateNotify / FolderRelayInfo）。该头文件同样不含 net/Protocol.h，不会与 v1 的
-//net/Msg.h 撞枚举名，故引入它不会限制本头文件的使用方。
+//协议数据类型（net::FolderInviteResponse / FolderInviteNotify / FolderSessionResponse /
+//FolderStateNotify / FolderRelayInfo）。这个头文件同样不引 net/Protocol.h —— 原先是
+//为了不与 v1 的 net/Msg.h 撞枚举名（v1 协议头已于 2026-08-14 删除，该顾虑不复存在），
+//现在的理由是不把整个协议头传染给本头文件的使用方。
 #include "../net/FolderProtocolClient.h"
 
 namespace foldertransfer {

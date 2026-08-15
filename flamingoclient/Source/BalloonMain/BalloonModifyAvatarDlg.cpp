@@ -98,8 +98,9 @@ static const COLORREF kZoneHintColor   = RGB(0xA9, 0xA9, 0xA9);   // 上传占�
 // 应答里"头像过大"的结果码（对应服务端 error_code_avatar_too_large）。
 static const int kRespCodeAvatarTooLarge = 108;
 // 应答里"不是群主或管理员"的结果码（对应 net/Protocol.h 的
-// error_code_not_group_admin=303）。此处复述一份而不 include 那个头文件：本编译
-// 单元同时会碰到 v1 的 net/Msg.h，两者有同名枚举冲突（同 GroupRoleRules.h 的说明）。
+// error_code_not_group_admin=303）。此处另抄一份而不 include 那个头文件：原先是因为
+// 本编译单元同时包含 v1 的 net/Msg.h、两者有同名枚举冲突（v1 协议头已于 2026-08-14
+// 删除，该限制不复存在），现在只是不想为一个常量拖进整个协议头。
 static const int kRespCodeNotGroupAdmin = 303;
 
 // 预览 / 磁贴圆角比例（半径 = 边长 * 该比例）。

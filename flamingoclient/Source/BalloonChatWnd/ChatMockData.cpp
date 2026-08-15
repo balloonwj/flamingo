@@ -28,8 +28,8 @@
 #include "ChatMockData.h"
 #include "FileBubbleFormat.h"   // FormatFileSize / FileTypeLabelFromName（文件气泡大小文字与类型标签）
 #include "ChatFolderStateModel.h"   // ChatFolderState（文件夹 mock 消息的传输状态取值）
-//文件夹失败原因的错误码取值。本 .cpp 不包含 v1 的 Msg.h，与 Protocol.h 不在同一编译
-//单元里冲突（两者的枚举名重叠，见 net/Protocol.h 文件头）。
+//文件夹失败原因的错误码取值。（此处原有一句"本 .cpp 不含 v1 的 Msg.h，故与
+//Protocol.h 不冲突"，v1 协议头已于 2026-08-14 删除，该顾虑不复存在。）
 #include "../net/Protocol.h"
 
 namespace balloonchatwnd {

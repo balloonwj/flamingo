@@ -6,10 +6,11 @@
  *  单独成一个文件而不是塞进 CMainDlg，有两个理由：
  *    · 文案要能单测 —— 尤其"异地登录"那一条是安全提示，措辞不能被后来的改动悄悄改掉，
  *      故有一条用例逐字比对它。
- *    · CMainDlg 所在的编译单元包含 v1 的 net/Msg.h，无法再 include v2 的 net/Protocol.h
- *      （msg_type / error_code 枚举名会冲突），却又要按被踢原因分支给文案。于是本文件
- *      按 UserSessionData.h 里 MyPresenceValue 的老办法，把 kickout_reason 的取值<u>镜像</u>
- *      一份出来，两边靠 KickoutNoticeTests 的一条用例保证不走样。
+ *    · 取值<u>另抄</u>一份常量，而不直接用 net/Protocol.h 的 kickout_reason。原先是因为
+ *      CMainDlg 所在的编译单元包含 v1 的 net/Msg.h、无法再 include v2 的 Protocol.h
+ *      （两者 msg_type / error_code 枚举名冲突）；v1 协议头已于 2026-08-14 删除，该限制
+ *      不复存在，现在保留另一份的理由是本模块要能被测试工程独立编译。两边取值由
+ *      KickoutNoticeTests 的一组用例逐条验证，防止走岔。
  *
  *  本文件不依赖窗口、不依赖网络对象，可被 Flamingo.vcxproj 与 FlamingoUnit.vcxproj
  *  两个工程逐字共用。在 Flamingo.vcxproj 里本文件需标记 PrecompiledHeader=NotUsing。

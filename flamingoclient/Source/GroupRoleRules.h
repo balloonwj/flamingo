@@ -20,10 +20,10 @@ namespace grouprole {
 /**
  *  群成员角色取值，与协议报文里的 role 字段、服务端 group_member_role 一致。
  *
- *  本模块<u>刻意不</u> include net/Protocol.h：群管理窗口所在的编译单元同时会
- *  碰到 v1 的 net/Msg.h，两者有同名枚举冲突（缘由见 GroupManageMapping.cpp 里
- *  DescribeGroupOpFailure 上方的说明），故在此复述一份。<u>取值必须与
- *  net/Protocol.h 的 group_member_role 保持一致</u>，改那边就要改这里。
+ *  本模块<u>刻意不</u> include net/Protocol.h：原先是因为群管理窗口所在的编译单元同时
+ *  包含 v1 的 net/Msg.h、两者有同名枚举冲突（v1 协议头已于 2026-08-14 删除，该限制
+ *  不复存在），现在的理由是本模块要能被测试工程独立编译。故角色取值在此复制一份，
+ *  <u>取值必须与 net/Protocol.h 的 group_member_role 保持一致</u>，改那边就要改这里。
  *
  *  注意与界面侧的 BalloonGroupManage/GroupManageModel.h 里 GroupRole 区分开 ——
  *  那一套的顺序<u>正好相反</u>（群主为 0、普通成员为 2），只有管理员同为 1。

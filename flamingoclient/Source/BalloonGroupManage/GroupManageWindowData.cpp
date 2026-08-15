@@ -264,9 +264,9 @@ void CBalloonGroupManageWindow::OnAnnouncementChanged(const net::GroupAnnounceme
     //重拉当前这一页：推送只带变动的这一条，而列表要跟着变顺序、变总数、变页数，
     //本地维护这些增量的分支比重拉一次多得多，公告又是低频操作，不在热路径上。
     //
-    //推送的 changetype 取值在此复述一份。本文件刻意不 include net/Protocol.h ——
-    //那个头与 v1 的 net/Msg.h 有同名枚举冲突，而本编译单元两者都会碰到
-    //（与本文件里 kCmdOperateSensitiveWord 的处理同理）。
+    //推送的 changetype 取值在此复制一份。本文件另抄而不 include net/Protocol.h：
+    //原先是因为协议头与 v1 的 net/Msg.h 有同名枚举冲突（v1 协议头已于 2026-08-14
+    //删除，该限制不复存在），现在的理由与本文件 kCmdOperateSensitiveWord 处相同。
     const int kAnnounceChangePublish = 1;   //有新公告发布
 
     //新公告发布时回到第一页 —— 它排在最前，用户多半就是想看它；删除则留在原页，

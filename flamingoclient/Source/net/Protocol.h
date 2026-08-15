@@ -6,8 +6,9 @@
  *  协议的单一事实来源，本副本仅供客户端编译使用，改协议时两边须一起改。
  *  完整设计见 docs/协议设计-v2.md。
  *
- *  v1 与 v2 协议不兼容：本文件不得与旧版 Msg.h 在同一编译单元（.cpp）
- *  内同时包含，否则 enum msg_type / error_code 等枚举名冲突。
+ *  v1 协议头 Msg.h 已于 2026-08-14 随 v1 清理删除。此前本文件与它有 enum msg_type /
+ *  error_code 同名冲突、不得同处一个编译单元，代码里为此留下的一批"刻意不 include
+ *  Protocol.h"的写法已同步订正，新代码不必再受此约束。
  *
  *  典型用法：帧层用 frame_header 收发；消息层按 msg_type 分发，包体为
  *  UTF-8 JSON 文本（不带 BOM）。

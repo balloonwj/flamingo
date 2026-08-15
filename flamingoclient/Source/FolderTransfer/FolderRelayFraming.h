@@ -52,8 +52,10 @@ namespace foldertransfer {
 
 //中转单帧包体上限，单位：字节。取 2 MiB，与 Source/net/Protocol.h 的
 //MAX_BODY_FILESERVER 一致（服务端 fileserver 按同一上限解帧，超限即断连）；
-//本头文件不包含 net/Protocol.h 是为了不把「不得与旧版 Msg.h 同编译单元」这条
-//约束传染给使用方，两者的一致性由 FolderRelayFraming.cpp 里的 static_assert 保证。
+//本头文件不包含 net/Protocol.h，是为了不把「不得与旧版 Msg.h 同处一个编译单元」
+//这条约束传染给使用方 —— v1 协议头已于 2026-08-14 删除、该约束已消失，现在的理由
+//只剩「使用方多为绘制侧，用不上协议定义」。两处取值的一致性由
+//FolderRelayFraming.cpp 里的 static_assert 保证。
 //出处另见 docs/单聊文件夹传输方案.md 5.3。
 const size_t kFolderRelayMaxBodyBytes = 2u * 1024u * 1024u;
 

@@ -16,8 +16,9 @@
  *  与协议的关系：本枚举 1~8 号取值与 net/Protocol.h 的 folder_transfer_state
  *  <u>逐值相同</u>，收到 cmd_folder_state_notify（1815）后可直接把 state 字段填进来；
  *  另有三个协议表达不了的本端状态从 101 起编号（见 ChatFolderState 的注释）。为免把
- *  v2 协议头带进气泡绘制的编译单元（那边可能仍在编 v1 的 Msg.h，两者枚举名冲突），
- *  本头文件<u>不</u>包含 Protocol.h，取值一致性由单元测试锁定。
+ *  协议头带进气泡绘制的编译单元（那边用不上协议定义），本头文件<u>不</u>包含
+ *  Protocol.h，取值一致性由单元测试锁定。此前还有一条理由是协议头与 v1 的
+ *  net/Msg.h 枚举名冲突，v1 协议头已于 2026-08-14 删除、该限制不复存在。
  *
  *  可脱离界面单元测试（见 flamingoclient/Source/Tests/ChatFolderStateModelTests.cpp，
  *  Suite CFOLD）。几何常量与气泡高度仍留在绘制侧——那些与绘制强耦合，脱离绘制没有意义。

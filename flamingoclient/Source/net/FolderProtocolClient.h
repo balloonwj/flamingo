@@ -17,9 +17,11 @@
  *  RemoteDesktopProtocolClient::parseRelayHelloAck 解析，本模块不重复一份。
  *
  *  会话状态取值见 net/Protocol.h 的 enum folder_transfer_state（1~8），失败原因取值见同
- *  文件的 error_code_folder_*（606~620）。本头文件<u>不</u>包含 Protocol.h——那份头文件
- *  不得与 v1 的 Msg.h 同处一个编译单元，包含进来会把这条限制传染给每一个使用本模块的
- *  .cpp；因此取值范围判定放在实现文件里，调用方需要具体枚举值时自行包含 Protocol.h。
+ *  文件的 error_code_folder_*（606~620）。本头文件<u>不</u>包含 Protocol.h：原先是不想把
+ *  "不得与 v1 的 Msg.h 同处一个编译单元"这条约束传染给每一个使用本模块的 .cpp
+ *  （v1 协议头已于 2026-08-14 删除，该约束已消失），现在的理由是使用方多半只需要
+ *  本模块的解析函数、用不上协议头的其余定义。取值范围判定都在实现文件里；调用方
+ *  要用到枚举值时自行包含 Protocol.h。
  *
  *  本模块为纯逻辑，只依赖 jsoncpp 与标准库，不触及 socket、界面与日志，便于单元测试，
  *  见 flamingoclient/Source/Tests/FolderProtocolClientTests.cpp（Suite FPC）。

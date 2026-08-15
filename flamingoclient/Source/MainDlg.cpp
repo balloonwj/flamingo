@@ -11,7 +11,8 @@
 #include "Update/UpdateManager.h"
 #include "BalloonUpdate/BalloonUpdateWindow.h"   // 静默检查查出新版本时拉起升级窗
 #include "net/IUProtocolData.h"
-#include "net/IUSocket.h"                 // CIUSocket::RequestContacts（登录后拉取通讯录）
+#include "net/IUSocket.h"
+#include "net/Protocol.h"   // error_code —— v1 的 Msg.h 删除后 两个头不再冲突，撤回 / Pin / 通话的错误码直接用协议原枚举                 // CIUSocket::RequestContacts（登录后拉取通讯录）
 #include "net/MessageProtocolClient.h"    // net::MessageNotify / net::SendMessageResponse
 #include "net/RemoteDesktopProtocolClient.h" // net::RDInviteResponse / RDInviteNotify / RDRelayInfo / RDStateNotify
 #include "net/CallProtocolClient.h"          // net::CallInviteResponse / CallInviteNotify / CallSignalingInfo / CallStateNotify
@@ -2450,11 +2451,11 @@ LRESULT CMainDlg::OnV2RecallResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lPar
     {
         //按服务端返回的 error_code 给出具体原因，别让用户面对一句笼统的"撤回失败"。
         LPCTSTR pszTip = _T("撤回失败，请稍后重试。");
-        if (pResp->m_code == kRecallErrTimeout)
+        if (pResp->m_code == error_code_recall_timeout)
             pszTip = _T("该消息发出已超过 2 分钟，无法撤回。");
-        else if (pResp->m_code == kRecallErrNotAllowed)
+        else if (pResp->m_code == error_code_recall_not_allowed)
             pszTip = _T("你没有权限撤回这条消息。");
-        else if (pResp->m_code == kRecallErrMessageNotExist)
+        else if (pResp->m_code == error_code_message_not_exist)
             pszTip = _T("该消息不存在或已被撤回。");
 
         LOG_ERROR("v2 recall message failed, code=%d, msg=%s.", pResp->m_code, pResp->m_msg.c_str());
@@ -2497,11 +2498,11 @@ LRESULT CMainDlg::OnV2PinResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
         //文案要分清"钉"与"取消"两个方向 —— 同一个失败码在两个方向下读起来完全不同。
         const bool bPinning = (pResp->m_pin == 1);
         LPCTSTR pszTip = bPinning ? _T("Pin 失败，请稍后重试。") : _T("取消 Pin 失败，请稍后重试。");
-        if (pResp->m_code == kPinErrNotAllowed)
+        if (pResp->m_code == error_code_pin_not_allowed)
             pszTip = _T("只有钉住这条消息的人和群主 / 管理员才能取消它。");
-        else if (pResp->m_code == kPinErrMessageNotExist)
+        else if (pResp->m_code == error_code_message_not_exist)
             pszTip = _T("该消息不存在或已被撤回。");
-        else if (pResp->m_code == kPinErrNotGroupMember)
+        else if (pResp->m_code == error_code_not_group_member)
             pszTip = _T("你已不在该群聊中。");
 
         LOG_ERROR("v2 pin message failed, code=%d, msg=%s, ctype=%d, cid=%lld, msgid=%lld, pin=%d.",
@@ -3232,11 +3233,11 @@ LRESULT CMainDlg::OnV2CallSwitchMediaResult(UINT /*uMsg*/, WPARAM /*wParam*/, LP
     {
         //按服务端返回的 error_code 给出具体原因，别让用户面对一句笼统的"切换失败"。
         LPCTSTR pszTip = _T("切换失败，请稍后重试。");
-        if (pResp->m_code == kCallErrNotExist)
+        if (pResp->m_code == error_code_call_not_exist)
             pszTip = _T("通话已结束，无法切换。");
-        else if (pResp->m_code == kCallErrNotMember)
+        else if (pResp->m_code == error_code_call_not_member)
             pszTip = _T("你不是本次通话的参与方。");
-        else if (pResp->m_code == kCallErrStateInvalid)
+        else if (pResp->m_code == error_code_call_state_invalid)
             pszTip = _T("通话尚未接通，接通后才能切换。");
 
         LOG_ERROR("v2 call switch media failed, code=%d, msg=%s.",

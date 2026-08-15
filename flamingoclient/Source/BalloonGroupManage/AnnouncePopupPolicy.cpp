@@ -15,8 +15,9 @@ namespace balloongroupmanage {
 static const TCHAR* const kAnnouncePopupSection = _T("GroupAnnouncePopped");
 
 // changetype 取值，与服务端 group_announcement_change_type 一致。
-// 本模块刻意不 include net/Protocol.h —— 它与 v1 的 net/Msg.h 有同名枚举冲突，
-// 而本模块要能被单测工程直接编译（与 GroupManageMapping 里的处理同理）。
+// 本模块另抄一份而不 include net/Protocol.h：原先是因为协议头与 v1 的 net/Msg.h
+// 有同名枚举冲突（v1 协议头已于 2026-08-14 删除，该限制不复存在），现在的理由是
+// 本模块要能被测试工程直接编译，不想拖进整个协议头（与 GroupManageMapping 同处理）。
 static const int kAnnounceChangePublish = 1;   // 新发布
 
 bool ShouldPopupAnnouncement(const AnnouncePopupInput& input)

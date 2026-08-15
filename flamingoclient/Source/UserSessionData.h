@@ -211,41 +211,15 @@ extern std::wstring g_strAppTitle;
 #define     FMG_MSG_V2_FOLDER_RECV_PROGRESS WM_USER + 589			//文件夹接收进度，lParam=堆 foldertransfer::FolderProgressNotice*（处理后 delete）
 #define     FMG_MSG_V2_FOLDER_RECV_RESULT   WM_USER + 590			//文件夹接收最终结果，lParam=堆 foldertransfer::FolderResultNotice*（处理后 delete）；UI 线程收到后须回调 FolderTransferManager::FinishRecv，成功时其中的 m_localRoot 即落地目录，供「打开文件夹」
 
-// FMG_MSG_CHANGE_MY_PRESENCE 的 wParam 取值（与 v2 协议 net/Protocol.h 的 presence_type
-// 同值）。单列一份命名常量，是因为 CMainDlg 等编译单元包含 v1 net/Msg.h，无法再 include
-// v2 net/Protocol.h（msg_type / error_code 枚举名会冲突），却又要按这些值分支。值必须与
-// presence_type 保持一致（菜单侧 MainPanelStatusMenu 仍用 presence_type 原值，经 wParam 传来）。
-// 撤回消息应答里可能出现的错误码。与 v2 协议 net/Protocol.h 的 enum error_code 同值，
-// 单列一份的原因同下面的 MyPresenceValue：CMainDlg 所在编译单元包含 v1 net/Msg.h，
-// 无法再 include v2 net/Protocol.h（msg_type / error_code 枚举名会冲突），却又要按这些
-// 值分支给出不同提示。值必须与 error_code 保持一致。
-// 切换通话媒体类型时可能出现的错误码。与 v2 协议 net/Protocol.h 的 enum error_code 同值，
-// 单列一份的原因同下面的 RecallErrorCode / MyPresenceValue：CMainDlg 所在编译单元包含
-// v1 net/Msg.h，无法再 include v2 net/Protocol.h（枚举名会冲突）。值必须保持一致。
-enum CallSwitchMediaErrorCode
-{
-    kCallErrNotExist     = 705,   // 通话会话不存在（通话已结束 / sessionid 无效）
-    kCallErrNotMember    = 706,   // 请求者不是本次通话双方之一，无权操作
-    kCallErrStateInvalid = 707,   // 通话未接通，此时不允许切换媒体
-};
-
-enum RecallErrorCode
-{
-    kRecallErrTimeout        = 501,   // 超出可撤回时限（服务端为消息发出后 2 分钟）
-    kRecallErrNotAllowed     = 502,   // 无权撤回该消息（非本人发出、且非群主/管理员）
-    kRecallErrMessageNotExist = 503,  // 消息不存在（或已被撤回）
-};
-
-// Pin 消息（cmd_pin_message 1518）失败时服务端返回的结果码。取值与 v2 协议
-// net/Protocol.h 的 error_code 一致，单列一份的理由同上面几个 enum：CMainDlg 等
-// 编译单元包含 v1 net/Msg.h，无法再 include v2 的 Protocol.h（枚举名会冲突）。
-enum PinErrorCode
-{
-    kPinErrNotGroupMember = 302,  // 已不在该群里，无权操作群内消息
-    kPinErrMessageNotExist = 503, // 消息不存在或已被撤回（撤回的消息不允许再钉）
-    kPinErrNotAllowed     = 506,  // 无权取消该消息的 Pin（群里只有钉它的人本人与群主/管理员可取消）
-};
-
+// FMG_MSG_CHANGE_MY_PRESENCE 的 wParam 取值。四个值与 v2 协议 net/Protocol.h 的
+// enum presence_type 逐条同值（0 离线 / 1 在线 / 2 离开 / 3 勿扰），改动那边时
+// 必须同步这里。
+//
+// 这里另立一份命名常量而不是直接用 presence_type，原本是因为 CMainDlg 所在的
+// 编译单元包含 v1 的 net/Msg.h，而它与 net/Protocol.h 有同名枚举、不能同时包含；
+// v1 协议头已于 2026-08-14 删除，那条限制不复存在。现在保留它的理由变成：本头
+// 文件被大量 UI 侧文件包含，不宜为四个状态值把整个协议头拖进来。要换成直接用
+// presence_type 也可以，届时把这四个常量的使用点一并改掉即可。
 enum MyPresenceValue
 {
     kMyPresenceOffline = 0,   // 离线 —— 真正断开连接（GoOffline）

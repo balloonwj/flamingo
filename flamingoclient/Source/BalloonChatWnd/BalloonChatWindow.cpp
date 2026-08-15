@@ -202,9 +202,11 @@ static const int kShakeStepCount = (int)(sizeof(kShakeOffsets) / sizeof(kShakeOf
 // 刷屏。收发两侧统一用同一阈值（5 秒，与产品约定一致）。
 static const ULONGLONG kShakeMinIntervalMs = 5000;
 
-// 消息内容类型常量，与 net::message_type（net/Protocol.h）对齐 —— 本窗口只用到
-// 文本与抖动两类；不直接 include Protocol.h 是为避开它与旧 net/Msg.h 的枚举同名
-// 冲突（见 IUSocket.h 顶部说明）。
+// 消息内容类型常量，与 net/Protocol.h 的 message_type 对齐 —— 本窗口只用到
+// 文本、图片、文件几类。此处另立常量而不直接 include Protocol.h：原先的理由是
+// 协议头与 v1 的 net/Msg.h 枚举名冲突，v1 协议头已于 2026-08-14 删除、该限制不复
+// 存在；现在的理由只剩「本文件用不上协议头的其余几百个定义」。取值一致，日后
+// 想直接用 message_type 也可以。
 static const int kMsgTypeText  = 1;    // message_type_text
 static const int kMsgTypeImage = 2;    // message_type_image
 static const int kMsgTypeFile  = 3;    // message_type_file

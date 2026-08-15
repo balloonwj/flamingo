@@ -15,10 +15,10 @@
 #include "FrameCrypto.h"             // net::IDENTITY_PUBLICKEY_BYTES（服务端公钥成员需完整尺寸）
 
 
-//v2 协议帧头前置声明。本头文件被众多 .cpp 引用，其中部分仍包含旧
-//net/Msg.h；而 net/Protocol.h 与 Msg.h 的枚举同名冲突，故本头文件不能
-//直接包含 Protocol.h，只前置声明 frame_header 供成员函数声明使用，
-//完整定义在 IUSocket.cpp 内经 FrameCodec.h 引入。
+//v2 协议帧头前置声明。本头文件被众多 .cpp 引用，故不直接包含 Protocol.h ——
+//原先是因为它与 v1 的 net/Msg.h 枚举同名冲突（v1 协议头已于 2026-08-14 删除，
+//该限制不复存在），现在的理由是不把整个协议头传染给所有使用方。这里只前置
+//声明 frame_header 供成员函数签名使用，完整定义由 IUSocket.cpp 内经 FrameCodec.h 引入。
 struct frame_header;
 
 //注册请求参数前置声明。Register 只按 const 引用收它，无需完整类型；
