@@ -570,24 +570,6 @@ tstring CFlamingoClient::GetChatPicFolder(UINT nUserNum/* = 0*/)
 	return m_UserMgr.GetChatPicFolder();
 }
 
-// 获取用户头像图片全路径文件名
-tstring CFlamingoClient::GetUserHeadPicFullName(UINT nUserNum/* = 0*/)
-{
-	return m_UserMgr.GetUserHeadPicFullName(nUserNum);
-}
-
-// 获取好友头像图片全路径文件名
-tstring CFlamingoClient::GetBuddyHeadPicFullName(UINT nUTalkNum)
-{
-	return m_UserMgr.GetBuddyHeadPicFullName(nUTalkNum);
-}
-
-// 获取群头像图片全路径文件名
-tstring CFlamingoClient::GetGroupHeadPicFullName(UINT nGroupNum)
-{
-	return m_UserMgr.GetGroupHeadPicFullName(nGroupNum);
-}
-
 // 获取群成员头像图片全路径文件名
 tstring CFlamingoClient::GetSessHeadPicFullName(UINT nUTalkNum)
 {
@@ -604,24 +586,6 @@ tstring CFlamingoClient::GetChatPicFullName(LPCTSTR lpszFileName)
 tstring CFlamingoClient::GetMsgLogFullName(UINT nUserNum/* = 0*/)
 {
 	return m_UserMgr.GetMsgLogFullName();
-}
-
-// 判断是否需要更新好友头像
-BOOL CFlamingoClient::IsNeedUpdateBuddyHeadPic(UINT nUTalkNum)
-{
-	return m_UserMgr.IsNeedUpdateBuddyHeadPic(nUTalkNum);
-}
-
-// 判断是否需要更新群头像
-BOOL CFlamingoClient::IsNeedUpdateGroupHeadPic(UINT nGroupNum)
-{
-	return m_UserMgr.IsNeedUpdateGroupHeadPic(nGroupNum);
-}
-
-// 判断是否需要更新群成员头像
-BOOL CFlamingoClient::IsNeedUpdateSessHeadPic(UINT nUTalkNum)
-{
-	return m_UserMgr.IsNeedUpdateSessHeadPic(nUTalkNum);
 }
 
 // 获取服务器时间

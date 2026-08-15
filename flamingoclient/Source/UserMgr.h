@@ -26,17 +26,12 @@ public:
 	tstring GetChatPicFolder();							// 获取聊天图片存放路径
 	tstring GetCustomUserThumbFolder();					// 获取自定义用户头像目录
 
-	tstring GetUserHeadPicFullName(UINT uFace);			// 获取用户头像图片全路径文件名
-	tstring GetBuddyHeadPicFullName(UINT uFace);		// 获取好友头像图片全路径文件名
-	tstring GetGroupHeadPicFullName(UINT nGroupNum);	// 获取群头像图片全路径文件名
 	tstring GetSessHeadPicFullName(UINT nUTalkNum);		// 获取群成员头像图片全路径文件名
 	tstring GetChatPicFullName(LPCTSTR lpszFileName);	// 获取聊天图片全路径文件名
 	tstring GetMsgLogFullName();						// 获取消息记录全路径文件名
 	tstring GetDefaultRecvFilePath();					// 获取默认接收文件路径名
 	void	SetCustomRecvFilePath(PCTSTR pszPath);		// 设置自定义接收目录（空=用默认）；GetDefaultRecvFilePath 优先用它
 
-	BOOL IsNeedUpdateBuddyHeadPic(UINT nUTalkNum);		// 判断是否需要更新好友头像
-	BOOL IsNeedUpdateGroupHeadPic(UINT nGroupNum);		// 判断是否需要更新群头像
 	BOOL IsNeedUpdateSessHeadPic(UINT nUTalkNum);		// 判断是否需要更新群成员头像
 
 	BOOL IsSelf(PCTSTR pszAccountName);

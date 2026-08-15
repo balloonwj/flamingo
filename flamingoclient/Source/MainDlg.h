@@ -236,7 +236,6 @@ public:
 		MESSAGE_HANDLER_EX(WM_CLOSE_GMEMBERINFODLG, OnShowOrCloseDlg)
 		MESSAGE_HANDLER_EX(WM_CLOSE_GROUPINFODLG, OnShowOrCloseDlg)
 		MESSAGE_HANDLER_EX(WM_CLOSE_MAINDLG, OnCloseDlg)						//关闭主对话框
-		MESSAGE_HANDLER_EX(WM_DEL_MSG_SENDER, OnDelMsgSender)
 		MESSAGE_HANDLER_EX(WM_CANCEL_FLASH, OnCancelFlash)
 
 		REFLECT_NOTIFICATIONS()													//消息反射通知宏
@@ -466,7 +465,6 @@ private:
 	
 	LRESULT OnCloseDlg(UINT uMsg, WPARAM wParam, LPARAM lParam);
 	LRESULT OnShowOrCloseDlg(UINT uMsg, WPARAM wParam, LPARAM lParam);
-	LRESULT OnDelMsgSender(UINT uMsg, WPARAM wParam, LPARAM lParam);
 	LRESULT OnCancelFlash(UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 
@@ -579,7 +577,6 @@ private:
 
 	BOOL LoadLoginIcon();
 	void DestroyLoginIcon();
-	void UpdateMsgIcon();
 
 	// 按 m_trayFlash 当前"最近一条"未读会话重建托盘闪烁图标 m_hMsgIcon —— 用
 	// monogram（头像首字 + 底色）按小图标尺寸生成 HICON。先销毁旧 m_hMsgIcon 再
@@ -596,7 +593,6 @@ private:
 	// 回投 FMG_MSG_TRAY_CLEAR 使托盘停闪）。
 	void OpenConvFromTrayPopup(int ctype, long long cid);
 
-	CString GetHeadPicFullName(UINT nGroupCode, UINT nUTalkUin);
 	void GetNumber(UINT nGroupCode, UINT nUTalkUin, UINT& nGroupNum, UINT& nUTalkNum);
 	HICON ExtractIcon(LPCTSTR lpszFileName);
 

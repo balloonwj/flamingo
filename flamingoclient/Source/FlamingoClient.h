@@ -97,16 +97,10 @@ public:
 	tstring GetPersonalFolder(UINT nUserNum = 0);		// 获取个人文件夹存放路径
 	tstring GetChatPicFolder(UINT nUserNum = 0);		// 获取聊天图片存放路径
 
-	tstring GetUserHeadPicFullName(UINT nUserNum = 0);	// 获取用户头像图片全路径文件名
-	tstring GetBuddyHeadPicFullName(UINT nUTalkNum);	// 获取好友头像图片全路径文件名
-	tstring GetGroupHeadPicFullName(UINT nGroupNum);	// 获取群头像图片全路径文件名
 	tstring GetSessHeadPicFullName(UINT nUTalkNum);		// 获取群成员头像图片全路径文件名
 	tstring GetChatPicFullName(LPCTSTR lpszFileName);	// 获取聊天图片全路径文件名
 	tstring GetMsgLogFullName(UINT nUserNum = 0);		// 获取消息记录全路径文件名
 
-	BOOL IsNeedUpdateBuddyHeadPic(UINT nUTalkNum);		// 判断是否需要更新好友头像
-	BOOL IsNeedUpdateGroupHeadPic(UINT nGroupNum);		// 判断是否需要更新群头像
-	BOOL IsNeedUpdateSessHeadPic(UINT nUTalkNum);		// 判断是否需要更新群成员头像
 
 	void RequestServerTime();							// 获取服务器时间
 	time_t GetCurrentTime();							// 获取当前时间(以服务器时间为基准)

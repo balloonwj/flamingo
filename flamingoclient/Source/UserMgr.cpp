@@ -53,33 +53,6 @@ tstring CUserMgr::GetCustomUserThumbFolder()
 	return  GetPersonalFolder()+_T("UserThumb\\");
 }
 
-// 获取用户头像图片全路径文件名
-tstring CUserMgr::GetUserHeadPicFullName(UINT uFace)
-{
-	TCHAR szPath[MAX_PATH] = {0};
-	_stprintf_s(szPath, MAX_PATH, _T("%sImage\\UserThumbs\\%u.png"), g_szHomePath, uFace);
-	tstring strPath(szPath);
-
-	return strPath;
-}
-
-// 获取好友头像图片全路径文件名
-tstring CUserMgr::GetBuddyHeadPicFullName(UINT uFace)
-{
-	return GetUserHeadPicFullName(uFace);
-}
-
-// 获取群头像图片全路径文件名
-tstring CUserMgr::GetGroupHeadPicFullName(UINT nGroupNum)
-{
-	//TCHAR szPath[MAX_PATH] = {0};
-	//LPCTSTR lpFmt = _T("%s%u\\HeadImage\\Group\\%u.png");
-	//wsprintf(szPath, lpFmt, m_strUserFolder.c_str(), m_nUTalkUin, nGroupNum);
-	//return szPath;
-
-	return _T("");
-}
-
 // 获取群成员头像图片全路径文件名
 tstring CUserMgr::GetSessHeadPicFullName(UINT nUTalkNum)
 {
@@ -137,34 +110,6 @@ tstring CUserMgr::GetDefaultRecvFilePath()
 void CUserMgr::SetCustomRecvFilePath(PCTSTR pszPath)
 {
 	m_strCustomRecvPath = (pszPath != NULL) ? pszPath : _T("");
-}
-
-// 判断是否需要更新好友头像
-BOOL CUserMgr::IsNeedUpdateBuddyHeadPic(UINT nUTalkNum)
-{
-	tstring strFullName = GetBuddyHeadPicFullName(0);
-
-	if (!Hootina::CPath::IsFileExist(strFullName.c_str()))
-		return TRUE;
-
-	SYSTEMTIME stLastWriteTime = {0};
-	GetFileLastWriteTime(strFullName.c_str(), &stLastWriteTime);
-
-	return ((!IsToday(&stLastWriteTime)) ? TRUE : FALSE);
-}
-
-// 判断是否需要更新群头像
-BOOL CUserMgr::IsNeedUpdateGroupHeadPic(UINT nGroupNum)
-{
-	tstring strFullName = GetGroupHeadPicFullName(nGroupNum);
-
-	if (!Hootina::CPath::IsFileExist(strFullName.c_str()))
-		return TRUE;
-
-	SYSTEMTIME stLastWriteTime = {0};
-	GetFileLastWriteTime(strFullName.c_str(), &stLastWriteTime);
-
-	return ((!IsToday(&stLastWriteTime)) ? TRUE : FALSE);
 }
 
 // 判断是否需要更新群成员头像

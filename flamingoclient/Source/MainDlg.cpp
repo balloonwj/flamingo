@@ -4194,36 +4194,6 @@ LRESULT CMainDlg::OnCloseDlg(UINT uMsg, WPARAM wParam, LPARAM lParam)
     return (LRESULT)1;
 }
 
-LRESULT CMainDlg::OnDelMsgSender(UINT uMsg, WPARAM wParam, LPARAM lParam)
-{
-    long nType = (long)wParam;
-    UINT nSenderId = (UINT)lParam;
-
-
-    // 旧自绘好友 / 群列表的头像灭闪已随旧控件移除；仍转发刷新最近联系人（会话）列表。
-    if (nType == FMG_MSG_TYPE_BUDDY || nType == FMG_MSG_TYPE_GROUP)
-    {
-        //更新最近联系人中新消息的数目
-        SendMessage(FMG_MSG_UPDATE_RECENT_LIST, 0, 0);
-    }
-
-    UpdateMsgIcon();
-
-    //TODO: 以下代码放到UpdateMsgIcon中去
-    CMessageList* lpMsgList = m_FMGClient.GetMessageList();
-    if (lpMsgList != NULL && lpMsgList->GetMsgSenderCount() <= 0)
-    {
-        KillTimer(m_dwMsgTimerId);
-        m_dwMsgTimerId = NULL;
-        m_nLastMsgType = FMG_MSG_TYPE_BUDDY;
-        m_nLastSenderId = 0;
-
-        UpdateTrayIconTip();
-    }
-
-    return 0;
-}
-
 LRESULT CMainDlg::OnCancelFlash(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 
@@ -4751,77 +4721,6 @@ void CMainDlg::StopTrayFlash()
 
     // 恢复默认托盘图标（带"昵称 / 账号 / 当前状态"提示），与 OnDelMsgSender / OnCancelFlash 同口径。
     UpdateTrayIconTip();
-}
-
-void CMainDlg::UpdateMsgIcon()
-{
-    CMessageList* lpMsgList = m_FMGClient.GetMessageList();
-    if (NULL == lpMsgList)
-        return;
-
-    CMessageSender* lpMsgSender = lpMsgList->GetLastMsgSender();
-    if (NULL == lpMsgSender)
-        return;
-
-    long nMsgType = lpMsgSender->GetMsgType();
-    UINT nSenderId = lpMsgSender->GetSenderId();
-    UINT nGroupCode = lpMsgSender->GetGroupCode();
-
-    if (m_nLastMsgType != nMsgType || m_nLastSenderId != nSenderId)
-    {
-        m_nLastMsgType = nMsgType;
-        m_nLastSenderId = nSenderId;
-
-        if (m_hMsgIcon != NULL)
-        {
-            ::DestroyIcon(m_hMsgIcon);
-            m_hMsgIcon = NULL;
-        }
-
-        CString strHeadPicFileName;
-
-        if (FMG_MSG_TYPE_BUDDY == nMsgType)
-        {
-            //strHeadPicFileName = GetHeadPicFullName(0, nSenderId);
-            strHeadPicFileName.Format(_T("%sUsers\\%s\\UserThumb\\%d.png"), g_szHomePath, m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount.c_str(), nSenderId);
-            if (!Hootina::CPath::IsFileExist(strHeadPicFileName))
-                strHeadPicFileName.Format(_T("%sImage\\UserThumbs\\%d.png"), g_szHomePath, m_FMGClient.m_UserMgr.GetFaceID(nSenderId));
-        }
-        else if (FMG_MSG_TYPE_GROUP == nMsgType)
-            strHeadPicFileName = GetHeadPicFullName(nSenderId, 0);
-        else if (FMG_MSG_TYPE_SESS == nMsgType)
-            strHeadPicFileName = GetHeadPicFullName(nGroupCode, nSenderId);
-        // 		else if (long_SYSGROUP == nMsgType)
-        // 			strHeadPicFileName = Hootina::CPath::GetAppPath() + _T("Image\\DefSysHeadPic.ico");
-
-        m_hMsgIcon = ExtractIcon(strHeadPicFileName);
-        if (NULL == m_hMsgIcon)
-        {
-            if (FMG_MSG_TYPE_BUDDY == nMsgType || FMG_MSG_TYPE_SESS == nMsgType)
-                m_hMsgIcon = AtlLoadIconImage(IDI_BUDDY, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
-            else if (FMG_MSG_TYPE_GROUP == nMsgType)
-                m_hMsgIcon = AtlLoadIconImage(IDI_GROUPCHATDLG_16, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
-            //else if (long_SYSGROUP == nMsgType)
-            //	m_hMsgIcon = AtlLoadIconImage(IDI_SYS, LR_DEFAULTCOLOR, ::GetSystemMetrics(SM_CXSMICON), ::GetSystemMetrics(SM_CYSMICON));
-        }
-    }
-}
-
-CString CMainDlg::GetHeadPicFullName(UINT nGroupCode, UINT nUTalkUin)
-{
-
-
-    //UINT nGroupNum, nUTalkNum;
-    //GetNumber(nGroupCode, nUTalkUin, nGroupNum, nUTalkNum);
-
-    //if (nGroupCode != 0 && nUTalkUin != 0)	// 群成员
-    //	return m_FMGClient.GetSessHeadPicFullName(nUTalkNum).c_str();
-    //else if (nGroupCode != 0)			// 群
-    //	return m_FMGClient.GetGroupHeadPicFullName(nGroupNum).c_str();
-    //else								// 好友
-    //	return m_FMGClient.GetBuddyHeadPicFullName(nUTalkUin).c_str();
-
-    return _T("");
 }
 
 void CMainDlg::GetNumber(UINT nGroupCode, UINT nUTalkUin, UINT& nGroupNum, UINT& nUTalkNum)
