@@ -156,7 +156,9 @@ private:
     // 主窗口销毁 → 退出消息循环。
     LRESULT OnDestroy(UINT, WPARAM, LPARAM, BOOL& bHandled);
 
-    // 定时器：驱动 Toast 到时自动隐藏。
+    // 定时器回调：目前只处理顶栏审计滚动提示的切换定时器(kTickerTimerId)。
+    // Toast 的显隐与 balloonui 的动画都已由 DuiToast / DuiAnimMgr 自带的
+    // 定时器推进,不再经由本函数驱动。
     LRESULT OnTimer(UINT, WPARAM, LPARAM, BOOL& bHandled);
 
     // 汇聚所有子控件的 WM_DUI_NOTIFY，按通知码 + ctrlId 分发。

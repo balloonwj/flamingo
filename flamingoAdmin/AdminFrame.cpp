@@ -54,7 +54,6 @@
 #include "Controls/Basic/DuiButton.h"   // 「记住密码」复选框（StyleCheckbox）的读写
 #include "Controls/Input/DuiRichEditHost.h"   // 公告详情面板的标题 / 正文用
 #include "Controls/List/DuiMenu.h"
-#include "DuiAnimation.h"   // DuiAnimMgr：host 须周期性 TickAll 驱动 balloonui 动画
 
 #include <windowsx.h>   // GET_X_LPARAM / GET_Y_LPARAM
 
@@ -118,17 +117,16 @@ const WPARAM kNavScreenBase        = 100;// 切换界面：kNavScreenBase + (int
 // 注:历史的 kToastTimerId / kToastTickMs 已删除 ——
 // balloonwjui::DuiToast 内部走 DuiAnimMgr 自驱(渐入 → 显示 → 渐出),
 // 不再需要 admin 主动启 toast 专用 timer 调 Tick()。
+//
+// 注:历史的 kAnimPulseTimerId / kAnimPulseMs(16ms 动画脉冲定时器)同样已删除 ——
+// balloonwjui::DuiAnimMgr 自 2026-08-14 起内置共享脉冲定时器(见 DuiAnimation.cpp
+// 的 DuiAnimMgr::PulseProc):有动画加入时自行安装、全部播完后自行卸载,宿主程序
+// 不必也不应再周期性调用 TickAll。定时器 ID 3 就此空缺,不再复用。
 
 // ---- 顶栏审计滚动提示定时器 ----
 // 周期取 4500ms：足够看清一条、又不至于久到像静止。
 const UINT_PTR kTickerTimerId   = 2;       // 定时器 ID
 const UINT     kTickerIntervalMs = 4500;   // 切换周期（毫秒）
-
-// ---- balloonui 动画脉冲定时器 ----
-// balloonui 的 DuiAnimMgr 不自驱，须由 host 周期性调 TickAll 推进动画
-// （详见 DuiAnimation.h）。约 60Hz 足够滚动条淡入淡出、hover 渐变等短动画。
-const UINT_PTR kAnimPulseTimerId = 3;      // 定时器 ID
-const UINT     kAnimPulseMs      = 16;     // 脉冲周期（毫秒，约 60Hz）
 
 // ---- 网络连通性测试 ----
 const int kNetTestTimeoutMs = 2000;        // TCP 探测超时（毫秒）
@@ -461,10 +459,6 @@ void AdminFrame::InitContent()
     // DuiHost::EnableDoubleClick 注释。
     EnableDoubleClick(true);
 
-    // 启动 balloonui 动画脉冲定时器：DuiAnimMgr 须由 host 周期性 TickAll
-    // 驱动，否则一切动画（投放目标悬浮滚动条淡入淡出等）都不会推进。
-    SetTimer(kAnimPulseTimerId, kAnimPulseMs);
-
     // 构建客户区根容器：含 Toast 层 + 登录界面页 + 新增企业弹窗层。
     // SetClientContent 仅此一次，之后所有界面切换都在 RootContainer 内部
     // 切显隐，不再替换客户区根。
@@ -556,8 +550,9 @@ LRESULT AdminFrame::OnDestroy(UINT, WPARAM, LPARAM, BOOL& bHandled)
 
 LRESULT AdminFrame::OnTimer(UINT, WPARAM wParam, LPARAM, BOOL& bHandled)
 {
-    // 历史 kToastTimerId 分支已删除 —— balloonwjui::DuiToast 自驱,
-    // 不再需要 admin 周期性调 Tick / KillTimer。
+    // 历史的 kToastTimerId 与 kAnimPulseTimerId 两个分支均已删除 ——
+    // balloonwjui::DuiToast 与 DuiAnimMgr 都自带定时驱动,不再需要 admin
+    // 周期性调 Tick / TickAll。本函数目前只剩顶栏审计滚动提示这一路定时器。
     if (wParam == kTickerTimerId)
     {
         // 顶栏审计滚动提示前进一条。
@@ -565,14 +560,6 @@ LRESULT AdminFrame::OnTimer(UINT, WPARAM wParam, LPARAM, BOOL& bHandled)
         {
             m_topBar->AdvanceTicker();
         }
-        bHandled = TRUE;
-        return 0;
-    }
-    if (wParam == kAnimPulseTimerId)
-    {
-        // 驱动 balloonui 动画系统：推进所有活跃动画一帧（活跃动画为空时
-        // TickAll 近乎空操作，开销可忽略）。
-        balloonwjui::DuiAnimMgr::Inst().TickAll(::GetTickCount());
         bHandled = TRUE;
         return 0;
     }
@@ -4828,8 +4815,8 @@ void AdminFrame::ShowToast(LPCTSTR text, ToastKind kind)
     m_toast->SetShadowAlpha(42);
     m_toast->SetMaxWidth(0);                   // 0 = 不限, 自按图标 + 文字 + padding 算宽
     m_toast->Show(text);
-    // DuiToast 内部走 DuiAnimMgr 自驱(已由 kAnimPulseTimerId 全局推进),
-    // 这里无需再 SetTimer。
+    // DuiToast 的渐入 → 停留 → 渐出全程由 DuiAnimMgr 内置的共享脉冲定时器
+    // 推进(见 DuiAnimation.cpp 的 DuiAnimMgr::PulseProc),这里无需再 SetTimer。
     FA_LOGI(_T("提示：%s"), text);
 }
 
