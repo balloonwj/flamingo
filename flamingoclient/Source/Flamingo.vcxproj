@@ -1085,7 +1085,6 @@
     <ClInclude Include="MainDlg.h" />
     <ClInclude Include="MD5.h" />
     <ClInclude Include="MD5Core.h" />
-    <ClInclude Include="MD5Sum.h" />
     <ClInclude Include="MessageLogger.h" />
     <ClInclude Include="MiniBuffer.h" />
     <ClInclude Include="Path.h" />

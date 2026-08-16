@@ -2,7 +2,6 @@
 #include "FileTaskThread.h"
 #include "UserSessionData.h"
 #include "IULog.h"
-#include "MD5Sum.h"
 #include "Utils.h"
 #include "EncodeUtil.h"
 #include "Path.h"

@@ -1181,9 +1181,6 @@
     <ClInclude Include="MD5Core.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="MD5Sum.h">
-      <Filter>Utils</Filter>
-    </ClInclude>
     <ClInclude Include="MessageLogger.h">
       <Filter>Source Files</Filter>
     </ClInclude>

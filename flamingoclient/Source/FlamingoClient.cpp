@@ -24,7 +24,6 @@
 #include "EncodeUtil.h"
 #include "UserSessionData.h"
 #include "CustomMsgDef.h"
-#include "Startup.h"
 #include "File2.h"
 #include "Path.h"
 #include <sstream>

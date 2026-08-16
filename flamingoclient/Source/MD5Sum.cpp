@@ -19,7 +19,7 @@
 * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 #include "stdafx.h"
-#include "MD5Sum.h"
+#include "MD5Core.h"   // MD5_CTX 与三个 C 接口的声明；本文件是它们的实现
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -28,49 +28,6 @@ static char THIS_FILE[] = __FILE__;
 #endif
 
 
-
-MD5Sum::MD5Sum()
-{
-}
-
-MD5Sum::MD5Sum(const CString& sSource)
-{
-	Calculate(sSource);
-}
-
-MD5Sum::MD5Sum(const unsigned char* pachSource, UINT nLen)
-{
-	Calculate(pachSource, nLen);
-}
-
-CString MD5Sum::Calculate(const CString& sSource)
-{
-	return Calculate((const unsigned char*)(LPCTSTR)sSource, sSource.GetLength()*sizeof(TCHAR));
-}
-
-CString MD5Sum::Calculate(const unsigned char* pachSource, UINT nLen)
-{
-	MD5_CTX context;
-
-	MD5Init(&context);
-	MD5Update(&context, pachSource, nLen);
-	MD5Final(m_rawHash, &context);
-
-	m_sHash.Empty();
-	for (int i = 0; i < 16; i++)
-	{
-		CString sT;
-		sT.Format(_T("%02x"), m_rawHash[i]);
-		m_sHash += sT;
-	}
-
-	return m_sHash;
-}
-
-CString MD5Sum::GetHash() const
-{
-	return m_sHash;
-}
 
 #define S11 7
 #define S12 12

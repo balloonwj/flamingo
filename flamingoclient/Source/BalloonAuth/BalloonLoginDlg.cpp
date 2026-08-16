@@ -24,7 +24,6 @@
 #include "../net/LoginProtocolClient.h"  // v2 登录应答解析
 #include "../BalloonRegister/BalloonRegisterWindow.h"        // 新版注册窗口（“注册账号”链接）
 #include "../BalloonNetSettings/BalloonNetSettingsWindow.h"  // 新版网络设置窗口（“网络设置”链接）
-#include "../Startup.h"              // CheckOnlyOneInstance
 #include "../Update/UpdateManager.h"          // 登录前检查更新
 #include "../BalloonUpdate/BalloonUpdateWindow.h"  // 查出新版本时弹升级窗
 #include "../Path.h"                 // Hootina::CPath::GetAppPath（历史账号列表落盘路径）

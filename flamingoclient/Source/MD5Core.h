@@ -1,10 +1,11 @@
 /**
  *  MD5 摘要算法的纯 C 接口（RSA Data Security 参考实现的声明部分）。
  *
- *  从 MD5Sum.h 中拆出：那里的 MD5Sum 类依赖 MFC 的 CString，凡是不链接 MFC 的
- *  编译单元（如 net/FileStreamTransfer.cpp 及其单元测试）都无法包含它。本头文件
- *  只含 MD5_CTX 与三个 C 函数，无任何 MFC / Windows 依赖，可被任意模块安全包含。
- *  实现仍在 MD5Sum.cpp 里，两边共用同一份。
+ *  本文件原是从 MD5Sum.h 里拆出来的：那个头文件里有个依赖 MFC CString 的封装类
+ *  MD5Sum，凡是不链接 MFC 的编译单元（如 net/FileStreamTransfer.cpp 及其单元测试）
+ *  都无法包含它。该类全仓库无人使用，已于 2026-08-16 连同 MD5Sum.h 一并删除，
+ *  现在这里就是 MD5 接口唯一的声明处。只含 MD5_CTX 与三个 C 函数，无任何
+ *  MFC / Windows 依赖，可被任意模块安全包含；实现在 MD5Sum.cpp 里。
  *
  *  典型用法（流式增量计算）：
  *      MD5_CTX ctx;

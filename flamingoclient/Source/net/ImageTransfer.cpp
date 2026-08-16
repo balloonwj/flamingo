@@ -12,7 +12,7 @@
 #include "FramePayload.h"           // encodeFramePayload / decodeFramePayload（压缩与加密管线）
 #include "../UserSessionData.h"     // FMG_MSG_V2_IMAGE_SEND_*
 #include "../IULog.h"               // LOG_INFO / LOG_ERROR
-#include "../MD5Sum.h"              // MD5Init / MD5Update / MD5Final
+#include "../MD5Core.h"   // MD5Init / MD5Update / MD5Final（纯 C 接口）
 #include "../EncodeUtil.h"          // UnicodeToUtf8（日志里打登录账号用）
 #include "UserCachePath.h"          // UserCacheDir（Users\<登录账号>\ 的统一口径）
 

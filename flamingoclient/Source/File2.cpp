@@ -1,6 +1,6 @@
 ﻿#include "stdafx.h"
 #include "File2.h"
-#include "MD5Sum.h"
+#include "MD5Core.h"   // MD5Init / MD5Update / MD5Final（纯 C 接口）
 #include "MiniBuffer.h"
 #include "Path.h"
 #include "EncodeUtil.h"
