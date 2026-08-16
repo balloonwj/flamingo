@@ -111,9 +111,6 @@
     <ClCompile Include="CascadeWinManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="ChatDlgCommon.cpp">
-      <Filter>UI</Filter>
-    </ClCompile>
     <ClCompile Include="CheckNetworkStatusTask.cpp">
       <Filter>Tasks</Filter>
     </ClCompile>
@@ -1126,9 +1123,6 @@
     </ClInclude>
     <ClInclude Include="CascadeWinManager.h">
       <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="ChatDlgCommon.h">
-      <Filter>UI</Filter>
     </ClInclude>
     <ClInclude Include="CheckNetworkStatusTask.h">
       <Filter>Tasks</Filter>

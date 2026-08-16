@@ -47,7 +47,6 @@
 #include "GDIFactory.h"
 #include "IULog.h"
 #include "Startup.h"
-#include "ChatDlgCommon.h"
 #include "EncodeUtil.h"
 #include "UIText.h"
 #include "PerformanceCounter.h"

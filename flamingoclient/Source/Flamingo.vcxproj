@@ -274,7 +274,6 @@
     </ClCompile>
     <ClCompile Include="Buffer.cpp" />
     <ClCompile Include="CascadeWinManager.cpp" />
-    <ClCompile Include="ChatDlgCommon.cpp" />
     <ClCompile Include="CheckNetworkStatusTask.cpp" />
     <ClCompile Include="Crash.cpp" />
     <ClCompile Include="EncodeUtil.cpp" />
@@ -1067,7 +1066,6 @@
     <ClInclude Include="net\HandshakeRunner.h" />
     <ClInclude Include="Buffer.h" />
     <ClInclude Include="CascadeWinManager.h" />
-    <ClInclude Include="ChatDlgCommon.h" />
     <ClInclude Include="CheckNetworkStatusTask.h" />
     <ClInclude Include="ClipboardText.h" />
     <ClInclude Include="CustomMsgDef.h" />
