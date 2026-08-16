@@ -350,6 +350,13 @@
     <ClCompile Include="MainPanelTrayMenuTests.cpp" />
     <ClCompile Include="MainPanelUserDataTests.cpp" />
     <ClCompile Include="MemberPickerTreeModelTests.cpp" />
+    <!-- 消息号守卫用例要在运行期打开 Source\ 下的四个消息定义头文件，靠 __FILE__
+         定位源码目录，故单独加 /FC 让 __FILE__ 展开成绝对路径（默认是相对项目
+         目录的相对路径，测试 exe 的工作目录与之无关，用不了）。 -->
+    <ClCompile Include="MessageIdRegistryTests.cpp">
+      <AdditionalOptions>/FC %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+    <ClCompile Include="MessageEscapeTests.cpp" />
     <ClCompile Include="MessageProtocolTests.cpp" />
     <ClCompile Include="MouseWheelBubbleTests.cpp" />
     <ClCompile Include="NetSettingsTests.cpp" />
