@@ -238,8 +238,13 @@ TEST_CASE("CDM11 ProbeDropPath 判定真实文件 / 目录 / 不存在路径")
     const DWORD n = ::GetTempPathW(MAX_PATH, tempDir);
     REQUIRE(n > 0);
 
+    //文件名里带上进程号，避免两份测试进程同时跑时争同一个文件
+    //（同 HistoryModelTests::FreshTempDb 的做法）。
+    wchar_t probeName[64] = { 0 };
+    ::swprintf_s(probeName, L"flamingo_cdm_probe_%u.bin",
+                 static_cast<unsigned int>(::GetCurrentProcessId()));
     std::wstring filePath = tempDir;
-    filePath += L"flamingo_cdm_probe.bin";
+    filePath += probeName;
 
     HANDLE h = ::CreateFileW(filePath.c_str(), GENERIC_WRITE, 0, NULL,
                              CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);

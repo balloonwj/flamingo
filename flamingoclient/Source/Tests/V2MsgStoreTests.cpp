@@ -25,7 +25,13 @@ static std::wstring FreshTempDb(const wchar_t* name)
 {
     wchar_t dir[MAX_PATH] = { 0 };
     ::GetTempPathW(MAX_PATH, dir);
+    //文件名里带上进程号：两份测试进程同时跑（命令行一份 + VS 里一份）时，
+    //固定文件名会让它们共用同一个文件，先起的占着、后起的打开就失败，
+    //表现为看似偶发、复跑又好了的失败。同 HistoryModelTests::FreshTempDb。
+    wchar_t prefix[32] = { 0 };
+    ::swprintf_s(prefix, L"%u_", static_cast<unsigned int>(::GetCurrentProcessId()));
     std::wstring path = dir;
+    path += prefix;
     path += name;
     ::DeleteFileW(path.c_str());
     return path;
