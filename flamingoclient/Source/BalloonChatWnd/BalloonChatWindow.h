@@ -1029,7 +1029,8 @@ private:
      *  WM_LBUTTONDOWN 旁听：落点在消息区里就把逻辑焦点记成"接收框"。
      *
      *  只旁听、<u>不消费</u>（恒置 bHandled=FALSE），否则整个界面的鼠标交互都会失灵。
-     *  点输入框不会产生本消息（那是子窗口的事），发送框那一侧由输入框的键盘钩子报。
+     *  输入框是无窗口控件，点它也会产生本消息、落点在发送框那一块矩形内；同时输入框
+     *  自己也会投 WM_CHAT_FOCUS_AREA 上报（见 ChatInputRichEdit），两条路径结果一致。
      */
     LRESULT OnLButtonDownMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 

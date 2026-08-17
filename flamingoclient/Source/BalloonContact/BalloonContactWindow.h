@@ -31,11 +31,12 @@
 
 class CFlamingoClient;
 
-// 「备注名」失焦提交的去抖自投消息。DUIN_KILLFOCUS 不能立即提交 —— 用户在编辑框内
-// 点一下会让寄宿的 EDIT 短暂失焦再得焦，此刻立即提交就会当场退回查看态、字都打不了。
-// 改为 PostMessage 本消息延后一拍，在 OnRemarkCommitDeferred 里查一下焦点：焦点又回到
-// EDIT 说明人还在编辑、跳过；只有焦点真正离开才提交。做法与群资料对话框的
-// WM_GROUPINFO_CARD_COMMIT 一致。值取 WM_APP 段，与系统消息不冲突。
+// 「备注名」失焦提交的去抖自投消息。DUIN_KILLFOCUS 不能立即提交 —— 早先文本框内嵌
+// 真 Win32 输入框子窗口时，用户在框内点一下会让它短暂失焦再得焦，此刻立即提交就会
+// 当场退回查看态、字都打不了。改为 PostMessage 本消息延后一拍，在
+// OnRemarkCommitDeferred 里查一下焦点：焦点仍在文本框上说明人还在编辑、跳过；只有
+// 焦点真正离开才提交。文本框现已是无窗口控件，这道去抖作为保险继续保留。做法与群
+// 资料对话框的 WM_GROUPINFO_CARD_COMMIT 一致。值取 WM_APP 段，与系统消息不冲突。
 #define WM_CONTACT_REMARK_COMMIT   (WM_APP + 0x22)
 
 /**
@@ -145,8 +146,9 @@ private:
     void FillSwitches();
 
     // 进入 / 退出「备注名」行内编辑态。进入时显示文本框、隐藏当前值与
-    // 铅笔，并把 Win32 键盘焦点直接交给文本框寄宿的 EDIT 子窗（只调
-    // DuiControl::SetFocus 是不够的，见函数实现里的说明）；退出时反之。
+    // 铅笔，并把焦点交给文本框、全选其内容（文本框是无窗口控件，一次
+    // SetFocus 即可同时拿到 DUI 焦点与宿主窗口的键盘焦点，见函数实现里的
+    // 说明）；退出时反之。
     //   editing：true 进入编辑态；false 退出编辑态。
     void SetRemarkEditing(bool editing);
 
@@ -273,7 +275,7 @@ private:
     LRESULT OnLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     // WM_CONTACT_REMARK_COMMIT（去抖自投）：备注名文本框失焦后延后一拍的提交检查。
-    // 若焦点又回到了 EDIT 子窗（用户在框内重新点了一下）则跳过、仍留编辑态；
+    // 若焦点又回到了备注名文本框（用户在框内重新点了一下）则跳过、仍留编辑态；
     // 焦点真正离开才提交。
     LRESULT OnRemarkCommitDeferred(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 

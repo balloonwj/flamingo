@@ -21,7 +21,7 @@
 #include "../net/ProfileProtocolClient.h" // net::UpdateProfileResponse
 #include "../ClipboardText.h"            // 点击账号复制到剪贴板
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"   // 编辑框 GetText / SetBgColor
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"   // 编辑框 GetText / SetBgColor
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"   // 性别下拉 GetCurSel / SetBgColor
 
 #include <vector>                        // CStrToUtf8 缓冲
@@ -374,7 +374,7 @@ void CBalloonProfileDlg::OpenForCurrentUser(HWND hParent, CFlamingoClient* pFMGC
     EnsureVisualResources();
     ApplyProfileButtonStyles(GetClientContent(), m_resources);
 
-    // 5 个 DuiEditHost 输入框此刻是隐藏态,进入编辑态时由 SetProfileEditMode
+    // 5 个 DuiEdit 输入框此刻是隐藏态,进入编辑态时由 SetProfileEditMode
     // 的容器重排显示并定位。这里只统一它们的底色。
     const UINT editIds[] = {
         kIdNicknameEdit, kIdSignatureEdit, kIdBirthdayEdit,
@@ -385,7 +385,7 @@ void CBalloonProfileDlg::OpenForCurrentUser(HWND hParent, CFlamingoClient* pFMGC
     const COLORREF kEditBgColor = RGB(0xF4, 0xF3, 0xF0);
     for (size_t i = 0; i < sizeof(editIds) / sizeof(editIds[0]); ++i)
     {
-        balloonwjui::DuiEditHost* edt = dynamic_cast<balloonwjui::DuiEditHost*>(
+        balloonwjui::DuiEdit* edt = dynamic_cast<balloonwjui::DuiEdit*>(
             GetClientContent()->FindCtrlById(editIds[i]));
         if (edt != NULL)
         {
@@ -505,15 +505,15 @@ void CBalloonProfileDlg::DoSaveProfile()
     }
 
     // 读 6 个编辑控件当前值。
-    balloonwjui::DuiEditHost* nickEdit = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* nickEdit = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(kIdNicknameEdit));
-    balloonwjui::DuiEditHost* signEdit = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* signEdit = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(kIdSignatureEdit));
-    balloonwjui::DuiEditHost* bdayEdit = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* bdayEdit = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(kIdBirthdayEdit));
-    balloonwjui::DuiEditHost* addrEdit = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* addrEdit = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(kIdLocationEdit));
-    balloonwjui::DuiEditHost* mailEdit = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* mailEdit = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(kIdEmailEdit));
     balloonwjui::DuiComboBox* genderBox = dynamic_cast<balloonwjui::DuiComboBox*>(
         content->FindCtrlById(kIdGenderEdit));

@@ -9,12 +9,14 @@
  *  上一代是 RootContainer 的 modal overlay 子控件 —— 共享主窗口 DuiHost,
  *  自绘半透明遮罩 + 居中卡片 + header / banner / 按钮栏,自己写 BuildFieldLayout
  *  手算 9 字段几何,自己拦 OnLButtonUp 吃遮罩点击。这种走法跟 DuiHost 的 paint
- *  模型对撞 —— 弹窗首次显示时 9 个 EDIT 子窗的 paint 会被 host 的 back-buffer +
- *  全 client BitBlt 吞掉,屏幕上看不到任何文字 / 占位字,必须点一下框才会重画。
+ *  模型对撞 —— 当时输入框内嵌真 Win32 输入框子窗口,弹窗首次显示时这 9 个子
+ *  窗口的绘制结果会被 host 的 back-buffer + 全 client BitBlt 覆盖,屏幕上看不到
+ *  任何文字 / 占位字,必须点一下框才会重画。输入框现已是无窗口控件、由库统一
+ *  绘制,这个具体故障不会再出现,但本类仍按下述标准路径实现。
  *
  *  本类改走 balloonui 标准路径:继承 DuiFrameWindow 拿独立顶层 HWND + 自带
  *  标题栏 / 关闭按钮 / DuiHost paint;客户区用 DuiVBox / DuiHBox 容器纯代码
- *  构造控件树,字段是现成的 DuiEditHost / DuiLabel / DuiButton,完全不自绘
+ *  构造控件树,字段是现成的 DuiEdit / DuiLabel / DuiButton,完全不自绘
  *  对话框框架。由 balloonui 处理整个 paint 周期 —— paint 时序问题消失。
  *
  *  真模态语义:CreateAndShow 调用时 EnableWindow(parent, FALSE) 把主窗口禁掉,
@@ -30,7 +32,7 @@
 #include "Controls/Window/DuiFrameWindow.h"
 #include "Mock/MockData.h"
 
-namespace balloonwjui { class DuiEditHost; }
+namespace balloonwjui { class DuiEdit; }
 
 namespace flamingoadmin {
 
@@ -92,7 +94,7 @@ private:
     // admin 现有风格一致。
     void BuildClientContent();
 
-    // 把 m_node 的字段值灌进 9 个 DuiEditHost + banner / 登录账号文字。
+    // 把 m_node 的字段值灌进 9 个 DuiEdit + banner / 登录账号文字。
     // 在 BuildClientContent 之后立即调一次。
     void LoadNodeIntoUi();
 
@@ -119,15 +121,15 @@ private:
 
     // 输入控件 / 按钮裸指针。所有权在控件树中,本类只借用;控件树由
     // SetClientContent 接管 -> 本对话框析构时一并销毁。
-    balloonwjui::DuiEditHost* m_editName;        // 姓名 *
-    balloonwjui::DuiEditHost* m_editTitle;       // 职位
-    balloonwjui::DuiEditHost* m_editEmployeeNo;  // 工号
-    balloonwjui::DuiEditHost* m_editJoinDate;    // 入职日期
-    balloonwjui::DuiEditHost* m_editEmail;       // 邮箱 *
-    balloonwjui::DuiEditHost* m_editPhone;       // 手机号
-    balloonwjui::DuiEditHost* m_editLandline;    // 座机
-    balloonwjui::DuiEditHost* m_editWorkstation; // 工位地址
-    balloonwjui::DuiEditHost* m_editSignature;   // 个性签名
+    balloonwjui::DuiEdit* m_editName;        // 姓名 *
+    balloonwjui::DuiEdit* m_editTitle;       // 职位
+    balloonwjui::DuiEdit* m_editEmployeeNo;  // 工号
+    balloonwjui::DuiEdit* m_editJoinDate;    // 入职日期
+    balloonwjui::DuiEdit* m_editEmail;       // 邮箱 *
+    balloonwjui::DuiEdit* m_editPhone;       // 手机号
+    balloonwjui::DuiEdit* m_editLandline;    // 座机
+    balloonwjui::DuiEdit* m_editWorkstation; // 工位地址
+    balloonwjui::DuiEdit* m_editSignature;   // 个性签名
 
     balloonwjui::DuiControl*  m_btnSave;         // 「保存」按钮(busy 时改文字)
 };

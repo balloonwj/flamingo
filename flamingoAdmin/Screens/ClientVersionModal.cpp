@@ -10,7 +10,7 @@
 #include "Widgets/UiHelpers.h"
 #include "Widgets/CommonWidgets.h"
 #include "Widgets/IconRenderer.h"
-#include "Controls/Input/DuiEditHost.h"
+#include "Controls/Input/DuiEdit.h"
 #include "Controls/Basic/DuiButton.h"
 #include "Widgets/OverlayScrollbar.h"
 
@@ -73,7 +73,7 @@ ClientVersionModal::ClientVersionModal()
     ::SetRectEmpty(&m_panelRect);
     ::SetRectEmpty(&m_listRc);
 
-    std::unique_ptr<DuiEditHost> version = std::make_unique<DuiEditHost>();
+    std::unique_ptr<DuiEdit> version = std::make_unique<DuiEdit>();
     version->SetCtrlId(kIdCvModalVersion);
     version->SetPlaceholder(_T("例如：3.3.0（须与客户端内置版本号一致）"));
     version->SetShowBorder(true);
@@ -81,7 +81,7 @@ ClientVersionModal::ClientVersionModal()
     m_editVersion = version.get();
     AddChild(std::move(version));
 
-    std::unique_ptr<DuiEditHost> minVer = std::make_unique<DuiEditHost>();
+    std::unique_ptr<DuiEdit> minVer = std::make_unique<DuiEdit>();
     minVer->SetCtrlId(kIdCvModalMinVer);
     minVer->SetPlaceholder(_T("例如：3.1.0（低于它的客户端会被强制升级；留空表示不设门槛）"));
     minVer->SetShowBorder(true);
@@ -89,7 +89,7 @@ ClientVersionModal::ClientVersionModal()
     m_editMinVer = minVer.get();
     AddChild(std::move(minVer));
 
-    std::unique_ptr<DuiEditHost> note = std::make_unique<DuiEditHost>();
+    std::unique_ptr<DuiEdit> note = std::make_unique<DuiEdit>();
     note->SetCtrlId(kIdCvModalNote);
     note->SetPlaceholder(_T("更新说明，会原样显示在客户端的升级窗里，可分多行写"));
     note->SetShowBorder(true);

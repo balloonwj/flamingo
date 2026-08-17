@@ -74,7 +74,7 @@ enum HistoryCtrlId : UINT
     kIdHistoryEmptySub     = 581,  //空状态副文案；副文案为空串时该控件不建
 
     kIdHistoryPageJump     = 570,  //“跳至第 N 页”微调框（DuiSpinBox 本体，▲▼ 点击发通知）
-    kIdHistoryPageJumpEdit = 571,  //上面那个微调框内部的真 EDIT。手输入的提交要在它
+    kIdHistoryPageJumpEdit = 571,  //上面那个微调框内部的输入框子控件。手输入的提交要在它
                                    //失焦时自己做（见 DuiSpinBox 头注释），故单独给个 id
                                    //才认得出是谁失焦了
 };

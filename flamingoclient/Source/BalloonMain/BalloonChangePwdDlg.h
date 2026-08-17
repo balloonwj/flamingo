@@ -21,7 +21,7 @@
 class CFlamingoClient;
 
 namespace net { struct ChangePasswordResponse; }
-namespace balloonwjui { class DuiVBox; class DuiEditHost; class DuiButton; }
+namespace balloonwjui { class DuiVBox; class DuiEdit; class DuiButton; }
 
 /**
  *  CBalloonChangePwdDlg —— 修改密码对话框（非模态浮窗，owner = 主面板）。
@@ -66,7 +66,7 @@ private:
 
     // 往 root 加一个"标题 + 密码输入框"字段组，并把输入框指针写回 *outEdit。
     void AddField(balloonwjui::DuiVBox* root, LPCTSTR label, UINT editId,
-                  balloonwjui::DuiEditHost** outEdit);
+                  balloonwjui::DuiEdit** outEdit);
 
     // 点"保存"：读三框 → 校验（失败就地提示）→ SHA-256 → 发起 cmd_change_password。
     void DoSave();
@@ -78,9 +78,9 @@ private:
     CFlamingoClient* m_lpFMGClient;   // 所属客户端（消息中枢），引用不持有
 
     // 控件指针（借用，控件树持有）：读值 / 复位时用。
-    balloonwjui::DuiEditHost* m_oldEdit;       // 当前密码
-    balloonwjui::DuiEditHost* m_newEdit;       // 新密码
-    balloonwjui::DuiEditHost* m_confirmEdit;   // 确认新密码
+    balloonwjui::DuiEdit* m_oldEdit;       // 当前密码
+    balloonwjui::DuiEdit* m_newEdit;       // 新密码
+    balloonwjui::DuiEdit* m_confirmEdit;   // 确认新密码
 
     bool m_built;          // 骨架是否已构建
     bool m_submitting;     // 是否已发出改密请求、等待应答（防重复提交）

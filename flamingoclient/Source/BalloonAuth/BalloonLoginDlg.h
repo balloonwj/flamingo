@@ -30,7 +30,7 @@ class CFlamingoClient;
 // 新增成员指针时务必同时补进这一行：漏了的话，凡是在引入对应控件头之前先包含本
 // 文件的 .cpp（典型是经 BalloonMainPanel.h 间接包含）都会编不过，报的是"DuiXxx
 // 不是 balloonwjui 的成员"、位置指向本文件，与那个 .cpp 看不出关系，很难查。
-namespace balloonwjui { class DuiComboBox; class DuiEditHost; class DuiButton;
+namespace balloonwjui { class DuiComboBox; class DuiEdit; class DuiButton;
                         class DuiLabel; class DuiProgressBar; }
 // 自绘 Banner 控件 —— 同上，前置声明即可。
 namespace balloonauth { class AuthBanner; }
@@ -387,7 +387,7 @@ private:
     // 由 InitLoginUi 填充；指向客户区控件树里的节点，所有权属于控件树，
     // 本类不负责释放。未 InitLoginUi 时为 NULL。
     balloonwjui::DuiComboBox* m_pAccountCombo;   // 账号下拉框
-    balloonwjui::DuiEditHost* m_pPasswordEdit;   // 密码输入框
+    balloonwjui::DuiEdit* m_pPasswordEdit;   // 密码输入框
     balloonwjui::DuiButton*   m_pLoginButton;    // “登录”按钮（检查更新期间要改文案并禁用）
     balloonwjui::DuiButton*   m_pRememberPwd;    // “记住密码”复选框
     balloonwjui::DuiButton*   m_pAutoLogin;      // “自动登录”复选框

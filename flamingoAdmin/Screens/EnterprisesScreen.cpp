@@ -15,7 +15,7 @@
 #include "Util/AppConfig.h"
 #include "Util/Logger.h"
 
-#include "Controls/Input/DuiEditHost.h"
+#include "Controls/Input/DuiEdit.h"
 #include "Controls/Basic/DuiButton.h"   // FlatButton 已迁到 balloonwjui::DuiButton
 #include "DuiNotify.h"
 
@@ -407,13 +407,13 @@ EnterprisesScreen::EnterprisesScreen()
     auto filterRow = std::make_unique<DuiHBox>();
     filterRow->SetGap(kFilterGap);
 
-    auto search = std::make_unique<DuiEditHost>();
+    auto search = std::make_unique<DuiEdit>();
     search->SetCtrlId(kIdEntSearch);
     search->SetPlaceholder(_T("搜索企业名称、行业…"));
     search->SetBgColor(theme::kInk25);
     search->SetShowBorder(true);
     // 左侧放大镜图标。
-    search->SetIcon(DuiEditHost::LeftIcon, 30,
+    search->SetIcon(DuiEdit::LeftIcon, 30,
         [](HDC hdc, const RECT& rcIcon)
         {
             const int kGlyph = 16;

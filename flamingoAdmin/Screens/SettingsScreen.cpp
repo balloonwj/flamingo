@@ -12,7 +12,7 @@
 #include "Widgets/Widgets.h"
 #include "Widgets/CommonWidgets.h"
 
-#include "Controls/Input/DuiEditHost.h"
+#include "Controls/Input/DuiEdit.h"
 #include "Controls/Basic/DuiButton.h"   // FlatButton 已迁到 balloonwjui::DuiButton
 
 using namespace balloonwjui;
@@ -61,9 +61,9 @@ const int kCard2H    = kC2Btn + kBtnH + 20;   // 修改密码卡总高
 
 // 构造一个统一风格的输入框。
 //   id：控件 ID；placeholder：占位文字；password：是否密码模式。
-std::unique_ptr<DuiEditHost> MakeEdit(int id, LPCTSTR placeholder, bool password)
+std::unique_ptr<DuiEdit> MakeEdit(int id, LPCTSTR placeholder, bool password)
 {
-    auto e = std::make_unique<DuiEditHost>();
+    auto e = std::make_unique<DuiEdit>();
     e->SetCtrlId(id);
     e->SetPlaceholder(placeholder);
     e->SetShowBorder(true);

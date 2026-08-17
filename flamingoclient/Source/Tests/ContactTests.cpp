@@ -33,7 +33,7 @@
 #include "../BalloonContact/ContactLayout.h"
 #include "../BalloonContact/ContactModel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"   // 快捷操作行四个按钮的公共基类
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
@@ -214,7 +214,7 @@ TEST_CASE("C4 联系人资料对话框含备注名当前值与行内文本框", 
     REQUIRE(root != nullptr);
 
     CHECK(root->FindCtrlById(kIdRemarkValue) != nullptr);
-    CHECK(dynamic_cast<DuiEditHost*>(
+    CHECK(dynamic_cast<DuiEdit*>(
               root->FindCtrlById(kIdRemarkEdit)) != nullptr);
 }
 

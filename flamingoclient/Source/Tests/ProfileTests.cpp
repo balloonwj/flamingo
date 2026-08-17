@@ -21,7 +21,7 @@
 
 #include "../BalloonProfile/ProfileLayout.h"
 #include "../BalloonProfile/ProfileModel.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 
 using namespace balloonwjui;
@@ -112,20 +112,20 @@ TEST_CASE("P4 查看态含六个只读值文本控件", "[profile]")
     CHECK(viewRoot->FindCtrlById(kIdViewEmail)     != nullptr);
 }
 
-TEST_CASE("P5 编辑态含五个文本框且类型为 DuiEditHost", "[profile]")
+TEST_CASE("P5 编辑态含五个文本框且类型为 DuiEdit", "[profile]")
 {
     auto editRoot = BuildProfileBody(true);
     REQUIRE(editRoot != nullptr);
 
-    CHECK(dynamic_cast<DuiEditHost*>(
+    CHECK(dynamic_cast<DuiEdit*>(
         editRoot->FindCtrlById(kIdEditNickname))  != nullptr);
-    CHECK(dynamic_cast<DuiEditHost*>(
+    CHECK(dynamic_cast<DuiEdit*>(
         editRoot->FindCtrlById(kIdEditSignature)) != nullptr);
-    CHECK(dynamic_cast<DuiEditHost*>(
+    CHECK(dynamic_cast<DuiEdit*>(
         editRoot->FindCtrlById(kIdEditBirthday))  != nullptr);
-    CHECK(dynamic_cast<DuiEditHost*>(
+    CHECK(dynamic_cast<DuiEdit*>(
         editRoot->FindCtrlById(kIdEditRegion))    != nullptr);
-    CHECK(dynamic_cast<DuiEditHost*>(
+    CHECK(dynamic_cast<DuiEdit*>(
         editRoot->FindCtrlById(kIdEditEmail))     != nullptr);
 }
 

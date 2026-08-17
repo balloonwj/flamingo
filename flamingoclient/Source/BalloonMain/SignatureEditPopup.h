@@ -3,7 +3,7 @@
  *
  *  主面板"点个性签名→原地编辑→回车提交"的内联编辑弹层。子类化 balloonui
  *  DuiPopupHost（无边框 WS_POPUP 浮层，自带 ESC / 失焦自动关闭），内部承载一个
- *  单行 DuiEditHost；OpenForSignature 把弹层精确盖在签名文字的屏幕矩形上，带入
+ *  单行 DuiEdit；OpenForSignature 把弹层精确盖在签名文字的屏幕矩形上，带入
  *  当前签名并聚焦全选，达到"签名就地变成编辑框"的观感。
  *
  *  提交时机（与产品决策一致）：
@@ -25,7 +25,7 @@
 
 #include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiPopupHost.h"
 
-namespace balloonwjui { class DuiEditHost; }
+namespace balloonwjui { class DuiEdit; }
 
 /**
  *  CSignatureEditPopup —— 个性签名内联编辑弹层。
@@ -75,7 +75,7 @@ private:
      */
     LRESULT OnChildNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
-    // 首次打开时构建一次内容树（一个单行 DuiEditHost）。
+    // 首次打开时构建一次内容树（一个单行 DuiEdit）。
     void BuildContentOnce();
 
     // DuiPopupHost dismiss 回调：失焦关闭→提交；ESC / 程序化关闭→不提交。
@@ -86,7 +86,7 @@ private:
     void DoCommit();
 
 private:
-    balloonwjui::DuiEditHost* m_edit;        // 单行编辑框（借用，内容树持有）
+    balloonwjui::DuiEdit* m_edit;        // 单行编辑框（借用，内容树持有）
     bool           m_built;                  // 内容树是否已构建
     bool           m_handled;                // 本次会话是否已提交/取消（防重复提交）
     CommitCallback m_commitCb;               // 提交回调

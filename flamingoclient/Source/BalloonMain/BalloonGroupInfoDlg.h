@@ -117,7 +117,7 @@ private:
 
     /**
      *  WM_GROUPINFO_CARD_COMMIT(去抖自投):群名片编辑框失焦后延后一拍的提交检查。
-     *  若焦点又回到了 EDIT 子窗(用户在框内重新点击)则跳过,仍留在编辑态;否则提交。
+     *  若焦点又回到了该编辑框(用户在框内重新点击)则跳过,仍留在编辑态;否则提交。
      */
     LRESULT OnCardCommitDeferred(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 

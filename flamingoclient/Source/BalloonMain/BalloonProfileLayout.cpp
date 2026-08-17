@@ -51,7 +51,7 @@ extern CAppModule _Module;
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 
 namespace balloonmain {
 
@@ -324,7 +324,7 @@ void SafeSetLabelText(balloonwjui::DuiLabel* lbl, LPCTSTR text)
     }
 }
 
-void SafeSetEditText(balloonwjui::DuiEditHost* edt, LPCTSTR text)
+void SafeSetEditText(balloonwjui::DuiEdit* edt, LPCTSTR text)
 {
     if (edt != NULL)
     {
@@ -466,15 +466,15 @@ bool ApplyProfileDataToView(balloonwjui::DuiControl* root,
                      info.position.IsEmpty() ? kEmptyFieldText : info.position);
 
     // ---- Edit 系列控件初值（部门 / 职位只读，没有编辑控件，不在此列）----
-    SafeSetEditText(FindCtrl<balloonwjui::DuiEditHost>(root, kIdNicknameEdit),
+    SafeSetEditText(FindCtrl<balloonwjui::DuiEdit>(root, kIdNicknameEdit),
                     info.nickname);
-    SafeSetEditText(FindCtrl<balloonwjui::DuiEditHost>(root, kIdSignatureEdit),
+    SafeSetEditText(FindCtrl<balloonwjui::DuiEdit>(root, kIdSignatureEdit),
                     info.signature);
-    SafeSetEditText(FindCtrl<balloonwjui::DuiEditHost>(root, kIdBirthdayEdit),
+    SafeSetEditText(FindCtrl<balloonwjui::DuiEdit>(root, kIdBirthdayEdit),
                     bdayText);
-    SafeSetEditText(FindCtrl<balloonwjui::DuiEditHost>(root, kIdLocationEdit),
+    SafeSetEditText(FindCtrl<balloonwjui::DuiEdit>(root, kIdLocationEdit),
                     info.address);
-    SafeSetEditText(FindCtrl<balloonwjui::DuiEditHost>(root, kIdEmailEdit),
+    SafeSetEditText(FindCtrl<balloonwjui::DuiEdit>(root, kIdEmailEdit),
                     info.email);
 
     balloonwjui::DuiComboBox* genderCombo =

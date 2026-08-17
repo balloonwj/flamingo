@@ -18,7 +18,7 @@
 #include "Util/OrgToolbarLayout.h"   // 工具条搜索框 / 图标按钮的摆位（纯函数，有单测）
 
 #include "Controls/Basic/DuiButton.h"   // FlatButton 已迁到 balloonwjui::DuiButton
-#include "Controls/Input/DuiEditHost.h" // 组织树搜索框
+#include "Controls/Input/DuiEdit.h" // 组织树搜索框
 #include "DuiNotify.h"
 
 using namespace balloonwjui;
@@ -60,7 +60,7 @@ int MeasureW(LPCTSTR text, HFONT font)
 }
 
 // 组织树搜索框右侧放大镜图标的画法。写成自由函数(而非 lambda)以遵开发约定文档
-// 「尽量不用 lambda」;交给 DuiEditHost::SetIcon(RightIcon,...) 在右侧 gutter 内
+// 「尽量不用 lambda」;交给 DuiEdit::SetIcon(RightIcon,...) 在右侧 gutter 内
 // 居中绘制。rcIcon 为图标可用矩形(host 客户区坐标)。
 void DrawOrgSearchIcon(HDC hdc, const RECT& rcIcon)
 {
@@ -132,13 +132,13 @@ EnterpriseDetailScreen::EnterpriseDetailScreen()
     // ---- 组织树搜索框(工具条左侧) ----
     // 输入框是无窗口控件,构造完即可使用,无需额外的创建步骤。
     // 文字变化经 DUIN_VALUECHANGED 上报 AdminFrame,再转发到 OnOrgSearchChanged。
-    auto orgSearch = std::make_unique<DuiEditHost>();
+    auto orgSearch = std::make_unique<DuiEdit>();
     orgSearch->SetCtrlId(kIdOrgSearch);
     orgSearch->SetPlaceholder(_T("搜索部门 / 员工…"));
     orgSearch->SetBgColor(theme::kInk25);
     orgSearch->SetShowBorder(true);
     // 右侧内部放大镜图标(装饰,gutter 30px;文字区自动避让该 gutter)。
-    orgSearch->SetIcon(DuiEditHost::RightIcon, 30, &DrawOrgSearchIcon);
+    orgSearch->SetIcon(DuiEdit::RightIcon, 30, &DrawOrgSearchIcon);
     m_orgSearch = orgSearch.get();
     AddChild(std::move(orgSearch));
 
@@ -269,10 +269,10 @@ void EnterpriseDetailScreen::OnOrgSearchChanged()
         return;
     }
     // 按搜索框当前文本过滤组织树(部门名 / 员工姓名;空文本恢复全树)。
-    // 注意:这里【不】调本屏 Invalidate() —— 整屏重绘会把背景填到搜索框 EDIT
-    // 子窗口区域、盖住刚输入的文字(须再次点击 EDIT 自绘才恢复)。SetFilter 内部
-    // 已对组织树自身 Invalidate,树会正常刷新;EDIT 文字由其自身 WM_PAINT 呈现,
-    // 不需要、也不应被整屏重绘干扰(与 EnterprisesScreen::OnSearchChanged 一致)。
+    // 这里不调本屏 Invalidate():SetFilter 内部已对组织树自身 Invalidate,树会
+    // 正常刷新,整屏重绘是多余的开销。早先搜索框内嵌真 Win32 输入框子窗口时,
+    // 整屏重绘还会把背景填到搜索框所在区域、盖掉刚输入的文字(须再点一下才恢复);
+    // 搜索框改为无窗口控件、与本屏一同绘制之后,该现象已不复存在。
     m_tree->SetFilter(m_orgSearch->GetText());
 }
 

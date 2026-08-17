@@ -6,7 +6,7 @@
  *  —— CBalloonProfileDlg 与 FlamingoUnit 测试工程共用本文件。
  *
  *  设计稿:design/个人信息.png(查看态) / design/个人信息02.png(编辑态)。
- *  同一窗口承载两套右侧值控件:查看态用 DuiLabel,编辑态用 DuiEditHost +
+ *  同一窗口承载两套右侧值控件:查看态用 DuiLabel,编辑态用 DuiEdit +
  *  DuiComboBox;两套同时建好,按 SetVisible 切换。底部 4 个按钮(关闭/
  *  编辑资料/取消/保存)同样两两切换。
  *
@@ -36,19 +36,19 @@ enum ProfileCtrlId : UINT
     kIdProfileAccount     = 302,  // "账号 MY0308" 行(显示登录账号名;ModeLink 可点复制)
 
     // ---- 6 行信息;每行两套右侧控件,View 是查看态 DuiLabel,Edit 是
-    //      编辑态 DuiEditHost(性别除外:DuiComboBox)。
+    //      编辑态 DuiEdit(性别除外:DuiComboBox)。
     kIdNicknameView       = 320,  // 昵称查看 DuiLabel
-    kIdNicknameEdit       = 321,  // 昵称编辑 DuiEditHost
+    kIdNicknameEdit       = 321,  // 昵称编辑 DuiEdit
     kIdSignatureView      = 322,  // 个性签名查看 DuiLabel
-    kIdSignatureEdit      = 323,  // 个性签名编辑 DuiEditHost
+    kIdSignatureEdit      = 323,  // 个性签名编辑 DuiEdit
     kIdGenderView         = 324,  // 性别查看 DuiLabel
     kIdGenderEdit         = 325,  // 性别编辑 DuiComboBox
     kIdBirthdayView       = 326,  // 生日查看 DuiLabel
-    kIdBirthdayEdit       = 327,  // 生日编辑 DuiEditHost(YYYY-MM-DD)
+    kIdBirthdayEdit       = 327,  // 生日编辑 DuiEdit(YYYY-MM-DD)
     kIdLocationView       = 328,  // 所在地查看 DuiLabel
-    kIdLocationEdit       = 329,  // 所在地编辑 DuiEditHost
+    kIdLocationEdit       = 329,  // 所在地编辑 DuiEdit
     kIdEmailView          = 330,  // 邮箱查看 DuiLabel
-    kIdEmailEdit          = 331,  // 邮箱编辑 DuiEditHost
+    kIdEmailEdit          = 331,  // 邮箱编辑 DuiEdit
     // 下面两行<u>只有查看态</u>，没有配套的编辑控件：部门与职位由管理员在
     // admin 控制台维护，本人改不了，编辑态下它们原样保持只读展示。
     kIdDeptView           = 332,  // 部门查看 DuiLabel（形如"产品部 / 设计组"）
@@ -88,7 +88,7 @@ struct ProfileDataInput
  *  把 ProfileDataInput 写入对话框控件树:
  *    · 顶部 Banner:头像底色 / fallback name、昵称、"账号 X" 三个控件
  *    · 6 行 View 系列 DuiLabel(查看态文字)
- *    · 6 行 Edit 系列控件初值(DuiEditHost SetText / DuiComboBox AddString + SetCurSel)
+ *    · 6 行 Edit 系列控件初值(DuiEdit SetText / DuiComboBox AddString + SetCurSel)
  *
  *  本函数不切换可见性(由对话框类按"查看 / 编辑"模式自行处理)。
  *    root  BuildProfileBody 返回的客户区根控件;null 返 false。

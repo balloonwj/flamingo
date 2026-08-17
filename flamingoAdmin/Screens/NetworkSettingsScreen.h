@@ -7,7 +7,7 @@
  *  常驻页面，开 / 关只切显隐。
  *
  *  自绘居中卡片：返回链接 + 标题 + 主机 / 端口输入框 + TLS 开关 +
- *  状态行 + 测试连接 / 保存并返回 按钮。主机 / 端口是 DuiEditHost 真
+ *  状态行 + 测试连接 / 保存并返回 按钮。主机 / 端口是 DuiEdit 真
  *  输入框；TLS 开关为自绘可点区。
  *
  *  balloonwj@qq.com   2026-05-21
@@ -18,7 +18,7 @@
 
 #include <vector>
 
-namespace balloonwjui { class DuiEditHost; }
+namespace balloonwjui { class DuiEdit; }
 
 namespace flamingoadmin {
 
@@ -51,8 +51,8 @@ private:
     CString  m_status;             // 状态行文字（空 = 不显示）
     COLORREF m_statusColor = 0;    // 状态行文字颜色
 
-    balloonwjui::DuiEditHost* m_hostEdit = nullptr;
-    balloonwjui::DuiEditHost* m_portEdit = nullptr;
+    balloonwjui::DuiEdit* m_hostEdit = nullptr;
+    balloonwjui::DuiEdit* m_portEdit = nullptr;
 };
 
 } // namespace flamingoadmin

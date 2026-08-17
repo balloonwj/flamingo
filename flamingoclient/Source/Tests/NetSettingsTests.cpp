@@ -21,7 +21,7 @@
 #include "../BalloonNetSettings/NetSettingsLayout.h"
 #include "../BalloonNetSettings/NetSettingsModel.h"
 #include "../BalloonNetSettings/NetServerCard.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 
 using namespace balloonwjui;
 using namespace balloonnetsettings;
@@ -87,8 +87,8 @@ TEST_CASE("N3 网络设置窗含地址 / 端口输入框", "[netsettings]")
     auto root = BuildNetSettingsBody();
     REQUIRE(root != nullptr);
 
-    CHECK(dynamic_cast<DuiEditHost*>(root->FindCtrlById(kIdEditHost)) != nullptr);
-    CHECK(dynamic_cast<DuiEditHost*>(root->FindCtrlById(kIdEditPort)) != nullptr);
+    CHECK(dynamic_cast<DuiEdit*>(root->FindCtrlById(kIdEditHost)) != nullptr);
+    CHECK(dynamic_cast<DuiEdit*>(root->FindCtrlById(kIdEditPort)) != nullptr);
 }
 
 TEST_CASE("N5 网络设置窗含测试连接 / 保存按钮", "[netsettings]")

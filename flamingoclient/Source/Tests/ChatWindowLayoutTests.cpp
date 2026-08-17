@@ -28,7 +28,7 @@
 #include "../BalloonChatWnd/ChatMockData.h"
 #include "../net/MessageProtocolClient.h"   // canRecallMessage（验证回填前后撤回条件的变化）
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../BalloonChatWnd/ChatInputRichEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiSplitter.h"   // 消息区/输入区可拖分隔
 
@@ -88,11 +88,12 @@ TEST_CASE("W3 单聊窗输入框已迁移为无窗口富文本控件", "[p1a][ch
 
     DuiControl* input = root->FindCtrlById(kIdInputEdit);
     REQUIRE(input != nullptr);
-    // 输入框先由纯文本 DuiEditHost 换成富文本，再由寄宿真子窗口的那个换成
-    // 无窗口的 ChatInputRichEdit（回车发送 / @提醒等定制都在它里面）。
+    // 输入框换过两次：先由纯文本输入框换成富文本，再由早先内嵌真 Win32 输入框
+    // 子窗口的那个换成无窗口的 ChatInputRichEdit（回车发送 / @提醒等定制都在
+    // 它里面）。
     CHECK(dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(input) != nullptr);
-    // 确认确实换掉了——不再是旧的 DuiEditHost（二者非继承关系，互斥）。
-    CHECK(dynamic_cast<DuiEditHost*>(input) == nullptr);
+    // 确认确实换掉了——不再是纯文本的 DuiEdit（二者非继承关系，互斥）。
+    CHECK(dynamic_cast<DuiEdit*>(input) == nullptr);
 }
 
 TEST_CASE("W14 单聊窗输入框配置：多行 / 自动换行 / 有占位符", "[p1a][chatwnd]")

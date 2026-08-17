@@ -3,7 +3,7 @@
  *
  *  联系人资料对话框「标签」区的输入弹层 —— 新增一个标签、或就地修改某一枚
  *  已有标签时弹出的单行输入框。子类化 balloonui 的 DuiPopupHost（无边框
- *  WS_POPUP 浮层，自带 ESC / 失焦自动关闭），内部承载一个单行 DuiEditHost。
+ *  WS_POPUP 浮层，自带 ESC / 失焦自动关闭），内部承载一个单行 DuiEdit。
  *
  *  提交时机：
  *    · 回车        → 提交（输入框发出 DUIN_EDIT_ENTER，本弹层在通知处理里接住）。
@@ -28,7 +28,7 @@
 
 #include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiPopupHost.h"
 
-namespace balloonwjui { class DuiEditHost; }
+namespace balloonwjui { class DuiEdit; }
 
 namespace ballooncontact {
 
@@ -94,7 +94,7 @@ private:
      */
     LRESULT OnChildNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
-    // 首次打开时构建一次内容树（一个单行 DuiEditHost）。重复调用无副作用。
+    // 首次打开时构建一次内容树（一个单行 DuiEdit）。重复调用无副作用。
     void BuildContentOnce();
 
     // DuiPopupHost dismiss 回调的转接函数（C 风格回调没有 this）。
@@ -108,7 +108,7 @@ private:
     void DoCommit();
 
 private:
-    balloonwjui::DuiEditHost* m_edit;        // 单行输入框（借用指针，所有权在内容树里）
+    balloonwjui::DuiEdit* m_edit;        // 单行输入框（借用指针，所有权在内容树里）
     bool           m_built;                  // 内容树是否已构建（只建一次）
     bool           m_handled;                // 本次打开是否已提交或已取消，防重复提交
     CommitCallback m_commitCb;               // 提交回调；NULL 表示未注册

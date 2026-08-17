@@ -87,7 +87,7 @@ const wchar_t* const kAnnToolTips[kAnnToolCount]  =
     { L"选择 / 移动（拖动或缩放选区）", L"矩形", L"椭圆", L"箭头", L"画笔",
       L"马赛克（拖框打码）", L"马赛克（涂抹打码）", L"文字（点击输入）" };
 
-// 文字编辑框（DuiEditHost）的控件 id —— 取一个不与工具栏 / 颜色 / 线宽冲突的值；
+// 文字编辑框（DuiEdit）的控件 id —— 取一个不与工具栏 / 颜色 / 线宽冲突的值；
 // 其失焦 / 值变通知（非 DUIN_CLICK）会冒到遮罩窗口但被忽略，互不干扰。
 const UINT kIdTextEdit    = 60;
 const int  kTextInnerPad  = 4;    // 文字框初始一行高的内边距估算（像素，随后被 GrowTextEditToFit 校正）
@@ -363,8 +363,8 @@ void CaptureCanvas::BeginTextEdit(POINT pt)
     m_textBox.right  = right;
     m_textBox.bottom = bottom;
 
-    // 建一个多行 DuiEditHost 作子控件（复用 balloonui，IME / 光标 / 编辑都现成）。
-    std::unique_ptr<balloonwjui::DuiEditHost> edit(new balloonwjui::DuiEditHost());
+    // 建一个多行 DuiEdit 作子控件（复用 balloonui，IME / 光标 / 编辑都现成）。
+    std::unique_ptr<balloonwjui::DuiEdit> edit(new balloonwjui::DuiEdit());
     edit->SetCtrlId(kIdTextEdit);
     edit->SetMultiLine(true);          // 多行
     edit->SetWordWrap(true);           // 按宽度自动换行
@@ -439,9 +439,9 @@ void CaptureCanvas::CommitTextEdit()
     if (m_textEdit != NULL)
     {
         text = m_textEdit->GetText();
-        balloonwjui::DuiEditHost* dead = m_textEdit;
+        balloonwjui::DuiEdit* dead = m_textEdit;
         m_textEdit = NULL;
-        RemoveChild(dead);   // 连同其 EDIT 子窗一并销毁
+        RemoveChild(dead);   // 从控件树摘下并销毁该输入框子控件
     }
     m_textEditing = false;
 
@@ -476,7 +476,7 @@ void CaptureCanvas::CancelTextEdit()
     }
     if (m_textEdit != NULL)
     {
-        balloonwjui::DuiEditHost* dead = m_textEdit;
+        balloonwjui::DuiEdit* dead = m_textEdit;
         m_textEdit = NULL;
         RemoveChild(dead);
     }

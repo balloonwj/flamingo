@@ -1133,8 +1133,10 @@ LRESULT CBalloonChatWindow::OnLButtonDownMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
         }
     }
 
-    // 点发送框那一整块（工具栏、提示行、发送按钮等）同样算回到发送框。点输入框
-    // 本身不会走到这里 —— 那是子窗口的事，由输入框的键盘钩子报。
+    // 点发送框那一整块（工具栏、提示行、发送按钮等）同样算回到发送框。输入框本身
+    // 也在这块矩形之内，点它会落到同一分支；此外输入框自己在被点击、得到焦点或
+    // 键入可见字符时也会投 WM_CHAT_FOCUS_AREA 上报（见 ChatInputRichEdit），两条
+    // 路径给出的结果一致。
     balloonwjui::DuiVBox* block = InputBlockCtrl();
     if (block != NULL)
     {
@@ -3644,7 +3646,7 @@ void CBalloonChatWindow::ApplyConnectionState(int state)
     }
 
     // 输入框：离线时置为只读而不是禁用 —— 已经打好的草稿还看得见、能复制，只是打不了字。
-    // 这里的目标类型必须与输入框的实际类型一致。历史上此处误写成 DuiEditHost，
+    // 这里的目标类型必须与输入框的实际类型一致。历史上此处误写成 DuiEdit，
     // 而输入框是另一条继承链上的富文本控件，dynamic_cast 恒返回空指针，于是
     // 「离线置只读」自输入框改成富文本框起就从未真正执行过（bugs.md BUG-5）。
     // 这类错误编译期查不出来：转换到无关类型是合法写法，失败只在运行期表现为

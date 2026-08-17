@@ -37,7 +37,7 @@ enum ContactCtrlId
 
     kIdRemarkValue    = 1020,   // 「备注名」行右侧的当前备注文字（ContactValueText）
     kIdRemarkEditBtn  = 1021,   // 「备注名」行右侧的铅笔编辑按钮（ContactIconButton）
-    kIdRemarkEdit     = 1022,   // 「备注名」行内编辑用文本框（DuiEditHost，默认隐藏）
+    kIdRemarkEdit     = 1022,   // 「备注名」行内编辑用文本框（DuiEdit，默认隐藏）
     kIdGroupCombo     = 1023,   // 「分组」行的下拉框（DuiComboBox）
 
     kIdSwitchMute     = 1030,   // 「消息免打扰」开关（DuiSwitch）

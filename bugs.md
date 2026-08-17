@@ -69,7 +69,7 @@
         edit->SetReadOnly(!bOnline);   // 从未执行
     }
     ```
-  - 但这两个 id 对应的控件是富文本输入框，不是 `DuiEditHost`。两者是**兄弟类**，分处不同的继承链，彼此之间没有继承关系，因此 `dynamic_cast` 恒返回 NULL，`if` 分支永不进入。
+  - 但这两个 id 对应的控件是富文本输入框，不是 `DuiEditHost`。两者是**兄弟类**，分处不同的继承链，彼此之间没有继承关系，因此 `dynamic_cast` 恒返回 NULL，`if` 分支永不进入。（上面这段代码与类名都是发现该缺陷时的原貌。`DuiEditHost` 已于 2026-08-17 删除，普通输入框统一为无窗口的 `DuiEdit`，它与富文本控件是父子关系而不再是兄弟类 —— 也就是说同样的写法今天不会再有这个问题。）
   - 同一文件里取同一个 id 的其它九处都正确地转换成了富文本类型，只有"离线置只读"这一处漏改，应是输入框换类型时遗漏。
   - 这类错误编译期无法发现：`dynamic_cast` 到无关类型是合法写法，失败只表现为运行期返回 NULL，而代码又恰好用 `if (edit != NULL)` 把失败情形当作正常分支静默跳过。
 - **状态**：2026-08-16 已修（据实证，仅限编译层面）。输入框迁移到无窗口富文本控件之后，两处的目标类型改为 `balloonchatwnd::ChatInputRichEdit*`，见 `BalloonChatWindow.cpp` 与 `BalloonGroupChatWindow.cpp` 中 `UpdateOnlineState` 一带的注释。**尚未做断网实测** —— 需确认离线时确实打不了字、且草稿仍可选中复制，实测通过后本条方可关闭。
@@ -135,11 +135,11 @@
 ## BUG-9　flamingoAdmin「编辑公告」弹窗首次点入正文输入框时闪烁一次
 
 - **发现日期**：2026-08-16（迁移公告预览面板到无窗口富文本控件时顺带发现）
-- **位置**：`flamingoAdmin/Screens/ComposeModal.cpp` 的 `m_editBody`（`balloonwjui::DuiEditHost`，寄宿真 Win32 EDIT 子窗口）。
+- **位置**：`flamingoAdmin/Screens/ComposeModal.cpp` 的 `m_editBody`。发现时它的类型是 `balloonwjui::DuiEditHost`，内嵌一个真的 Win32 输入框子窗口；该类已于 2026-08-17 删除，现在这个成员是无窗口的 `balloonwjui::DuiEdit`。
 - **现象**：打开「编辑公告」弹窗后**第一次**点进正文输入框，输入框内容会闪烁一次；此后再点不再出现。点击弹窗**背后**的公告预览正文不会闪烁。
 - **与本次迁移的关系**（据实证）：**无关**。本次迁移改的是公告预览面板的标题 / 正文（已从旧的 HWND 宿主富文本控件换成无窗口的 `DuiRichEdit`），而弹窗里这个输入框是 `DuiEditHost`，两处是不同的控件，`AdminFrame` 里针对 `DuiEditHost` 的创建与显隐处理也原样保留着。
 - **初步排查**：据推测与「真 EDIT 子窗口首次获得焦点时自绘一帧」有关 —— `AdminFrame::HideModalEdits` 会在主窗口显示前把这些子窗口先建出来再 `ShowWindow(SW_HIDE)`，弹窗打开时再显示，首次点击获得焦点时子窗口重绘。尚未用埋点确认。
-- **状态**：未修复，**已约定随控件替换一并解决** —— 该输入框后续会迁移到无窗口富文本控件，届时不再有真子窗口，这类首帧自绘问题从结构上消失。在那之前不单独投入排查。
+- **状态**：2026-08-17 **推定已随控件替换消失，待实机确认**。当日普通输入框整体改为无窗口实现（新控件 `DuiEdit`，旧类 `DuiEditHost` 已删除），`ComposeModal` 的三个输入框不再有真子窗口；同时 `AdminFrame` 里那套"主窗口显示前先把子窗口创建出来再隐藏"的处理（`EnsureEditsCreated` / `HideModalEdits` / `HideEditHwnds`）也一并删除，本条推测的成因从结构上不再成立。**尚未实机确认** —— 需要打开「编辑公告」弹窗、第一次点进正文输入框，确认不再闪烁，确认后本条方可关闭。
 
 ## BUG-10　群管理窗正在输入的公告会被后台刷新清空
 
@@ -151,3 +151,30 @@
 - **影响**：写长公告时输入内容随机丢失，用户无法预判也无从挽回。据推测触发概率不低 —— 群管理窗打开后会并发拉取四类数据，且群资料推送随时可能到达。
 - **与输入框无窗口化的关系**：无关。该缺陷在控件还是内嵌真子窗口时就已存在，两种实现下重建控件树的后果相同。
 - **状态**：未修复。修法有两种：一是把输入中的标题与正文暂存进 `m_model`（或窗口成员），`BuildPage` 构建时回填；二是让 `RefreshNavAndPage` 在公告页且输入框非空时跳过重建、只更新左侧导航的计数徽章。前者更彻底，后者改动小。
+
+## BUG-11　DuiResMgr::SetDpi 会销毁控件仍在持有的字体句柄
+
+- **发现日期**：2026-08-17（重做 DuiGallery 界面布局、给高 DPI 补演示页面时发现）
+- **位置**：`third-party/balloonui/balloonui/DuiResMgr.cpp` 的 `CDuiResMgr::SetDpi`，与 `balloonui/Controls/Basic/DuiLabel.h` 的 `SetFont`、`balloonui/Controls/Basic/DuiButton.h` 的 `SetTextPointSize`。
+- **问题**（据实证）：`DuiResMgr::GetFontByPointSize(pt, bold)` 按 (磅值, 是否加粗) 缓存 `HFONT` 并返回，头文件写明"所有权在 manager，不要 DeleteObject"；而 `DuiLabel::SetFont` 的语义是"caller 持有，控件不会 DeleteObject"，控件里只存句柄。两处合起来的实际后果是：**控件长期持有一个由 manager 拥有的句柄**。`SetDpi` 在 DPI 变化时会对字体缓存里的每个句柄调 `DeleteObject` 并清空缓存表，此时所有仍在界面上的控件手里那份句柄立刻失效，随后的绘制会拿一个已销毁的 GDI 对象去 `SelectObject`。
+- **触发路径**：`DuiHost` 的消息映射挂了 `WM_DPICHANGED`，处理函数 `OnDpiChangedMsg` 第一件事就是 `DuiResMgr::Inst().SetDpi(dpi)`。也就是说把窗口拖到另一块缩放比例不同的显示器上、或者运行期改系统缩放，都会走到这条路径。
+- **影响**（据推测，尚未实测）：跨显示器拖动之后，凡是调过 `SetFont` / `SetTextPointSize` 的控件文字可能不再绘制、绘制成系统默认字体，或者在 GDI 句柄被复用后画出别的字体。DuiGallery 的段落标题（`DuiGallery/PageKit.cpp` 的 `AddSection`）与 `DuiButton::SetTextPointSize` 的每一个调用点都在这条路径上。
+- **初步排查**：单显示器、不改系统缩放的环境下 `SetDpi` 只在启动时被调用一次，那时还没有控件持有句柄，所以日常开发中碰不到。
+- **状态**：未修复。修法有两种：一是让控件不存句柄、改存 (磅值, 是否加粗) 并在每次绘制时向 manager 现取；二是让 `SetDpi` 不销毁旧句柄，改为把它们挂进一条待回收链、在进程退出时统一释放。前者彻底，后者改动小但会短暂多占一些 GDI 对象。**改动落在 balloonui 库内，需事先获得用户批准。**
+
+## BUG-12　CSkinManager::SetCurSkin 校验的是切换前的皮肤编号，传入不存在的编号也会成功
+
+- **发现日期**：2026-08-17（给 DuiGallery 补「资源与皮肤」演示页时发现）
+- **位置**：`third-party/balloonui/balloonui/SkinManager.cpp` 的 `CSkinManager::SetCurSkin`（第 109 至 123 行）。
+- **问题**（据实证）：函数体是 `lpSkinInfo = GetSkinInfo(m_nCurSkinID);` —— 查的是**切换前**的当前皮肤编号有没有对应的皮肤信息，而不是调用方传进来的 `nSkinID`。只要当前编号是有效的，函数就把 `m_nCurSkinID` 改成 `nSkinID` 并返回 TRUE，完全不校验目标皮肤是否存在。
+- **影响**：传一个不存在的皮肤编号会得到「切换成功」的返回值，此后 `GetAbsolutePath` 因为查不到皮肤信息一律返回空串，于是所有按皮肤取图的调用都拿不到图片，而调用方从返回值上看不出任何异常。反过来，若当前编号本身无效（例如配置文件里第一条皮肤缺失），即便传入一个有效编号也会返回 FALSE、切不过去。
+- **状态**：未修复。修法是把 `GetSkinInfo(m_nCurSkinID)` 改成 `GetSkinInfo(nSkinID)`。**改动落在 balloonui 库内，需事先获得用户批准。**
+
+## BUG-13　拖入位图时回调拿到的句柄可能在回调返回后立即失效
+
+- **发现日期**：2026-08-17（给 DuiGallery 补「拖放接收」演示页时发现）
+- **位置**：`third-party/balloonui/balloonui/DuiDropTarget.cpp` 的 `Drop` 中处理 CF_BITMAP 的分支（第 203 至 207 行）。
+- **问题**（据实证）：代码是 `HBITMAP copy = (HBITMAP)::CopyImage(med.hBitmap, IMAGE_BITMAP, 0, 0, LR_COPYRETURNORG);` 随后 `m_bmpCb(copy ? copy : med.hBitmap);`，回调返回后立即 `::ReleaseStgMedium(&med);`。`LR_COPYRETURNORG` 的语义是「当请求的尺寸与色深与原图一致时直接返回原句柄，不做复制」，因此 `copy` 很可能就是 `med.hBitmap` 本身；而 `ReleaseStgMedium` 对 TYMED_GDI 的介质会释放这个位图。
+- **影响**：回调**执行期间**句柄是有效的，但调用方只要把它存下来供后续绘制（这正是拖入图片最常见的用法），存下的就是一个已被释放的 GDI 句柄。表现为图片时有时无，或在句柄编号被复用后画出别的内容。
+- **初步排查**：库内目前没有生产代码使用位图拖入这条路径，所以尚未在实际功能中暴露。DuiGallery 的拖放演示页在自己这一侧用 `LR_CREATEDIBSECTION` 当场复制了一份来规避。
+- **状态**：未修复。修法是把 `LR_COPYRETURNORG` 换成 `LR_CREATEDIBSECTION`（或去掉该标志），确保交给回调的一定是一份独立副本，并在头文件里写明句柄的所有权归回调方。**改动落在 balloonui 库内，需事先获得用户批准。**

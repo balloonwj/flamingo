@@ -54,14 +54,14 @@ extern CAppModule _Module;
 #include "../BalloonMain/AvatarPalette.h"   // 头像底色调色板（与主面板共用一份）
 #include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 
 namespace balloonauth {
 
 using balloonwjui::DuiControl;
 using balloonwjui::DuiXmlBuilder;
 using balloonwjui::DuiComboBox;
-using balloonwjui::DuiEditHost;
+using balloonwjui::DuiEdit;
 
 namespace {
 
@@ -164,16 +164,16 @@ const COLORREF kFieldFillColor = RGB(0xF5, 0xF4, 0xF1);
 // 账号下拉框的占位文字。与密码框的"密码"对称，账号框为空时显示。
 const wchar_t* const kAccountPlaceholder = L"账号";
 
-// 取出下拉框内嵌的那个真 EDIT 宿主控件。
+// 取出下拉框内嵌的那个输入框子控件。
 //
-// DuiComboBox 在 editable 风格下会把一个 DuiEditHost 子类挂到自己名下（见
+// DuiComboBox 在 editable 风格下会把一个 DuiEdit 子类挂到自己名下（见
 // balloonui 的 DuiComboBox::EnsureEditChild），但它既没有公开取用该子控件的
 // 接口，也没有转发 SetPlaceholder。这里顺着公开的 Children() 走一层把它找
 // 出来，从而在不改动 balloonui 的前提下给账号框设占位文字。
 //   pCombo：下拉框，可为 NULL。
-// 返回：内嵌的 EDIT 宿主控件；下拉框为 NULL、或还没有内嵌控件（read-only
+// 返回：内嵌的输入框子控件；下拉框为 NULL、或还没有内嵌控件（read-only
 //       风格下就没有）时返回 NULL。所有权属于下拉框，调用方不得释放。
-DuiEditHost* FindComboEditHost(DuiComboBox* pCombo)
+DuiEdit* FindComboEditHost(DuiComboBox* pCombo)
 {
     if (pCombo == NULL)
         return NULL;
@@ -181,7 +181,7 @@ DuiEditHost* FindComboEditHost(DuiComboBox* pCombo)
     const std::vector<std::unique_ptr<DuiControl> >& children = pCombo->Children();
     for (size_t i = 0; i < children.size(); ++i)
     {
-        DuiEditHost* pEdit = dynamic_cast<DuiEditHost*>(children[i].get());
+        DuiEdit* pEdit = dynamic_cast<DuiEdit*>(children[i].get());
         if (pEdit != NULL)
             return pEdit;
     }
@@ -244,7 +244,7 @@ std::unique_ptr<DuiControl> CreateLoginCustomControl(const DuiXmlBuilder::Node& 
         if (kind == "password")
         {
             field->SetIconKind(AuthInputField::IconLock);
-            std::unique_ptr<DuiEditHost> edit(new DuiEditHost());
+            std::unique_ptr<DuiEdit> edit(new DuiEdit());
             edit->SetCtrlId(kIdPasswordEdit);
             edit->SetPassword(true);
             edit->SetPlaceholder(L"密码");
@@ -269,7 +269,7 @@ std::unique_ptr<DuiControl> CreateLoginCustomControl(const DuiXmlBuilder::Node& 
 
             // 占位文字。上面的 SetEditable(true) 已经把内嵌的输入框控件建好，
             // 此刻取得到，可以直接设置占位文字。
-            DuiEditHost* accountEdit = FindComboEditHost(combo.get());
+            DuiEdit* accountEdit = FindComboEditHost(combo.get());
             if (accountEdit != NULL)
             {
                 accountEdit->SetPlaceholder(kAccountPlaceholder);

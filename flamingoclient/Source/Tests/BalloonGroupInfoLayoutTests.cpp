@@ -37,7 +37,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 
 using namespace balloonwjui;
 using namespace balloonmain;
@@ -107,7 +107,7 @@ TEST_CASE("GI2 关键 ctrlId 存在且类型正确", "[groupinfo]")
     CHECK(dynamic_cast<DuiLabel*>(root->FindCtrlById(kIdGroupAnnouncement)) != nullptr);
     CHECK(dynamic_cast<DuiLabel*>(root->FindCtrlById(kIdGroupCardLabel)) != nullptr);
     CHECK(dynamic_cast<DuiLabel*>(root->FindCtrlById(kIdGroupCardView)) != nullptr);
-    CHECK(dynamic_cast<DuiEditHost*>(root->FindCtrlById(kIdGroupCardEdit)) != nullptr);
+    CHECK(dynamic_cast<DuiEdit*>(root->FindCtrlById(kIdGroupCardEdit)) != nullptr);
     CHECK(dynamic_cast<DuiSwitch*>(root->FindCtrlById(kIdGroupMuteSwitch)) != nullptr);
     CHECK(dynamic_cast<DuiSwitch*>(root->FindCtrlById(kIdGroupPinSwitch)) != nullptr);
     CHECK(dynamic_cast<DuiButton*>(root->FindCtrlById(kIdGroupBtnHistory)) != nullptr);
@@ -158,7 +158,7 @@ TEST_CASE("GI4 ApplyGroupInfoDataToView 写入群名 / 群号人数 / 群主 / �
     CHECK(card->GetText()   == CString(_T("林知夏")));
 
     // 名片 edit 初值同步为真实名片。
-    DuiEditHost* cardEdit = dynamic_cast<DuiEditHost*>(root->FindCtrlById(kIdGroupCardEdit));
+    DuiEdit* cardEdit = dynamic_cast<DuiEdit*>(root->FindCtrlById(kIdGroupCardEdit));
     REQUIRE(cardEdit != nullptr);
     CHECK(cardEdit->GetText() == CString(_T("林知夏")));
 }

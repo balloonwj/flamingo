@@ -40,7 +40,7 @@ namespace balloonwjui
     class DuiVBox;
     class DuiHBox;
     class DuiButton;
-    class DuiEditHost;
+    class DuiEdit;
     class DuiControl;
 }
 namespace balloonmain { class AvatarPickerTile; class CUploadDropZone; }
@@ -232,7 +232,7 @@ private:
     balloonwjui::DuiButton*        m_tabBtns[3];     // 三个分段按钮
     balloonwjui::DuiControl*       m_pages[3];       // 三页内容容器（show/hide 切换）
     balloonwjui::DuiControl*       m_pageHost;       // 页容器（切页后 ForceLayout 用）
-    balloonwjui::DuiEditHost*      m_letterEdit;     // 首字母输入框
+    balloonwjui::DuiEdit*      m_letterEdit;     // 首字母输入框
     balloonmain::CUploadDropZone*  m_uploadZone;    // 本地上传页的拖拽框（虚线框；未选图显示图标+文案，选图后框内显示真图）
 
     CString m_pendingAvatarFile;   // 本地上传：已处理好、待上传的本地图片完整路径（空=未选）

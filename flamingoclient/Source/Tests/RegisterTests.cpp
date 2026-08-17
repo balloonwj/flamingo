@@ -22,7 +22,7 @@
 #include "../BalloonRegister/RegisterLayout.h"
 #include "../BalloonRegister/RegisterModel.h"
 #include "../net/RegisterProtocolClient.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 
 using namespace balloonwjui;
@@ -84,13 +84,13 @@ TEST_CASE("R2 填写页含全部五个输入框", "[register]")
     auto root = BuildRegisterBody(kRegStepFillInfo);
     REQUIRE(root != nullptr);
 
-    CHECK(dynamic_cast<DuiEditHost*>(root->FindCtrlById(kRegIdEditNick))    != nullptr);
-    CHECK(dynamic_cast<DuiEditHost*>(root->FindCtrlById(kRegIdEditPwd))     != nullptr);
-    CHECK(dynamic_cast<DuiEditHost*>(root->FindCtrlById(kRegIdEditPwd2))    != nullptr);
+    CHECK(dynamic_cast<DuiEdit*>(root->FindCtrlById(kRegIdEditNick))    != nullptr);
+    CHECK(dynamic_cast<DuiEdit*>(root->FindCtrlById(kRegIdEditPwd))     != nullptr);
+    CHECK(dynamic_cast<DuiEdit*>(root->FindCtrlById(kRegIdEditPwd2))    != nullptr);
     // 手机号原先在已被去掉的"手机验证"那一步，现在并入本页。
-    CHECK(dynamic_cast<DuiEditHost*>(root->FindCtrlById(kRegIdEditPhone))   != nullptr);
+    CHECK(dynamic_cast<DuiEdit*>(root->FindCtrlById(kRegIdEditPhone))   != nullptr);
     // 公司名称是本次新增的字段，注册的核心输入。
-    CHECK(dynamic_cast<DuiEditHost*>(root->FindCtrlById(kRegIdEditCompany)) != nullptr);
+    CHECK(dynamic_cast<DuiEdit*>(root->FindCtrlById(kRegIdEditCompany)) != nullptr);
 }
 
 TEST_CASE("R3 填写页含返回按钮与提交注册按钮", "[register]")
@@ -280,7 +280,7 @@ TEST_CASE("R15 填写页没有账号输入框，模型也没有账号字段",
                               kRegIdEditPhone, kRegIdEditCompany };
     for (size_t i = 0; i < sizeof(kEditIds) / sizeof(kEditIds[0]); ++i)
     {
-        if (dynamic_cast<DuiEditHost*>(root->FindCtrlById(kEditIds[i])) != nullptr)
+        if (dynamic_cast<DuiEdit*>(root->FindCtrlById(kEditIds[i])) != nullptr)
         {
             ++editCount;
         }

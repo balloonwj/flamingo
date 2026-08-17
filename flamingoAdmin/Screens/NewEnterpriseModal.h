@@ -10,7 +10,7 @@
  *  (2) 常驻、切显隐。弹窗一经构建便常驻于 RootContainer 的「弹窗层」，
  *      打开 / 关闭只切换可见性，<u>绝不销毁</u>，从根本上杜绝「点击关闭
  *      按钮后销毁自身所在控件树」导致的悬空指针崩溃。
- *  (3) 表单里的文本框是 DuiEditHost，它是无窗口控件，随本弹窗一起参与绘制，
+ *  (3) 表单里的文本框是 DuiEdit，它是无窗口控件，随本弹窗一起参与绘制，
  *      构建完即可读写文本，不需要额外的创建步骤。
  *
  *  弹窗内控件的通知（X / 取消 / 创建 按钮）经 WM_DUI_NOTIFY 上报对应
@@ -25,7 +25,7 @@
 
 namespace balloonwjui
 {
-    class DuiEditHost;
+    class DuiEdit;
     class DuiComboBox;
 }
 
@@ -61,11 +61,11 @@ public:
 
 private:
     balloonwjui::DuiControl*  m_panel       = nullptr;  // 表单卡片（借用，在控件树中）
-    balloonwjui::DuiEditHost* m_editName    = nullptr;  // 企业全称
-    balloonwjui::DuiEditHost* m_editShort   = nullptr;  // 企业简称
-    balloonwjui::DuiEditHost* m_editRegion  = nullptr;  // 主要地区
-    balloonwjui::DuiEditHost* m_editAdmin   = nullptr;  // 主管理员姓名
-    balloonwjui::DuiEditHost* m_editContact = nullptr;  // 管理员邮箱
+    balloonwjui::DuiEdit* m_editName    = nullptr;  // 企业全称
+    balloonwjui::DuiEdit* m_editShort   = nullptr;  // 企业简称
+    balloonwjui::DuiEdit* m_editRegion  = nullptr;  // 主要地区
+    balloonwjui::DuiEdit* m_editAdmin   = nullptr;  // 主管理员姓名
+    balloonwjui::DuiEdit* m_editContact = nullptr;  // 管理员邮箱
     balloonwjui::DuiComboBox* m_cbIndustry  = nullptr;  // 所属行业
     balloonwjui::DuiComboBox* m_cbPlan      = nullptr;  // 套餐
     RECT                      m_panelRect{};            // 表单卡片矩形（居中算出）

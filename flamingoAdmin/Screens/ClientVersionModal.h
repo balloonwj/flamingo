@@ -10,8 +10,9 @@
  *  包的 MD5 与字节数由服务端算好随候选包一起下发，<u>不需要人工输入</u>。
  *
  *  实现与其它弹窗一致：半透明遮罩 + 居中卡片，常驻 RootContainer 弹窗层，
- *  开 / 关只切显隐；点遮罩不关闭。三个输入框是 DuiEditHost 真子窗；候选包
- *  列表为手写自绘可滚动区，复用 OverlayScrollbar 悬浮滚动条（见开发约定文档
+ *  开 / 关只切显隐；点遮罩不关闭。三个输入框是 DuiEdit，随本弹窗一起参与
+ *  绘制、受弹窗矩形裁剪；候选包列表为手写自绘可滚动区，复用 OverlayScrollbar
+ *  悬浮滚动条（见开发约定文档
  *  「UI 约定」）。各按钮经自己的 ctrlId 上报 AdminFrame。
  *
  *  balloonwj@qq.com   2026-08-11
@@ -24,7 +25,7 @@
 
 #include "Util/AdminApi.h"   // UpdatePackageItem / ScanPackagesResult
 
-namespace balloonwjui { class DuiEditHost; }
+namespace balloonwjui { class DuiEdit; }
 namespace balloonwjui { class DuiButton; }
 
 namespace flamingoadmin {
@@ -100,9 +101,9 @@ private:
     int     m_scroll;     //列表纵向滚动偏移（像素）
     int     m_scrollMax;  //纵向滚动上限（像素）
 
-    balloonwjui::DuiEditHost* m_editVersion;  //版本号输入框；所有权在子控件列表
-    balloonwjui::DuiEditHost* m_editMinVer;   //最低版本号输入框；所有权在子控件列表
-    balloonwjui::DuiEditHost* m_editNote;     //更新说明输入框；所有权在子控件列表
+    balloonwjui::DuiEdit* m_editVersion;  //版本号输入框；所有权在子控件列表
+    balloonwjui::DuiEdit* m_editMinVer;   //最低版本号输入框；所有权在子控件列表
+    balloonwjui::DuiEdit* m_editNote;     //更新说明输入框；所有权在子控件列表
     balloonwjui::DuiButton*   m_chkForced;    //「强制升级」复选框；所有权在子控件列表
     balloonwjui::DuiButton*   m_btnClose;     //右上角关闭按钮
     balloonwjui::DuiButton*   m_btnRescan;    //「重新扫描」按钮

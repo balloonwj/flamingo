@@ -8,7 +8,7 @@
  *      （姓名 + 邮箱 + 添加），分别经 removeadmin.do / addadmin.do。
  *
  *  实现：半透明遮罩 + 居中卡片，常驻 RootContainer 弹窗层，开 / 关只切显隐；
- *  点遮罩不关闭。企业信息字段与新增管理员行是 DuiEditHost / DuiComboBox 真
+ *  点遮罩不关闭。企业信息字段与新增管理员行是 DuiEdit / DuiComboBox 真
  *  控件；管理员列表为自绘，「移除」命中区在 OnLButtonUp 里按坐标判定，命中
  *  后经 WM_DUI_NOTIFY 上报 AdminFrame（ctrlId = kIdEntSettings）。
  *
@@ -24,7 +24,7 @@
 
 namespace balloonwjui
 {
-    class DuiEditHost;
+    class DuiEdit;
     class DuiComboBox;
 }
 
@@ -94,13 +94,13 @@ private:
     long long               m_pendingRemoveAdminId = 0;  // 上次点「移除」的管理员
 
     // 输入控件（所有权在控件树中；借用指针）。
-    balloonwjui::DuiEditHost* m_editName     = nullptr;
-    balloonwjui::DuiEditHost* m_editShort    = nullptr;
-    balloonwjui::DuiEditHost* m_editIndustry = nullptr;
-    balloonwjui::DuiEditHost* m_editRegion   = nullptr;
+    balloonwjui::DuiEdit* m_editName     = nullptr;
+    balloonwjui::DuiEdit* m_editShort    = nullptr;
+    balloonwjui::DuiEdit* m_editIndustry = nullptr;
+    balloonwjui::DuiEdit* m_editRegion   = nullptr;
     balloonwjui::DuiComboBox* m_cbPlan       = nullptr;
-    balloonwjui::DuiEditHost* m_editNewName  = nullptr;
-    balloonwjui::DuiEditHost* m_editNewEmail = nullptr;
+    balloonwjui::DuiEdit* m_editNewName  = nullptr;
+    balloonwjui::DuiEdit* m_editNewEmail = nullptr;
 };
 
 } // namespace flamingoadmin

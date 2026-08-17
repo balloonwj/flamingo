@@ -12,7 +12,7 @@
 #include "Widgets/Widgets.h"
 #include "Mock/DataStore.h"
 
-#include "Controls/Input/DuiEditHost.h"
+#include "Controls/Input/DuiEdit.h"
 #include "DuiHost.h"   // InvalidateDuiRect：滚动 / 勾选时只刷新成员列表面板
 #include "Widgets/OverlayScrollbar.h"
 #include "Controls/Basic/DuiButton.h"   // FlatButton 已迁到 balloonwjui::DuiButton
@@ -104,7 +104,7 @@ GroupModal::GroupModal()
     SetCtrlId(kIdGroupModal);
 
     // 群名称输入框。
-    std::unique_ptr<DuiEditHost> name = std::make_unique<DuiEditHost>();
+    std::unique_ptr<DuiEdit> name = std::make_unique<DuiEdit>();
     name->SetCtrlId(kIdGroupName);
     name->SetPlaceholder(_T("例如：研发一组"));
     name->SetShowBorder(true);
@@ -262,8 +262,8 @@ void GroupModal::InvalidateList()
     {
         return;
     }
-    // 从「成员」标签行顶部一直到列表面板底部。这块区域不含任何真子窗输入框，
-    // 单独刷新它即可让滚动 / 勾选只重绘面板自身，不牵连群名 DuiEditHost。
+    // 从「成员」标签行顶部一直到列表面板底部。这块区域内没有输入框，单独刷新
+    // 它即可让滚动 / 勾选只重绘面板自身，不牵连群名 DuiEdit。
     const int fl = m_panelRect.left + kBodyPad;
     const int fr = m_panelRect.right - kBodyPad;
     const int bodyTop = m_panelRect.top + kHeaderH + kBodyPad;

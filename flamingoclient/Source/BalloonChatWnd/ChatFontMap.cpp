@@ -6,8 +6,8 @@
  *  的翻译单元：既供 ApplyChatFontToEdit 的各重载共用，也让该逻辑可被单元测试
  *  （FlamingoUnit）直接覆盖而不必把 ini / 会话全局拖进测试 exe。
  *
- *  LOGFONT 各字段严格对齐 DuiEditHost::SetCtlFont 内部 CreateFont 的取值，保证
- *  输入框从纯文本 DuiEditHost 迁移到富文本控件后字体渲染视觉一致。
+ *  LOGFONT 各字段严格对齐 DuiEdit::SetCtlFont 内部 CreateFont 的取值，保证
+ *  输入框从纯文本 DuiEdit 迁移到富文本控件后字体渲染视觉一致。
  *
  *  balloonwj@qq.com   2026-06-04
  */
@@ -24,7 +24,7 @@ bool ChatFontToLogFont(const net::TextFont& font, LOGFONT& outLf, COLORREF& outC
         return false;
     }
 
-    // 字号像素。<=0 兜底为 14，与 DuiEditHost::SetCtlFont 的兜底一致。
+    // 字号像素。<=0 兜底为 14，与 DuiEdit::SetCtlFont 的兜底一致。
     int sizePx = font.m_size;
     if (sizePx <= 0)
     {
@@ -32,7 +32,7 @@ bool ChatFontToLogFont(const net::TextFont& font, LOGFONT& outLf, COLORREF& outC
     }
 
     ::ZeroMemory(&outLf, sizeof(outLf));
-    // 负字高 = 按像素指定字符高度，与 DuiEditHost 历史的 CreateFont(-sizePx,...) 对齐。
+    // 负字高 = 按像素指定字符高度，与 DuiEdit 历史的 CreateFont(-sizePx,...) 对齐。
     outLf.lfHeight        = -sizePx;
     outLf.lfWeight        = font.m_bold      ? FW_BOLD : FW_NORMAL;
     outLf.lfItalic        = font.m_italic    ? TRUE : FALSE;

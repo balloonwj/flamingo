@@ -641,10 +641,10 @@ std::unique_ptr<DuiControl> BuildGroupChatWindowBody(bool loadMock)
         // 整窗接收（拖文件进来就发送），窗口里任何控件抢走这份注册，聊天窗那份就
         // 再也注册不上，症状是拖什么进来都没反应、且没有任何提示。
         //
-        // 搜索框原先是内嵌真子窗口的编辑框、不参与这件事；2026-08-17 balloonui 把
-        // DuiEditHost 改成继承自 DuiEdit / DuiRichEdit 之后它就跟着有了这个行为，
-        // 守卫用例 CDR4 当场变红。输入框那一侧是在 ChatInputRichEdit 的构造函数里
-        // 关的，这里关不了构造函数（控件由 XML 建出来），所以建完就地关。
+        // 搜索框早先用的是内嵌真 Win32 输入框子窗口的实现、不参与这件事；
+        // 2026-08-17 起它改用无窗口的富文本控件，于是跟着具备了接收拖放的行为，
+        // 守卫用例 CDR4 当场失败。输入框那一侧是在 ChatInputRichEdit 的构造函数里
+        // 关的，本控件由 XML 建出来、没有可插手的构造函数，所以建完之后就地关。
         balloonwjui::DuiRichEdit* memberSearch =
             dynamic_cast<balloonwjui::DuiRichEdit*>(root->FindCtrlById(kGIdMemberSearch));
         if (memberSearch != NULL)

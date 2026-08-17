@@ -3,7 +3,7 @@
  *
  *  企业详情屏「组织架构」tab 点击「新建群」时弹出：把本企业的成员拉进一个新群。
  *  交互形态为「单列表行内角色」：
- *    · 顶部填群名称（DuiEditHost 真输入框）；
+ *    · 顶部填群名称（DuiEdit 真输入框）；
  *    · 下方一个可滚动成员列表，列出本企业全部员工，每行三个可点区——
  *      勾选框(加入本群) + ★(设为群主，整列表唯一) + 复选(设为管理员，可多个)；
  *    · 设群主 / 管理员会自动把该成员标记为已加入；取消加入会一并清掉其角色。
@@ -11,7 +11,8 @@
  *  实现与其它弹窗一致：半透明遮罩 + 居中卡片，常驻 RootContainer 弹窗层，
  *  开 / 关只切显隐；点遮罩不关闭。成员列表为手写自绘可滚动区，复用
  *  OverlayScrollbar 悬浮滚动条（见开发约定文档「UI 约定」）。群名输入框是
- *  DuiEditHost 真子窗。提交、关闭经各按钮的 ctrlId 上报 AdminFrame。
+ *  DuiEdit，随本弹窗一起参与绘制、受弹窗矩形裁剪。提交、关闭经各按钮的
+ *  ctrlId 上报 AdminFrame。
  *
  *  balloonwj@qq.com   2026-06-02
  */
@@ -22,7 +23,7 @@
 
 #include <vector>
 
-namespace balloonwjui { class DuiEditHost; }
+namespace balloonwjui { class DuiEdit; }
 
 namespace flamingoadmin {
 
@@ -99,8 +100,10 @@ private:
     // 成员列表面板矩形（host-client 坐标）；Layout / 绘制 / 滚动 / 局部刷新共用。
     RECT ListRect() const;
 
-    // 只把成员列表面板那块矩形标记为脏并刷新——避免整窗 Invalidate 牵连群名
-    // DuiEditHost 真子窗导致闪烁（对齐 ComposeModal::InvalidatePicker 的做法）。
+    // 只把成员列表面板那块矩形标记为脏并刷新，不必整窗 Invalidate 牵连群名
+    // DuiEdit（对齐 ComposeModal::InvalidatePicker 的做法）。这个做法最初是
+    // 为了消除群名输入框的闪烁（当时它内嵌真 Win32 输入框子窗口），改为无窗口
+    // 控件之后闪烁已不存在，现在只用于减少重绘量。
     void InvalidateList();
 
     // 自绘成员列表（含每行的勾选框 / 群主 / 管理员可点区，并重建 m_hits）。
@@ -116,7 +119,7 @@ private:
     std::vector<Hit> m_hits;            // 本帧成员列表命中区集合
 
     OverlayScrollbar* m_sb = nullptr;            // 成员列表悬浮滚动条（子控件）
-    balloonwjui::DuiEditHost* m_editName = nullptr;  // 群名称输入框（子控件）
+    balloonwjui::DuiEdit* m_editName = nullptr;  // 群名称输入框（子控件）
 };
 
 } // namespace flamingoadmin

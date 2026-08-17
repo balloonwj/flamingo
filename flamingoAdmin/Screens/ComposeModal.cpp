@@ -14,7 +14,7 @@
 #include "Mock/DataStore.h"
 #include "DuiNotify.h"
 
-#include "Controls/Input/DuiEditHost.h"
+#include "Controls/Input/DuiEdit.h"
 #include "DuiHost.h"   // InvalidateDuiRect：滚动 / 勾选时只刷新投放目标面板
 #include "Widgets/OverlayScrollbar.h"  // 投放目标选择器的悬浮滚动条子控件
 #include "Controls/Basic/DuiButton.h"   // FlatButton 已迁到 balloonwjui::DuiButton
@@ -87,9 +87,9 @@ Severity SeverityForCode(int code)
 }
 
 // 构造一个统一风格的输入框。
-std::unique_ptr<DuiEditHost> MakeEdit(int id, LPCTSTR placeholder, bool multiline)
+std::unique_ptr<DuiEdit> MakeEdit(int id, LPCTSTR placeholder, bool multiline)
 {
-    auto e = std::make_unique<DuiEditHost>();
+    auto e = std::make_unique<DuiEdit>();
     e->SetCtrlId(id);
     if (multiline)
     {
@@ -340,9 +340,10 @@ void ComposeModal::RecomputeLayout()
     y += sendRow + kRowGap;
     m_ySched = y;
 
-    // 标题 / 正文 / 定时时间是 DuiEditHost 真子窗，区块纵向位置一变就必须
-    // 同步重排它们的 HWND，否则会停在旧位置：例如 LoadForEdit / Reset 切换
-    // 受众后只调本函数、不调 Layout，定时时间输入框会错位到「置顶」行上方。
+    // 标题 / 正文 / 定时时间是三个 DuiEdit 子控件，而本弹窗是手写自绘面板、
+    // 自行摆放它们的矩形，故区块纵向位置一变就必须同步重排，否则它们会停在
+    // 旧位置：例如 LoadForEdit / Reset 切换受众后只调本函数、不调 Layout，
+    // 定时时间输入框会错位到「置顶」行上方。
     // m_panelRect 在首次 Layout 之后才有效，未就绪时跳过、由 Layout 兜底。
     if (m_panelRect.right > m_panelRect.left)
     {
@@ -444,8 +445,8 @@ void ComposeModal::Layout(const RECT& rcAvail)
     m_children[n - 2]->ForceLayout(rcCancel);
     m_children[n - 1]->ForceLayout(rcSubmit);
 
-    // 标题 / 正文 / 定时时间三个输入框真子窗的位置已在 RecomputeLayout()
-    // 里随各区块一并重排（上面第 349 行已调用），此处无需再单独处理。
+    // 标题 / 正文 / 定时时间三个输入框的矩形已在 RecomputeLayout() 里随各区块
+    // 一并重排（上面第 349 行已调用），此处无需再单独处理。
 }
 
 void ComposeModal::OnPaint(HDC hdc, const RECT& rcDirty)
@@ -820,9 +821,10 @@ void ComposeModal::InvalidatePicker()
     const int fl = m_panelRect.left + kBodyPad;
     const int fr = m_panelRect.right - kBodyPad;
     const int bodyTop = m_panelRect.top + kHeaderH + kBodyPad;
-    // 从「投放目标」标签行顶部一直到面板列表底部。这块区域内不含任何真子窗
-    // 输入框，单独刷新它即可让滚动 / 勾选只重绘面板自身，不牵连标题 / 正文 /
-    // 定时时间三个 DuiEditHost，从根上消除它们的闪烁。
+    // 从「投放目标」标签行顶部一直到面板列表底部。这块区域内没有输入框，单独
+    // 刷新它即可让滚动 / 勾选只重绘面板自身，不牵连标题 / 正文 / 定时时间三个
+    // DuiEdit。早先这三处内嵌真 Win32 输入框子窗口，被整窗刷新牵连时会闪烁；
+    // 改为无窗口控件之后已不会闪烁，缩小刷新区域现在只用于减少重绘量。
     RECT rc = { fl, bodyTop + m_yPicker,
                 fr, bodyTop + m_yPicker + kLabelH + kFieldGap + kPickerH };
     m_pHost->InvalidateDuiRect(rc);

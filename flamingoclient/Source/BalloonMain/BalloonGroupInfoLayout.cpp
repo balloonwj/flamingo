@@ -3,7 +3,7 @@
  *
  *  「群资料」对话框客户区控件树构造 + 数据注入 + 群名片双态切换的实现。
  *  程序化组合 balloonui 现成控件(DuiVBox/DuiHBox/DuiAvatar/DuiLabel/
- *  DuiSwitch/DuiEditHost/DuiButton/DuiSeparator),与 BalloonSystemSettingDlg
+ *  DuiSwitch/DuiEdit/DuiButton/DuiSeparator),与 BalloonSystemSettingDlg
  *  同套路;唯一的"差一小步"补齐是公告浅色填充框 —— 子类化 DuiVBox 覆写
  *  OnPaint 画圆角底(详见 CRoundedFillBox),不改 balloonui 库。
  *
@@ -46,7 +46,7 @@ extern CAppModule _Module;
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiSeparator.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 
 namespace balloonmain {
 
@@ -325,7 +325,7 @@ std::unique_ptr<balloonwjui::DuiControl> BuildGroupInfoBody()
                       balloonwjui::DuiLayout::Hint().Weight(1));
 
         // 值 edit(初始隐藏;进编辑态时显示并占满右侧)。
-        std::unique_ptr<balloonwjui::DuiEditHost> edit(new balloonwjui::DuiEditHost());
+        std::unique_ptr<balloonwjui::DuiEdit> edit(new balloonwjui::DuiEdit());
         edit->SetCtrlId(kIdGroupCardEdit);
         edit->SetVisible(false);
         row->AddChild(std::move(edit),
@@ -456,7 +456,7 @@ bool ApplyGroupInfoDataToView(balloonwjui::DuiControl* root,
             cardView->SetTextColor(kClrText);
         }
     }
-    balloonwjui::DuiEditHost* cardEdit = FindCtrl<balloonwjui::DuiEditHost>(root, kIdGroupCardEdit);
+    balloonwjui::DuiEdit* cardEdit = FindCtrl<balloonwjui::DuiEdit>(root, kIdGroupCardEdit);
     if (cardEdit != NULL)
     {
         cardEdit->SetText(data.myCard);

@@ -22,7 +22,7 @@
 #include "../BalloonChatWnd/ChatLinkDetect.h"   // IsSafeLinkUrl（打开链接前的协议白名单）
 
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSpinBox.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
@@ -1827,7 +1827,7 @@ LRESULT CBalloonHistoryWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         //搜索框文字变化：取最新文本设进模型（搜索框持久、不会被刷新重建）。
         if (id == kIdHistorySearch && content != NULL)
         {
-            DuiEditHost* search = dynamic_cast<DuiEditHost*>(content->FindCtrlById(kIdHistorySearch));
+            DuiEdit* search = dynamic_cast<DuiEdit*>(content->FindCtrlById(kIdHistorySearch));
             if (search != NULL)
             {
                 m_model.SetKeyword(CStringToUtf8(search->GetText()));

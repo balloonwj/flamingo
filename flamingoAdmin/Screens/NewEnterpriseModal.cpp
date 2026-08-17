@@ -14,7 +14,7 @@
 
 #include "Controls/Layout/DuiLayout.h"
 #include "Controls/Basic/DuiLabel.h"
-#include "Controls/Input/DuiEditHost.h"
+#include "Controls/Input/DuiEdit.h"
 #include "Controls/Input/DuiComboBox.h"
 #include "Controls/Basic/DuiButton.h"   // FlatButton 已迁到 balloonwjui::DuiButton
 
@@ -72,9 +72,9 @@ std::unique_ptr<DuiControl> MakeField(LPCTSTR label,
 }
 
 // 构造一个单行文本输入框。
-std::unique_ptr<DuiEditHost> MakeEdit(int ctrlId, LPCTSTR placeholder)
+std::unique_ptr<DuiEdit> MakeEdit(int ctrlId, LPCTSTR placeholder)
 {
-    auto edit = std::make_unique<DuiEditHost>();
+    auto edit = std::make_unique<DuiEdit>();
     edit->SetCtrlId(ctrlId);
     edit->SetPlaceholder(placeholder);
     edit->SetShowBorder(true);

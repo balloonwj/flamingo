@@ -22,7 +22,7 @@
 #include "../BalloonChatWnd/GroupChatWindowLayout.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"      // 公告面板各行文本
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../BalloonChatWnd/ChatInputRichEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiSplitter.h"   // 消息区/输入区可拖分隔
 
@@ -84,7 +84,7 @@ TEST_CASE("G3 群聊窗输入框已迁移为无窗口富文本控件", "[gp1a][g
     REQUIRE(input != nullptr);
     // 群聊输入框与单聊窗共用同一个控件。
     CHECK(dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(input) != nullptr);
-    CHECK(dynamic_cast<DuiEditHost*>(input) == nullptr);
+    CHECK(dynamic_cast<DuiEdit*>(input) == nullptr);
 }
 
 TEST_CASE("G9 群聊窗输入框配置：多行 / 自动换行 / 有占位符", "[gp1a][groupchat]")

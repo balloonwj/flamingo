@@ -50,7 +50,7 @@
 #include "Util/Logger.h"
 
 #include "Controls/Layout/DuiLayout.h"
-#include "Controls/Input/DuiEditHost.h"
+#include "Controls/Input/DuiEdit.h"
 #include "Controls/Basic/DuiButton.h"   // 「记住密码」复选框（StyleCheckbox）的读写
 #include "Controls/List/DuiMenu.h"
 
@@ -1307,10 +1307,11 @@ LRESULT AdminFrame::OnDuiNotify(UINT, WPARAM, LPARAM lParam, BOOL& bHandled)
             }
             break;
         case kIdOrgSearch:
-            // 企业详情组织树搜索框文字变化 → 延后一拍再过滤组织树。若在此处(即
-            // EN_CHANGE 同一消息周期)同步过滤会触发树重绘,导致搜索框 EDIT 刚输入
-            // 的文字画不出来(须再点一下);PostMessage 延迟到本轮派发结束后执行,
-            // 让按键这一周期只走 EDIT 自身刷新,文字即可正常显示。
+            // 企业详情组织树搜索框文字变化 → 延后一拍再过滤组织树。这一做法源于
+            // 早先搜索框内嵌真 Win32 输入框子窗口的时期:在文本变化通知的同一周期
+            // 里同步过滤会触发树重绘,把刚输入的文字盖掉(须再点一下才恢复)。搜索框
+            // 改为无窗口控件之后该现象不再出现,仍保留 PostMessage 延迟,以免在通知
+            // 派发过程中改动控件树(见 WM_APP_ORG_FILTER 说明)。
             ::PostMessage(m_hWnd, WM_APP_ORG_FILTER, 0, 0);
             break;
         case kIdEntSeg:
@@ -2654,10 +2655,10 @@ void AdminFrame::StartNetTest()
 void AdminFrame::TrySubmitLogin()
 {
     // 读取账户 / 密码输入框的当前文字（读取不销毁控件，安全）。
-    DuiEditHost* account = m_loginPage != nullptr
-        ? dynamic_cast<DuiEditHost*>(m_loginPage->FindCtrlById(kIdLoginAccount))  : nullptr;
-    DuiEditHost* password = m_loginPage != nullptr
-        ? dynamic_cast<DuiEditHost*>(m_loginPage->FindCtrlById(kIdLoginPassword)) : nullptr;
+    DuiEdit* account = m_loginPage != nullptr
+        ? dynamic_cast<DuiEdit*>(m_loginPage->FindCtrlById(kIdLoginAccount))  : nullptr;
+    DuiEdit* password = m_loginPage != nullptr
+        ? dynamic_cast<DuiEdit*>(m_loginPage->FindCtrlById(kIdLoginPassword)) : nullptr;
 
     CString accountText  = account  != nullptr ? account->GetText()  : CString();
     CString passwordText = password != nullptr ? password->GetText() : CString();
@@ -2717,10 +2718,11 @@ void AdminFrame::ShowNewEnterpriseModal()
         return;
     }
     m_modal->Reset();
-    // 外壳内的真 EDIT 子窗会绘制在半透明遮罩之上，须先隐藏。
+    // 隐藏外壳内的输入框。这是早先内嵌真 Win32 输入框子窗口时的必要动作
+    // （那时输入框会绘制在半透明遮罩之上），现在输入框是无窗口控件、由库统一
+    // 绘制并受遮罩覆盖，该前提已不成立，此处保留只是尚未清理。
     SetEditsVisible(m_shellPage, false);
-    // ShowModal 会把弹窗 SetVisible(true)，触发 HWND 可见性同步把弹窗内
-    // 5 个 EDIT 子窗显示出来（此刻主窗口已显示，同步可靠）。
+    // ShowModal 会把弹窗 SetVisible(true)，弹窗内的输入框随之一并显示。
     m_root->ShowModal(m_modal);
     FA_LOGI(_T("打开新增企业弹窗"));
 }
@@ -2732,7 +2734,7 @@ void AdminFrame::HideNewEnterpriseModal()
         return;
     }
     m_root->HideModal();
-    SetEditsVisible(m_shellPage, true);   // 恢复外壳内的真 EDIT 子窗
+    SetEditsVisible(m_shellPage, true);   // 恢复外壳内被隐藏的输入框
     FA_LOGI(_T("关闭新增企业弹窗"));
 }
 
@@ -3239,8 +3241,9 @@ void AdminFrame::ShowNodeModal()
     }
 
     // 对话框已改成独立顶层窗口：它自带真模态（EnableWindow(主窗, FALSE)），
-    // 顶层 HWND 天然盖得住主窗口里的任何子窗口，故【不再】需要像 overlay 弹窗
-    // 那样先 SetEditsVisible(m_shellPage, false) 去藏外壳里的真 EDIT 子窗。
+    // 顶层窗口天然盖得住主窗口的内容，故不需要像 overlay 弹窗那样先
+    // SetEditsVisible(m_shellPage, false) 去隐藏外壳里的输入框。附带说明：
+    // 输入框已是无窗口控件，那道隐藏动作对 overlay 弹窗也不再必要。
     m_nodeModal = new NodeModal(
         this, m_hWnd,
         m_nodeModalPendingIsDept ? NodeModal::Mode::AddDept
@@ -3275,8 +3278,9 @@ void AdminFrame::ShowGroupModal()
     {
         return;
     }
-    // 企业与成员列表已在 OnDuiNotify 里经 SetEnterprise 装好。隐藏外壳内
-    // 真 EDIT 子窗，再显示弹窗。
+    // 企业与成员列表已在 OnDuiNotify 里经 SetEnterprise 装好。隐藏外壳内的
+    // 输入框，再显示弹窗；输入框改为无窗口控件之后这道隐藏已无必要，此处保留
+    // 只是尚未清理。
     SetEditsVisible(m_shellPage, false);
     m_root->ShowModal(m_groupModal);
     FA_LOGI(_T("打开新建群弹窗"));
@@ -4836,12 +4840,12 @@ void AdminFrame::PrefillLogin()
         passwordText = _T("admin123");
     }
 
-    if (DuiEditHost* account = dynamic_cast<DuiEditHost*>(
+    if (DuiEdit* account = dynamic_cast<DuiEdit*>(
             m_loginPage->FindCtrlById(kIdLoginAccount)))
     {
         account->SetText(accountText);
     }
-    if (DuiEditHost* password = dynamic_cast<DuiEditHost*>(
+    if (DuiEdit* password = dynamic_cast<DuiEdit*>(
             m_loginPage->FindCtrlById(kIdLoginPassword)))
     {
         password->SetText(passwordText);
@@ -4874,7 +4878,7 @@ void AdminFrame::SetEditsVisible(DuiControl* node, bool visible)
         return;
     }
 
-    if (DuiEditHost* edit = dynamic_cast<DuiEditHost*>(node))
+    if (DuiEdit* edit = dynamic_cast<DuiEdit*>(node))
     {
         edit->SetVisible(visible);
     }
@@ -5065,7 +5069,8 @@ void AdminFrame::ShowClientVersionModal(const adminapi::ScanPackagesResult& scan
     }
 
     m_clientVersionModal->SetPackages(scan);
-    // 隐藏外壳内的真 EDIT 子窗，否则它们会透过半透明遮罩显形
+    // 隐藏外壳内的输入框。早先内嵌真 Win32 输入框子窗口时不隐藏会透过半透明
+    // 遮罩显形，改为无窗口控件之后该前提已不成立，此处保留只是尚未清理。
     SetEditsVisible(m_shellPage, false);
     m_root->ShowModal(m_clientVersionModal);
     FA_LOGI(_T("打开新建客户端版本弹窗"));

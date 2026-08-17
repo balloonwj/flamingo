@@ -15,7 +15,7 @@
 #include "../CustomMsgDef.h"          // WM_CLOSE_MAINDLG
 #include "../IULog.h"                 // LOG_INFO / LOG_WARNING / LOG_ERROR
 #include "ProfileLayout.h"            // BuildProfileBody / ProfileCtrlId / helper
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 
 using namespace balloonwjui;
@@ -115,7 +115,7 @@ void CBalloonProfileWindow::RebuildUi()
         const int editCount = sizeof(editIds) / sizeof(editIds[0]);
         for (int i = 0; i < editCount; ++i)
         {
-            DuiEditHost* edit = dynamic_cast<DuiEditHost*>(
+            DuiEdit* edit = dynamic_cast<DuiEdit*>(
                 content->FindCtrlById(editIds[i]));
             if (edit == NULL)
             {
@@ -165,14 +165,14 @@ void CBalloonProfileWindow::LoadModelIntoUi()
     if (m_editMode)
     {
         // 编辑态：把可编辑字段灌进文本框 / 下拉框。
-        DuiEditHost* nick = dynamic_cast<DuiEditHost*>(
+        DuiEdit* nick = dynamic_cast<DuiEdit*>(
             content->FindCtrlById(kIdEditNickname));
         if (nick != NULL)
         {
             nick->SetText(m_model.Nickname());
         }
 
-        DuiEditHost* sign = dynamic_cast<DuiEditHost*>(
+        DuiEdit* sign = dynamic_cast<DuiEdit*>(
             content->FindCtrlById(kIdEditSignature));
         if (sign != NULL)
         {
@@ -194,21 +194,21 @@ void CBalloonProfileWindow::LoadModelIntoUi()
             }
         }
 
-        DuiEditHost* birth = dynamic_cast<DuiEditHost*>(
+        DuiEdit* birth = dynamic_cast<DuiEdit*>(
             content->FindCtrlById(kIdEditBirthday));
         if (birth != NULL)
         {
             birth->SetText(m_model.Birthday());
         }
 
-        DuiEditHost* region = dynamic_cast<DuiEditHost*>(
+        DuiEdit* region = dynamic_cast<DuiEdit*>(
             content->FindCtrlById(kIdEditRegion));
         if (region != NULL)
         {
             region->SetText(m_model.Region());
         }
 
-        DuiEditHost* email = dynamic_cast<DuiEditHost*>(
+        DuiEdit* email = dynamic_cast<DuiEdit*>(
             content->FindCtrlById(kIdEditEmail));
         if (email != NULL)
         {
@@ -235,7 +235,7 @@ void CBalloonProfileWindow::CommitUiToModel()
         return;
     }
 
-    DuiEditHost* nick = dynamic_cast<DuiEditHost*>(
+    DuiEdit* nick = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kIdEditNickname));
     if (nick != NULL)
     {
@@ -244,7 +244,7 @@ void CBalloonProfileWindow::CommitUiToModel()
         m_model.SetNickname(value);
     }
 
-    DuiEditHost* sign = dynamic_cast<DuiEditHost*>(
+    DuiEdit* sign = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kIdEditSignature));
     if (sign != NULL)
     {
@@ -258,7 +258,7 @@ void CBalloonProfileWindow::CommitUiToModel()
         m_model.SetGender(gender->GetText());
     }
 
-    DuiEditHost* birth = dynamic_cast<DuiEditHost*>(
+    DuiEdit* birth = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kIdEditBirthday));
     if (birth != NULL)
     {
@@ -267,7 +267,7 @@ void CBalloonProfileWindow::CommitUiToModel()
         m_model.SetBirthday(value);
     }
 
-    DuiEditHost* region = dynamic_cast<DuiEditHost*>(
+    DuiEdit* region = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kIdEditRegion));
     if (region != NULL)
     {
@@ -276,7 +276,7 @@ void CBalloonProfileWindow::CommitUiToModel()
         m_model.SetRegion(value);
     }
 
-    DuiEditHost* email = dynamic_cast<DuiEditHost*>(
+    DuiEdit* email = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kIdEditEmail));
     if (email != NULL)
     {

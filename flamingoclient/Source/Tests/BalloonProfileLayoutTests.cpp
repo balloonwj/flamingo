@@ -13,7 +13,7 @@
  *    P3   (已删:状态胶囊去除)
  *    P4   6 行信息查看态 ctrlId 存在,类型是 DuiLabel
  *    P5   6 行信息编辑态 ctrlId 存在;昵称/签名/生日/地址/邮箱是
- *         DuiEditHost,性别是 DuiComboBox
+ *         DuiEdit,性别是 DuiComboBox
  *    P6   初始可见性:View 系列可见,Edit 系列隐藏(初始处于"查看态")
  *    P7   4 底部按钮 ctrlId 存在;初始 Close/Edit 可见,Cancel/Save 隐藏
  *    P8   全部 ctrlId 互不重复
@@ -34,7 +34,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 
 using namespace balloonwjui;
 using namespace balloonmain;
@@ -108,13 +108,13 @@ TEST_CASE("P4 6 行查看态 ctrlId 存在,类型是 DuiLabel",
     }
 }
 
-TEST_CASE("P5 6 行编辑态 ctrlId 存在;5 行是 DuiEditHost,性别是 DuiComboBox",
+TEST_CASE("P5 6 行编辑态 ctrlId 存在;5 行是 DuiEdit,性别是 DuiComboBox",
           "[p2][profile]")
 {
     std::unique_ptr<DuiControl> root = BuildProfileBody();
     REQUIRE(root != nullptr);
 
-    // 5 行 DuiEditHost
+    // 5 行 DuiEdit
     const UINT editIds[] = { kIdNicknameEdit, kIdSignatureEdit,
                              kIdBirthdayEdit, kIdLocationEdit,
                              kIdEmailEdit };
@@ -123,7 +123,7 @@ TEST_CASE("P5 6 行编辑态 ctrlId 存在;5 行是 DuiEditHost,性别是 DuiCom
         INFO("edit id = " << editIds[i]);
         DuiControl* c = root->FindCtrlById(editIds[i]);
         REQUIRE(c != nullptr);
-        CHECK(dynamic_cast<DuiEditHost*>(c) != nullptr);
+        CHECK(dynamic_cast<DuiEdit*>(c) != nullptr);
     }
 
     // 性别下拉

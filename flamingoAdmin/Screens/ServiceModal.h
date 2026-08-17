@@ -8,7 +8,7 @@
  *
  *  实现与其它弹窗一致：半透明遮罩 + 居中表单卡片，常驻于 RootContainer
  *  弹窗层，开 / 关只切显隐；点遮罩不关闭。名称 / 头像文字 / 描述是
- *  DuiEditHost 真输入框；配色与类型是自绘可点区。
+ *  DuiEdit 真输入框；配色与类型是自绘可点区。
  *
  *  balloonwj@qq.com   2026.05.21
  */
@@ -17,7 +17,7 @@
 #include "DuiControl.h"
 #include "Mock/MockData.h"
 
-namespace balloonwjui { class DuiEditHost; }
+namespace balloonwjui { class DuiEdit; }
 
 namespace flamingoadmin {
 
@@ -59,9 +59,9 @@ private:
     int              m_kindIndex  = 0;   // 当前类型下标
     std::vector<Hit> m_hits;             // 本帧记录的可点区
 
-    balloonwjui::DuiEditHost* m_editName  = nullptr;
-    balloonwjui::DuiEditHost* m_editGlyph = nullptr;
-    balloonwjui::DuiEditHost* m_editDesc  = nullptr;
+    balloonwjui::DuiEdit* m_editName  = nullptr;
+    balloonwjui::DuiEdit* m_editGlyph = nullptr;
+    balloonwjui::DuiEdit* m_editDesc  = nullptr;
 };
 
 } // namespace flamingoadmin

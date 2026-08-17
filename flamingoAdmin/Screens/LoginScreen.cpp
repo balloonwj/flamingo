@@ -11,7 +11,7 @@
 #include "Util/AppConfig.h"
 
 #include "Controls/Layout/DuiLayout.h"
-#include "Controls/Input/DuiEditHost.h"
+#include "Controls/Input/DuiEdit.h"
 #include "Controls/Basic/DuiButton.h"
 
 using namespace balloonwjui;
@@ -126,7 +126,7 @@ std::unique_ptr<DuiControl> MakeField(LPCTSTR label, int editId,
     field->AddChild(ui::MakeLabel(label, theme::kFontSizeNormal, false, theme::kInk500),
                     Hint().Fixed(18));
 
-    auto edit = std::make_unique<DuiEditHost>();
+    auto edit = std::make_unique<DuiEdit>();
     edit->SetCtrlId(editId);
     if (password)
     {
@@ -136,7 +136,7 @@ std::unique_ptr<DuiControl> MakeField(LPCTSTR label, int editId,
     edit->SetPlaceholder(placeholder);
     edit->SetShowBorder(true);
     edit->SetBgColor(theme::kInk0);
-    // 单行 EDIT 文字垂直居中是 DuiEditHost 的默认行为（见 SetVerticalCenter），
+    // 单行输入框的文字垂直居中是 DuiEdit 的默认行为（见 SetVerticalCenter），
     // 框高 kFieldEditH（40px）高于一行时文字 / 光标自动竖直居中，无需在此显式开启。
     field->AddChild(std::move(edit), Hint().Fixed(kFieldEditH));
 

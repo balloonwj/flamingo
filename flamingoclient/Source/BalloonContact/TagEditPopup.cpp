@@ -1,7 +1,7 @@
 /**
  *  TagEditPopup.cpp
  *
- *  标签输入弹层的实现。子类化 DuiPopupHost，内部一个单行 DuiEditHost；打开时
+ *  标签输入弹层的实现。子类化 DuiPopupHost，内部一个单行 DuiEdit；打开时
  *  盖在目标矩形上、带入当前文本并全选，回车 / 失焦提交、ESC 取消。
  *
  *  balloonwj@qq.com   2026-08-14
@@ -12,7 +12,7 @@
 
 #include <memory>
 
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "ContactTagModel.h"   // kContactTagMaxLen
 #include "../IULog.h"
 
@@ -63,7 +63,7 @@ void CTagEditPopup::BuildContentOnce()
     // 单行输入框作内容根：带 1px 边框（让人看出这是编辑态）、文字垂直居中、
     // 限长到单个标签的字符上限。限长放在这里是"从源头挡住"——用户敲不进第 17
     // 个字符，判定函数里的超长分支就只在粘贴等异常路径上才会被走到。
-    std::unique_ptr<balloonwjui::DuiEditHost> edit(new balloonwjui::DuiEditHost());
+    std::unique_ptr<balloonwjui::DuiEdit> edit(new balloonwjui::DuiEdit());
     edit->SetCtrlId(kTagEditCtrlId);
     edit->SetMaxLength(kContactTagMaxLen);
     edit->SetVerticalCenter(true);

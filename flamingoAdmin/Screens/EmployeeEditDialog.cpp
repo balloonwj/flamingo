@@ -14,7 +14,7 @@
 #include "Controls/Layout/DuiLayout.h"
 #include "Controls/Basic/DuiLabel.h"
 #include "Controls/Basic/DuiButton.h"
-#include "Controls/Input/DuiEditHost.h"
+#include "Controls/Input/DuiEdit.h"
 #include "DuiNotify.h"
 
 #include <memory>
@@ -43,7 +43,7 @@ const int kRowGap           = 18;   // 字段行之间间距
 const int kColGap           = 16;   // 双列间距
 const int kFieldLabelH      = 16;   // 字段标签行高
 const int kFieldLabelGap    = 6;    // 标签到输入控件之间间距
-const int kFieldCtrlH       = 34;   // 单行输入控件高度(以 DuiEditHost 为准)
+const int kFieldCtrlH       = 34;   // 单行输入控件高度(以 DuiEdit 为准)
 const int kFieldRowH        = kFieldLabelH + kFieldLabelGap + kFieldCtrlH; // 56
 
 // 个性签名是 multiline textarea,高度比单行 EDIT 多一倍(对应设计稿 rows=2)。
@@ -83,9 +83,9 @@ std::unique_ptr<DuiLabel> MakeLabel(LPCTSTR text, int pt, bool bold,
 // 建好,也没有需要在窗口就绪后补做的步骤。
 //   ctrlId      :控件 ID(UiIds.h);
 //   placeholder :空值占位字。
-std::unique_ptr<DuiEditHost> MakeEdit(int ctrlId, LPCTSTR placeholder)
+std::unique_ptr<DuiEdit> MakeEdit(int ctrlId, LPCTSTR placeholder)
 {
-    std::unique_ptr<DuiEditHost> e(new DuiEditHost());
+    std::unique_ptr<DuiEdit> e(new DuiEdit());
     e->SetCtrlId(ctrlId);
     e->SetPlaceholder(placeholder);
     e->SetShowBorder(true);
@@ -95,17 +95,17 @@ std::unique_ptr<DuiEditHost> MakeEdit(int ctrlId, LPCTSTR placeholder)
 
 // 造一个「字段列」:上下两段 —— 顶部是字段名 label,底部是输入控件(以裸
 // 指针 borrowOutEdit 输出供外层 cache)。multiLine=true 时输入控件高度变
-// 为 kSignatureCtrlH,EDIT 用多行样式(对应设计稿 textarea rows=2)。
+// 为 kSignatureCtrlH,输入框设为多行(对应设计稿 textarea rows=2)。
 //   label         :字段名(如「姓名 *」);
 //   ctrlId        :输入框 ID;
 //   placeholder   :输入框占位字,可为空字符串;
 //   multiLine     :是否多行 textarea;
-//   borrowOutEdit :输出参数 —— 拿到 DuiEditHost 裸指针,供外层 SetText
+//   borrowOutEdit :输出参数 —— 拿到 DuiEdit 裸指针,供外层 SetText
 //                  / GetText 用。所有权仍在控件树里。
 std::unique_ptr<DuiControl> MakeFieldColumn(LPCTSTR label, int ctrlId,
                                             LPCTSTR placeholder,
                                             bool multiLine,
-                                            DuiEditHost** borrowOutEdit)
+                                            DuiEdit** borrowOutEdit)
 {
     std::unique_ptr<DuiVBox> col(new DuiVBox());
     col->SetGap(kFieldLabelGap);
@@ -113,7 +113,7 @@ std::unique_ptr<DuiControl> MakeFieldColumn(LPCTSTR label, int ctrlId,
     col->AddChild(MakeLabel(label, kFontSizeSmall, false, theme::kInk500),
                   DuiLayout::Hint().Fixed(kFieldLabelH));
 
-    std::unique_ptr<DuiEditHost> e = MakeEdit(ctrlId, placeholder);
+    std::unique_ptr<DuiEdit> e = MakeEdit(ctrlId, placeholder);
     if (multiLine)
     {
         e->SetMultiLine(true);

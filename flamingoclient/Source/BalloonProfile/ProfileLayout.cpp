@@ -49,7 +49,7 @@ extern CAppModule _Module;
 #include "ProfileModel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 #include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
 
@@ -57,7 +57,7 @@ namespace balloonprofile {
 
 using balloonwjui::DuiControl;
 using balloonwjui::DuiXmlBuilder;
-using balloonwjui::DuiEditHost;
+using balloonwjui::DuiEdit;
 using balloonwjui::DuiComboBox;
 
 // =====================================================================

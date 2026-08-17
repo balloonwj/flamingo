@@ -18,7 +18,7 @@
 #include "../net/IUSocket.h"             // CIUSocket::SendSetConversation / SendSetMemberCard / SendLeaveGroup
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 
 #include <vector>                        // CStrToUtf8 缓冲
 #include <windowsx.h>                    // GET_X_LPARAM / GET_Y_LPARAM(鼠标消息取坐标)
@@ -499,7 +499,7 @@ void CBalloonGroupInfoDlg::OpenForGroup(HWND hParent, CFlamingoClient* pFMGClien
 
     // 群名片输入框在查看态是隐藏的,首次进编辑态时由 SetGroupInfoCardEditMode
     // 显示并重排。这里只统一它的底色,与是否可见无关。
-    balloonwjui::DuiEditHost* cardEdit = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* cardEdit = dynamic_cast<balloonwjui::DuiEdit*>(
         GetClientContent()->FindCtrlById(kIdGroupCardEdit));
     if (cardEdit != NULL)
     {
@@ -538,7 +538,7 @@ void CBalloonGroupInfoDlg::EnterCardEdit()
         return;
     }
     // edit 初值设为当前名片(空名片则空串,方便直接输入)。
-    balloonwjui::DuiEditHost* cardEdit = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* cardEdit = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(kIdGroupCardEdit));
     if (cardEdit != NULL)
     {
@@ -571,7 +571,7 @@ void CBalloonGroupInfoDlg::CommitCardEdit()
     }
     m_cardEditing = false;
 
-    balloonwjui::DuiEditHost* cardEdit = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* cardEdit = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(kIdGroupCardEdit));
     CString newCard = (cardEdit != NULL) ? cardEdit->GetText() : CString();
 
@@ -795,8 +795,8 @@ LRESULT CBalloonGroupInfoDlg::OnLButtonDown(UINT /*uMsg*/, WPARAM /*wParam*/,
     if (m_cardEditing)
     {
         balloonwjui::DuiControl* content = GetClientContent();
-        balloonwjui::DuiEditHost* cardEdit = (content != NULL)
-            ? dynamic_cast<balloonwjui::DuiEditHost*>(content->FindCtrlById(kIdGroupCardEdit))
+        balloonwjui::DuiEdit* cardEdit = (content != NULL)
+            ? dynamic_cast<balloonwjui::DuiEdit*>(content->FindCtrlById(kIdGroupCardEdit))
             : NULL;
         // 只在输入框当前确实持有 DUI 焦点时才动焦点:焦点已经不在它身上时,
         // DUIN_KILLFOCUS 早已发过、提交也已经投递过,这里再摘一次只会给别的控件
@@ -835,7 +835,7 @@ LRESULT CBalloonGroupInfoDlg::OnCardCommitDeferred(UINT /*uMsg*/, WPARAM /*wPara
     balloonwjui::DuiControl* content = GetClientContent();
     if (content != NULL)
     {
-        balloonwjui::DuiEditHost* cardEdit = dynamic_cast<balloonwjui::DuiEditHost*>(
+        balloonwjui::DuiEdit* cardEdit = dynamic_cast<balloonwjui::DuiEdit*>(
             content->FindCtrlById(kIdGroupCardEdit));
         if (cardEdit != NULL && cardEdit->IsFocused())
         {

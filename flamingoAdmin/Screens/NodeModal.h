@@ -33,7 +33,7 @@
 
 namespace balloonwjui
 {
-    class DuiEditHost;
+    class DuiEdit;
     class DuiComboBox;
 }
 
@@ -137,12 +137,12 @@ private:
 
     // 输入控件裸指针。所有权在控件树里（SetClientContent 接管），本类只借用；
     // 只有当前模式用到的那几个非空，另一组恒为 nullptr。
-    balloonwjui::DuiEditHost* m_editDeptName;    // 部门名称 *（AddDept）
-    balloonwjui::DuiEditHost* m_editDeptLeader;  // 部门负责人（AddDept）
-    balloonwjui::DuiEditHost* m_editUserName;    // 姓名 *（AddUser）
-    balloonwjui::DuiEditHost* m_editUserTitle;   // 职位（AddUser）
-    balloonwjui::DuiEditHost* m_editUserEmail;   // 邮箱 *（AddUser）
-    balloonwjui::DuiEditHost* m_editUserPhone;   // 手机号（AddUser）
+    balloonwjui::DuiEdit* m_editDeptName;    // 部门名称 *（AddDept）
+    balloonwjui::DuiEdit* m_editDeptLeader;  // 部门负责人（AddDept）
+    balloonwjui::DuiEdit* m_editUserName;    // 姓名 *（AddUser）
+    balloonwjui::DuiEdit* m_editUserTitle;   // 职位（AddUser）
+    balloonwjui::DuiEdit* m_editUserEmail;   // 邮箱 *（AddUser）
+    balloonwjui::DuiEdit* m_editUserPhone;   // 手机号（AddUser）
     balloonwjui::DuiComboBox* m_cbUserGender;    // 性别（AddUser）
 
     balloonwjui::DuiControl*  m_btnSubmit;       // 「创建」按钮（busy 时改文字并置灰）

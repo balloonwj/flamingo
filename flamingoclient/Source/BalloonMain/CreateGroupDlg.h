@@ -33,7 +33,7 @@
 class CFlamingoClient;
 
 namespace net { struct ContactItem; struct DepartmentItem; struct CreateGroupResponse; }
-namespace balloonwjui { class DuiControl; class DuiEditHost; class DuiScrollView;
+namespace balloonwjui { class DuiControl; class DuiEdit; class DuiScrollView;
                         class DuiLabel; class DuiButton; class DuiVBox; }
 namespace balloonmain { class MemberPickerTreeView; }
 
@@ -198,8 +198,8 @@ private:
     std::vector<UINT> m_selected;
 
     // 控件指针（借用，控件树持有）：动态刷新时用。
-    balloonwjui::DuiEditHost*   m_searchInput;   // 搜索联系人输入框
-    balloonwjui::DuiEditHost*   m_nameInput;     // 群聊名称输入框
+    balloonwjui::DuiEdit*   m_searchInput;   // 搜索联系人输入框
+    balloonwjui::DuiEdit*   m_nameInput;     // 群聊名称输入框
     balloonwjui::DuiScrollView* m_memberScroll;  // 左侧候选树的滚动视口
     // 左侧候选树（借用，滚动区的内容容器持有）。单列模式 + 每节点挂 MemberPickerRow，
     // 滚轮由它上抛给 m_memberScroll。

@@ -24,7 +24,7 @@
 #include "../net/IUSocket.h"          // CIUSocket::Register
 #include "../net/Protocol.h"          // enum error_code
 #include "../net/RegisterProtocolClient.h"   // 注册报文编解码
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 
 using namespace balloonwjui;
 using namespace balloonregister;
@@ -124,14 +124,14 @@ HBITMAP CreateRegisterBgBitmap()
     return hbm;
 }
 
-// 把一个 DuiEditHost 配成注册窗输入框风格：透明融入 RegInput 的圆角底
+// 把一个 DuiEdit 配成注册窗输入框风格：透明融入 RegInput 的圆角底
 // （底色 #F5F4F1）、不画自身边框、设占位文字、必要时密码态，并回填
 // 初始文本（用于步骤来回切换时保留已输入内容）。
 //   edit：       目标输入框；NULL 安全返回。
 //   placeholder：占位提示文字。
 //   password：   true 时为密码态（显示圆点）。
 //   initialText：回填的初始文本（来自数据模型）。
-void SetupRegisterEdit(DuiEditHost* edit, LPCTSTR placeholder, bool password,
+void SetupRegisterEdit(DuiEdit* edit, LPCTSTR placeholder, bool password,
                        LPCTSTR initialText)
 {
     if (edit == NULL)
@@ -321,21 +321,21 @@ void CBalloonRegisterWindow::RebuildStepUi(int step)
     switch (step)
     {
     case kRegStepFillInfo:
-        SetupRegisterEdit(dynamic_cast<DuiEditHost*>(
+        SetupRegisterEdit(dynamic_cast<DuiEdit*>(
             content->FindCtrlById(kRegIdEditNick)),
             _T("昵称"), false, m_model.Nickname());
-        SetupRegisterEdit(dynamic_cast<DuiEditHost*>(
+        SetupRegisterEdit(dynamic_cast<DuiEdit*>(
             content->FindCtrlById(kRegIdEditPwd)),
             _T("设置密码"), true, m_model.Password());
-        SetupRegisterEdit(dynamic_cast<DuiEditHost*>(
+        SetupRegisterEdit(dynamic_cast<DuiEdit*>(
             content->FindCtrlById(kRegIdEditPwd2)),
             _T("确认密码"), true, m_model.ConfirmPassword());
-        SetupRegisterEdit(dynamic_cast<DuiEditHost*>(
+        SetupRegisterEdit(dynamic_cast<DuiEdit*>(
             content->FindCtrlById(kRegIdEditPhone)),
             _T("手机号"), false, m_model.Phone());
         // 占位文字里直接点明"须与公司全称一致" —— 服务端是按这个名字做精确
         // 匹配的，不提醒的话用户很容易填简称然后收到一句"公司不存在"。
-        SetupRegisterEdit(dynamic_cast<DuiEditHost*>(
+        SetupRegisterEdit(dynamic_cast<DuiEdit*>(
             content->FindCtrlById(kRegIdEditCompany)),
             _T("公司名称（须与公司全称一致）"), false, m_model.Company());
         break;
@@ -402,31 +402,31 @@ void CBalloonRegisterWindow::CommitFormToModel()
         return;
     }
 
-    DuiEditHost* nick = dynamic_cast<DuiEditHost*>(
+    DuiEdit* nick = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kRegIdEditNick));
     if (nick != NULL)
     {
         m_model.SetNickname(nick->GetText());
     }
-    DuiEditHost* pwd = dynamic_cast<DuiEditHost*>(
+    DuiEdit* pwd = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kRegIdEditPwd));
     if (pwd != NULL)
     {
         m_model.SetPassword(pwd->GetText());
     }
-    DuiEditHost* pwd2 = dynamic_cast<DuiEditHost*>(
+    DuiEdit* pwd2 = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kRegIdEditPwd2));
     if (pwd2 != NULL)
     {
         m_model.SetConfirmPassword(pwd2->GetText());
     }
-    DuiEditHost* phone = dynamic_cast<DuiEditHost*>(
+    DuiEdit* phone = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kRegIdEditPhone));
     if (phone != NULL)
     {
         m_model.SetPhone(phone->GetText());
     }
-    DuiEditHost* company = dynamic_cast<DuiEditHost*>(
+    DuiEdit* company = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kRegIdEditCompany));
     if (company != NULL)
     {

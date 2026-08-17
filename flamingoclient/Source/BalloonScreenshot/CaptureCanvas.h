@@ -18,7 +18,7 @@
 #pragma once
 
 #include "../../../third-party/balloonui/balloonui/DuiControl.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"  // 文字标注复用的多行编辑框
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"  // 文字标注复用的多行编辑框
 #include "AnnotationModel.h"      // 标注数据模型（撤销重做栈 / 工具状态 / 箭头几何）
 #include "ScreenshotGeometry.h"   // SelHitZone（选区移动 / 缩放命中区）
 #include "ScreenshotToolbar.h"    // ITipSink（按钮悬停提示接收方接口）
@@ -162,7 +162,7 @@ private:
     void    DrawMosaicBrush(HDC hdc, const Annotation& a, int dx, int dy);
 
     // ---- 文字标注 ----
-    // 在 pt 处开一个多行文字编辑框（复用 balloonui DuiEditHost，挂为本画布子控件）。
+    // 在 pt 处开一个多行文字编辑框（复用 balloonui DuiEdit，挂为本画布子控件）。
     void    BeginTextEdit(POINT pt);
     // 画一条已提交的文字标注（GDI DrawText，微软雅黑，按 start→end.x 的宽度自动换行）。
     void    DrawTextAnnotation(HDC hdc, const Annotation& a, int dx, int dy);
@@ -208,7 +208,7 @@ private:
 
     // ---- 文字标注编辑态 ----
     bool                  m_textEditing;  // 是否正在编辑文字框
-    balloonwjui::DuiEditHost* m_textEdit; // 编辑框（加入控件树后由树持有，裸指针访问；非编辑时 NULL）
+    balloonwjui::DuiEdit* m_textEdit; // 编辑框（加入控件树后由树持有，裸指针访问；非编辑时 NULL）
     RECT                  m_textBox;      // 编辑框矩形（客户区坐标）；左上=文字锚点、right=换行宽度边界
     COLORREF              m_textColor;    // 本次文字颜色（开编辑时取当前调色板色）
     int                   m_textFontPx;   // 本次文字字号（像素高，开编辑时由线宽档位换算）

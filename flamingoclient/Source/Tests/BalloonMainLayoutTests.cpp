@@ -26,7 +26,7 @@
 #include "../BalloonMain/MainPanelTreeView.h"
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"                    // DispatchMouseWheel（滚轮派发入口）
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
 
@@ -80,7 +80,7 @@ TEST_CASE("M2 主面板含搜索框", "[p1a][main]")
 
     DuiControl* search = root->FindCtrlById(kIdSearchBox);
     REQUIRE(search != nullptr);
-    CHECK(dynamic_cast<DuiEditHost*>(search) != nullptr);
+    CHECK(dynamic_cast<DuiEdit*>(search) != nullptr);
 }
 
 TEST_CASE("M3 主面板含消息 / 联系人 / 群三个 Tab 按钮", "[p1a][main]")

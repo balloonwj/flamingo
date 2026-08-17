@@ -76,7 +76,7 @@
 #include "../net/ImageTransfer.h"
 #include "../net/CurrentUserAccount.h"   // net::CurrentUserAccount（本地缓存目录按登录账号分）          // net::ImageSendProgress / net::ImageSendResult
 #include "../net/FileTransfer.h"           // net::FileSendProgress / net::FileSendResult / net::FileDownload*
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"   // 通讯录标题刷新
 #include "../../../third-party/balloonui/balloonui/Controls/List/DuiTreeView.h"
 #include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"   // 联系人右键菜单
@@ -1564,7 +1564,7 @@ LRESULT CBalloonMainPanel::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
     //
     // 注意这里<u>只在 ctrlId 确实是那三棵树之一时才 return</u>：自定义通知码是按控件
     // 各自编号的（每个控件都从 balloonwjui::DUIN_CUSTOM 起算），所以 DUITVN_EXPAND_TOGGLED
-    // 与 MainPanelHeader::DUIN_HEADER_SIGN_CLICK、DuiEditHost::DUIEN_LEFT_ICON_CLICK 等
+    // 与 MainPanelHeader::DUIN_HEADER_SIGN_CLICK、DuiEdit::DUIEN_LEFT_ICON_CLICK 等
     // 数值完全相同。原先此处无条件 return，等于把本面板内其它控件发出的同值通知统统
     // 吞掉，症状是"点了没反应"且不报错、不崩溃——登录窗的状态胶囊就栽在同一个坑上
     // （2026-08-12 定位并修复，见 CBalloonLoginDlg::OnDuiNotify 的注释）。
@@ -1596,7 +1596,7 @@ LRESULT CBalloonMainPanel::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
 
     // 搜索框文字变化 —— 实时驱动搜索结果下拉：去空白后为空则隐藏下拉（"空内容
     // 不显示"，同时避免点 Tab 时焦点回落搜索框误弹），非空则定位到搜索框下方展示
-    // 并刷新结果。DuiEditHost 每键变化发 DUIN_VALUECHANGED。
+    // 并刷新结果。DuiEdit 每键变化发 DUIN_VALUECHANGED。
     if (pNotify != NULL
         && pNotify->ctrlId == balloonmain::kIdSearchBox
         && pNotify->code == balloonwjui::DUIN_VALUECHANGED)
@@ -7490,7 +7490,7 @@ bool CBalloonMainPanel::ComputeSearchAnchor(RECT& outAnchorScreen, int& outPanel
     {
         return false;
     }
-    balloonwjui::DuiEditHost* edit = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* edit = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(balloonmain::kIdSearchBox));
     if (edit == NULL)
     {
@@ -7522,7 +7522,7 @@ void CBalloonMainPanel::UpdateSearchDropdown()
     {
         return;
     }
-    balloonwjui::DuiEditHost* edit = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* edit = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(balloonmain::kIdSearchBox));
     if (edit == NULL)
     {
@@ -7570,7 +7570,7 @@ void CBalloonMainPanel::FocusSearchBox()
     {
         return;
     }
-    balloonwjui::DuiEditHost* edit = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* edit = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(balloonmain::kIdSearchBox));
     if (edit == NULL)
     {
@@ -7951,7 +7951,7 @@ void CBalloonMainPanel::OnPresenceChanged(int64_t userid, int presence)
     }
 
     // 3) 联系人树上对应节点重着色 + 刷新。同一好友在树上只挂一个叶子，遍历"节点→userid"
-    //    映射命中即按新 presence 重着状态点；改完整树重绘一次（树窗不含输入框，无闪烁顾虑）。
+    //    映射命中即按新 presence 重着状态点；改完之后整树重绘一次即可，不需要局部刷新。
     balloonwjui::DuiControl* content = GetClientContent();
     if (content == NULL)
     {

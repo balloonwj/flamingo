@@ -28,7 +28,7 @@
 #include "../BalloonAuth/BalloonLoginLayout.h"
 #include "../BalloonMain/AvatarPalette.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiProgressBar.h"
 
@@ -98,7 +98,7 @@ TEST_CASE("L3 登录页含密码输入框且为密码模式", "[p1a][login]")
     DuiControl* password = root->FindCtrlById(kIdPasswordEdit);
     REQUIRE(password != nullptr);
 
-    auto* edit = dynamic_cast<DuiEditHost*>(password);
+    auto* edit = dynamic_cast<DuiEdit*>(password);
     REQUIRE(edit != nullptr);
     CHECK(edit->IsPassword());
     CHECK_FALSE(edit->GetPlaceholder().IsEmpty());
@@ -115,11 +115,11 @@ TEST_CASE("L8 账号下拉框的内嵌输入框带占位文字", "[p1a][login]")
     DuiComboBox* combo = dynamic_cast<DuiComboBox*>(root->FindCtrlById(kIdAccountCombo));
     REQUIRE(combo != nullptr);
 
-    DuiEditHost* accountEdit = NULL;
+    DuiEdit* accountEdit = NULL;
     const std::vector<std::unique_ptr<DuiControl> >& children = combo->Children();
     for (size_t i = 0; i < children.size(); ++i)
     {
-        DuiEditHost* candidate = dynamic_cast<DuiEditHost*>(children[i].get());
+        DuiEdit* candidate = dynamic_cast<DuiEdit*>(children[i].get());
         if (candidate != NULL)
         {
             accountEdit = candidate;

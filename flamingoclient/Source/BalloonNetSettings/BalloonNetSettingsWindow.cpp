@@ -20,7 +20,7 @@
 #include "../FlamingoClient.h"        // CFlamingoClient::SetServer / SetPort 等
 #include "NetSettingsLayout.h"        // BuildNetSettingsBody / NetCtrlId
 #include "NetServerCard.h"            // NetServerCard
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../net/IUSocket.h"            // CIUSocket::TestConnect
 
 using namespace balloonwjui;
@@ -218,13 +218,13 @@ void CBalloonNetSettingsWindow::InitUi()
     }
 
     // 地址与端口两个输入框都要画出边框，让用户看出它们是可以输入的。
-    DuiEditHost* hostEdit = dynamic_cast<DuiEditHost*>(
+    DuiEdit* hostEdit = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kIdEditHost));
     if (hostEdit != NULL)
     {
         hostEdit->SetShowBorder(true);
     }
-    DuiEditHost* portEdit = dynamic_cast<DuiEditHost*>(
+    DuiEdit* portEdit = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kIdEditPort));
     if (portEdit != NULL)
     {
@@ -307,7 +307,7 @@ void CBalloonNetSettingsWindow::CommitFormToModel()
 
     NetServerEntry entry = m_model.Server(m_model.Selected());
 
-    DuiEditHost* hostEdit = dynamic_cast<DuiEditHost*>(
+    DuiEdit* hostEdit = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kIdEditHost));
     if (hostEdit != NULL)
     {
@@ -316,7 +316,7 @@ void CBalloonNetSettingsWindow::CommitFormToModel()
         entry.host = host;
     }
 
-    DuiEditHost* portEdit = dynamic_cast<DuiEditHost*>(
+    DuiEdit* portEdit = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kIdEditPort));
     if (portEdit != NULL)
     {
@@ -343,14 +343,14 @@ void CBalloonNetSettingsWindow::LoadFormFromModel()
 
     const NetServerEntry& entry = m_model.Server(m_model.Selected());
 
-    DuiEditHost* hostEdit = dynamic_cast<DuiEditHost*>(
+    DuiEdit* hostEdit = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kIdEditHost));
     if (hostEdit != NULL)
     {
         hostEdit->SetText(entry.host);
     }
 
-    DuiEditHost* portEdit = dynamic_cast<DuiEditHost*>(
+    DuiEdit* portEdit = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kIdEditPort));
     if (portEdit != NULL)
     {

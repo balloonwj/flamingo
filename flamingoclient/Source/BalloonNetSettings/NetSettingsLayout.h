@@ -26,8 +26,8 @@ enum NetCtrlId
     kIdCardImage  = 701,   // 图片服务器卡片（NetServerCard）
     kIdCardFile   = 702,   // 文件服务器卡片（NetServerCard）
 
-    kIdEditHost   = 710,   // "服务器地址"输入框（DuiEditHost）
-    kIdEditPort   = 711,   // "端口"输入框（DuiEditHost）
+    kIdEditHost   = 710,   // "服务器地址"输入框（DuiEdit）
+    kIdEditPort   = 711,   // "端口"输入框（DuiEdit）
 
     kIdBtnTest    = 720,   // "测试连接"按钮（NetActionButton）
     kIdBtnSave    = 721,   // "保存"按钮（NetActionButton）

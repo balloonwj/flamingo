@@ -45,12 +45,12 @@ enum ProfileCtrlId
     kIdViewEmail     = 925,  // 邮箱 —— 查看态只读文本
 
     // ---- 字段区：编辑态的可编辑控件 ----------------------------------
-    kIdEditNickname  = 930,  // 昵称 —— 编辑态文本框（DuiEditHost）
-    kIdEditSignature = 931,  // 个性签名 —— 编辑态文本框（DuiEditHost）
+    kIdEditNickname  = 930,  // 昵称 —— 编辑态文本框（DuiEdit）
+    kIdEditSignature = 931,  // 个性签名 —— 编辑态文本框（DuiEdit）
     kIdEditGender    = 932,  // 性别 —— 编辑态下拉框（DuiComboBox）
-    kIdEditBirthday  = 933,  // 生日 —— 编辑态文本框（DuiEditHost）
-    kIdEditRegion    = 934,  // 所在地 —— 编辑态文本框（DuiEditHost）
-    kIdEditEmail     = 935,  // 邮箱 —— 编辑态文本框（DuiEditHost）
+    kIdEditBirthday  = 933,  // 生日 —— 编辑态文本框（DuiEdit）
+    kIdEditRegion    = 934,  // 所在地 —— 编辑态文本框（DuiEdit）
+    kIdEditEmail     = 935,  // 邮箱 —— 编辑态文本框（DuiEdit）
 
     // ---- 底部按钮区 ---------------------------------------------------
     //   查看态控件树含"关闭 + 编辑资料"；编辑态含"取消 + 保存"。
@@ -80,7 +80,7 @@ int ProfileBodyHeight(bool editMode);
 // 布局自用控件的访问 helper —— ProfileText / ProfileStatusPill /
 // ProfileAvatar 是 ProfileLayout.cpp 文件局部类型，窗口侧拿不到其声明，
 // 故由本组函数代为按 ctrl-id 操作（在 .cpp 内 dynamic_cast 落地）。
-// 文本框（DuiEditHost）/ 下拉框（DuiComboBox）是 balloonui 公共类型，
+// 文本框（DuiEdit）/ 下拉框（DuiComboBox）是 balloonui 公共类型，
 // 窗口可直接 dynamic_cast，不经这里。
 // =====================================================================
 

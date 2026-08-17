@@ -11,7 +11,7 @@
  *      "群主:<群主显示名>"
  *    · 群公告:浅橙填充圆角框(空时占位"暂无群公告")
  *    · "我在本群的昵称":右对齐值,整行点击就地编辑(view DuiLabel ↔ edit
- *      DuiEditHost)
+ *      DuiEdit)
  *    · "消息免打扰" / "置顶群聊":各一个 DuiSwitch
  *    · 底部:"查看消息记录"(本轮占位) / "退出群聊"(危险红)
  *
@@ -55,7 +55,7 @@ enum GroupInfoCtrlId : UINT
     // ---- 我在本群的昵称(查看/编辑双态;整行点击进编辑) ----
     kIdGroupCardLabel    = 365,  // 行左标签"我在本群的昵称"(可点,点了进编辑)
     kIdGroupCardView     = 366,  // 群名片值 查看 DuiLabel(可点,点了进编辑)
-    kIdGroupCardEdit     = 367,  // 群名片值 编辑 DuiEditHost(回车/失焦提交)
+    kIdGroupCardEdit     = 367,  // 群名片值 编辑 DuiEdit(回车/失焦提交)
 
     // ---- 开关 ----
     kIdGroupMuteSwitch   = 368,  // 消息免打扰 DuiSwitch

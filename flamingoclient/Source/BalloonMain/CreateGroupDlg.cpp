@@ -30,7 +30,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
 
 // ---- 对话框固定尺寸（逻辑像素）-----------------------------------------
@@ -303,7 +303,7 @@ void CCreateGroupDlg::BuildUiOnce()
             std::unique_ptr<balloonwjui::DuiVBox> left(new balloonwjui::DuiVBox());
             left->SetGap(8);
 
-            std::unique_ptr<balloonwjui::DuiEditHost> search(new balloonwjui::DuiEditHost());
+            std::unique_ptr<balloonwjui::DuiEdit> search(new balloonwjui::DuiEdit());
             search->SetCtrlId(kIdSearch);
             search->SetPlaceholder(_T("搜索联系人"));
             search->SetBgColor(RGB(255, 255, 255));
@@ -336,7 +336,7 @@ void CCreateGroupDlg::BuildUiOnce()
             //群名早就定了，这一行整个不构建（而不是藏起来），免得留一条空白带。
             if (m_purpose == kPurposeCreateGroup)
             {
-                std::unique_ptr<balloonwjui::DuiEditHost> name(new balloonwjui::DuiEditHost());
+                std::unique_ptr<balloonwjui::DuiEdit> name(new balloonwjui::DuiEdit());
                 name->SetCtrlId(kIdName);
                 name->SetPlaceholder(_T("群聊名称（选填）"));
                 name->SetBgColor(RGB(255, 255, 255));

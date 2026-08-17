@@ -14,7 +14,7 @@
 #include "Controls/Layout/DuiLayout.h"
 #include "Controls/Basic/DuiLabel.h"
 #include "Controls/Basic/DuiButton.h"
-#include "Controls/Input/DuiEditHost.h"
+#include "Controls/Input/DuiEdit.h"
 #include "Controls/Input/DuiComboBox.h"
 #include "DuiNotify.h"
 
@@ -91,9 +91,9 @@ std::unique_ptr<DuiLabel> MakeLabel(LPCTSTR text, int pt, bool bold, COLORREF co
 // 建好，也没有需要在窗口就绪后补做的步骤。
 //   ctrlId      ：控件 ID（UiIds.h）；
 //   placeholder ：空值占位字。
-std::unique_ptr<DuiEditHost> MakeEdit(int ctrlId, LPCTSTR placeholder)
+std::unique_ptr<DuiEdit> MakeEdit(int ctrlId, LPCTSTR placeholder)
 {
-    std::unique_ptr<DuiEditHost> e(new DuiEditHost());
+    std::unique_ptr<DuiEdit> e(new DuiEdit());
     e->SetCtrlId(ctrlId);
     e->SetPlaceholder(placeholder);
     e->SetShowBorder(true);
@@ -105,10 +105,10 @@ std::unique_ptr<DuiEditHost> MakeEdit(int ctrlId, LPCTSTR placeholder)
 //   label         ：字段名（如「姓名 *」）；
 //   ctrlId        ：输入框 ID；
 //   placeholder   ：占位字，可为空串；
-//   borrowOutEdit ：输出参数 —— 拿到 DuiEditHost 裸指针供外层读写；所有权仍在控件树里。
+//   borrowOutEdit ：输出参数 —— 拿到 DuiEdit 裸指针供外层读写；所有权仍在控件树里。
 std::unique_ptr<DuiControl> MakeFieldColumn(LPCTSTR label, int ctrlId,
                                             LPCTSTR placeholder,
-                                            DuiEditHost** borrowOutEdit)
+                                            DuiEdit** borrowOutEdit)
 {
     std::unique_ptr<DuiVBox> col(new DuiVBox());
     col->SetGap(kFieldLabelGap);
@@ -116,7 +116,7 @@ std::unique_ptr<DuiControl> MakeFieldColumn(LPCTSTR label, int ctrlId,
     col->AddChild(MakeLabel(label, kFontSizeSmall, false, theme::kInk500),
                   DuiLayout::Hint().Fixed(kFieldLabelH));
 
-    std::unique_ptr<DuiEditHost> e = MakeEdit(ctrlId, placeholder);
+    std::unique_ptr<DuiEdit> e = MakeEdit(ctrlId, placeholder);
     *borrowOutEdit = e.get();
     col->AddChild(std::move(e), DuiLayout::Hint().Fixed(kFieldCtrlH));
 

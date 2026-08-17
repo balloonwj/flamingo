@@ -21,7 +21,7 @@
 #include "../UserSessionData.h"         // FMG_MSG_OPEN_CHAT / FMG_MSG_OPEN_CONTACT_PROFILE
 #include "../BalloonMain/PopupMenuPlacement.h"   // ClampPopupMenuToWorkArea
 #include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../FlamingoClient.h"          // 取本人 userid
 #include "../net/IUSocket.h"            // 各 Send / Request 方法
 #include "../net/GroupProtocolClient.h" // 应答与推送的解析结构
@@ -882,7 +882,7 @@ void CBalloonGroupManageWindow::SaveBasicInfo()
 
     //逐个输入框取值，只把"改过的"标成待更新 —— 没动过的项不发，避免多端
     //同时编辑时互相覆盖（见方案文档 §4.1 对 has_* 的说明）。
-    balloonwjui::DuiEditHost* pName = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* pName = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(kIdEditGroupName));
     if (pName != NULL)
     {
@@ -897,7 +897,7 @@ void CBalloonGroupManageWindow::SaveBasicInfo()
     //群公告刻意不在这里发：它已经是一条条带标题 / 发布人 / 优先级的记录，编辑
     //入口统一在「群公告」页（走 cmd_publish_group_announcement）。基本信息页上
     //那一行只是当前最新公告的只读摘要，没有输入框可读。
-    balloonwjui::DuiEditHost* pIntro = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* pIntro = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(kIdEditIntro));
     if (pIntro != NULL)
     {
@@ -1028,14 +1028,14 @@ void CBalloonGroupManageWindow::ClearAnnouncementDraft()
         return;
     }
 
-    balloonwjui::DuiEditHost* pTitle = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* pTitle = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(kIdEditAnnounceTitle));
     if (pTitle != NULL)
     {
         pTitle->SetText(_T(""));
     }
 
-    balloonwjui::DuiEditHost* pBody = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* pBody = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(kIdEditAnnounceBody));
     if (pBody != NULL)
     {
@@ -1056,7 +1056,7 @@ void CBalloonGroupManageWindow::PublishAnnouncementFromInput()
         return;
     }
 
-    balloonwjui::DuiEditHost* pTitle = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* pTitle = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(kIdEditAnnounceTitle));
     if (pTitle == NULL)
     {
@@ -1074,7 +1074,7 @@ void CBalloonGroupManageWindow::PublishAnnouncementFromInput()
     }
 
     CString body;
-    balloonwjui::DuiEditHost* pBody = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* pBody = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(kIdEditAnnounceBody));
     if (pBody != NULL)
     {
@@ -1296,7 +1296,7 @@ void CBalloonGroupManageWindow::AddSensitiveWordFromInput()
     {
         return;
     }
-    balloonwjui::DuiEditHost* pEdit = dynamic_cast<balloonwjui::DuiEditHost*>(
+    balloonwjui::DuiEdit* pEdit = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(kIdEditSensitiveNew));
     if (pEdit == NULL)
     {

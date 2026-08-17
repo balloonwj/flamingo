@@ -22,7 +22,7 @@
 #include "Mock/MockData.h"
 
 namespace balloonwjui { class DuiButton; }   // FlatButton 已迁到 balloonwjui::DuiButton
-namespace balloonwjui { class DuiEditHost; } // 组织树搜索框用的单行输入框
+namespace balloonwjui { class DuiEdit; } // 组织树搜索框用的单行输入框
 
 namespace flamingoadmin {
 
@@ -130,7 +130,7 @@ private:
     int              m_subTab = kTabOrg;         // 当前子 tab
 
     OrgTree*         m_tree  = nullptr;          // 组织树（子控件）
-    balloonwjui::DuiEditHost* m_orgSearch = nullptr;  // 组织树搜索框（工具条左侧,子控件）
+    balloonwjui::DuiEdit* m_orgSearch = nullptr;  // 组织树搜索框（工具条左侧,子控件）
 
     // 组织树工具条右侧的三个图标按钮（子控件，从左到右）。仅在「组织架构」
     // 子 tab 下可见，切到「服务号」tab 时由 SetSubTab 隐藏。

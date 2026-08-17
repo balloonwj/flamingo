@@ -10,7 +10,7 @@
 #include "Widgets/IconRenderer.h"
 #include "Widgets/CommonWidgets.h"
 #include "Widgets/OverlayScrollbar.h"   // 面板右缘的悬浮 auto-hide 滚动条子控件
-#include "Controls/Input/DuiEditHost.h" // 基本信息各值字段：只读 DuiEditHost
+#include "Controls/Input/DuiEdit.h" // 基本信息各值字段：只读 DuiEdit
 #include "Mock/DataStore.h"
 
 namespace flamingoadmin {
@@ -70,7 +70,7 @@ void DrawSectionTitle(HDC hdc, int x, int y, int w, LPCTSTR text, bool danger)
 
 // 基本信息字段数：与 PaintUserBasic 内 fields[] 数组**同步**维护。
 // 改字段数量时必须同时改这里 + fields[] + RenderBasicField 调用点。
-// 构造函数按此数量创建只读 DuiEditHost 值字段子控件。
+// 构造函数按此数量创建只读 DuiEdit 值字段子控件。
 constexpr int kBasicFieldCount = 11;
 
 // 画一个「标签在上、值在下框内」的字段单元格。
@@ -293,7 +293,7 @@ RECT DrawDangerRow(HDC hdc, int left, int right, int top,
 
 OrgDetailPanel::OrgDetailPanel()
 {
-    // ---- 基本信息 11 个值字段：只读 DuiEditHost，让每个值都是真正的只读
+    // ---- 基本信息 11 个值字段：只读 DuiEdit，让每个值都是真正的只读
     // 文本框（鼠标拖选 + 右键菜单复制/全选 + Ctrl+C/A）。先加它们、再加
     // 滚动条 —— 这样滚动条在子控件序列最末，base OnPaint 最后绘制它。
     // 位置 / 文本 / 可见性由 PaintUserBasic 每帧重新设置；这里做一次性初始化
@@ -307,7 +307,7 @@ OrgDetailPanel::OrgDetailPanel()
     HFONT valueFont = ui::UiFont(theme::kFontSizeNormal, false);
     for (int i = 0; i < kBasicFieldCount; ++i)
     {
-        auto edit = std::make_unique<balloonwjui::DuiEditHost>();
+        auto edit = std::make_unique<balloonwjui::DuiEdit>();
         edit->SetReadOnly(true);
         edit->SetShowBorder(false);          // 外观靠自绘圆角框，输入框自身不画边框
         edit->SetBgColor(theme::kInk0);      // 底色与自绘框填充（kInk0）一致
@@ -898,7 +898,7 @@ int OrgDetailPanel::PaintUserBasic(HDC hdc, int y)
     const int colW    = (w - kColGap) / 2;
     const int kCellH  = 52 + 10;
     const int nonFull = kCount - 1;
-    // 11 个值字段全部用只读 DuiEditHost 子控件渲染（原生拖选 + 右键菜单）：
+    // 11 个值字段全部用只读 DuiEdit 子控件渲染（原生拖选 + 右键菜单）：
     // 前 10 个排成 2 列网格，第 11 个（个性签名）单独跨整行。
     for (int i = 0; i < nonFull; ++i)
     {
@@ -971,7 +971,7 @@ void OrgDetailPanel::RenderBasicField(HDC hdc, int idx, int x, int y, int w,
     // 自绘字段 label + 圆角框（无值文本）；返回值字段的矩形 rcVal。
     RECT rcVal = DrawKVCellLabelAndBoxOnly(hdc, x, y, w, label);
 
-    balloonwjui::DuiEditHost* edit = nullptr;
+    balloonwjui::DuiEdit* edit = nullptr;
     if (idx >= 0 && idx < static_cast<int>(m_basicValueEdits.size()))
     {
         edit = m_basicValueEdits[idx];
@@ -1032,7 +1032,7 @@ void OrgDetailPanel::ApplyBasicEditVisibility()
 {
     for (size_t i = 0; i < m_basicValueEdits.size(); ++i)
     {
-        balloonwjui::DuiEditHost* edit = m_basicValueEdits[i];
+        balloonwjui::DuiEdit* edit = m_basicValueEdits[i];
         if (edit == nullptr)
         {
             continue;

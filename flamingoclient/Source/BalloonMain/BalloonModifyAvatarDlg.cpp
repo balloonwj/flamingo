@@ -5,7 +5,7 @@
  *    · 顶部预览 = AvatarPickerTile（承载 MakeMonogramSquareAvatar 生成的圆角方形
  *      字形位图）+ DuiLabel 说明；
  *    · 三段切换 = 三个 DuiButton（选中 Primary 橙、其余 Default）；
- *    · 系统头像页 = AvatarPickerTile 磁贴网格；首字母页 = DuiEditHost + 12 色点；
+ *    · 系统头像页 = AvatarPickerTile 磁贴网格；首字母页 = DuiEdit + 12 色点；
  *      本地上传页 = 占位（第二期接通）；
  *    · 底部 = DuiButton(取消 / 使用此头像)。
  *  "使用此头像"把当前字形 + 底色经 AvatarSpec::EncodeGlyphAvatar 编码后，
@@ -40,7 +40,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 
 // ---- 对话框固定尺寸（逻辑像素）-----------------------------------------
 static const int kDlgWidth      = 560;
@@ -764,7 +764,7 @@ void CBalloonModifyAvatarDlg::BuildLetterPage(balloonwjui::DuiVBox* host)
 
     {
         std::unique_ptr<balloonwjui::DuiHBox> editRow(new balloonwjui::DuiHBox());
-        std::unique_ptr<balloonwjui::DuiEditHost> edit(new balloonwjui::DuiEditHost());
+        std::unique_ptr<balloonwjui::DuiEdit> edit(new balloonwjui::DuiEdit());
         edit->SetCtrlId(kIdLetterEdit);
         edit->SetMaxLength(2);
         edit->SetBgColor(kEditBgColor);

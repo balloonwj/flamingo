@@ -12,7 +12,7 @@
 #include "Widgets/Widgets.h"
 #include "Widgets/CommonWidgets.h"
 
-#include "Controls/Input/DuiEditHost.h"
+#include "Controls/Input/DuiEdit.h"
 #include "Controls/Input/DuiComboBox.h"
 #include "Controls/Basic/DuiButton.h"   // FlatButton 已迁到 balloonwjui::DuiButton
 #include "DuiNotify.h"
@@ -52,9 +52,9 @@ const int kModalTitlePt  = 14;   // 弹窗标题字号
 const int kAdminStatusDisabled = 1;  // 管理员状态：1=停用
 
 // 新建一个带边框的输入框。
-std::unique_ptr<DuiEditHost> MakeEdit(int ctrlId, LPCTSTR placeholder)
+std::unique_ptr<DuiEdit> MakeEdit(int ctrlId, LPCTSTR placeholder)
 {
-    std::unique_ptr<DuiEditHost> e(new DuiEditHost());
+    std::unique_ptr<DuiEdit> e(new DuiEdit());
     e->SetCtrlId(ctrlId);
     e->SetPlaceholder(placeholder);
     e->SetShowBorder(true);
@@ -70,19 +70,19 @@ EnterpriseSettingsModal::EnterpriseSettingsModal()
     SetCtrlId(kIdEntSettings);   // 自绘「移除」动作经此 ID 上报
 
     // ---- 企业信息：4 个文本框 + 1 个套餐下拉 ----
-    std::unique_ptr<DuiEditHost> eName = MakeEdit(kIdEntSetName, _T("企业全称"));
+    std::unique_ptr<DuiEdit> eName = MakeEdit(kIdEntSetName, _T("企业全称"));
     m_editName = eName.get();
     AddChild(std::move(eName));
 
-    std::unique_ptr<DuiEditHost> eShort = MakeEdit(kIdEntSetShort, _T("企业简称"));
+    std::unique_ptr<DuiEdit> eShort = MakeEdit(kIdEntSetShort, _T("企业简称"));
     m_editShort = eShort.get();
     AddChild(std::move(eShort));
 
-    std::unique_ptr<DuiEditHost> eInd = MakeEdit(kIdEntSetIndustry, _T("所属行业"));
+    std::unique_ptr<DuiEdit> eInd = MakeEdit(kIdEntSetIndustry, _T("所属行业"));
     m_editIndustry = eInd.get();
     AddChild(std::move(eInd));
 
-    std::unique_ptr<DuiEditHost> eReg = MakeEdit(kIdEntSetRegion, _T("主要地区"));
+    std::unique_ptr<DuiEdit> eReg = MakeEdit(kIdEntSetRegion, _T("主要地区"));
     m_editRegion = eReg.get();
     AddChild(std::move(eReg));
 
@@ -96,12 +96,12 @@ EnterpriseSettingsModal::EnterpriseSettingsModal()
     AddChild(std::move(cbPlan));
 
     // ---- 新增管理员行：姓名 + 邮箱 ----
-    std::unique_ptr<DuiEditHost> eNewName =
+    std::unique_ptr<DuiEdit> eNewName =
         MakeEdit(kIdEntSetNewName, _T("管理员姓名"));
     m_editNewName = eNewName.get();
     AddChild(std::move(eNewName));
 
-    std::unique_ptr<DuiEditHost> eNewEmail =
+    std::unique_ptr<DuiEdit> eNewEmail =
         MakeEdit(kIdEntSetNewEmail, _T("管理员邮箱"));
     m_editNewEmail = eNewEmail.get();
     AddChild(std::move(eNewEmail));

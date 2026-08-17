@@ -3,7 +3,7 @@
  *
  *  群管理对话框客户区控件树的程序化构建实现。Header / 左侧导航 / 右侧各
  *  页内容全部用 balloonui 现成控件（DuiVBox 卡片底、DuiAvatar、DuiBadge、
- *  DuiSwitch、DuiComboBox、DuiSearchBox、DuiEditHost、DuiSeparator）加本
+ *  DuiSwitch、DuiComboBox、DuiSearchBox、DuiEdit、DuiSeparator）加本
  *  目录少量自绘小控件（导航项、操作按钮、单行文本、分组标题）搭成。
  *
  *  本 .cpp 不 include Flamingo 的 stdafx.h —— 自带 ATL/WTL 前置依赖，
@@ -54,7 +54,7 @@ extern CAppModule _Module;
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSearchBox.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 
 namespace balloongroupmanage {
 
@@ -69,7 +69,7 @@ using balloonwjui::DuiSeparator;
 using balloonwjui::DuiSwitch;
 using balloonwjui::DuiComboBox;
 using balloonwjui::DuiSearchBox;
-using balloonwjui::DuiEditHost;
+using balloonwjui::DuiEdit;
 //「更换头像」按钮按角色置灰时要用基类类型持有 MakeButton 的产物（它返回的是
 //派生类 GroupManageButton），故把基类名也引进来
 using balloonwjui::DuiButton;
@@ -884,7 +884,7 @@ std::unique_ptr<DuiControl> BuildBasicInfoPage(const GroupManageModel& model)
     page->AddChild(std::move(avatarCard), Hint().Fixed(82));
 
     // 群名称。
-    std::unique_ptr<DuiEditHost> nameEdit(new DuiEditHost());
+    std::unique_ptr<DuiEdit> nameEdit(new DuiEdit());
     nameEdit->SetCtrlId(kIdEditGroupName);
     nameEdit->SetShowBorder(true);
     nameEdit->SetText(model.m_groupName);
@@ -930,7 +930,7 @@ std::unique_ptr<DuiControl> BuildBasicInfoPage(const GroupManageModel& model)
                    Hint().Fixed(48));
 
     // 群简介。
-    std::unique_ptr<DuiEditHost> introEdit(new DuiEditHost());
+    std::unique_ptr<DuiEdit> introEdit(new DuiEdit());
     introEdit->SetCtrlId(kIdEditIntro);
     introEdit->SetShowBorder(true);
     introEdit->SetPlaceholder(_T("介绍一下这个群…"));
@@ -1220,7 +1220,7 @@ std::unique_ptr<DuiControl> BuildAnnouncementPage(const GroupManageModel& model)
         card->AddChild(std::move(head), Hint().Fixed(26));
 
         // 标题（必填）
-        std::unique_ptr<DuiEditHost> titleEdit(new DuiEditHost());
+        std::unique_ptr<DuiEdit> titleEdit(new DuiEdit());
         titleEdit->SetCtrlId(kIdEditAnnounceTitle);
         titleEdit->SetShowBorder(true);
         titleEdit->SetPlaceholder(_T("公告标题（必填）"));
@@ -1228,7 +1228,7 @@ std::unique_ptr<DuiControl> BuildAnnouncementPage(const GroupManageModel& model)
                        Hint().Fixed(kAnnFormTitleH));
 
         // 正文（多行）
-        std::unique_ptr<DuiEditHost> bodyEdit(new DuiEditHost());
+        std::unique_ptr<DuiEdit> bodyEdit(new DuiEdit());
         bodyEdit->SetCtrlId(kIdEditAnnounceBody);
         bodyEdit->SetMultiLine(true);
         bodyEdit->SetWordWrap(true);
@@ -1342,7 +1342,7 @@ std::unique_ptr<DuiControl> BuildSensitiveWordsPage(const GroupManageModel& mode
         std::unique_ptr<DuiHBox> addRow(new DuiHBox());
         addRow->SetGap(10);
 
-        std::unique_ptr<DuiEditHost> edit(new DuiEditHost());
+        std::unique_ptr<DuiEdit> edit(new DuiEdit());
         edit->SetCtrlId(kIdEditSensitiveNew);
         edit->SetShowBorder(true);
         edit->SetPlaceholder(_T("输入要屏蔽的词"));

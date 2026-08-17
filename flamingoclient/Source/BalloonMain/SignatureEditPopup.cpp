@@ -1,7 +1,7 @@
 /**
  *  SignatureEditPopup.cpp
  *
- *  个性签名内联编辑弹层的实现。子类化 DuiPopupHost，内部一个单行 DuiEditHost；
+ *  个性签名内联编辑弹层的实现。子类化 DuiPopupHost，内部一个单行 DuiEdit；
  *  打开时精确盖在签名文字屏幕矩形上，回车/失焦提交、ESC 取消。
  *
  *  balloonwj@qq.com   2026-06-03
@@ -11,7 +11,7 @@
 
 #include <memory>
 
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "SignatureEditModel.h"   // kSignatureMaxLen
 #include "../IULog.h"
 
@@ -56,7 +56,7 @@ void CSignatureEditPopup::BuildContentOnce()
     }
 
     // 单行编辑框作内容根：白底、带 1px 边框（编辑态有个框）、单行垂直居中、限长。
-    std::unique_ptr<balloonwjui::DuiEditHost> edit(new balloonwjui::DuiEditHost());
+    std::unique_ptr<balloonwjui::DuiEdit> edit(new balloonwjui::DuiEdit());
     edit->SetCtrlId(kSignEditCtrlId);
     edit->SetMaxLength(balloonmain::kSignatureMaxLen);
     edit->SetVerticalCenter(true);

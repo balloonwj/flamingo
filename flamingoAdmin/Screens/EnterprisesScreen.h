@@ -26,7 +26,7 @@
 
 #include <vector>
 
-namespace balloonwjui { class DuiEditHost; }
+namespace balloonwjui { class DuiEdit; }
 
 namespace flamingoadmin {
 
@@ -116,7 +116,7 @@ private:
     ui::StatTile*               m_tilePending = nullptr;  // 待审核
     ui::StatTile*               m_tileUsers   = nullptr;  // 总用户数
     ui::StatTile*               m_tileAudit   = nullptr;  // 今日审计事件
-    balloonwjui::DuiEditHost*   m_search      = nullptr;  // 搜索输入框
+    balloonwjui::DuiEdit*   m_search      = nullptr;  // 搜索输入框
     ui::SegControl*             m_seg         = nullptr;  // 状态分段筛选
     balloonwjui::DuiVirtualList* m_table      = nullptr;  // 企业表格（实际是 EnterpriseTable）
     balloonwjui::DuiControl*    m_footer      = nullptr;  // 表尾（显示计数）

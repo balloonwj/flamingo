@@ -11,7 +11,7 @@
 #include "Widgets/IconRenderer.h"
 #include "Widgets/Widgets.h"
 
-#include "Controls/Input/DuiEditHost.h"
+#include "Controls/Input/DuiEdit.h"
 #include "Controls/Basic/DuiButton.h"   // FlatButton 已迁到 balloonwjui::DuiButton
 
 using namespace balloonwjui;
@@ -63,9 +63,9 @@ ServiceModal::ServiceModal()
 {
     SetVisible(false);
 
-    auto mkEdit = [](int id, LPCTSTR ph) -> std::unique_ptr<DuiEditHost>
+    auto mkEdit = [](int id, LPCTSTR ph) -> std::unique_ptr<DuiEdit>
     {
-        auto e = std::make_unique<DuiEditHost>();
+        auto e = std::make_unique<DuiEdit>();
         e->SetCtrlId(id);
         e->SetPlaceholder(ph);
         e->SetShowBorder(true);

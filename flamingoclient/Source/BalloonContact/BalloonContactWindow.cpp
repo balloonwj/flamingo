@@ -30,7 +30,7 @@
 #include "ContactTagModel.h"          // 标签的归一与增 / 改判定（纯函数）
 #include "TagChip.h"                  // TagChip::DUIN_TAGCHIP_DELETE / DUIN_TAGCHIP_EDIT
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 
@@ -164,8 +164,8 @@ void CBalloonContactWindow::OpenForContact(HWND hostPanel, UINT peerUserId,
     }
 
     // 右键菜单「修改备注」的入口：窗口就绪后立刻进编辑态。必须放在窗口创建 / 重建
-    // 客户区<u>之后</u> —— SetRemarkEditing 要把 Win32 焦点交给编辑框寄宿的 EDIT
-    // 子窗，那个子窗是 InitUi 里才建出来的。
+    // 客户区<u>之后</u> —— SetRemarkEditing 要在控件树里找到备注名文本框并给它
+    // 设焦点，而那个控件是 InitUi 里才建出来的。
     if (beginRemarkEdit && IsWindow())
     {
         SetRemarkEditing(true);
@@ -325,7 +325,7 @@ void CBalloonContactWindow::InitUi()
     }
 
     // 备注名行内编辑用的文本框：画出边框并限制长度。
-    DuiEditHost* remarkEdit = dynamic_cast<DuiEditHost*>(
+    DuiEdit* remarkEdit = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kIdRemarkEdit));
     if (remarkEdit != NULL)
     {
@@ -630,10 +630,10 @@ void CBalloonContactWindow::SetRemarkEditing(bool editing)
     m_remarkEditing = editing;
 
     // 当前值文本与铅笔按钮只需切换显隐 —— 用 DuiControl 基类接口即可，
-    // 无需其文件局部具体类型。文本框需要 DuiEditHost 的接口。
+    // 无需其文件局部具体类型。文本框需要 DuiEdit 的接口。
     DuiControl* remarkValue = content->FindCtrlById(kIdRemarkValue);
     DuiControl* remarkBtn   = content->FindCtrlById(kIdRemarkEditBtn);
-    DuiEditHost* remarkEdit = dynamic_cast<DuiEditHost*>(
+    DuiEdit* remarkEdit = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kIdRemarkEdit));
 
     if (editing)
@@ -691,7 +691,7 @@ void CBalloonContactWindow::CommitRemarkEdit()
         return;
     }
 
-    DuiEditHost* remarkEdit = dynamic_cast<DuiEditHost*>(
+    DuiEdit* remarkEdit = dynamic_cast<DuiEdit*>(
         content->FindCtrlById(kIdRemarkEdit));
     if (remarkEdit == NULL)
     {
@@ -1315,8 +1315,8 @@ LRESULT CBalloonContactWindow::OnLButtonDown(UINT /*uMsg*/, WPARAM /*wParam*/,
     if (m_remarkEditing)
     {
         DuiControl* content = GetClientContent();
-        DuiEditHost* remarkEdit = (content != NULL)
-            ? dynamic_cast<DuiEditHost*>(content->FindCtrlById(kIdRemarkEdit))
+        DuiEdit* remarkEdit = (content != NULL)
+            ? dynamic_cast<DuiEdit*>(content->FindCtrlById(kIdRemarkEdit))
             : NULL;
         // 只在文本框当前确实持有 DUI 焦点时才动焦点：焦点已经不在它身上时，
         // DUIN_KILLFOCUS 早已发过、提交也已经投递过，这里再摘一次只会给别的控件
@@ -1356,7 +1356,7 @@ LRESULT CBalloonContactWindow::OnRemarkCommitDeferred(UINT /*uMsg*/, WPARAM /*wP
     DuiControl* content = GetClientContent();
     if (content != NULL)
     {
-        DuiEditHost* remarkEdit = dynamic_cast<DuiEditHost*>(
+        DuiEdit* remarkEdit = dynamic_cast<DuiEdit*>(
             content->FindCtrlById(kIdRemarkEdit));
         if (remarkEdit != NULL && remarkEdit->IsFocused())
         {

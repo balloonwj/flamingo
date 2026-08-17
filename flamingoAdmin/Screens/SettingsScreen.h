@@ -7,7 +7,7 @@
  *
  *  进入本界面时 AdminFrame 拉 profile.do 填充资料；「保存」走
  *  updateprofile.do、「修改密码」走 changepassword.do。本控件是自绘容器：
- *  卡片 / 标签 / 只读字段自绘，输入框与按钮是 DuiEditHost / FlatButton 子控件。
+ *  卡片 / 标签 / 只读字段自绘，输入框与按钮是 DuiEdit / FlatButton 子控件。
  *
  *  balloonwj@qq.com   2026-05-22
  */
@@ -15,7 +15,7 @@
 
 #include "DuiControl.h"
 
-namespace balloonwjui { class DuiEditHost; class DuiButton; }
+namespace balloonwjui { class DuiEdit; class DuiButton; }
 
 namespace flamingoadmin {
 
@@ -51,10 +51,10 @@ public:
 
 private:
     // 借用指针，所有权均在控件树中。
-    balloonwjui::DuiEditHost* m_nameEdit       = nullptr;  // 姓名输入框
-    balloonwjui::DuiEditHost* m_oldPwEdit      = nullptr;  // 当前密码输入框
-    balloonwjui::DuiEditHost* m_newPwEdit      = nullptr;  // 新密码输入框
-    balloonwjui::DuiEditHost* m_confirmPwEdit  = nullptr;  // 确认新密码输入框
+    balloonwjui::DuiEdit* m_nameEdit       = nullptr;  // 姓名输入框
+    balloonwjui::DuiEdit* m_oldPwEdit      = nullptr;  // 当前密码输入框
+    balloonwjui::DuiEdit* m_newPwEdit      = nullptr;  // 新密码输入框
+    balloonwjui::DuiEdit* m_confirmPwEdit  = nullptr;  // 确认新密码输入框
     balloonwjui::DuiButton*           m_btnSaveProfile = nullptr;  // 「保存」按钮
     balloonwjui::DuiButton*           m_btnChangePw    = nullptr;  // 「修改密码」按钮
 

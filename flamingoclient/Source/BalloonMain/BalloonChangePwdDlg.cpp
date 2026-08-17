@@ -2,7 +2,7 @@
  *  BalloonChangePwdDlg.cpp —— "修改密码"对话框实现。
  *
  *  控件树用 balloonui 现成控件程序化组合（对照 design/修改密码.png）：每个字段 =
- *  DuiLabel(标题) + DuiEditHost(密码框，左锁图标 + 右小眼睛 + 掩码)；提示框 =
+ *  DuiLabel(标题) + DuiEdit(密码框，左锁图标 + 右小眼睛 + 掩码)；提示框 =
  *  DuiVBox(琥珀底 + 圆角) 内嵌 DuiLabel(自动换行)；底部 = DuiButton(取消/保存)。
  *  保存流程：读三框 → ValidateChangePwdInput 校验 → Sha256 哈希 → CIUSocket
  *  发 cmd_change_password；应答经主面板转发到 OnChangePwdResult。
@@ -30,7 +30,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 
 // ---- 对话框固定尺寸（逻辑像素）-----------------------------------------
 static const int kDlgWidth      = 460;   // 客户区宽
@@ -75,7 +75,7 @@ static const COLORREF kLockIconColor   = RGB(0x9A, 0x9A, 0x9A);   // 锁图标�
 // 改密应答里"旧密码错误"的结果码（对应服务端 error_code_wrong_password）。
 static const int kRespCodeWrongOldPwd = 103;
 
-// 锁图标描边宽度（viewBox 24 基准）与边长（与 DuiEditHost gutter 匹配）。
+// 锁图标描边宽度（viewBox 24 基准）与边长（与 DuiEdit gutter 匹配）。
 static const Gdiplus::REAL kLockIconSize   = 16.0f;
 static const Gdiplus::REAL kLockStrokeW    = 2.0f;
 
@@ -252,7 +252,7 @@ LRESULT CBalloonChangePwdDlg::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
 // =======================================================================
 
 void CBalloonChangePwdDlg::AddField(balloonwjui::DuiVBox* root, LPCTSTR label,
-                                    UINT editId, balloonwjui::DuiEditHost** outEdit)
+                                    UINT editId, balloonwjui::DuiEdit** outEdit)
 {
     std::unique_ptr<balloonwjui::DuiVBox> group(new balloonwjui::DuiVBox());
     group->SetGap(kFieldGap);
@@ -263,13 +263,13 @@ void CBalloonChangePwdDlg::AddField(balloonwjui::DuiVBox* root, LPCTSTR label,
     lab->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     group->AddChild(std::move(lab), balloonwjui::DuiLayout::Hint().Fixed(kFieldLabelH));
 
-    std::unique_ptr<balloonwjui::DuiEditHost> edit(new balloonwjui::DuiEditHost());
+    std::unique_ptr<balloonwjui::DuiEdit> edit(new balloonwjui::DuiEdit());
     edit->SetCtrlId(editId);
     edit->SetPassword(true);
     // 右侧"小眼睛"按钮：点击在密文 / 明文显示之间切换。
     edit->SetShowEyeToggle(true);
     edit->SetBgColor(kFieldBgColor);
-    edit->SetIcon(balloonwjui::DuiEditHost::LeftIcon, kLockGutterW, &PaintLockGutter);
+    edit->SetIcon(balloonwjui::DuiEdit::LeftIcon, kLockGutterW, &PaintLockGutter);
     *outEdit = edit.get();
     group->AddChild(std::move(edit), balloonwjui::DuiLayout::Hint().Fixed(kEditRowH));
 
@@ -393,7 +393,7 @@ void CBalloonChangePwdDlg::DoSave()
     if (vr != balloonmain::kCpwOk)
     {
         LPCTSTR msg = _T("请检查输入。");
-        balloonwjui::DuiEditHost* focusTo = NULL;
+        balloonwjui::DuiEdit* focusTo = NULL;
         switch (vr)
         {
         case balloonmain::kCpwEmptyOld:

@@ -26,7 +26,7 @@
 #include <vector>
 
 namespace balloonwjui {
-class DuiEditHost;     // 基本信息各值字段：只读输入框（可选中 + 自带右键菜单）
+class DuiEdit;     // 基本信息各值字段：只读输入框（可选中 + 自带右键菜单）
 }
 
 namespace flamingoadmin {
@@ -56,15 +56,16 @@ public:
     /**
      *  设置「外部强制隐藏基本信息值字段」开关。
      *
-     *  本面板「基本信息」tab 的 11 个值字段是只读 DuiEditHost 子控件，显隐由
+     *  本面板「基本信息」tab 的 11 个值字段是只读 DuiEdit 子控件，显隐由
      *  本面板每帧绘制时按自己的标记表 reconcile（见 ApplyBasicEditVisibility）。
      *  外部（AdminFrame 在弹窗开 / 关时）若直接对这些子控件调 SetVisible，
      *  下一次重绘就会被 reconcile 覆盖回去，故留出本开关：打开期间 reconcile
      *  一律隐藏，关闭后恢复成本帧标记该显示的那些。
      *
-     *  注：这条路径原本是为了压住"寄宿的真 EDIT 子窗浮在弹窗之上"（2026-08-11
-     *  现场：「新增员工」弹窗里漂出员工姓名与登录账号）。输入框改为无窗口控件
-     *  之后弹窗本身就能盖住这些字段，本开关已无必要，留着只是尚未清理。
+     *  注：这条路径原本是为了应对早先内嵌真 Win32 输入框子窗口的实现 —— 那时这些
+     *  字段会绘制在弹窗之上（2026-08-11 现场：「新增员工」弹窗上显示出底层的员工
+     *  姓名与登录账号）。输入框改为无窗口控件之后弹窗本身就能盖住这些字段，本开关
+     *  已无必要，留着只是尚未清理。
      *  @param suppressed true=外部要求全部隐藏（弹窗打开）；false=恢复由本面板自行决定。
      */
     void SetBasicEditsSuppressed(bool suppressed);
@@ -121,7 +122,7 @@ private:
     int PaintUser (HDC hdc);
 
     // 渲染一条基本信息字段：自绘 label + 圆角框，把值字段交给
-    // m_basicValueEdits[idx] 子控件（只读 DuiEditHost）承载；索引与该数组对不上
+    // m_basicValueEdits[idx] 子控件（只读 DuiEdit）承载；索引与该数组对不上
     // 时用 DrawKVCellValueOnly 兜底自绘。
     //   hdc / x / y / w：单元格左上角与宽度；
     //   idx：fields[] 索引，决定用 m_basicValueEdits 里的哪一个；
@@ -185,7 +186,7 @@ private:
 
     // 基本信息 11 个值字段（姓名 / 职位 / 登录账号 / 工号 / 入职日期 /
     // 邮箱 / 手机号 / 座机 / 工位地址 / 性别 / 个性签名），全部用只读
-    // DuiEditHost 子控件承载，让每个值都是真正的只读文本框：鼠标拖选 +
+    // DuiEdit 子控件承载，让每个值都是真正的只读文本框：鼠标拖选 +
     // 右键菜单（复制 / 全选）+ Ctrl+C / Ctrl+A。
     //
     // 与 PaintUserBasic 内 fields[] 数组**同序**：索引 i 处的子控件对应
@@ -196,7 +197,7 @@ private:
     // 都不需要额外处理。
     //
     // 所有权归 m_children；本数组仅借用裸指针。
-    std::vector<balloonwjui::DuiEditHost*>  m_basicValueEdits;
+    std::vector<balloonwjui::DuiEdit*>  m_basicValueEdits;
 
     // 本帧各值字段是否应显示（与 m_basicValueEdits 同序同长）。OnPaint 开头
     // 清零，RenderBasicField 渲染到的置 1，绘制子控件之前据此统一 reconcile。

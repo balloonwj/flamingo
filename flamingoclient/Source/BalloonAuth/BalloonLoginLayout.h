@@ -38,7 +38,7 @@ enum CtrlId : UINT
 
     // ---- 输入区 ----
     kIdAccountCombo  = 100,   // 账号下拉框：可编辑 DuiComboBox，可手输入也可下拉选历史账号
-    kIdPasswordEdit  = 101,   // 密码输入框：DuiEditHost，密码模式
+    kIdPasswordEdit  = 101,   // 密码输入框：DuiEdit，密码模式
 
     // ---- 选项区 ----
     kIdRememberPwd   = 110,   // “记住密码”复选框：checkbox 风格 DuiButton

@@ -32,7 +32,7 @@
 #include "AccountRemoval.h"          // 删除历史账号的二次确认与本地数据清理
 #include "AuthBanner.h"              // AuthBanner（顶部 Banner，回填用户名 + 可点击状态胶囊）
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"          // 状态区文字
 #include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiProgressBar.h" // 登录中的不确定进度条
@@ -381,7 +381,7 @@ void CBalloonLoginDlg::InitLoginUi()
     // 控件点名：按 BalloonLoginLayout 约定的数字 id 取回关键控件指针。
     m_pAccountCombo = dynamic_cast<balloonwjui::DuiComboBox*>(
         content->FindCtrlById(balloonauth::kIdAccountCombo));
-    m_pPasswordEdit = dynamic_cast<balloonwjui::DuiEditHost*>(
+    m_pPasswordEdit = dynamic_cast<balloonwjui::DuiEdit*>(
         content->FindCtrlById(balloonauth::kIdPasswordEdit));
     m_pLoginButton = dynamic_cast<balloonwjui::DuiButton*>(
         content->FindCtrlById(balloonauth::kIdLoginButton));

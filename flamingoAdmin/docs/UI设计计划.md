@@ -116,12 +116,17 @@ balloonui 的宿主（`DuiHost`）会跟踪「当前 hover / 焦点 / 鼠标按�
 | `ScreenHost` | 外壳内容区 | 5 个主界面，切换只切显隐 |
 | `NewEnterpriseModal` | `RootContainer` 弹窗层 | 半透明遮罩 + 表单卡片，开 / 关只切显隐 |
 
-配套两条约定：
+配套约定：
 
 - **结构 / 可见性变动延迟执行**：导航、登出、弹窗开关均经
   `PostMessage(WM_APP_NAVIGATE)` 延迟到 DUI 事件派发栈结束后再执行。
-- **弹窗打开时隐藏外壳内真 EDIT 子窗**：`DuiEditHost` 是寄宿真 HWND 的控件，
-  HWND 子窗总绘制在 DUI 背景之上，不隐藏会透过半透明遮罩显形。
+
+原先还有第二条「弹窗打开时隐藏外壳内的输入框」，现已不再需要。当时的输入框控件
+`DuiEditHost` 内嵌一个真正的 Win32 输入框子窗口，该子窗口总是绘制在 DUI 绘制内容
+之上，不隐藏就会穿透半透明遮罩显形。输入框已于 2026-08-17 改为无窗口控件 `DuiEdit`，
+由库直接绘制，与其它控件遵循同一套层级与裁剪规则，弹窗本身即可遮住它。
+代码里遗留的 `AdminFrame::SetEditsVisible` 与 `OrgDetailPanel::SetBasicEditsSuppressed`
+就是那时留下的，现已无必要，只是尚未清理。
 
 ## 5. 分阶段实施计划
 

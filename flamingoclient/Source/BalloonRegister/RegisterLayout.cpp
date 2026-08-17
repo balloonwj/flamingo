@@ -11,7 +11,7 @@
  *    · RegBackButton   —— 圆形返回按钮（白底 + 阴影 + 左箭头）
  *    · RegText         —— 单行文本（副标题 / 标签 / 协议文字）
  *    · RegStepper      —— 三步步骤指示器
- *    · RegInput        —— 圆角输入框（圆角底 + 左图标，内嵌真 EDIT）
+ *    · RegInput        —— 圆角输入框（圆角底 + 左图标，内嵌一个 DuiEdit 子控件）
  *    · RegActionButton —— 底部主 / 次按钮
  *    · RegLinkButton   —— "获取验证码"文字按钮
  *    · RegSuccessIcon  —— 步骤 3 的圆形成功对勾图标
@@ -748,11 +748,11 @@ private:
  *
  *  对照 design/_decoded/components.jsx 的 Input：圆角 10、底色 #F5F4F1、
  *  左侧线条图标、聚焦时边框变 accent。本控件继承 DuiHBox 当布局容器，
- *  内嵌一个真 <edit>（DuiEditHost）子控件承载文本输入；图标与圆角底
+ *  内嵌一个 <edit>（DuiEdit）子控件承载文本输入；图标与圆角底
  *  由本控件 OnPaint 自绘，HBox 左 padding 给图标让位。
  *
  *  ctrl-id 挂在内嵌的 <edit> 上（窗口代码按 id FindCtrlById 取到的是
- *  真正可编辑的 DuiEditHost）。
+ *  真正可编辑的 DuiEdit）。
  */
 class RegInput : public balloonwjui::DuiHBox
 {

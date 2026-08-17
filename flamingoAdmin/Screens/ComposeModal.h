@@ -9,7 +9,7 @@
  *
  *  实现与其它弹窗一致：半透明遮罩 + 居中表单卡片，常驻于 RootContainer
  *  弹窗层，开 / 关只切显隐；点遮罩不关闭。标题 / 正文 / 定时时间为
- *  DuiEditHost 真输入框；严重等级 / 受众 / 置顶 / 发送方式 / 目标选择器为
+ *  DuiEdit 真输入框；严重等级 / 受众 / 置顶 / 发送方式 / 目标选择器为
  *  自绘可点区。目标选择器需要某企业的组织树时，经 WM_DUI_NOTIFY
  *  （ctrlId = kIdComposeModal）上报 AdminFrame 拉取，再经 SetOrgTree 回填。
  *
@@ -23,7 +23,7 @@
 
 #include <vector>
 
-namespace balloonwjui { class DuiEditHost; }
+namespace balloonwjui { class DuiEdit; }
 
 namespace flamingoadmin {
 
@@ -126,8 +126,9 @@ private:
 
     // 只把投放目标面板那块矩形（含其上方标签行）标记为脏并刷新。滚动列表、
     // 勾选目标、切换作用域企业、组织树回填等仅影响该面板的操作都走这里，
-    // 避免整窗 Invalidate 把标题 / 正文 / 定时时间三个 DuiEditHost 真子窗
-    // 牵连进重绘而导致闪烁。
+    // 不必整窗 Invalidate 把标题 / 正文 / 定时时间三个 DuiEdit 牵连进重绘。
+    // 这个做法最初是为了消除那三处输入框的闪烁（当时它们内嵌真 Win32 输入框
+    // 子窗口），改为无窗口控件之后闪烁已不存在，现在只用于减少重绘量。
     void InvalidatePicker();
 
     // 投放目标面板矩形（host-client 坐标）。
@@ -171,9 +172,9 @@ private:
 
     std::vector<Hit> m_hits;           // 本帧命中区集合
 
-    balloonwjui::DuiEditHost* m_editTitle    = nullptr;  // 标题输入框
-    balloonwjui::DuiEditHost* m_editBody     = nullptr;  // 正文输入框
-    balloonwjui::DuiEditHost* m_editSchedule = nullptr;  // 定时发送时间输入框
+    balloonwjui::DuiEdit* m_editTitle    = nullptr;  // 标题输入框
+    balloonwjui::DuiEdit* m_editBody     = nullptr;  // 正文输入框
+    balloonwjui::DuiEdit* m_editSchedule = nullptr;  // 定时发送时间输入框
 };
 
 } // namespace flamingoadmin

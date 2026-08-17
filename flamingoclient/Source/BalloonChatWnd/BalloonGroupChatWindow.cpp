@@ -80,7 +80,7 @@ static const COLORREF kGroupConnectingBannerBorderColor = RGB(0xE5, 0xE7, 0xEB);
 #include <time.h>
 #include <gdiplus.h>                       // 读图片真实宽高以算展示尺寸
 #pragma comment(lib, "gdiplus.lib")
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"      // 成员搜索框
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"      // 成员搜索框
 #include "../BalloonScreenshot/ScreenCaptureOverlay.h"  // 截图浮层（截图按钮调起）
 #include "ChatRichContentSplit.h"     // 输入框图文混排的有序拆分（发送用）
 #include "ChatFaceTag.h"              // 内联表情的 dwUser 标记编码 + 显示尺寸
@@ -1632,8 +1632,8 @@ LRESULT CBalloonGroupChatWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         && pNotify->ctrlId == balloonchatwnd::kGIdFileSearch)
     {
         balloonwjui::DuiControl* content = GetClientContent();
-        balloonwjui::DuiEditHost* search = (content != NULL)
-            ? dynamic_cast<balloonwjui::DuiEditHost*>(
+        balloonwjui::DuiEdit* search = (content != NULL)
+            ? dynamic_cast<balloonwjui::DuiEdit*>(
                   content->FindCtrlById(balloonchatwnd::kGIdFileSearch))
             : NULL;
         if (search != NULL)
@@ -1875,7 +1875,7 @@ void CBalloonGroupChatWindow::ApplyConnectionState(int state)
     }
 
     // 输入框置为只读（草稿仍可见可复制），发送按钮置灰并不再响应点击。
-    // 这里的目标类型必须与输入框的实际类型一致。历史上此处误写成 DuiEditHost，
+    // 这里的目标类型必须与输入框的实际类型一致。历史上此处误写成 DuiEdit，
     // 而输入框是另一条继承链上的富文本控件，dynamic_cast 恒返回空指针，于是
     // 「离线置只读」自输入框改成富文本框起就从未真正执行过（bugs.md BUG-5）。
     // 这类错误编译期查不出来：转换到无关类型是合法写法，失败只在运行期表现为

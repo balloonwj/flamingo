@@ -29,12 +29,12 @@ enum RegCtrlId
     kRegIdBackBtn      = 800,   // 返回按钮（RegBackButton），点击回到登录窗
 
     // ---- 步骤 1：填写资料 ----
-    kRegIdEditNick     = 810,   // "昵称"输入框（DuiEditHost）
+    kRegIdEditNick     = 810,   // "昵称"输入框（DuiEdit）
     // 811 曾是"自定义账号"输入框，账号改为服务端自动生成后已删除，编号留空不再复用
-    kRegIdEditPwd      = 812,   // "设置密码"输入框（DuiEditHost，密码态）
-    kRegIdEditPwd2     = 813,   // "确认密码"输入框（DuiEditHost，密码态）
-    kRegIdEditPhone    = 815,   // "手机号"输入框（DuiEditHost）
-    kRegIdEditCompany  = 816,   // "公司名称"输入框（DuiEditHost）
+    kRegIdEditPwd      = 812,   // "设置密码"输入框（DuiEdit，密码态）
+    kRegIdEditPwd2     = 813,   // "确认密码"输入框（DuiEdit，密码态）
+    kRegIdEditPhone    = 815,   // "手机号"输入框（DuiEdit）
+    kRegIdEditCompany  = 816,   // "公司名称"输入框（DuiEdit）
     kRegIdBtnSubmit    = 817,   // "提交注册"主按钮（RegActionButton）
     kRegIdLinkAgreement = 818,  // "FlamingoIM 服务协议"超链接（DuiLabel，ModeLink）
     kRegIdLinkPrivacy   = 819,  // "隐私政策"超链接（DuiLabel，ModeLink）

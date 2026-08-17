@@ -38,7 +38,7 @@ enum CtrlId : UINT
     kIdHeader        = 240,   // 渐变 Banner（MainPanelHeader）
 
     // ---- 搜索 ----
-    kIdSearchBox     = 200,   // 搜索框（DuiEditHost）
+    kIdSearchBox     = 200,   // 搜索框（DuiEdit）
 
     // ---- 三个 Tab 按钮 ----
     kIdTabMessages   = 210,   // “消息 / 会话”Tab
