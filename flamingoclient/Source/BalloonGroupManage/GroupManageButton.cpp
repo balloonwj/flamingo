@@ -16,7 +16,7 @@
 #define WINVER          0x0601
 #define _WIN32_WINNT    0x0601
 #define _WIN32_IE       0x0601
-#define _RICHEDIT_VER   0x0200
+#define _RICHEDIT_VER   0x0300      // RichEdit 3.0，WTL 10 要求的下限（窗口类仍为 RichEdit20W）
 #define _WTL_NO_CSTRING
 #define _WTL_NO_WTYPES
 

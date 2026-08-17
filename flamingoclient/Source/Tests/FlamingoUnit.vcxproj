@@ -106,7 +106,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;$(ProjectDir);..\..\..\third-party\balloonui\wtl9.0;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;$(ProjectDir);..\..\..\third-party\balloonui\wtl10.1;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
@@ -128,7 +128,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <Optimization>Disabled</Optimization>
-      <AdditionalIncludeDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;$(ProjectDir);..\..\..\third-party\balloonui\wtl9.0;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;$(ProjectDir);..\..\..\third-party\balloonui\wtl10.1;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_DEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
@@ -152,7 +152,7 @@
       <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FunctionLevelLinking>true</FunctionLevelLinking>
-      <AdditionalIncludeDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;$(ProjectDir);..\..\..\third-party\balloonui\wtl9.0;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;$(ProjectDir);..\..\..\third-party\balloonui\wtl10.1;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>SODIUM_STATIC;WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <ExceptionHandling>Sync</ExceptionHandling>
@@ -175,7 +175,7 @@
       <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <FunctionLevelLinking>true</FunctionLevelLinking>
-      <AdditionalIncludeDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;$(ProjectDir);..\..\..\third-party\balloonui\wtl9.0;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;$(ProjectDir);..\..\..\third-party\balloonui\wtl10.1;..\..\..\third-party\sqlite-src-3530100;..\..\..\third-party\opus-1.5.2\include;..\..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>SODIUM_STATIC;WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <ExceptionHandling>Sync</ExceptionHandling>

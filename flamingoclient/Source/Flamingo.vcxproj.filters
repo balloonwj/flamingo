@@ -97,7 +97,7 @@
     <Filter Include="third-party">
       <UniqueIdentifier>{5492c6cc-82d1-3141-a851-7181d809afd6}</UniqueIdentifier>
     </Filter>
-    <Filter Include="wtl9.0">
+    <Filter Include="wtl10.1">
       <UniqueIdentifier>{aeb84ca7-355e-1687-176e-8300f523165d}</UniqueIdentifier>
     </Filter>
     <Filter Include="zlib1.2.11">
@@ -2171,74 +2171,65 @@
     <ClInclude Include="RemoteDesktop\until.h">
       <Filter>RemoteDesktop</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlapp.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atlapp.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlcrack.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atlcrack.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlctrls.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atlctrls.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlctrlw.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atlctrlw.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlctrlx.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atlctrlx.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlddx.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atlddx.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atldlgs.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atldlgs.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atldwm.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atldwm.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlfind.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atlfind.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlframe.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atlframe.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlgdi.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atlgdi.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlmisc.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atlmisc.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlprint.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atlprint.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlres.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atlres.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlresce.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atlribbon.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlribbon.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atlscrl.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlrx.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atlsplit.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlscrl.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atltheme.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atlsplit.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atluser.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
-    <ClInclude Include="wtl9.0\atltheme.h">
-      <Filter>wtl9.0</Filter>
-    </ClInclude>
-    <ClInclude Include="wtl9.0\atluser.h">
-      <Filter>wtl9.0</Filter>
-    </ClInclude>
-    <ClInclude Include="wtl9.0\atlwince.h">
-      <Filter>wtl9.0</Filter>
-    </ClInclude>
-    <ClInclude Include="wtl9.0\atlwinx.h">
-      <Filter>wtl9.0</Filter>
+    <ClInclude Include="wtl10.1\atlwinx.h">
+      <Filter>wtl10.1</Filter>
     </ClInclude>
     <ClInclude Include="zlib1.2.11\crc32.h">
       <Filter>zlib1.2.11</Filter>

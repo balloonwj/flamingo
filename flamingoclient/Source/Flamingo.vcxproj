@@ -74,25 +74,25 @@
     <OutDir>..\Bin\</OutDir>
     <IntDir>Debug_x64\</IntDir>
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>wtl9.0\;$(IncludePath)</IncludePath>
+    <IncludePath>wtl10.1\;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>..\Bin\x64\Release\</OutDir>
     <IntDir>Release_x64\</IntDir>
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>wtl9.0\;$(IncludePath)</IncludePath>
+    <IncludePath>wtl10.1\;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <OutDir>..\Bin\Win32\Debug\</OutDir>
     <IntDir>Debug\</IntDir>
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>wtl9.0\;$(IncludePath)</IncludePath>
+    <IncludePath>wtl10.1\;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>..\Bin\Win32\Release\</OutDir>
     <IntDir>Release\</IntDir>
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>wtl9.0\;$(IncludePath)</IncludePath>
+    <IncludePath>wtl10.1\;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <PreBuildEvent>
@@ -1417,29 +1417,26 @@
     <ClInclude Include="RemoteDesktop\ScreenManager.h" />
     <ClInclude Include="RemoteDesktop\ScreenSpy.h" />
     <ClInclude Include="RemoteDesktop\until.h" />
-    <ClInclude Include="wtl9.0\atlapp.h" />
-    <ClInclude Include="wtl9.0\atlcrack.h" />
-    <ClInclude Include="wtl9.0\atlctrls.h" />
-    <ClInclude Include="wtl9.0\atlctrlw.h" />
-    <ClInclude Include="wtl9.0\atlctrlx.h" />
-    <ClInclude Include="wtl9.0\atlddx.h" />
-    <ClInclude Include="wtl9.0\atldlgs.h" />
-    <ClInclude Include="wtl9.0\atldwm.h" />
-    <ClInclude Include="wtl9.0\atlfind.h" />
-    <ClInclude Include="wtl9.0\atlframe.h" />
-    <ClInclude Include="wtl9.0\atlgdi.h" />
-    <ClInclude Include="wtl9.0\atlmisc.h" />
-    <ClInclude Include="wtl9.0\atlprint.h" />
-    <ClInclude Include="wtl9.0\atlres.h" />
-    <ClInclude Include="wtl9.0\atlresce.h" />
-    <ClInclude Include="wtl9.0\atlribbon.h" />
-    <ClInclude Include="wtl9.0\atlrx.h" />
-    <ClInclude Include="wtl9.0\atlscrl.h" />
-    <ClInclude Include="wtl9.0\atlsplit.h" />
-    <ClInclude Include="wtl9.0\atltheme.h" />
-    <ClInclude Include="wtl9.0\atluser.h" />
-    <ClInclude Include="wtl9.0\atlwince.h" />
-    <ClInclude Include="wtl9.0\atlwinx.h" />
+    <ClInclude Include="wtl10.1\atlapp.h" />
+    <ClInclude Include="wtl10.1\atlcrack.h" />
+    <ClInclude Include="wtl10.1\atlctrls.h" />
+    <ClInclude Include="wtl10.1\atlctrlw.h" />
+    <ClInclude Include="wtl10.1\atlctrlx.h" />
+    <ClInclude Include="wtl10.1\atlddx.h" />
+    <ClInclude Include="wtl10.1\atldlgs.h" />
+    <ClInclude Include="wtl10.1\atldwm.h" />
+    <ClInclude Include="wtl10.1\atlfind.h" />
+    <ClInclude Include="wtl10.1\atlframe.h" />
+    <ClInclude Include="wtl10.1\atlgdi.h" />
+    <ClInclude Include="wtl10.1\atlmisc.h" />
+    <ClInclude Include="wtl10.1\atlprint.h" />
+    <ClInclude Include="wtl10.1\atlres.h" />
+    <ClInclude Include="wtl10.1\atlribbon.h" />
+    <ClInclude Include="wtl10.1\atlscrl.h" />
+    <ClInclude Include="wtl10.1\atlsplit.h" />
+    <ClInclude Include="wtl10.1\atltheme.h" />
+    <ClInclude Include="wtl10.1\atluser.h" />
+    <ClInclude Include="wtl10.1\atlwinx.h" />
     <ClInclude Include="zlib1.2.11\crc32.h" />
     <ClInclude Include="zlib1.2.11\deflate.h" />
     <ClInclude Include="zlib1.2.11\gzguts.h" />

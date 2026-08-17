@@ -79,14 +79,14 @@
       ..                                       flamingoAdmin 工程根(解析 stdafx.h / Mock/ / Util/ / Tests/ / Widgets/ / Theme/)
       ..\third-party\jsoncpp                   jsoncpp(被 DebugConsole 用到)
       ..\..\third-party\balloonui\balloonui    balloonui 头(DuiVBox / DuiLabel / DuiControl 等;由 CommonWidgets 与测试代码经 #include 间接需要)
-      ..\..\third-party\balloonui\wtl9.0       WTL 头(stdafx.h 经 atlapp.h 间接需要)
+      ..\..\third-party\balloonui\wtl10.1       WTL 头(stdafx.h 经 atlapp.h 间接需要)
     链接库:
       balloonui_static.lib                     静态库形式的 balloonui 全集
       gdiplus.lib / comctl32.lib / winhttp.lib balloonui 静态链接时系统侧需要的库(与主程序对齐)
   -->
   <ItemDefinitionGroup>
     <ClCompile>
-      <AdditionalIncludeDirectories>..;..\third-party\jsoncpp;..\..\third-party\balloonui\balloonui;..\..\third-party\balloonui\wtl9.0;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..;..\third-party\jsoncpp;..\..\third-party\balloonui\balloonui;..\..\third-party\balloonui\wtl10.1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>WIN32;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_CRT_NON_CONFORMING_SWPRINTFS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level3</WarningLevel>
       <PrecompiledHeader />
