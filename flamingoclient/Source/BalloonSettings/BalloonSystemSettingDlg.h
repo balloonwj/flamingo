@@ -157,6 +157,10 @@ private:
     //   返回：是否为本对话框已知的按钮（true 表示已处理）。
     bool HandleButtonClick(UINT ctrlId);
 
+    // 机器级配置文件 config\flamingo.ini 的完整路径。存储页里有三处要读写它（数据
+    // 存储位置的读与写、启动时清空历史日志的读写），路径只在这里拼一次。
+    CString AppIniPath();
+
     // 本次会话真正在用的数据根目录（g_szDataRoot）。它在进程启动时按 flamingo.ini 的
     // [storage] datapath 算好，运行期不再变。
     CString EffectiveDataRoot();

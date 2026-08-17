@@ -154,6 +154,8 @@ CSearchDropdown::CSearchDropdown()
     , m_contactCb(NULL)
     , m_groupCb(NULL)
     , m_pickUd(NULL)
+    , m_locateCb(NULL)      // 宿主未提供定位能力时，结果行不显示定位按钮
+    , m_deptPaths(NULL)     // 没有部门信息时，联系人副行退回展示账号与地区
     , m_built(false)
     , m_filter(kFilterAll)
     , m_panelWidth(0)
@@ -188,6 +190,16 @@ void CSearchDropdown::SetPickCallbacks(PickContactCallback contactCb,
     m_contactCb = contactCb;
     m_groupCb   = groupCb;
     m_pickUd    = userdata;
+}
+
+void CSearchDropdown::SetLocateCallback(LocateContactCallback locateCb)
+{
+    m_locateCb = locateCb;
+}
+
+void CSearchDropdown::SetContactDeptPaths(const std::map<UINT, CString>* deptPaths)
+{
+    m_deptPaths = deptPaths;
 }
 
 // =======================================================================
@@ -426,13 +438,30 @@ int CSearchDropdown::RefreshResults()
                 display += _T("（我）");
             }
 
-            // 副行："账号 xxx · 地区"（地区为空则省略）。
+            // 副行：优先显示这个人在组织架构里的位置（形如"技术中心 / 研发部 / 前端组"）——
+            // 同名同姓的人靠部门一眼就能分开，比账号有辨识度得多。宿主没给部门表、
+            // 表里查不到这个人、或路径为空串时，退回原来的"账号 xxx · 地区"
+            //（地区为空则省略）。
             CString sub;
-            sub.Format(_T("账号 %s"), (LPCTSTR)Utf8ToCStr(c.m_username));
-            if (!c.m_address.empty())
+            bool haveDeptPath = false;
+            if (m_deptPaths != NULL)
             {
-                sub += _T(" · ");
-                sub += Utf8ToCStr(c.m_address);
+                std::map<UINT, CString>::const_iterator itd =
+                    m_deptPaths->find((UINT)c.m_userid);
+                if (itd != m_deptPaths->end() && !itd->second.IsEmpty())
+                {
+                    sub          = itd->second;
+                    haveDeptPath = true;
+                }
+            }
+            if (!haveDeptPath)
+            {
+                sub.Format(_T("账号 %s"), (LPCTSTR)Utf8ToCStr(c.m_username));
+                if (!c.m_address.empty())
+                {
+                    sub += _T(" · ");
+                    sub += Utf8ToCStr(c.m_address);
+                }
             }
 
             std::unique_ptr<balloonmain::MainPanelListItem> item(new balloonmain::MainPanelListItem());
@@ -441,6 +470,12 @@ int CSearchDropdown::RefreshResults()
             item->SetName(display);
             item->SetSubText(sub);
             item->SetHoverFill(kRowHoverFill);
+            // 宿主提供了定位能力时，联系人行才长出右侧那枚悬停态的定位按钮。
+            // 群组行一律不调用本方法 —— 通讯录树里没有群，定位无从谈起。
+            if (m_locateCb != NULL)
+            {
+                item->SetLocateButtonVisible(true);
+            }
             if (mr.m_nameHiStart >= 0 && mr.m_nameHiLen > 0)
             {
                 item->SetNameHighlight(mr.m_nameHiStart, mr.m_nameHiLen);
@@ -651,6 +686,29 @@ LRESULT CSearchDropdown::OnChildNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         return 0;
     }
     balloonwjui::DuiControl* pCtrl = static_cast<balloonwjui::DuiControl*>(n->pCtrl);
+
+    // —— 联系人结果行右侧的「定位」按钮 → 回调宿主去通讯录树里定位，并隐藏下拉 ——
+    //
+    // 仓库约定（开发约定文档「UI 约定」第 4 条）要求：判定自定义通知码时必须连触发控件
+    // 一起判，且分支内没匹配上时不能无条件 return —— 否则排在后面的控件发来的同值
+    // 通知会被本分支一并截住而得不到处理，症状是"点了没反应"且无任何日志。本下拉的
+    // 结果行没有设 ctrlId（恒为 0），无法按编号区分，等价的区分手段是"pCtrl 能否在
+    // m_rowContact 里查到"：查得到才是本下拉的联系人结果行；查不到就让流程继续往下
+    // 走，不 return。
+    if (n->code == (UINT)balloonmain::MainPanelListItem::DUIN_LISTITEM_LOCATE)
+    {
+        std::map<balloonwjui::DuiControl*, UINT>::iterator itl = m_rowContact.find(pCtrl);
+        if (itl != m_rowContact.end())
+        {
+            UINT peerUserId = itl->second;
+            HideDropdown();
+            if (m_locateCb != NULL)
+            {
+                m_locateCb(m_pickUd, peerUserId);
+            }
+            return 0;
+        }
+    }
 
     // 只处理单击；其余通知放行。
     if (n->code != balloonwjui::DUIN_CLICK)

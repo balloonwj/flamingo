@@ -126,7 +126,7 @@ AnnouncementsScreen::AnnouncementsScreen()
 
     // 右栏「公告详情」面板。整块替代原 PaintPreview 自绘 —— 文字字段(标题 /
     // 正文 / 日期 / 发送者 / 受众 / 进度 / 推送描述)由 DuiLabel(selectable) /
-    // DuiRichEditHost(只读多行) 接管,鼠标拖选 + Ctrl+C 可复制。装饰图形
+    // DuiRichEdit(只读多行) 接管,鼠标拖选 + Ctrl+C 可复制。装饰图形
     // (徽章 / 头像 / 分隔线 / 进度条 / 调度卡图标底)由 PreviewPanel::OnPaint
     // 继续画。本控件只负责定位 + 滚动偏移 + 选公告时调 SetAnnouncement。
     auto pv = std::make_unique<AnnouncementPreviewPanel>();
@@ -296,11 +296,17 @@ void AnnouncementsScreen::OnPaint(HDC hdc, const RECT& rcDirty)
     // PreviewPanel 内容高度同步给悬浮滚动条:contentH = m_previewContentH
     // (Layout 阶段从 PreviewPanel.GetDesiredSize 拿到)。
     //
-    // 注:本期暂不支持预览区滚动(m_previewScroll 始终为 0,m_previewSb 在
-    // 内容能装下时自动隐藏)。原因:DuiRichEditHost 是真 RICHEDIT50W 子 HWND,
-    // 父 HWND 的 clip 对它不生效,scroll>0 时 RichEdit 内容会越界覆盖页头 /
-    // 列表区,视觉错乱。后续如有超长公告需求,加 PreviewPanel 内部 SetScrollOffset
-    // 自行处理子控件位置与 RichEdit clip 即可,此处再放开 m_previewScroll 接入。
+    // 注:预览区整页滚动目前仍未启用(m_previewScroll 始终为 0,m_previewSb 在
+    // 内容能装下时自动隐藏)。
+    //
+    // 原先挡着它的那个障碍已经不存在了:标题 / 正文过去用的是寄宿真子窗口的
+    // 控件,父窗口的裁剪对子窗口不生效,一旦滚动子窗口内容就会越界盖住页头与
+    // 列表区。改用无窗口富文本控件之后,它就是 DUI 树里的普通一员,照常受父
+    // 容器裁剪,滚动不再有这个问题。
+    //
+    // 之所以仍未启用,是因为正文本身已经能在框内滚动(控件自带覆盖式滚动条),
+    // 预览区整体滚动暂时用不上。将来真有超长公告需求时,直接放开
+    // m_previewScroll 即可,不需要再为裁剪做任何特殊处理。
     m_previewSb->SetMetrics(m_previewContentH, m_previewScroll);
 
     balloonwjui::DuiControl::OnPaint(hdc, rcDirty);
@@ -586,9 +592,9 @@ bool AnnouncementsScreen::OnMouseWheel(POINT pt, short zDelta, UINT /*mkFlags*/)
 
     if (::PtInRect(&m_previewRc, pt))
     {
-        // 注:鼠标落在正文 RichEdit 上时,DUI 宿主(DuiHost::OnMouseWheel)按位置
-        // 命中的是正文控件本身,会直接调正文 DuiRichEditHost::OnMouseWheel 滚动
-        // 正文,不会冒泡到这里 —— 本分支只处理"预览区内、正文之外"的滚轮。整页
+        // 注:鼠标落在正文上时,DUI 宿主(DuiHost::OnMouseWheel)按位置命中的是
+        // 正文控件本身,会直接调它的 OnMouseWheel 滚动正文;正文滚到头之后才
+        // 冒泡到这里 —— 本分支主要处理"预览区内、正文之外"的滚轮。整页
         // 预览滚动(m_previewScroll)目前实际为空转(预览内容为内容自适应高度,
         // 装得下),保留此分支以兼容未来超高预览的整页滚动需求。
         m_previewScroll -= (zDelta / WHEEL_DELTA) * kWheelStep;

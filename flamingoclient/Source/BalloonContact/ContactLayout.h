@@ -41,12 +41,20 @@ enum ContactCtrlId
     kIdGroupCombo     = 1023,   // 「分组」行的下拉框（DuiComboBox）
 
     kIdSwitchMute     = 1030,   // 「消息免打扰」开关（DuiSwitch）
-    kIdSwitchPinned   = 1031,   // 「置顶聊天」开关（DuiSwitch）
+    // 1031 曾是「置顶聊天」开关 —— 见 ContactSwitchKind 的说明，本轮整项移除；
+    // 编号留空不复用。
     // 1032 曾是「加入黑名单」开关。企业版取消好友关系后该行整行移除；
     // 编号留空不复用，避免与旧版本布局对不上号。
+    kIdSwitchFavorite = 1033,   // 「添加到收藏」开关（DuiSwitch）
+    kIdSwitchStarred  = 1034,   // 「特别关注」开关（DuiSwitch）
 
     kIdBtnClose       = 1040,   // 底部「关闭」按钮（ContactActionButton，ghost）
     kIdBtnSend        = 1041,   // 底部「发消息」按钮（ContactActionButton，primary）
+    kIdBtnVoice       = 1042,   // 快捷操作行「语音通话」按钮（ContactActionButton，ghost）
+    kIdBtnVideo       = 1043,   // 快捷操作行「视频通话」按钮（ContactActionButton，ghost）
+    kIdBtnHistory     = 1044,   // 快捷操作行「历史消息」按钮（ContactActionButton，ghost）
+    kIdBtnLocate      = 1045,   // 快捷操作行「组织架构」按钮（ContactActionButton，ghost）
+    kIdQuickRow       = 1046,   // 快捷操作行容器（hbox，四个按钮等宽平分）
 
     // 标签胶囊的 ctrlId 基址 —— 第 i 枚胶囊取 kIdTagChipBase + i。
     // 留出 [1050, 1099] 共 50 个号，足够任何合理数量的标签。
@@ -108,6 +116,14 @@ const int kContactTagFlowMaxTrustedWidth =
 // 标签区最多把窗口撑高到几行。再多的标签留给滚动视口滚着看 —— 标签本来是
 // "一眼扫过去"的辅助信息，为它把整个对话框拉得比屏幕还高并不合算。
 const int kContactTagMaxRows = 3;
+
+// 快捷操作行（语音 / 视频 / 历史 / 定位四个按钮）的行高（逻辑像素），与内嵌 XML 中
+// 该 hbox 的 fixedHeight 一致。
+const int kContactQuickRowHeight = 36;
+
+// 快捷操作行与上方部门路径、下方分隔线之间的间距（逻辑像素，单侧），与内嵌 XML 中
+// 它前后各一个 spacer control 的 fixedHeight 一致。
+const int kContactQuickRowGap = 14;
 
 /**
  *  把部门路径按层级切成一个个段名。

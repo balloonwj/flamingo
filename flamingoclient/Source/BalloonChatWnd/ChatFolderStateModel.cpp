@@ -261,4 +261,12 @@ int FolderStateFromRecord(int result, int errCode)
     }
 }
 
+bool FolderInviteRejectShouldRemoveBubble(int errcode)
+{
+    //只有"对方不在线"这一种：服务端在收到邀请时就直接拒绝并返回，会话没建、消息记录
+    //也没写，本端那条占位气泡撤掉之后翻历史不会再出现。其余拒绝理由都属于"这个文件夹
+    //发不出去"，气泡留在原地转失败态才说得清原因。
+    return errcode == error_code_folder_peer_offline;
+}
+
 } // namespace balloonchatwnd

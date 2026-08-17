@@ -29,9 +29,8 @@
 #include "../net/MessageProtocolClient.h"   // canRecallMessage（验证回填前后撤回条件的变化）
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEditHost.h"
+#include "../BalloonChatWnd/ChatInputRichEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiSplitter.h"   // 消息区/输入区可拖分隔
-#include "../../../third-party/balloonui/balloonui/HwndHostControl.h"               // 断言消息区非 HWND 寄宿
 
 using namespace balloonwjui;
 using namespace balloonchatwnd;
@@ -82,15 +81,16 @@ TEST_CASE("W2 单聊窗含消息区容器", "[p1a][chatwnd]")
     CHECK(root->FindCtrlById(kIdMessageArea) != nullptr);
 }
 
-TEST_CASE("W3 单聊窗输入框已迁移为 DuiRichEditHost", "[p1a][chatwnd]")
+TEST_CASE("W3 单聊窗输入框已迁移为无窗口富文本控件", "[p1a][chatwnd]")
 {
     auto root = BuildChatWindowBody();
     REQUIRE(root != nullptr);
 
     DuiControl* input = root->FindCtrlById(kIdInputEdit);
     REQUIRE(input != nullptr);
-    // 第零期：输入框由纯文本 DuiEditHost 换成富文本 DuiRichEditHost（支持内联图片）。
-    CHECK(dynamic_cast<DuiRichEditHost*>(input) != nullptr);
+    // 输入框先由纯文本 DuiEditHost 换成富文本，再由寄宿真子窗口的那个换成
+    // 无窗口的 ChatInputRichEdit（回车发送 / @提醒等定制都在它里面）。
+    CHECK(dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(input) != nullptr);
     // 确认确实换掉了——不再是旧的 DuiEditHost（二者非继承关系，互斥）。
     CHECK(dynamic_cast<DuiEditHost*>(input) == nullptr);
 }
@@ -100,8 +100,8 @@ TEST_CASE("W14 单聊窗输入框配置：多行 / 自动换行 / 有占位符",
     auto root = BuildChatWindowBody();
     REQUIRE(root != nullptr);
 
-    DuiRichEditHost* input =
-        dynamic_cast<DuiRichEditHost*>(root->FindCtrlById(kIdInputEdit));
+    balloonchatwnd::ChatInputRichEdit* input =
+        dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(root->FindCtrlById(kIdInputEdit));
     REQUIRE(input != nullptr);
     CHECK(input->IsMultiLine());
     CHECK(input->IsWordWrap());
@@ -113,12 +113,12 @@ TEST_CASE("W15 单聊窗输入框文本 round-trip（缓存层）", "[p1a][chatw
     auto root = BuildChatWindowBody();
     REQUIRE(root != nullptr);
 
-    DuiRichEditHost* input =
-        dynamic_cast<DuiRichEditHost*>(root->FindCtrlById(kIdInputEdit));
+    balloonchatwnd::ChatInputRichEdit* input =
+        dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(root->FindCtrlById(kIdInputEdit));
     REQUIRE(input != nullptr);
 
-    // 未 EnsureCreated（测试不建窗口）时 SetText/GetText 走缓存，与旧控件等价，
-    // 保证发送读取文本的通道在迁移后不变。
+    // 测试环境不创建窗口，SetText / GetText 直接读写控件内部保存的文本，
+    // 与旧控件等价，保证发送时读取文本的通道在迁移后不变。
     input->SetText(_T("你好"));
     CHECK(input->GetText() == CString(_T("你好")));
     input->SetText(_T(""));
@@ -212,10 +212,8 @@ TEST_CASE("W16 单聊窗消息区与输入区之间有可拖的横向分隔条",
     CHECK(pane0->FindCtrlById(kIdMessageArea) != nullptr);
     CHECK(pane1->FindCtrlById(kIdInputEdit)   != nullptr);
 
-    // 消息区是纯 DUI 控件（非 HWND 寄宿）—— 分隔条上侧热区落在它上面也能收到
-    // 鼠标，不会出现"被子窗口吃掉鼠标"的死区。
-    CHECK(dynamic_cast<balloonwjui::HwndHostControl*>(
-              pane0->FindCtrlById(kIdMessageArea)) == nullptr);
+    // 此处原有一条断言，检查消息区不是内嵌真实 Win32 子窗口的控件。balloonui
+    // 已经删除了这套设施，库内全部控件都是纯 DUI 绘制，该检查失去了对象，故移除。
 
     // 布局到固定尺寸后：消息区在上、输入区在下，分隔线处可被命中（= 可拖）。
     sp->Layout(RECT{ 0, 0, 600, 500 });

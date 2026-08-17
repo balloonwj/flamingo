@@ -13,7 +13,32 @@ class CFriendStatus;
 class CFlamingoClient
 {
 public:
-    static CFlamingoClient& GetInstance();
+    /**
+     *  登记「进程内正在使用的那一个 CFlamingoClient」，供 GetInstance 取用。
+     *
+     *  存在理由：登录信息写进的是 CMainDlg 的成员对象 m_FMGClient，各窗口持有的
+     *  m_lpFMGClient 指针也都指向它。GetInstance 必须返回同一个对象，"写登录态"与
+     *  "读登录态"才是同一份数据（2026-08-16 之前 GetInstance 返回的是一个谁都没写过
+     *  的函数内静态对象，详见 GetInstance 的实现注释）。
+     *
+     *    lpClient：要登记的实例地址；传 NULL 表示注销。<u>本类不接管所有权</u> ——
+     *              对象的生命周期仍由登记者（CMainDlg）负责，登记者析构前必须传 NULL
+     *              注销，否则 GetInstance 会返回一个已销毁对象的地址。
+     *
+     *  副作用：覆盖一个已登记的不同实例时记一条 LOG_ERROR（进程内应当只有一个）。
+     */
+    static void SetInstance(CFlamingoClient* lpClient);
+
+    /**
+     *  取进程内正在使用的那一个 CFlamingoClient。
+     *
+     *  @return 已登记时返回该实例的地址（非空，所有权不转移，调用方不得 delete）；
+     *          尚未登记或已注销时返回 NULL —— 此时调用方须自行降级（典型做法是当作
+     *          "没有登录态"处理），不要解引用。
+     *
+     *  副作用：未登记时记一条 LOG_ERROR（每进程只记首次，避免高频调用点刷屏）。
+     */
+    static CFlamingoClient* GetInstance();
 
 public:
 	CFlamingoClient(void);
@@ -184,4 +209,11 @@ private:
 	long							m_nGroupCount;
 	BOOL							m_bGroupInfoAvailable;
 	BOOL							m_bGroupMemberInfoAvailable;
+
+	//上一次 Login() 被前置条件挡下时的原因掩码（取值见 FlamingoClient.cpp 里的
+	//kLoginSkipBit* 三个常量），-1 表示"尚未记录过 / 上一次是正常放行的"。
+	//用途只有一个：给日志去重。断线重连定时器每 5 秒调一次 Login()，若每次都记一条，
+	//几分钟就把日志刷满；只在掩码变化时记，既不会漏掉第一次，原因变了也一定看得见。
+	//生命周期与本对象相同，只在 UI 线程的 Login() 里读写，无须加锁。
+	int								m_nLastLoginSkipMask;
 };

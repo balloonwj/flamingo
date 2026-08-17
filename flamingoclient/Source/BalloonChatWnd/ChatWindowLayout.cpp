@@ -50,6 +50,7 @@ extern CAppModule _Module;
 #include "ChatSendButton.h"
 #include "ChatIcons.h"
 #include "ChatMessageList.h"
+#include "ChatInputRichEdit.h"   // 聊天输入框控件（无窗口富文本的聊天定制子类）
 #include "ChatBubble.h"
 #include "ChatMockData.h"
 #include "../../../third-party/balloonui/balloonui/DuiXmlBuilder.h"
@@ -136,7 +137,7 @@ const char* const kChatWindowBodyXml = u8R"xml(
           <label id="409" text="⊗" fixedWidth="22"/>
         </hbox>
       </vbox>
-      <richedit id="401" placeholder="输入消息，Enter 发送，Ctrl+Enter 换行" multi-line="true" word-wrap="true" weight="1"/>
+      <chat-input id="401" placeholder="输入消息，Enter 发送，Ctrl+Enter 换行" multi-line="true" word-wrap="true" weight="1"/>
       <hbox fixedHeight="34" gap="8">
         <label id="404" text="提示：按 Ctrl+Enter 换行" weight="1"/>
         <chat-sendbtn id="402" fixedWidth="104"/>
@@ -177,6 +178,28 @@ int ChatIconKindFromAttr(const std::string& kind)
 // 自定义标签工厂 —— 接 <chat-headerinfo>（头部信息块）、<chat-iconbtn>
 // （图标按钮）、<control>（不可见 spacer）。其它标签走 builder 内置处理；
 // 未知标签返回 nullptr 由 builder 跳过。
+// 把 UTF-8 的属性值转成宽字符串。内嵌 XML 是 UTF-8 的，而控件接口收宽字符。
+// 群聊那份布局里有一份同名函数 —— 两个文件各持一份、互不可见，与本文件里
+// 其它小helper 的处置方式一致。
+//   s：UTF-8 字符串；空串直接返回空。
+//   返回：转换后的宽字符串；转换失败时返回空串。
+CString Utf8ToWide(const std::string& s)
+{
+    if (s.empty())
+    {
+        return CString();
+    }
+    const int nWideLen = ::MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, NULL, 0);
+    if (nWideLen <= 0)
+    {
+        return CString();
+    }
+    CString out;
+    ::MultiByteToWideChar(CP_UTF8, 0, s.c_str(), -1, out.GetBuffer(nWideLen), nWideLen);
+    out.ReleaseBuffer();
+    return out;
+}
+
 std::unique_ptr<DuiControl> CreateChatCustomControl(const DuiXmlBuilder::Node& n)
 {
     if (n.tag == "chat-root")
@@ -208,6 +231,28 @@ std::unique_ptr<DuiControl> CreateChatCustomControl(const DuiXmlBuilder::Node& n
     if (n.tag == "chat-msglist")
     {
         return std::unique_ptr<DuiControl>(new ChatMessageList());
+    }
+
+    if (n.tag == "chat-input")
+    {
+        // 聊天输入框。用自定义标签而不是内置的 <richtext>，是因为这里要的是
+        // 带聊天定制的子类 —— 回车发送、正在输入通知、焦点区域上报、群聊的
+        // @ 提醒转发都在它里面（见 ChatInputRichEdit.h）。内置标签只会建出
+        // 基类，那些定制就落不下来。
+        //
+        // **属性要在这里自己解析。** builder 只对自定义标签统一处理编号与布局
+        // 提示（id / weight / fixedWidth 等），placeholder 这类是各标签各自解析
+        // 的，走自定义工厂之后就没有别人代劳了。漏解析不会报错 —— 只是那条
+        // 属性静默失效（占位文字不见了）。
+        std::unique_ptr<ChatInputRichEdit> edit(new ChatInputRichEdit());
+        const std::string strPlaceholder = GetNodeAttr(n, "placeholder");
+        if (!strPlaceholder.empty())
+        {
+            edit->SetPlaceholder(Utf8ToWide(strPlaceholder));
+        }
+        edit->SetMultiLine(GetNodeAttr(n, "multi-line") != "false");
+        edit->SetWordWrap(GetNodeAttr(n, "word-wrap") != "false");
+        return std::unique_ptr<DuiControl>(edit.release());
     }
 
     if (n.tag == "chat-sendbtn")

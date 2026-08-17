@@ -12,11 +12,12 @@
  *    · 文字字段全部外化为 balloonwjui 现有子控件:
  *        DuiLabel(单行 selectable) —— 日期 / 发送者+受众 / 进度数字 /
  *                                       推送描述 / 进度卡 / 调度卡的小标题;
- *        DuiRichEditHost(SetReadOnly + MultiLine + WordWrap +
- *                        SetShowBorder(false) + SetShowVScroll(false) +
- *                        SetDefaultFontFromHFONT) —— 标题 / 正文(多行可选
- *                        可复制,与卡片底融合无边框无滚动条,字体跟随
- *                        admin 业务字号);
+ *        DuiRichEdit(SetReadOnly + MultiLine + WordWrap +
+ *                    SetShowBorder(false) + SetShowCaret(false) +
+ *                    SetDefaultFontFromHFONT) —— 标题 / 正文(多行可选
+ *                    可复制,与卡片底融合无边框无光标,字体跟随
+ *                    admin 业务字号);正文内容超出时由该控件自带的
+ *                    覆盖式滚动条承载框内滚动;
  *        DuiButton ×5  —— 编辑 / 复制公告 / 重新推送 / 置顶 / 撤回 (删除)。
  *    · 装饰性图形(级别 / 已置顶 / 定时发送徽章圆角底、发送者头像、分隔线、
  *      进度条轨道与填充、调度卡左侧图标底)继续由 PreviewPanel::OnPaint 接管,
@@ -46,14 +47,11 @@ namespace balloonwjui
 {
 class DuiLabel;
 class DuiButton;
-class DuiRichEditHost;
+class DuiRichEdit;
 class DuiControl;
 }
 
 namespace flamingoadmin {
-
-// 正文区悬浮滚动条(与左侧公告列表同款 auto-hide 细条)。
-class OverlayScrollbar;
 
 // 公告中心右栏的「公告详情」面板。
 class AnnouncementPreviewPanel : public balloonwjui::DuiVBox
@@ -91,19 +89,6 @@ public:
     void OnPaint(HDC hdc, const RECT& rcDirty) override;
 
 private:
-    // 把正文 RichEdit 当前的竖直滚动度量(内容总高 / 偏移)同步给悬浮滚动条
-    // m_bodySb。在正文滚动回调、SetAnnouncement 收尾、Layout 收尾各调一次,
-    // 保证细条的滑块大小 / 位置与正文实际内容一致。HWND 未建时为空操作。
-    void UpdateBodyScrollbar();
-
-    // 正文 RichEdit 因滚轮 / 键盘滚动导致位置变化时的回调(注册给
-    // DuiRichEditHost::SetOnVScrollChanged)。ctx 为本面板 this。
-    static void OnBodyRichEditScrolled(void* ctx);
-
-    // 悬浮滚动条被拖动时的回调(注册给 OverlayScrollbar::SetOnScroll)。
-    //   ctx:本面板 this;newScroll:拖动产生的新像素偏移。
-    static void OnBodyScrollbarDrag(void* ctx, int newScroll);
-
     // 当前展示公告的【本地拷贝】(panel 自有,生命周期与 panel 同步)。
     // 历史教训:之前缓存的是外部 DataStore vector 元素的裸指针;DataStore
     // 在 SetAnnouncements 时整体替换 vector,旧指针即刻悬空,等用户切到
@@ -129,7 +114,7 @@ private:
     balloonwjui::DuiLabel*   m_dateLabel         = nullptr;  // 日期 / 计划时间(selectable 单行)★ 强 7
 
     // ---- 标题 ----
-    balloonwjui::DuiRichEditHost* m_titleEdit = nullptr;     // 标题(只读多行可复制)★ 强 7
+    balloonwjui::DuiRichEdit* m_titleEdit = nullptr;         // 标题(只读多行可复制)★ 强 7
 
     // ---- 发送者行(SenderRow):头像占位 + "发送者  ·  受众:xxx" ----
     balloonwjui::DuiControl* m_avatarSlot       = nullptr;   // 头像占位(装饰画在 m_rcItem 里)
@@ -139,12 +124,10 @@ private:
     balloonwjui::DuiControl* m_dividerSlot = nullptr;        // 1px 灰线占位(装饰画在 m_rcItem 里)
 
     // ---- 正文 ----
-    // 正文放在一个 HBox 行里:[ 正文 RichEdit(Weight 1) ][ 悬浮滚动条(固定窄带) ]。
-    // 正文关掉原生滚动条(SetShowVScroll(false)),改由 m_bodySb 这条悬浮细条
-    // 承载滚动显示,风格与左侧公告列表一致;细条画在 RichEdit 子窗口矩形之外
-    // 的右侧窄带里,不会被 HWND 盖住。
-    balloonwjui::DuiRichEditHost* m_bodyEdit = nullptr;      // 正文(只读多行可复制,固定高度+内部滚动)★ 强 7
-    OverlayScrollbar*             m_bodySb   = nullptr;      // 正文悬浮滚动条(auto-hide,与列表同款)
+    // 正文独占一行,弹性高度。内容超出时由控件自带的覆盖式滚动条承载框内
+    // 滚动 —— 那条滚动条浮在内容之上、不占内容宽度,与左侧公告列表同款
+    // auto-hide 手感,不需要外部再挂一条手写的细条。
+    balloonwjui::DuiRichEdit* m_bodyEdit = nullptr;          // 正文(只读多行可复制,弹性高度+内部滚动)★ 强 7
 
     // ---- 已发布 → 已读进度卡(ProgressCard):带卡片底 + 内嵌进度条 ----
     balloonwjui::DuiVBox*    m_progressCard       = nullptr; // 进度卡容器(卡片底)

@@ -298,7 +298,9 @@
     <ClCompile Include="MessageLogger.cpp" />
     <ClCompile Include="MinuBuffer.cpp" />
     <ClCompile Include="Path.cpp" />
-    <ClCompile Include="PerformanceCounter.cpp" />
+    <ClCompile Include="LogCleanupPolicy.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="SendMsgThread.cpp" />
     <ClCompile Include="Startup.cpp" />
     <ClCompile Include="stdafx.cpp">
@@ -384,8 +386,7 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="BalloonChatWnd\ChatImageSaveAs.cpp" />
-    <ClCompile Include="BalloonChatWnd\ChatInputKeyFilter.cpp" />
-    <ClCompile Include="BalloonChatWnd\ChatInputScrollBar.cpp" />
+    <ClCompile Include="BalloonChatWnd\ChatInputRichEdit.cpp" />
     <ClCompile Include="BalloonChatWnd\ChatMessageList.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -711,6 +712,9 @@
     </ClCompile>
     <ClCompile Include="BalloonMain\TrayFlashController.cpp" />
     <ClCompile Include="BalloonMain\TrayMsgTipPopup.cpp" />
+    <ClCompile Include="BalloonMain\TreeLocate.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="BalloonMain\UnknownSenderRefreshPolicy.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -1088,7 +1092,7 @@
     <ClInclude Include="MessageLogger.h" />
     <ClInclude Include="MiniBuffer.h" />
     <ClInclude Include="Path.h" />
-    <ClInclude Include="PerformanceCounter.h" />
+    <ClInclude Include="LogCleanupPolicy.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="SendMsgThread.h" />
     <ClInclude Include="Startup.h" />
@@ -1136,8 +1140,7 @@
     <ClInclude Include="BalloonChatWnd\ChatIcons.h" />
     <ClInclude Include="BalloonChatWnd\ChatImageCache.h" />
     <ClInclude Include="BalloonChatWnd\ChatImageSaveAs.h" />
-    <ClInclude Include="BalloonChatWnd\ChatInputKeyFilter.h" />
-    <ClInclude Include="BalloonChatWnd\ChatInputScrollBar.h" />
+    <ClInclude Include="BalloonChatWnd\ChatInputRichEdit.h" />
     <ClInclude Include="BalloonChatWnd\ChatMessageList.h" />
     <ClInclude Include="BalloonChatWnd\ChatMessageMenu.h" />
     <ClInclude Include="BalloonChatWnd\ChatMockData.h" />
@@ -1278,6 +1281,7 @@
     <ClInclude Include="BalloonMain\TitleBarIcon.h" />
     <ClInclude Include="BalloonMain\TrayFlashController.h" />
     <ClInclude Include="BalloonMain\TrayMsgTipPopup.h" />
+    <ClInclude Include="BalloonMain\TreeLocate.h" />
     <ClInclude Include="BalloonNetSettings\BalloonNetSettingsWindow.h" />
     <ClInclude Include="BalloonNetSettings\NetServerCard.h" />
     <ClInclude Include="BalloonNetSettings\NetSettingsLayout.h" />

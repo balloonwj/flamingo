@@ -171,7 +171,7 @@
     <ClCompile Include="Path.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
-    <ClCompile Include="PerformanceCounter.cpp">
+    <ClCompile Include="LogCleanupPolicy.cpp">
       <Filter>Utils</Filter>
     </ClCompile>
     <ClCompile Include="SendMsgThread.cpp">
@@ -309,10 +309,7 @@
     <ClCompile Include="BalloonChatWnd\ChatImageSaveAs.cpp">
       <Filter>BalloonChatWnd</Filter>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatInputKeyFilter.cpp">
-      <Filter>BalloonChatWnd</Filter>
-    </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatInputScrollBar.cpp">
+    <ClCompile Include="BalloonChatWnd\ChatInputRichEdit.cpp">
       <Filter>BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="BalloonChatWnd\ChatMessageList.cpp">
@@ -718,6 +715,9 @@
       <Filter>BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="BalloonMain\TrayMsgTipPopup.cpp">
+      <Filter>BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="BalloonMain\TreeLocate.cpp">
       <Filter>BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="BalloonNetSettings\BalloonNetSettingsWindow.cpp">
@@ -1190,7 +1190,7 @@
     <ClInclude Include="Path.h">
       <Filter>Utils</Filter>
     </ClInclude>
-    <ClInclude Include="PerformanceCounter.h">
+    <ClInclude Include="LogCleanupPolicy.h">
       <Filter>Utils</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">
@@ -1337,10 +1337,7 @@
     <ClInclude Include="BalloonChatWnd\ChatImageSaveAs.h">
       <Filter>BalloonChatWnd</Filter>
     </ClInclude>
-    <ClInclude Include="BalloonChatWnd\ChatInputKeyFilter.h">
-      <Filter>BalloonChatWnd</Filter>
-    </ClInclude>
-    <ClInclude Include="BalloonChatWnd\ChatInputScrollBar.h">
+    <ClInclude Include="BalloonChatWnd\ChatInputRichEdit.h">
       <Filter>BalloonChatWnd</Filter>
     </ClInclude>
     <ClInclude Include="BalloonChatWnd\ChatMessageList.h">
@@ -1764,6 +1761,9 @@
       <Filter>BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="BalloonMain\TrayMsgTipPopup.h">
+      <Filter>BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="BalloonMain\TreeLocate.h">
       <Filter>BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="BalloonNetSettings\BalloonNetSettingsWindow.h">

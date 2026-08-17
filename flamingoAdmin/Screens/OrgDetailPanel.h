@@ -6,9 +6,10 @@
  *    · 选中部门 —— 部门头 + 下属部门卡片 + 直接挂载员工表；
  *    · 选中员工 —— 资料头 + 6 个 tab 条 + 基本信息 + 危险操作。
  *
- *  本控件是【自绘控件，无子控件】，内置滚轮滚动；所有可点区域（动作按钮、
- *  子部门卡片、员工行、tab 条）在 OnPaint 时记录矩形、在 OnLButtonUp 里
- *  按坐标命中。与外部通过【回调】通信，不走 WM_DUI_NOTIFY。
+ *  本控件的内容以自绘为主，内置滚轮滚动；所有可点区域（动作按钮、子部门
+ *  卡片、员工行、tab 条）在 OnPaint 时记录矩形、在 OnLButtonUp 里按坐标命中。
+ *  与外部通过【回调】通信，不走 WM_DUI_NOTIFY。子控件只有两类：面板右缘的
+ *  悬浮滚动条，以及「基本信息」tab 的 11 个只读值字段输入框。
  *
  *  注：Phase 4a-① 仅实现员工详情的「基本信息」tab，其余 5 个 tab 显示
  *  占位文案，待 4a-② 接入。
@@ -25,7 +26,7 @@
 #include <vector>
 
 namespace balloonwjui {
-class DuiEditHost;     // 基本信息各值字段：只读 DuiEditHost（可选中 + 自带右键菜单）
+class DuiEditHost;     // 基本信息各值字段：只读输入框（可选中 + 自带右键菜单）
 }
 
 namespace flamingoadmin {
@@ -53,17 +54,17 @@ public:
     void SetNode(const OrgNode* node, const Enterprise* ent);
 
     /**
-     *  设置「外部强制隐藏值字段 EDIT」开关。
+     *  设置「外部强制隐藏基本信息值字段」开关。
      *
-     *  本面板「基本信息」tab 的 11 个值字段是只读 DuiEditHost，各自寄宿一个真
-     *  Win32 EDIT 子窗，而真 HWND 恒画在 DUI 绘制内容之上。弹窗（NodeModal /
-     *  ComposeModal 等 overlay 弹窗）盖上来时，AdminFrame 会调 SetEditsVisible
-     *  把它们隐藏；但本面板每帧绘制末尾都会按自己的标记表 reconcile 一次显隐
-     *  （见 ApplyBasicEditVisibility），把那次隐藏又覆盖回去，于是字段文字会
-     *  浮在弹窗上方（2026-08-11 现场：「新增员工」弹窗里漂出员工姓名与登录账号）。
+     *  本面板「基本信息」tab 的 11 个值字段是只读 DuiEditHost 子控件，显隐由
+     *  本面板每帧绘制时按自己的标记表 reconcile（见 ApplyBasicEditVisibility）。
+     *  外部（AdminFrame 在弹窗开 / 关时）若直接对这些子控件调 SetVisible，
+     *  下一次重绘就会被 reconcile 覆盖回去，故留出本开关：打开期间 reconcile
+     *  一律隐藏，关闭后恢复成本帧标记该显示的那些。
      *
-     *  本开关让 reconcile 知道"现在有弹窗压着，一律别显示"。开关打开期间
-     *  reconcile 一律隐藏，关闭后下一帧自动恢复成该显示的那些。
+     *  注：这条路径原本是为了压住"寄宿的真 EDIT 子窗浮在弹窗之上"（2026-08-11
+     *  现场：「新增员工」弹窗里漂出员工姓名与登录账号）。输入框改为无窗口控件
+     *  之后弹窗本身就能盖住这些字段，本开关已无必要，留着只是尚未清理。
      *  @param suppressed true=外部要求全部隐藏（弹窗打开）；false=恢复由本面板自行决定。
      */
     void SetBasicEditsSuppressed(bool suppressed);
@@ -120,33 +121,18 @@ private:
     int PaintUser (HDC hdc);
 
     // 渲染一条基本信息字段：自绘 label + 圆角框，把值字段交给
-    // m_basicValueEdits[idx] 子控件（只读 DuiEditHost）；若该行没完整落在
-    // 面板可见区，则用 DrawKVCellValueOnly 兜底自绘（HWND 子窗口不随面板
-    // GDI 裁剪，部分落外会画到面板外，故滚动跨边界时退回自绘）。
+    // m_basicValueEdits[idx] 子控件（只读 DuiEditHost）承载；索引与该数组对不上
+    // 时用 DrawKVCellValueOnly 兜底自绘。
     //   hdc / x / y / w：单元格左上角与宽度；
     //   idx：fields[] 索引，决定用 m_basicValueEdits 里的哪一个；
     //   label / value：字段标签与值（value 空时显示"—"）。
     void RenderBasicField(HDC hdc, int idx, int x, int y, int w,
                           LPCTSTR label, const CString& value);
 
-    // 懒创建 11 个基本信息值字段的 EDIT 子 HWND，并给每个挂滚轮转发子类
-    // 过程（幂等）。必须在 host HWND 就绪后调（OnPaint 期间 GetHost() 有效）；
-    // 未就绪时本次跳过、下次重绘再试，直到全部就绪。
-    void EnsureBasicEditsCreated();
-
-    // 在 OnPaint 末尾按本帧标记（m_basicEditShown）统一同步各值字段 EDIT
-    // 的显隐。SetVisible 幂等 —— 未变化不触发 ShowWindow，避免每帧
-    // hide→show 造成 HWND 闪烁。
+    // 在 OnPaint 里按本帧标记（m_basicEditShown）统一同步各值字段的显隐。
+    // 调用点在内容绘制之后、子控件绘制之前 —— 值字段本身就是子控件，晚一步
+    // 生效会让本帧仍按上一帧的显隐状态绘制。
     void ApplyBasicEditVisibility();
-
-    // 滚轮转发子类过程：鼠标悬在某值字段 EDIT 上滚动时，EDIT 子窗口会截走
-    // WM_MOUSEWHEEL（只读单行 EDIT 自身又无内容可滚），导致"停在字段上滚不动
-    // 面板"。本过程把滚轮转交本面板 OnMouseWheel 实现正常滚动。
-    //   dwRefData：SetWindowSubclass 时传入的本 OrgDetailPanel 实例。
-    static LRESULT CALLBACK FieldEditWheelProc(HWND hwnd, UINT msg,
-                                               WPARAM wParam, LPARAM lParam,
-                                               UINT_PTR uIdSubclass,
-                                               DWORD_PTR dwRefData);
 
     // 员工详情各 tab 的内容绘制。入参 y 为内容起始坐标，返回绘制后的 y。
     int PaintUserBasic   (HDC hdc, int y);   // 基本信息
@@ -199,32 +185,26 @@ private:
 
     // 基本信息 11 个值字段（姓名 / 职位 / 登录账号 / 工号 / 入职日期 /
     // 邮箱 / 手机号 / 座机 / 工位地址 / 性别 / 个性签名），全部用只读
-    // DuiEditHost（寄宿真 Win32 EDIT）接入，让每个值都是真正的只读文本框：
-    // 原生鼠标拖选 + 右键菜单（复制 / 全选）+ Ctrl+C / Ctrl+A。
+    // DuiEditHost 子控件承载，让每个值都是真正的只读文本框：鼠标拖选 +
+    // 右键菜单（复制 / 全选）+ Ctrl+C / Ctrl+A。
     //
     // 与 PaintUserBasic 内 fields[] 数组**同序**：索引 i 处的子控件对应
     // fields[i] 的值字段。改 fields[] 顺序时必须同步检查所有 idx 计算。
     //
-    // 单个字段在「该行完整落在面板可见区」时显形；滚出可见区时由
-    // PaintUserBasic 自绘文本兜底、对应 EDIT 隐藏，避免 HWND 子窗口画到
-    // 面板外（HWND 不随面板 GDI 裁剪）。切屏时由 ScreenHost::ShowScreen 的
-    // SetVisible(false) 经 balloonui SyncHwndVisibilitySubtree_ 自动隐藏。
+    // 输入框是无窗口控件，随本面板一起参与 DUI 合成：滚出面板边界的部分由
+    // OnPaint 压的裁剪区截掉，切屏时随本面板的 SetVisible(false) 一起消失，
+    // 都不需要额外处理。
     //
     // 所有权归 m_children；本数组仅借用裸指针。
     std::vector<balloonwjui::DuiEditHost*>  m_basicValueEdits;
 
     // 本帧各值字段是否应显示（与 m_basicValueEdits 同序同长）。OnPaint 开头
-    // 清零，RenderBasicField 命中显形的置 1，OnPaint 末尾据此统一 reconcile。
+    // 清零，RenderBasicField 渲染到的置 1，绘制子控件之前据此统一 reconcile。
     std::vector<char>                       m_basicEditShown;
 
-    // 11 个值字段 EDIT 是否都已创建并挂好滚轮子类（EnsureBasicEditsCreated
-    // 全部就绪后置 true，后续重绘跳过创建逻辑）。
-    bool                                    m_basicEditsReady = false;
-
-    // 外部（AdminFrame）是否要求把值字段 EDIT 全部藏起来。弹窗盖上来时置 true，
+    // 外部（AdminFrame）是否要求把值字段全部藏起来。弹窗盖上来时置 true，
     // 弹窗关闭后置回 false。为 true 期间 ApplyBasicEditVisibility 一律隐藏，
-    // 不理会本帧标记表 —— 否则每帧 reconcile 会把 AdminFrame 那次隐藏覆盖掉，
-    // 真 EDIT 子窗重新浮到弹窗之上。详见 SetBasicEditsSuppressed 的说明。
+    // 不理会本帧标记表。详见 SetBasicEditsSuppressed 的说明。
     bool                                    m_basicEditsSuppressed = false;
 
     SelectFn           m_selFn   = nullptr;

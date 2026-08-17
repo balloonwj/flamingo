@@ -12,6 +12,7 @@
 
 #include <functional>   // std::bind / std::placeholders
 #include "../IULog.h"   // LOG_INFO
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"   // EnableDropDispatch
 
 namespace balloonchatwnd {
 
@@ -29,13 +30,19 @@ ChatDropController::~ChatDropController()
     Detach();
 }
 
-bool ChatDropController::Attach(HWND frameHwnd, HWND inputHwnd, IChatDropSink* sink)
+bool ChatDropController::Attach(balloonwjui::DuiHost* host, HWND inputHwnd, IChatDropSink* sink)
 {
     if (m_attached)
     {
         Detach();
     }
-    if (frameHwnd == NULL || !::IsWindow(frameHwnd) || sink == NULL)
+    if (host == NULL || sink == NULL)
+    {
+        return false;
+    }
+
+    HWND frameHwnd = host->m_hWnd;
+    if (frameHwnd == NULL || !::IsWindow(frameHwnd))
     {
         return false;
     }
@@ -44,10 +51,21 @@ bool ChatDropController::Attach(HWND frameHwnd, HWND inputHwnd, IChatDropSink* s
     m_frameHwnd = frameHwnd;
     m_inputHwnd = inputHwnd;
 
+    //先把窗口让出来：balloonui 的无窗口控件共用宿主窗口，需要接收拖放的控件会
+    //让宿主替它注册一个分发器，而一个窗口只能注册一个拖放目标。聊天窗要的是
+    //"整窗接收"，窗口里没有别的控件需要单独收拖放，所以这份分发器一律让掉。
+    //未开启时本调用为空操作，不会有副作用。
+    if (host->IsDropDispatchEnabled())
+    {
+        host->EnableDropDispatch(false);
+        LOG_INFO("Chat drop: released the host drop dispatch, the whole window receives drops now.");
+    }
+
     WireCallbacks(m_target, false /*来自窗口那份目标*/);
     if (!m_target.Register(frameHwnd))
     {
-        LOG_ERROR("聊天窗拖放：窗口级 RegisterDragDrop 失败，拖文件进来将不可用。");
+        LOG_ERROR("Chat drop: RegisterDragDrop on the frame window failed, "
+                  "dropping files into this window will not work.");
         m_sink      = NULL;
         m_frameHwnd = NULL;
         m_inputHwnd = NULL;
@@ -64,12 +82,13 @@ bool ChatDropController::Attach(HWND frameHwnd, HWND inputHwnd, IChatDropSink* s
         if (!m_inputTarget.Register(m_inputHwnd))
         {
             //退化情形：输入框那块收不了拖放，但消息区仍然可用，不算致命。
-            LOG_ERROR("聊天窗拖放：输入框 RegisterDragDrop 失败，拖到输入框上将无反应。");
+            LOG_ERROR("Chat drop: RegisterDragDrop on the input child window failed, "
+                      "drops onto the input box will not respond.");
         }
     }
 
     m_attached = true;
-    LOG_INFO("聊天窗拖放已就绪: frame=0x%p, input=0x%p。", frameHwnd, inputHwnd);
+    LOG_INFO("Chat drop is ready: frame=0x%p, input=0x%p.", frameHwnd, inputHwnd);
     return true;
 }
 
@@ -105,6 +124,15 @@ void ChatDropController::Detach()
     m_hintShown = false;
 }
 
+IDropTarget* ChatDropController::GetFrameDropTarget()
+{
+    if (!m_attached)
+    {
+        return NULL;
+    }
+    return m_target.GetDropTarget();
+}
+
 bool ChatDropController::IsForceAsFileHeld()
 {
     //最高位为 1 表示当前按下。
@@ -135,16 +163,25 @@ bool ChatDropController::OnDragEnter(bool fromInput, const POINT& ptClient, bool
         return false;
     }
 
-    //窗口这份目标覆盖整个窗口，但只有发送框那块收；落在消息区时先按"不能放"起步，
-    //等用户把光标移到发送框上，DragOver 会把它改判回来。
+    //进入点在不在发送框内，只用来决定要不要显示提示，<u>不能拿来当本方法的返回值</u>。
+    //
+    //DuiDropTargetHelper 那一侧的约定是：本回调返回 false 表示<u>整次拖放</u>拒收，
+    //此后 DragOver 不再逐帧询问、Drop 也直接忽略（见 DuiDropTarget.cpp 里 DragEnter
+    //与 DragOver 的实现）。而光标总是从窗口边缘进来的，发送框又在窗口下半部分，
+    //进入点几乎必然落在上方的消息区 —— 若按落点返回，每一次拖放都在进窗口那一瞬间
+    //被判死，用户再把光标移到发送框上也毫无反应。2026-08-17 实测就栽在这里。
+    //
+    //故只要拖的是文件就一律先收下，"哪一块能放"完全交给逐帧的 OnDragOver 决定；
+    //真落手时 OnFilesDropped 还会按最终落点再兜一道底，落在消息区的投放仍然不会
+    //被当成发送（守卫用例 CDR8 / CDR9）。
     const bool inZone = InDropZone(fromInput, ptClient);
     //落点判定是这套交互的关键，进来一次记一条：万一发送框的范围算歪了（布局改动
     //导致取到的父控件不对），从日志一眼能看出来，不必靠猜。
-    LOG_INFO("聊天窗拖放：拖入 (%d,%d), 来源=%s, 在发送框内=%d。",
-             (int)ptClient.x, (int)ptClient.y, fromInput ? "输入框" : "窗口",
+    LOG_INFO("Chat drop: drag enter (%d,%d), source=%s, inSendBox=%d.",
+             (int)ptClient.x, (int)ptClient.y, fromInput ? "input" : "frame",
              inZone ? 1 : 0);
     SetHintVisible(inZone);
-    return inZone;
+    return true;
 }
 
 bool ChatDropController::OnDragOver(bool fromInput, const POINT& ptClient)
@@ -174,7 +211,7 @@ void ChatDropController::OnFilesDropped(bool fromInput, const std::vector<CStrin
     //但落点是最终事实，按它兜一道底，免得消息区上的投放被当成发送。
     if (!InDropZone(fromInput, ptClient))
     {
-        LOG_INFO("聊天窗拖放：落点不在发送框内，忽略本次投放。");
+        LOG_INFO("Chat drop: the drop point is outside the send box, this drop is ignored.");
         return;
     }
 
@@ -186,7 +223,7 @@ void ChatDropController::OnFilesDropped(bool fromInput, const std::vector<CStrin
     }
 
     const bool forceAsFile = IsForceAsFileHeld();
-    LOG_INFO("聊天窗拖放收到 %d 个路径, shift=%d。", (int)paths.size(), forceAsFile ? 1 : 0);
+    LOG_INFO("Chat drop received %d paths, shift=%d.", (int)paths.size(), forceAsFile ? 1 : 0);
     m_sink->OnChatFilesDropped(paths, forceAsFile);
 }
 

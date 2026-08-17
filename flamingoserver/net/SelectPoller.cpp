@@ -99,35 +99,35 @@ Timestamp SelectPoller::poll(int timeoutMs, ChannelList* activeChannels)
 void SelectPoller::fillActiveChannels(int numEvents, ChannelList* activeChannels, fd_set& readfds, fd_set& writefds) const
 {
     Channel* channel = NULL;
-    bool eventTriggered = false;
     //TODO：每次遍历channels_，效率太低，能否改进？
     int currentCount = 0;
     for (const auto& iter : m_channels)
     {
         channel = iter.second;
 
+        //本轮真正发生的事件先算进一个局部变量，最后整体覆盖写回 Channel。
+        //这里<u>不能</u>按位或累加到 Channel 已有的值上：m_revents 表示「本轮发生了什么」，
+        //不是历史事件的累积量。累加会让上一轮的可读位残留到下一轮的可写事件里，
+        //TcpConnection::handleRead 随之在无数据可读时从 readFd 拿到 -1、把一条健康的连接
+        //判死 —— 2026-08-16 之前本函数正是这么写的，Windows 上的表现是客户端读得慢时
+        //服务端拆连接。EpollPoller 与 PollPoller 用的都是覆盖写，三个 poller 的口径必须一致
+        int revents = 0;
         if (FD_ISSET(iter.first, &readfds))
-        {
-            channel->add_revents(XPOLLIN);
-            eventTriggered = true;
-        }
+            revents |= XPOLLIN;
 
         if (FD_ISSET(iter.first, &writefds))
-        {
-            channel->add_revents(XPOLLOUT);
-            eventTriggered = true;
-        }
+            revents |= XPOLLOUT;
 
-        if (eventTriggered)
-        {
-            activeChannels->push_back(channel);
-            //重置标志
-            eventTriggered = false;
+        //本轮什么都没发生的 Channel 不进活跃列表，它上一轮的 m_revents 也就不会被派发
+        if (revents == 0)
+            continue;
 
-            ++currentCount;
-            if (currentCount >= numEvents)
-                break;
-        }
+        channel->set_revents(revents);
+        activeChannels->push_back(channel);
+
+        ++currentCount;
+        if (currentCount >= numEvents)
+            break;
     }// end for-loop
 }
 

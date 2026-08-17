@@ -29,6 +29,10 @@
 #include "../utils/RelayToken.h"
 #include "../base/Singleton.h"
 
+#include <atomic>
+#include <string>
+#include <thread>
+
 namespace {
 
 //测试统一使用的 relay 令牌 HMAC 密钥
@@ -84,6 +88,42 @@ bool containsSession(const std::vector<FolderTransferSessionInfo>& sessions,
     }
 
     return false;
+}
+
+//FTM19 用：一轮并发终结的上下文。一批线程同时对同一个会话的同一次尝试调 finishAttempt，
+//由 m_winners 统计有几个拿到 true —— 正确的实现下每一轮都必须恰好是 1 个
+struct ConcurrentFinishContext
+{
+    FolderTransferManager* m_mgr;        //被测单例的地址（上下文不持有它的所有权）
+    std::string            m_sessionid;  //本轮各线程一起终结的那个会话 id
+    int                    m_attemptSeq; //本轮终结的尝试序号（次）
+    int64_t                m_now;        //传给 finishAttempt 的时间，Unix 毫秒
+    int                    m_threadCount;//本轮参与的线程数，自旋栅栏据它判断是否已全部就位
+    std::atomic<int>*      m_ready;      //已到达栅栏的线程数（上下文不持有它的所有权）
+    std::atomic<int>*      m_winners;    //拿到 true 的线程数（上下文不持有它的所有权）
+
+    ConcurrentFinishContext()
+        : m_mgr(NULL), m_attemptSeq(0), m_now(0), m_threadCount(0)
+        , m_ready(NULL), m_winners(NULL)
+    {
+    }
+};
+
+//FTM19 的线程体：先在自旋栅栏上等齐所有线程，再一起调 finishAttempt。
+//写成具名函数而不是 lambda，与本仓库的代码约定一致
+void concurrentFinishWorker(ConcurrentFinishContext* ctx)
+{
+    //自旋而不是等条件变量：条件变量唤醒各线程的时刻本就有先有后，自旋能让各线程
+    //尽量在同一个瞬间进入 finishAttempt，"查"与"写"之间的窗口才暴露得出来
+    ctx->m_ready->fetch_add(1);
+    while (ctx->m_ready->load() < ctx->m_threadCount)
+        std::this_thread::yield();
+
+    if (ctx->m_mgr->finishAttempt(ctx->m_sessionid, ctx->m_attemptSeq,
+                                  folder_state_completed, ctx->m_now))
+    {
+        ctx->m_winners->fetch_add(1);
+    }
 }
 
 } // namespace
@@ -1022,4 +1062,245 @@ TEST_CASE("FTM18 尝试序号：新建会话为 1，每受理一次重试加一�
     CHECK(s.attemptSeq == 1);
 
     mgr.removeSession(sid2);
+}
+
+TEST_CASE("FTM19 并发终结同一次尝试：多线程同时调用，恰好只有一个拿到 true")
+{
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+    configureLoose(mgr);
+
+    //参与并发的线程数（条）：线上一次传输正常收尾时双方各发一帧 cmd_folder_close，
+    //两帧落在两个不同的 EventLoop 工作线程上，故真实并发度是 2；取 8 是为了留出余量，
+    //让"查"与"写"之间的窗口更容易被撞上
+    const int kFinishThreads = 8;
+    //轮次（轮）：每一轮都是一次独立的抢入。取 200 轮是为了让本用例<u>稳定</u>复现，
+    //而不是偶尔才红 —— 只要实现里还留着"先查后写"的窗口，几百轮里必然撞上若干次
+    const int kFinishRounds = 200;
+
+    const int64_t sender   = 810019;
+    const int64_t receiver = 820019;
+    //各轮统一使用的时间点（Unix 毫秒），本用例不关心时间推进
+    const int64_t createTimeMs = 1000;
+    const int64_t acceptTimeMs = 2000;
+    const int64_t finishTimeMs = 3000;
+
+    int duplicatedRounds = 0;   //出现了不止一个终结者的轮次数，正确实现下应为 0
+    int missingRounds    = 0;   //一个终结者都没有的轮次数，正确实现下应为 0
+    int maxWinners       = 0;   //单轮里最多有几个线程同时拿到 true
+
+    for (int round = 0; round < kFinishRounds; ++round)
+    {
+        //每一轮各建一个会话并置为传输中，现场与线上一致（会话仍在表里、正在传输），
+        //而不是对着一个不存在的会话空跑
+        std::string sid = mgr.createSession(sender, receiver, makeScale(5, 500), createTimeMs);
+        REQUIRE(mgr.setState(sid, folder_state_transferring, acceptTimeMs));
+
+        std::atomic<int> ready(0);
+        std::atomic<int> winners(0);
+
+        ConcurrentFinishContext ctx;
+        ctx.m_mgr         = &mgr;
+        ctx.m_sessionid   = sid;
+        ctx.m_attemptSeq  = FolderTransferManager::kFirstAttemptSeq;
+        ctx.m_now         = finishTimeMs;
+        ctx.m_threadCount = kFinishThreads;
+        ctx.m_ready       = &ready;
+        ctx.m_winners     = &winners;
+
+        std::vector<std::thread> threads;
+        threads.reserve(kFinishThreads);
+        for (int i = 0; i < kFinishThreads; ++i)
+        {
+            threads.push_back(std::thread(&concurrentFinishWorker, &ctx));
+        }
+
+        for (size_t i = 0; i < threads.size(); ++i)
+        {
+            threads[i].join();
+        }
+
+        int got = winners.load();
+        if (got > 1)
+            ++duplicatedRounds;
+        if (got < 1)
+            ++missingRounds;
+        if (got > maxWinners)
+            maxWinners = got;
+
+        //"进入终态"这件事同样只该发生一次，且落在传入的那个终态上
+        FolderTransferSessionInfo s;
+        REQUIRE(mgr.getSession(sid, s));
+        CHECK(s.state == folder_state_completed);
+        CHECK(s.stateTime == finishTimeMs);
+
+        mgr.removeSession(sid);
+    }
+
+    //本条断言就是用户实测那个缺陷的复现点：两帧 cmd_folder_close 落在两个 I/O 线程上，
+    //各自查到"还没终结过"，于是各留一条一模一样的记录条、各推一帧状态变更
+    CHECK_MESSAGE(duplicatedRounds == 0,
+                  "rounds with more than one winner: " << duplicatedRounds
+                  << " out of " << kFinishRounds
+                  << ", max winners in a single round: " << maxWinners
+                  << ", threads per round: " << kFinishThreads);
+
+    //一个终结者都没有同样是错的：那意味着这一次传输谁都不负责留记录，聊天记录里会缺一条
+    CHECK_MESSAGE(missingRounds == 0,
+                  "rounds with no winner at all: " << missingRounds
+                  << " out of " << kFinishRounds);
+}
+
+TEST_CASE("FTM20 顺序终结同一次尝试：第一次 true，第二次及以后一律 false")
+{
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+    configureLoose(mgr);
+
+    const int64_t sender   = 810020;
+    const int64_t receiver = 820020;
+
+    std::string sid = mgr.createSession(sender, receiver, makeScale(5, 500), 1000);
+    REQUIRE(mgr.setState(sid, folder_state_transferring, 2000));
+
+    //第一个终结者：拿到 true，负责留记录与推送
+    CHECK(mgr.finishAttempt(sid, 1, folder_state_completed, 3000));
+
+    //会话状态被同一个临界区顺带置成了终态，状态时间刷成终结时刻
+    FolderTransferSessionInfo s;
+    REQUIRE(mgr.getSession(sid, s));
+    CHECK(s.state == folder_state_completed);
+    CHECK(s.stateTime == 3000);
+
+    //后到的那一帧 cmd_folder_close：拿到 false，安静返回
+    CHECK_FALSE(mgr.finishAttempt(sid, 1, folder_state_completed, 4000));
+    //第三次、第四次同理 —— 掉线收尾与定时器清理都可能重复走到终结这一步
+    CHECK_FALSE(mgr.finishAttempt(sid, 1, folder_state_failed, 5000));
+    CHECK_FALSE(mgr.finishAttempt(sid, 1, folder_state_peer_offline, 6000));
+
+    //被去重的调用不得改动会话状态：否则聊天记录里那条记录写的是"已完成"，
+    //而会话表里却成了"已失败"，两处对不上
+    REQUIRE(mgr.getSession(sid, s));
+    CHECK(s.state == folder_state_completed);
+    CHECK(s.stateTime == 3000);
+
+    //序号<u>小于</u>已终结序号的调用同样被挡下：一笔传输重试到第 2 次之后，
+    //第 1 次那条迟到的终结判定不该再落一条记录
+    CHECK_FALSE(mgr.finishAttempt(sid, 0, folder_state_completed, 7000));
+
+    mgr.removeSession(sid);
+}
+
+TEST_CASE("FTM21 重试之后能再终结一次：序号加一，新一次尝试不被上一次的标记挡住")
+{
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+    configureLoose(mgr);
+
+    const int64_t sender   = 810021;
+    const int64_t receiver = 820021;
+
+    std::string sid = mgr.createSession(sender, receiver, makeScale(5, 500), 1000);
+    REQUIRE(mgr.setState(sid, folder_state_transferring, 2000));
+
+    //第一次尝试失败：终结成功，会话转入失败态并开始计保留期
+    CHECK(mgr.finishAttempt(sid, 1, folder_state_failed, 3000));
+
+    FolderTransferSessionInfo s;
+    REQUIRE(mgr.getSession(sid, s));
+    CHECK(s.state == folder_state_failed);
+    CHECK(s.stateTime == 3000);
+    CHECK(s.attemptSeq == 1);
+
+    //同一次尝试的重复终结仍被挡住（对端那帧 cmd_folder_close 随后才到）
+    CHECK_FALSE(mgr.finishAttempt(sid, 1, folder_state_failed, 3100));
+
+    //保留期内点「重试」：序号加到 2，会话回到传输中
+    int attempt = 0;
+    REQUIRE(mgr.beginRetryAttempt(sid, 4000, attempt));
+    CHECK(attempt == 2);
+
+    //第二次尝试走到终态：<u>必须</u>能再终结一次并各留一条记录，需求要的就是
+    //"每次尝试各留一条"，先失败后重试成功的一笔在聊天记录里能看到失败与完成两条
+    CHECK(mgr.finishAttempt(sid, attempt, folder_state_completed, 5000));
+
+    REQUIRE(mgr.getSession(sid, s));
+    CHECK(s.state == folder_state_completed);
+    CHECK(s.stateTime == 5000);
+
+    //第二次尝试的重复终结照样被挡住
+    CHECK_FALSE(mgr.finishAttempt(sid, attempt, folder_state_completed, 5100));
+    //第一次尝试那条迟到的终结判定也不会被放行
+    CHECK_FALSE(mgr.finishAttempt(sid, 1, folder_state_failed, 5200));
+
+    //连续重试多次：每一次尝试都各自终结一次
+    REQUIRE(mgr.beginRetryAttempt(sid, 6000, attempt));
+    CHECK(attempt == 3);
+    CHECK(mgr.finishAttempt(sid, attempt, folder_state_failed, 7000));
+    CHECK_FALSE(mgr.finishAttempt(sid, attempt, folder_state_failed, 7100));
+
+    mgr.removeSession(sid);
+}
+
+TEST_CASE("FTM22 会话不存在 / 已销毁 / 非终态时的终结判定")
+{
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+    configureLoose(mgr);
+
+    //类内初始化的 static const 先复制到局部变量再参与断言，理由见 FTM18 的同类注释
+    const int64_t retentionMs = FolderTransferManager::kFinishedAttemptRetentionMs;
+
+    const int64_t sender   = 810022;
+    const int64_t receiver = 820022;
+
+    //（1）会话根本不在会话表里：照样受理。邀请超时那条路径正是如此 —— tick 已经把会话
+    //移出会话表，main.cpp 手里只有一份快照，此时仍要留下那条"已超时"的记录
+    const std::string ghost = "810022-820022-1000-ghost";
+    CHECK(mgr.finishAttempt(ghost, 1, folder_state_timeout, 1000));
+    //但重复的那一次仍被挡住：定时器判定超时的同时，发送端那帧 cmd_folder_close 可能
+    //正好也在路上
+    CHECK_FALSE(mgr.finishAttempt(ghost, 1, folder_state_timeout, 1100));
+
+    //（2）会话被销毁之后，登记项仍然留着 —— 销毁与"重复的终结判定到达"之间还有窗口
+    std::string sid = mgr.createSession(sender, receiver, makeScale(5, 500), 1000);
+    REQUIRE(mgr.setState(sid, folder_state_transferring, 2000));
+    CHECK(mgr.finishAttempt(sid, 1, folder_state_completed, 3000));
+    REQUIRE(mgr.removeSession(sid));
+    CHECK_FALSE(mgr.finishAttempt(sid, 1, folder_state_completed, 3100));
+
+    //（3）非终态一律不受理：既不登记也不改状态，避免这一次尝试此后真正走到终态时
+    //被当成重复而丢掉整条记录
+    std::string sid2 = mgr.createSession(sender, receiver, makeScale(5, 500), 1000);
+    CHECK_FALSE(mgr.finishAttempt(sid2, 1, folder_state_ringing, 2000));
+    CHECK_FALSE(mgr.finishAttempt(sid2, 1, folder_state_transferring, 2000));
+
+    FolderTransferSessionInfo s;
+    REQUIRE(mgr.getSession(sid2, s));
+    CHECK(s.state == folder_state_ringing);
+    CHECK(s.stateTime == 1000);
+
+    //刚才那两次不受理没有留下任何登记项，故真正的终态照常受理
+    CHECK(mgr.finishAttempt(sid2, 1, folder_state_rejected, 3000));
+    mgr.removeSession(sid2);
+
+    //（4）登记项的回收：所属会话已经销毁、且终结至今已达保留期，tick 才丢弃它。
+    //丢弃之后同一个 (会话 id, 序号) 又会被当成第一次 —— 这不影响正确性，那时早已
+    //没有任何一帧还在路上了
+    std::vector<FolderTransferSessionInfo> timedOut;
+    std::vector<FolderTransferSessionInfo> expired;
+
+    //差 1 毫秒未到保留期：登记项还在，重复的终结判定仍被挡住
+    mgr.tick(3000 + retentionMs - 1, timedOut, expired);
+    CHECK_FALSE(mgr.finishAttempt(sid, 1, folder_state_completed, 3000 + retentionMs - 1));
+
+    //正好到点即回收，与本类其余各处的时间边界口径一致（一律取"大于等于"）
+    mgr.tick(3000 + retentionMs, timedOut, expired);
+    CHECK(mgr.finishAttempt(sid, 1, folder_state_completed, 3000 + retentionMs));
+
+    //会话仍在表里的登记项<u>不受</u>保留期约束：失败会话在整个 folderretrywindow 内
+    //都可能再收到一帧重复的 cmd_folder_close，此时挡不住就会多留一条记录
+    std::string sid3 = mgr.createSession(sender, receiver, makeScale(5, 500), 1000);
+    REQUIRE(mgr.setState(sid3, folder_state_transferring, 2000));
+    CHECK(mgr.finishAttempt(sid3, 1, folder_state_failed, 3000));
+    mgr.tick(3000 + retentionMs, timedOut, expired);
+    CHECK_FALSE(mgr.finishAttempt(sid3, 1, folder_state_failed, 3000 + retentionMs));
+
+    mgr.removeSession(sid3);
 }

@@ -1,4 +1,17 @@
-﻿#pragma once
+﻿/**
+ *  客户端早期（v1）就存在的一批窗口自定义消息号，收件方主要是 CMainDlg 与各个
+ *  聊天窗口。新增的 v2 消息一律定义在 UserSessionData.h，不要再往本文件里加。
+ *
+ *  号段约定见开发约定文档「UI 约定」第 6 条：本文件这批消息全部落在
+ *  FMG_MSG_FIRST 之下，刻意排除在 CFlamingoClient::ProxyWndProc 的收件范围之外
+ *  —— 它们都是窗口之间直接投递的消息，不经代理窗中转。
+ *
+ *  号值不得重复，由单元测试 Source\Tests\MessageIdRegistryTests.cpp 守着。
+ *
+ *  balloonwj@qq.com   2026-08-16
+ */
+
+#pragma once
 
 // MingUTalk CMainDlg自定义消息
 #define			WM_TRAYICON_NOTIFY		WM_USER + 1		// 系统托盘图标通知消息
@@ -16,12 +29,15 @@
 #define			WM_CLOSE_BUDDYINFODLG	WM_USER + 14	// 关闭好友信息对话框消息
 #define			WM_CLOSE_GROUPINFODLG	WM_USER + 15	// 关闭群成员信息对话框消息
 #define			WM_CLOSE_GMEMBERINFODLG	WM_USER + 16	// 关闭群信息对话框消息
-#define			WM_DEL_MSG_SENDER		WM_USER + 17	// 删除发送者消息
 #define			WM_CANCEL_FLASH			WM_USER + 18	// 取消托盘图标闪烁消息
-#define			WM_SETDLGINITFOCUS		WM_USER + 19	// 设置对话框初始焦点
 
-#define			WM_SHOW_USERINFODLG		WM_USER + 20    // 显示个人信息对话框消息
-#define			WM_CLOSE_USERINFODLG	WM_USER + 21	// 关闭个人信息对话框消息
+// 2026-08-16 删除以下五条零引用的遗留定义：WM_USER + 17 WM_DEL_MSG_SENDER、
+// WM_USER + 19 WM_SETDLGINITFOCUS、WM_USER + 20 WM_SHOW_USERINFODLG、
+// WM_USER + 21 WM_CLOSE_USERINFODLG、WM_USER + 1 WM_CLOSE_MSGLOGDLG。
+// 它们对应的界面早已改由 v2 那套窗口实现，全仓库没有任何投递点与处理点。
+// 其中 WM_CLOSE_MSGLOGDLG 与本文件开头的 WM_TRAYICON_NOTIFY 同取 WM_USER + 1，
+// 删掉它也就消除了这处同文件内的重号。腾出的号可以重新分配，重号由
+// Source\Tests\MessageIdRegistryTests.cpp 的守卫用例把关。
 
 #define			WM_CLOSE_MAINDLG		WM_USER + 22	// 关闭主对话框
 
@@ -51,8 +67,6 @@
 #define			WM_CHAT_OPEN_LINK		WM_USER + 36// 气泡里的超链接被点击 / 右键选了「在浏览器中打开」：lParam = 堆上 std::wstring*（规范化后的完整 URL，处理后 delete，异步消息）。宿主聊天窗先过 balloonchatwnd::IsSafeLinkUrl 的协议白名单再 ShellExecute —— 气泡不该直接拉起外部程序，安全判断也只该有一处
 #define			WM_CHAT_FOLDER_ACTION	WM_USER + 40	// 文件夹气泡按钮点击：lParam = 堆上 balloonchatwnd::ChatFolderActionData*（宿主聊天窗处理后 delete，异步消息）。与 WM_CHAT_FILE_ACTION 分开一条：文件夹的动作枚举、定位方式（会话 id）都与文件那套不同，共用一条消息只会让宿主先猜"这条是文件还是文件夹"
 #define			WM_CHAT_IMAGE_ACTION	WM_USER + 35	// 图片气泡右键选了「图片另存为」/「再次发送」：lParam = 堆上 balloonchatwnd::ChatImageActionData*（图片本地路径 + 另存为默认文件名 + 选中的菜单项，处理后 delete，异步消息）。另存为要弹模态文件对话框、再次发送要调宿主窗的 SendImageFile，气泡两样都不该碰，故经宿主窗中转
-
-#define			WM_CLOSE_MSGLOGDLG		WM_USER + 1	// 关闭消息记录浏览窗口
 
 #define			IPC_CODE_MSGLOG_PASTE		1		// 消息记录浏览窗口粘贴消息
 #define			IPC_CODE_MSGLOG_EXIT		2		// 消息记录浏览窗口退出消息

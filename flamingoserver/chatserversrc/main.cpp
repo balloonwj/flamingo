@@ -163,14 +163,21 @@ static void ReapFolderTransferSessionsTick()
         //推终态与留记录一并交给 ChatSession::finishFolderTransferSession —— 全部终态分支
         //都收口在那一个函数里，本条路径不自己拼推送。它是静态方法，正是为了让这条没有
         //ChatSession 可用的定时器路径也能走同一个出口（超时的判定与任何一条客户端连接
-        //都无关，发起邀请的那一端完全可能早已断开）
-        ChatSession::finishFolderTransferSession(timedOut[i], folder_state_timeout,
-                                                 error_code_folder_invite_timeout,
-                                                 "invite timeout", users);
-
-        LOGI("folder transfer invite timed out, session: %s, sender: %lld, receiver: %lld.",
-             timedOut[i].sessionid.c_str(),
-             (long long)timedOut[i].senderId, (long long)timedOut[i].receiverId);
+        //都无关，发起邀请的那一端完全可能早已断开）。
+        //
+        //本条路径同样要经那道终结闸门（FolderTransferManager::finishAttempt）：定时器判定
+        //超时的同一时刻，发起方那帧 cmd_folder_close 完全可能正落在别的工作线程上，两条
+        //路径抢着终结同一次尝试时只有一条能拿到 true。会话此时已被 tick 移出会话表，
+        //闸门只登记"这一次尝试已终结"、不再改会话状态。
+        //返回 false 即表示这一次尝试已由别的路径收尾，本轮不必再记这条超时日志
+        if (ChatSession::finishFolderTransferSession(timedOut[i], folder_state_timeout,
+                                                     error_code_folder_invite_timeout,
+                                                     "invite timeout", users))
+        {
+            LOGI("folder transfer invite timed out, session: %s, sender: %lld, receiver: %lld.",
+                 timedOut[i].sessionid.c_str(),
+                 (long long)timedOut[i].senderId, (long long)timedOut[i].receiverId);
+        }
     }
 
     //（2）失败会话的保留期届满：不推送，客户端的「重试」按钮到点自行置灰；这里只记一条

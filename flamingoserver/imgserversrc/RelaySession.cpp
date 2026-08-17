@@ -4,6 +4,8 @@
  */
 #include "RelaySession.h"
 #include <time.h>
+#include <functional>
+#include "../net/EventLoop.h"
 #include "../net/TcpConnection.h"
 #include "../net/FrameCodec.h"
 #include "../net/FrameCrypto.h"
@@ -229,9 +231,29 @@ bool RelaySession::onData(const std::shared_ptr<TcpConnection>& conn, uint16_t c
 void RelaySession::forwardFrame(uint16_t cmd, uint32_t seq, uint8_t srcFlags, uint32_t originlen,
                                 const std::string& plainBody)
 {
-    //加密与投递必须整体串行，理由见 m_sendMutex 的注释
-    std::lock_guard<std::mutex> guard(m_sendMutex);
+    net::EventLoop* loop = getOwnLoop();
+    if (loop == NULL)
+    {
+        LOGE("relay forward: TcpConnection is destroyed, drop frame, cmd: %u",
+             static_cast<unsigned>(cmd));
+        return;
+    }
 
+    //本函数运行在<u>配对端</u>的 I/O 线程上，故必须把整段动作投递回本连接自己的线程，
+    //理由见 sendFrame 里的说明
+    if (!loop->isInLoopThread())
+    {
+        loop->runInLoop(std::bind(&RelaySession::forwardFrameInLoop, shared_from_this(),
+                                  cmd, seq, srcFlags, originlen, plainBody));
+        return;
+    }
+
+    forwardFrameInLoop(cmd, seq, srcFlags, originlen, plainBody);
+}
+
+void RelaySession::forwardFrameInLoop(uint16_t cmd, uint32_t seq, uint8_t srcFlags,
+                                      uint32_t originlen, const std::string& plainBody)
+{
     //只加密、不压缩：压缩是两端客户端之间的语义，服务端既不解压也不重压，
     //原帧的压缩标志与 originlen 都原样透传，对端客户端据此自行解压
     std::string wire;
@@ -269,9 +291,38 @@ void RelaySession::sendHelloAck(uint16_t helloCmd, int code, const std::string& 
 
 void RelaySession::sendFrame(uint16_t cmd, uint32_t seq, uint8_t extraFlags, const std::string& body)
 {
-    //加密与投递必须整体串行，理由见 m_sendMutex 的注释
-    std::lock_guard<std::mutex> guard(m_sendMutex);
+    net::EventLoop* loop = getOwnLoop();
+    if (loop == NULL)
+    {
+        LOGE("relay send: TcpConnection is destroyed, drop frame, cmd: %u",
+             static_cast<unsigned>(cmd));
+        return;
+    }
 
+    //不在本连接所属的 EventLoop 线程时，把整段「组帧 + 加密 + 写 socket」投递回去执行。
+    //
+    //加密器是每条连接一份的流式对象，每帧推进一次内部状态，接收端严格按序解密；本连接
+    //的帧却有两个来源——本会话自己回的应答帧，以及配对端 I/O 线程经 forwardFrame
+    //转发来的数据帧。若在调用方线程里就地加密、只把写 socket 投递回来，「加密的先后」
+    //与「写到线上的先后」就可能相反：配对端线程加密好的那一帧要排队等本 loop 处理，
+    //而本 loop 线程自己发的帧是直接写出去的，后加密的反而先到线上，接收端必然解不开。
+    //把加密也一并放到连接自己的线程里，两个顺序就恒等（这也是这里不再需要发送锁的原因）。
+    //
+    //任务里捕获 shared_from_this() 而不是裸 this：任务真正执行时本会话可能已被
+    //配对表与会话表移除，捕获 shared_ptr 才能保证那时对象还在。
+    if (!loop->isInLoopThread())
+    {
+        loop->runInLoop(std::bind(&RelaySession::sendFrameInLoop, shared_from_this(),
+                                  cmd, seq, extraFlags, body));
+        return;
+    }
+
+    sendFrameInLoop(cmd, seq, extraFlags, body);
+}
+
+void RelaySession::sendFrameInLoop(uint16_t cmd, uint32_t seq, uint8_t extraFlags,
+                                   const std::string& body)
+{
     //包体的压缩与加密都由 FramePayload 这一条管线负责，顺序也在那里定死。
     //压缩策略取 never：本函数只用来发握手应答与报到应答，包体都是几十字节的 JSON，
     //压了反而更长。加密器未就绪（未启用加密 / 握手未完成）时它自然产出明文，

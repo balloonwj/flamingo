@@ -3561,14 +3561,15 @@ void ChatSession::onFolderClose(const std::string& body, const std::shared_ptr<T
     }
 
     int64_t peerId = (m_userinfo.userid == s.senderId) ? s.receiverId : s.senderId;
-    int64_t now = static_cast<int64_t>(time(NULL)) * MILLISECONDS_PER_SECOND;
 
     send(cmd_folder_close, m_seq,
          FolderTransferProtocol::buildSessionResponse(error_code_ok, "ok", req.sessionid));
 
     //成功结束：向对端推"已完成"并留记录，会话立即销毁，不留重试余地。
-    //正常收尾时双方各发一帧 cmd_folder_close，第二帧到达时会话已被销毁、走的是上面那条
-    //幂等分支，故不会重复推送；即便重复走到这里，留记录那一步本身也是幂等的
+    //正常收尾时双方各发一帧 cmd_folder_close，两帧多半落在两个不同的工作线程上：先到的
+    //那一帧走完这里并销毁会话，后到的那一帧要么在上面的"会话已不存在"分支就返回，要么
+    //也走到这里 —— 后者由 finishFolderTransferSession 里的终结闸门挡下，不会重复推送、
+    //也不会重复留记录
     if (req.result == folder_close_success)
     {
         std::vector<int64_t> notifyPeer;
@@ -3586,12 +3587,16 @@ void ChatSession::onFolderClose(const std::string& body, const std::shared_ptr<T
 
     //失败结束：置为失败态但<u>不销毁会话</u> —— 会话要保留 folderretrywindow 供发送端点
     //「重试」做断点续传，期满由定时器扫描销毁。失败原因原样透传给对端，保证两端看到的
-    //是同一个 errcode（中转通道还通时对端已从 ft_abort 收到过一份，本推送是兜底通路）
-    mgr.setState(req.sessionid, folder_state_failed, now);
-
-    //终态收口：向对端推"已失败"并留记录。<u>留记录以最先到达的终态为准</u>——本笔若在
-    //保留期内重试并最终成功，那条成功的 cmd_folder_close 会因幂等键相同而不再另留记录，
-    //聊天记录里留下的仍是这一条失败记录（见 docs/协议设计-v2.md 12.8）
+    //是同一个 errcode（中转通道还通时对端已从 ft_abort 收到过一份，本推送是兜底通路）。
+    //
+    //置失败态这一步<u>不在这里单独做</u>：它已经并进 finishFolderTransferSession 那道
+    //终结闸门（最终落到 FolderTransferManager::finishAttempt），与"判定本次尝试是否已经
+    //终结过"在同一个临界区内完成。在闸门之外先置一次的话，双方各发一帧 cmd_folder_close
+    //时会话会被两个线程各置一遍终态（实测日志里表现为 state: 7 -> 7）
+    //
+    //终结闸门：向对端推"已失败"并留记录。<u>同一次尝试以最先到达的终态为准</u>——本笔若在
+    //保留期内点「重试」，尝试序号会加一，那一次尝试的结局另留一条记录，两条并存
+    //（见 docs/协议设计-v2.md 12.8）
     std::vector<int64_t> notifyPeer;
     notifyPeer.push_back(peerId);
     finishFolderTransferSession(s, folder_state_failed, req.errcode, req.errmsg, notifyPeer);
@@ -3747,11 +3752,43 @@ bool ChatSession::pushFolderRelayInfo(const FolderTransferSessionInfo& s, int64_
     return true;
 }
 
-void ChatSession::finishFolderTransferSession(const FolderTransferSessionInfo& s,
+bool ChatSession::finishFolderTransferSession(const FolderTransferSessionInfo& s,
                                               int state, int errcode, const std::string& errmsg,
                                               const std::vector<int64_t>& notifyUsers)
 {
-    //（1）推终态：名单为空表示本次不推（pushToUsers 对空名单本就直接返回，这里显式
+    const int64_t now = static_cast<int64_t>(time(NULL)) * MILLISECONDS_PER_SECOND;
+
+    //（1）过程态不该走到这里，出现即说明某条调用路径传错了参数：照常推送、但不留记录，
+    //也不占用本次尝试的终结名额（此后这一次尝试真正走到终态时仍要留下自己那条记录），
+    //并记一条告警使这个参数错误能被发现
+    if (!FolderTransferProtocol::isTerminalState(state))
+    {
+        if (!notifyUsers.empty())
+        {
+            Singleton<ChatServer>::Instance().pushToUsers(
+                notifyUsers, cmd_folder_state_notify,
+                FolderTransferProtocol::buildStateNotify(s.sessionid, state, errcode, errmsg));
+        }
+
+        LOGW("folder transfer record skipped, state %d is not a terminal state, session: %s.",
+             state, s.sessionid.c_str());
+        return false;
+    }
+
+    //（2）终结闸门。「本次尝试是否已经终结过」的判断与「标记为已终结」由
+    //FolderTransferManager 在同一个临界区内一次做完，只有第一个调用方拿到 true。
+    //后面的推送与留记录都在闸门之内，故一次尝试只推一帧状态变更、只留一条记录。
+    //会话状态也由它顺带置成终态，调用方不必再单独调一次 setState
+    FolderTransferManager& mgr = Singleton<FolderTransferManager>::Instance();
+    if (!mgr.finishAttempt(s.sessionid, s.attemptSeq, state, now))
+    {
+        LOGI("folder transfer terminal decision ignored, session: %s, attempt: %d, state: %d, "
+             "already finished by another path.",
+             s.sessionid.c_str(), s.attemptSeq, state);
+        return false;
+    }
+
+    //（3）推终态：名单为空表示本次不推（pushToUsers 对空名单本就直接返回，这里显式
     //判一次是为了让"不推"这条路径在代码里看得见）
     if (!notifyUsers.empty())
     {
@@ -3760,18 +3797,9 @@ void ChatSession::finishFolderTransferSession(const FolderTransferSessionInfo& s
             FolderTransferProtocol::buildStateNotify(s.sessionid, state, errcode, errmsg));
     }
 
-    //（2）留记录。过程态不该走到这里，出现即说明某条调用路径传错了参数：照常推送、
-    //但不留记录，并记一条告警使它能被发现
-    if (!FolderTransferProtocol::isTerminalState(state))
-    {
-        LOGW("folder transfer record skipped, state %d is not a terminal state, session: %s.",
-             state, s.sessionid.c_str());
-        return;
-    }
-
-    //幂等键由会话 id 与本次尝试的序号一起派生，两个层面各自成立：同一次尝试的终态判定
-    //可能被触发多次（典型是双方各发一帧 cmd_folder_close），键固定即保证只落一条；而
-    //不同次尝试的序号不同，故一笔传输先失败、重试又成功时会各留一条，过程完整
+    //（4）留记录。幂等键由会话 id 与本次尝试的序号一起派生，与上面那道闸门的去重粒度
+    //完全一致；它是第二道防线，挡的是日后新增的、绕开闸门的调用路径与进程重启前后的
+    //重复落库
     const std::string clientMsgId =
         FolderTransferProtocol::buildRecordClientMsgId(s.sessionid, s.attemptSeq);
 
@@ -3790,7 +3818,7 @@ void ChatSession::finishFolderTransferSession(const FolderTransferSessionInfo& s
         LOGI("folder transfer record already saved, session: %s, attempt: %d, msgid: %lld, "
              "state: %d, duplicate terminal decision ignored.",
              s.sessionid.c_str(), s.attemptSeq, (long long)existedId, state);
-        return;
+        return false;
     }
 
     FolderTransferRecord record;
@@ -3819,8 +3847,6 @@ void ChatSession::finishFolderTransferSession(const FolderTransferSessionInfo& s
     const std::string storedContent =
         MessageProtocol::buildStoredContent(content, noMentions, false, "");
 
-    const int64_t now = static_cast<int64_t>(time(NULL)) * MILLISECONDS_PER_SECOND;
-
     //落 t_chatmsg。会话列表的摘要与未读不另做处理：会话集合、最后一条消息与未读数都由
     //t_chatmsg 派生（见 MessageManager::getConversationBriefs），这条记录一入库，双方的
     //会话列表下次拉取时自然带上它，接收方的未读也照常计入
@@ -3831,7 +3857,7 @@ void ChatSession::finishFolderTransferSession(const FolderTransferSessionInfo& s
         LOGE("save folder transfer record failed, session: %s, attempt: %d, from: %d, to: %d, "
              "state: %d.",
              s.sessionid.c_str(), s.attemptSeq, fromId, toId, state);
-        return;
+        return false;
     }
 
     MessageRecord rec;
@@ -3864,6 +3890,8 @@ void ChatSession::finishFolderTransferSession(const FolderTransferSessionInfo& s
          s.sessionid.c_str(), s.attemptSeq, (long long)msgId, fromId, toId,
          s.folderName.c_str(), (long long)s.totalDirs, (long long)s.totalFiles,
          (long long)s.totalSize, state, record.errcode);
+
+    return true;
 }
 
 void ChatSession::cleanupFolderTransferOnOffline()

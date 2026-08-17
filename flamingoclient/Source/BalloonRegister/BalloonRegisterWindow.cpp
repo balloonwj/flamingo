@@ -128,33 +128,25 @@ HBITMAP CreateRegisterBgBitmap()
 // （底色 #F5F4F1）、不画自身边框、设占位文字、必要时密码态，并回填
 // 初始文本（用于步骤来回切换时保留已输入内容）。
 //   edit：       目标输入框；NULL 安全返回。
-//   hostHwnd：   宿主窗口 HWND，用于 EnsureCreated 真正创建 EDIT。
 //   placeholder：占位提示文字。
 //   password：   true 时为密码态（显示圆点）。
-//   initialText：EnsureCreated 后回填的初始文本（来自数据模型）。
-void SetupRegisterEdit(DuiEditHost* edit, HWND hostHwnd,
-                       LPCTSTR placeholder, bool password,
+//   initialText：回填的初始文本（来自数据模型）。
+void SetupRegisterEdit(DuiEditHost* edit, LPCTSTR placeholder, bool password,
                        LPCTSTR initialText)
 {
     if (edit == NULL)
     {
         return;
     }
-    // 密码态须在 EnsureCreated 之前设置（EnsureCreated 后改会销毁重建）。
+    // 密码态可以在任意时刻设置，与调用顺序无关。
     if (password)
     {
         edit->SetPassword(true);
     }
     edit->SetPlaceholder(placeholder);
-    // EDIT 底色与 RegInput 圆角底一致（design Input 底色 #F5F4F1）。
+    // 输入框底色与 RegInput 圆角底一致（design Input 底色 #F5F4F1）。
     edit->SetBgColor(RGB(245, 244, 241));
     edit->SetShowBorder(false);
-    // 内嵌真 Win32 EDIT —— XML builder 只建控件对象、不调 EnsureCreated，
-    // 须在 host HWND 就绪后由调用方显式建一次。
-    if (!edit->EnsureCreated(hostHwnd))
-    {
-        LOG_WARNING(_T("注册窗输入框 EnsureCreated 失败。"));
-    }
     // 回填初始文本 —— 步骤来回切换时不丢失已输入内容。
     if (initialText != NULL && initialText[0] != _T('\0'))
     {
@@ -325,27 +317,27 @@ void CBalloonRegisterWindow::RebuildStepUi(int step)
         return;
     }
 
-    // 各步的输入框：按 ctrl-id 取回、配占位文字 / 密码态、EnsureCreated。
+    // 各步的输入框：按 ctrl-id 取回、配占位文字 / 密码态、回填已输入内容。
     switch (step)
     {
     case kRegStepFillInfo:
         SetupRegisterEdit(dynamic_cast<DuiEditHost*>(
             content->FindCtrlById(kRegIdEditNick)),
-            m_hWnd, _T("昵称"), false, m_model.Nickname());
+            _T("昵称"), false, m_model.Nickname());
         SetupRegisterEdit(dynamic_cast<DuiEditHost*>(
             content->FindCtrlById(kRegIdEditPwd)),
-            m_hWnd, _T("设置密码"), true, m_model.Password());
+            _T("设置密码"), true, m_model.Password());
         SetupRegisterEdit(dynamic_cast<DuiEditHost*>(
             content->FindCtrlById(kRegIdEditPwd2)),
-            m_hWnd, _T("确认密码"), true, m_model.ConfirmPassword());
+            _T("确认密码"), true, m_model.ConfirmPassword());
         SetupRegisterEdit(dynamic_cast<DuiEditHost*>(
             content->FindCtrlById(kRegIdEditPhone)),
-            m_hWnd, _T("手机号"), false, m_model.Phone());
+            _T("手机号"), false, m_model.Phone());
         // 占位文字里直接点明"须与公司全称一致" —— 服务端是按这个名字做精确
         // 匹配的，不提醒的话用户很容易填简称然后收到一句"公司不存在"。
         SetupRegisterEdit(dynamic_cast<DuiEditHost*>(
             content->FindCtrlById(kRegIdEditCompany)),
-            m_hWnd, _T("公司名称（须与公司全称一致）"), false, m_model.Company());
+            _T("公司名称（须与公司全称一致）"), false, m_model.Company());
         break;
 
     case kRegStepDone:

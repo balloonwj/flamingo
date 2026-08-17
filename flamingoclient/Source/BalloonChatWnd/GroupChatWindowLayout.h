@@ -31,7 +31,7 @@ enum GroupCtrlId : UINT
 {
     // ---- 主体 ----
     kGIdMessageArea  = 500,   // 消息区容器（气泡列表）
-    kGIdInputEdit    = 501,   // 输入框（DuiRichEditHost，富文本，支持内联图片）
+    kGIdInputEdit    = 501,   // 输入框（ChatInputRichEdit，无窗口富文本，支持内联图片）
     kGIdSendButton   = 502,   // 发送按钮
     kGIdMention      = 503,   // @提醒 按钮
     kGIdHintLabel    = 504,   // 输入区左下角"发送/换行"提示文字（随发送模式联动）

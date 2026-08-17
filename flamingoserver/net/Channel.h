@@ -40,8 +40,14 @@ namespace net
 
         SOCKET fd() const { return m_fd; }
         int events() const { return m_events; }
+        //由 poller 在每一轮 poll 返回之后调用，写入<u>本轮</u>真正发生的事件位。
+        //约定是「整体覆盖写」而非累加：m_revents 表示本轮发生了什么，不是历史事件的累积量，
+        //本类也不会在派发完之后把它清零。三个 poller（EpollPoller / PollPoller / SelectPoller）
+        //都必须按这个口径写 —— 一旦有人改成按位或累加，上一轮的可读位就会残留到下一轮的
+        //可写事件里，把一条健康的连接判死。2026-08-16 之前 SelectPoller 用的正是一个名为
+        //add_revents 的累加写法，Windows 上因此出现过「客户端读得慢时服务端拆连接」的故障，
+        //该写法已随修复一并删除。守卫用例见 tests/test_pollerrevents.cpp（Suite PRV）
         void set_revents(int revt) { m_revents = revt; }
-        void add_revents(int revt) { m_revents |= revt; }
         // int revents() const { return revents_; }
         bool isNoneEvent() const { return m_events == kNoneEvent; }
 

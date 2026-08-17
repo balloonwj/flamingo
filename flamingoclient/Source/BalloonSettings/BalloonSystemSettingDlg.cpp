@@ -31,6 +31,7 @@
 #include "../FlamingoClient.h"            // CFlamingoClient::m_UserConfig / SaveUserConfig
 #include "../UserSessionData.h"           // FMG_MSG_OPEN_CHANGEPWD（"修改密码"转发主面板）、g_szHomePath / g_szDataRoot
 #include "../IniFile.h"                  // CIniFile（数据存储位置存在全局 flamingo.ini 里）
+#include "../LogCleanupPolicy.h"         // 「启动时清空历史日志」开关的读写与默认值
 #include "BalloonCacheCleanDlg.h"        // 「立即清理」弹出的清理对话框
 #include "SettingsNavList.h"
 #include "SettingsPageModel.h"
@@ -167,6 +168,7 @@ enum SettingCtrlId
     // 存储页
     kIdClearCache      = 501,   // 清理本地缓存（按钮，占位）
     kIdChangeRecvPath  = 502,   // 更改文件保存位置（按钮，弹选目录框）
+    kIdClearLogOnStart = 503,   // 启动时清空历史日志（开关，落 flamingo.ini，不入 CUserConfig）
 
     // 账号安全页
     kIdManageDevices   = 601,   // 登录设备管理（按钮，占位）
@@ -955,6 +957,15 @@ std::unique_ptr<balloonwjui::DuiVBox> CBalloonSystemSettingDlg::BuildStoragePage
         AddRowDivider(page.get());
     }
 
+    // ---- 启动时清空历史日志（开关，落 flamingo.ini）----
+    //
+    // 这一项<u>不入 CUserConfig</u>：那份配置是按账号的、登录之后才加载，而清理动作
+    // 发生在 WinMain 里、比登录早得多。取值规则见 LogCleanupPolicy.h。
+    // 与「开机自启动」同类 —— 那一项落注册表，这一项落 flamingo.ini。
+    AddSwitchRow(page.get(), _T("启动时清空历史日志"),
+                 _T("每次启动删除以往的日志文件，只保留本次运行的这一份（重启后生效）"),
+                 kIdClearLogOnStart, logcleanup::ReadClearLogOnStart(AppIniPath()), true);
+
     // ---- 清理本地缓存（按钮，占位）----
     AddButtonRow(page.get(), _T("清理本地缓存"), _T("清理聊天图片 / 文件缓存"),
                  kIdClearCache, _T("立即清理"), false, false);
@@ -971,17 +982,21 @@ CString CBalloonSystemSettingDlg::EffectiveDataRoot()
     return CString(g_szDataRoot);
 }
 
+CString CBalloonSystemSettingDlg::AppIniPath()
+{
+    TCHAR szIniPath[MAX_PATH] = { 0 };
+    _stprintf_s(szIniPath, MAX_PATH, _T("%sconfig\\flamingo.ini"), g_szHomePath);
+    return CString(szIniPath);
+}
+
 CString CBalloonSystemSettingDlg::ConfiguredDataRoot()
 {
     // 配置里当前写着的值。用户刚改完还没重启时，它与 EffectiveDataRoot 不同 ——
     // 界面显示这一个，并在两者不一致时标注"重启后生效"，免得用户以为没改上。
-    TCHAR szIniPath[MAX_PATH] = { 0 };
-    _stprintf_s(szIniPath, MAX_PATH, _T("%sconfig\\flamingo.ini"), g_szHomePath);
-
     TCHAR szConfigured[MAX_PATH] = { 0 };
     CIniFile iniFile;
     iniFile.ReadString(_T("storage"), _T("datapath"), _T(""),
-                       szConfigured, MAX_PATH, szIniPath);
+                       szConfigured, MAX_PATH, AppIniPath());
     return CString(szConfigured);
 }
 
@@ -1079,11 +1094,8 @@ void CBalloonSystemSettingDlg::ChooseDataRoot()
     // 写全局配置。<u>不能</u>写进账号配置 —— <账号>.cfg 本身就在要搬走的那棵树里，
     // 存进去的话下次启动会去新位置找它、找不到就用默认值，这一项永远不会生效
     // （原委见 net/StorageLocation.h）。
-    TCHAR szIniPath[MAX_PATH] = { 0 };
-    _stprintf_s(szIniPath, MAX_PATH, _T("%sconfig\\flamingo.ini"), g_szHomePath);
-
     CIniFile iniFile;
-    if (!iniFile.WriteString(_T("storage"), _T("datapath"), picked, szIniPath))
+    if (!iniFile.WriteString(_T("storage"), _T("datapath"), picked, AppIniPath()))
     {
         LOG_ERROR(_T("系统设置：写入数据存储位置失败（错误码 %u）。"), ::GetLastError());
         ::MessageBox(m_hWnd, _T("保存设置失败，请检查程序目录是否可写。"),
@@ -1335,6 +1347,23 @@ bool CBalloonSystemSettingDlg::ApplySettingChange(UINT ctrlId, int value)
     {
         AutoStartSetEnabled(on);
         LOG_INFO(_T("系统设置：开机自启动已更新。"));
+        return true;
+    }
+
+    // 启动时清空历史日志：落机器级的 config\flamingo.ini，同样不入账号配置 ——
+    // 清理动作在 WinMain 里执行，那时账号配置还没加载（原委见 LogCleanupPolicy.h）。
+    if (ctrlId == kIdClearLogOnStart)
+    {
+        if (!logcleanup::WriteClearLogOnStart(AppIniPath(), on))
+        {
+            LOG_ERROR("Settings: failed to save the clear-log-on-start switch (error %u).",
+                      (unsigned)::GetLastError());
+            ::MessageBox(m_hWnd, _T("保存设置失败，请检查程序目录是否可写。"),
+                         _T("启动时清空历史日志"), MB_OK | MB_ICONWARNING);
+            return true;
+        }
+        LOG_INFO("Settings: clear-log-on-start is now %s, effective on next launch.",
+                 on ? "on" : "off");
         return true;
     }
 

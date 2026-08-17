@@ -206,7 +206,6 @@ private:
     CFlamingoClient* m_lpFMGClient;   // 所属客户端（消息中枢），引用不持有
 
     bool m_built;          // 骨架是否已构建
-    bool m_editCreated;    // 首字母输入框内嵌 EDIT 是否已建
     bool m_submitting;     // 是否已发出改像请求、等待应答（防重复提交）
 
     int     m_page;          // 当前页：0 系统 / 1 首字母 / 2 上传

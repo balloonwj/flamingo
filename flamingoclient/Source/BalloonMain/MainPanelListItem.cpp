@@ -96,6 +96,98 @@ const int kRightTextFallbackW = 70;
 const int kRightTextTop       = 8;
 const int kRightTextHeight    = 16;
 
+// ---- 悬停态「定位」小按钮 ----------------------------------------------
+//
+// 只在打开了 SetLocateButtonVisible 的行上出现（目前是搜索结果里的联系人行），
+// 且仅当鼠标悬停于该行时才绘制；其余时候完全不占位。
+
+// 图标绘制方框的边长（逻辑像素）。取 18 与行内其它次要元素（未读角标 16）量级相当：
+// 再大会与 36 见方的头像抢视觉重量，再小则难以点中。
+const int kLocateIconSize    = 18;
+// 图标绘制方框的右边界与行右内距 kRowRightPad 之间的间距（逻辑像素）。0 表示图标
+// 右边界正好落在行右内距那条线上，与未读角标、右侧文字的右对齐口径一致。
+const int kLocateIconRightGap = 0;
+// 鼠标落在图标上时，垫在图标下方的圆底相对图标方框每边外扩的距离（逻辑像素）。
+// 外扩 4 后圆底直径 26，与常见工具栏图标按钮的触发区尺寸相当。
+const int kLocateHotPad      = 4;
+// 图标常态描边色（中灰）。刻意弱于名称文字色 kNameColor，避免抢走主行的注意力。
+const COLORREF kLocateIconColor    = RGB(0x8C, 0x8C, 0x8C);
+// 鼠标正落在图标上时的描边色（深灰）。与常态之间拉开明显的明度差，表示"这里可以点"。
+const COLORREF kLocateIconHotColor = RGB(0x40, 0x40, 0x40);
+// 鼠标正落在图标上时垫在图标下方的浅色圆底。比搜索结果行的悬停底色
+// （SearchDropdown 里的 RGB(0xE9,0xEC,0xF1)）再深一档，才能在已经变色的行底上看出来。
+const Gdiplus::Color kLocateHotFill(255, 0xD6, 0xDB, 0xE3);
+// 图标描边宽度，以 viewBox 24 为基准（与 MainPanelIcons 里其它线性图标同口径）。
+const Gdiplus::REAL kLocateStrokeWidth = 2.0f;
+// 图标的 viewBox 基准边长（design icons.jsx 的图标统一用 0 0 24 24）。
+const Gdiplus::REAL kLocateViewBox     = 24.0f;
+
+// ---- 地图定位针在 viewBox 24 里的几何 ----
+// 针头圆心。x 取正中；y 取 9.5 而非 12 —— 针身要向下伸出一段尖角，圆心上移后
+// 整枚针在方框内才是上下居中的。
+const Gdiplus::REAL kPinHeadCx     = 12.0f;
+const Gdiplus::REAL kPinHeadCy     = 9.5f;
+// 针头圆半径。5.5 是在 18 像素目标尺寸下实测的下限附近：再小针孔就糊进圆环里了。
+const Gdiplus::REAL kPinHeadR      = 5.5f;
+// 针尖端点的 y 坐标（落在针头圆心正下方）。20.5 使整枚针在 viewBox 上下各留约 3.5
+// 的余量，与本文件其它图标的留白一致。
+const Gdiplus::REAL kPinTipY       = 20.5f;
+// 针身两条斜边与针头圆的相接点相对圆心的偏移量（圆上 45° 方位，左下 / 右下各一个）。
+// 数值即 kPinHeadR * cos(45°) ≈ 3.889，取 3.9 便于阅读。
+const Gdiplus::REAL kPinSideOffset = 3.9f;
+// 针头正中那个实心小圆（针孔）的半径。太小在 18 像素下看不见，太大会把针头填满、
+// 看着像个实心水滴而不是定位针。
+const Gdiplus::REAL kPinHoleR      = 1.9f;
+
+// 在 (x, y) 起、边长 size 的方形区域内描边绘制一枚地图定位针（圆形针头 + 下方尖角
+// + 针头正中的实心小圆）。画法与 MainPanelIcons::DrawLineIcon 同口径：先把 viewBox 24
+// 映射到目标区域，再用圆头圆角的 Pen 描边。
+//
+// 之所以不把它加进 MainPanelIcons 的 IconKind：那份图标表是主面板 Tab 栏与各菜单
+// 共用的公共资源，本图标目前只有搜索结果行一个使用方，先就地画；将来出现第二个
+// 使用方再归并过去。
+void DrawLocatePin(Gdiplus::Graphics& g,
+                   Gdiplus::REAL x, Gdiplus::REAL y, Gdiplus::REAL size,
+                   const Gdiplus::Color& color)
+{
+    if (size <= 0.0f)
+    {
+        return;
+    }
+
+    Gdiplus::GraphicsState st = g.Save();
+    g.TranslateTransform(x, y);
+    g.ScaleTransform(size / kLocateViewBox, size / kLocateViewBox);
+
+    Gdiplus::Pen pen(color, kLocateStrokeWidth);
+    pen.SetStartCap(Gdiplus::LineCapRound);
+    pen.SetEndCap(Gdiplus::LineCapRound);
+    pen.SetLineJoin(Gdiplus::LineJoinRound);
+
+    // 针头圆。
+    g.DrawEllipse(&pen, kPinHeadCx - kPinHeadR, kPinHeadCy - kPinHeadR,
+                  kPinHeadR * 2.0f, kPinHeadR * 2.0f);
+
+    // 针身：自针头圆左下 45° 处斜下到针尖，再斜上回到圆右下 45° 处。
+    {
+        Gdiplus::GraphicsPath tip;
+        tip.AddLine(kPinHeadCx - kPinSideOffset, kPinHeadCy + kPinSideOffset,
+                    kPinHeadCx, kPinTipY);
+        tip.AddLine(kPinHeadCx, kPinTipY,
+                    kPinHeadCx + kPinSideOffset, kPinHeadCy + kPinSideOffset);
+        g.DrawPath(&pen, &tip);
+    }
+
+    // 针孔：针头正中的实心小圆，有了它才一眼能认出这是定位针。
+    {
+        Gdiplus::SolidBrush brush(color);
+        g.FillEllipse(&brush, kPinHeadCx - kPinHoleR, kPinHeadCy - kPinHoleR,
+                      kPinHoleR * 2.0f, kPinHoleR * 2.0f);
+    }
+
+    g.Restore(st);
+}
+
 // 用四段 90° 圆弧 + 闭合，向 path 添加一个圆角矩形。
 void AddRoundRect(Gdiplus::GraphicsPath& path,
                   Gdiplus::REAL x, Gdiplus::REAL y,
@@ -189,6 +281,9 @@ MainPanelListItem::MainPanelListItem()
     , m_status(kMockOffline)
     , m_badgeCount(0)
     , m_hoverFill(RGB(0xF4, 0xF3, 0xF0))   // design --hover 浅灰（默认，与主面板列表一致）
+    , m_showLocate(false)                  // 默认不提供「定位」小按钮
+    , m_locateHot(false)
+    , m_locatePressed(false)
 {
 }
 
@@ -274,9 +369,45 @@ void MainPanelListItem::SetHoverFill(COLORREF c)
     Invalidate();
 }
 
+void MainPanelListItem::SetLocateButtonVisible(bool show)
+{
+    if (m_showLocate == show)
+    {
+        return;
+    }
+    m_showLocate = show;
+    if (!m_showLocate)
+    {
+        //关掉按钮时一并复位命中态与按下态，免得下次再打开时残留上一轮的状态。
+        m_locateHot = false;
+        m_locatePressed = false;
+    }
+    Invalidate();
+}
+
+RECT MainPanelListItem::LocateIconRect() const
+{
+    RECT rc = { 0, 0, 0, 0 };
+
+    const int h = m_rcItem.bottom - m_rcItem.top;
+    if (h <= 0)
+    {
+        return rc;   //尚未布局（或行高为 0），没有可用矩形
+    }
+
+    rc.right  = m_rcItem.right - kRowRightPad - kLocateIconRightGap;
+    rc.left   = rc.right - kLocateIconSize;
+    rc.top    = m_rcItem.top + (h - kLocateIconSize) / 2;   //垂直居中
+    rc.bottom = rc.top + kLocateIconSize;
+    return rc;
+}
+
 bool MainPanelListItem::OnMouseEnter()
 {
     bool r = balloonwjui::DuiButton::OnMouseEnter();   // 基类置 m_bHover=true 并通知父
+    // 刚进入本行时先按"鼠标不在图标上"起步 —— 紧随其后的 OnMouseMove 会立刻把真实
+    // 落点算出来，不会停在错误状态上。
+    m_locateHot = false;
     Invalidate();                                      // 基类不重绘，这里补一次让 hover 底色立刻显示
     return r;
 }
@@ -284,8 +415,87 @@ bool MainPanelListItem::OnMouseEnter()
 bool MainPanelListItem::OnMouseLeave()
 {
     bool r = balloonwjui::DuiButton::OnMouseLeave();   // 基类置 m_bHover=false 并通知父
+    // 鼠标已离开本行，图标随 hover 底色一起消失，命中态必须跟着复位；否则下次
+    // 移进来时会先闪一帧加深色的图标。
+    m_locateHot = false;
+    // 按下态一并复位：按住左键拖出本行时不会有松开事件传到这里，不复位的话它会
+    // 一直留着，让下一次真正的点击被误判成定位。
+    m_locatePressed = false;
     Invalidate();                                      // 补一次让 hover 底色立刻消失
     return r;
+}
+
+bool MainPanelListItem::OnMouseMove(POINT pt, UINT mkFlags)
+{
+    bool r = balloonwjui::DuiButton::OnMouseMove(pt, mkFlags);
+
+    // 只在"鼠标是否落在定位图标上"这个状态发生翻转时才重绘。鼠标在行内移动是高频
+    // 事件，每次都 Invalidate 会让整张下拉不停刷新。
+    bool hot = false;
+    if (m_showLocate)
+    {
+        RECT rcIcon = LocateIconRect();
+        if (rcIcon.right > rcIcon.left)
+        {
+            hot = (::PtInRect(&rcIcon, pt) != FALSE);
+        }
+    }
+    if (hot != m_locateHot)
+    {
+        m_locateHot = hot;
+        Invalidate();
+    }
+
+    return r;
+}
+
+bool MainPanelListItem::OnLButtonDown(POINT pt, UINT mkFlags)
+{
+    // 记下这一次按下的落点在不在「定位」图标内。只判松开点是不够的：在行的空白处
+    // 按下、拖到图标上再松开，本该算一次普通的行点击（打开会话），只判松开点会把
+    // 它当成定位。
+    m_locatePressed = false;
+    if (m_showLocate)
+    {
+        RECT rcIcon = LocateIconRect();
+        if (rcIcon.right > rcIcon.left && ::PtInRect(&rcIcon, pt))
+        {
+            m_locatePressed = true;
+        }
+    }
+
+    return balloonwjui::DuiButton::OnLButtonDown(pt, mkFlags);
+}
+
+bool MainPanelListItem::OnLButtonUp(POINT pt, UINT mkFlags)
+{
+    // 按下与松开的落点都在「定位」图标内：本次点击只表示"去通讯录里定位这个人"，
+    // 绝不能再走基类那条 DUIN_CLICK 通路 —— 否则宿主会既定位又打开会话。
+    //
+    // 拦截手法是把基类调用改派到一个<u>落在本行之外</u>的坐标上：DuiButton::OnLButtonUp
+    // 只有在"按下时在按钮内、松开时也在按钮内"两个条件同时成立时才发 DUIN_CLICK
+    // （见 DuiButton.h 的行为约定），松开点在外就走它自己的取消路径。这样按下态、
+    // 鼠标捕获、重绘等收尾工作仍由基类完成，本类不必去碰基类的私有成员，也就无需
+    // 改动 balloonui 库。
+    const bool pressedOnIcon = m_locatePressed;
+    m_locatePressed = false;   // 一次点击用完即复位，不跨事件保留
+
+    if (m_showLocate && pressedOnIcon)
+    {
+        RECT rcIcon = LocateIconRect();
+        if (rcIcon.right > rcIcon.left && ::PtInRect(&rcIcon, pt))
+        {
+            POINT ptOutside;
+            ptOutside.x = m_rcItem.left - 1;
+            ptOutside.y = m_rcItem.top - 1;
+            balloonwjui::DuiButton::OnLButtonUp(ptOutside, mkFlags);
+
+            NotifyParent(DUIN_LISTITEM_LOCATE);
+            return true;
+        }
+    }
+
+    return balloonwjui::DuiButton::OnLButtonUp(pt, mkFlags);
 }
 
 void MainPanelListItem::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
@@ -518,6 +728,40 @@ void MainPanelListItem::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         RECT badgeRc = { bx, by, bx + (int)kBadgeDiameter, by + (int)kBadgeDiameter };
         DrawGdiText(hdc, (LPCWSTR)badgeStr, badgeRc, 10, true, RGB(255, 255, 255),
                     DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+    }
+
+    // ---- 悬停态「定位」小按钮 ----
+    //
+    // 画在最后，浮在行内其它元素之上。只有本行打开了该按钮、且鼠标此刻正悬停在本行
+    // 内时才画：其余时候完全不绘制、也不占位（名称与副行的右界不因它而收缩 —— 打开
+    // 该按钮的搜索结果联系人行既没有未读角标也没有右侧文字，行右侧本就是空白）。
+    if (m_showLocate && IsHover())
+    {
+        RECT rcIcon = LocateIconRect();
+        if (rcIcon.right > rcIcon.left)
+        {
+            Gdiplus::Graphics gi(hdc);
+            gi.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+
+            // 鼠标正落在图标上：先垫一层浅色圆底作为可点击反馈。
+            if (m_locateHot)
+            {
+                const Gdiplus::REAL hotR = (Gdiplus::REAL)kLocateIconSize / 2.0f
+                                           + (Gdiplus::REAL)kLocateHotPad;
+                const Gdiplus::REAL hotCx = (Gdiplus::REAL)(rcIcon.left + rcIcon.right) / 2.0f;
+                const Gdiplus::REAL hotCy = (Gdiplus::REAL)(rcIcon.top + rcIcon.bottom) / 2.0f;
+                Gdiplus::SolidBrush hotBrush(kLocateHotFill);
+                gi.FillEllipse(&hotBrush, hotCx - hotR, hotCy - hotR,
+                               hotR * 2.0f, hotR * 2.0f);
+            }
+
+            // 图标本体。鼠标落在它上面时画深一档，与浅色圆底一起构成"这里可以点"的提示。
+            const COLORREF pinColor = m_locateHot ? kLocateIconHotColor : kLocateIconColor;
+            Gdiplus::Color pinArgb(255, GetRValue(pinColor), GetGValue(pinColor),
+                                   GetBValue(pinColor));
+            DrawLocatePin(gi, (Gdiplus::REAL)rcIcon.left, (Gdiplus::REAL)rcIcon.top,
+                          (Gdiplus::REAL)kLocateIconSize, pinArgb);
+        }
     }
 }
 

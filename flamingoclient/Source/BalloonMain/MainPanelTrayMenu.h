@@ -81,7 +81,11 @@ struct TrayMenuEntry
     const wchar_t* label;         // 显示文本（宽字符常量串）；分隔条取 nullptr
     int            iconKind;      // 左侧图标类型（MainPanelIcons.h 的 IconKind）；无图标 / 分隔条取 -1。
                                   // 在线状态项取该状态的徽标字形（kIconPresence* 之一），不随 isCurrent 变化
-    bool           enabled;       // 是否可点击；false 为灰显 no-op（当前各项均 true）
+    bool           enabled;       // 是否可点击；false 由调用方转成 DuiMenu::SetEnabled(id, false)，
+                                  // 表现为灰显且点不动。四个在线状态项在<u>连接未就绪</u>时取 false
+                                  // （切状态要向服务端发一帧，此刻发不出去，点了是无效操作，
+                                  //  界面还会先按"已改"渲染，与服务端实际状态不符）；
+                                  // 静音 / 打开主面板 / 登出 / 退出都是本地动作，恒为 true
     COLORREF       dotColor;      // 在线状态项的徽标颜色（在线绿/离开橙/忙碌红/离线灰，与状态菜单同源）；
                                   // 非状态项取 0，渲染时表示"用默认单色图标"，不做彩色覆盖。
                                   // <u>本字段兼作"是不是在线状态项"的判据</u>（!= 0 即是）
@@ -100,16 +104,21 @@ struct TrayMenuEntry
  *    muted：          当前是否已静音；仅影响 kTrayNormal 下静音项的<u>文字与图标</u>
  *                     （未静音"关闭所有声音"+kIconSound / 已静音"开启所有声音"+kIconMute），
  *                     其余形态忽略该参数。
- *    currentPresence：用户当前所处的在线状态（v2 presence_type）。与之相符的那一个状态
- *                     项被标记为当前项（isCurrent = true、文字带"（当前）"后缀，
- *                     渲染期再给徽标套一圈外环）。取值先经 NormalizePresenceForMenu 归一，
- *                     故越界值会落到"离线"项上。kTrayBeforeLogin / kTrayLocked
- *                     两种形态没有状态项，忽略该参数。
+ *    currentPresence：用户当前所处的在线状态（v2 presence_type）。kTrayBeforeLogin /
+ *                     kTrayLocked 两种形态没有状态项，忽略该参数。
+ *    connUiState：    界面连接态（balloonmain::ConnectionUiState 的取值，这里用 int 是为了
+ *                     不让本头文件依赖 OnlineCapability.h）。它决定两件事：
+ *                       · 哪一行被标为当前项、该行显示什么文字 —— 连接未就绪时按连接态显示
+ *                         "正在连接（当前）"/"离线（当前）"，与主面板状态胶囊逐字一致；
+ *                       · 四个状态项是否可点（见 TrayMenuEntry::enabled）。
+ *                     判定分别走 OnlineCapability 的 GetConnectionBadgePresence /
+ *                     GetConnectionMenuLabel / IsActionAllowedInState，本文件不另立口径。
+ *                     kTrayBeforeLogin / kTrayLocked 两种形态忽略该参数。
  *
  *  返回：行模型 vector（值语义，调用方拥有）。label 指向静态常量串，生命周期为
  *        进程级，调用方可直接持有 / 转宽字符使用。
  */
 std::vector<TrayMenuEntry> BuildTrayMenuModel(TrayMenuKind kind, bool muted,
-                                              int currentPresence);
+                                              int currentPresence, int connUiState);
 
 } // namespace balloonmain

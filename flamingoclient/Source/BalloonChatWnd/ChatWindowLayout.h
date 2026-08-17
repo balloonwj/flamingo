@@ -34,7 +34,7 @@ enum CtrlId : UINT
 {
     // ---- 主体 ----
     kIdMessageArea   = 400,   // 消息区容器（气泡列表）
-    kIdInputEdit     = 401,   // 输入框（DuiRichEditHost，富文本，支持内联图片）
+    kIdInputEdit     = 401,   // 输入框（ChatInputRichEdit，无窗口富文本，支持内联图片）
     kIdSendButton    = 402,   // 发送按钮
     kIdHeaderInfo    = 403,   // 头部信息块（点击打开对方资料窗）
     kIdHintLabel     = 404,   // 输入区左下角"发送/换行"提示文字（随发送模式联动）

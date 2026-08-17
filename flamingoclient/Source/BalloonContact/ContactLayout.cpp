@@ -111,8 +111,10 @@ const TCHAR* const kDeptPathEllipsis = _T("…");
 // 累计宽度，不需要它按宽度截断（截断由调用方自己算）。
 const int kMeasureNoWidthLimit = 0x7FFFFFFF;
 
-// 没有部门路径区块、且标签只占一行时的客户区固定高度（逻辑像素）。按内嵌 XML
-// 各区块自上而下精确累计：
+// 没有部门路径区块、且标签只占一行时的客户区固定高度（逻辑像素），<u>不含</u>
+// 快捷操作行本身与它下方那一段间距 —— 那两段由 ContactBodyHeight 用
+// kContactQuickRowHeight / kContactQuickRowGap 另行加上，见该函数。
+// 按内嵌 XML 各区块自上而下精确累计：
 //   客户区上内边距 18
 //   头部行 84 + 头部下边距 spacer 14 + 分隔线 1
 //   标签区 vbox 76 + 分隔线 1
@@ -1326,16 +1328,21 @@ private:
 };
 
 /**
- *  ContactActionButton —— 底部操作按钮（自绘）。primary=true 为 accent
- *  实心主按钮（「发消息」，左侧带聊天气泡图标），false 为白底描边 ghost
- *  按钮（「关闭」）。继承 DuiButton 复用点击 / 通知，只覆写 OnPaint。
+ *  ContactActionButton —— 操作按钮（自绘）。底部按钮行与快捷操作行共用这一个
+ *  类型：primary=true 为 accent 实心主按钮（「发消息」），false 为白底描边
+ *  ghost 按钮（「关闭」以及快捷操作行的四个按钮）。文字左侧可选画一个图标，
+ *  画哪一个由 SetIconKind 指定。继承 DuiButton 复用点击 / 通知，只覆写 OnPaint。
  */
 class ContactActionButton : public balloonwjui::DuiButton
 {
 public:
+    // SetIconKind 的特殊取值：本按钮只画文字、不画图标。ContactIconKind 从 0 起
+    // 连续编号，取 -1 与任何有效图标都区分得开。
+    static const int kNoIcon = -1;
+
     ContactActionButton()
         : m_primary(false)
-        , m_withChatIcon(false)
+        , m_iconKind(kNoIcon)
     {
     }
 
@@ -1346,10 +1353,11 @@ public:
         Invalidate();
     }
 
-    // 设置按钮文字左侧是否绘制聊天气泡图标（「发消息」按钮用）。
-    void SetWithChatIcon(bool b)
+    // 设置按钮文字左侧要绘制的图标。
+    //   kind：图标类型，取值见 ContactIconKind；传 kNoIcon 表示不画图标。
+    void SetIconKind(int kind)
     {
-        m_withChatIcon = b;
+        m_iconKind = kind;
         Invalidate();
     }
 
@@ -1403,10 +1411,9 @@ public:
         // 文字字号 13.5（取整 14，照 Btn size md）。
         const int kTextSize = 14;
 
-        if (m_withChatIcon)
+        if (m_iconKind != kNoIcon)
         {
-            // 图标 + 文字整体水平居中。设计稿 Icon.chat size 14、icon 与
-            // 文字 gap 6。
+            // 图标 + 文字整体水平居中。设计稿 Icon size 14、图标与文字 gap 6。
             const int kIconSize = 14;
             const int kIconGap  = 6;
             const int textW = MeasureTextWidth(hdc, (LPCWSTR)GetText(),
@@ -1418,7 +1425,7 @@ public:
                 bx = x;
             }
             const int iconY = y + (h - kIconSize) / 2;
-            DrawContactIcon(g, kContactIconChat,
+            DrawContactIcon(g, m_iconKind,
                             (Gdiplus::REAL)bx, (Gdiplus::REAL)iconY,
                             (Gdiplus::REAL)kIconSize,
                             Gdiplus::Color(255,
@@ -1442,9 +1449,39 @@ public:
     bool OnSetCursor(POINT /*pt*/) override { return false; }
 
 private:
-    bool m_primary;        // true=accent 主按钮，false=ghost 按钮
-    bool m_withChatIcon;   // 文字左侧是否画聊天气泡图标
+    bool m_primary;    // true=accent 主按钮，false=ghost 按钮
+    int  m_iconKind;   // 文字左侧要画的图标类型（ContactIconKind）；kNoIcon 表示不画
 };
+
+// 把 <contact-actionbtn> 的 icon 属性翻译成 ContactIconKind。放在类外，因为它
+// 要用到 ContactActionButton::kNoIcon。
+//   icon：属性原值（"chat" / "phone" / "video" / "history" / "locate"）；
+//         空串与一切无法识别的值都按"不画图标"处理。
+//   返回：对应的 ContactIconKind；不画图标时返回 ContactActionButton::kNoIcon。
+int ContactIconKindFromAttr(const std::string& icon)
+{
+    if (icon == "chat")
+    {
+        return kContactIconChat;
+    }
+    if (icon == "phone")
+    {
+        return kContactIconPhone;
+    }
+    if (icon == "video")
+    {
+        return kContactIconVideo;
+    }
+    if (icon == "history")
+    {
+        return kContactIconHistory;
+    }
+    if (icon == "locate")
+    {
+        return kContactIconLocate;
+    }
+    return ContactActionButton::kNoIcon;
+}
 
 // ContactTagFlow::MeasureChildWidth —— 放在类外，因为它要用到 TagChip /
 // ContactAddTagButton / ContactTagLimitHint 的完整定义。
@@ -1513,17 +1550,26 @@ int ContactTagFlow::CountRows(int availWidth) const
 // =====================================================================
 //
 // contact-root（白底 vbox，padding 20,18,20,18）自上而下：
-//   · 头部行（头像 + 多行资料块），fixedHeight 64；
+//   · 头部行（头像 + 多行资料块），fixedHeight 84；
 //   · 部门路径整宽区块（fixedHeight 先写 0，真实高度运行期由
 //     ConfigureContactDeptPath 按折行行数改写；没有部门时保持 0 且不可见）；
 //   · 头部下边距 spacer（14，对应设计稿 header paddingBottom）；
+//   · 快捷操作行（语音通话 / 视频通话 / 历史消息 / 组织架构四个等宽 ghost
+//     按钮），fixedHeight 36。四个按钮同时写了 fixedWidth 89 与 weight 1：
+//     DuiHBox 排版时，带 weight 的子控件仍以自身期望宽度打底，再去分剩余空间
+//     （见 DuiLayout.cpp 的 HintFixedMainPx）。只写 weight 的话，四个按钮按
+//     文字量算出的期望宽度加起来超过可用宽度，剩余空间为 0，最后一个按钮会被
+//     挤出客户区右边界。89 的来历：客户区名义宽 420 减左右内边距各 20 得 380，
+//     减去三条 8 像素间隔得 356，四等分即 89。实际客户区比名义宽度多出一圈缩放
+//     边框（实测 438），多出来的部分由 weight 均分掉，四个按钮仍然等宽铺满；
+//   · 快捷操作行下边距 spacer（14）；
 //   · 分隔线；
 //   · 标签区（小标题 + 装着流式胶囊容器的滚动视口）。它的 fixedHeight 写的是
 //     "标签只有一行"时的高度，真实高度在运行期由 SyncContactTagArea 按行数改写；
 //   · 分隔线；
 //   · 备注名 + 分组两行 FieldRow；
 //   · 分隔线；
-//   · 其它开关三行 FieldRow；
+//   · 开关区三行 FieldRow（消息免打扰 / 添加到收藏 / 特别关注）；
 //   · 弹性占位 control（weight=1，把底部按钮推到底）；
 //   · 底部分隔线 + 按钮行（关闭 / 发消息）；
 //   · 复制成功的轻量提示（DuiToast）。放在<u>末尾</u>是因为基类按子控件顺序
@@ -1548,6 +1594,19 @@ const char* const kContactBodyXml = u8R"xml(
   </hbox>
 
   <contact-deptpath id="1002" fixedHeight="0"/>
+
+  <control fixedHeight="14"/>
+
+  <hbox id="1046" fixedHeight="36" gap="8">
+    <contact-actionbtn id="1042" text="语音通话" primary="false" icon="phone"
+                       weight="1" fixedWidth="89" fixedHeight="36"/>
+    <contact-actionbtn id="1043" text="视频通话" primary="false" icon="video"
+                       weight="1" fixedWidth="89" fixedHeight="36"/>
+    <contact-actionbtn id="1044" text="历史消息" primary="false" icon="history"
+                       weight="1" fixedWidth="89" fixedHeight="36"/>
+    <contact-actionbtn id="1045" text="组织架构" primary="false" icon="locate"
+                       weight="1" fixedWidth="89" fixedHeight="36"/>
+  </hbox>
 
   <control fixedHeight="14"/>
   <separator fixedHeight="1" color="237,237,237"/>
@@ -1584,9 +1643,14 @@ const char* const kContactBodyXml = u8R"xml(
       <switch id="1030" fixedWidth="36" fixedHeight="20" alignCross="center"
               on-color="255,122,69" off-color="216,213,208"/>
     </field-row>
+    <field-row fixedHeight="52" divider="true" gap="16">
+      <contact-text text="添加到收藏" size="14" color="26,26,26" weight="1"/>
+      <switch id="1033" fixedWidth="36" fixedHeight="20" alignCross="center"
+              on-color="255,122,69" off-color="216,213,208"/>
+    </field-row>
     <field-row fixedHeight="52" divider="false" gap="16">
-      <contact-text text="置顶聊天" size="14" color="26,26,26" weight="1"/>
-      <switch id="1031" fixedWidth="36" fixedHeight="20" alignCross="center"
+      <contact-text text="特别关注" size="14" color="26,26,26" weight="1"/>
+      <switch id="1034" fixedWidth="36" fixedHeight="20" alignCross="center"
               on-color="255,122,69" off-color="216,213,208"/>
     </field-row>
   </vbox>
@@ -1599,7 +1663,7 @@ const char* const kContactBodyXml = u8R"xml(
     <control weight="1"/>
     <contact-actionbtn id="1040" text="关闭"   primary="false"
                        fixedWidth="76" fixedHeight="34" alignCross="center"/>
-    <contact-actionbtn id="1041" text="发消息" primary="true" chat-icon="true"
+    <contact-actionbtn id="1041" text="发消息" primary="true" icon="chat"
                        fixedWidth="104" fixedHeight="34" alignCross="center"/>
   </hbox>
 
@@ -1730,7 +1794,7 @@ std::unique_ptr<DuiControl> CreateContactCustomControl(
         const CString btnText = Utf8ToCString(GetNodeAttr(n, "text"));
         btn->SetText(btnText);
         btn->SetPrimary(GetNodeAttr(n, "primary") == "true");
-        btn->SetWithChatIcon(GetNodeAttr(n, "chat-icon") == "true");
+        btn->SetIconKind(ContactIconKindFromAttr(GetNodeAttr(n, "icon")));
         return std::unique_ptr<DuiControl>(btn.release());
     }
 
@@ -2096,7 +2160,14 @@ int ContactBodyHeight(int deptLineCount, int tagRowCount)
     // kContactBodyBaseHeight 里已经含了"标签正好一行"的那一份高度，故这里加的是
     // 标签多出来那几行的<u>增量</u>，不能把整块高度再加一遍。
     const int tagExtra = ContactTagBlockHeight(tagRowCount) - kTagBlockOneRowHeight;
-    return kContactBodyBaseHeight + ContactDeptBlockHeight(deptLineCount) + tagExtra;
+
+    // 快捷操作行本身，加上它<u>下方</u>那一个 spacer。上方那个 spacer 原先就在
+    // （它是头部与分隔线之间的间距），已经算进 kContactBodyBaseHeight 里了，
+    // 所以这里只加一份间距而不是两份。
+    const int quickRowExtra = kContactQuickRowHeight + kContactQuickRowGap;
+
+    return kContactBodyBaseHeight + quickRowExtra
+         + ContactDeptBlockHeight(deptLineCount) + tagExtra;
 }
 
 } // namespace ballooncontact

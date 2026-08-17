@@ -267,9 +267,8 @@ std::unique_ptr<DuiControl> CreateLoginCustomControl(const DuiXmlBuilder::Node& 
             combo->SetBgColor(kFieldFillColor);
             combo->SetShowBorder(false);
 
-            // 占位文字。上面的 SetEditable(true) 已经把内嵌 EDIT 建好，此刻
-            // 取得到；EDIT 的 HWND 要等布局时才创建，SetPlaceholder 会先缓存、
-            // 由 EnsureCreated 一并同步过去，故这里设是安全的。
+            // 占位文字。上面的 SetEditable(true) 已经把内嵌的输入框控件建好，
+            // 此刻取得到，可以直接设置占位文字。
             DuiEditHost* accountEdit = FindComboEditHost(combo.get());
             if (accountEdit != NULL)
             {

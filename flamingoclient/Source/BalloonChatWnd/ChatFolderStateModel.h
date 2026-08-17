@@ -156,6 +156,25 @@ bool FolderRetryEnabled(int state, bool fromMe, bool withinRetryWindow);
 const wchar_t* FolderErrorText(int errcode);
 
 /**
+ *  发起邀请（cmd_folder_invite）被服务端拒绝时，本端那条占位气泡该撤掉还是该转成
+ *  失败态。
+ *
+ *  发送端点了「发送文件夹」之后，气泡是<u>先建出来</u>的（用户要立刻看到反馈），
+ *  随后才收到服务端的邀请应答。应答里的拒绝理由分两类：
+ *
+ *    · 对方不在线 —— 服务端在收到邀请的那一刻就直接拒绝并返回，<u>不建会话、也不
+ *      写任何消息记录</u>。这一笔一个字节都没发出去，把气泡改成"发送失败"会在聊天
+ *      记录里平白留下一条并不存在的失败消息。这类应当撤掉气泡，另给用户一句提示。
+ *    · 其余理由（规模超出服务端上限、服务器繁忙、对方并发满额等）—— 这些是"这个
+ *      文件夹发不出去"，气泡留在原地转失败态是对的，用户能看到原因，也能重新发送。
+ *
+ *  @param errcode 邀请应答里的结果码，取值见 net/Protocol.h 的 error_code_folder_*
+ *  @return true 表示应当把占位气泡整行撤掉；false 表示应当转成失败态。成功码（0）
+ *          传进来也返回 false —— 成功时调用方根本不该走到这个判断
+ */
+bool FolderInviteRejectShouldRemoveBubble(int errcode);
+
+/**
  *  把服务端传输记录条（msgtype=message_type_folder=18）里的「结局 + 失败原因」翻成
  *  气泡状态。
  *

@@ -330,6 +330,72 @@ bool FolderTransferManager::beginRetryAttempt(const std::string& sessionid, int6
     return true;
 }
 
+bool FolderTransferManager::finishAttempt(const std::string& sessionid, int attemptSeq,
+                                          int terminalState, int64_t now)
+{
+    //终态之外的取值一律是调用方参数写错：真按它登记的话，这一次尝试此后再走到真正的
+    //终态时会被当成重复而丢掉整条记录，故此处既不登记也不改状态，只记一条告警
+    if (terminalState < folder_state_rejected || terminalState > folder_state_completed)
+    {
+        LOGW("folder finish attempt rejected, state %d is not a terminal state, sessionid: %s, "
+             "attempt: %d.",
+             terminalState, sessionid.c_str(), attemptSeq);
+        return false;
+    }
+
+    //以下三件事 ——「查本次尝试是否已经终结过」「登记为已终结」「把会话置为终态」——
+    //必须在同一个临界区内一次做完。分成两次加锁（先查、再写）就等于把闸门打开：两个
+    //工作线程各拿一帧 cmd_folder_close 进来，都在对方登记之前查到"还没终结过"，于是
+    //各留一条一模一样的记录条、各推一帧状态变更，正是本方法要消灭的那个缺陷
+    int oldState = 0;
+    bool sessionAlive = false;
+    {
+        std::lock_guard<std::mutex> guard(m_mutex);
+
+        //序号不大于已终结序号的一律是重复的：同一次尝试只终结一次，而序号只增不减
+        std::map<std::string, FinishedAttempt>::iterator it = m_finishedAttempts.find(sessionid);
+        if (it != m_finishedAttempts.end() && it->second.attemptSeq >= attemptSeq)
+        {
+            LOGI("folder terminal decision deduplicated, sessionid: %s, attempt: %d, state: %d, "
+                 "already finished up to attempt %d.",
+                 sessionid.c_str(), attemptSeq, terminalState, it->second.attemptSeq);
+            return false;
+        }
+
+        if (it != m_finishedAttempts.end())
+        {
+            //同一个会话的后一次尝试：覆盖成新序号，此后按新序号判重
+            it->second.attemptSeq = attemptSeq;
+            it->second.finishTime = now;
+        }
+        else
+        {
+            FinishedAttempt mark;
+            mark.attemptSeq = attemptSeq;
+            mark.finishTime = now;
+            m_finishedAttempts[sessionid] = mark;
+        }
+
+        //会话已被销毁时只登记、不改状态：邀请超时那条路径上 tick 已经把会话移出会话表，
+        //调用方手里只有一份快照
+        std::map<std::string, FolderTransferSessionInfo>::iterator sit = m_sessions.find(sessionid);
+        if (sit != m_sessions.end())
+        {
+            sessionAlive = true;
+            oldState = sit->second.state;
+            sit->second.state     = terminalState;
+            sit->second.stateTime = now;
+        }
+    }
+
+    LOGI("folder attempt finished, sessionid: %s, attempt: %d, terminal state: %d, "
+         "session alive: %d, session state: %d -> %d.",
+         sessionid.c_str(), attemptSeq, terminalState, sessionAlive ? 1 : 0,
+         oldState, terminalState);
+
+    return true;
+}
+
 bool FolderTransferManager::removeSession(const std::string& sessionid)
 {
     std::lock_guard<std::mutex> guard(m_mutex);
@@ -419,6 +485,22 @@ void FolderTransferManager::tick(int64_t now,
         }
 
         ++it;
+    }
+
+    //（3）顺带丢弃过期的"已终结尝试"登记项。判定分两步：所属会话还在表里的一律留着
+    //（失败会话在整个保留期内都可能再收到一帧重复的 cmd_folder_close），会话已经销毁的
+    //再多留 kFinishedAttemptRetentionMs，接住那些赶在销毁之后才到达的重复终结判定
+    std::map<std::string, FinishedAttempt>::iterator mit = m_finishedAttempts.begin();
+    while (mit != m_finishedAttempts.end())
+    {
+        if (m_sessions.find(mit->first) != m_sessions.end()
+            || now - mit->second.finishTime < kFinishedAttemptRetentionMs)
+        {
+            ++mit;
+            continue;
+        }
+
+        mit = m_finishedAttempts.erase(mit);
     }
 }
 

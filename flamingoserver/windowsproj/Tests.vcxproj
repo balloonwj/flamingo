@@ -66,6 +66,7 @@
     <ClCompile Include="..\tests\test_adminbootstrap.cpp" />
     <ClCompile Include="..\chatserversrc\AdminManager.cpp" />
     <ClCompile Include="..\tests\test_apppath.cpp" />
+    <ClCompile Include="..\tests\test_protocolparity.cpp" />
     <ClCompile Include="..\tests\test_serverconfigloader.cpp" />
     <ClCompile Include="..\tests\test_iothreadcount.cpp" />
     <ClCompile Include="..\tests\test_asynclog.cpp" />
@@ -136,6 +137,29 @@
     <ClCompile Include="..\dbapi\QueryResult.cpp" />
     <ClCompile Include="..\base\AsyncLog.cpp" />
     <ClCompile Include="..\base\Platform.cpp" />
+    <!-- SSA 套用例（会话发送路径的线程归属）要真的起一个 EventLoop 线程、真的建一条
+         回环 TCP 连接，故把 reactor 与被测的发送漏斗一并编进测试程序。
+         这里只列本套用例用得着的那些：连接由用例自己 accept 出来后交给 TcpConnection，
+         不经 TcpServer / Acceptor / EventLoopThreadPool，故那三个不必编进来 -->
+    <ClCompile Include="..\tests\test_sendthreadaffinity.cpp" />
+    <!-- PRV 套用例（Poller 事件位口径）同样是端到端复现，用的是上面这批 reactor 源文件，
+         不需要再额外补实现文件 -->
+    <ClCompile Include="..\tests\test_pollerrevents.cpp" />
+    <ClCompile Include="..\chatserversrc\TcpSession.cpp" />
+    <ClCompile Include="..\net\ByteBuffer.cpp" />
+    <ClCompile Include="..\net\Channel.cpp" />
+    <ClCompile Include="..\net\EpollPoller.cpp" />
+    <ClCompile Include="..\net\EventLoop.cpp" />
+    <ClCompile Include="..\net\EventLoopThread.cpp" />
+    <ClCompile Include="..\net\InetAddress.cpp" />
+    <ClCompile Include="..\net\Poller.cpp" />
+    <ClCompile Include="..\net\PollPoller.cpp" />
+    <ClCompile Include="..\net\SelectPoller.cpp" />
+    <ClCompile Include="..\net\Sockets.cpp" />
+    <ClCompile Include="..\net\TcpConnection.cpp" />
+    <ClCompile Include="..\net\Timer.cpp" />
+    <ClCompile Include="..\net\TimerQueue.cpp" />
+    <ClCompile Include="..\base\Timestamp.cpp" />
     <!-- jsoncpp 原版源码，同上 -->
     <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp">
       <DisableSpecificWarnings>4244</DisableSpecificWarnings>
@@ -204,6 +228,10 @@
     <ClInclude Include="..\chatserversrc\GroupFileProtocol.h" />
     <ClInclude Include="..\dbapi\DbRetryPolicy.h" />
     <ClInclude Include="..\dbapi\DbTransaction.h" />
+    <ClInclude Include="..\chatserversrc\TcpSession.h" />
+    <ClInclude Include="..\net\EventLoop.h" />
+    <ClInclude Include="..\net\EventLoopThread.h" />
+    <ClInclude Include="..\net\TcpConnection.h" />
     <ClInclude Include="..\zlib1.2.11\ZlibUtil.h" />
     <ClInclude Include="..\zlib1.2.11\zlib.h" />
     <ClInclude Include="..\zlib1.2.11\zconf.h" />

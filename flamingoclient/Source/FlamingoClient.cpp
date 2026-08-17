@@ -28,10 +28,71 @@
 #include "Path.h"
 #include <sstream>
 
-CFlamingoClient& CFlamingoClient::GetInstance()
+//进程内正在使用的那一个 CFlamingoClient 的地址。由 CMainDlg 在构造时登记、析构时
+//注销，本文件不持有其所有权。
+//
+//这里刻意<u>不</u>自己造一个对象：登录信息写进的是 CMainDlg 的成员对象 m_FMGClient，
+//各窗口持有的 m_lpFMGClient 也都指向它，本指针必须指到同一个对象上，"读"与"写"才是
+//同一份数据。2026-08-16 之前 GetInstance 返回的是一个函数内静态对象，全仓库没有任何
+//代码往它里面写过登录信息，于是 net::CurrentUserAccount() 永远返回空串，按账号分目录
+//的缓存（ChatFile / ChatImage / Avatar）全部静默失效 —— 路径拼不出来被各调用方当作
+//"没有缓存"，既不报错也不弹框，只表现为每次都要重新下载。
+static CFlamingoClient* s_lpFlamingoClientInstance = NULL;
+
+//------------------------------------------------------------------------------
+// Login() 被前置条件挡下时的原因掩码取值。三个原因可以同时成立，故按位表示。
+// m_nLastLoginSkipMask 记住上一次的掩码，只有掩码变化时才记日志 —— 断线重连定时器
+// 每 5 秒调一次 Login()，不去重会把日志刷满。
+//------------------------------------------------------------------------------
+
+//尚未记录过，或上一次调用是正常放行的。取 -1 以与任何真实掩码（0x00~0x07）区分开。
+static const int kLoginSkipMaskNotRecorded = -1;
+//当前不是离线态（IsOffline() 为假）：连接还在或状态机没收拾干净，此时不该重复登录。
+static const int kLoginSkipBitNotOffline   = 0x01;
+//账号为空：登录信息没能写进 m_UserMgr.m_UserInfo。
+static const int kLoginSkipBitNoAccount    = 0x02;
+//密码为空：同上。密码只有 SetUser 一个写入点，它被跳过就再也没人填。
+static const int kLoginSkipBitNoPassword   = 0x04;
+
+void CFlamingoClient::SetInstance(CFlamingoClient* lpClient)
 {
-    static CFlamingoClient client;
-    return client;
+    //登记与注销共用这一个入口：传实例地址为登记，传 NULL 为注销。
+    if (lpClient != NULL && s_lpFlamingoClientInstance != NULL
+        && s_lpFlamingoClientInstance != lpClient)
+    {
+        //进程里本该只有一个 CFlamingoClient（CMainDlg 的成员，而 CMainDlg 在
+        //Startup.cpp 里只有一个栈对象）。真出现第二个就说明有人另建了一份，后登记的
+        //会把先前那份挤掉，"读写不是同一个对象"的老问题即刻重演，故必须记下来。
+        LOG_ERROR("CFlamingoClient::SetInstance: overwriting a previously registered instance; "
+                  "there must be exactly one CFlamingoClient in the process.");
+    }
+
+    s_lpFlamingoClientInstance = lpClient;
+}
+
+CFlamingoClient* CFlamingoClient::GetInstance()
+{
+    if (s_lpFlamingoClientInstance == NULL)
+    {
+        //未登记时<u>不</u>返回兜底实例。本缺陷之所以长期没被发现，正是因为这里曾经返回
+        //一个谁也没写过的静态对象：调用方拿到手的是一份看着正常、内容全空的登录态，
+        //于是缓存路径拼不出来，却谁都不觉得出了错。改为返回 NULL 之后调用方必须显式
+        //判空，配合下面这条日志，接线一断当场就能在日志里看见。
+        //
+        //只记首次：net::CurrentUserAccount 在联系人 / 会话列表渲染时逐行调用，每次都记
+        //会把日志刷满，而"没登记"是一次性的接线错误，一条足够定位。本函数的调用点都在
+        //UI 线程（各窗口取当前账号），故这个标志无须加锁。
+        static bool s_bMissingInstanceLogged = false;
+        if (!s_bMissingInstanceLogged)
+        {
+            s_bMissingInstanceLogged = true;
+            LOG_ERROR("CFlamingoClient::GetInstance: no instance registered. Every caller that "
+                      "needs the login state (net::CurrentUserAccount and therefore the per-account "
+                      "cache directories) degrades to empty. Check CMainDlg::SetInstance wiring.");
+        }
+    }
+
+    return s_lpFlamingoClientInstance;
 }
 
 
@@ -50,6 +111,8 @@ CFlamingoClient::CFlamingoClient(void)
 	m_nGroupCount = 0;
 	m_bGroupInfoAvailable = FALSE;
 	m_bGroupMemberInfoAvailable = FALSE;
+
+	m_nLastLoginSkipMask = kLoginSkipMaskNotRecorded;
 
     m_SendMsgThread.m_lpUserMgr = &m_UserMgr;
     m_FileTask.m_lpFMGClient = this;
@@ -136,14 +199,58 @@ void CFlamingoClient::SetImgPort(short port)
     CIUSocket::GetInstance().SetImgPort(port);
 }
 
-// 设置UTalk号码和密码
+// 记录本次登录使用的账号与密码
+//
+// 唯一调用方是 CMainDlg::StartLogin，它在登录流程走完之后把登录窗采集到的账号 / 密码
+// 交到这里存下来，供<u>断线自动重连</u>使用（CFlamingoClient::Login 从这两个字段取值
+// 重新登录）。
+//
+// 2026-08-16 之前这里还有一个 "m_nStatus != STATUS_OFFLINE 就直接返回" 的前置条件，
+// 那是 v1 时代"在线期间不允许换用户"的遗留判断，放在这条链路上是错的，后果是<u>手动
+// 登录之后再也无法自动重连</u>：
+//   · 登录窗是模态的，登录成功的结果在它的模态消息循环内部就派发到了
+//     CFlamingoClient::OnLoginResult，那里已经把 m_nStatus 置成 STATUS_ONLINE；
+//   · 等 DoModal 返回、StartLogin 执行到本函数时，前置条件已经不成立，本函数整个
+//     变成空操作，m_strPassword 从头到尾是空串（它没有第二个写入点）；
+//   · 于是掉线后重连定时器每次调 Login()，都被 "m_strPassword.empty()" 挡在门外，
+//     且当时没有任何日志，现场表现为"重连定时器在跑、却一次请求都没发出去"。
+// 自动登录那条路只是碰巧躲过：DoLogin 起线程即返回，执行到本函数时登录尚未完成，
+// m_nStatus 仍是 STATUS_OFFLINE，密码得以存下 —— 同一个缺陷靠时序侥幸不发作，
+// 更说明这个前置条件不该留在这里。
+//
+//   lpUserAccount：用户在登录窗里填的账号，NULL 视为无效入参、整个调用被忽略。
+//                  <u>只在还没有服务端确认过的账号时才采纳</u>，理由见下面的实现注释。
+//   lpUserPwd：    登录明文密码，NULL 同上。它<u>一律</u>被记下，并在本进程内保留到
+//                  登出 —— 这是自动重连的必要条件，与登录窗的"记住密码"勾选无关
+//                  （那个勾选决定的是要不要写进 LoginAccountList.dat）。
 void CFlamingoClient::SetUser(LPCTSTR lpUserAccount, LPCTSTR lpUserPwd)
 {
-	if (NULL == lpUserAccount || NULL == lpUserPwd || m_UserMgr.m_UserInfo.m_nStatus != STATUS_OFFLINE)
+	if (NULL == lpUserAccount || NULL == lpUserPwd)
 		return;
 
-	m_UserMgr.m_UserInfo.m_strAccount = lpUserAccount;
+	//密码无条件记下：它没有第二个来源，服务端应答里也不会带回来。
 	m_UserMgr.m_UserInfo.m_strPassword = lpUserPwd;
+
+	//账号则要看会话是否已经建立。登录成功时 OnLoginResult 会把<u>服务端返回的</u>
+	//用户名写进同一个字段，那才是规范值：用手机号登录（LOGIN_USE_MOBILE_NUMBER）
+	//时用户填的是手机号，服务端返回的却是用户名，两者并不相同；而按账号分目录的
+	//缓存（ChatFile / ChatImage / Avatar）都以这个字段为准。手动登录这条路上本函数
+	//跑在 OnLoginResult 之后，若照抄用户填的内容就会把规范值覆盖掉。
+	//会话尚未建立（自动登录发起后、结果回来之前）时则必须写：Login() 要靠它取账号。
+	const bool bTakeAccount = (IsOffline() == TRUE)
+	                          || m_UserMgr.m_UserInfo.m_strAccount.empty();
+	if (bTakeAccount)
+	{
+		m_UserMgr.m_UserInfo.m_strAccount = lpUserAccount;
+	}
+
+	//登录态字段是否填齐直接决定断线后能不能自动重连，故留一条日志。密码只记长度，
+	//不记内容。
+	LOG_INFO("CFlamingoClient::SetUser: credentials recorded for auto-reconnect. "
+	         "accountLen=%d, passwordLen=%d, accountTakenFromCaller=%d.",
+	         (int)m_UserMgr.m_UserInfo.m_strAccount.size(),
+	         (int)m_UserMgr.m_UserInfo.m_strPassword.size(),
+	         bTakeAccount ? 1 : 0);
 	//m_UserMgr.m_nUTalkUin = _tcstoul(lpUTalkNum, NULL, 10);
 	//m_UserMgr.m_UserInfo.m_nUTalkUin = m_UserMgr.m_nUTalkUin;
 	//m_UserMgr.m_UserInfo.m_nUTalkNum = m_UserMgr.m_nUTalkUin;
@@ -203,8 +310,41 @@ void CFlamingoClient::SendHeartbeatMessage()
 // 登录
 void CFlamingoClient::Login(int nStatus/* = STATUS_ONLINE*/)
 {
-	if (!IsOffline() || m_UserMgr.m_UserInfo.m_strAccount.empty() || m_UserMgr.m_UserInfo.m_strPassword.empty())
-		return;
+    //前置条件不满足就不发登录请求。这三条<u>必须</u>留下日志：唯一的调用方是断线重连
+    //定时器，它每 5 秒调一次，被这里挡住时既不报错也不弹框，现场看起来就是"什么都
+    //没发生"，而后果是客户端永远连不回服务器。2026-08-14 的实测里三十次重连尝试全部
+    //在这里被挡掉，日志里一条痕迹都没有，排查只能靠通读代码。
+    const bool bOffline     = (IsOffline() == TRUE);
+    const bool bHasAccount  = !m_UserMgr.m_UserInfo.m_strAccount.empty();
+    const bool bHasPassword = !m_UserMgr.m_UserInfo.m_strPassword.empty();
+    if (!bOffline || !bHasAccount || !bHasPassword)
+    {
+        int nSkipMask = 0;
+        if (!bOffline)
+            nSkipMask |= kLoginSkipBitNotOffline;
+        if (!bHasAccount)
+            nSkipMask |= kLoginSkipBitNoAccount;
+        if (!bHasPassword)
+            nSkipMask |= kLoginSkipBitNoPassword;
+
+        //只在原因掩码变化时记一条：首次必记，原因变了也必记，重连定时器反复触发的
+        //相同原因不再重复刷屏。
+        if (nSkipMask != m_nLastLoginSkipMask)
+        {
+            m_nLastLoginSkipMask = nSkipMask;
+            LOG_WARNING("CFlamingoClient::Login skipped: isOffline=%d, hasAccount=%d, "
+                        "hasPassword=%d (reasonMask=0x%02X). The reconnect timer keeps "
+                        "calling this every few seconds and gets nowhere.",
+                        bOffline ? 1 : 0, bHasAccount ? 1 : 0, bHasPassword ? 1 : 0,
+                        (unsigned int)nSkipMask);
+        }
+        return;
+    }
+
+    //本次放行：把去重标志复位，下一次再被挡住时仍会记下第一条。
+    m_nLastLoginSkipMask = kLoginSkipMaskNotRecorded;
+    LOG_INFO("CFlamingoClient::Login: enqueue a login request, presence=%d.",
+             CIUSocket::GetInstance().GetRecordOnlineStatus());
 
 	CLoginRequest* pLoginRequest = new CLoginRequest();
 	if(pLoginRequest == NULL)

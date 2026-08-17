@@ -18,7 +18,7 @@
 #include "net/StorageLocation.h"      // ResolveDataRoot（本地数据根目录的归一）
 #include "net/FrameCrypto.h"          // net::cryptoInit（协议加密的一次性初始化）
 #include "UIText.h"
-#include "PerformanceCounter.h"
+#include "LogCleanupPolicy.h"         // 「启动时清空历史日志」开关的取值规则
 #include "../../third-party/balloonui/balloonui/DuiDpi.h"
 
 CAppModule _Module;
@@ -83,6 +83,11 @@ int Run(LPTSTR /*lpstrCmdLine = NULL*/, int nCmdShow/* = SW_SHOWDEFAULT*/)
     return nRet;
 }
 
+// 注意本函数<u>没有任何时间判断</u>：它把 Logs 目录下该后缀的文件<u>全部</u>删掉，
+// 只有本次运行的那一份因为正被自己占用着删不掉，于是留了下来。也就是说它的真实
+// 语义是「清空历史日志，只保留本次这一份」，函数名里的"过期"没有对应的实现。
+// 名字保留是因为配置项键名（clearexpirelog）已经在用户的配置文件里了，一并改动
+// 会让老配置里的用户选择失效。
 void ClearExpiredLog(PCTSTR pszFileSuffixName)
 {
     if (pszFileSuffixName == NULL)
@@ -97,7 +102,10 @@ void ClearExpiredLog(PCTSTR pszFileSuffixName)
 
     do
     {
-        if (_tcsicmp(win32FindData.cFileName, _T(".")) != 0 ||
+        //跳过目录项 "." 与 ".."。这里原先写的是 ||，两个条件不可能同时成立，整个
+        //判断恒为真；因为通配符是 "*.<后缀>"、两个目录项根本匹配不到，所以一直没
+        //造成后果。2026-08-17 顺手改正为 &&。
+        if (_tcsicmp(win32FindData.cFileName, _T(".")) != 0 &&
             _tcsicmp(win32FindData.cFileName, _T("..")) != 0)
         {
             memset(szLogFilePath, 0, sizeof(szLogFilePath));
@@ -185,23 +193,20 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
     _stprintf_s(szLogFileName, MAX_PATH, _T("%s\\Logs\\%04d%02d%02d%02d%02d%02d_%d.log"), g_szHomePath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, (int32_t)dwProcessId);
     CIULog::Init(true, false, szLogFileName);
 
-    //初始化性能计数器
-    TCHAR szPerformanceFileName[MAX_PATH] = { 0 };
-    _stprintf_s(szPerformanceFileName, MAX_PATH, _T("%s\\Logs\\%04d%02d%02d%02d%02d%02d_%d.perf"), g_szHomePath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, (int32_t)dwProcessId);
-    CPerformanceCounter::Init(true, szPerformanceFileName);
-
     //TODO: 统一到AppConfig类中去
     CIniFile iniFile;
     CString strIniFilePath(g_szHomePath);
     strIniFilePath += _T("config\\flamingo.ini");
-    bool bNeedClear = true;
-    if (iniFile.ReadInt(_T("app"), _T("clearexpirelog"), 0, strIniFilePath) == 0)
-        bNeedClear = false;
 
-    if (bNeedClear)
+    //「启动时清空历史日志」：取值规则（含配置项缺失 / 被写坏时的默认值）收口在
+    //LogCleanupPolicy 里，系统设置的存储页改的也是同一项，两边不会漂移。
+    //Debug 构建默认关闭（开发期要能翻前几次运行的日志），Release 默认开启。
+    if (logcleanup::ReadClearLogOnStart(strIniFilePath))
     {
-        //清理过期的日志文件
+        //清空历史日志，只保留本次运行的这一份（正被本进程占用着，删不掉）。
         ClearExpiredLog(_T("log"));
+        //性能计数功能已于 2026-08-17 移除、不再产生 .perf 文件；这一句留着是为了
+        //把历史遗留的那些一并清掉，等用户机器上不再有残留后可以去掉。
         ClearExpiredLog(_T("perf"));
     }
 

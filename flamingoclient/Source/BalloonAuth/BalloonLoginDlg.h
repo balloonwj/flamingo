@@ -324,8 +324,7 @@ private:
 
     /**
      *  构建并装载登录窗客户区控件树（来自 BalloonLoginLayout），缓存
-     *  关键控件指针，对内嵌 HWND 的控件调 EnsureCreated，并填充历史
-     *  账号下拉框。须在窗口 Create 之后调用。
+     *  关键控件指针，并填充历史账号下拉框。须在窗口 Create 之后调用。
      */
     void InitLoginUi();
 

@@ -42,6 +42,13 @@ ConnectionUiState ComputeConnectionUiState(int presence, bool connected)
 
 bool IsActionAllowed(int presence, bool connected, int action)
 {
+    // 先把"在线状态 + 连接是否就绪"折成连接态，再走同一条规则，保证两副入口
+    // 永远给出一致的答案。
+    return IsActionAllowedInState((int)ComputeConnectionUiState(presence, connected), action);
+}
+
+bool IsActionAllowedInState(int connUiState, int action)
+{
     if (action < 0 || action >= kActionKindCount)
     {
         // 越界类别一律不放行：宁可误拦（用户会来反馈），也好过把一个没登记过的
@@ -49,8 +56,9 @@ bool IsActionAllowed(int presence, bool connected, int action)
         return false;
     }
 
-    // 五类操作目前放行条件相同：必须在线且连接就绪。
-    return ComputeConnectionUiState(presence, connected) == kConnUiOnline;
+    // 各类操作目前放行条件相同：必须真正在线（连接已就绪）。连接中、用户主动离线，
+    // 以及一切越界的连接态都拦住 —— 与托盘图标 / 头像置灰的兜底方向一致。
+    return connUiState == (int)kConnUiOnline;
 }
 
 const wchar_t* GetBlockedActionTip(int action)
@@ -67,6 +75,10 @@ const wchar_t* GetBlockedActionTip(int action)
         return L"当前为离线状态，无法发起通话或远程协助。请先恢复在线。";
     case kActionAccountOp:
         return L"当前为离线状态，该操作需要连接服务器。请先恢复在线。";
+    case kActionChangePresence:
+        // 这一条不能照抄上面几条的"当前为离线状态"：切换在线状态被拦住时，用户既可能
+        // 主动离线、也可能正在断线重连，后者说成"离线"会让他以为要自己动手恢复。
+        return L"当前处于离线状态或正在连接服务器，无法切换在线状态。连接恢复后可以再切换。";
     default:
         // 越界类别的通用兜底文案。正常流程不会走到这里。
         return L"当前为离线状态，该操作需要连接服务器。请先恢复在线。";
@@ -159,6 +171,27 @@ int GetConnectionBadgePresence(int presence, int connUiState)
     // 灰色圆点色保持同一口径 —— 两者一旦分叉，就会出现"点是灰的、形状却画成在线实心圆"
     // 这种自相矛盾的胶囊。
     return presence_offline;
+}
+
+const wchar_t* GetConnectionMenuLabel(int presence, int connUiState)
+{
+    if (connUiState == kConnUiOnline)
+    {
+        // 连接就绪：菜单里被标记的那一行就是用户自己选的状态，文字与主面板状态菜单一致。
+        return GetPresenceMenuLabel(presence, true);
+    }
+
+    if (connUiState == kConnUiConnecting)
+    {
+        // 掉线重连中，或刚从离线切回在线正在登录。这里写成完整字面量而不是运行时拼接，
+        // 是为了让返回值仍是进程级生命周期的静态常量串 —— 这是 TrayMenuEntry::label
+        // 对调用方的承诺（同 GetPresenceMenuLabel 的做法）。
+        return L"正在连接（当前）";
+    }
+
+    // kConnUiOffline，以及一切越界取值：一律"离线（当前）"，兜底方向与
+    // GetConnectionPresenceVisual / GetConnectionBadgePresence 保持一致。
+    return L"离线（当前）";
 }
 
 bool ShouldGrayAvatar(int connUiState)

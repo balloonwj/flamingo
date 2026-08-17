@@ -23,7 +23,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"      // 公告面板各行文本
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEditHost.h"
+#include "../BalloonChatWnd/ChatInputRichEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiSplitter.h"   // 消息区/输入区可拖分隔
 
 using namespace balloonwjui;
@@ -75,15 +75,15 @@ TEST_CASE("G2 群聊窗含消息区容器", "[gp1a][groupchat]")
     CHECK(root->FindCtrlById(kGIdMessageArea) != nullptr);
 }
 
-TEST_CASE("G3 群聊窗输入框已迁移为 DuiRichEditHost", "[gp1a][groupchat]")
+TEST_CASE("G3 群聊窗输入框已迁移为无窗口富文本控件", "[gp1a][groupchat]")
 {
     auto root = BuildGroupChatWindowBody();
     REQUIRE(root != nullptr);
 
     DuiControl* input = root->FindCtrlById(kGIdInputEdit);
     REQUIRE(input != nullptr);
-    // 第零期：群聊输入框同样换成富文本 DuiRichEditHost。
-    CHECK(dynamic_cast<DuiRichEditHost*>(input) != nullptr);
+    // 群聊输入框与单聊窗共用同一个控件。
+    CHECK(dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(input) != nullptr);
     CHECK(dynamic_cast<DuiEditHost*>(input) == nullptr);
 }
 
@@ -92,8 +92,8 @@ TEST_CASE("G9 群聊窗输入框配置：多行 / 自动换行 / 有占位符", 
     auto root = BuildGroupChatWindowBody();
     REQUIRE(root != nullptr);
 
-    DuiRichEditHost* input =
-        dynamic_cast<DuiRichEditHost*>(root->FindCtrlById(kGIdInputEdit));
+    balloonchatwnd::ChatInputRichEdit* input =
+        dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(root->FindCtrlById(kGIdInputEdit));
     REQUIRE(input != nullptr);
     CHECK(input->IsMultiLine());
     CHECK(input->IsWordWrap());
@@ -105,8 +105,8 @@ TEST_CASE("G10 群聊窗输入框文本 round-trip（缓存层）", "[gp1a][grou
     auto root = BuildGroupChatWindowBody();
     REQUIRE(root != nullptr);
 
-    DuiRichEditHost* input =
-        dynamic_cast<DuiRichEditHost*>(root->FindCtrlById(kGIdInputEdit));
+    balloonchatwnd::ChatInputRichEdit* input =
+        dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(root->FindCtrlById(kGIdInputEdit));
     REQUIRE(input != nullptr);
 
     input->SetText(_T("群里你好"));

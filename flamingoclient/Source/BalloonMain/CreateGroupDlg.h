@@ -213,7 +213,6 @@ private:
     Purpose m_builtPurpose;
 
     bool m_built;          // 骨架是否已构建
-    bool m_editsCreated;   // 各输入框内嵌 EDIT 是否已建
     bool m_creating;       // 是否已发出建群请求、等待应答（防重复提交）
 
     // 标题栏左侧图标位图（程序图标合成到标题栏底色上）。DuiFrameWindow::SetIcon 只

@@ -165,7 +165,6 @@ extern std::wstring g_strAppTitle;
 #define     FMG_MSG_V2_ANNOUNCEMENTS        WM_USER + 549			//v2 平台公告列表应答(cmd_get_announcements 2101)，lParam=堆 net::AnnouncementsResult*（UI 处理后 delete）；主面板落本地库 announce.db 并刷新铃铛角标。注意与群公告的 FMG_MSG_V2_GROUP_ANNOUNCEMENTS(537) 不是一回事
 #define     FMG_MSG_V2_ANNOUNCEMENT_NOTIFY  WM_USER + 550			//v2 推送：平台公告新发布 / 被撤回(cmd_announcement_notify 2103)，lParam=堆 net::AnnouncementNotify*（UI 处理后 delete）；changetype=1 落库并弹角标 + 提示音，=2 只带公告ID、把本地那条标为已撤回
 #define     FMG_MSG_V2_ANN_MARK_READ_RESULT WM_USER + 551			//v2 平台公告已读上报应答(cmd_mark_announcement_read 2102)，lParam=堆 net::AnnounceMarkReadResult*（UI 处理后 delete）；成功不动界面（已读在发起时已乐观落本地库），仅失败时记日志留痕
-#define     FMG_MSG_OPEN_ANNOUNCE_BOX       WM_USER + 552			//新公告提示窗→主面板：点「查看全部」，请它打开「消息盒子」窗口，wParam=0，lParam=0；无堆负载，无需 delete
 #define     FMG_MSG_V2_SET_REMARK_RESULT    WM_USER + 552			//v2 设置好友备注名应答(cmd_set_friend_remark 1209)，lParam=堆 net::SetFriendRemarkResult*（UI 处理后 delete）；成功只记日志（乐观更新在发起时已生效），失败时主面板据其中原样回带的 userid 把那一个人的备注回滚并提示。备注名改完不走推送，读回靠下次通讯录应答里的 contacts[].remark
 #define     FMG_MSG_SET_CONTACT_REMARK      WM_USER + 553			//联系人资料窗→主面板：备注名编辑提交，wParam=对端 userid，lParam=堆 std::string*（用户敲进去的原始文本，UTF-8，未 trim；主面板处理后 delete）。该不该发、发不出去怎么办、失败怎么退回来全由主面板判定——通讯录缓存与 socket 都在它手上
 //——客户端自动更新：UpdateManager 工作线程 → 升级窗（CBalloonUpdateWindow）——
@@ -274,10 +273,34 @@ enum PresenceChangeSource
 #define     FMG_MSG_OPEN_CHAT               WM_USER + 454			//请求主面板打开与某 userid 的单聊，wParam=userid
 #define     FMG_MSG_CONV_SEND_BUMP          WM_USER + 456			//单聊窗发出一条消息后通知主面板冒泡该会话，wParam=对端userid，lParam=堆上 ConvSendBumpData*（处理后 delete）
 #define     FMG_MSG_CONV_MARK_READ          WM_USER + 497			//聊天窗/群聊窗被切到前台（WM_ACTIVATE）后通知主面板把该会话未读清零，wParam=ctype（1单聊 2群聊），lParam=堆上 long long* cid（处理后 delete）。窗口间直投、不经 ProxyWndProc，故无须在 FlamingoClient.cpp 加转发 case
-#define     FMG_MSG_OPEN_GROUP_MANAGE       WM_USER + 472			//请求主面板打开某群的群管理对话框，lParam=堆上 int64_t* groupId（处理后 delete）
-#define     FMG_MSG_OPEN_HISTORY            WM_USER + 477			//请求主面板打开某会话的历史消息记录窗，wParam 低字节=ctype(1单聊 2群聊)、次低字节=打开后预选的类型胶囊(balloonhistory::HistoryTypeFilter，0=全部 6=Pin；不填即 0)，lParam=堆上 int64_t* cid（处理后 delete）
 #define     FMG_MSG_OPEN_CHANGEPWD          WM_USER + 473			//请求主面板打开修改密码对话框（系统设置「账号安全」页"修改"按钮转发；无参）
-#define     FMG_MSG_REFRESH_SELF_HEADER     WM_USER + 474			//请求主面板按 m_UserInfo 立即刷新本人 Header（昵称/签名/头像）；个人信息对话框乐观保存后转发（无参）
+
+//——B 段（WM_USER + 4500 ~ 4799）：窗口 → 主面板 CBalloonMainPanel——
+//
+//这一段是 2026-08-16 号段整改新划出来的，段内按<u>发起窗口</u>分档：
+//  4500 起  聊天窗 / 群聊窗（CBalloonChatWindow、CBalloonGroupChatWindow）
+//  4520 起  个人资料、系统设置一类的对话框
+//  4540 起  公告提示窗、消息盒子一类的浮窗
+//下面四条原先分别取 472 / 474 / 477 / 552，逐个与 A 段的网络应答 / 推送消息撞号
+//（FMG_MSG_V2_USERINFO_CHANGED、FMG_MSG_V2_IMAGE_DOWNLOAD_RESULT、
+// FMG_MSG_V2_FILE_SEND_PROGRESS、FMG_MSG_V2_SET_REMARK_RESULT）。当时没出问题，
+//全靠「收件窗口不同」这个没有任何机制保证的前提：这四条由某个窗口直接
+//PostMessage 给主面板，那四条经代理窗转给 CMainDlg。整改一律搬走本段这一条、
+//保留网络应答那一条，因为本段不经代理窗、影响面最小。
+//号段规约见开发约定文档「UI 约定」第 6 条，重号由
+//Source\Tests\MessageIdRegistryTests.cpp 的守卫用例把关。
+#define     FMG_MSG_OPEN_HISTORY            WM_USER + 4500			//聊天窗 / 群聊窗→主面板：打开某会话的历史消息记录窗，wParam 低字节=ctype(1单聊 2群聊)、次低字节=打开后预选的类型胶囊(balloonhistory::HistoryTypeFilter，0=全部 6=Pin；不填即 0)，lParam=堆上 int64_t* cid（处理后 delete）
+#define     FMG_MSG_OPEN_GROUP_MANAGE       WM_USER + 4501			//群聊窗→主面板：打开某群的群管理对话框，lParam=堆上 int64_t* groupId（处理后 delete）
+#define     FMG_MSG_REFRESH_SELF_HEADER     WM_USER + 4520			//个人信息对话框→主面板：乐观保存后请它按 m_UserInfo 立即刷新本人 Header（昵称/签名/头像）（无参）
+//下面四条是联系人资料对话框的动作出口。该窗口既没有 socket 也没有通讯录 / 收藏 /
+//特别关注三份缓存，判定与执行一律交给主面板，做法与备注名(553)、标签(562)一致。
+//三条状态类消息传的是<u>目标状态</u>而不是"取反"：开关拨出来的本来就是明确的开或关，
+//传取反的话，用户连点两下、而第一条应答还在路上时，主面板会按同一个旧状态取反两次。
+#define     FMG_MSG_SET_CONTACT_MUTE        WM_USER + 4521			//联系人资料窗→主面板：设置与该联系人会话的消息免打扰状态，wParam=对端 userid，lParam=目标状态(1 开 / 0 关)；无堆负载，无需 delete
+#define     FMG_MSG_SET_CONTACT_FAVORITE    WM_USER + 4522			//联系人资料窗→主面板：设置该联系人的收藏状态，wParam=对端 userid，lParam=目标状态(1 收藏 / 0 取消)；无堆负载，无需 delete
+#define     FMG_MSG_SET_CONTACT_STARRED     WM_USER + 4523			//联系人资料窗→主面板：设置该联系人的特别关注状态，wParam=对端 userid，lParam=目标状态(1 关注 / 0 取消)；无堆负载，无需 delete
+#define     FMG_MSG_LOCATE_CONTACT          WM_USER + 4524			//联系人资料窗→主面板：在通讯录树里定位该联系人（切到通讯录页、展开各级部门、滚动到该行并选中），wParam=对端 userid，lParam=0；无堆负载，无需 delete
+#define     FMG_MSG_OPEN_ANNOUNCE_BOX       WM_USER + 4540			//新公告提示窗→主面板：点「查看全部」，请它打开「消息盒子」窗口，wParam=0，lParam=0；无堆负载，无需 delete
 //这条原先取的是 WM_USER + 497，与上面的 FMG_MSG_CONV_MARK_READ 撞了号，而两者<u>由同一个
 //窗口 CBalloonMainPanel 处理</u>。ATL 消息映射先匹配先赢，靠后的这条处理器永远不会执行：
 //系统设置里改「自动识别链接」开关时，消息落进了 OnConvMarkReadMsg，那个函数把 lParam 当
@@ -292,7 +315,12 @@ enum PresenceChangeSource
 #define     FMG_MSG_TRAY_MINIMIZE_TIP       WM_USER + 496			//主面板刚最小化隐藏到托盘：请 CMainDlg 弹一次"已最小化到托盘"气泡提示（无参；"是否首次"由主面板据 CUserConfig 判定，CMainDlg 收到就弹）
 
 
-#define		FMG_MSG_FIRST					WM_USER + 001
+// 闸门下界。2026-08-16 由 WM_USER + 1 上抬到 WM_USER + 50：本文件里最小的一条
+// FMG_MSG_* 就是 FMG_MSG_NET_ERROR（WM_USER + 50），而 CustomMsgDef.h 里那批
+// v1 遗留消息取 WM_USER + 1 ~ 41，原先整段落在闸门之内。它们都是窗口之间直接
+// 投递的消息，本就不该由代理窗收；下界抬到 50 之后，万一有谁误把它们投给代理窗，
+// 会在门口被挡掉而不是被 switch 里号段相同的某条 case 当成别的消息处理。
+#define		FMG_MSG_FIRST					WM_USER + 50
 //——v2 音视频通话信令(cmd_call_* 1701-1707)，lParam 携带堆上 net:: 结构体指针，由 UI 线程处理后 delete——
 #define     FMG_MSG_V2_CALL_INVITE_ACK      WM_USER + 501		//v2 通话邀请应答(cmd_call_invite 1701)，lParam=net::CallInviteResponse*（成功带 sessionid，失败如对方离线/忙提示；处理后 delete）
 #define     FMG_MSG_V2_CALL_INVITE_NOTIFY   WM_USER + 502		//v2 通话邀请推送(cmd_call_invite_notify 1702)，lParam=net::CallInviteNotify*（被叫弹来电窗；处理后 delete）
@@ -317,10 +345,11 @@ enum PresenceChangeSource
 // 越界也照常工作，很容易让人误以为这个号段没问题。
 //
 // 上界留足余量（原为 560，2026-08-12 特别关注用掉 558-560 后上抬到 580；2026-08-14
-// 单聊文件夹传输用掉 581-590 后再上抬到 620），免得每加一条消息都要动它一次；闸门放宽
-// 本身无风险：switch 里没有匹配 case 的消息一律走 default → DefWindowProc，与被闸门
-// 挡掉的效果相同。
-#define		FMG_MSG_LAST					WM_USER + 620
+// 单聊文件夹传输用掉 581-590 后再上抬到 620；2026-08-16 号段整改划出 A/B/C 三段，
+// 上抬到 4999 一次性覆盖整个 4000~4999 规划区间），免得每加一条消息都要动它一次；
+// 闸门放宽本身无风险：switch 里没有匹配 case 的消息一律走 default → DefWindowProc，
+// 与被闸门挡掉的效果相同。
+#define		FMG_MSG_LAST					WM_USER + 4999
 
 //聊天窗 → 主面板 的"会话冒泡"载荷（FMG_MSG_CONV_SEND_BUMP 的 lParam，堆分配，
 //主面板处理后 delete）。承载本端刚发出的一条消息，用于刷新会话列表的最后预览。

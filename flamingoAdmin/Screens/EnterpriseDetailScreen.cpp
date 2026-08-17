@@ -130,7 +130,7 @@ EnterpriseDetailScreen::EnterpriseDetailScreen()
     AddChild(std::move(primary));
 
     // ---- 组织树搜索框(工具条左侧) ----
-    // 寄宿真 EDIT;EnsureCreated 由 AdminFrame 装入外壳时统一对 shell 子树调用。
+    // 输入框是无窗口控件,构造完即可使用,无需额外的创建步骤。
     // 文字变化经 DUIN_VALUECHANGED 上报 AdminFrame,再转发到 OnOrgSearchChanged。
     auto orgSearch = std::make_unique<DuiEditHost>();
     orgSearch->SetCtrlId(kIdOrgSearch);

@@ -18,6 +18,11 @@
  *  自路由回本窗口，结果行 / 标签点击在本类 OnChildNotify 内自行处理（命中行 →
  *  回调对端 / 群 id 并隐藏；标签 → 切筛选刷新）。
  *
+ *  宿主经 SetLocateCallback 提供「定位」回调后，联系人结果行会在鼠标悬停时于行右侧
+ *  显示一枚定位图标（MainPanelListItem::SetLocateButtonVisible）；点它发出的是
+ *  DUIN_LISTITEM_LOCATE 而非 DUIN_CLICK，本类据此回调宿主去通讯录树里定位这个人，
+ *  而不是打开会话。群组结果行不提供该按钮。
+ *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL。
  *
  *  balloonwj@qq.com   2026-06-04
@@ -45,6 +50,8 @@ public:
     typedef void (*PickContactCallback)(void* userdata, UINT peerUserId);
     // 选中某群组结果时的回调；groupId 为群 id。
     typedef void (*PickGroupCallback)(void* userdata, int64_t groupId);
+    // 选中某联系人结果行右侧的「定位」按钮时的回调；peerUserId 为对端 userid。
+    typedef void (*LocateContactCallback)(void* userdata, UINT peerUserId);
 
     CSearchDropdown();
     ~CSearchDropdown();
@@ -83,6 +90,27 @@ public:
      */
     void SetPickCallbacks(PickContactCallback contactCb,
                           PickGroupCallback groupCb, void* userdata);
+
+    /**
+     *  设置「定位」回调。本方法不另收 userdata —— 触发时透传的是 SetPickCallbacks
+     *  存下的那一份，两者调用的先后顺序不限。
+     *    locateCb：点联系人结果行右侧定位按钮时触发，参数为该行对应的对端 userid；
+     *              传 nullptr 表示不提供该能力 —— 此时结果行不显示定位按钮，行为
+     *              与改造前完全一致。
+     *  副作用：本设置在下一次 RefreshResults 重建结果行时才生效（结果行是每次刷新
+     *  整批重建的），已经在屏幕上的那一批行不会即时长出按钮。
+     */
+    void SetLocateCallback(LocateContactCallback locateCb);
+
+    /**
+     *  设置「userid → 部门路径」查询表，用于联系人结果行的副行展示。<u>借用不持有</u>，
+     *  调用方须保证其生命周期覆盖本下拉的使用期；传 nullptr 表示没有部门信息，副行
+     *  退回展示「账号 xxx · 地区」。
+     *    deptPaths：userid → 部门路径（形如「技术中心 / 研发部 / 前端组」）。表内查不到
+     *               的人、或路径为空串的人，同样退回展示账号与地区。
+     *  副作用：同 SetLocateCallback，下一次 RefreshResults 时才生效。
+     */
+    void SetContactDeptPaths(const std::map<UINT, CString>* deptPaths);
 
     /**
      *  设新查询词并据它在搜索框下方展示 / 刷新结果。查询词去首尾空白后为空则
@@ -158,6 +186,12 @@ private:
     PickContactCallback m_contactCb;                     // 选中联系人回调
     PickGroupCallback   m_groupCb;                       // 选中群组回调
     void*               m_pickUd;                        // 回调用户数据
+    // 点联系人结果行右侧「定位」按钮时的回调。NULL（默认）表示宿主没有提供该能力，
+    // 此时结果行不显示定位按钮。透传的用户数据与上面两个回调共用 m_pickUd。
+    LocateContactCallback m_locateCb;
+    // userid → 部门路径的查询表，<u>借用不持有</u>（宿主主面板持有那份表）。非空且能
+    // 查到时，联系人结果行的副行显示部门路径；NULL 或查不到时退回「账号 xxx · 地区」。
+    const std::map<UINT, CString>* m_deptPaths;
 
     bool    m_built;          // 控件树是否已构建
     int     m_filter;         // 当前分类筛选（FilterKind）

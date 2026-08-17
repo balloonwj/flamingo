@@ -71,7 +71,7 @@ std::unique_ptr<DuiControl> MakeField(LPCTSTR label,
     return std::move(field);
 }
 
-// 构造一个寄宿真 EDIT 的文本输入框。
+// 构造一个单行文本输入框。
 std::unique_ptr<DuiEditHost> MakeEdit(int ctrlId, LPCTSTR placeholder)
 {
     auto edit = std::make_unique<DuiEditHost>();

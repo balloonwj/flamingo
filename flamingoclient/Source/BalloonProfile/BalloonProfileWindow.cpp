@@ -104,8 +104,7 @@ void CBalloonProfileWindow::RebuildUi()
         return;
     }
 
-    // 编辑态的文本框内嵌真 Win32 EDIT —— XML builder 只建控件对象、不调
-    // EnsureCreated，须在 host HWND 就绪后由调用方逐个显式建一次。
+    // 编辑态的文本框要画出边框，与只读态的纯文本行区分开。
     if (m_editMode)
     {
         const UINT editIds[] =
@@ -123,10 +122,6 @@ void CBalloonProfileWindow::RebuildUi()
                 continue;
             }
             edit->SetShowBorder(true);
-            if (!edit->EnsureCreated(m_hWnd))
-            {
-                LOG_WARNING(_T("个人信息对话框某文本框 EnsureCreated 失败。"));
-            }
         }
     }
 

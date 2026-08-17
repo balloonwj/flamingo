@@ -1,7 +1,7 @@
 /**
  *  ChatRichContentSplit.h
  *
- *  富文本输入框（DuiRichEditHost）内容的"有序拆分"纯逻辑：把图文混排的输入按
+ *  富文本输入框（ChatInputRichEdit）内容的"有序拆分"纯逻辑：把图文混排的输入按
  *  <u>文档顺序</u>拆成一串待发送部分——连续文字是一个文字部分，每个内嵌图（在
  *  RichEdit 纯文本里表现为占位符 WCH_EMBEDDING 0xFFFC）是一个图片部分。聊天窗
  *  发送时据此逐段发出（文字→文字消息、图→图片消息），实现"全保真按文档顺序发送"。
@@ -43,7 +43,7 @@ struct RichOutgoingPart
 //   返回：按文档顺序排列的部分序列；输入为空 / 全空白时返回空 vector。
 std::vector<RichOutgoingPart> SplitRichInputToParts(const wchar_t* textWithEmbeds);
 
-// 输入框按文档顺序枚举出的一个原始段（DuiRichEditHost::EnumContent 的逐段结果）。
+// 输入框按文档顺序枚举出的一个原始段（DuiRichEdit::EnumContent 的逐段结果）。
 struct RichInputSegment
 {
     bool      isImage;   // true=内嵌图片对象，false=纯文本段

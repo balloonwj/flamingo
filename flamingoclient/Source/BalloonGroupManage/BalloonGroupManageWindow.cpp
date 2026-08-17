@@ -253,9 +253,8 @@ void CBalloonGroupManageWindow::InitUi()
 
     SetClientContent(std::unique_ptr<DuiControl>(root.release()));
 
-    // 初始页：成员管理。就绪其搜索框、刷新导航选中态。
+    // 初始页：成员管理。刷新导航选中态。
     m_currentPage = kPageMembers;
-    EnsureEditsForPage(kPageMembers);
     UpdateNavActive(kPageMembers);
 
     LOG_INFO(_T("群管理窗客户区 UI 初始化完成。"));
@@ -278,9 +277,6 @@ void CBalloonGroupManageWindow::SwitchToPage(int pageId)
     m_pContentScroll->SetContent(BuildPage(pageId, m_model));
     m_pContentScroll->SetScrollPos(0);
 
-    // 就绪该页的真 Win32 输入框。
-    EnsureEditsForPage(pageId);
-
     // 强制滚动视口按当前矩形重新布局（SetRect 即使 rc 不变也会重排），
     // 再重绘。
     const RECT rc = m_pContentScroll->GetRect();
@@ -288,40 +284,6 @@ void CBalloonGroupManageWindow::SwitchToPage(int pageId)
     m_pContentScroll->Invalidate();
 
     UpdateNavActive(pageId);
-}
-
-void CBalloonGroupManageWindow::EnsureEditsForPage(int /*pageId*/)
-{
-    if (m_pContentScroll == NULL)
-    {
-        return;
-    }
-    DuiControl* content = m_pContentScroll->GetContent();
-    if (content == NULL)
-    {
-        return;
-    }
-
-    // 当前页内可能存在的输入框 id（不存在的 FindCtrlById 返回空，跳过）。
-    const UINT editIds[] =
-    {
-        kIdSearchMembers,
-        kIdEditGroupName,
-        kIdEditIntro,
-        kIdEditSensitiveNew,
-        kIdEditAnnounceTitle,
-        kIdEditAnnounceBody,
-    };
-    const int count = (int)(sizeof(editIds) / sizeof(editIds[0]));
-    for (int i = 0; i < count; ++i)
-    {
-        DuiEditHost* edit = dynamic_cast<DuiEditHost*>(
-            content->FindCtrlById(editIds[i]));
-        if (edit != NULL)
-        {
-            edit->EnsureCreated(m_hWnd);
-        }
-    }
 }
 
 void CBalloonGroupManageWindow::UpdateNavActive(int pageId)

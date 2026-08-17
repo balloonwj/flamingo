@@ -324,8 +324,7 @@ std::unique_ptr<balloonwjui::DuiControl> BuildGroupInfoBody()
                                          kClrText, DT_RIGHT | DT_VCENTER | DT_SINGLELINE),
                       balloonwjui::DuiLayout::Hint().Weight(1));
 
-        // 值 edit(初始隐藏;进编辑态时显示并占满右侧)。HWND 寄宿控件,子 EDIT
-        // 由对话框 EnsureCreated。
+        // 值 edit(初始隐藏;进编辑态时显示并占满右侧)。
         std::unique_ptr<balloonwjui::DuiEditHost> edit(new balloonwjui::DuiEditHost());
         edit->SetCtrlId(kIdGroupCardEdit);
         edit->SetVisible(false);

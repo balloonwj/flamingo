@@ -8,13 +8,14 @@
  *
  *  【为什么是独立顶层窗口而不是 overlay】
  *  上一代实现继承 DuiControl，是 RootContainer 弹窗层里的一个绘制层：自绘半透明
- *  遮罩 + 居中卡片，两组字段都建好再切显隐。它盖不住底层的 HWND-hosted 控件 ——
- *  员工详情面板(OrgDetailPanel)的 11 个只读值字段各自寄宿一个真 Win32 EDIT，而真
- *  HWND 恒画在父窗口客户区的 GDI 绘制之上，于是弹窗一开，底层的员工姓名 / 登录
- *  账号就漂在表单上面（2026-08-11 现场）。该现场的直接成因已在 OrgDetailPanel 侧
- *  修掉（见 SetBasicEditsSuppressed），但"overlay 盖不住子窗口"是 Win32 的固有
+ *  遮罩 + 居中卡片，两组字段都建好再切显隐。当时它盖不住底层的输入框 —— 员工详情
+ *  面板(OrgDetailPanel)的 11 个只读值字段当时各自内嵌一个 Win32 EDIT 子窗口，而
+ *  子窗口总是绘制在父窗口客户区的 GDI 内容之上，于是弹窗一开，底层的员工姓名 /
+ *  登录账号就显示在表单上面（2026-08-11 现场）。该现场的直接成因已在 OrgDetailPanel
+ *  侧修掉（见 SetBasicEditsSuppressed），但"overlay 盖不住子窗口"是 Win32 的固有
  *  行为、治不了本；本类改走 DuiFrameWindow 独立顶层窗口，从根上不再有这个问题，
- *  与 EmployeeEditDialog / ConfirmDialog 保持一致。
+ *  与 EmployeeEditDialog / ConfirmDialog 保持一致。（输入框已于 2026-08-17 改为
+ *  无窗口实现，该冲突不复存在，此处保留作为选型缘由的记录。）
  *
  *  真模态语义：CreateAndShow 时 EnableWindow(parent, FALSE) 禁掉主窗口，
  *  WM_DESTROY 时恢复。期间主窗口不响应鼠标 / 键盘。
@@ -112,11 +113,6 @@ private:
     // 按 m_mode 构造客户区控件树并 SetClientContent。纯代码构造，不引 XML，
     // 与 EmployeeEditDialog 保持一致的风格。
     void BuildClientContent();
-
-    // 各输入框的 EnsureCreated：纯代码构造完控件树后，DuiEditHost 寄宿的真
-    // Win32 EDIT 子窗还没建出来，必须在 host HWND 就绪后逐个显式建一次。
-    // 性别下拉(DuiComboBox)是自绘主体 + 独立 popup HWND，不在此列。
-    void EnsureFieldEditsCreated();
 
     // 「创建」按钮入口：校验必填项 → 通过则调 AdminFrame 的提交入口并置 Busy，
     // 未通过则弹 Toast 提示。

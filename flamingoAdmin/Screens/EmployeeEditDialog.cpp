@@ -79,8 +79,8 @@ std::unique_ptr<DuiLabel> MakeLabel(LPCTSTR text, int pt, bool bold,
     return lbl;
 }
 
-// 造一个输入框。注意此处【不】调 EnsureCreated —— host HWND 尚未就绪;
-// 由 EnsureFieldEditsCreated 在 SetClientContent 之后逐个 EnsureCreated。
+// 造一个输入框。输入框是无窗口控件,构造完即可读写文本,不依赖窗口是否已经
+// 建好,也没有需要在窗口就绪后补做的步骤。
 //   ctrlId      :控件 ID(UiIds.h);
 //   placeholder :空值占位字。
 std::unique_ptr<DuiEditHost> MakeEdit(int ctrlId, LPCTSTR placeholder)
@@ -183,13 +183,10 @@ bool EmployeeEditDialog::CreateAndShow()
     // ---- 2. 构造客户区控件树 + SetClientContent
     BuildClientContent();
 
-    // ---- 3. 客户区 HWND 就绪后,逐个 EnsureCreated 9 个真 EDIT 子窗
-    EnsureFieldEditsCreated();
-
-    // ---- 4. 灌数据
+    // ---- 3. 灌数据
     LoadNodeIntoUi();
 
-    // ---- 5. 锁死窗口尺寸 + 居中 + 真模态(禁主窗) + 显示
+    // ---- 4. 锁死窗口尺寸 + 居中 + 真模态(禁主窗) + 显示
     ResizeClient(kDlgClientWidth, kDlgClientHeight + kTitleBarHeight);
     CenterWindow();
 
@@ -371,27 +368,6 @@ void EmployeeEditDialog::LoadNodeIntoUi()
     if (m_editLandline    != nullptr) { m_editLandline->SetText(m_node.m_landline);       }
     if (m_editWorkstation != nullptr) { m_editWorkstation->SetText(m_node.m_workstation); }
     if (m_editSignature   != nullptr) { m_editSignature->SetText(m_node.m_signature);     }
-}
-
-void EmployeeEditDialog::EnsureFieldEditsCreated()
-{
-    // 9 个 EDIT 各调一次 EnsureCreated。XML / 纯代码构造完控件树后,真
-    // Win32 EDIT 子窗还没建出来;balloonui 期望调用方在 host HWND 就绪后
-    // 显式建一次(参考 CBalloonProfileWindow::RebuildUi 同套路)。
-    DuiEditHost* edits[] =
-    {
-        m_editName,        m_editTitle,       m_editEmployeeNo,
-        m_editJoinDate,    m_editEmail,       m_editPhone,
-        m_editLandline,    m_editWorkstation, m_editSignature,
-    };
-    const int n = sizeof(edits) / sizeof(edits[0]);
-    for (int i = 0; i < n; ++i)
-    {
-        if (edits[i] != nullptr)
-        {
-            edits[i]->EnsureCreated(m_hWnd);
-        }
-    }
 }
 
 void EmployeeEditDialog::SubmitOrShake()

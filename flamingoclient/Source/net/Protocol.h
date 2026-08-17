@@ -261,8 +261,15 @@ enum msg_type
 
 /**
  *  统一错误码，置于各应答 JSON 包体的 code 字段。0 为成功，其余按业务域分段：
- *  0-99 通用 / 100-199 账号 / 200-299 好友 / 300-399 群组 /
+ *  0-99 通用 / 100-199 账号 / 200-299 联系人 / 300-399 群组 /
  *  400-499 企业组织 / 500-599 消息 / 600-699 文件 / 700-799 音视频。
+ *
+ *  号段规约（完整版见 docs/协议设计-v2.md 第 8.1 节「错误码号段规约」）：
+ *    - 新增错误码必须落在它所属功能段的区间内，并写在该段的末尾；
+ *    - 作废的错误码留空不复用，在原处留一行注释写明它原来是什么；
+ *    - 本枚举与服务端的 flamingoserver/chatserversrc/Protocol.h 必须逐条同步，
+ *      服务端是协议的权威定义方；一致性由服务端测试
+ *      flamingoserver/tests/test_protocolparity.cpp（Suite PP）守住。
  */
 enum error_code
 {
@@ -309,9 +316,17 @@ enum error_code
     error_code_group_full          = 304,  //群成员已满
     error_code_already_in_group    = 305,  //已在群中
     error_code_member_muted        = 306,  //已被禁言，不能发言
-    error_code_join_need_approval  = 307,  //加群需管理员审批
+    error_code_cannot_operate_owner = 307, //不能对群主执行该操作（移出 / 禁言 / 降级）
     error_code_join_req_not_exist  = 308,  //加群申请不存在或已处理
+    error_code_at_all_denied       = 309,  //无权 @ 全体成员（群设为仅群主和管理员可 @）
     error_code_announcement_404    = 310,  //群公告不存在，或不属于本群（撤回 / 重新发布时）
+    //311 原为 error_code_join_need_approval（加群需管理员审批），2026-08-16 作废，
+    //号位留空不复用（规约见 docs/协议设计-v2.md 第 8.1 节）。
+    //作废的理由是它从来没有下发路径：服务端「需审批」那条分支返回的是<u>成功应答</u>
+    //加一个 joined=false 标志（ChatSession::onJoinGroupRequest 里的
+    //buildJoinGroupResponse(0, "ok", false)），用它表达「申请已提交、等待审批」，
+    //而不是返回一个错误码。这条码此前先占 307（与 error_code_cannot_operate_owner
+    //撞号）、后挪到 311，两处都从未真正发出去过。
 
     //==== 企业组织架构 400-499 ====
     error_code_dept_not_exist      = 400,  //部门不存在
@@ -335,6 +350,10 @@ enum error_code
     error_code_conversation_404    = 504,  //会话不存在
     error_code_msg_too_large       = 505,  //消息内容超过大小限制
     error_code_pin_not_allowed     = 506,  //无权取消该消息的Pin：群里只有Pin的操作者本人与群主/管理员可取消，别人取消他人钉的消息时返回本码
+    error_code_sensitive_word      = 507,  //消息命中本群敏感词，服务端已拒绝发送。本码原先在
+                                           //服务端取 308（既与 error_code_join_req_not_exist 撞号，
+                                           //又归错了段），2026-08-16 移到消息段；客户端此前一直
+                                           //没有定义它，本次一并补齐
 
     //==== 文件 600-699 ====
     error_code_upload_fail         = 600,  //上传失败

@@ -21,7 +21,7 @@
 #include "../net/ProfileProtocolClient.h" // net::UpdateProfileResponse
 #include "../ClipboardText.h"            // 点击账号复制到剪贴板
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"   // 编辑框 EnsureCreated
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"   // 编辑框 GetText / SetBgColor
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"   // 性别下拉 GetCurSel / SetBgColor
 
 #include <vector>                        // CStrToUtf8 缓冲
@@ -374,10 +374,8 @@ void CBalloonProfileDlg::OpenForCurrentUser(HWND hParent, CFlamingoClient* pFMGC
     EnsureVisualResources();
     ApplyProfileButtonStyles(GetClientContent(), m_resources);
 
-    // 5 个 DuiEditHost 输入框是 HWND 寄宿控件,builder 不建底层 Win32 EDIT,
-    // 必须在窗口就绪后显式 EnsureCreated 一次,否则编辑态下点不进去、打不了字
-    // (参考 BalloonChangePwdDlg)。控件此刻是隐藏态,子 EDIT 随之隐藏;进入编辑态
-    // 时由 SetProfileEditMode 的容器重排显示并定位。性别是纯 DUI 下拉,无需建。
+    // 5 个 DuiEditHost 输入框此刻是隐藏态,进入编辑态时由 SetProfileEditMode
+    // 的容器重排显示并定位。这里只统一它们的底色。
     const UINT editIds[] = {
         kIdNicknameEdit, kIdSignatureEdit, kIdBirthdayEdit,
         kIdLocationEdit, kIdEmailEdit
@@ -391,7 +389,6 @@ void CBalloonProfileDlg::OpenForCurrentUser(HWND hParent, CFlamingoClient* pFMGC
             GetClientContent()->FindCtrlById(editIds[i]));
         if (edt != NULL)
         {
-            edt->EnsureCreated(m_hWnd);
             edt->SetBgColor(kEditBgColor);
         }
     }
@@ -482,8 +479,7 @@ void CBalloonProfileDlg::SwitchEditMode(bool edit)
 
     // 可见性翻转 + 受影响容器重排都交给 SetProfileEditMode(纯 DUI、可单测)。
     // 它内部对每行 hbox / footer hbox 直接 ForceLayout,绕开 SetRect 矩形相等提前
-    // 返回的坑,保证刚可见的编辑框 / Cancel/Save 拿到正确矩形;编辑框的子 EDIT
-    // 已在 OpenForCurrentUser 里 EnsureCreated,此处重排会顺带把它定位到正确位置。
+    // 返回的坑,保证刚可见的编辑框 / Cancel/Save 拿到正确矩形。
     SetProfileEditMode(content, edit);
 
     if (IsWindow())

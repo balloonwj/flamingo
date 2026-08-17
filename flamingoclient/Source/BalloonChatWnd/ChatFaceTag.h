@@ -1,8 +1,8 @@
 /**
  *  ChatFaceTag.h
  *
- *  气泡聊天窗里"内联表情"在 DuiRichEditHost 中以"带标记内联图"（
- *  DuiRichEditHost::InsertTaggedImage，标记落在 REOBJECT.dwUser）承载。本文件约定
+ *  气泡聊天窗里"内联表情"在富文本输入框中以"带标记内联图"（
+ *  DuiRichEdit::InsertTaggedImage，标记落在内嵌对象的 dwUser 上）承载。本文件约定
  *  该标记的编码，使发送时能把内嵌对象区分成"系统表情"与"截图等普通内联图"：
  *    · dwUser == 0                  —— 非表情（如截图）；
  *    · dwUser == kFaceTagBase+faceId —— 一个系统表情（faceId 见 Face/FaceConfig.xml，0..142）。

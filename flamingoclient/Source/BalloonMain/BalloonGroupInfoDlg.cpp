@@ -21,6 +21,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
 
 #include <vector>                        // CStrToUtf8 缓冲
+#include <windowsx.h>                    // GET_X_LPARAM / GET_Y_LPARAM(鼠标消息取坐标)
 #include <gdiplus.h>                     // 退群按钮浅红圆角底位图用 GDI+ 抗锯齿绘制
 #pragma comment(lib, "gdiplus.lib")
 
@@ -496,11 +497,8 @@ void CBalloonGroupInfoDlg::OpenForGroup(HWND hParent, CFlamingoClient* pFMGClien
     EnsureVisualResources();
     ApplyQuitButtonStyle();
 
-    // 群名片 DuiEditHost 此处<u>不</u> EnsureCreated:DuiEditHost 在 SetVisible(false)
-    // 时并不隐藏它的子 EDIT 窗口(子 EDIT 恒 WS_VISIBLE),若查看态就把 EDIT 建出来,
-    // 会露出一个空输入框。改为惰性创建 —— 首次进编辑态时 SetGroupInfoCardEditMode
-    // 显示并 ForceLayout,DuiEditHost::Layout 自动建 EDIT(见其 .cpp 注释)。SetBgColor
-    // 可在建前调,会被缓存到建好后应用。
+    // 群名片输入框在查看态是隐藏的,首次进编辑态时由 SetGroupInfoCardEditMode
+    // 显示并重排。这里只统一它的底色,与是否可见无关。
     balloonwjui::DuiEditHost* cardEdit = dynamic_cast<balloonwjui::DuiEditHost*>(
         GetClientContent()->FindCtrlById(kIdGroupCardEdit));
     if (cardEdit != NULL)
@@ -550,19 +548,13 @@ void CBalloonGroupInfoDlg::EnterCardEdit()
     SetGroupInfoCardEditMode(content, true);
     m_cardEditing = true;
 
-    // 把 Win32 键盘焦点直接给到寄宿的 EDIT 子窗。注意:DuiControl::SetFocus 只设
-    // DUI 焦点、并不 ::SetFocus 那个 Win32 EDIT,所以光调它打不了字(实测:焦点在别处、
-    // 注入按键文本不变)。须用 GetHostedHwnd 拿到子 EDIT 句柄直接 ::SetFocus,并全选
-    // 文本(EM_SETSEL 0,-1)方便用户直接覆盖输入。GetHostedHwnd 在上面 SetGroupInfoCardEditMode
-    // 惰性建好 EDIT 后才有效。
+    // 把焦点交给名片输入框并全选,方便用户直接覆盖输入。输入框改成无窗口实现之后
+    // 一次 SetFocus 就够了:它既把 DUI 焦点指到本控件,又让宿主窗口把 Win32 键盘焦点
+    // 拿到手(无窗口控件没有自己的窗口,按键消息要先投递到宿主才能转下来)。
     if (cardEdit != NULL)
     {
-        HWND hEdit = cardEdit->GetHostedHwnd();
-        if (hEdit != NULL)
-        {
-            ::SetFocus(hEdit);
-            ::SendMessage(hEdit, EM_SETSEL, 0, -1);
-        }
+        cardEdit->SetFocus();
+        cardEdit->SelectAll();
     }
     if (IsWindow())
     {
@@ -788,15 +780,44 @@ LRESULT CBalloonGroupInfoDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
 }
 
 LRESULT CBalloonGroupInfoDlg::OnLButtonDown(UINT /*uMsg*/, WPARAM /*wParam*/,
-                                            LPARAM /*lParam*/, BOOL& bHandled)
+                                            LPARAM lParam, BOOL& bHandled)
 {
-    // 群名片编辑态下,本消息只会在点击子 EDIT 之外的 DUI 区域时到达宿主(点子 EDIT 子窗
-    // 的鼠标消息直接进 EDIT、不经宿主)。把焦点移到宿主窗口逼子 EDIT 失焦 → EN_KILLFOCUS
-    // → DUIN_KILLFOCUS → 去抖提交,从而"点别处自动退出编辑并保存"。balloonui 的 DUI 控件
-    // 不是独立 HWND,点它们不会自动夺走子 EDIT 的 Win32 焦点,故须在此显式逼失焦。
-    if (m_cardEditing && IsWindow())
+    // 群名片编辑态下点在输入框之外 —— 把 DUI 焦点从输入框上摘掉,由此触发
+    // DUIN_KILLFOCUS → 去抖提交,达成"点别处自动退出编辑并保存"。
+    //
+    // 这条路径换过一次触发方式。输入框还是内嵌真 Win32 EDIT 子窗口的时候,靠的是
+    // 「把键盘焦点移到宿主窗口 → 子窗口失焦 → DUIN_KILLFOCUS」;那时点在子窗口上的
+    // 鼠标消息由系统直送该子窗口、不经宿主,所以宿主收到本消息就等于"点在输入框
+    // 之外",不必判落点。输入框改成无窗口实现之后这两条前提都不成立了:键盘焦点本来
+    // 就在宿主窗口上,再调一次 ::SetFocus(m_hWnd) 不产生任何焦点变化(故那一句已删除);
+    // 而点在输入框上的鼠标消息同样会到达宿主。于是改为在这里自己判落点,只有确实点
+    // 在输入框之外时才摘焦点。
+    if (m_cardEditing)
     {
-        ::SetFocus(m_hWnd);
+        balloonwjui::DuiControl* content = GetClientContent();
+        balloonwjui::DuiEditHost* cardEdit = (content != NULL)
+            ? dynamic_cast<balloonwjui::DuiEditHost*>(content->FindCtrlById(kIdGroupCardEdit))
+            : NULL;
+        // 只在输入框当前确实持有 DUI 焦点时才动焦点:焦点已经不在它身上时,
+        // DUIN_KILLFOCUS 早已发过、提交也已经投递过,这里再摘一次只会给别的控件
+        // 发出一条无意义的失焦通知。
+        if (cardEdit != NULL && cardEdit->IsFocused())
+        {
+            // 控件矩形与本消息的鼠标坐标同为宿主窗口客户区坐标,可直接比对。
+            POINT pt;
+            pt.x = GET_X_LPARAM(lParam);
+            pt.y = GET_Y_LPARAM(lParam);
+            RECT rcEdit = cardEdit->GetRect();
+            if (!::PtInRect(&rcEdit, pt))
+            {
+                // 摘掉 DUI 焦点即走原有的那条提交链:输入框收到失焦 → 发出
+                // DUIN_KILLFOCUS → 本窗口投递 WM_GROUPINFO_CARD_COMMIT → 去抖后提交。
+                // 这里刻意不直接调 CommitCardEdit:提交会切回查看态并重排整棵树,而本次
+                // 点击随后还要交给 DuiHost 做命中派发,就地提交会让它按提交后的新布局去
+                // 命中控件,点到本不该点的东西上。
+                SetDuiFocus(NULL);
+            }
+        }
     }
     bHandled = FALSE;   // 继续交给 DuiFrameWindow/DuiHost 正常处理这次点击
     return 0;
@@ -809,17 +830,16 @@ LRESULT CBalloonGroupInfoDlg::OnCardCommitDeferred(UINT /*uMsg*/, WPARAM /*wPara
     {
         return 0;   // 已不在编辑态(例如已被别处提交),无须处理
     }
-    // 焦点又回到了群名片 EDIT 子窗(用户在编辑框内重新点击导致的短暂失焦→得焦) → 仍在
+    // 焦点又回到了群名片输入框(用户在输入框内重新点击导致的短暂失焦→得焦) → 仍在
     // 编辑,跳过提交。否则焦点真正离开了,执行提交。
     balloonwjui::DuiControl* content = GetClientContent();
     if (content != NULL)
     {
         balloonwjui::DuiEditHost* cardEdit = dynamic_cast<balloonwjui::DuiEditHost*>(
             content->FindCtrlById(kIdGroupCardEdit));
-        if (cardEdit != NULL && cardEdit->GetHostedHwnd() != NULL &&
-            ::GetFocus() == cardEdit->GetHostedHwnd())
+        if (cardEdit != NULL && cardEdit->IsFocused())
         {
-            return 0;   // 焦点回到 EDIT,仍在编辑
+            return 0;   // 焦点回到输入框,仍在编辑
         }
     }
     CommitCardEdit();

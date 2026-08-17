@@ -5,15 +5,41 @@
  *  杂事收口到一处，单聊窗与群聊窗共用，两边只需实现 IChatDropSink 两个回调。
  *
  *  典型用法（聊天窗）：
- *      // 窗口建好、输入框 HWND 已创建之后
- *      m_dropCtrl.Attach(m_hWnd, GetInputEditHwnd(), this);
+ *      // 窗口建好、客户区控件树装好之后
+ *      m_dropCtrl.Attach(this, NULL, this);
  *      // 关窗时
  *      m_dropCtrl.Detach();
  *
  *  ------------------------------------------------------------------
+ *  为什么第一个参数是宿主而不是窗口句柄
+ *
+ *  一个窗口只能注册一个拖放目标，而 balloonui 的无窗口控件是共用宿主窗口的：
+ *  需要接收拖放的控件会让宿主替自己注册一个分发器（DuiHost::EnableDropDispatch），
+ *  典型的就是富文本控件在第一次布局时那一下。它先注册，聊天窗这份就再也注册
+ *  不上 —— 2026-08-17 实测栽过：日志里每开一次聊天窗报一条
+ *  "窗口级 RegisterDragDrop 失败"，界面上则是拖任何文件进来都没有反应。
+ *
+ *  故 Attach 收宿主对象而不是光收一个 HWND：注册之前先调
+ *  EnableDropDispatch(false) 把窗口让出来，聊天窗这份"整窗接收"才拿得到。
+ *  聊天窗里没有别的控件需要单独接收拖放，让出来不损失任何功能。
+ *  ------------------------------------------------------------------
+ *
+ *  ------------------------------------------------------------------
+ *  「进入」与「逐帧改判」的分工
+ *
+ *  DragEnter 的返回值是一锤定音的：返回 false 表示<u>整次拖放</u>拒收，此后
+ *  DragOver 不再逐帧询问、Drop 也直接忽略。而光标总是从窗口边缘进来的，发送框
+ *  又在窗口下半部分，进入点几乎必然落在上方的消息区。
+ *
+ *  所以「进入」这一步只判数据格式（是不是文件），一律收下；「这个位置能不能放」
+ *  完全由逐帧的 DragOver 决定，最终落点再由 Drop 兜一道底。把落点判定提到
+ *  DragEnter 里去，症状就是拖什么进来都没反应 —— 2026-08-17 实测栽过一次。
+ *  ------------------------------------------------------------------
+ *
+ *  ------------------------------------------------------------------
  *  为什么要单独处理输入框那个子窗口
  *
- *  聊天窗的输入框是 balloonui DuiRichEditHost 内嵌的<u>真 RICHEDIT50W 子窗口</u>，
+ *  聊天窗的输入框曾经是内嵌真子窗口的富文本控件（现已换成无窗口的），
  *  而 RichEdit 会把自己注册成 OLE 拖放目标（2026-08-11 实测：该子窗口上的
  *  "OleDropTargetInterface" 窗口属性非空）。OLE 投放时找的是光标底下那个窗口的
  *  拖放目标，于是拖到输入框上的文件会被 RichEdit 自己接走 —— 它会试着把文件当
@@ -40,6 +66,10 @@
 #include "../../../third-party/balloonui/balloonui/DuiDropTarget.h"
 #include <string>
 #include <vector>
+
+namespace balloonwjui {
+class DuiHost;   // Attach 只需要它的指针，具体定义在实现文件里引
+}
 
 namespace balloonchatwnd {
 
@@ -93,16 +123,19 @@ public:
     ~ChatDropController();
 
     /**
-     *  绑定到聊天窗。窗口建好之后调用；重复调用会先解绑再绑。
-     *    frameHwnd：聊天窗顶层 HWND，拖放目标注册在它身上。
+     *  绑定到聊天窗。窗口建好、客户区控件树装好之后调用；重复调用会先解绑再绑。
+     *    host：     聊天窗宿主对象（聊天窗自身即可，DuiFrameWindow 派生自 DuiHost），
+     *               拖放目标注册在它的 HWND 上；<u>本类只引用不持有</u>。
      *    inputHwnd：输入框内嵌的 RICHEDIT50W 子 HWND，会先摘掉 RichEdit 自带的
-     *               拖放目标再换上我们的；传 NULL 表示它还没建好，此时输入框区域
-     *               的投放仍会被 RichEdit 接走（见文件头说明）。
+     *               拖放目标再换上我们的；输入框已换成无窗口控件、没有子窗口时
+     *               传 NULL（见文件头说明）。
      *    sink：     回调接收方；<u>本类只引用不持有</u>，其生命期须长于本类。
-     *  @return 注册成功返回 true；frameHwnd 为空、sink 为空或 RegisterDragDrop
-     *          失败时返回 false。
+     *  @return 注册成功返回 true；host 为空 / 窗口未创建、sink 为空或
+     *          RegisterDragDrop 失败时返回 false。
+     *  副作用：注册之前会调 host->EnableDropDispatch(false)，把窗口上可能已被
+     *          balloonui 控件占用的拖放目标让出来（理由见文件头）。
      */
-    bool Attach(HWND frameHwnd, HWND inputHwnd, IChatDropSink* sink);
+    bool Attach(balloonwjui::DuiHost* host, HWND inputHwnd, IChatDropSink* sink);
 
     /**
      *  解绑。关窗时调用；未绑定时为空操作。析构函数也会调它。
@@ -114,6 +147,18 @@ public:
     {
         return m_attached;
     }
+
+    /**
+     *  取注册在聊天窗上的那份 IDropTarget 实现。
+     *
+     *  <u>给测试用</u>。拖放最容易出问题的地方是「进入 → 逐帧改判 → 落手」这三步
+     *  的衔接：任一步判错，表现都只是"拖进去没反应"，不报错也不崩溃，只能靠人
+     *  手动拖才发现。把这个接口露出来，测试才能把三步自己走一遍钉住行为。
+     *  业务代码接入拖放只需 Attach + 实现 IChatDropSink，不必碰它。
+     *  @return 未绑定时返回 NULL；<u>所有权仍属本类</u>，调用方不得 Release，
+     *          也不要在 Detach 之后继续使用。
+     */
+    IDropTarget* GetFrameDropTarget();
 
     /**
      *  落手瞬间是否按住了 Shift（图片改按原文件发）。

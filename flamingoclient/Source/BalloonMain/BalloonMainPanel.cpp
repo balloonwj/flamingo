@@ -85,10 +85,8 @@
 #include "PanelDragZone.h"                 // IsPointInDragZone（空白处按住拖窗口的命中判定）
 #include "TitleBarIcon.h"                  // CreateProgramIconBitmap（标题栏左侧图标）
 #include "ContactsOrgStats.h"              // FindCompanyRootDeptIndex / CountDeptMembersRecursive（公司节点与人数）
-#include <commctrl.h>                      // SetWindowSubclass（给搜索框 EDIT 挂 Esc 拦截）
+#include "TreeLocate.h"                    // CollectAncestorChain / ComputeLocateScrollPos（搜索定位到通讯录树）
 #include <windowsx.h>                      // GET_X_LPARAM / GET_Y_LPARAM（非客户区消息取坐标）
-
-#pragma comment(lib, "comctl32.lib")
 
 // ---- 文件作用域常量 -----------------------------------------------------
 
@@ -132,6 +130,12 @@ static const int kPresenceBadgeSizePx = 12;
 // 计算滚动内容高度时，联系人页只需算 treeview 自身高度加 vbox 上下 padding。
 static const int kContactsPaneTitleHeight = 0;
 
+// 三个列表面板里，内容 vbox 的上、下内边距（逻辑像素，单边）。与 BalloonMainLayout
+// 里 BuildXxxListXml 的 padding="6,4,6,4"（L,T,R,B 顺序）中的 T / B 两个数一致。
+// 两处用到：算滚动内容总高（要把上下两边都算进去），以及算某一行在滚动内容里的
+// 纵向位置（只算上边那一份，见 LocateContactInTree）。
+static const int kContactsPaneContentPadTop = 4;
+
 // 群页标题行高（逻辑像素）—— 取 0，因为群页在 treeview 之上没有独立的标题
 // label：分组标题由树的根节点"我的群聊 · N"承担（见 BalloonMainLayout.cpp
 // 的 BuildGroupsListXml 注释）。SyncPaneContentHeight 计算滚动内容高度时，
@@ -148,6 +152,8 @@ static const int kGroupRoleOwner  = 2;   // 群主
 // 与菜单结构一起由纯函数给出、被单测覆盖。这里给常用的几个起短别名，让下面的
 // switch 分发读起来仍然紧凑；本文件不再自持一份 id 定义，避免两处数值漂移。
 const UINT kCMenuSendMsg      = balloonmain::kContactMenuSendMsg;
+const UINT kCMenuVoice        = balloonmain::kContactMenuVoice;
+const UINT kCMenuVideo        = balloonmain::kContactMenuVideo;
 const UINT kCMenuViewProfile  = balloonmain::kContactMenuViewProfile;
 const UINT kCMenuMute         = balloonmain::kContactMenuMute;
 const UINT kCMenuViewHistory  = balloonmain::kContactMenuViewHistory;
@@ -692,14 +698,9 @@ void CBalloonMainPanel::InitUi()
         return;
     }
 
-    // 搜索框内嵌真 Win32 EDIT —— XML builder 只建控件对象、不调
-    // EnsureCreated，须在 host HWND 就绪后由调用方显式建一次。
-    balloonwjui::DuiEditHost* search = dynamic_cast<balloonwjui::DuiEditHost*>(
-        content->FindCtrlById(balloonmain::kIdSearchBox));
-    if (search != NULL && !search->EnsureCreated(m_hWnd))
-    {
-        LOG_WARNING(_T("主面板搜索框 EnsureCreated 失败。"));
-    }
+    // 搜索框是无窗口控件，构建出来就能用 —— 既不必在宿主窗口就绪后补一次创建，
+    // 也没有可供挂接键盘拦截的子窗口。按 Esc 收起结果下拉改由控件发出的
+    // DUIN_EDIT_ESCAPE 通知驱动，见 OnDuiNotify 里对应的分支。
 
     // 搜索结果下拉：作为主面板的 WS_CHILD 子窗口创建一次（初始隐藏）。用户在上面
     // 的搜索框输入时，由 OnDuiNotify 的 DUIN_VALUECHANGED 分支驱动它定位 / 显示 /
@@ -708,18 +709,9 @@ void CBalloonMainPanel::InitUi()
     {
         m_searchDropdown.SetPickCallbacks(&CBalloonMainPanel::OnSearchPick,
                                           &CBalloonMainPanel::OnSearchPickGroup, this);
-    }
-
-    // 给搜索框内嵌 EDIT 挂 Esc 拦截：Win32 EDIT 默认吞掉 Esc 使 host 收不到，故在此
-    // 补上 —— 按 Esc 收起结果下拉。ref 传 this，子类过程据此调本面板隐藏下拉。
-    if (search != NULL)
-    {
-        HWND hEdit = search->GetHostedHwnd();
-        if (hEdit != NULL)
-        {
-            ::SetWindowSubclass(hEdit, &CBalloonMainPanel::SearchBoxEscSubclassProc,
-                                1, (DWORD_PTR)this);
-        }
+        // 结果行右侧那个悬停出现的「定位」小按钮。注册了它，联系人结果行才会画出
+        // 这个按钮；点行本身仍然是打开单聊，两条路各走各的。
+        m_searchDropdown.SetLocateCallback(&CBalloonMainPanel::OnSearchLocate);
     }
 
     // 三个 Tab 内容面板默认只显示"联系人"页（与当前选中 Tab 一致），
@@ -1102,9 +1094,8 @@ void CBalloonMainPanel::SyncPaneContentHeight(UINT paneId, UINT treeViewId,
         return;
     }
 
-    // 与 BalloonMainLayout 里 BuildXxxListXml 的 padding="6,4,6,4" 对齐
-    // (L,T,R,B 顺序;T+B=8)。这是内容 vbox 上下 padding 之和。
-    const int kVboxPadV = 4 + 4;
+    // 内容 vbox 上下 padding 之和（上下两边取值相同，见 kContactsPaneContentPadTop）。
+    const int kVboxPadV = kContactsPaneContentPadTop * 2;
     const int totalH = paneTitleHeight + tv->GetContentHeight() + kVboxPadV;
     sv->SetContentHeight(totalH);
 
@@ -1611,6 +1602,18 @@ LRESULT CBalloonMainPanel::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         && pNotify->code == balloonwjui::DUIN_VALUECHANGED)
     {
         UpdateSearchDropdown();
+        return 0;
+    }
+
+    // 搜索框按 Esc —— 收起结果下拉（搜索框文字保留，用户可继续改词）。无窗口输入框
+    // 把 Esc 转成了这条通知，不再需要往子窗口挂键盘拦截。判定条件里带上控件编号：
+    // balloonui 的自定义通知码按控件各自编号，不同控件的同序号自定义码数值相同，
+    // 只比通知码会把别的控件的通知一并截住。
+    if (pNotify != NULL
+        && pNotify->ctrlId == balloonmain::kIdSearchBox
+        && pNotify->code == (UINT)balloonwjui::DuiEdit::DUIN_EDIT_ESCAPE)
+    {
+        m_searchDropdown.HideDropdown();
         return 0;
     }
 
@@ -2189,6 +2192,11 @@ void CBalloonMainPanel::OnContactsArrived(const net::ContactsResult& result)
              (uint32_t)result.m_starred.size(), m_starred.Count());
     m_departments = result.m_departments;
 
+    // 部门路径查询表随通讯录一起刷新，搜索结果行的副行据它显示对方所在部门。
+    // 放在这里而不是下面建树那一段里：即使树控件此刻取不到（界面尚未构建完），
+    // 搜索下拉照样该能显示部门，两者没有依赖关系。
+    RebuildContactDeptPaths();
+
     // 通讯录与会话列表是两条相互独立、各自异步到达的应答。若会话先到、通讯录
     // 后到，会话行此前只能显示"用户<id>"；这里通讯录到位后用真实昵称/头像重绘
     // 一次会话树（只在已有会话时做，避免把尚未到达的会话页清成空）。本调用只
@@ -2217,6 +2225,10 @@ void CBalloonMainPanel::OnContactsArrived(const net::ContactsResult& result)
     tv->Clear();
     m_contactNodeUserId.clear();
     m_favoriteGroupNodeId.clear();
+    // 树整棵重建，节点 id 会重新编号，两份定位索引必须一起作废重填，否则定位会跳到
+    // 上一棵树的某个不相干的行上。
+    m_contactNodeParent.clear();
+    m_contactOrgNode.clear();
     for (size_t i = 0; i < m_avatarBitmaps.size(); ++i)
     {
         if (m_avatarBitmaps[i] != NULL)
@@ -2260,6 +2272,7 @@ void CBalloonMainPanel::OnContactsArrived(const net::ContactsResult& result)
         int rootId = tv->AddRoot(rootLabel);
         tv->SetExpanded(rootId, true);
         tv->SetItemSelectable(rootId, false);
+        m_contactNodeParent[rootId] = balloonmain::kTreeNodeNoParent;
         for (size_t i = 0; i < result.m_contacts.size(); ++i)
         {
             AddContactLeaf(tv, rootId, result.m_contacts[i]);
@@ -2359,6 +2372,7 @@ void CBalloonMainPanel::OnContactsArrived(const net::ContactsResult& result)
         int r = tv->AddRoot(label);
         tv->SetExpanded(r, true);
         tv->SetItemSelectable(r, false);
+        m_contactNodeParent[r] = balloonmain::kTreeNodeNoParent;
         for (size_t i = 0; i < others.size(); ++i)
         {
             AddContactLeaf(tv, r, *others[i]);
@@ -2371,6 +2385,7 @@ void CBalloonMainPanel::OnContactsArrived(const net::ContactsResult& result)
         int r = tv->AddRoot(label);
         tv->SetExpanded(r, true);
         tv->SetItemSelectable(r, false);
+        m_contactNodeParent[r] = balloonmain::kTreeNodeNoParent;
         for (size_t i = 0; i < services.size(); ++i)
         {
             AddContactLeaf(tv, r, *services[i]);
@@ -2410,6 +2425,9 @@ void CBalloonMainPanel::AddDepartmentSubtree(
         : tv->AddChild(parentTreeNodeId, deptLabel);
     tv->SetExpanded(deptNode, true);
     tv->SetItemSelectable(deptNode, false);
+    // 记下本部门节点的父节点，供 LocateContactInTree 自下而上展开整条部门路径。
+    m_contactNodeParent[deptNode] = (parentTreeNodeId < 0)
+        ? balloonmain::kTreeNodeNoParent : parentTreeNodeId;
 
     // 2. 子部门：按 deptorder 排序后递归。
     std::map<int64_t, std::vector<const net::DepartmentItem*> >::const_iterator cit =
@@ -2561,6 +2579,13 @@ void CBalloonMainPanel::AddContactLeaf(balloonwjui::DuiTreeView* tv, int parentN
 
     // 记录"节点 → userid"，供点击开聊。
     m_contactNodeUserId[node] = (UINT)c.m_userid;
+
+    // 另记两份索引供搜索定位（LocateContactInTree）：一份是本节点的父节点，用来自下
+    // 而上把整条部门路径展开（DuiTreeView 没有公开取父节点的接口，只能建树时自己记）；
+    // 一份是 userid → 本节点，用来由人反查行。「我的收藏」分区自己建行、不经本方法，
+    // 所以这里记下的一定是组织架构树里的那一行。
+    m_contactNodeParent[node] = parentNode;
+    m_contactOrgNode[(UINT)c.m_userid] = node;
 }
 
 // 消息内容类型：窗口抖动（与 net::message_type 的 message_type_shake 对齐）。收到
@@ -4876,17 +4901,33 @@ void CBalloonMainPanel::ToggleFavorite(int ctype, int64_t cid)
         return;
     }
 
-    const bool wantFavorite = !m_favorites.IsFavorite(ctype, cid);
+    //三处右键菜单的文案是按当前状态取反给出的，故这里也取反后交给按目标状态写的执行体。
+    SetFavoriteState(ctype, cid, !m_favorites.IsFavorite(ctype, cid));
+}
+
+void CBalloonMainPanel::SetFavoriteState(int ctype, int64_t cid, bool favorite)
+{
+    if (cid <= 0)
+    {
+        return;
+    }
+
+    //已经是这个状态就什么都不做：资料对话框的开关在被刷新时也会走一次 SetOn，
+    //不加这项判断的话，界面刷新会被当成一次用户操作，多发一条无意义的协议。
+    if (m_favorites.IsFavorite(ctype, cid) == favorite)
+    {
+        return;
+    }
 
     //先本地生效再发协议：点完立刻能看到收藏区的变化，不必等一个来回。
-    //返回值是改动前的状态，应答失败时原样传回去即完成回滚（见 OnSetFavoriteResult）。
-    m_favorites.SetFavorite(ctype, cid, wantFavorite);
+    //应答失败时按服务端回带的 ctype/cid/favorite 回滚（见 OnSetFavoriteResult）。
+    m_favorites.SetFavorite(ctype, cid, favorite);
     RebuildContactsTree();
 
-    CIUSocket::GetInstance().SendSetFavorite(ctype, cid, wantFavorite);
+    CIUSocket::GetInstance().SendSetFavorite(ctype, cid, favorite);
 
-    LOG_INFO("切换收藏: ctype=%d, cid=%lld, favorite=%d。",
-             ctype, (long long)cid, (int)wantFavorite);
+    LOG_INFO("set favorite: ctype=%d, cid=%lld, favorite=%d.",
+             ctype, (long long)cid, (int)favorite);
 }
 
 void CBalloonMainPanel::OnSetFavoriteResult(const net::SetFavoriteResult& result)
@@ -4903,6 +4944,12 @@ void CBalloonMainPanel::OnSetFavoriteResult(const net::SetFavoriteResult& result
     const bool intended = (result.m_favorite != 0);
     m_favorites.SetFavorite(result.m_ctype, result.m_cid, !intended);
     RebuildContactsTree();
+    //资料对话框上的收藏开关此刻还停在用户拨过去的位置，跟着退回来，否则界面显示的
+    //状态与实际状态不一致，而用户没有任何提示。群收藏不影响该窗口，故只处理联系人。
+    if (result.m_ctype == conversation_single)
+    {
+        RefreshContactWindowIfShowing((UINT)result.m_cid);
+    }
 
     LOG_ERROR(_T("收藏设置失败，已回滚: ctype=%d, cid=%lld, favorite=%d, code=%d。"),
               result.m_ctype, (long long)result.m_cid, result.m_favorite, result.m_code);
@@ -5046,6 +5093,17 @@ void CBalloonMainPanel::ToggleStarred(int64_t userid)
         return;
     }
 
+    //四处菜单的文案是按当前状态取反给出的，故这里也取反后交给按目标状态写的执行体。
+    SetStarredState(userid, !m_starred.IsStarred(userid));
+}
+
+void CBalloonMainPanel::SetStarredState(int64_t userid, bool starred)
+{
+    if (userid <= 0)
+    {
+        return;
+    }
+
     //关注自己没有意义（自己的上下线自己清楚），服务端也会直接拒掉。四处菜单本来
     //就不会对自己出这一项，这里再兜一道，免得将来新加入口时漏判。
     if (IsSelfUserId((UINT)userid))
@@ -5054,17 +5112,21 @@ void CBalloonMainPanel::ToggleStarred(int64_t userid)
         return;
     }
 
-    const bool wantStarred = !m_starred.IsStarred(userid);
+    //已经是这个状态就什么都不做，理由同 SetFavoriteState。
+    if (m_starred.IsStarred(userid) == starred)
+    {
+        return;
+    }
 
     //先本地生效再发协议：菜单文案下次弹出来立刻是对的，不必等一个来回。
     //应答失败时按服务端回带的 target/starred 回滚（见 OnSetStarredResult）。
-    m_starred.SetStarred(userid, wantStarred);
+    m_starred.SetStarred(userid, starred);
     RefreshStarredMarks(userid);
 
-    CIUSocket::GetInstance().SendSetStarred(userid, wantStarred);
+    CIUSocket::GetInstance().SendSetStarred(userid, starred);
 
-    LOG_INFO("切换特别关注: userid=%lld, starred=%d, 当前共 %d 人。",
-             (long long)userid, (int)wantStarred, m_starred.Count());
+    LOG_INFO("set starred: userid=%lld, starred=%d, total %d contacts.",
+             (long long)userid, (int)starred, m_starred.Count());
 }
 
 void CBalloonMainPanel::OnSetStarredResult(const net::SetStarredResult& result)
@@ -5081,6 +5143,8 @@ void CBalloonMainPanel::OnSetStarredResult(const net::SetStarredResult& result)
     const bool intended = (result.m_starred != 0);
     m_starred.SetStarred(result.m_target, !intended);
     RefreshStarredMarks(result.m_target);
+    //资料对话框上的特别关注开关跟着退回来，理由同收藏的回滚分支。
+    RefreshContactWindowIfShowing((UINT)result.m_target);
 
     LOG_ERROR(_T("特别关注设置失败，已回滚: target=%lld, starred=%d, code=%d。"),
               (long long)result.m_target, result.m_starred, result.m_code);
@@ -5304,16 +5368,7 @@ void CBalloonMainPanel::OnSetContactTagsResult(const net::SetContactTagsResult& 
 void CBalloonMainPanel::RefreshContactTagsDisplay(UINT peerUserId)
 {
     //标签只出现在资料窗里，不上通讯录树也不上会话列表，故不必像备注名那样整棵树重建。
-    if (!m_contactWindow.IsWindow() || m_contactWindow.GetPeerUserId() != peerUserId)
-    {
-        return;
-    }
-
-    ballooncontact::ContactModel model;
-    if (BuildContactModelFromCache(peerUserId, model))
-    {
-        m_contactWindow.RefreshContactData(model);
-    }
+    RefreshContactWindowIfShowing(peerUserId);
 }
 
 LRESULT CBalloonMainPanel::OnSetContactTagsMsg(UINT /*uMsg*/, WPARAM wParam,
@@ -5356,14 +5411,7 @@ void CBalloonMainPanel::RefreshContactDisplayName(UINT peerUserId)
     }
 
     //资料窗若正开着这个人，把备注行也刷新掉。
-    if (m_contactWindow.IsWindow() && m_contactWindow.GetPeerUserId() == peerUserId)
-    {
-        ballooncontact::ContactModel model;
-        if (BuildContactModelFromCache(peerUserId, model))
-        {
-            m_contactWindow.RefreshContactData(model);
-        }
-    }
+    RefreshContactWindowIfShowing(peerUserId);
 }
 
 void CBalloonMainPanel::OnSetFriendRemarkResult(const net::SetFriendRemarkResult& result)
@@ -5423,6 +5471,9 @@ void CBalloonMainPanel::BeginContactRemarkEdit(UINT peerUserId)
         return;   // 不在通讯录缓存里
     }
     m_contactWindow.OpenForContact(m_hWnd, peerUserId, model, true);
+    //把当前连接态推给它 —— 资料窗里的语音 / 视频通话要靠这个值做离线门控。
+    //ApplyConnectionState 平时只在连接态变化时逐窗转发，新开的窗口收不到，故在此补一次。
+    m_contactWindow.ApplyConnectionState(m_connUiState);
 }
 
 void CBalloonMainPanel::ShowContactContextMenu(UINT peerUserId)
@@ -5480,6 +5531,15 @@ void CBalloonMainPanel::ShowContactContextMenu(UINT peerUserId)
         OpenSingleChat(peerUserId);
         break;
 
+    // 语音 / 视频通话：转给 CMainDlg 的通话协调器，与单聊窗头部那两个按钮走同一条路。
+    case kCMenuVoice:
+        StartCallWithContact(peerUserId, false);
+        break;
+
+    case kCMenuVideo:
+        StartCallWithContact(peerUserId, true);
+        break;
+
     case kCMenuViewProfile:
         // 看自己走"个人信息"窗（与点左上角头像是同一个窗口，可编辑）；看同事
         // 走联系人资料窗。不共用一个窗口是为了不出现两个不一样的"自己的资料"。
@@ -5521,10 +5581,11 @@ void CBalloonMainPanel::ShowContactContextMenu(UINT peerUserId)
     case 0:
         break;   // 未选中（失焦 / ESC）
 
+    // 兜底分支。本菜单的每一项现在都已接上，走到这里只可能是新增了菜单项却忘了
+    // 加分发；记一条日志，不要静默丢弃（症状会是"点了没反应"，很难查）。
     default:
-        // 语音/视频/移动分组/黑名单/删好友 待接后端。
-        ::MessageBox(m_hWnd, _T("该功能正在开发中。"), _T("FlamingoIM"),
-                     MB_OK | MB_ICONINFORMATION);
+        LOG_ERROR("contact context menu: unhandled command id=%u, userid=%u.",
+                  chosen, peerUserId);
         break;
     }
 }
@@ -6440,7 +6501,7 @@ LRESULT CBalloonMainPanel::OnOpenHistoryMsg(UINT /*uMsg*/, WPARAM wParam,
                                             LPARAM lParam, BOOL& /*bHandled*/)
 {
     //wParam 里塞了两样东西：低字节是会话类型，次低字节是"打开后要预选哪个类型胶囊"
-    //（见 CustomMsgDef.h 里 FMG_MSG_OPEN_HISTORY 的约定）。聊天窗顶部的「已 Pin N 条」
+    //（见 UserSessionData.h 里 FMG_MSG_OPEN_HISTORY 的约定）。聊天窗顶部的「已 Pin N 条」
     //提示带就靠这个次低字节把窗口直接开在 Pin 分类上，省得再加一条窗口消息。
     const int ctype = (int)(wParam & 0xFF);
     const int initialTypeFilter = (int)((wParam >> 8) & 0xFF);
@@ -6690,12 +6751,15 @@ int CBalloonMainPanel::GetPresence()
 bool CBalloonMainPanel::CheckOnlineFor(int action)
 {
     // 门禁只看 CMainDlg 推下来的连接态，与托盘图标、状态胶囊、聊天窗同源。
-    if (m_connUiState == (int)balloonmain::kConnUiOnline)
+    // 判定本身交给 OnlineCapability，不在本面板就地写一份。
+    if (balloonmain::IsActionAllowedInState(m_connUiState, action))
     {
         return true;
     }
 
-    LOG_INFO("主面板操作被拦截：action=%d, state=%d。", action, m_connUiState);
+    LOG_INFO("MainPanel::CheckOnlineFor: blocked. action=%d, "
+             "connUiState=%d (0=online 1=connecting 2=offline).",
+        action, m_connUiState);
     ::MessageBox(m_hWnd, balloonmain::GetBlockedActionTip(action),
                  _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
     return false;
@@ -6753,6 +6817,13 @@ void CBalloonMainPanel::ApplyConnectionState(int state)
         {
             it->second->ApplyConnectionState(state);
         }
+    }
+
+    // 联系人资料对话框：它的快捷操作行里有语音 / 视频通话，同样要按连接态做门控。
+    // 该窗口是本面板的成员对象（不是堆上的一组），开着才推。
+    if (m_contactWindow.IsWindow())
+    {
+        m_contactWindow.ApplyConnectionState(state);
     }
 }
 
@@ -6888,7 +6959,166 @@ bool CBalloonMainPanel::BuildContactModelFromCache(UINT peerUserId,
     std::vector<CString> groups;
     groups.push_back(deptPath.IsEmpty() ? CString(_T("未分组")) : deptPath);
     outModel.SetGroups(groups, 0);
+
+    //三个开关的当前状态。此前这三项从未灌过值，资料窗打开时一律显示"关"，与真实
+    //状态对不上；用户拨一下也只改窗口内存、窗口一关就没了。
+    //免打扰取自会话缓存：还没聊过的联系人不在会话列表里，查不到就按"未免打扰"显示，
+    //用户拨开关照样发协议生效（口径与联系人右键菜单一致）。
+    bool muted = false;
+    const net::ConversationItem* pConv =
+        balloonmain::FindConversation(m_conversations, conversation_single, (int64_t)peerUserId);
+    if (pConv != NULL)
+    {
+        muted = (pConv->m_mute != 0);
+    }
+    outModel.SetSwitch(ballooncontact::kContactSwitchMute, muted);
+    outModel.SetSwitch(ballooncontact::kContactSwitchFavorite,
+                       m_favorites.IsFavorite(conversation_single, (int64_t)peerUserId));
+    outModel.SetSwitch(ballooncontact::kContactSwitchStarred,
+                       m_starred.IsStarred((int64_t)peerUserId));
     return true;
+}
+
+void CBalloonMainPanel::RefreshContactWindowIfShowing(UINT peerUserId)
+{
+    if (peerUserId == 0)
+    {
+        return;
+    }
+    if (!m_contactWindow.IsWindow())
+    {
+        return;   // 资料对话框没开着
+    }
+    if (m_contactWindow.GetPeerUserId() != peerUserId)
+    {
+        return;   // 开着的是别人的资料
+    }
+
+    ballooncontact::ContactModel model;
+    if (!BuildContactModelFromCache(peerUserId, model))
+    {
+        return;   // 不在通讯录缓存里，无从重建
+    }
+    //静默刷新：不前置、不抢焦点，只把窗口内容换成最新状态。
+    m_contactWindow.RefreshContactData(model);
+}
+
+void CBalloonMainPanel::RebuildContactDeptPaths()
+{
+    m_contactDeptPaths.clear();
+    for (size_t i = 0; i < m_contacts.size(); ++i)
+    {
+        const UINT userId = (UINT)m_contacts[i].m_userid;
+        CString position;
+        CString deptPath;
+        ComputeContactDeptInfo(userId, position, deptPath);
+        //没有部门归属的人不进表 —— 搜索结果行查不到就退回展示账号与地区。
+        if (!deptPath.IsEmpty())
+        {
+            m_contactDeptPaths[userId] = deptPath;
+        }
+    }
+    LOG_INFO("contact dept path table rebuilt: %u of %u contacts have a department.",
+             (uint32_t)m_contactDeptPaths.size(), (uint32_t)m_contacts.size());
+}
+
+void CBalloonMainPanel::ShowAndActivateSelf()
+{
+    if (!IsWindow())
+    {
+        return;
+    }
+
+    //最小化的窗口只有 SW_RESTORE 能还原，SW_SHOW 对它无效（表现为点了没有任何反应）；
+    //隐藏到托盘的窗口则走 SW_SHOW。两种情形必须分开处理，做法与托盘菜单「打开主面板」
+    //一致（见 CMainDlg::ShowLoginOrMainPanel）。
+    if (IsIconic())
+    {
+        ShowWindow(SW_RESTORE);
+    }
+    else
+    {
+        ShowWindow(SW_SHOW);
+    }
+    ::SetForegroundWindow(m_hWnd);
+    ::SetFocus(m_hWnd);
+}
+
+void CBalloonMainPanel::LocateContactInTree(UINT peerUserId)
+{
+    if (peerUserId == 0)
+    {
+        return;
+    }
+
+    //定位的结果显示在主面板上，所以先把主面板还原并切到前台。入口之一是联系人资料
+    //对话框的「组织架构」按钮，那个窗口点完就关闭，此时主面板可能收在托盘里或处于
+    //最小化状态 —— 不先调出来的话，用户看不到任何变化，会以为这个按钮没有生效。
+    //另一处入口（搜索结果行的定位按钮）本来主面板就在前台，多调一次没有副作用。
+    ShowAndActivateSelf();
+
+    std::map<UINT, int>::const_iterator itNode = m_contactOrgNode.find(peerUserId);
+    if (itNode == m_contactOrgNode.end())
+    {
+        //树上没有这一行：通讯录尚未到达，或者这个人不属于任何部门（协议下发的资料池
+        //与部门成员表是两份数据，理论上可能对不齐）。此时弹出提示说明原因，不静默返回。
+        ::MessageBox(m_hWnd, _T("这位联系人不在当前的组织架构中，无法定位。"),
+                     _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+        LOG_WARNING("locate contact failed: userid=%u is not in the org tree.", peerUserId);
+        return;
+    }
+    const int targetNode = itNode->second;
+
+    //先切到通讯录页。SwitchTab 内部会收起搜索结果下拉，避免该浮窗遮住刚定位到的那一行。
+    SwitchTab(balloonmain::kIdTabContacts);
+
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    balloonwjui::DuiTreeView* tv = dynamic_cast<balloonwjui::DuiTreeView*>(
+        content->FindCtrlById(balloonmain::kIdContactsTree));
+    //只需要滚动位置与内容高度，用基类指针即可，不必依赖那个自绘悬浮滚动条的子类。
+    balloonwjui::DuiScrollView* sv = dynamic_cast<balloonwjui::DuiScrollView*>(
+        content->FindCtrlById(balloonmain::kIdPaneContacts));
+    if (tv == NULL || sv == NULL)
+    {
+        return;
+    }
+
+    //自下而上把整条部门路径展开。用户可能手动折叠过其中某一级，不展开的话目标行
+    //根本不在可见行列表里，算不出行号也滚不到。
+    std::vector<int> ancestors;
+    balloonmain::CollectAncestorChain(m_contactNodeParent, targetNode,
+                                      balloonmain::kTreeAncestorMaxDepth, ancestors);
+    for (size_t i = 0; i < ancestors.size(); ++i)
+    {
+        tv->SetExpanded(ancestors[i], true);
+    }
+
+    //展开之后树变高了，滚动范围要重算一遍，否则下面拿到的内容总高还是展开前的，
+    //目标行在视口下方时会因为滚不动而定位不到。
+    SyncPaneContentHeight(balloonmain::kIdPaneContacts,
+                          balloonmain::kIdContactsTree, kContactsPaneTitleHeight);
+
+    //把目标行滚进视口。行的纵向位置 = 页标题高度 + 容器上内边距 + 行号 × 行高。
+    const int rowIndex = tv->GetVisibleRow(targetNode);
+    const RECT rcView  = sv->GetRect();
+    const int viewHeight = rcView.bottom - rcView.top;
+    const int newPos = balloonmain::ComputeLocateScrollPos(
+        rowIndex, tv->GetRowHeight(),
+        kContactsPaneTitleHeight + kContactsPaneContentPadTop,
+        viewHeight, sv->GetContentHeight(), sv->GetScrollPos());
+    sv->SetScrollPos(newPos);
+
+    //选中该行。notify 传 false —— 树的选中通知会被当成"用户点了这一行"从而打开
+    //单聊窗，而定位只是让用户看到这个人在组织架构中的位置，不应当同时打开聊天窗口。
+    tv->SetCurSel(targetNode, false);
+    tv->Invalidate();
+
+    LOG_INFO("locate contact in org tree: userid=%u, node=%d, row=%d, scroll=%d.",
+             peerUserId, targetNode, rowIndex, newPos);
 }
 
 void CBalloonMainPanel::OpenContactProfile(UINT peerUserId)
@@ -6899,6 +7129,8 @@ void CBalloonMainPanel::OpenContactProfile(UINT peerUserId)
         return;   // 不在通讯录缓存里
     }
     m_contactWindow.OpenForContact(m_hWnd, peerUserId, model);
+    //把当前连接态推给它，理由同 BeginContactRemarkEdit 里的那一处。
+    m_contactWindow.ApplyConnectionState(m_connUiState);
 }
 
 LRESULT CBalloonMainPanel::OnOpenContactProfileMsg(UINT /*uMsg*/, WPARAM wParam,
@@ -6923,6 +7155,35 @@ LRESULT CBalloonMainPanel::OnToggleStarredMsg(UINT /*uMsg*/, WPARAM wParam,
                                               LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
     ToggleStarred((int64_t)wParam);
+    return 0;
+}
+
+LRESULT CBalloonMainPanel::OnSetContactMuteMsg(UINT /*uMsg*/, WPARAM wParam,
+                                               LPARAM lParam, BOOL& /*bHandled*/)
+{
+    //lParam 是目标状态而不是取反，理由见 SetFavoriteState 的说明。
+    SetConversationMuteState(conversation_single, (int64_t)(UINT)wParam, lParam != 0);
+    return 0;
+}
+
+LRESULT CBalloonMainPanel::OnSetContactFavoriteMsg(UINT /*uMsg*/, WPARAM wParam,
+                                                   LPARAM lParam, BOOL& /*bHandled*/)
+{
+    SetFavoriteState(conversation_single, (int64_t)(UINT)wParam, lParam != 0);
+    return 0;
+}
+
+LRESULT CBalloonMainPanel::OnSetContactStarredMsg(UINT /*uMsg*/, WPARAM wParam,
+                                                  LPARAM lParam, BOOL& /*bHandled*/)
+{
+    SetStarredState((int64_t)(UINT)wParam, lParam != 0);
+    return 0;
+}
+
+LRESULT CBalloonMainPanel::OnLocateContactMsg(UINT /*uMsg*/, WPARAM wParam,
+                                              LPARAM /*lParam*/, BOOL& /*bHandled*/)
+{
+    LocateContactInTree((UINT)wParam);
     return 0;
 }
 
@@ -7146,6 +7407,37 @@ LRESULT CBalloonMainPanel::OnRdStartInviteMsg(UINT /*uMsg*/, WPARAM wParam,
     return 0;
 }
 
+void CBalloonMainPanel::StartCallWithContact(UINT peerUserId, bool video)
+{
+    if (peerUserId == 0)
+    {
+        return;
+    }
+
+    // 通话要走信令通道，离线时发起必然失败，在入口就拦住（口径与单聊窗头部的
+    // 语音 / 视频按钮一致）。
+    if (!CheckOnlineFor(balloonmain::kActionRealtimeCall))
+    {
+        return;
+    }
+    if (m_hMainDlg == NULL || !::IsWindow(m_hMainDlg))
+    {
+        LOG_ERROR("start call failed: CMainDlg window handle is invalid, userid=%u.",
+                  peerUserId);
+        return;
+    }
+
+    // peerName 走堆上的 std::wstring，最终由 CMainDlg 处理后 delete —— 与单聊窗
+    // 那两个按钮传的是同一份载荷格式。
+    const CString peerName = ContactDisplayName(peerUserId);
+    const UINT msgId = video ? FMG_MSG_CALL_START_VIDEO_INVITE : FMG_MSG_CALL_START_INVITE;
+    ::PostMessage(m_hMainDlg, msgId, (WPARAM)peerUserId,
+                  (LPARAM)new std::wstring(peerName.GetString()));
+
+    LOG_INFO("start call from contact menu: userid=%u, video=%d.",
+             peerUserId, (int)video);
+}
+
 LRESULT CBalloonMainPanel::OnCallStartInviteMsg(UINT /*uMsg*/, WPARAM wParam,
                                                 LPARAM lParam, BOOL& /*bHandled*/)
 {
@@ -7245,6 +7537,9 @@ void CBalloonMainPanel::UpdateSearchDropdown()
     // 自己（好让用户看清自己在组织架构里的位置），搜索这边跟着放开才不别扭；
     // 命中自己的那一行会带"（我）"后缀，不会认错人。
     m_searchDropdown.SetData(&m_contacts, &m_myGroups, selfId, true);
+    // 部门路径查询表：联系人结果行的副行据它显示对方所在部门，而不是账号与地区。
+    // 通讯录复杂时，"这个人在哪个部门"往往比账号更能帮用户认出是不是要找的那位。
+    m_searchDropdown.SetContactDeptPaths(&m_contactDeptPaths);
 
     RECT anchorScreen = { 0, 0, 0, 0 };
     int panelWidth = 0;
@@ -7281,12 +7576,9 @@ void CBalloonMainPanel::FocusSearchBox()
     {
         return;
     }
-    // 把真键盘焦点交给内嵌 EDIT，用户即可直接输入。
-    HWND hEdit = edit->GetHostedHwnd();
-    if (hEdit != NULL)
-    {
-        ::SetFocus(hEdit);
-    }
+    // 把焦点交给搜索框，用户即可直接输入。无窗口控件的 SetFocus 一步到位：
+    // 既把 DUI 焦点指到本控件，又让主面板窗口把 Win32 键盘焦点拿到手。
+    edit->SetFocus();
 }
 
 void CBalloonMainPanel::OpenCreateGroupDlg()
@@ -7922,26 +8214,19 @@ void CBalloonMainPanel::OnSearchPickGroup(void* userdata, int64_t groupId)
     }
 }
 
-LRESULT CALLBACK CBalloonMainPanel::SearchBoxEscSubclassProc(HWND hWnd, UINT msg,
-        WPARAM wParam, LPARAM lParam, UINT_PTR idSubclass, DWORD_PTR ref)
+void CBalloonMainPanel::OnSearchLocate(void* userdata, UINT peerUserId)
 {
-    // Esc：收起结果下拉（搜索框文字保留，用户可继续改词）。EDIT 默认吞 Esc，
-    // 在此层拦下转给本面板隐藏下拉。
-    if (msg == WM_KEYDOWN && wParam == VK_ESCAPE)
+    CBalloonMainPanel* self = (CBalloonMainPanel*)userdata;
+    if (self == NULL)
     {
-        CBalloonMainPanel* self = (CBalloonMainPanel*)ref;
-        if (self != NULL)
-        {
-            self->m_searchDropdown.HideDropdown();
-        }
-        return 0;
+        return;
     }
-    // EDIT 销毁时摘掉子类过程，避免悬挂。
-    if (msg == WM_NCDESTROY)
-    {
-        ::RemoveWindowSubclass(hWnd, &CBalloonMainPanel::SearchBoxEscSubclassProc, idSubclass);
-    }
-    return ::DefSubclassProc(hWnd, msg, wParam, lParam);
+
+    //本回调是在结果行的通知调用栈里被同步调到的，此刻那一批行控件还活着。
+    //LocateContactInTree 里只会调下拉的 HideDropdown（仅隐藏窗口、不重建控件树），
+    //<u>不要</u>在这条路径上去调 UpdateQuery —— 那会重建结果列表、把正在派发通知的
+    //那个行控件当场析构掉。
+    self->LocateContactInTree(peerUserId);
 }
 
 void CBalloonMainPanel::ToggleSection(balloonmain::MainPanelSectionHeader* sec)

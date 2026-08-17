@@ -12,6 +12,31 @@
 
 using namespace net;
 
+namespace {
+
+/**
+ *  判断一个 socket 错误码是不是「暂时做不了、等下一次事件再来」这一类。
+ *
+ *  非阻塞 socket 上它是<u>正常现象</u>而不是错误：无数据可读的 recv、发送缓冲已满的 send
+ *  都会返回 -1 并带上这个错误码。据此断开连接会把一条健康的连接判死 —— 2026-08-16
+ *  修复的那次「客户端读得慢时服务端拆连接」的故障里，这就是最后一环。
+ *
+ *  @param savedErrno 系统错误码。Windows 上取自 WSAGetLastError()，POSIX 上取自 errno
+ *  @return 属于该类返回 true，调用方应当直接返回、等下一次事件
+ */
+bool isWouldBlockError(int savedErrno)
+{
+#ifdef WIN32
+    //winsock 只有 WSAEWOULDBLOCK 这一个码表示该含义，且不会返回 POSIX 的 EAGAIN
+    return savedErrno == WSAEWOULDBLOCK;
+#else
+    //POSIX 允许 EAGAIN 与 EWOULDBLOCK 取相同值（Linux 上就相同），也允许取不同值，故两个都判
+    return savedErrno == EAGAIN || savedErrno == EWOULDBLOCK;
+#endif
+}
+
+} // namespace
+
 void net::defaultConnectionCallback(const TcpConnectionPtr& conn)
 {
     LOGD("%s -> is %s",
@@ -319,6 +344,17 @@ void TcpConnection::handleRead(Timestamp receiveTime)
     }
     else
     {
+        //非阻塞 socket 上「当前没有数据可读」返回的同样是 -1，这是正常情况而不是错误：
+        //本轮什么都不做，等下一次可读事件即可。之所以要防这一手，是因为一旦 poller 把
+        //事件位写错，本函数就会在根本没有数据的时候被叫起来，而原先的写法会顺着
+        //handleError -> handleClose 把一条健康的连接判死（2026-08-16 修复的故障即如此）
+        if (isWouldBlockError(savedErrno))
+        {
+            LOGD("TcpConnection::handleRead, fd = %d, no data available yet, wait for the next read event",
+                m_channel->fd());
+            return;
+        }
+
         errno = savedErrno;
         LOGSYSE("TcpConnection::handleRead");
         handleError();
@@ -350,6 +386,24 @@ void TcpConnection::handleWrite()
         }
         else
         {
+            //取错误码必须紧挨着失败的那次调用，中间不能插入任何别的系统调用，否则会被覆盖
+            int savedErrno = 0;
+#ifdef WIN32
+            savedErrno = (int)WSAGetLastError();
+#else
+            savedErrno = errno;
+#endif
+
+            //与 handleRead 同理：非阻塞 socket 上「发送缓冲暂时满了」返回的也是 -1，
+            //本轮什么都不做，剩下的字节等下一次可写事件再写出去
+            if (isWouldBlockError(savedErrno))
+            {
+                LOGD("TcpConnection::handleWrite, fd = %d, send buffer is full, wait for the next write event",
+                    m_channel->fd());
+                return;
+            }
+
+            errno = savedErrno;
             LOGSYSE("TcpConnection::handleWrite");
             // if (state_ == kDisconnecting)
             // {

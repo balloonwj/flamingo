@@ -401,13 +401,6 @@ void CBalloonLoginDlg::InitLoginUi()
     if (m_pStatusArea != NULL)
         m_pStatusArea->SetVisible(false);
 
-    // 密码框内嵌真 Win32 EDIT —— XML builder 只建控件对象、不调
-    // EnsureCreated，须在 host HWND 就绪后由调用方显式建一次。
-    if (m_pPasswordEdit != NULL && !m_pPasswordEdit->EnsureCreated(m_hWnd))
-    {
-        LOG_WARNING(_T("登录窗密码输入框 EnsureCreated 失败。"));
-    }
-
     // 密码框启用"小眼睛"切换按钮 —— 点击在密文 / 明文显示间切换。
     if (m_pPasswordEdit != NULL)
     {

@@ -11,12 +11,7 @@
 #include "Widgets/CommonWidgets.h"
 #include "Widgets/OverlayScrollbar.h"   // 面板右缘的悬浮 auto-hide 滚动条子控件
 #include "Controls/Input/DuiEditHost.h" // 基本信息各值字段：只读 DuiEditHost
-#include "DuiHost.h"                    // GetHost()->m_hWnd（EnsureCreated 的父 HWND）
 #include "Mock/DataStore.h"
-
-#include <windowsx.h>                   // GET_X_LPARAM / GET_Y_LPARAM
-#include <commctrl.h>                   // SetWindowSubclass / DefSubclassProc
-#pragma comment(lib, "comctl32.lib")
 
 namespace flamingoadmin {
 
@@ -35,14 +30,10 @@ const int kHeadAvatar  = 60;   // 资料头头像 / 图标边长
 const int kBtnH        = 32;   // 操作按钮高度
 const int kRowH        = 30;   // 滚轮一格滚动量参考行高
 
-// 基本信息值字段 EDIT 的可视高度（像素）。单行 EDIT 文字顶对齐，给它一个
-// 约一行文字高、在自绘圆角框内垂直居中的子矩形，使文字视觉上居中（对齐
-// 自绘兜底的 DT_VCENTER）。框内高 34，取 22 居中可容纳 9pt 微软雅黑而不裁切。
+// 基本信息值字段输入框的可视高度（像素）。给它一个约一行文字高、在自绘圆角
+// 框内垂直居中的子矩形，使文字视觉上居中（对齐自绘兜底的 DT_VCENTER）。
+// 框内高 34，取 22 可容纳 9pt 微软雅黑而不裁切。
 const int kBasicEditH  = 22;
-
-// 基本信息值字段 EDIT 滚轮转发子类过程的 uIdSubclass（唯一标识，避免与
-// balloonui 内部子类 id 冲突）。
-const UINT_PTR kFieldWheelSubclassId = 0xC001;
 
 const int kBigTitlePt  = 16;   // 资料头名称字号
 const int kTabBarH     = 38;   // 员工详情 tab 条高度
@@ -101,8 +92,8 @@ void DrawKVCell(HDC hdc, int x, int y, int w, LPCTSTR label, LPCTSTR value)
                      | DT_END_ELLIPSIS);
 }
 
-// 试点接入辅助：画 KV 单元格的 label + 空白圆角框，但**不画 value**。
-// 返回 value 文本应当落位的 rcVal（caller 决定用只读 EDIT 子控件或自绘兜底）。
+// 画 KV 单元格的 label + 空白圆角框，但**不画 value**。返回 value 文本应当
+// 落位的 rcVal（调用方决定用只读输入框子控件承载还是自绘兜底）。
 // 与 DrawKVCell 共享同一布局常量，确保两路视觉一致。
 RECT DrawKVCellLabelAndBoxOnly(HDC hdc, int x, int y, int w, LPCTSTR label)
 {
@@ -116,7 +107,7 @@ RECT DrawKVCellLabelAndBoxOnly(HDC hdc, int x, int y, int w, LPCTSTR label)
     return RECT{ rcBox.left + 10, rcBox.top, rcBox.right - 10, rcBox.bottom };
 }
 
-// 自绘 value 文本（值字段 EDIT 因滚动跨边界 / host 未就绪等无法接入时的兜底）。
+// 自绘 value 文本。字段索引越界、拿不到对应的只读输入框子控件时的兜底画法。
 void DrawKVCellValueOnly(HDC hdc, const RECT& rcVal, LPCTSTR value)
 {
     const bool empty = (value == nullptr || value[0] == _T('\0'));
@@ -303,31 +294,33 @@ RECT DrawDangerRow(HDC hdc, int left, int right, int top,
 OrgDetailPanel::OrgDetailPanel()
 {
     // ---- 基本信息 11 个值字段：只读 DuiEditHost，让每个值都是真正的只读
-    // 文本框（原生拖选 + 右键菜单复制/全选 + Ctrl+C/A）。先加它们、再加
+    // 文本框（鼠标拖选 + 右键菜单复制/全选 + Ctrl+C/A）。先加它们、再加
     // 滚动条 —— 这样滚动条在子控件序列最末，base OnPaint 最后绘制它。
-    // 位置 / 文本 / 可见性由 PaintUserBasic 每帧重新设置；这里仅做一次性
-    // 初始化（只读 + 无边框 + 底色对齐自绘框 + 默认隐藏）。EDIT 子 HWND 不在
-    // 此创建（host 尚未就绪），由 EnsureBasicEditsCreated 在首次绘制时懒创建。
+    // 位置 / 文本 / 可见性由 PaintUserBasic 每帧重新设置；这里做一次性初始化
+    // （只读 + 无边框 + 底色对齐自绘框 + 字体 + 默认隐藏）。输入框是无窗口
+    // 控件，构造完即可用，没有"创建"这一步。
     m_basicValueEdits.reserve(kBasicFieldCount);
+    // 字段值的字体与自绘值文本一致（微软雅黑 10pt = kFontSizeNormal），否则
+    // 输入框会用 balloonui 的默认 9pt，与自绘兜底那一路大小对不上。UiFont
+    // 返回进程级缓存的字体句柄，所有权不归控件，控件不会销毁它 —— 正合
+    // SetDefaultFontFromHFONT 的约定。
+    HFONT valueFont = ui::UiFont(theme::kFontSizeNormal, false);
     for (int i = 0; i < kBasicFieldCount; ++i)
     {
         auto edit = std::make_unique<balloonwjui::DuiEditHost>();
         edit->SetReadOnly(true);
-        edit->SetShowBorder(false);          // 外观靠自绘圆角框，EDIT 自身不画边框
+        edit->SetShowBorder(false);          // 外观靠自绘圆角框，输入框自身不画边框
         edit->SetBgColor(theme::kInk0);      // 底色与自绘框填充（kInk0）一致
-        // 只读 EDIT 的底色由 OS 经 WM_CTLCOLORSTATIC 向父窗口索取画刷。
-        // DuiEditHost::SetBgColor 在"目标色 == 其默认白底 RGB(255,255,255)"时会
-        // 提前 return（见 balloonui DuiEditHost::SetBgColor），而 kInk0 恰是纯白，
-        // 于是底色没被传到 WM_CTLCOLOR* 实际使用的 m_ctlBg，m_ctlBg 留在
-        // CLR_INVALID，只读 EDIT 便落回系统默认灰底（COLOR_3DFACE）。这里显式再
-        // 设一次控件底色，保证 WM_CTLCOLORSTATIC 返回白色画刷、与自绘框白底一致。
-        edit->SetCtlBgColor(theme::kInk0);
+        if (valueFont != nullptr)
+        {
+            edit->SetDefaultFontFromHFONT(valueFont);
+        }
         edit->SetMargins(0, 0, 0, 0);        // 去掉默认内边距，文字左缘贴齐自绘值位置
         edit->SetVisible(false);             // 没节点时不显示
         m_basicValueEdits.push_back(edit.get());
         AddChild(std::move(edit));
     }
-    // 本帧显隐标记表，与值字段同长；OnPaint 开头清零、末尾据此 reconcile。
+    // 本帧显隐标记表，与值字段同长；OnPaint 开头清零、绘制子控件前据此 reconcile。
     m_basicEditShown.assign(kBasicFieldCount, 0);
 
     // ---- 面板右缘的悬浮 auto-hide 滚动条 —— 最后入子，保证绘制在最上层。
@@ -490,11 +483,9 @@ void OrgDetailPanel::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     m_hits.clear();
 
     // 清零本帧"应显示的基本信息值字段"标记；下面 PaintUserBasic 命中显形的
-    // 字段把对应位置 1。真正的 EDIT 显隐放到本函数末尾 ApplyBasicEditVisibility
-    // 统一 reconcile（幂等，不变化不触发 ShowWindow）—— 避免在这里先 hide-all
-    // 再 show-visible 造成 HWND 每帧 hide→show 闪烁（无窗口 DuiLabel 无此问题，
-    // 真 EDIT 有）。其它路径（PaintEmpty / PaintDept / 非基本信息 tab）不置位，
-    // reconcile 时即全部隐藏。
+    // 字段把对应位置 1。真正的显隐放到内容绘制之后、子控件绘制之前统一
+    // reconcile（见下方 ApplyBasicEditVisibility 的调用）。其它路径
+    // （PaintEmpty / PaintDept / 非基本信息 tab）不置位，reconcile 时即全部隐藏。
     for (size_t i = 0; i < m_basicEditShown.size(); ++i)
     {
         m_basicEditShown[i] = 0;
@@ -521,12 +512,22 @@ void OrgDetailPanel::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     // 把最新内容总高 / 滚动量同步给悬浮滚动条子控件。
     m_panelSb->SetMetrics(m_contentH, m_scrollY);
 
-    // 绘制子控件（悬浮滚动条）——它悬浮于面板内容右缘、auto-hide。base
-    // OnPaint 以脏矩形与子控件求交后才绘制，故传整个面板矩形作脏矩形。
-    balloonwjui::DuiControl::OnPaint(hdc, m_rcItem);
-
-    // 帧末统一同步基本信息值字段 EDIT 的显隐（按本帧标记，幂等）。
+    // 按本帧标记统一同步基本信息值字段的显隐（幂等，未变化不触发重绘）。
+    // 必须放在下面这行子控件绘制【之前】：这些字段本身就是子控件，显隐晚一步
+    // 生效的话本帧仍按上一帧的状态绘制，切 tab / 切节点时会多显示一帧旧内容。
     ApplyBasicEditVisibility();
+
+    // 绘制子控件（11 个只读值字段 + 悬浮滚动条）。base OnPaint 以脏矩形与
+    // 子控件求交后才绘制，故传整个面板矩形作脏矩形。
+    //
+    // 这里必须重新压一次裁剪：值字段随内容一起滚动，滚到面板上下边缘时矩形会
+    // 越界，而控件自身只按自己的矩形铺底色、画文字，不知道面板的边界在哪。
+    // 少了这一步的表现是滚动时字段的白底与文字画到面板之外。
+    int savedChildClip = ::SaveDC(hdc);
+    ::IntersectClipRect(hdc, m_rcItem.left, m_rcItem.top,
+                        m_rcItem.right, m_rcItem.bottom);
+    balloonwjui::DuiControl::OnPaint(hdc, m_rcItem);
+    ::RestoreDC(hdc, savedChildClip);
 }
 
 int OrgDetailPanel::PaintEmpty(HDC hdc)
@@ -970,100 +971,46 @@ void OrgDetailPanel::RenderBasicField(HDC hdc, int idx, int x, int y, int w,
     // 自绘字段 label + 圆角框（无值文本）；返回值字段的矩形 rcVal。
     RECT rcVal = DrawKVCellLabelAndBoxOnly(hdc, x, y, w, label);
 
-    // 确保 11 个值字段 EDIT 已创建并挂好滚轮转发子类（幂等；host 就绪后只跑一次）。
-    EnsureBasicEditsCreated();
-
     balloonwjui::DuiEditHost* edit = nullptr;
     if (idx >= 0 && idx < static_cast<int>(m_basicValueEdits.size()))
     {
         edit = m_basicValueEdits[idx];
     }
-
-    // 只有当 rcVal 完整落在面板可见区、且 EDIT 子 HWND 已就绪时，才用真 EDIT
-    // 渲染：HWND 子窗口不随面板 GDI 裁剪，部分落外会画到面板之外，故滚动跨
-    // 边界（或 host 尚未就绪）时退回自绘兜底。EDIT 的实际显隐由本帧标记
-    // 在 OnPaint 末尾统一 reconcile，这里只置位、不直接 SetVisible（防闪）。
-    const bool fullyInside = (rcVal.top    >= m_rcItem.top    &&
-                              rcVal.bottom <= m_rcItem.bottom);
-    if (edit != nullptr && fullyInside && edit->GetHostedHwnd() != nullptr)
+    if (edit == nullptr)
     {
-        const bool empty = value.IsEmpty();
-        // SetText 已是幂等的（护栏在 balloonui DuiEditHost::SetText 内：文本与
-        // 当前缓存一致时不重复 SetWindowText、不 Invalidate），故这里每帧调用
-        // 安全，不会因每帧失效而触发自激重绘。空值写占位符"—"。
-        edit->SetText(empty ? _T("—") : static_cast<LPCTSTR>(value));
-        // 值文本色：有值 kInk700、空值占位"—" kInk400（对齐自绘两路）。
-        // SetCtlTextColor 内部同样有"颜色未变则不失效"的护栏，每帧调用安全。
-        edit->SetCtlTextColor(empty ? theme::kInk400 : theme::kInk700);
-        // 单行 EDIT 文字顶对齐，给它一个约一行高、在自绘框内垂直居中的子矩形，
-        // 让文字视觉上居中（与自绘兜底的 DT_VCENTER 对齐）。
-        const int cy = (rcVal.top + rcVal.bottom) / 2;
-        RECT rcEdit = { rcVal.left, cy - kBasicEditH / 2,
-                        rcVal.right, cy - kBasicEditH / 2 + kBasicEditH };
-        edit->SetRect(rcEdit);
-        if (idx >= 0 && idx < static_cast<int>(m_basicEditShown.size()))
-        {
-            m_basicEditShown[idx] = 1;   // 本帧显形；帧末 reconcile 据此 SetVisible(true)
-        }
-    }
-    else
-    {
+        // 字段索引与 m_basicValueEdits 对不上（理论上不会发生，见 fields[] 处的
+        // static_assert），退回自绘，至少把值显示出来。
         DrawKVCellValueOnly(hdc, rcVal, value);
-    }
-}
-
-void OrgDetailPanel::EnsureBasicEditsCreated()
-{
-    if (m_basicEditsReady)
-    {
         return;
     }
-    balloonwjui::DuiHost* host = GetHost();
-    if (host == nullptr || host->m_hWnd == nullptr || !::IsWindow(host->m_hWnd))
+
+    const bool empty = value.IsEmpty();
+    CString wanted = empty ? CString(_T("—")) : value;
+    // 只在内容真的变了时才写。SetText 会无条件重排、请求重绘并发出文字变化
+    // 通知，而本函数是在绘制路径上每帧调用的 —— 不加这道判断就成了"绘制触发
+    // 重绘"的自激循环。
+    if (edit->GetText() != wanted)
     {
-        return;   // host HWND 尚未就绪，下次重绘再试
+        // 用不发通知的那个重载：这是程序回填只读展示值，不是用户编辑，
+        // 不该让宿主窗口收到一条文字变化通知。
+        edit->SetTextNoNotify(wanted);
     }
-    bool allReady = true;
-    for (balloonwjui::DuiEditHost* edit : m_basicValueEdits)
+    // 值文本色：有值 kInk700、空值占位"—" kInk400（对齐自绘两路）。
+    // SetTextColor 同样会无条件请求重绘，故一并加判断。
+    const COLORREF crWanted = empty ? theme::kInk400 : theme::kInk700;
+    if (edit->GetTextColor() != crWanted)
     {
-        if (edit == nullptr)
-        {
-            continue;
-        }
-        if (edit->GetHostedHwnd() == nullptr)
-        {
-            if (!edit->EnsureCreated(host->m_hWnd))
-            {
-                allReady = false;
-                continue;
-            }
-        }
-        HWND h = edit->GetHostedHwnd();
-        if (h != nullptr)
-        {
-            // 字体设成与自绘值文本一致（微软雅黑 10pt = kFontSizeNormal）。否则
-            // EDIT 用 balloonui 默认 9pt，与滚动跨边界时的自绘兜底大小不一致。
-            // UiFont 返回进程级缓存 HFONT，本控件不持有所有权、无需释放。
-            HFONT valueFont = ui::UiFont(theme::kFontSizeNormal, false);
-            if (valueFont != nullptr)
-            {
-                ::SendMessage(h, WM_SETFONT,
-                              reinterpret_cast<WPARAM>(valueFont),
-                              MAKELPARAM(TRUE, 0));
-            }
-            // 挂滚轮转发子类（SetWindowSubclass 对"同 proc + 同 id"幂等）。
-            ::SetWindowSubclass(h, &OrgDetailPanel::FieldEditWheelProc,
-                                kFieldWheelSubclassId,
-                                reinterpret_cast<DWORD_PTR>(this));
-        }
-        else
-        {
-            allReady = false;
-        }
+        edit->SetTextColor(crWanted);
     }
-    if (allReady)
+    // 给输入框一个约一行高、在自绘框内垂直居中的子矩形（控件自身还会把单行
+    // 文字在该矩形内再垂直居中，与自绘兜底的 DT_VCENTER 对齐）。
+    const int cy = (rcVal.top + rcVal.bottom) / 2;
+    RECT rcEdit = { rcVal.left, cy - kBasicEditH / 2,
+                    rcVal.right, cy - kBasicEditH / 2 + kBasicEditH };
+    edit->SetRect(rcEdit);   // 幂等：矩形未变时直接返回
+    if (idx >= 0 && idx < static_cast<int>(m_basicEditShown.size()))
     {
-        m_basicEditsReady = true;
+        m_basicEditShown[idx] = 1;   // 本帧显形；reconcile 据此 SetVisible(true)
     }
 }
 
@@ -1090,34 +1037,12 @@ void OrgDetailPanel::ApplyBasicEditVisibility()
         {
             continue;
         }
-        // 有弹窗压在上面时一律隐藏，忽略本帧标记表。真 EDIT 子窗恒画在 DUI
-        // 绘制之上，留着就会浮到弹窗表面（见 SetBasicEditsSuppressed 的说明）。
+        // 外部要求隐藏时一律隐藏，忽略本帧标记表（见 SetBasicEditsSuppressed）。
         const bool show = !m_basicEditsSuppressed
                           && (i < m_basicEditShown.size() && m_basicEditShown[i] != 0);
-        // SetVisible 幂等：状态未变不触发 ShowWindow，避免每帧闪烁。
+        // SetVisible 幂等：状态未变直接返回，不会每帧请求重绘。
         edit->SetVisible(show);
     }
-}
-
-LRESULT CALLBACK OrgDetailPanel::FieldEditWheelProc(HWND hwnd, UINT msg,
-                                                    WPARAM wParam, LPARAM lParam,
-                                                    UINT_PTR /*uIdSubclass*/,
-                                                    DWORD_PTR dwRefData)
-{
-    if (msg == WM_MOUSEWHEEL)
-    {
-        OrgDetailPanel* self = reinterpret_cast<OrgDetailPanel*>(dwRefData);
-        if (self != nullptr)
-        {
-            // 把滚轮转交本面板滚动逻辑（OnMouseWheel 只用 zDelta）。消费掉，
-            // 不再交默认过程（只读单行 EDIT 自身也无内容可滚）。
-            const short zDelta = static_cast<short>(HIWORD(wParam));
-            POINT pt = { GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam) };
-            self->OnMouseWheel(pt, zDelta, static_cast<UINT>(LOWORD(wParam)));
-            return 0;
-        }
-    }
-    return ::DefSubclassProc(hwnd, msg, wParam, lParam);
 }
 
 // ===========================================================================

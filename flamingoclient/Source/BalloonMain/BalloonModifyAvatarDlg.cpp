@@ -364,7 +364,6 @@ private:
 CBalloonModifyAvatarDlg::CBalloonModifyAvatarDlg(CFlamingoClient* pFMGClient)
     : m_lpFMGClient(pFMGClient)
     , m_built(false)
-    , m_editCreated(false)
     , m_submitting(false)
     , m_page(0)
     , m_colorIndex(0)
@@ -459,8 +458,7 @@ void CBalloonModifyAvatarDlg::OpenForTarget(int targetKind, __int64 targetId, LP
             SetIcon(m_titleIconBmp);
         }
 
-        m_built       = false;
-        m_editCreated = false;
+        m_built = false;
         BuildUiOnce();
         ResizeClient(kDlgWidth, kDlgHeight);
         CenterWindow();
@@ -469,13 +467,6 @@ void CBalloonModifyAvatarDlg::OpenForTarget(int targetKind, __int64 targetId, LP
     // 窗口已开着时也要改：上一次开的可能是另一种目标（改完自己的头像，接着去
     // 群管理页改群头像），标题不跟着换就会指错东西。
     SetTitle(szTitle);
-
-    // 首字母输入框内嵌真 Win32 EDIT，须在窗口 HWND 就绪后建一次。
-    if (!m_editCreated && m_letterEdit != NULL)
-    {
-        m_letterEdit->EnsureCreated(m_hWnd);
-        m_editCreated = true;
-    }
 
     // 「默认」磁贴画的是"这个目标不设头像时长什么样"，故目标一换就得重画。
     RefreshDefaultTile();
@@ -880,20 +871,10 @@ void CBalloonModifyAvatarDlg::ShowPage(int kind)
         }
     }
 
-    // 首字母输入框是真 Win32 EDIT 子窗口，须只在首字母页显示。光靠 SetVisible 的
-    // 子树同步不可靠：它按 IsWindowVisible 判断，而本对话框 ShowWindow 之前（首次打开
-    // 的 OpenForCurrentUser 里就调本函数）整窗尚不可见，IsWindowVisible 恒为假，于是
-    // "想隐藏 vs 当前已隐藏"被判为相等、不去清 EDIT 的 WS_VISIBLE 样式位；等整窗显示
-    // 时该 EDIT（样式仍为可见）就透出来（"韩"字串到本地上传页，见 dd/182857）。故这里
-    // 直接对其真 HWND 调 ShowWindow，强制写对 WS_VISIBLE 位，绕开 IsWindowVisible 误判。
+    // 首字母输入框只在首字母页显示。
     if (m_letterEdit != NULL)
     {
-        m_letterEdit->SetVisible(kind == 1);   // 同步 DUI 逻辑可见性
-        HWND hEdit = m_letterEdit->GetHostedHwnd();
-        if (hEdit != NULL && ::IsWindow(hEdit))
-        {
-            ::ShowWindow(hEdit, (kind == 1) ? SW_SHOWNOACTIVATE : SW_HIDE);
-        }
+        m_letterEdit->SetVisible(kind == 1);
     }
 
     ApplyTabVisual();

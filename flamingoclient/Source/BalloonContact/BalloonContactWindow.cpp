@@ -1,8 +1,12 @@
 /**
  *  BalloonContactWindow.cpp
  *
- *  联系人资料对话框的实现。标签增删 + 备注名行内编辑 + 三个开关 +
- *  分组下拉 + 底部按钮。当前以 mock 数据驱动，「发消息」为占位。
+ *  联系人资料对话框的实现。标签增删 + 备注名行内编辑 + 三个开关（消息免打扰 /
+ *  添加到收藏 / 特别关注）+ 分组下拉 + 快捷操作行（语音通话 / 视频通话 /
+ *  历史消息 / 组织架构）+ 底部按钮。
+ *
+ *  三个开关与四个快捷操作都不在本窗口执行，只把用户的意图回投给主面板，理由见
+ *  BalloonContactWindow.h 的文件说明。
  *
  *  balloonwj@qq.com   2026-05-22
  */
@@ -11,12 +15,15 @@
 #include "BalloonContactWindow.h"
 
 #include <memory>
+#include <windowsx.h>                 // GET_X_LPARAM / GET_Y_LPARAM（鼠标消息取坐标）
 
 #include "../CustomMsgDef.h"          // WM_CLOSE_MAINDLG
-#include "../UserSessionData.h"       // FMG_MSG_OPEN_CHAT（"发消息"路由）/ FMG_MSG_SET_CONTACT_REMARK（备注提交回投）/ FMG_MSG_SET_CONTACT_TAGS（标签整份提交回投）
-#include <string>                     // 备注 / 标签回投的 UTF-8 堆负载
+#include "../UserSessionData.h"       // FMG_MSG_OPEN_CHAT（"发消息"路由）/ FMG_MSG_SET_CONTACT_REMARK（备注提交回投）/ FMG_MSG_SET_CONTACT_TAGS（标签整份提交回投）/ FMG_MSG_SET_CONTACT_MUTE 等三条开关消息 / FMG_MSG_LOCATE_CONTACT / FMG_MSG_CALL_START_INVITE 等
+#include <string>                     // 备注 / 标签回投的 UTF-8 堆负载，通话邀请的 std::wstring 显示名
 #include <vector>                     // 标签整份提交的列表
+#include <stdint.h>                   // int64_t（历史消息记录窗回投的会话 id）
 #include "../IULog.h"                 // LOG_INFO / LOG_ERROR / LOG_WARNING
+#include "../BalloonMain/OnlineCapability.h"   // 快捷操作行的离线门禁（IsActionAllowedInState）
 #include "../BalloonMain/TitleBarIcon.h"   // CreateProgramIconBitmap（标题栏程序图标）
 #include "../resource.h"                   // IDR_MAINFRAME（任务栏 / Alt-Tab 图标）
 #include "ContactLayout.h"            // BuildContactBody / ContactCtrlId 等
@@ -69,6 +76,20 @@ const TCHAR* const kTipTagDuplicate = _T("该标签已存在");
 // "新增标签"时用来表示"这次不是在改某一枚已有标签"的下标值。
 const int kTagIndexNone = -1;
 
+// ---- 打开历史消息记录窗时 wParam 的打包（约定见 UserSessionData.h 上
+//      FMG_MSG_OPEN_HISTORY 的说明：低字节 = 会话类型，次低字节 = 预选的类型胶囊）----
+
+// 会话类型：1 = 单聊（v2 协议的 conversation_single）。联系人资料对话框只可能打开
+// 单聊的历史记录，故取固定值。
+const int kHistoryConvTypeSingle = 1;
+
+// 打开后预选哪一个类型胶囊：0 = 全部（balloonhistory::kHistoryTypeAll）。本入口是
+// "看看和这个人聊过什么"，不预先筛掉任何类型。
+const int kHistoryTypeFilterAll = 0;
+
+// 类型胶囊在 wParam 里的位偏移 —— 它占的是次低字节，故左移一个字节的位数。
+const int kHistoryTypeFilterShift = 8;
+
 // CString（宽字符）转 UTF-8 字节。备注名要跨窗口回投给主面板、并最终进 JSON 报文，
 // 两处都以 UTF-8 为准。空串原样返回空串。
 std::string CStrToUtf8(const CString& text)
@@ -110,6 +131,7 @@ CBalloonContactWindow::CBalloonContactWindow(CFlamingoClient* pFMGClient)
     , m_titleIconBmp(NULL)
     , m_hTaskIconBig(NULL)
     , m_hTaskIconSmall(NULL)
+    , m_connUiState((int)balloonmain::kConnUiOnline)
 {
     // 标签输入弹层的提交回调只需注册一次，弹层本身随窗口存活。
     m_tagPopup.SetCommitCallback(&CBalloonContactWindow::OnTagPopupCommitThunk, this);
@@ -163,6 +185,20 @@ void CBalloonContactWindow::RefreshContactData(const ballooncontact::ContactMode
     ApplyBodyHeight();
     // 不调 SetForegroundWindow —— 后台静默刷新,不抢用户当前焦点。
     ::InvalidateRect(m_hWnd, NULL, FALSE);
+}
+
+void CBalloonContactWindow::ApplyConnectionState(int state)
+{
+    // 状态没变就不必再记一条日志 —— 主面板是每次连接态变化逐窗推的，重复值很常见。
+    if (m_connUiState == state)
+    {
+        return;
+    }
+    m_connUiState = state;
+
+    // 本窗口界面上没有连接态提示条，连接态只影响快捷操作行的门禁，故这里不重绘。
+    LOG_INFO("contact dialog: connection state applied, peer=%u, state=%d "
+             "(0=online 1=connecting 2=offline).", m_peerUserId, state);
 }
 
 CBalloonContactWindow::~CBalloonContactWindow()
@@ -288,18 +324,13 @@ void CBalloonContactWindow::InitUi()
         return;
     }
 
-    // 备注名行内编辑用的文本框 —— XML builder 只建控件对象、不调
-    // EnsureCreated，须在 host HWND 就绪后由调用方显式建一次。
+    // 备注名行内编辑用的文本框：画出边框并限制长度。
     DuiEditHost* remarkEdit = dynamic_cast<DuiEditHost*>(
         content->FindCtrlById(kIdRemarkEdit));
     if (remarkEdit != NULL)
     {
         remarkEdit->SetShowBorder(true);
         remarkEdit->SetMaxLength(32);   // 备注名上限 32 字符
-        if (!remarkEdit->EnsureCreated(m_hWnd))
-        {
-            LOG_WARNING(_T("联系人资料对话框备注名文本框 EnsureCreated 失败。"));
-        }
         // 默认处于非编辑态 —— 文本框先隐藏，让出位置给当前值 + 铅笔按钮。
         remarkEdit->SetVisible(false);
     }
@@ -561,14 +592,15 @@ void CBalloonContactWindow::FillSwitches()
         return;
     }
 
-    // 各开关的 ctrlId 与对应模型开关类别。
+    // 各开关的 ctrlId 与对应模型开关类别。两张表按行一一对应，顺序即界面上
+    // 自上而下的顺序（消息免打扰 / 添加到收藏 / 特别关注）。
     const UINT switchIds[kContactSwitchCount] =
     {
-        kIdSwitchMute, kIdSwitchPinned
+        kIdSwitchMute, kIdSwitchFavorite, kIdSwitchStarred
     };
     const int switchKinds[kContactSwitchCount] =
     {
-        kContactSwitchMute, kContactSwitchPinned
+        kContactSwitchMute, kContactSwitchFavorite, kContactSwitchStarred
     };
 
     for (int i = 0; i < kContactSwitchCount; ++i)
@@ -641,21 +673,13 @@ void CBalloonContactWindow::SetRemarkEditing(bool editing)
     // 显隐变化影响行内布局 —— 强制整树重排。
     RelayoutContactBody(content);
 
-    // 把 Win32 键盘焦点直接给到文本框寄宿的 EDIT 子窗。注意：DuiControl::SetFocus
-    // 只设 DUI 层的焦点，<u>并不会</u> ::SetFocus 那个真 EDIT —— 光调它的话框显出来了
-    // 却打不了字，键盘焦点还留在宿主窗口上。更糟的是此后用户去点那个框，Win32 焦点从
-    // 宿主转到子 EDIT，宿主收到 WM_KILLFOCUS → DuiHost 转给 m_pFocus（正是本文本框）
-    // → 基类 OnKillFocus 发出 DUIN_KILLFOCUS → 被当成"编辑完了"当场提交退回。
-    // 所以这里必须走 GetHostedHwnd + ::SetFocus，并全选文本方便直接覆盖输入。
-    // 同样的坑群资料对话框的群名片编辑先踩过（见 BalloonGroupInfoDlg::EnterCardEdit）。
+    // 把焦点交给文本框并全选，方便用户直接覆盖输入。文本框改成无窗口实现之后
+    // 一次 SetFocus 就够了：它既把 DUI 焦点指到本控件，又让宿主窗口把 Win32 键盘
+    // 焦点拿到手（无窗口控件没有自己的窗口，按键消息要先投递到宿主才能转下来）。
     if (editing && remarkEdit != NULL)
     {
-        HWND hEdit = remarkEdit->GetHostedHwnd();
-        if (hEdit != NULL)
-        {
-            ::SetFocus(hEdit);
-            ::SendMessage(hEdit, EM_SETSEL, 0, -1);
-        }
+        remarkEdit->SetFocus();
+        remarkEdit->SelectAll();
     }
 }
 
@@ -961,21 +985,165 @@ void CBalloonContactWindow::CommitTagList(const std::vector<CString>& tags)
 
 void CBalloonContactWindow::OnSwitchToggled(UINT switchCtrlId, bool on)
 {
-    int kind = -1;
+    // 开关类别（写模型用）与要回投给主面板的消息号一起定下来。
+    int  kind  = -1;
+    UINT msgId = 0;
     switch (switchCtrlId)
     {
+    //消息免打扰：主面板据此改与该联系人这条会话的免打扰属性
     case kIdSwitchMute:
-        kind = kContactSwitchMute;
+        kind  = kContactSwitchMute;
+        msgId = FMG_MSG_SET_CONTACT_MUTE;
         break;
-    case kIdSwitchPinned:
-        kind = kContactSwitchPinned;
+
+    //添加到收藏：主面板据此把该联系人加入 / 移出通讯录顶部的「我的收藏」分区
+    case kIdSwitchFavorite:
+        kind  = kContactSwitchFavorite;
+        msgId = FMG_MSG_SET_CONTACT_FAVORITE;
         break;
+
+    //特别关注：主面板据此登记 / 取消该联系人上下线时的桌面提示
+    case kIdSwitchStarred:
+        kind  = kContactSwitchStarred;
+        msgId = FMG_MSG_SET_CONTACT_STARRED;
+        break;
+
+    //其余控件不是本对话框的开关，不处理
     default:
         return;
     }
 
+    // 先把新状态写进模型：界面上开关已经拨过去了，模型不跟上的话，下一次重建
+    // 客户区（FillSwitches）又会按旧值把它拨回来。
     m_model.SetSwitch(kind, on);
-    LOG_INFO(_T("联系人资料对话框开关状态已更新。"));
+
+    // 有宿主主面板（正常登录态）时，"该不该发、发不出去怎么办、失败怎么退回来"
+    // 全部交给主面板判定与执行 —— 收藏 / 特别关注的缓存、会话免打扰的开关与 socket
+    // 都在它手上。做法与备注名（CommitRemarkEdit）、标签（CommitTagList）完全同构。
+    if (m_hostPanel != NULL && ::IsWindow(m_hostPanel) && m_peerUserId != 0)
+    {
+        // 传的是<u>目标状态</u>而不是"取反"：用户连点两下、而第一条应答还在路上时，
+        // 按取反算会让主面板对着同一个旧状态取反两次，结果与用户看到的开关相反。
+        ::PostMessage(m_hostPanel, msgId, (WPARAM)m_peerUserId, (LPARAM)(on ? 1 : 0));
+        LOG_INFO("contact dialog: submit switch, userid=%u, ctrlId=%u, target=%d.",
+                 m_peerUserId, switchCtrlId, on ? 1 : 0);
+        return;
+    }
+
+    // 调试入口（--contact）没有宿主主面板，也没有真实连接：只改内存，好让这条交互
+    // 在调试入口下仍然能走通、能人工核对界面。
+    LOG_INFO("contact dialog: no host panel, switch updated in memory only, "
+             "ctrlId=%u, target=%d.", switchCtrlId, on ? 1 : 0);
+}
+
+void CBalloonContactWindow::OnQuickActionClicked(UINT ctrlId)
+{
+    // 调试入口（--contact）没有宿主主面板，四个动作没有一个发得出去。这里只记一条
+    // 日志、不弹提示框 —— 调试入口是拿来看界面的，弹框正好挡住要看的东西。
+    if (m_hostPanel == NULL || !::IsWindow(m_hostPanel) || m_peerUserId == 0)
+    {
+        LOG_INFO("contact dialog: no host panel, quick action ignored, ctrlId=%u.",
+                 ctrlId);
+        return;
+    }
+
+    // 通话邀请要带上给对方"呼叫中"对话框看的显示名：备注优先，没有备注才用真名 ——
+    // 与 DoSendMessage 的取名口径一致。
+    const CString& remark = m_model.Remark();
+    const CString peerName = remark.IsEmpty() ? m_model.Name() : remark;
+
+    switch (ctrlId)
+    {
+    //语音通话：转投主面板的通话协调器，由它统一发 cmd_call_invite 并弹"呼叫中"对话框。
+    //做法与单聊窗头部那颗按钮一致（见 CBalloonChatWindow::OnDuiNotify）。
+    case kIdBtnVoice:
+        {
+            // 通话要走信令通道，离线时发起必然失败，在入口就拦住。
+            if (!CheckOnlineFor(balloonmain::kActionRealtimeCall))
+            {
+                return;
+            }
+            // 跨窗口传 CString 不安全（生命周期与线程），显示名走堆 std::wstring，
+            // 由收件方处理后 delete。
+            std::wstring* pPeerName = new std::wstring(peerName.GetString());
+            if (!::PostMessage(m_hostPanel, FMG_MSG_CALL_START_INVITE,
+                               (WPARAM)m_peerUserId, (LPARAM)pPeerName))
+            {
+                delete pPeerName;   // 投递失败（主面板已销毁）自行回收，杜绝泄漏
+            }
+            LOG_INFO("contact dialog: request voice call, userid=%u.", m_peerUserId);
+        }
+        break;
+
+    //视频通话：与语音通话同一条路由，只是消息号不同（主面板据此发 media=video）。
+    case kIdBtnVideo:
+        {
+            if (!CheckOnlineFor(balloonmain::kActionRealtimeCall))
+            {
+                return;
+            }
+            std::wstring* pPeerName = new std::wstring(peerName.GetString());
+            if (!::PostMessage(m_hostPanel, FMG_MSG_CALL_START_VIDEO_INVITE,
+                               (WPARAM)m_peerUserId, (LPARAM)pPeerName))
+            {
+                delete pPeerName;
+            }
+            LOG_INFO("contact dialog: request video call, userid=%u.", m_peerUserId);
+        }
+        break;
+
+    //历史消息：请主面板打开与该联系人这条单聊会话的历史消息记录窗。历史记录读的是
+    //本地库，不需要联网，故这一项不过离线门禁。
+    case kIdBtnHistory:
+        {
+            // 会话类型与"预选哪个类型胶囊"一起塞在 wParam 里；对端 userid 经堆
+            // int64_t 回投，由主面板处理后 delete（约定见 UserSessionData.h）。
+            int64_t* pCid = new int64_t((int64_t)m_peerUserId);
+            const WPARAM wp = (WPARAM)(kHistoryConvTypeSingle
+                | (kHistoryTypeFilterAll << kHistoryTypeFilterShift));
+            if (!::PostMessage(m_hostPanel, FMG_MSG_OPEN_HISTORY, wp, (LPARAM)pCid))
+            {
+                delete pCid;   // 投递失败（主面板已销毁）自行回收，杜绝泄漏
+            }
+            LOG_INFO("contact dialog: request history window, userid=%u.", m_peerUserId);
+        }
+        break;
+
+    //组织架构：请主面板切到通讯录页、展开各级部门、滚动到该联系人那一行并选中。
+    //纯本地操作，同样不过离线门禁。
+    case kIdBtnLocate:
+        ::PostMessage(m_hostPanel, FMG_MSG_LOCATE_CONTACT, (WPARAM)m_peerUserId, 0);
+        LOG_INFO("contact dialog: request locate in address book, userid=%u.",
+                 m_peerUserId);
+        // 本窗口是居中的独立顶层窗口，正好盖住主面板；不关掉的话用户看不见定位结果。
+        // 与「发消息」一样投完即关。
+        if (IsWindow())
+        {
+            DestroyWindow();
+        }
+        break;
+
+    //其余控件不是快捷操作行的按钮，不处理
+    default:
+        break;
+    }
+}
+
+bool CBalloonContactWindow::CheckOnlineFor(int action)
+{
+    // 门禁只看本窗记下的连接态：它由主面板推下来，与托盘图标、状态胶囊同源。
+    // 判定本身交给 OnlineCapability，不在本窗口再写一份（规则只该有一处）。
+    if (balloonmain::IsActionAllowedInState(m_connUiState, action))
+    {
+        return true;
+    }
+
+    LOG_INFO("ContactWindow::CheckOnlineFor: blocked. peer=%u, action=%d, "
+             "connUiState=%d (0=online 1=connecting 2=offline).",
+             m_peerUserId, action, m_connUiState);
+    ::MessageBox(m_hWnd, balloonmain::GetBlockedActionTip(action),
+                 _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+    return false;
 }
 
 void CBalloonContactWindow::DoSendMessage()
@@ -1076,6 +1244,14 @@ LRESULT CBalloonContactWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         case kIdBtnSend:
             DoSendMessage();
             return 0;
+        //点快捷操作行的四个按钮（语音通话 / 视频通话 / 历史消息 / 组织架构）——
+        //四者都只是把动作回投给主面板，统一交给 OnQuickActionClicked 按 ctrlId 分派。
+        case kIdBtnVoice:
+        case kIdBtnVideo:
+        case kIdBtnHistory:
+        case kIdBtnLocate:
+            OnQuickActionClicked(pNotify->ctrlId);
+            return 0;
         //其余控件的点击本分支不处理，落到函数后面的分支继续判定。
         default:
             break;
@@ -1087,7 +1263,8 @@ LRESULT CBalloonContactWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
     {
         // 开关翻转 —— extra 为新状态（1 开 / 0 关）。
         if (pNotify->ctrlId == kIdSwitchMute
-            || pNotify->ctrlId == kIdSwitchPinned)
+            || pNotify->ctrlId == kIdSwitchFavorite
+            || pNotify->ctrlId == kIdSwitchStarred)
         {
             OnSwitchToggled(pNotify->ctrlId, pNotify->extra != 0);
             return 0;
@@ -1123,14 +1300,44 @@ LRESULT CBalloonContactWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
 }
 
 LRESULT CBalloonContactWindow::OnLButtonDown(UINT /*uMsg*/, WPARAM /*wParam*/,
-                                             LPARAM /*lParam*/, BOOL& bHandled)
+                                             LPARAM lParam, BOOL& bHandled)
 {
-    // 备注名编辑态下，本消息只会在点击子 EDIT <u>之外</u>的 DUI 区域时到达宿主
-    //（点子 EDIT 的鼠标消息由系统直送该子窗口，不经宿主）。把焦点收回宿主逼子 EDIT
-    // 失焦 → EN_KILLFOCUS → DUIN_KILLFOCUS → 去抖提交，达成"点别处自动退出编辑并保存"。
-    if (m_remarkEditing && IsWindow())
+    // 备注名编辑态下点在文本框之外 —— 把 DUI 焦点从文本框上摘掉，由此触发
+    // DUIN_KILLFOCUS → 去抖提交，达成"点别处自动退出编辑并保存"。
+    //
+    // 这条路径换过一次触发方式。文本框还是内嵌真 Win32 EDIT 子窗口的时候，靠的是
+    // 「把键盘焦点收回宿主窗口 → 子窗口失焦 → DUIN_KILLFOCUS」；那时点在子窗口上的
+    // 鼠标消息由系统直送该子窗口，压根不会到达宿主，所以宿主收到本消息就等于"点在
+    // 文本框之外"，不必判落点。文本框改成无窗口实现之后这两条前提都不成立了：键盘
+    // 焦点本来就在宿主窗口上，再调一次 ::SetFocus(m_hWnd) 不产生任何焦点变化（故那
+    // 一句已删除）；而点在文本框上的鼠标消息同样会到达宿主。于是改为在这里自己判
+    // 落点，只有确实点在文本框之外时才摘焦点。
+    if (m_remarkEditing)
     {
-        ::SetFocus(m_hWnd);
+        DuiControl* content = GetClientContent();
+        DuiEditHost* remarkEdit = (content != NULL)
+            ? dynamic_cast<DuiEditHost*>(content->FindCtrlById(kIdRemarkEdit))
+            : NULL;
+        // 只在文本框当前确实持有 DUI 焦点时才动焦点：焦点已经不在它身上时，
+        // DUIN_KILLFOCUS 早已发过、提交也已经投递过，这里再摘一次只会给别的控件
+        // 发出一条无意义的失焦通知。
+        if (remarkEdit != NULL && remarkEdit->IsFocused())
+        {
+            // 控件矩形与本消息的鼠标坐标同为宿主窗口客户区坐标，可直接比对。
+            POINT pt;
+            pt.x = GET_X_LPARAM(lParam);
+            pt.y = GET_Y_LPARAM(lParam);
+            RECT rcEdit = remarkEdit->GetRect();
+            if (!::PtInRect(&rcEdit, pt))
+            {
+                // 摘掉 DUI 焦点即走原有的那条提交链：文本框收到失焦 → 发出
+                // DUIN_KILLFOCUS → 本窗口投递 WM_CONTACT_REMARK_COMMIT → 去抖后提交。
+                // 这里刻意不直接调 CommitRemarkEdit：提交会隐藏文本框并重排整棵树，
+                // 而本次点击随后还要交给 DuiHost 做命中派发，就地提交会让它按提交后的
+                // 新布局去命中控件，点到本不该点的东西上。
+                SetDuiFocus(NULL);
+            }
+        }
     }
     bHandled = FALSE;   // 继续交给 DuiFrameWindow / DuiHost 正常处理这次点击
     return 0;
@@ -1144,16 +1351,14 @@ LRESULT CBalloonContactWindow::OnRemarkCommitDeferred(UINT /*uMsg*/, WPARAM /*wP
         return 0;   // 已不在编辑态（例如已被别处提交），无须处理
     }
 
-    // 焦点又回到了备注名 EDIT 子窗（用户在编辑框内重新点击导致的短暂失焦 → 得焦）：
+    // 焦点又回到了备注名文本框（用户在文本框内重新点击导致的短暂失焦 → 得焦）：
     // 说明人还在编辑，跳过这次提交。焦点真正离开了才提交。
     DuiControl* content = GetClientContent();
     if (content != NULL)
     {
         DuiEditHost* remarkEdit = dynamic_cast<DuiEditHost*>(
             content->FindCtrlById(kIdRemarkEdit));
-        if (remarkEdit != NULL
-            && remarkEdit->GetHostedHwnd() != NULL
-            && ::GetFocus() == remarkEdit->GetHostedHwnd())
+        if (remarkEdit != NULL && remarkEdit->IsFocused())
         {
             return 0;
         }

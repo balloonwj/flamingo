@@ -7,7 +7,7 @@
  *  （FlamingoUnit）直接覆盖而不必把 ini / 会话全局拖进测试 exe。
  *
  *  LOGFONT 各字段严格对齐 DuiEditHost::SetCtlFont 内部 CreateFont 的取值，保证
- *  输入框从 DuiEditHost 迁移到 DuiRichEditHost 后字体渲染视觉一致。
+ *  输入框从纯文本 DuiEditHost 迁移到富文本控件后字体渲染视觉一致。
  *
  *  balloonwj@qq.com   2026-06-04
  */

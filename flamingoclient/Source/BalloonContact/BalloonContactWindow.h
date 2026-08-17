@@ -4,11 +4,16 @@
  *  联系人资料对话框 —— 基于 balloonui，对照 design/联系人.png 与
  *  design/_decoded 里的 ContactInfoDialog。居中模态风格的独立窗口，
  *  展示某个联系人的资料并提供：标签的增 / 改 / 删、备注名行内编辑、消息免打扰 /
- *  置顶聊天两个开关、分组下拉、「发消息」「关闭」两个底部
- *  按钮。
+ *  添加到收藏 / 特别关注三个开关、分组下拉、语音通话 / 视频通话 / 历史消息 /
+ *  组织架构四个快捷操作按钮、「发消息」「关闭」两个底部按钮。
  *
- *  当前以 mock 数据（「江屿白」那一组）填充；真实联系人数据与「发消息」
- *  的真实跳转待后续接入。调试期由 CMainDlg 的 --contact 入口直接弹出。
+ *  本窗口自己既没有 socket 也没有通讯录 / 收藏 / 特别关注这几份缓存，所以三个
+ *  开关与四个快捷操作一律不在本窗口执行，只把用户的意图回投给主面板
+ *  （FMG_MSG_SET_CONTACT_* / FMG_MSG_LOCATE_CONTACT / FMG_MSG_CALL_* /
+ *  FMG_MSG_OPEN_HISTORY），由它判定与执行 —— 与备注名、标签的提交是同一套做法。
+ *
+ *  调试期由 CMainDlg 的 --contact 入口直接弹出，此时没有宿主主面板，各动作
+ *  退化为只改内存并记一条日志。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL
  *  （Flamingo 侧由 stdafx.h 保证）。
@@ -82,6 +87,21 @@ public:
      *    model  已按新值填好的资料模型。
      */
     void RefreshContactData(const ballooncontact::ContactModel& model);
+
+    /**
+     *  把当前的界面连接态推给本窗口，供快捷操作行的离线门禁使用。
+     *
+     *  本窗口不自己判断连不连得上服务器：连接态由 CMainDlg 统一算出、经主面板逐窗
+     *  推下来，与托盘图标、状态胶囊、各聊天窗同源（做法与
+     *  CBalloonChatWindow::ApplyConnectionState 一致）。宿主主面板应当在打开本窗口
+     *  之后、以及此后每次连接态变化时各调用一次。
+     *
+     *    state：界面连接态，取值见 balloonmain::ConnectionUiState
+     *           （0=在线 1=正在连接 2=离线）。越界值按"未就绪"处理，一律拦住。
+     *
+     *  副作用：只更新成员，不重绘、不弹任何提示。
+     */
+    void ApplyConnectionState(int state);
 
     BEGIN_MSG_MAP(CBalloonContactWindow)
         MESSAGE_HANDLER(WM_CLOSE, OnCloseMsg)
@@ -199,22 +219,57 @@ private:
      */
     bool GetTagCtrlScreenRect(UINT ctrlId, RECT& outRectScreen);
 
-    // 某个开关翻转后，把新状态写回 m_model。
-    //   switchCtrlId：被翻转开关的 ctrlId；on：翻转后的状态。
+    /**
+     *  某个开关翻转后：先把新状态写回 m_model，再把<u>目标状态</u>回投给主面板。
+     *
+     *  与备注名、标签的提交同构 —— 本窗口不判定该不该发、也不执行，收藏与特别关注
+     *  的缓存、会话免打扰的开关、以及 socket 都在主面板手上。回投的是目标状态而不是
+     *  "取反"：用户连点两下而第一条应答还在路上时，按取反算会被同一个旧状态取反两次。
+     *  无宿主主面板（--contact 调试入口）时退化为只改内存并记一条日志。
+     *
+     *    switchCtrlId：被翻转开关的 ctrlId（kIdSwitchMute / kIdSwitchFavorite /
+     *                  kIdSwitchStarred 三者之一，其余值忽略）。
+     *    on：翻转后的状态，true 开 / false 关。
+     */
     void OnSwitchToggled(UINT switchCtrlId, bool on);
 
-    // 「发消息」按钮（当前为 mock：弹框占位 + 打日志）。
+    /**
+     *  快捷操作行四个按钮的统一处理：语音通话 / 视频通话 / 历史消息 / 组织架构。
+     *
+     *  四者都只是把动作回投给主面板，由它去发信令、开历史记录窗、定位通讯录。
+     *  语音与视频还要先过离线门禁（通话要走信令通道，离线时发起必然失败）。
+     *  「组织架构」投完之后会关闭本窗口 —— 资料窗是居中的独立顶层窗口，会盖住
+     *  主面板，不关掉的话用户看不见定位结果。
+     *
+     *    ctrlId：被点击按钮的 ctrlId（kIdBtnVoice / kIdBtnVideo / kIdBtnHistory /
+     *            kIdBtnLocate 四者之一，其余值忽略）。
+     */
+    void OnQuickActionClicked(UINT ctrlId);
+
+    /**
+     *  离线门禁：判定某类操作在当前连接态下是否放行，被拦住时弹一句提示。
+     *
+     *  判定本身交给 balloonmain::IsActionAllowedInState，不在本窗口就地写一份 ——
+     *  规则只该有一处（见 BalloonMain/OnlineCapability.h 的说明）。做法与
+     *  CBalloonChatWindow::CheckOnlineFor 完全一致。
+     *
+     *    action：操作类别，取值见 balloonmain::OnlineActionKind。
+     *  返回：true 表示可以执行；false 表示已被拦住（并且已经弹过提示框）。
+     */
+    bool CheckOnlineFor(int action);
+
+    // 「发消息」按钮：请主面板按 userid 打开单聊并关闭本窗口；调试入口下弹 mock 提示。
     void DoSendMessage();
 
     // WM_CLOSE：调试入口下关闭即结束程序，转交 CMainDlg。
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
-    // WM_DUI_NOTIFY：处理标签删除 / 添加、备注名编辑、开关翻转、按钮点击。
+    // WM_DUI_NOTIFY：处理标签删除 / 添加、备注名编辑、开关翻转、快捷操作与底部按钮点击。
     LRESULT OnDuiNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
-    // WM_LBUTTONDOWN：备注名编辑态下点到子 EDIT 以外的 DUI 区域时，把焦点收回
-    // 宿主窗口，逼子 EDIT 失焦，从而走"失焦提交"退出编辑态。balloonui 的 DUI 控件
-    // 不是独立 HWND，点它们不会自动夺走子 EDIT 的 Win32 焦点，故须在此显式逼失焦。
+    // WM_LBUTTONDOWN：备注名编辑态下，按鼠标落点判断是否点在文本框之外；是则摘掉
+    // 文本框的 DUI 焦点，从而走"失焦提交"退出编辑态。文本框是无窗口控件，点它与点
+    // 别处的鼠标消息都到达本窗口，且它本身不持有 Win32 焦点，故须在此自行判定落点。
     LRESULT OnLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     // WM_CONTACT_REMARK_COMMIT（去抖自投）：备注名文本框失焦后延后一拍的提交检查。
@@ -240,4 +295,10 @@ private:
                                        // 本类持有，跨"关闭再打开"复用，析构时 DeleteObject
     HICON            m_hTaskIconBig;   // 任务栏 / Alt-Tab 大图标（本类持有，析构 DestroyIcon）
     HICON            m_hTaskIconSmall; // 任务栏 / Alt-Tab 小图标（本类持有，析构 DestroyIcon）
+    int              m_connUiState;    // 当前界面连接态（balloonmain::ConnectionUiState：
+                                       // 0=在线 1=正在连接 2=离线）。由 ApplyConnectionState
+                                       // 从主面板推入，快捷操作行的离线门禁据它判定。
+                                       // 初值取"在线"：与各聊天窗一致，宿主尚未推入之前
+                                       // 不误拦用户的操作（确实发不出去时，主面板一侧还有
+                                       // 一次同样的判定）。
 };

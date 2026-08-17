@@ -276,6 +276,10 @@ tests/test_contacttagprotocol.cpp
 tests/test_contacttagmanager.cpp
 tests/test_adminbootstrap.cpp
 tests/test_apppath.cpp
+# 两份 v2 协议头（服务端 chatserversrc/Protocol.h 与客户端 Source/net/Protocol.h）
+# 的一致性守卫（Suite PP）。它把两个头文件当纯文本读进来比对，不链接任何实现文件，
+# 只用到 utils/AppPath.cpp 里的路径工具，而后者已在下方的实现清单中
+tests/test_protocolparity.cpp
 tests/test_serverconfigloader.cpp
 # 网络 I/O 工作线程数配置项的取值判定用例（Suite IOT）。被测的两个函数就在
 # utils/ServerConfigLoader.cpp 里，而该文件已在下方的实现清单中，不需要再补实现文件
@@ -308,6 +312,31 @@ tests/test_updateprotocol.cpp
 tests/test_clientversionmanager.cpp
 tests/test_updatepackageindex.cpp
 tests/test_updatepackagescanner.cpp
+# 会话发送路径的线程归属用例（Suite SSA）。它是端到端复现：真的起一个 EventLoop 线程、
+# 真的建一条 127.0.0.1 上的 TCP 连接、真的走完三帧协议加密握手，故要把 reactor 与被测的
+# 发送漏斗 chatserversrc/TcpSession.cpp 一并编进测试程序（都在下方的实现清单里）。
+# 连接由用例自己 accept 出来后交给 TcpConnection，不经 TcpServer / Acceptor /
+# EventLoopThreadPool，那三个因此不必编进来
+tests/test_sendthreadaffinity.cpp
+# Poller 事件位口径的用例（Suite PRV）。同样是端到端复现，用的是下面这批 reactor 实现文件，
+# 不需要再额外补实现文件。缺陷本身只在 Windows 的 SelectPoller 上成立，Linux 走 epoll
+# 不会复现，这里编进来是为了守住「两个平台的判定口径一致」
+tests/test_pollerrevents.cpp
+chatserversrc/TcpSession.cpp
+net/ByteBuffer.cpp
+net/Channel.cpp
+net/EpollPoller.cpp
+net/EventLoop.cpp
+net/EventLoopThread.cpp
+net/InetAddress.cpp
+net/Poller.cpp
+net/PollPoller.cpp
+net/SelectPoller.cpp
+net/Sockets.cpp
+net/TcpConnection.cpp
+net/Timer.cpp
+net/TimerQueue.cpp
+base/Timestamp.cpp
 chatserversrc/DepartmentPath.cpp
 chatserversrc/DepartmentMsg.cpp
 chatserversrc/LoginProtocol.cpp

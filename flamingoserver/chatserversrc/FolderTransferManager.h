@@ -139,6 +139,14 @@ public:
     //在人读日志与包体时能直接对应"第几次尝试"，不必在心里加一
     static const int kFirstAttemptSeq = 1;
 
+    //已终结尝试的登记项在会话销毁之后还要保留多久（毫秒）= 5 分钟。
+    //保留期存在的理由是"会话已经不在表里、重复的终结判定却还在路上"：一次传输正常收尾时
+    //双方各发一帧 cmd_folder_close，先到的那一帧终结会话并把它从会话表里删掉，后到的那一帧
+    //仍会走到终结这一步，此时只剩登记项能认出它是重复的。两帧在真实链路上相隔至多几百毫秒，
+    //取 5 分钟即留了三个数量级的余量。会话仍在表里的登记项不受本保留期约束（见 tick），
+    //故失败会话在整个 folderretrywindow 内的重复终结都拦得住
+    static const int64_t kFinishedAttemptRetentionMs = 5 * 60 * 1000;
+
     /**
      *  配置文件夹传输域运行参数；main.cpp 读取 etc/chatserver.conf 后调用一次。
      *  约定只在服务启动阶段调用（此后各 get 方法只读不加锁），不要在运行期改配置。
@@ -312,6 +320,46 @@ public:
     bool beginRetryAttempt(const std::string& sessionid, int64_t now, int& outAttemptSeq);
 
     /**
+     *  终结一次尝试：在<u>同一个临界区内</u>判定「本会话的这一次尝试是否已经被终结过」
+     *  并把它标记为已终结，返回本次调用是不是第一个终结者。传输走到终态时要做的两件事
+     *  （在双方聊天记录里留一条传输记录、向相关方推一帧 cmd_folder_state_notify）都以它
+     *  为闸门：<u>只有拿到 true 的那一个调用方才继续做，拿到 false 的一律安静返回</u>。
+     *
+     *  之所以必须收在本类里而不是由调用方"先查一次、没终结过就自己做"：一次传输结束时
+     *  双方各发一帧 cmd_folder_close，两帧落在两个不同的 EventLoop 工作线程上，"查"与
+     *  "写"分成两步时两个线程都会查到"还没终结过"，于是各做一遍 —— 表现为聊天记录里
+     *  同一次传输出现两条一模一样的记录条、对端连收两帧状态变更。会话状态与尝试序号本就
+     *  归本类维护，判定与标记合并进本类已有的那把互斥量即可，调用方不必自己加锁。
+     *
+     *  <b>去重粒度是「会话 id + 尝试序号」，不是「会话 id」。</b>一笔传输失败后在保留期内
+     *  重试会开启新的一次尝试（序号加一，见 beginRetryAttempt），那一次尝试再走到终态时
+     *  必须能再留一条记录 —— 需求要的就是"每次尝试各留一条"。故本方法只挡住序号<u>不大于</u>
+     *  已终结序号的调用：同一次尝试的第二次终结被挡下，下一次尝试的终结照常放行。
+     *
+     *  副作用：拿到 true 时，会话若仍在会话表里，其状态被置为 terminalState、stateTime
+     *  刷成 now（"进入终态"这件事因而同样只发生一次，不会像先前那样被两个线程各置一遍）。
+     *  会话已经不在表里时只登记、不改状态 —— 邀请超时那条路径正是如此：tick 已经把会话
+     *  移出会话表，调用方手里只有一份快照。
+     *
+     *  登记项的清理见 tick：会话仍在表里时一直保留，会话销毁之后再保留
+     *  kFinishedAttemptRetentionMs 毫秒才丢弃。
+     *
+     *  @param sessionid     会话 id
+     *  @param attemptSeq    本次尝试的序号（次），调用方从会话快照的
+     *                       FolderTransferSessionInfo::attemptSeq 取；它与传输记录条的
+     *                       幂等键用的是同一个值，去重粒度因而与记录粒度严格对齐
+     *  @param terminalState 终态取值，见 Protocol.h 的 enum folder_transfer_state 的 3~8；
+     *                       传入过程态（响铃中 / 传输中）视为调用方参数写错，本方法记一条
+     *                       告警日志并返回 false，既不登记也不改状态
+     *  @param now           当前时间，Unix 毫秒
+     *  @return true 表示本次调用是这一次尝试的第一个终结者，调用方须继续做留记录与推送；
+     *          false 表示这一次尝试已被别的线程或别的路径终结过（或 terminalState 非法），
+     *          调用方应当直接返回
+     */
+    bool finishAttempt(const std::string& sessionid, int attemptSeq,
+                       int terminalState, int64_t now);
+
+    /**
      *  删除会话（拒绝 / 取消 / 对方离线 / 传输完成时调用）。
      *  注意传输失败时<u>不要</u>立即删：失败会话要保留 folderretrywindow 供重试续传，
      *  改用 setState(sessionid, folder_state_failed, now)，到期由 tick 销毁。
@@ -347,6 +395,10 @@ public:
      *        自己那侧的关联状态与记录日志。
      *
      *  两个边界都取"大于等于"：正好到点即清理。
+     *
+     *  除这两类会话之外，本方法还顺带丢弃过期的"已终结尝试"登记项（见 finishAttempt）：
+     *  所属会话已经不在会话表里、且终结至今已达 kFinishedAttemptRetentionMs 的那些。
+     *  登记项不随会话销毁一起丢弃，否则重复的终结判定赶在销毁之后到达时就认不出来了。
      *
      *  @param now         当前时间，Unix 毫秒
      *  @param outTimedOut [出参] 追加邀请超时被移除的会话；调用前是否清空由调用方决定
@@ -396,9 +448,26 @@ private:
     int collectUserSessionsLocked(int64_t userId,
                                   std::vector<FolderTransferSessionInfo>* out) const;
 
+    /**
+     *  一条"已终结尝试"的登记项，记的是某个会话最近一次被终结的是第几次尝试、终结于何时。
+     *  一个会话只留一条：尝试序号只增不减、每次尝试也只终结一次，故记住最大的那个序号
+     *  就足以认出所有重复的终结判定（序号不大于它的一律是重复的）。
+     */
+    struct FinishedAttempt
+    {
+        int     attemptSeq;   //已终结的最大尝试序号（次）
+        int64_t finishTime;   //该次终结发生的时间，Unix 毫秒；登记项的保留期以它为基准
+
+        FinishedAttempt()
+            : attemptSeq(0), finishTime(0)
+        {
+        }
+    };
+
 private:
-    mutable std::mutex                                  m_mutex;          //保护会话表；配置项只在启动时写一次，不受它保护
+    mutable std::mutex                                  m_mutex;          //保护会话表与已终结尝试表；配置项只在启动时写一次，不受它保护
     std::map<std::string, FolderTransferSessionInfo>    m_sessions;       //sessionid → 会话
+    std::map<std::string, FinishedAttempt>              m_finishedAttempts;//sessionid → 已终结尝试登记项；生命周期比会话长，见 finishAttempt 与 tick
     uint64_t                                            m_seqCounter;     //会话序号自增器，与时间 / 双方 id 拼成唯一 sessionid
     std::string                                         m_relayTokenKey;  //relay 令牌 HMAC 密钥，与 fileserver 共享
     std::string                                         m_relayHost;      //fileserver 中转对外主机地址

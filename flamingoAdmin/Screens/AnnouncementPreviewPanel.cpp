@@ -10,11 +10,10 @@
 #include "Widgets/UiHelpers.h"
 #include "Widgets/CommonWidgets.h"
 #include "Widgets/IconRenderer.h"
-#include "Widgets/OverlayScrollbar.h"   // 正文悬浮滚动条(与左侧列表同款)
 
 #include "Controls/Basic/DuiLabel.h"
 #include "Controls/Basic/DuiButton.h"
-#include "Controls/Input/DuiRichEditHost.h"
+#include "Controls/Input/DuiRichEdit.h"
 
 using namespace balloonwjui;
 
@@ -43,7 +42,6 @@ const int kSenderBottomGap = 16; // 发送者行与分隔线间距
 const int kDividerH      = 1;   // 分隔线高度
 const int kDividerBottomGap = 16; // 分隔线与正文间距
 const int kBodyBottomGap = 20;  // 正文与状态卡间距
-const int kBodySbGap     = 4;   // 正文文字与右侧悬浮滚动条窄带之间的间距(像素)
 const int kProgressCardH = 62;  // 进度卡高度
 const int kScheduleCardH = 70;  // 调度卡高度
 const int kStatusCardBottomGap = 16; // 状态卡与按钮行间距
@@ -119,17 +117,22 @@ std::unique_ptr<DuiControl> MakeSlot()
     return std::unique_ptr<DuiControl>(new DuiControl());
 }
 
-// 创建一个只读多行可选 RichEdit(已设字体 / 字色 / 无边框 / 无滚动条槽位)。
+// 创建一个只读多行可选富文本控件(已设字体 / 字色 / 无边框 / 无光标)。
 //   font:默认字体(调用方持有);
 //   color:文字色。
-std::unique_ptr<DuiRichEditHost> MakeReadOnlyRichEdit(HFONT font, COLORREF color)
+std::unique_ptr<DuiRichEdit> MakeReadOnlyRichEdit(HFONT font, COLORREF color)
 {
-    std::unique_ptr<DuiRichEditHost> re(new DuiRichEditHost());
+    std::unique_ptr<DuiRichEdit> re(new DuiRichEdit());
     re->SetMultiLine(true);
     re->SetWordWrap(true);
     re->SetReadOnly(true);
     re->SetShowBorder(false);       // 与父卡片底融合,不画输入框边框
-    re->SetShowVScroll(false);      // 不预留滚动条槽,外层 OverlayScrollbar 接管
+    // 只读展示区不显示光标,免得看着像可以编辑。
+    // 注意**不能**改用 SetFocusable(false):那样文字会变得选不中
+    // (排版引擎在拖选过程中需要控件持有焦点),而这里要的正是能选中复制。
+    re->SetShowCaret(false);
+    // 高度由外层布局决定,不随内容长高 —— 面板各段的位置是算好的。
+    re->SetAutoGrow(false);
     re->SetDefaultFontFromHFONT(font);
     re->SetTextColor(color);
     re->SetBackgroundColor(theme::kInk0);  // 与卡片白底一致
@@ -199,7 +202,7 @@ AnnouncementPreviewPanel::AnnouncementPreviewPanel()
     // 子控件 1:标题(只读多行可复制 RichEdit)
     //   高度在 Layout 时按文本 + 当前宽度量算后用 SetHint 更新。
     // ====================================================================
-    std::unique_ptr<DuiRichEditHost> titleEdit = MakeReadOnlyRichEdit(
+    std::unique_ptr<DuiRichEdit> titleEdit = MakeReadOnlyRichEdit(
         ui::UiFont(kTitlePt, true), theme::kInk700);
     //标题固定单行：换行版靠 DrawText 量算高度，而 RichEdit 的真实行高与之有出入，
     //两行标题经常差几像素、末行被切掉半截（见 snapshots/105040.png）。单行则高度
@@ -239,35 +242,23 @@ AnnouncementPreviewPanel::AnnouncementPreviewPanel()
     // ====================================================================
     // 子控件 4:正文(只读多行可复制 RichEdit),高度同标题在 Layout 量算。
     // ====================================================================
-    // 正文行:[ 正文 RichEdit(Weight 1) ][ 悬浮滚动条(固定窄带) ]。正文关掉
-    // 原生灰色滚动条,改由右侧悬浮细条 m_bodySb 承载滚动显示(与左侧公告列表
-    // 同款 auto-hide)。细条落在 RichEdit 子窗口矩形之外的右侧窄带里,不会被
-    // HWND 盖住。整行固定高度 kBodyFixedH;正文内容超出时内部滚动。
-    std::unique_ptr<DuiHBox> bodyRow(new DuiHBox());
-    bodyRow->SetGap(kBodySbGap);
-    {
-        std::unique_ptr<DuiRichEditHost> bodyEdit = MakeReadOnlyRichEdit(
-            ui::UiFont(theme::kFontSizeNormal, false), theme::kInk700);
-        // 关原生竖直滚动条(MakeReadOnlyRichEdit 已设 false,这里显式重申意图)。
-        bodyEdit->SetShowVScroll(false);
-        // 注册"内容滚动位置变化"回调:用户滚轮 / 键盘滚动正文时,把新位置同步
-        // 给悬浮滚动条。HWND 未建时仅缓存,EnsureCreated 后子类过程据此回调。
-        bodyEdit->SetOnVScrollChanged(&AnnouncementPreviewPanel::OnBodyRichEditScrolled,
-                                      this);
-        m_bodyEdit = bodyEdit.get();
-        bodyRow->AddChild(std::move(bodyEdit), Hint().Weight(1));
-
-        std::unique_ptr<OverlayScrollbar> sb(new OverlayScrollbar());
-        m_bodySb = sb.get();
-        // 拖动悬浮条 → 反向滚动正文 RichEdit。
-        m_bodySb->SetOnScroll(&AnnouncementPreviewPanel::OnBodyScrollbarDrag, this);
-        bodyRow->AddChild(std::move(sb),
-                          Hint().Fixed(OverlayScrollbar::kSuggestedWidth));
-    }
-    // 正文行用弹性高度:撑满分隔线之下、状态卡之上的剩余竖直空间,使下方
+    // 正文直接占一整行,不再额外套一个 HBox 挂手写滚动条。
+    //
+    // 原先的做法是 [ 正文 RichEdit(Weight 1) ][ 悬浮滚动条(固定窄带) ],
+    // 因为旧控件寄宿真子窗口、原生滚动条既难看又会盖住东西,只能在子窗口
+    // 矩形之外的右侧窄带里另画一条细条,再靠两个回调把它与正文的滚动位置
+    // 双向同步。换成无窗口控件之后这一整套都不需要了:它自带的滚动条就是
+    // 覆盖式 auto-hide 的,浮在内容之上、不占内容宽度,与左侧公告列表同款。
+    //
+    // 正文用弹性高度:撑满分隔线之下、状态卡之上的剩余竖直空间,使下方
     // 状态卡 / 按钮行被顶到预览区底部(按钮底部对齐);正文超长时框内滚动。
-    AddChild(std::move(bodyRow),
-             Hint().Weight(1).Margin(0, 0, 0, kBodyBottomGap));
+    {
+        std::unique_ptr<DuiRichEdit> bodyEdit = MakeReadOnlyRichEdit(
+            ui::UiFont(theme::kFontSizeNormal, false), theme::kInk700);
+        m_bodyEdit = bodyEdit.get();
+        AddChild(std::move(bodyEdit),
+                 Hint().Weight(1).Margin(0, 0, 0, kBodyBottomGap));
+    }
 
     // ====================================================================
     // 子控件 5:ProgressCard(已读进度卡:m_scheduled=false 时可见)
@@ -514,9 +505,6 @@ void AnnouncementPreviewPanel::SetAnnouncement(const Announcement* a)
     m_btnDelete->SetText(_T("撤回"));
     m_btnDelete->SetVisible(a->m_status == 1);
 
-    // 切换公告后正文内容变了,把新的滚动度量同步给悬浮滚动条(滑块大小 /
-    // 是否需要显示随之更新)。SetText 已将 RichEdit 滚到顶部。
-    UpdateBodyScrollbar();
 }
 
 void AnnouncementPreviewPanel::Layout(const RECT& rcAvail)
@@ -527,9 +515,9 @@ void AnnouncementPreviewPanel::Layout(const RECT& rcAvail)
     DuiLayout::LayoutGuard layoutGuard(*this);
 
     // 仅标题按可用宽度动态量算高度(标题字数少,通常一行,偶尔两行)。正文
-    // 不再动态算高 —— 它改为弹性高度(Weight),撑满剩余竖直空间;关掉原生
-    // 滚动条、由右侧悬浮细条 m_bodySb 承载框内滚动,无论正文多长框高都由
-    // 布局分配,从根上避免"切换公告不重新布局导致高度过时"的老问题。
+    // 不再动态算高 —— 它改为弹性高度(Weight),撑满剩余竖直空间,内容超出时
+    // 由控件自带的覆盖式滚动条承载框内滚动。无论正文多长框高都由布局分配,
+    // 从根上避免"切换公告不重新布局导致高度过时"的老问题。
     //
     // 可用宽度 = panel 客户区宽度 - 左右内距;不能直接用 m_rcItem.right - left
     // (此时还没设),用 rcAvail 自己算。
@@ -550,10 +538,6 @@ void AnnouncementPreviewPanel::Layout(const RECT& rcAvail)
 
     // 交给 DuiVBox 走标准纵向布局。
     DuiVBox::Layout(rcAvail);
-
-    // 布局后正文 RichEdit 子窗口已按新尺寸定位,把最新滚动度量同步给悬浮
-    // 滚动条(可视高 / 内容总高可能随宽度变化而变,如窗口缩放导致重新换行)。
-    UpdateBodyScrollbar();
 }
 
 void AnnouncementPreviewPanel::OnPaint(HDC hdc, const RECT& rcDirty)
@@ -636,52 +620,6 @@ void AnnouncementPreviewPanel::OnPaint(HDC hdc, const RECT& rcDirty)
         RECT ii = { cx - 10, cy - 10, cx + 10, cy + 10 };
         ui::DrawIcon(hdc, ui::Icon::Bell, ii, theme::kColorInfo);
     }
-}
-
-void AnnouncementPreviewPanel::UpdateBodyScrollbar()
-{
-    if (m_bodyEdit == nullptr || m_bodySb == nullptr)
-    {
-        return;
-    }
-    // 从正文 RichEdit 取竖直滚动度量(像素),喂给悬浮滚动条。OverlayScrollbar
-    // 用自身矩形高度作可视高、用 contentH 与 scrollPos 算滑块大小与位置;内容
-    // 放得下时(contentH <= viewH)它自动什么都不画。HWND 未建时三者全 0,
-    // 等价于"无需滚动条"。
-    int contentH = 0;
-    int scrollPos = 0;
-    int viewH = 0;
-    m_bodyEdit->GetVScrollMetrics(contentH, scrollPos, viewH);
-    m_bodySb->SetMetrics(contentH, scrollPos);
-}
-
-void AnnouncementPreviewPanel::OnBodyRichEditScrolled(void* ctx)
-{
-    // 正文被滚轮 / 键盘滚动 → 同步悬浮条位置并令其淡入(停止约 1 秒后淡出),
-    // 与左侧列表滚动时的手感一致。
-    AnnouncementPreviewPanel* self = static_cast<AnnouncementPreviewPanel*>(ctx);
-    if (self == nullptr)
-    {
-        return;
-    }
-    self->UpdateBodyScrollbar();
-    if (self->m_bodySb != nullptr)
-    {
-        self->m_bodySb->Flash();
-    }
-}
-
-void AnnouncementPreviewPanel::OnBodyScrollbarDrag(void* ctx, int newScroll)
-{
-    // 拖动悬浮条 → 反向把正文 RichEdit 滚到对应像素偏移,再回读实际位置同步
-    // 滑块(RichEdit 按行滚动,实际落点可能与目标有一行内误差,回读保证一致)。
-    AnnouncementPreviewPanel* self = static_cast<AnnouncementPreviewPanel*>(ctx);
-    if (self == nullptr || self->m_bodyEdit == nullptr)
-    {
-        return;
-    }
-    self->m_bodyEdit->SetVScrollPos(newScroll);
-    self->UpdateBodyScrollbar();
 }
 
 } // namespace flamingoadmin

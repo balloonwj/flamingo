@@ -69,11 +69,10 @@
         edit->SetReadOnly(!bOnline);   // 从未执行
     }
     ```
-  - 但这两个 id 对应的控件是 `DuiRichEditHost`，不是 `DuiEditHost` —— 见 `ChatWindowLayout.h:37`（`kIdInputEdit = 401, // 输入框（DuiRichEditHost，富文本，支持内联图片）`）与 `GroupChatWindowLayout.h:34`（`kGIdInputEdit = 501`，同样注释）。
-  - `DuiEditHost` 与 `DuiRichEditHost` 是**兄弟类**，两者都直接继承 `HwndHostControl`（`third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h:76`、`DuiRichEditHost.h:76`），彼此之间没有继承关系。因此 `dynamic_cast` 恒返回 NULL，`if` 分支永不进入。
-  - 同一文件里取同一个 id 的其它九处（如 `BalloonChatWindow.cpp:454` / `:715` / `:3058` / `:3303`，`BalloonGroupChatWindow.cpp:1781`）都正确地转换成了 `DuiRichEditHost*`，只有"离线置只读"这一处漏改，应是输入框换类型时遗漏。
+  - 但这两个 id 对应的控件是富文本输入框，不是 `DuiEditHost`。两者是**兄弟类**，分处不同的继承链，彼此之间没有继承关系，因此 `dynamic_cast` 恒返回 NULL，`if` 分支永不进入。
+  - 同一文件里取同一个 id 的其它九处都正确地转换成了富文本类型，只有"离线置只读"这一处漏改，应是输入框换类型时遗漏。
   - 这类错误编译期无法发现：`dynamic_cast` 到无关类型是合法写法，失败只表现为运行期返回 NULL，而代码又恰好用 `if (edit != NULL)` 把失败情形当作正常分支静默跳过。
-- **状态**：未修复。修法：把两处的目标类型改成 `balloonwjui::DuiRichEditHost*`。修完需实测确认离线时确实打不了字、且草稿仍可选中复制。
+- **状态**：2026-08-16 已修（据实证，仅限编译层面）。输入框迁移到无窗口富文本控件之后，两处的目标类型改为 `balloonchatwnd::ChatInputRichEdit*`，见 `BalloonChatWindow.cpp` 与 `BalloonGroupChatWindow.cpp` 中 `UpdateOnlineState` 一带的注释。**尚未做断网实测** —— 需确认离线时确实打不了字、且草稿仍可选中复制，实测通过后本条方可关闭。
 
 ## BUG-6　聊天窗富文本拆分模块残留死代码，且单测在为已废弃实现提供覆盖
 
@@ -123,3 +122,32 @@
 - **影响**：自动增高按这个高度决定控件长多高，量小了控件就长不够，内容会被截掉一截。目前**尚未在界面上观察到该现象** —— 演示页的富文本控件显示正常，据推测是因为默认下限（按一行的高度算）恰好把偏小的结果盖住了。风险在于把控件用在「最多五行」这类需要真实内容高度的场景时会显出来。
 - **初步排查**：`MeasureContentHeight` 里已留有埋点（`BUI_TRACE("MEASURE ...")`，默认关闭，设环境变量 `BUI_DUI_TRACE=1` 打开），会输出调用返回值、出参宽高、范围参数与客户区矩形，可直接复现上表。下一步建议查两处：一是 `TxGetNaturalSize` 的出参单位到底是不是像素（当前代码按像素用）；二是引擎在文档刚被修改、尚未重新排版时是否会给出未定稿的结果。
 - **状态**：未修复。相关测试 `Source/../Tests/DuiRichEditTests.cpp` 中的 `MeasureIndependentOfControlHeight` 已经钉住了「随行数增长」「不受控件当前高度影响」两条性质，但**没有**校验绝对值是否合理 —— 该用例里那条「一行不能低于 8 像素」的下界断言是唯一的绝对值防线，且当前恰好压线通过。
+
+## BUG-9　登录必需目录建在程序目录，而按账号隔离的数据读写在数据根目录
+
+- **发现日期**：2026-08-16（修「`CFlamingoClient::GetInstance()` 返回的不是在用实例」这个缺陷时，顺带核对缓存目录口径发现）
+- **位置**：`flamingoclient/Source/MainDlg.cpp` 的 `CMainDlg::CreateEssentialDirectories`（第 4884 行起）。
+- **问题**（据实证）：该函数用 `g_szHomePath`（程序目录）拼出 `Users\<账号>\`、`Users\<账号>\ChatImage\`、`Users\<账号>\UserThumb\` 三级目录并创建；而按账号隔离的数据实际读写走的是 `g_szDataRoot`（数据根目录）—— 账号配置见 `FlamingoClient.cpp:1382` / `1399` 的 `<g_szDataRoot>Users\<账号>\<账号>.cfg`，最近联系人列表见 `UserMgr.cpp:470` / `510` / `553`。两者默认相等，用户在「系统设置 → 存储」里改过数据目录之后就分成两棵树。
+- **影响**（据推测，尚未实测）：改过数据目录的用户，首次登录时 `<g_szDataRoot>Users\<账号>\` 这一级没有任何地方预先创建，`SaveUserConfig` 与最近联系人列表落盘可能因父目录不存在而失败。缓存目录（ChatFile / ChatImage / Avatar）不受影响 —— 它们各自的 `buildXxxCachePath` 会在写文件前逐级创建。表现为「改过存储位置之后，用户设置与最近联系人列表每次重启都丢」。
+- **初步排查**：`net/ImageTransfer.cpp` 的 `AvatarCacheFilePathForFileId` 原本也有同一类根目录错配（路径按 `g_szHomePath` 拼、父目录按 `g_szDataRoot` 建），已于 2026-08-16 改为统一取 `g_szDataRoot`。`CreateEssentialDirectories` 属于同一批遗漏，但它牵涉的是用户配置而非缓存，改动面与验证方式都不同，故单独记录。
+- **状态**：未修复。修法：把 `CreateEssentialDirectories` 里的 `g_szHomePath` 改为 `g_szDataRoot`，并核对 `UserThumb` 目录的其余使用点（`CUserMgr::GetCustomUserThumbFolder`）是否同一口径。
+
+## BUG-9　flamingoAdmin「编辑公告」弹窗首次点入正文输入框时闪烁一次
+
+- **发现日期**：2026-08-16（迁移公告预览面板到无窗口富文本控件时顺带发现）
+- **位置**：`flamingoAdmin/Screens/ComposeModal.cpp` 的 `m_editBody`（`balloonwjui::DuiEditHost`，寄宿真 Win32 EDIT 子窗口）。
+- **现象**：打开「编辑公告」弹窗后**第一次**点进正文输入框，输入框内容会闪烁一次；此后再点不再出现。点击弹窗**背后**的公告预览正文不会闪烁。
+- **与本次迁移的关系**（据实证）：**无关**。本次迁移改的是公告预览面板的标题 / 正文（已从旧的 HWND 宿主富文本控件换成无窗口的 `DuiRichEdit`），而弹窗里这个输入框是 `DuiEditHost`，两处是不同的控件，`AdminFrame` 里针对 `DuiEditHost` 的创建与显隐处理也原样保留着。
+- **初步排查**：据推测与「真 EDIT 子窗口首次获得焦点时自绘一帧」有关 —— `AdminFrame::HideModalEdits` 会在主窗口显示前把这些子窗口先建出来再 `ShowWindow(SW_HIDE)`，弹窗打开时再显示，首次点击获得焦点时子窗口重绘。尚未用埋点确认。
+- **状态**：未修复，**已约定随控件替换一并解决** —— 该输入框后续会迁移到无窗口富文本控件，届时不再有真子窗口，这类首帧自绘问题从结构上消失。在那之前不单独投入排查。
+
+## BUG-10　群管理窗正在输入的公告会被后台刷新清空
+
+- **发现日期**：2026-08-17（清理输入框无窗口化留下的过时注释时顺带发现）
+- **位置**：`flamingoclient/Source/BalloonGroupManage/GroupManageLayout.cpp` 的群公告页构建代码（第 1223 行起），与 `GroupManageWindowData.cpp` 的 `RefreshNavAndPage`（第 111 行）。
+- **现象**：在群管理窗的「群公告」页里填写新公告，标题与正文可能在用户毫无操作的情况下被清空。
+- **问题**（据实证）：`RefreshNavAndPage` 会整体重建客户区（其注释写明"InitUi 内部走的是 SetClientContent，它会先摘掉旧的客户区再挂新的"），重建时 `BuildPage` 重新构造标题与正文两个输入框，**只调用 SetPlaceholder 设置提示文字，不回填用户已经输入的内容**（第 1223-1238 行，两个输入框从头到尾没有 SetText）。用户输入的文本只存在于控件里，模型 `m_model` 中没有对应字段，因此重建之后无从恢复。
+- **触发时机不止切换页面**，下列每一处都会调用 `RefreshNavAndPage`：拉取群资料返回（`GroupManageWindowData.cpp:150`）、拉取群成员返回（`:174`）、拉取加群申请返回（`:193`）、拉取公告列表返回（`:250`，该处注释写明"无论当前停在哪一页都要重建一次"）、以及收到服务端推送的群资料变更（`:356`）。也就是说用户正在输入时，后台任何一次数据返回或服务端推送都会清空输入。
+- **影响**：写长公告时输入内容随机丢失，用户无法预判也无从挽回。据推测触发概率不低 —— 群管理窗打开后会并发拉取四类数据，且群资料推送随时可能到达。
+- **与输入框无窗口化的关系**：无关。该缺陷在控件还是内嵌真子窗口时就已存在，两种实现下重建控件树的后果相同。
+- **状态**：未修复。修法有两种：一是把输入中的标题与正文暂存进 `m_model`（或窗口成员），`BuildPage` 构建时回填；二是让 `RefreshNavAndPage` 在公告页且输入框非空时跳过重建、只更新左侧导航的计数徽章。前者更彻底，后者改动小。

@@ -40,6 +40,7 @@
 #include "net/FileTransfer.h"               // net::GroupFileUploadResult / GroupFileDownloadResult
 #include "net/AccountProtocolClient.h"      // net::ChangePasswordResponse
 #include "net/ProfileProtocolClient.h"      // net::UpdateProfileResponse（更新个性签名应答）
+#include "net/CurrentUserAccount.h"         // net::CurrentUserAccount（登录成功后校验账号取值口是否接上）
 #include "net/ImageTransfer.h"              // net::ImageSendProgress / net::ImageSendResult
 #include "net/FileTransfer.h"               // net::FileSendProgress / net::FileSendResult / net::FileDownload*
 #include "IULog.h"
@@ -48,7 +49,6 @@
 #include "IULog.h"
 #include "EncodeUtil.h"
 #include "UIText.h"
-#include "PerformanceCounter.h"
 #include <memory>                                          // std::unique_ptr（托盘菜单图标保活）
 #include "ImageEx.h"                                       // CImageEx（托盘菜单项图标）
 #include "BalloonMain/MainPanelTrayMenu.h"                 // BuildTrayMenuModel / TrayMenuId（托盘菜单行模型）
@@ -144,6 +144,18 @@ m_BalloonGroupManageWindow(&m_FMGClient),
 m_BalloonHistoryWindow(&m_FMGClient),
 m_BalloonSystemSettingDlg(&m_FMGClient)
 {
+    //把本对话框持有的这个 CFlamingoClient 登记成"进程内正在使用的那一个"，
+    //net::CurrentUserAccount() 等取全局登录态的地方据此找到它。
+    //
+    //之所以放在构造函数体的第一行、而不是 OnInitDialog：
+    //  一、m_FMGClient 在 MainDlg.h 的成员声明顺序里排在其余成员之前，进入本函数体时
+    //      它已经构造完毕，取地址是安全的，且该地址在整个 CMainDlg 生命周期内不变；
+    //  二、OnInitDialog 要等窗口创建之后才执行，构造与创建之间那一段（其余窗口对象的
+    //      构造、命令行调试入口）就取不到登录态，多一段"看着能用其实取不到"的窗口期；
+    //  三、与析构函数里的注销严格配对，比"OnInitDialog 登记 / OnDestroy 注销"少一层
+    //      漏掉的可能 —— 窗口没创建成功时 OnDestroy 根本不会执行。
+    CFlamingoClient::SetInstance(&m_FMGClient);
+
     //m_BuddyChatDlg.m_lpFMGClient = &m_FMGClient;
     m_nLastMsgType = FMG_MSG_TYPE_BUDDY;
     m_nLastSenderId = 0;
@@ -186,6 +198,12 @@ m_BalloonSystemSettingDlg(&m_FMGClient)
 
 CMainDlg::~CMainDlg(void)
 {
+    //注销登记，避免 m_FMGClient 随本对话框一同销毁之后 GetInstance 还返回一个野指针。
+    //与构造函数里的登记严格配对。不放在 OnDestroy 里：窗口销毁之后本对象仍然存在
+    //（Startup.cpp 里它是栈对象），期间的收尾代码照样可能读登录态。
+    //这里无条件传 NULL，前提是进程内只有一个 CMainDlg（见 Startup.cpp）；若将来真的
+    //出现第二个，SetInstance 里的覆盖检查会先记一条 LOG_ERROR 把问题暴露出来。
+    CFlamingoClient::SetInstance(NULL);
 }
 
 BOOL CMainDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
@@ -262,6 +280,12 @@ BOOL CMainDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
     if (::_tcsstr(::GetCommandLine(), _T("--mainpanel")) != NULL)
     {
         m_BalloonMainPanel.CreateAndShow(m_hWnd);
+
+        // 本入口模拟的是"已经登录、主面板已打开"这个局面，故一并把登录标志置真：
+        // 托盘右键菜单的形态就是据它选的（见 OnTrayIcon_RButtunUp），不置真的话
+        // 弹出来的是"未登录"那套两行菜单，四个在线状态项根本不出现，也就无从核对
+        // 断线时的置灰与"当前项"文字。仅 _DEBUG 构建有本分支。
+        m_bAlreadyLogin = TRUE;
 
         // 再带 --connecting / --offline 时把对应连接态推给面板，便于截图核对
         // "掉线重连中"与"用户主动离线"两种状态下的胶囊文字与头像置灰。不带则
@@ -387,10 +411,19 @@ BOOL CMainDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
             mock.m_packageUsable = true;
             mock.m_latestVersion = "3.3.0";
             mock.m_size          = 38219776;
+            //说明文字刻意写得**超过说明区的高度**：说明区高度固定，内容装不下
+            //时才会出现滚动条。写短了的话滚动、滚动条淡入淡出这些都核对不到，
+            //而那恰恰是这块最容易出问题的地方。
             mock.m_releaseNote   = "1. 新增群接龙，支持在群里发起接龙并统计参与人；\r\n"
                                    "2. 修复了聊天记录搜索在消息量较大时偶尔卡顿的问题；\r\n"
                                    "3. 优化了文件传输的断点续传逻辑，弱网下更稳定；\r\n"
-                                   "4. 修复若干已知问题。";
+                                   "4. 新增消息引用回复，可在会话里直接引用某条历史消息；\r\n"
+                                   "5. 群公告支持富文本排版，可设置字号、颜色与对齐方式；\r\n"
+                                   "6. 优化了大群成员列表的加载速度，千人群进入不再卡顿；\r\n"
+                                   "7. 修复了极少数情况下托盘图标闪烁不停的问题；\r\n"
+                                   "8. 修复了切换网络环境后需要手动重连的问题；\r\n"
+                                   "9. 调整了截图工具的快捷键冲突检测逻辑；\r\n"
+                                   "10. 修复若干已知问题。";
             mock.m_forced = (::_tcsstr(::GetCommandLine(), _T("--forced")) != NULL);
 
             //--emptynote：把更新说明置空，用来复现"发布时没填说明"那条路径 ——
@@ -1612,6 +1645,32 @@ LRESULT CMainDlg::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
     case LOGIN_SUCCESS:				// 登录成功
     {
+        //守卫：登录成功之后，"当前登录账号"这个统一取值口必须真的取得到账号。
+        //net::CurrentUserAccount() 读的是 CFlamingoClient::GetInstance() 登记进去的那个
+        //实例，而登录信息写的是本对话框的成员 m_FMGClient。两者一旦不是同一个对象
+        //（例如构造函数里那行 SetInstance 被删掉、或将来又冒出第二个 CFlamingoClient），
+        //取值口就会一直返回空串或返回别人的账号，按账号分目录的缓存（ChatFile /
+        //ChatImage / Avatar）随之全部失效 —— 而且不报错、不弹框，只表现为"每次都要重新
+        //下载"。这类"读写不是同一个对象"的错误没有别的地方会发声，故在此校验并记日志。
+        //放在本分支最前面：后面的 CreateEssentialDirectories 与各项拉取都会用到缓存目录，
+        //日志要落在它们之前才好定位。
+        const std::wstring strAccountFromAccessor = net::CurrentUserAccount();
+        const std::wstring& strAccountFromClient  = m_FMGClient.m_UserMgr.m_UserInfo.m_strAccount;
+        if (strAccountFromAccessor.empty() || strAccountFromAccessor != strAccountFromClient)
+        {
+            LOG_ERROR("login succeeded but the current-account accessor is not wired to the live "
+                "CFlamingoClient: net::CurrentUserAccount()=[%s] while the logged-in account "
+                "is [%s]. Every per-account cache directory (ChatFile / ChatImage / Avatar) "
+                "will silently degrade to \"no cache\".",
+                EncodeUtil::UnicodeToUtf8(strAccountFromAccessor).c_str(),
+                EncodeUtil::UnicodeToUtf8(strAccountFromClient).c_str());
+        }
+        else
+        {
+            LOG_INFO("current-account accessor check passed, account=%s.",
+                EncodeUtil::UnicodeToUtf8(strAccountFromAccessor).c_str());
+        }
+
         if (m_dwReconnectTimerId != 0)
         {
             KillTimer(m_dwReconnectTimerId);
@@ -4409,10 +4468,17 @@ void CMainDlg::OnTrayIcon_RButtunUp()
     //
     // 当前在线状态传给行模型，由它把对应那一项标成"当前"（带外环的圆点 +
     // "（当前）"后缀），否则四个状态项长得一模一样，用户看不出自己现在是哪个。
+    //
+    // 连接态也一并传进去，由行模型按 OnlineCapability 那套规则决定当前项显示什么文字、
+    // 四个状态项能不能点。本函数<u>不再自己判断</u>：原先这里只把 presence 交给行模型，
+    // 于是掉线时主面板胶囊已经显示"正在连接"、托盘菜单里却仍标着"在线（当前）"，
+    // 而且四项照样可点 —— 点了只是把改状态的帧发进一条断掉的连接，界面先按"已改"
+    // 渲染，与服务端实际状态不符。
     bool bMuted = m_FMGClient.m_UserConfig.IsEnableMute() ? true : false;
     int  nCurrentPresence = GetCurrentPresence();
+    int  nConnUiState = GetConnectionUiState();
     std::vector<balloonmain::TrayMenuEntry> model =
-        balloonmain::BuildTrayMenuModel(kind, bMuted, nCurrentPresence);
+        balloonmain::BuildTrayMenuModel(kind, bMuted, nCurrentPresence, nConnUiState);
 
     balloonwjui::DuiMenu menu;
     std::vector<std::unique_ptr<CImageEx> > icons;
@@ -4464,22 +4530,42 @@ void CMainDlg::OnTrayIcon_RButtunUp()
 
     // 关键路径日志：记录托盘菜单的光标、菜单尺寸、可放置区与最终落点，便于排查
     // "被任务栏遮挡 / 越界"类问题（例如任务栏自动隐藏会让工作区不排除任务栏）。
-    LOG_INFO(_T("托盘菜单落点：光标(%d,%d) 菜单(%dx%d) 可放置区(%d,%d,%d,%d) 弹出(%d,%d) 底边=%d")
-             _T(" 当前状态presence=%d"),
+    // 同时记下当前在线状态与连接态 —— 排查"菜单标错当前项 / 四项该不该灰"时要用。
+    LOG_INFO("MainDlg::OnTrayIcon_RButtunUp: cursor=(%d,%d), menu=%dx%d, "
+             "area=(%d,%d,%d,%d), popup=(%d,%d), bottom=%d, presence=%d, "
+             "connUiState=%d (0=online 1=connecting 2=offline).",
         anchor.x, anchor.y, (int)menuSize.cx, (int)menuSize.cy,
         (int)area.left, (int)area.top, (int)area.right, (int)area.bottom,
-        pos.x, pos.y, pos.y + (int)menuSize.cy, nCurrentPresence);
+        pos.x, pos.y, pos.y + (int)menuSize.cy, nCurrentPresence, nConnUiState);
 
     UINT chosen = menu.TrackPopup(pos.x, pos.y, m_hWnd);   // 同步阻塞
 
-    // 选中的就是当前所处的状态：什么都不做，避免重复发包、无谓的断开或重连。
-    // 与主面板状态菜单的处理一致（见 CBalloonMainPanel::ShowStatusMenu）。
+    // 先按行模型过一遍选中项，两种情况就地返回，都不进下面的分发：
+    //   · 该行被标为不可点（连接未就绪时的四个状态项）—— DuiMenu 本身已不会把灰显项
+    //     交回来，这里是幂等的兜底，免得哪天菜单控件的行为变了就把一个明明拦住的
+    //     操作放了出去；
+    //   · 选中的就是当前所处的状态 —— 什么都不做，避免重复发包、无谓的断开或重连
+    //     （与主面板状态菜单的处理一致，见 CBalloonMainPanel::ShowStatusMenu）。
     for (size_t i = 0; i < model.size(); ++i)
     {
-        if (model[i].id == chosen && model[i].isCurrent)
+        if (model[i].isSeparator || model[i].id != chosen)
         {
-            LOG_INFO(_T("托盘菜单：选中的就是当前状态(presence=%d)，不做处理。"),
-                nCurrentPresence);
+            continue;
+        }
+
+        if (!model[i].enabled)
+        {
+            LOG_INFO("MainDlg::OnTrayIcon_RButtunUp: item %u is disabled in the current "
+                     "connection state (connUiState=%d), ignored.",
+                (unsigned int)chosen, nConnUiState);
+            return;
+        }
+
+        if (model[i].isCurrent)
+        {
+            LOG_INFO("MainDlg::OnTrayIcon_RButtunUp: item %u is already the current "
+                     "presence (presence=%d), nothing to do.",
+                (unsigned int)chosen, nCurrentPresence);
             return;
         }
     }

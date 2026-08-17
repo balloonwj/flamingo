@@ -2,14 +2,14 @@
  *  flamingoAdmin —— AnnouncementPreviewPanel 单元测试。
  *
  *  覆盖 8 条用例,验证"自绘 PaintPreview → DuiVBox + DuiLabel(selectable) +
- *  DuiRichEditHost"迁移后,SetAnnouncement 仍能把 Announcement 的 7 个★强项
+ *  DuiRichEdit"迁移后,SetAnnouncement 仍能把 Announcement 的 7 个★强项
  *  文字字段正确转写到对应子控件,并按 m_scheduled / m_pinned / m_status 切换
  *  状态卡和按钮文字。
  *
  *  所有用例都在【无 host】下裸构造 PreviewPanel —— DuiControl::Invalidate /
- *  SetVisible / DuiLabel::SetText / DuiRichEditHost::SetText 在 m_pHost ==
- *  nullptr 时都是 no-op 或仅更新缓存(DuiRichEditHost.cpp:GetText 在
- *  HWND 未建时返回 m_cachedText),无需 EnsureCreated。本文件【绝不调用
+ *  SetVisible / DuiLabel::SetText / DuiRichEdit::SetText 在 m_pHost ==
+ *  nullptr 时都能正常工作 —— 无窗口富文本控件构造完即可读写文本,
+ *  不依赖任何窗口,也没有"创建"这一步。本文件【绝不调用
  *  OnPaint】,因此不必拿 HDC、不必 init gdiplus。
  *
  *  断言走 panel.Children()[i] + 裸指针(通过 helper 暴露的 5 个 m_btn / 8 个
@@ -26,7 +26,7 @@
 
 #include "Controls/Basic/DuiLabel.h"
 #include "Controls/Basic/DuiButton.h"
-#include "Controls/Input/DuiRichEditHost.h"
+#include "Controls/Input/DuiRichEdit.h"
 #include "Controls/Layout/DuiLayout.h"
 
 namespace flamingoadmin { namespace test {
@@ -37,11 +37,11 @@ namespace {
 // 的顺序一一对应,详见 AnnouncementPreviewPanel.cpp)。
 //   0: HeaderRow (DuiHBox) —— 5 个子:severityChipSlot / pinnedChipSlot /
 //        scheduledChipSlot / spacer / dateLabel
-//   1: titleEdit (DuiRichEditHost)
+//   1: titleEdit (DuiRichEdit)
 //   2: SenderRow (DuiHBox) —— 2 个子:avatarSlot / senderMetaLabel
 //   3: dividerSlot
-//   4: bodyRow (DuiHBox) —— 2 个子:[0]=正文 bodyEdit(DuiRichEditHost) /
-//        [1]=悬浮滚动条 OverlayScrollbar。取正文用 GetGrandChild(panel,4,0)。
+//   4: bodyEdit (DuiRichEdit) —— 正文直接占一行,不再套 HBox 挂手写滚动条:
+//        改用无窗口控件之后,滚动条是它自带的覆盖式细条,浮在内容之上。
 //   5: progressCard (DuiVBox) —— 内含 topRow(2 label) + progressBarSlot
 //   6: scheduleCard (DuiVBox) —— 内含 row(iconSlot + texts vbox(top/sub labels))
 //   7: ActionRow (DuiHBox) —— 6 button + 1 spacer
@@ -171,10 +171,10 @@ void RunAllAnnouncementPreviewPanelTests()
 
         // 标题 / 正文 = RichEdit GetText。正文现在包在 HBox 里(下标 4 是
         // [正文 | 悬浮滚动条] 行),正文 RichEdit 是该行第 0 个孙子。
-        balloonwjui::DuiRichEditHost* titleEdit =
-            dynamic_cast<balloonwjui::DuiRichEditHost*>(GetChild(panel, kIdxTitleEdit));
-        balloonwjui::DuiRichEditHost* bodyEdit =
-            dynamic_cast<balloonwjui::DuiRichEditHost*>(GetGrandChild(panel, kIdxBodyEdit, 0));
+        balloonwjui::DuiRichEdit* titleEdit =
+            dynamic_cast<balloonwjui::DuiRichEdit*>(GetChild(panel, kIdxTitleEdit));
+        balloonwjui::DuiRichEdit* bodyEdit =
+            dynamic_cast<balloonwjui::DuiRichEdit*>(GetChild(panel, kIdxBodyEdit));
         FA_EXPECT_NOTNULL(titleEdit);
         FA_EXPECT_NOTNULL(bodyEdit);
         FA_EXPECT_STREQ(titleEdit->GetText(), a.m_title);
@@ -351,10 +351,10 @@ void RunAllAnnouncementPreviewPanelTests()
         const size_t childrenCountAfter2 = panel.Children().size();
         FA_EXPECT_EQ(childrenCountAfter1, childrenCountAfter2);
 
-        balloonwjui::DuiRichEditHost* titleEdit =
-            dynamic_cast<balloonwjui::DuiRichEditHost*>(GetChild(panel, kIdxTitleEdit));
-        balloonwjui::DuiRichEditHost* bodyEdit =
-            dynamic_cast<balloonwjui::DuiRichEditHost*>(GetGrandChild(panel, kIdxBodyEdit, 0));
+        balloonwjui::DuiRichEdit* titleEdit =
+            dynamic_cast<balloonwjui::DuiRichEdit*>(GetChild(panel, kIdxTitleEdit));
+        balloonwjui::DuiRichEdit* bodyEdit =
+            dynamic_cast<balloonwjui::DuiRichEdit*>(GetChild(panel, kIdxBodyEdit));
         FA_EXPECT_STREQ(titleEdit->GetText(), a2.m_title);
         FA_EXPECT_STREQ(bodyEdit->GetText(),  a2.m_body);
     }

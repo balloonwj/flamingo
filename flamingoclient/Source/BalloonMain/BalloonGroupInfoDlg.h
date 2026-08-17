@@ -107,10 +107,11 @@ private:
     LRESULT OnDuiNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
-     *  WM_LBUTTONDOWN:点击宿主客户区(DUI 区域)。群名片编辑态下,点子 EDIT 之外的任何
-     *  地方都会到这里(点子 EDIT 子窗不经宿主) —— 此时把焦点移到宿主窗口逼子 EDIT 失焦,
-     *  触发 KILLFOCUS→去抖提交,实现"点别处自动退出编辑并提交"。处理后 bHandled=FALSE,
-     *  让 DuiFrameWindow/DuiHost 继续正常处理这次点击(如切换开关)。
+     *  WM_LBUTTONDOWN:点击宿主客户区(DUI 区域)。群名片编辑态下按鼠标落点判断是否点在
+     *  输入框之外,是则摘掉输入框的 DUI 焦点,触发 KILLFOCUS→去抖提交,实现"点别处自动
+     *  退出编辑并提交"。输入框是无窗口控件,点它与点别处的鼠标消息都到达本窗口,且它
+     *  本身不持有 Win32 焦点,故须在此自行判定落点。处理后 bHandled=FALSE,让
+     *  DuiFrameWindow/DuiHost 继续正常处理这次点击(如切换开关)。
      */
     LRESULT OnLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 

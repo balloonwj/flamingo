@@ -975,6 +975,28 @@ bool ChatMessageList::SetFolderMessage(const std::string& sessionId, const ChatM
     return false;
 }
 
+bool ChatMessageList::RemoveFolderMessage(const std::string& sessionId)
+{
+    if (sessionId.empty())
+        return false;
+
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (IsLiveFolderBubble(b, sessionId))
+        {
+            //RemoveChild 会立即销毁这个气泡，其后不得再访问 b；随即重排让下方各行
+            //补上空出来的位置。做法与右键菜单删除消息行（RequestDeleteBubble）一致。
+            RemoveChild(b);
+            ForceLayout(GetRect());
+            Invalidate();
+            return true;
+        }
+    }
+    return false;
+}
+
 bool ChatMessageList::ReviveFolderMessage(const std::string& sessionId)
 {
     if (sessionId.empty())

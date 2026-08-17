@@ -217,27 +217,18 @@ void CBalloonNetSettingsWindow::InitUi()
         return;
     }
 
-    // 两个输入框内嵌真 Win32 EDIT —— XML builder 只建控件对象、不调
-    // EnsureCreated，须在 host HWND 就绪后由调用方显式建一次。
+    // 地址与端口两个输入框都要画出边框，让用户看出它们是可以输入的。
     DuiEditHost* hostEdit = dynamic_cast<DuiEditHost*>(
         content->FindCtrlById(kIdEditHost));
     if (hostEdit != NULL)
     {
         hostEdit->SetShowBorder(true);
-        if (!hostEdit->EnsureCreated(m_hWnd))
-        {
-            LOG_WARNING(_T("网络设置窗地址输入框 EnsureCreated 失败。"));
-        }
     }
     DuiEditHost* portEdit = dynamic_cast<DuiEditHost*>(
         content->FindCtrlById(kIdEditPort));
     if (portEdit != NULL)
     {
         portEdit->SetShowBorder(true);
-        if (!portEdit->EnsureCreated(m_hWnd))
-        {
-            LOG_WARNING(_T("网络设置窗端口输入框 EnsureCreated 失败。"));
-        }
     }
 
     // 从 flamingo.ini 载入三组配置，刷新卡片，并把选中组灌进表单。

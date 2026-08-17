@@ -789,6 +789,10 @@ public:
         MESSAGE_HANDLER(FMG_MSG_TOGGLE_STARRED, OnToggleStarredMsg)
         MESSAGE_HANDLER(FMG_MSG_SET_CONTACT_REMARK, OnSetContactRemarkMsg)
         MESSAGE_HANDLER(FMG_MSG_SET_CONTACT_TAGS, OnSetContactTagsMsg)
+        MESSAGE_HANDLER(FMG_MSG_SET_CONTACT_MUTE, OnSetContactMuteMsg)
+        MESSAGE_HANDLER(FMG_MSG_SET_CONTACT_FAVORITE, OnSetContactFavoriteMsg)
+        MESSAGE_HANDLER(FMG_MSG_SET_CONTACT_STARRED, OnSetContactStarredMsg)
+        MESSAGE_HANDLER(FMG_MSG_LOCATE_CONTACT, OnLocateContactMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_CHAT, OnOpenChatMsg)
         MESSAGE_HANDLER(FMG_MSG_CONV_SEND_BUMP, OnConvSendBumpMsg)
         MESSAGE_HANDLER(FMG_MSG_CONV_MARK_READ, OnConvMarkReadMsg)
@@ -1404,6 +1408,11 @@ private:
      *
      *  若 c 就是当前登录用户，显示名会自动加上"（我）"后缀 —— 判定放在本方法
      *  内部而非各调用点，是因为挂叶子的地方有五处，逐处判会漏。
+     *
+     *  除了既有的 node→userid 映射，本方法还会登记 node→父节点（m_contactNodeParent）
+     *  与 userid→node（m_contactOrgNode）两份索引，供 LocateContactInTree 展开路径并
+     *  滚动定位。后一份记下来的一定是组织架构树里的那一行 ——「我的收藏」分区自己建行、
+     *  不经本方法，所以同一个人在树上的两行不会互相覆盖。
      */
     void AddContactLeaf(balloonwjui::DuiTreeView* tv, int parentNode,
                         const net::ContactItem& c);
@@ -1513,12 +1522,28 @@ private:
     void ShowGroupContextMenu(int64_t groupId);
 
     /**
-     *  在鼠标处弹出联系人右键菜单（发消息 / 语音 / 视频 / 查看资料 / 修改备注 /
-     *  移动到分组 / 消息免打扰 / 加入黑名单 / 删除好友）。同步弹出，选中后按项
-     *  分发：发消息→开单聊；其余功能待接后端，暂提示"开发中"。
+     *  在鼠标处弹出联系人右键菜单（发消息 / 语音通话 / 视频通话 / 查看资料 /
+     *  收藏 / 特别关注 / 查看历史消息 / 修改备注 / 消息免打扰）。菜单行由
+     *  balloonmain::BuildContactMenuModel 按该联系人当前状态生成，本函数只负责
+     *  渲染、夹取落点与选中后的分发。同步弹出。
      *    peerUserId：右键命中的联系人 userid。
      */
     void ShowContactContextMenu(UINT peerUserId);
+
+    /**
+     *  向某个联系人发起语音 / 视频通话 —— 把请求转给 CMainDlg 里的通话协调器，
+     *  由它统一发 cmd_call_invite 并弹「呼叫中」对话框。
+     *
+     *  之所以由协调器统一发起：同一时刻只允许有一路通话，这个互斥判定与呼叫中
+     *  对话框都在 CMainDlg 那边；各入口自己发协议的话，判定会散成好几份。
+     *
+     *  本方法内部先判定当前连接态是否允许发起通话（通话需要信令通道，离线时发起
+     *  必然失败），不允许时弹出提示并直接返回。
+     *
+     *    peerUserId：对端 userid；0 时本方法什么都不做。
+     *    video：     true 发起视频通话，false 发起语音通话。
+     */
+    void StartCallWithContact(UINT peerUserId, bool video);
 
     /**
      *  在鼠标处弹出"消息"Tab 会话列表的右键菜单（打开会话 / 标记已读 / 查看历史消息 /
@@ -1538,6 +1563,19 @@ private:
      */
     void ToggleFavorite(int ctype, int64_t cid);
 
+    /**
+     *  把某个对象的收藏状态设成指定值（收藏的实际执行体，ToggleFavorite 也转调它）。
+     *
+     *  之所以要有"按目标状态写"这一副入口：联系人资料对话框里的收藏是一个开关，
+     *  拨出来的本来就是明确的开或关。若也走取反，用户连拨两下、而第一条应答还在
+     *  路上时，两次取反都基于同一个旧状态，第二次会把第一次的效果抹掉。
+     *    ctype：    1 联系人、2 群组。
+     *    cid：      对象 ID；<= 0 时本方法什么都不做。
+     *    favorite： 目标状态，true 收藏 / false 取消收藏。与当前状态相同时直接返回，
+     *               不重复发协议。
+     */
+    void SetFavoriteState(int ctype, int64_t cid, bool favorite);
+
 public:
     /**
      *  切换某个联系人的特别关注状态：先做本地乐观更新，再发 cmd_set_starred。
@@ -1550,7 +1588,57 @@ public:
      */
     void ToggleStarred(int64_t userid);
 
+    /**
+     *  把某个联系人的特别关注状态设成指定值（特别关注的实际执行体，ToggleStarred
+     *  也转调它）。理由同 SetFavoriteState —— 资料对话框里它是一个开关，拨出来的
+     *  是明确的目标状态，走取反会在连拨时出错。
+     *    userid：  被关注的联系人 userid；<= 0 或等于本人时本方法什么都不做。
+     *    starred： 目标状态，true 关注 / false 取消关注。与当前状态相同时直接返回。
+     */
+    void SetStarredState(int64_t userid, bool starred);
+
 private:
+    /**
+     *  若联系人资料对话框此刻正展示 peerUserId 这个人，就用最新缓存重建一份资料
+     *  模型并刷新它（静默刷新，不前置、不抢焦点）；没开着或展示的是别人时什么都不做。
+     *
+     *  收藏、特别关注、免打扰三项都是"先本地生效、失败再回滚"。回滚发生在网络应答
+     *  回来的时候，那时资料对话框上的开关还停在用户拨过去的位置，必须跟着退回来，
+     *  否则界面显示的状态与实际状态不一致，而用户没有任何提示。
+     *    peerUserId： 状态刚发生变化的那个联系人的 userid。
+     */
+    void RefreshContactWindowIfShowing(UINT peerUserId);
+
+    /**
+     *  把主面板自身还原并切到前台。
+     *
+     *  最小化的窗口只有 SW_RESTORE 能还原，SW_SHOW 对它无效；隐藏到托盘的窗口则
+     *  只需 SW_SHOW。两种情形要分开处理，做法与托盘菜单「打开主面板」一致
+     *  （见 CMainDlg::ShowLoginOrMainPanel）。
+     *
+     *  供那些"结果显示在主面板上"的入口在动手之前调用 —— 主面板此刻可能收在托盘里
+     *  或处于最小化状态，不先把它调出来的话，用户看不到任何变化，会以为功能失效。
+     *
+     *  副作用：改变本窗口的显示状态与前台焦点；窗口尚未创建时什么都不做。
+     */
+    void ShowAndActivateSelf();
+
+    /**
+     *  在「联系人」Tab 的组织架构树里定位某个联系人：先把主面板还原并切到前台，
+     *  再切到通讯录页、把他所在的那条部门路径逐级展开、把那一行滚进视口并选中。
+     *
+     *  两个入口：搜索结果行右侧的定位按钮、联系人资料对话框的「组织架构」按钮。
+     *
+     *  选中时不发通知（SetCurSel 的 notify 传 false）—— 树的选中通知会被当成"用户
+     *  点了这一行"从而打开单聊窗，而定位只是让用户看到这个人在组织架构中的位置，
+     *  不应当同时打开聊天窗口。
+     *
+     *    peerUserId： 要定位的联系人 userid。不在组织架构树里（没有部门归属、或
+     *                 通讯录尚未到达）时弹一个提示框说明原因，不静默失败 —— 否则
+     *                 用户只能看到"点了没反应"。
+     */
+    void LocateContactInTree(UINT peerUserId);
+
 
     /**
      *  往「联系人」Tab 的树里插入「我的收藏」根节点及其子行。须在铺开部门树<u>之前</u>
@@ -1736,6 +1824,18 @@ private:
 
     // 群聊窗请求切换某联系人的特别关注状态（FMG_MSG_TOGGLE_STARRED，wParam=userid）。
     LRESULT OnToggleStarredMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // 联系人资料对话框的三个开关（FMG_MSG_SET_CONTACT_MUTE / _FAVORITE / _STARRED）：
+    // wParam=对端 userid，lParam=目标状态（1 开 / 0 关）。三条都不带堆负载，无需 delete。
+    // 传的是目标状态而不是"取反"，理由见 SetFavoriteState 的说明。
+    LRESULT OnSetContactMuteMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnSetContactFavoriteMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnSetContactStarredMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // 联系人资料对话框请求在通讯录树里定位该联系人（FMG_MSG_LOCATE_CONTACT，
+    // wParam=对端 userid，无堆负载）。
+    LRESULT OnLocateContactMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
     LRESULT OnOpenChatMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     // 单聊窗发出消息后的会话冒泡：wParam=对端userid，lParam=堆上 std::string*（UTF-8 预览，处理后 delete）。
     LRESULT OnConvSendBumpMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
@@ -1811,12 +1911,13 @@ private:
     static void OnSearchPick(void* userdata, UINT peerUserId);
     // 搜索结果下拉"选中群组"回调：打开该群 id 的群聊。
     static void OnSearchPickGroup(void* userdata, int64_t groupId);
+    // 搜索结果下拉"定位联系人"回调（点结果行右侧那个定位小按钮）：切到通讯录页并
+    // 把该 userid 在组织架构树里的那一行滚出来选中。
+    static void OnSearchLocate(void* userdata, UINT peerUserId);
 
-    // 主面板搜索框内嵌 EDIT 的 Esc 拦截子类过程：按 Esc 收起结果下拉（EDIT 默认
-    // 吞掉 Esc 使 host 收不到，故在 EDIT 层拦截）。ref 为本面板 this。
-    static LRESULT CALLBACK SearchBoxEscSubclassProc(HWND hWnd, UINT msg,
-                                                     WPARAM wParam, LPARAM lParam,
-                                                     UINT_PTR idSubclass, DWORD_PTR ref);
+    // 按当前通讯录缓存重算"userid → 部门路径"查询表（写进 m_contactDeptPaths），
+    // 供搜索结果行的副行展示。每次收到通讯录应答后调一次。
+    void RebuildContactDeptPaths();
 
 private:
     HWND m_hMainDlg;                            // CMainDlg 窗口句柄，关闭主面板时通知其退出
@@ -1852,6 +1953,19 @@ private:
     // 联系人树"节点id → userid"映射，OnContactsArrived 填充，树节点点击时
     // 据此取对端 userid 开聊。
     std::map<int, UINT>     m_contactNodeUserId;
+    // 联系人树"节点id → 父节点id"映射，与上一张表同在 OnContactsArrived 里填充。
+    // 用途只有一个：定位某个联系人时要把他所在的那条部门路径逐级展开，而 DuiTreeView
+    // 没有公开取父节点的接口（只有 AddChild(parentId, ...) 这一个方向），所以在建树
+    // 时自行记录一份。值为 balloonmain::kTreeNodeNoParent 表示该节点本身就是根。
+    std::map<int, int>      m_contactNodeParent;
+    // "userid → 组织架构树里该联系人的节点id"映射，由 AddContactLeaf 登记。
+    // 「我的收藏」分区自己建行、不经 AddContactLeaf，所以这里记下的一定是组织架构树
+    // 里的那一行 —— 定位要跳到那一行，用户才看得见他所在的部门层级。
+    std::map<UINT, int>     m_contactOrgNode;
+    // "userid → 部门路径"查询表（如「技术中心 / 研发部 / 前端组」），由
+    // RebuildContactDeptPaths 在每次收到通讯录应答后重算。搜索结果下拉借用它，
+    // 把联系人结果行的副行从"账号 · 地区"换成部门路径，让人一眼看出对方在哪个部门。
+    std::map<UINT, CString> m_contactDeptPaths;
     // 缓存的联系人资料池（OnContactsArrived 存入），搜索弹窗据此本地过滤。
     std::vector<net::ContactItem> m_contacts;
     // 备注名乐观更新的回滚快照："userid → 改动前的备注名"。SetContactRemark 发请求

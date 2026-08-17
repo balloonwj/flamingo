@@ -164,9 +164,7 @@ bool ApplyProfileButtonStyles(balloonwjui::DuiControl* root,
  *      不变,只靠根 ForceLayout 不会重排其子,会导致刚切到可见的编辑框 /
  *      Cancel/Save 停留在 {0,0,0,0} 而点不到、显示不出来。
  *
- *  注意:本函数只处理控件可见性与几何重排,<u>不</u>负责 DuiEditHost 的子 EDIT
- *  创建(EnsureCreated 由对话框在窗口就绪后调一次);但本函数的重排会触发
- *  DuiEditHost::Layout 用 SetWindowPos 把已创建的子 EDIT 定位到正确位置。
+ *  注意:本函数只处理控件可见性与几何重排,不改动各控件的内容与样式。
  *    root  BuildProfileBody 返回的客户区根控件;null 返 false。
  *    edit  true 切到编辑态;false 切到查看态。
  *  返回:root 非空即 true。

@@ -217,13 +217,9 @@ private:
      */
     int ResizeBorderInsetPx() const;
 
-    // 切换右侧内容到指定页（重建内容、就绪输入框、刷新导航选中态）。
+    // 切换右侧内容到指定页（重建内容、刷新导航选中态）。
     //   pageId：目标页 id，取值见 balloongroupmanage::GmPageId。
     void SwitchToPage(int pageId);
-
-    // 为某页内容里的真 Win32 输入框补 EnsureCreated（builder 不建 EDIT）。
-    //   pageId：当前页 id。
-    void EnsureEditsForPage(int pageId);
 
     // 按当前页刷新左侧各导航项的选中态。
     //   pageId：当前页 id。

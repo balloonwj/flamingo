@@ -5,8 +5,8 @@
  *  按哪个键发送、按哪个键换行；单聊 / 群聊所有窗口共用同一份模式。
  *
  *  在发送按钮的下拉菜单里切换；切换后写回 flamingo.ini（键值为 ASCII，遵守
- *  flamingo.ini 须保持 ASCII 的约束），客户端重启后保留上次选择。回车过滤器
- *  ChatInputKeyFilter 每次按回车时读取本模块决定发送/换行；窗口据本模块刷新
+ *  flamingo.ini 须保持 ASCII 的约束），客户端重启后保留上次选择。输入框控件
+ *  ChatInputRichEdit 每次按回车时读取本模块决定发送 / 换行；窗口据本模块刷新
  *  左下角提示文字与输入框 placeholder。
  *
  *  balloonwj@qq.com   2026-06-03

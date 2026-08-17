@@ -7,7 +7,9 @@
 #include <time.h>
 #include <stdio.h>
 #include <fstream>
+#include <functional>
 #include <vector>
+#include "../net/EventLoop.h"
 #include "../net/TcpConnection.h"
 #include "../net/FrameCodec.h"
 #include "../net/FramePayload.h"
@@ -692,10 +694,36 @@ bool FileSession::onDownloadChunk(const std::shared_ptr<TcpConnection>& conn,
 
 void FileSession::sendFrame(uint16_t cmd, uint32_t seq, uint8_t flags, const std::string& body)
 {
-    //本连接的「加密 + 投递」必须整体串行，理由见 m_sendMutex 的注释。本函数是本会话
-    //唯一的发送出口，所以锁加在这里就够了：上传应答、下载分片、中转应答与转发帧都经过它
-    std::lock_guard<std::mutex> guard(m_sendMutex);
+    net::EventLoop* loop = getOwnLoop();
+    if (loop == NULL)
+    {
+        LOGE("TcpConnection is destroyed, drop frame, cmd: %u", static_cast<unsigned>(cmd));
+        return;
+    }
 
+    //不在本连接所属的 EventLoop 线程时，把整段「组帧 + 加密 + 写 socket」投递回去执行。
+    //
+    //加密器是每条连接一份的流式对象，每帧推进一次内部状态，接收端严格按序解密；本连接
+    //的帧却有两个来源——本会话自己回的应答帧，以及配对端 I/O 线程经 sendRelayFrame
+    //转发来的数据帧。若在调用方线程里就地加密、只把写 socket 投递回来，「加密的先后」
+    //与「写到线上的先后」就可能相反：配对端线程加密好的那一帧要排队等本 loop 处理，
+    //而本 loop 线程自己发的帧是直接写出去的，后加密的反而先到线上，接收端必然解不开。
+    //把加密也一并放到连接自己的线程里，两个顺序就恒等（这也是这里不再需要发送锁的原因）。
+    //
+    //任务里捕获 shared_from_this() 而不是裸 this：任务真正执行时本会话可能已被
+    //会话表移除，捕获 shared_ptr 才能保证那时对象还在。
+    if (!loop->isInLoopThread())
+    {
+        loop->runInLoop(std::bind(&FileSession::sendFrameInLoop, shared_from_this(),
+                                  cmd, seq, flags, body));
+        return;
+    }
+
+    sendFrameInLoop(cmd, seq, flags, body);
+}
+
+void FileSession::sendFrameInLoop(uint16_t cmd, uint32_t seq, uint8_t flags, const std::string& body)
+{
     //包体的压缩与加密都由 FramePayload 这一条管线负责，顺序也在那里定死。
     //压缩策略取 never：文件分片本身多半已是压缩格式，再走一遍 zlib 既费 CPU 又压不动，
     //而且这也与收敛到管线之前的行为一致。
@@ -755,7 +783,8 @@ void FileSession::sendRelayFrame(uint16_t cmd, uint32_t seq, const std::string& 
     //转发的帧不带任何附加标志位：按协议约定（docs/协议设计-v2.md 第 12.3.2 节）
     //cmd_folder_relay_data 的包体是一段不透明的应用帧，既不压缩、也不是附件包体布局，
     //故这里只需交给 sendFrame 用本连接的会话密钥重新加密后发出。
-    //注意本函数运行在<u>配对端</u>的 I/O 线程上，串行由 sendFrame 里的 m_sendMutex 保证
+    //注意本函数运行在<u>配对端</u>的 I/O 线程上，sendFrame 会把整段动作投递回本连接
+    //所属的 EventLoop 线程，加密与写出的先后因此始终一致
     sendFrame(cmd, seq, 0, plainBody);
 }
 

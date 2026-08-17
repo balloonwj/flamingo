@@ -152,7 +152,6 @@ CCreateGroupDlg::CCreateGroupDlg(CFlamingoClient* pFMGClient)
     , m_countLabel(NULL)
     , m_builtPurpose(kPurposeCreateGroup)
     , m_built(false)
-    , m_editsCreated(false)
     , m_creating(false)
     , m_hTitleIcon(NULL)
 {
@@ -238,26 +237,12 @@ void CCreateGroupDlg::OpenInternal(HWND /*owner*/, UINT selfUserId,
         SetButtons(false, false, true);   // 只留关闭按钮（不需要最小化 / 最大化）
         SetMinSize(kDlgMinWidth, kDlgMinHeight);
 
-        m_built        = false;
-        m_editsCreated = false;
+        m_built = false;
         BuildUiOnce();
         ResizeClient(kDlgWidth, kDlgHeight);
         CenterWindow();
     }
 
-    // 两个输入框内嵌真 Win32 EDIT，须在窗口 HWND 就绪后建一次。
-    if (!m_editsCreated)
-    {
-        if (m_searchInput != NULL)
-        {
-            m_searchInput->EnsureCreated(m_hWnd);
-        }
-        if (m_nameInput != NULL)
-        {
-            m_nameInput->EnsureCreated(m_hWnd);
-        }
-        m_editsCreated = true;
-    }
     if (m_searchInput != NULL)
     {
         m_searchInput->SetText(_T(""));
@@ -292,7 +277,7 @@ void CCreateGroupDlg::BuildUiOnce()
     //这些指针指向的控件由控件树持有，窗口一销毁就跟着析构，本类留下的是悬空指针；
     //而各用途构建出来的控件集合并不相同（如群名输入框只有建群用途才建），若只靠
     //"各分支各自赋值"，换个用途重开时就会拿着上一轮的野指针去用 —— 曾因此崩溃过
-    //（OpenInternal 里对已释放的输入框调 EnsureCreated）。统一在这里清零，后面
+    //（OpenInternal 里用到了随窗口销毁而释放掉的输入框）。统一在这里清零，后面
     //哪个分支建了哪个控件就只由那个分支填回来。
     m_searchInput    = NULL;
     m_nameInput      = NULL;

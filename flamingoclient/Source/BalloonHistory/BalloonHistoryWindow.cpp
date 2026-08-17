@@ -274,24 +274,6 @@ int ComboIndexFromRange(HistoryTimeRange range)
     return (int)kHistoryTimeAll;
 }
 
-//递归就绪子树里所有 DuiEditHost（含其子类 DuiSearchBox）的真 Win32 EDIT。
-void EnsureEditsCreated(DuiControl* node, HWND host)
-{
-    if (node == NULL)
-    {
-        return;
-    }
-    DuiEditHost* edit = dynamic_cast<DuiEditHost*>(node);
-    if (edit != NULL)
-    {
-        edit->EnsureCreated(host);
-    }
-    for (const auto& child : node->Children())
-    {
-        EnsureEditsCreated(child.get(), host);
-    }
-}
-
 //清空容器的全部子控件（先复制指针清单再逐个 RemoveChild，避免遍历中容器变化）。
 void RemoveAllChildren(DuiControl* box)
 {
@@ -806,7 +788,6 @@ void CBalloonHistoryWindow::InitUi()
     {
         return;
     }
-    EnsureEditsCreated(content, m_hWnd);
 
     //捕获要复用的控件指针（所有权在控件树）。
     m_pScroll = dynamic_cast<DuiScrollView*>(content->FindCtrlById(kIdHistoryScroll));

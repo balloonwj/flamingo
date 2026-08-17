@@ -95,8 +95,7 @@ ClientVersionModal::ClientVersionModal()
     note->SetShowBorder(true);
     note->SetBgColor(theme::kInk0);
     //更新说明通常要分条写（"新增 X；修复 Y；已知问题 Z"），单行框写起来很别扭，
-    //故设为多行 + 按宽度自动换行。两个开关都必须在 EnsureCreated 之前调 ——
-    //之后再改会触发 HWND 销毁重建。
+    //故设为多行 + 按宽度自动换行。这两个开关在运行期任何时候都可以改。
     note->SetMultiLine(true);
     note->SetWordWrap(true);
     m_editNote = note.get();

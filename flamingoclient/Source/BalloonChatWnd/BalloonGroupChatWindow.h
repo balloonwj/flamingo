@@ -50,7 +50,8 @@ namespace net { struct MessageNotify; struct GroupMembersResult; struct SyncMess
                 struct GroupFileUploadProgress; struct GroupFileDownloadProgress; }
 
 // 气泡消息列表控件（自绘，定义在 ChatMessageList.h；本头只需前置声明）。
-namespace balloonchatwnd { class ChatMessageList; }
+namespace balloonchatwnd {
+class ChatInputRichEdit; class ChatMessageList; }
 
 /**
  *  CBalloonGroupChatWindow
@@ -792,8 +793,8 @@ private:
     LRESULT OnRelayout(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
-     *  kSendOnEnterMsg 处理：群聊输入框按 Enter 触发发送（由 ChatInputKeyFilter
-     *  的子类过程投递），转调 DoSend()。
+     *  kSendOnEnterMsg 处理：群聊输入框按 Enter 触发发送（由输入框控件
+     *  ChatInputRichEdit 投递），转调 DoSend()。
      */
     LRESULT OnSendOnEnter(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
@@ -818,9 +819,15 @@ private:
     LRESULT OnMentionWheel(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
-     *  WM_LBUTTONDOWN：点到输入框之外的任何 DUI 区域就收起 @ 浮层。
-     *  点输入框内部的鼠标消息由系统直送那个 EDIT 子窗口、不经本窗口，故本消息
-     *  到达就意味着"点的是别处"。不消费该消息（bHandled 置 FALSE），点击照常生效。
+     *  WM_LBUTTONDOWN：点在输入框之外的 DUI 区域就收起 @ 浮层；点在输入框内部则
+     *  保留浮层，改为投递一次 kMentionChangedMsg，让本窗口按点击之后的光标位置重算。
+     *
+     *  这条路径的前提换过一次。输入框还是内嵌真 Win32 子窗口的时候，点它的鼠标消息
+     *  由系统直送该子窗口、不经本窗口，所以本消息到达就等于"点的是别处"，不必判落点。
+     *  输入框改成无窗口控件（ChatInputRichEdit 继承自 DuiRichEdit）之后这条前提不再
+     *  成立：点输入框的鼠标消息同样会到达本窗口，于是改为在这里自己判落点。
+     *
+     *  不消费该消息（bHandled 置 FALSE），点击照常交给 DuiHost 派发。
      */
     LRESULT OnLButtonDownForMention(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
@@ -831,10 +838,10 @@ private:
     LRESULT OnActivateForMention(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
-     *  取输入框内部 EDIT 的句柄（未创建返回 NULL）。@提醒 要直接读它的文本与
-     *  光标位置、并对选区设字符格式，故单独收口一个取句柄的小函数。
+     *  取消息输入框控件（找不到返回 NULL）。@提醒 要直接读它的文本与光标位置、
+     *  并对选区设字符格式，故单独收口一个取控件的小函数。
      */
-    HWND GetInputEditHwnd();
+    balloonchatwnd::ChatInputRichEdit* GetInputEdit();
 
     /**
      *  从输入框当前文本与光标位置解出"光标前正在 @ 的前缀"。
@@ -931,31 +938,45 @@ private:
     static void OnFacePicked(void* userdata, int faceId, const wchar_t* facePath);
 
 private:
+    // 以下七条都是本窗口投给自己的私有消息，取 WM_APP 段而不是公共的 WM_USER 段。
+    //
+    // 理由：WM_USER 段被 UserSessionData.h / CustomMsgDef.h 那两批跨窗口消息占着，
+    // 号是手工分配的，群聊窗在里面另起一段只会增加撞号面。这几条既不经
+    // CFlamingoClient::ProxyWndProc 中转、也不受 FMG_MSG_FIRST / FMG_MSG_LAST 闸门
+    // 约束，与那两批消息没有任何交集，放进 WM_APP 段更贴合它们的实际作用域。
+    //
+    // 取值段说明：本窗口用 WM_APP + 0x50 起，单聊窗（BalloonChatWindow）用
+    // WM_APP + 0x40 起，两边刻意错开。窗口私有消息即便同号也互不干扰（各发各的窗口），
+    // 错开只是为了排查时一眼能看出某个号属于哪个窗口。仓库里其它窗口已占用的
+    // WM_APP 偏移是 1~3、0x21、0x22、0x31、0x32、0x137~0x13A，均已避开。
+    // 号段规约见开发约定文档「UI 约定」第 6 条，重号由
+    // Source\Tests\MessageIdRegistryTests.cpp 的守卫用例把关。
+
     // 自定义消息：窗口缩放后投递，触发客户区重新布局。
-    static const UINT kRelayoutMsg = WM_USER + 0x601;
+    static const UINT kRelayoutMsg = WM_APP + 0x50;
 
     // 自定义消息：群聊输入框按 Enter 时投递，触发发送（Ctrl+Enter 则在框内换行）。
-    static const UINT kSendOnEnterMsg = WM_USER + 0x602;
+    static const UINT kSendOnEnterMsg = WM_APP + 0x51;
 
     // 自定义消息：发送按钮「▼」被点时投递，弹出发送模式切换菜单。
-    static const UINT kOpenSendMenuMsg = WM_USER + 0x603;
+    static const UINT kOpenSendMenuMsg = WM_APP + 0x52;
 
     // 自定义消息：截图按钮被点时投递，延后到 DUI 鼠标事件之外再发起模态截图浮层，避免
     // 捕获 / 重入问题导致截图后发送按钮等点击失灵（与发送▼菜单同理）。
-    static const UINT kDoScreenshotMsg = WM_USER + 0x604;
+    static const UINT kDoScreenshotMsg = WM_APP + 0x53;
 
     // 自定义消息：输入框内容 / 光标可能变化时由 @提醒 钩子<u>投递</u>，
     // 本窗口据此重算"光标前是不是正在 @ 某个前缀"，显示 / 更新 / 收起浮层。
-    static const UINT kMentionChangedMsg = WM_USER + 0x605;
+    static const UINT kMentionChangedMsg = WM_APP + 0x54;
 
     // 自定义消息：方向键 / 回车 / Tab / Esc 时由 @提醒 钩子<u>同步发送</u>，
     // wParam 为虚拟键码；本窗口返回非 0 表示"浮层消费了这次按键"，钩子据此吞键。
-    static const UINT kMentionNavMsg = WM_USER + 0x606;
+    static const UINT kMentionNavMsg = WM_APP + 0x55;
 
     // 自定义消息：鼠标滚轮时由 @提醒 钩子<u>同步发送</u>，wParam 为滚轮增量
     // （zDelta）；本窗口返回非 0 表示"浮层消费了这次滚轮"，钩子据此吞掉、
     // 不让输入框自己跟着滚。
-    static const UINT kMentionWheelMsg = WM_USER + 0x607;
+    static const UINT kMentionWheelMsg = WM_APP + 0x56;
 
     HWND    m_hMainDlg;     // CMainDlg 窗口句柄（为 NULL 时关闭不退出程序）
     int     m_replyIndex;   // mock 自动回复轮转下标（仅无群 id 的调试入口下用）
@@ -1044,7 +1065,7 @@ private:
     // 当前聊天字体（影响后续发送的群消息与输入框外观）。InitUi 时从 flamingo.ini
     // 载入，面板改动后写回；m_valid 为 false 表示尚未设过、消息不带字体。
     net::TextFont m_currentFont;
-    // 输入框（DuiRichEditHost）当前生效的自定义字体句柄。RichEdit 的
+    // 输入框（ChatInputRichEdit）当前生效的自定义字体句柄。富文本控件的
     // SetDefaultFontFromHFONT 不接管 HFONT 所有权，故由本窗口持有：每次应用新字体
     // 前先 DeleteObject 上一只再换新，析构时释放，避免 GDI 句柄泄漏。NULL=用默认字体。
     HFONT m_hInputFont;

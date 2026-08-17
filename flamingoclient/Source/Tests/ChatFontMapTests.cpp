@@ -1,7 +1,7 @@
 /**
  *  ChatFontMapTests.cpp
  *
- *  第零期（聊天输入框迁移到 DuiRichEditHost）测试：覆盖字体翻译纯逻辑
+ *  第零期（聊天输入框迁移到富文本控件）测试：覆盖字体翻译纯逻辑
  *  ChatFontToLogFont —— 把 net::TextFont 翻成 LOGFONT + 文字色。该逻辑是
  *  ApplyChatFontToEdit 各重载共用的核心，单独测它即可验证"字号 / 粗体 /
  *  斜体 / 下划线 / 删除线 / 颜色"映射正确，且不必把 ini / 会话全局拖进测试。

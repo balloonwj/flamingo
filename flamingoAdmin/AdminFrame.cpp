@@ -52,7 +52,6 @@
 #include "Controls/Layout/DuiLayout.h"
 #include "Controls/Input/DuiEditHost.h"
 #include "Controls/Basic/DuiButton.h"   // 「记住密码」复选框（StyleCheckbox）的读写
-#include "Controls/Input/DuiRichEditHost.h"   // 公告详情面板的标题 / 正文用
 #include "Controls/List/DuiMenu.h"
 
 #include <windowsx.h>   // GET_X_LPARAM / GET_Y_LPARAM
@@ -482,14 +481,11 @@ void AdminFrame::InitContent()
     m_root = root.get();
     SetClientContent(std::move(root));
 
-    // 登录界面的账户 / 密码输入框寄宿真 EDIT，须 EnsureCreated。
-    EnsureEditsCreated(m_loginPage);
     PrefillLogin();
 
     // 弹窗层：新增企业弹窗 + 组织节点弹窗。两者一经构建便常驻，开 / 关
-    // 只切显隐。弹窗内文本框的真 EDIT 子窗由 balloonui 在首次布局时自动
-    // 创建且默认显示，藏好它们的工作由 WinMain 在主窗口 ShowWindow 之前
-    // 调用 HideModalEdits() 完成（详见该函数注释）。
+    // 只切显隐。弹窗内的文本框是无窗口控件，随所在弹窗一起参与 DUI 合成，
+    // 弹窗逻辑上隐藏时它们不会画出任何内容，因此不需要额外的预隐藏步骤。
     auto modal = std::make_unique<NewEnterpriseModal>();
     m_modal = modal.get();
     m_root->AddModal(std::move(modal));
@@ -1909,9 +1905,6 @@ void AdminFrame::EnterShell()
 
         m_shellPage = shell.get();
         m_root->AddPage(std::move(shell));
-
-        // 外壳内的真 EDIT（顶栏搜索框、企业管理搜索框）须 EnsureCreated。
-        EnsureEditsCreated(m_shellPage);
     }
 
     m_root->ShowPage(m_shellPage);
@@ -4822,7 +4815,7 @@ void AdminFrame::ShowToast(LPCTSTR text, ToastKind kind)
 
 void AdminFrame::PrefillLogin()
 {
-    // 回填登录框。须在输入框 EnsureCreated 之后调用。
+    // 回填登录框。输入框是无窗口控件，构造完即可写入，没有前置条件。
     // 优先用 ini 里记下的上次登录信息；本机从未登录过时，才回退到测试数据库
     // （testdata.sql）里的平台超级管理员账户，保持联调演示的便利。
     if (m_loginPage == nullptr)
@@ -4861,28 +4854,6 @@ void AdminFrame::PrefillLogin()
     }
 }
 
-void AdminFrame::EnsureEditsCreated(DuiControl* node)
-{
-    if (node == nullptr)
-    {
-        return;
-    }
-    if (DuiEditHost* edit = dynamic_cast<DuiEditHost*>(node))
-    {
-        edit->EnsureCreated(m_hWnd);
-    }
-    // 公告详情面板的标题 / 正文是 DuiRichEditHost(寄宿真 RICHEDIT50W),
-    // 与 DuiEditHost 同样需要在 host HWND 就绪后 EnsureCreated 才能显示。
-    if (DuiRichEditHost* re = dynamic_cast<DuiRichEditHost*>(node))
-    {
-        re->EnsureCreated(m_hWnd);
-    }
-    for (const auto& child : node->Children())
-    {
-        EnsureEditsCreated(child.get());
-    }
-}
-
 void AdminFrame::SetEditsVisible(DuiControl* node, bool visible)
 {
     if (node == nullptr)
@@ -4890,14 +4861,13 @@ void AdminFrame::SetEditsVisible(DuiControl* node, bool visible)
         return;
     }
 
-    // 员工详情面板自己管这 11 个只读值字段的显隐 —— 它每帧绘制末尾都会按本帧
+    // 员工详情面板自己管这 11 个只读值字段的显隐 —— 它每帧绘制时都会按本帧
     // 标记表 reconcile 一次(OrgDetailPanel::ApplyBasicEditVisibility)。若在这里
-    // 逐个 SetVisible,弹窗显示引发的下一次重绘就会把这次隐藏覆盖回去,真 EDIT
-    // 子窗重新浮到弹窗表面(2026-08-11 现场:「新增员工」弹窗里漂出员工姓名与
-    // 登录账号)。改为拨它的"外部强制隐藏"开关,并【跳过其子树】——
-    // 子树递归下去只会与该面板的 reconcile 互相打架:恢复时递归会把 11 个字段
-    // 全设为可见,而其中一部分本就不该显示(空字段 / 当前不在基本信息 tab),
-    // 要等下一帧 reconcile 才纠正,中间会闪一帧错误内容。
+    // 逐个 SetVisible,面板的下一次重绘就会把这次设置覆盖回去。改为拨它的
+    // "外部强制隐藏"开关,并【跳过其子树】—— 子树递归下去只会与该面板的
+    // reconcile 互相打架:恢复时递归会把 11 个字段全设为可见,而其中一部分本就
+    // 不该显示(空字段 / 当前不在基本信息 tab),要等下一帧 reconcile 才纠正,
+    // 中间会闪一帧错误内容。
     if (OrgDetailPanel* orgPanel = dynamic_cast<OrgDetailPanel*>(node))
     {
         orgPanel->SetBasicEditsSuppressed(!visible);
@@ -4908,75 +4878,9 @@ void AdminFrame::SetEditsVisible(DuiControl* node, bool visible)
     {
         edit->SetVisible(visible);
     }
-    // 公告详情面板的标题 / 正文是 DuiRichEditHost(寄宿真 RICHEDIT50W),与
-    // DuiEditHost 一样必须在弹窗打开时显式隐藏,否则真 HWND 始终画在 DUI
-    // 上层,会在"编辑公告"等弹窗中部漂出公告标题 / 正文文字
-    // (2026-05-26 现场)。EnsureEditsCreated 已经处理它,这里要对称处理。
-    if (DuiRichEditHost* re = dynamic_cast<DuiRichEditHost*>(node))
-    {
-        re->SetVisible(visible);
-    }
     for (const auto& child : node->Children())
     {
         SetEditsVisible(child.get(), visible);
-    }
-}
-
-void AdminFrame::HideModalEdits()
-{
-    // 新增企业弹窗里的 5 个文本框是寄宿真 Win32 EDIT 的控件。balloonui 会
-    // 在控件首次布局时自动创建该 EDIT 子窗（DuiEditHost::Layout 内的懒
-    // 创建），且创建出来默认是【显示】的；而弹窗逻辑上一直隐藏，于是这些
-    // EDIT 子窗会浮在登录 / 主界面之上（真 HWND 永远画在 DUI 画面之上）。
-    //
-    // 隐藏它们要点有二：
-    //  (1) EDIT 子窗须已创建 —— 这里先 EnsureEditsCreated 强制建好；
-    //  (2) 直接对 HWND 调 ShowWindow(SW_HIDE)，【不】改控件自身的
-    //      m_bVisible —— 否则弹窗打开时 SetVisible 的可见性同步会因
-    //      「控件自身 invisible」而继续把它藏着，弹窗里就看不到输入框了。
-    //
-    // 本函数由 WinMain 在主窗口 ShowWindow 【之前】调用，从而连一帧闪烁
-    // 都不会出现。弹窗之后正常 ShowModal / HideModal 时，SetVisible 触发
-    // 的同步会按 IsEffectivelyVisible 把这些子窗正确显示 / 隐藏。
-    EnsureEditsCreated(m_modal);        // 确保新增企业弹窗的 EDIT 子窗已创建
-    EnsureEditsCreated(m_serviceModal); // 确保新建服务号弹窗的 EDIT 子窗已创建
-    EnsureEditsCreated(m_composeModal); // 确保新建公告弹窗的 EDIT 子窗已创建
-    EnsureEditsCreated(m_groupModal);   // 确保新建群弹窗的 EDIT 子窗已创建
-    EnsureEditsCreated(m_clientVersionModal); // 确保新建客户端版本弹窗的 3 个 EDIT 子窗已创建
-    // 修改员工资料弹窗(EmployeeEditDialog)与组织节点对话框(NodeModal)已经改成
-    // 独立顶层窗口,on-demand 创建,不再常驻 RootContainer,此处不需要预创建 /
-    // 隐藏它们的 EDIT 子窗。
-    EnsureEditsCreated(m_enterpriseSettingsModal); // 确保企业设置弹窗的 EDIT 子窗已创建
-    EnsureEditsCreated(m_networkPage);  // 确保网络设置页的 EDIT 子窗已创建
-    HideEditHwnds(m_modal);             // 再逐个 ShowWindow(SW_HIDE)
-    HideEditHwnds(m_serviceModal);
-    HideEditHwnds(m_composeModal);
-    HideEditHwnds(m_groupModal);        // 新建群弹窗的群名输入框
-    // 新建客户端版本弹窗的版本号 / 最低版本号 / 更新说明三个输入框。漏掉这一行的
-    // 表现就是登录界面正中浮着三条白色横条（2026-08-12 现场）—— 弹窗逻辑上没显示，
-    // 但它的真 EDIT 子窗一经创建默认可见，而真 HWND 永远画在 DUI 画面之上。
-    HideEditHwnds(m_clientVersionModal);
-    HideEditHwnds(m_enterpriseSettingsModal); // 企业设置弹窗的输入框
-    HideEditHwnds(m_networkPage);       // 网络设置页默认不显示，藏好其 EDIT
-}
-
-void AdminFrame::HideEditHwnds(DuiControl* node)
-{
-    if (node == nullptr)
-    {
-        return;
-    }
-    if (DuiEditHost* edit = dynamic_cast<DuiEditHost*>(node))
-    {
-        HWND h = edit->GetHostedHwnd();
-        if (h != nullptr && ::IsWindow(h))
-        {
-            ::ShowWindow(h, SW_HIDE);
-        }
-    }
-    for (const auto& child : node->Children())
-    {
-        HideEditHwnds(child.get());
     }
 }
 

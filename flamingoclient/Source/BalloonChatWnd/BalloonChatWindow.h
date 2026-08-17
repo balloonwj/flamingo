@@ -479,6 +479,23 @@ private:
     bool CheckOnlineFor(int action);
 
     /**
+     *  发送文件夹之前的<u>对端</u>在线门禁：对方不在线时弹出提示并返回 false。
+     *
+     *  与 CheckOnlineFor 的分工：那一个看的是本端连不连得上服务器，这一个看的是对端
+     *  有没有在线连接。文件夹传输要双方各自连上 fileserver 建中转通道，对方不在线时
+     *  这条通道建不起来，服务端在收到邀请的那一刻就会直接拒绝、连会话都不建。与其
+     *  等那条拒绝回来再把气泡改成"发送失败"（聊天记录里会平白多出一条失败消息，而
+     *  实际上一个字节都没发出去），不如在这里就把话说清楚。
+     *
+     *  本端掌握的对端状态可能是旧的（对方刚掉线、推送还没到），所以这道门禁只在
+     *  <u>确知对方离线</u>时才拦：状态尚未注入（m_peerPresence 为 -1）时一律放行，
+     *  由服务端的应答兜底（见 OnFolderBound 对 kFolderErrPeerOffline 的处理）。
+     *
+     *  返回：true 表示可以继续发送；false 表示已弹出提示、调用方应当直接返回。
+     */
+    bool CheckPeerOnlineForFolder();
+
+    /**
      *  请主面板打开与对端的历史消息记录窗。头部「消息记录」按钮与「已 Pin N 条」
      *  提示带共用本函数，区别只在预选哪个类型胶囊。
      *    initialTypeFilter：打开后预选的类型胶囊，取 balloonhistory::HistoryTypeFilter
@@ -957,8 +974,8 @@ private:
     LRESULT OnRelayout(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
-     *  kSendOnEnterMsg 处理：聊天输入框按 Enter 触发发送（由 ChatInputKeyFilter
-     *  的子类过程投递），转调 DoSend()。
+     *  kSendOnEnterMsg 处理：聊天输入框按 Enter 触发发送（由输入框控件
+     *  ChatInputRichEdit 投递），转调 DoSend()。
      */
     LRESULT OnSendOnEnter(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
@@ -1058,24 +1075,38 @@ private:
     void RebuildPeerIcons();
 
 private:
+    // 以下五条都是本窗口投给自己的私有消息，取 WM_APP 段而不是公共的 WM_USER 段。
+    //
+    // 理由：WM_USER 段被 UserSessionData.h / CustomMsgDef.h 那两批跨窗口消息占着，
+    // 号是手工分配的，聊天窗在里面另起一段只会增加撞号面。这几条既不经
+    // CFlamingoClient::ProxyWndProc 中转、也不受 FMG_MSG_FIRST / FMG_MSG_LAST 闸门
+    // 约束，与那两批消息没有任何交集，放进 WM_APP 段更贴合它们的实际作用域。
+    //
+    // 取值段说明：本窗口用 WM_APP + 0x40 起，群聊窗（BalloonGroupChatWindow）用
+    // WM_APP + 0x50 起，两边刻意错开。窗口私有消息即便同号也互不干扰（各发各的窗口），
+    // 错开只是为了排查时一眼能看出某个号属于哪个窗口。仓库里其它窗口已占用的
+    // WM_APP 偏移是 1~3、0x21、0x22、0x31、0x32、0x137~0x13A，均已避开。
+    // 号段规约见开发约定文档「UI 约定」第 6 条，重号由
+    // Source\Tests\MessageIdRegistryTests.cpp 的守卫用例把关。
+
     // 自定义消息：窗口缩放后投递，触发客户区重新布局（避开 WM_SIZE
     // 处理顺序问题 —— 等 DuiFrameWindow 把客户区缩放完再重排）。
-    static const UINT kRelayoutMsg = WM_USER + 0x601;
+    static const UINT kRelayoutMsg = WM_APP + 0x40;
 
     // 自定义消息：聊天输入框按 Enter 时投递，触发发送（Ctrl+Enter 则在框内换行）。
-    static const UINT kSendOnEnterMsg = WM_USER + 0x602;
+    static const UINT kSendOnEnterMsg = WM_APP + 0x41;
 
     // 自定义消息：发送按钮「▼」被点时投递，弹出发送模式切换菜单。
-    static const UINT kOpenSendMenuMsg = WM_USER + 0x603;
+    static const UINT kOpenSendMenuMsg = WM_APP + 0x42;
 
     // 自定义消息：截图按钮被点时投递。截图浮层 overlay.Run 是个模态消息循环，若直接在
     // OnDuiNotify（DUI 鼠标事件同步派发栈）里跑，会引发捕获 / 重入问题，导致截图结束后
     // 发送按钮等点击失灵（与发送▼菜单同理）。故投递本消息、延后到鼠标事件外再发起截图。
-    static const UINT kDoScreenshotMsg = WM_USER + 0x604;
+    static const UINT kDoScreenshotMsg = WM_APP + 0x43;
 
     // 自定义消息：输入框内容可能变化时由键盘钩子投递（打字 / 退格 / 粘贴 / 输入法上屏），
     // 触发「正在输入」发包判断。wParam 为 1 表示输入框失焦（须立即收尾）、0 表示普通变化。
-    static const UINT kInputChangedMsg = WM_USER + 0x605;
+    static const UINT kInputChangedMsg = WM_APP + 0x44;
 
     /**
      *  kInputChangedMsg 处理：输入框内容可能变化了，交发送侧节流器判断要不要发包。
@@ -1148,7 +1179,7 @@ private:
     // 当前聊天字体（影响后续发送的消息与输入框外观）。InitUi 时从 flamingo.ini
     // 载入，面板改动后写回；m_valid 为 false 表示尚未设过、消息不带字体。
     net::TextFont m_currentFont;
-    // 输入框（DuiRichEditHost）当前生效的自定义字体句柄。RichEdit 的
+    // 输入框（ChatInputRichEdit）当前生效的自定义字体句柄。富文本控件的
     // SetDefaultFontFromHFONT 不接管 HFONT 所有权，故由本窗口持有：每次应用新字体
     // 前先 DeleteObject 上一只再换新，析构时释放，避免 GDI 句柄泄漏。NULL=用默认字体。
     HFONT m_hInputFont;

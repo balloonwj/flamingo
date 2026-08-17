@@ -8,8 +8,7 @@
 
 #include "../IniFile.h"
 #include "../UserSessionData.h"   // g_szHomePath
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEdit.h"
 
 namespace balloonchatwnd {
 
@@ -83,32 +82,7 @@ void SaveChatFont(const net::TextFont& font)
     io.WriteInt(kSection, _T("color"),     (long)(font.m_colorRgb & 0xFFFFFFu), ini);
 }
 
-void ApplyChatFontToEdit(balloonwjui::DuiEditHost* edit, const net::TextFont& font)
-{
-    if (edit == NULL)
-    {
-        return;
-    }
-    // 未设过字体：不改动输入框，保留 balloonui 默认外观（微软雅黑 9pt）。
-    if (!font.m_valid)
-    {
-        return;
-    }
-    edit->SetCtlFont(_T("Microsoft YaHei"), font.m_size,
-                     font.m_bold, font.m_italic, font.m_underline, font.m_strike);
-    // 先显式给 EDIT 设白底：Win32 EDIT 的 WM_CTLCOLOREDIT 只有在返回画刷时，
-    // hdc 上的文字色才生效；若不设背景色（m_ctlBg=CLR_INVALID），HwndHostControl
-    // 会 return nullptr 交给 DefWindowProc，文字色被覆盖。聊天输入区本就是白底，
-    // 这里设白不改观感，只为让文字色落地。直接调 SetCtlBgColor（绕过 DuiEditHost
-    // ::SetBgColor 的"同色即返回"短路，确保 m_ctlBg 被真正赋值）。
-    edit->SetCtlBgColor(RGB(0xFF, 0xFF, 0xFF));
-    const COLORREF c = RGB((font.m_colorRgb >> 16) & 0xFF,
-                           (font.m_colorRgb >> 8) & 0xFF,
-                           font.m_colorRgb & 0xFF);
-    edit->SetCtlTextColor(c);
-}
-
-HFONT ApplyChatFontToEdit(balloonwjui::DuiRichEditHost* edit, const net::TextFont& font)
+HFONT ApplyChatFontToEdit(balloonwjui::DuiRichEdit* edit, const net::TextFont& font)
 {
     if (edit == NULL)
     {
@@ -127,7 +101,7 @@ HFONT ApplyChatFontToEdit(balloonwjui::DuiRichEditHost* edit, const net::TextFon
     {
         return NULL;
     }
-    // DuiRichEditHost::SetDefaultFontFromHFONT 不接管 HFONT 所有权（见其头注释），
+    // DuiRichEdit::SetDefaultFontFromHFONT 不接管 HFONT 所有权（见其头注释），
     // 故把句柄返回给调用方持有；RichEdit 的字色走 CHARFORMAT2，直接 SetTextColor 即可，
     // 不需要 EDIT 那套"设白底让文字色生效"的迂回。
     edit->SetDefaultFontFromHFONT(hFont);

@@ -62,8 +62,8 @@ enum ContactMenuId : UINT
     // 联系人行上点出来的，点的是谁本来就一目了然，再顶一行名字只是把功能项往下推。
     // 此 id 一并撤销，日后新增菜单项另取新值，不要复用 1。
     kContactMenuSendMsg      = 2,    // 发消息 —— 打开与该联系人的单聊窗
-    kContactMenuVoice        = 3,    // 语音通话 —— 待接后端
-    kContactMenuVideo        = 4,    // 视频通话 —— 待接后端
+    kContactMenuVoice        = 3,    // 语音通话 —— 转给 CMainDlg 的通话协调器发起呼叫
+    kContactMenuVideo        = 4,    // 视频通话 —— 同上，媒体类型为视频
     kContactMenuViewProfile  = 5,    // 查看资料 —— 同事打开联系人资料窗，自己打开个人信息窗
     kContactMenuRemark       = 6,    // 修改备注 —— 打开资料窗并让备注行直接进入编辑态
     // 7 曾是"移动到分组"、9 曾是"加入黑名单"、10 曾是"删除好友"。企业版取消了

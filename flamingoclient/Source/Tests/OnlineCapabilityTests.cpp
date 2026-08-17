@@ -4,7 +4,7 @@
  *  "当前状态下哪些功能可用"判定（OnlineCapability）的测试：
  *    · 三态推导 —— 在线且连接就绪 / 状态在线但连接未就绪（恢复中、断线重连中）/
  *      用户主动离线，以及越界 presence 的兜底。
- *    · 五类操作的放行矩阵 —— 在线放行、离线全拦、"连接未就绪"同样全拦。
+ *    · 各类操作的放行矩阵 —— 在线放行、离线全拦、"连接未就绪"同样全拦。
  *    · 提示条文案与可点击性、被拦操作的提示文案完整性。
  *    · 托盘图标选择（离线用灰色图标）。
  *    · 托盘状态徽标叠加 —— 只有"连接就绪 + 离开 / 忙碌"才在图标右下角叠徽标。
@@ -33,14 +33,17 @@ namespace {
 
 const int kOnlineLikePresences[3] = { presence_online, presence_away, presence_busy };
 
-// 五种操作类别，供放行矩阵逐类遍历。
-const int kAllActions[5] =
+// 全部操作类别，供放行矩阵逐类遍历。数组长度取 kActionKindCount；新增类别时必须
+// 同时往这里补一行 —— 漏补只会被零填充（0 恰好是一个合法类别，看不出异常），
+// 故另有 CAP20 一条专门核对"每个类别都确实被列了进来"。
+const int kAllActions[kActionKindCount] =
 {
     kActionSendMessage,
     kActionTransferFile,
     kActionShakeWindow,
     kActionRealtimeCall,
     kActionAccountOp,
+    kActionChangePresence,
 };
 
 } // anonymous namespace
@@ -85,14 +88,14 @@ TEST_CASE("CAP3 离线态与未知取值的兜底", "[onlinecap]")
 }
 
 // =====================================================================
-// CAP4 ~ CAP6 —— 五类操作的放行矩阵
+// CAP4 ~ CAP6 —— 各类操作的放行矩阵
 // =====================================================================
 
-TEST_CASE("CAP4 在线且连接就绪时五类操作全部放行", "[onlinecap][action]")
+TEST_CASE("CAP4 在线且连接就绪时各类操作全部放行", "[onlinecap][action]")
 {
     for (int i = 0; i < 3; ++i)
     {
-        for (int a = 0; a < 5; ++a)
+        for (int a = 0; a < kActionKindCount; ++a)
         {
             INFO("presence = " << kOnlineLikePresences[i] << ", action = " << kAllActions[a]);
             CHECK(IsActionAllowed(kOnlineLikePresences[i], true, kAllActions[a]));
@@ -100,9 +103,9 @@ TEST_CASE("CAP4 在线且连接就绪时五类操作全部放行", "[onlinecap][
     }
 }
 
-TEST_CASE("CAP5 离线时五类操作全部拦住", "[onlinecap][action]")
+TEST_CASE("CAP5 离线时各类操作全部拦住", "[onlinecap][action]")
 {
-    for (int a = 0; a < 5; ++a)
+    for (int a = 0; a < kActionKindCount; ++a)
     {
         INFO("action = " << kAllActions[a]);
         CHECK(!IsActionAllowed(presence_offline, false, kAllActions[a]));
@@ -120,7 +123,7 @@ TEST_CASE("CAP6 状态是在线但连接未就绪时同样全部拦住", "[onlin
     // 此时胶囊已经显示在线，但消息发出去也到不了服务器，必须拦。
     for (int i = 0; i < 3; ++i)
     {
-        for (int a = 0; a < 5; ++a)
+        for (int a = 0; a < kActionKindCount; ++a)
         {
             INFO("presence = " << kOnlineLikePresences[i] << ", action = " << kAllActions[a]);
             CHECK(!IsActionAllowed(kOnlineLikePresences[i], false, kAllActions[a]));
@@ -140,10 +143,10 @@ TEST_CASE("CAP7 越界操作类别一律不放行", "[onlinecap][action]")
 // CAP8 ~ CAP10 —— 提示文案
 // =====================================================================
 
-TEST_CASE("CAP8 五类操作各有非空提示文案，且都点明离线", "[onlinecap][text]")
+TEST_CASE("CAP8 各类操作各有非空提示文案，且都点明离线", "[onlinecap][text]")
 {
     // 新增类别时若漏配文案，本条会失败。
-    for (int a = 0; a < 5; ++a)
+    for (int a = 0; a < kActionKindCount; ++a)
     {
         INFO("action = " << kAllActions[a]);
         const wchar_t* tip = GetBlockedActionTip(kAllActions[a]);
@@ -420,6 +423,153 @@ TEST_CASE("CAP19 叠徽标时底图必然是彩色图标", "[onlinecap][trayover
                 continue;
 
             CHECK(::wcscmp(GetTrayIconFileName(kStates[s]), L"imonline.ico") == 0);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CAP20 ~ CAP23  「切换在线状态」这一档能力判定，以及状态菜单当前项的文字
+//
+// 这几条针对的是"掉线时托盘右键菜单仍标着『在线（当前）』、四个状态项还能点"这个
+// 缺陷。切状态要向服务端发一帧（在线态发 cmd_change_presence、离线态走重新登录），
+// 连接未就绪时发不出去，故它与发消息、传文件同属"需要服务器配合"的操作，走同一层
+// 判定；菜单当前项的文字则必须与主面板胶囊逐字同源。
+// ---------------------------------------------------------------------------
+
+TEST_CASE("CAP20 操作类别表覆盖完整，且每个类别都配了提示文案", "[onlinecap][action]")
+{
+    // kAllActions 漏列一项时只会被零填充（0 恰好是合法类别 kActionSendMessage），
+    // 上面那些遍历用例照样全绿却漏测了新类别。这条逐个核对每个类别都出现过一次。
+    for (int kind = 0; kind < kActionKindCount; ++kind)
+    {
+        INFO("action kind = " << kind);
+        int occurrences = 0;
+        for (int a = 0; a < kActionKindCount; ++a)
+        {
+            if (kAllActions[a] == kind)
+            {
+                ++occurrences;
+            }
+        }
+        CHECK(occurrences == 1);
+    }
+
+    // 新增的这一档单独点名，防止将来有人把它从枚举里挪走却没同步这里。
+    CHECK(kActionChangePresence < kActionKindCount);
+    const wchar_t* tip = GetBlockedActionTip(kActionChangePresence);
+    REQUIRE(tip != NULL);
+    // 文案要点明"切换在线状态"这件事本身，不能沿用发消息那几条的通用措辞。
+    CHECK(::wcsstr(tip, L"切换在线状态") != NULL);
+}
+
+TEST_CASE("CAP21 两副入口给出的答案永远一致", "[onlinecap][action]")
+{
+    // IsActionAllowed（在线状态 + 连接是否就绪）与 IsActionAllowedInState（连接态）
+    // 是同一条规则的两副入口。三个窗口的 CheckOnlineFor 用的是后者、菜单模型也用它，
+    // 一旦两者分叉，就会出现"聊天窗拦住了、托盘菜单却放行"这种局面。
+    const int  kAllPresences[6] =
+    {
+        presence_online, presence_away, presence_busy,
+        presence_offline, kRetiredPresence, 999,
+    };
+    const bool kConnectedValues[2] = { true, false };
+
+    for (int i = 0; i < 6; ++i)
+    {
+        for (int j = 0; j < 2; ++j)
+        {
+            for (int a = 0; a < kActionKindCount; ++a)
+            {
+                const int  presence  = kAllPresences[i];
+                const bool connected = kConnectedValues[j];
+                const int  action    = kAllActions[a];
+                INFO("presence = " << presence << ", connected = " << connected
+                     << ", action = " << action);
+
+                const int state = (int)ComputeConnectionUiState(presence, connected);
+                CHECK(IsActionAllowed(presence, connected, action)
+                      == IsActionAllowedInState(state, action));
+            }
+        }
+    }
+
+    // 连接态入口的三条口径：只有真正在线放行，连接中 / 主动离线 / 越界值都拦。
+    CHECK(IsActionAllowedInState((int)kConnUiOnline, kActionChangePresence));
+    CHECK(!IsActionAllowedInState((int)kConnUiConnecting, kActionChangePresence));
+    CHECK(!IsActionAllowedInState((int)kConnUiOffline, kActionChangePresence));
+    CHECK(!IsActionAllowedInState(999, kActionChangePresence));
+
+    // 越界的操作类别在这一副入口下同样不放行。
+    CHECK(!IsActionAllowedInState((int)kConnUiOnline, -1));
+    CHECK(!IsActionAllowedInState((int)kConnUiOnline, kActionKindCount));
+}
+
+TEST_CASE("CAP22 菜单当前项的文字：连接就绪按状态取，未就绪按连接态取",
+          "[onlinecap][presence]")
+{
+    // 连接就绪：与只看在线状态的 GetPresenceMenuLabel 完全一致，正常在线时的表现不变。
+    CHECK(::wcscmp(GetConnectionMenuLabel(presence_online, kConnUiOnline), L"在线（当前）") == 0);
+    CHECK(::wcscmp(GetConnectionMenuLabel(presence_away,   kConnUiOnline), L"离开（当前）") == 0);
+    CHECK(::wcscmp(GetConnectionMenuLabel(presence_busy,   kConnUiOnline), L"忙碌（当前）") == 0);
+    CHECK(::wcscmp(GetConnectionMenuLabel(presence_offline, kConnUiOnline), L"离线（当前）") == 0);
+
+    // 掉线重连中：用户选的仍是在线 / 离开 / 忙碌，但菜单不能再写"在线（当前）"——
+    // 这正是本次要修的现象。
+    for (int i = 0; i < 3; ++i)
+    {
+        INFO("presence = " << kOnlineLikePresences[i]);
+        CHECK(::wcscmp(GetConnectionMenuLabel(kOnlineLikePresences[i], kConnUiConnecting),
+                       L"正在连接（当前）") == 0);
+    }
+
+    // 用户主动离线：显示"离线（当前）"，他并没有在等着连上。
+    CHECK(::wcscmp(GetConnectionMenuLabel(presence_offline, kConnUiOffline), L"离线（当前）") == 0);
+
+    // 越界的连接态按离线兜底，绝不能落回"在线（当前）"。
+    CHECK(::wcscmp(GetConnectionMenuLabel(presence_online, 999), L"离线（当前）") == 0);
+    CHECK(::wcscmp(GetConnectionMenuLabel(presence_online, -1),  L"离线（当前）") == 0);
+
+    // 本菜单表达不了的 presence，在连接就绪时退化为"离线（当前）"（沿用既有兜底口径）。
+    CHECK(::wcscmp(GetConnectionMenuLabel(kRetiredPresence, kConnUiOnline), L"离线（当前）") == 0);
+}
+
+TEST_CASE("CAP23 菜单当前项文字与胶囊文字同源（只多一个\"（当前）\"后缀）",
+          "[onlinecap][presence]")
+{
+    // 这条锁的是两个函数之间的一致性：菜单与胶囊只要有一处被单独改动、口径分叉了，
+    // 就会重新出现"胶囊写着正在连接、菜单里却标着在线（当前）"这种自相矛盾。
+    const int kAllPresences[6] =
+    {
+        presence_online, presence_away, presence_busy,
+        presence_offline, kRetiredPresence, 999,
+    };
+    const int kAllStates[4] =
+    {
+        (int)kConnUiOnline, (int)kConnUiConnecting, (int)kConnUiOffline, 999,
+    };
+    // 后缀"（当前）"共 4 个宽字符（全角括号各占 1 个）。
+    const size_t kCurrentSuffixLen = 4;
+
+    for (int s = 0; s < 4; ++s)
+    {
+        for (int p = 0; p < 6; ++p)
+        {
+            const int presence = kAllPresences[p];
+            const int state    = kAllStates[s];
+            INFO("presence = " << presence << ", connUiState = " << state);
+
+            const wchar_t* menuLabel = GetConnectionMenuLabel(presence, state);
+            const wchar_t* pillText  = GetConnectionPresenceVisual(presence, state).text;
+            REQUIRE(menuLabel != NULL);
+            REQUIRE(pillText != NULL);
+
+            const size_t labelLen = ::wcslen(menuLabel);
+            const size_t pillLen  = ::wcslen(pillText);
+            REQUIRE(labelLen == pillLen + kCurrentSuffixLen);
+
+            // 前半段逐字等于胶囊文字，后半段恰好是"（当前）"。
+            CHECK(::wcsncmp(menuLabel, pillText, pillLen) == 0);
+            CHECK(::wcscmp(menuLabel + pillLen, L"（当前）") == 0);
         }
     }
 }

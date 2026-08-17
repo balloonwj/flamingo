@@ -126,13 +126,26 @@ public:
      *  结局（会话 id、目录名、目录数 / 文件数 / 总字节数、终态、失败原因），<u>不写</u>
      *  文件清单与文件内容，故"字节不落盘、不入库"这条不变式没有被打破。
      *
-     *  幂等：clientmsgid 取由「会话 id + 本次尝试的序号」派生的固定串（见
-     *  FolderTransferProtocol::buildRecordClientMsgId），落库前先按「发送方 userid +
-     *  clientmsgid」查一次，已有记录即跳过。<u>同一次尝试</u>被判定多次终态（典型是双方各
-     *  发一帧 cmd_folder_close）只会留下一条记录，以最先到达的那个终态为准；而<u>不同次
-     *  尝试</u>的序号不同，故一笔传输先失败（序号 1）、在保留期内重试又成功（序号 2）时，
-     *  聊天记录里会依次留下失败与完成两条，过程完整。序号由 FolderTransferManager 维护
-     *  （见其 beginRetryAttempt），本方法只从会话快照里取用。
+     *  幂等由两道防线保证，缺一不可：
+     *
+     *  <b>第一道（主防线）是 FolderTransferManager::finishAttempt 的原子判定。</b>本方法
+     *  一进来就调它，「本次尝试是否已经终结过」的判断与「标记为已终结」在会话表那把互斥量
+     *  的同一个临界区内一次做完，只有第一个调用方拿到 true 并继续做推送与留记录，后到的
+     *  一律拿到 false 并直接返回。少了这道防线就会出现 2026-08-14 实测到的那个缺陷：一次
+     *  传输结束时双方各发一帧 cmd_folder_close，两帧落在两个不同的工作线程上，都查到"还
+     *  没写过记录"，于是各插一条 —— 双方界面上因而看到两条一模一样的记录条，会话终态也被
+     *  各置了一遍、跟着多推一帧 cmd_folder_state_notify。
+     *
+     *  <b>第二道是 clientmsgid 幂等键。</b>clientmsgid 取由「会话 id + 本次尝试的序号」
+     *  派生的固定串（见 FolderTransferProtocol::buildRecordClientMsgId），落库前先按
+     *  「发送方 userid + clientmsgid」查一次，已有记录即跳过。它挡的是日后新增的、绕开
+     *  第一道防线的调用路径，以及进程重启前后的重复落库。
+     *
+     *  两道防线的去重粒度都是「会话 id + 尝试序号」而不是「会话 id」：<u>同一次尝试</u>
+     *  被判定多次终态只会留下一条记录，以最先到达的那个终态为准；而<u>不同次尝试</u>的
+     *  序号不同，故一笔传输先失败（序号 1）、在保留期内重试又成功（序号 2）时，聊天记录里
+     *  会依次留下失败与完成两条，过程完整。序号由 FolderTransferManager 维护（见其
+     *  beginRetryAttempt），本方法只从会话快照里取用。
      *
      *  写成静态方法是因为主循环那条超时清理路径没有 ChatSession 可用（超时与任何一条
      *  客户端连接都无关，发起邀请的那一端完全可能早已断开）；本方法只用到 ChatServer 与
@@ -153,8 +166,12 @@ public:
      *  @param notifyUsers 要收到 cmd_folder_state_notify 的 userid 列表；空列表表示本次
      *                     不推状态变更（例如重试时发起方由 1817 的应答得知结果、对端已离线），
      *                     此时仍照常留记录
+     *  @return true 表示本次调用就是这一次尝试的终结者，推送与留记录都由它做完了；
+     *          false 表示本次调用被去重挡下（这一次尝试已被别的线程或别的路径终结过），
+     *          或传入的 state 不是终态。调用方多数情况下不必关心返回值 —— 会话的销毁与
+     *          应答照常走；只有需要"确实由本次调用收尾时才记一条日志"的调用点才用得上它
      */
-    static void finishFolderTransferSession(const FolderTransferSessionInfo& s,
+    static bool finishFolderTransferSession(const FolderTransferSessionInfo& s,
                                             int state, int errcode, const std::string& errmsg,
                                             const std::vector<int64_t>& notifyUsers);
 

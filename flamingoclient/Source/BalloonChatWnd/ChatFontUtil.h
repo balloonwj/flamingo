@@ -14,7 +14,7 @@
 
 #include "../net/MessageProtocolClient.h"   // net::TextFont
 
-namespace balloonwjui { class DuiEditHost; class DuiRichEditHost; }
+namespace balloonwjui { class DuiRichEdit; }
 
 namespace balloonchatwnd {
 
@@ -26,17 +26,10 @@ net::TextFont LoadChatFont();
 //   font：要保存的字体设置。
 void SaveChatFont(const net::TextFont& font);
 
-// 把字体应用到输入框：SetCtlFont（字号 / 粗体 / 斜体 / 下划线 / 删除线，字体族
-// 固定微软雅黑）+ SetCtlTextColor（颜色）。font.m_valid 为 false 时不改动（保留
-// 输入框默认外观）。
-//   edit：输入框（可为 NULL，NULL 时不做事）；
-//   font：要应用的字体设置。
-void ApplyChatFontToEdit(balloonwjui::DuiEditHost* edit, const net::TextFont& font);
-
 // 把"当前聊天字体"翻译成一个 LOGFONT + 文字色（字体族固定微软雅黑）。纯函数：
-// 不依赖任何控件 / ini / 全局状态，供 ApplyChatFontToEdit 各重载与单元测试共用。
-// LOGFONT 各字段与 DuiEditHost::SetCtlFont 内部 CreateFont 的取值一一对齐，保证
-// 富文本输入框（DuiRichEditHost）与历史的 EDIT 渲染视觉一致。
+// 不依赖任何控件 / ini / 全局状态，供下面的应用函数与单元测试共用。
+// LOGFONT 各字段与普通输入框 SetCtlFont 内部 CreateFont 的取值一一对齐，保证
+// 富文本输入框与普通输入框的渲染视觉一致。
 //   font：    字体设置；
 //   outLf：   出参，填好的 LOGFONT（仅返回 true 时有意义）；
 //   outColor：出参，文字色（COLORREF，由 font.m_colorRgb 的 0xRRGGBB 转得）；
@@ -44,13 +37,13 @@ void ApplyChatFontToEdit(balloonwjui::DuiEditHost* edit, const net::TextFont& fo
 //             font.m_valid==false → 不动出参、返回 false（调用方据此保留默认外观）。
 bool ChatFontToLogFont(const net::TextFont& font, LOGFONT& outLf, COLORREF& outColor);
 
-// 把字体应用到富文本输入框（DuiRichEditHost 版本，配合输入框迁移到 RichEdit）。
-// 因 DuiRichEditHost::SetDefaultFontFromHFONT <u>不接管</u> HFONT 所有权，本函数
+// 把字体应用到富文本输入框（无窗口富文本控件版本）。
+// 因 DuiRichEdit::SetDefaultFontFromHFONT <u>不接管</u> HFONT 所有权，本函数
 // 新建的 HFONT 由【调用方】持有：函数把它返回，调用方须保存该句柄，并在下次应用
 // 字体 / 窗口析构时 DeleteObject 上一只，避免 GDI 句柄泄漏。
 //   edit：富文本输入框（可为 NULL，NULL 时返回 NULL、不做事）；
 //   font：要应用的字体；font.m_valid==false 时不改控件并返回 NULL（保留默认外观）。
 //   返回：新建并已应用到控件的 HFONT（调用方所有权）；未改动时返回 NULL。
-HFONT ApplyChatFontToEdit(balloonwjui::DuiRichEditHost* edit, const net::TextFont& font);
+HFONT ApplyChatFontToEdit(balloonwjui::DuiRichEdit* edit, const net::TextFont& font);
 
 } // namespace balloonchatwnd

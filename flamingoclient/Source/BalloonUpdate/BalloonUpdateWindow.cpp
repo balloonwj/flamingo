@@ -20,7 +20,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiProgressBar.h"
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEditHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEdit.h"
 
 // ---- 窗口固定尺寸（逻辑像素）-------------------------------------------
 static const int kDlgWidth      = 420;   // 客户区宽
@@ -352,7 +352,6 @@ void CBalloonUpdateWindow::ShowChecking()
     ShowWindow(SW_SHOW);
     UpdateWindow();
     ::SetForegroundWindow(m_hWnd);
-    TakeFocusFromNote();
 
     //false = 只检查、不下载。用户主动点检查时不该在他不知情的情况下下载几十兆的包，
     //下载等他看到版本信息后点「立即更新」。
@@ -390,7 +389,6 @@ void CBalloonUpdateWindow::ShowResult(const update::UpdateTaskResult& r)
     ShowWindow(SW_SHOW);
     UpdateWindow();
     ::SetForegroundWindow(m_hWnd);
-    TakeFocusFromNote();
 
     LOG_INFO(_T("升级窗已显示：kind=%d，强制=%d。"),
              (int)st.kind, st.closable ? 0 : 1);
@@ -474,10 +472,10 @@ void CBalloonUpdateWindow::BuildUiOnce()
     }
 
     // ---- 更新说明正文（只读多行，自带滚动）----
-    // 用 DuiRichEditHost 而不是 DuiLabel：说明可能很长，需要能滚动，而 balloonui
-    // 里没有独立的滚动容器控件，RichEdit 宿主本身就带滚动，只读化后正好合用。
+    // 用富文本控件而不是 DuiLabel：说明可能很长，需要能滚动，而 balloonui
+    // 里没有独立的滚动容器控件，富文本控件本身就带滚动，只读化后正好合用。
     {
-        std::unique_ptr<balloonwjui::DuiRichEditHost> re(new balloonwjui::DuiRichEditHost());
+        std::unique_ptr<balloonwjui::DuiRichEdit> re(new balloonwjui::DuiRichEdit());
         re->SetMultiLine(true);
         re->SetWordWrap(true);
         re->SetReadOnly(true);
@@ -486,6 +484,14 @@ void CBalloonUpdateWindow::BuildUiOnce()
         re->SetMargins(8, 6, 8, 6);
         //只读展示，不需要右键菜单里的剪切 / 粘贴
         re->SetContextMenuEnabled(false);
+        //不显示光标。只读的展示区带着一个闪烁的光标，会让人以为可以编辑。
+        //注意**不能**改用 SetFocusable(false) 达到同样效果：那样文字会变得
+        //选不中（排版引擎在拖选过程中需要控件持有焦点），而这里恰恰希望用户
+        //能把版本说明选中复制出来。
+        re->SetShowCaret(false);
+        //高度由外层布局固定为 kNoteH，内容多了在框内滚动，不要随内容长高 ——
+        //布局随内容变化会把下方的进度条和按钮行顶来顶去。
+        re->SetAutoGrow(false);
         m_editNote = re.get();
         root->AddChild(std::move(re), balloonwjui::DuiLayout::Hint().Fixed(kNoteH));
     }
@@ -555,15 +561,6 @@ void CBalloonUpdateWindow::BuildUiOnce()
     }
 
     SetClientContent(std::move(root));
-
-    //RichEdit 是真实子窗口，须在客户区内容设置到宿主窗口之后再创建，否则没有父窗口。
-    if (m_editNote != NULL)
-    {
-        if (!m_editNote->EnsureCreated(m_hWnd))
-        {
-            LOG_ERROR(_T("升级窗：更新说明 RichEdit 创建失败，说明区将为空白。"));
-        }
-    }
 
     m_built = true;
 }
@@ -656,30 +653,6 @@ void CBalloonUpdateWindow::ApplyViewState(const update::UpdateViewState& st)
     //上面改了一堆控件的显隐，必须重排，否则新露出来的控件没有矩形、画不出来
     RelayoutClientContent();
     Invalidate();
-}
-
-void CBalloonUpdateWindow::TakeFocusFromNote()
-{
-    //更新说明用的 DuiRichEditHost 内部包着一个真的 RICHEDIT50W 子窗口，窗口显示后
-    //键盘焦点默认落在它身上，于是只读的说明区里会有一个闪烁的光标，看着像可以编辑。
-    //balloonui 没有对外暴露那个子窗口句柄，也没有"不接受焦点"的开关，所以这里换个
-    //办法：把 DUI 焦点交给一个按钮，宿主随之把 Win32 焦点从 RichEdit 子窗口上收走，
-    //光标消失。之所以不去改 balloonui 加接口，是因为改库要先经用户同意，而在库外
-    //就能解决。
-    if (m_btnUpdateNow != NULL && m_btnUpdateNow->IsVisible())
-    {
-        m_btnUpdateNow->SetFocus();
-        return;
-    }
-    if (m_btnLater != NULL && m_btnLater->IsVisible())
-    {
-        m_btnLater->SetFocus();
-        return;
-    }
-    if (m_hWnd != NULL)
-    {
-        ::SetFocus(m_hWnd);
-    }
 }
 
 void CBalloonUpdateWindow::ApplyCheckingUi()

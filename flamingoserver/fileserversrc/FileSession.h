@@ -22,7 +22,6 @@
 #include <stdint.h>
 #include <string>
 #include <memory>
-#include <mutex>
 #include "../net/ByteBuffer.h"
 #include "TcpSession.h"
 #include "FolderRelayEndpoint.h"
@@ -64,8 +63,8 @@ public:
      *  <u>由配对端会话在它自己的 I/O 线程里调用</u>：包体要用本连接的会话密钥加密，
      *  只有本对象拿得到那把密钥，所以这一步必须由本对象来做（做法同
      *  RelaySession::forwardFrame）。本连接的发送方向因而有两个来源——本会话自己回的
-     *  握手应答，以及配对端线程转发来的数据帧——两者的「加密 + 投递」由 m_sendMutex
-     *  整体串行，理由见该成员的注释。
+     *  握手应答，以及配对端线程转发来的数据帧——两者最终都由 sendFrame 归到本连接
+     *  所属的 EventLoop 线程上执行，理由见 sendFrame 的实现。
      *
      *  @param cmd       原帧的 cmd（cmd_folder_relay_data），原样沿用
      *  @param seq       原帧的 seq，原样沿用，供对端客户端关联收发
@@ -123,8 +122,11 @@ private:
                               const frame_header& header,
                               std::string& body, bool& handled);
 
-    //发送一个 v2 帧（flags 由调用方指定）
+    //发送一个 v2 帧（flags 由调用方指定）。可从任意线程调用，见实现里的说明
     void sendFrame(uint16_t cmd, uint32_t seq, uint8_t flags, const std::string& body);
+    //在本连接所属的 EventLoop 线程里完成「组帧 + 加密 + 写 socket」。
+    //只允许由 sendFrame 直接调用（已在该线程时）或经 runInLoop 投递后执行
+    void sendFrameInLoop(uint16_t cmd, uint32_t seq, uint8_t flags, const std::string& body);
     //发送一个普通 JSON 应答帧（无附件，用于上传应答）
     void sendJsonResponse(uint16_t cmd, uint32_t seq, const std::string& json);
     //发送一个下载错误应答（附件帧，描述符带错误码，二进制段为空）
@@ -152,11 +154,4 @@ private:
     //本连接的文件夹传输中转端点：握手校验、配对与找对端都由它负责。会话建立时即构造
     //（此时尚未握手，不占配对表的位置），随会话一同销毁
     FolderRelayEndpoint m_relayEndpoint;
-
-    //本连接发送方向的串行锁。加密器内部虽然自带互斥量，但它只保证单次加密是原子的：
-    //中转模式下本连接的帧有两个来源（本会话自己回的应答帧、配对端 I/O 线程转发来的
-    //数据帧），若两者各自加密完再各自投递，写到 socket 的先后可能与加密的先后相反，
-    //接收端按流顺序解密必然失败。故把「加密 + 投递」整体锁起来（做法同 RelaySession）。
-    //上传 / 下载模式下只有本连接自己的 I/O 线程在发，这把锁恒不竞争，代价可以忽略
-    std::mutex  m_sendMutex;
 };

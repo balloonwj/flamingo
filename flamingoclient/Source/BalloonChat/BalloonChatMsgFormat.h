@@ -76,7 +76,7 @@ CString FormatDisplayLine(const CString& sender, time_t when, const CString& tex
  *
  *  聊天输入框里文字与系统表情图文混排，发送前按出现顺序拆成若干段：每段
  *  要么是一串纯文本，要么是一个系统表情。BuildSendBody 把这样一串段编码
- *  成发送正文字符串。段序列通常来自输入框 DuiRichEditHost::EnumContent
+ *  成发送正文字符串。段序列通常来自输入框 DuiRichEdit::EnumContent
  *  按文档顺序的回调（文本段 + 带 faceId 的内联表情段）。
  */
 struct ChatSegment

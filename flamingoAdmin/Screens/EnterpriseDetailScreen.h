@@ -22,7 +22,7 @@
 #include "Mock/MockData.h"
 
 namespace balloonwjui { class DuiButton; }   // FlatButton 已迁到 balloonwjui::DuiButton
-namespace balloonwjui { class DuiEditHost; } // 组织树搜索框(寄宿真 EDIT)
+namespace balloonwjui { class DuiEditHost; } // 组织树搜索框用的单行输入框
 
 namespace flamingoadmin {
 

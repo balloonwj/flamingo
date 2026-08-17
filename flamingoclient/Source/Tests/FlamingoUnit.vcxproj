@@ -281,6 +281,8 @@
     <ClCompile Include="catch_amalgamated.cpp" />
     <ClCompile Include="ChatBubbleBackfillRepaintTests.cpp" />
     <ClCompile Include="ChatDropModelTests.cpp" />
+    <ClCompile Include="ChatDropRegistrationTests.cpp" />
+    <ClCompile Include="LogCleanupPolicyTests.cpp" />
     <ClCompile Include="ChatLinkDetectTests.cpp" />
     <ClCompile Include="ChatTimeSeparatorTests.cpp" />
     <ClCompile Include="ChatFileLocationTests.cpp" />
@@ -405,6 +407,7 @@
     <ClCompile Include="SpeexResamplerTests.cpp" />
     <ClCompile Include="TransferOwnerRegistryTests.cpp" />
     <ClCompile Include="TrayFlashControllerTests.cpp" />
+    <ClCompile Include="TreeLocateTests.cpp" />
     <ClCompile Include="TypingIndicatorTests.cpp" />
     <ClCompile Include="V2MsgQueryTests.cpp" />
     <ClCompile Include="V2MsgStoreTests.cpp" />
@@ -423,6 +426,9 @@
     <ClCompile Include="..\BalloonChatWnd\ChatBubble.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatInlineText.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatDropModel.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatDropController.cpp" />
+    <ClCompile Include="..\LogCleanupPolicy.cpp" />
+    <ClCompile Include="..\IniFile.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatLinkDetect.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatTimeSeparator.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatFileLocation.cpp" />
@@ -444,6 +450,7 @@
     <ClCompile Include="..\BalloonChatWnd\ChatSendButton.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatTextSelection.cpp" />
     <ClCompile Include="..\BalloonChatWnd\ChatWindowLayout.cpp" />
+    <ClCompile Include="..\BalloonChatWnd\ChatInputRichEdit.cpp" />
     <ClCompile Include="..\BalloonChatWnd\FileBubbleFormat.cpp" />
     <ClCompile Include="..\BalloonChatWnd\GroupChatHeaderInfo.cpp" />
     <ClCompile Include="..\BalloonChatWnd\GroupChatWindowLayout.cpp" />
@@ -533,6 +540,7 @@
     <ClCompile Include="..\BalloonMain\OverlayScrollBarGeometry.cpp" />
     <ClCompile Include="..\BalloonMain\PanelDragZone.cpp" />
     <ClCompile Include="..\BalloonMain\PopupMenuPlacement.cpp" />
+    <ClCompile Include="..\BalloonMain\TreeLocate.cpp" />
     <ClCompile Include="..\BalloonMain\UnknownSenderRefreshPolicy.cpp" />
     <ClCompile Include="..\net\UserCachePath.cpp" />
     <ClCompile Include="..\net\StorageLocation.cpp" />

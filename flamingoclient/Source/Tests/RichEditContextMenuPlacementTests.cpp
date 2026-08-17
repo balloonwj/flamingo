@@ -4,7 +4,7 @@
  *  文本框右键菜单"跑到屏幕外"问题的回归测试。
  *
  *  问题原本长这样（2026-08-12 修复前）：
- *    1. DuiRichEditHost::ShowContextMenu 把光标点原样交给 TrackPopup，中间不做
+ *    1. 文本框控件的 ShowContextMenu 把光标点原样交给 TrackPopup，中间不做
  *       任何处理；
  *    2. DuiMenu::TrackPopup → TrackPopupEx → DuiMenuPopup::Open，而 Open 里直接
  *       SetWindowPos(NULL, screenX, screenY, ...)，菜单窗口左上角就钉在传入坐标；
@@ -60,7 +60,7 @@ const int kCornerInsetPx = 8;
 const int kCenterAnchorX = 800;
 const int kCenterAnchorY = 400;
 
-// 按 DuiRichEditHost::ShowContextMenu 的同一套规则把菜单模型填进 DuiMenu：
+// 按文本框控件 ShowContextMenu 的同一套规则把菜单模型填进 DuiMenu：
 // 分隔条走 AppendSeparator，可用项走 AppendItem，灰显项走 AppendDisabled，
 // 文案统一取 EditContextCommandLabel。
 //   menu：  待填充的菜单（出参，调用前应为空）。

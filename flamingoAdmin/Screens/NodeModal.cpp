@@ -87,8 +87,8 @@ std::unique_ptr<DuiLabel> MakeLabel(LPCTSTR text, int pt, bool bold, COLORREF co
     return lbl;
 }
 
-// 造一个输入框。此处【不】调 EnsureCreated —— host HWND 尚未就绪，
-// 由 EnsureFieldEditsCreated 在 SetClientContent 之后统一建。
+// 造一个输入框。输入框是无窗口控件，构造完即可读写文本，不依赖窗口是否已经
+// 建好，也没有需要在窗口就绪后补做的步骤。
 //   ctrlId      ：控件 ID（UiIds.h）；
 //   placeholder ：空值占位字。
 std::unique_ptr<DuiEditHost> MakeEdit(int ctrlId, LPCTSTR placeholder)
@@ -124,7 +124,7 @@ std::unique_ptr<DuiControl> MakeFieldColumn(LPCTSTR label, int ctrlId,
 }
 
 // 造「性别」字段列：上标签、下 DuiComboBox。与 MakeFieldColumn 同形，只是
-// 底部控件换成下拉框（自绘主体 + 独立 popup HWND，不需要 EnsureCreated）。
+// 底部控件换成下拉框（自绘主体 + 独立 popup 窗口承载展开后的列表）。
 std::unique_ptr<DuiControl> MakeGenderColumn(DuiComboBox** borrowOutCombo)
 {
     std::unique_ptr<DuiVBox> col(new DuiVBox());
@@ -200,10 +200,7 @@ bool NodeModal::CreateAndShow()
     // ---- 2. 构造客户区控件树 + SetClientContent
     BuildClientContent();
 
-    // ---- 3. 客户区 HWND 就绪后，逐个 EnsureCreated 真 EDIT 子窗
-    EnsureFieldEditsCreated();
-
-    // ---- 4. 锁死尺寸 + 居中 + 真模态（禁主窗）+ 显示
+    // ---- 3. 锁死尺寸 + 居中 + 真模态（禁主窗）+ 显示
     ResizeClient(kDlgClientWidth, ClientHeightFor(m_mode) + kTitleBarHeight);
     CenterWindow();
 
@@ -387,24 +384,6 @@ void NodeModal::BuildClientContent()
     }
 
     SetClientContent(std::unique_ptr<DuiControl>(root.release()));
-}
-
-void NodeModal::EnsureFieldEditsCreated()
-{
-    // 只有当前模式建出来的那几个非空，另一组恒为 nullptr，逐个判空即可。
-    DuiEditHost* edits[] =
-    {
-        m_editDeptName, m_editDeptLeader,
-        m_editUserName, m_editUserTitle, m_editUserEmail, m_editUserPhone,
-    };
-    const int n = sizeof(edits) / sizeof(edits[0]);
-    for (int i = 0; i < n; ++i)
-    {
-        if (edits[i] != nullptr)
-        {
-            edits[i]->EnsureCreated(m_hWnd);
-        }
-    }
 }
 
 void NodeModal::SubmitOrShake()

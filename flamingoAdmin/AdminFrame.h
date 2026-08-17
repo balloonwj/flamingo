@@ -144,10 +144,6 @@ public:
     // 须在 Create 之后调用一次。
     void InitContent();
 
-    // 把新增企业弹窗里的真 EDIT 子窗藏好。须由 WinMain 在主窗口
-    // ShowWindow 之前、且 InitContent + 一次布局之后调用一次。
-    void HideModalEdits();
-
     // 切换调试控制台窗口的显隐。F12 键（由 WinMain 消息循环拦截）与顶栏
     // 「调试控制台」按钮共用此入口；窗口懒创建，重复调用安全。
     void ToggleDebugConsole();
@@ -607,16 +603,13 @@ private:
     // 给登录界面的账户 / 密码输入框预填示例值（与设计稿默认值一致）。
     void PrefillLogin();
 
-    // 递归地对 node 子树里的每个 DuiEditHost 调一次 EnsureCreated。
-    void EnsureEditsCreated(balloonwjui::DuiControl* node);
-
     // 递归地把 node 子树里每个 DuiEditHost 设为指定可见性。弹窗开 / 关时
-    // 用它隐藏 / 恢复外壳内的真 EDIT 子窗，避免其透过半透明遮罩显形。
+    // 用它隐藏 / 恢复外壳内的输入框。
+    //
+    // 注：这套隐藏动作原本是为了应对"输入框寄宿的真 EDIT 子窗恒画在 DUI
+    // 绘制内容之上、会穿透半透明遮罩显形"。输入框改为无窗口控件之后弹窗本身
+    // 就能盖住它们，本函数已无必要，留着只是尚未清理。
     void SetEditsVisible(balloonwjui::DuiControl* node, bool visible);
-
-    // 递归地对 node 子树里每个 DuiEditHost 的真 EDIT 子窗调
-    // ShowWindow(SW_HIDE)（直接操作 HWND，不改控件的 m_bVisible）。
-    void HideEditHwnds(balloonwjui::DuiControl* node);
 
     bool                     m_loggedIn   = false;             // 是否已登录
     bool                     m_sidebarCollapsed = false;       // 侧边栏是否紧凑态

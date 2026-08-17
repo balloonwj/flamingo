@@ -110,7 +110,7 @@ static bool writeWholeFile(const std::wstring& path, const std::string& bytes)
     return out.good();
 }
 
-//构造图片下载缓存文件的完整路径：<g_szHomePath>Users\<登录账号>\ChatImage\<md5>，
+//构造图片下载缓存文件的完整路径：<g_szDataRoot>Users\<登录账号>\ChatImage\<md5>，
 //并按需逐级创建 Users、Users\<账号>、Users\<账号>\ChatImage 三级目录。落地
 //写文件前调用。账号为空（未登录）时返回空串，调用方按落地失败处理。
 static std::wstring buildImageCachePath(const std::wstring& account, const std::string& md5)
@@ -128,12 +128,12 @@ static std::wstring buildImageCachePath(const std::wstring& account, const std::
     return ImageTransfer::CacheFilePathForMd5(account, md5);
 }
 
-//构造头像缓存文件完整路径：<g_szHomePath>Users\<登录账号>\Avatar\<fileid>，并按需
+//构造头像缓存文件完整路径：<g_szDataRoot>Users\<登录账号>\Avatar\<fileid>，并按需
 //逐级创建 Users、Users\<账号>、Users\<账号>\Avatar 三级目录。落地写文件前调用。
 //账号为空（未登录）时返回空串，调用方按落地失败处理。
 static std::wstring buildAvatarCachePath(const std::wstring& account, const std::string& fileid)
 {
-    const std::wstring avatarDir = net::UserCacheDir(g_szHomePath, account, L"Avatar");
+    const std::wstring avatarDir = net::UserCacheDir(g_szDataRoot, account, L"Avatar");
     if (avatarDir.empty())
         return std::wstring();
 
@@ -313,7 +313,7 @@ std::wstring ImageTransfer::CacheFilePathForMd5(const std::wstring& account, con
 {
     if (md5.empty())
         return std::wstring();
-    //缓存按登录账号分隔、按内容 MD5 命名：<g_szHomePath>Users\<账号>\ChatImage\<md5>。
+    //缓存按登录账号分隔、按内容 MD5 命名：<g_szDataRoot>Users\<账号>\ChatImage\<md5>。
     //目录那一截统一由 UserCacheDir 拼（Users 下的命名口径只此一处），账号为空时它
     //返回空串。md5 为 ASCII 十六进制，逐字符宽化即可。本方法只拼路径、不创建目录、
     //不判断存在。
@@ -331,9 +331,15 @@ std::wstring ImageTransfer::AvatarCacheFilePathForFileId(const std::wstring& acc
 {
     if (fileid.empty())
         return std::wstring();
-    //缓存按登录账号分隔、按 fileid 命名：<g_szHomePath>Users\<账号>\Avatar\<fileid>。
+    //缓存按登录账号分隔、按 fileid 命名：<g_szDataRoot>Users\<账号>\Avatar\<fileid>。
     //fileid 为字符串编码的数字（ASCII），逐字符宽化即可；只拼路径、不建目录、不判存在。
-    std::wstring path = net::UserCacheDir(g_szHomePath, account, L"Avatar");
+    //
+    //根目录取 g_szDataRoot 而非程序目录 g_szHomePath：头像缓存属于"按账号隔离的本地
+    //数据"，与聊天文件、聊天图片同一口径（见 UserSessionData.h 对 g_szDataRoot 的说明，
+    //以及 BalloonSettings/CacheCleanPlan.cpp 里按 g_szDataRoot 清理 Avatar 目录）。
+    //2026-08-16 之前这里误用 g_szHomePath：用户在系统设置里改过数据目录之后，本函数
+    //返回的路径与 buildAvatarCachePath 建出来的目录不在同一棵树上，头像缓存写不进去。
+    std::wstring path = net::UserCacheDir(g_szDataRoot, account, L"Avatar");
     if (path.empty())
         return std::wstring();
 

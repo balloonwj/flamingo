@@ -130,7 +130,7 @@ std::unique_ptr<DuiControl> MakeField(LPCTSTR label, int editId,
     edit->SetCtrlId(editId);
     if (password)
     {
-        edit->SetPassword(true);          // 须在 EnsureCreated 之前设置
+        edit->SetPassword(true);          // 密码模式，字符显示为圆点
         edit->SetShowEyeToggle(true);     // 显示「眼睛」显隐切换
     }
     edit->SetPlaceholder(placeholder);

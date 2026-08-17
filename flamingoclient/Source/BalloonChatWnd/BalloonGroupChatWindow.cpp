@@ -18,6 +18,7 @@
 #include "../IULog.h"                 // LOG_INFO
 #include "../EncodeUtil.h"            // UTF-8 ↔ Unicode
 #include "../FlamingoClient.h"        // CFlamingoClient::m_UserMgr（取自己 userid）
+#include "ChatInputRichEdit.h"   // 输入框控件（无窗口富文本的聊天定制子类）
 #include "GroupChatWindowLayout.h"    // BuildGroupChatWindowBody / GroupCtrlId
 #include "ChatWindowLayout.h"         // RememberChatSplitFraction（单/群共用分割记忆）
 #include "ChatImageCache.h"           // 图片后台解码缓存：注册监听 + 就绪重绘
@@ -80,13 +81,10 @@ static const COLORREF kGroupConnectingBannerBorderColor = RGB(0xE5, 0xE7, 0xEB);
 #include <gdiplus.h>                       // 读图片真实宽高以算展示尺寸
 #pragma comment(lib, "gdiplus.lib")
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"      // 成员搜索框
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEditHost.h"  // 消息输入框（富文本）
 #include "../BalloonScreenshot/ScreenCaptureOverlay.h"  // 截图浮层（截图按钮调起）
 #include "ChatRichContentSplit.h"     // 输入框图文混排的有序拆分（发送用）
 #include "ChatFaceTag.h"              // 内联表情的 dwUser 标记编码 + 显示尺寸
 #include "../BalloonChat/BalloonChatMsgFormat.h"  // BodyToDigest（会话摘要里表情→[表情]）
-#include "ChatInputScrollBar.h"       // 输入框与接收区一致的细悬浮滚动条
-#include "ChatInputKeyFilter.h"       // 输入框 Enter 发送 / Ctrl+Enter 换行
 #include "ChatSendMode.h"             // 发送键模式（Enter / Ctrl+Enter）
 #include "ChatSendButton.h"           // ChatSendButton::DUIN_SENDBTN_DROPDOWN
 #include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"      // 发送模式切换菜单
@@ -108,7 +106,7 @@ static const COLORREF kGroupConnectingBannerBorderColor = RGB(0xE5, 0xE7, 0xEB);
 //   hEdit：输入框（RichEdit）句柄。
 //   pos：  光标位置（字符下标）。
 // @return pos 为 0，或前一个字符是空白时返回 true。
-static bool PrevCharIsWhitespace(HWND hEdit, int pos);
+static bool PrevCharIsWhitespace(balloonchatwnd::ChatInputRichEdit* edit, int pos);
 
 // ---- 文件作用域常量 -----------------------------------------------------
 
@@ -380,7 +378,7 @@ static void ComputeImageDisplaySize(int realW, int realH, int& dispW, int& dispH
         dispH = 1;
 }
 
-// DuiRichEditHost::EnumContent 的逐段收集回调：把（文本 / 内嵌图+标记）按文档顺序
+// EnumContent 的逐段收集回调：把（文本 / 内嵌图+标记）按文档顺序
 // 收进 vector，供 BuildOutgoingParts 聚合成待发送部分。与单聊同口径。ctx 为收集目标。
 static void CollectGroupInputSegment(bool isImage, LPCTSTR text, DWORD_PTR tag, void* ctx)
 {
@@ -478,6 +476,22 @@ CBalloonGroupChatWindow::CBalloonGroupChatWindow(CFlamingoClient* pFMGClient)
     , m_noticeReqOffset(-1)   //-1=还没发过拉公告的请求，此时不认领任何应答
 {
 }
+
+//「回车是发送还是换行」的查询回调，注册给输入框控件。
+//
+// 判断放在这里而不是控件里：它要读用户选的发送模式，而那个设置存在配置文件中，
+// 读它会牵进配置文件读写与主程序目录这一整条依赖链；输入框控件还要被编进单元
+// 测试工程，那边刻意不引入这些。
+//   bCtrlDown：按下回车时 Ctrl 是否也按着。
+//   返回：true 表示发送，false 表示插入换行。
+static bool ChatSendOnEnterQuery(bool bCtrlDown, void* /*pCtx*/)
+{
+    // 回车发送模式 —— 不按 Ctrl 即发送、按 Ctrl 换行；
+    // Ctrl+回车发送模式 —— 按住 Ctrl 才发送、单按回车换行。
+    return (balloonchatwnd::GetChatSendMode() == balloonchatwnd::kSendOnEnter)
+           ? !bCtrlDown : bCtrlDown;
+}
+
 
 void CBalloonGroupChatWindow::SetGroupId(int64_t groupId)
 {
@@ -689,7 +703,7 @@ void CBalloonGroupChatWindow::OnFontChanged(void* userdata, const net::TextFont&
     balloonwjui::DuiControl* content = self->GetClientContent();
     if (content != NULL)
     {
-        balloonwjui::DuiRichEditHost* input = dynamic_cast<balloonwjui::DuiRichEditHost*>(
+        balloonchatwnd::ChatInputRichEdit* input = dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
             content->FindCtrlById(balloonchatwnd::kGIdInputEdit));
         // 应用新字体：RichEdit 不接管 HFONT 所有权，先换新句柄再释放上一只，避免泄漏。
         HFONT hNewFont = balloonchatwnd::ApplyChatFontToEdit(input, font);
@@ -752,7 +766,7 @@ void CBalloonGroupChatWindow::InsertFaceToInput(int faceId, const wchar_t* faceP
     {
         return;
     }
-    balloonwjui::DuiRichEditHost* input = dynamic_cast<balloonwjui::DuiRichEditHost*>(
+    balloonchatwnd::ChatInputRichEdit* input = dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
         content->FindCtrlById(balloonchatwnd::kGIdInputEdit));
     if (input == NULL)
     {
@@ -895,45 +909,38 @@ void CBalloonGroupChatWindow::InitUi()
         m_fileLoaded = true;
     }
 
-    // 消息输入框是富文本 DuiRichEditHost（内嵌真 RICHEDIT50W，支持后续把截图作为内联
-    // 图片塞进来）；成员搜索框仍是纯文本 DuiEditHost。两者都只由 builder 建控件对象、
-    // 不调 EnsureCreated，须在 host HWND 就绪后各显式建一次。
-    balloonwjui::DuiRichEditHost* input = dynamic_cast<balloonwjui::DuiRichEditHost*>(
+    // 消息输入框是无窗口富文本控件的聊天定制子类（见 ChatInputRichEdit.h），
+    // 构造完即可用，下面各项属性都可以直接设置。
+    balloonchatwnd::ChatInputRichEdit* input = dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
         content->FindCtrlById(balloonchatwnd::kGIdInputEdit));
     if (input != NULL)
     {
         input->SetShowBorder(false);   // 输入框无边框，融入输入区
-        // 多行 + 自动换行：须在 EnsureCreated 之前设。RichEdit 默认即多行自动换行，
-        // 这里显式声明意图、与 XML 一致。
+        // 多行 + 自动换行。这两项在无窗口控件上是随时可改的属性，顺序无讲究。
         input->SetMultiLine(true);
         input->SetWordWrap(true);
-        // 关掉 RichEdit 原生竖直滚动条槽（须在 EnsureCreated 之前设——WS_VSCROLL 是
-        // 创建期 baked-in 风格位）；改用下方自绘的细悬浮滚动条，与接收区风格一致。
-        input->SetShowVScroll(false);
-        if (!input->EnsureCreated(m_hWnd))
+        // 输入区高度由用户拖分割条决定，内容多了在框内滚动，不随内容长高。
+        input->SetAutoGrow(false);
         {
-            LOG_WARNING(_T("群聊窗输入框 EnsureCreated 失败。"));
-        }
-        else
-        {
-            // 粘贴一律按纯文本（聊天输入不要带来源的颜色/字体/链接/对象）。
+            // 粘贴一律按纯文本（聊天输入不要带来源的颜色 / 字体 / 链接 / 对象）。
             input->SetPasteAsPlainTextDefault(true);
-            // 装回车过滤器：Enter 发送、Ctrl+Enter 换行。须在 EnsureCreated 之后调
-            // —— 此时内部 RichEdit 子窗口才存在；按 Enter 时投递 kSendOnEnterMsg 回本窗口。
-            balloonchatwnd::InstallChatInputEnterToSend(
-                input->GetHostedHwnd(), m_hWnd, kSendOnEnterMsg);
-            // 装 @提醒 键盘钩子（与回车过滤器各自独立的子类，互不影响）：
-            // 输入变化投 kMentionChangedMsg，方向键 / 回车 / Tab / Esc 同步问
-            // kMentionNavMsg 要不要交给浮层。
-            balloonchatwnd::InstallChatInputMentionHook(
-                input->GetHostedHwnd(), m_hWnd, kMentionChangedMsg, kMentionNavMsg,
-                kMentionWheelMsg);
+            // 关掉输入框自带的拖放：拖放在聊天窗里是整窗接收的，两处都注册会
+            // 互相抢（详见单聊窗同一处的说明）。
+            input->SetDragDropEnabled(false);
+
+            // 回车发送、「正在输入」、以及 @ 提醒这三组通知。原先是往子窗口上
+            // 挂三段子类过程，现在由控件自己处理 —— 消息协议没变，本窗口接消息
+            // 那一侧的代码一行都不用改。
+            input->SetNotifyTarget(m_hWnd);
+            input->SetSendOnEnterMsg(kSendOnEnterMsg);
+            input->SetSendOnEnterQuery(&ChatSendOnEnterQuery, NULL);
+            // 群聊窗没有单独的「正在输入」通知，内容变化统一走 @ 提醒那一路。
+            input->SetMentionMsgs(kMentionChangedMsg, kMentionNavMsg, kMentionWheelMsg);
+
             // 浮窗提前建好（此刻不显示）。建窗 + 建控件树是同步的，留到首次键入 '@'
             // 时再做，会把那一拍拖长、让刚敲的 '@' 迟迟不显示。
             m_atDropdown.EnsureCreated();
             m_atDropdown.SetPickCallback(&CBalloonGroupChatWindow::OnAtPickThunk, this);
-            // 装与接收区一致的细悬浮滚动条（内容溢出才出现、浮在右沿、可拖动）。
-            balloonchatwnd::AttachChatInputScrollBar(input);
 
             // 给消息区装"成员是否仍在群里"的查询钩子：气泡里 @某人 的右键菜单据此
             // 决定「再 @ 一次 TA」要不要置灰。只有群聊窗需要装。
@@ -963,13 +970,6 @@ void CBalloonGroupChatWindow::InitUi()
 
     // 字体设置浮层：装"变化"回调（this 作上下文）。
     m_fontPopup.SetChangeCallback(&CBalloonGroupChatWindow::OnFontChanged, this);
-
-    balloonwjui::DuiEditHost* memberSearch = dynamic_cast<balloonwjui::DuiEditHost*>(
-        content->FindCtrlById(balloonchatwnd::kGIdMemberSearch));
-    if (memberSearch != NULL && !memberSearch->EnsureCreated(m_hWnd))
-    {
-        LOG_WARNING(_T("群聊窗成员搜索框 EnsureCreated 失败。"));
-    }
 
     // 给头部 / 输入工具栏 / 发送按钮 / @提醒 注册 tooltip。
     RegisterTip(content, balloonchatwnd::kGIdHdrVoice,     _T("语音通话"));
@@ -1043,9 +1043,12 @@ void CBalloonGroupChatWindow::InitUi()
         rootBox->AddChild(std::move(toast), balloonwjui::DuiLayout::Hint().Fixed(0));
     }
 
-    // 拖文件进窗口：注册窗口级与输入框级拖放目标（后者会先摘掉 RichEdit 自带的那份，
-    // 见 ChatDropController.h）。
-    m_dropCtrl.Attach(m_hWnd, GetInputEditHwnd(), this);
+    // 拖文件进窗口：把拖放目标注册到本窗口。第一个参数传本窗口自身作宿主，接收器
+    // 会在注册之前先让出窗口上可能已被 balloonui 控件占用的那份拖放目标 —— 一个
+    // 窗口只能注册一个，被占住时本窗口这份会静默失败，症状是拖任何文件进来都没有
+    // 反应（见 ChatDropController.h 的文件头）。输入框已换成无窗口控件、没有子窗口
+    // 需要摘，故第二个参数传空。
+    m_dropCtrl.Attach(this, NULL, this);
 
     LOG_INFO(_T("群聊窗客户区 UI 初始化完成。"));
 }
@@ -1556,11 +1559,11 @@ LRESULT CBalloonGroupChatWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
 
         if (pNotify->ctrlId == balloonchatwnd::kGIdMention)
         {
-            HWND hEdit = GetInputEditHwnd();
-            if (hEdit != NULL)
+            balloonchatwnd::ChatInputRichEdit* edit = GetInputEdit();
+            if (edit != NULL)
             {
-                ::SetFocus(hEdit);
-                ::SendMessage(hEdit, EM_REPLACESEL, TRUE, (LPARAM)_T("@"));
+                edit->SetFocus();
+                edit->ReplaceSel(_T("@"));
                 ::PostMessage(m_hWnd, kMentionChangedMsg, 0, 0);
             }
             return 0;
@@ -1800,7 +1803,7 @@ void CBalloonGroupChatWindow::RefreshSendModeUi()
     }
 
     // 输入框 placeholder 随模式联动。
-    balloonwjui::DuiRichEditHost* input = dynamic_cast<balloonwjui::DuiRichEditHost*>(
+    balloonchatwnd::ChatInputRichEdit* input = dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
         content->FindCtrlById(balloonchatwnd::kGIdInputEdit));
     if (input != NULL)
     {
@@ -1872,7 +1875,12 @@ void CBalloonGroupChatWindow::ApplyConnectionState(int state)
     }
 
     // 输入框置为只读（草稿仍可见可复制），发送按钮置灰并不再响应点击。
-    balloonwjui::DuiEditHost* edit = dynamic_cast<balloonwjui::DuiEditHost*>(
+    // 这里的目标类型必须与输入框的实际类型一致。历史上此处误写成 DuiEditHost，
+    // 而输入框是另一条继承链上的富文本控件，dynamic_cast 恒返回空指针，于是
+    // 「离线置只读」自输入框改成富文本框起就从未真正执行过（bugs.md BUG-5）。
+    // 这类错误编译期查不出来：转换到无关类型是合法写法，失败只在运行期表现为
+    // 空指针，又恰好被 if 判空当成正常情况静默跳过。
+    balloonchatwnd::ChatInputRichEdit* edit = dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
         content->FindCtrlById(balloonchatwnd::kGIdInputEdit));
     if (edit != NULL)
     {
@@ -1903,12 +1911,15 @@ void CBalloonGroupChatWindow::ApplyConnectionState(int state)
 
 bool CBalloonGroupChatWindow::CheckOnlineFor(int action)
 {
-    if (m_connUiState == (int)balloonmain::kConnUiOnline)
+    // 放行与否统一问 OnlineCapability，不在本窗口就地写"连接态是不是在线"——
+    // 那样等于把同一条规则在三个窗口各抄一份，日后某类操作要放宽条件时必然漏改。
+    if (balloonmain::IsActionAllowedInState(m_connUiState, action))
     {
         return true;
     }
 
-    LOG_INFO(_T("群聊窗操作被拦截：group=%lld, action=%d, state=%d。"),
+    LOG_INFO("GroupChatWindow::CheckOnlineFor: blocked. group=%lld, action=%d, "
+             "connUiState=%d (0=online 1=connecting 2=offline).",
         (long long)m_groupId, action, m_connUiState);
     ::MessageBox(m_hWnd, balloonmain::GetBlockedActionTip(action),
                  _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
@@ -1929,7 +1940,7 @@ void CBalloonGroupChatWindow::DoSend()
         return;
     }
 
-    balloonwjui::DuiRichEditHost* input = dynamic_cast<balloonwjui::DuiRichEditHost*>(
+    balloonchatwnd::ChatInputRichEdit* input = dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
         content->FindCtrlById(balloonchatwnd::kGIdInputEdit));
     balloonchatwnd::ChatMessageList* list =
         dynamic_cast<balloonchatwnd::ChatMessageList*>(
@@ -2019,20 +2030,15 @@ static const COLORREF kMentionInputColor = RGB(0xD9, 0x53, 0x1E);
 // 取输入框默认行高的近似值即可，不需要精确。
 static const int kMentionAnchorLineHeight = 20;
 
-HWND CBalloonGroupChatWindow::GetInputEditHwnd()
+balloonchatwnd::ChatInputRichEdit* CBalloonGroupChatWindow::GetInputEdit()
 {
     balloonwjui::DuiControl* content = GetClientContent();
     if (content == NULL)
     {
         return NULL;
     }
-    balloonwjui::DuiRichEditHost* input = dynamic_cast<balloonwjui::DuiRichEditHost*>(
+    return dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
         content->FindCtrlById(balloonchatwnd::kGIdInputEdit));
-    if (input == NULL)
-    {
-        return NULL;
-    }
-    return input->GetHostedHwnd();
 }
 
 bool CBalloonGroupChatWindow::ResolveMentionPrefix(CString& prefixOut, int& atPosOut)
@@ -2040,26 +2046,24 @@ bool CBalloonGroupChatWindow::ResolveMentionPrefix(CString& prefixOut, int& atPo
     prefixOut.Empty();
     atPosOut = -1;
 
-    HWND hEdit = GetInputEditHwnd();
-    if (hEdit == NULL)
+    balloonchatwnd::ChatInputRichEdit* edit = GetInputEdit();
+    if (edit == NULL)
     {
         return false;
     }
 
     // 取光标位置（选区非空时按选区尾算）与全文。
-    DWORD selStart = 0;
-    DWORD selEnd   = 0;
-    ::SendMessage(hEdit, EM_GETSEL, (WPARAM)&selStart, (LPARAM)&selEnd);
+    long selStart = 0;
+    long selEnd   = 0;
+    edit->GetSel(selStart, selEnd);
     const int caret = (int)selEnd;
 
-    const int len = ::GetWindowTextLength(hEdit);
+    const CString text = edit->GetText();
+    const int len = text.GetLength();
     if (len <= 0 || caret <= 0 || caret > len)
     {
         return false;
     }
-    CString text;
-    ::GetWindowText(hEdit, text.GetBuffer(len + 1), len + 1);
-    text.ReleaseBuffer();
 
     // 从光标往前找最近的 '@'。中途遇到空白 / 换行就放弃 —— 说明这一段不是
     // 正在编辑的 @ 片段（名字里不含空格，@ 后跟空格即视为该片段已结束）。
@@ -2100,40 +2104,40 @@ bool CBalloonGroupChatWindow::ResolveMentionPrefix(CString& prefixOut, int& atPo
 
 void CBalloonGroupChatWindow::InsertMention(int64_t uid, const CString& name)
 {
-    HWND hEdit = GetInputEditHwnd();
-    if (hEdit == NULL || m_mentionAtPos < 0)
+    balloonchatwnd::ChatInputRichEdit* edit = GetInputEdit();
+    if (edit == NULL || m_mentionAtPos < 0)
     {
         return;
     }
 
     // @ 浮层这条路：要替换掉的是"从用户键入的 '@' 到当前光标"这一段（即 `@已键入前缀`）。
-    DWORD selStart = 0;
-    DWORD selEnd   = 0;
-    ::SendMessage(hEdit, EM_GETSEL, (WPARAM)&selStart, (LPARAM)&selEnd);
+    long selStart = 0;
+    long selEnd   = 0;
+    edit->GetSel(selStart, selEnd);
     InsertMentionInRange(uid, name, m_mentionAtPos, (int)selEnd);
     m_mentionAtPos = -1;
 }
 
 void CBalloonGroupChatWindow::InsertMentionAtCaret(int64_t uid, const CString& name)
 {
-    HWND hEdit = GetInputEditHwnd();
-    if (hEdit == NULL)
+    balloonchatwnd::ChatInputRichEdit* edit = GetInputEdit();
+    if (edit == NULL)
     {
         return;
     }
 
     // 气泡右键「再 @ 一次 TA」这条路：没有任何已键入的 `@前缀` 要替换，就在光标处插入
     // （若当前有选区则替换选区，与普通编辑器的插入手感一致）。
-    DWORD selStart = 0;
-    DWORD selEnd   = 0;
-    ::SendMessage(hEdit, EM_GETSEL, (WPARAM)&selStart, (LPARAM)&selEnd);
+    long selStart = 0;
+    long selEnd   = 0;
+    edit->GetSel(selStart, selEnd);
 
     // 必要时补前导空格：重扫只认「文本开头、或紧跟空白之后」的 '@'，
     // 直接接在"你好"后面插出来的 "你好@张三 " 不会被识别成 @提醒。
-    if (selStart > 0 && !PrevCharIsWhitespace(hEdit, (int)selStart))
+    if (selStart > 0 && !PrevCharIsWhitespace(edit, (int)selStart))
     {
-        ::SendMessage(hEdit, EM_SETSEL, (WPARAM)selStart, (LPARAM)selEnd);
-        ::SendMessage(hEdit, EM_REPLACESEL, TRUE, (LPARAM)_T(" "));
+        edit->SetSel(selStart, selEnd);
+        edit->ReplaceSel(_T(" "));
         selStart += 1;
         selEnd = selStart;
     }
@@ -2144,38 +2148,36 @@ void CBalloonGroupChatWindow::InsertMentionAtCaret(int64_t uid, const CString& n
 void CBalloonGroupChatWindow::InsertMentionInRange(int64_t uid, const CString& name,
                                                    int begin, int end)
 {
-    HWND hEdit = GetInputEditHwnd();
-    if (hEdit == NULL || begin < 0 || end < begin)
+    balloonchatwnd::ChatInputRichEdit* edit = GetInputEdit();
+    if (edit == NULL || begin < 0 || end < begin)
     {
         return;
     }
 
-    ::SendMessage(hEdit, EM_SETSEL, (WPARAM)begin, (LPARAM)end);
+    edit->SetSel(begin, end);
 
     CString inserted;
     inserted.Format(_T("@%s "), (LPCTSTR)name);   // 末尾空格作分隔，且不计入高亮片段
-    ::SendMessage(hEdit, EM_REPLACESEL, TRUE, (LPARAM)(LPCTSTR)inserted);
+    edit->ReplaceSel(inserted);
 
     // 给刚插入的 `@显示名`（不含尾随空格）设主题橙。插入是从 begin 处开始的，
     // 故这一段就是 [begin, begin + 1 + 名字长度)。
     const int nameEnd = begin + 1 + name.GetLength();
-    ::SendMessage(hEdit, EM_SETSEL, (WPARAM)begin, (LPARAM)nameEnd);
-    CHARFORMAT2 cf;
-    ::ZeroMemory(&cf, sizeof(cf));
-    cf.cbSize      = sizeof(cf);
-    cf.dwMask      = CFM_COLOR;
-    cf.crTextColor = kMentionInputColor;
-    ::SendMessage(hEdit, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
+    edit->SetSel(begin, nameEnd);
+    edit->SetSelTextColor(kMentionInputColor);
 
     // 光标移到尾随空格之后，并把格式恢复成默认色 —— 否则用户接着打的字会
     // 一路继承橙色。
     const int caretAfter = begin + inserted.GetLength();
-    ::SendMessage(hEdit, EM_SETSEL, (WPARAM)caretAfter, (LPARAM)caretAfter);
+    edit->SetSel(caretAfter, caretAfter);
+    // 恢复默认文字色。没有对应的窄接口 —— 「自动色」这一档只能靠效果位表达，
+    // 用颜色值表达不了，故直接给引擎下发一条设置字符格式的消息。
+    CHARFORMAT2 cf;
     ::ZeroMemory(&cf, sizeof(cf));
-    cf.cbSize      = sizeof(cf);
-    cf.dwMask      = CFM_COLOR;
-    cf.dwEffects   = CFE_AUTOCOLOR;   // 回到默认文字色
-    ::SendMessage(hEdit, EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
+    cf.cbSize    = sizeof(cf);
+    cf.dwMask    = CFM_COLOR;
+    cf.dwEffects = CFE_AUTOCOLOR;
+    edit->SendMessageToEngine(EM_SETCHARFORMAT, SCF_SELECTION, (LPARAM)&cf);
 
     // 记一条候选。发送时还会以最终文本为准重扫，这里只是"用户点过谁"的线索。
     balloonchatwnd::MentionCandidate cand;
@@ -2185,7 +2187,7 @@ void CBalloonGroupChatWindow::InsertMentionInRange(int64_t uid, const CString& n
 
     // 注意：m_mentionAtPos 由调用方各自收尾 —— @ 浮层那条路要清掉它（那一次
     // "用户键入的 @" 已经被消费），右键菜单这条路它本来就是 -1，不该在这里统一动。
-    ::SetFocus(hEdit);   // 焦点交回输入框，用户可以接着打字
+    edit->SetFocus();   // 焦点交回输入框，用户可以接着打字
 
     LOG_INFO("群聊窗插入 @提醒: uid=%lld.", (long long)uid);
 }
@@ -2207,10 +2209,13 @@ LRESULT CBalloonGroupChatWindow::OnMentionChanged(UINT /*uMsg*/, WPARAM wParam,
     // 为什么必须这么做：WM_PAINT 是最低优先级消息，而本消息是 PostMessage 投来的，
     // 会<u>排在重绘之前</u>被处理。下面建浮窗 / 填列表 / 摆位置是同步的，几十毫秒过去
     // 才轮到 EDIT 重绘 —— 用户看到的就是"刚敲的 @ 不显示，等浮层弹出来才冒出来"。
-    HWND hEditForPaint = GetInputEditHwnd();
-    if (hEditForPaint != NULL)
+    // 让输入框把刚才的改动立刻画出来。无窗口控件没有自己的窗口，失效标记打在
+    // 宿主窗口上，由宿主统一重画。
+    balloonchatwnd::ChatInputRichEdit* editForPaint = GetInputEdit();
+    if (editForPaint != NULL)
     {
-        ::UpdateWindow(hEditForPaint);
+        editForPaint->Invalidate();
+        ::UpdateWindow(m_hWnd);
     }
 
     // wParam 非 0 = 钩子告知输入框已失焦。
@@ -2301,18 +2306,25 @@ LRESULT CBalloonGroupChatWindow::OnMentionChanged(UINT /*uMsg*/, WPARAM wParam,
     }
 
     // 落点取输入框里 '@' 那个字符的位置（转屏幕坐标），并让浮层落在它下一行。
-    HWND hEdit = GetInputEditHwnd();
+    balloonchatwnd::ChatInputRichEdit* edit = GetInputEdit();
     POINT anchor;
     anchor.x = 0;
     anchor.y = 0;
-    if (hEdit != NULL)
+    if (edit != NULL)
     {
-        const LRESULT posRet = ::SendMessage(hEdit, EM_POSFROMCHAR, (WPARAM)atPos, 0);
-        anchor.x = (short)LOWORD(posRet);
-        anchor.y = (short)HIWORD(posRet);
+        // **富文本控件的「按字符位置取坐标」是填出参，不是读返回值**，与普通
+        // 编辑框的约定相反：那边把位置当参数传、从返回值里取坐标。照搬过来会
+        // 把一个小整数当指针写，后果严重。
+        POINTL pt;
+        pt.x = 0;
+        pt.y = 0;
+        edit->SendMessageToEngine(EM_POSFROMCHAR, (WPARAM)&pt, (LPARAM)atPos);
+        anchor.x = pt.x;
+        anchor.y = pt.y;
         // 往下挪一行高，免得浮层压住正在输入的那行文字。
         anchor.y += kMentionAnchorLineHeight;
-        ::ClientToScreen(hEdit, &anchor);
+        // 坐标本来就是宿主窗口的客户区坐标 —— 无窗口控件与宿主共用一套坐标。
+        ::ClientToScreen(m_hWnd, &anchor);
     }
 
     m_atDropdown.EnsureCreated();
@@ -2363,16 +2375,50 @@ LRESULT CBalloonGroupChatWindow::OnMentionWheel(UINT /*uMsg*/, WPARAM wParam,
 }
 
 LRESULT CBalloonGroupChatWindow::OnLButtonDownForMention(UINT /*uMsg*/, WPARAM /*wParam*/,
-                                                         LPARAM /*lParam*/, BOOL& bHandled)
+                                                         LPARAM lParam, BOOL& bHandled)
 {
-    // 能到本窗口的左键按下，说明点的不是输入框内部（点 EDIT 的鼠标消息由系统直送
-    // 那个子窗口）。收起浮层，但不消费这次点击 —— 该点的按钮 / 该选的气泡照常。
+    // 点在输入框之外才收起浮层，点在输入框内部要保留。
+    //
+    // 这条路径的判定方式换过一次。输入框还是内嵌真 Win32 子窗口的时候，点它的鼠标
+    // 消息由系统直送该子窗口、不会到达本窗口，所以本窗口收到本消息就等于"点的是
+    // 别处"，无须判落点。输入框改成无窗口控件之后这条前提不再成立：点输入框的鼠标
+    // 消息同样会到达本窗口，若仍旧无条件收起，用户在浮层显示期间点一下输入框挪动
+    // 光标，浮层立即消失，而按设计此时应当保留。故改为在这里自己判落点。
     if (m_atDropdown.IsShowing())
     {
-        m_atDropdown.Hide();
-        m_mentionAtPos = -1;
+        POINT pt;
+        pt.x = GET_X_LPARAM(lParam);
+        pt.y = GET_Y_LPARAM(lParam);
+
+        // 控件矩形与本消息的鼠标坐标同为宿主窗口客户区坐标，可直接比对。
+        balloonchatwnd::ChatInputRichEdit* edit = GetInputEdit();
+        bool bInsideInput = false;
+        if (edit != NULL)
+        {
+            RECT rcEdit = edit->GetRect();
+            bInsideInput = (::PtInRect(&rcEdit, pt) != FALSE);
+        }
+
+        if (bInsideInput)
+        {
+            // 点在输入框内：这次点击随后会把光标挪到落点上，而输入框只在内容变化时
+            // 通知本窗口，光标单纯移动没有通知，浮层的过滤前缀会停在旧值上。故在此
+            // 投递一次重算请求，由 OnMentionChanged 按新的光标位置决定是刷新过滤还是
+            // 收起浮层（光标已经离开那段 @ 片段时就该收起）。
+            // 必须用投递而非直接调用：本次点击尚未交给 DuiHost 派发，光标此刻仍停在
+            // 旧位置，就地重算读到的是旧值。
+            if (IsWindow())
+            {
+                ::PostMessage(m_hWnd, kMentionChangedMsg, 0, 0);
+            }
+        }
+        else
+        {
+            m_atDropdown.Hide();
+            m_mentionAtPos = -1;
+        }
     }
-    bHandled = FALSE;
+    bHandled = FALSE;   // 不消费这次点击，继续交给 DuiFrameWindow / DuiHost 派发
     return 0;
 }
 
@@ -2624,7 +2670,7 @@ void CBalloonGroupChatWindow::OnScreenshotStage(void* ctx, const wchar_t* pngPat
     {
         return;
     }
-    balloonwjui::DuiRichEditHost* input = dynamic_cast<balloonwjui::DuiRichEditHost*>(
+    balloonchatwnd::ChatInputRichEdit* input = dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
         content->FindCtrlById(balloonchatwnd::kGIdInputEdit));
     if (input == NULL)
     {
@@ -4521,17 +4567,17 @@ LRESULT CBalloonGroupChatWindow::OnChatPinRequest(UINT /*uMsg*/, WPARAM wParam,
 //   hEdit：输入框（RichEdit）句柄。
 //   pos：  光标位置（字符下标）。
 // @return pos 为 0，或前一个字符是空白时返回 true。
-static bool PrevCharIsWhitespace(HWND hEdit, int pos)
+static bool PrevCharIsWhitespace(balloonchatwnd::ChatInputRichEdit* edit, int pos)
 {
-    if (pos <= 0)
+    if (edit == NULL || pos <= 0)
     {
         return true;   // 已在文本开头，本来就满足重扫的要求
     }
     // 选中 [pos-1, pos) 把那一个字符读回来。内嵌对象（表情图）会读成 U+FFFC，
     // 它不是空白，于是照样补空格 —— 正是想要的。
-    ::SendMessage(hEdit, EM_SETSEL, (WPARAM)(pos - 1), (LPARAM)pos);
+    edit->SetSel(pos - 1, pos);
     wchar_t buf[8] = { 0 };
-    ::SendMessage(hEdit, EM_GETSELTEXT, 0, (LPARAM)buf);
+    edit->SendMessageToEngine(EM_GETSELTEXT, 0, (LPARAM)buf);
     return buf[0] == L' ' || buf[0] == L'\t' || buf[0] == L'\r' || buf[0] == L'\n';
 }
 

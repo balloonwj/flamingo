@@ -7,7 +7,7 @@
 #include "ScreenshotGeometry.h"
 #include "ScreenshotToolbar.h"   // 深色风格工具栏控件（DarkBar / IconButton / ColorDot / WidthDot）
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"   // DUIN_CLICK（双击确认通知）
-#include "../../../third-party/balloonui/balloonui/DuiHost.h"     // GetHost()->m_hWnd（文字编辑框 EnsureCreated / 焦点）
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"     // GetHost()->m_hWnd（文字标注结束后把键盘焦点交回宿主窗口）
 
 #include <gdiplus.h>             // 标注用 GDI+ 抗锯齿绘制
 
@@ -328,7 +328,7 @@ void CaptureCanvas::BeginTextEdit(POINT pt)
 {
     if (GetHost() == NULL)
     {
-        return;   // 未挂宿主无法创建 EDIT 子窗
+        return;   // 未挂宿主，输入框既拿不到键盘焦点也无从绘制
     }
     // 字号 / 颜色取当前工具状态。
     m_textFontPx = TextFontSizeForWidth(m_toolState.LineWidth());
@@ -366,32 +366,20 @@ void CaptureCanvas::BeginTextEdit(POINT pt)
     // 建一个多行 DuiEditHost 作子控件（复用 balloonui，IME / 光标 / 编辑都现成）。
     std::unique_ptr<balloonwjui::DuiEditHost> edit(new balloonwjui::DuiEditHost());
     edit->SetCtrlId(kIdTextEdit);
-    edit->SetMultiLine(true);          // 多行（须在 EnsureCreated 前设）
+    edit->SetMultiLine(true);          // 多行
     edit->SetWordWrap(true);           // 按宽度自动换行
     edit->SetVerticalCenter(false);    // 多行从顶部排
+    // 不显示竖直滚动条：本场景靠"自动长高"让内容尽量装得下，画面上不该出现滚动条。
+    // 关掉的只是那根可拖动的滑块，内容仍可用滚轮与方向键滚动，所以文字长到顶住选区
+    // 底边之后仍然看得到后面的内容。
+    edit->SetVScrollPolicy(balloonwjui::DuiRichEdit::kScrollBarNever);
     edit->SetCtlFont(L"Microsoft YaHei", m_textFontPx, false, false, false, false);
-    edit->SetCtlTextColor(m_textColor);
+    edit->SetTextColor(m_textColor);
     edit->SetBgColor(RGB(0xFF, 0xFF, 0xFF));
     m_textEdit = edit.get();
     AddChild(std::move(edit));         // AddChild 内部自动 AttachToHost
-    m_textEdit->EnsureCreated(GetHost()->m_hWnd);
 
-    // 去掉 EDIT 子窗的竖直滚动条：DuiEditHost 多行 + 自动换行会 baked-in WS_VSCROLL，
-    // 但本场景靠"自动长高"保证内容不溢出、不需要也不想要滚动条。自动换行取决于"无
-    // ES_AUTOHSCROLL"，与滚动条样式无关，故剥掉 WS_VSCROLL 后仍正常换行。
-    HWND hEdit = m_textEdit->GetHostedHwnd();
-    if (hEdit != NULL)
-    {
-        LONG_PTR st = ::GetWindowLongPtr(hEdit, GWL_STYLE);
-        if ((st & WS_VSCROLL) != 0)
-        {
-            ::SetWindowLongPtr(hEdit, GWL_STYLE, st & ~(LONG_PTR)WS_VSCROLL);
-            ::SetWindowPos(hEdit, NULL, 0, 0, 0, 0,
-                           SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
-        }
-    }
-
-    m_textEdit->SetRect(m_textBox);    // HWND 已建，SetRect 触发 Layout 摆放子窗
+    m_textEdit->SetRect(m_textBox);    // 摆放到算好的矩形上
     m_textEdit->SetText(_T(""));
     m_textEdit->SetVisible(true);
     m_textEdit->SetFocus();
@@ -407,30 +395,14 @@ void CaptureCanvas::GrowTextEditToFit()
     {
         return;
     }
-    HWND hEdit = m_textEdit->GetHostedHwnd();
-    if (hEdit == NULL)
-    {
-        return;
-    }
-    // EDIT 的可见行数（多行控件里自动换行产生的行也计入）。空文本返回 1。
-    int lineCount = (int)::SendMessage(hEdit, EM_GETLINECOUNT, 0, 0);
+    // 输入框的显示行数（自动换行折出来的行也计入）。空文本为 1。
+    int lineCount = m_textEdit->LineCount();
     if (lineCount < 1)
     {
         lineCount = 1;
     }
-    // 行高：取 EDIT 实际字体的 tmHeight + tmExternalLeading，跟控件内部排版一致。
-    HDC hdc = ::GetDC(hEdit);
-    HFONT editFont = (HFONT)::SendMessage(hEdit, WM_GETFONT, 0, 0);
-    HFONT oldFont = (editFont != NULL) ? (HFONT)::SelectObject(hdc, editFont) : NULL;
-    TEXTMETRIC tm;
-    ::ZeroMemory(&tm, sizeof(tm));
-    ::GetTextMetrics(hdc, &tm);
-    if (oldFont != NULL)
-    {
-        ::SelectObject(hdc, oldFont);
-    }
-    ::ReleaseDC(hEdit, hdc);
-    int lineH = tm.tmHeight + tm.tmExternalLeading;
+    // 行高由控件按自己当前的默认字体量出，与它内部排版用的是同一个口径。
+    int lineH = m_textEdit->GetLineHeight();
     if (lineH <= 0)
     {
         lineH = m_textFontPx;

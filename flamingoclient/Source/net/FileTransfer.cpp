@@ -135,7 +135,7 @@ std::wstring FileTransfer::CacheFilePathFor(const std::wstring& account, const s
         return std::wstring();
 
     //缓存按登录账号分隔、按内容 MD5 分目录、按原始文件名命名：
-    //<g_szHomePath>Users\<账号>\ChatFile\<md5>\<filename>。目录那一截统一由
+    //<g_szDataRoot>Users\<账号>\ChatFile\<md5>\<filename>。目录那一截统一由
     //UserCacheDir 拼（Users 下的命名口径只此一处），账号为空时它返回空串，
     //本方法据此一并返回空串。md5 为 ASCII 十六进制，逐字符宽化；filename 为 UTF-8，
     //经 EncodeUtil 转宽字符。本方法只拼路径、不创建目录、不判断存在。

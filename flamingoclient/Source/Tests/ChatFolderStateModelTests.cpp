@@ -500,3 +500,40 @@ TEST_CASE("CFOLD19 记录条翻出来的每种状态都能算出按钮与进度�
     REQUIRE(FolderButtonActions(kFolderCompleted, false, done) == 1);
     CHECK(done[0] == kChatFolderOpenFolder);
 }
+
+TEST_CASE("CFOLD20 邀请被拒时只有「对方不在线」这一种要撤掉气泡")
+{
+    //对方不在线：服务端在收到邀请的那一刻就直接拒绝并返回，会话没建、消息记录也没写，
+    //本端那条占位气泡必须整行撤掉 —— 留成"发送失败"会在聊天记录里多出一条并不存在的
+    //失败消息，而实际上一个字节都没发出去
+    CHECK(FolderInviteRejectShouldRemoveBubble(error_code_folder_peer_offline) == true);
+
+    //其余拒绝理由都属于"这个文件夹发不出去"，气泡留在原地转失败态才说得清原因
+    const int kKeepBubbleCodes[] =
+    {
+        error_code_folder_rejected,
+        error_code_folder_invite_timeout,
+        error_code_folder_too_many_files,
+        error_code_folder_too_large,
+        error_code_folder_mkdir_fail,
+        error_code_folder_disk_full,
+        error_code_folder_write_fail,
+        error_code_folder_read_fail,
+        error_code_folder_verify_fail,
+        error_code_folder_relay_broken,
+        error_code_folder_canceled,
+        error_code_folder_session_expired,
+        error_code_folder_server_busy,
+        error_code_folder_busy,
+    };
+    const int kKeepCount = (int)(sizeof(kKeepBubbleCodes) / sizeof(kKeepBubbleCodes[0]));
+    for (int i = 0; i < kKeepCount; ++i)
+    {
+        INFO("errcode = " << kKeepBubbleCodes[i]);
+        CHECK(FolderInviteRejectShouldRemoveBubble(kKeepBubbleCodes[i]) == false);
+    }
+
+    //成功码传进来也不该被当成"要撤气泡"：成功时调用方根本不会走到这个判断，
+    //这里只是兜住"万一被误用"的情形
+    CHECK(FolderInviteRejectShouldRemoveBubble(error_code_ok) == false);
+}

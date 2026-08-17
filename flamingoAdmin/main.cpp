@@ -53,7 +53,7 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int nCmdShow)
     // 声明 Per-Monitor DPI v2 感知；必须在创建任何窗口之前调用。
     DuiDpi::OptInPerMonitorV2();
 
-    // OLE 初始化：RichEdit / EDIT 寄宿控件依赖之。
+    // OLE 初始化：富文本控件依赖之。
     ::OleInitialize(NULL);
     // ICC_LISTVIEW_CLASSES：注册 ListView 通用控件类，调试控制台窗口需要它。
     AtlInitCommonControls(ICC_BAR_CLASSES | ICC_LISTVIEW_CLASSES);
@@ -128,11 +128,6 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int nCmdShow)
         frame.ResizeClient(kInitialClientWidth, kInitialClientHeight);
         frame.CenterWindow();
 
-        // 经过上面的布局，新增企业弹窗内的真 EDIT 子窗已被 balloonui 自动
-        // 创建且默认显示。在主窗口 ShowWindow【之前】把它们藏好，避免这些
-        // 子窗浮在登录 / 主界面之上（连一帧闪烁都不会出现）。
-        frame.HideModalEdits();
-
         // 启动 HTTP 工作线程：登录等所有联网请求都经它异步发送。
         flamingoadmin::HttpWorker::Instance().Start();
 
@@ -145,8 +140,8 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE, LPTSTR, int nCmdShow)
         while (::GetMessage(&msg, NULL, 0, 0))
         {
             // F12：切换调试控制台。F12 被系统保留给调试器，无法用 RegisterHotKey
-            // 注册为热键，故在消息循环里拦截 —— 这样无论键盘焦点在哪个子窗口
-            // （含 balloonui 寄宿的真 EDIT）都能响应。过滤长按自动重复。
+            // 注册为热键，故在消息循环里拦截 —— 这样无论键盘焦点落在主窗口
+            // 还是哪个子窗口上都能响应。过滤长按自动重复。
             if (msg.message == WM_KEYDOWN && msg.wParam == VK_F12
                 && (msg.lParam & kKeyPrevDownBit) == 0)
             {

@@ -8,6 +8,10 @@
  *  写回 UserConfig 落盘 → 关本框 → 隐藏主面板（最小化）或 PostMessage(WM_CLOSE_MAINDLG)
  *  触发退出。
  *
+ *  模态的实现见 OpenForClose / CloseSelf / RestoreHostEnabled：owner = 主面板保证
+ *  z 序，::EnableWindow 保证主面板不可操作，恢复动作收敛在 RestoreHostEnabled 一处、
+ *  由 WM_DESTROY 兜底。设计取舍写在本类头文件的说明里。
+ *
  *  balloonwj@qq.com   2026-06-04
  */
 #include "stdafx.h"
@@ -377,11 +381,19 @@ void CBalloonClosePromptDlg::OpenForClose(HWND ownerPanel, HWND hMainDlg, CFlami
 
     if (!IsWindow())
     {
-        // owner 传 NULL：让子控件通知自路由回本对话框（与改密 / 新建群对话框同处理）。
-        if (Create(NULL, CWindow::rcDefault, _T("关闭 FlamingoIM"),
+        // owner 传主面板：owned 窗口在 z 序上恒在 owner 之上，用户再怎么点主面板都
+        // 压不住本框；主面板被销毁时本框也会被系统一并销毁，不会留下孤立窗口。
+        //
+        // 曾经这里传的是 NULL，理由写作"让子控件通知自路由回本对话框"。该理由不成立：
+        // balloonui 的 DuiHost::SendNotify 是用 ::GetParent(m_hWnd) 找投递目标、取不到
+        // 才自路由，而 WS_OVERLAPPEDWINDOW 的顶层窗口即便带 owner，::GetParent 仍返回
+        // NULL（owner 须用 ::GetWindow(GW_OWNER) 取），所以通知照旧回到本框自己。
+        // 守卫用例见 Tests/ClosePromptDecisionTests.cpp 的 CPD15；工程内 CBalloonKickoutDlg
+        // 与 CBalloonRegisterWindow 也一直是带 owner 创建、控件通知正常。
+        if (Create(ownerPanel, CWindow::rcDefault, _T("关闭 FlamingoIM"),
                    WS_OVERLAPPEDWINDOW, 0) == NULL)
         {
-            LOG_ERROR(_T("关闭确认对话框 Create 失败。"));
+            LOG_ERROR("ClosePromptDlg: create window failed.");
             return;
         }
         SetTitle(_T("关闭 FlamingoIM"));
@@ -410,7 +422,12 @@ void CBalloonClosePromptDlg::OpenForClose(HWND ownerPanel, HWND hMainDlg, CFlami
         m_built = false;
         BuildUiOnce();
         ResizeClient(kDlgWidth, kDlgHeight);
-        CenterWindow(m_panelHwnd);   // 居中到主面板
+
+        // 居中到主面板。主面板若处于最小化或隐藏状态（例如从任务栏 / 托盘一侧触发
+        // 关闭），ATL 的 CenterWindow 会自动改为按显示器工作区居中（见 atlwin.h 里
+        // "don't center against invisible or minimized windows" 一段），故本框在
+        // 这些情形下也落在屏幕中央、能被看见，不会跑到最小化窗口的离屏坐标上。
+        CenterWindow(m_panelHwnd);
     }
 
     // 默认选中项：由当前"无提示时是否退出"偏好推出（首次配置为最小化，与设计稿一致）。
@@ -425,10 +442,58 @@ void CBalloonClosePromptDlg::OpenForClose(HWND ownerPanel, HWND hMainDlg, CFlami
         m_remember->SetCheck(false, false);
     }
 
+    // 模态化：把主面板置为不可操作。放在 ShowWindow 之前，使"主面板可点"与"本框
+    // 已弹出"之间不留哪怕一帧的空隙。是否真的要禁用由 ClosePromptHostGuard 判定
+    // （主面板句柄无效、或已被别的窗口禁用时不接管），恢复由 RestoreHostEnabled 负责。
+    const bool hostIsWindow  = (m_panelHwnd != NULL) && (::IsWindow(m_panelHwnd) != FALSE);
+    const bool hostIsEnabled = hostIsWindow && (::IsWindowEnabled(m_panelHwnd) != FALSE);
+    if (m_hostGuard.OnOpen(hostIsWindow, hostIsEnabled))
+    {
+        ::EnableWindow(m_panelHwnd, FALSE);
+    }
+
     ShowWindow(SW_SHOW);
     UpdateWindow();
     ::SetForegroundWindow(m_hWnd);
-    LOG_INFO(_T("关闭确认对话框已打开。"));
+    LOG_INFO("ClosePromptDlg: opened (owner=0x%p, owner disabled=%d).",
+             m_panelHwnd, (int)m_hostGuard.IsHostDisabled());
+}
+
+// =======================================================================
+// 关闭收尾与宿主窗恢复
+// =======================================================================
+
+void CBalloonClosePromptDlg::CloseSelf()
+{
+    // 顺序不能颠倒：销毁一个处于激活态的窗口时，系统把激活权交回它的 owner，
+    // 而 owner 必须已经是可操作的，否则激活权会落到别的进程窗口上。工程内
+    // CBalloonKickoutDlg / CBalloonLoginDlg 的模态收尾也是先恢复 owner 再销毁。
+    RestoreHostEnabled();
+
+    if (IsWindow())
+    {
+        DestroyWindow();
+    }
+}
+
+void CBalloonClosePromptDlg::RestoreHostEnabled()
+{
+    const bool hostIsWindow = (m_panelHwnd != NULL) && (::IsWindow(m_panelHwnd) != FALSE);
+    if (!m_hostGuard.OnClose(hostIsWindow))
+    {
+        return;
+    }
+
+    ::EnableWindow(m_panelHwnd, TRUE);
+
+    // 主面板仍然摆在桌面上时把激活权还给它；已隐藏或已最小化（确认"最小化到托盘"
+    // 之后即属此列）就不必抢焦点，交由系统按常规规则处理。
+    if (::IsWindowVisible(m_panelHwnd) && !::IsIconic(m_panelHwnd))
+    {
+        ::SetForegroundWindow(m_panelHwnd);
+    }
+
+    LOG_INFO("ClosePromptDlg: host panel re-enabled (owner=0x%p).", m_panelHwnd);
 }
 
 // =======================================================================
@@ -564,10 +629,10 @@ void CBalloonClosePromptDlg::DoConfirm()
     HWND mainDlg = m_mainDlgHwnd;
     int  action  = d.action;
 
-    if (IsWindow())
-    {
-        DestroyWindow();
-    }
+    // 关闭收尾统一走 CloseSelf：它先把主面板恢复为可操作，再销毁本窗口。下面对
+    // 主面板的隐藏 / 退出动作必须排在恢复之后 —— 一个禁用状态下的窗口被隐藏，
+    // 下次显示出来仍是禁用的，用户就再也点不动它了。
+    CloseSelf();
 
     // 执行动作：两种方式都先隐藏主面板（视觉上立即消失）；退出再通知 CMainDlg 收尾。
     if (panel != NULL && ::IsWindow(panel))
@@ -580,11 +645,11 @@ void CBalloonClosePromptDlg::DoConfirm()
         {
             ::PostMessage(mainDlg, WM_CLOSE_MAINDLG, 0, 0);
         }
-        LOG_INFO(_T("关闭确认：用户选择退出，已通知主窗口收尾。"));
+        LOG_INFO("ClosePromptDlg: user chose exit, WM_CLOSE_MAINDLG posted to main dialog.");
     }
     else
     {
-        LOG_INFO(_T("关闭确认：用户选择最小化到任务栏。"));
+        LOG_INFO("ClosePromptDlg: user chose minimize to tray.");
     }
 }
 
@@ -595,11 +660,9 @@ void CBalloonClosePromptDlg::DoConfirm()
 LRESULT CBalloonClosePromptDlg::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
                                            LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
-    // 关闭(×) = 取消：仅销毁本窗口，不改配置、不执行任何动作（对象由主面板持有可复用）。
-    if (IsWindow())
-    {
-        DestroyWindow();
-    }
+    // 关闭(×) = 取消：恢复主面板后销毁本窗口，不改配置、不执行任何动作
+    //（本对象由主面板持有，下次还能再打开）。
+    CloseSelf();
     return 0;
 }
 
@@ -609,12 +672,24 @@ LRESULT CBalloonClosePromptDlg::OnKeyDownMsg(UINT /*uMsg*/, WPARAM wParam,
     // ESC = 取消，等同关闭按钮。
     if (wParam == VK_ESCAPE)
     {
-        if (IsWindow())
-        {
-            DestroyWindow();
-        }
+        CloseSelf();
         return 0;
     }
+    bHandled = FALSE;
+    return 0;
+}
+
+LRESULT CBalloonClosePromptDlg::OnDestroyMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                             LPARAM /*lParam*/, BOOL& bHandled)
+{
+    // 恢复主面板可操作状态的兜底。本框无论因何被销毁都会走到这里：用户确认、取消、
+    // ESC、标题栏关闭按钮（这几条已在 CloseSelf 里恢复过，此处因幂等而不重复执行），
+    // 以及不经 CloseSelf 的两条 —— CBalloonMainPanel 析构时直接 DestroyWindow 掉本框，
+    // 以及主面板窗口销毁时系统连带销毁作为 owned 窗口的本框。漏掉任何一条，主面板
+    // 都会永久停在不可操作状态。
+    RestoreHostEnabled();
+
+    // 不消费本消息：DuiFrameWindow::OnFrameDestroyMsg 还要在这里释放控件树。
     bHandled = FALSE;
     return 0;
 }
@@ -634,21 +709,28 @@ LRESULT CBalloonClosePromptDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
     {
         switch (pNotify->ctrlId)
         {
+        //点"最小化到托盘"卡片：整卡可点，仅切换选中态，不立即执行动作。
         case kIdCardMinimize:
             SelectAction(balloonmain::kCloseActionMinimize);
             return 0;
+
+        //点"退出 FlamingoIM"卡片：同上，仅切换选中态。
         case kIdCardExit:
             SelectAction(balloonmain::kCloseActionExit);
             return 0;
+
+        //点"取消"：不改配置、不执行动作，恢复主面板后关掉本框。
         case kIdCancel:
-            if (IsWindow())
-            {
-                DestroyWindow();
-            }
+            CloseSelf();
             return 0;
+
+        //点"确认"：按选中项执行最小化或退出，见 DoConfirm。
         case kIdConfirm:
             DoConfirm();
             return 0;
+
+        //其余控件（如"记住我的选择"复选框）的点击本处不处理，交由下方
+        //bHandled = FALSE 让消息继续沿消息映射交给基类。
         default:
             break;
         }

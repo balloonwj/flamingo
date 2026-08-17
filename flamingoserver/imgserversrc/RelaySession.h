@@ -24,7 +24,6 @@
 #include <stdint.h>
 #include <string>
 #include <memory>
-#include <mutex>
 #include "../net/ByteBuffer.h"
 #include "../fileserversrc/TcpSession.h"
 #include "RelayHub.h"
@@ -80,8 +79,15 @@ private:
     //回握手应答帧（包体 {code,msg}）；应答 cmd 与收到的握手 cmd 一致（1853 / 1855）
     void sendHelloAck(uint16_t helloCmd, int code, const std::string& msg);
 
-    //本会话发送普通帧的漏斗：包体按明文传入，压缩与加密交给 FramePayload 管线
+    //本会话发送普通帧的漏斗：包体按明文传入，压缩与加密交给 FramePayload 管线。
+    //可从任意线程调用，见实现里的说明
     void sendFrame(uint16_t cmd, uint32_t seq, uint8_t extraFlags, const std::string& body);
+    //在本连接所属的 EventLoop 线程里完成「组帧 + 加密 + 写 socket」。
+    //只允许由 sendFrame 直接调用（已在该线程时）或经 runInLoop 投递后执行
+    void sendFrameInLoop(uint16_t cmd, uint32_t seq, uint8_t extraFlags, const std::string& body);
+    //forwardFrame 的实际执行体，同样只在本连接所属的 EventLoop 线程里执行
+    void forwardFrameInLoop(uint16_t cmd, uint32_t seq, uint8_t srcFlags, uint32_t originlen,
+                            const std::string& plainBody);
 
 private:
     std::string m_tokenKey;    //relay 令牌 HMAC 密钥
@@ -89,10 +95,4 @@ private:
     bool        m_paired;      //是否已完成握手并登记到配对表
     std::string m_sessionId;   //本会话 id（握手后填）
     int         m_role;        //本端角色，见 RelayToken::role_*（握手后填）
-
-    //本连接发送方向的串行锁。加密器内部虽然自带互斥量，但它只保证单次加密是原子的：
-    //本连接的帧有两个来源（本会话自己回的应答帧、配对端 I/O 线程转发来的数据帧），
-    //若两者各自加密完再各自投递，写到 socket 的先后可能与加密的先后相反，接收端
-    //按流顺序解密必然失败。故把「加密 + 投递」整体锁起来。
-    std::mutex  m_sendMutex;
 };

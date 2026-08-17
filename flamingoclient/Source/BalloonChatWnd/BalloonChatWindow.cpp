@@ -17,6 +17,7 @@
 #include "../UserSessionData.h"       // FMG_MSG_OPEN_CONTACT_PROFILE（头部点击路由）
 #include "../IULog.h"                 // LOG_INFO
 #include "ChatWindowLayout.h"         // BuildChatWindowBody / CtrlId / 分割记忆
+#include "ChatInputRichEdit.h"        // 输入框控件（无窗口富文本的聊天定制子类）
 #include "ChatImageCache.h"           // 图片后台解码缓存：注册监听 + 就绪重绘
 #include "ChatHeaderInfo.h"           // ChatHeaderInfo::SetPresence/SetSignature（头部对端真实状态）
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiSplitter.h"  // 拖动完成后算回分割比例
@@ -71,14 +72,11 @@ static const COLORREF kConnectingBannerBorderColor = RGB(0xE5, 0xE7, 0xEB);
 #include <gdiplus.h>                  // 读图片真实宽高以算展示尺寸
 #include <shellapi.h>                 // ShellExecute（文件气泡"打开文件"）
 #pragma comment(lib, "gdiplus.lib")
-#include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEditHost.h"  // 输入框（富文本，支持内联图片）
 #include "../BalloonScreenshot/ScreenCaptureOverlay.h"  // 截图浮层（截图按钮调起）
 #include "../BalloonImageViewer/BalloonImageViewerWindow.h"  // 看图窗（双击图片放大）
 #include "ChatRichContentSplit.h"     // 输入框图文混排的有序拆分（发送用）
 #include "ChatFaceTag.h"              // 内联表情的 dwUser 标记编码 + 显示尺寸
 #include "../BalloonChat/BalloonChatMsgFormat.h"  // BodyToDigest（会话摘要里表情→[表情]）
-#include "ChatInputScrollBar.h"       // 输入框与接收区一致的细悬浮滚动条
-#include "ChatInputKeyFilter.h"       // 输入框 Enter 发送 / Ctrl+Enter 换行
 #include "ChatSendMode.h"             // 发送键模式（Enter / Ctrl+Enter）
 #include "ChatBannerLabel.h"          // 顶部离线 / 正在连接提示带（带底色的 DuiLabel 子类）
 #include "ChatSendButton.h"           // ChatSendButton::DUIN_SENDBTN_DROPDOWN
@@ -216,6 +214,11 @@ static const int kMsgTypeFolder = 18;  // message_type_folder：文件夹传输�
 // 会话类型常量，与 net::conversation_type（net/Protocol.h）对齐。本窗口是单聊窗，
 // 发撤回请求时固定取单聊；同上，不 include Protocol.h 而是就地取值。
 static const int kConvTypeSingle = 1;  // conversation_single
+
+// 对端在线状态常量，与 net/Protocol.h 的 enum presence_type 对齐；同上，就地复述取值。
+// 只用得上"离线"这一个：离开与勿扰的用户连接仍在，服务端判定文件夹传输能否发起时
+// 看的是"名下有没有在线会话"，那两种状态照样发得出去。
+static const int kPresenceOffline = 0;   // presence_offline：对方没有任何在线连接
 
 // 文件回执状态常量，与 file_ack_state（net/Protocol.h:398）对齐。理由同上 ——
 // 本文件刻意不 include Protocol.h，故就地复述一份取值。
@@ -455,7 +458,7 @@ LRESULT CBalloonChatWindow::OnInputChanged(UINT /*uMsg*/, WPARAM wParam,
     {
         return 0;
     }
-    balloonwjui::DuiRichEditHost* input = dynamic_cast<balloonwjui::DuiRichEditHost*>(
+    balloonchatwnd::ChatInputRichEdit* input = dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
         content->FindCtrlById(balloonchatwnd::kIdInputEdit));
     if (input == NULL)
     {
@@ -692,6 +695,22 @@ void CBalloonChatWindow::CreateAndShow(HWND hMainDlg)
 // 客户区
 // =======================================================================
 
+//「回车是发送还是换行」的查询回调，注册给输入框控件。
+//
+// 判断放在这里而不是控件里：它要读用户选的发送模式，而那个设置存在配置文件中，
+// 读它会牵进配置文件读写与主程序目录这一整条依赖链；输入框控件还要被编进单元
+// 测试工程，那边刻意不引入这些。
+//   bCtrlDown：按下回车时 Ctrl 是否也按着。
+//   返回：true 表示发送，false 表示插入换行。
+static bool ChatSendOnEnterQuery(bool bCtrlDown, void* /*pCtx*/)
+{
+    // 回车发送模式 —— 不按 Ctrl 即发送、按 Ctrl 换行；
+    // Ctrl+回车发送模式 —— 按住 Ctrl 才发送、单按回车换行。
+    return (balloonchatwnd::GetChatSendMode() == balloonchatwnd::kSendOnEnter)
+           ? !bCtrlDown : bCtrlDown;
+}
+
+
 void CBalloonChatWindow::InitUi()
 {
     // 构建单聊窗客户区控件树（来自 ChatWindowLayout 的内嵌 XML）。真实会话
@@ -713,42 +732,40 @@ void CBalloonChatWindow::InitUi()
         return;
     }
 
-    // 输入框是富文本 DuiRichEditHost（内嵌真 RICHEDIT50W，支持后续把截图作为内联
-    // 图片塞进来）—— XML builder 只建控件对象、不调 EnsureCreated，须在 host HWND
-    // 就绪后由调用方显式建一次。
-    balloonwjui::DuiRichEditHost* input = dynamic_cast<balloonwjui::DuiRichEditHost*>(
-        content->FindCtrlById(balloonchatwnd::kIdInputEdit));
+    // 输入框是无窗口富文本控件的聊天定制子类（见 ChatInputRichEdit.h）。
+    // 它没有子窗口，**不需要任何创建步骤** —— 从 XML 建出来就能用。
+    balloonchatwnd::ChatInputRichEdit* input =
+        dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
+            content->FindCtrlById(balloonchatwnd::kIdInputEdit));
     if (input != NULL)
     {
         input->SetShowBorder(false);   // 输入框无边框，融入输入区
-        // 多行 + 自动换行：须在 EnsureCreated 之前设（多行/换行是创建期 baked-in
-        // 的窗口风格位）。RichEdit 默认即多行自动换行，这里显式声明意图、与 XML 一致。
+        // 多行 + 自动换行。这两项在无窗口控件上是随时可改的属性，不像旧控件
+        // 那样是创建期定死的窗口风格位，所以顺序上没有讲究。
         input->SetMultiLine(true);
         input->SetWordWrap(true);
-        // 关掉 RichEdit 原生竖直滚动条槽（须在 EnsureCreated 之前设——WS_VSCROLL 是
-        // 创建期 baked-in 风格位）；改用下方自绘的细悬浮滚动条，与接收区风格一致。
-        input->SetShowVScroll(false);
-        if (!input->EnsureCreated(m_hWnd))
-        {
-            LOG_WARNING(_T("单聊窗输入框 EnsureCreated 失败。"));
-        }
-        else
-        {
-            // 粘贴一律按纯文本（聊天输入不要带来源的颜色/字体/链接/对象）。
-            input->SetPasteAsPlainTextDefault(true);
-            // 装回车过滤器：Enter 发送、Ctrl+Enter 换行。须在 EnsureCreated 之后调
-            // —— 此时内部 RichEdit 子窗口才存在；按 Enter 时投递 kSendOnEnterMsg 回本窗口。
-            balloonchatwnd::InstallChatInputEnterToSend(
-                input->GetHostedHwnd(), m_hWnd, kSendOnEnterMsg);
-            // 装「正在输入」钩子：内容一变就投 kInputChangedMsg 回本窗口，由节流器
-            // 决定要不要给对端发 cmd_typing_notify。与回车过滤器各挂各的、互不影响。
-            balloonchatwnd::InstallChatInputTypingHook(
-                input->GetHostedHwnd(), m_hWnd, kInputChangedMsg);
-            // 装与接收区一致的细悬浮滚动条（内容溢出才出现、浮在右沿、可拖动）。
-            balloonchatwnd::AttachChatInputScrollBar(input);
-        }
+        // 输入区高度由用户拖分割条决定，内容多了在框内滚动，不随内容长高。
+        input->SetAutoGrow(false);
+        // 粘贴一律按纯文本（聊天输入不要带来源的颜色 / 字体 / 链接 / 对象）。
+        input->SetPasteAsPlainTextDefault(true);
+        // 关掉输入框自带的拖放。
+        //
+        // 拖放在聊天窗里是**整窗**接收的：拖文件进来就发送，由 m_dropCtrl 统一
+        // 处理（见 ChatDropController.h）。而一个窗口只能注册一个拖放目标 ——
+        // 输入框若也要一份，就会与聊天窗那份抢，先注册的那个赢，后一个静默失败。
+        // 这与旧控件时代的取舍一致：那时是把子窗口自带的拖放目标摘掉。
+        input->SetDragDropEnabled(false);
+
+        // 回车发送、「正在输入」通知。原先是往子窗口上挂两段子类过程，现在
+        // 由控件自己处理，只需把宿主窗口与消息号交给它 —— 消息协议没变，
+        // 本窗口接消息那一侧的代码一行都不用改。
+        input->SetNotifyTarget(m_hWnd);
+        input->SetSendOnEnterMsg(kSendOnEnterMsg);
+        input->SetSendOnEnterQuery(&ChatSendOnEnterQuery, NULL);
+        input->SetTypingChangedMsg(kInputChangedMsg);
+
         // 载入上次的聊天字体并应用到输入框（所见即所得）。未设过则保持默认外观。
-        // RichEdit 不接管 HFONT 所有权，返回的句柄存入 m_hInputFont 由本窗口持有。
+        // 控件不接管字体所有权，返回的句柄存入 m_hInputFont 由本窗口持有。
         m_currentFont = balloonchatwnd::LoadChatFont();
         m_hInputFont = balloonchatwnd::ApplyChatFontToEdit(input, m_currentFont);
     }
@@ -818,16 +835,21 @@ void CBalloonChatWindow::InitUi()
         rootBox->AddChild(std::move(toast), balloonwjui::DuiLayout::Hint().Fixed(0));
     }
 
-    // 拖文件进窗口发送：把拖放目标注册到本窗口，并摘掉输入框自带的那个
-    // （否则拖到输入框上的文件会被 RichEdit 当内嵌对象吃掉，见 ChatDropController.h）。
-    {
-        HWND inputHwnd = NULL;
-        if (input != NULL)
-        {
-            inputHwnd = input->GetHostedHwnd();
-        }
-        m_dropCtrl.Attach(m_hWnd, inputHwnd, this);
-    }
+    // 拖文件进窗口发送：把拖放目标注册到本窗口。
+    //
+    // 第一个参数是宿主对象，传本窗口自身（DuiFrameWindow 派生自 DuiHost）。
+    // 收宿主而不是光收一个 HWND，是为了让接收器在注册之前先让出窗口上可能
+    // 已被 balloonui 控件占用的拖放目标 —— 一个窗口只能注册一个，被占住时
+    // 本窗口这份会静默失败，症状是拖任何文件进来都没有反应（见
+    // ChatDropController.h 的文件头）。
+    //
+    // 第二个参数原先传的是输入框内部子窗口的句柄，用来摘掉那个子窗口自带的
+    // 拖放目标（否则拖到输入框上的文件会被它当内嵌对象吃掉）。输入框换成
+    // 无窗口控件之后没有子窗口了，它自带的拖放也已经在上面关掉，所以这里
+    // 传空 —— 没有第二个目标需要摘。
+    //
+    // 第三个参数是拖放回调接收方，也是本窗口（实现了 IChatDropSink）。
+    m_dropCtrl.Attach(this, NULL, this);
 
     LOG_INFO(_T("单聊窗客户区 UI 初始化完成。"));
 }
@@ -1789,6 +1811,15 @@ static CString FolderBusyTipText()
     return tip;
 }
 
+// 「对方不在线，发不了文件夹」的提示文案。两处用到：发起之前按本端掌握的对端在线
+// 状态先拦一道，以及服务端回 error_code_folder_peer_offline 时的兜底，两处措辞一致。
+//
+// 文件夹传输必须由双方各自连上 fileserver 建中转通道才能传字节，对方不在线时这条
+// 通道根本建不起来，服务端也因此在收到邀请的那一刻就直接拒绝、连会话都不建。所以
+// 它不是"发了但失败了"，而是"这会儿发不了"。
+static const wchar_t* const kFolderPeerOfflineTip =
+    L"对方当前不在线，暂时无法发送文件夹。等对方上线后再发送吧。";
+
 // 文件夹接收的默认落地目录名。与聊天文件缓存的 ChatFile、图片缓存的 ChatImage 同级，
 // 都挂在 Users\<登录账号>\ 之下（这条口径的唯一出处是 net/UserCachePath.h），因而一个
 // 账号收到的文件夹不会落进另一个账号的目录里。
@@ -2130,6 +2161,13 @@ void CBalloonChatWindow::PickAndSendFolder()
         return;
     }
 
+    // 对方不在线时中转通道建不起来，服务端会直接拒绝。在这里就拦下并说明原因，
+    // 免得用户白选一次目录、再看到一条"发送失败"的气泡。
+    if (!CheckPeerOnlineForFolder())
+    {
+        return;
+    }
+
     // 本机同时可进行的文件夹传输有笔数上限（发送与接收各算一笔，上限见 flamingo.ini 的
     // [app] foldermaxconcurrent）。先在这里拦一道给出明确提示，免得用户白选一次目录；
     // 管理器与服务端另有两道同样的校验，服务端是权威方。
@@ -2203,6 +2241,12 @@ void CBalloonChatWindow::SendDroppedFolders(const std::vector<std::wstring>& fol
         return;
     }
     if (!CheckOnlineFor(balloonmain::kActionTransferFile))
+    {
+        return;
+    }
+
+    // 对方不在线时一个都发不了，整批直接拦下，理由同工具栏那条入口。
+    if (!CheckPeerOnlineForFolder())
     {
         return;
     }
@@ -2414,7 +2458,29 @@ void CBalloonChatWindow::OnFolderBound(const foldertransfer::FolderBindNotice& b
         return;
     }
 
-    //被服务端拒绝：气泡转失败态，失败原因用服务端给的码，双方看到的是同一条文案。
+    //对方不在线：这一笔连会话都没建立起来（服务端在收到邀请时就直接拒绝并返回，
+    //不建会话、不落任何消息记录），一个字节都没发出去。此时把气泡改成"发送失败"
+    //会在聊天记录里平白留下一条并不存在的失败消息，故改为整行撤掉、另给一句提示。
+    //气泡是本地占位的，撤掉之后翻历史也不会再出现。
+    //
+    //正常情况下发起之前的 CheckPeerOnlineForFolder 已经拦住了，走到这里说明本端
+    //掌握的对端状态是旧的（对方刚掉线、推送还没到），这是那道门禁的兜底。
+    if (balloonchatwnd::FolderInviteRejectShouldRemoveBubble(bind.m_code))
+    {
+        balloonchatwnd::ChatMessageList* list = GetMessageList();
+        if (list != NULL)
+        {
+            list->RemoveFolderMessage(bind.m_localId);
+        }
+        LOG_INFO("Folder send: invite rejected because peer is offline, bubble removed "
+                 "(localid=%s, peer=%u).", bind.m_localId.c_str(), m_peerUserId);
+        ::MessageBox(m_hWnd, kFolderPeerOfflineTip, g_strAppTitle.c_str(),
+                     MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+
+    //其余理由（规模超限 / 服务器繁忙 / 对方满额等）：气泡转失败态，失败原因用服务端
+    //给的码，双方看到的是同一条文案。
     msg.folderState       = balloonchatwnd::kFolderFailed;
     msg.folderErrCode     = bind.m_code;
     msg.folderWithinRetry = false;
@@ -3397,7 +3463,7 @@ void CBalloonChatWindow::RefreshSendModeUi()
     }
 
     // 输入框 placeholder 随模式联动（避免空框时提示与实际行为矛盾）。
-    balloonwjui::DuiRichEditHost* input = dynamic_cast<balloonwjui::DuiRichEditHost*>(
+    balloonchatwnd::ChatInputRichEdit* input = dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
         content->FindCtrlById(balloonchatwnd::kIdInputEdit));
     if (input != NULL)
     {
@@ -3407,7 +3473,7 @@ void CBalloonChatWindow::RefreshSendModeUi()
 
 // ---- 输入框图文混排发送用的本地辅助 -----------------------------------
 
-// DuiRichEditHost::EnumContent 的逐段收集回调：把（文本 / 内嵌图+标记）按文档顺序
+// EnumContent 的逐段收集回调：把（文本 / 内嵌图+标记）按文档顺序
 // 收进 vector，供 BuildOutgoingParts 聚合成待发送部分。ctx 为收集目标 vector。
 static void CollectInputSegment(bool isImage, LPCTSTR text, DWORD_PTR tag, void* ctx)
 {
@@ -3578,7 +3644,12 @@ void CBalloonChatWindow::ApplyConnectionState(int state)
     }
 
     // 输入框：离线时置为只读而不是禁用 —— 已经打好的草稿还看得见、能复制，只是打不了字。
-    balloonwjui::DuiEditHost* edit = dynamic_cast<balloonwjui::DuiEditHost*>(
+    // 这里的目标类型必须与输入框的实际类型一致。历史上此处误写成 DuiEditHost，
+    // 而输入框是另一条继承链上的富文本控件，dynamic_cast 恒返回空指针，于是
+    // 「离线置只读」自输入框改成富文本框起就从未真正执行过（bugs.md BUG-5）。
+    // 这类错误编译期查不出来：转换到无关类型是合法写法，失败只在运行期表现为
+    // 空指针，又恰好被 if 判空当成正常情况静默跳过。
+    balloonchatwnd::ChatInputRichEdit* edit = dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
         content->FindCtrlById(balloonchatwnd::kIdInputEdit));
     if (edit != NULL)
     {
@@ -3614,16 +3685,33 @@ void CBalloonChatWindow::ApplyConnectionState(int state)
 bool CBalloonChatWindow::CheckOnlineFor(int action)
 {
     // 门禁只看本窗记下的连接态：它由 CMainDlg 在每次状态变化时推下来，与托盘图标、
-    // 状态胶囊同源。
-    if (m_connUiState == (int)balloonmain::kConnUiOnline)
+    // 状态胶囊同源。判定本身交给 OnlineCapability，不在本窗口就地写一份。
+    if (balloonmain::IsActionAllowedInState(m_connUiState, action))
     {
         return true;
     }
 
-    LOG_INFO(_T("单聊窗操作被拦截：peer=%u, action=%d, state=%d。"),
+    LOG_INFO("ChatWindow::CheckOnlineFor: blocked. peer=%u, action=%d, "
+             "connUiState=%d (0=online 1=connecting 2=offline).",
         m_peerUserId, action, m_connUiState);
     ::MessageBox(m_hWnd, balloonmain::GetBlockedActionTip(action),
                  _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+    return false;
+}
+
+bool CBalloonChatWindow::CheckPeerOnlineForFolder()
+{
+    // 只在确知对方离线时才拦。m_peerPresence 为 -1 表示状态还没注入进来（窗口刚建、
+    // 通讯录应答未到），此时无从判断，放行交给服务端应答兜底 —— 宁可让服务端拒绝
+    // 一次，也不要在状态未知时把能发的也挡掉。
+    if (m_peerPresence != kPresenceOffline)
+    {
+        return true;
+    }
+
+    LOG_INFO("ChatWindow: folder send blocked, peer=%u is offline.", m_peerUserId);
+    ::MessageBox(m_hWnd, kFolderPeerOfflineTip, g_strAppTitle.c_str(),
+                 MB_OK | MB_ICONINFORMATION);
     return false;
 }
 
@@ -3642,7 +3730,7 @@ void CBalloonChatWindow::DoSend()
         return;
     }
 
-    balloonwjui::DuiRichEditHost* input = dynamic_cast<balloonwjui::DuiRichEditHost*>(
+    balloonchatwnd::ChatInputRichEdit* input = dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
         content->FindCtrlById(balloonchatwnd::kIdInputEdit));
     balloonchatwnd::ChatMessageList* list =
         dynamic_cast<balloonchatwnd::ChatMessageList*>(
@@ -3960,7 +4048,7 @@ void CBalloonChatWindow::OnScreenshotStage(void* ctx, const wchar_t* pngPath)
     {
         return;
     }
-    balloonwjui::DuiRichEditHost* input = dynamic_cast<balloonwjui::DuiRichEditHost*>(
+    balloonchatwnd::ChatInputRichEdit* input = dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
         content->FindCtrlById(balloonchatwnd::kIdInputEdit));
     if (input == NULL)
     {
@@ -4279,7 +4367,7 @@ void CBalloonChatWindow::OnFontChanged(void* userdata, const net::TextFont& font
     balloonwjui::DuiControl* content = self->GetClientContent();
     if (content != NULL)
     {
-        balloonwjui::DuiRichEditHost* input = dynamic_cast<balloonwjui::DuiRichEditHost*>(
+        balloonchatwnd::ChatInputRichEdit* input = dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
             content->FindCtrlById(balloonchatwnd::kIdInputEdit));
         // 应用新字体：RichEdit 不接管 HFONT 所有权，先换新句柄再释放上一只，避免泄漏。
         HFONT hNewFont = balloonchatwnd::ApplyChatFontToEdit(input, font);
@@ -4308,7 +4396,7 @@ void CBalloonChatWindow::InsertEmojiToInput(const wchar_t* emoji)
     {
         return;
     }
-    balloonwjui::DuiRichEditHost* input = dynamic_cast<balloonwjui::DuiRichEditHost*>(
+    balloonchatwnd::ChatInputRichEdit* input = dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
         content->FindCtrlById(balloonchatwnd::kIdInputEdit));
     if (input == NULL)
     {
@@ -4331,7 +4419,7 @@ void CBalloonChatWindow::InsertFaceToInput(int faceId, const wchar_t* facePath)
     {
         return;
     }
-    balloonwjui::DuiRichEditHost* input = dynamic_cast<balloonwjui::DuiRichEditHost*>(
+    balloonchatwnd::ChatInputRichEdit* input = dynamic_cast<balloonchatwnd::ChatInputRichEdit*>(
         content->FindCtrlById(balloonchatwnd::kIdInputEdit));
     if (input == NULL)
     {

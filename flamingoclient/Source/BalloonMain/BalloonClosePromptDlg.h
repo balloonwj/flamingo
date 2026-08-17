@@ -10,7 +10,15 @@
  *  在"还需提示"时创建并显示本对话框；点"确认"后本对话框把选择写回 UserConfig 并
  *  落盘，再隐藏主面板（最小化）或 PostMessage(WM_CLOSE_MAINDLG) 触发整体退出。
  *
- *  纯决策逻辑见 ClosePromptDecision.h（可单测）；本文件只管 UI 与动作派发。
+ *  模态方式：本框以主面板为 owner 创建（保证 z 序恒在主面板之上，主面板再怎么点
+ *  也压不住它），显示期间用 ::EnableWindow 把主面板置为不可操作，关闭时恢复。
+ *  没有采用嵌套消息循环那种"正统"模态，原因是本框的确认路径会投递
+ *  WM_CLOSE_MAINDLG 触发整体退出，而退出流程最终走 PostQuitMessage 并销毁主面板 ——
+ *  嵌套循环会把 WM_QUIT 吞在自己这一层（外层主循环再也收不到，进程退不掉），而且
+ *  销毁主面板时本对话框的调用栈还压在主面板窗口过程里，属于典型的重入隐患。
+ *
+ *  纯决策逻辑见 ClosePromptDecision.h（可单测），其中的 ClosePromptHostGuard 负责
+ *  "主面板该不该禁用 / 该不该恢复"的判定；本文件只管 UI 与动作派发。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL。
  *
@@ -21,6 +29,7 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"
+#include "ClosePromptDecision.h"          // ClosePromptHostGuard（主面板禁用 / 恢复判定）
 
 class CFlamingoClient;
 
@@ -67,7 +76,11 @@ private:
 } // namespace balloonmain
 
 /**
- *  CBalloonClosePromptDlg —— 关闭确认对话框（非模态浮窗，owner = 主面板）。
+ *  CBalloonClosePromptDlg —— 关闭确认对话框（模态，owner = 主面板）。
+ *
+ *  显示期间主面板不可操作（按钮、列表、标题栏拖动全无响应），且本框恒在主面板
+ *  之上。对话框以任何方式结束都会把主面板恢复为可操作 —— 恢复动作只写在
+ *  RestoreHostEnabled 一处，由关闭收尾与 WM_DESTROY 兜底两条路径调用。
  */
 class CBalloonClosePromptDlg : public balloonwjui::DuiFrameWindow
 {
@@ -76,17 +89,22 @@ public:
     ~CBalloonClosePromptDlg();
 
     /**
-     *  创建并显示对话框（已显示则前置 + 复位选中态）。
-     *    ownerPanel：主面板窗口句柄；"最小化 / 退出"动作执行时隐藏它。
+     *  创建并显示对话框（已显示则前置 + 复位选中态），并把主面板置为不可操作。
+     *    ownerPanel：主面板窗口句柄；同时作为本框的 owner（z 序恒在其上）、模态
+     *                期间被禁用的宿主窗，以及"最小化 / 退出"动作执行时隐藏的对象。
+     *                可为 NULL（调试入口单独起本框时），此时不做禁用。
      *    hMainDlg：  隐藏的消息中枢 CMainDlg 句柄；"退出"时向它 PostMessage
      *                WM_CLOSE_MAINDLG 触发整体收尾。
      *    client：    所属客户端对象；读 / 写 m_UserConfig 偏好并落盘，本类只引用不持有。
+     *
+     *  副作用：主面板被禁用，直到本框结束才恢复。本方法立即返回，不等待用户选择。
      */
     void OpenForClose(HWND ownerPanel, HWND hMainDlg, CFlamingoClient* client);
 
     BEGIN_MSG_MAP(CBalloonClosePromptDlg)
         MESSAGE_HANDLER(WM_CLOSE, OnCloseMsg)
         MESSAGE_HANDLER(WM_KEYDOWN, OnKeyDownMsg)
+        MESSAGE_HANDLER(WM_DESTROY, OnDestroyMsg)
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
         CHAIN_MSG_MAP(balloonwjui::DuiFrameWindow)
     END_MSG_MAP()
@@ -94,7 +112,26 @@ public:
 private:
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnKeyDownMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    LRESULT OnDestroyMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     LRESULT OnDuiNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  关闭收尾：先把主面板恢复为可操作，再销毁本窗口。
+     *
+     *  用户主动结束本框的四条路径（确认、取消、ESC、标题栏关闭按钮）统一走这里。
+     *  两步的先后不能颠倒 —— 销毁一个处于激活态的窗口时，系统会把激活权交回它的
+     *  owner，而 owner 必须已经是可操作的，否则激活权会落到别的进程窗口上。
+     */
+    void CloseSelf();
+
+    /**
+     *  把主面板恢复为可操作，并把激活权交回它。
+     *
+     *  本方法是恢复动作的唯一实现处，且幂等（判定由 ClosePromptHostGuard 收敛）：
+     *  没禁用过、已经恢复过、主面板已销毁这三种情形都会安全地什么也不做，故可以
+     *  从任意结束路径重复调用。
+     */
+    void RestoreHostEnabled();
 
     //构建一次静态骨架（副标题 + 两张卡片 + 底部复选框/按钮栏）。
     void BuildUiOnce();
@@ -120,6 +157,10 @@ private:
 
     int    m_selectedAction;   //当前选中的关闭方式（CloseAction）
     bool   m_built;            //骨架是否已构建
+
+    //主面板"禁用 — 恢复"的判定状态机。与本对象同生命周期，跨"打开再关闭"复用；
+    //本框显示期间它记着"主面板是被本框禁用的"，关闭收尾据此恢复且只恢复一次。
+    balloonmain::ClosePromptHostGuard m_hostGuard;
 
     //标题栏图标位图（程序图标 IDR_MAINFRAME 合成到标题栏底色上）。SetIcon 仅借用，
     //故由本类持有、析构时 DeleteObject。

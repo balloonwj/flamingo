@@ -42,13 +42,18 @@ namespace balloonmain {
  */
 enum OnlineActionKind
 {
-    kActionSendMessage  = 0,   // 发送聊天消息（单聊 / 群聊的文本、图片、文件消息体）
-    kActionTransferFile = 1,   // 文件与图片的上传下载（走 file / img 两条连接）
-    kActionShakeWindow  = 2,   // 发送窗口抖动（与聊天消息同一条 cmd_send_message 通道）
-    kActionRealtimeCall = 3,   // 发起远程桌面协助、语音 / 视频通话（需信令通道）
-    kActionAccountOp    = 4,   // 加好友、建群、改资料等一切需要向服务器发请求的账号类操作
+    kActionSendMessage    = 0,   // 发送聊天消息（单聊 / 群聊的文本、图片、文件消息体）
+    kActionTransferFile   = 1,   // 文件与图片的上传下载（走 file / img 两条连接）
+    kActionShakeWindow    = 2,   // 发送窗口抖动（与聊天消息同一条 cmd_send_message 通道）
+    kActionRealtimeCall   = 3,   // 发起远程桌面协助、语音 / 视频通话（需信令通道）
+    kActionAccountOp      = 4,   // 加好友、建群、改资料等一切需要向服务器发请求的账号类操作
+    kActionChangePresence = 5,   // 切换在线状态（托盘右键菜单与主面板状态菜单里的
+                                 // 在线 / 离开 / 忙碌 / 离线四项）。它同样要向服务端发一帧
+                                 // （在线态发 cmd_change_presence、离线态走重新登录），
+                                 // 连接未就绪时发不出去：点了不但没有效果，界面还会先按
+                                 // "已改"渲染，与服务端实际状态不符
 
-    kActionKindCount    = 5,   // 类别总数，仅供遍历 / 越界判断用，不是有效操作类别
+    kActionKindCount      = 6,   // 类别总数，仅供遍历 / 越界判断用，不是有效操作类别
 };
 
 /**
@@ -84,11 +89,28 @@ ConnectionUiState ComputeConnectionUiState(int presence, bool connected);
  *
  *  返回：true 表示可以执行；false 表示必须拦住并给用户提示。
  *
- *  说明：目前五类操作的放行条件相同（都要求在线且连接就绪），保留 action 参数是
+ *  说明：目前各类操作的放行条件相同（都要求在线且连接就绪），保留 action 参数是
  *  为了调用点自解释、以及日后出现"离线也允许"的操作（如纯本地的历史记录搜索）时
  *  不必改动所有调用点的签名。
  */
 bool IsActionAllowed(int presence, bool connected, int action);
+
+/**
+ *  判定某类操作在给定的<u>界面连接态</u>下是否放行。与 IsActionAllowed 是同一条规则的
+ *  两副入口，区别只在于入参：调用方手里已经是算好的连接态（各窗口由 CMainDlg 推下来的
+ *  m_connUiState、菜单模型拿到的 connUiState）时用本函数，手里是"在线状态 + 连接是否
+ *  就绪"这对原始值时用 IsActionAllowed。
+ *
+ *  之所以补这一副入口：各窗口的 CheckOnlineFor 原先都是就地写一句
+ *  <u>m_connUiState == kConnUiOnline</u>，等于把放行规则在三个窗口里各抄了一份，
+ *  日后要给某类操作放宽条件时必然漏改。统一改走本函数后，规则只有这一处。
+ *
+ *    connUiState：界面连接态，取值见 ConnectionUiState；越界值按"未就绪"处理，不放行。
+ *    action：     操作类别，取值见 OnlineActionKind；越界值一律不放行。
+ *
+ *  返回：true 表示可以执行；false 表示必须拦住并给用户提示。
+ */
+bool IsActionAllowedInState(int connUiState, int action);
 
 /**
  *  取某类操作被拦住时给用户看的提示文字。
@@ -193,6 +215,36 @@ PresenceVisual GetConnectionPresenceVisual(int presence, int connUiState);
  *  本函数无副作用。
  */
 int GetConnectionBadgePresence(int presence, int connUiState);
+
+/**
+ *  取状态菜单（托盘右键菜单、主面板状态菜单）里<u>被标记为"当前项"的那一行</u>
+ *  该显示的文字。是 GetConnectionPresenceVisual 的菜单版：后者给胶囊用，本函数在
+ *  同一份文字后面缀上"（当前）"给菜单用，两者必然同源。
+ *
+ *  本函数存在的理由与 GetConnectionPresenceVisual 相同：菜单原先只看用户选的那个
+ *  presence，掉线时用户并没有改状态，于是菜单照旧写着"在线（当前）"，而同一时刻
+ *  主面板胶囊按连接态已经显示"正在连接"了 —— 两处一分叉就自相矛盾。
+ *
+ *    presence：   用户当前选择的在线状态（v2 presence_type）。仅在连接就绪时用得上。
+ *    connUiState：界面连接态，取值见 ConnectionUiState。
+ *
+ *  @return 当前项的完整文字（静态常量串，进程级生命周期，调用方可直接持有）：
+ *            · kConnUiOnline     —— "在线（当前）" / "离开（当前）" / "忙碌（当前）"
+ *                                   / "离线（当前）"，按 presence 取；
+ *            · kConnUiConnecting —— "正在连接（当前）"；
+ *            · kConnUiOffline 及一切越界取值 —— "离线（当前）"。
+ *
+ *  与本模块其它函数的口径约定：返回值去掉"（当前）"后缀之后，必然等于
+ *  GetConnectionPresenceVisual(presence, connUiState).text（OnlineCapabilityTests
+ *  里有一条专门断言这件事的用例）。
+ *
+ *  说明：调用方还须自行判定<u>哪一行</u>是当前项，取值走 GetConnectionBadgePresence
+ *  —— 连接未就绪时它给出的是 presence_offline，即"离线"那一行被标记，此时该行的
+ *  文字就是本函数返回的"正在连接（当前）"。
+ *
+ *  本函数无副作用。
+ */
+const wchar_t* GetConnectionMenuLabel(int presence, int connUiState);
 
 /**
  *  判定主面板顶部"我自己"的头像是否该置灰。

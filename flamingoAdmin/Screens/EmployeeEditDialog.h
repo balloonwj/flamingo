@@ -96,11 +96,6 @@ private:
     // 在 BuildClientContent 之后立即调一次。
     void LoadNodeIntoUi();
 
-    // 9 个字段的 EnsureCreated:XML / 纯代码构造完控件树后,DuiEditHost
-    // 寄宿的真 Win32 EDIT 子窗还没建出来;必须在 host HWND 就绪后逐个
-    // 显式调 EnsureCreated。参考 CBalloonProfileWindow::RebuildUi 同套路。
-    void EnsureFieldEditsCreated();
-
     // 「保存」按钮入口:校验必填项(姓名 + 邮箱非空)→ 若通过则调
     // AdminFrame 的 OnEmployeeEditDialogSubmit 入口,本对话框置 Busy 等
     // HTTP reply;若校验未通过则 ShowToast 提示用户。

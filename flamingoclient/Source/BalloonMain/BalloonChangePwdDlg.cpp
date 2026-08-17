@@ -167,7 +167,6 @@ CBalloonChangePwdDlg::CBalloonChangePwdDlg(CFlamingoClient* pFMGClient)
     , m_newEdit(NULL)
     , m_confirmEdit(NULL)
     , m_built(false)
-    , m_editsCreated(false)
     , m_submitting(false)
     , m_titleIconBmp(NULL)
 {
@@ -219,26 +218,10 @@ void CBalloonChangePwdDlg::OpenForChange(HWND /*owner*/)
             SetIcon(m_titleIconBmp);
         }
 
-        m_built        = false;
-        m_editsCreated = false;
+        m_built = false;
         BuildUiOnce();
         ResizeClient(kDlgWidth, kDlgHeight);
         CenterWindow();
-    }
-
-    // 三个密码框内嵌真 Win32 EDIT，须在窗口 HWND 就绪后建一次；建好后开小眼睛。
-    if (!m_editsCreated)
-    {
-        balloonwjui::DuiEditHost* edits[3] = { m_oldEdit, m_newEdit, m_confirmEdit };
-        for (int i = 0; i < 3; ++i)
-        {
-            if (edits[i] != NULL)
-            {
-                edits[i]->EnsureCreated(m_hWnd);
-                edits[i]->SetShowEyeToggle(true);
-            }
-        }
-        m_editsCreated = true;
     }
 
     ResetFields();
@@ -283,6 +266,8 @@ void CBalloonChangePwdDlg::AddField(balloonwjui::DuiVBox* root, LPCTSTR label,
     std::unique_ptr<balloonwjui::DuiEditHost> edit(new balloonwjui::DuiEditHost());
     edit->SetCtrlId(editId);
     edit->SetPassword(true);
+    // 右侧"小眼睛"按钮：点击在密文 / 明文显示之间切换。
+    edit->SetShowEyeToggle(true);
     edit->SetBgColor(kFieldBgColor);
     edit->SetIcon(balloonwjui::DuiEditHost::LeftIcon, kLockGutterW, &PaintLockGutter);
     *outEdit = edit.get();

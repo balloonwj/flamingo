@@ -218,6 +218,22 @@ public:
     bool SetFolderMessage(const std::string& sessionId, const ChatMessage& msg);
 
     /**
+     *  把某条<u>尚未被记录接管</u>的文件夹气泡整行移除（销毁该 ChatBubble 并重排）。
+     *  命中条件与 GetFolderMessage 完全一致（会话 id 相同且 msgid 仍为 0）。
+     *
+     *  用在"这一笔根本没能开始"的场合：发送端点了「发送文件夹」之后气泡是先建出来
+     *  的（用户要立刻看到反馈），随后才收到服务端的邀请应答。若服务端因对方不在线
+     *  直接拒绝，这一笔连会话都没建立、服务端不会留下任何消息记录，此时把气泡改成
+     *  失败态并不合适 —— 聊天记录里会平白多出一条"发送失败"，而实际上什么都没发生。
+     *  这种情形应当移除气泡、另给用户一句提示。
+     *
+     *    sessionId：本次传输的会话 id（UTF-8，此时通常还是本地占位 id）；空串一律
+     *               返回 false。
+     *  @return 找到并移除返回 true；没有这条会话的本地气泡返回 false。
+     */
+    bool RemoveFolderMessage(const std::string& sessionId);
+
+    /**
      *  把某条已被服务端记录接管的文件夹气泡放回"活的本地气泡"状态：清掉它身上的 msgid
      *  与消息时间，使 GetFolderMessage / SetFolderMessage 重新认得它。
      *

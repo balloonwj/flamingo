@@ -198,6 +198,9 @@
     <ClCompile Include="..\tests\test_apppath.cpp">
       <Filter>tests\utils</Filter>
     </ClCompile>
+    <ClCompile Include="..\tests\test_protocolparity.cpp">
+      <Filter>tests\protocol</Filter>
+    </ClCompile>
     <ClCompile Include="..\tests\test_serverconfigloader.cpp">
       <Filter>tests\utils</Filter>
     </ClCompile>
@@ -408,6 +411,57 @@
     <ClCompile Include="..\base\Platform.cpp">
       <Filter>base</Filter>
     </ClCompile>
+    <ClCompile Include="..\tests\test_sendthreadaffinity.cpp">
+      <Filter>tests\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\tests\test_pollerrevents.cpp">
+      <Filter>tests\net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\TcpSession.cpp">
+      <Filter>chatserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\ByteBuffer.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\Channel.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\EpollPoller.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\EventLoop.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\EventLoopThread.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\InetAddress.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\Poller.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\PollPoller.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\SelectPoller.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\Sockets.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\TcpConnection.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\Timer.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\TimerQueue.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\base\Timestamp.cpp">
+      <Filter>base</Filter>
+    </ClCompile>
     <ClCompile Include="..\jsoncpp1.9.0\json_reader.cpp">
       <Filter>third-party\jsoncpp1.9.0</Filter>
     </ClCompile>
@@ -472,6 +526,18 @@
     </ClInclude>
     <ClInclude Include="..\net\FramePayload.h">
       <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\EventLoop.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\EventLoopThread.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\net\TcpConnection.h">
+      <Filter>net</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\TcpSession.h">
+      <Filter>chatserversrc</Filter>
     </ClInclude>
     <ClInclude Include="..\tests\doctest.h">
       <Filter>tests</Filter>

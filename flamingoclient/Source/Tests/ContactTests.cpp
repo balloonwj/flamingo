@@ -15,6 +15,8 @@
  *           贪心装箱折行（PackDeptPathLines）、区块与客户区高度
  *           （ContactDeptBlockHeight / ContactBodyHeight），以及区块在
  *           控件树里的契约（按 id 找得到、无部门时不可见且不占高度）。
+ *    C35-C36 快捷操作行：容器与四个按钮的 id / 类型 / 文字 / 归属，以及
+ *           客户区高度确实把这一行算了进去。
  *
  *  用 Catch2 v3（amalgamated 形态）作测试框架。本工程不创建任何窗口，
  *  纯粹在内存里 build 控件树 / 操作模型 + 断言。
@@ -30,6 +32,7 @@
 
 #include "../BalloonContact/ContactLayout.h"
 #include "../BalloonContact/ContactModel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"   // 快捷操作行四个按钮的公共基类
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEditHost.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
@@ -65,6 +68,27 @@ bool HasDuplicateContactId(std::vector<UINT> ids)
     std::sort(ids.begin(), ids.end());
     return std::adjacent_find(ids.begin(), ids.end()) != ids.end();
 }
+
+// 统计某个 ctrlId 在 ids 里出现了几次。用来断言"这个号在控件树里存在，且只有一个"。
+int CountContactId(const std::vector<UINT>& ids, UINT id)
+{
+    return (int)std::count(ids.begin(), ids.end(), id);
+}
+
+// ---- 客户区高度用的基准常量（逻辑像素）-------------------------------
+
+// 2026-08-17 加入快捷操作行<u>之前</u>，"没有部门路径、标签只占一行"时的客户区高度。
+// 574 是内嵌 XML 各区块高度自上而下的累加值，出处见 ContactLayout.cpp 里
+// kContactBodyBaseHeight 的注释。
+const int kTestBodyHeightBeforeQuickRow = 574;
+
+// 快捷操作行给客户区带来的高度增量 = 行高 + 它<u>下方</u>那一个 spacer。上方那个
+// spacer（头部与分隔线之间的间距）原先就在，不计入增量。
+const int kTestQuickRowExtra = kContactQuickRowHeight + kContactQuickRowGap;
+
+// 当前"没有部门路径、标签只占一行"时的客户区高度。
+const int kTestContactBaseBodyHeight =
+    kTestBodyHeightBeforeQuickRow + kTestQuickRowExtra;
 
 // ---- C32-C34 标签区行数 / 滚动范围用的测试夹具 -------------------------
 
@@ -203,7 +227,7 @@ TEST_CASE("C5 联系人资料对话框含分组下拉框", "[contact]")
               root->FindCtrlById(kIdGroupCombo)) != nullptr);
 }
 
-TEST_CASE("C6 联系人资料对话框含两个 DuiSwitch 开关", "[contact]")
+TEST_CASE("C6 联系人资料对话框含三个 DuiSwitch 开关", "[contact]")
 {
     auto root = BuildContactBody();
     REQUIRE(root != nullptr);
@@ -211,10 +235,21 @@ TEST_CASE("C6 联系人资料对话框含两个 DuiSwitch 开关", "[contact]")
     CHECK(dynamic_cast<DuiSwitch*>(
               root->FindCtrlById(kIdSwitchMute)) != nullptr);
     CHECK(dynamic_cast<DuiSwitch*>(
-              root->FindCtrlById(kIdSwitchPinned)) != nullptr);
+              root->FindCtrlById(kIdSwitchFavorite)) != nullptr);
+    CHECK(dynamic_cast<DuiSwitch*>(
+              root->FindCtrlById(kIdSwitchStarred)) != nullptr);
 
-    // 企业版取消好友关系后，「加入黑名单」那一行整行移除。用字面量 1032 断言
-    // 而不是枚举 —— 枚举项已经删了，这里要防的是"日后有人复用这个编号"。
+    // 三个开关的编号必须正是约定的 1030 / 1033 / 1034 —— 主面板那一侧按这几个号
+    // 对接，改错了不报错也不崩溃，只表现为界面上拨了没反应。
+    CHECK((UINT)kIdSwitchMute     == 1030u);
+    CHECK((UINT)kIdSwitchFavorite == 1033u);
+    CHECK((UINT)kIdSwitchStarred  == 1034u);
+
+    // 1031 曾是「置顶聊天」开关（置顶是会话的属性、不是人的属性，会话列表右键菜单
+    // 里已有该项），1032 曾是「加入黑名单」开关（企业版取消好友关系后移除），两行
+    // 都已整行去掉。用字面量断言而不是枚举 —— 枚举项已经删了，这里要防的是"日后
+    // 有人复用这两个编号"。
+    CHECK(root->FindCtrlById(1031) == nullptr);
     CHECK(root->FindCtrlById(1032) == nullptr);
 }
 
@@ -236,6 +271,26 @@ TEST_CASE("C8 联系人资料对话框控件 id 互不重复", "[contact]")
     CollectContactIds(root.get(), ids);
     CHECK_FALSE(ids.empty());
     CHECK_FALSE(HasDuplicateContactId(ids));
+
+    // 逐个点名：本对话框对外承诺的每个号都要在控件树里、且只出现一次。上面那条
+    // "无重复"只保证已存在的号不打架，保证不了某个号<u>压根没建出来</u>（XML 里
+    // 写漏一行同样是全绿）。
+    const UINT kDeclaredIds[] =
+    {
+        (UINT)kIdAvatar,        (UINT)kIdHeaderInfo,   (UINT)kIdDeptPath,
+        (UINT)kIdCopyToast,     (UINT)kIdTagFlow,      (UINT)kIdTagBlock,
+        (UINT)kIdTagScroll,     (UINT)kIdRemarkValue,  (UINT)kIdRemarkEditBtn,
+        (UINT)kIdRemarkEdit,    (UINT)kIdGroupCombo,
+        (UINT)kIdSwitchMute,    (UINT)kIdSwitchFavorite, (UINT)kIdSwitchStarred,
+        (UINT)kIdBtnClose,      (UINT)kIdBtnSend,
+        (UINT)kIdBtnVoice,      (UINT)kIdBtnVideo,
+        (UINT)kIdBtnHistory,    (UINT)kIdBtnLocate,    (UINT)kIdQuickRow,
+    };
+    const int kDeclaredCount = sizeof(kDeclaredIds) / sizeof(kDeclaredIds[0]);
+    for (int i = 0; i < kDeclaredCount; ++i)
+    {
+        CHECK(CountContactId(ids, kDeclaredIds[i]) == 1);
+    }
 }
 
 // =====================================================================
@@ -318,23 +373,35 @@ TEST_CASE("C14 ContactModel 分组默认选中「产品部 · 设计组」、可
     CHECK(model.SelectedGroup() == 0);
 }
 
-TEST_CASE("C15 ContactModel 两个开关默认全关、可读写、越界忽略", "[contact][model]")
+TEST_CASE("C15 ContactModel 三个开关默认全关、可读写、越界忽略", "[contact][model]")
 {
     ContactModel model;
 
     // 默认全关。
-    CHECK(model.Switch(kContactSwitchMute)    == false);
-    CHECK(model.Switch(kContactSwitchPinned)  == false);
+    CHECK(model.Switch(kContactSwitchMute)     == false);
+    CHECK(model.Switch(kContactSwitchFavorite) == false);
+    CHECK(model.Switch(kContactSwitchStarred)  == false);
 
-    // 分别打开，互不串扰。
-    model.SetSwitch(kContactSwitchPinned, true);
-    CHECK(model.Switch(kContactSwitchMute)    == false);
-    CHECK(model.Switch(kContactSwitchPinned)  == true);
+    // 逐个打开，互不串扰。
+    model.SetSwitch(kContactSwitchFavorite, true);
+    CHECK(model.Switch(kContactSwitchMute)     == false);
+    CHECK(model.Switch(kContactSwitchFavorite) == true);
+    CHECK(model.Switch(kContactSwitchStarred)  == false);
 
-    // 越界 kind：写忽略、读返回 false。开关只剩两个，下标 2 已经越界 ——
-    // 这一条同时锁住"删掉黑名单开关后 kContactSwitchCount 确实降到了 2"。
-    model.SetSwitch(2, true);
-    CHECK(model.Switch(2) == false);
+    model.SetSwitch(kContactSwitchStarred, true);
+    CHECK(model.Switch(kContactSwitchMute)     == false);
+    CHECK(model.Switch(kContactSwitchFavorite) == true);
+    CHECK(model.Switch(kContactSwitchStarred)  == true);
+
+    // 越界 kind：写忽略、读返回 false。用 kContactSwitchCount 表达"第一个越界下标"，
+    // 开关增减时本用例不必改数字；这一条同时锁住"三个开关的下标是 0/1/2 连续编号、
+    // kContactSwitchCount 确实等于 3"。
+    CHECK(kContactSwitchCount == 3);
+    CHECK((int)kContactSwitchStarred == kContactSwitchCount - 1);
+    model.SetSwitch(kContactSwitchCount, true);
+    CHECK(model.Switch(kContactSwitchCount) == false);
+    model.SetSwitch(-1, true);
+    CHECK(model.Switch(-1) == false);
     model.SetSwitch(99, true);
     CHECK(model.Switch(99) == false);
 }
@@ -547,14 +614,15 @@ TEST_CASE("C28 部门路径区块高度随行数递增、0 行不占高", "[cont
     CHECK(two > one);
 }
 
-TEST_CASE("C29 无部门、标签一行时客户区高度仍是原来的 574", "[contact][dept]")
+TEST_CASE("C29 无部门、标签一行时客户区高度等于各区块高度的直接累加", "[contact][dept]")
 {
-    // 这一条锁的是"没有部门、标签只有一行的联系人，界面与加这两块之前逐像素一致"。
-    CHECK(ContactBodyHeight(0, 1) == 574);
+    // 这一条锁的是"没有部门、标签只有一行的联系人，窗口高度就是内嵌 XML 各区块
+    // 高度的累加值"，不多一像素也不少一像素。
+    CHECK(ContactBodyHeight(0, 1) == kTestContactBaseBodyHeight);
 
-    // 有部门时高度 = 574 + 部门区块高度。
-    CHECK(ContactBodyHeight(1, 1) == 574 + ContactDeptBlockHeight(1));
-    CHECK(ContactBodyHeight(3, 1) == 574 + ContactDeptBlockHeight(3));
+    // 有部门时高度 = 基准高度 + 部门区块高度。
+    CHECK(ContactBodyHeight(1, 1) == kTestContactBaseBodyHeight + ContactDeptBlockHeight(1));
+    CHECK(ContactBodyHeight(3, 1) == kTestContactBaseBodyHeight + ContactDeptBlockHeight(3));
 }
 
 TEST_CASE("C29b 标签区高度随行数递增、封顶三行", "[contact][tag]")
@@ -582,9 +650,10 @@ TEST_CASE("C29c 部门行数与标签行数一起决定客户区高度", "[conta
     // 两块的增量必须同时体现在同一个高度值里 —— 各算各的会互相覆盖。
     const int tagExtra2 = ContactTagBlockHeight(2) - ContactTagBlockHeight(1);
     const int tagExtra3 = ContactTagBlockHeight(3) - ContactTagBlockHeight(1);
-    CHECK(ContactBodyHeight(0, 2) == 574 + tagExtra2);
-    CHECK(ContactBodyHeight(0, 3) == 574 + tagExtra3);
-    CHECK(ContactBodyHeight(2, 3) == 574 + ContactDeptBlockHeight(2) + tagExtra3);
+    CHECK(ContactBodyHeight(0, 2) == kTestContactBaseBodyHeight + tagExtra2);
+    CHECK(ContactBodyHeight(0, 3) == kTestContactBaseBodyHeight + tagExtra3);
+    CHECK(ContactBodyHeight(2, 3)
+          == kTestContactBaseBodyHeight + ContactDeptBlockHeight(2) + tagExtra3);
 }
 
 // =====================================================================
@@ -605,7 +674,7 @@ TEST_CASE("C30 控件树含部门路径区块且没有部门时不占位", "[con
     CHECK(lineCount == 0);
     CHECK(block->IsVisible() == false);
     CHECK(ContactDeptBlockHeight(lineCount) == 0);
-    CHECK(ContactBodyHeight(lineCount, 1) == 574);
+    CHECK(ContactBodyHeight(lineCount, 1) == kTestContactBaseBodyHeight);
 }
 
 TEST_CASE("C31 有部门时区块可见且至少折出一行", "[contact][dept]")
@@ -726,4 +795,65 @@ TEST_CASE("C34 标签区在控件树完全没布局过时也算得出行数", "[
     CHECK(SyncContactTagArea(root.get()) == SyncContactTagArea(reference.get()));
     CHECK(TagScrollContentHeight(root.get())
           == TagScrollContentHeight(reference.get()));
+}
+
+// =====================================================================
+// C35-C36 快捷操作行（语音通话 / 视频通话 / 历史消息 / 组织架构）
+// =====================================================================
+
+TEST_CASE("C35 联系人资料对话框含快捷操作行与四个按钮", "[contact]")
+{
+    auto root = BuildContactBody();
+    REQUIRE(root != nullptr);
+
+    DuiControl* quickRow = root->FindCtrlById(kIdQuickRow);
+    REQUIRE(quickRow != nullptr);
+
+    // 四个按钮的具体类型（ContactActionButton）是布局文件局部类型，测试里拿不到它的
+    // 声明，只能验到它的公共基类 DuiButton；再各自核对文字，连带验证 XML 的 text
+    // 属性没有写串行。
+    const UINT kQuickIds[] =
+    {
+        (UINT)kIdBtnVoice, (UINT)kIdBtnVideo, (UINT)kIdBtnHistory, (UINT)kIdBtnLocate
+    };
+    const TCHAR* const kQuickTexts[] =
+    {
+        _T("语音通话"), _T("视频通话"), _T("历史消息"), _T("组织架构")
+    };
+    const int kQuickCount = sizeof(kQuickIds) / sizeof(kQuickIds[0]);
+
+    for (int i = 0; i < kQuickCount; ++i)
+    {
+        DuiButton* btn = dynamic_cast<DuiButton*>(root->FindCtrlById(kQuickIds[i]));
+        REQUIRE(btn != nullptr);
+        CHECK(btn->GetText() == CString(kQuickTexts[i]));
+        // 四个按钮必须挂在快捷操作行这一个容器里 —— 散落在别处的话就不会等宽平分
+        // 这一行，界面上会看出宽度不齐。
+        CHECK(btn->GetParent() == quickRow);
+    }
+
+    // 快捷操作行只有这四个按钮，没有多也没有少。
+    CHECK((int)quickRow->Children().size() == kQuickCount);
+
+    // 编号必须正是约定的 1042-1046 —— 主面板那一侧按这几个号对接。
+    CHECK((UINT)kIdBtnVoice   == 1042u);
+    CHECK((UINT)kIdBtnVideo   == 1043u);
+    CHECK((UINT)kIdBtnHistory == 1044u);
+    CHECK((UINT)kIdBtnLocate  == 1045u);
+    CHECK((UINT)kIdQuickRow   == 1046u);
+}
+
+TEST_CASE("C36 客户区高度已把快捷操作行算进去", "[contact][tag]")
+{
+    // 漏掉这一行的高度不会有任何报错，只表现为底部两个按钮被挤出窗口 —— 正是
+    // 部门路径与标签区当初踩过的那个坑，这里把它一并钉住。
+    CHECK(ContactBodyHeight(0, 1) - kTestBodyHeightBeforeQuickRow
+          == kContactQuickRowHeight + kContactQuickRowGap);
+    CHECK(ContactBodyHeight(0, 1) == kTestContactBaseBodyHeight);
+
+    // 快捷操作行是固定高度的一行，部门路径与标签区的增量照旧各加各的，不受它影响。
+    CHECK(ContactBodyHeight(2, 1) - ContactBodyHeight(0, 1)
+          == ContactDeptBlockHeight(2));
+    CHECK(ContactBodyHeight(0, 3) - ContactBodyHeight(0, 1)
+          == ContactTagBlockHeight(3) - ContactTagBlockHeight(1));
 }

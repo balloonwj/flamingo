@@ -3,7 +3,7 @@
  *
  *  联系人资料对话框的数据模型 —— 持有被查看联系人的姓名 / 备注名 /
  *  账号 / 地区 / 部门 / 职务 / 个性签名 / 在线状态，以及对话框内可编辑
- *  的标签列表、分组、两个开关（消息免打扰 / 置顶聊天）。
+ *  的标签列表、分组、三个开关（消息免打扰 / 添加到收藏 / 特别关注）。
  *
  *  纯数据结构，不涉及任何控件 / 网络 / 持久化。当前以 mock 数据
  *  （「江屿白」那一组）初始化，真实数据接入待后续。
@@ -39,15 +39,19 @@ enum ContactStatus
  */
 enum ContactSwitchKind
 {
-    kContactSwitchMute      = 0,   // 消息免打扰：开则该联系人消息不提醒
-    kContactSwitchPinned    = 1,   // 置顶聊天：开则会话置于消息列表顶部
-    // 曾经还有一项 kContactSwitchBlocked（加入黑名单）。企业版取消了好友关系，
+    kContactSwitchMute     = 0,   // 消息免打扰：开则该联系人的消息不提醒
+    kContactSwitchFavorite = 1,   // 添加到收藏：开则该联系人出现在通讯录顶部的「我的收藏」分区
+    kContactSwitchStarred  = 2,   // 特别关注：开则该联系人上下线时桌面右下角弹提示
+    // 曾经还有一项 kContactSwitchPinned（置顶聊天）。置顶是「会话」的属性而不是
+    // 「人」的属性 —— 会话列表的右键菜单里已经提供了该项；资料窗这一份从未接过
+    // 任何协议，拨了也不生效，2026-08-17 整项移除。
+    // 更早还有一项 kContactSwitchBlocked（加入黑名单）。企业版取消了好友关系，
     // 该开关连同好友功能一并移除；它此前也从未发出过任何协议，拨动只改内存、
     // 窗口一关就没了。
 };
 
 // 对话框内开关的总数。
-const int kContactSwitchCount = 2;
+const int kContactSwitchCount = 3;
 
 /**
  *  ContactModel —— 联系人资料对话框的数据模型。

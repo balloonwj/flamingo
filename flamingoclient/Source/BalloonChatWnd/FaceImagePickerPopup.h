@@ -10,7 +10,7 @@
  *  「表情」按钮改弹本浮层（Bin/Face 图片表情），原 Unicode emoji 不再用。
  *
  *  点中某表情经回调把 (faceId, 文件绝对路径) 交回聊天窗，由聊天窗用
- *  DuiRichEditHost::InsertTaggedImage 以"带 faceId 标记的内联图"插入输入框
+ *  DuiRichEdit::InsertTaggedImage 以"带 faceId 标记的内联图"插入输入框
  *  （所见即所得）；发送时再由聊天窗据该标记把表情内联进文本消息。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL。

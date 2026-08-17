@@ -42,6 +42,7 @@ extern CAppModule _Module;
 
 #include "GroupChatWindowLayout.h"
 #include "ChatWindowLayout.h"     // Pin 提示带的样式 / 文案与单聊窗共用
+#include "ChatInputRichEdit.h"   // 聊天输入框控件（与单聊窗共用）
 #include "GroupChatHeaderInfo.h"
 #include "GroupSideTab.h"
 #include "GroupMemberItem.h"
@@ -132,7 +133,7 @@ const char* const kGroupChatWindowBodyXml = u8R"xml(
               <label id="508" text="⊗" fixedWidth="22"/>
             </hbox>
           </vbox>
-          <richedit id="501" placeholder="输入消息，Enter 发送，Ctrl+Enter 换行" multi-line="true" word-wrap="true" weight="1"/>
+          <chat-input id="501" placeholder="输入消息，Enter 发送，Ctrl+Enter 换行" multi-line="true" word-wrap="true" weight="1"/>
           <hbox fixedHeight="34" gap="8">
             <label id="504" text="提示：按 Ctrl+Enter 换行" weight="1"/>
             <chat-sendbtn id="502" fixedWidth="104"/>
@@ -282,6 +283,21 @@ std::unique_ptr<DuiControl> CreateGroupCustomControl(const DuiXmlBuilder::Node& 
     if (n.tag == "chat-msglist")
     {
         return std::unique_ptr<DuiControl>(new ChatMessageList());
+    }
+
+    if (n.tag == "chat-input")
+    {
+        // 与单聊窗同一个控件（见 ChatWindowLayout.cpp 里同名分支的说明，
+        // 那里也讲了为什么属性要在工厂里自己解析）。
+        std::unique_ptr<ChatInputRichEdit> edit(new ChatInputRichEdit());
+        const std::string strPlaceholder = GetNodeAttr(n, "placeholder");
+        if (!strPlaceholder.empty())
+        {
+            edit->SetPlaceholder(Utf8ToWide(strPlaceholder));
+        }
+        edit->SetMultiLine(GetNodeAttr(n, "multi-line") != "false");
+        edit->SetWordWrap(GetNodeAttr(n, "word-wrap") != "false");
+        return std::unique_ptr<DuiControl>(edit.release());
     }
 
     if (n.tag == "group-sidetab")
@@ -616,6 +632,24 @@ std::unique_ptr<DuiControl> BuildGroupChatWindowBody(bool loadMock)
         {
             replyClose->SetMode(balloonwjui::DuiLabel::ModeLink);
             replyClose->SetAutoNavigate(false);   // 不打开浏览器，点击交给本窗处理
+        }
+
+        // 成员搜索框自带的拖放要关掉，而且必须在控件挂进窗口<u>之前</u>关。
+        //
+        // 操作系统的拖放目标按窗口注册、一个窗口只能有一个，而 balloonui 里需要
+        // 接收拖放的控件会在第一次布局时让宿主替自己注册一个分发器。群聊窗要的是
+        // 整窗接收（拖文件进来就发送），窗口里任何控件抢走这份注册，聊天窗那份就
+        // 再也注册不上，症状是拖什么进来都没反应、且没有任何提示。
+        //
+        // 搜索框原先是内嵌真子窗口的编辑框、不参与这件事；2026-08-17 balloonui 把
+        // DuiEditHost 改成继承自 DuiEdit / DuiRichEdit 之后它就跟着有了这个行为，
+        // 守卫用例 CDR4 当场变红。输入框那一侧是在 ChatInputRichEdit 的构造函数里
+        // 关的，这里关不了构造函数（控件由 XML 建出来），所以建完就地关。
+        balloonwjui::DuiRichEdit* memberSearch =
+            dynamic_cast<balloonwjui::DuiRichEdit*>(root->FindCtrlById(kGIdMemberSearch));
+        if (memberSearch != NULL)
+        {
+            memberSearch->SetDragDropEnabled(false);
         }
     }
 

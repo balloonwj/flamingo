@@ -37,7 +37,7 @@ namespace balloonwjui {
 class DuiLabel;
 class DuiButton;
 class DuiProgressBar;
-class DuiRichEditHost;
+class DuiRichEdit;
 }
 
 /**
@@ -233,10 +233,6 @@ private:
     //只生效一次，之后 m_gatedWnd 置空。本窗口关闭时调。
     void ReleaseGatedWindow();
 
-    //把键盘焦点从更新说明那个只读文本框移开，消掉它里面闪烁的光标
-    //（只读的展示区带光标会让人以为可以编辑）。窗口每次显示后调一次。
-    void TakeFocusFromNote();
-
     //切换为"正在检查更新"的呈现：标题给出提示，两个按钮都不可用，不显示进度条。
     //这一形态不经 BuildUpdateViewState —— 它不是由检查结果推出来的判断，
     //而是一个固定的过渡态。
@@ -332,7 +328,7 @@ private:
     balloonwjui::DuiLabel*        m_labTitle;       //标题
     balloonwjui::DuiLabel*        m_labVersion;     //版本行
     balloonwjui::DuiLabel*        m_labSize;        //升级包大小
-    balloonwjui::DuiRichEditHost* m_editNote;       //更新说明（只读多行）
+    balloonwjui::DuiRichEdit* m_editNote;       //更新说明（只读多行）
     balloonwjui::DuiProgressBar*  m_progress;       //下载进度条
     balloonwjui::DuiLabel*        m_labProgress;    //进度文字
     balloonwjui::DuiButton*       m_btnUpdateNow;   //立即更新

@@ -31,12 +31,12 @@ void RunAllCommonWidgetsTests();
 
 // 在 AnnouncementPreviewPanelTests.cpp 中定义:运行公告中心右栏「公告详情」
 // 面板(Screens/AnnouncementPreviewPanel)的 8 条用例,验证 SetAnnouncement
-// 把 7 个★强项文字字段正确转写到 DuiLabel/DuiRichEditHost 子控件,以及
+// 把 7 个★强项文字字段正确转写到 DuiLabel/DuiRichEdit 子控件,以及
 // pinned/scheduled/status 切换时的可见性 + 按钮文字。
 void RunAllAnnouncementPreviewPanelTests();
 
-// 在 RichEditScrollTests.cpp 中定义:公告正文滚动机制集成测试(需真 RICHEDIT
-// 子窗口,创建隐藏宿主窗口验证 DuiRichEditHost 滚动 API 与 OnPreviewWheel)。
+// 在 RichEditScrollTests.cpp 中定义:公告正文滚动机制集成测试(验证无窗口
+// 富文本控件的滚动接口与滚轮行为;不需要任何窗口)。
 void RunAllRichEditScrollTests();
 
 // 在 ListPagingTests.cpp 中定义:列表分页纯函数(Util/ListPaging)单元测试。
@@ -88,12 +88,12 @@ int main()
 
     // 运行公告中心「公告详情」面板单元测试 —— 在无 host 下裸构造 PreviewPanel,
     // 断言 SetAnnouncement 后 7 个★强项文字字段 / 双状态卡可见性 / 5 按钮
-    // 文字切换正确;不调 OnPaint,故 RichEdit HWND 不必 EnsureCreated。
+    // 文字切换正确;面板内的控件都是无窗口控件,不依赖任何窗口,构造完即可断言。
     flamingoadmin::test::RunAllAnnouncementPreviewPanelTests();
 
-    // 运行公告正文滚动机制集成测试 —— 创建隐藏宿主窗口 + 真 RICHEDIT 子窗口,
-    // 验证 DuiRichEditHost 滚动 API(GetVScrollMetrics/SetVScrollPos)与
-    // AnnouncementPreviewPanel::OnPreviewWheel 的真实滚动行为。
+    // 运行公告正文滚动机制集成测试 —— 验证正文控件的滚动接口
+    // (GetVScrollMetrics / SetVScrollPos)与滚轮行为(溢出时消费、
+    // 装得下时不吞,让预览区整页滚动能接手)。
     flamingoadmin::test::RunAllRichEditScrollTests();
 
     // 运行列表分页纯函数(Util/ListPaging)单元测试。

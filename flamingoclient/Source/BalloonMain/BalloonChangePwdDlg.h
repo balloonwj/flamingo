@@ -83,7 +83,6 @@ private:
     balloonwjui::DuiEditHost* m_confirmEdit;   // 确认新密码
 
     bool m_built;          // 骨架是否已构建
-    bool m_editsCreated;   // 三个输入框内嵌 EDIT 是否已建
     bool m_submitting;     // 是否已发出改密请求、等待应答（防重复提交）
 
     // 标题栏图标位图（程序图标 IDR_MAINFRAME 合成到标题栏底色上的 HBITMAP）。

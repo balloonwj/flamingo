@@ -31,4 +31,45 @@ int DefaultSelection(bool exitWhenClose)
     return exitWhenClose ? kCloseActionExit : kCloseActionMinimize;
 }
 
+// =======================================================================
+// ClosePromptHostGuard —— 宿主窗"禁用 — 恢复"判定
+// =======================================================================
+
+ClosePromptHostGuard::ClosePromptHostGuard()
+    : m_hostDisabled(false)
+{
+}
+
+bool ClosePromptHostGuard::OnOpen(bool hostIsWindow, bool hostIsEnabled)
+{
+    //已经禁用着：对话框正在显示时又触发了一次打开（例如代码再次向主面板投
+    //WM_CLOSE）。不重复禁用，也不动标记 —— 恢复仍由后面唯一的一次 OnClose 负责。
+    if (m_hostDisabled)
+        return false;
+
+    //宿主窗句柄无效：没有可禁用的对象。此处不置标记，关闭时也就不会去恢复。
+    if (!hostIsWindow)
+        return false;
+
+    //宿主窗本来就不可操作：说明另有窗口把它禁用着。这里若再禁用一次，本对话框
+    //关闭时的恢复会把别人的禁用状态一并抹掉，让本不该能操作的窗口变得能操作。
+    if (!hostIsEnabled)
+        return false;
+
+    m_hostDisabled = true;
+    return true;
+}
+
+bool ClosePromptHostGuard::OnClose(bool hostIsWindow)
+{
+    //没禁用过就没有要恢复的东西。重复走到关闭收尾时也从这里直接返回，保证幂等。
+    if (!m_hostDisabled)
+        return false;
+
+    //标记一律清掉：本轮"禁用 — 恢复"到此结束。宿主窗若已销毁则无需再调
+    //::EnableWindow，故返回值取决于它是否仍是有效窗口。
+    m_hostDisabled = false;
+    return hostIsWindow;
+}
+
 } // namespace balloonmain
