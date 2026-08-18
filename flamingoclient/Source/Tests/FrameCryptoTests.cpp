@@ -55,6 +55,27 @@ struct FakeServer
     }
 };
 
+//把 Json::Value 序列化为紧凑（无缩进、无换行）的 JSON 文本。
+//写法与产品代码 net/FrameCrypto.cpp、以及服务端那一份镜像实现保持一致 ——
+//旧的 Json::FastWriter 已被 jsoncpp 标记为废弃，编译时会产生 C4996 告警。
+std::string writeCompact(const Json::Value& v)
+{
+    Json::StreamWriterBuilder wb;
+    wb["indentation"] = "";
+    return Json::writeString(wb, v);
+}
+
+//解析 JSON 文本。同样只能用新版 CharReader 接口，其默认容错与旧 Json::Reader 等价。
+bool parseJson(const std::string& text, Json::Value& out)
+{
+    Json::CharReaderBuilder b;
+    JSONCPP_STRING errs;
+    Json::CharReader* reader = b.newCharReader();
+    const bool ok = reader->parse(text.c_str(), text.c_str() + text.size(), &out, &errs);
+    delete reader;
+    return ok && errs.empty();
+}
+
 std::string toB64(const unsigned char* p, size_t n)
 {
     const size_t len = sodium_base64_ENCODED_LEN(n, sodium_base64_VARIANT_ORIGINAL);
@@ -94,9 +115,8 @@ std::string transcript(const unsigned char* cpk, const unsigned char* cnonce,
 std::string makeServerHello(FakeServer& s, const std::string& helloJson,
                             const unsigned char* signWith = NULL)
 {
-    Json::Reader reader;
-    Json::Value  hello;
-    REQUIRE(reader.parse(helloJson, hello));
+    Json::Value hello;
+    REQUIRE(parseJson(helloJson, hello));
 
     unsigned char cpk[KX_PUBLICKEY_BYTES] = { 0 };
     unsigned char cnonce[HANDSHAKE_NONCE_BYTES] = { 0 };
@@ -125,16 +145,14 @@ std::string makeServerHello(FakeServer& s, const std::string& helloJson,
     resp["sig"]    = toB64(sig, (size_t)siglen);
     resp["shdr"]   = toB64(hdr, STREAM_HEADER_BYTES);
 
-    Json::FastWriter w;
-    return w.write(resp);
+    return writeCompact(resp);
 }
 
 //让假服务端吃下客户端的流头，从而能解客户端发来的帧。
 void acceptClientHeader(FakeServer& s, const std::string& chdrJson)
 {
-    Json::Reader reader;
-    Json::Value  root;
-    REQUIRE(reader.parse(chdrJson, root));
+    Json::Value root;
+    REQUIRE(parseJson(chdrJson, root));
 
     unsigned char hdr[STREAM_HEADER_BYTES] = { 0 };
     REQUIRE(fromB64(root["chdr"].asString(), STREAM_HEADER_BYTES, hdr));

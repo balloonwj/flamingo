@@ -2,7 +2,6 @@
  *  H.264 编解码自测（调试入口）实现，H264SelfTest.cpp
  *  balloonwj@qq.com   2026-06-15
  */
-#define _CRT_SECURE_NO_WARNINGS
 #include "H264SelfTest.h"
 #include "MfH264Codec.h"
 #include "VideoFrameConvert.h"

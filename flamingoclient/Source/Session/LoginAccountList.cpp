@@ -532,7 +532,9 @@ void CLoginAccountList::Decrypt(char* lpBuf, int nLen)
 
 int CLoginAccountList::_fread(void* lpBuf, int nSize, int nCount, FILE* fp)
 {
-	int nRet = fread(lpBuf, nSize, nCount, fp);
+	//fread 返回实际读到的元素个数，其上限就是形参 nCount（int 类型），
+	//因此把 size_t 的返回值收窄为 int 不会丢失数据
+	int nRet = static_cast<int>(fread(lpBuf, nSize, nCount, fp));
 	Decrypt((char*)lpBuf, nSize*nCount);
 	return nRet;
 }
@@ -545,5 +547,7 @@ int CLoginAccountList::_fwrite(const void* lpBuf, int nSize, int nCount, FILE* f
 	char cBuf[sizeof(LOGIN_ACCOUNT_INFO)];
 	memcpy(cBuf, lpBuf, nLen);
 	Encrypt(cBuf, nLen);
-	return fwrite(cBuf, nSize, nCount, fp);
+	//fwrite 返回实际写入的元素个数，其上限就是形参 nCount（int 类型），
+	//因此把 size_t 的返回值收窄为 int 不会丢失数据
+	return static_cast<int>(fwrite(cBuf, nSize, nCount, fp));
 }

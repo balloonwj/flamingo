@@ -16,12 +16,7 @@
 #include "catch_amalgamated.hpp"
 #include "../net/FriendProtocolClient.h"
 
-//vendored 的 jsoncpp/json.h 含非 UTF-8 字节，作为 UTF-8 编译单元时 MSVC 报 C4828；
-//该告警仅涉及 json.h 内注释、不影响代码，就地屏蔽。
-#pragma warning(push)
-#pragma warning(disable: 4828)
 #include "../third-party/jsoncpp-1.9.0/json.h"
-#pragma warning(pop)
 
 using namespace net;
 

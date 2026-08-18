@@ -287,7 +287,9 @@ LRESULT CStarredPopupWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
     if (pNotify != NULL && pNotify->code == balloonwjui::DUIN_VALUECHANGED
         && pNotify->ctrlId == kIdStarredList && m_list != NULL)
     {
-        const int idx = pNotify->extra;
+        //DuiNotify::extra 声明为 LPARAM（64 位下 8 字节）；DUIN_VALUECHANGED 时列表控件
+        //在这里回带的是选中行的下标，与 GetItemCount() 同为 int 值域，故收窄为 int 安全。
+        const int idx = static_cast<int>(pNotify->extra);
         if (idx >= 0 && idx < m_list->GetItemCount())
         {
             const int64_t userid = (int64_t)m_list->GetItemParam(idx);

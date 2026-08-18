@@ -41,7 +41,9 @@ BOOL StrToHex(const CHAR* lpStr, CHAR* lpHex, int nLen)
 	if (lpStr == NULL || lpHex == NULL || nLen <= 0)
 		return FALSE;
 
-	int nSrcLen = strlen(lpStr);
+	//本函数的接口用 int 表达长度（见参数 nLen），待编码的都是短字符串，
+	//长度不会超过 int 的表示范围；这里保持 int 是为了下面能与 nLen 直接比较
+	int nSrcLen = static_cast<int>(strlen(lpStr));
 	if (nLen <= nSrcLen* 2)
 		return FALSE;
 
@@ -314,8 +316,9 @@ void Replace(std::string& strText, const CHAR* lpOldStr, const CHAR* lpNewStr)
 	if (NULL == lpOldStr || NULL == lpNewStr)
 		return;
 
-	int nOldStrLen = strlen(lpOldStr);
-	int nNewStrLen = strlen(lpNewStr);
+	//两个长度都只用于 std::string 的下标运算，直接用 size_t 保存，省去无谓的收窄
+	size_t nOldStrLen = strlen(lpOldStr);
+	size_t nNewStrLen = strlen(lpNewStr);
 
 	std::string::size_type nPos = 0;
 	while ((nPos = strText.find(lpOldStr, nPos)) != std::string::npos)
@@ -330,8 +333,9 @@ void Replace(std::wstring& strText, const WCHAR* lpOldStr, const WCHAR* lpNewStr
 	if (NULL == lpOldStr || NULL == lpNewStr)
 		return;
 
-	int nOldStrLen = wcslen(lpOldStr);
-	int nNewStrLen = wcslen(lpNewStr);
+	//两个长度都只用于 std::wstring 的下标运算，直接用 size_t 保存，省去无谓的收窄
+	size_t nOldStrLen = wcslen(lpOldStr);
+	size_t nNewStrLen = wcslen(lpNewStr);
 
 	std::wstring::size_type nPos = 0;
 	while ((nPos = strText.find(lpOldStr, nPos)) != std::wstring::npos)
@@ -412,7 +416,8 @@ tstring GetBetweenString(const TCHAR* pStr, TCHAR cStart, TCHAR cEnd)
 	if (NULL == p2)
 		return _T("");
 
-	int nLen = p2-(p1+1);
+	//两个指针指向同一个字符串，其差值的类型是 ptrdiff_t，用它保存可避免收窄
+	ptrdiff_t nLen = p2-(p1+1);
 	if (nLen <= 0)
 		return _T("");
 
@@ -444,7 +449,8 @@ tstring GetBetweenString(const WCHAR* pStr, const WCHAR* pStart, const WCHAR* pE
 	if (NULL == pStr || NULL == pStart || NULL == pEnd)
 		return _T("");
 
-	int nStartLen = _tcslen(pStart);
+	//该长度只用于指针偏移，直接用 size_t 保存，省去无谓的收窄
+	size_t nStartLen = _tcslen(pStart);
 
 	const TCHAR* p1 = _tcsstr(pStr, pStart);
 	if (NULL == p1)
@@ -454,7 +460,8 @@ tstring GetBetweenString(const WCHAR* pStr, const WCHAR* pStart, const WCHAR* pE
 	if (NULL == p2)
 		return _T("");
 
-	int nLen = p2-(p1+nStartLen);
+	//两个指针指向同一个字符串，其差值的类型是 ptrdiff_t，用它保存可避免收窄
+	ptrdiff_t nLen = p2-(p1+nStartLen);
 	if (nLen <= 0)
 		return _T("");
 
@@ -582,7 +589,8 @@ GUID GetFileTypeGuidByExtension(const WCHAR* lpExtension)
 					break;
 				}
 
-				int nLen = pEnd-pStart;
+				//两个指针指向同一个扩展名字符串，其差值的类型是 ptrdiff_t，用它保存可避免收窄
+				ptrdiff_t nLen = pEnd-pStart;
 				if (nLen < MAX_PATH)
 				{
 					WCHAR cBuf[MAX_PATH] = {0};
@@ -647,7 +655,8 @@ CLSID GetEncoderClsidByExtension(const WCHAR* lpExtension)
 					break;
 				}
 
-				int nLen = pEnd-pStart;
+				//两个指针指向同一个扩展名字符串，其差值的类型是 ptrdiff_t，用它保存可避免收窄
+				ptrdiff_t nLen = pEnd-pStart;
 				if (nLen < MAX_PATH)
 				{
 					WCHAR cBuf[MAX_PATH] = {0};

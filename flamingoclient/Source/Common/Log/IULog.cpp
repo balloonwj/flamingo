@@ -27,7 +27,9 @@ bool CIULog::Init(bool bToFile, bool bTruncateLongLog, PCTSTR pszLogFileName)
 
     TCHAR szHomePath[MAX_PATH] = {0};
     ::GetModuleFileName(NULL, szHomePath, MAX_PATH);
-    for (int i = _tcslen(szHomePath); i >= 0; --i)
+    //szHomePath 是长度为 MAX_PATH 的栈上数组，长度不会超过 MAX_PATH；
+    //这里的下标必须是有符号数，循环才能在减到 -1 时退出，因此显式收窄为 int
+    for (int i = static_cast<int>(_tcslen(szHomePath)); i >= 0; --i)
     {
         if (szHomePath[i] == _T('\\'))
         {
@@ -158,7 +160,8 @@ bool CIULog::Log(long nLevel, PCTSTR pszFmt, ...)
 		
 		::SetFilePointer(m_hLogFile, 0, NULL, FILE_END);
 		DWORD dwBytesWritten = 0;       
-        ::WriteFile(m_hLogFile, strDebugInfo.c_str(), strDebugInfo.length(), &dwBytesWritten, NULL);
+        //单条日志的长度远小于 DWORD 能表示的上限（4GB），收窄不会丢数据
+        ::WriteFile(m_hLogFile, strDebugInfo.c_str(), static_cast<DWORD>(strDebugInfo.length()), &dwBytesWritten, NULL);
         ::FlushFileBuffers(m_hLogFile);
         return true;
 	}
@@ -237,7 +240,8 @@ bool CIULog::Log(long nLevel, PCSTR pszFunctionSig, int nLineNo, PCTSTR pszFmt, 
 		
 		::SetFilePointer(m_hLogFile, 0, NULL, FILE_END);
 		DWORD dwBytesWritten = 0;
-        ::WriteFile(m_hLogFile, strDebugInfo.c_str(), strDebugInfo.length(), &dwBytesWritten, NULL);
+        //单条日志的长度远小于 DWORD 能表示的上限（4GB），收窄不会丢数据
+        ::WriteFile(m_hLogFile, strDebugInfo.c_str(), static_cast<DWORD>(strDebugInfo.length()), &dwBytesWritten, NULL);
         ::FlushFileBuffers(m_hLogFile);
         return true;
 	}
@@ -313,7 +317,8 @@ bool CIULog::Log(long nLevel, PCSTR pszFunctionSig, int nLineNo, PCSTR pszFmt, .
 		
 		::SetFilePointer(m_hLogFile, 0, NULL, FILE_END);
 		DWORD dwBytesWritten = 0;
-        ::WriteFile(m_hLogFile, strDebugInfo.c_str(), strDebugInfo.length(), &dwBytesWritten, NULL);
+        //单条日志的长度远小于 DWORD 能表示的上限（4GB），收窄不会丢数据
+        ::WriteFile(m_hLogFile, strDebugInfo.c_str(), static_cast<DWORD>(strDebugInfo.length()), &dwBytesWritten, NULL);
         ::FlushFileBuffers(m_hLogFile);
         return true;
 	}

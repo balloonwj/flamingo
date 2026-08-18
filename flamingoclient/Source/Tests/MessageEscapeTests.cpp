@@ -23,11 +23,7 @@
  */
 #include "catch_amalgamated.hpp"
 #include "../net/MessageProtocolClient.h"
-//见 MessageProtocolClient.cpp 同处说明：屏蔽 vendored json.h 的 C4828。
-#pragma warning(push)
-#pragma warning(disable: 4828)
 #include "../third-party/jsoncpp-1.9.0/json.h"
-#pragma warning(pop)
 
 using namespace net;
 

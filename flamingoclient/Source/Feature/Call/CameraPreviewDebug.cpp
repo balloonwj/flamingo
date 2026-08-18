@@ -2,7 +2,6 @@
  *  摄像头本地预览（调试入口）实现，CameraPreviewDebug.cpp
  *  balloonwj@qq.com   2026-06-15
  */
-#define _CRT_SECURE_NO_WARNINGS
 #include "CameraPreviewDebug.h"
 #include "MfCameraCapture.h"
 #include "VideoFrameConvert.h"

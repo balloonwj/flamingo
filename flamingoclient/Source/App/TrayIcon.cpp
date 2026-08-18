@@ -1,6 +1,9 @@
 ﻿#include "stdafx.h"
 #include "TrayIcon.h"
 
+//offsetof 的出处。EnumNotifyWindow 需要取 TBBUTTON::dwData 相对结构体首地址的字节偏移。
+#include <stddef.h>
+
 struct TRAYDATA  
 {  
 	HWND hwnd;                                 
@@ -132,7 +135,9 @@ LRESULT CTrayIcon::OnTrayIconNotify(WPARAM wParam, LPARAM lParam)
 				m_bHover = TRUE;
 				::PostMessage(m_stNotifyIconData.hWnd, m_stNotifyIconData.uCallbackMessage, 
 					m_stNotifyIconData.uID, WM_MOUSEHOVER);
-				m_dwTimerId = ::SetTimer(m_stNotifyIconData.hWnd, 990, 160, NULL);
+				//::SetTimer 返回 UINT_PTR，而 m_dwTimerId 声明为 DWORD。定时器标识由本处
+				//以常量传入，系统原样返回，取值远小于 32 位上限，收窄为 DWORD 不会丢数据。
+				m_dwTimerId = static_cast<DWORD>(::SetTimer(m_stNotifyIconData.hWnd, 990, 160, NULL));
 			}
 		}
 	}
@@ -223,7 +228,9 @@ BOOL CTrayIcon::EnumNotifyWindow(HWND hWnd, RECT &rect)
 	lpBuffer = ::VirtualAllocEx(hProcess, 0, 1024, MEM_COMMIT, PAGE_READWRITE);
 	if (lpBuffer != NULL)
 	{
-		nButtons = ::SendMessage(hWnd, TB_BUTTONCOUNT, 0, 0);	// 获取托盘图标数量
+		//TB_BUTTONCOUNT 的返回值是工具栏上的按钮个数，托盘图标数量不可能超出 int 的
+		//表示范围，故把 LRESULT 收窄为 int 是安全的。
+		nButtons = static_cast<int>(::SendMessage(hWnd, TB_BUTTONCOUNT, 0, 0));	// 获取托盘图标数量
 		for (int i = 0; i < nButtons; i++)
 		{
 			RECT rc = {0}; 
@@ -235,8 +242,12 @@ BOOL CTrayIcon::EnumNotifyWindow(HWND hWnd, RECT &rect)
 			///TODO: 解决这个问题
 			//这个函数执行失败导致，错误码：0x0000012b 仅完成部分的 ReadProcessMemory 或 WriteProcessMemory 请求。
 			//see: http://bbs.csdn.net/topics/90433523
-			long nOffset = (long)(&stButton.dwData) - (long)&stButton;
-			char* pDest = (char*)lpBuffer+nOffset;
+			//stButton 只是本进程内的一份接收缓冲，真正的 TBBUTTON 位于托盘所属进程的地址
+			//空间里（首地址即 lpBuffer）。这里需要的只是 dwData 成员相对结构体首地址的字节
+			//偏移，用 offsetof 直接取即可。原先的写法是把 &stButton.dwData 与 &stButton 两个
+			//指针分别强制转换为 long 再相减，在 x64 下属于把 64 位指针截断为 32 位整数
+			//（编译告警 C4311 / C4302），此处改为 offsetof 后取值含义完全一致且不再有截断。
+			char* pDest = (char*)lpBuffer + offsetof(TBBUTTON, dwData);
 			bRet = ::ReadProcessMemory(hProcess, (LPVOID)pDest, &stTrayData, sizeof(TRAYDATA), 0);
 			if (bRet != 0 && stTrayData.hwnd == m_stNotifyIconData.hWnd)
 			{

@@ -6,7 +6,6 @@
  *  转 BGRA 显示到 Win32 窗口。日志写到固定文件 E:\flamingo\cameratest.log（每步 flush，便于
  *  随时查看 / 发回分析）。
  */
-#define _CRT_SECURE_NO_WARNINGS
 #include "CameraDisplayTest.h"
 #include "VideoFrameConvert.h"   //call::Nv12ToBgra
 

@@ -11,12 +11,7 @@
 #include "FolderProtocolClient.h"
 #include <stdlib.h>                     // strtoll
 #include "Protocol.h"                   // folder_transfer_state 与 error_code_folder_* 的取值范围
-//vendored 的 jsoncpp/json.h 含非 UTF-8 字节，当本文件作为 UTF-8 编译单元时 MSVC 会对其
-//报 C4828；该告警仅涉及 json.h 内注释、不影响代码，故就地屏蔽，不污染编译输出。
-#pragma warning(push)
-#pragma warning(disable: 4828)
 #include "../third-party/jsoncpp-1.9.0/json.h"
-#pragma warning(pop)
 
 namespace net {
 

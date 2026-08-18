@@ -1477,7 +1477,9 @@ void CFlamingoClient::OnUpdateGroupInfo(UINT message, WPARAM wParam, LPARAM lPar
 void CFlamingoClient::OnChangeStatusResult(UINT message, WPARAM wParam, LPARAM lParam)
 {
 	BOOL bSuccess = (BOOL)wParam;
-	long nNewStatus = lParam;
+	//本回调的 lParam 由本进程内部投递，存放的是在线状态枚举值（取值只有个位数），
+	//高位恒为 0，故收窄为 long 不会丢数据。
+	long nNewStatus = static_cast<long>(lParam);
 
 	if (bSuccess)
 		m_UserMgr.m_UserInfo.m_nStatus = nNewStatus;
@@ -1507,7 +1509,9 @@ void CFlamingoClient::OnTargetInfoChange(UINT message, WPARAM wParam, LPARAM lPa
 
 UINT CFlamingoClient::OnInternal_GroupId2Code(UINT message, WPARAM wParam, LPARAM lParam)
 {
-	CGroupInfo* lpGroupInfo = m_UserMgr.m_GroupList.GetGroupById(lParam);
+	//GetGroupById 的形参是 UINT。本回调的 lParam 由本进程内部投递，存放的是群 ID
+	//（协议上就是 32 位无符号整数），高 32 位恒为 0，故收窄为 UINT 不会丢数据。
+	CGroupInfo* lpGroupInfo = m_UserMgr.m_GroupList.GetGroupById(static_cast<UINT>(lParam));
 	return ((lpGroupInfo != NULL) ? lpGroupInfo->m_nGroupCode : 0);
 }
 // 加载用户设置信息

@@ -522,7 +522,9 @@ BOOL CBuddyMessage::Parse(Json::Value& JsonValue)
     if (!JsonValue["font"][(UINT)0].isNull())
     {
         strValue = JsonValue["font"][(UINT)0].asString();
-        EncodeUtil::Utf8ToUnicode(strValue.data(), strTmp.GetBuffer(strValue.length()* 2), strValue.length()* 2);
+        //CString::GetBuffer 与 EncodeUtil::Utf8ToUnicode 的长度形参都是 int，
+        //而字体名取自单条聊天消息，长度远小于 int 上限，故此处按 int 收窄是安全的
+        EncodeUtil::Utf8ToUnicode(strValue.data(), strTmp.GetBuffer(static_cast<int>(strValue.length() * 2)), static_cast<int>(strValue.length() * 2));
         strTmp.ReleaseBuffer();
         pContent->m_FontInfo.m_strName = strTmp.GetString();
     }
@@ -574,7 +576,9 @@ BOOL CBuddyMessage::Parse(Json::Value& JsonValue)
             pContent = new CContent();
             pContent->m_nType = CONTENT_TYPE_TEXT;
             strNodeValue = JsonValue["content"][i]["msgText"].asString();
-            EncodeUtil::Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(strNodeValue.length()* 2), strNodeValue.length()* 2);
+            //CString::GetBuffer 与 EncodeUtil::Utf8ToUnicode 的长度形参都是 int，
+            //而消息正文取自单条聊天消息，长度远小于 int 上限，故此处按 int 收窄是安全的
+            EncodeUtil::Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(static_cast<int>(strNodeValue.length() * 2)), static_cast<int>(strNodeValue.length() * 2));
             strTmp.ReleaseBuffer();
             pContent->m_strText = strTmp;
             m_arrContent.push_back(pContent);
@@ -598,14 +602,18 @@ BOOL CBuddyMessage::Parse(Json::Value& JsonValue)
             pContent = new CContent();
             pContent->m_nType = CONTENT_TYPE_CHAT_IMAGE;
             strNodeValue = JsonValue["content"][i]["pic"][(UINT)0].asString();;
-            EncodeUtil::Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(strNodeValue.length()* 2), strNodeValue.length()* 2);
+            //CString::GetBuffer 与 EncodeUtil::Utf8ToUnicode 的长度形参都是 int，
+            //而图片文件名长度远小于 int 上限，故此处按 int 收窄是安全的
+            EncodeUtil::Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(static_cast<int>(strNodeValue.length() * 2)), static_cast<int>(strNodeValue.length() * 2));
             strTmp.ReleaseBuffer();
             pContent->m_CFaceInfo.m_strFileName = strTmp;
 
             strNodeValue = JsonValue["content"][i]["pic"][(UINT)1].asString();;
             if (!strNodeValue.empty())
             {
-                EncodeUtil::Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(strNodeValue.length()* 2), strNodeValue.length()* 2);
+                //CString::GetBuffer 与 EncodeUtil::Utf8ToUnicode 的长度形参都是 int，
+                //而图片文件路径长度远小于 int 上限，故此处按 int 收窄是安全的
+                EncodeUtil::Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(static_cast<int>(strNodeValue.length() * 2)), static_cast<int>(strNodeValue.length() * 2));
                 strTmp.ReleaseBuffer();
                 pContent->m_CFaceInfo.m_strFilePath = strTmp;
             }
@@ -618,12 +626,16 @@ BOOL CBuddyMessage::Parse(Json::Value& JsonValue)
             pContent = new CContent();
             pContent->m_nType = CONTENT_TYPE_FILE;
             strNodeValue = JsonValue["content"][i]["file"][(UINT)0].asString();;
-            EncodeUtil::Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(strNodeValue.length()* 2), strNodeValue.length()* 2);
+            //CString::GetBuffer 与 EncodeUtil::Utf8ToUnicode 的长度形参都是 int，
+            //而传输文件名长度远小于 int 上限，故此处按 int 收窄是安全的
+            EncodeUtil::Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(static_cast<int>(strNodeValue.length() * 2)), static_cast<int>(strNodeValue.length() * 2));
             strTmp.ReleaseBuffer();
             pContent->m_CFaceInfo.m_strFileName = strTmp;
 
             strNodeValue = JsonValue["content"][i]["file"][(UINT)1].asString();;
-            EncodeUtil::Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(strNodeValue.length()* 2), strNodeValue.length()* 2);
+            //CString::GetBuffer 与 EncodeUtil::Utf8ToUnicode 的长度形参都是 int，
+            //而传输文件路径长度远小于 int 上限，故此处按 int 收窄是安全的
+            EncodeUtil::Utf8ToUnicode(strNodeValue.data(), strTmp.GetBuffer(static_cast<int>(strNodeValue.length() * 2)), static_cast<int>(strNodeValue.length() * 2));
             strTmp.ReleaseBuffer();
             pContent->m_CFaceInfo.m_strFilePath = strTmp;
 
@@ -646,7 +658,9 @@ BOOL CBuddyMessage::Parse(Json::Value& JsonValue)
 
 BOOL CBuddyMessage::IsShakeWindowMsg()
 {
-    long nSize = m_arrContent.size();
+    //下面的倒序循环用带符号的 long 作下标（需要判断 i >= 0），因此这里保持 long；
+    //单条消息的内容分段数量远小于 long 上限，故收窄是安全的
+    long nSize = static_cast<long>(m_arrContent.size());
     if (nSize <= 0)
         return FALSE;
 
@@ -702,7 +716,10 @@ void CGroupMessage::Reset()
 BOOL CGroupMessage::Parse(Json::Value& JsonValue)
 {
     std::string strValue;
-    int nCount, nCount2;
+    int nCount;
+    //nCount2 只用于承接 std::string::size() 的返回值，直接声明为 size_t，
+    //避免 64 位下由 size_t 隐式收窄到 int
+    size_t nCount2;
 
     Reset();
 
@@ -898,7 +915,10 @@ void CSessMessage::Reset()
 BOOL CSessMessage::Parse(Json::Value& JsonValue)
 {
     std::string strValue;
-    int nCount, nCount2;
+    int nCount;
+    //nCount2 只用于承接 std::string::size() 的返回值，直接声明为 size_t，
+    //避免 64 位下由 size_t 隐式收窄到 int
+    size_t nCount2;
 
     Reset();
 
@@ -1677,7 +1697,9 @@ CMessageSender* CMessageList::GetMsgSender(long nType, UINT nSenderId)
 // 获取最后一个发送消息过来的发送者
 CMessageSender* CMessageList::GetLastMsgSender()
 {
-    int nCount = m_arrMsgIdentity.size();
+    //下面用 nCount <= 0 判断列表是否为空，需要带符号类型，因此这里保持 int；
+    //会话内的消息标识数量远小于 int 上限，故收窄是安全的
+    int nCount = static_cast<int>(m_arrMsgIdentity.size());
     if (nCount <= 0)
         return NULL;
 

@@ -8,12 +8,7 @@
 //文件夹传输记录条（msgtype=18）的 content 字段名与校验只有这一份出处，落库时转调它。
 #include "../../net/FolderProtocolClient.h"    // net::FolderRecordContent / buildRecordContent
 #include <cctype>
-//见 MessageProtocolClient.cpp 同处说明：vendored 的 json.h 含非 UTF-8 字节，作为
-//UTF-8 编译单元时 MSVC 报 C4828；该告警仅涉及注释，就地屏蔽不污染编译输出。
-#pragma warning(push)
-#pragma warning(disable: 4828)
 #include "../../third-party/jsoncpp-1.9.0/json.h"
-#pragma warning(pop)
 
 namespace balloonhistory {
 

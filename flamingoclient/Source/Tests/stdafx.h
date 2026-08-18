@@ -15,7 +15,9 @@
 #ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
 #endif
+#ifndef _WINSOCK_DEPRECATED_NO_WARNINGS
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
+#endif
 
 #define WINVER          0x0601      // 目标系统下限 = Windows 7
 #define _WIN32_WINNT    0x0601

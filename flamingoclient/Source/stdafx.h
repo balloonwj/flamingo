@@ -5,8 +5,10 @@
 
 #pragma once
 
-#define _CRT_SECURE_NO_WARNINGS
-#define _WINSOCK_DEPRECATED_NO_WARNINGS
+//_CRT_SECURE_NO_WARNINGS 与 _WINSOCK_DEPRECATED_NO_WARNINGS 已改由
+//Flamingo.vcxproj / FlamingoUnit.vcxproj 的预处理器定义提供。放在这里时，
+//不包含本文件的编译单元拿不到它们，而包含本文件的编译单元又会与工程级
+//定义重复而触发 C4005，故统一上提到工程级。
 
 // Change these values to use different versions
 #define WINVER		    0x0601

@@ -114,7 +114,7 @@
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;..\..\third-party\balloonui\balloonui;..\..\third-party\sqlite-src-3530100;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
-      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_DEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessToFile>false</PreprocessToFile>
       <PreprocessSuppressLineNumbers>false</PreprocessSuppressLineNumbers>
       <MinimalRebuild>
@@ -157,7 +157,7 @@
            "非法 else""语法错误 }" 之类完全对不上号的错。两条都补齐，与 Debug 一致。 -->
       <AdditionalIncludeDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;..\..\third-party\balloonui\balloonui;..\..\third-party\sqlite-src-3530100;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 /EHsc %(AdditionalOptions)</AdditionalOptions>
-      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;STRICT;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;STRICT;NDEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ExceptionHandling />
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -198,7 +198,7 @@
       <Optimization>Disabled</Optimization>
       <AdditionalIncludeDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;..\..\third-party\balloonui\balloonui;..\..\third-party\sqlite-src-3530100;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
-      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;_DEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PreprocessToFile>false</PreprocessToFile>
       <PreprocessSuppressLineNumbers>false</PreprocessSuppressLineNumbers>
       <MinimalRebuild>
@@ -241,7 +241,7 @@
            "非法 else""语法错误 }" 之类完全对不上号的错。两条都补齐，与 Debug 一致。 -->
       <AdditionalIncludeDirectories>..\..\third-party\libsodium-1.0.22-RELEASE\src\libsodium\include;..\..\third-party\balloonui\balloonui;..\..\third-party\sqlite-src-3530100;..\..\third-party\opus-1.5.2\include;..\..\third-party\speexdsp-1.2.1\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 /EHsc %(AdditionalOptions)</AdditionalOptions>
-      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;STRICT;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>SODIUM_STATIC;WIN32;_WINDOWS;STRICT;NDEBUG;_CRT_SECURE_NO_WARNINGS;_WINSOCK_DEPRECATED_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ExceptionHandling />
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
       <PrecompiledHeader>Use</PrecompiledHeader>
@@ -1032,9 +1032,11 @@
     </ClCompile>
     <ClCompile Include="third-party\zlib1.2.11\gzread.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <DisableSpecificWarnings>4267;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
     <ClCompile Include="third-party\zlib1.2.11\gzwrite.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <DisableSpecificWarnings>4267;%(DisableSpecificWarnings)</DisableSpecificWarnings>
     </ClCompile>
     <ClCompile Include="third-party\zlib1.2.11\infback.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>

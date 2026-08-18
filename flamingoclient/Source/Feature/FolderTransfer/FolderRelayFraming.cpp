@@ -7,13 +7,7 @@
 #include <stdlib.h>              // atoll
 #include "../../net/FrameCodec.h"   // encodeAttachmentBody / decodeAttachmentBody
 #include "../../net/Protocol.h"     // MAX_BODY_FILESERVER / FILE_CHUNK_SIZE
-//vendored 的 jsoncpp/json.h 含非 UTF-8 字节，当本文件作为 UTF-8 编译单元时 MSVC 会
-//对其报 C4828；该告警仅涉及 json.h 内注释、不影响代码，故就地屏蔽，说明同
-//net/MessageProtocolClient.cpp。
-#pragma warning(push)
-#pragma warning(disable: 4828)
 #include "../../third-party/jsoncpp-1.9.0/json.h"
-#pragma warning(pop)
 
 namespace foldertransfer {
 

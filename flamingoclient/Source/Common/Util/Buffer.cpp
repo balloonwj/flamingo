@@ -60,12 +60,15 @@ void CBuffer::SetGrowBy(DWORD dwGrowBy)
 
 BOOL CBuffer::Add(const CHAR* lpStr)
 {
-	return Add(lpStr, strlen(lpStr));
+	//缓冲区自身的长度字段就是 DWORD，能容纳的数据量本来就不超过 4GB，
+	//这里的字符串长度必然落在 DWORD 范围内，收窄是安全的
+	return Add(lpStr, static_cast<DWORD>(strlen(lpStr)));
 }
 
 BOOL CBuffer::Add(const WCHAR* lpStr)
 {
-	return Add((const char*)lpStr, wcslen(lpStr)* sizeof(WCHAR));
+	//同上：宽字符串的字节数同样不会超出 DWORD 能表示的范围
+	return Add((const char*)lpStr, static_cast<DWORD>(wcslen(lpStr)* sizeof(WCHAR)));
 }
 
 BOOL CBuffer::Add(CBuffer& src)

@@ -3,7 +3,7 @@
 // recognized in your jurisdiction.
 // See file LICENSE for detail or copy at http://jsoncpp.sourceforge.net/LICENSE
 
-//¥˙¬Î¿¥‘¥£∫https://github.com/open-source-parsers/jsoncpp
+//‰ª£Á†ÅÊù•Ê∫êÔºöhttps://github.com/open-source-parsers/jsoncpp
 
 #ifndef JSON_JSON_H_INCLUDED
 #define JSON_JSON_H_INCLUDED

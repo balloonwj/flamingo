@@ -245,7 +245,9 @@ BOOL CMainDlg::OnInitDialog(CWindow wndFocus, LPARAM lInitParam)
     //"无操作自动离开"的轮询定时器，进程在世期间一直跑。之所以不等登录成功才起：
     //每一跳都会先看连接态，未登录 / 掉线时 DecideAutoAway 直接返回"什么都不做"，
     //比在登录、掉线、重连、登出各处分别起停定时器要少好几处漏改的机会。
-    m_dwAutoAwayTimerId = SetTimer(AUTOAWAY_TIMER_ID, AUTOAWAY_POLL_INTERVAL_MS, NULL);
+    //SetTimer 返回 UINT_PTR，而 m_dwAutoAwayTimerId 声明为 DWORD。定时器标识由本处以
+    //常量 AUTOAWAY_TIMER_ID 传入、系统原样返回，取值远小于 32 位上限，收窄不会丢数据。
+    m_dwAutoAwayTimerId = static_cast<DWORD>(SetTimer(AUTOAWAY_TIMER_ID, AUTOAWAY_POLL_INTERVAL_MS, NULL));
 
     //订阅锁屏 / 解锁等会话事件（WM_WTSSESSION_CHANGE），让"人已经走了"这件事第一时间
     //反映到在线状态上，而不是傻等空闲满 5 分钟。NOTIFY_FOR_THIS_SESSION 表示只关心本
@@ -1237,7 +1239,9 @@ bool CMainDlg::StartLogin(BOOL bAutoLogin/* = FALSE*/)
     if (bAutoLogin)
     {
         LoadLoginIcon();
-        m_dwLoginTimerId = SetTimer(LOGIN_TIMER_ID, LOGIN_ICON_ANIM_INTERVAL_MS, NULL);
+        //SetTimer 返回 UINT_PTR，而 m_dwLoginTimerId 声明为 DWORD。定时器标识由本处以
+        //常量 LOGIN_TIMER_ID 传入、系统原样返回，取值远小于 32 位上限，收窄不会丢数据。
+        m_dwLoginTimerId = static_cast<DWORD>(SetTimer(LOGIN_TIMER_ID, LOGIN_ICON_ANIM_INTERVAL_MS, NULL));
         LOG_INFO("MainDlg::StartLogin: auto-login, tray login animation started, timerId=%u.",
                  (unsigned)m_dwLoginTimerId);
     }
@@ -1417,7 +1421,9 @@ LRESULT CMainDlg::OnNetError(UINT uMsg, WPARAM wParam, LPARAM lParam)
     if (balloonmain::ShouldAutoReconnect(userWentOffline, m_bEnableReconnect))
     {
         m_nMainPanelStatus = MAINPANEL_STATUS_RECONNECTING;
-        m_dwReconnectTimerId = SetTimer(RECONNECT_TIMER_ID, m_uReconnectInterval, NULL);
+        //SetTimer 返回 UINT_PTR，而 m_dwReconnectTimerId 声明为 DWORD。定时器标识由本处
+        //以常量 RECONNECT_TIMER_ID 传入、系统原样返回，取值远小于 32 位上限，收窄不会丢数据。
+        m_dwReconnectTimerId = static_cast<DWORD>(SetTimer(RECONNECT_TIMER_ID, m_uReconnectInterval, NULL));
     }
 
     //连接已断：托盘图标转灰，界面进入"正在连接"（重连中）或"离线"（用户主动下线）态，
@@ -3062,7 +3068,9 @@ LRESULT CMainDlg::OnV2TrayFlash(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
         // 交给 SetTimer 会被夹成约 24.8 天，托盘就一次都不闪、且毫无提示。
         const UINT uBlink = ::GetCaretBlinkTime();
         const UINT uInterval = balloonmain::ClampTrayFlashInterval(uBlink);
-        m_dwMsgTimerId = SetTimer(RECVCHATMSG_TIMER_ID, uInterval, NULL);
+        //SetTimer 返回 UINT_PTR，而 m_dwMsgTimerId 声明为 DWORD。定时器标识由本处以常量
+        //RECVCHATMSG_TIMER_ID 传入、系统原样返回，取值远小于 32 位上限，收窄不会丢数据。
+        m_dwMsgTimerId = static_cast<DWORD>(SetTimer(RECVCHATMSG_TIMER_ID, uInterval, NULL));
         LOG_INFO("托盘闪烁定时器已启动: timerId=%u, 系统光标闪烁=%u ms, 实际间隔=%u ms。",
                  (UINT)m_dwMsgTimerId, uBlink, uInterval);
     }
@@ -3983,7 +3991,9 @@ LRESULT CMainDlg::OnUpdateGroupNumber(UINT uMsg, WPARAM wParam, LPARAM lParam)
 // 更新好友个性签名
 LRESULT CMainDlg::OnUpdateBuddySign(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-    UINT nUTalkUin = lParam;
+    //本消息由本进程内部投递，lParam 里放的是用户账号 ID（协议上就是 32 位无符号整数），
+    //高 32 位恒为 0，故收窄为 UINT 不会丢数据。
+    UINT nUTalkUin = static_cast<UINT>(lParam);
     if (0 == nUTalkUin)
         return 0;
 
@@ -4211,7 +4221,9 @@ LRESULT CMainDlg::OnUpdateGroupHeadPic(UINT uMsg, WPARAM wParam, LPARAM lParam)
 LRESULT CMainDlg::OnChangeStatusResult(UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     BOOL bSuccess = (BOOL)wParam;
-    long nNewStatus = lParam;
+    //本消息由本进程内部投递，lParam 里放的是在线状态枚举值（取值只有个位数），
+    //高位恒为 0，故收窄为 long 不会丢数据。
+    long nNewStatus = static_cast<long>(lParam);
     if (!bSuccess)
     {
         MessageBox(_T("改变在线状态失败！"));

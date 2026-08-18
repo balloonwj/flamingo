@@ -66,6 +66,32 @@ std::string jsonString(const Json::Value& root, const char* key)
     return root[key].asString();
 }
 
+//把 Json::Value 序列化为紧凑（无缩进、无换行）的 JSON 文本。
+//与服务端 flamingoserver/net/FrameCrypto.cpp 的同名函数保持一致 —— 旧的
+//Json::FastWriter 已被 jsoncpp 标记为废弃，编译时会产生 C4996 告警。
+//两者的差别只在结尾：FastWriter::write 会额外追加一个换行符，本函数不会。
+//握手包体的长度由帧头 bodylen 字段随包一起发出，签名覆盖的握手记录又完全
+//由二进制字段拼成、不含这段 JSON 文本，故少一个换行符不影响任何一侧的判定。
+std::string writeCompact(const Json::Value& v)
+{
+    Json::StreamWriterBuilder wb;
+    wb["indentation"] = "";
+    return Json::writeString(wb, v);
+}
+
+//解析 JSON 文本，要求结果是一个对象。同样只能用新版 CharReader 接口。
+//CharReaderBuilder 的默认配置与旧 Json::Reader 的默认容错等价：允许注释、
+//不要求根节点是对象或数组、不因尾部多余内容而失败（failIfExtra 默认为 false）。
+bool parseJson(const std::string& text, Json::Value& out)
+{
+    Json::CharReaderBuilder b;
+    JSONCPP_STRING errs;
+    Json::CharReader* reader = b.newCharReader();
+    const bool ok = reader->parse(text.c_str(), text.c_str() + text.size(), &out, &errs);
+    delete reader;
+    return ok && errs.empty() && out.isObject();
+}
+
 //握手记录：ver || cpk || cnonce || spk || snonce || shdr
 //<u>与服务端 buildTranscript 必须逐字节一致</u>，否则验签必然失败。
 std::string buildTranscript(uint8_t version,
@@ -317,9 +343,8 @@ std::string ClientHandshake::buildClientHello()
     root["cpk"]    = toBase64(m_pk, KX_PUBLICKEY_BYTES);
     root["cnonce"] = toBase64(m_nonce, HANDSHAKE_NONCE_BYTES);
 
-    Json::FastWriter writer;
     m_state = state_wait_server;
-    return writer.write(root);
+    return writeCompact(root);
 }
 
 bool ClientHandshake::onServerHello(const std::string& responseBody,
@@ -337,9 +362,8 @@ bool ClientHandshake::onServerHello(const std::string& responseBody,
         return false;
     }
 
-    Json::Reader reader;
-    Json::Value  root;
-    if (!reader.parse(responseBody, root) || !root.isObject())
+    Json::Value root;
+    if (!parseJson(responseBody, root))
     {
         errOut = "ServerHello is not valid JSON";
         return false;
@@ -435,9 +459,8 @@ std::string ClientHandshake::buildClientStreamHeader()
     Json::Value root;
     root["chdr"] = toBase64((const unsigned char*)m_streamHeader.data(), m_streamHeader.size());
 
-    Json::FastWriter writer;
     m_state = state_done;
-    return writer.write(root);
+    return writeCompact(root);
 }
 
 } // namespace net

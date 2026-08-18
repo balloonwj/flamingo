@@ -19,13 +19,7 @@
 
 #include <string>
 
-//vendored 的 jsoncpp/json.h 含非 UTF-8 字节，当本文件作为 UTF-8 编译单元时 MSVC 会
-//对其报 C4828；该告警仅涉及 json.h 内注释、不影响代码，故就地屏蔽，说明同
-//FolderTransfer/FolderRelayFraming.cpp。
-#pragma warning(push)
-#pragma warning(disable: 4828)
 #include "../third-party/jsoncpp-1.9.0/json.h"
-#pragma warning(pop)
 
 //被测头文件<u>放在最后</u>：它引入 <winsock2.h>，而后者会带进 <windows.h> 里的 min /
 //max 宏。这两个宏一旦先定义，Catch2 与 jsoncpp 里形如 std::numeric_limits<T>::min()

@@ -19,7 +19,6 @@ HANDLE MyCreateThread (LPSECURITY_ATTRIBUTES lpThreadAttributes, // SD
 	
 DWORD GetProcessID(LPCTSTR lpProcessName);
 TCHAR *GetLogUserXP();
-TCHAR *GetLogUser2K();
 TCHAR *GetCurrentLoginUser();
 
 bool SwitchInputDesktop();

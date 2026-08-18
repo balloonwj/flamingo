@@ -278,7 +278,9 @@ namespace net
             return false;
 
         unsigned int value;
-        read7BitEncoded(buf, headlen, value);
+        //headlen 统计的是 7 位变长编码的头部字节数，上面的循环最多走 sizeof(buf) 即 5 次，
+        //取值范围是 1..5，远小于 uint32_t 上限，故按 uint32_t 收窄是安全的
+        read7BitEncoded(buf, static_cast<uint32_t>(headlen), value);
         outlen = value;
 
         /*if ( cur + BINARY_PACKLEN_LEN_2 > ptr + len ) {
@@ -393,7 +395,10 @@ namespace net
     void BinaryStreamWriter::Flush()
     {
         char* ptr = &(*m_data)[0];
-        unsigned int ulen = htonl(m_data->length());
+        //包头的长度字段固定占 BINARY_PACKLEN_LEN_2（4 字节），本身就只能表达 32 位长度，
+        //因此这里把 size_t 收窄为 32 位再交给 htonl，不会改变原有的字节流布局；
+        //ulen 必须保持 4 字节的 unsigned int，否则下面 memcpy 写入的包头宽度会变
+        unsigned int ulen = htonl(static_cast<uint32_t>(m_data->length()));
         memcpy(ptr, &ulen, sizeof(ulen));
     }
     void BinaryStreamWriter::Clear()

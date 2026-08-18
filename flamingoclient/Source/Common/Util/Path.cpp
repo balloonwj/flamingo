@@ -49,7 +49,8 @@ tstring CPath::GetCurDir()
 	TCHAR szCurDir[MAX_PATH] = {0};
 	::GetCurrentDirectory(MAX_PATH, szCurDir);
 
-	DWORD dwLen = _tcslen(szCurDir);
+	//szCurDir 是长度为 MAX_PATH 的栈上数组，字符串长度不会超过 MAX_PATH，收窄到 DWORD 是安全的
+	DWORD dwLen = static_cast<DWORD>(_tcslen(szCurDir));
 	if (dwLen <= 0)
 		return _T("");
 
@@ -66,7 +67,8 @@ tstring CPath::GetTempPath()
 	TCHAR szTempPath[MAX_PATH] = {0};
 	::GetTempPath(MAX_PATH, szTempPath);
 
-	DWORD dwLen = _tcslen(szTempPath);
+	//szTempPath 是长度为 MAX_PATH 的栈上数组，字符串长度不会超过 MAX_PATH，收窄到 DWORD 是安全的
+	DWORD dwLen = static_cast<DWORD>(_tcslen(szTempPath));
 	if (dwLen <= 0)
 		return _T("");
 
@@ -263,7 +265,8 @@ tstring CPath::GetFileNameWithoutExtension(LPCTSTR lpszPath)
 		}
 	}
 
-	int nPos = strPath.rfind(_T('.'));
+	//用 tstring::size_type 保存下标，才能与 tstring::npos 直接比较（写成 int 依赖的是补码截断后的巧合）
+	tstring::size_type nPos = strPath.rfind(_T('.'));
 	if (nPos != tstring::npos)
 		strPath = strPath.substr(0, nPos);
 

@@ -368,7 +368,8 @@ long CImageTaskThread::UploadImage(PCTSTR pszFileName, HWND hwndReflection, HAND
         filedata.append(buffer.GetBuffer(), (size_t)buffer.GetSize());
         writeStream.WriteString(filedata);
         writeStream.Flush();
-        file_msg headerx = { outbuf.length() };
+        //outbuf 是单个上传数据包的内容，其长度不会超过 int64_t 的表示范围，这里显式收窄以消除 C4838 告警。
+        file_msg headerx = { static_cast<int64_t>(outbuf.length()) };
         outbuf.insert(0, (const char*)&headerx, sizeof(headerx));
         if (!iusocket.SendOnImgPort(outbuf.c_str(), (int64_t)outbuf.length()))
             break;
@@ -509,7 +510,8 @@ long CImageTaskThread::DownloadImage(LPCSTR lpszFileName, LPCTSTR lpszDestPath, 
         writeStream.WriteInt32(clientNetType);
         writeStream.Flush();
 
-        file_msg header = { outbuf.length() };
+        //outbuf 是单个下载请求数据包的内容，其长度不会超过 int64_t 的表示范围，这里显式收窄以消除 C4838 告警。
+        file_msg header = { static_cast<int64_t>(outbuf.length()) };
         outbuf.insert(0, (const char*)&header, sizeof(header));
 
         if (!iusocket.SendOnImgPort(outbuf.c_str(), (int64_t)outbuf.length()))
@@ -587,7 +589,8 @@ long CImageTaskThread::DownloadImage(LPCSTR lpszFileName, LPCTSTR lpszDestPath, 
         }
 
         DWORD dwBytesWritten;
-        if (!::WriteFile(hFile, filedata.c_str(), filedata.length(), &dwBytesWritten, NULL) || dwBytesWritten != filedata.length())
+        //单次写入的数据块长度远小于 DWORD 的上限（约 4GB），向 WriteFile 传入前显式收窄以消除 C4267 告警。
+        if (!::WriteFile(hFile, filedata.c_str(), static_cast<DWORD>(filedata.length()), &dwBytesWritten, NULL) || dwBytesWritten != filedata.length())
         {
             nBreakType = FILE_DOWNLOAD_FAILED;
             break;

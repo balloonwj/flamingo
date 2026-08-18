@@ -4,13 +4,7 @@
  */
 #include "FriendProtocolClient.h"
 #include <stdlib.h>                     // strtoll
-//vendored 的 jsoncpp/json.h 含非 UTF-8 字节，当本文件作为 UTF-8 编译单元
-//时 MSVC 会对其报 C4828；该告警仅涉及 json.h 内注释、不影响代码，故就地
-//屏蔽，不污染编译输出。
-#pragma warning(push)
-#pragma warning(disable: 4828)
 #include "../third-party/jsoncpp-1.9.0/json.h"
-#pragma warning(pop)
 
 namespace net {
 

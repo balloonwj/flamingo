@@ -2,7 +2,6 @@
  *  本地视频回环（调试入口）实现，VideoLoopbackDebug.cpp
  *  balloonwj@qq.com   2026-06-16
  */
-#define _CRT_SECURE_NO_WARNINGS
 #include "VideoLoopbackDebug.h"
 #include "CallVideoEngine.h"
 #include "VideoFrameConvert.h"

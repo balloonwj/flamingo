@@ -20,7 +20,8 @@ void CloneStr(const wchar_t* src, wchar_t** dest, UINT* destlen)
 	memcpy(copy, src, len*sizeof(wchar_t));
 
 	*dest = copy;
-	*destlen = len-1;
+	//源字符串是聊天消息一类的短文本，长度远小于 UINT 能表示的上限，收窄不会丢数据
+	*destlen = static_cast<UINT>(len - 1);
 }
 
 CMessageLogger::CMessageLogger(void) : m_hMutex(NULL)
@@ -357,7 +358,8 @@ UINT CMessageLogger::ReadBuddyMsgLog(UINT nUTalkNum, UINT nOffset, UINT nRows,
 	sqlite3_finalize(stmt);
 	sqlite3_close(conn);
 
-	return arrMsgLog.size();
+	//读出的记录条数受查询语句中的行数限制，远小于 UINT 能表示的上限，收窄不会丢数据
+	return static_cast<UINT>(arrMsgLog.size());
 }
 
 // 读出一条或多条群消息记录
@@ -426,7 +428,8 @@ UINT CMessageLogger::ReadGroupMsgLog(UINT nGroupNum, UINT nOffset, UINT nRows,
 	sqlite3_finalize(stmt);
 	sqlite3_close(conn);
 
-	return arrMsgLog.size();
+	//读出的记录条数受查询语句中的行数限制，远小于 UINT 能表示的上限，收窄不会丢数据
+	return static_cast<UINT>(arrMsgLog.size());
 }
 
 // 读出一条或多条临时会话(群成员)消息记录
@@ -495,7 +498,8 @@ UINT CMessageLogger::ReadSessMsgLog(UINT nUTalkNum, UINT nOffset, UINT nRows,
 	sqlite3_finalize(stmt);
 	sqlite3_close(conn);
 
-	return arrMsgLog.size();
+	//读出的记录条数受查询语句中的行数限制，远小于 UINT 能表示的上限，收窄不会丢数据
+	return static_cast<UINT>(arrMsgLog.size());
 }
 
 // 获取好友消息记录数
@@ -1028,8 +1032,9 @@ void CMessageLogger::Replace(tstring& strText, const TCHAR* lpOldStr, const TCHA
 	if (NULL == lpOldStr || NULL == lpNewStr)
 		return;
 
-	int nOldStrLen = _tcslen(lpOldStr);
-	int nNewStrLen = _tcslen(lpNewStr);
+	//两个长度都只用于 tstring 的下标运算，直接用 size_t 保存，省去无谓的收窄
+	size_t nOldStrLen = _tcslen(lpOldStr);
+	size_t nNewStrLen = _tcslen(lpNewStr);
 
 	tstring::size_type nPos = 0;
 	while ((nPos = strText.find(lpOldStr, nPos)) != tstring::npos)

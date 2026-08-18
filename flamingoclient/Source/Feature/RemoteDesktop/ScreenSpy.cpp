@@ -368,12 +368,12 @@ void CScreenSpy::ScanScreen( HDC hdcDest, HDC hdcSrc, int nWidth, int nHeight)
 	UINT	nJumpLine = 50;
 	UINT	nJumpSleep = nJumpLine / 10; // 扫描间隔
 	// 扫描屏幕
-	int	nToJump;
 	for (int i = 0, nToJump = 0; i < nHeight; i += nToJump)
 	{
 		int	nOther = nHeight - i;
 		
-		if (nOther > nJumpLine)
+		//nOther 为剩余待扫描的行数，循环条件保证 i 小于 nHeight，故其取值恒为正，转换为 UINT 与 nJumpLine 比较是安全的，用于消除 C4018 告警。
+		if (static_cast<UINT>(nOther) > nJumpLine)
 			nToJump = nJumpLine;
 		else
 			nToJump = nOther;
@@ -394,7 +394,8 @@ int CScreenSpy::Compare( LPBYTE lpSource, LPBYTE lpDest, LPBYTE lpBuffer, DWORD 
 	int	nOffsetOffset = 0, nBytesOffset = 0, nDataOffset = 0;
 	int nCount = 0; // 数据计数器
 	// p1++实际上是递增了一个DWORD
-	for (int i = 0; i < dwSize; i += 4, p1++, p2++)
+	//i 是按 4 字节步进遍历 dwSize（DWORD）个字节时的偏移量，改用 DWORD 与 dwSize 同类型比较，消除 C4018 告警。
+	for (DWORD i = 0; i < dwSize; i += 4, p1++, p2++)
 	{
 		if (*p1 == *p2)
 			continue;
@@ -413,7 +414,8 @@ int CScreenSpy::Compare( LPBYTE lpSource, LPBYTE lpDest, LPBYTE lpBuffer, DWORD 
 		nCount += 4;
 		i += 4, p1++, p2++;
 		
-		for (int j = i; j < dwSize; j += 4, i += 4, p1++, p2++)
+		//j 与 i 一样按 4 字节步进遍历 dwSize（DWORD）个字节，改用 DWORD 与 dwSize 同类型比较，消除 C4018 告警。
+		for (DWORD j = i; j < dwSize; j += 4, i += 4, p1++, p2++)
 		{
 			if (*p1 == *p2)
 				break;

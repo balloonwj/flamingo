@@ -531,7 +531,9 @@ bool CIUSocket::Connect(int timeout /*= 3*/)
     FD_ZERO(&writeset);
     FD_SET(m_hSocket, &writeset);
     struct timeval tv = { timeout, 0 };
-    if (::select(m_hSocket + 1, NULL, &writeset, NULL, &tv) != 1)
+    //Windows 下 select 的第一个参数 nfds 并不参与运算，仅为兼容 BSD 接口而保留；
+    //SOCKET 在 64 位下是 64 位无符号句柄，这里收窄为 int 不影响 select 的行为
+    if (::select(static_cast<int>(m_hSocket + 1), NULL, &writeset, NULL, &tv) != 1)
     {
         LOG_ERROR("Could not connect to server:%s, port:%d.", m_strServer.c_str(), m_nPort);
         return false;
@@ -706,7 +708,9 @@ bool CIUSocket::ConnectToFileServer(int timeout/* = 3*/)
     FD_ZERO(&writeset);
     FD_SET(m_hFileSocket, &writeset);
     struct timeval tv = { timeout, 0 };
-    if (::select(m_hFileSocket + 1, NULL, &writeset, NULL, &tv) != 1)
+    //Windows 下 select 的第一个参数 nfds 并不参与运算，仅为兼容 BSD 接口而保留；
+    //SOCKET 在 64 位下是 64 位无符号句柄，这里收窄为 int 不影响 select 的行为
+    if (::select(static_cast<int>(m_hFileSocket + 1), NULL, &writeset, NULL, &tv) != 1)
     {
         LOG_ERROR("Could not connect to file server:%s, port:%d.", m_strFileServer.c_str(), m_nFilePort);
         return false;
@@ -789,7 +793,9 @@ bool CIUSocket::ConnectToImgServer(int timeout/* = 3*/)
     FD_ZERO(&writeset);
     FD_SET(m_hImgSocket, &writeset);
     struct timeval tv = { timeout, 0 };
-    if (::select(m_hImgSocket + 1, NULL, &writeset, NULL, &tv) != 1)
+    //Windows 下 select 的第一个参数 nfds 并不参与运算，仅为兼容 BSD 接口而保留；
+    //SOCKET 在 64 位下是 64 位无符号句柄，这里收窄为 int 不影响 select 的行为
+    if (::select(static_cast<int>(m_hImgSocket + 1), NULL, &writeset, NULL, &tv) != 1)
     {
         LOG_ERROR("Could not connect to img server:%s, port:%d.", m_strImgServer.c_str(), m_nImgPort);
         return false;
@@ -823,7 +829,9 @@ int CIUSocket::CheckReceivedData()
     timeout.tv_sec = 0;
     timeout.tv_usec = 500;
 
-    long nRet = ::select(m_hSocket + 1, &readset, NULL, &exceptionset, &timeout);
+    //Windows 下 select 的第一个参数 nfds 并不参与运算，仅为兼容 BSD 接口而保留；
+    //SOCKET 在 64 位下是 64 位无符号句柄，这里收窄为 int 不影响 select 的行为
+    long nRet = ::select(static_cast<int>(m_hSocket + 1), &readset, NULL, &exceptionset, &timeout);
     if (nRet >= 1)
     {
         if (FD_ISSET(m_hSocket, &exceptionset))
@@ -867,7 +875,9 @@ bool CIUSocket::Send()
     int nRet = 0;
     while (true)
     {
-        nRet = ::send(m_hSocket, m_strSendBuf.c_str(), m_strSendBuf.length(), 0);
+        //send 的长度形参是 int。发送缓冲中排队的是协议帧，单帧长度受包头 4 字节长度字段
+        //的约束，排队总量在实际运行中远小于 int 上限，故此处按 int 收窄是安全的
+        nRet = ::send(m_hSocket, m_strSendBuf.c_str(), static_cast<int>(m_strSendBuf.length()), 0);
         if (nRet == SOCKET_ERROR)
         {
             if (::WSAGetLastError() == WSAEWOULDBLOCK)
@@ -4268,7 +4278,9 @@ bool CIUSocket::RecvData(char* pszBuff, int nBufferSize, int nTimeout)
     timeout.tv_sec = nTimeout;
     timeout.tv_usec = 0;
 
-    int nRet = ::select(m_hSocket + 1, NULL, &writeset, NULL, &timeout);
+    //Windows 下 select 的第一个参数 nfds 并不参与运算，仅为兼容 BSD 接口而保留；
+    //SOCKET 在 64 位下是 64 位无符号句柄，这里收窄为 int 不影响 select 的行为
+    int nRet = ::select(static_cast<int>(m_hSocket + 1), NULL, &writeset, NULL, &timeout);
     if (nRet != 1)
     {
         Close();

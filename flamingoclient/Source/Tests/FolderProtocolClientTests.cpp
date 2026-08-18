@@ -21,11 +21,7 @@
 #include "catch_amalgamated.hpp"
 #include "../net/FolderProtocolClient.h"
 #include "../net/Protocol.h"   //folder_transfer_state 与 error_code_folder_* 的具体取值
-//见 MessageProtocolClient.cpp 同处说明：屏蔽 vendored json.h 的 C4828。
-#pragma warning(push)
-#pragma warning(disable: 4828)
 #include "../third-party/jsoncpp-1.9.0/json.h"
-#pragma warning(pop)
 
 using namespace net;
 
