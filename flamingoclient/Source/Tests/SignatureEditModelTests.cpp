@@ -15,7 +15,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/SignatureEditModel.h"
+#include "../UI/BalloonMain/SignatureEditModel.h"
 
 using namespace balloonmain;
 

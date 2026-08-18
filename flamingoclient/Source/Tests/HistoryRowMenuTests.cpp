@@ -20,7 +20,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonHistory/HistoryRowMenu.h"
+#include "../UI/BalloonHistory/HistoryRowMenu.h"
 #include "../net/Protocol.h"   // ::message_type_*
 
 #include <algorithm>

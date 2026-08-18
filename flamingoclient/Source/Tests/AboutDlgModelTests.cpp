@@ -19,7 +19,7 @@
 
 #include <string>
 
-#include "../BalloonMain/AboutDlgModel.h"
+#include "../UI/BalloonMain/AboutDlgModel.h"
 
 using namespace balloonmain;
 

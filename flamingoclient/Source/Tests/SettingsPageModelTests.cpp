@@ -20,7 +20,7 @@
 #include <vector>
 #include <cwchar>          // wcscmp —— 比对导航项中文文本
 
-#include "../BalloonSettings/SettingsPageModel.h"
+#include "../UI/BalloonSettings/SettingsPageModel.h"
 
 using namespace balloonsettings;
 

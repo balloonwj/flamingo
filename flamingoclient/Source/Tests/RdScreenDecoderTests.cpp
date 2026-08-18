@@ -7,8 +7,8 @@
  *  balloonwj@qq.com   2026-06-08
  */
 #include "catch_amalgamated.hpp"
-#include "../RemoteDesktop/RdScreenDecoder.h"
-#include "../RemoteDesktop/RdEngineDef.h"
+#include "../Feature/RemoteDesktop/RdScreenDecoder.h"
+#include "../Feature/RemoteDesktop/RdEngineDef.h"
 
 using namespace remotedesktop;
 

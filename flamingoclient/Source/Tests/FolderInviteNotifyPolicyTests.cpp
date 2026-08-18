@@ -20,7 +20,7 @@
 
 #include <string>
 
-#include "../BalloonMain/FolderInviteNotifyPolicy.h"
+#include "../UI/BalloonMain/FolderInviteNotifyPolicy.h"
 
 using namespace balloonmain;
 

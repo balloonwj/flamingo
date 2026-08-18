@@ -16,7 +16,7 @@
  *  balloonwj@qq.com   2026-08-03
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonHistory/FileLocalStore.h"
+#include "../UI/BalloonHistory/FileLocalStore.h"
 
 using namespace balloonhistory;
 

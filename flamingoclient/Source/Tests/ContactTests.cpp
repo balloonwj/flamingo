@@ -30,8 +30,8 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonContact/ContactLayout.h"
-#include "../BalloonContact/ContactModel.h"
+#include "../UI/BalloonContact/ContactLayout.h"
+#include "../UI/BalloonContact/ContactModel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"   // 快捷操作行四个按钮的公共基类
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"

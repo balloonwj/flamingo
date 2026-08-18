@@ -20,8 +20,8 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/AutoAwayPolicy.h"
-#include "../BalloonSettings/SettingsBinding.h"   // 时长下拉索引 → 分钟数
+#include "../UI/BalloonMain/AutoAwayPolicy.h"
+#include "../UI/BalloonSettings/SettingsBinding.h"   // 时长下拉索引 → 分钟数
 #include "../net/Protocol.h"                      // presence_type
 
 #include <wtsapi32.h>                             // WTS_SESSION_LOCK 等会话事件状态码

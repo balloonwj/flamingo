@@ -16,7 +16,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../LoginAccountList.h"
+#include "../Session/LoginAccountList.h"
 
 #include <windows.h>
 #include <stdio.h>

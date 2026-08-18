@@ -19,7 +19,7 @@
 
 #include <cwchar>          // wcscmp / wcslen —— 比对中文提示文案
 
-#include "../BalloonMain/KickoutNotice.h"
+#include "../UI/BalloonMain/KickoutNotice.h"
 #include "../net/Protocol.h"   // kickout_reason（被踢原因取值的单一事实来源）
 
 using namespace balloonmain;

@@ -27,15 +27,15 @@
 #include <vector>
 #include <utility>
 
-#include "../BalloonChatWnd/ChatBubble.h"
-#include "../BalloonChatWnd/ChatMessageList.h"
-#include "../BalloonChatWnd/ChatMockData.h"
-#include "../BalloonChatWnd/ChatTextSelection.h"
-#include "../BalloonChatWnd/GroupMentionModel.h"
-#include "../BalloonChatWnd/GroupMentionMenu.h"
-#include "../GroupRoleRules.h"
-#include "../BalloonChat/BalloonChatMsgFormat.h"
-#include "../BalloonMain/StarredModel.h"   // 特别关注项文案，M24 用它核对两处措辞一致
+#include "../UI/BalloonChatWnd/ChatBubble.h"
+#include "../UI/BalloonChatWnd/ChatMessageList.h"
+#include "../UI/BalloonChatWnd/ChatMockData.h"
+#include "../UI/BalloonChatWnd/ChatTextSelection.h"
+#include "../UI/BalloonChatWnd/GroupMentionModel.h"
+#include "../UI/BalloonChatWnd/GroupMentionMenu.h"
+#include "../Session/GroupRoleRules.h"
+#include "../UI/BalloonChat/BalloonChatMsgFormat.h"
+#include "../UI/BalloonMain/StarredModel.h"   // 特别关注项文案，M24 用它核对两处措辞一致
 
 using namespace balloonwjui;
 using namespace balloonchatwnd;

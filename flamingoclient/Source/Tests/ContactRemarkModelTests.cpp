@@ -16,7 +16,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/ContactRemarkModel.h"
+#include "../UI/BalloonMain/ContactRemarkModel.h"
 
 using namespace balloonmain;
 

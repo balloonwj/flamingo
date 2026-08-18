@@ -29,7 +29,7 @@
 //被测头文件放在最后：它引入 <windows.h>，而后者会带进 min / max 宏。这两个宏一旦先定义，
 //Catch2 与标准库里形如 std::numeric_limits<T>::min() 的写法就会被当成宏调用，编译期报出
 //一串 C4003"函数式宏的参数不足"。
-#include "../FolderTransfer/FolderTransferManager.h"
+#include "../Feature/FolderTransfer/FolderTransferManager.h"
 
 using namespace foldertransfer;
 

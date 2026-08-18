@@ -17,9 +17,9 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonHistory/HistoryContentView.h"
-#include "../BalloonChatWnd/ChatFaceTag.h"
-#include "../BalloonChatWnd/ChatLinkDetect.h"   // 链接识别开关（HCV9 要开关它）
+#include "../UI/BalloonHistory/HistoryContentView.h"
+#include "../UI/BalloonChatWnd/ChatFaceTag.h"
+#include "../UI/BalloonChatWnd/ChatLinkDetect.h"   // 链接识别开关（HCV9 要开关它）
 
 #include <vector>
 #include <stdlib.h>                            // abs（数像素时比色差用）

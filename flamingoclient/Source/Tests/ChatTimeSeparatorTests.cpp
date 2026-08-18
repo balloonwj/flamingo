@@ -19,7 +19,7 @@
 #include "stdafx.h"
 
 #include "catch_amalgamated.hpp"
-#include "../BalloonChatWnd/ChatTimeSeparator.h"
+#include "../UI/BalloonChatWnd/ChatTimeSeparator.h"
 
 #include <time.h>
 

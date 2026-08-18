@@ -16,7 +16,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonChatWnd/ChatFontUtil.h"
+#include "../UI/BalloonChatWnd/ChatFontUtil.h"
 #include "../net/MessageProtocolClient.h"   // net::TextFont
 
 using namespace balloonchatwnd;

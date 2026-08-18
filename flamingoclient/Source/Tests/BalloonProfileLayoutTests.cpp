@@ -28,8 +28,8 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/BalloonProfileLayout.h"
-#include "../BalloonMain/MainPanelUserData.h"   // GetUserAvatarColor
+#include "../UI/BalloonMain/BalloonProfileLayout.h"
+#include "../UI/BalloonMain/MainPanelUserData.h"   // GetUserAvatarColor
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"

@@ -10,7 +10,7 @@
 #include "stdafx.h"
 #include "CurrentUserAccount.h"
 
-#include "../FlamingoClient.h"   // CFlamingoClient::GetInstance / m_UserMgr.m_UserInfo
+#include "../App/FlamingoClient.h"   // CFlamingoClient::GetInstance / m_UserMgr.m_UserInfo
 
 namespace net {
 

@@ -23,7 +23,7 @@
 #include "FramePayload.h"        // net::decodeFramePayload（收包时的解密与解压）
 #include "HandshakeRunner.h"     // net::performClientHandshake / IHandshakeChannel
 #include "IUSocket.h"            // CIUSocket::GetServerPublicKey（四条链路共用同一把公钥）
-#include "../IULog.h"            // LOG_INFO / LOG_ERROR
+#include "../Common/Log/IULog.h"            // LOG_INFO / LOG_ERROR
 
 #include <string>
 #include <vector>

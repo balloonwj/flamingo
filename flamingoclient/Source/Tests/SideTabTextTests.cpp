@@ -8,7 +8,7 @@
  *  balloonwj@qq.com   2026-08-03
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonChatWnd/SideTabText.h"
+#include "../UI/BalloonChatWnd/SideTabText.h"
 
 using namespace balloonchatwnd;
 

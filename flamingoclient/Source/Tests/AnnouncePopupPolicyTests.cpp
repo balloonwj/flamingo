@@ -13,7 +13,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonGroupManage/AnnouncePopupPolicy.h"
+#include "../UI/BalloonGroupManage/AnnouncePopupPolicy.h"
 
 using namespace balloongroupmanage;
 

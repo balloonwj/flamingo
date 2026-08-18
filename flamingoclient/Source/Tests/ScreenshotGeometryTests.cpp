@@ -15,7 +15,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonScreenshot/ScreenshotGeometry.h"
+#include "../UI/BalloonScreenshot/ScreenshotGeometry.h"
 
 using namespace balloonscreenshot;
 

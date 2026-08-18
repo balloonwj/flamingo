@@ -19,11 +19,11 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonChatWnd/GroupChatWindowLayout.h"
+#include "../UI/BalloonChatWnd/GroupChatWindowLayout.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"      // 公告面板各行文本
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
-#include "../BalloonChatWnd/ChatInputRichEdit.h"
+#include "../UI/BalloonChatWnd/ChatInputRichEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiSplitter.h"   // 消息区/输入区可拖分隔
 
 using namespace balloonwjui;

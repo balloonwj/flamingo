@@ -15,7 +15,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonAuth/LoginProgressState.h"
+#include "../UI/BalloonAuth/LoginProgressState.h"
 
 using namespace auth;
 

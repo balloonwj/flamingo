@@ -18,8 +18,8 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonGroupManage/GroupManageLayout.h"
-#include "../BalloonGroupManage/GroupManageModel.h"
+#include "../UI/BalloonGroupManage/GroupManageLayout.h"
+#include "../UI/BalloonGroupManage/GroupManageModel.h"
 
 using namespace balloonwjui;
 using namespace balloongroupmanage;

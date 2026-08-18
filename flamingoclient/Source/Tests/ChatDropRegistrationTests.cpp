@@ -37,9 +37,9 @@
 
 #include <memory>
 
-#include "../BalloonChatWnd/ChatWindowLayout.h"
-#include "../BalloonChatWnd/GroupChatWindowLayout.h"
-#include "../BalloonChatWnd/ChatDropController.h"
+#include "../UI/BalloonChatWnd/ChatWindowLayout.h"
+#include "../UI/BalloonChatWnd/GroupChatWindowLayout.h"
+#include "../UI/BalloonChatWnd/ChatDropController.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEdit.h"
 

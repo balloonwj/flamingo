@@ -20,7 +20,7 @@
  *  balloonwj@qq.com   2026-08-11
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonChatWnd/ChatLinkDetect.h"
+#include "../UI/BalloonChatWnd/ChatLinkDetect.h"
 
 #include <string>
 #include <vector>

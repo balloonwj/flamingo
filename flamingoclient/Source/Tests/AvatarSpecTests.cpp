@@ -17,7 +17,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/AvatarSpec.h"
+#include "../UI/BalloonMain/AvatarSpec.h"
 
 using namespace balloonmain;
 

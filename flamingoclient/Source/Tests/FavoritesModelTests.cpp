@@ -20,7 +20,7 @@
 
 #include <cwchar>          // wcscmp —— 比对中文菜单文案
 
-#include "../BalloonMain/FavoritesModel.h"
+#include "../UI/BalloonMain/FavoritesModel.h"
 #include "../net/FavoriteProtocolClient.h"
 #include "../net/Protocol.h"   // conversation_single / conversation_group / error_code
 

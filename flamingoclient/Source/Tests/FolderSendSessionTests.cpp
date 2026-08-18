@@ -27,13 +27,13 @@
 #include <thread>
 #include <memory>
 
-#include "../FolderTransfer/FolderSendSession.h"
+#include "../Feature/FolderTransfer/FolderSendSession.h"
 
 //被测的第二个头文件<u>放在最后</u>：它引入 <winsock2.h>，而后者会带进 <windows.h> 里的
 //min / max 宏。这两个宏一旦先定义，Catch2 与标准库里形如 std::numeric_limits<T>::min()
 //的写法就会被当成宏调用，编译期报出一串 C4003"函数式宏的参数不足"。本文件只用到它里面
 //的单帧上限常量 kFolderRelayMaxAppFrameBytes。
-#include "../FolderTransfer/FolderRelayClient.h"
+#include "../Feature/FolderTransfer/FolderRelayClient.h"
 
 using namespace foldertransfer;
 

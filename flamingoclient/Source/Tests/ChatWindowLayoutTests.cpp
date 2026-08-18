@@ -20,16 +20,16 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonChatWnd/ChatWindowLayout.h"
-#include "../BalloonChatWnd/GroupChatWindowLayout.h"   // 验证分割记忆单/群共用
-#include "../BalloonChatWnd/ChatBannerLabel.h"        // 顶部状态提示带（带底色的 DuiLabel 子类）
-#include "../BalloonChatWnd/ChatBubble.h"
-#include "../BalloonChatWnd/ChatMessageList.h"
-#include "../BalloonChatWnd/ChatMockData.h"
+#include "../UI/BalloonChatWnd/ChatWindowLayout.h"
+#include "../UI/BalloonChatWnd/GroupChatWindowLayout.h"   // 验证分割记忆单/群共用
+#include "../UI/BalloonChatWnd/ChatBannerLabel.h"        // 顶部状态提示带（带底色的 DuiLabel 子类）
+#include "../UI/BalloonChatWnd/ChatBubble.h"
+#include "../UI/BalloonChatWnd/ChatMessageList.h"
+#include "../UI/BalloonChatWnd/ChatMockData.h"
 #include "../net/MessageProtocolClient.h"   // canRecallMessage（验证回填前后撤回条件的变化）
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
-#include "../BalloonChatWnd/ChatInputRichEdit.h"
+#include "../UI/BalloonChatWnd/ChatInputRichEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiSplitter.h"   // 消息区/输入区可拖分隔
 
 using namespace balloonwjui;

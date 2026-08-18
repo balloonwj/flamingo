@@ -10,7 +10,7 @@
  *  balloonwj@qq.com   2026-06-01
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonSearch/ContactMatch.h"
+#include "../UI/BalloonSearch/ContactMatch.h"
 
 using namespace contactsearch;
 

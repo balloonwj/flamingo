@@ -21,7 +21,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/MemberPickerTreeModel.h"
+#include "../UI/BalloonMain/MemberPickerTreeModel.h"
 
 using namespace balloonmain;
 

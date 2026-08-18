@@ -18,9 +18,9 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonNetSettings/NetSettingsLayout.h"
-#include "../BalloonNetSettings/NetSettingsModel.h"
-#include "../BalloonNetSettings/NetServerCard.h"
+#include "../UI/BalloonNetSettings/NetSettingsLayout.h"
+#include "../UI/BalloonNetSettings/NetSettingsModel.h"
+#include "../UI/BalloonNetSettings/NetServerCard.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 
 using namespace balloonwjui;

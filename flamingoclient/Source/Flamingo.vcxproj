@@ -74,25 +74,25 @@
     <OutDir>..\Bin\</OutDir>
     <IntDir>Debug_x64\</IntDir>
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>wtl10.1\;$(IncludePath)</IncludePath>
+    <IncludePath>third-party\wtl10.1\;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>..\Bin\x64\Release\</OutDir>
     <IntDir>Release_x64\</IntDir>
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>wtl10.1\;$(IncludePath)</IncludePath>
+    <IncludePath>third-party\wtl10.1\;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <OutDir>..\Bin\Win32\Debug\</OutDir>
     <IntDir>Debug\</IntDir>
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>wtl10.1\;$(IncludePath)</IncludePath>
+    <IncludePath>third-party\wtl10.1\;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>..\Bin\Win32\Release\</OutDir>
     <IntDir>Release\</IntDir>
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>wtl10.1\;$(IncludePath)</IncludePath>
+    <IncludePath>third-party\wtl10.1\;$(IncludePath)</IncludePath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <PreBuildEvent>
@@ -272,450 +272,450 @@
     <ClCompile Include="net\HandshakeRunner.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Buffer.cpp" />
-    <ClCompile Include="CascadeWinManager.cpp" />
-    <ClCompile Include="CheckNetworkStatusTask.cpp" />
-    <ClCompile Include="Crash.cpp" />
-    <ClCompile Include="EncodeUtil.cpp" />
-    <ClCompile Include="FaceList.cpp" />
-    <ClCompile Include="File2.cpp" />
-    <ClCompile Include="FileTaskThread.cpp" />
-    <ClCompile Include="FlamingoClient.cpp" />
-    <ClCompile Include="GDIFactory.cpp" />
-    <ClCompile Include="GroupRoleRules.cpp">
+    <ClCompile Include="Common\Util\Buffer.cpp" />
+    <ClCompile Include="App\CascadeWinManager.cpp" />
+    <ClCompile Include="Threading\CheckNetworkStatusTask.cpp" />
+    <ClCompile Include="App\Crash.cpp" />
+    <ClCompile Include="Common\Util\EncodeUtil.cpp" />
+    <ClCompile Include="Common\Graphics\FaceList.cpp" />
+    <ClCompile Include="Common\Util\File2.cpp" />
+    <ClCompile Include="Threading\FileTaskThread.cpp" />
+    <ClCompile Include="App\FlamingoClient.cpp" />
+    <ClCompile Include="Common\Graphics\GDIFactory.cpp" />
+    <ClCompile Include="Session\GroupRoleRules.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="ImageEx.cpp" />
-    <ClCompile Include="ImageTaskThread.cpp" />
-    <ClCompile Include="IniFile.cpp" />
-    <ClCompile Include="IULog.cpp" />
-    <ClCompile Include="LoginAccountList.cpp">
+    <ClCompile Include="Common\Graphics\ImageEx.cpp" />
+    <ClCompile Include="Threading\ImageTaskThread.cpp" />
+    <ClCompile Include="Common\Util\IniFile.cpp" />
+    <ClCompile Include="Common\Log\IULog.cpp" />
+    <ClCompile Include="Session\LoginAccountList.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="MainDlg.cpp" />
-    <ClCompile Include="MD5.cpp" />
-    <ClCompile Include="MD5Sum.cpp" />
-    <ClCompile Include="MessageLogger.cpp" />
-    <ClCompile Include="MinuBuffer.cpp" />
-    <ClCompile Include="Path.cpp" />
-    <ClCompile Include="LogCleanupPolicy.cpp">
+    <ClCompile Include="App\MainDlg.cpp" />
+    <ClCompile Include="Common\Util\MD5.cpp" />
+    <ClCompile Include="Common\Util\MD5Sum.cpp" />
+    <ClCompile Include="Common\Log\MessageLogger.cpp" />
+    <ClCompile Include="Common\Util\MiniBuffer.cpp" />
+    <ClCompile Include="Common\Util\Path.cpp" />
+    <ClCompile Include="Common\Log\LogCleanupPolicy.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="SendMsgThread.cpp" />
-    <ClCompile Include="Startup.cpp" />
+    <ClCompile Include="Threading\SendMsgThread.cpp" />
+    <ClCompile Include="App\Startup.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Thread.cpp" />
-    <ClCompile Include="ThreadPool.cpp" />
-    <ClCompile Include="TrayIcon.cpp" />
-    <ClCompile Include="UserConfig.cpp" />
-    <ClCompile Include="UserMgr.cpp" />
-    <ClCompile Include="UserSessionData.cpp" />
-    <ClCompile Include="Utils.cpp" />
-    <ClCompile Include="XmlDocument.cpp" />
-    <ClCompile Include="ZlibUtil.cpp" />
-    <ClCompile Include="BalloonAnnounce\AnnounceBoxLayout.cpp">
+    <ClCompile Include="Threading\Thread.cpp" />
+    <ClCompile Include="Threading\ThreadPool.cpp" />
+    <ClCompile Include="App\TrayIcon.cpp" />
+    <ClCompile Include="Session\UserConfig.cpp" />
+    <ClCompile Include="Session\UserMgr.cpp" />
+    <ClCompile Include="Session\UserSessionData.cpp" />
+    <ClCompile Include="Common\Util\Utils.cpp" />
+    <ClCompile Include="Common\Util\XmlDocument.cpp" />
+    <ClCompile Include="Common\Util\ZlibUtil.cpp" />
+    <ClCompile Include="UI\BalloonAnnounce\AnnounceBoxLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonAnnounce\AnnounceRow.cpp" />
-    <ClCompile Include="BalloonAnnounce\BalloonAnnounceBoxWindow.cpp" />
-    <ClCompile Include="BalloonAnnounce\AnnouncePopupWindow.cpp" />
-    <ClCompile Include="BalloonAuth\AuthBanner.cpp">
+    <ClCompile Include="UI\BalloonAnnounce\AnnounceRow.cpp" />
+    <ClCompile Include="UI\BalloonAnnounce\BalloonAnnounceBoxWindow.cpp" />
+    <ClCompile Include="UI\BalloonAnnounce\AnnouncePopupWindow.cpp" />
+    <ClCompile Include="UI\BalloonAuth\AuthBanner.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonAuth\AuthButtons.cpp">
+    <ClCompile Include="UI\BalloonAuth\AuthButtons.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonAuth\AuthInputField.cpp">
+    <ClCompile Include="UI\BalloonAuth\AuthInputField.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonAuth\BalloonLoginDlg.cpp" />
-    <ClCompile Include="BalloonAuth\LoginProgressState.cpp" />
-    <ClCompile Include="BalloonAuth\BalloonLoginLayout.cpp">
+    <ClCompile Include="UI\BalloonAuth\BalloonLoginDlg.cpp" />
+    <ClCompile Include="UI\BalloonAuth\LoginProgressState.cpp" />
+    <ClCompile Include="UI\BalloonAuth\BalloonLoginLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonAuth\AccountRemoval.cpp" />
-    <ClCompile Include="BalloonChat\BalloonChatMsgFormat.cpp">
+    <ClCompile Include="UI\BalloonAuth\AccountRemoval.cpp" />
+    <ClCompile Include="UI\BalloonChat\BalloonChatMsgFormat.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\BalloonChatWindow.cpp" />
-    <ClCompile Include="BalloonChatWnd\BalloonGroupChatWindow.cpp" />
-    <ClCompile Include="BalloonChatWnd\ChatAvatarResolve.cpp" />
-    <ClCompile Include="BalloonChatWnd\ChatBannerLabel.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\BalloonChatWindow.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\BalloonGroupChatWindow.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\ChatAvatarResolve.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\ChatBannerLabel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatInlineText.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatInlineText.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatBubble.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatBubble.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatFileLocation.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatFileLocation.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatDropController.cpp" />
-    <ClCompile Include="BalloonChatWnd\ChatDropModel.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatDropController.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\ChatDropModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatLinkDetect.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatLinkDetect.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatTimeSeparator.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatTimeSeparator.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatFileStateModel.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatFileStateModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatFileVisual.cpp" />
-    <ClCompile Include="BalloonChatWnd\ChatFontMap.cpp" />
-    <ClCompile Include="BalloonChatWnd\ChatFontUtil.cpp" />
-    <ClCompile Include="BalloonChatWnd\ChatHeaderInfo.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatFileVisual.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\ChatFontMap.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\ChatFontUtil.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\ChatHeaderInfo.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatHistoryPaging.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatHistoryPaging.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatIconButton.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatIconButton.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatIcons.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatIcons.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatImageCache.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatImageCache.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatImageSaveAs.cpp" />
-    <ClCompile Include="BalloonChatWnd\ChatInputRichEdit.cpp" />
-    <ClCompile Include="BalloonChatWnd\ChatMessageList.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatImageSaveAs.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\ChatInputRichEdit.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\ChatMessageList.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatMessageMenu.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatMessageMenu.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatMockData.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatMockData.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatQuoteModel.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatQuoteModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatRichContentSplit.cpp" />
-    <ClCompile Include="BalloonChatWnd\ChatRootPanel.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatRichContentSplit.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\ChatRootPanel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatSendButton.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatSendButton.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatSendMode.cpp" />
-    <ClCompile Include="BalloonChatWnd\ChatTextSelection.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatSendMode.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\ChatTextSelection.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatTitleIcon.cpp" />
-    <ClCompile Include="BalloonChatWnd\ChatWindowLayout.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatTitleIcon.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\ChatWindowLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\EmojiPickerPopup.cpp" />
-    <ClCompile Include="BalloonChatWnd\FaceImagePickerPopup.cpp" />
-    <ClCompile Include="BalloonChatWnd\FileBubbleFormat.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\EmojiPickerPopup.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\FaceImagePickerPopup.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\FileBubbleFormat.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\FontSettingPopup.cpp" />
-    <ClCompile Include="BalloonChatWnd\GroupAtDropdown.cpp" />
-    <ClCompile Include="BalloonChatWnd\GroupChatHeaderInfo.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\FontSettingPopup.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\GroupAtDropdown.cpp" />
+    <ClCompile Include="UI\BalloonChatWnd\GroupChatHeaderInfo.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\GroupChatWindowLayout.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\GroupChatWindowLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\GroupFileItem.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\GroupFileItem.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\GroupFileLibrary.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\GroupFileLibrary.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\GroupFileList.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\GroupFileList.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\GroupFileUploadTracker.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\GroupFileUploadTracker.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\GroupMemberItem.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\GroupMemberItem.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\GroupMemberList.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\GroupMemberList.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\GroupMemberOrder.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\GroupMemberOrder.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\GroupMentionButton.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\GroupMentionButton.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\GroupMentionMenu.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\GroupMentionMenu.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\GroupMentionModel.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\GroupMentionModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\GroupSideTab.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\GroupSideTab.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\SideTabText.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\SideTabText.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonContact\BalloonContactWindow.cpp" />
-    <ClCompile Include="BalloonContact\ContactIcons.cpp">
+    <ClCompile Include="UI\BalloonContact\BalloonContactWindow.cpp" />
+    <ClCompile Include="UI\BalloonContact\ContactIcons.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonContact\ContactLayout.cpp">
+    <ClCompile Include="UI\BalloonContact\ContactLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonContact\ContactModel.cpp">
+    <ClCompile Include="UI\BalloonContact\ContactModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonContact\ContactTagModel.cpp">
+    <ClCompile Include="UI\BalloonContact\ContactTagModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonContact\TagEditPopup.cpp" />
-    <ClCompile Include="BalloonContact\TagChip.cpp">
+    <ClCompile Include="UI\BalloonContact\TagEditPopup.cpp" />
+    <ClCompile Include="UI\BalloonContact\TagChip.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonGroupManage\AnnouncePopupPolicy.cpp">
+    <ClCompile Include="UI\BalloonGroupManage\AnnouncePopupPolicy.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonGroupManage\BalloonAnnouncePopupDlg.cpp" />
-    <ClCompile Include="BalloonGroupManage\BalloonGroupManageWindow.cpp" />
-    <ClCompile Include="BalloonGroupManage\GroupManageButton.cpp">
+    <ClCompile Include="UI\BalloonGroupManage\BalloonAnnouncePopupDlg.cpp" />
+    <ClCompile Include="UI\BalloonGroupManage\BalloonGroupManageWindow.cpp" />
+    <ClCompile Include="UI\BalloonGroupManage\GroupManageButton.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonGroupManage\GroupManageIcons.cpp">
+    <ClCompile Include="UI\BalloonGroupManage\GroupManageIcons.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonGroupManage\GroupManageLayout.cpp">
+    <ClCompile Include="UI\BalloonGroupManage\GroupManageLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonGroupManage\GroupManageMapping.cpp">
+    <ClCompile Include="UI\BalloonGroupManage\GroupManageMapping.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonGroupManage\GroupManageModel.cpp">
+    <ClCompile Include="UI\BalloonGroupManage\GroupManageModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonGroupManage\GroupManageNavItem.cpp">
+    <ClCompile Include="UI\BalloonGroupManage\GroupManageNavItem.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonGroupManage\GroupManagePaint.cpp">
+    <ClCompile Include="UI\BalloonGroupManage\GroupManagePaint.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonGroupManage\GroupManageWindowData.cpp" />
-    <ClCompile Include="BalloonHistory\AnnounceStore.cpp">
+    <ClCompile Include="UI\BalloonGroupManage\GroupManageWindowData.cpp" />
+    <ClCompile Include="UI\BalloonHistory\AnnounceStore.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonHistory\BalloonHistoryWindow.cpp">
+    <ClCompile Include="UI\BalloonHistory\BalloonHistoryWindow.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonHistory\FileLocalStore.cpp">
+    <ClCompile Include="UI\BalloonHistory\FileLocalStore.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonHistory\FolderLocalStore.cpp">
+    <ClCompile Include="UI\BalloonHistory\FolderLocalStore.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonHistory\HistoryHighlightLabel.cpp">
+    <ClCompile Include="UI\BalloonHistory\HistoryHighlightLabel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonHistory\HistoryModel.cpp">
+    <ClCompile Include="UI\BalloonHistory\HistoryModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonHistory\HistoryContentView.cpp">
+    <ClCompile Include="UI\BalloonHistory\HistoryContentView.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonHistory\HistoryRowMenu.cpp">
+    <ClCompile Include="UI\BalloonHistory\HistoryRowMenu.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonHistory\HistoryRow.cpp">
+    <ClCompile Include="UI\BalloonHistory\HistoryRow.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonHistory\HistoryView.cpp">
+    <ClCompile Include="UI\BalloonHistory\HistoryView.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonHistory\HistoryWindowLayout.cpp">
+    <ClCompile Include="UI\BalloonHistory\HistoryWindowLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonHistory\V2MsgQuery.cpp">
+    <ClCompile Include="UI\BalloonHistory\V2MsgQuery.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonHistory\V2MsgStore.cpp">
+    <ClCompile Include="UI\BalloonHistory\V2MsgStore.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonImageViewer\BalloonImageViewerWindow.cpp" />
-    <ClCompile Include="BalloonImageViewer\ImageCanvas.cpp" />
-    <ClCompile Include="BalloonImageViewer\ImageViewerGeometry.cpp" />
-    <ClCompile Include="BalloonImageViewer\ImageViewerToolbar.cpp" />
-    <ClCompile Include="BalloonMain\AboutDlgModel.cpp">
+    <ClCompile Include="UI\BalloonImageViewer\BalloonImageViewerWindow.cpp" />
+    <ClCompile Include="UI\BalloonImageViewer\ImageCanvas.cpp" />
+    <ClCompile Include="UI\BalloonImageViewer\ImageViewerGeometry.cpp" />
+    <ClCompile Include="UI\BalloonImageViewer\ImageViewerToolbar.cpp" />
+    <ClCompile Include="UI\BalloonMain\AboutDlgModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\AvatarGray.cpp">
+    <ClCompile Include="UI\BalloonMain\AvatarGray.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\AvatarImageUtil.cpp" />
-    <ClCompile Include="BalloonMain\AvatarPickerTile.cpp" />
-    <ClCompile Include="BalloonMain\BadgeRender.cpp">
+    <ClCompile Include="UI\BalloonMain\AvatarImageUtil.cpp" />
+    <ClCompile Include="UI\BalloonMain\AvatarPickerTile.cpp" />
+    <ClCompile Include="UI\BalloonMain\BadgeRender.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\BalloonAboutDlg.cpp" />
-    <ClCompile Include="BalloonMain\BalloonChangePwdDlg.cpp" />
-    <ClCompile Include="BalloonMain\BalloonChangePwdValidate.cpp">
+    <ClCompile Include="UI\BalloonMain\BalloonAboutDlg.cpp" />
+    <ClCompile Include="UI\BalloonMain\BalloonChangePwdDlg.cpp" />
+    <ClCompile Include="UI\BalloonMain\BalloonChangePwdValidate.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\BalloonClosePromptDlg.cpp" />
-    <ClCompile Include="BalloonMain\BalloonContactTreeAdapter.cpp" />
-    <ClCompile Include="BalloonMain\BalloonGroupInfoDlg.cpp" />
-    <ClCompile Include="BalloonMain\BalloonGroupInfoLayout.cpp">
+    <ClCompile Include="UI\BalloonMain\BalloonClosePromptDlg.cpp" />
+    <ClCompile Include="UI\BalloonMain\BalloonContactTreeAdapter.cpp" />
+    <ClCompile Include="UI\BalloonMain\BalloonGroupInfoDlg.cpp" />
+    <ClCompile Include="UI\BalloonMain\BalloonGroupInfoLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\BalloonKickoutDlg.cpp" />
-    <ClCompile Include="BalloonMain\BalloonMainLayout.cpp">
+    <ClCompile Include="UI\BalloonMain\BalloonKickoutDlg.cpp" />
+    <ClCompile Include="UI\BalloonMain\BalloonMainLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\BalloonMainPanel.cpp" />
-    <ClCompile Include="BalloonMain\BalloonModifyAvatarDlg.cpp" />
-    <ClCompile Include="BalloonMain\BalloonProfileDlg.cpp" />
-    <ClCompile Include="BalloonMain\BalloonProfileLayout.cpp">
+    <ClCompile Include="UI\BalloonMain\BalloonMainPanel.cpp" />
+    <ClCompile Include="UI\BalloonMain\BalloonModifyAvatarDlg.cpp" />
+    <ClCompile Include="UI\BalloonMain\BalloonProfileDlg.cpp" />
+    <ClCompile Include="UI\BalloonMain\BalloonProfileLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\ClosePromptDecision.cpp">
+    <ClCompile Include="UI\BalloonMain\ClosePromptDecision.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\ContactRemarkModel.cpp">
+    <ClCompile Include="UI\BalloonMain\ContactRemarkModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\ContactsOrgStats.cpp">
+    <ClCompile Include="UI\BalloonMain\ContactsOrgStats.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\ConversationListOps.cpp">
+    <ClCompile Include="UI\BalloonMain\ConversationListOps.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\CreateGroupDlg.cpp" />
-    <ClCompile Include="BalloonMain\FavoritesModel.cpp">
+    <ClCompile Include="UI\BalloonMain\CreateGroupDlg.cpp" />
+    <ClCompile Include="UI\BalloonMain\FavoritesModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\FolderInviteNotifyPolicy.cpp">
+    <ClCompile Include="UI\BalloonMain\FolderInviteNotifyPolicy.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\GroupRowText.cpp">
+    <ClCompile Include="UI\BalloonMain\GroupRowText.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\StarredModel.cpp">
+    <ClCompile Include="UI\BalloonMain\StarredModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\CornerPopupPlacement.cpp">
+    <ClCompile Include="UI\BalloonMain\CornerPopupPlacement.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\StarredPopupModel.cpp">
+    <ClCompile Include="UI\BalloonMain\StarredPopupModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\StarredPopupWindow.cpp" />
-    <ClCompile Include="BalloonMain\KickoutNotice.cpp">
+    <ClCompile Include="UI\BalloonMain\StarredPopupWindow.cpp" />
+    <ClCompile Include="UI\BalloonMain\KickoutNotice.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MainPanelAvatar.cpp" />
-    <ClCompile Include="BalloonMain\MainPanelButtons.cpp">
+    <ClCompile Include="UI\BalloonMain\MainPanelAvatar.cpp" />
+    <ClCompile Include="UI\BalloonMain\MainPanelButtons.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MainPanelContactMenu.cpp">
+    <ClCompile Include="UI\BalloonMain\MainPanelContactMenu.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MainPanelConversationMenu.cpp">
+    <ClCompile Include="UI\BalloonMain\MainPanelConversationMenu.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MainPanelHeader.cpp">
+    <ClCompile Include="UI\BalloonMain\MainPanelHeader.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MainPanelIcons.cpp">
+    <ClCompile Include="UI\BalloonMain\MainPanelIcons.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MainPanelListItem.cpp">
+    <ClCompile Include="UI\BalloonMain\MainPanelListItem.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MainPanelMenuIcons.cpp" />
-    <ClCompile Include="BalloonMain\MainPanelMockData.cpp">
+    <ClCompile Include="UI\BalloonMain\MainPanelMenuIcons.cpp" />
+    <ClCompile Include="UI\BalloonMain\MainPanelMockData.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MainPanelScrollView.cpp">
+    <ClCompile Include="UI\BalloonMain\MainPanelScrollView.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MainPanelSectionHeader.cpp">
+    <ClCompile Include="UI\BalloonMain\MainPanelSectionHeader.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MainPanelStatusMenu.cpp">
+    <ClCompile Include="UI\BalloonMain\MainPanelStatusMenu.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\PresenceBadge.cpp">
+    <ClCompile Include="UI\BalloonMain\PresenceBadge.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\AutoAwayPolicy.cpp">
+    <ClCompile Include="UI\BalloonMain\AutoAwayPolicy.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\KeepAwakePolicy.cpp">
+    <ClCompile Include="UI\BalloonMain\KeepAwakePolicy.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\KeepAwakeSession.cpp">
+    <ClCompile Include="UI\BalloonMain\KeepAwakeSession.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MainPanelSystemMenu.cpp">
+    <ClCompile Include="UI\BalloonMain\MainPanelSystemMenu.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MainPanelTab.cpp">
+    <ClCompile Include="UI\BalloonMain\MainPanelTab.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MainPanelTrayMenu.cpp">
+    <ClCompile Include="UI\BalloonMain\MainPanelTrayMenu.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MainPanelTreeView.cpp">
+    <ClCompile Include="UI\BalloonMain\MainPanelTreeView.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MainPanelUserData.cpp">
+    <ClCompile Include="UI\BalloonMain\MainPanelUserData.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MemberPickerRow.cpp">
+    <ClCompile Include="UI\BalloonMain\MemberPickerRow.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MemberPickerTreeModel.cpp">
+    <ClCompile Include="UI\BalloonMain\MemberPickerTreeModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\MemberPickerTreeView.cpp">
+    <ClCompile Include="UI\BalloonMain\MemberPickerTreeView.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\NotificationSound.cpp">
+    <ClCompile Include="UI\BalloonMain\NotificationSound.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\NotificationSoundPlayer.cpp">
+    <ClCompile Include="UI\BalloonMain\NotificationSoundPlayer.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\OnlineCapability.cpp">
+    <ClCompile Include="UI\BalloonMain\OnlineCapability.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\OverlayScrollBarGeometry.cpp">
+    <ClCompile Include="UI\BalloonMain\OverlayScrollBarGeometry.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\PanelDragZone.cpp">
+    <ClCompile Include="UI\BalloonMain\PanelDragZone.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\PopupMenuPlacement.cpp">
+    <ClCompile Include="UI\BalloonMain\PopupMenuPlacement.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\SignatureEditModel.cpp">
+    <ClCompile Include="UI\BalloonMain\SignatureEditModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\SignatureEditPopup.cpp" />
-    <ClCompile Include="BalloonMain\TitleBarIcon.cpp">
+    <ClCompile Include="UI\BalloonMain\SignatureEditPopup.cpp" />
+    <ClCompile Include="UI\BalloonMain\TitleBarIcon.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\TrayFlashController.cpp" />
-    <ClCompile Include="BalloonMain\TrayMsgTipPopup.cpp" />
-    <ClCompile Include="BalloonMain\TreeLocate.cpp">
+    <ClCompile Include="UI\BalloonMain\TrayFlashController.cpp" />
+    <ClCompile Include="UI\BalloonMain\TrayMsgTipPopup.cpp" />
+    <ClCompile Include="UI\BalloonMain\TreeLocate.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonMain\UnknownSenderRefreshPolicy.cpp">
+    <ClCompile Include="UI\BalloonMain\UnknownSenderRefreshPolicy.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="net\UserCachePath.cpp">
@@ -725,139 +725,139 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="net\CurrentUserAccount.cpp" />
-    <ClCompile Include="BalloonNetSettings\BalloonNetSettingsWindow.cpp" />
-    <ClCompile Include="BalloonNetSettings\NetServerCard.cpp">
+    <ClCompile Include="UI\BalloonNetSettings\BalloonNetSettingsWindow.cpp" />
+    <ClCompile Include="UI\BalloonNetSettings\NetServerCard.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonNetSettings\NetSettingsLayout.cpp">
+    <ClCompile Include="UI\BalloonNetSettings\NetSettingsLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonNetSettings\NetSettingsModel.cpp">
+    <ClCompile Include="UI\BalloonNetSettings\NetSettingsModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonProfile\BalloonProfileWindow.cpp" />
-    <ClCompile Include="BalloonProfile\ProfileLayout.cpp">
+    <ClCompile Include="UI\BalloonProfile\BalloonProfileWindow.cpp" />
+    <ClCompile Include="UI\BalloonProfile\ProfileLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonProfile\ProfileModel.cpp">
+    <ClCompile Include="UI\BalloonProfile\ProfileModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonRegister\BalloonRegisterWindow.cpp" />
-    <ClCompile Include="BalloonRegister\RegisterIcons.cpp">
+    <ClCompile Include="UI\BalloonRegister\BalloonRegisterWindow.cpp" />
+    <ClCompile Include="UI\BalloonRegister\RegisterIcons.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonRegister\RegisterLayout.cpp">
+    <ClCompile Include="UI\BalloonRegister\RegisterLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonRegister\RegisterModel.cpp">
+    <ClCompile Include="UI\BalloonRegister\RegisterModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonRemoteDesktop\BalloonRemoteDesktopDlg.cpp" />
-    <ClCompile Include="BalloonRemoteDesktop\RdControlledBar.cpp" />
-    <ClCompile Include="BalloonRemoteDesktop\RdViewerToolbar.cpp" />
-    <ClCompile Include="BalloonRemoteDesktop\RdViewerWindow.cpp" />
-    <ClCompile Include="BalloonScreenshot\AnnotationModel.cpp" />
-    <ClCompile Include="BalloonScreenshot\CaptureCanvas.cpp" />
-    <ClCompile Include="BalloonScreenshot\ScreenCaptureOverlay.cpp" />
-    <ClCompile Include="BalloonScreenshot\ScreenshotGeometry.cpp" />
-    <ClCompile Include="BalloonScreenshot\ScreenshotToolbar.cpp" />
-    <ClCompile Include="BalloonSearch\ContactMatch.cpp">
+    <ClCompile Include="UI\BalloonRemoteDesktop\BalloonRemoteDesktopDlg.cpp" />
+    <ClCompile Include="UI\BalloonRemoteDesktop\RdControlledBar.cpp" />
+    <ClCompile Include="UI\BalloonRemoteDesktop\RdViewerToolbar.cpp" />
+    <ClCompile Include="UI\BalloonRemoteDesktop\RdViewerWindow.cpp" />
+    <ClCompile Include="UI\BalloonScreenshot\AnnotationModel.cpp" />
+    <ClCompile Include="UI\BalloonScreenshot\CaptureCanvas.cpp" />
+    <ClCompile Include="UI\BalloonScreenshot\ScreenCaptureOverlay.cpp" />
+    <ClCompile Include="UI\BalloonScreenshot\ScreenshotGeometry.cpp" />
+    <ClCompile Include="UI\BalloonScreenshot\ScreenshotToolbar.cpp" />
+    <ClCompile Include="UI\BalloonSearch\ContactMatch.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonSearch\PinyinFull.cpp">
+    <ClCompile Include="UI\BalloonSearch\PinyinFull.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonSearch\PinyinInitials.cpp">
+    <ClCompile Include="UI\BalloonSearch\PinyinInitials.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonSearch\SearchDropdown.cpp" />
-    <ClCompile Include="BalloonSearch\SearchFilterTab.cpp" />
-    <ClCompile Include="BalloonSettings\BalloonSystemSettingDlg.cpp" />
-    <ClCompile Include="BalloonSettings\CacheCleanPlan.cpp">
+    <ClCompile Include="UI\BalloonSearch\SearchDropdown.cpp" />
+    <ClCompile Include="UI\BalloonSearch\SearchFilterTab.cpp" />
+    <ClCompile Include="UI\BalloonSettings\BalloonSystemSettingDlg.cpp" />
+    <ClCompile Include="UI\BalloonSettings\CacheCleanPlan.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonSettings\CacheCleanExecutor.cpp">
+    <ClCompile Include="UI\BalloonSettings\CacheCleanExecutor.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonSettings\BalloonCacheCleanDlg.cpp" />
-    <ClCompile Include="BalloonSettings\SettingsBinding.cpp">
+    <ClCompile Include="UI\BalloonSettings\BalloonCacheCleanDlg.cpp" />
+    <ClCompile Include="UI\BalloonSettings\SettingsBinding.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonSettings\SettingsNavList.cpp" />
-    <ClCompile Include="BalloonSettings\SettingsPageModel.cpp">
+    <ClCompile Include="UI\BalloonSettings\SettingsNavList.cpp" />
+    <ClCompile Include="UI\BalloonSettings\SettingsPageModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\AudioLoopback.cpp">
+    <ClCompile Include="Feature\Call\AudioLoopback.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\AudioPcmUtils.cpp">
+    <ClCompile Include="Feature\Call\AudioPcmUtils.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\BalloonCallDlg.cpp" />
-    <ClCompile Include="Call\CallAudioEngine.cpp">
+    <ClCompile Include="Feature\Call\BalloonCallDlg.cpp" />
+    <ClCompile Include="Feature\Call\CallAudioEngine.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\CallDlgLayout.cpp">
+    <ClCompile Include="Feature\Call\CallDlgLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\CallMediaFraming.cpp">
+    <ClCompile Include="Feature\Call\CallMediaFraming.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\CallMediaSession.cpp">
+    <ClCompile Include="Feature\Call\CallMediaSession.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\CallRelayClient.cpp">
+    <ClCompile Include="Feature\Call\CallRelayClient.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\CallRelaySelfTest.cpp">
+    <ClCompile Include="Feature\Call\CallRelaySelfTest.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\CallRelayTestFrame.cpp">
+    <ClCompile Include="Feature\Call\CallRelayTestFrame.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\CallVideoCanvas.cpp">
+    <ClCompile Include="Feature\Call\CallVideoCanvas.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\CallVideoEngine.cpp">
+    <ClCompile Include="Feature\Call\CallVideoEngine.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\CallVideoUiDebug.cpp" />
-    <ClCompile Include="Call\CameraDisplayTest.cpp">
+    <ClCompile Include="Feature\Call\CallVideoUiDebug.cpp" />
+    <ClCompile Include="Feature\Call\CameraDisplayTest.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\CameraPreviewDebug.cpp">
+    <ClCompile Include="Feature\Call\CameraPreviewDebug.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\H264SelfTest.cpp">
+    <ClCompile Include="Feature\Call\H264SelfTest.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\MfCameraCapture.cpp">
+    <ClCompile Include="Feature\Call\MfCameraCapture.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\MfH264Codec.cpp">
+    <ClCompile Include="Feature\Call\MfH264Codec.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\OpusAudioCodec.cpp">
+    <ClCompile Include="Feature\Call\OpusAudioCodec.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\SpeexAudioProcessor.cpp">
+    <ClCompile Include="Feature\Call\SpeexAudioProcessor.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\SpeexResampler.cpp">
+    <ClCompile Include="Feature\Call\SpeexResampler.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\VideoFrameConvert.cpp">
+    <ClCompile Include="Feature\Call\VideoFrameConvert.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\VideoLoopbackDebug.cpp">
+    <ClCompile Include="Feature\Call\VideoLoopbackDebug.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Call\WasapiAudioIo.cpp">
+    <ClCompile Include="Feature\Call\WasapiAudioIo.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="jsoncpp-1.9.0\json_reader.cpp" />
-    <ClCompile Include="jsoncpp-1.9.0\json_value.cpp" />
-    <ClCompile Include="jsoncpp-1.9.0\json_writer.cpp" />
+    <ClCompile Include="third-party\jsoncpp-1.9.0\json_reader.cpp" />
+    <ClCompile Include="third-party\jsoncpp-1.9.0\json_value.cpp" />
+    <ClCompile Include="third-party\jsoncpp-1.9.0\json_writer.cpp" />
     <ClCompile Include="net\AccountProtocolClient.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -922,9 +922,9 @@
     <ClCompile Include="net\UpdateProtocolClient.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="Update\UpdateManager.cpp" />
-    <ClCompile Include="BalloonUpdate\BalloonUpdateWindow.cpp" />
-    <ClCompile Include="Update\UpdateViewModel.cpp">
+    <ClCompile Include="Feature\Update\UpdateManager.cpp" />
+    <ClCompile Include="UI\BalloonUpdate\BalloonUpdateWindow.cpp" />
+    <ClCompile Include="Feature\Update\UpdateViewModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="net\MessageProtocolClient.cpp">
@@ -949,115 +949,115 @@
     <ClCompile Include="net\TransferOwnerRegistry.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="RemoteDesktop\CaptureFallbackPolicy.cpp">
+    <ClCompile Include="Feature\RemoteDesktop\CaptureFallbackPolicy.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="RemoteDesktop\DxgiScreenCapturer.cpp">
+    <ClCompile Include="Feature\RemoteDesktop\DxgiScreenCapturer.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="RemoteDesktop\GdiScreenCapturer.cpp">
+    <ClCompile Include="Feature\RemoteDesktop\GdiScreenCapturer.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="RemoteDesktop\RdControlledStreamer.cpp">
+    <ClCompile Include="Feature\RemoteDesktop\RdControlledStreamer.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="RemoteDesktop\RdInputEncoder.cpp">
+    <ClCompile Include="Feature\RemoteDesktop\RdInputEncoder.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="RemoteDesktop\RdInputInjector.cpp">
+    <ClCompile Include="Feature\RemoteDesktop\RdInputInjector.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="RemoteDesktop\RdRelayClient.cpp">
+    <ClCompile Include="Feature\RemoteDesktop\RdRelayClient.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="RemoteDesktop\RdRelayFraming.cpp">
+    <ClCompile Include="Feature\RemoteDesktop\RdRelayFraming.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="FolderTransfer\FolderManifest.cpp">
+    <ClCompile Include="Feature\FolderTransfer\FolderManifest.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="BalloonChatWnd\ChatFolderStateModel.cpp">
+    <ClCompile Include="UI\BalloonChatWnd\ChatFolderStateModel.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="FolderTransfer\FolderRelayFraming.cpp">
+    <ClCompile Include="Feature\FolderTransfer\FolderRelayFraming.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="FolderTransfer\FolderRelayClient.cpp">
+    <ClCompile Include="Feature\FolderTransfer\FolderRelayClient.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="FolderTransfer\FolderRecvSession.cpp">
+    <ClCompile Include="Feature\FolderTransfer\FolderRecvSession.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="FolderTransfer\FolderSendSession.cpp">
+    <ClCompile Include="Feature\FolderTransfer\FolderSendSession.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="FolderTransfer\FolderTransferManager.cpp">
+    <ClCompile Include="Feature\FolderTransfer\FolderTransferManager.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="RemoteDesktop\RdRelaySelfTest.cpp">
+    <ClCompile Include="Feature\RemoteDesktop\RdRelaySelfTest.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="RemoteDesktop\RdScreenCapturer.cpp">
+    <ClCompile Include="Feature\RemoteDesktop\RdScreenCapturer.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="RemoteDesktop\RdScreenDecoder.cpp">
+    <ClCompile Include="Feature\RemoteDesktop\RdScreenDecoder.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="RemoteDesktop\RdSelfTestWindow.cpp">
+    <ClCompile Include="Feature\RemoteDesktop\RdSelfTestWindow.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="RemoteDesktop\ScreenFrameEncoder.cpp">
+    <ClCompile Include="Feature\RemoteDesktop\ScreenFrameEncoder.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="RemoteDesktop\ScreenManager.cpp" />
-    <ClCompile Include="RemoteDesktop\ScreenSpy.cpp" />
-    <ClCompile Include="RemoteDesktop\until.cpp" />
-    <ClCompile Include="zlib1.2.11\adler32.c">
+    <ClCompile Include="Feature\RemoteDesktop\ScreenManager.cpp" />
+    <ClCompile Include="Feature\RemoteDesktop\ScreenSpy.cpp" />
+    <ClCompile Include="Feature\RemoteDesktop\until.cpp" />
+    <ClCompile Include="third-party\zlib1.2.11\adler32.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="zlib1.2.11\compress.c">
+    <ClCompile Include="third-party\zlib1.2.11\compress.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="zlib1.2.11\crc32.c">
+    <ClCompile Include="third-party\zlib1.2.11\crc32.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="zlib1.2.11\deflate.c">
+    <ClCompile Include="third-party\zlib1.2.11\deflate.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="zlib1.2.11\gzclose.c">
+    <ClCompile Include="third-party\zlib1.2.11\gzclose.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="zlib1.2.11\gzlib.c">
+    <ClCompile Include="third-party\zlib1.2.11\gzlib.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="zlib1.2.11\gzread.c">
+    <ClCompile Include="third-party\zlib1.2.11\gzread.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="zlib1.2.11\gzwrite.c">
+    <ClCompile Include="third-party\zlib1.2.11\gzwrite.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="zlib1.2.11\infback.c">
+    <ClCompile Include="third-party\zlib1.2.11\infback.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="zlib1.2.11\inffast.c">
+    <ClCompile Include="third-party\zlib1.2.11\inffast.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="zlib1.2.11\inflate.c">
+    <ClCompile Include="third-party\zlib1.2.11\inflate.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="zlib1.2.11\inftrees.c">
+    <ClCompile Include="third-party\zlib1.2.11\inftrees.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="zlib1.2.11\trees.c">
+    <ClCompile Include="third-party\zlib1.2.11\trees.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="zlib1.2.11\uncompr.c">
+    <ClCompile Include="third-party\zlib1.2.11\uncompr.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="zlib1.2.11\zlibdemo.c">
+    <ClCompile Include="third-party\zlib1.2.11\zlibdemo.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="zlib1.2.11\zutil.c">
+    <ClCompile Include="third-party\zlib1.2.11\zutil.c">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="..\..\third-party\sqlite-src-3530100\sqlite3.c">
@@ -1068,292 +1068,292 @@
     <ClInclude Include="net\FrameCrypto.h" />
     <ClInclude Include="net\FramePayload.h" />
     <ClInclude Include="net\HandshakeRunner.h" />
-    <ClInclude Include="Buffer.h" />
-    <ClInclude Include="CascadeWinManager.h" />
-    <ClInclude Include="CheckNetworkStatusTask.h" />
-    <ClInclude Include="ClipboardText.h" />
-    <ClInclude Include="CustomMsgDef.h" />
-    <ClInclude Include="EncodeUtil.h" />
-    <ClInclude Include="FaceList.h" />
-    <ClInclude Include="File2.h" />
-    <ClInclude Include="FileTaskThread.h" />
-    <ClInclude Include="FlamingoClient.h" />
-    <ClInclude Include="GDIFactory.h" />
-    <ClInclude Include="GroupRoleRules.h" />
-    <ClInclude Include="ImageEx.h" />
-    <ClInclude Include="ImageTaskThread.h" />
-    <ClInclude Include="IniFile.h" />
-    <ClInclude Include="IULog.h" />
-    <ClInclude Include="Crash.h" />
-    <ClInclude Include="LoginAccountList.h" />
-    <ClInclude Include="MainDlg.h" />
-    <ClInclude Include="MD5.h" />
-    <ClInclude Include="MD5Core.h" />
-    <ClInclude Include="MessageLogger.h" />
-    <ClInclude Include="MiniBuffer.h" />
-    <ClInclude Include="Path.h" />
-    <ClInclude Include="LogCleanupPolicy.h" />
+    <ClInclude Include="Common\Util\Buffer.h" />
+    <ClInclude Include="App\CascadeWinManager.h" />
+    <ClInclude Include="Threading\CheckNetworkStatusTask.h" />
+    <ClInclude Include="Common\Util\ClipboardText.h" />
+    <ClInclude Include="App\CustomMsgDef.h" />
+    <ClInclude Include="Common\Util\EncodeUtil.h" />
+    <ClInclude Include="Common\Graphics\FaceList.h" />
+    <ClInclude Include="Common\Util\File2.h" />
+    <ClInclude Include="Threading\FileTaskThread.h" />
+    <ClInclude Include="App\FlamingoClient.h" />
+    <ClInclude Include="Common\Graphics\GDIFactory.h" />
+    <ClInclude Include="Session\GroupRoleRules.h" />
+    <ClInclude Include="Common\Graphics\ImageEx.h" />
+    <ClInclude Include="Threading\ImageTaskThread.h" />
+    <ClInclude Include="Common\Util\IniFile.h" />
+    <ClInclude Include="Common\Log\IULog.h" />
+    <ClInclude Include="App\Crash.h" />
+    <ClInclude Include="Session\LoginAccountList.h" />
+    <ClInclude Include="App\MainDlg.h" />
+    <ClInclude Include="Common\Util\MD5.h" />
+    <ClInclude Include="Common\Util\MD5Core.h" />
+    <ClInclude Include="Common\Log\MessageLogger.h" />
+    <ClInclude Include="Common\Util\MiniBuffer.h" />
+    <ClInclude Include="Common\Util\Path.h" />
+    <ClInclude Include="Common\Log\LogCleanupPolicy.h" />
     <ClInclude Include="resource.h" />
-    <ClInclude Include="SendMsgThread.h" />
-    <ClInclude Include="Startup.h" />
+    <ClInclude Include="Threading\SendMsgThread.h" />
+    <ClInclude Include="App\Startup.h" />
     <ClInclude Include="stdafx.h" />
-    <ClInclude Include="Thread.h" />
-    <ClInclude Include="ThreadPool.h" />
-    <ClInclude Include="TrayIcon.h" />
-    <ClInclude Include="UIText.h" />
-    <ClInclude Include="UserConfig.h" />
-    <ClInclude Include="UserMgr.h" />
-    <ClInclude Include="UserSessionData.h" />
-    <ClInclude Include="Utils.h" />
-    <ClInclude Include="XmlDocument.h" />
-    <ClInclude Include="ZlibUtil.h" />
-    <ClInclude Include="BalloonAnnounce\AnnounceBoxLayout.h" />
-    <ClInclude Include="BalloonAnnounce\AnnounceRow.h" />
-    <ClInclude Include="BalloonAnnounce\BalloonAnnounceBoxWindow.h" />
-    <ClInclude Include="BalloonAnnounce\AnnouncePopupWindow.h" />
-    <ClInclude Include="BalloonAuth\AuthBanner.h" />
-    <ClInclude Include="BalloonAuth\AuthButtons.h" />
-    <ClInclude Include="BalloonAuth\AuthInputField.h" />
-    <ClInclude Include="BalloonAuth\BalloonLoginDlg.h" />
-    <ClInclude Include="BalloonAuth\LoginProgressState.h" />
-    <ClInclude Include="BalloonAuth\BalloonLoginLayout.h" />
-    <ClInclude Include="BalloonAuth\AccountRemoval.h" />
-    <ClInclude Include="BalloonChat\BalloonChatMsgFormat.h" />
-    <ClInclude Include="BalloonChatWnd\BalloonChatWindow.h" />
-    <ClInclude Include="BalloonChatWnd\BalloonGroupChatWindow.h" />
-    <ClInclude Include="BalloonChatWnd\ChatAvatarResolve.h" />
-    <ClInclude Include="BalloonChatWnd\ChatBannerLabel.h" />
-    <ClInclude Include="BalloonChatWnd\ChatBubble.h" />
-    <ClInclude Include="BalloonChatWnd\ChatFaceTag.h" />
-    <ClInclude Include="BalloonChatWnd\ChatFileAction.h" />
-    <ClInclude Include="BalloonChatWnd\ChatDropController.h" />
-    <ClInclude Include="BalloonChatWnd\ChatDropModel.h" />
-    <ClInclude Include="BalloonChatWnd\ChatLinkDetect.h" />
-    <ClInclude Include="BalloonChatWnd\ChatTimeSeparator.h" />
-    <ClInclude Include="BalloonChatWnd\ChatFileLocation.h" />
-    <ClInclude Include="BalloonChatWnd\ChatFileStateModel.h" />
-    <ClInclude Include="BalloonChatWnd\ChatFileVisual.h" />
-    <ClInclude Include="BalloonChatWnd\ChatFontUtil.h" />
-    <ClInclude Include="BalloonChatWnd\ChatHeaderInfo.h" />
-    <ClInclude Include="BalloonChatWnd\ChatHistoryPaging.h" />
-    <ClInclude Include="BalloonChatWnd\ChatIconButton.h" />
-    <ClInclude Include="BalloonChatWnd\ChatIcons.h" />
-    <ClInclude Include="BalloonChatWnd\ChatImageCache.h" />
-    <ClInclude Include="BalloonChatWnd\ChatImageSaveAs.h" />
-    <ClInclude Include="BalloonChatWnd\ChatInputRichEdit.h" />
-    <ClInclude Include="BalloonChatWnd\ChatMessageList.h" />
-    <ClInclude Include="BalloonChatWnd\ChatMessageMenu.h" />
-    <ClInclude Include="BalloonChatWnd\ChatMockData.h" />
-    <ClInclude Include="BalloonChatWnd\ChatQuoteModel.h" />
-    <ClInclude Include="BalloonChatWnd\ChatRichContentSplit.h" />
-    <ClInclude Include="BalloonChatWnd\ChatRootPanel.h" />
-    <ClInclude Include="BalloonChatWnd\ChatSendButton.h" />
-    <ClInclude Include="BalloonChatWnd\ChatSendMode.h" />
-    <ClInclude Include="BalloonChatWnd\ChatTextSelection.h" />
-    <ClInclude Include="BalloonChatWnd\ChatTitleIcon.h" />
-    <ClInclude Include="BalloonChatWnd\ChatWindowLayout.h" />
-    <ClInclude Include="BalloonChatWnd\EmojiPickerPopup.h" />
-    <ClInclude Include="BalloonChatWnd\FaceImagePickerPopup.h" />
-    <ClInclude Include="BalloonChatWnd\FileBubbleFormat.h" />
-    <ClInclude Include="BalloonChatWnd\FontSettingPopup.h" />
-    <ClInclude Include="BalloonChatWnd\GroupAtDropdown.h" />
-    <ClInclude Include="BalloonChatWnd\GroupChatHeaderInfo.h" />
-    <ClInclude Include="BalloonChatWnd\GroupChatWindowLayout.h" />
-    <ClInclude Include="BalloonChatWnd\GroupFileItem.h" />
-    <ClInclude Include="BalloonChatWnd\GroupFileLibrary.h" />
-    <ClInclude Include="BalloonChatWnd\GroupFileList.h" />
-    <ClInclude Include="BalloonChatWnd\GroupFileUploadTracker.h" />
-    <ClInclude Include="BalloonChatWnd\GroupMemberItem.h" />
-    <ClInclude Include="BalloonChatWnd\GroupMemberList.h" />
-    <ClInclude Include="BalloonChatWnd\GroupMemberOrder.h" />
-    <ClInclude Include="BalloonChatWnd\GroupMentionButton.h" />
-    <ClInclude Include="BalloonChatWnd\GroupMentionMenu.h" />
-    <ClInclude Include="BalloonChatWnd\GroupMentionModel.h" />
-    <ClInclude Include="BalloonChatWnd\GroupSideTab.h" />
-    <ClInclude Include="BalloonChatWnd\ShakeRateLimiter.h" />
-    <ClInclude Include="BalloonChatWnd\SideTabText.h" />
-    <ClInclude Include="BalloonChatWnd\TypingIndicator.h" />
-    <ClInclude Include="BalloonContact\BalloonContactWindow.h" />
-    <ClInclude Include="BalloonContact\ContactIcons.h" />
-    <ClInclude Include="BalloonContact\ContactLayout.h" />
-    <ClInclude Include="BalloonContact\ContactModel.h" />
-    <ClInclude Include="BalloonContact\ContactTagModel.h" />
-    <ClInclude Include="BalloonContact\TagEditPopup.h" />
-    <ClInclude Include="BalloonContact\TagChip.h" />
-    <ClInclude Include="BalloonGroupManage\AnnouncePopupPolicy.h" />
-    <ClInclude Include="BalloonGroupManage\BalloonAnnouncePopupDlg.h" />
-    <ClInclude Include="BalloonGroupManage\BalloonGroupManageWindow.h" />
-    <ClInclude Include="BalloonGroupManage\GroupAvatarDlgRequest.h" />
-    <ClInclude Include="BalloonGroupManage\GroupManageButton.h" />
-    <ClInclude Include="BalloonGroupManage\GroupManageIcons.h" />
-    <ClInclude Include="BalloonGroupManage\GroupManageLayout.h" />
-    <ClInclude Include="BalloonGroupManage\GroupManageMapping.h" />
-    <ClInclude Include="BalloonGroupManage\GroupManageModel.h" />
-    <ClInclude Include="BalloonGroupManage\GroupManageNavItem.h" />
-    <ClInclude Include="BalloonGroupManage\GroupManagePaint.h" />
-    <ClInclude Include="BalloonGroupManage\MemberPickerRequest.h" />
-    <ClInclude Include="BalloonHistory\AnnounceStore.h" />
-    <ClInclude Include="BalloonHistory\BalloonHistoryWindow.h" />
-    <ClInclude Include="BalloonHistory\FileLocalStore.h" />
-    <ClInclude Include="BalloonHistory\FolderLocalStore.h" />
-    <ClInclude Include="BalloonHistory\HistoryHighlightLabel.h" />
-    <ClInclude Include="BalloonHistory\HistoryModel.h" />
-    <ClInclude Include="BalloonHistory\HistoryContentView.h" />
-    <ClInclude Include="BalloonHistory\HistoryRowMenu.h" />
-    <ClInclude Include="ClipboardImage.h" />
-    <ClInclude Include="BalloonHistory\HistoryRow.h" />
-    <ClInclude Include="BalloonHistory\HistoryView.h" />
-    <ClInclude Include="BalloonHistory\HistoryWindowLayout.h" />
-    <ClInclude Include="BalloonHistory\V2MsgQuery.h" />
-    <ClInclude Include="BalloonHistory\V2MsgStore.h" />
-    <ClInclude Include="BalloonImageViewer\BalloonImageViewerWindow.h" />
-    <ClInclude Include="BalloonImageViewer\ImageCanvas.h" />
-    <ClInclude Include="BalloonImageViewer\ImageViewerGeometry.h" />
-    <ClInclude Include="BalloonImageViewer\ImageViewerToolbar.h" />
-    <ClInclude Include="BalloonMain\AboutDlgModel.h" />
-    <ClInclude Include="BalloonMain\AvatarGray.h" />
-    <ClInclude Include="BalloonMain\AvatarImageUtil.h" />
-    <ClInclude Include="BalloonMain\AvatarPalette.h" />
-    <ClInclude Include="BalloonMain\AvatarPickerTile.h" />
-    <ClInclude Include="BalloonMain\AvatarSpec.h" />
-    <ClInclude Include="BalloonMain\BadgeRender.h" />
-    <ClInclude Include="BalloonMain\BalloonAboutDlg.h" />
-    <ClInclude Include="BalloonMain\BalloonChangePwdDlg.h" />
-    <ClInclude Include="BalloonMain\BalloonChangePwdValidate.h" />
-    <ClInclude Include="BalloonMain\BalloonClosePromptDlg.h" />
-    <ClInclude Include="BalloonMain\BalloonContactTreeAdapter.h" />
-    <ClInclude Include="BalloonMain\BalloonGroupInfoDlg.h" />
-    <ClInclude Include="BalloonMain\BalloonGroupInfoLayout.h" />
-    <ClInclude Include="BalloonMain\BalloonKickoutDlg.h" />
-    <ClInclude Include="BalloonMain\BalloonMainLayout.h" />
-    <ClInclude Include="BalloonMain\BalloonMainPanel.h" />
-    <ClInclude Include="BalloonMain\BalloonModifyAvatarDlg.h" />
-    <ClInclude Include="BalloonMain\BalloonProfileDlg.h" />
-    <ClInclude Include="BalloonMain\BalloonProfileLayout.h" />
-    <ClInclude Include="BalloonMain\ClosePromptDecision.h" />
-    <ClInclude Include="BalloonMain\ContactRemarkModel.h" />
-    <ClInclude Include="BalloonMain\ContactsOrgStats.h" />
-    <ClInclude Include="BalloonMain\ConversationListOps.h" />
-    <ClInclude Include="BalloonMain\CreateGroupDlg.h" />
-    <ClInclude Include="BalloonMain\FavoritesModel.h" />
-    <ClInclude Include="BalloonMain\FolderInviteNotifyPolicy.h" />
-    <ClInclude Include="BalloonMain\StarredModel.h" />
-    <ClInclude Include="BalloonMain\CornerPopupPlacement.h" />
-    <ClInclude Include="BalloonMain\StarredPopupModel.h" />
-    <ClInclude Include="BalloonMain\StarredPopupWindow.h" />
-    <ClInclude Include="BalloonMain\GroupRowText.h" />
-    <ClInclude Include="BalloonMain\KickoutNotice.h" />
-    <ClInclude Include="BalloonMain\MainPanelAvatar.h" />
-    <ClInclude Include="BalloonMain\MainPanelButtons.h" />
-    <ClInclude Include="BalloonMain\MainPanelContactMenu.h" />
-    <ClInclude Include="BalloonMain\MainPanelConversationMenu.h" />
-    <ClInclude Include="BalloonMain\MainPanelHeader.h" />
-    <ClInclude Include="BalloonMain\MainPanelIcons.h" />
-    <ClInclude Include="BalloonMain\MainPanelListItem.h" />
-    <ClInclude Include="BalloonMain\MainPanelMenuIcons.h" />
-    <ClInclude Include="BalloonMain\MainPanelMockData.h" />
-    <ClInclude Include="BalloonMain\MainPanelScrollView.h" />
-    <ClInclude Include="BalloonMain\MainPanelSectionHeader.h" />
-    <ClInclude Include="BalloonMain\MainPanelStatusMenu.h" />
-    <ClInclude Include="BalloonMain\PresenceBadge.h" />
-    <ClInclude Include="BalloonMain\AutoAwayPolicy.h" />
-    <ClInclude Include="BalloonMain\KeepAwakePolicy.h" />
-    <ClInclude Include="BalloonMain\KeepAwakeSession.h" />
-    <ClInclude Include="BalloonMain\MainPanelSystemMenu.h" />
-    <ClInclude Include="BalloonMain\MainPanelTab.h" />
-    <ClInclude Include="BalloonMain\MainPanelTrayMenu.h" />
-    <ClInclude Include="BalloonMain\MainPanelTreeView.h" />
-    <ClInclude Include="BalloonMain\MainPanelUserData.h" />
-    <ClInclude Include="BalloonMain\MemberPickerRow.h" />
-    <ClInclude Include="BalloonMain\MemberPickerTreeModel.h" />
-    <ClInclude Include="BalloonMain\MemberPickerTreeView.h" />
-    <ClInclude Include="BalloonMain\NotificationSound.h" />
-    <ClInclude Include="BalloonMain\OnlineCapability.h" />
-    <ClInclude Include="BalloonMain\OverlayScrollBarGeometry.h" />
-    <ClInclude Include="BalloonMain\PanelDragZone.h" />
-    <ClInclude Include="BalloonMain\PopupMenuPlacement.h" />
-    <ClInclude Include="BalloonMain\UnknownSenderRefreshPolicy.h" />
+    <ClInclude Include="Threading\Thread.h" />
+    <ClInclude Include="Threading\ThreadPool.h" />
+    <ClInclude Include="App\TrayIcon.h" />
+    <ClInclude Include="App\UIText.h" />
+    <ClInclude Include="Session\UserConfig.h" />
+    <ClInclude Include="Session\UserMgr.h" />
+    <ClInclude Include="Session\UserSessionData.h" />
+    <ClInclude Include="Common\Util\Utils.h" />
+    <ClInclude Include="Common\Util\XmlDocument.h" />
+    <ClInclude Include="Common\Util\ZlibUtil.h" />
+    <ClInclude Include="UI\BalloonAnnounce\AnnounceBoxLayout.h" />
+    <ClInclude Include="UI\BalloonAnnounce\AnnounceRow.h" />
+    <ClInclude Include="UI\BalloonAnnounce\BalloonAnnounceBoxWindow.h" />
+    <ClInclude Include="UI\BalloonAnnounce\AnnouncePopupWindow.h" />
+    <ClInclude Include="UI\BalloonAuth\AuthBanner.h" />
+    <ClInclude Include="UI\BalloonAuth\AuthButtons.h" />
+    <ClInclude Include="UI\BalloonAuth\AuthInputField.h" />
+    <ClInclude Include="UI\BalloonAuth\BalloonLoginDlg.h" />
+    <ClInclude Include="UI\BalloonAuth\LoginProgressState.h" />
+    <ClInclude Include="UI\BalloonAuth\BalloonLoginLayout.h" />
+    <ClInclude Include="UI\BalloonAuth\AccountRemoval.h" />
+    <ClInclude Include="UI\BalloonChat\BalloonChatMsgFormat.h" />
+    <ClInclude Include="UI\BalloonChatWnd\BalloonChatWindow.h" />
+    <ClInclude Include="UI\BalloonChatWnd\BalloonGroupChatWindow.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatAvatarResolve.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatBannerLabel.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatBubble.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatFaceTag.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatFileAction.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatDropController.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatDropModel.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatLinkDetect.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatTimeSeparator.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatFileLocation.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatFileStateModel.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatFileVisual.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatFontUtil.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatHeaderInfo.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatHistoryPaging.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatIconButton.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatIcons.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatImageCache.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatImageSaveAs.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatInputRichEdit.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatMessageList.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatMessageMenu.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatMockData.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatQuoteModel.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatRichContentSplit.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatRootPanel.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatSendButton.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatSendMode.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatTextSelection.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatTitleIcon.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatWindowLayout.h" />
+    <ClInclude Include="UI\BalloonChatWnd\EmojiPickerPopup.h" />
+    <ClInclude Include="UI\BalloonChatWnd\FaceImagePickerPopup.h" />
+    <ClInclude Include="UI\BalloonChatWnd\FileBubbleFormat.h" />
+    <ClInclude Include="UI\BalloonChatWnd\FontSettingPopup.h" />
+    <ClInclude Include="UI\BalloonChatWnd\GroupAtDropdown.h" />
+    <ClInclude Include="UI\BalloonChatWnd\GroupChatHeaderInfo.h" />
+    <ClInclude Include="UI\BalloonChatWnd\GroupChatWindowLayout.h" />
+    <ClInclude Include="UI\BalloonChatWnd\GroupFileItem.h" />
+    <ClInclude Include="UI\BalloonChatWnd\GroupFileLibrary.h" />
+    <ClInclude Include="UI\BalloonChatWnd\GroupFileList.h" />
+    <ClInclude Include="UI\BalloonChatWnd\GroupFileUploadTracker.h" />
+    <ClInclude Include="UI\BalloonChatWnd\GroupMemberItem.h" />
+    <ClInclude Include="UI\BalloonChatWnd\GroupMemberList.h" />
+    <ClInclude Include="UI\BalloonChatWnd\GroupMemberOrder.h" />
+    <ClInclude Include="UI\BalloonChatWnd\GroupMentionButton.h" />
+    <ClInclude Include="UI\BalloonChatWnd\GroupMentionMenu.h" />
+    <ClInclude Include="UI\BalloonChatWnd\GroupMentionModel.h" />
+    <ClInclude Include="UI\BalloonChatWnd\GroupSideTab.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ShakeRateLimiter.h" />
+    <ClInclude Include="UI\BalloonChatWnd\SideTabText.h" />
+    <ClInclude Include="UI\BalloonChatWnd\TypingIndicator.h" />
+    <ClInclude Include="UI\BalloonContact\BalloonContactWindow.h" />
+    <ClInclude Include="UI\BalloonContact\ContactIcons.h" />
+    <ClInclude Include="UI\BalloonContact\ContactLayout.h" />
+    <ClInclude Include="UI\BalloonContact\ContactModel.h" />
+    <ClInclude Include="UI\BalloonContact\ContactTagModel.h" />
+    <ClInclude Include="UI\BalloonContact\TagEditPopup.h" />
+    <ClInclude Include="UI\BalloonContact\TagChip.h" />
+    <ClInclude Include="UI\BalloonGroupManage\AnnouncePopupPolicy.h" />
+    <ClInclude Include="UI\BalloonGroupManage\BalloonAnnouncePopupDlg.h" />
+    <ClInclude Include="UI\BalloonGroupManage\BalloonGroupManageWindow.h" />
+    <ClInclude Include="UI\BalloonGroupManage\GroupAvatarDlgRequest.h" />
+    <ClInclude Include="UI\BalloonGroupManage\GroupManageButton.h" />
+    <ClInclude Include="UI\BalloonGroupManage\GroupManageIcons.h" />
+    <ClInclude Include="UI\BalloonGroupManage\GroupManageLayout.h" />
+    <ClInclude Include="UI\BalloonGroupManage\GroupManageMapping.h" />
+    <ClInclude Include="UI\BalloonGroupManage\GroupManageModel.h" />
+    <ClInclude Include="UI\BalloonGroupManage\GroupManageNavItem.h" />
+    <ClInclude Include="UI\BalloonGroupManage\GroupManagePaint.h" />
+    <ClInclude Include="UI\BalloonGroupManage\MemberPickerRequest.h" />
+    <ClInclude Include="UI\BalloonHistory\AnnounceStore.h" />
+    <ClInclude Include="UI\BalloonHistory\BalloonHistoryWindow.h" />
+    <ClInclude Include="UI\BalloonHistory\FileLocalStore.h" />
+    <ClInclude Include="UI\BalloonHistory\FolderLocalStore.h" />
+    <ClInclude Include="UI\BalloonHistory\HistoryHighlightLabel.h" />
+    <ClInclude Include="UI\BalloonHistory\HistoryModel.h" />
+    <ClInclude Include="UI\BalloonHistory\HistoryContentView.h" />
+    <ClInclude Include="UI\BalloonHistory\HistoryRowMenu.h" />
+    <ClInclude Include="Common\Util\ClipboardImage.h" />
+    <ClInclude Include="UI\BalloonHistory\HistoryRow.h" />
+    <ClInclude Include="UI\BalloonHistory\HistoryView.h" />
+    <ClInclude Include="UI\BalloonHistory\HistoryWindowLayout.h" />
+    <ClInclude Include="UI\BalloonHistory\V2MsgQuery.h" />
+    <ClInclude Include="UI\BalloonHistory\V2MsgStore.h" />
+    <ClInclude Include="UI\BalloonImageViewer\BalloonImageViewerWindow.h" />
+    <ClInclude Include="UI\BalloonImageViewer\ImageCanvas.h" />
+    <ClInclude Include="UI\BalloonImageViewer\ImageViewerGeometry.h" />
+    <ClInclude Include="UI\BalloonImageViewer\ImageViewerToolbar.h" />
+    <ClInclude Include="UI\BalloonMain\AboutDlgModel.h" />
+    <ClInclude Include="UI\BalloonMain\AvatarGray.h" />
+    <ClInclude Include="UI\BalloonMain\AvatarImageUtil.h" />
+    <ClInclude Include="UI\BalloonMain\AvatarPalette.h" />
+    <ClInclude Include="UI\BalloonMain\AvatarPickerTile.h" />
+    <ClInclude Include="UI\BalloonMain\AvatarSpec.h" />
+    <ClInclude Include="UI\BalloonMain\BadgeRender.h" />
+    <ClInclude Include="UI\BalloonMain\BalloonAboutDlg.h" />
+    <ClInclude Include="UI\BalloonMain\BalloonChangePwdDlg.h" />
+    <ClInclude Include="UI\BalloonMain\BalloonChangePwdValidate.h" />
+    <ClInclude Include="UI\BalloonMain\BalloonClosePromptDlg.h" />
+    <ClInclude Include="UI\BalloonMain\BalloonContactTreeAdapter.h" />
+    <ClInclude Include="UI\BalloonMain\BalloonGroupInfoDlg.h" />
+    <ClInclude Include="UI\BalloonMain\BalloonGroupInfoLayout.h" />
+    <ClInclude Include="UI\BalloonMain\BalloonKickoutDlg.h" />
+    <ClInclude Include="UI\BalloonMain\BalloonMainLayout.h" />
+    <ClInclude Include="UI\BalloonMain\BalloonMainPanel.h" />
+    <ClInclude Include="UI\BalloonMain\BalloonModifyAvatarDlg.h" />
+    <ClInclude Include="UI\BalloonMain\BalloonProfileDlg.h" />
+    <ClInclude Include="UI\BalloonMain\BalloonProfileLayout.h" />
+    <ClInclude Include="UI\BalloonMain\ClosePromptDecision.h" />
+    <ClInclude Include="UI\BalloonMain\ContactRemarkModel.h" />
+    <ClInclude Include="UI\BalloonMain\ContactsOrgStats.h" />
+    <ClInclude Include="UI\BalloonMain\ConversationListOps.h" />
+    <ClInclude Include="UI\BalloonMain\CreateGroupDlg.h" />
+    <ClInclude Include="UI\BalloonMain\FavoritesModel.h" />
+    <ClInclude Include="UI\BalloonMain\FolderInviteNotifyPolicy.h" />
+    <ClInclude Include="UI\BalloonMain\StarredModel.h" />
+    <ClInclude Include="UI\BalloonMain\CornerPopupPlacement.h" />
+    <ClInclude Include="UI\BalloonMain\StarredPopupModel.h" />
+    <ClInclude Include="UI\BalloonMain\StarredPopupWindow.h" />
+    <ClInclude Include="UI\BalloonMain\GroupRowText.h" />
+    <ClInclude Include="UI\BalloonMain\KickoutNotice.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelAvatar.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelButtons.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelContactMenu.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelConversationMenu.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelHeader.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelIcons.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelListItem.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelMenuIcons.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelMockData.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelScrollView.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelSectionHeader.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelStatusMenu.h" />
+    <ClInclude Include="UI\BalloonMain\PresenceBadge.h" />
+    <ClInclude Include="UI\BalloonMain\AutoAwayPolicy.h" />
+    <ClInclude Include="UI\BalloonMain\KeepAwakePolicy.h" />
+    <ClInclude Include="UI\BalloonMain\KeepAwakeSession.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelSystemMenu.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelTab.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelTrayMenu.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelTreeView.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelUserData.h" />
+    <ClInclude Include="UI\BalloonMain\MemberPickerRow.h" />
+    <ClInclude Include="UI\BalloonMain\MemberPickerTreeModel.h" />
+    <ClInclude Include="UI\BalloonMain\MemberPickerTreeView.h" />
+    <ClInclude Include="UI\BalloonMain\NotificationSound.h" />
+    <ClInclude Include="UI\BalloonMain\OnlineCapability.h" />
+    <ClInclude Include="UI\BalloonMain\OverlayScrollBarGeometry.h" />
+    <ClInclude Include="UI\BalloonMain\PanelDragZone.h" />
+    <ClInclude Include="UI\BalloonMain\PopupMenuPlacement.h" />
+    <ClInclude Include="UI\BalloonMain\UnknownSenderRefreshPolicy.h" />
     <ClInclude Include="net\UserCachePath.h" />
     <ClInclude Include="net\StorageLocation.h" />
     <ClInclude Include="net\CurrentUserAccount.h" />
-    <ClInclude Include="BalloonMain\SignatureEditModel.h" />
-    <ClInclude Include="BalloonMain\SignatureEditPopup.h" />
-    <ClInclude Include="BalloonMain\TitleBarIcon.h" />
-    <ClInclude Include="BalloonMain\TrayFlashController.h" />
-    <ClInclude Include="BalloonMain\TrayMsgTipPopup.h" />
-    <ClInclude Include="BalloonMain\TreeLocate.h" />
-    <ClInclude Include="BalloonNetSettings\BalloonNetSettingsWindow.h" />
-    <ClInclude Include="BalloonNetSettings\NetServerCard.h" />
-    <ClInclude Include="BalloonNetSettings\NetSettingsLayout.h" />
-    <ClInclude Include="BalloonNetSettings\NetSettingsModel.h" />
-    <ClInclude Include="BalloonProfile\BalloonProfileWindow.h" />
-    <ClInclude Include="BalloonProfile\ProfileLayout.h" />
-    <ClInclude Include="BalloonProfile\ProfileModel.h" />
-    <ClInclude Include="BalloonRegister\BalloonRegisterWindow.h" />
-    <ClInclude Include="BalloonRegister\RegisterIcons.h" />
-    <ClInclude Include="BalloonRegister\RegisterLayout.h" />
-    <ClInclude Include="BalloonRegister\RegisterModel.h" />
-    <ClInclude Include="BalloonRemoteDesktop\BalloonRemoteDesktopDlg.h" />
-    <ClInclude Include="BalloonRemoteDesktop\RdControlledBar.h" />
-    <ClInclude Include="BalloonRemoteDesktop\RdViewerToolbar.h" />
-    <ClInclude Include="BalloonRemoteDesktop\RdViewerWindow.h" />
-    <ClInclude Include="BalloonScreenshot\AnnotationModel.h" />
-    <ClInclude Include="BalloonScreenshot\CaptureCanvas.h" />
-    <ClInclude Include="BalloonScreenshot\ScreenCaptureOverlay.h" />
-    <ClInclude Include="BalloonScreenshot\ScreenshotGeometry.h" />
-    <ClInclude Include="BalloonScreenshot\ScreenshotToolbar.h" />
-    <ClInclude Include="BalloonSearch\ContactMatch.h" />
-    <ClInclude Include="BalloonSearch\PinyinFull.h" />
-    <ClInclude Include="BalloonSearch\PinyinInitials.h" />
-    <ClInclude Include="BalloonSearch\PinyinTable.inc" />
-    <ClInclude Include="BalloonSearch\SearchDropdown.h" />
-    <ClInclude Include="BalloonSearch\SearchFilterTab.h" />
-    <ClInclude Include="BalloonSettings\BalloonSystemSettingDlg.h" />
-    <ClInclude Include="BalloonSettings\SettingsBinding.h" />
-    <ClInclude Include="BalloonSettings\CacheCleanPlan.h" />
-    <ClInclude Include="BalloonSettings\CacheCleanExecutor.h" />
-    <ClInclude Include="BalloonSettings\BalloonCacheCleanDlg.h" />
-    <ClInclude Include="BalloonSettings\SettingsNavList.h" />
-    <ClInclude Include="BalloonSettings\SettingsPageModel.h" />
-    <ClInclude Include="Call\AudioLoopback.h" />
-    <ClInclude Include="Call\AudioPcmUtils.h" />
-    <ClInclude Include="Call\AvSyncScheduler.h" />
-    <ClInclude Include="Call\BalloonCallDlg.h" />
-    <ClInclude Include="Call\CallActionBarModel.h" />
-    <ClInclude Include="Call\CallAudioEngine.h" />
-    <ClInclude Include="Call\CallDlgLayout.h" />
-    <ClInclude Include="Call\CallMediaFraming.h" />
-    <ClInclude Include="Call\CallMediaSession.h" />
-    <ClInclude Include="Call\CallRelayClient.h" />
-    <ClInclude Include="Call\CallRelaySelfTest.h" />
-    <ClInclude Include="Call\CallRelayTestFrame.h" />
-    <ClInclude Include="Call\CallVideoCanvas.h" />
-    <ClInclude Include="Call\CallVideoDisplaySink.h" />
-    <ClInclude Include="Call\CallVideoEngine.h" />
-    <ClInclude Include="Call\CallVideoUiDebug.h" />
-    <ClInclude Include="Call\CameraDisplayTest.h" />
-    <ClInclude Include="Call\CameraPreviewDebug.h" />
-    <ClInclude Include="Call\H264SelfTest.h" />
-    <ClInclude Include="Call\MfCameraCapture.h" />
-    <ClInclude Include="Call\MfH264Codec.h" />
-    <ClInclude Include="Call\OpusAudioCodec.h" />
-    <ClInclude Include="Call\SpeexAudioProcessor.h" />
-    <ClInclude Include="Call\SpeexResampler.h" />
-    <ClInclude Include="Call\VideoFrameConvert.h" />
-    <ClInclude Include="Call\VideoLoopbackDebug.h" />
-    <ClInclude Include="Call\WasapiAudioIo.h" />
-    <ClInclude Include="jsoncpp-1.9.0\allocator.h" />
-    <ClInclude Include="jsoncpp-1.9.0\assertions.h" />
-    <ClInclude Include="jsoncpp-1.9.0\autolink.h" />
-    <ClInclude Include="jsoncpp-1.9.0\config.h" />
-    <ClInclude Include="jsoncpp-1.9.0\features.h" />
-    <ClInclude Include="jsoncpp-1.9.0\forwards.h" />
-    <ClInclude Include="jsoncpp-1.9.0\json.h" />
-    <ClInclude Include="jsoncpp-1.9.0\json_tool.h" />
-    <ClInclude Include="jsoncpp-1.9.0\reader.h" />
-    <ClInclude Include="jsoncpp-1.9.0\value.h" />
-    <ClInclude Include="jsoncpp-1.9.0\version.h" />
-    <ClInclude Include="jsoncpp-1.9.0\writer.h" />
+    <ClInclude Include="UI\BalloonMain\SignatureEditModel.h" />
+    <ClInclude Include="UI\BalloonMain\SignatureEditPopup.h" />
+    <ClInclude Include="UI\BalloonMain\TitleBarIcon.h" />
+    <ClInclude Include="UI\BalloonMain\TrayFlashController.h" />
+    <ClInclude Include="UI\BalloonMain\TrayMsgTipPopup.h" />
+    <ClInclude Include="UI\BalloonMain\TreeLocate.h" />
+    <ClInclude Include="UI\BalloonNetSettings\BalloonNetSettingsWindow.h" />
+    <ClInclude Include="UI\BalloonNetSettings\NetServerCard.h" />
+    <ClInclude Include="UI\BalloonNetSettings\NetSettingsLayout.h" />
+    <ClInclude Include="UI\BalloonNetSettings\NetSettingsModel.h" />
+    <ClInclude Include="UI\BalloonProfile\BalloonProfileWindow.h" />
+    <ClInclude Include="UI\BalloonProfile\ProfileLayout.h" />
+    <ClInclude Include="UI\BalloonProfile\ProfileModel.h" />
+    <ClInclude Include="UI\BalloonRegister\BalloonRegisterWindow.h" />
+    <ClInclude Include="UI\BalloonRegister\RegisterIcons.h" />
+    <ClInclude Include="UI\BalloonRegister\RegisterLayout.h" />
+    <ClInclude Include="UI\BalloonRegister\RegisterModel.h" />
+    <ClInclude Include="UI\BalloonRemoteDesktop\BalloonRemoteDesktopDlg.h" />
+    <ClInclude Include="UI\BalloonRemoteDesktop\RdControlledBar.h" />
+    <ClInclude Include="UI\BalloonRemoteDesktop\RdViewerToolbar.h" />
+    <ClInclude Include="UI\BalloonRemoteDesktop\RdViewerWindow.h" />
+    <ClInclude Include="UI\BalloonScreenshot\AnnotationModel.h" />
+    <ClInclude Include="UI\BalloonScreenshot\CaptureCanvas.h" />
+    <ClInclude Include="UI\BalloonScreenshot\ScreenCaptureOverlay.h" />
+    <ClInclude Include="UI\BalloonScreenshot\ScreenshotGeometry.h" />
+    <ClInclude Include="UI\BalloonScreenshot\ScreenshotToolbar.h" />
+    <ClInclude Include="UI\BalloonSearch\ContactMatch.h" />
+    <ClInclude Include="UI\BalloonSearch\PinyinFull.h" />
+    <ClInclude Include="UI\BalloonSearch\PinyinInitials.h" />
+    <ClInclude Include="UI\BalloonSearch\PinyinTable.inc" />
+    <ClInclude Include="UI\BalloonSearch\SearchDropdown.h" />
+    <ClInclude Include="UI\BalloonSearch\SearchFilterTab.h" />
+    <ClInclude Include="UI\BalloonSettings\BalloonSystemSettingDlg.h" />
+    <ClInclude Include="UI\BalloonSettings\SettingsBinding.h" />
+    <ClInclude Include="UI\BalloonSettings\CacheCleanPlan.h" />
+    <ClInclude Include="UI\BalloonSettings\CacheCleanExecutor.h" />
+    <ClInclude Include="UI\BalloonSettings\BalloonCacheCleanDlg.h" />
+    <ClInclude Include="UI\BalloonSettings\SettingsNavList.h" />
+    <ClInclude Include="UI\BalloonSettings\SettingsPageModel.h" />
+    <ClInclude Include="Feature\Call\AudioLoopback.h" />
+    <ClInclude Include="Feature\Call\AudioPcmUtils.h" />
+    <ClInclude Include="Feature\Call\AvSyncScheduler.h" />
+    <ClInclude Include="Feature\Call\BalloonCallDlg.h" />
+    <ClInclude Include="Feature\Call\CallActionBarModel.h" />
+    <ClInclude Include="Feature\Call\CallAudioEngine.h" />
+    <ClInclude Include="Feature\Call\CallDlgLayout.h" />
+    <ClInclude Include="Feature\Call\CallMediaFraming.h" />
+    <ClInclude Include="Feature\Call\CallMediaSession.h" />
+    <ClInclude Include="Feature\Call\CallRelayClient.h" />
+    <ClInclude Include="Feature\Call\CallRelaySelfTest.h" />
+    <ClInclude Include="Feature\Call\CallRelayTestFrame.h" />
+    <ClInclude Include="Feature\Call\CallVideoCanvas.h" />
+    <ClInclude Include="Feature\Call\CallVideoDisplaySink.h" />
+    <ClInclude Include="Feature\Call\CallVideoEngine.h" />
+    <ClInclude Include="Feature\Call\CallVideoUiDebug.h" />
+    <ClInclude Include="Feature\Call\CameraDisplayTest.h" />
+    <ClInclude Include="Feature\Call\CameraPreviewDebug.h" />
+    <ClInclude Include="Feature\Call\H264SelfTest.h" />
+    <ClInclude Include="Feature\Call\MfCameraCapture.h" />
+    <ClInclude Include="Feature\Call\MfH264Codec.h" />
+    <ClInclude Include="Feature\Call\OpusAudioCodec.h" />
+    <ClInclude Include="Feature\Call\SpeexAudioProcessor.h" />
+    <ClInclude Include="Feature\Call\SpeexResampler.h" />
+    <ClInclude Include="Feature\Call\VideoFrameConvert.h" />
+    <ClInclude Include="Feature\Call\VideoLoopbackDebug.h" />
+    <ClInclude Include="Feature\Call\WasapiAudioIo.h" />
+    <ClInclude Include="third-party\jsoncpp-1.9.0\allocator.h" />
+    <ClInclude Include="third-party\jsoncpp-1.9.0\assertions.h" />
+    <ClInclude Include="third-party\jsoncpp-1.9.0\autolink.h" />
+    <ClInclude Include="third-party\jsoncpp-1.9.0\config.h" />
+    <ClInclude Include="third-party\jsoncpp-1.9.0\features.h" />
+    <ClInclude Include="third-party\jsoncpp-1.9.0\forwards.h" />
+    <ClInclude Include="third-party\jsoncpp-1.9.0\json.h" />
+    <ClInclude Include="third-party\jsoncpp-1.9.0\json_tool.h" />
+    <ClInclude Include="third-party\jsoncpp-1.9.0\reader.h" />
+    <ClInclude Include="third-party\jsoncpp-1.9.0\value.h" />
+    <ClInclude Include="third-party\jsoncpp-1.9.0\version.h" />
+    <ClInclude Include="third-party\jsoncpp-1.9.0\writer.h" />
     <ClInclude Include="net\AccountProtocolClient.h" />
     <ClInclude Include="net\AnnounceProtocolClient.h" />
     <ClInclude Include="net\CallProtocolClient.h" />
@@ -1378,10 +1378,10 @@
     <ClInclude Include="net\IUProtocolData.h" />
     <ClInclude Include="net\IUSocket.h" />
     <ClInclude Include="net\LoginProtocolClient.h" />
-    <ClInclude Include="Update\UpdateManager.h" />
-    <ClInclude Include="Update\UpdateTaskResult.h" />
-    <ClInclude Include="BalloonUpdate\BalloonUpdateWindow.h" />
-    <ClInclude Include="Update\UpdateViewModel.h" />
+    <ClInclude Include="Feature\Update\UpdateManager.h" />
+    <ClInclude Include="Feature\Update\UpdateTaskResult.h" />
+    <ClInclude Include="UI\BalloonUpdate\BalloonUpdateWindow.h" />
+    <ClInclude Include="Feature\Update\UpdateViewModel.h" />
     <ClInclude Include="net\FileServerConn.h" />
     <ClInclude Include="net\UpdateProtocolClient.h" />
     <ClInclude Include="ClientVersion.h" />
@@ -1392,62 +1392,68 @@
     <ClInclude Include="net\RegisterProtocolClient.h" />
     <ClInclude Include="net\RemoteDesktopProtocolClient.h" />
     <ClInclude Include="net\FolderProtocolClient.h" />
-    <ClInclude Include="FolderTransfer\FolderTransferManager.h" />
-    <ClInclude Include="BalloonChatWnd\ChatFolderAction.h" />
+    <ClInclude Include="Feature\FolderTransfer\FolderTransferManager.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatFolderAction.h" />
+    <ClInclude Include="UI\BalloonChatWnd\ChatFolderStateModel.h" />
+    <ClInclude Include="Feature\FolderTransfer\FolderManifest.h" />
+    <ClInclude Include="Feature\FolderTransfer\FolderRecvSession.h" />
+    <ClInclude Include="Feature\FolderTransfer\FolderRelayClient.h" />
+    <ClInclude Include="Feature\FolderTransfer\FolderRelayFraming.h" />
+    <ClInclude Include="Feature\FolderTransfer\FolderSendSession.h" />
     <ClInclude Include="net\Sha256.h" />
     <ClInclude Include="net\TransferOwnerRegistry.h" />
-    <ClInclude Include="RemoteDesktop\CaptureFallbackPolicy.h" />
-    <ClInclude Include="RemoteDesktop\CursorInfo.h" />
-    <ClInclude Include="RemoteDesktop\DxgiScreenCapturer.h" />
-    <ClInclude Include="RemoteDesktop\GdiScreenCapturer.h" />
-    <ClInclude Include="RemoteDesktop\IScreenCapturer.h" />
-    <ClInclude Include="RemoteDesktop\RdCaptureTypes.h" />
-    <ClInclude Include="RemoteDesktop\RdControlledStreamer.h" />
-    <ClInclude Include="RemoteDesktop\RdEngineDef.h" />
-    <ClInclude Include="RemoteDesktop\RdInputDef.h" />
-    <ClInclude Include="RemoteDesktop\RdInputEncoder.h" />
-    <ClInclude Include="RemoteDesktop\RdInputInjector.h" />
-    <ClInclude Include="RemoteDesktop\RdRelayClient.h" />
-    <ClInclude Include="RemoteDesktop\RdRelayFraming.h" />
-    <ClInclude Include="RemoteDesktop\RdRelaySelfTest.h" />
-    <ClInclude Include="RemoteDesktop\RdScreenCapturer.h" />
-    <ClInclude Include="RemoteDesktop\RdScreenDecoder.h" />
-    <ClInclude Include="RemoteDesktop\RdSelfTestWindow.h" />
-    <ClInclude Include="RemoteDesktop\ScreenFrameEncoder.h" />
-    <ClInclude Include="RemoteDesktop\ScreenManager.h" />
-    <ClInclude Include="RemoteDesktop\ScreenSpy.h" />
-    <ClInclude Include="RemoteDesktop\until.h" />
-    <ClInclude Include="wtl10.1\atlapp.h" />
-    <ClInclude Include="wtl10.1\atlcrack.h" />
-    <ClInclude Include="wtl10.1\atlctrls.h" />
-    <ClInclude Include="wtl10.1\atlctrlw.h" />
-    <ClInclude Include="wtl10.1\atlctrlx.h" />
-    <ClInclude Include="wtl10.1\atlddx.h" />
-    <ClInclude Include="wtl10.1\atldlgs.h" />
-    <ClInclude Include="wtl10.1\atldwm.h" />
-    <ClInclude Include="wtl10.1\atlfind.h" />
-    <ClInclude Include="wtl10.1\atlframe.h" />
-    <ClInclude Include="wtl10.1\atlgdi.h" />
-    <ClInclude Include="wtl10.1\atlmisc.h" />
-    <ClInclude Include="wtl10.1\atlprint.h" />
-    <ClInclude Include="wtl10.1\atlres.h" />
-    <ClInclude Include="wtl10.1\atlribbon.h" />
-    <ClInclude Include="wtl10.1\atlscrl.h" />
-    <ClInclude Include="wtl10.1\atlsplit.h" />
-    <ClInclude Include="wtl10.1\atltheme.h" />
-    <ClInclude Include="wtl10.1\atluser.h" />
-    <ClInclude Include="wtl10.1\atlwinx.h" />
-    <ClInclude Include="zlib1.2.11\crc32.h" />
-    <ClInclude Include="zlib1.2.11\deflate.h" />
-    <ClInclude Include="zlib1.2.11\gzguts.h" />
-    <ClInclude Include="zlib1.2.11\inffast.h" />
-    <ClInclude Include="zlib1.2.11\inffixed.h" />
-    <ClInclude Include="zlib1.2.11\inflate.h" />
-    <ClInclude Include="zlib1.2.11\inftrees.h" />
-    <ClInclude Include="zlib1.2.11\trees.h" />
-    <ClInclude Include="zlib1.2.11\zconf.h" />
-    <ClInclude Include="zlib1.2.11\zlib.h" />
-    <ClInclude Include="zlib1.2.11\zutil.h" />
+    <ClInclude Include="Feature\RemoteDesktop\CaptureFallbackPolicy.h" />
+    <ClInclude Include="Feature\RemoteDesktop\CursorInfo.h" />
+    <ClInclude Include="Feature\RemoteDesktop\DxgiScreenCapturer.h" />
+    <ClInclude Include="Feature\RemoteDesktop\GdiScreenCapturer.h" />
+    <ClInclude Include="Feature\RemoteDesktop\IScreenCapturer.h" />
+    <ClInclude Include="Feature\RemoteDesktop\RdCaptureTypes.h" />
+    <ClInclude Include="Feature\RemoteDesktop\RdControlledStreamer.h" />
+    <ClInclude Include="Feature\RemoteDesktop\RdEngineDef.h" />
+    <ClInclude Include="Feature\RemoteDesktop\RdInputDef.h" />
+    <ClInclude Include="Feature\RemoteDesktop\RdInputEncoder.h" />
+    <ClInclude Include="Feature\RemoteDesktop\RdInputInjector.h" />
+    <ClInclude Include="Feature\RemoteDesktop\RdRelayClient.h" />
+    <ClInclude Include="Feature\RemoteDesktop\RdRelayFraming.h" />
+    <ClInclude Include="Feature\RemoteDesktop\RdRelaySelfTest.h" />
+    <ClInclude Include="Feature\RemoteDesktop\RdScreenCapturer.h" />
+    <ClInclude Include="Feature\RemoteDesktop\RdScreenDecoder.h" />
+    <ClInclude Include="Feature\RemoteDesktop\RdSelfTestWindow.h" />
+    <ClInclude Include="Feature\RemoteDesktop\ScreenFrameEncoder.h" />
+    <ClInclude Include="Feature\RemoteDesktop\ScreenManager.h" />
+    <ClInclude Include="Feature\RemoteDesktop\ScreenSpy.h" />
+    <ClInclude Include="Feature\RemoteDesktop\until.h" />
+    <ClInclude Include="third-party\wtl10.1\atlapp.h" />
+    <ClInclude Include="third-party\wtl10.1\atlcrack.h" />
+    <ClInclude Include="third-party\wtl10.1\atlctrls.h" />
+    <ClInclude Include="third-party\wtl10.1\atlctrlw.h" />
+    <ClInclude Include="third-party\wtl10.1\atlctrlx.h" />
+    <ClInclude Include="third-party\wtl10.1\atlddx.h" />
+    <ClInclude Include="third-party\wtl10.1\atldlgs.h" />
+    <ClInclude Include="third-party\wtl10.1\atldwm.h" />
+    <ClInclude Include="third-party\wtl10.1\atlfind.h" />
+    <ClInclude Include="third-party\wtl10.1\atlframe.h" />
+    <ClInclude Include="third-party\wtl10.1\atlgdi.h" />
+    <ClInclude Include="third-party\wtl10.1\atlmisc.h" />
+    <ClInclude Include="third-party\wtl10.1\atlprint.h" />
+    <ClInclude Include="third-party\wtl10.1\atlres.h" />
+    <ClInclude Include="third-party\wtl10.1\atlribbon.h" />
+    <ClInclude Include="third-party\wtl10.1\atlscrl.h" />
+    <ClInclude Include="third-party\wtl10.1\atlsplit.h" />
+    <ClInclude Include="third-party\wtl10.1\atltheme.h" />
+    <ClInclude Include="third-party\wtl10.1\atluser.h" />
+    <ClInclude Include="third-party\wtl10.1\atlwinx.h" />
+    <ClInclude Include="third-party\zlib1.2.11\crc32.h" />
+    <ClInclude Include="third-party\zlib1.2.11\deflate.h" />
+    <ClInclude Include="third-party\zlib1.2.11\gzguts.h" />
+    <ClInclude Include="third-party\zlib1.2.11\inffast.h" />
+    <ClInclude Include="third-party\zlib1.2.11\inffixed.h" />
+    <ClInclude Include="third-party\zlib1.2.11\inflate.h" />
+    <ClInclude Include="third-party\zlib1.2.11\inftrees.h" />
+    <ClInclude Include="third-party\zlib1.2.11\trees.h" />
+    <ClInclude Include="third-party\zlib1.2.11\zconf.h" />
+    <ClInclude Include="third-party\zlib1.2.11\zlib.h" />
+    <ClInclude Include="third-party\zlib1.2.11\zutil.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="flamingo.rc" />

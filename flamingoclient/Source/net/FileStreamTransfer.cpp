@@ -14,7 +14,7 @@
 #include "ImageDownloadDriver.h"    // IDownloadProgressSink
 //取 MD5 的纯 C 接口（下载侧增量校验用）。刻意不引 MD5Sum.h——那里的 MD5Sum 类依赖
 //MFC 的 CString，而本文件与其单元测试都不链接 MFC。
-#include "../MD5Core.h"             // MD5Init / MD5Update / MD5Final
+#include "../Common/Util/MD5Core.h"             // MD5Init / MD5Update / MD5Final
 
 #include <fstream>
 #include <vector>                   // 分片缓冲

@@ -19,7 +19,7 @@
 #include "stdafx.h"
 
 #include "catch_amalgamated.hpp"
-#include "../BalloonMain/KeepAwakePolicy.h"
+#include "../UI/BalloonMain/KeepAwakePolicy.h"
 
 using balloonmain::KeepAwakeInput;
 using balloonmain::kKeepAwakeNone;

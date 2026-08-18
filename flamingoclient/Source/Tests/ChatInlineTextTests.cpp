@@ -19,8 +19,8 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonChatWnd/ChatInlineText.h"
-#include "../BalloonChat/BalloonChatMsgFormat.h"
+#include "../UI/BalloonChatWnd/ChatInlineText.h"
+#include "../UI/BalloonChat/BalloonChatMsgFormat.h"
 
 #include <vector>
 

@@ -10,7 +10,7 @@
  *  balloonwj@qq.com   2026-06-09
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonHistory/V2MsgStore.h"
+#include "../UI/BalloonHistory/V2MsgStore.h"
 //Pin 那几个用例要自己建一个"旧结构"的库来验证补列，故直接用 sqlite3 的 C 接口，
 //不经产品代码 —— 拿产品代码建出来的库已经带上新列，那样测等于什么都没验证。
 #include "sqlite3.h"

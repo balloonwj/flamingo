@@ -21,7 +21,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonChatWnd/TypingIndicator.h"
+#include "../UI/BalloonChatWnd/TypingIndicator.h"
 
 using namespace balloonchatwnd;
 

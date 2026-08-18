@@ -19,7 +19,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/ClosePromptDecision.h"
+#include "../UI/BalloonMain/ClosePromptDecision.h"
 
 using namespace balloonmain;
 

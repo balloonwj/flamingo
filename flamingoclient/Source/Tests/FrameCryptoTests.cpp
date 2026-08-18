@@ -25,7 +25,7 @@
 
 #include <sodium.h>
 
-#include "../jsoncpp-1.9.0/json.h"   // 测试里就地拼装 ServerHello，需要它
+#include "../third-party/jsoncpp-1.9.0/json.h"   // 测试里就地拼装 ServerHello，需要它
 #include "../net/FrameCrypto.h"
 
 using namespace net;

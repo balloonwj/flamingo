@@ -25,10 +25,10 @@
 #include <vector>
 #include <cwchar>          // wcscmp —— 比对菜单项中文文本
 
-#include "../BalloonMain/MainPanelTrayMenu.h"
-#include "../BalloonMain/MainPanelIcons.h"        // IconKind（断言静音项 / 当前状态项的图标）
-#include "../BalloonMain/MainPanelStatusMenu.h"   // GetPresenceVisual（断言圆点配色仍与状态菜单同源）
-#include "../BalloonMain/OnlineCapability.h"      // ConnectionUiState / GetConnectionMenuLabel
+#include "../UI/BalloonMain/MainPanelTrayMenu.h"
+#include "../UI/BalloonMain/MainPanelIcons.h"        // IconKind（断言静音项 / 当前状态项的图标）
+#include "../UI/BalloonMain/MainPanelStatusMenu.h"   // GetPresenceVisual（断言圆点配色仍与状态菜单同源）
+#include "../UI/BalloonMain/OnlineCapability.h"      // ConnectionUiState / GetConnectionMenuLabel
 #include "../net/Protocol.h"                      // presence_type（构造各种"当前状态"入参）
 
 using namespace balloonmain;

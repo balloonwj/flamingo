@@ -16,7 +16,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/BadgeRender.h"
+#include "../UI/BalloonMain/BadgeRender.h"
 
 using namespace balloonmain;
 

@@ -24,11 +24,11 @@
 #include <cmath>       // pow —— 算离线灰对白底的对比度
 #include <vector>
 
-#include "../BalloonMain/PresenceBadge.h"
-#include "../BalloonMain/MainPanelIcons.h"       // IconKind（断言字形取值）
-#include "../BalloonMain/MainPanelStatusMenu.h"  // GetPresenceVisual / NormalizePresenceForMenu
-#include "../BalloonMain/MainPanelMockData.h"    // MockPresenceFromStatus（mock 与真实数据同源）
-#include "../BalloonMain/OnlineCapability.h"     // GetConnectionBadgePresence（连接态 → 徽标）
+#include "../UI/BalloonMain/PresenceBadge.h"
+#include "../UI/BalloonMain/MainPanelIcons.h"       // IconKind（断言字形取值）
+#include "../UI/BalloonMain/MainPanelStatusMenu.h"  // GetPresenceVisual / NormalizePresenceForMenu
+#include "../UI/BalloonMain/MainPanelMockData.h"    // MockPresenceFromStatus（mock 与真实数据同源）
+#include "../UI/BalloonMain/OnlineCapability.h"     // GetConnectionBadgePresence（连接态 → 徽标）
 #include "../net/Protocol.h"                     // presence_type
 
 using namespace balloonmain;

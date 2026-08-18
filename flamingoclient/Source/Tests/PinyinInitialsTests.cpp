@@ -8,7 +8,7 @@
  *  balloonwj@qq.com   2026-06-01
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonSearch/PinyinInitials.h"
+#include "../UI/BalloonSearch/PinyinInitials.h"
 
 using namespace pinyin;
 

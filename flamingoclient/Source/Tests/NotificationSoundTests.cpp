@@ -20,7 +20,7 @@
 
 #include <cwchar>          // wcscmp —— 比对 wav 相对路径文本
 
-#include "../BalloonMain/NotificationSound.h"
+#include "../UI/BalloonMain/NotificationSound.h"
 
 using namespace balloonmain;
 

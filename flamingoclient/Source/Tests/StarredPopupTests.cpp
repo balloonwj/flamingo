@@ -17,9 +17,9 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/StarredPopupModel.h"
-#include "../BalloonMain/CornerPopupPlacement.h"
-#include "../BalloonMain/NotificationSound.h"
+#include "../UI/BalloonMain/StarredPopupModel.h"
+#include "../UI/BalloonMain/CornerPopupPlacement.h"
+#include "../UI/BalloonMain/NotificationSound.h"
 #include "../net/Protocol.h"   // presence_offline / presence_online / presence_away / presence_busy
 
 using namespace balloonmain;

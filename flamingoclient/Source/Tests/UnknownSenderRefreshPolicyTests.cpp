@@ -12,7 +12,7 @@
  *  balloonwj@qq.com   2026-08-11
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonMain/UnknownSenderRefreshPolicy.h"
+#include "../UI/BalloonMain/UnknownSenderRefreshPolicy.h"
 
 using namespace balloonmain;
 

@@ -14,7 +14,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/ContactsOrgStats.h"
+#include "../UI/BalloonMain/ContactsOrgStats.h"
 
 using namespace balloonmain;
 

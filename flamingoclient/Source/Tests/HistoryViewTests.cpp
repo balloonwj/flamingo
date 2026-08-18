@@ -7,7 +7,7 @@
  *  balloonwj@qq.com   2026-06-09
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonHistory/HistoryView.h"
+#include "../UI/BalloonHistory/HistoryView.h"
 #include "../net/Protocol.h"   // message_type_*
 #include <string>
 #include <vector>

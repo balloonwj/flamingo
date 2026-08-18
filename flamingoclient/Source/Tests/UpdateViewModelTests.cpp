@@ -17,7 +17,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../Update/UpdateViewModel.h"
+#include "../Feature/Update/UpdateViewModel.h"
 
 using namespace update;
 

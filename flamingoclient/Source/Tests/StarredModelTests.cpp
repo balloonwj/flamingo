@@ -21,7 +21,7 @@
 
 #include <cwchar>          // wcscmp —— 比对中文菜单文案
 
-#include "../BalloonMain/StarredModel.h"
+#include "../UI/BalloonMain/StarredModel.h"
 #include "../net/StarredProtocolClient.h"
 #include "../net/ContactsProtocolClient.h"
 #include "../net/Protocol.h"   // error_code_ok / error_code_starred_limit

@@ -27,7 +27,7 @@
  *  balloonwj@qq.com   2026-08-13
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonChatWnd/ChatFolderStateModel.h"
+#include "../UI/BalloonChatWnd/ChatFolderStateModel.h"
 #include "../net/Protocol.h"   // enum folder_transfer_state 与 error_code_folder_*（取值须与气泡侧一致）
 
 #include <string>

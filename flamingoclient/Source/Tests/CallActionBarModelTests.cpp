@@ -8,7 +8,7 @@
  *  balloonwj@qq.com   2026-07-31
  */
 #include "catch_amalgamated.hpp"
-#include "../Call/CallActionBarModel.h"
+#include "../Feature/Call/CallActionBarModel.h"
 
 #include <algorithm>
 

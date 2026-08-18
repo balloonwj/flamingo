@@ -11,7 +11,7 @@
  *  balloonwj@qq.com   2026-08-03
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonChatWnd/ChatFileLocation.h"
+#include "../UI/BalloonChatWnd/ChatFileLocation.h"
 
 using namespace balloonchatwnd;
 

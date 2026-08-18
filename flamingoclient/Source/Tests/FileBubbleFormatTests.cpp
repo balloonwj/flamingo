@@ -5,7 +5,7 @@
  *  balloonwj@qq.com   2026-06-05
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonChatWnd/FileBubbleFormat.h"
+#include "../UI/BalloonChatWnd/FileBubbleFormat.h"
 
 #include <ctime>
 

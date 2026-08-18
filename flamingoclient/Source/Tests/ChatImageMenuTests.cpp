@@ -22,8 +22,8 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonChatWnd/ChatMessageMenu.h"
-#include "../BalloonChatWnd/ChatMockData.h"   // ChatMsgKind：核对模型里那份 kind 取值没漂
+#include "../UI/BalloonChatWnd/ChatMessageMenu.h"
+#include "../UI/BalloonChatWnd/ChatMockData.h"   // ChatMsgKind：核对模型里那份 kind 取值没漂
 
 using namespace balloonchatwnd;
 

@@ -18,7 +18,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/GroupRowText.h"
+#include "../UI/BalloonMain/GroupRowText.h"
 
 using namespace balloonmain;
 

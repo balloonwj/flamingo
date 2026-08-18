@@ -1,12 +1,12 @@
 ﻿#include "stdafx.h"
 #include "IUSocket.h"
 
-#include "../IniFile.h"
-#include "../UserSessionData.h"
+#include "../Common/Util/IniFile.h"
+#include "../Session/UserSessionData.h"
 #include "IUProtocolData.h"
-#include "../EncodeUtil.h"
-#include "../IULog.h"
-#include "../ZlibUtil.h"
+#include "../Common/Util/EncodeUtil.h"
+#include "../Common/Log/IULog.h"
+#include "../Common/Util/ZlibUtil.h"
 #include "FrameCodec.h"             // v2 帧编解码（内含 net/Protocol.h）
 #include "FramePayload.h"           // 包体的压缩与加密管线
 #include "HandshakeRunner.h"         // 三帧握手的共用流程（四条链路复用同一份）
@@ -41,7 +41,7 @@
 
 #include "../ClientVersion.h"
 #include "UpdateProtocolClient.h"
-#include "../Update/UpdateManager.h"
+#include "../Feature/Update/UpdateManager.h"
 
 //v2 客户端版本号，登录请求 cmd_login 与检查更新 cmd_check_update 都携带它。
 //取自 ClientVersion.h 这一个出处 —— 此前登录上报的、关于页显示的、exe 属性里的

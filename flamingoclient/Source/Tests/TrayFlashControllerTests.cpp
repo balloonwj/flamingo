@@ -22,7 +22,7 @@
 
 #include <string>
 
-#include "../BalloonMain/TrayFlashController.h"
+#include "../UI/BalloonMain/TrayFlashController.h"
 
 using namespace balloonmain;
 

@@ -19,8 +19,8 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonRegister/RegisterLayout.h"
-#include "../BalloonRegister/RegisterModel.h"
+#include "../UI/BalloonRegister/RegisterLayout.h"
+#include "../UI/BalloonRegister/RegisterModel.h"
 #include "../net/RegisterProtocolClient.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"

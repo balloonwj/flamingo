@@ -25,8 +25,8 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonAuth/BalloonLoginLayout.h"
-#include "../BalloonMain/AvatarPalette.h"
+#include "../UI/BalloonAuth/BalloonLoginLayout.h"
+#include "../UI/BalloonMain/AvatarPalette.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"

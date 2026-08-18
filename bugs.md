@@ -60,7 +60,7 @@
 - **复现**：打开单聊或群聊窗口 → 断开网络（或停掉 chatserver）→ 顶部离线提示条出现、发送按钮正确置灰，但输入框照样能输入。
 - **影响**：离线期间用户可以继续输入并尝试发送，与"发送按钮已置灰"的视觉状态自相矛盾。该功能自输入框从普通编辑框改为富文本框那次改动起就一直没生效过。
 - **初步排查**（据实证）：
-  - 出错代码在 `flamingoclient/Source/BalloonChatWnd/BalloonChatWindow.cpp:3239` 与 `BalloonGroupChatWindow.cpp:1854`，两处都是：
+  - 出错代码在 `flamingoclient/Source/UI/BalloonChatWnd/BalloonChatWindow.cpp:3239` 与 `BalloonGroupChatWindow.cpp:1854`，两处都是：
     ```cpp
     balloonwjui::DuiEditHost* edit = dynamic_cast<balloonwjui::DuiEditHost*>(
         content->FindCtrlById(balloonchatwnd::kIdInputEdit));
@@ -77,7 +77,7 @@
 ## BUG-6　聊天窗富文本拆分模块残留死代码，且单测在为已废弃实现提供覆盖
 
 - **发现日期**：2026-08-14（为无窗口富文本控件梳理接口时顺带查出）
-- **位置**：`flamingoclient/Source/BalloonChatWnd/`。
+- **位置**：`flamingoclient/Source/UI/BalloonChatWnd/`。
 - **问题**（据实证，三处）：
   1. `BalloonChatWindow.cpp:3086` 与 `BalloonGroupChatWindow.cpp:402` 各定义了一个 `static CString GetRichEditPlainText(HWND hRich)`，**全仓库零调用**。函数上方 `:3093` 的注释还记录了它被弃用的原因（读回的内嵌对象占位符实测是空格，导致取不到内联图）。
   2. `ChatRichContentSplit.cpp:34` 的 `SplitRichInputToParts` **只有单测在调**（`Source/Tests/ChatRichContentSplitTests.cpp` 共 9 处）。生产代码已全部改走 `BuildOutgoingParts` —— `ChatRichContentSplit.h:55` 的注释明确写着新函数"取代上面的 SplitRichInputToParts"。
@@ -126,7 +126,7 @@
 ## BUG-9　登录必需目录建在程序目录，而按账号隔离的数据读写在数据根目录
 
 - **发现日期**：2026-08-16（修「`CFlamingoClient::GetInstance()` 返回的不是在用实例」这个缺陷时，顺带核对缓存目录口径发现）
-- **位置**：`flamingoclient/Source/MainDlg.cpp` 的 `CMainDlg::CreateEssentialDirectories`（第 4884 行起）。
+- **位置**：`flamingoclient/Source/App/MainDlg.cpp` 的 `CMainDlg::CreateEssentialDirectories`（第 4884 行起）。
 - **问题**（据实证）：该函数用 `g_szHomePath`（程序目录）拼出 `Users\<账号>\`、`Users\<账号>\ChatImage\`、`Users\<账号>\UserThumb\` 三级目录并创建；而按账号隔离的数据实际读写走的是 `g_szDataRoot`（数据根目录）—— 账号配置见 `FlamingoClient.cpp:1382` / `1399` 的 `<g_szDataRoot>Users\<账号>\<账号>.cfg`，最近联系人列表见 `UserMgr.cpp:470` / `510` / `553`。两者默认相等，用户在「系统设置 → 存储」里改过数据目录之后就分成两棵树。
 - **影响**（据推测，尚未实测）：改过数据目录的用户，首次登录时 `<g_szDataRoot>Users\<账号>\` 这一级没有任何地方预先创建，`SaveUserConfig` 与最近联系人列表落盘可能因父目录不存在而失败。缓存目录（ChatFile / ChatImage / Avatar）不受影响 —— 它们各自的 `buildXxxCachePath` 会在写文件前逐级创建。表现为「改过存储位置之后，用户设置与最近联系人列表每次重启都丢」。
 - **初步排查**：`net/ImageTransfer.cpp` 的 `AvatarCacheFilePathForFileId` 原本也有同一类根目录错配（路径按 `g_szHomePath` 拼、父目录按 `g_szDataRoot` 建），已于 2026-08-16 改为统一取 `g_szDataRoot`。`CreateEssentialDirectories` 属于同一批遗漏，但它牵涉的是用户配置而非缓存，改动面与验证方式都不同，故单独记录。
@@ -144,7 +144,7 @@
 ## BUG-10　群管理窗正在输入的公告会被后台刷新清空
 
 - **发现日期**：2026-08-17（清理输入框无窗口化留下的过时注释时顺带发现）
-- **位置**：`flamingoclient/Source/BalloonGroupManage/GroupManageLayout.cpp` 的群公告页构建代码（第 1223 行起），与 `GroupManageWindowData.cpp` 的 `RefreshNavAndPage`（第 111 行）。
+- **位置**：`flamingoclient/Source/UI/BalloonGroupManage/GroupManageLayout.cpp` 的群公告页构建代码（第 1223 行起），与 `GroupManageWindowData.cpp` 的 `RefreshNavAndPage`（第 111 行）。
 - **现象**：在群管理窗的「群公告」页里填写新公告，标题与正文可能在用户毫无操作的情况下被清空。
 - **问题**（据实证）：`RefreshNavAndPage` 会整体重建客户区（其注释写明"InitUi 内部走的是 SetClientContent，它会先摘掉旧的客户区再挂新的"），重建时 `BuildPage` 重新构造标题与正文两个输入框，**只调用 SetPlaceholder 设置提示文字，不回填用户已经输入的内容**（第 1223-1238 行，两个输入框从头到尾没有 SetText）。用户输入的文本只存在于控件里，模型 `m_model` 中没有对应字段，因此重建之后无从恢复。
 - **触发时机不止切换页面**，下列每一处都会调用 `RefreshNavAndPage`：拉取群资料返回（`GroupManageWindowData.cpp:150`）、拉取群成员返回（`:174`）、拉取加群申请返回（`:193`）、拉取公告列表返回（`:250`，该处注释写明"无论当前停在哪一页都要重建一次"）、以及收到服务端推送的群资料变更（`:356`）。也就是说用户正在输入时，后台任何一次数据返回或服务端推送都会清空输入。
@@ -178,3 +178,25 @@
 - **影响**：回调**执行期间**句柄是有效的，但调用方只要把它存下来供后续绘制（这正是拖入图片最常见的用法），存下的就是一个已被释放的 GDI 句柄。表现为图片时有时无，或在句柄编号被复用后画出别的内容。
 - **初步排查**：库内目前没有生产代码使用位图拖入这条路径，所以尚未在实际功能中暴露。DuiGallery 的拖放演示页在自己这一侧用 `LR_CREATEDIBSECTION` 当场复制了一份来规避。
 - **状态**：未修复。修法是把 `LR_COPYRETURNORG` 换成 `LR_CREATEDIBSECTION`（或去掉该标志），确保交给回调的一定是一份独立副本，并在头文件里写明句柄的所有权归回调方。**改动落在 balloonui 库内，需事先获得用户批准。**
+
+## BUG-14　登出时聊天窗不会被关闭，且主面板的本次登录缓存从不清空
+
+- **发现日期**：2026-08-18（评估「移除 CMainDlg、改由主面板作顶层类」的方案时，核对主面板生命周期发现）
+- **位置**：`flamingoclient/Source/App/MainDlg.cpp` 的 `CMainDlg::ReturnToLoginWindow`（第 2426 行起），以及 `flamingoclient/Source/UI/BalloonMain/BalloonMainPanel.cpp`。
+- **问题**（据实证，代码层面已逐行确认，尚未实机复现）：登出与被踢下线共用的收尾函数 `ReturnToLoginWindow` 只调了 `m_BalloonMainPanel.DestroyWindow()`，此外没有任何代码去关闭已经打开的单聊窗、群聊窗、群管理窗。这些窗口是**独立顶层窗口**——主面板建它们时走的是 `pWin->CreateAndShow(NULL)`（`BalloonMainPanel.cpp:2130`），而 `CBalloonChatWindow::CreateAndShow` 内部是 `Create(NULL, ...)`（`BalloonChatWindow.cpp:616`），父窗口与属主都是 NULL，所以销毁主面板的窗口不会连带销毁它们。主面板析构函数里确实有统一销毁的循环（`BalloonMainPanel.cpp:420-480`），但 `m_BalloonMainPanel` 是 `CMainDlg` 的值成员、随进程存活，登出时根本不会析构。
+- 同一个根因还带来第二个后果：主面板对象跨越了登出边界，而它持有的本次登录缓存**从来没有被清空过**——`m_contacts`、`m_departments`、`m_lastContactsResult`、`m_groupInfo`、`m_myGroups`、`m_favorites`、`m_starred`、`m_chatWindows`、`m_groupChatWindows` 等全部保留到下一次登录。`m_conversations` 是唯一有 `clear()` 的（`BalloonMainPanel.cpp:3357` / `5945`），且那两处都在「会话列表到达后重填」的路径上，不是登出复位。
+- **影响**（据推测，需实机验证）：
+  - 登出后回到登录窗，上一个账号的聊天窗仍留在屏幕上，且窗口内还能看到聊天记录。登出确认框的文案「登出后将断开连接并关闭所有聊天窗口」（`MainDlg.cpp:2402`）与实际行为不符。
+  - 换账号登录后，`GetOrCreateChatWindow` 对同一个 userid 会直接复用上一个账号留下的那个窗口实例（`BalloonMainPanel.cpp:2096-2102` 判 `IsWindow()` 为真即返回），于是新账号看到的是旧账号的会话窗口。
+  - 群资料、收藏、特别关注等缓存同理跨账号残留。多数会被新登录拉取的应答覆盖，但键值在新账号下不存在的条目（例如上个账号才加入的群）不会被覆盖掉。
+- **初步排查**：`ReturnToLoginWindow` 的注释写着「断开三条连接，再关掉所有聊天窗等子窗口」，但函数体内找不到对应实现，据推测是早期版本里由别处代劳、后来重构时丢失的。
+- **状态**：未修复。修法建议与「移除 CMainDlg」的改造合并做：给主面板加一个 `ResetForLogout()`，统一负责关闭全部子窗口、清空全部本次登录缓存、清空三棵树与三个头像位图池，由 `ReturnToLoginWindow` 在销毁/隐藏主面板之前调用。为避免日后新增成员时漏掉复位，建议把「仅本次登录期间有效」的成员集中到一个内嵌结构体里，复位即整体赋一个默认构造的实例。
+
+## BUG-15　BalloonHistory 下四个源文件用的是 balloonui 的 stdafx.h，不是客户端自己那份
+
+- **发现日期**：2026-08-18（重排 `Source/` 目录、评估能否给包含目录加 `$(ProjectDir)` 时发现）
+- **位置**：`flamingoclient/Source/UI/BalloonHistory/` 下的 `BalloonHistoryWindow.cpp`、`HistoryHighlightLabel.cpp`、`HistoryContentView.cpp`、`HistoryRow.cpp`，以及 `flamingoclient/Source/Flamingo.vcxproj` 里这四个条目的 `<PrecompiledHeader>NotUsing</PrecompiledHeader>` 设置。
+- **问题**（据实证）：`Flamingo.vcxproj` 的四个配置默认都是 `<PrecompiledHeader>Use</PrecompiledHeader>`，而这四个文件被单独设成了 `NotUsing`。走预编译头的文件，编译器按 `#include` 的字面文本匹配 `/Yu` 的值、根本不去磁盘找文件；设成 `NotUsing` 之后这一行就变成一次真实的文件查找。而 `Source/` 目录本身**不在**包含目录里（工程的 `AdditionalIncludeDirectories` 只有 libsodium、balloonui、sqlite、opus、speexdsp 五项，`IncludePath` 只有 `third-party\wtl10.1\`），逐个检查这几个目录，其中唯一存在 `stdafx.h` 的是 `third-party/balloonui/balloonui/stdafx.h`。也就是说这四个文件包含到的是 balloonui 的预编译头。
+- **影响**：目前编译与运行都正常，因为 balloonui 的 `stdafx.h` 恰好也拉齐了 ATL / WTL 那一套。但客户端 `stdafx.h` 里独有的宏与包含项对这四个文件是缺失的，日后往客户端 `stdafx.h` 里加东西时，这四个文件不会跟着变，表现为「同一个宏在别的文件里有、在这四个文件里没有」，排查起来很难想到根因。反过来，balloonui 的 `stdafx.h` 改动会意外影响到客户端这四个文件。
+- **初步排查**：这四个文件被设成 `NotUsing` 的原因未查明，据推测是当初某次编译报错后就近关掉了预编译头。全工程 228 个 `NotUsing` 的 `.cpp` 里，只有这四个同时包含了 `stdafx.h`，其余都没有这一行，所以不受影响。
+- **状态**：未修复。修法有两条：一是把这四个文件恢复成走预编译头（去掉 `NotUsing`），若当初是因为编译错误才关的，需要先确认那个错误是否还在；二是给工程的包含目录加上 `$(ProjectDir)`，让这一行能找到客户端自己的 `stdafx.h`。**本次目录重排刻意没有采用第二条**，因为那会在无声无息之间改变这四个文件包含到的是哪一份预编译头，属于超出重排范围的行为改动。

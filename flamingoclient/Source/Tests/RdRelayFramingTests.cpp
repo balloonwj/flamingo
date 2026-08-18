@@ -15,14 +15,14 @@
  *  balloonwj@qq.com   2026-06-09
  */
 #include "catch_amalgamated.hpp"
-#include "../RemoteDesktop/RdRelayFraming.h"
+#include "../Feature/RemoteDesktop/RdRelayFraming.h"
 #include "../net/FrameCodec.h"
 #include "../net/Protocol.h"
 #include "../net/RemoteDesktopProtocolClient.h"
 //见 MessageProtocolClient.cpp 同处说明：屏蔽 vendored json.h 的 C4828。
 #pragma warning(push)
 #pragma warning(disable: 4828)
-#include "../jsoncpp-1.9.0/json.h"
+#include "../third-party/jsoncpp-1.9.0/json.h"
 #pragma warning(pop)
 
 #include <string>

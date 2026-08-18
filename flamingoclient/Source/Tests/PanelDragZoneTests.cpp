@@ -21,7 +21,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/PanelDragZone.h"
+#include "../UI/BalloonMain/PanelDragZone.h"
 
 using namespace balloonmain;
 

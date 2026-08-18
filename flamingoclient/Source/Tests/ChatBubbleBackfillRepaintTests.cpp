@@ -38,10 +38,10 @@
 #include <string>
 #include <vector>
 
-#include "../BalloonChatWnd/ChatBubble.h"
-#include "../BalloonChatWnd/ChatMessageList.h"
-#include "../BalloonChatWnd/ChatMockData.h"
-#include "../BalloonChatWnd/GroupMentionModel.h"
+#include "../UI/BalloonChatWnd/ChatBubble.h"
+#include "../UI/BalloonChatWnd/ChatMessageList.h"
+#include "../UI/BalloonChatWnd/ChatMockData.h"
+#include "../UI/BalloonChatWnd/GroupMentionModel.h"
 
 using namespace balloonwjui;
 using namespace balloonchatwnd;

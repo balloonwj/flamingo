@@ -19,7 +19,7 @@
 
 #include <vector>
 
-#include "../BalloonChatWnd/GroupMemberOrder.h"
+#include "../UI/BalloonChatWnd/GroupMemberOrder.h"
 #include "../net/Protocol.h"   // group_member_role：确认本模块用的数值与协议一致
 
 using namespace balloonchatwnd;

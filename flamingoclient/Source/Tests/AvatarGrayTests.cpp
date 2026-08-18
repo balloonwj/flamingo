@@ -17,7 +17,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/AvatarGray.h"
+#include "../UI/BalloonMain/AvatarGray.h"
 
 using namespace balloonmain;
 

@@ -20,7 +20,7 @@
  *  balloonwj@qq.com   2026-08-03
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonChatWnd/ChatFileStateModel.h"
+#include "../UI/BalloonChatWnd/ChatFileStateModel.h"
 #include "../net/Protocol.h"   // enum file_ack_state（气泡侧常量须与协议取值一致）
 
 using namespace balloonchatwnd;

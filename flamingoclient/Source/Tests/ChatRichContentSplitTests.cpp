@@ -16,7 +16,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonChatWnd/ChatRichContentSplit.h"
+#include "../UI/BalloonChatWnd/ChatRichContentSplit.h"
 
 using namespace balloonchatwnd;
 
@@ -97,7 +97,7 @@ TEST_CASE("P6 多图文混排 imageIndex 连续递增、文字段保真", "[rich
 // P7. EnumContent 原始段 → 待发送部分聚合（表情随文字、截图独立成段）
 // =====================================================================
 
-#include "../BalloonChatWnd/ChatFaceTag.h"
+#include "../UI/BalloonChatWnd/ChatFaceTag.h"
 
 namespace {
 

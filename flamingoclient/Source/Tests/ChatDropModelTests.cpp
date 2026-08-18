@@ -22,7 +22,7 @@
  *  balloonwj@qq.com   2026-08-11
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonChatWnd/ChatDropModel.h"
+#include "../UI/BalloonChatWnd/ChatDropModel.h"
 
 #include <windows.h>
 #include <string>

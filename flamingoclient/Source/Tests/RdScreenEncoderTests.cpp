@@ -6,9 +6,9 @@
  *  balloonwj@qq.com   2026-06-11
  */
 #include "catch_amalgamated.hpp"
-#include "../RemoteDesktop/ScreenFrameEncoder.h"
-#include "../RemoteDesktop/RdScreenDecoder.h"
-#include "../RemoteDesktop/RdEngineDef.h"
+#include "../Feature/RemoteDesktop/ScreenFrameEncoder.h"
+#include "../Feature/RemoteDesktop/RdScreenDecoder.h"
+#include "../Feature/RemoteDesktop/RdEngineDef.h"
 
 using namespace remotedesktop;
 

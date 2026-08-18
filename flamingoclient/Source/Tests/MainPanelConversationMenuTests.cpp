@@ -20,9 +20,9 @@
 #include <vector>
 #include <cwchar>          // wcscmp —— 比对菜单项中文文本
 
-#include "../BalloonMain/MainPanelConversationMenu.h"
-#include "../BalloonMain/FavoritesModel.h"   // GetMenuLabel（与本模型的收藏项文案须一致）
-#include "../BalloonMain/StarredModel.h"     // GetMenuLabel（与本模型的特别关注项文案须一致）
+#include "../UI/BalloonMain/MainPanelConversationMenu.h"
+#include "../UI/BalloonMain/FavoritesModel.h"   // GetMenuLabel（与本模型的收藏项文案须一致）
+#include "../UI/BalloonMain/StarredModel.h"     // GetMenuLabel（与本模型的特别关注项文案须一致）
 
 using namespace balloonmain;
 

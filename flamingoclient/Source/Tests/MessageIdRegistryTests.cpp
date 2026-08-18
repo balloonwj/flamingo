@@ -2,9 +2,9 @@
  *  MessageIdRegistryTests.cpp
  *
  *  客户端自定义窗口消息号的守卫测试。运行期读取四个消息定义头文件
- *  （Source\UserSessionData.h、Source\CustomMsgDef.h、
- *   Source\BalloonChatWnd\BalloonChatWindow.h、
- *   Source\BalloonChatWnd\BalloonGroupChatWindow.h），把其中形如
+ *  （Source\Session\UserSessionData.h、Source\App\CustomMsgDef.h、
+ *   Source\UI\BalloonChatWnd\BalloonChatWindow.h、
+ *   Source\UI\BalloonChatWnd\BalloonGroupChatWindow.h），把其中形如
  *  「#define NAME WM_USER + n」与「static const UINT kName = WM_APP + n」
  *  的定义全部解析出来，断言三件事：同一头文件内部不得有两条消息取同一个号；
  *  跨头文件取同号必须落在白名单里并写明理由；UserSessionData.h 里的消息号
@@ -39,7 +39,7 @@ namespace {
 const int kMaxParentWalkDepth = 10;
 
 //用来认定「这一层就是客户端根目录」的标志文件，写成相对该目录的路径。
-const char* const kClientRootMarker = "Source\\UserSessionData.h";
+const char* const kClientRootMarker = "Source\\Session\\UserSessionData.h";
 
 //代理窗收件闸门的两个哨兵宏名。它们不是可投递的消息，参与不了重号判定，
 //只用来给 UserSessionData.h 里的消息号划定合法区间。
@@ -80,10 +80,10 @@ struct HeaderUnderGuard
 //白名单会长到失去意义。
 const HeaderUnderGuard kGuardedHeaders[] =
 {
-    { "UserSessionData.h", "UserSessionData.h" },
-    { "CustomMsgDef.h", "CustomMsgDef.h" },
-    { "BalloonChatWnd\\BalloonChatWindow.h", "BalloonChatWindow.h" },
-    { "BalloonChatWnd\\BalloonGroupChatWindow.h", "BalloonGroupChatWindow.h" },
+    { "Session\\UserSessionData.h", "UserSessionData.h" },
+    { "App\\CustomMsgDef.h", "CustomMsgDef.h" },
+    { "UI\\BalloonChatWnd\\BalloonChatWindow.h", "BalloonChatWindow.h" },
+    { "UI\\BalloonChatWnd\\BalloonGroupChatWindow.h", "BalloonGroupChatWindow.h" },
 };
 
 const size_t kGuardedHeaderCount = sizeof(kGuardedHeaders) / sizeof(kGuardedHeaders[0]);

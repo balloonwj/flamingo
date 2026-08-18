@@ -16,7 +16,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonImageViewer/ImageViewerGeometry.h"
+#include "../UI/BalloonImageViewer/ImageViewerGeometry.h"
 
 using namespace balloonimageviewer;
 

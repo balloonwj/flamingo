@@ -12,7 +12,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/AvatarImageUtil.h"
+#include "../UI/BalloonMain/AvatarImageUtil.h"
 
 using namespace balloonmain;
 

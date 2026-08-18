@@ -20,7 +20,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonChatWnd/ShakeRateLimiter.h"
+#include "../UI/BalloonChatWnd/ShakeRateLimiter.h"
 
 using namespace balloonchatwnd;
 

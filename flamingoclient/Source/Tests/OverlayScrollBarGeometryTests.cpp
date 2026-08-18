@@ -17,7 +17,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/OverlayScrollBarGeometry.h"
+#include "../UI/BalloonMain/OverlayScrollBarGeometry.h"
 
 using namespace balloonmain;
 

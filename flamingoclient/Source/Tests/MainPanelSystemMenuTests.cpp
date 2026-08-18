@@ -21,8 +21,8 @@
 #include <vector>
 #include <cwchar>          // wcscmp —— 比对菜单项中文文本
 
-#include "../BalloonMain/MainPanelSystemMenu.h"
-#include "../BalloonMain/MainPanelIcons.h"   // IconKind（断言各项图标）
+#include "../UI/BalloonMain/MainPanelSystemMenu.h"
+#include "../UI/BalloonMain/MainPanelIcons.h"   // IconKind（断言各项图标）
 #include "../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"
 
 using namespace balloonmain;

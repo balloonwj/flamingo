@@ -12,9 +12,9 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonGroupManage/GroupManageMapping.h"
-#include "../BalloonMain/AvatarPalette.h"   //群头像用例要按同一张调色板核对底色
-#include "../GroupRoleRules.h"   //设 / 撤管理员的共用门控，群管理窗与群聊窗同一份规则
+#include "../UI/BalloonGroupManage/GroupManageMapping.h"
+#include "../UI/BalloonMain/AvatarPalette.h"   //群头像用例要按同一张调色板核对底色
+#include "../Session/GroupRoleRules.h"   //设 / 撤管理员的共用门控，群管理窗与群聊窗同一份规则
 
 #include <time.h>     //mktime：公告时间文本的用例要按本地日历反算时间戳
 #include <string.h>   //memset

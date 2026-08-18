@@ -17,7 +17,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonChatWnd/ChatHistoryPaging.h"
+#include "../UI/BalloonChatWnd/ChatHistoryPaging.h"
 
 using namespace balloonchatwnd;
 

@@ -37,7 +37,7 @@
 
 #include "sqlite3.h"
 
-#include "../BalloonHistory/V2MsgStore.h"   // CV2MsgStore；HistoryRecord 由它 include 的 V2MsgQuery.h 带入
+#include "../UI/BalloonHistory/V2MsgStore.h"   // CV2MsgStore；HistoryRecord 由它 include 的 V2MsgQuery.h 带入
 
 namespace {
 

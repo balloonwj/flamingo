@@ -26,7 +26,7 @@
 
 #include <string>
 
-#include "../LogCleanupPolicy.h"
+#include "../Common/Log/LogCleanupPolicy.h"
 
 using namespace logcleanup;
 

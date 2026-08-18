@@ -18,7 +18,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonContact/ContactTagModel.h"
+#include "../UI/BalloonContact/ContactTagModel.h"
 
 using namespace ballooncontact;
 

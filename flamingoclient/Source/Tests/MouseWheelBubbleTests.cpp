@@ -31,12 +31,12 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/MainPanelListItem.h"
-#include "../BalloonMain/MainPanelSectionHeader.h"
-#include "../BalloonMain/MainPanelScrollView.h"
-#include "../BalloonChatWnd/ChatBubble.h"
-#include "../BalloonChatWnd/ChatMessageList.h"
-#include "../BalloonChatWnd/ChatMockData.h"
+#include "../UI/BalloonMain/MainPanelListItem.h"
+#include "../UI/BalloonMain/MainPanelSectionHeader.h"
+#include "../UI/BalloonMain/MainPanelScrollView.h"
+#include "../UI/BalloonChatWnd/ChatBubble.h"
+#include "../UI/BalloonChatWnd/ChatMessageList.h"
+#include "../UI/BalloonChatWnd/ChatMockData.h"
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox / DuiHBox
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView

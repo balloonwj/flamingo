@@ -17,7 +17,7 @@
 #include "stdafx.h"
 
 #include "catch_amalgamated.hpp"
-#include "../BalloonSettings/CacheCleanPlan.h"
+#include "../UI/BalloonSettings/CacheCleanPlan.h"
 
 using balloonsettings::BuildCacheCleanPlan;
 using balloonsettings::CacheCleanEntry;

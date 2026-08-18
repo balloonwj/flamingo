@@ -7,8 +7,8 @@
  *  balloonwj@qq.com   2026-06-09
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonHistory/HistoryModel.h"
-#include "../BalloonHistory/V2MsgStore.h"
+#include "../UI/BalloonHistory/HistoryModel.h"
+#include "../UI/BalloonHistory/V2MsgStore.h"
 #include <windows.h>
 
 using namespace balloonhistory;

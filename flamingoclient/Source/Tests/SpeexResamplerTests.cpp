@@ -8,7 +8,7 @@
  *  balloonwj@qq.com   2026-06-12
  */
 #include "catch_amalgamated.hpp"
-#include "../Call/SpeexResampler.h"
+#include "../Feature/Call/SpeexResampler.h"
 
 #include <vector>
 #include <cmath>

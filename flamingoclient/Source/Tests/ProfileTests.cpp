@@ -19,8 +19,8 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonProfile/ProfileLayout.h"
-#include "../BalloonProfile/ProfileModel.h"
+#include "../UI/BalloonProfile/ProfileLayout.h"
+#include "../UI/BalloonProfile/ProfileModel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 

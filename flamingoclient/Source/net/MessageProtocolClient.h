@@ -22,7 +22,7 @@
 // @ 片段的结构体（MentionSpan）定义在这里 —— 它是<u>不依赖 ATL / balloonui / 任何
 // UI 对象</u>的纯 std 头，描述的又正是 content.at 的线上格式，故协议层直接复用，
 // 避免两边各定义一份结构相同的类型再来回拷贝。
-#include "../BalloonChatWnd/GroupMentionModel.h"
+#include "../UI/BalloonChatWnd/GroupMentionModel.h"
 
 namespace net {
 

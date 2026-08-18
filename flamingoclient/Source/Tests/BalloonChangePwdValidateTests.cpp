@@ -14,7 +14,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/BalloonChangePwdValidate.h"
+#include "../UI/BalloonMain/BalloonChangePwdValidate.h"
 
 using namespace balloonmain;
 

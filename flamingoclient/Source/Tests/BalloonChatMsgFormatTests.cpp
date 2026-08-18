@@ -18,7 +18,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonChat/BalloonChatMsgFormat.h"
+#include "../UI/BalloonChat/BalloonChatMsgFormat.h"
 
 using namespace balloonchat;
 

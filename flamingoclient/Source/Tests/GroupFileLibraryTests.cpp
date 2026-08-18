@@ -11,7 +11,7 @@
  *  balloonwj@qq.com   2026-06-08
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonChatWnd/GroupFileLibrary.h"
+#include "../UI/BalloonChatWnd/GroupFileLibrary.h"
 
 using namespace balloonchatwnd;
 using net::GroupFileEntry;

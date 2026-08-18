@@ -11,7 +11,7 @@
  *  balloonwj@qq.com   2026-06-09
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonChatWnd/GroupFileUploadTracker.h"
+#include "../UI/BalloonChatWnd/GroupFileUploadTracker.h"
 
 using namespace balloonchatwnd;
 

@@ -5,7 +5,7 @@
 #include "FramePayload.h"
 
 #include "Protocol.h"        //frame_flag_* / COMPRESS_THRESHOLD
-#include "../ZlibUtil.h"
+#include "../Common/Util/ZlibUtil.h"
 
 namespace net {
 

@@ -23,9 +23,9 @@
 #include <vector>
 #include <cwchar>          // wcscmp —— 比对菜单项中文文本
 
-#include "../BalloonMain/MainPanelStatusMenu.h"
-#include "../BalloonMain/MainPanelIcons.h"   // IconKind（断言各项的图标类型）
-#include "../BalloonMain/PresenceBadge.h"    // GetPresenceBadgeIconKind（状态 → 徽标字形）
+#include "../UI/BalloonMain/MainPanelStatusMenu.h"
+#include "../UI/BalloonMain/MainPanelIcons.h"   // IconKind（断言各项的图标类型）
+#include "../UI/BalloonMain/PresenceBadge.h"    // GetPresenceBadgeIconKind（状态 → 徽标字形）
 #include "../net/Protocol.h"                 // presence_type（断言各项对应的在线状态值）
 
 using namespace balloonmain;

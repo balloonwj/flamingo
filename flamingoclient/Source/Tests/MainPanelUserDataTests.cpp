@@ -25,9 +25,9 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/BalloonMainLayout.h"
-#include "../BalloonMain/MainPanelHeader.h"
-#include "../BalloonMain/MainPanelUserData.h"
+#include "../UI/BalloonMain/BalloonMainLayout.h"
+#include "../UI/BalloonMain/MainPanelHeader.h"
+#include "../UI/BalloonMain/MainPanelUserData.h"
 
 using namespace balloonwjui;
 using namespace balloonmain;

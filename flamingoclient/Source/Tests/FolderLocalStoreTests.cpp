@@ -19,7 +19,7 @@
  *  balloonwj@qq.com   2026-08-14
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonHistory/FolderLocalStore.h"
+#include "../UI/BalloonHistory/FolderLocalStore.h"
 
 using namespace balloonhistory;
 

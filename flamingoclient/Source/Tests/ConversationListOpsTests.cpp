@@ -23,7 +23,7 @@
 
 #include <vector>
 
-#include "../BalloonMain/ConversationListOps.h"
+#include "../UI/BalloonMain/ConversationListOps.h"
 
 using namespace balloonmain;
 

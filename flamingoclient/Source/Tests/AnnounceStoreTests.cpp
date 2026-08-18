@@ -20,7 +20,7 @@
  *  balloonwj@qq.com   2026-08-05
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonHistory/AnnounceStore.h"
+#include "../UI/BalloonHistory/AnnounceStore.h"
 //sqlite3.h 由工程的附加包含目录（third-party/sqlite-src-3530100）提供，不写相对路径。
 //这里直接用裸 sqlite3 API，是为了手工造一个"缺列的旧库"来验证补列机制（见 ANS11）。
 #include "sqlite3.h"

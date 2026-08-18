@@ -29,9 +29,9 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonChatWnd/ChatBubble.h"
-#include "../BalloonChatWnd/ChatMessageList.h"
-#include "../BalloonChatWnd/ChatMockData.h"
+#include "../UI/BalloonChatWnd/ChatBubble.h"
+#include "../UI/BalloonChatWnd/ChatMessageList.h"
+#include "../UI/BalloonChatWnd/ChatMockData.h"
 
 using namespace balloonwjui;
 using namespace balloonchatwnd;

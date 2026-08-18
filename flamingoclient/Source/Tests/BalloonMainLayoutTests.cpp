@@ -21,9 +21,9 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/BalloonMainLayout.h"
-#include "../BalloonMain/MainPanelScrollView.h"
-#include "../BalloonMain/MainPanelTreeView.h"
+#include "../UI/BalloonMain/BalloonMainLayout.h"
+#include "../UI/BalloonMain/MainPanelScrollView.h"
+#include "../UI/BalloonMain/MainPanelTreeView.h"
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"                    // DispatchMouseWheel（滚轮派发入口）
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"

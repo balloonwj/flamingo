@@ -29,14 +29,14 @@
 #include "stdafx.h"
 
 #include "catch_amalgamated.hpp"
-#include "../BalloonAnnounce/AnnounceBoxLayout.h"
-#include "../BalloonAnnounce/AnnounceRow.h"
-#include "../BalloonHistory/HistoryContentView.h"   // 右栏正文控件（读正文用 GetFlatText）
+#include "../UI/BalloonAnnounce/AnnounceBoxLayout.h"
+#include "../UI/BalloonAnnounce/AnnounceRow.h"
+#include "../UI/BalloonHistory/HistoryContentView.h"   // 右栏正文控件（读正文用 GetFlatText）
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"                        // DispatchMouseWheel（滚轮派发入口）
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView（ANB11 要滚动）
-#include "../BalloonMain/MainPanelScrollView.h"                       // 两栏用的悬浮式滚动视口（ANB12）
+#include "../UI/BalloonMain/MainPanelScrollView.h"                       // 两栏用的悬浮式滚动视口（ANB12）
 
 using namespace balloonannounce;
 using balloonwjui::DuiControl;

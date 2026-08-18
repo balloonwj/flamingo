@@ -16,7 +16,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/PopupMenuPlacement.h"
+#include "../UI/BalloonMain/PopupMenuPlacement.h"
 
 using namespace balloonmain;
 

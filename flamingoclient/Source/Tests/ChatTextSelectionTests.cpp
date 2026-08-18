@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-#include "../BalloonChatWnd/ChatTextSelection.h"
+#include "../UI/BalloonChatWnd/ChatTextSelection.h"
 
 using namespace balloonchatwnd;
 

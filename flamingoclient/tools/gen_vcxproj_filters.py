@@ -1,33 +1,34 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-按 Flamingo.vcxproj 重新生成 Flamingo.vcxproj.filters
-balloonwj@qq.com   2026-08-05
+按 .vcxproj 重新生成对应的 .vcxproj.filters
+balloonwj@qq.com   2026-08-05（2026-08-18 改为纯目录映射，并覆盖测试工程）
 
 用途
 ----
 `.filters` 只决定 VS「解决方案资源管理器」里的目录树长什么样，不参与编译。
-但它一直是手工维护的，新增文件极容易忘了往里加 —— 2026-08-05 曾出现过
-vcxproj 有 773 个源文件、filters 里只有 245 个的局面，三分之二的文件在 VS 里
-根本看不见。本脚本把它改成可重复生成，新增文件后重跑一次即可。
+它一直是手工维护的，新增文件极容易忘了往里加 —— 2026-08-05 曾出现过 vcxproj
+有 773 个源文件、filters 里只有 245 个的局面，三分之二的文件在 VS 里根本看不见。
+本脚本把它改成可重复生成，新增文件后重跑一次即可。
 
 分组规则
 --------
-1. 位于子目录的文件（如 `BalloonMain\\Xxx.cpp`、`net\\Yyy.h`）—— 按其所在
-   目录路径分组，目录层级原样映射成 filter 层级。
-2. 位于 Source 根目录的文件 —— **优先沿用 .filters 里已有的归属**，把
-   `UI` / `Utils` / `Tasks` / `UserData` / `FakeData` 这套按职责手工分的组保下来；
-   以前没登记过的，按扩展名进 `Source Files`（.c/.cpp/.cc）或 `Header Files`（.h/.hpp）。
-3. 仓库外的文件（Include 以 `..` 开头，如 vendored 的 sqlite3.c）—— 统一进
-   `third-party` 组，不按它在磁盘上的真实路径建一长串空目录。
+2026-08-18 把 Source 目录按模块重排成两层结构之后，分组可以完全由磁盘目录推导，
+不再需要任何手工维护的归属表：
 
-非源码条目（Image / Text / None / ResourceCompile）沿用原 .filters 里的归属；
-原来没有的，进 `Resource Files`。
+1. 位于子目录的文件（如 `UI\\BalloonMain\\Xxx.cpp`、`net\\Yyy.h`）—— 按其所在
+   目录路径分组，目录层级原样映射成 filter 层级。
+2. 位于工程目录下的文件 —— 主工程（Flamingo）只剩 stdafx、resource.h、
+   flamingo.rc、ClientVersion.h 这几个构建用的文件，直接挂在工程节点下不分组；
+   测试工程（FlamingoUnit）的用例源文件很多，统一归入 `Tests` 组。
+3. 路径以 `..` 开头的文件 —— 先去掉全部 `..\\` 前缀再按剩下的目录分组。测试工程
+   引用被测代码走的都是这种写法（`..\\UI\\BalloonMain\\Xxx.cpp`），去掉前缀后
+   正好落进与主工程同名的分组里。
 
 用法
 ----
     cd flamingoclient/tools
-    python gen_vcxproj_filters.py            # 生成并覆盖 .filters
+    python gen_vcxproj_filters.py            # 生成并覆盖两个工程的 .filters
     python gen_vcxproj_filters.py --check    # 只比对、不写文件，有差异时退出码为 1
 
 `--check` 适合放进提交前检查：它能在"加了文件却忘了重跑本脚本"时报出来。
@@ -39,38 +40,28 @@ filter 的 UniqueIdentifier（GUID）按组名做确定性哈希生成，不用�
 """
 
 import hashlib
+import io
 import os
-import re
 import sys
 import xml.etree.ElementTree as ET
 
 MSBUILD_NS = "http://schemas.microsoft.com/developer/msbuild/2003"
 
-# 参与"按目录分组"的源码条目类型。
-SOURCE_ITEM_TYPES = ("ClCompile", "ClInclude")
-# 非源码条目类型：沿用原归属，缺省进 Resource Files。
-OTHER_ITEM_TYPES = ("ResourceCompile", "Image", "Text", "None")
-# vcxproj 独有、不该出现在 .filters 里的条目类型。
-SKIP_ITEM_TYPES = ("ProjectReference", "ProjectConfiguration")
+# 会出现在 .filters 里的条目类型。ProjectReference / ProjectConfiguration 是
+# vcxproj 独有的，不参与分组。
+ITEM_TYPES = ("ClCompile", "ClInclude", "ResourceCompile", "Image", "Text", "None")
 
-DEFAULT_SOURCE_FILTER = "Source Files"
-DEFAULT_HEADER_FILTER = "Header Files"
-DEFAULT_OTHER_FILTER = "Resource Files"
-THIRD_PARTY_FILTER = "third-party"
-
-SOURCE_EXTS = (".c", ".cpp", ".cc", ".cxx")
-HEADER_EXTS = (".h", ".hpp", ".hxx", ".inl")
+# 要生成的工程。第三项是"工程目录下的文件"该进哪个组，None 表示不分组、
+# 直接挂在工程节点下。
+#   路径相对本脚本所在的 flamingoclient/tools 目录。
+TARGETS = (
+    (os.path.join("..", "Source", "Flamingo.vcxproj"), None),
+    (os.path.join("..", "Source", "Tests", "FlamingoUnit.vcxproj"), "Tests"),
+)
 
 
 def script_dir():
     return os.path.dirname(os.path.abspath(__file__))
-
-
-def project_paths():
-    """返回 (vcxproj 路径, filters 路径)。本脚本放在 flamingoclient/tools 下。"""
-    source_dir = os.path.normpath(os.path.join(script_dir(), "..", "Source"))
-    return (os.path.join(source_dir, "Flamingo.vcxproj"),
-            os.path.join(source_dir, "Flamingo.vcxproj.filters"))
 
 
 def stable_guid(name):
@@ -80,39 +71,13 @@ def stable_guid(name):
                                  digest[16:20], digest[20:32])
 
 
-def read_existing_filters(filters_path):
-    """读旧 .filters，返回 {Include 路径: filter 名}。文件不存在时返回空表。"""
-    mapping = {}
-    if not os.path.exists(filters_path) or os.path.getsize(filters_path) == 0:
-        return mapping
-    try:
-        tree = ET.parse(filters_path)
-    except ET.ParseError:
-        # 旧文件损坏（曾出现过被清空成 0 字节的情况）时，当作没有历史归属，
-        # 全部按目录规则重建即可。
-        return mapping
-    for item in tree.getroot().iter():
-        tag = item.tag.replace("{%s}" % MSBUILD_NS, "")
-        if tag not in SOURCE_ITEM_TYPES + OTHER_ITEM_TYPES:
-            continue
-        include = item.get("Include")
-        if not include:
-            continue
-        node = item.find("{%s}Filter" % MSBUILD_NS)
-        if node is not None and node.text:
-            mapping[include.lower()] = node.text.strip()
-    return mapping
-
-
 def read_project_items(proj_path):
     """读 vcxproj，返回 [(条目类型, Include 路径)]，保持原文件里的先后顺序。"""
     items = []
     tree = ET.parse(proj_path)
     for item in tree.getroot().iter():
         tag = item.tag.replace("{%s}" % MSBUILD_NS, "")
-        if tag in SKIP_ITEM_TYPES:
-            continue
-        if tag not in SOURCE_ITEM_TYPES + OTHER_ITEM_TYPES:
+        if tag not in ITEM_TYPES:
             continue
         include = item.get("Include")
         if include:
@@ -120,45 +85,42 @@ def read_project_items(proj_path):
     return items
 
 
-def decide_filter(item_type, include, existing):
-    """按分组规则决定某个条目该进哪个 filter。"""
-    # 仓库外的 vendored 文件：不按真实路径建一长串空目录。
-    if include.startswith(".."):
-        return THIRD_PARTY_FILTER
+def decide_filter(include, root_filter):
+    """
+    按分组规则决定某个条目该进哪个 filter。返回 None 表示不分组。
 
-    directory = os.path.dirname(include)
+      include     条目在 vcxproj 里的 Include 路径
+      root_filter 工程目录下的文件该进的组名，None 表示不分组
+    """
+    path = include.replace("/", "\\")
+
+    # 去掉全部 ..\ 前缀：测试工程引用被测代码用的就是这种写法，
+    # 去掉之后正好与主工程里的分组同名。
+    while path.startswith("..\\"):
+        path = path[3:]
+
+    directory = os.path.dirname(path)
     if directory:
-        # 子目录文件：目录层级原样映射成 filter 层级。
-        return directory.replace("/", "\\")
-
-    # 根目录文件：优先沿用历史归属，保住按职责手工分的那几个组。
-    prior = existing.get(include.lower())
-    if prior:
-        return prior
-
-    if item_type in OTHER_ITEM_TYPES:
-        return DEFAULT_OTHER_FILTER
-
-    ext = os.path.splitext(include)[1].lower()
-    if ext in HEADER_EXTS:
-        return DEFAULT_HEADER_FILTER
-    if ext in SOURCE_EXTS:
-        return DEFAULT_SOURCE_FILTER
-    return DEFAULT_SOURCE_FILTER
+        return directory
+    return root_filter
 
 
 def expand_filter_tree(names):
     """把 "A\\B\\C" 展开成 A、A\\B、A\\B\\C —— VS 要求每一级都有 Filter 定义。"""
     out = set()
     for name in names:
+        if not name:
+            continue
         parts = name.split("\\")
         for i in range(1, len(parts) + 1):
             out.add("\\".join(parts[:i]))
     return out
 
 
-def build_filters_xml(items, existing):
-    assignments = [(t, inc, decide_filter(t, inc, existing)) for (t, inc) in items]
+def build_filters_xml(items, root_filter):
+    assignments = []
+    for (item_type, include) in items:
+        assignments.append((item_type, include, decide_filter(include, root_filter)))
 
     lines = []
     lines.append('<?xml version="1.0" encoding="utf-8"?>')
@@ -166,53 +128,64 @@ def build_filters_xml(items, existing):
                  'xmlns="http://schemas.microsoft.com/developer/msbuild/2003">')
 
     # 1) filter 定义（含每一级父目录），按名字排序，保证生成结果稳定。
-    lines.append("  <ItemGroup>")
-    for name in sorted(expand_filter_tree([a[2] for a in assignments])):
-        lines.append('    <Filter Include="%s">' % name)
-        lines.append("      <UniqueIdentifier>%s</UniqueIdentifier>" % stable_guid(name))
-        lines.append("    </Filter>")
-    lines.append("  </ItemGroup>")
+    names = expand_filter_tree([a[2] for a in assignments if a[2]])
+    if names:
+        lines.append("  <ItemGroup>")
+        for name in sorted(names):
+            lines.append('    <Filter Include="%s">' % name)
+            lines.append("      <UniqueIdentifier>%s</UniqueIdentifier>" % stable_guid(name))
+            lines.append("    </Filter>")
+        lines.append("  </ItemGroup>")
 
     # 2) 各类条目分组输出，组内保持 vcxproj 里的原始顺序。
-    for item_type in SOURCE_ITEM_TYPES + OTHER_ITEM_TYPES:
+    for item_type in ITEM_TYPES:
         group = [a for a in assignments if a[0] == item_type]
         if not group:
             continue
         lines.append("  <ItemGroup>")
         for (_, include, filter_name) in group:
-            lines.append('    <%s Include="%s">' % (item_type, include))
-            lines.append("      <Filter>%s</Filter>" % filter_name)
-            lines.append("    </%s>" % item_type)
+            if filter_name:
+                lines.append('    <%s Include="%s">' % (item_type, include))
+                lines.append("      <Filter>%s</Filter>" % filter_name)
+                lines.append("    </%s>" % item_type)
+            else:
+                # 不分组的条目直接挂在工程节点下。
+                lines.append('    <%s Include="%s" />' % (item_type, include))
         lines.append("  </ItemGroup>")
 
     lines.append("</Project>")
-    return "\r\n".join(lines) + "\r\n"
+    # 换行符用 LF：同目录的 Flamingo.vcxproj / FlamingoUnit.vcxproj 都是 BOM + LF，
+    # 生成的 .filters 跟着一致，重新生成时才不会整个文件每一行都算作改动。
+    return "\n".join(lines) + "\n"
 
 
-def main():
-    check_only = "--check" in sys.argv
-    proj_path, filters_path = project_paths()
+def process(proj_rel, root_filter, check_only):
+    """生成或校验一个工程的 .filters。返回 (是否一致, 条目数)。"""
+    proj_path = os.path.normpath(os.path.join(script_dir(), proj_rel))
+    filters_path = proj_path + ".filters"
 
     if not os.path.exists(proj_path):
         sys.stderr.write("找不到工程文件: %s\n" % proj_path)
-        return 2
+        return (False, 0)
 
-    existing = read_existing_filters(filters_path)
     items = read_project_items(proj_path)
-    content = build_filters_xml(items, existing)
+    content = build_filters_xml(items, root_filter)
 
     old = ""
     if os.path.exists(filters_path):
         with open(filters_path, "rb") as f:
             old = f.read().decode("utf-8-sig", "replace")
 
+    same = old.replace("\r\n", "\n") == content.replace("\r\n", "\n")
+
     if check_only:
-        if old.replace("\r\n", "\n") == content.replace("\r\n", "\n"):
-            print("filters 与 vcxproj 一致，共 %d 个条目。" % len(items))
-            return 0
-        print("filters 与 vcxproj 不一致：vcxproj 里有 %d 个条目。" % len(items))
-        print("请重跑 python gen_vcxproj_filters.py 重新生成。")
-        return 1
+        if same:
+            print("  %-24s 一致，共 %d 个条目。"
+                  % (os.path.basename(proj_path), len(items)))
+        else:
+            print("  %-24s 不一致：vcxproj 里有 %d 个条目，请重跑本脚本。"
+                  % (os.path.basename(proj_path), len(items)))
+        return (same, len(items))
 
     # VS 生成的 .filters 是带 BOM 的 UTF-8，保持一致。
     with open(filters_path, "wb") as f:
@@ -223,8 +196,25 @@ def main():
     for (t, _) in items:
         counts[t] = counts.get(t, 0) + 1
     detail = "，".join("%s %d" % (k, counts[k]) for k in sorted(counts))
-    print("已生成 %s" % filters_path)
-    print("  共 %d 个条目（%s）" % (len(items), detail))
+    print("  已生成 %s" % filters_path)
+    print("    共 %d 个条目（%s）" % (len(items), detail))
+    return (True, len(items))
+
+
+def main():
+    # 脚本里有中文提示，而 Windows 控制台默认不是 UTF-8，不显式指定会输出乱码。
+    if hasattr(sys.stdout, "buffer"):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8",
+                                      errors="replace")
+
+    check_only = "--check" in sys.argv
+    all_same = True
+    for (proj_rel, root_filter) in TARGETS:
+        same, _ = process(proj_rel, root_filter, check_only)
+        all_same = all_same and same
+
+    if check_only and not all_same:
+        return 1
     return 0
 
 

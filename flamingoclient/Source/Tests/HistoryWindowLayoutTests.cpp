@@ -11,7 +11,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonHistory/HistoryWindowLayout.h"
+#include "../UI/BalloonHistory/HistoryWindowLayout.h"
 #include "../../../third-party/balloonui/balloonui/DuiResMgr.h"   // 量文字宽度要用与控件同一支默认字体
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"   // 时间下拉的项与宽度断言
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"      // “展开 / 收起”链接的文案与模式断言

@@ -17,7 +17,7 @@
 
 #include <cwchar>          // wcscmp —— 比对下拉项中文文本
 
-#include "../BalloonSettings/SettingsBinding.h"
+#include "../UI/BalloonSettings/SettingsBinding.h"
 
 using namespace balloonsettings;
 

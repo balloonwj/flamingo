@@ -16,7 +16,7 @@
 #include <string.h>
 #include <vector>
 
-#include "../jsoncpp-1.9.0/json.h"
+#include "../third-party/jsoncpp-1.9.0/json.h"
 
 namespace net {
 

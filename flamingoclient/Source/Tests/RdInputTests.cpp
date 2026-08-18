@@ -7,9 +7,9 @@
  *  balloonwj@qq.com   2026-06-08
  */
 #include "catch_amalgamated.hpp"
-#include "../RemoteDesktop/RdInputEncoder.h"
-#include "../RemoteDesktop/RdInputInjector.h"
-#include "../RemoteDesktop/RdInputDef.h"
+#include "../Feature/RemoteDesktop/RdInputEncoder.h"
+#include "../Feature/RemoteDesktop/RdInputInjector.h"
+#include "../Feature/RemoteDesktop/RdInputDef.h"
 
 using namespace remotedesktop;
 

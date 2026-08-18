@@ -18,7 +18,7 @@
  *  balloonwj@qq.com   2026-08-13
  */
 #include "catch_amalgamated.hpp"
-#include "../FolderTransfer/FolderManifest.h"
+#include "../Feature/FolderTransfer/FolderManifest.h"
 
 #include <windows.h>
 #include <string>

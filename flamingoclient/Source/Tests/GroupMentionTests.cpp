@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include "../BalloonChatWnd/GroupMentionModel.h"
+#include "../UI/BalloonChatWnd/GroupMentionModel.h"
 #include "../net/MessageProtocolClient.h"
 
 using namespace balloonchatwnd;

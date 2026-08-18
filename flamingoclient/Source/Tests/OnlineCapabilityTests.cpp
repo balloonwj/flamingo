@@ -22,7 +22,7 @@
 
 #include <cwchar>          // wcscmp / wcsstr —— 比对中文提示文案
 
-#include "../BalloonMain/OnlineCapability.h"
+#include "../UI/BalloonMain/OnlineCapability.h"
 #include "../net/Protocol.h"   // presence_type
 
 using namespace balloonmain;

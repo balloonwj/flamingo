@@ -23,7 +23,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonSearch/PinyinFull.h"
+#include "../UI/BalloonSearch/PinyinFull.h"
 
 TEST_CASE("PY1 全拼完整匹配", "[pinyin]")
 {

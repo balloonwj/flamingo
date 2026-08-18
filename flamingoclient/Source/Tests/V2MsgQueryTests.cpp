@@ -7,13 +7,13 @@
  *  balloonwj@qq.com   2026-06-09
  */
 #include "catch_amalgamated.hpp"
-#include "../BalloonHistory/V2MsgQuery.h"
+#include "../UI/BalloonHistory/V2MsgQuery.h"
 #include "../net/MessageProtocolClient.h"   // net::MessageNotify
 #include "../net/Protocol.h"                // ::message_type_*
 //见 MessageProtocolClient.cpp 同处说明：屏蔽 vendored json.h 的 C4828。
 #pragma warning(push)
 #pragma warning(disable: 4828)
-#include "../jsoncpp-1.9.0/json.h"
+#include "../third-party/jsoncpp-1.9.0/json.h"
 #pragma warning(pop)
 
 using namespace balloonhistory;

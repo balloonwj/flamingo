@@ -31,7 +31,7 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonMain/BalloonGroupInfoLayout.h"
+#include "../UI/BalloonMain/BalloonGroupInfoLayout.h"
 #include "../net/GroupProtocolClient.h"          // net::GroupMemberItem
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"

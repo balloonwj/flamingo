@@ -18,8 +18,8 @@
 
 #include "catch_amalgamated.hpp"
 
-#include "../BalloonChatWnd/ChatQuoteModel.h"
-#include "../BalloonChatWnd/ChatMockData.h"
+#include "../UI/BalloonChatWnd/ChatQuoteModel.h"
+#include "../UI/BalloonChatWnd/ChatMockData.h"
 #include "../net/Protocol.h"
 
 using namespace balloonchatwnd;
