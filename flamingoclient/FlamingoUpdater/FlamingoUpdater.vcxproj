@@ -75,7 +75,7 @@
     <ClCompile>
       <Optimization>Disabled</Optimization>
       <PreprocessorDefinitions>_DEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\Source\zlib1.2.11;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\Source\third-party\zlib1.2.11;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <MinimalRebuild>false</MinimalRebuild>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>
@@ -94,7 +94,7 @@
       <Optimization>MaxSpeed</Optimization>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <PreprocessorDefinitions>NDEBUG;_WINDOWS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <AdditionalIncludeDirectories>..\Source\zlib1.2.11;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>..\Source\third-party\zlib1.2.11;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
       <FunctionLevelLinking>true</FunctionLevelLinking>
@@ -119,12 +119,12 @@
     <ClCompile Include="UpdateLog.cpp" />
     <!-- zlib 1.2.11：解压只需要 inflate 这一路的六个文件。它们是 C 代码，
          带中文注释的 /utf-8 对纯 ASCII 的 C 源码无影响。 -->
-    <ClCompile Include="..\Source\zlib1.2.11\adler32.c" />
-    <ClCompile Include="..\Source\zlib1.2.11\crc32.c" />
-    <ClCompile Include="..\Source\zlib1.2.11\inffast.c" />
-    <ClCompile Include="..\Source\zlib1.2.11\inflate.c" />
-    <ClCompile Include="..\Source\zlib1.2.11\inftrees.c" />
-    <ClCompile Include="..\Source\zlib1.2.11\zutil.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\adler32.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\crc32.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inffast.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inflate.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inftrees.c" />
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\zutil.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CommandLine.h" />

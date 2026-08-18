@@ -39,22 +39,22 @@
     <ClCompile Include="UpdateLog.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
-    <ClCompile Include="..\Source\zlib1.2.11\adler32.c">
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\adler32.c">
       <Filter>zlib</Filter>
     </ClCompile>
-    <ClCompile Include="..\Source\zlib1.2.11\crc32.c">
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\crc32.c">
       <Filter>zlib</Filter>
     </ClCompile>
-    <ClCompile Include="..\Source\zlib1.2.11\inffast.c">
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inffast.c">
       <Filter>zlib</Filter>
     </ClCompile>
-    <ClCompile Include="..\Source\zlib1.2.11\inflate.c">
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inflate.c">
       <Filter>zlib</Filter>
     </ClCompile>
-    <ClCompile Include="..\Source\zlib1.2.11\inftrees.c">
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\inftrees.c">
       <Filter>zlib</Filter>
     </ClCompile>
-    <ClCompile Include="..\Source\zlib1.2.11\zutil.c">
+    <ClCompile Include="..\Source\third-party\zlib1.2.11\zutil.c">
       <Filter>zlib</Filter>
     </ClCompile>
   </ItemGroup>

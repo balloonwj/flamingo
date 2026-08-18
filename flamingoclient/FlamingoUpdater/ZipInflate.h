@@ -4,7 +4,7 @@
  *  从 ZipReader 拆出来单独成文件，只因为它依赖 zlib：这样 ZipReader 保持零依赖、
  *  能直接编进 FlamingoUnit 测试工程，而本文件不必进测试工程。
  *
- *  用的是仓库里已有的 zlib 1.2.11（`flamingoclient/Source/zlib1.2.11/`），主工程本来
+ *  用的是仓库里已有的 zlib 1.2.11（`flamingoclient/Source/third-party/zlib1.2.11/`），主工程本来
  *  就在编译它。只需要其中的 inflate 一路：adler32 / crc32 / inffast / inflate /
  *  inftrees / zutil 六个 .c。不再引入老工程那份内嵌了一整套 zlib 的 unzip.cpp。
  *

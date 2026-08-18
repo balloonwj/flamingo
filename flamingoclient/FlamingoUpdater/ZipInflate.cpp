@@ -4,7 +4,7 @@
  */
 #include "ZipInflate.h"
 
-#include "../Source/zlib1.2.11/zlib.h"
+#include "../Source/third-party/zlib1.2.11/zlib.h"
 
 namespace iupdate {
 
