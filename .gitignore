@@ -126,8 +126,11 @@ third-party/speexdsp-1.2.1/obj/
 
 # 服务端测试程序跑 SQLite 集成用例时生成的临时库文件（含 WAL 模式的两个附属文件）。
 # 每个用例开头都会重建它们，属于纯粹的测试中间产物。
-flamingoserver/windowsproj/flamingo_sqlite_*.db*
-flamingoserver/flamingo_sqlite_*.db*
+#
+# 刻意不锚定目录：用例里给的是相对路径（见 flamingoserver/tests/test_sqlite_database.cpp
+# 的 TEST_DB_PATH），文件最终落在哪儿取决于测试程序当次的工作目录。已经出现过
+# flamingoserver/windowsproj/ 与 flamingoserver/chatserversrc/ 两个位置，写死路径就会漏。
+flamingo_sqlite_*.db*
 
 # dbtype=sqlite 时 chatserver 运行期生成的本地数据库文件（默认路径 data/flamingo.db）。
 # 属于运行期数据，不入库。
