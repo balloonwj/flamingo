@@ -1077,7 +1077,7 @@ LRESULT CBalloonChatWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
                                        LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
     // 调试入口（--chatwindow）下，本窗口是唯一可见窗口，关闭即退出程序，
-    // 交由 CMainDlg 统一收尾。后续真实集成（从主面板打开聊天窗）时关闭
+    // 请求进程退出。后续真实集成（从主面板打开聊天窗）时关闭
     // 行为另议。
     if (m_hMainDlg != NULL && ::IsWindow(m_hMainDlg))
     {
@@ -2958,8 +2958,8 @@ LRESULT CBalloonChatWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         if (m_peerUserId != 0 && m_hostPanel != NULL && ::IsWindow(m_hostPanel))
         {
             //单聊窗的 m_hMainDlg 为 NULL（关闭只销毁本窗、不退出程序），故经主面板
-            //（m_hostPanel）转发给 CMainDlg 协调器。peerName 走堆 std::wstring，
-            //最终由 CMainDlg 处理后 delete。
+            //（m_hostPanel）转发给通话协调器。peerName 走堆 std::wstring，
+            //最终由通话协调器处理后 delete。
             ::PostMessage(m_hostPanel, FMG_MSG_RD_START_INVITE,
                           (WPARAM)m_peerUserId,
                           (LPARAM)new std::wstring(m_peerName.GetString()));
@@ -2969,8 +2969,8 @@ LRESULT CBalloonChatWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
 
     // 点击头部"语音通话"按钮 → 通知主面板通话协调器发起语音呼叫（协调器统一发
     // cmd_call_invite 并弹"呼叫中"对话框）。机制同上方远程桌面：单聊窗 m_hMainDlg 为
-    // NULL，故经主面板 m_hostPanel 转发给 CMainDlg 协调器；peerName 走堆 std::wstring，
-    // 最终由 CMainDlg 处理后 delete。
+    // NULL，故经主面板 m_hostPanel 转发给通话协调器；peerName 走堆 std::wstring，
+    // 最终由通话协调器处理后 delete。
     if (pNotify != NULL
         && pNotify->code == balloonwjui::DUIN_CLICK
         && pNotify->ctrlId == balloonchatwnd::kIdHdrVoice)
@@ -3686,7 +3686,7 @@ void CBalloonChatWindow::ApplyConnectionState(int state)
 
 bool CBalloonChatWindow::CheckOnlineFor(int action)
 {
-    // 门禁只看本窗记下的连接态：它由 CMainDlg 在每次状态变化时推下来，与托盘图标、
+    // 门禁只看本窗记下的连接态：它由会话控制器在每次状态变化时推下来，与托盘图标、
     // 状态胶囊同源。判定本身交给 OnlineCapability，不在本窗口就地写一份。
     if (balloonmain::IsActionAllowedInState(m_connUiState, action))
     {

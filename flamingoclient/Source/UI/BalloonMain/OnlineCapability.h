@@ -97,7 +97,7 @@ bool IsActionAllowed(int presence, bool connected, int action);
 
 /**
  *  判定某类操作在给定的<u>界面连接态</u>下是否放行。与 IsActionAllowed 是同一条规则的
- *  两副入口，区别只在于入参：调用方手里已经是算好的连接态（各窗口由 CMainDlg 推下来的
+ *  两副入口，区别只在于入参：调用方手里已经是算好的连接态（各窗口由会话控制器推下来的
  *  m_connUiState、菜单模型拿到的 connUiState）时用本函数，手里是"在线状态 + 连接是否
  *  就绪"这对原始值时用 IsActionAllowed。
  *
@@ -272,7 +272,7 @@ bool ShouldGrayAvatar(int connUiState);
  *  用户是否主动离线，后者没判</u>，导致"正在断线重连时用户选离线"这条路上客户端会
  *  自己又连回去。两处共用本函数即可杜绝这类遗漏。
  *
- *    userWentOffline： 用户是否主动选择了离线（对应 MAINPANEL_STATUS_USERGOOFFLINE）。
+ *    userWentOffline： 用户是否主动选择了离线（对应 balloonmain::kSessionUserGoOffline）。
  *    enableReconnect： 配置里是否允许自动重连。
  *
  *  返回：true 表示应当重连。用户主动离线时恒为 false —— 主动离线的语义就是"别再连了"。

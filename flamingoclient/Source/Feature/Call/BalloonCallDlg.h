@@ -11,7 +11,7 @@
  *      点挂断向服务端发 cmd_call_hangup。
  *
  *  本对话框只负责"显示 + 把用户的取消 / 接听 / 拒绝 / 挂断转成一条 v2 通话信令发出"，
- *  通过 CIUSocket 单例发送；不持有会话状态机（那在 CMainDlg 的通话协调逻辑里）。
+ *  通过 CIUSocket 单例发送；不持有会话状态机（那在 balloonmain::CCallCoordinator 里）。
  *  协调器在收到服务端应答 / 推送时调用 OpenConnected 切通话中态、或 CloseDlg 关闭，
  *  并在邀请应答回来后用 SetSessionId 回填会话 id（主叫取消时用）。
  *
@@ -19,7 +19,7 @@
  *
  *  第三期接入视频：通话中态分纯语音 / 视频两种布局。视频通话的「通话中」态把窗口放大，客户区
  *  上半部是铺满的大画面（自绘 CallVideoCanvas），底部栏左侧放小画面（同类画面控件，画中画）、
- *  右侧放挂断按钮。本类实现 call::CallVideoDisplaySink，由协调器（CMainDlg）把中转会话
+ *  右侧放挂断按钮。本类实现 call::CallVideoDisplaySink，由通话协调器把中转会话
  *  的视频显示去向指向本对话框；远端帧（视频解码线程）/ 本端采集帧（采集线程）经 sink 回调到来后，
  *  本类把 NV12 转 BGRA、拷到堆、PostMessage 转投 UI 线程，再在消息处理里喂给对应画面控件重绘
  *  （仿远程桌面观看窗 RdViewerWindow 的帧投递做法）。
@@ -93,7 +93,7 @@ public:
     void SetVideoCall(bool video) { m_videoCall = video; }
 
     /**
-     *  切换本对话框的媒体呈现形态（语音 <-> 视频），通话中调用。由 CMainDlg 收到
+     *  切换本对话框的媒体呈现形态（语音 <-> 视频），通话中调用。由通话协调器收到
      *  cmd_call_media_changed_notify 推送后调用 —— 本端不自作主张切，一律等推送。
      *
      *  以视频对话框为基座：语音态即"视频布局但画面区换成对端头像 + 昵称"，故窗口尺寸、
@@ -238,7 +238,7 @@ private:
     int     m_pinIconId;       //标题栏「固定」图标按钮的 caption icon id（AddCaptionIcon 返回）；0=未装
     HBITMAP m_pinIconNormal;   //未置顶态的「固定」图标位图（本类拥有，析构时 DeleteObject）
     HBITMAP m_pinIconActive;   //已置顶态的「固定」图标位图（本类拥有，析构时 DeleteObject）
-    //打开本窗口时传入的 owner（即 CMainDlg 的 HWND）。关窗时要经它请求协调器停掉媒体会话，
+    //打开本窗口时传入的 owner（即主面板的 HWND）。关窗时要经它请求协调器停掉媒体会话，
     //否则采集线程继续跑、摄像头灯不灭（通话窗自己不持有 CallMediaSession）。
     HWND    m_hOwnerWnd;
     HBITMAP m_titleIconVideo;  //标题栏左上角图标：摄像机（视频通话用；本类拥有，析构时 DeleteObject）

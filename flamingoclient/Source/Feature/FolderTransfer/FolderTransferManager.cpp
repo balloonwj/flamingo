@@ -213,7 +213,7 @@ FolderTransferManager::FolderTransferManager()
 
 FolderTransferManager::~FolderTransferManager()
 {
-    //进程退出时兜底回收线程。正常路径上 CMainDlg 在登出 / 掉线时已经调过 Reset。
+    //进程退出时兜底回收线程。正常路径上主面板在登出 / 掉线时已经调过 Reset。
     JoinAllScanThreads();
     StopAllSessions();
 }

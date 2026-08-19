@@ -169,7 +169,7 @@ bool CBalloonGroupManageWindow::BuildWindow(HWND hWndParent)
 
 void CBalloonGroupManageWindow::CreateAndShow(HWND hMainDlg)
 {
-    // 调试入口（CMainDlg --groupmanage）：无父窗口、非模态。
+    // 调试入口（命令行 --groupmanage）：无父窗口、非模态。
     m_hMainDlg = hMainDlg;
     if (!BuildWindow(NULL))
     {
@@ -316,7 +316,7 @@ void CBalloonGroupManageWindow::UpdateNavActive(int pageId)
 LRESULT CBalloonGroupManageWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
                                               LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
-    // 调试入口下，本窗口是唯一可见窗口，关闭即退出程序，交由 CMainDlg
+    // 调试入口下，本窗口是唯一可见窗口，关闭即请求
     // 统一收尾。
     if (m_hMainDlg != NULL && ::IsWindow(m_hMainDlg))
     {

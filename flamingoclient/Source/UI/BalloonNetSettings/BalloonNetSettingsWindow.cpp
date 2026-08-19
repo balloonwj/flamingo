@@ -144,7 +144,7 @@ bool CBalloonNetSettingsWindow::BuildWindow(HWND hWndParent)
 
 void CBalloonNetSettingsWindow::CreateAndShow(HWND hMainDlg)
 {
-    // 调试入口（CMainDlg --netsettings）：无父窗口、非模态。
+    // 调试入口（命令行 --netsettings）：无父窗口、非模态。
     m_hMainDlg = hMainDlg;
     if (!BuildWindow(NULL))
         return;
@@ -639,7 +639,7 @@ LRESULT CBalloonNetSettingsWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
     }
 
     // 调试入口（--netsettings）下，本窗口是唯一可见窗口，关闭即退出
-    // 程序，交由 CMainDlg 统一收尾。
+    // 程序。
     if (m_hMainDlg != NULL && ::IsWindow(m_hMainDlg))
     {
         ::PostMessage(m_hMainDlg, WM_CLOSE_MAINDLG, 0, 0);

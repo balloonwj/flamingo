@@ -25,7 +25,7 @@
 #include "../../Common/Log/IULog.h"
 #include "../../resource.h"                 // IDR_MAINFRAME（标题栏程序图标）
 #include "../../App/FlamingoClient.h"           // CFlamingoClient::m_UserConfig / SaveUserConfig
-#include "../../App/CustomMsgDef.h"             // WM_CLOSE_MAINDLG（退出时投递给 CMainDlg）
+#include "../../App/CustomMsgDef.h"             // WM_CLOSE_MAINDLG（退出时投递给主面板）
 #include "MainPanelIcons.h"              // DrawLineIcon / kIconPanel / kIconExit
 #include "ClosePromptDecision.h"         // DecideOnConfirm / DefaultSelection / CloseAction
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
@@ -634,7 +634,7 @@ void CBalloonClosePromptDlg::DoConfirm()
     // 下次显示出来仍是禁用的，用户就再也点不动它了。
     CloseSelf();
 
-    // 执行动作：两种方式都先隐藏主面板（视觉上立即消失）；退出再通知 CMainDlg 收尾。
+    // 执行动作：两种方式都先隐藏主面板（视觉上立即消失）；退出再请求进程收尾。
     if (panel != NULL && ::IsWindow(panel))
     {
         ::ShowWindow(panel, SW_HIDE);

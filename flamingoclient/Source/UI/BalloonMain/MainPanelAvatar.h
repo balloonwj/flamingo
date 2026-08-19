@@ -8,7 +8,7 @@
  *  不做 HRGN clip,圆形边缘无锯齿。
  *
  *  设计来源:design data.js 里每个联系人 / 群配的 (avatarText, avatarColor),
- *  以及 BalloonContactTreeAdapter 后续从 CBuddyInfo 字段算出的同样两字段。
+ *  以及后续从 CBuddyInfo 字段算出的同样两字段。
  *
  *  本文件遵循 balloonui 头文件约定:包含它之前调用方必须已引入
  *  ATL/WTL (LPCTSTR / COLORREF) 与 <windows.h>。

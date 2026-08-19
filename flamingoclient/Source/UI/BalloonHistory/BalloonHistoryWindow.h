@@ -9,7 +9,7 @@
  *  交互采用局部刷新：改类型胶囊 / 时间档 / 关键字 / 翻页时只重建“列表 + 分页器”
  *  并更新底部信息与胶囊选中态，**不重建搜索框**（保住正在输入的焦点）。
  *
- *  调试期由 CMainDlg 的 --history 命令行入口直接弹出：用一个 in-memory 预置本地库
+ *  调试期由命令行 --history 入口直接弹出：用一个 in-memory 预置本地库
  *  （SeedDebugStore）灌入若干假消息，使筛选 / 翻页 / 搜索都能真点真用、便于目检。
  *  接真实会话数据（取主面板本地库 + 联系人昵称解析）与两个入口留待 2c-2。
  *
@@ -58,7 +58,7 @@ public:
 
     //创建并显示历史窗（调试入口 --history 用，非模态、无父窗口）。内部预置一个 in-memory
     //本地库灌假消息，使筛选 / 翻页 / 搜索可真点真用。
-    //  hMainDlg：CMainDlg 的窗口句柄（隐藏的消息中枢）；关闭本窗口时据此通知其收尾。
+    //  hMainDlg：主面板的窗口句柄；关闭本窗口时据此通知其收尾。
     void CreateAndShow(HWND hMainDlg);
 
     //为某个真实会话打开 / 重定向历史窗（主面板 OpenHistory 调用）。用主面板的本地库
@@ -178,7 +178,7 @@ private:
     //解析发送者昵称（调试期查 m_senderNames；查不到回退“用户<id>”）。
     CString ResolveSenderName(int64_t fromid) const;
 
-    //WM_CLOSE：调试入口下本窗口是唯一可见窗口，关闭即退出程序，转交 CMainDlg。
+    //WM_CLOSE：调试入口下本窗口是唯一可见窗口，关闭即请求退出程序。
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     //WM_DUI_NOTIFY：路由类型胶囊 / 时间下拉 / 搜索框 / 分页按钮的交互到模型，改完模型后
@@ -260,7 +260,7 @@ private:
 
 private:
     CFlamingoClient*             m_lpFMGClient;   //所属客户端对象（引用，不持有）
-    HWND                         m_hMainDlg;      //CMainDlg 句柄（仅调试入口下关闭即退出用；真实打开为 NULL）
+    HWND                         m_hMainDlg;      //主面板句柄（仅调试入口下关闭即退出用；真实打开为 NULL）
     CBalloonMainPanel*           m_pMainPanel;    //主面板（真实会话下解析昵称用，引用不持有；调试入口为 NULL）
 
     balloonhistory::HistoryModel m_model;         //浏览状态 / 分页模型（驱动列表）

@@ -38,7 +38,7 @@ enum SystemMenuId : UINT
     kSysMenuNetSettings  = 6,   // 网络设置 —— 打开新版网络设置窗
     kSysMenuAbout        = 7,   // 关于 FlamingoIM —— 打开关于对话框
     kSysMenuLogout       = 8,   // 登出 —— 二次确认后断开当前连接、销毁主面板并回到登录界面
-                                // （实际动作由 ShowSystemMenu 投递 FMG_MSG_LOGOUT 给 CMainDlg 执行）
+                                // （实际动作由 ShowSystemMenu 投递 FMG_MSG_LOGOUT 给会话控制器执行）
 };
 
 /**

@@ -361,7 +361,7 @@ void CBalloonAboutDlg::OpenAbout(HWND /*owner*/)
 LRESULT CBalloonAboutDlg::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
                                      LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
-    // 关闭 = 销毁本窗口（对象由主面板 / CMainDlg 持有，可复用重开）。
+    // 关闭 = 销毁本窗口（对象由主面板 / 调试入口持有，可复用重开）。
     if (IsWindow())
     {
         DestroyWindow();
@@ -593,7 +593,8 @@ void CBalloonAboutDlg::BuildUiOnce()
 
     HFONT appNameFont = balloonwjui::DuiResMgr::Inst().GetFontByPointSize(kAppNamePt, true);
     AddCenteredLabel(root.get(), balloonmain::kAboutAppName, appNameFont, kAppNameColor, kAppNameH);
-    AddCenteredLabel(root.get(), balloonmain::kAboutVersionLine, NULL, kGrayTextColor, kVerLineH);
+    const std::wstring versionLine = balloonmain::AboutVersionLine();
+    AddCenteredLabel(root.get(), versionLine.c_str(), NULL, kGrayTextColor, kVerLineH);
     AddCenteredLabel(root.get(), balloonmain::kAboutSlogan, NULL, kGrayTextColor, kSloganH);
 
     {

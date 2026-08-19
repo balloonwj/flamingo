@@ -150,9 +150,6 @@ public:
      */
 	int    CheckReceivedData();
 
-	//异步接口
-    void    Send(const std::string& strBuffer);
-
     /**
      *  发送一条单聊文本消息（v2，cmd_send_message=1503）。线程安全，可在 UI
      *  线程调用：内部组帧后追加进发送缓冲、唤醒发送线程。发送回执经
@@ -377,7 +374,7 @@ public:
      *  @return 已启动返回 true。
      *
      *  它在 Init() 里启动，而 Init() 要<u>登录成功之后</u>才被调用（见
-     *  CMainDlg::OnLoginResult 的 LOGIN_SUCCESS 分支）。登录前这条线程不能起 ——
+     *  会话控制器 OnLoginResult 的 LOGIN_SUCCESS 分支）。登录前这条线程不能起 ——
      *  它会把 Login() 正等着同步收取的那一帧应答抢走。所以凡是"登录前也要能用"的
      *  请求（目前只有检查更新），都必须据本函数判断走同步收发那条路。
      */

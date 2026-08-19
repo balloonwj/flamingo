@@ -269,7 +269,7 @@ void UpdateManager::DoCheck(bool autoDownload)
     bool arrived = false;
 
     //取应答有两条路，按<u>异步收帧线程是否已启动</u>分流。这条线程在 CIUSocket::Init 里
-    //启动，而 Init 要登录成功之后才被调用（见 CMainDlg::OnLoginResult 的 LOGIN_SUCCESS
+    //启动，而 Init 要登录成功之后才被调用（见会话控制器 OnLoginResult 的 LOGIN_SUCCESS
     //分支）—— 它不能提前起，否则会把 Login() 正等着同步收取的那一帧应答抢走。
     if (!CIUSocket::GetInstance().IsAsyncRecvRunning())
     {

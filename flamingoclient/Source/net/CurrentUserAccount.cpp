@@ -16,8 +16,8 @@ namespace net {
 
 std::wstring CurrentUserAccount()
 {
-    //取进程内正在使用的那个 CFlamingoClient（即 CMainDlg 的成员对象 m_FMGClient，
-    //由 CMainDlg 构造时登记）。尚未登记（进程刚起、或 CMainDlg 已析构）时返回 NULL，
+    //取进程内正在使用的那个 CFlamingoClient（即进程外壳的成员对象 m_FMGClient，
+    //由进程外壳构造时登记）。尚未登记（进程刚起、或进程外壳已析构）时返回 NULL，
     //此处按"取不到登录态"降级为空串。不在这里补记日志：GetInstance 内部已记过一条
     //LOG_ERROR，而本函数在联系人 / 会话列表渲染时逐行调用，重复记会把日志刷满。
     CFlamingoClient* lpClient = CFlamingoClient::GetInstance();

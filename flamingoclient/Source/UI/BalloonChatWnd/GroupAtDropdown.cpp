@@ -144,7 +144,7 @@ CGroupAtDropdown::~CGroupAtDropdown()
     // 建好的（BalloonGroupChatWindow.cpp 里的 EnsureCreated），所以哪怕用户一次
     // '@' 都没敲过也照样触发。
     //
-    // 收尾方式与 CBalloonMainPanel 对 m_searchDropdown、CMainDlg 对 m_trayMsgTipPopup
+    // 收尾方式与 CBalloonMainPanel 对 m_searchDropdown、托盘控制器对 m_trayMsgTipPopup
     // 的处理同源，区别是就近放在本类自己的析构里，这样所有宿主都自动受益。
     if (m_hWnd != NULL)
     {

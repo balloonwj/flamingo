@@ -8,7 +8,7 @@
  *  旋转 / 平移。
  *
  *  本轮（增量 2）只做窗口外壳 + 画布渲染与键鼠交互；底部悬浮工具栏与"另存为"
- *  留到增量 3，接入聊天气泡双击留到增量 4。调试期由 CMainDlg 的 --imageviewer
+ *  留到增量 3，接入聊天气泡双击留到增量 4。调试期由命令行 --imageviewer
  *  命令行入口弹出（弹文件选择框挑一张本地图片自检）。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL
@@ -41,8 +41,8 @@ public:
     /**
      *  创建并显示看图窗口（调试入口用，非模态、无父窗口）。窗口显示后弹出
      *  文件选择框让开发者挑一张本地图片载入，便于核对渲染与交互。
-     *    hMainDlg：CMainDlg 的窗口句柄（隐藏的消息中枢）；调试入口下本窗口是
-     *              唯一可见窗口，关闭时据此通知 CMainDlg 退出程序。
+     *    hMainDlg：主面板的窗口句柄；调试入口下本窗口是
+     *              唯一可见窗口，关闭时据此请求退出程序。
      */
     void CreateAndShow(HWND hMainDlg);
 
@@ -79,11 +79,11 @@ private:
     // WM_KEYDOWN：Esc 关闭窗口；其余键交回基类链。
     LRESULT OnKeyDownMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
-    // WM_CLOSE：调试入口下关闭即退出程序，转交 CMainDlg；正式使用下仅销毁本窗口。
+    // WM_CLOSE：调试入口下关闭即请求退出程序；正式使用下仅销毁本窗口。
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
 private:
     balloonimageviewer::ImageCanvas* m_pCanvas;   // 图片画布（裸指针，所有权在控件树）
-    HWND     m_hMainDlg;                           // 调试入口下 CMainDlg 句柄；NULL=正式使用（关闭只销毁本窗）
+    HWND     m_hMainDlg;                           // 调试入口下 主面板句柄；NULL=正式使用（关闭只销毁本窗）
     HBITMAP  m_hBgBitmap;                          // 深色背景位图（caller-owned，本类持有，析构释放）
 };

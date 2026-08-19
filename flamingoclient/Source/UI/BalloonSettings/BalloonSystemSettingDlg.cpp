@@ -1394,7 +1394,7 @@ bool CBalloonSystemSettingDlg::ApplySettingChange(UINT ctrlId, int value)
         cfg->SetAutoAwayDelayIndex(balloonsettings::ClampAutoAwayDelayIndex(value));
         break;
     //用户切换「禁止机器休眠」开关：写入配置，并立即把与之互斥的「自动离开」两行置为
-    //禁用或恢复。真正获取与释放系统电源请求由 CMainDlg 的定时器按配置执行（它每次触发
+    //禁用或恢复。真正获取与释放系统电源请求由自动离开控制器的定时器按配置执行（它每次触发
     //都会重新读取配置），本处不调用 Win32 API；相关日志见 BalloonMain/KeepAwakeSession.cpp。
     case kIdKeepAwake:
         cfg->EnableKeepAwake(on ? TRUE : FALSE);

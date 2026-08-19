@@ -4,15 +4,12 @@
  *  登录成功后的主面板 —— 基于 balloonui 的窄高主窗口，对照
  *  design/pc-snapshots/05-main-contacts.png 与 06-main-groups.png。
  *
- *  与现有 CMainDlg 的关系（已与用户确认的集成方式）：CMainDlg 体量庞大、
- *  同时是 IM 消息中枢（收发消息 / 托盘 / 管理聊天窗），不便整体替换。
- *  故新主面板做成一个独立的 balloonui 窗口：登录成功后由 CMainDlg 创建
- *  并显示本面板，同时把 CMainDlg 自身窗口隐藏 —— CMainDlg 退居幕后只
- *  作消息中枢。真实好友 / 群 / 消息数据的接入留作后续阶段，本阶段先用
- *  mock 数据。
+ *  本面板同时是整个客户端的消息中枢：网络应答与推送的收件窗口就是它（见
+ *  CFlamingoClient::SetCallBackWnd），托盘、登录编排、在线状态、自动离开、远程桌面、
+ *  音视频通话这几条线各由一个协作类承担，它们都不是窗口，靠 CHAIN_MSG_MAP_MEMBER
+ *  搭在本面板的消息派发链上（见下面的消息映射与成员声明）。
  *
- *  P0 范围：骨架 —— 一个能创建 / 显示 / 关闭的空 DuiFrameWindow；真正的
- *  Header / 搜索 / Tab / 列表由后续 P1 阶段的 BalloonMainLayout 构建。
+ *  进程级的事务（网络客户端的持有、启动与退出序列）不在本类，归 balloonapp::CAppShell。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方必须已引入 ATL/WTL
  *  （Flamingo 侧由 stdafx.h 保证）。
@@ -35,6 +32,12 @@
 #include "../BalloonGroupManage/BalloonGroupManageWindow.h"  // 群管理对话框（成员指针需完整类型）
 #include "../BalloonGroupManage/BalloonAnnouncePopupDlg.h"   // 新公告提示窗（成员按值持有，需完整类型）
 #include "../BalloonContact/BalloonContactWindow.h"  // 联系人资料窗
+#include "MainPanelRdCoordinator.h"                 // 远程桌面协调器（本面板按值持有）
+#include "MainPanelCallCoordinator.h"               // 音视频通话协调器（本面板按值持有）
+#include "MainPanelAutoAwayController.h"            // 自动离开 / 禁止休眠控制器（本面板按值持有）
+#include "MainPanelTrayController.h"                // 托盘控制器（本面板按值持有）
+#include "MainPanelSessionController.h"             // 会话控制器（本面板按值持有）
+#include "../BalloonNetSettings/BalloonNetSettingsWindow.h"  // 网络设置窗（本面板按值持有）
 #include "../BalloonSearch/SearchDropdown.h"       // 搜索结果下拉（主面板下方顶层浮窗）
 #include "FavoritesModel.h"                        // 「我的收藏」模型（成员按值持有，需完整类型）
 #include "StarredModel.h"                          // 「特别关注」模型（成员按值持有，需完整类型）
@@ -125,13 +128,79 @@ public:
     ~CBalloonMainPanel();
 
     /**
-     *  创建并显示主面板窗口。登录成功后由 CMainDlg 调用。
-     *    hMainDlg：CMainDlg 的窗口句柄（隐藏的消息中枢）；关闭本面板时
-     *              据此通知 CMainDlg 退出程序。
+     *  创建并显示主面板窗口。登录成功后由会话控制器调用。
+     *  窗口尚未建出来时先建（等同 EnsureCreated），随后显示。
      */
-    void CreateAndShow(HWND hMainDlg);
+    void CreateAndShow();
 
-    // 下面三个 RefreshXxx 是给 CMainDlg 用的对外刷新入口。它们原先各自走 v1 的
+    /**
+     *  建出主面板窗口并初始化客户区，但<u>不显示</u>。进程启动时调用一次。
+     *
+     *  主面板是常驻窗口：整个进程生命周期内只建一次，登出时只隐藏、不销毁，
+     *  退出进程时才由进程外壳销毁。这样它的 HWND 全程不变，可以稳定地
+     *  充当网络应答的收件窗口。
+     *
+     *  本方法幂等，窗口已经建出来时直接返回，不会重复建窗。
+     */
+    void EnsureCreated();
+
+    /**
+     *  绑定进程层宿主，并启动本面板持有的三个协作类（会话控制器、自动离开控制器、
+     *  托盘控制器）。须在 EnsureCreated 之后调用一次。
+     *    pAppHost  进程层宿主，本面板不拥有；不可为 NULL。
+     */
+    void AttachAppHost(balloonmain::ISessionAppHost* pAppHost);
+
+    /**
+     *  取会话控制器，供外部发起首次登录、查询登录态等。
+     *  返回本面板持有的那一个，调用方不得保存超过本面板生命周期。
+     */
+    balloonmain::CSessionController& SessionController() { return m_sessionController; }
+
+    /**
+     *  取托盘控制器，供外部驱动托盘（刷新图标、起停登录动画、弹重连气泡等）。
+     *  返回本面板持有的那一个，调用方不得保存超过本面板生命周期。
+     */
+    balloonmain::CTrayController& TrayController() { return m_trayController; }
+
+    /**
+     *  通知本面板：本人的在线状态刚刚被切换过。由「切换在线状态」的唯一漏斗调用，
+     *  本面板转交自动离开控制器，让它维护「当前这个离开是不是自动切过去的」。
+     *    presence  切换后的在线状态（kMyPresenceOnline 等）。
+     *    source    本次切换的来源，取值见 Session/UserSessionData.h 的 PresenceChangeSource。
+     */
+    void NotifyMyPresenceChanged(int presence, int source);
+
+    /**
+     *  登录成功后显示主面板：先用本次登录用户的资料刷新 Header，再显示窗口、
+     *  置于前台、摘掉任务栏按钮。窗口尚未创建时只记一条错误日志并返回。
+     */
+    void ShowAfterLogin();
+
+    /**
+     *  登出时隐藏主面板。窗口与本对象都保留，下次登录直接复用。
+     *  调用方须在此之前先调 ResetForLogout() 清掉上一个账号的数据。
+     */
+    void HideForLogout();
+
+    /**
+     *  把主面板复位到"未登录"状态。用户登出或被踢下线时，由会话控制器的
+     *  ReturnToLoginWindow 在销毁本面板窗口<u>之前</u>调用（本方法要按控件 id
+     *  现查三棵树来清空节点，窗口销毁后就查不到了）。
+     *
+     *  做四件事：销毁本面板拉起的全部子窗口（单聊窗、群聊窗、各对话框与浮窗）、
+     *  清空三棵树的节点、释放三个头像位图池、清空本次登录期间累积的全部数据缓存。
+     *
+     *  必要性：本面板对象由进程外壳按值持有，登出时只隐藏窗口、对象本身一直
+     *  活到进程结束，因此上述状态不会随窗口一起消失。不复位会有两个后果——聊天窗
+     *  是 Create(NULL, ...) 建出的独立顶层窗口，销毁主面板不会连带关掉它们，登出
+     *  后仍留在屏幕上；各缓存以 userid / groupid 为键，换账号登录后会串数据。
+     *
+     *  无参数、无返回值。可重复调用（各步骤都是幂等的）。
+     */
+    void ResetForLogout();
+
+    // 下面三个 RefreshXxx 是对外的刷新入口。它们原先各自走 v1 的
     // CUserMgr 适配器（好友列表 / 群列表 / 最近会话），企业版删除好友子系统后
     // 数据源已全部换成 v2：通讯录来自 cmd_get_contacts 应答、群与会话来自会话
     // 同步。三个方法因此都只是转调真正的重建函数，保留是为了不改动调用方。
@@ -146,13 +215,13 @@ public:
     void RefreshMessages();
 
     /**
-     *  一次性刷新三个 Tab。CMainDlg 登录成功 + 数据全部加载完毕时调用。
+     *  一次性刷新三个 Tab。登录成功 + 数据全部加载完毕时调用。
      */
     void RefreshAll();
 
     /**
      *  收到 v2 通讯录应答后，用真实联系人资料池填充 Contacts 页的
-     *  DuiTreeView，并建立"树节点 → userid"映射（供点击开聊）。由 CMainDlg
+     *  DuiTreeView，并建立"树节点 → userid"映射（供点击开聊）。由 本类
      *  的 OnV2Contacts 调用。
      *    result：通讯录解析结果（仅 code==0 时调用）。
      */
@@ -160,13 +229,13 @@ public:
 
     /**
      *  收到 v2 单聊新消息推送：按发送方 userid 找到（必要时创建）对应单聊
-     *  窗口并渲染。由 CMainDlg 的 OnV2RecvChatMsg 调用。
+     *  窗口并渲染。由 本类 的 OnV2RecvChatMsg 调用。
      *    notify：消息推送解析结果。
      */
     void OnRecvChatMessage(const net::MessageNotify& notify);
 
     /**
-     *  收到 v2 单聊发送回执：成功仅记日志；失败弹框提示。由 CMainDlg 的
+     *  收到 v2 单聊发送回执：成功仅记日志；失败弹框提示。由 本类 的
      *  OnV2SendChatAck 调用。
      *    resp：发送回执解析结果。
      */
@@ -174,14 +243,14 @@ public:
 
     /**
      *  收到 v2 发图上传进度：按 (ctype,cid) 找到对应聊天窗，更新其"发送中"
-     *  图片气泡的进度。由 CMainDlg 的 OnV2ImageSendProgress 调用。
+     *  图片气泡的进度。由 本类 的 OnV2ImageSendProgress 调用。
      *    prog：发图进度（含 clientmsgid / ctype / cid / 已传 / 总字节）。
      */
     void OnImageSendProgress(const net::ImageSendProgress& prog);
 
     /**
      *  收到 v2 发图最终结果：按 (ctype,cid) 找到对应聊天窗，成功把气泡置正常态、
-     *  失败标"发送失败"。由 CMainDlg 的 OnV2ImageSendResult 调用。
+     *  失败标"发送失败"。由 本类 的 OnV2ImageSendResult 调用。
      *    result：发图结果（含 clientmsgid / ctype / cid / ok / 错误码）。
      */
     void OnImageSendResult(const net::ImageSendResult& result);
@@ -189,7 +258,7 @@ public:
     /**
      *  收到 v2 收图下载结果：下载结果只带 msgid（无会话标识），故向所有已开的
      *  聊天窗按 msgid 广播——命中那条"下载中"气泡的窗口回填渲染 / 标失败。由
-     *  CMainDlg 的 OnV2ImageDownloadResult 调用。
+     *  本类 的 OnV2ImageDownloadResult 调用。
      *    result：下载结果（含 msgid / ok / 本地缓存路径）。
      */
     void OnImageDownloadResult(const net::ImageDownloadResult& result);
@@ -273,7 +342,7 @@ public:
 
     /**
      *  收到 v2 最近会话列表应答后，用真实会话填充"消息"页的 DuiTreeView。
-     *  本轮只展示单聊会话（ctype==1，群聊会话延后）。由 CMainDlg 的
+     *  本轮只展示单聊会话（ctype==1，群聊会话延后）。由 本类 的
      *  OnV2Conversations 调用。
      *    result：会话列表解析结果（仅 code==0 时调用）。
      */
@@ -281,14 +350,14 @@ public:
 
     /**
      *  收到 v2 群资料应答：写群信息缓存（群名 / 成员数），刷新"群"Tab 与"消息"Tab
-     *  里该群的显示名。由 CMainDlg 的 OnV2GroupInfo 调用。
+     *  里该群的显示名。由 本类 的 OnV2GroupInfo 调用。
      *    info：群资料解析结果（仅 code==0 时调用）。
      */
     void OnGroupInfoArrived(const net::GroupInfoResult& info);
 
     /**
      *  收到 v2 群成员应答：路由到对应群聊窗，填成员侧栏并建"发送人映射"。
-     *  由 CMainDlg 的 OnV2GroupMembers 调用。
+     *  由 本类 的 OnV2GroupMembers 调用。
      *    members：群成员解析结果（仅 code==0 时调用）。
      */
     void OnGroupMembersArrived(const net::GroupMembersResult& members);
@@ -324,7 +393,7 @@ public:
 
     /**
      *  收到 cmd_set_member_card(1315) 应答：转交给群资料对话框处理(成功无动作;失败从
-     *  快照回退我的群名片 + 弹提示)。由 CMainDlg 的 OnV2GroupWriteResult 在该应答到达时
+     *  快照回退我的群名片 + 弹提示)。由 本类 的 OnV2GroupWriteResult 在该应答到达时
      *  调用。
      *    code  结果码,0 成功;
      *    msg   结果描述(UTF-16)。
@@ -333,27 +402,27 @@ public:
 
     /**
      *  收到 v2 群文件列表应答：按 groupid 路由到对应群聊窗，由其累积分页 / 拉全后渲染。
-     *  由 CMainDlg 的 OnV2GroupFiles 调用（成功 / 失败都转，群聊窗据 code 收尾）。
+     *  由 本类 的 OnV2GroupFiles 调用（成功 / 失败都转，群聊窗据 code 收尾）。
      *    result：群文件列表解析结果（含 groupid / 本页条目 / hasmore）。
      */
     void OnGroupFilesArrived(const net::GetGroupFilesResult& result);
 
     /**
      *  收到 v2 群文件变更推送：按 groupid 路由到对应群聊窗，由其增量增 / 删并重渲染。
-     *  由 CMainDlg 的 OnV2GroupFilesChanged 调用。
+     *  由 本类 的 OnV2GroupFilesChanged 调用。
      *    notify：群文件变更解析结果（changetype=新增带 file / 删除带 entryid）。
      */
     void OnGroupFilesChanged(const net::GroupFilesChangedNotify& notify);
 
     /**
-     *  收到群文件上传结果：按 groupid 路由到对应群聊窗。由 CMainDlg 的
+     *  收到群文件上传结果：按 groupid 路由到对应群聊窗。由 本类 的
      *  OnV2GroupFileUploadResult 调用。
      *    result：群文件上传结果（成功含 fileid）。
      */
     void OnGroupFileUploadResult(const net::GroupFileUploadResult& result);
 
     /**
-     *  收到群文件下载结果：按 groupid 路由到对应群聊窗。由 CMainDlg 的
+     *  收到群文件下载结果：按 groupid 路由到对应群聊窗。由 本类 的
      *  OnV2GroupFileDownloadResult 调用。
      *    result：群文件下载结果（成功含落地路径）。
      */
@@ -373,14 +442,14 @@ public:
 
     /**
      *  收到 v2"我的群列表"应答：缓存本人加入的全部群（含无消息空群）作为"群"Tab
-     *  的群源，并把群名/成员数写进群信息缓存、刷新"群"Tab 与"消息"Tab。由 CMainDlg
+     *  的群源，并把群名/成员数写进群信息缓存、刷新"群"Tab 与"消息"Tab。由 本类
      *  的 OnV2UserGroups 调用。
      *    result：群列表解析结果（仅 code==0 时调用）。
      */
     void OnUserGroupsArrived(const net::UserGroupsResult& result);
 
     /**
-     *  收到 v2 历史消息应答：按 (ctype,cid) 路由到对应聊天窗渲染历史。由 CMainDlg
+     *  收到 v2 历史消息应答：按 (ctype,cid) 路由到对应聊天窗渲染历史。由 本类
      *  的 OnV2SyncMessages 调用。
      *    result：历史消息解析结果（仅 code==0 时调用）。
      */
@@ -388,42 +457,42 @@ public:
 
     /**
      *  收到 v2 建群应答：转交新建群对话框提示结果（成功关闭并提示，失败提示
-     *  错误）。由 CMainDlg 的 OnV2CreateGroupResult 调用。
+     *  错误）。由 本类 的 OnV2CreateGroupResult 调用。
      *    resp：建群应答解析结果。
      */
     void OnCreateGroupResult(const net::CreateGroupResponse& resp);
 
     /**
      *  收到 v2 修改密码应答：转交改密对话框提示结果（成功关闭、旧密码错 / 失败提示）。
-     *  由 CMainDlg 的 OnV2ChangePwdResult 调用。
+     *  由 本类 的 OnV2ChangePwdResult 调用。
      *    resp：改密应答解析结果。
      */
     void OnChangePwdResult(const net::ChangePasswordResponse& resp);
 
     /**
      *  收到 v2 修改头像应答：转交修改头像对话框提示 / 关闭；成功则把新头像写回本端
-     *  缓存并刷新 Banner 头像。由 CMainDlg 的 OnV2ChangeAvatarResult 调用。
+     *  缓存并刷新 Banner 头像。由 本类 的 OnV2ChangeAvatarResult 调用。
      *    resp：改像应答解析结果（通用 {code,msg}）。
      */
     void OnChangeAvatarResult(const net::UpdateProfileResponse& resp);
 
     /**
      *  收到 v2 头像图片上传结果：转交修改头像对话框（成功则它接着发 cmd_change_avatar；
-     *  失败就地提示）。由 CMainDlg 的 OnV2AvatarUploadResult 调用。
+     *  失败就地提示）。由 本类 的 OnV2AvatarUploadResult 调用。
      *    result：头像上传结果（含 fileid / 本地缓存路径或失败码）。
      */
     void OnAvatarUploadResult(const net::AvatarUploadResult& result);
 
     /**
      *  收到 v2 头像图片下载结果：按 fileid 找到所有引用该头像的联系人 / 单聊会话节点，
-     *  从缓存重生成真图并 SetItemIcon 刷新。由 CMainDlg 的 OnV2AvatarDownloadResult 调用。
+     *  从缓存重生成真图并 SetItemIcon 刷新。由 本类 的 OnV2AvatarDownloadResult 调用。
      *    result：下载结果（含 fileid / 成功标志）。
      */
     void OnAvatarDownloadResult(const net::AvatarDownloadResult& result);
 
     /**
      *  收到 v2 更新资料（个性签名）应答：失败则回退乐观更新的签名并提示；成功
-     *  无需额外动作（乐观更新已在提交时把新签名显示出来）。由 CMainDlg 的
+     *  无需额外动作（乐观更新已在提交时把新签名显示出来）。由会话控制器的
      *  OnV2UpdateProfileResult 调用。
      *    resp：更新资料应答解析结果。
      */
@@ -432,7 +501,7 @@ public:
     /**
      *  收到 v2 修改在线状态应答（cmd_change_presence）：失败则把状态胶囊回退到改之前
      *  的状态并提示；成功无需额外动作（乐观更新已在选中时把胶囊改成目标状态）。由
-     *  CMainDlg 的 OnV2ChangePresenceResult 调用。仅"已连接时直接改状态"这条路径会
+     *  会话控制器的 OnV2ChangePresenceResult 调用。仅"已连接时直接改状态"这条路径会
      *  收到本应答；"离线 / 重新上线"走 GoOffline / GoOnline，不产生本应答。
      *    resp：修改在线状态应答解析结果。
      */
@@ -452,7 +521,7 @@ public:
      *  乐观更新状态胶囊 —— 先把改之前的状态存进 m_presenceBeforeChange 供应答失败时
      *  回退，再把胶囊改成目标状态并重绘 Header。
      *
-     *  由 CMainDlg::OnChangeMyPresence <u>统一</u>调用，<u>不要</u>在各个发起点各调一次：
+     *  由会话控制器的 OnChangeMyPresence <u>统一</u>调用，<u>不要</u>在各个发起点各调一次：
      *  切换在线状态有两个入口（主面板状态菜单、系统托盘右键菜单），它们都汇到
      *  OnChangeMyPresence，把胶囊更新放在那里两个入口的表现才一致 —— 原先这步写在
      *  主面板自己的 ShowStatusMenu 里，导致从托盘切状态时胶囊不跟着变。
@@ -467,7 +536,7 @@ public:
      *  应用当前连接态并<u>逐窗转发</u>给本面板持有的所有单聊 / 群聊窗口，由它们决定
      *  顶部提示条的显隐、输入框是否只读、发送按钮是否可用。
      *
-     *  由 CMainDlg::BroadcastConnectionState 调用 —— CMainDlg 不直接持有聊天窗，
+     *  由会话控制器的 BroadcastConnectionState 调用 —— 它不直接持有聊天窗，
      *  聊天窗的所有权在本面板（m_chatWindows / m_groupChatWindows），故由本面板转发。
      *
      *    state：界面连接态，取值见 OnlineCapability.h 的 ConnectionUiState。
@@ -478,7 +547,7 @@ public:
     void ApplyConnectionState(int state);
 
     /**
-     *  收到 cmd_set_favorite 应答后的处理（由 CMainDlg 转交）。
+     *  收到 cmd_set_favorite 应答后的处理（由本面板的消息处理器转交）。
      *    result： 应答解析结果，含服务端原样回带的 ctype / cid / favorite。
      *  成功时只记日志 —— 乐观更新在发起时已经生效。失败时把那一条回滚回去并
      *  提示用户，随后重填收藏分区。
@@ -486,7 +555,7 @@ public:
     void OnSetFavoriteResult(const net::SetFavoriteResult& result);
 
     /**
-     *  收到 cmd_set_starred 应答后的处理（由 CMainDlg 转交）。
+     *  收到 cmd_set_starred 应答后的处理（由本面板的消息处理器转交）。
      *    result： 应答解析结果，含服务端原样回带的 target / starred。
      *  成功时只记日志 —— 乐观更新在发起时已经生效。失败时把那一个人的关注状态
      *  回滚回去并提示用户（关注人数超限要给一句明确的话，否则用户只会看到
@@ -538,7 +607,7 @@ private:
 public:
 
     /**
-     *  收到 cmd_set_friend_remark 应答后的处理（由 CMainDlg 转交）。
+     *  收到 cmd_set_friend_remark 应答后的处理（由本面板的消息处理器转交）。
      *    result： 应答解析结果，含服务端原样回带的 userid。
      *  成功时丢掉回滚快照即可 —— 乐观更新在发起时已经生效。失败时按回带的 userid
      *  把<u>那一个人</u>的备注退回改动前的值并提示用户；老服务端不回带 userid
@@ -582,7 +651,7 @@ public:
     void SetContactTags(UINT peerUserId, const std::vector<std::string>& tagsUtf8);
 
     /**
-     *  处理 cmd_set_contact_tags 应答。由 CMainDlg 收到 FMG_MSG_V2_SET_TAGS_RESULT 后转交。
+     *  处理 cmd_set_contact_tags 应答。由本面板收到 FMG_MSG_V2_SET_TAGS_RESULT 后转交。
      *
      *    result：应答解析结果。其中的 m_tags 无论成败都是<u>服务端侧的真值</u>
      *            （成功时是归一后的最终列表，失败时是当前实际存着的那一份），
@@ -613,7 +682,7 @@ public:
     /**
      *  收到 v2 好友在线状态变更推送（cmd_presence_changed_notify）：更新通讯录缓存
      *  m_contacts 里该 userid 的 presence，并把联系人树上对应节点的状态点重着色 + 刷新，
-     *  实现好友改状态后本端实时变色。由 CMainDlg 的 OnV2PresenceChanged 调用。
+     *  实现好友改状态后本端实时变色。由会话控制器的 OnV2PresenceChanged 调用。
      *    userid    状态发生变更的好友用户ID。
      *    presence  新的在线状态（v2 presence_type）。
      */
@@ -622,7 +691,7 @@ public:
     /**
      *  收到 v2 会话属性变更推送（cmd_conversation_changed_notify 1514）：本账号在另一端
      *  改了某会话的置顶 / 免打扰 / 删除，按推送里的<u>完整新状态</u>覆盖本地会话缓存并刷新
-     *  "消息"Tab。由 CMainDlg 的 OnV2ConversationChanged 调用。
+     *  "消息"Tab。由 本类 的 OnV2ConversationChanged 调用。
      *
      *  发起改动的那一端自己也会收到这条推送（服务端推给该用户的每个在线端）。那一端在
      *  发请求时已经乐观更新过，此处再覆盖一遍结果相同，是安全的重复操作。
@@ -637,9 +706,9 @@ public:
     // 群管理（应答与推送的落点）
     // ================================================================
     //
-    // 这一组方法由 CMainDlg 的同名消息处理函数调用。主面板本身不显示群管理
+    // 这一组方法由本面板的同名消息处理函数调用。主面板本身不显示群管理
     // 内容，它的职责是<u>转交</u>：群管理窗口是它创建并持有的（m_pGroupManageWindow），
-    // 而 socket 层的消息只投给 CMainDlg，所以必须经主面板这一跳。窗口没开着时
+    // 而 socket 层的消息只投给主面板，所以必须经主面板这一跳。窗口没开着时
     // 直接丢弃即可 —— 下次打开会重新拉一遍数据。
 
     /**
@@ -700,14 +769,14 @@ public:
     /**
      *  收到 v2 联系人资料变更推送（1108）：更新通讯录缓存里该 userid 的头像字段，并实时
      *  重画联系人树 / 单聊会话里该联系人的头像（字形即时生效；真图未缓存则触发下载）。
-     *  由 CMainDlg 的 OnV2UserInfoChanged 调用。
+     *  由 本类 的 OnV2UserInfoChanged 调用。
      *    notify：资料变更解析结果（userid + 新 facetype/customface/nickname）。
      */
     void OnUserInfoChanged(const net::UserInfoChangedNotify& notify);
 
     /**
      *  收到 v2 组织架构变更推送（1404）：重新拉一次通讯录（cmd_get_contacts），应答
-     *  照常经 OnContactsArrived 回来重建联系人树与缓存。由 CMainDlg 的
+     *  照常经 OnContactsArrived 回来重建联系人树与缓存。由 本类 的
      *  OnV2OrgStructureChanged 调用。
      *
      *  之所以整份重拉而不做增量：推送体里只有"变更类型 + 部门ID"，没带变了什么，
@@ -718,16 +787,16 @@ public:
     void OnOrgStructureChanged(const net::OrgStructureChangedNotify& notify);
 
     /**
-     *  重置"陌生发送方补拉通讯录"的节流记账。由 CMainDlg 在每次登录成功后调用。
+     *  重置"陌生发送方补拉通讯录"的节流记账。由会话控制器在每次登录成功后调用。
      *  掉线重连期间组织架构可能变过、推送也可能错过，把上一轮"这些人已经问过了"
      *  的记录清掉，本轮才能对同一个人再补拉一次。
      */
     void ResetUnknownSenderPolicy();
 
     /**
-     *  打开（或前置）指定会话并把其未读本地清零 —— 供 CMainDlg 在用户单击闪烁的托盘
+     *  打开（或前置）指定会话并把其未读本地清零 —— 供托盘控制器在用户单击闪烁的托盘
      *  图标时调用。单聊走 OpenSingleChat、群聊走 OpenGroupChat，随后 MarkConversationRead
-     *  清未读角标（其内部会回投 FMG_MSG_TRAY_CLEAR 给 CMainDlg，使托盘停闪 / 切目标）。
+     *  清未读角标（其内部会回投 FMG_MSG_TRAY_CLEAR，使托盘停闪 / 切目标）。
      *    ctype：会话类型（1 单聊 cid=对端userid；2 群聊 cid=群id）。
      *    cid：  会话 ID。
      */
@@ -763,7 +832,7 @@ public:
      */
     void LocateMessageInChat(int ctype, int64_t cid, long long msgid);
 
-    // WM_CLOSE 自行处理（关闭主面板 = 退出程序，转交 CMainDlg）；其余
+    // WM_CLOSE 自行处理（关闭主面板 = 退出程序，请求进程外壳收尾）；其余
     // 消息经 CHAIN 交回 DuiFrameWindow。
     BEGIN_MSG_MAP(CBalloonMainPanel)
         // 主面板是普通顶层窗口，每次显示都会被分到一个任务栏按钮，须逐次摘除
@@ -781,6 +850,16 @@ public:
         // 原有的最大化态维护与客户区重排）。
         MESSAGE_HANDLER(WM_MOVE, OnPanelMoveMsg)
         MESSAGE_HANDLER(WM_SIZE, OnPanelSizeMsg)
+        // 「显示 / 隐藏主面板」全局热键 Ctrl+Alt+D（登录成功后注册在本窗口上）。
+        // 请求退出整个进程。本面板自己的关闭确认框、以及命令行调试入口开出来的那些
+        // 预览窗口（关掉它们就该结束进程）都投这一条。
+        MESSAGE_HANDLER_EX(WM_CLOSE_MAINDLG, OnRequestAppExitMsg)
+        MSG_WM_HOTKEY(OnPanelHotKey)
+        // 窗口销毁前给各协作类一次收尾机会（退订会话事件等按 HWND 记录的订阅，
+        // 必须赶在窗口还在的时候做）。处理后放行，基类照常走自己的销毁流程。
+        MESSAGE_HANDLER(WM_DESTROY, OnPanelDestroyMsg)
+        // WM_TIMER 先给各协作类认领（自动离开的轮询定时器等），没人认领再往下走。
+        MESSAGE_HANDLER(WM_TIMER, OnCollaboratorTimer)
         // 悬浮滚动条的淡入 / 淡出 pulse（非本 id 的定时器会被放行）。
         MESSAGE_HANDLER(WM_TIMER, OnScrollBarAnimTimer)
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
@@ -803,23 +882,224 @@ public:
         MESSAGE_HANDLER(FMG_MSG_OPEN_CHANGEPWD, OnOpenChangePwdMsg)
         MESSAGE_HANDLER(FMG_MSG_REFRESH_SELF_HEADER, OnRefreshSelfHeaderMsg)
         MESSAGE_HANDLER(FMG_MSG_LINK_OPTION_CHANGED, OnLinkOptionChangedMsg)
-        MESSAGE_HANDLER(FMG_MSG_RD_START_INVITE, OnRdStartInviteMsg)
-        MESSAGE_HANDLER(FMG_MSG_CALL_START_INVITE, OnCallStartInviteMsg)
-        MESSAGE_HANDLER(FMG_MSG_CALL_START_VIDEO_INVITE, OnCallStartVideoInviteMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_HISTORY, OnOpenHistoryMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_ANNOUNCE_BOX, OnOpenAnnounceBoxMsg)
         // WM_SETFOCUS：拦掉基类"没有已聚焦控件时自动聚焦第一个控件"的回退行为，
         // 详见 OnPanelSetFocusMsg 的说明。须排在 CHAIN_MSG_MAP 之前才能拦得住。
         MESSAGE_HANDLER(WM_SETFOCUS, OnPanelSetFocusMsg)
         CHAIN_MSG_MAP(balloonwjui::DuiFrameWindow)
+        //======== 以下为网络应答与推送的处理器，实现在 BalloonMainPanelNetHandlers.cpp ========
+        MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_GROUP_LIST, OnUpdateGroupList)
+        MESSAGE_HANDLER_EX(FMG_MSG_UPDATE_RECENT_LIST, OnUpdateRecentList)  //更新最近联系人列表
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_CONTACTS, OnV2Contacts)     //v2 通讯录应答：填充联系人面板
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_CONVERSATIONS, OnV2Conversations)   //v2 会话列表应答：填充消息页
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_CREATE_GROUP_RESULT, OnV2CreateGroupResult) //v2 建群应答：提示建群结果
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_INFO, OnV2GroupInfo)    //v2 群资料应答：缓存群名/刷新群列表
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_MEMBERS, OnV2GroupMembers)   //v2 群成员应答：路由到群聊窗
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_CONVERSATION_RESULT, OnV2GroupWriteResult) //v2 会话设置应答：日志/失败提示
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_MEMBER_CARD_RESULT, OnV2GroupWriteResult) //v2 改群名片应答：日志/失败提示
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_LEAVE_GROUP_RESULT, OnV2GroupWriteResult)  //v2 退群应答：日志/失败提示
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_FAVORITE_RESULT, OnV2SetFavoriteResult) //v2 收藏设置应答：失败时让主面板回滚乐观更新
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_STARRED_RESULT, OnV2SetStarredResult)  //v2 特别关注设置应答：失败时让主面板按回带的 target 回滚那一个人的关注状态
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_REMARK_RESULT, OnV2SetRemarkResult)  //v2 设置好友备注名应答：失败时让主面板按回带的 userid 回滚那一个人的备注
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_SET_TAGS_RESULT, OnV2SetTagsResult)  //v2 设置联系人标签应答：主面板拿回带的列表覆盖本地缓存（成功对齐归一结果、失败退回服务端真值）
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILES, OnV2GroupFiles)    //v2 群文件列表应答：路由到群聊窗
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILES_CHANGED, OnV2GroupFilesChanged) //v2 群文件变更推送：路由到群聊窗
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILE_UPLOAD_RESULT, OnV2GroupFileUploadResult)  //v2 群文件上传结果：路由到群聊窗
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILE_DOWNLOAD_RESULT, OnV2GroupFileDownloadResult) //v2 群文件下载结果：路由到群聊窗
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILE_UPLOAD_PROGRESS, OnV2GroupFileUploadProgress) //v2 群文件上传进度：路由到群聊窗
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_FILE_DOWNLOAD_PROGRESS, OnV2GroupFileDownloadProgress) //v2 群文件下载进度：路由到群聊窗
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_USER_GROUPS, OnV2UserGroups)    //v2 我的群列表应答：填群Tab
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_AVATAR_DOWNLOAD_RESULT, OnV2AvatarDownloadResult) //v2 头像图片下载结果：转发到主面板刷新节点头像
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_USERINFO_CHANGED, OnV2UserInfoChanged)  //v2 联系人资料变更推送：转发到主面板实时刷新头像
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_ORG_STRUCTURE_CHANGED, OnV2OrgStructureChanged) //v2 组织架构变更推送：转发到主面板重新拉通讯录
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_CONVERSATION_CHANGED, OnV2ConversationChanged) //v2 会话属性多端同步推送：按新状态刷新会话列表
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_OP_RESULT, OnV2GroupOpResult)    //v2 群管理写操作应答：失败时提示，成功不动界面（等推送）
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_JOIN_REQUESTS, OnV2GroupJoinRequests)  //v2 待审批加群申请列表应答：填进群管理窗口的审批页
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_SENSITIVE_WORDS, OnV2SensitiveWords)    //v2 群敏感词库应答：填进群权限页的词库管理
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_ANNOUNCEMENTS, OnV2GroupAnnouncements)  //v2 群公告列表应答：填进群管理窗公告页与群聊窗公告边栏
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_ANNOUNCEMENT_CHANGED, OnV2AnnouncementChanged) //v2 群公告变更推送：刷新公告界面；新发布时还要弹一次提示
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_MEMBER_CHANGED, OnV2GroupMemberChanged)  //v2 群成员变动推送：刷新群管理窗口与群聊窗成员边栏
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_GROUP_INFO_CHANGED, OnV2GroupInfoChanged)   //v2 群资料变更推送：刷新群名与各页；已解散时关窗
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_JOIN_GROUP_REQUEST, OnV2JoinGroupRequest)   //v2 有人申请加群推送：让审批入口出现待处理红点
+
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_SYNC_MESSAGES, OnV2SyncMessages)   //v2 历史消息应答：路由到聊天窗渲染
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_RECALL_RESULT, OnV2RecallResult)   //v2 撤回消息应答：失败时提示原因，成功不动界面（等推送）
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_MESSAGE_RECALLED, OnV2MessageRecalled)  //v2 消息被撤回推送：转发到主面板改气泡/刷会话列表/标记本地库
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_PIN_RESULT, OnV2PinResult)    //v2 Pin 消息应答：失败时提示原因，成功不动界面（等推送）
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_MESSAGE_PINNED, OnV2MessagePinned)  //v2 消息被 Pin / 取消 Pin 推送：转发到主面板落本地标记并刷新消息记录窗
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_PINNED_MESSAGES, OnV2PinnedMessages)  //v2 被 Pin 消息全集应答：转发到主面板补齐本地库缺行并对账
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_ANNOUNCEMENTS, OnV2Announcements)   //v2 平台公告列表应答：转发到主面板落本地库 announce.db 并刷新铃铛角标
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_ANNOUNCEMENT_NOTIFY, OnV2AnnouncementNotify) //v2 平台公告新发布/被撤回推送：转发到主面板落库、刷角标、刷消息盒子窗
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_ANN_MARK_READ_RESULT, OnV2AnnMarkReadResult) //v2 平台公告已读上报应答：成功不动界面，失败时留痕
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_RECV_CHATMSG, OnV2RecvChatMsg)   //v2 单聊收到新消息：路由到对应聊天窗
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_SEND_CHATMSG_ACK, OnV2SendChatAck)  //v2 单聊发送回执
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_IMAGE_SEND_PROGRESS, OnV2ImageSendProgress) //v2 发图上传进度：路由到聊天窗更新气泡进度
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_IMAGE_SEND_RESULT, OnV2ImageSendResult)  //v2 发图最终结果：路由到聊天窗收尾气泡
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_IMAGE_DOWNLOAD_RESULT, OnV2ImageDownloadResult) //v2 收图下载结果：路由到聊天窗回填渲染
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_FILE_SEND_PROGRESS, OnV2FileSendProgress)  //v2 发文件上传进度：路由到聊天窗更新文件气泡进度
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_FILE_SEND_RESULT, OnV2FileSendResult)   //v2 发文件最终结果：路由到聊天窗收尾文件气泡
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_FILE_DOWNLOAD_PROGRESS, OnV2FileDownloadProgress) //v2 收文件下载进度：路由到聊天窗更新进度
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_FILE_DOWNLOAD_RESULT, OnV2FileDownloadResult) //v2 收文件下载结果：路由到聊天窗回填渲染
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_FILE_TRANSFER_ACK, OnV2FileTransferAck)  //v2 对方收取本端所发文件的状态：路由到聊天窗更新文件气泡状态行
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_INVITE_ACK, OnV2FolderInviteAck)  //v2 文件夹邀请应答：绑定服务端会话 id，或按 code 把气泡标失败
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_INVITE_NOTIFY, OnV2FolderInviteNotify) //v2 文件夹邀请推送：接收端会话里出一条带「接收 / 拒绝」的邀请气泡
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_SESSION_ACK, OnV2FolderSessionAck)  //v2 文件夹通用应答（应答 / 撤回 / 结束 / 重试四条共用）
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_STATE_NOTIFY, OnV2FolderStateNotify) //v2 文件夹状态推送：按 state 把气泡切成拒绝 / 取消 / 失败 / 完成等
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_RELAY_INFO, OnV2FolderRelayInfo)  //v2 文件夹中转参数：起收发状态机，气泡转传输中
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_SCANNED, OnV2FolderScanned)   //本地目录扫描完成：把文件数 / 目录数 / 总大小补进气泡
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_SEND_PROGRESS, OnV2FolderSendProgress) //文件夹发送进度：更新气泡进度条与状态行
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_SEND_RESULT, OnV2FolderSendResult)  //文件夹发送结果：收尾气泡并回调管理器停线程、发 cmd_folder_close
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_RECV_PROGRESS, OnV2FolderRecvProgress) //文件夹接收进度：同上
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_FOLDER_RECV_RESULT, OnV2FolderRecvResult)  //文件夹接收结果：同上，成功时把落地目录写回气泡供「打开文件夹」
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_TYPING_NOTIFY, OnV2TypingNotify)    //v2 对端正在/停止输入：路由到对应单聊窗刷新头部提示
+
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_CHANGE_PWD_RESULT, OnV2ChangePwdResult) //v2 修改密码应答：转发到改密对话框
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_CHANGE_AVATAR_RESULT, OnV2ChangeAvatarResult) //v2 修改头像应答：转发到修改头像对话框
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_AVATAR_UPLOAD_RESULT, OnV2AvatarUploadResult) //v2 头像图片上传结果：转发到修改头像对话框
+
+        // 以下五个协作类都不是窗口，各自只有一份消息映射，靠这几行搭在本面板的派发链上。
+        // 顺序无关紧要 —— 它们接管的消息号互不重叠。
+        CHAIN_MSG_MAP_MEMBER(m_rdCoordinator)
+        CHAIN_MSG_MAP_MEMBER(m_callCoordinator)
+        CHAIN_MSG_MAP_MEMBER(m_autoAwayController)
+        CHAIN_MSG_MAP_MEMBER(m_trayController)
+        CHAIN_MSG_MAP_MEMBER(m_sessionController)
     END_MSG_MAP()
+
+private:
+    //======================== 网络应答与推送处理器 ========================
+    //
+    // 这批处理器实现在 BalloonMainPanelNetHandlers.cpp。它们的形态
+    // 一致：把 lParam 还原成堆上的 net:: 结构体、判空、调用本类对应的业务方法、最后
+    // delete。每条对应的消息号见上面的消息映射。
+
+    //---- 联系人、会话与个人资料 ----
+    LRESULT OnUpdateGroupList(UINT uMsg, WPARAM wParam, LPARAM lParam);  // 更新群列表消息
+    LRESULT OnUpdateRecentList(UINT uMsg, WPARAM wParam, LPARAM lParam); // 更新最近联系人列表消息
+    LRESULT OnV2Contacts(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 通讯录应答(lParam=net::ContactsResult*，处理后 delete)
+    LRESULT OnV2Conversations(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 会话列表应答(lParam=net::ConversationsResult*，处理后 delete)
+    LRESULT OnV2AvatarDownloadResult(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 头像图片下载结果(lParam=net::AvatarDownloadResult*，处理后 delete)
+    LRESULT OnV2UserInfoChanged(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 联系人资料变更推送(lParam=net::UserInfoChangedNotify*，处理后 delete)
+    LRESULT OnV2OrgStructureChanged(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 组织架构变更推送(lParam=net::OrgStructureChangedNotify*，处理后 delete)
+    LRESULT OnV2ConversationChanged(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 会话属性多端同步推送(lParam=net::ConversationChangedNotify*，处理后 delete)
+    // v2 收藏设置应答（cmd_set_favorite）。lParam 为堆上的 net::SetFavoriteResult*，
+    // 本方法负责 delete。成功只记日志，失败要按应答里回带的
+    // ctype/cid/favorite 把那一条的乐观更新回滚掉。
+    LRESULT OnV2SetFavoriteResult(UINT uMsg, WPARAM wParam, LPARAM lParam);
+    // v2 特别关注设置应答（cmd_set_starred）。lParam 为堆上的 net::SetStarredResult*，
+    // 本方法负责 delete。成功只记日志（乐观更新在发起时已生效），失败要按
+    // 应答里回带的 target/starred 把那一个人的关注状态回滚，并按 code 提示原因
+    // （典型是关注人数已达上限）。
+    LRESULT OnV2SetStarredResult(UINT uMsg, WPARAM wParam, LPARAM lParam);
+    // v2 设置好友备注名应答（cmd_set_friend_remark）。lParam 为堆上的
+    // net::SetFriendRemarkResult*，本方法负责 delete。成功只记日志
+    // （乐观更新在发起时已生效），失败要按应答里回带的 userid 把那一个人的备注退回去。
+    LRESULT OnV2SetRemarkResult(UINT uMsg, WPARAM wParam, LPARAM lParam);
+    LRESULT OnV2SetTagsResult(UINT uMsg, WPARAM wParam, LPARAM lParam);
+
+    //---- 群资料、群成员、群文件与群管理 ----
+    LRESULT OnV2CreateGroupResult(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 建群应答(lParam=net::CreateGroupResponse*，处理后 delete)
+    LRESULT OnV2UserGroups(UINT uMsg, WPARAM wParam, LPARAM lParam);   // v2 我的群列表应答(lParam=net::UserGroupsResult*，处理后 delete)
+    LRESULT OnV2GroupInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);   // v2 群资料应答(lParam=net::GroupInfoResult*，处理后 delete)
+    LRESULT OnV2GroupMembers(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 群成员应答(lParam=net::GroupMembersResult*，处理后 delete)
+    LRESULT OnV2GroupWriteResult(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 群写操作通用应答(置顶/免打扰/改群名片/退群)：wParam=code，lParam=std::string* msg(处理后 delete)
+    LRESULT OnV2GroupFiles(UINT uMsg, WPARAM wParam, LPARAM lParam);   // v2 群文件列表应答(lParam=net::GetGroupFilesResult*，处理后 delete)
+    LRESULT OnV2GroupFilesChanged(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 群文件变更推送(lParam=net::GroupFilesChangedNotify*，处理后 delete)
+    LRESULT OnV2GroupFileUploadResult(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 群文件上传结果(lParam=net::GroupFileUploadResult*，处理后 delete)
+    LRESULT OnV2GroupFileDownloadResult(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 群文件下载结果(lParam=net::GroupFileDownloadResult*，处理后 delete)
+    LRESULT OnV2GroupFileUploadProgress(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 群文件上传进度(lParam=net::GroupFileUploadProgress*，处理后 delete)
+    LRESULT OnV2GroupFileDownloadProgress(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 群文件下载进度(lParam=net::GroupFileDownloadProgress*，处理后 delete)
+    LRESULT OnV2GroupOpResult(UINT uMsg, WPARAM wParam, LPARAM lParam);   // v2 群管理写操作应答(wParam=cmd 协议号, lParam=net::GroupOpResult*，处理后 delete)
+    LRESULT OnV2GroupJoinRequests(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 待审批加群申请列表应答(lParam=net::GroupJoinRequestsResult*，处理后 delete)
+    LRESULT OnV2SensitiveWords(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 群敏感词库应答(lParam=net::SensitiveWordsResult*，处理后 delete)
+    LRESULT OnV2GroupAnnouncements(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 群公告列表应答(lParam=net::GroupAnnouncementsResult*，处理后 delete)
+    LRESULT OnV2AnnouncementChanged(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 群公告变更推送(lParam=net::GroupAnnouncementNotify*，处理后 delete)
+    LRESULT OnV2GroupMemberChanged(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 群成员变动推送(lParam=net::GroupMemberChangedNotify*，处理后 delete)
+    LRESULT OnV2GroupInfoChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 群资料变更推送(lParam=net::GroupInfoChangedNotify*，处理后 delete)
+    LRESULT OnV2JoinGroupRequest(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 有人申请加群推送(lParam=net::GroupJoinRequestItem*，处理后 delete)
+
+    //---- 单聊消息、历史消息、撤回与 Pin ----
+    LRESULT OnV2RecvChatMsg(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 单聊收到新消息(lParam=net::MessageNotify*，处理后 delete)
+    LRESULT OnV2SendChatAck(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 单聊发送回执(lParam=net::SendMessageResponse*，处理后 delete)
+    LRESULT OnV2SyncMessages(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 历史消息应答(lParam=net::SyncMessagesResult*，处理后 delete)
+    LRESULT OnV2TypingNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);   // v2 对端正在/停止输入(lParam=net::TypingNotify*，处理后 delete)
+    LRESULT OnV2RecallResult(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 撤回消息应答(lParam=net::RecallMessageResponse*，处理后 delete)
+    LRESULT OnV2MessageRecalled(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 消息被撤回推送(lParam=net::MessageRecalledNotify*，处理后 delete)
+    LRESULT OnV2PinResult(UINT uMsg, WPARAM wParam, LPARAM lParam);    // v2 Pin 消息应答(lParam=net::PinMessageResponse*，处理后 delete)：仅失败时据 code 提示原因
+    LRESULT OnV2MessagePinned(UINT uMsg, WPARAM wParam, LPARAM lParam);   // v2 消息被 Pin / 取消 Pin 推送(lParam=net::MessagePinnedNotify*，处理后 delete)
+    LRESULT OnV2PinnedMessages(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 被 Pin 消息全集应答(lParam=net::PinnedMessagesResult*，处理后 delete)
+
+    //---- 平台公告（消息盒子） ----
+    LRESULT OnV2Announcements(UINT uMsg, WPARAM wParam, LPARAM lParam);   // v2 平台公告列表应答(lParam=net::AnnouncementsResult*，处理后 delete)：落本地库并刷新铃铛角标
+    LRESULT OnV2AnnouncementNotify(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 平台公告新发布 / 被撤回推送(lParam=net::AnnouncementNotify*，处理后 delete)
+    LRESULT OnV2AnnMarkReadResult(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 平台公告已读上报应答(lParam=net::AnnounceMarkReadResult*，处理后 delete)：成功不动界面
+
+    //---- 图片与文件传输 ----
+    LRESULT OnV2ImageSendProgress(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 发图上传进度(lParam=net::ImageSendProgress*，处理后 delete)
+    LRESULT OnV2ImageSendResult(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 发图最终结果(lParam=net::ImageSendResult*，处理后 delete)
+    LRESULT OnV2ImageDownloadResult(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 收图下载结果(lParam=net::ImageDownloadResult*，处理后 delete)
+    LRESULT OnV2FileSendProgress(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 发文件上传进度(lParam=net::FileSendProgress*，处理后 delete)
+    LRESULT OnV2FileSendResult(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 发文件最终结果(lParam=net::FileSendResult*，处理后 delete)
+    LRESULT OnV2FileDownloadProgress(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 收文件下载进度(lParam=net::FileDownloadProgress*，处理后 delete)
+    LRESULT OnV2FileDownloadResult(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 收文件下载结果(lParam=net::FileDownloadResult*，处理后 delete)
+    LRESULT OnV2FileTransferAck(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 对方收取本端所发文件的状态(lParam=net::FileTransferAckNotify*，处理后 delete)
+
+    //---- 文件夹传输 ----
+    // ---- v2 单聊文件夹传输：会话生命周期交 foldertransfer::FolderTransferManager，
+    //      界面更新由本类路由到对应聊天窗；每个处理器都负责 delete 自己的堆负载 ----
+    LRESULT OnV2FolderInviteAck(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 文件夹邀请应答(wParam=本次邀请请求的帧 seq，管理器按它对回是哪一笔发起的；lParam=net::FolderInviteResponse*，处理后 delete)
+    LRESULT OnV2FolderInviteNotify(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 文件夹邀请推送(lParam=net::FolderInviteNotify*，处理后 delete)
+    LRESULT OnV2FolderSessionAck(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 文件夹通用应答(wParam=命令协议号，lParam=net::FolderSessionResponse*，处理后 delete)
+    LRESULT OnV2FolderStateNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 文件夹状态推送(lParam=net::FolderStateNotify*，处理后 delete)
+    LRESULT OnV2FolderRelayInfo(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 文件夹中转参数(lParam=net::FolderRelayInfo*，处理后 delete)
+    LRESULT OnV2FolderScanned(UINT uMsg, WPARAM wParam, LPARAM lParam);   // 本地目录扫描完成(lParam=foldertransfer::FolderScanNotice*，处理后 delete)
+    LRESULT OnV2FolderSendProgress(UINT uMsg, WPARAM wParam, LPARAM lParam); // 文件夹发送进度(lParam=foldertransfer::FolderProgressNotice*，处理后 delete)
+    LRESULT OnV2FolderSendResult(UINT uMsg, WPARAM wParam, LPARAM lParam);  // 文件夹发送结果(lParam=foldertransfer::FolderResultNotice*，处理后 delete)
+    LRESULT OnV2FolderRecvProgress(UINT uMsg, WPARAM wParam, LPARAM lParam); // 文件夹接收进度(lParam=foldertransfer::FolderProgressNotice*，处理后 delete)
+    LRESULT OnV2FolderRecvResult(UINT uMsg, WPARAM wParam, LPARAM lParam);  // 文件夹接收结果(lParam=foldertransfer::FolderResultNotice*，处理后 delete)
+
+    //---- 修改密码与头像 ----
+    LRESULT OnV2ChangePwdResult(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 修改密码应答(lParam=net::ChangePasswordResponse*，处理后 delete)
+    LRESULT OnV2ChangeAvatarResult(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 修改头像应答(lParam=net::UpdateProfileResponse*，处理后 delete)
+    LRESULT OnV2AvatarUploadResult(UINT uMsg, WPARAM wParam, LPARAM lParam); // v2 头像图片上传结果(lParam=net::AvatarUploadResult*，处理后 delete)
+
+    // 远程桌面协调器：一次远程桌面会话涉及的四个窗口 / 对象都归它持有，本面板只负责
+    // 把消息派发给它（见消息映射里的 CHAIN_MSG_MAP_MEMBER）并在登出时叫它收尾。
+    balloonmain::CRdCoordinator m_rdCoordinator;
+
+    // 通话协调器：一通电话涉及的通话窗与中转会话都归它持有，本面板只负责把消息派发给它
+    // 并在登出时叫它收尾。
+    balloonmain::CCallCoordinator m_callCoordinator;
+
+    // 自动离开 / 禁止休眠控制器：「无操作自动离开」与「禁止机器休眠」两项设置的运行期
+    // 逻辑都归它，包括那个 30 秒的轮询定时器与锁屏 / 解锁事件的订阅。本面板只负责把
+    // WM_TIMER 转给它（见 OnCollaboratorTimer），并在绑定会话状态宿主时启动它。
+    balloonmain::CAutoAwayController m_autoAwayController;
+
+    // 托盘控制器：托盘图标本身、悬停提示、新消息闪烁、登录动画、右键菜单与未读提示
+    // 浮窗都归它。托盘图标挂在本窗口句柄上，四条托盘消息经上面的 CHAIN_MSG_MAP_MEMBER
+    // 直接派发给它。
+    balloonmain::CTrayController m_trayController;
+
+    // 会话控制器：从弹出登录窗到退出登录之间的全部编排（登录、掉线重连、被踢下线、
+    // 切换在线状态、连接态广播、登出）都归它，它同时是另外两个控制器的
+    // ISessionStateHost。
+    balloonmain::CSessionController m_sessionController;
+
+    // 网络设置窗（服务器地址 / 端口等，读写真实的 flamingo.ini）。由系统菜单的
+    // 「网络设置」项打开；命令行 --netsettings 调试入口借用的也是这一个实例。
+    CBalloonNetSettingsWindow m_netSettingsWindow;
+
+    // 进程层宿主接口，借用不拥有。会话控制器经它请求退出整个进程。
+    balloonmain::ISessionAppHost* m_pAppHost;
 
 public:
     CFlamingoClient* m_lpFMGClient;   // 所属客户端（消息中枢），引用不持有
 
 private:
     /**
-     *  WM_CLOSE 处理：通知 CMainDlg 退出程序，并销毁本窗口。
+     *  WM_CLOSE 处理：请求退出程序，并隐藏本窗口。
      */
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
@@ -938,6 +1218,32 @@ private:
     LRESULT OnScrollBarAnimTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
+     *  WM_TIMER 的第一道处理：先问各协作类认不认这个定时器标识。认领了就置
+     *  bHandled=TRUE 结束派发；没人认领则置 FALSE 放行，交给排在后面的
+     *  OnScrollBarAnimTimer 以及基类。
+     */
+    LRESULT OnCollaboratorTimer(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  窗口销毁前的收尾：叫各协作类停掉挂在本窗口句柄上的定时器与系统订阅。
+     *  处理完置 bHandled=FALSE 放行，基类 DuiHost 照常执行自己的销毁流程。
+     */
+    LRESULT OnPanelDestroyMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  「显示 / 隐藏主面板」全局热键（Ctrl+Alt+D）的响应：本面板可见就隐藏它，
+     *  否则按「单击托盘图标」的同一条路径把它唤到前台。
+     *    nHotKeyID  热键标识，只处理 kShowPanelHotKeyId 这一个。
+     */
+    void OnPanelHotKey(int nHotKeyID, UINT uModifiers, UINT uVirtKey);
+
+    /**
+     *  「请求退出整个进程」（WM_CLOSE_MAINDLG）。转交进程层宿主执行退出序列。
+     *  wParam / lParam 均未使用。
+     */
+    LRESULT OnRequestAppExitMsg(UINT uMsg, WPARAM wParam, LPARAM lParam);
+
+    /**
      *  按控件 id 取某个 Tab 内容面板的滚动视口；找不到（界面尚未构建）返回 NULL。
      *    paneId：滚动视口的控件 id（kIdPaneMessages / Contacts / Groups）。
      */
@@ -957,7 +1263,7 @@ private:
 
     /**
      *  隐藏主面板到托盘：收起附属浮层后隐藏窗口，并在该账号首次发生时请
-     *  CMainDlg（托盘图标持有者）弹一次"已最小化到托盘"气泡提示，弹过即
+     *  托盘控制器弹一次"已最小化到托盘"气泡提示，弹过即
      *  写入该账号配置不再重复。托盘图标常驻，用户可从托盘单击 / 托盘菜单
      *  "打开主面板"把它唤回。
      */
@@ -1089,7 +1395,7 @@ private:
 public:
     /**
      *  处理服务端推来的"某条消息被撤回"通知（cmd_message_recalled_notify）。
-     *  由 CMainDlg::OnV2MessageRecalled 转交。撤回者本人也会收到本通知，故
+     *  由本面板的 OnV2MessageRecalled 转交。撤回者本人也会收到本通知，故
      *  据 notify.m_operator 与本端 userid 比较来决定提示文案。
      *
      *  做三件事：把本地消息库该条标记为已撤回（使"消息记录"窗口不再显示它）、
@@ -1152,13 +1458,22 @@ public:
     void OpenAnnounceBox();
 
     /**
+     *  打开网络设置窗。已经开着就把它前置，不重复创建。
+     *    hCloseTarget  关闭该窗口时请求退出进程的目标窗口；传 NULL（默认）表示
+     *                  关掉它只销毁它自己。系统菜单打开时必须用默认值，否则关掉
+     *                  这个小窗会把整个程序一起带走；只有命令行 --netsettings
+     *                  调试入口才传非 NULL —— 那条路径下它是唯一可见窗口。
+     */
+    void OpenNetSettings(HWND hCloseTarget = NULL);
+
+    /**
      *  在桌面右下角弹一次「新公告」提示窗。收到新发布推送时调用。
      *    item：公告内容（借用，本方法内用完即弃）。
      */
     void ShowAnnouncePopup(const net::AnnouncementItem& item);
 
     /**
-     *  向服务端拉取发给本人的平台公告。登录成功后由 CMainDlg 调用一次。
+     *  向服务端拉取发给本人的平台公告。登录成功后由会话控制器调用一次。
      *
      *  内部先确保本地库 announce.db 已按当前账号打开，取出本地最大公告ID作增量游标
      *  ——本机已经有的那些不必再拉一遍。本地库打不开（磁盘故障等）时退化为全量拉取，
@@ -1169,14 +1484,14 @@ public:
     /**
      *  收到平台公告列表应答（cmd_get_announcements）：逐条落本地库、刷新铃铛角标；
      *  应答里 hasmore 为 true 时以本批最后一条的ID作新游标继续拉下一批。
-     *  由 CMainDlg 的 OnV2Announcements 调用。
+     *  由 本类 的 OnV2Announcements 调用。
      *    result：公告列表解析结果（成功 / 失败都会转过来，本方法据 m_code 决定处理）。
      */
     void OnAnnouncementsArrived(const net::AnnouncementsResult& result);
 
     /**
      *  收到平台公告推送（cmd_announcement_notify）：新发布则落库并让铃铛角标亮起来，
-     *  已撤回则把本地那条标掉、从消息盒子列表移除。由 CMainDlg 的 OnV2AnnouncementNotify 调用。
+     *  已撤回则把本地那条标掉、从消息盒子列表移除。由 本类 的 OnV2AnnouncementNotify 调用。
      *    notify：推送解析结果；撤回时其 m_item 只有 m_announcementId 有效。
      */
     void OnAnnouncementNotify(const net::AnnouncementNotify& notify);
@@ -1184,7 +1499,7 @@ public:
     /**
      *  收到平台公告已读上报的应答（cmd_mark_announcement_read）。成功时<u>不动界面</u>
      *  ——已读在发起上报时就乐观写进本地库、角标也已经减掉了。失败只记日志留痕，供日后
-     *  排查「这台机器上读过的公告，换台机器登录仍显示未读」。由 CMainDlg 的
+     *  排查「这台机器上读过的公告，换台机器登录仍显示未读」。由 本类 的
      *  OnV2AnnMarkReadResult 调用。
      *    result：应答解析结果，其中 m_announcementId 由服务端原样回带。
      */
@@ -1210,7 +1525,7 @@ public:
 
     /**
      *  把一条通话相关的系统提示追加到与某联系人的聊天窗里（居中提示行）。
-     *  由 CMainDlg 在通话被拒 / 无应答 / 对方忙 / 通话结束时调用。
+     *  由通话协调器在通话被拒 / 无应答 / 对方忙 / 通话结束时调用。
      *
      *  聊天窗未打开时会先建窗 —— 通话结果是用户关心的信息，不该因为没开窗就丢掉。
      *
@@ -1358,8 +1673,8 @@ private:
                             CString& outGlyph, COLORREF& outColor);
 
     /**
-     *  向 CMainDlg（隐藏的托盘宿主）回投一条"托盘闪头像"消息：算好该会话的显示名 /
-     *  首字 / 底色，堆分配 TrayFlashData 经 FMG_MSG_TRAY_FLASH 发出（CMainDlg 处理后
+     *  向本窗口回投一条"托盘闪头像"消息：算好该会话的显示名 /
+     *  首字 / 底色，堆分配 TrayFlashData 经 FMG_MSG_TRAY_FLASH 发出（托盘控制器处理后
      *  delete）。仅在收到的消息"应在托盘闪烁"（非抖动 / 对端发来 / 对应聊天窗未开）时调用。
      *    ctype       会话类型（1 单聊 2 群聊）。
      *    cid         会话 ID。
@@ -1369,9 +1684,9 @@ private:
     void PostTrayFlash(int ctype, int64_t cid, const std::string& digestUtf8);
 
     /**
-     *  向 CMainDlg 回投一条"托盘清除该会话"消息（FMG_MSG_TRAY_CLEAR）：某会话被读后，
-     *  让 CMainDlg 把它移出托盘闪烁集合。会话 ID 经堆分配 long long 传递（Win32 下
-     *  lParam 容不下 64 位），CMainDlg 处理后 delete。
+     *  向本窗口回投一条"托盘清除该会话"消息（FMG_MSG_TRAY_CLEAR）：某会话被读后，
+     *  让托盘控制器把它移出闪烁集合。会话 ID 经堆分配 long long 传递（Win32 下
+     *  lParam 容不下 64 位），托盘控制器处理后 delete。
      *    ctype  会话类型（1 单聊 2 群聊）。
      *    cid    会话 ID。
      */
@@ -1531,11 +1846,11 @@ private:
     void ShowContactContextMenu(UINT peerUserId);
 
     /**
-     *  向某个联系人发起语音 / 视频通话 —— 把请求转给 CMainDlg 里的通话协调器，
+     *  向某个联系人发起语音 / 视频通话 —— 把请求投给本窗口，由通话协调器接管，
      *  由它统一发 cmd_call_invite 并弹「呼叫中」对话框。
      *
      *  之所以由协调器统一发起：同一时刻只允许有一路通话，这个互斥判定与呼叫中
-     *  对话框都在 CMainDlg 那边；各入口自己发协议的话，判定会散成好几份。
+     *  对话框都在通话协调器那边；各入口自己发协议的话，判定会散成好几份。
      *
      *  本方法内部先判定当前连接态是否允许发起通话（通话需要信令通道，离线时发起
      *  必然失败），不允许时弹出提示并直接返回。
@@ -1614,7 +1929,7 @@ private:
      *
      *  最小化的窗口只有 SW_RESTORE 能还原，SW_SHOW 对它无效；隐藏到托盘的窗口则
      *  只需 SW_SHOW。两种情形要分开处理，做法与托盘菜单「打开主面板」一致
-     *  （见 CMainDlg::ShowLoginOrMainPanel）。
+     *  （见 balloonmain::CSessionController::ShowLoginOrMainPanel）。
      *
      *  供那些"结果显示在主面板上"的入口在动手之前调用 —— 主面板此刻可能收在托盘里
      *  或处于最小化状态，不先把它调出来的话，用户看不到任何变化，会以为功能失效。
@@ -1799,7 +2114,7 @@ private:
      *  内容由 BuildSystemMenuModel() 给出（个人信息 / 修改密码 / 公告与通知 /
      *  系统设置 / 网络设置 / 登出 / 关于），各项带图标，菜单锚定在按钮<u>上方</u>
      *  弹出（同步阻塞）。选中后按项分发：个人信息 / 修改密码 / 系统设置 / 关于走
-     *  本类自己的 OpenXxxDlg；网络设置与登出经 m_hMainDlg 转给 CMainDlg（消息中枢）
+     *  本类自己的 OpenXxxDlg；登出投给本窗口，由会话控制器处理
      *  处理；公告与通知暂提示"开发中"。
      */
     void ShowSystemMenu();
@@ -1809,8 +2124,8 @@ private:
      *  内容由 BuildStatusMenuModel() 给出（在线 / 离开 / 勿扰 / 离线，各带彩色圆点，
      *  共四项），其中当前所处的那一项带外环圆点与"（当前）"后缀（当前状态取
      *  胶囊上正在显示的那个），锚定在胶囊<u>正下方</u>弹出（同步阻塞）。选中后：先把胶囊乐观
-     *  更新成目标状态，再把目标 presence（v2 presence_type）经 m_hMainDlg 投递
-     *  FMG_MSG_CHANGE_MY_PRESENCE 给 CMainDlg，由其决定走 GoOffline / GoOnline /
+     *  更新成目标状态，再把目标 presence（v2 presence_type）投给本窗口
+     *  FMG_MSG_CHANGE_MY_PRESENCE 给本窗口，由会话控制器决定走 GoOffline / GoOnline /
      *  SendChangePresence；改状态失败时由 OnChangePresenceResult 回退胶囊。
      */
     void ShowStatusMenu();
@@ -1881,15 +2196,6 @@ private:
     // 更新进程级开关，再让已打开的单聊 / 群聊窗重新测量重绘 —— 链接片段是在气泡测量阶段
     // 算出来的，不重新测量已开着的窗口就还是旧样子。
     LRESULT OnLinkOptionChangedMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
-    // 单聊窗显示器按钮发起远程桌面：单聊窗 m_hMainDlg 为 NULL，故经主面板转发给
-    // CMainDlg 协调器。wParam=对端userid，lParam=堆 std::wstring* peerName（转交后由 CMainDlg delete）。
-    LRESULT OnRdStartInviteMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
-    // 单聊窗"语音通话"按钮发起呼叫：单聊窗 m_hMainDlg 为 NULL，故经主面板转发给
-    // CMainDlg 通话协调器。wParam=对端userid，lParam=堆 std::wstring* peerName（转交后由 CMainDlg delete）。
-    LRESULT OnCallStartInviteMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
-
-    // 单聊窗"视频通话"按钮发起呼叫：同上两步路由，仅消息为视频发起，转发给 CMainDlg 协调器。
-    LRESULT OnCallStartVideoInviteMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     // FMG_MSG_OPEN_HISTORY：聊天窗"消息记录"按钮转发来——打开该会话的历史消息记录窗。
     // wParam=ctype（1单聊 2群聊），lParam=堆上 int64_t* cid（处理后 delete）。
@@ -1900,6 +2206,7 @@ private:
      *  wParam / lParam 均为 0，无堆负载。
      */
     LRESULT OnOpenAnnounceBoxMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
 
     // 从通讯录缓存计算某联系人的职位与部门路径（"产品部 / 设计组"）。
     //   userId       联系人 userid。
@@ -1919,8 +2226,16 @@ private:
     // 供搜索结果行的副行展示。每次收到通讯录应答后调一次。
     void RebuildContactDeptPaths();
 
+    // 销毁本类持有的全部子窗口：堆分配的单聊窗 / 群聊窗 / 群管理对话框（销毁后
+    // 一并 delete 并清空容器），以及按值持有的各对话框与浮窗（只 DestroyWindow，
+    // 对象本身随本类析构）。析构与 ResetForLogout 共用，避免两处各写一份而漏项。
+    void DestroyOwnedSubWindows();
+
+    // 释放三个 monogram 头像位图池（通讯录树 / 会话树 / 群树各一个）并清空容器。
+    // 调用方须保证三棵树的节点已经先行清空——树节点只借用池中的 HBITMAP，不复制。
+    void ReleaseAvatarBitmapPools();
+
 private:
-    HWND m_hMainDlg;                            // CMainDlg 窗口句柄，关闭主面板时通知其退出
     // 标题栏左侧图标位图（程序主图标 IDR_MAINFRAME 合成到标题栏底色上）。
     // DuiFrameWindow::SetIcon 只借用不释放，故由本类持有、析构时 DeleteObject。
     // 建窗时生成一次，之后不再变；生成失败时为 NULL（标题栏只显示文字）。
@@ -2056,7 +2371,7 @@ private:
     CSignatureEditPopup     m_signEditPopup;    // Header 签名点击弹出的内联编辑弹层
     CString                 m_signBeforeUpdate; // 乐观更新前的签名快照，应答失败时回退用
     int                     m_presenceBeforeChange; // 改状态前的在线状态快照(v2 presence)，cmd_change_presence 应答失败时回退胶囊用
-    // 当前连接态（ConnectionUiState：0=在线 1=正在连接 2=离线）。由 CMainDlg 经
+    // 当前连接态（ConnectionUiState：0=在线 1=正在连接 2=离线）。由会话控制器经
     // ApplyConnectionState 推入，本面板据它给自身的联网入口做门禁，并逐窗转发给聊天窗。
     // 默认按"在线"起步 —— 主面板是登录成功后才创建的。
     int                     m_connUiState;

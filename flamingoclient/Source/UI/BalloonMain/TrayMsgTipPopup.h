@@ -4,13 +4,13 @@
  *  鼠标悬停在系统托盘图标上时弹出的"未读消息提示"小列表。列出当前正在
  *  托盘闪烁的未读会话（每条：彩色字母头像 + 会话名 + "N 条新消息"），点某条即打开
  *  对应会话。取代旧的 SkinLib 版 CMsgTipDlg —— 旧版数据绑死 v1 的 CMessageList，
- *  这里用 balloonui 重写，数据直接来自 CMainDlg 持有的托盘闪烁状态机（CTrayFlashController）。
+ *  这里用 balloonui 重写，数据直接来自托盘控制器持有的闪烁状态机（CTrayFlashController）。
  *
  *  窗口形态：与 CSearchDropdown 同一套路 —— 顶层无边框浮窗（WS_POPUP），窗口类带
  *  CS_DROPSHADOW 系统投影使其明显浮于内容之上；WS_EX_NOACTIVATE 故弹出 / 点击都<u>不
  *  抢</u>前台与键盘焦点。宿主能力复用 balloonui DuiHost（SubclassWindow 接管自建 HWND）。
  *  通知自路由（owner 传 NULL）：行点击在本类 OnChildNotify 内处理，经回调把 (ctype,cid)
- *  交回 CMainDlg 打开会话。
+ *  交回托盘控制器打开会话。
  *
  *  自动隐藏：展示后起一个轮询定时器，每拍检查光标是否仍落在"弹窗矩形 ∪ 托盘图标矩形"
  *  内；都不在则隐藏（与旧 CMsgTipDlg 的 leave 轮询同思路，避免一移开就消失导致点不到）。
@@ -43,7 +43,7 @@ class CTrayMsgTipPopup : public balloonwjui::DuiHost
 {
 public:
     // 选中某会话行时的回调：ctype 会话类型（1 单聊 2 群聊），cid 会话 ID。
-    // userdata 为注册回调时透传的用户数据（一般为 CMainDlg this）。
+    // userdata 为注册回调时透传的用户数据（一般为托盘控制器 this）。
     typedef void (*PickConvCallback)(void* userdata, int ctype, long long cid);
 
     CTrayMsgTipPopup();
@@ -58,7 +58,7 @@ public:
     /**
      *  设置行点击回调。
      *    cb：       点某会话行时触发。
-     *    userdata： 回调透传的用户数据（一般为 CMainDlg this）。
+     *    userdata： 回调透传的用户数据（一般为托盘控制器 this）。
      */
     void SetPickCallback(PickConvCallback cb, void* userdata);
 

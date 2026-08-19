@@ -231,14 +231,14 @@ TEST_CASE("CAP12 用户主动离线时恒不自动重连", "[onlinecap][reconnec
     // 处没判，导致正在重连时选离线仍会被连回去。共用本函数即可杜绝。
     //
     // 目前共有三个调用点，新增第四个时也必须走本函数、不要再各判各的：
-    //   · CMainDlg::OnNetError       —— 掉线事件到达，决定要不要起重连定时器；
-    //   · CMainDlg::OnTimer          —— 重连定时器每次触发，决定要不要真的去登录；
-    //   · CMainDlg::OnNetworkResumed —— 本机网络由断开恢复，决定要不要趁机连回服务器。
+    //   · 会话控制器 OnNetError  —— 掉线事件到达，决定要不要起重连定时器；
+    //   · 会话控制器 PumpTimer   —— 重连定时器每次触发，决定要不要真的去登录；
+    //   · 会话控制器 OnNetworkResumed —— 本机网络由断开恢复，决定要不要趁机连回服务器。
     // 第三个调用点是后补的：它原先不判登录态，网络一恢复就重新登录，于是用户主动离线、
     // 或账号在别处登录被顶下线之后，拔插一次网线就会自己连回去。
     //
     // "被踢下线"与"用户主动离线"在这里是同一种情形 —— 两者都会把面板状态置成
-    // MAINPANEL_STATUS_USERGOOFFLINE，对"要不要连回去"的答案都是不要。
+    // balloonmain::kSessionUserGoOffline，对"要不要连回去"的答案都是不要。
     CHECK(!ShouldAutoReconnect(true, true));    // 主动离线：配置允许重连也不连
     CHECK(!ShouldAutoReconnect(true, false));
 

@@ -3,7 +3,7 @@
  *
  *  "被踢下线"提示框 —— 账号在别处登录被顶下线（以及被停用 / 服务器维护等）时，
  *  贴着托盘图标弹出的<u>模态</u>小窗：一段说明文字 + 一个"确定"按钮。用户关掉它之后，
- *  CMainDlg 接着走登出序列回到登录界面（见 CMainDlg::OnV2Kickout）。
+ *  会话控制器接着走登出序列回到登录界面（见它的 OnV2Kickout）。
  *
  *  为什么是模态：被踢下线是必须被看见的事（原先只弹托盘气泡，用户反馈"效果不明显"）。
  *  balloonui 的 DuiFrameWindow 本身不带模态，故照 CBalloonLoginDlg 的做法手写模态消息
@@ -33,7 +33,7 @@
 /**
  *  CBalloonKickoutDlg —— 被踢下线提示框（模态，owner 一般为主面板）。
  *
- *  典型用法（见 CMainDlg::OnV2Kickout）：
+ *  典型用法（见会话控制器的 OnV2Kickout）：
  *      RECT rcTray = { 0 };
  *      m_TrayIcon.GetTrayIconRect(&rcTray);
  *      CBalloonKickoutDlg dlg;
@@ -50,7 +50,7 @@ public:
      *  模态显示提示框，直到用户点"确定"或关掉窗口才返回。
      *
      *    hWndParent：  owner 窗口句柄，模态期间被禁用、返回前恢复；可为 NULL
-     *                  （主面板尚未创建或已销毁时传隐藏的 CMainDlg 即可）。
+     *                  （主面板尚未创建或已销毁时传 NULL 即可）。
      *    reason：      被踢原因，取值见 BalloonMain/KickoutNotice.h 的 KickoutReasonValue；
      *                  未知 / 越界值会落到兜底文案，不会显示空白。
      *    trayIconRect：托盘图标的屏幕矩形（CTrayIcon::GetTrayIconRect 的产物）；传空矩形

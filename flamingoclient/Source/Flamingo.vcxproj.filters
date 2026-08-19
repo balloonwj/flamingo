@@ -126,9 +126,6 @@
     <ClCompile Include="Common\Util\Buffer.cpp">
       <Filter>Common\Util</Filter>
     </ClCompile>
-    <ClCompile Include="App\CascadeWinManager.cpp">
-      <Filter>App</Filter>
-    </ClCompile>
     <ClCompile Include="Threading\CheckNetworkStatusTask.cpp">
       <Filter>Threading</Filter>
     </ClCompile>
@@ -171,7 +168,10 @@
     <ClCompile Include="Session\LoginAccountList.cpp">
       <Filter>Session</Filter>
     </ClCompile>
-    <ClCompile Include="App\MainDlg.cpp">
+    <ClCompile Include="App\DebugEntryPoints.cpp">
+      <Filter>App</Filter>
+    </ClCompile>
+    <ClCompile Include="App\AppShell.cpp">
       <Filter>App</Filter>
     </ClCompile>
     <ClCompile Include="Common\Util\MD5.cpp">
@@ -550,9 +550,6 @@
     <ClCompile Include="UI\BalloonMain\BalloonClosePromptDlg.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
-    <ClCompile Include="UI\BalloonMain\BalloonContactTreeAdapter.cpp">
-      <Filter>UI\BalloonMain</Filter>
-    </ClCompile>
     <ClCompile Include="UI\BalloonMain\BalloonGroupInfoDlg.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
@@ -566,6 +563,24 @@
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\BalloonMainPanel.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\BalloonMainPanelNetHandlers.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\MainPanelRdCoordinator.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\MainPanelCallCoordinator.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\MainPanelTrayController.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\MainPanelAutoAwayController.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="UI\BalloonMain\MainPanelSessionController.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\BalloonModifyAvatarDlg.cpp">
@@ -1152,9 +1167,6 @@
     <ClInclude Include="Common\Util\Buffer.h">
       <Filter>Common\Util</Filter>
     </ClInclude>
-    <ClInclude Include="App\CascadeWinManager.h">
-      <Filter>App</Filter>
-    </ClInclude>
     <ClInclude Include="Threading\CheckNetworkStatusTask.h">
       <Filter>Threading</Filter>
     </ClInclude>
@@ -1203,7 +1215,10 @@
     <ClInclude Include="Session\LoginAccountList.h">
       <Filter>Session</Filter>
     </ClInclude>
-    <ClInclude Include="App\MainDlg.h">
+    <ClInclude Include="App\DebugEntryPoints.h">
+      <Filter>App</Filter>
+    </ClInclude>
+    <ClInclude Include="App\AppShell.h">
       <Filter>App</Filter>
     </ClInclude>
     <ClInclude Include="Common\Util\MD5.h">
@@ -1604,9 +1619,6 @@
     <ClInclude Include="UI\BalloonMain\BalloonClosePromptDlg.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
-    <ClInclude Include="UI\BalloonMain\BalloonContactTreeAdapter.h">
-      <Filter>UI\BalloonMain</Filter>
-    </ClInclude>
     <ClInclude Include="UI\BalloonMain\BalloonGroupInfoDlg.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
@@ -1620,6 +1632,24 @@
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonMain\BalloonMainPanel.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\MainPanelRdCoordinator.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\MainPanelCallCoordinator.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\MainPanelTrayController.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\MainPanelSessionHost.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\MainPanelAutoAwayController.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\MainPanelSessionController.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonMain\BalloonModifyAvatarDlg.h">

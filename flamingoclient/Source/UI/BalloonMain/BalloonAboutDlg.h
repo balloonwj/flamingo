@@ -14,7 +14,7 @@
  *    · "用户协议 / 隐私政策 / 开源许可" → 提示"功能开发中"（占位）。
  *
  *  与主面板的关系：主面板系统菜单"关于 FlamingoIM"项点击时创建并显示本对话框；
- *  CMainDlg 另持一份实例供 --about 调试入口（跳过登录直接预览）。
+ *  命令行调试入口另持一份实例供 --about 使用（跳过登录直接预览）。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL（经 stdafx.h）。
  *
@@ -28,7 +28,7 @@
 namespace balloonwjui { class DuiVBox; }
 
 /**
- *  CBalloonAboutDlg —— "关于"对话框（非模态浮窗，owner = 主面板或 CMainDlg）。
+ *  CBalloonAboutDlg —— "关于"对话框（非模态浮窗，owner = 主面板）。
  *  纯展示 + 几个外链 / 占位按钮，不依赖任何业务对象，故构造无参。
  */
 class CBalloonAboutDlg : public balloonwjui::DuiFrameWindow
@@ -39,7 +39,7 @@ public:
 
     /**
      *  创建并显示对话框（已显示则前置）。每次打开都按当前进程 id 重置标题。
-     *    owner：owner 窗口句柄（主面板 / CMainDlg）；内部 Create 传 NULL 让子控件
+     *    owner：owner 窗口句柄（主面板）；内部 Create 传 NULL 让子控件
      *           通知自路由回本对话框（与改密 / 建群对话框同处理），owner 仅作语义留存。
      */
     void OpenAbout(HWND owner);

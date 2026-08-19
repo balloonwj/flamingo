@@ -224,7 +224,7 @@ void CBalloonUpdateWindow::RequestApplicationExit(GatedWindowKind gatedKind, HWN
 
     if (gatedKind == kGatedLoginDlg && gatedWnd != NULL && ::IsWindow(gatedWnd))
     {
-        //登录前：交给登录窗自己关。它退出模态循环后，CMainDlg::StartLogin 会统一
+        //登录前：交给登录窗自己关。它退出模态循环后，会话控制器的 StartLogin 会统一
         //收尾一次。详见本函数在头文件里的说明。
         LOG_INFO(_T("升级窗：登录前退出，交由登录窗收尾。"));
         ::PostMessage(gatedWnd, WM_CLOSE, 0, 0);

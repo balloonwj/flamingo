@@ -12,7 +12,7 @@
  *  （FMG_MSG_SET_CONTACT_* / FMG_MSG_LOCATE_CONTACT / FMG_MSG_CALL_* /
  *  FMG_MSG_OPEN_HISTORY），由它判定与执行 —— 与备注名、标签的提交是同一套做法。
  *
- *  调试期由 CMainDlg 的 --contact 入口直接弹出，此时没有宿主主面板，各动作
+ *  调试期由命令行 --contact 入口直接弹出，此时没有宿主主面板，各动作
  *  退化为只改内存并记一条日志。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL
@@ -57,8 +57,8 @@ public:
 
     /**
      *  创建并显示联系人资料对话框。
-     *    hMainDlg：CMainDlg 的窗口句柄（隐藏的消息中枢）；关闭本窗口时
-     *              据此通知 CMainDlg。
+     *    hMainDlg：主面板的窗口句柄；关闭本窗口时
+     *              据此请求退出程序。
      */
     void CreateAndShow(HWND hMainDlg);
 
@@ -92,7 +92,7 @@ public:
     /**
      *  把当前的界面连接态推给本窗口，供快捷操作行的离线门禁使用。
      *
-     *  本窗口不自己判断连不连得上服务器：连接态由 CMainDlg 统一算出、经主面板逐窗
+     *  本窗口不自己判断连不连得上服务器：连接态由会话控制器统一算出、经主面板逐窗
      *  推下来，与托盘图标、状态胶囊、各聊天窗同源（做法与
      *  CBalloonChatWindow::ApplyConnectionState 一致）。宿主主面板应当在打开本窗口
      *  之后、以及此后每次连接态变化时各调用一次。
@@ -263,7 +263,7 @@ private:
     // 「发消息」按钮：请主面板按 userid 打开单聊并关闭本窗口；调试入口下弹 mock 提示。
     void DoSendMessage();
 
-    // WM_CLOSE：调试入口下关闭即结束程序，转交 CMainDlg。
+    // WM_CLOSE：调试入口下关闭即请求退出程序。
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     // WM_DUI_NOTIFY：处理标签删除 / 添加、备注名编辑、开关翻转、快捷操作与底部按钮点击。
@@ -281,7 +281,7 @@ private:
 
 private:
     CFlamingoClient* m_lpFMGClient;   // 所属客户端（消息中枢），只引用不持有
-    HWND             m_hMainDlg;      // CMainDlg 句柄（隐藏的消息中枢）
+    HWND             m_hMainDlg;      // 主面板句柄
     HWND             m_hostPanel;     // 主面板 HWND，"发消息"经它路由开单聊；0 表示调试入口
     UINT             m_peerUserId;    // 被查看联系人的 userid；0 表示调试入口(mock)
     ballooncontact::ContactModel m_model;   // 联系人资料数据模型

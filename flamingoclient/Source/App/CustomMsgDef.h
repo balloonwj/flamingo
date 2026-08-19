@@ -1,5 +1,5 @@
 ﻿/**
- *  客户端早期（v1）就存在的一批窗口自定义消息号，收件方主要是 CMainDlg 与各个
+ *  客户端早期（v1）就存在的一批窗口自定义消息号，收件方主要是各个
  *  聊天窗口。新增的 v2 消息一律定义在 UserSessionData.h，不要再往本文件里加。
  *
  *  号段约定见开发约定文档「UI 约定」第 6 条：本文件这批消息全部落在
@@ -13,7 +13,7 @@
 
 #pragma once
 
-// MingUTalk CMainDlg自定义消息
+// MingUTalk 时期的自定义消息
 #define			WM_TRAYICON_NOTIFY		WM_USER + 1		// 系统托盘图标通知消息
 #define			WM_SHOW_BUDDYCHATDLG	WM_USER + 2		// 显示好友会话聊天对话框消息
 #define			WM_SHOW_GROUPCHATDLG	WM_USER + 3		// 显示群会话聊天对话框消息

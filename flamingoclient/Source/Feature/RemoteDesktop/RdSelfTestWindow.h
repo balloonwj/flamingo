@@ -1,7 +1,7 @@
 /**
  *  远程桌面引擎自环测试窗口，RdSelfTestWindow.h
  *
- *  调试入口（CMainDlg 命令行 --rdpselftest）：开一个纯 Win32 窗口，定时把
+ *  调试入口（命令行 --rdpselftest）：开一个纯 Win32 窗口，定时把
  *  本机屏幕走一遍完整引擎链路——RdScreenCapturer 抓屏 + 编码 → RdScreenDecoder
  *  解码 → drawTo 绘制到窗口客户区。用于目视确认"抓屏 + 编码 + 解码 + 绘制"
  *  闭环出画面（窗口里应实时显示本机桌面的缩小镜像）。不接网络、不接聊天窗口，

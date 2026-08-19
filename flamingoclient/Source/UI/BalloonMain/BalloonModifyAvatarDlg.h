@@ -18,7 +18,7 @@
  *  彩色 emoji 需后续彩色字形渲染能力，留作后续（见类内 kSystemPresets 注释）。
  *
  *  与主面板的关系：主面板头像区被点击时创建并显示本对话框；改像应答由
- *  CMainDlg → 主面板 → 转发到本对话框的 OnChangeAvatarResult。
+ *  由主面板转发到本对话框的 OnChangeAvatarResult。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL。
  *

@@ -2,10 +2,10 @@
  *  MainPanelTrayMenu.h
  *
  *  系统托盘图标右键菜单的<u>纯数据模型</u>。把"托盘菜单有哪些项、什么顺序、
- *  各项 id / 文本 / 图标 / 勾选 / 是否可用"从对话框类（CMainDlg）里抽出成一个
+ *  各项 id / 文本 / 图标 / 勾选 / 是否可用"从托盘控制器里抽出成一个
  *  不依赖 HWND、不依赖 Flamingo 业务对象的纯函数，便于被 FlamingoUnit 测试
  *  工程直接调用断言（真正的弹出 / 命令分发等带窗口副作用的部分仍留在
- *  CMainDlg::OnTrayIcon_RButtunUp）。
+ *  托盘控制器的 OnTrayIcon_RButtunUp）。
  *
  *  结构对照 flamingo.rc 原 ID_MENU_MAIN_PANEL 里的三个托盘子菜单：
  *    · 登录前 / 面板锁定：打开主面板 ── 退出（两态内容相同）。
@@ -26,7 +26,7 @@ namespace balloonmain {
 
 /**
  *  TrayMenuId —— 托盘菜单各功能项的命令 id。点击后由 DuiMenu::TrackPopup 返回
- *  该值；CMainDlg::OnTrayIcon_RButtunUp 据此分发到现成的 OnMenu_* 处理函数。
+ *  该值；托盘控制器的 OnTrayIcon_RButtunUp 据此分发到对应的处理路径。
  *
  *  取值<u>必须非 0</u>：0 是 DuiMenu::TrackPopup 的"未选中"（失焦 / ESC）返回值，
  *  不能占用。分隔条不是功能项、没有 id（其 TrayMenuEntry::id 取 0）。
@@ -50,7 +50,7 @@ enum TrayMenuId : UINT
 };
 
 /**
- *  TrayMenuKind —— 托盘菜单的三种形态。由 CMainDlg 的登录态 / 锁定态决定取哪种。
+ *  TrayMenuKind —— 托盘菜单的三种形态。由会话的登录态 / 锁定态决定取哪种。
  */
 enum TrayMenuKind
 {

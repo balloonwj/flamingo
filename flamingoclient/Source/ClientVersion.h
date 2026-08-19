@@ -7,7 +7,7 @@
  *  服务端拿登录上报的版本号比对，而用户看到的是关于页那个，两者对不上就永远升不完。
  *  故收口到本文件，其余各处一律引用它。
  *
- *  <u>发版时要改的地方</u>：只改本文件下面这两个宏，且版本号必须与控制台
+ *  <u>发版时要改的地方</u>：只改本文件下面那三个版本号宏，且版本号必须与控制台
  *  「客户端版本」页填的版本号一致。flamingo.rc 已 #include 本文件，exe 文件属性
  *  里的版本会跟着一起变，不必再手工同步。
  *
@@ -23,16 +23,16 @@
 
 //客户端版本号，点分十进制。登录（cmd_login 的 clientversion）与检查更新
 //（cmd_check_update 的 version）都上报它，服务端据此判断要不要升级、是否强制。
-#define FLAMINGO_CLIENT_VERSION      "3.2.1"
+#define FLAMINGO_CLIENT_VERSION      "2.0.0"
 
 //上面同一个版本号写给资源脚本的两种形式。资源脚本的 FILEVERSION / PRODUCTVERSION
 //只认逗号分隔的四段数字，没法直接吃 "3.2.1" 这种字符串，故单列一份；第四段是
 //构建序号，本项目不用，固定为 0。改版本号时这三个宏要一起改。
-#define FLAMINGO_CLIENT_VERSION_RC       3,2,1,0
-#define FLAMINGO_CLIENT_VERSION_RC_STR   "3.2.1.0"
+#define FLAMINGO_CLIENT_VERSION_RC       2,0,0,0
+#define FLAMINGO_CLIENT_VERSION_RC_STR   "2.0.0.0"
 
-//关于页显示用的 build 号。仅供人肉辨认是哪次构建，不参与任何版本比较。
-#define FLAMINGO_CLIENT_BUILD        "20260518"
+//关于页显示的 build 号<u>不在这里</u>：它已改为编译期自动取当次的构建时间，
+//见 UI/BalloonMain/AboutDlgModel.cpp 的 AboutBuildStamp。发版时不必再手工改它。
 
 //宽字符版本的同一个值。界面层（关于页、升级窗）用它，
 //不在那边另写一份字面量 —— 否则又回到“版本号散在多处”的老问题。
@@ -40,4 +40,3 @@
 #define FLAMINGO_WIDEN2(x)           L ## x
 #define FLAMINGO_WIDEN(x)            FLAMINGO_WIDEN2(x)
 #define FLAMINGO_CLIENT_VERSION_W    FLAMINGO_WIDEN(FLAMINGO_CLIENT_VERSION)
-#define FLAMINGO_CLIENT_BUILD_W      FLAMINGO_WIDEN(FLAMINGO_CLIENT_BUILD)

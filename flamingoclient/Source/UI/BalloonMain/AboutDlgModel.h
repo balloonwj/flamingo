@@ -38,14 +38,20 @@ constexpr const wchar_t* kAboutAppName = L"FlamingoIM";
 // 用户会看到“明明刚升完级，关于页还是旧版本”。
 constexpr const wchar_t* kAboutVersion = FLAMINGO_CLIENT_VERSION_W;
 
-// 构建号（沿用设计稿，仅作展示，不参与任何逻辑）。
-constexpr const wchar_t* kAboutBuild = FLAMINGO_CLIENT_BUILD_W;
+// 构建时间戳，形如 20260819-1530（年月日-时分）。仅作展示，不参与任何逻辑：
+// 用户报问题时报一句这个数字，就能对上是哪次构建出来的包。
+//
+// 取值来自编译本模块时的 __DATE__ / __TIME__，发版时不必手工维护。工程给
+// AboutDlgModel.cpp 挂了「每次构建先更新其时间戳」的预生成步骤，保证它每次都被
+// 重新编译 —— 否则增量编译时本文件没被重编，显示的就会是上一次的时间。
+//
+// 返回的指针指向进程级的静态字符串，调用方可直接持有。
+const wchar_t* AboutBuildStamp();
 
-// 品牌区版本行完整文案，如：版本 3.2.1 (Build 20260518)。
-// 版本号与 build 号都取自 ClientVersion.h，不在本处另写一份 ——
+// 品牌区版本行完整文案，如：版本 2.0.0 (Build 20260819-1530)。
+// 版本号取自 ClientVersion.h、构建时间戳取自 AboutBuildStamp，不在本处另写一份 ——
 // 关于页显示的版本必须与登录上报的一致，否则升级完用户看到的还是旧号。
-constexpr const wchar_t* kAboutVersionLine =
-    L"版本 " FLAMINGO_CLIENT_VERSION_W L" (Build " FLAMINGO_CLIENT_BUILD_W L")";
+std::wstring AboutVersionLine();
 
 // 品牌区标语（设计稿原文）。
 constexpr const wchar_t* kAboutSlogan = L"让沟通像火烈鸟一样优雅";

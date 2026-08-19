@@ -8,7 +8,7 @@
 #include "..\resource.h"
 #include "Startup.h"
 
-#include "MainDlg.h"
+#include "AppShell.h"
 #include "..\Common\Util\File2.h"
 #include "..\Common\Log\IULog.h"
 #include "..\Session\UserSessionData.h"
@@ -61,23 +61,20 @@ int Run(LPTSTR /*lpstrCmdLine = NULL*/, int nCmdShow/* = SW_SHOWDEFAULT*/)
     CMessageLoop theLoop;
     _Module.AddMessageLoop(&theLoop);
 
-    CMainDlg dlgMain;
-
     g_hwndOwner = CreateOwnerWindow();
-    if (dlgMain.Create(g_hwndOwner) == NULL)
-    {
-        ATLTRACE(_T("Main dialog creation failed!\n"));
-        return 0;
-    }
 
-    // CMainDlg 是隐藏的 IM 消息中枢，不再作为可见主窗口（旧自绘主界面已移除）。
-    // OnInitDialog 的登录流程已把它隐藏；这里不能再用 nCmdShow 把它显示出来，
-    // 否则登录后会冒出一个空白的旧主界面对话框。始终保持隐藏：登录对话框由
-    // StartLogin 弹出，登录成功后的主面板由 OnLoginResult 创建并显示 BalloonMainPanel。
+    //nCmdShow 不予理会：本程序没有「主窗口」这个概念上的启动窗口 —— 未登录时可见的是
+    //登录窗，登录后是主面板，两者的显示时机都由登录流程决定。
     UNREFERENCED_PARAMETER(nCmdShow);
-    dlgMain.ShowWindow(SW_HIDE);
 
-    int nRet = theLoop.Run();
+    balloonapp::CAppShell shell;
+    int nRet = 0;
+    if (shell.Startup(g_hwndOwner))
+    {
+        nRet = theLoop.Run();
+    }
+    //Startup 返回 false（调试入口要求立即退出、或用户直接关掉了登录窗）时也要收尾。
+    shell.Shutdown();
 
     _Module.RemoveMessageLoop();
     return nRet;

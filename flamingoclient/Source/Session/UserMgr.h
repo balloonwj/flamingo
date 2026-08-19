@@ -13,9 +13,6 @@
 class CUserMgr
 {
 public:
-    static CUserMgr& GetInstance();
-
-public:
 	CUserMgr(void);
 	~CUserMgr(void);
 
@@ -29,55 +26,21 @@ public:
 	tstring GetSessHeadPicFullName(UINT nUTalkNum);		// 获取群成员头像图片全路径文件名
 	tstring GetChatPicFullName(LPCTSTR lpszFileName);	// 获取聊天图片全路径文件名
 	tstring GetMsgLogFullName();						// 获取消息记录全路径文件名
-	tstring GetDefaultRecvFilePath();					// 获取默认接收文件路径名
-	void	SetCustomRecvFilePath(PCTSTR pszPath);		// 设置自定义接收目录（空=用默认）；GetDefaultRecvFilePath 优先用它
-
-	BOOL IsNeedUpdateSessHeadPic(UINT nUTalkNum);		// 判断是否需要更新群成员头像
-
-	BOOL IsSelf(PCTSTR pszAccountName);
-
-	tstring GetAccountName(UINT uAccountID) const;			//通过内部ID获取账户名
-	void	SetAccountName(UINT uAccountID, PCTSTR pszAccountName);
 
 	tstring GetNickName(UINT uAccountID) const;				//通过内部ID获取昵称名
-	void	SetNickName(UINT uAccountID, PCTSTR pszNickName);
-
-	tstring GetGroupName(UINT uGroupCode);
-	tstring	GetGroupAccount(UINT uGroupCode);
-
-	UINT	GetFaceID(UINT uAccountID) const;
-	void	SetFaceID(UINT uAccountID, UINT uFaceID);
-
-	PCTSTR  GetCustomFace(UINT uAccountID) const;
 
 	void	SetStatus(UINT uAccountID, long nStatus);	//设置自己或者某个好友的状态
-	long	GetStatus(UINT uAccountID);					//获取某个自己或者某个好友的状态
 
     void	SetClientType(UINT uAccountID, long nNewClientType);
-    long	GetClientType(UINT uAccountID);
 
-	UINT	GetMsgID(UINT uAccountID) const;
 	BOOL	SetMsgID(UINT uAccountID, UINT uMsgID);
 
-	tstring GetNickName(PCTSTR pszAccountName) const;	//通过账户获取昵称名
-
-	UINT	GetFaceID(PCTSTR pszAccountName) const;		//通过账户获取昵称
-
 	void	ResetToOfflineStatus();						//重置成离线状态
-
-	BOOL ExitGroup(UINT uGroupID);						//退出群组
-	BOOL IsGroupMember(UINT uAccountID, UINT uGroupID);	//账户uAccount是否是指定群的成员
 
 	BOOL LoadRecentList();								//从磁盘中加载最近联系人
 	BOOL StoreRecentList();								//将最近联系人存储至磁盘
 
-	long GetRecentListCount();							//获取最近联系人数量
-	void ClearRecentList();								//清空最近联系人
-	BOOL DeleteRecentItem(UINT uAccountID);				//删除指定好友会话
-
 	void ClearUserInfo();
-
-	long GetTotalBuddyCount();	
 
 public:		
 	HWND			m_hProxyWnd;
@@ -96,5 +59,4 @@ public:
 	CRecentList		m_RecentList;
 
 private:
-	tstring							m_strCustomRecvPath;	// 系统设置里选的自定义接收目录；空=用默认推导路径
 };

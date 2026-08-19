@@ -227,7 +227,7 @@ TEST_CASE("LPS11 复位之前那一轮的迟到结果仍被丢弃", "[loginprogr
 
 TEST_CASE("LPS12 已登录成功的状态也能被复位", "[loginprogress]")
 {
-    // 登录成功后窗口关闭；同一个 CMainDlg 里的登录窗对象会被复用（例如用户登出
+    // 登录成功后窗口关闭；会话控制器持有的登录窗对象会被复用（例如用户登出
     // 后重新登录），那时状态机停在 done，不复位就再也发不起登录。
     LoginProgressState st;
     const uint32_t gen = st.startLogin();

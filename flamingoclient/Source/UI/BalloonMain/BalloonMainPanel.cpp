@@ -2,7 +2,7 @@
  *  BalloonMainPanel.cpp
  *
  *  登录后主面板实现。P0：骨架 —— 以 DuiFrameWindow 形式创建 / 显示一个
- *  窄高窗口，客户区暂为占位文字；关闭时通知 CMainDlg 退出程序。真正的
+ *  窄高窗口。关闭本面板即请求退出程序。真正的
  *  Header / 搜索 / Tab / 列表由后续 P1 阶段的 BalloonMainLayout 构建。
  *
  *  balloonwj@qq.com   2026-05-21
@@ -24,7 +24,7 @@
 #include <algorithm>
 #include <ctime>                      // ::time —— 会话冒泡的本地时间戳
 
-#include "../../resource.h"             // IDM_MODIFYPASSWORD / ID_BTN_MULTI_CHAT / IDM_SYSTEMSETTINGS / ID_ABOUT / ID_MENU_NETSETTINGS（系统菜单转 CMainDlg 命令）
+#include "../../resource.h"             // IDM_MODIFYPASSWORD / IDM_SYSTEMSETTINGS / ID_ABOUT（系统菜单命令号）
 #include "../../Common/Graphics/ImageEx.h"             // CImageEx（系统菜单项图标）
 #include "MainPanelSystemMenu.h"    // BuildSystemMenuModel / SystemMenuId（系统菜单行模型）
 #include "MainPanelConversationMenu.h" // BuildConversationMenuModel / ConversationMenuId（会话右键菜单行模型）
@@ -54,7 +54,6 @@
 #include "MainPanelSectionHeader.h"   // MainPanelSectionHeader（展开/收起）
 #include "MainPanelListItem.h"        // MainPanelListItem（列表项点击）
 #include "MainPanelMockData.h"        // MockFavorites / MockServiceAccounts(19a 填 Contacts TreeView)
-#include "BalloonContactTreeAdapter.h" // 19d:真实数据 → DuiTreeView 节点适配器
 #include "MainPanelAvatar.h"          // 19f:monogram avatar HBITMAP 生成
 #include "AvatarPalette.h"            // 头像底色调色板（与登录窗共用一份）
 #include "AvatarSpec.h"               // avatar_kind_image（判断是否真图头像）
@@ -392,7 +391,9 @@ static CString FormatConversationTime(int64_t timestampMs)
 
 CBalloonMainPanel::CBalloonMainPanel(CFlamingoClient* pFMGClient)
     : m_lpFMGClient(pFMGClient)
-    , m_hMainDlg(NULL)
+    , m_pAppHost(NULL)
+    , m_sessionController(pFMGClient)
+    , m_netSettingsWindow(pFMGClient)
     , m_hTitleIcon(NULL)
     , m_contactWindow(pFMGClient)
     , m_createGroupDlg(pFMGClient)
@@ -418,6 +419,42 @@ CBalloonMainPanel::CBalloonMainPanel(CFlamingoClient* pFMGClient)
 }
 
 CBalloonMainPanel::~CBalloonMainPanel()
+{
+    // 子窗口与头像位图池的回收，与"登出复位"要做的事完全一样，故统一收敛到两个私有
+    // 辅助函数里，避免析构与 ResetForLogout 各写一份、日后改动只改了其中一份。
+    DestroyOwnedSubWindows();
+
+    // 搜索下拉只在 InitUi 里创建一次、登出时不销毁（理由见 DestroyOwnedSubWindows），
+    // 因此它的销毁单独放在这里。不销毁的话，本对象析构时它仍持有有效 HWND，会触发
+    // ATL CWindowImplRoot 的析构断言。
+    if (m_searchDropdown.IsWindow())
+        m_searchDropdown.DestroyWindow();
+
+    // 状态徽标位图缓存由本类持有（DuiTreeView 只借用指针），这里统一释放。
+    // 这批位图与账号无关（固定 4 槽、按 presence 取值，见 GetPresenceBadgeBitmap），
+    // 因此只在析构时释放；ResetForLogout 不动它们，留给下一个账号继续用。
+    for (int i = 0; i < kPresenceBadgeSlotCount; ++i)
+    {
+        if (m_presenceBadges[i] != NULL)
+        {
+            ::DeleteObject(m_presenceBadges[i]);
+            m_presenceBadges[i] = NULL;
+        }
+    }
+
+    // 客户区控件树与 HWND 由 DuiFrameWindow 基类析构兜底。
+    // 三个 monogram 头像位图池由本类持有，这里统一释放。
+    ReleaseAvatarBitmapPools();
+
+    // 标题栏图标位图：DuiFrameWindow::SetIcon 只借用不释放，由本类收回。
+    if (m_hTitleIcon != NULL)
+    {
+        ::DeleteObject(m_hTitleIcon);
+        m_hTitleIcon = NULL;
+    }
+}
+
+void CBalloonMainPanel::DestroyOwnedSubWindows()
 {
     // 单聊窗口由本类堆分配持有，这里统一销毁并释放。
     for (std::map<UINT, CBalloonChatWindow*>::iterator it = m_chatWindows.begin();
@@ -459,17 +496,24 @@ CBalloonMainPanel::~CBalloonMainPanel()
         delete m_pGroupManageWindow;
         m_pGroupManageWindow = NULL;
     }
+    m_groupManageGroupId = 0;
 
-    // 本类按值持有的顶层窗口成员（搜索下拉 / 联系人资料窗 / 各对话框 / 签名内联弹层）。
+    // 特别关注上线提醒浮窗：先清掉已经攒下、用户还没看到的提醒行，再销毁窗口。
+    // HideAndClear 内部会判断窗口是否存在，窗口未创建时也可以照常调用。
+    m_starredPopup.HideAndClear();
+
+    // 本类按值持有的顶层窗口成员（搜索下拉 / 联系人资料窗 / 各对话框 / 各浮窗）。
     // 它们都是独立顶层窗口（DuiFrameWindow / DuiHost / DuiPopupHost 派生，皆 ATL
     // CWindowImpl 派生），不是本面板的子窗口，DestroyWindow(本面板) 不会连带销毁；
     // 若不在此先销毁，它们各自的析构会在仍持有有效 HWND 时触发 ATL CWindowImplRoot
     // 断言（atlwin.h:3238 "Object deleted before window was destroyed"）——这正是
     // "登录成功后从托盘菜单退出崩溃"的根因（最常见的是搜索框用过后残留的 m_searchDropdown）。
-    // C++ 成员析构在本析构体之后、按声明逆序进行，故在此显式 DestroyWindow 即可保证
-    // 它们的 HWND 先被清掉。
-    if (m_searchDropdown.IsWindow())
-        m_searchDropdown.DestroyWindow();
+    // C++ 成员析构在析构函数体执行完之后、按声明逆序进行，故在此显式 DestroyWindow
+    // 即可保证它们的 HWND 先被清掉。
+    // 注意这里<u>没有</u>销毁 m_searchDropdown。它与其它窗口不同：其余各窗都是每次
+    // 用到时现开（OpenForXxx / ShowAnnouncement 内部建窗），而搜索下拉只在 InitUi 里
+    // 创建一次。主面板改成常驻窗口之后 InitUi 不会再跑第二次，登出时若把它销毁，
+    // 下次登录搜索框就再也弹不出结果了。它的销毁只在析构函数里做。
     if (m_contactWindow.IsWindow())
         m_contactWindow.DestroyWindow();
     if (m_profileDlg.IsWindow())
@@ -490,19 +534,23 @@ CBalloonMainPanel::~CBalloonMainPanel()
         m_systemSettingDlg.DestroyWindow();
     if (m_aboutDlg.IsWindow())
         m_aboutDlg.DestroyWindow();
+    // 下面五个同样是按值持有的独立顶层窗口，2026-08-18 修 BUG-14 时补齐 —— 此前它们
+    // 既不在析构里销毁、也不随主面板一起销毁，用户登出后会一直留在屏幕上。
+    if (m_historyWindow.IsWindow())
+        m_historyWindow.DestroyWindow();
+    if (m_announceBoxWindow.IsWindow())
+        m_announceBoxWindow.DestroyWindow();
+    if (m_announcePopup.IsWindow())
+        m_announcePopup.DestroyWindow();
+    if (m_starredPopup.IsWindow())
+        m_starredPopup.DestroyWindow();
+    if (m_announcePopupDlg.IsWindow())
+        m_announcePopupDlg.DestroyWindow();
+}
 
-    // 状态徽标位图缓存由本类持有（DuiTreeView 只借用指针），这里统一释放。
-    for (int i = 0; i < kPresenceBadgeSlotCount; ++i)
-    {
-        if (m_presenceBadges[i] != NULL)
-        {
-            ::DeleteObject(m_presenceBadges[i]);
-            m_presenceBadges[i] = NULL;
-        }
-    }
-
-    // 客户区控件树与 HWND 由 DuiFrameWindow 基类析构兜底。
-    // monogram avatar HBITMAP 池由本类持有,这里统一释放。
+void CBalloonMainPanel::ReleaseAvatarBitmapPools()
+{
+    // 通讯录树的 monogram 头像位图池。
     for (size_t i = 0; i < m_avatarBitmaps.size(); ++i)
     {
         if (m_avatarBitmaps[i] != NULL)
@@ -512,7 +560,7 @@ CBalloonMainPanel::~CBalloonMainPanel()
     }
     m_avatarBitmaps.clear();
 
-    // Messages 树（会话列表）专用的头像位图池，同样统一释放。
+    // 「消息」树（会话列表）专用的头像位图池。
     for (size_t i = 0; i < m_msgAvatarBitmaps.size(); ++i)
     {
         if (m_msgAvatarBitmaps[i] != NULL)
@@ -522,7 +570,7 @@ CBalloonMainPanel::~CBalloonMainPanel()
     }
     m_msgAvatarBitmaps.clear();
 
-    // "群"Tab 群树专用的头像位图池，同样统一释放。
+    // 「群」树专用的头像位图池。
     for (size_t i = 0; i < m_groupAvatarBitmaps.size(); ++i)
     {
         if (m_groupAvatarBitmaps[i] != NULL)
@@ -531,13 +579,123 @@ CBalloonMainPanel::~CBalloonMainPanel()
         }
     }
     m_groupAvatarBitmaps.clear();
+}
 
-    // 标题栏图标位图：DuiFrameWindow::SetIcon 只借用不释放，由本类收回。
-    if (m_hTitleIcon != NULL)
+void CBalloonMainPanel::ResetForLogout()
+{
+    LOG_INFO("MainPanel::ResetForLogout: destroy sub-windows and clear per-login state.");
+
+    // 先把远程桌面会话收尾：停被控端推流、关控制端观看窗、隐藏受控提示条。
+    // 这一步在协作类抽出之前是缺的（见 bugs.md 的 BUG-19）—— 正在被控时登出，屏幕仍会
+    // 继续往中转服务器推送，而用户看到的已经是登录窗，会以为早就断开了。
+    m_rdCoordinator.ResetForLogout();
+
+    // 通话同理：停铃声、停中转会话释放摄像头与麦克风、关掉通话窗。抽出之前
+    // 这一步也是缺的，采集线程会跨越登出边界继续运行。
+    m_callCoordinator.ResetForLogout();
+
+    // 第一步：关掉本面板拉起的全部子窗口。
+    //
+    // 单聊窗、群聊窗、历史记录窗等都是 Create(NULL, ...) 建出来的独立顶层窗口，既不是
+    // 本面板的子窗口、也没有把本面板设为 owner，所以销毁本面板并不会连带关掉它们。不在
+    // 这里显式销毁的话，用户登出后这些窗口会继续留在屏幕上，而且还带着上一个账号的聊天
+    // 内容 —— 这正是 BUG-14 的表层现象。
+    DestroyOwnedSubWindows();
+
+    // 搜索下拉不销毁、只收起（理由见 DestroyOwnedSubWindows）。它内部引用的是
+    // m_contacts / m_myGroups / m_contactDeptPaths 这三个容器本身，下面把容器清空
+    // 之后它拿到的就是空结果，不会残留上一个账号的联系人。
+    m_searchDropdown.HideDropdown();
+
+    // 第二步：清空三棵树的节点。必须排在位图池释放之前 —— 树节点里存的是位图池中
+    // HBITMAP 的原值（DuiTreeView::SetItemIcon 只借用、不复制），先释放位图池会让树在
+    // 随后的重绘中用到已经销毁的 GDI 对象。
+    // 本类不持有树控件指针，三棵树都按控件 id 现查（与各 FillXxxTree 的做法一致）。
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content != NULL)
     {
-        ::DeleteObject(m_hTitleIcon);
-        m_hTitleIcon = NULL;
+        balloonwjui::DuiTreeView* tvContacts = dynamic_cast<balloonwjui::DuiTreeView*>(
+            content->FindCtrlById(balloonmain::kIdContactsTree));
+        if (tvContacts != NULL)
+        {
+            tvContacts->Clear();
+        }
+
+        // 群树与会话树还带行装饰（成员数 / 未读角标 / 置顶与免打扰标记）。基类 Clear
+        // 不认识子类的装饰映射，须另外清一次。
+        balloonmain::MainPanelTreeView* tvGroups = dynamic_cast<balloonmain::MainPanelTreeView*>(
+            content->FindCtrlById(balloonmain::kIdGroupsTree));
+        if (tvGroups != NULL)
+        {
+            tvGroups->Clear();
+            tvGroups->ClearAllRowDecorations();
+        }
+
+        balloonmain::MainPanelTreeView* tvMessages = dynamic_cast<balloonmain::MainPanelTreeView*>(
+            content->FindCtrlById(balloonmain::kIdMessagesTree));
+        if (tvMessages != NULL)
+        {
+            tvMessages->Clear();
+            tvMessages->ClearAllRowDecorations();
+        }
     }
+
+    // 第三步：释放三个头像位图池。
+    ReleaseAvatarBitmapPools();
+
+    // 第四步：清空本次登录期间累积的全部数据缓存。这些容器都以 userid / groupid /
+    // 树节点 id 为键，换个账号登录后键的含义完全变了，不清就会串账号：轻则新账号看到上
+    // 一个账号的联系人与会话，重则点某一行跳到不相干的人。
+    m_contacts.clear();
+    m_departments.clear();
+    m_contactNodeUserId.clear();
+    m_contactNodeParent.clear();
+    m_contactOrgNode.clear();
+    m_contactDeptPaths.clear();
+    m_lastContactsResult = net::ContactsResult();
+
+    m_conversations.clear();
+    m_msgNodeConv.clear();
+
+    m_myGroups.clear();
+    m_groupNodeId.clear();
+    m_groupInfo.clear();
+    // 这一项漏清的后果最不容易察觉：它记录"哪些群已经发过资料请求"。不清的话，新账号的
+    // 群一旦群 id 与旧账号的记录重合，就再也不会发出资料请求，群名与成员数会一直为空。
+    m_groupInfoRequested.clear();
+    m_favoriteGroupNodeId.clear();
+
+    // 乐观更新的回滚快照：都是"请求已发出、应答未回"期间的临时存档。连接已经断开，对应
+    // 的应答不会再来，留着只会在下次登录时被当成本次的回滚数据用。
+    m_pendingRemarkRollback.clear();
+    m_pendingTagsRollback.clear();
+    m_signBeforeUpdate.Empty();
+    m_presenceBeforeChange = kMyPresenceOnline;
+
+    // 收藏与特别关注两个模型同属账号数据，一并清空。
+    m_favorites.Reset(std::vector<net::FavoriteItem>());
+    m_starred.Clear();
+
+    // 陌生人来消息时"要不要重新拉取通讯录"的限流记录，同样只在本次登录内有意义。
+    m_unknownSenderPolicy.Reset();
+
+    // 群资料对话框的随行状态（对话框本身已在第一步销毁）。
+    m_groupInfoDlgGroupId = 0;
+    m_groupInfoDlgAnnouncement.Empty();
+    m_groupInfoDlgOwnerName.Empty();
+    m_groupInfoDlgMyCard.Empty();
+
+    // 本地消息库按账号分库，登出时必须关掉，否则下次登录会继续往上一个账号的库里写。
+    m_msgStore.Close();
+    m_msgStoreDbPath.clear();
+
+    // 界面状态回到"刚建好"的样子：默认停在联系人页，连接提示条按在线态显示。
+    m_currentTabId = balloonmain::kIdTabContacts;
+    m_connUiState = balloonmain::kConnUiOnline;
+
+    // 重新起算特别关注上线提醒的静默期。下次登录时服务端会把所有在线的关注对象一次性推
+    // 过来，不静默的话屏幕右下角会瞬间弹出一整列提醒。
+    m_starredSilenceUntilTick = ::GetTickCount() + kStarredSilenceMs;
 }
 
 // =======================================================================
@@ -601,9 +759,14 @@ static void RemoveFromTaskbar(HWND hWnd)
     }
 }
 
-void CBalloonMainPanel::CreateAndShow(HWND hMainDlg)
+void CBalloonMainPanel::EnsureCreated()
 {
-    m_hMainDlg = hMainDlg;
+    // 幂等：窗口已经建出来就直接返回。主面板是常驻窗口，进程启动时建一次，
+    // 之后每次登录都复用同一个 HWND，中途的登出只隐藏、不销毁。
+    if (IsWindow())
+    {
+        return;
+    }
 
     // 主面板不占用任务栏按钮（由系统托盘图标 / 托盘左键调出），但实现方式是
     // <u>普通窗口 + ITaskbarList::DeleteTab</u>，扩展样式必须留空。
@@ -644,6 +807,14 @@ void CBalloonMainPanel::CreateAndShow(HWND hMainDlg)
 
     // 标题栏左侧图标：程序主图标合成到标题栏底色上再挂上去（合成的缘由见
     // TitleBarIcon.h）。SetIcon 只借用位图，故位图由本类持有、析构时释放。
+    //
+    // 先释放上一次创建的位图：本方法在"登出后重新登录"这条路径上会被调用第二次，
+    // 直接覆盖 m_hTitleIcon 会让前一只位图再也没有机会被释放。
+    if (m_hTitleIcon != NULL)
+    {
+        ::DeleteObject(m_hTitleIcon);
+        m_hTitleIcon = NULL;
+    }
     m_hTitleIcon = balloonmain::CreateProgramIconBitmap(kMainPanelTitleIconSize,
                                                         kMainPanelTitleBarBg);
     if (m_hTitleIcon != NULL)
@@ -662,8 +833,34 @@ void CBalloonMainPanel::CreateAndShow(HWND hMainDlg)
     EnableDoubleClick(true);
 
     InitUi();
+
+    // 建窗阶段到此为止，窗口保持隐藏。尺寸、居中、显示都留给 ShowAfterLogin —— 
+    // 进程启动时还没有登录用户，这时候把窗口显示出来是不对的。
     ResizeClient(kMainPanelWidth, kMainPanelHeight);
     CenterWindow();
+
+    // 协调器要用本窗口句柄做提示框属主，并接收受控提示条投回来的「结束控制」。
+    m_rdCoordinator.Attach(m_hWnd);
+    // 通话协调器还要拿主面板与网络客户端：前者用来把通话结果写进聊天窗，
+    // 后者用来读静音开关与本人 userid。
+    m_callCoordinator.Attach(m_hWnd, this, m_lpFMGClient);
+
+    LOG_INFO("MainPanel::EnsureCreated: window created (hidden).");
+}
+
+void CBalloonMainPanel::ShowAfterLogin()
+{
+    if (!IsWindow())
+    {
+        LOG_ERROR("MainPanel::ShowAfterLogin called before the window was created.");
+        return;
+    }
+
+    // 用本次登录用户的资料刷新 Header（昵称 / 签名 / 头像 / 在线状态胶囊）。
+    // 建窗发生在登录之前，那时 m_UserInfo 还是空的，所以这一步必须放在这里，
+    // 不能留在 InitUi 里只做一次。
+    RefreshSelfAvatar();
+
     ShowWindow(SW_SHOW);
     UpdateWindow();
     ::SetForegroundWindow(m_hWnd);
@@ -672,7 +869,24 @@ void CBalloonMainPanel::CreateAndShow(HWND hMainDlg)
     // 都会再长出来，那一路由 OnShowWindowForTaskbar 兜住。
     RemoveFromTaskbar(m_hWnd);
 
-    LOG_INFO(_T("主面板窗口已创建并显示。"));
+    LOG_INFO("MainPanel::ShowAfterLogin: panel shown.");
+}
+
+void CBalloonMainPanel::HideForLogout()
+{
+    if (!IsWindow())
+    {
+        return;
+    }
+    ShowWindow(SW_HIDE);
+    LOG_INFO("MainPanel::HideForLogout: panel hidden.");
+}
+
+void CBalloonMainPanel::CreateAndShow()
+{
+    // 保留这个入口是为了不改动既有调用方（登录成功后的显示、命令行调试入口）。
+    EnsureCreated();
+    ShowAfterLogin();
 }
 
 // =======================================================================
@@ -743,27 +957,12 @@ void CBalloonMainPanel::InitUi()
     // 19c:Messages 页扁平 DuiTreeView,填会话。
     FillMessagesTree();
 
-    // P2:把当前登录用户字段注入到 Banner Header,让"自己"显示真名 / 真签名
-    //    /真头像字。数据源是 CFlamingoClient::OnLoginResult 已填好的
-    //    m_UserMgr.m_UserInfo。helper 测试覆盖见 MainPanelUserDataTests.cpp。
-    if (m_lpFMGClient != NULL)
-    {
-        const CBuddyInfo& me = m_lpFMGClient->m_UserMgr.m_UserInfo;
-        // m_nFace=v2 facetype；m_strCustomFaceName(CStringA) 按字节存 customface 的 UTF-8。
-        std::string customface(me.m_strCustomFaceName.GetString(),
-                               (size_t)me.m_strCustomFaceName.GetLength());
-        balloonmain::ApplyUserDataToMainPanel(
-            GetClientContent(),
-            me.m_uUserID,
-            CString(me.m_strAccount.c_str()),
-            CString(me.m_strNickName.c_str()),
-            CString(me.m_strSign.c_str()),
-            CIUSocket::GetInstance().GetRecordOnlineStatus(),   // 当前在线状态(v2 presence)
-            (int)me.m_nFace,
-            customface);
-        // 真图头像：登录时若本地缓存有该 fileid 的头像图，直接给 header 设真实位图。
-        ApplySelfAvatarBitmap((int)me.m_nFace, customface, me.m_uUserID);
-    }
+    // Header 的昵称 / 签名 / 头像 / 在线状态胶囊。数据源是 CFlamingoClient::OnLoginResult
+    // 填好的 m_UserMgr.m_UserInfo，helper 的测试覆盖见 MainPanelUserDataTests.cpp。
+    //
+    // 注意建窗发生在登录<u>之前</u>（主面板是常驻窗口，进程启动即创建），此刻 m_UserInfo
+    // 还是空的，所以这里填进去的是一份空壳；真正有内容的那一次由 ShowAfterLogin 再刷一遍。
+    RefreshSelfAvatar();
 
     LOG_INFO(_T("主面板客户区 UI 初始化完成。"));
 }
@@ -1113,7 +1312,7 @@ void CBalloonMainPanel::SyncPaneContentHeight(UINT paneId, UINT treeViewId,
 
 // =======================================================================
 // 19e:RefreshXxx 公开 API —— 用真实数据 (CUserMgr) 刷新对应 TreeView。
-//      CMainDlg / CFlamingoClient 在好友列表 / 群 / 会话数据 ready 时调用。
+//      会话控制器 / CFlamingoClient 在好友列表 / 群 / 会话数据 ready 时调用。
 // =======================================================================
 
 void CBalloonMainPanel::RefreshContacts()
@@ -1156,11 +1355,11 @@ LRESULT CBalloonMainPanel::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
     // 点关闭按钮分三种情况：
     //   1) 还需提示（IsEnableExitPrompt 为真，默认）→ 弹关闭确认对话框，由它据用户
     //      选择执行最小化 / 退出；本面板保留不动。
-    //   2) 不提示 + 记住的是"退出" → 隐藏本面板并通知 CMainDlg 收尾退出。
+    //   2) 不提示 + 记住的是"退出" → 隐藏本面板并请求退出程序。
     //   3) 不提示 + 记住的是"最小化" → 仅隐藏本面板（托盘图标常驻，可再唤出）。
     if (m_lpFMGClient != NULL && m_lpFMGClient->m_UserConfig.IsEnableExitPrompt())
     {
-        m_closePromptDlg.OpenForClose(m_hWnd, m_hMainDlg, m_lpFMGClient);
+        m_closePromptDlg.OpenForClose(m_hWnd, m_hWnd, m_lpFMGClient);
         return 0;
     }
 
@@ -1171,10 +1370,10 @@ LRESULT CBalloonMainPanel::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
     {
         ShowWindow(SW_HIDE);
     }
-    // 退出走原有路径：通知消息中枢 CMainDlg 统一收尾（CloseDialog → PostQuitMessage）。
-    if (exitWhenClose && m_hMainDlg != NULL && ::IsWindow(m_hMainDlg))
+    // 请求退出进程。本窗口自己处理 WM_CLOSE_MAINDLG（见 OnRequestAppExitMsg）。
+    if (exitWhenClose)
     {
-        ::PostMessage(m_hMainDlg, WM_CLOSE_MAINDLG, 0, 0);
+        ::PostMessage(m_hWnd, WM_CLOSE_MAINDLG, 0, 0);
     }
     return 0;
 }
@@ -1430,6 +1629,106 @@ void CBalloonMainPanel::RefreshScrollBarEdgeInset()
     }
 }
 
+void CBalloonMainPanel::AttachAppHost(balloonmain::ISessionAppHost* pAppHost)
+{
+    m_pAppHost = pAppHost;
+
+    if (!IsWindow() || pAppHost == NULL)
+    {
+        LOG_ERROR("MainPanel::AttachAppHost: window not created or host is null, "
+            "collaborators stay disabled.");
+        return;
+    }
+
+    // 会话控制器排在最前：另外两个控制器把它当作 ISessionStateHost，绑定时就要拿到它。
+    m_sessionController.Attach(m_hWnd, this, m_lpFMGClient, pAppHost);
+
+    // 自动离开控制器要在本窗口上起定时器、订阅锁屏事件，故须等窗口建好之后再启动。
+    m_autoAwayController.Attach(m_hWnd, m_lpFMGClient, &m_sessionController);
+
+    // 托盘图标挂在本窗口句柄上（系统按窗口投递托盘回调消息），同样要等窗口建好。
+    // 此刻尚未登录，图标按「离线」取灰色的那只，登录成功后再刷新。
+    m_trayController.Attach(m_hWnd, this, m_lpFMGClient, &m_sessionController);
+    m_trayController.AddIcon(_T("Flamingo未登录"));
+}
+
+void CBalloonMainPanel::NotifyMyPresenceChanged(int presence, int source)
+{
+    m_autoAwayController.OnPresenceChanged(presence, source);
+}
+
+LRESULT CBalloonMainPanel::OnPanelDestroyMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                             LPARAM /*lParam*/, BOOL& bHandled)
+{
+    // 自动离开控制器在本窗口上起了定时器、并按本窗口句柄订阅了锁屏 / 解锁事件。
+    // 系统按 HWND 记录订阅方，窗口销毁后再退订就找不到对应项了，所以必须在这里做。
+    m_autoAwayController.Shutdown();
+
+    // 托盘同理：定时器与托盘图标都挂在本窗口上，窗口没了再摘就摘不掉了，
+    // 图标会以「幽灵图标」的形式留在托盘里直到用户把鼠标移上去。
+    m_trayController.Shutdown();
+
+    bHandled = FALSE;
+    return 0;
+}
+
+LRESULT CBalloonMainPanel::OnRequestAppExitMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                               LPARAM /*lParam*/)
+{
+    if (m_pAppHost != NULL)
+    {
+        m_pAppHost->RequestAppExit();
+    }
+    return (LRESULT)1;
+}
+
+void CBalloonMainPanel::OnPanelHotKey(int nHotKeyID, UINT /*uModifiers*/, UINT /*uVirtKey*/)
+{
+    if (nHotKeyID != balloonmain::kShowPanelHotKeyId)
+    {
+        SetMsgHandled(FALSE);
+        return;
+    }
+
+    // 本面板可见就把它隐藏；否则走与「单击托盘图标」完全相同的那条路径，
+    // 这样两个入口的行为（最小化时用 SW_RESTORE 还原、随后前置并取焦点）必然一致。
+    if (::IsWindowVisible(m_hWnd))
+    {
+        ::ShowWindow(m_hWnd, SW_HIDE);
+        return;
+    }
+
+    m_trayController.OnTrayIconNotify(WM_TRAYICON_NOTIFY, NULL, WM_LBUTTONUP);
+}
+
+LRESULT CBalloonMainPanel::OnCollaboratorTimer(UINT /*uMsg*/, WPARAM wParam,
+                                               LPARAM /*lParam*/, BOOL& bHandled)
+{
+    if (m_autoAwayController.PumpTimer((UINT_PTR)wParam))
+    {
+        bHandled = TRUE;
+        return 0;
+    }
+
+    // 托盘那几个定时器（新消息闪烁、登录动画，以及 CTrayIcon 自己检测鼠标停留的那个）。
+    if (m_trayController.PumpTimer((UINT_PTR)wParam))
+    {
+        bHandled = TRUE;
+        return 0;
+    }
+
+    // 自动重连定时器。
+    if (m_sessionController.PumpTimer((UINT_PTR)wParam))
+    {
+        bHandled = TRUE;
+        return 0;
+    }
+
+    // 不是协作类的定时器，放行给后面的处理器。
+    bHandled = FALSE;
+    return 0;
+}
+
 LRESULT CBalloonMainPanel::OnScrollBarAnimTimer(UINT /*uMsg*/, WPARAM wParam,
                                                 LPARAM /*lParam*/, BOOL& bHandled)
 {
@@ -1483,7 +1782,7 @@ void CBalloonMainPanel::HideToTray()
     ShowWindow(SW_HIDE);
     LOG_INFO(_T("主面板最小化：已隐藏到托盘（工具窗口无任务栏按钮，不做真正的最小化）。"));
 
-    // 该账号首次隐藏到托盘：请消息中枢 CMainDlg 弹一次气泡告诉用户去托盘找它，
+    // 该账号首次隐藏到托盘：请主面板 弹一次气泡告诉用户去托盘找它，
     // 并把"已提示过"立刻落盘（每账号只提示一次，之后静默隐藏）。
     if (m_lpFMGClient == NULL || m_lpFMGClient->m_UserConfig.IsTrayMinimizeTipShown())
     {
@@ -1493,11 +1792,9 @@ void CBalloonMainPanel::HideToTray()
     m_lpFMGClient->m_UserConfig.SetTrayMinimizeTipShown(TRUE);
     m_lpFMGClient->SaveUserConfig();
 
-    if (m_hMainDlg != NULL && ::IsWindow(m_hMainDlg))
-    {
-        ::PostMessage(m_hMainDlg, FMG_MSG_TRAY_MINIMIZE_TIP, 0, 0);
-        LOG_INFO(_T("主面板首次隐藏到托盘：已请求 CMainDlg 弹出托盘气泡提示。"));
-    }
+    //投给本窗口自己：托盘控制器挂在本面板的消息派发链上。
+    ::PostMessage(m_hWnd, FMG_MSG_TRAY_MINIMIZE_TIP, 0, 0);
+    LOG_INFO("MainPanel: first time minimized to tray, tray balloon tip requested.");
 }
 
 LRESULT CBalloonMainPanel::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
@@ -2080,7 +2377,7 @@ void CBalloonMainPanel::OnSignatureCommitted(const CString& newText)
         CString(me.m_strSign.c_str()),
         CIUSocket::GetInstance().GetRecordOnlineStatus());   // 状态不变，沿用当前 presence
 
-    // 发送 cmd_update_profile（仅签名）。应答经 CMainDlg → OnUpdateProfileResult 回投。
+    // 发送 cmd_update_profile（仅签名）。应答经会话控制器 → OnUpdateProfileResult 回投。
     CIUSocket::GetInstance().SendUpdateSignature(utf8);
     LOG_INFO(_T("提交个性签名更新（乐观更新已生效，等待服务端应答）。"));
 }
@@ -3679,7 +3976,7 @@ void CBalloonMainPanel::SetGroupConversation(int64_t groupId, bool hasMute, bool
         FillConversationsTree();
     }
 
-    // 发协议（应答经 cmd_set_conversation 回投 CMainDlg 记日志 / 失败提示）。
+    // 发协议（应答经 cmd_set_conversation 回投本面板记日志 / 失败提示）。
     CIUSocket::GetInstance().SendSetConversation(2, groupId, hasPinned, pinned, hasMute, mute);
     LOG_INFO("会话设置(群): groupid=%lld, hasMute=%d/%d, hasPinned=%d/%d。",
              (long long)groupId, (int)hasMute, (int)mute, (int)hasPinned, (int)pinned);
@@ -3692,7 +3989,7 @@ void CBalloonMainPanel::LeaveGroup(int64_t groupId)
         return;
     }
 
-    // 发退群请求（应答经 cmd_leave_group 回投 CMainDlg 记日志 / 失败提示）。
+    // 发退群请求（应答经 cmd_leave_group 回投本面板记日志 / 失败提示）。
     CIUSocket::GetInstance().SendLeaveGroup(groupId);
 
     // 乐观清理：从群列表 / 群信息缓存 / 会话缓存移除该群。若服务端最终拒绝（如群主须先
@@ -4490,11 +4787,11 @@ void CBalloonMainPanel::ComputeConvDisplay(int ctype, int64_t cid, CString& outN
 
 void CBalloonMainPanel::PostTrayFlash(int ctype, int64_t cid, const std::string& digestUtf8)
 {
-    if (m_hMainDlg == NULL || cid <= 0)
+    if (!IsWindow() || cid <= 0)
     {
         // 这里返回等于"该闪却没闪"，且不留任何痕迹，排查时极难定位，必须记一笔。
-        LOG_WARNING("托盘闪烁请求被丢弃: ctype=%d, cid=%lld, hMainDlg=%p。",
-                    ctype, (long long)cid, m_hMainDlg);
+        LOG_WARNING("tray flash request dropped: ctype=%d, cid=%lld.",
+                    ctype, (long long)cid);
         return;
     }
 
@@ -4503,7 +4800,7 @@ void CBalloonMainPanel::PostTrayFlash(int ctype, int64_t cid, const std::string&
     COLORREF color = RGB(0, 0, 0);
     ComputeConvDisplay(ctype, cid, name, glyph, color);
 
-    // 堆分配载荷，PostMessage 给隐藏的 CMainDlg；CMainDlg 处理后 delete。CString →
+    // 堆分配载荷，PostMessage 给本窗口；托盘控制器处理后 delete。CString →
     // std::wstring：Unicode 工程下 LPCTSTR 即 const wchar_t*，可直接构造 wstring。
     TrayFlashData* pData = new TrayFlashData();
     pData->ctype       = ctype;
@@ -4512,7 +4809,8 @@ void CBalloonMainPanel::PostTrayFlash(int ctype, int64_t cid, const std::string&
     pData->preview     = (LPCTSTR)Utf8ToCStr(digestUtf8);   // 最新一条消息预览（与会话列表 digest 同口径）
     pData->avatarText  = (LPCTSTR)glyph;
     pData->avatarColor = color;
-    ::PostMessage(m_hMainDlg, FMG_MSG_TRAY_FLASH, 0, (LPARAM)pData);
+    //投给本窗口自己：托盘控制器挂在本面板的消息派发链上，堆负载由它处理后 delete。
+    ::PostMessage(m_hWnd, FMG_MSG_TRAY_FLASH, 0, (LPARAM)pData);
 
     LOG_INFO("已投递托盘闪烁请求: ctype=%d, cid=%lld, 名称=%s, 首字=%s。",
              ctype, (long long)cid, CStrToUtf8(name).c_str(),
@@ -4521,14 +4819,14 @@ void CBalloonMainPanel::PostTrayFlash(int ctype, int64_t cid, const std::string&
 
 void CBalloonMainPanel::PostTrayClear(int ctype, int64_t cid)
 {
-    if (m_hMainDlg == NULL || cid <= 0)
+    if (!IsWindow() || cid <= 0)
     {
         return;
     }
 
-    // Win32 下 lParam 容不下 64 位 cid，故堆分配 long long 传递（CMainDlg 处理后 delete）。
+    // Win32 下 lParam 容不下 64 位 cid，故堆分配 long long 传递（托盘控制器处理后 delete）。
     long long* pCid = new long long(cid);
-    ::PostMessage(m_hMainDlg, FMG_MSG_TRAY_CLEAR, (WPARAM)ctype, (LPARAM)pCid);
+    ::PostMessage(m_hWnd, FMG_MSG_TRAY_CLEAR, (WPARAM)ctype, (LPARAM)pCid);
 }
 
 void CBalloonMainPanel::OpenConversation(int ctype, int64_t cid)
@@ -4703,7 +5001,7 @@ void CBalloonMainPanel::MarkConversationRead(int ctype, int64_t cid)
     }
 
     // 会话被读 —— 无条件回投"托盘清除该会话"。这是"会话已读"的统一收口（列表点开 /
-    // 托盘单击 / 主动开聊都经此），让 CMainDlg 把它移出托盘闪烁集合。即使本地未读本就
+    // 托盘单击 / 主动开聊都经此），让托盘控制器把它移出闪烁集合。即使本地未读本就
     // 为 0、清除一个不在集合里的会话也是安全的无操作，故不依赖下面的 changed 判定。
     PostTrayClear(ctype, cid);
 
@@ -5531,7 +5829,7 @@ void CBalloonMainPanel::ShowContactContextMenu(UINT peerUserId)
         OpenSingleChat(peerUserId);
         break;
 
-    // 语音 / 视频通话：转给 CMainDlg 的通话协调器，与单聊窗头部那两个按钮走同一条路。
+    // 语音 / 视频通话：投给本窗口交通话协调器，与单聊窗头部那两个按钮走同一条路。
     case kCMenuVoice:
         StartCallWithContact(peerUserId, false);
         break;
@@ -5895,7 +6193,7 @@ void CBalloonMainPanel::DeleteConversation(int ctype, int64_t cid)
         return;
     }
 
-    // 上报服务端（应答经 cmd_set_conversation 回投 CMainDlg 记日志 / 失败提示）。
+    // 上报服务端（应答经 cmd_set_conversation 回投本面板记日志 / 失败提示）。
     CIUSocket::GetInstance().SendDeleteConversation(ctype, cid);
 
     // 乐观更新：本地移除该会话并重填列表。若服务端最终失败，下次会话同步会把它带回。
@@ -5995,7 +6293,7 @@ void CBalloonMainPanel::SetConversationMuteState(int ctype, int64_t cid, bool mu
 //
 // 主面板本身不显示群管理内容，这一组方法的职责是把 socket 层来的消息转交给
 // 群管理窗口 —— 窗口是主面板创建并持有的（m_pGroupManageWindow），而 socket
-// 层的消息只投给 CMainDlg，所以必须经这一跳。窗口没开着时直接丢弃即可，
+// 层的消息只投给本面板，所以必须经这一跳。窗口没开着时直接丢弃即可，
 // 下次打开会重新拉一遍数据。
 
 // 取当前打开着的、且绑定在指定群上的群管理窗口；没有则返回 NULL。
@@ -6606,7 +6904,7 @@ void CBalloonMainPanel::ShowSystemMenu()
     LOG_INFO("主面板系统菜单：选中项 id=%u。", chosen);
 
     // 按选中项分发。修改密码 / 系统设置 / 网络设置 / 关于 都转交给
-    // 隐藏的 CMainDlg（消息中枢）现成的命令处理；个人信息走本类自己的窗口。
+    // 隐藏的 主面板现成的命令处理；个人信息走本类自己的窗口。
     switch (chosen)
     {
     case balloonmain::kSysMenuProfile:
@@ -6624,7 +6922,7 @@ void CBalloonMainPanel::ShowSystemMenu()
         break;
 
     case balloonmain::kSysMenuNetSettings:
-        ::PostMessage(m_hMainDlg, WM_COMMAND, MAKEWPARAM(ID_MENU_NETSETTINGS, 0), 0);
+        OpenNetSettings();
         break;
 
     case balloonmain::kSysMenuAbout:
@@ -6634,10 +6932,10 @@ void CBalloonMainPanel::ShowSystemMenu()
         break;
 
     case balloonmain::kSysMenuLogout:
-        // 登出交给隐藏的 CMainDlg（消息中枢）执行，且必须用 PostMessage：登出会销毁
-        // 本面板自身、并进入登录窗的模态循环，不能在本函数的调用栈上同步做（见
-        // CMainDlg::OnLogout 与 FMG_MSG_LOGOUT 的定义）。
-        ::PostMessage(m_hMainDlg, FMG_MSG_LOGOUT, 0, 0);
+        // 登出交给本面板持有的会话控制器执行，且必须用 PostMessage：登出会重置本面板、
+        // 并进入登录窗的模态循环，不能在本函数的调用栈上同步做（见
+        // balloonmain::CSessionController::OnLogout 与 FMG_MSG_LOGOUT 的定义）。
+        ::PostMessage(m_hWnd, FMG_MSG_LOGOUT, 0, 0);
         break;
 
     case balloonmain::kSysMenuAnnounce:
@@ -6652,6 +6950,23 @@ void CBalloonMainPanel::ShowSystemMenu()
     default:
         break;
     }
+}
+
+void CBalloonMainPanel::OpenNetSettings(HWND hCloseTarget)
+{
+    // 已经开着就前置，不重复 Create —— ATL 的 CWindowImpl::Create 断言 m_hWnd 为空，
+    // 对同一个成员窗口再建一次会在 Debug 下断言、Release 下丢掉旧句柄。
+    if (m_netSettingsWindow.IsWindow())
+    {
+        m_netSettingsWindow.ShowWindow(SW_SHOW);
+        ::SetForegroundWindow(m_netSettingsWindow.m_hWnd);
+        return;
+    }
+
+    // 该参数决定关掉这个窗口时要不要请求退出进程：窗口在 WM_CLOSE 里往它投
+    // WM_CLOSE_MAINDLG（见 CBalloonNetSettingsWindow::OnCloseMsg）。从系统菜单
+    // 打开时为 NULL，关掉它只销毁它自己，与本面板开群管理窗 / 资料窗的口径一致。
+    m_netSettingsWindow.CreateAndShow(hCloseTarget);
 }
 
 void CBalloonMainPanel::ShowStatusMenu()
@@ -6719,21 +7034,18 @@ void CBalloonMainPanel::ShowStatusMenu()
         return;
     }
 
-    // 把目标 presence 投给隐藏的 CMainDlg（消息中枢），由其按当前连接 / 登录态决定：
+    // 把目标 presence 投给隐藏的 主面板，由其按当前连接 / 登录态决定：
     // 离线→GoOffline；离线态选在线/离开/勿扰→GoOnline（登录带上该 presence）；
     // 在线态改状态→SendChangePresence（cmd_change_presence）。
     //
     // 胶囊的乐观更新<u>不在这里做</u>：切换在线状态还有系统托盘右键菜单这个入口，它是
-    // 直接调 CMainDlg::OnChangeMyPresence 的。两个入口都汇到那个函数，把更新胶囊放在
+    // 直接调会话控制器的 OnChangeMyPresence 的。两个入口都汇到那个函数，把更新胶囊放在
     // 那里（ApplyPresenceOptimistic）才能保证两条路表现一致。
-    if (m_hMainDlg != NULL)
-    {
-        //lParam 是切换来源：状态菜单是用户手动选的，故传 kPresenceChangeManual。
-        //CMainDlg 据此把"当前的离开是自动切过去的"标志清掉 —— 用户手动改过状态之后，
-        //"无操作自动离开"就不该再擅自把他切回在线（见 CMainDlg::OnChangeMyPresence）。
-        ::PostMessage(m_hMainDlg, FMG_MSG_CHANGE_MY_PRESENCE, (WPARAM)targetPresence,
-                      (LPARAM)kPresenceChangeManual);
-    }
+    //lParam 是切换来源：状态菜单是用户手动选的，故传 kPresenceChangeManual。
+    //会话控制器据此把"当前的离开是自动切过去的"标志清掉 —— 用户手动改过状态之后，
+    //"无操作自动离开"就不该再擅自把他切回在线。
+    ::PostMessage(m_hWnd, FMG_MSG_CHANGE_MY_PRESENCE, (WPARAM)targetPresence,
+                  (LPARAM)kPresenceChangeManual);
 }
 
 int CBalloonMainPanel::GetPresence()
@@ -6750,7 +7062,7 @@ int CBalloonMainPanel::GetPresence()
 
 bool CBalloonMainPanel::CheckOnlineFor(int action)
 {
-    // 门禁只看 CMainDlg 推下来的连接态，与托盘图标、状态胶囊、聊天窗同源。
+    // 门禁只看会话控制器推下来的连接态，与托盘图标、状态胶囊、聊天窗同源。
     // 判定本身交给 OnlineCapability，不在本面板就地写一份。
     if (balloonmain::IsActionAllowedInState(m_connUiState, action))
     {
@@ -6800,7 +7112,7 @@ void CBalloonMainPanel::ApplyConnectionState(int state)
         header->Invalidate();   // 自带 host 守卫；只重绘 Header 控件
     }
 
-    // 逐窗转发。聊天窗的所有权在本面板，CMainDlg 够不着，故由这里代为分发。
+    // 逐窗转发。聊天窗的所有权在本面板，会话控制器够不着，故由这里代为分发。
     for (std::map<UINT, CBalloonChatWindow*>::iterator it = m_chatWindows.begin();
          it != m_chatWindows.end(); ++it)
     {
@@ -7031,7 +7343,7 @@ void CBalloonMainPanel::ShowAndActivateSelf()
 
     //最小化的窗口只有 SW_RESTORE 能还原，SW_SHOW 对它无效（表现为点了没有任何反应）；
     //隐藏到托盘的窗口则走 SW_SHOW。两种情形必须分开处理，做法与托盘菜单「打开主面板」
-    //一致（见 CMainDlg::ShowLoginOrMainPanel）。
+    //一致（见 balloonmain::CSessionController::ShowLoginOrMainPanel）。
     if (IsIconic())
     {
         ShowWindow(SW_RESTORE);
@@ -7387,26 +7699,6 @@ LRESULT CBalloonMainPanel::OnLinkOptionChangedMsg(UINT /*uMsg*/, WPARAM wParam,
     return 0;
 }
 
-LRESULT CBalloonMainPanel::OnRdStartInviteMsg(UINT /*uMsg*/, WPARAM wParam,
-                                              LPARAM lParam, BOOL& /*bHandled*/)
-{
-    // 单聊窗显示器按钮发起远程桌面：单聊窗 m_hMainDlg 为 NULL（关闭只销毁本窗、不退出
-    // 程序），故把请求经主面板转发给 CMainDlg（远程桌面协调器在那里）。wParam=对端
-    // userid，lParam=堆 std::wstring* peerName，原样转交、由 CMainDlg 处理后 delete。
-    if (m_hMainDlg != NULL && ::IsWindow(m_hMainDlg))
-    {
-        ::PostMessage(m_hMainDlg, FMG_MSG_RD_START_INVITE, wParam, lParam);
-    }
-    else
-    {
-        // 没有 MainDlg 句柄（理论上不会）：回收堆对象避免泄漏。
-        std::wstring* pName = (std::wstring*)lParam;
-        if (pName != NULL)
-            delete pName;
-    }
-    return 0;
-}
-
 void CBalloonMainPanel::StartCallWithContact(UINT peerUserId, bool video)
 {
     if (peerUserId == 0)
@@ -7420,62 +7712,22 @@ void CBalloonMainPanel::StartCallWithContact(UINT peerUserId, bool video)
     {
         return;
     }
-    if (m_hMainDlg == NULL || !::IsWindow(m_hMainDlg))
+    if (!IsWindow())
     {
-        LOG_ERROR("start call failed: CMainDlg window handle is invalid, userid=%u.",
+        LOG_ERROR("start call failed: main panel window is gone, userid=%u.",
                   peerUserId);
         return;
     }
 
-    // peerName 走堆上的 std::wstring，最终由 CMainDlg 处理后 delete —— 与单聊窗
-    // 那两个按钮传的是同一份载荷格式。
+    // peerName 走堆上的 std::wstring，最终由通话协调器处理后 delete —— 与单聊窗
+    // 那两个按钮传的是同一份载荷格式。协调器挂在本面板的消息派发链上，故投给本窗口。
     const CString peerName = ContactDisplayName(peerUserId);
     const UINT msgId = video ? FMG_MSG_CALL_START_VIDEO_INVITE : FMG_MSG_CALL_START_INVITE;
-    ::PostMessage(m_hMainDlg, msgId, (WPARAM)peerUserId,
+    ::PostMessage(m_hWnd, msgId, (WPARAM)peerUserId,
                   (LPARAM)new std::wstring(peerName.GetString()));
 
     LOG_INFO("start call from contact menu: userid=%u, video=%d.",
              peerUserId, (int)video);
-}
-
-LRESULT CBalloonMainPanel::OnCallStartInviteMsg(UINT /*uMsg*/, WPARAM wParam,
-                                                LPARAM lParam, BOOL& /*bHandled*/)
-{
-    // 单聊窗"语音通话"按钮发起呼叫：单聊窗 m_hMainDlg 为 NULL（关闭只销毁本窗、不退出
-    // 程序），故把请求经主面板转发给 CMainDlg（通话协调器在那里）。wParam=对端 userid，
-    // lParam=堆 std::wstring* peerName，原样转交、由 CMainDlg 处理后 delete。
-    // 机制同上方远程桌面转发器 OnRdStartInviteMsg。
-    if (m_hMainDlg != NULL && ::IsWindow(m_hMainDlg))
-    {
-        ::PostMessage(m_hMainDlg, FMG_MSG_CALL_START_INVITE, wParam, lParam);
-    }
-    else
-    {
-        // 没有 MainDlg 句柄（理论上不会）：回收堆对象避免泄漏。
-        std::wstring* pName = (std::wstring*)lParam;
-        if (pName != NULL)
-            delete pName;
-    }
-    return 0;
-}
-
-LRESULT CBalloonMainPanel::OnCallStartVideoInviteMsg(UINT /*uMsg*/, WPARAM wParam,
-                                                     LPARAM lParam, BOOL& /*bHandled*/)
-{
-    // 单聊窗"视频通话"按钮发起呼叫：与语音转发器同机制（两步路由），仅消息为视频发起。
-    // wParam=对端 userid，lParam=堆 std::wstring* peerName，原样转交、由 CMainDlg 处理后 delete。
-    if (m_hMainDlg != NULL && ::IsWindow(m_hMainDlg))
-    {
-        ::PostMessage(m_hMainDlg, FMG_MSG_CALL_START_VIDEO_INVITE, wParam, lParam);
-    }
-    else
-    {
-        // 没有 MainDlg 句柄（理论上不会）：回收堆对象避免泄漏。
-        std::wstring* pName = (std::wstring*)lParam;
-        if (pName != NULL)
-            delete pName;
-    }
-    return 0;
 }
 
 bool CBalloonMainPanel::ComputeSearchAnchor(RECT& outAnchorScreen, int& outPanelWidth)

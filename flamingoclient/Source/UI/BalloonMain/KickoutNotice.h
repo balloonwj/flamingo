@@ -3,11 +3,11 @@
  *
  *  被服务器踢下线（cmd_kickout 1006 推送）后，提示框该显示什么文字的<u>纯数据判定</u>。
  *
- *  单独成一个文件而不是塞进 CMainDlg，有两个理由：
+ *  单独成一个文件而不是塞进会话控制器，有两个理由：
  *    · 文案要能单测 —— 尤其"异地登录"那一条是安全提示，措辞不能被后来的改动悄悄改掉，
  *      故有一条用例逐字比对它。
  *    · 取值<u>另抄</u>一份常量，而不直接用 net/Protocol.h 的 kickout_reason。原先是因为
- *      CMainDlg 所在的编译单元包含 v1 的 net/Msg.h、无法再 include v2 的 Protocol.h
+ *      当年消息中枢所在的编译单元包含 v1 的 net/Msg.h、无法再 include v2 的 Protocol.h
  *      （两者 msg_type / error_code 枚举名冲突）；v1 协议头已于 2026-08-14 删除，该限制
  *      不复存在，现在保留另一份的理由是本模块要能被测试工程独立编译。两边取值由
  *      KickoutNoticeTests 的一组用例逐条验证，防止走岔。
@@ -68,7 +68,7 @@ const wchar_t* GetKickoutNoticeText(int reason);
 /**
  *  LoginExitKind —— 这次退出登录态是怎么发生的。
  *
- *  主动登出与被踢下线共用同一套收尾序列（CMainDlg::ReturnToLoginWindow），但在
+ *  主动登出与被踢下线共用同一套收尾序列（会话控制器的 ReturnToLoginWindow），但在
  *  "要不要顺手关掉自动登录"这件事上必须区分开，故单立一个枚举把两者传下去。
  */
 enum LoginExitKind
@@ -95,7 +95,7 @@ enum LoginExitKind
  *    kickoutReason  被踢原因，取值见 KickoutReasonValue；exitKind 为主动登出时本参数被忽略。
  *  @return 应当清掉自动登录标志返回 true；应当原样保留返回 false
  *
- *  纯判定，无副作用（真正的清除与落盘由 CMainDlg 负责）。
+ *  纯判定，无副作用（真正的清除与落盘由会话控制器负责）。
  */
 bool ShouldClearAutoLoginOnExit(int exitKind, int kickoutReason);
 

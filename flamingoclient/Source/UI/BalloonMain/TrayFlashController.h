@@ -2,14 +2,14 @@
  *  TrayFlashController.h
  *
  *  托盘"新消息闪头像"的<u>纯逻辑状态机</u>。把"当前有哪些会话未读、谁是最近一条、
- *  单击托盘该打开谁、托盘该闪哪张头像"这套状态从 CMainDlg 里抽出来，做成一个
+ *  单击托盘该打开谁、托盘该闪哪张头像"这套状态单独抽出来，做成一个
  *  不依赖 HWND、不依赖 Shell_NotifyIcon、不依赖 Flamingo 业务对象的纯类，便于
  *  被 FlamingoUnit 测试工程直接断言。真正的托盘图标切换 / 弹窗 / 开聊天窗等带
- *  窗口副作用的部分仍留在 CMainDlg 与 CBalloonMainPanel。
+ *  窗口副作用的部分留在托盘控制器与 CBalloonMainPanel。
  *
  *  与 v2 消息流的衔接：CBalloonMainPanel::OnRecvChatMessage 收到一条"应在托盘
  *  闪烁"的消息（非窗口抖动、对端发来、且对应聊天窗当前未打开）时，把会话标识与
- *  画头像所需的首字 / 底色算好，经自定义窗口消息回投给 CMainDlg，由 CMainDlg
+ *  画头像所需的首字 / 底色算好，经自定义窗口消息回投给主面板，由托盘控制器
  *  调本类 PushUnread；用户打开 / 读完某会话时调 ClearConversation。头像首字与
  *  底色由调用方（主面板，持有联系人 / 群资料）算好传入，本类只存不算 —— 故本类
  *  不依赖 monogram 渲染、调色板等任何 GDI 设施。

@@ -177,7 +177,7 @@ void CBalloonImageViewerWindow::InitUi()
 
 void CBalloonImageViewerWindow::CreateAndShow(HWND hMainDlg)
 {
-    // 调试入口（CMainDlg --imageviewer）：无父窗口、非模态。
+    // 调试入口（命令行 --imageviewer）：无父窗口、非模态。
     m_hMainDlg = hMainDlg;
     if (!BuildWindow(NULL))
     {
@@ -260,7 +260,7 @@ LRESULT CBalloonImageViewerWindow::OnKeyDownMsg(UINT /*uMsg*/, WPARAM wParam,
 LRESULT CBalloonImageViewerWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
                                               LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
-    // 调试入口下，本窗口是唯一可见窗口，关闭即退出程序，交由 CMainDlg 收尾；
+    // 调试入口下，本窗口是唯一可见窗口，关闭即请求退出程序；
     // 正式使用下 m_hMainDlg 为 NULL，仅销毁本窗口。
     if (m_hMainDlg != NULL && ::IsWindow(m_hMainDlg))
     {

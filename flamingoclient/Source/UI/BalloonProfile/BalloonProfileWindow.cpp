@@ -325,7 +325,7 @@ LRESULT CBalloonProfileWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
                                           LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
     // 调试入口（--profile）下，本窗口是唯一可见窗口，关闭即退出程序，
-    // 交由 CMainDlg 统一收尾。
+    // 请求进程退出。
     if (m_hMainDlg != NULL && ::IsWindow(m_hMainDlg))
     {
         ::PostMessage(m_hMainDlg, WM_CLOSE_MAINDLG, 0, 0);

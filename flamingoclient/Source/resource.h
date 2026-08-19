@@ -4,7 +4,6 @@
 //
 #define Flamingo_MINOR_VERSION          0
 #define Flamingo_MAJOR_VERSION          1
-#define IDD_MAINDLG                     102
 #define IDR_MAINFRAME                   128
 #define ID_MENU_LOGINSTATUS             130
 #define ID_MENU_BUDDYCHAT               132
@@ -46,16 +45,9 @@
 #define ID_LIST_MERBER                  1008
 #define ID_BTN_MSG_MGR                  1009
 #define ID_BTN_SAFE                     1010
-#define ID_BTN_FIND                     1011
-#define ID_BTN_MAIN_MENU                1012
 #define ID_BTN_STATUS                   1013
-#define ID_EDIT_SEARCH                  1014
-#define ID_PIC_HEAD                     1015
-#define ID_BTN_SIGN                     1016
 #define ID_LINK_BUDDYNAME               1017
-#define ID_STATIC_NICKNAME              1017
 #define ID_BTN_CLOSE                    1018
-#define ID_EDIT_SIGN                    1019
 #define ID_BTN_SEND                     1020
 #define ID_BTN_ARROW                    1021
 #define ID_BTN_APP_MGR                  1022
@@ -66,10 +58,8 @@
 #define ID_BTN_CHANGE_EXTERIOR          1029
 #define ID_LINK_GROUPNAME               1030
 #define ID_RICHEDIT_MSGLOG              1031
-#define ID_PIC_LOGINING                 1032
 #define ID_STATIC_GROUPCATEGORY         1033
 #define ID_RICHEDIT_RECV                1034
-#define ID_STATIC_UTalkNUM              1035
 #define ID_STATIC_NUMBER                1035
 #define ID_STATIC_MEMOTITLE             1036
 #define ID_STATIC_MARKNAME              1036
@@ -80,7 +70,6 @@
 #define ID_COMBO_FONTSIZE               1039
 #define ID_STATIC_SHENGXIAO             1039
 #define ID_BTN_UPDATE                   1040
-#define ID_STATIC_LOGINING              1041
 #define ID_STATIC_CONSTEL               1041
 #define ID_STATIC_MERBERTITLE           1042
 #define ID_STATIC_BLOOD                 1042
@@ -109,7 +98,6 @@
 #define ID_BTN_OK                       1052
 #define ID_STATIC_CITY                  1052
 #define ID_EDIT_NUMBER                  1053
-#define ID_BTN_CANCEL                   1054
 #define ID_STATIC_MOBILE                1054
 #define ID_EDIT_CREATETIME              1055
 #define ID_STATIC_OCCUPATION            1055
@@ -181,7 +169,6 @@
 #define IDC_DESTROYDURATION             1104
 #define IDC_BUTTON1                     1105
 #define IDC_BTN_MSGLOG                  1105
-#define IDC_UNLOCK                      1105
 #define IDC_CHANGEHEAD                  1105
 #define IDC_SYSHEAD                     1105
 #define IDC_STATIC_CHECKPWD             1106
@@ -195,7 +182,6 @@
 #define IDC_STATIC_VERSION              1117
 #define IDC_BUTTON3                     1122
 #define IDC_SENDFILECANCEL              1122
-#define ID_BTN_MULTI_CHAT               1122
 #define IDC_SENDFILETHUMB               1123
 #define IDC_SENDFILEDESC                1124
 #define IDC_SENDFILEPROGRESS            1125
@@ -204,7 +190,6 @@
 #define IDC_STATIC_SENDFILECANCEL       1128
 #define IDC_BUTTON2                     1133
 #define IDC_CUSTOMHEAD                  1133
-#define IDC_BTN_MAIL                    1133
 #define IDC_MUTE                        1134
 #define IDC_AUTOREPLY                   1135
 #define IDC_DESTROYAFTERREAD            1136

@@ -74,8 +74,8 @@ public:
 
     /**
      *  创建并显示单聊窗口。
-     *    hMainDlg：CMainDlg 的窗口句柄；调试入口下关闭本窗口即退出程序，
-     *              据此通知 CMainDlg。
+     *    hMainDlg：主面板的窗口句柄；调试入口下关闭本窗口即退出程序，
+     *              据此请求退出程序。
      */
     void CreateAndShow(HWND hMainDlg);
 
@@ -417,7 +417,7 @@ public:
     /**
      *  应用当前连接态：顶部提示条的显隐与文字、输入框是否只读、发送按钮是否可用。
      *
-     *  由 CMainDlg::BroadcastConnectionState 经主面板逐窗转发；用户主动离线、从离线
+     *  由会话控制器的 BroadcastConnectionState 经主面板逐窗转发；用户主动离线、从离线
      *  恢复在线、登录成功 / 失败、掉线时都会调到。
      *
      *    state：界面连接态，取值见 BalloonMain/OnlineCapability.h 的 ConnectionUiState。
@@ -514,7 +514,7 @@ private:
     void RefreshPinBanner();
 
     /**
-     *  WM_CLOSE 处理：销毁本窗口；调试入口下同时通知 CMainDlg 退出程序。
+     *  WM_CLOSE 处理：销毁本窗口；调试入口下同时请求退出程序。
      */
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
@@ -1138,7 +1138,7 @@ private:
     // 对端"正在输入"的显示状态，含过期兜底（对方掉线时 state=0 收不到，靠它自动收起）。
     balloonchatwnd::TypingPeerState m_peerTyping;
 
-    HWND    m_hMainDlg;      // CMainDlg 窗口句柄（调试入口下关闭即退出程序）
+    HWND    m_hMainDlg;      // 主面板窗口句柄（调试入口下关闭即退出程序）
     int     m_replyIndex;    // mock 自动回复轮转下标（仅 --chatwindow 调试入口下用）
     // 当前连接态（ConnectionUiState：0=在线 1=正在连接 2=离线）。由 ApplyConnectionState
     // 写入，发送路径读它做门禁。默认按"在线"起步 —— 窗口能被打开说明此刻本就在线，

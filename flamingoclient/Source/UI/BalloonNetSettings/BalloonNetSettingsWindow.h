@@ -7,7 +7,7 @@
  *  flamingo.ini 的 [server] 段。
  *
  *  与现有 CLoginSettingsDlg（旧版 MFC 网络设置框）并存：本窗口是独立的
- *  balloonui 窗口，调试期由 CMainDlg 的 --netsettings 入口直接弹出；接入
+ *  balloonui 窗口，调试期由命令行 --netsettings 入口直接弹出；接入
  *  登录流程 / 替换旧框另议。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL
@@ -51,9 +51,9 @@ public:
 
     /**
      *  创建并显示网络设置窗口（非模态、无父窗口）。
-     *    hMainDlg：CMainDlg 的窗口句柄，<u>只为 --netsettings 调试入口而设</u>：
+     *    hMainDlg：主面板的窗口句柄，<u>只为 --netsettings 调试入口而设</u>：
      *              那条路径下本窗口是唯一可见窗口，关闭它就该结束进程，故关闭时
-     *              据此向 CMainDlg 投 WM_CLOSE_MAINDLG（见 OnCloseMsg）。
+     *              据此投 WM_CLOSE_MAINDLG 请求退出程序（见 OnCloseMsg）。
      *              <b>登录后从主面板系统菜单打开时必须传 NULL</b> —— 否则关掉这个
      *              小窗会把整个程序一起带走。与主面板开群管理窗 / 资料窗同一口径。
      */
@@ -86,7 +86,7 @@ private:
     // 构建客户区控件树、接好输入框、从 ini 载入并填充表单。
     void InitUi();
 
-    // WM_CLOSE：调试入口下关闭即结束程序，转交 CMainDlg。
+    // WM_CLOSE：调试入口下关闭即请求退出程序。
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     // WM_DUI_NOTIFY：处理卡片切换 / 测试连接 / 保存 / TLS 开关。
@@ -158,7 +158,7 @@ private:
 
 private:
     CFlamingoClient* m_lpFMGClient;   // 所属客户端（消息中枢），只引用不持有
-    HWND             m_hMainDlg;      // CMainDlg 句柄（仅 --netsettings 调试入口下"关闭即退出程序"用；真实打开时为 NULL）
+    HWND             m_hMainDlg;      // 主面板句柄（仅 --netsettings 调试入口下"关闭即退出程序"用；真实打开时为 NULL）
     bool             m_modalRunning;  // DoModal 模态循环是否进行中
     INT_PTR          m_modalResult;   // DoModal 的返回值
     bool             m_testing;       // "测试连接"后台探测是否进行中（防重入）

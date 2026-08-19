@@ -169,7 +169,7 @@ struct FolderScanNotice
     }
 };
 
-//发起邀请的应答落到界面上的形态（由 CMainDlg 在 UI 线程上就地填好后转交主面板，
+//发起邀请的应答落到界面上的形态（由主面板在 UI 线程上就地填好后自行处理，
 //不单独占一条窗口消息 —— 它是 FMG_MSG_V2_FOLDER_INVITE_ACK 处理过程中的产物）。
 struct FolderBindNotice
 {

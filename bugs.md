@@ -190,7 +190,11 @@
   - 换账号登录后，`GetOrCreateChatWindow` 对同一个 userid 会直接复用上一个账号留下的那个窗口实例（`BalloonMainPanel.cpp:2096-2102` 判 `IsWindow()` 为真即返回），于是新账号看到的是旧账号的会话窗口。
   - 群资料、收藏、特别关注等缓存同理跨账号残留。多数会被新登录拉取的应答覆盖，但键值在新账号下不存在的条目（例如上个账号才加入的群）不会被覆盖掉。
 - **初步排查**：`ReturnToLoginWindow` 的注释写着「断开三条连接，再关掉所有聊天窗等子窗口」，但函数体内找不到对应实现，据推测是早期版本里由别处代劳、后来重构时丢失的。
-- **状态**：未修复。修法建议与「移除 CMainDlg」的改造合并做：给主面板加一个 `ResetForLogout()`，统一负责关闭全部子窗口、清空全部本次登录缓存、清空三棵树与三个头像位图池，由 `ReturnToLoginWindow` 在销毁/隐藏主面板之前调用。为避免日后新增成员时漏掉复位，建议把「仅本次登录期间有效」的成员集中到一个内嵌结构体里，复位即整体赋一个默认构造的实例。
+- **状态**：已修复（2026-08-18）。做法就是上面建议的那条：给 `CBalloonMainPanel` 加了 `ResetForLogout()`，由 `CMainDlg::ReturnToLoginWindow` 在 `DestroyWindow()` **之前**调用（顺序不能颠倒——该方法要按控件 id 现查三棵树来清空节点，窗口销毁后就查不到了）。它依次做四件事：销毁全部子窗口、清空三棵树的节点、释放三个头像位图池、清空本次登录期间累积的全部数据缓存。
+  - 子窗口销毁与位图池释放的代码原先只存在于析构函数里，现已抽成两个私有辅助函数 `DestroyOwnedSubWindows()` / `ReleaseAvatarBitmapPools()`，析构与 `ResetForLogout()` 共用，避免两处各写一份、日后只改了其中一份。
+  - 顺手补了同一处的三个遗留问题：析构函数原先漏销毁 `m_historyWindow`、`m_announceBoxWindow`、`m_announcePopup`、`m_starredPopup`、`m_announcePopupDlg` 这五个按值持有的顶层窗口；`CreateAndShow` 无条件覆盖 `m_hTitleIcon`，第二次登录时上一只标题栏图标位图不会被释放；`m_groupInfoRequested` 不清会让新账号的群永远不再发出资料请求。
+  - 未采用「把仅本次登录有效的成员集中到内嵌结构体」这一条，因为涉及的成员散布在 20 余处代码里，改动面远大于本次修复本身；该重构留待「移除 CMainDlg」的阶段 2 一并评估。
+  - **验证情况**：客户端 `Debug|x64` 编译通过，`FlamingoUnit` 全量用例通过（22522 个断言 / 2112 个用例，过滤 `~[live]`）。**实机复现与回归尚未做**（需要一台可登录的服务端），据推测修复有效，实机验证后再把这一句改掉。
 
 ## BUG-15　BalloonHistory 下四个源文件用的是 balloonui 的 stdafx.h，不是客户端自己那份
 
@@ -209,3 +213,61 @@
 - **影响**：目前没有观察到实际故障。调用前 `nDestBufLength` 被赋的是 `compressBound()` 的结果或调用方传入的解压后长度，取值都远小于 4GB，高 4 字节本来就是零，加上 x86 / x64 都是小端序，于是低 4 字节被覆盖后整个变量的值恰好正确。也就是说这段代码的正确性依赖「高位恰好为零」与「小端序」两个前提，任一不成立就会得到错误的长度，随后 `strDestBuf.append(pDestBuf, nDestBufLength)` 会按错误长度读取。
 - **初步排查**：正确写法是引入一个 `uLongf` 类型的局部变量承接长度，调用结束后再赋回 `nDestBufLength`，而不是对 `size_t` 变量的地址做类型强转。
 - **状态**：未修复。本次清理编译告警时刻意没有改，因为它不在告警清单里，且改动会触及运行期行为，应当单独评估并配测试后再动。
+
+## BUG-17　六条 v2 应答消息在代理窗口没有转发分支，被静默丢弃并泄漏堆负载
+
+- **发现日期**：2026-08-18（清点 `CMainDlg` 的 130 条消息映射、准备移除 CMainDlg 时发现）
+- **位置**：`flamingoclient/Source/App/FlamingoClient.cpp` 的 `CFlamingoClient::ProxyWndProc`。
+- **问题**（据实证）：客户端的网络应答要经过四层才能到达界面——网络线程 `PostMessage` 给代理窗口 → `ProxyWndProc` 按消息号 `switch` 转发给主窗口 → 主窗口的消息映射派发到处理器 → 处理器转交给具体窗口。`ProxyWndProc` 的 `switch` 末尾是 `default: return DefWindowProc(...)`（`FlamingoClient.cpp:2434` 附近），也就是说**没有 `case` 的消息会被直接丢弃**，`lParam` 上的堆对象一并泄漏。下列六条 v2 应答的 `case` 一直缺失：
+
+  | 消息 | 消息号 | 投递点 | 处理器 | 后果 |
+  | --- | --- | --- | --- | --- |
+  | `FMG_MSG_V2_CHANGE_PWD_RESULT` | `WM_USER+462` | `IUSocket.cpp:2372` | `OnV2ChangePwdResult` | 改密对话框永远等不到结果 |
+  | `FMG_MSG_V2_UPDATE_PROFILE_RESULT` | `WM_USER+463` | `IUSocket.cpp:2396` | `OnV2UpdateProfileResult` | 改签名 / 昵称失败时界面不回退；新昵称不会同步进历史登录账号列表 |
+  | `FMG_MSG_V2_CHANGE_PRESENCE_RESULT` | `WM_USER+464` | `IUSocket.cpp:2445` | `OnV2ChangePresenceResult` | 改在线状态失败时状态胶囊不回退 |
+  | `FMG_MSG_V2_SET_CONVERSATION_RESULT` | `WM_USER+485` | `IUSocket.cpp:2835` | `OnV2GroupWriteResult` | 置顶 / 免打扰设置失败时没有任何提示 |
+  | `FMG_MSG_V2_SET_MEMBER_CARD_RESULT` | `WM_USER+486` | `IUSocket.cpp:2838` | `OnV2GroupWriteResult` | 改群名片既不提示成功也不回退 |
+  | `FMG_MSG_V2_LEAVE_GROUP_RESULT` | `WM_USER+487` | `IUSocket.cpp:2842` | `OnV2GroupWriteResult` | 退群失败时没有任何提示 |
+
+  六条的消息号都落在代理窗口的收件区间 `FMG_MSG_FIRST`(`WM_USER+50`) ~ `FMG_MSG_LAST`(`WM_USER+4999`) 之内，所以能通过 `ProxyWndProc` 开头的区间判断，只是随后在 `switch` 里无人认领。四个处理器函数本身都写好了、也都登记在 `MainDlg.h` 的消息映射表里，唯独中间这一层缺失。
+- **影响**：多数操作走的是「乐观更新」——发起时界面先按成功的样子改掉，应答只负责失败回退与提示。因此这六条缺失平时看不出来，只在**服务端返回失败**时暴露：界面停在错误的状态上，用户以为改成功了。改密码是唯一一条不走乐观更新的，对话框会一直等不到结果。此外每收到一条就泄漏一个堆对象（`std::string` 或各 Response 结构体）。
+- **初步排查**：这是本仓库的一类高发缺陷——自定义消息要接满四层，最容易漏的就是代理窗口这一层，症状是「网络通了但界面不动」，不报错、不崩溃、日志里也看不出来（网络层照常打「Recv v2 xxx result」）。
+- **状态**：已修复（2026-08-18）。在 `ProxyWndProc` 里补上了这六个 `case`，转发写法与相邻的既有分支一致：`m_hCallBackWnd` 非空则 `PostMessage` 转发，为空则就地 `delete` 堆负载。三条群写操作应答的负载同为 `std::string*`，合并成一组 `case`。同时给 `FlamingoClient.cpp` 补上了 `net/AccountProtocolClient.h` 的包含（`net::ChangePasswordResponse` 此前在该文件里没有声明）。客户端 `Debug|x64` 编译通过；**实机回归尚未做**，需要一台可登录的服务端来构造失败应答。
+
+## BUG-18　CloseDialog 的诊断日志格式串比实参多一个占位符
+
+- **发现日期**：2026-08-18（准备把 CMainDlg 的通话与远程桌面子系统拆成协作类时发现）
+- **位置**：`flamingoclient/Source/App/MainDlg.cpp`，`CMainDlg::CloseDialog` 里那条 `LOG_INFO("CloseDialog teardown alive: ...")`。
+- **问题**（据实证）：格式串里有 13 个 `%d`（依次是 trayMsgTip、panel、remoteDesktop、chatWin、groupChatWin、netSet、reg、profile、contact、groupMgr、sysSet、imgViewer、history），实参只给了 12 个 —— `remoteDesktop` 这个名字没有对应的 `m_rdDlg.IsWindow()`。于是从第三个占位符起，每个名字打印的都是下一个窗口的值，最后一个 `history=%d` 读的是可变参数列表之外的内容。
+- **影响**：这条日志本身是为「退出时崩在 ATL 断言上，看日志判断哪个窗口没销毁」准备的，现在它给出的对应关系整体错位一位，照它排查会指向错误的窗口。读越界属于未定义行为，x64 下通常只是读到寄存器或栈上的残留值，暂未观察到崩溃。
+- **初步排查**：两种改法都可以 —— 去掉 `remoteDesktop=%d` 这个占位符，或者补上远程桌面窗口的实参。考虑到 BUG-19，应当选后者，把 `m_rdDlg` 一并纳入收尾与诊断。
+- **状态**：已修复（2026-08-18）。远程桌面子系统抽成 `balloonmain::CRdCoordinator` 之后，真实会话用的那几个窗口已不再是 `CMainDlg` 的成员，留在 `CMainDlg` 的只有 `--rddlg` / `--rdbar` 两个调试入口的预览对象。诊断日志相应改成 `rdDlgPreview=%d rdBarPreview=%d`，实参补齐，占位符与实参数量一致。客户端 `Debug|x64` 编译通过。
+
+## BUG-19　退出与登出都不收尾通话窗与远程桌面，窗口不销毁、屏幕仍在推流
+
+- **发现日期**：2026-08-18
+- **位置**：`flamingoclient/Source/App/MainDlg.cpp` 的 `CMainDlg::CloseDialog`（退出路径）与 `CMainDlg::ReturnToLoginWindow`（登出 / 被踢下线路径）。
+- **问题**（据实证）：
+  - `CloseDialog` 的窗口收尾清单里列了 13 个窗口对象，**没有** `m_callDlg`（通话会话窗）、`m_rdDlg`（远程桌面会话窗）、`m_rdViewer`（控制端观看窗）、`m_rdControlledBar`（被控端提示条）。这四个都是 `DuiFrameWindow` 派生，也就是 `CWindowImpl` 派生，同一函数上方的注释已经写明：不在此销毁的话，对象析构时仍持有有效 HWND，会触发 `atlwin.h:3238` 的断言。
+  - `ReturnToLoginWindow` 做了断开连接、复位文件夹传输、复位并隐藏主面板、摘托盘图标，**唯独没有**停 `m_rdStreamer`（被控端屏幕采集与推流）、关 `m_rdViewer`、隐藏 `m_rdControlledBar`，也没有停 `m_callMedia`（通话中转会话，持有摄像头与麦克风）。
+- **影响**：正在通话或正在被远程控制时退出程序，Debug 构建会撞上 ATL 断言；正在被控时登出，屏幕仍在往中转服务器推送、屏幕顶部的"正在被控制"提示条仍挂着，而用户看到的是登录窗，会认为已经断开了。正在通话时登出，采集线程与摄像头也不会释放。
+- **初步排查**：这两条路径需要的是同一件事——让通话与远程桌面各自暴露一个收尾入口。拆协作类时正好一并解决：`CRdCoordinator` / `CCallCoordinator` 各提供 `ResetForLogout()` 与 `Shutdown()`，由这两处分别调用。
+- **状态**：已修复（2026-08-18）。远程桌面的四个会话对象已经搬进 `balloonmain::CRdCoordinator`（`flamingoclient/Source/UI/BalloonMain/MainPanelRdCoordinator.h/.cpp`），由主面板按值持有。该类提供 `ResetForLogout()`，一次性完成停推流、关观看窗、隐藏受控提示条、关会话对话框、清会话 id；`CBalloonMainPanel::ResetForLogout` 在开头调用它，登出与被踢下线两条路径都会经过。退出路径由该类的析构函数兜底 —— 析构时同样调 `ResetForLogout()`，三个窗口都会被销毁，不再有 ATL 断言的风险。通话那半同理：会话对话框与中转会话已经搬进 `balloonmain::CCallCoordinator`（`flamingoclient/Source/UI/BalloonMain/MainPanelCallCoordinator.h/.cpp`），它的 `ResetForLogout()` 依次停铃声、停中转会话（释放摄像头与麦克风）、关通话窗，同样由 `CBalloonMainPanel::ResetForLogout` 调用，析构函数也调它。客户端 `Debug|x64` 编译通过；**实机回归尚未做**，需要两台能互相呼叫的客户端才能构造出「通话中登出」与「被控中登出」这两个场景。
+
+## BUG-20　通话窗的 owner 一律传 NULL，导致"关窗即停媒体会话"这条兜底路径从未生效
+
+- **发现日期**：2026-08-18
+- **位置**：`flamingoclient/Source/App/MainDlg.cpp` 里四处 `m_callDlg.OpenCalling/OpenIncoming/OpenConnected`，与 `flamingoclient/Source/Feature/Call/BalloonCallDlg.cpp` 的 `OnCloseMsg`。
+- **问题**（据实证）：`CBalloonCallDlg::EnsureWindow(HWND owner)` 把传入的 owner 记在 `m_hOwnerWnd` 里，`OnCloseMsg` 据它 `PostMessage(m_hOwnerWnd, FMG_MSG_CALL_STOP_MEDIA, 0, 0)`，让协调器停掉媒体会话。但 `CMainDlg` 的四个调用点传的都是 `NULL`，于是 `m_hOwnerWnd` 恒为 NULL，那条 `if (m_hOwnerWnd != NULL && ::IsWindow(m_hOwnerWnd))` 永不成立，消息从未被投递过，`CMainDlg::OnCallStopMedia` 是死代码。
+- **影响**：用户点通话窗标题栏的关闭按钮时，信令（取消 / 拒绝 / 挂断）照常发出，但本端的 `CallMediaSession` 不会被停。正常情况下服务端随后会推一条 ended 状态回来，`OnV2CallStateNotify` 在那里也会停一次，所以平时看不出问题；一旦这条推送没有到达（断网、服务端异常），采集线程会继续跑，摄像头指示灯一直亮着。这正是 `BalloonCallDlg.cpp` 里那段注释所要防的情况。
+- **初步排查**：把四个调用点的 owner 改成协调器自己的窗口句柄即可。远程桌面窗（`m_rdDlg.OpenCalling` / `OpenAuth`）同样传的是 NULL，需要一并确认它有没有依赖 owner 的类似路径。
+- **状态**：已修复（2026-08-18）。通话子系统抽成 `balloonmain::CCallCoordinator` 时，四个调用点的 owner 都改成了协调器绑定的宿主窗口句柄（主面板），`m_hOwnerWnd` 因此是有效值，关窗时那条 `FMG_MSG_CALL_STOP_MEDIA` 能正常投出，协调器的 `OnCallStopMedia` 也就不再是死代码。**这项改动不影响窗口层级**：`CBalloonCallDlg::EnsureWindow` 拿到 owner 之后只把它记进 `m_hOwnerWnd`，建窗仍是 `Create(NULL, ...)`，通话窗依旧是无属主的独立顶层窗口。顺带核对了远程桌面窗：`CBalloonRemoteDesktopDlg::EnsureWindow` 完全不使用传入的 owner，没有类似路径。客户端 `Debug|x64` 编译通过；实机回归尚未做。
+
+## BUG-21　m_bAlreadySendReloginRequest 从未被置真，重连定时器每次都会重发登录请求
+
+- **发现日期**：2026-08-18
+- **位置**：`flamingoclient/Source/App/MainDlg.cpp`，成员声明在 `MainDlg.h`，读取点在 `CMainDlg::OnTimer` 的重连定时器分支。
+- **问题**（据实证）：这个成员在整个仓库里只有四处出现——构造函数、`OnLoginResult` 的两个分支各赋一次 `false`，以及 `OnTimer` 里的 `if (!m_bAlreadySendReloginRequest)`。**没有任何一处把它赋为 `true`**，因此该判断恒成立。
+- **影响**：按成员名与注释（"重连过程中是否已经发送过登录请求包"）看，原本的意图是"一个重连周期内只发一次登录请求，等应答回来再决定下一步"。实际行为是重连定时器每触发一次就调一次 `m_FMGClient.Login()`，并且每次都弹一遍"您已经掉线，正在帮您重连……"的托盘气泡。重连间隔来自 `flamingo.ini`，间隔较短时会向服务端重复发送登录包。
+- **初步排查**：要么在发出 `Login()` 之后置真、并在收到登录应答（成功或失败）时复位，与现有的两处 `false` 赋值配对；要么确认这个节流已无必要，把该成员连同判断一并删除。两种改法都会改变运行期行为，须单独评估。
+- **状态**：未修复。

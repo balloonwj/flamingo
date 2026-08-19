@@ -1249,7 +1249,7 @@ LRESULT CBalloonGroupChatWindow::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
                                             LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
     // m_hMainDlg 非空（调试入口 --groupchatwindow）：本窗口是唯一可见
-    // 窗口，关闭即退出程序，交由 CMainDlg 统一收尾。
+    // 窗口，关闭即请求退出程序。
     // m_hMainDlg 为空（从主面板打开）：关闭只销毁自身。
     if (m_hMainDlg != NULL && ::IsWindow(m_hMainDlg))
     {

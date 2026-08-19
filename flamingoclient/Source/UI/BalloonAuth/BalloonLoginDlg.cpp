@@ -208,13 +208,27 @@ INT_PTR CBalloonLoginDlg::DoModal(HWND hWndParent, LPARAM /*dwInitParam*/)
     if (hWndParent != NULL)
         ::EnableWindow(hWndParent, FALSE);
 
+    // 取到 WM_QUIT 时 GetMessage 返回 0，它会被本循环消费掉。若不重新投出去，外层的
+    // 消息循环永远收不到，进程就退不出去 —— 表现为「请求退出后窗口都关了、进程还在」。
+    // 这种情形并不罕见：登录界面上拉起升级窗，升级包就绪时会请求整个进程退出，而那一刻
+    // 本模态循环正在栈上。故这里区分两种退出方式，只有前者才转投。
     MSG msg;
-    while (::GetMessage(&msg, NULL, 0, 0))
+    BOOL bGot = TRUE;
+    while ((bGot = ::GetMessage(&msg, NULL, 0, 0)) > 0)
     {
         ::TranslateMessage(&msg);
         ::DispatchMessage(&msg);
         if (!m_modalRunning)
             break;
+    }
+
+    if (bGot == 0)
+    {
+        //收到了 WM_QUIT：转投给外层消息循环，并按「未正常登录」返回，让调用方停止后续流程。
+        LOG_INFO("login dialog modal loop got WM_QUIT, re-post it for the outer loop.");
+        ::PostQuitMessage((int)msg.wParam);
+        m_modalResult  = IDCANCEL;
+        m_modalRunning = false;
     }
 
     if (hWndParent != NULL)
@@ -322,7 +336,7 @@ void CBalloonLoginDlg::UpdateBannerUserName(const CString& account)
         return;
     }
 
-    // 曾登录成功过的账号在历史登录列表里存着他的姓名（登录成功时由 CMainDlg
+    // 曾登录成功过的账号在历史登录列表里存着他的姓名（登录成功时由会话控制器
     // 写入），切到这类账号时头像下方显示姓名而不是账号；查不到账号、或存下的
     // 姓名为空（老版本客户端存的账号 / 服务器没给昵称）则仍显示账号。
     LOGIN_ACCOUNT_INFO* lpAccount = NULL;
@@ -422,7 +436,7 @@ LRESULT CBalloonLoginDlg::OnSysCommand(UINT /*uMsg*/, WPARAM wParam,
                                        LPARAM /*lParam*/, BOOL& bHandled)
 {
     // 最小化 —— 与旧 CLoginDlg 一致：隐藏窗口而非真正最小化到任务栏，
-    // 登录窗驻留托盘，由托盘菜单（CMainDlg::OnMenu_ShowMainPanel）唤出。
+    // 登录窗驻留托盘，由托盘控制器经 balloonmain::ISessionStateHost::ShowLoginOrMainPanel 唤出。
     if ((wParam & kSysCommandMask) == SC_MINIMIZE)
     {
         ShowWindow(SW_HIDE);
@@ -637,7 +651,7 @@ void CBalloonLoginDlg::OnLoginClicked()
     }
 
     //发起登录后<u>不再立即关窗</u>：窗口就地切到「登录中」，等结果回来再决定去留。
-    //成功由 CMainDlg 关掉它，失败就地显示原因、界面回到可输入。
+    //成功由会话控制器关掉它，失败就地显示原因、界面回到可输入。
     //旧写法是发起后立刻 EndModal、失败时再由 StartLogin 重建一个登录窗，两者时序
     //稍有交错就会撞上 ATL 的 m_hWnd 断言——那个隐患也随之消掉了。
     DoLogin();
@@ -723,15 +737,15 @@ void CBalloonLoginDlg::OnRegisterClicked()
     // 新账号还没登录过，不在历史账号列表里，因而也不在下拉列表里 —— 下拉列表
     // 是 PopulateAccountCombo 在窗口初始化时一次性灌进去的，之后没人再往里加。
     // 只 SetText 的话账号仅仅出现在编辑框的文本上，用户一拉下拉框就找不着它，
-    // 得等到首次登录成功、CMainDlg 把它 Add 进列表之后才补得上。这里就地补齐。
+    // 得等到首次登录成功、会话控制器把它 Add 进列表之后才补得上。这里就地补齐。
     //
     // 加完立刻落盘：账号是在本机注册出来的，用户下次启动客户端理应还能在下拉
-    // 列表里找到它，而不是非得先成功登录一次。落盘路径与 CMainDlg 读写该文件
-    // 时用的是同一个（见 CMainDlg::SaveLoginAccountListFile）。
+    // 列表里找到它，而不是非得先成功登录一次。落盘路径与会话控制器读写该文件
+    // 时用的是同一个（见会话控制器的 SaveLoginAccountListFile）。
     if (m_pLoginAccountList != NULL && m_pLoginAccountList->Find(account) == NULL)
     {
         // 密码留空、两个勾选项都不勾 —— 用户此刻还没表达过"记住密码"的意愿，
-        // 替他记下密码是越权；登录成功后 CMainDlg 会用真实采集到的信息覆盖本条。
+        // 替他记下密码是越权；登录成功后会话控制器会用真实采集到的信息覆盖本条。
         const BOOL bAdded = m_pLoginAccountList->Add(account, _T(""),
                                                      STATUS_ONLINE, FALSE, FALSE);
 
@@ -843,7 +857,7 @@ bool CBalloonLoginDlg::StartPreLoginUpdateCheck()
     SetLoginButtonChecking(true);
 
     //必须在这里把更新管理器的工作线程启起来。它平时是在 CIUSocket::Init 里启动的，
-    //而那个函数要<u>登录成功之后</u>才被调用（CMainDlg::OnLoginResult 的 LOGIN_SUCCESS
+    //而那个函数要<u>登录成功之后</u>才被调用（会话控制器 OnLoginResult 的 LOGIN_SUCCESS
     //分支）—— 此刻还没登录，线程没起，投进去的任务没人处理，界面就会一直停在
     //「正在检查更新...」再也不动。Init 可重复调用，登录成功后那次是空操作。
     update::UpdateManager::GetInstance().Init();
@@ -1210,7 +1224,7 @@ void CBalloonLoginDlg::PersistCheckStateForCurrentAccount()
 
     LOGIN_ACCOUNT_INFO* lpAccount = m_pLoginAccountList->Find(account);
     if (lpAccount == NULL)
-        return;   // 尚未在本机成功登录过的账号，入列等登录成功后再由 CMainDlg 做
+        return;   // 尚未在本机成功登录过的账号，入列等登录成功后再由会话控制器做
 
     const BOOL bRemember =
         (m_pRememberPwd != NULL && m_pRememberPwd->IsChecked()) ? TRUE : FALSE;

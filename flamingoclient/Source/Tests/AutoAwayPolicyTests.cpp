@@ -132,7 +132,7 @@ TEST_CASE("AA8 用户手动选的离开：有操作也不切回在线", "[autoaw
 TEST_CASE("AA9 自动离开期间改成了忙碌：有操作也不切回在线", "[autoaway]")
 {
     // 场景：自动离开之后，用户在手机上 / 回来顺手把状态改成了忙碌。此时调用方
-    // 会把"自动"标志清掉（见 CMainDlg::OnChangeMyPresence 的来源标志），于是这里
+    // 会把"自动"标志清掉（见会话控制器 OnChangeMyPresence 的来源标志），于是这里
     // 看到的是"忙碌 + 非自动"。即便标志因某种原因没清干净，presence 已不是离开，
     // 本函数也不会把人切回在线 —— 两道防线都验一下。
     AutoAwayInput cleared = MakeInput(presence_busy, false, 0);

@@ -7,12 +7,6 @@
 #include "..\Common\Util\Path.h"
 #include "..\Common\Util\Utils.h"
 
-CUserMgr& CUserMgr::GetInstance()
-{
-    static CUserMgr user;
-    return user;
-}
-
 CUserMgr::CUserMgr(void)
 {
 	m_hProxyWnd = NULL;
@@ -78,122 +72,6 @@ tstring CUserMgr::GetMsgLogFullName()
 	return GetPersonalFolder()+_T("ChatLog\\msg.db");
 }
 
-tstring CUserMgr::GetDefaultRecvFilePath()
-{
-	tstring strRecvFilePath;
-
-	// 优先用用户在系统设置里选的自定义接收目录；未设置时退回默认推导路径
-	// （我的文档\Flamingo\FileRecv\账号）。
-	if (!m_strCustomRecvPath.empty())
-	{
-		strRecvFilePath = m_strCustomRecvPath;
-	}
-	else
-	{
-		TCHAR szMyDocumentPath[MAX_PATH] = {0};
-		::SHGetSpecialFolderPath(NULL, szMyDocumentPath, CSIDL_MYDOCUMENTS, TRUE);
-
-		strRecvFilePath = szMyDocumentPath;
-		strRecvFilePath += _T("\\Flamingo\\FileRecv\\");
-		strRecvFilePath += m_UserInfo.m_strAccount;
-	}
-
-	if(!Hootina::CPath::IsDirectoryExist(strRecvFilePath.c_str()))
-	{
-		if(ERROR_SUCCESS != ::SHCreateDirectoryEx(NULL, strRecvFilePath.c_str(), NULL))
-			return _T("");
-	}
-
-	return strRecvFilePath;
-}
-
-void CUserMgr::SetCustomRecvFilePath(PCTSTR pszPath)
-{
-	m_strCustomRecvPath = (pszPath != NULL) ? pszPath : _T("");
-}
-
-// 判断是否需要更新群成员头像
-BOOL CUserMgr::IsNeedUpdateSessHeadPic(UINT nUTalkNum)
-{
-	tstring strFullName = GetSessHeadPicFullName(nUTalkNum);
-
-	if (!Hootina::CPath::IsFileExist(strFullName.c_str()))
-		return TRUE;
-
-	SYSTEMTIME stLastWriteTime = {0};
-	GetFileLastWriteTime(strFullName.c_str(), &stLastWriteTime);
-
-	return ((!IsToday(&stLastWriteTime)) ? TRUE : FALSE);
-}
-
-BOOL CUserMgr::IsSelf(PCTSTR pszAccountName)
-{
-	return m_UserInfo.m_strAccount==pszAccountName;
-}
-
-tstring CUserMgr::GetAccountName(UINT uAccountID) const
-{
-	if(uAccountID == m_UserInfo.m_uUserID)
-		return m_UserInfo.m_strAccount;
-
-	return _T("");
-}
-
-void CUserMgr::SetAccountName(UINT uAccountID, PCTSTR pszAccountName)
-{
-	if(pszAccountName== NULL || pszAccountName[0]==NULL)
-		return;
-
-	if(uAccountID == m_UserInfo.m_uUserID)
-	{
-		m_UserInfo.m_strAccount = pszAccountName;
-	}
-
-	CBuddyInfo* pBuddyInfo = NULL;
-
-	CGroupInfo* pGroupInfo = NULL;
-	for(size_t i=0; i<m_GroupList.m_arrGroupInfo.size(); ++i)
-	{
-		pGroupInfo = m_GroupList.m_arrGroupInfo[i];
-		for(size_t j=0; j<pGroupInfo->m_arrMember.size(); ++j)
-		{
-			pBuddyInfo = pGroupInfo->m_arrMember[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-			{
-				pBuddyInfo->m_strAccount = pszAccountName;
-				break;
-			}
-		}
-	}
-	
-}
-
-tstring CUserMgr::GetGroupName(UINT uGroupCode)
-{
-	CGroupInfo* pGroupInfo = NULL;
-	for(size_t i=0; i<m_GroupList.m_arrGroupInfo.size(); ++i)
-	{
-		pGroupInfo = m_GroupList.m_arrGroupInfo[i];
-		if(pGroupInfo->m_nGroupCode == uGroupCode)
-			return pGroupInfo->m_strName;
-	}
-
-	return _T("");
-}
-
-tstring	CUserMgr::GetGroupAccount(UINT uGroupCode)
-{
-	CGroupInfo* pGroupInfo = NULL;
-	for(size_t i=0; i<m_GroupList.m_arrGroupInfo.size(); ++i)
-	{
-		pGroupInfo = m_GroupList.m_arrGroupInfo[i];
-		if(pGroupInfo->m_nGroupCode == uGroupCode)
-			return pGroupInfo->m_strAccount;
-	}
-
-	return _T("");
-}
-
 tstring CUserMgr::GetNickName(UINT uAccountID) const
 {
 	if(uAccountID == m_UserInfo.m_uUserID)
@@ -225,113 +103,6 @@ tstring CUserMgr::GetNickName(UINT uAccountID) const
 	return _T("");
 }
 
-void CUserMgr::SetNickName(UINT uAccountID, PCTSTR pszNickName)
-{
-	if(pszNickName==NULL || pszNickName[0]==NULL)
-		return;
-	
-	if(uAccountID == m_UserInfo.m_uUserID)
-	{
-		m_UserInfo.m_strNickName = pszNickName;
-	}
-
-	CBuddyInfo* pBuddyInfo = NULL;
-
-	CGroupInfo* pGroupInfo = NULL;
-	for(size_t i=0; i<m_GroupList.m_arrGroupInfo.size(); ++i)
-	{
-		pGroupInfo = m_GroupList.m_arrGroupInfo[i];
-		for(size_t j=0; j<pGroupInfo->m_arrMember.size(); ++j)
-		{
-			pBuddyInfo = pGroupInfo->m_arrMember[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-			{
-				pBuddyInfo->m_strNickName = pszNickName;
-				break;
-			}
-		}
-	}
-
-}
-
-UINT CUserMgr::GetFaceID(UINT uAccountID) const
-{
-	if(uAccountID == m_UserInfo.m_uUserID)
-		return m_UserInfo.m_uUserID;
-	
-
-	return 0;
-}
-	
-void CUserMgr::SetFaceID(UINT uAccountID, UINT uFaceID)
-{
-	if(uAccountID == m_UserInfo.m_uUserID)
-	{
-		m_UserInfo.m_nFace = uFaceID;
-	}
-	
-	CBuddyInfo* pBuddyInfo = NULL;
-
-	CGroupInfo* pGroupInfo = NULL;
-	for(size_t i=0; i<m_GroupList.m_arrGroupInfo.size(); ++i)
-	{
-		pGroupInfo = m_GroupList.m_arrGroupInfo[i];
-		for(size_t j=0; j<pGroupInfo->m_arrMember.size(); ++j)
-		{
-			pBuddyInfo = pGroupInfo->m_arrMember[j];
-			if(uAccountID == pBuddyInfo->m_uUserID)
-			{
-				pBuddyInfo->m_nFace = uFaceID;
-				break;
-			}
-		}
-	}
-
-}
-
-PCTSTR CUserMgr::GetCustomFace(UINT uAccountID) const
-{
-	if(uAccountID == m_UserInfo.m_uUserID)
-	{
-		return m_UserInfo.m_strCustomFace.c_str();;
-	}
-	
-	return NULL;
-}
-
-
-BOOL CUserMgr::ExitGroup(UINT uGroupID)
-{
-	if(!IsGroupTarget(uGroupID))
-		return FALSE;
-
-	CGroupInfo* pGroupInfo = NULL;
-	CBuddyInfo* pBuddyInfo = NULL;
-	for(std::vector<CGroupInfo*>::iterator iter=m_GroupList.m_arrGroupInfo.begin(); iter!=m_GroupList.m_arrGroupInfo.end(); ++iter)
-	{
-		pGroupInfo =*iter;
-		if(pGroupInfo->m_nGroupCode == uGroupID)
-		{
-			DEL(pGroupInfo);
-			m_GroupList.m_arrGroupInfo.erase(iter);
-			return TRUE;
-		}
-	}
-
-	return FALSE;
-}
-
-BOOL CUserMgr::IsGroupMember(UINT uAccountID, UINT uGroupID)
-{
-	CGroupInfo* pGroupInfo = m_GroupList.GetGroupByCode(uGroupID);
-	if(pGroupInfo == NULL)
-		return FALSE;
-	CBuddyInfo* pBuddyInfo = pGroupInfo->GetMemberByUin(uAccountID);
-	if(pBuddyInfo == NULL)
-		return FALSE;
-
-	return TRUE;
-}
 
 
 void CUserMgr::SetStatus(UINT uAccountID, long nStatus)
@@ -363,14 +134,6 @@ void CUserMgr::SetStatus(UINT uAccountID, long nStatus)
 
 }
 
-long CUserMgr::GetStatus(UINT uAccountID)
-{
-	if(uAccountID == m_UserInfo.m_uUserID)
-		return m_UserInfo.m_nStatus;
-
-	return -1;
-}
-
 void CUserMgr::SetClientType(UINT uAccountID, long nNewClientType)
 {
     if (uAccountID == 0)
@@ -399,50 +162,12 @@ void CUserMgr::SetClientType(UINT uAccountID, long nNewClientType)
     }
 }
 
-long CUserMgr::GetClientType(UINT uAccountID)
-{
-    if (uAccountID == m_UserInfo.m_uUserID)
-        return m_UserInfo.m_nClientType;
-
-    return -1;
-}
-
-UINT CUserMgr::GetMsgID(UINT uAccountID) const
-{
-	if(uAccountID==0 || uAccountID==m_UserInfo.m_uUserID)
-		return 0;
-
-	return 0;
-}
-	
 BOOL CUserMgr::SetMsgID(UINT uAccountID, UINT uMsgID)
 {
 	if(uAccountID==0 || uAccountID==m_UserInfo.m_uUserID)
 		return FALSE;
 
 	return FALSE;
-}
-
-tstring CUserMgr::GetNickName(PCTSTR pszAccountName) const
-{
-	if(pszAccountName==NULL ||*pszAccountName==NULL)
-		return _T("");
-
-	if(m_UserInfo.m_strAccount == pszAccountName)
-		return m_UserInfo.m_strNickName;
-
-	return _T("");
-}
-
-UINT CUserMgr::GetFaceID(PCTSTR pszAccountName) const
-{
-	if(pszAccountName==NULL ||*pszAccountName==NULL)
-		return 0;
-
-	if(m_UserInfo.m_strAccount == pszAccountName)
-		return m_UserInfo.m_nFace;
-
-	return 0;
 }
 
 void CUserMgr::ResetToOfflineStatus()
@@ -540,50 +265,9 @@ BOOL CUserMgr::StoreRecentList()
 	return TRUE;
 }
 
-long CUserMgr::GetRecentListCount()
-{
-	return m_RecentList.GetRecentCount();
-}
-
-void CUserMgr::ClearRecentList()
-{
-	m_RecentList.Reset();
-
-	CString strRecentFilePath;
-	strRecentFilePath.Format(_T("%sUsers\\%s\\RecentSessionList.rsl"), g_szDataRoot, m_UserInfo.m_strAccount.c_str());
-	::DeleteFile(strRecentFilePath);
-}
-
-BOOL CUserMgr::DeleteRecentItem(UINT uAccountID)
-{
-	if(uAccountID == 0)
-		return FALSE;
-
-	return m_RecentList.DeleteRecentItem(uAccountID);
-}
-
 void CUserMgr::ClearUserInfo()
 {
 	//企业版说明：v1 好友列表已删除，这里只需清群组信息。原先在此逐个 delete 好友分组 /
 	//好友对象的循环随 m_BuddyList 一并移除。
 	m_GroupList.Reset();
-}
-
-long CUserMgr::GetTotalBuddyCount()
-{
-	long nCount = 0;
-	CGroupInfo* pGroupInfo = NULL;
-	for(std::vector<CGroupInfo*>::iterator iter=m_GroupList.m_arrGroupInfo.begin(); iter!=m_GroupList.m_arrGroupInfo.end(); ++iter)
-	{
-		pGroupInfo =*iter;
-		if(pGroupInfo == NULL)
-			continue;
-
-		nCount += (long)pGroupInfo->m_arrMember.size();
-	}
-	
-	//算上自己
-	nCount += 1;
-
-	return nCount;
 }

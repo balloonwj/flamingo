@@ -63,11 +63,31 @@ TEST_CASE("ABOUT4 版本号取自 ClientVersion.h，版本行由它与 Build 拼
     //       两者不一致会让用户看到“升完级关于页还是旧版本”；
     //   (2) 版本行确实是由版本号与 build 号拼出来的。
     REQUIRE(std::wstring(kAboutVersion) == std::wstring(FLAMINGO_CLIENT_VERSION_W));
-    REQUIRE(std::wstring(kAboutBuild) == std::wstring(FLAMINGO_CLIENT_BUILD_W));
+
+    // 构建时间戳每次构建都变，钉不住具体数值，只钉住它的形状：8 位年月日 + 短横 +
+    // 4 位时分。形状错了（比如月份没认出来变成 00、或者位数不对）在这里就能发现。
+    const size_t kStampDateLen = 8;    // 年月日 YYYYMMDD
+    const size_t kStampTimeLen = 4;    // 时分 HHMM
+    const size_t kStampTotalLen = kStampDateLen + 1 + kStampTimeLen;   // 中间一个短横
+    const std::wstring stamp = AboutBuildStamp();
+    REQUIRE(stamp.size() == kStampTotalLen);
+    REQUIRE(stamp[kStampDateLen] == L'-');
+    for (size_t i = 0; i < stamp.size(); ++i)
+    {
+        if (i == kStampDateLen)
+        {
+            continue;
+        }
+        REQUIRE(stamp[i] >= L'0');
+        REQUIRE(stamp[i] <= L'9');
+    }
+    // 月份必须落在 01~12：MonthFromAbbrev 没认出来时会返回 0，在这里暴露。
+    REQUIRE(stamp.substr(4, 2) >= L"01");
+    REQUIRE(stamp.substr(4, 2) <= L"12");
 
     const std::wstring expected = std::wstring(L"版本 ") + kAboutVersion
-                                + L" (Build " + kAboutBuild + L")";
-    REQUIRE(std::wstring(kAboutVersionLine) == expected);
+                                + L" (Build " + stamp + L")";
+    REQUIRE(AboutVersionLine() == expected);
 }
 
 TEST_CASE("ABOUT5 官网链接的默认 URL 是 GitHub 仓库、且带协议头", "[about]")

@@ -11,7 +11,7 @@
  *  "编辑资料"进入编辑态；"取消" / "保存"回到查看态。"保存"把编辑态控件
  *  内容回写 ProfileModel（当前仅内存暂存，提交服务器另议）。
  *
- *  调试期由 CMainDlg 的 --profile 入口直接弹出；接入主面板菜单另议。
+ *  调试期由命令行 --profile 入口直接弹出；接入主面板菜单另议。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL
  *  （Flamingo 侧由 stdafx.h 保证）。
@@ -45,8 +45,8 @@ public:
 
     /**
      *  创建并显示个人信息对话框（初始为查看态）。
-     *    hMainDlg：CMainDlg 的窗口句柄（隐藏的消息中枢）；关闭本窗口时
-     *              据此通知 CMainDlg。
+     *    hMainDlg：主面板的窗口句柄；关闭本窗口时
+     *              据此请求退出程序。
      */
     void CreateAndShow(HWND hMainDlg);
 
@@ -76,7 +76,7 @@ private:
     // "保存"按钮：把编辑态内容提交回 m_model，再切回查看态。
     void DoSave();
 
-    // WM_CLOSE：调试入口下关闭即结束程序，转交 CMainDlg。
+    // WM_CLOSE：调试入口下关闭即请求退出程序。
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     // WM_DUI_NOTIFY：处理头像点击 / 状态胶囊切换 / 底部按钮点击。
@@ -84,7 +84,7 @@ private:
 
 private:
     CFlamingoClient* m_lpFMGClient;   // 所属客户端（消息中枢），只引用不持有
-    HWND             m_hMainDlg;      // CMainDlg 句柄（隐藏的消息中枢）
+    HWND             m_hMainDlg;      // 主面板句柄
     bool             m_editMode;      // 当前是否处于编辑态（false=查看态）
     balloonprofile::ProfileModel m_model;   // 个人信息数据模型
 };

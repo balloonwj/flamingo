@@ -7,7 +7,7 @@
  *  导航项切换右侧页面。
  *
  *  本轮只做群主全功能视图、数据为本地假数据（GroupManageMockData），接入
- *  v2 群管理协议与管理员受限视图留待后续。调试期由 CMainDlg 的
+ *  v2 群管理协议与管理员受限视图留待后续。调试期由命令行
  *  --groupmanage 命令行入口直接弹出。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL
@@ -54,8 +54,8 @@ public:
 
     /**
      *  创建并显示群管理窗口（调试入口用，非模态、无父窗口）。
-     *    hMainDlg：CMainDlg 的窗口句柄（隐藏的消息中枢）；关闭本窗口时
-     *              据此通知 CMainDlg 收尾。
+     *    hMainDlg：主面板的窗口句柄；关闭本窗口时
+     *              据此请求退出程序。
      */
     void CreateAndShow(HWND hMainDlg);
 
@@ -98,7 +98,7 @@ public:
      *  成员右键菜单里的"发消息""查看资料"要打开单聊窗 / 资料窗，而这两类窗口
      *  归主面板管（窗口集合在它手里），本窗口只能发一条 FMG_MSG_OPEN_CHAT /
      *  FMG_MSG_OPEN_CONTACT_PROFILE 请它代劳。m_hMainDlg 不能用 —— 那是
-     *  CMainDlg 的句柄，且从主面板打开时传的是 NULL（表示关窗不退程序）。
+     *  主面板的句柄，且从主面板打开时传的是 NULL（表示关窗不退程序）。
      *    hPanel：主面板的 HWND；传 NULL 表示没有宿主，相关菜单项点了不生效。
      */
     void SetHostPanel(HWND hPanel) { m_hHostPanel = hPanel; }
@@ -344,7 +344,7 @@ private:
      */
     void OpenMemberPicker(int purpose);
 
-    // WM_CLOSE：调试入口下关闭即退出程序，转交 CMainDlg。
+    // WM_CLOSE：调试入口下关闭即请求退出程序。
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     // WM_DUI_NOTIFY：处理左侧导航项点击（切页）；其余通知交回基类链。
@@ -352,7 +352,7 @@ private:
 
 private:
     CFlamingoClient* m_lpFMGClient;   // 所属客户端对象（引用，不持有）
-    HWND             m_hMainDlg;      // CMainDlg 句柄（关闭时通知其收尾）
+    HWND             m_hMainDlg;      // 主面板句柄（关闭时通知其收尾）
     HWND             m_hHostPanel;    // 宿主主面板句柄；成员菜单借它打开单聊 / 资料窗。NULL=无宿主
 
     balloongroupmanage::GroupManageModel m_model;   // 群管理数据（本轮假数据）

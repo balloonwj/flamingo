@@ -8,7 +8,7 @@
  *      按钮；点击向服务端发 cmd_rd_response（accept 0 / 1）。
  *
  *  本对话框只负责"显示 + 把用户的取消 / 接受 / 拒绝转成一条 v2 远程桌面信令发出"，
- *  通过 CIUSocket 单例发送；不持有会话状态机（那在 CMainDlg 的远程桌面协调逻辑里）。
+ *  通过 CIUSocket 单例发送；不持有会话状态机（那在 balloonmain::CRdCoordinator 里）。
  *  协调器在收到服务端应答 / 推送（邀请应答 / 中转参数 / 状态变更）时调用 CloseDlg
  *  主动关闭本对话框，并在邀请应答回来后用 SetSessionId 回填会话 id（发起方取消时用）。
  *

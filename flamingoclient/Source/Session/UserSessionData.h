@@ -116,7 +116,7 @@ extern std::wstring g_strAppTitle;
 #define     FMG_MSG_V2_CHANGE_PWD_RESULT    WM_USER + 462			//v2 修改密码应答(cmd_change_password 1105)，lParam=net::ChangePasswordResponse*（处理后 delete）
 #define     FMG_MSG_V2_UPDATE_PROFILE_RESULT WM_USER + 463			//v2 更新资料应答(cmd_update_profile 1104，当前用于个性签名)，lParam=net::UpdateProfileResponse*（处理后 delete）
 #define     FMG_MSG_V2_CHANGE_PRESENCE_RESULT WM_USER + 464			//v2 修改在线状态应答(cmd_change_presence 1107)，lParam=net::ChangePresenceResponse*（处理后 delete）
-#define     FMG_MSG_CHANGE_MY_PRESENCE      WM_USER + 465			//主面板状态菜单→消息中枢的"切换我的在线状态"请求，wParam=v2 presence(presence_type)，lParam=切换来源(见 PresenceChangeSource，0=手动)；由 CMainDlg 决定 GoOffline/GoOnline/SendChangePresence
+#define     FMG_MSG_CHANGE_MY_PRESENCE      WM_USER + 465			//主面板状态菜单 / 托盘菜单发出的"切换我的在线状态"请求，wParam=v2 presence(presence_type)，lParam=切换来源(见 PresenceChangeSource，0=手动)；由会话控制器决定 GoOffline/GoOnline/SendChangePresence
 #define     FMG_MSG_V2_CHANGE_AVATAR_RESULT WM_USER + 466			//v2 修改头像应答(cmd_change_avatar 1106，应答体为通用{code,msg})，lParam=net::UpdateProfileResponse*（处理后 delete）
 #define     FMG_MSG_V2_AVATAR_UPLOAD_RESULT WM_USER + 467			//v2 头像图片上传结果(走 imgserver，仅上传不发消息)，lParam=net::AvatarUploadResult*（处理后 delete）
 #define     FMG_MSG_V2_AVATAR_DOWNLOAD_RESULT WM_USER + 469			//v2 头像图片下载结果(按 fileid 拉联系人头像到本地缓存)，lParam=net::AvatarDownloadResult*（处理后 delete）
@@ -125,15 +125,15 @@ extern std::wstring g_strAppTitle;
 // 注意：本文件的 WM_USER 偏移<u>不是一条连续序列</u> —— 下面还有好几段各自从头编号的
 // 消息块（v2 图片 / 文件传输、主面板请求、托盘等），偏移区间彼此重叠。新增消息时
 // 务必在<u>全文件</u>范围内查重（如 grep "WM_USER + <号>"），不能只看邻近几行顺着往下取，
-// 否则会与别处同号：同号消息会被 CMainDlg 消息映射里靠前的那个处理器抢走，把别人的
+// 否则会与别处同号：同号消息会被消息映射里靠前的那个处理器抢走，把别人的
 // lParam 当成自己的结构体解读，既弹错提示又按错误类型 delete。
 // 下面三条取 521 起（当前全文件最大号为 520），确保不与任何一段重叠。
-#define     FMG_MSG_LOGOUT                  WM_USER + 521			//托盘菜单/主面板系统菜单→消息中枢的"登出"请求，wParam=0，lParam=0；由 CMainDlg::OnLogout 二次确认后断开连接、销毁主面板并回登录界面。必须 PostMessage 而非 SendMessage：登出要销毁主面板、并进入登录窗的模态循环，不能在菜单分发的调用栈上做
+#define     FMG_MSG_LOGOUT                  WM_USER + 521			//托盘菜单 / 主面板系统菜单发出的"登出"请求，wParam=0，lParam=0；由会话控制器二次确认后断开连接、重置主面板并回登录界面。必须 PostMessage 而非 SendMessage：登出要销毁主面板、并进入登录窗的模态循环，不能在菜单分发的调用栈上做
 #define     FMG_MSG_V2_RECALL_RESULT        WM_USER + 522			//v2 撤回消息应答(cmd_recall_message 1508)，lParam=net::RecallMessageResponse*（处理后 delete）；code 非 0 时据 error_code 提示失败原因
 #define     FMG_MSG_V2_MESSAGE_RECALLED     WM_USER + 523			//v2 推送：某条消息被撤回(cmd_message_recalled_notify 1509)，lParam=net::MessageRecalledNotify*（处理后 delete）；撤回者本人也会收到，据 operator 区分提示文案
 #define     FMG_MSG_V2_CALL_SWITCH_MEDIA_RESULT WM_USER + 525		//v2 切换通话媒体类型应答(cmd_call_switch_media 1708)，lParam=net::CallSwitchMediaResponse*（处理后 delete）；code 非 0 时据 error_code 提示失败原因
 #define     FMG_MSG_V2_CALL_MEDIA_CHANGED   WM_USER + 526		//v2 推送：通话媒体类型已变更(cmd_call_media_changed_notify 1709)，lParam=net::CallMediaChangedNotify*（处理后 delete）；双方含发起者均收到，据 operator 决定本端是否自动开摄像头
-#define     FMG_MSG_CALL_STOP_MEDIA         WM_USER + 528		//通话窗→消息中枢：请求停掉音视频媒体会话，wParam=0，lParam=0。用户点通话窗标题栏关闭按钮时发出——通话窗不持有 CallMediaSession（持有者是 CMainDlg），若只销毁窗口不停会话，采集线程会继续跑、摄像头灯一直亮着。本消息为窗口间投递，不经 ProxyWndProc
+#define     FMG_MSG_CALL_STOP_MEDIA         WM_USER + 528		//通话窗发给主面板：请求停掉音视频媒体会话，wParam=0，lParam=0。用户点通话窗标题栏关闭按钮时发出——通话窗不持有 CallMediaSession（持有者是通话协调器），若只销毁窗口不停会话，采集线程会继续跑、摄像头灯一直亮着。本消息为窗口间投递，不经 ProxyWndProc
 #define     FMG_MSG_V2_CONVERSATION_CHANGED WM_USER + 524			//v2 推送：会话属性多端同步(cmd_conversation_changed_notify 1514)，lParam=net::ConversationChangedNotify*（处理后 delete）；带的是改完之后的完整状态(置顶/免打扰/删除)，发起改动的那一端自己也会收到
 
 // ---- 群管理（cmd 1305~1322）----
@@ -157,8 +157,8 @@ extern std::wstring g_strAppTitle;
 //故群管理窗只能请它代开，不能自己 new 一个。
 #define     FMG_MSG_OPEN_GROUP_AVATAR_DLG   WM_USER + 541			//群管理窗→主面板：请求打开「修改群头像」对话框，lParam=堆 balloongroupmanage::GroupAvatarDlgRequest*（主面板处理后 delete）
 #define     FMG_MSG_V2_SET_FAVORITE_RESULT  WM_USER + 542			//v2 收藏设置应答(cmd_set_favorite 1215，加入/取消收藏)，lParam=堆 net::SetFavoriteResult*（UI 处理后 delete）；失败时主面板据其中的 ctype/cid/favorite 回滚乐观更新
-#define     FMG_MSG_V2_KICKOUT              WM_USER + 543			//v2 推送：本连接被服务器踢下线(cmd_kickout 1006)，wParam=被踢原因(见 BalloonMain/KickoutNotice.h 的 KickoutReasonValue，即协议 kickout_reason)，lParam=0，无堆负载。由 CMainDlg::OnV2Kickout 进入离线态（停自动重连）并弹托盘气泡
-#define     FMG_MSG_NETWORK_RESUMED         WM_USER + 544			//本机网络由断开恢复（CCheckNetworkStatusTask 探测 → CFlamingoClient::OnNetworkStatusChange 转投），wParam=0，lParam=0，无堆负载。由 CMainDlg::OnNetworkResumed 过一遍自动重连守卫再决定要不要连回服务器——主动离线 / 被踢下线时不连
+#define     FMG_MSG_V2_KICKOUT              WM_USER + 543			//v2 推送：本连接被服务器踢下线(cmd_kickout 1006)，wParam=被踢原因(见 BalloonMain/KickoutNotice.h 的 KickoutReasonValue，即协议 kickout_reason)，lParam=0，无堆负载。由会话控制器进入离线态（停自动重连）并弹托盘气泡
+#define     FMG_MSG_NETWORK_RESUMED         WM_USER + 544			//本机网络由断开恢复（CCheckNetworkStatusTask 探测 → CFlamingoClient::OnNetworkStatusChange 转投），wParam=0，lParam=0，无堆负载。由会话控制器过一遍自动重连守卫再决定要不要连回服务器——主动离线 / 被踢下线时不连
 #define     FMG_MSG_V2_PIN_RESULT           WM_USER + 545			//v2 Pin 消息应答(cmd_pin_message 1518)，lParam=堆 net::PinMessageResponse*（UI 处理后 delete）；只在失败时据 code 提示原因（无权取消 / 消息已撤回），成功一律等推送再改界面
 #define     FMG_MSG_V2_MESSAGE_PINNED       WM_USER + 546			//v2 推送：某条消息被 Pin / 取消 Pin(cmd_message_pinned_notify 1519)，lParam=net::MessagePinnedNotify*（处理后 delete）；Pin 是会话内共享状态，单聊推双方、群聊推全体成员，操作者本人也会收到
 #define     FMG_MSG_V2_PINNED_MESSAGES      WM_USER + 547			//v2 被 Pin 消息全集应答(cmd_get_pinned_messages 1520)，lParam=net::PinnedMessagesResult*（处理后 delete）；带完整消息体，UI 据它补齐本地库缺的行并对账，m_total 大于返回条数说明被截断
@@ -214,7 +214,7 @@ extern std::wstring g_strAppTitle;
 // enum presence_type 逐条同值（0 离线 / 1 在线 / 2 离开 / 3 勿扰），改动那边时
 // 必须同步这里。
 //
-// 这里另立一份命名常量而不是直接用 presence_type，原本是因为 CMainDlg 所在的
+// 这里另立一份命名常量而不是直接用 presence_type，原本是因为消息中枢所在的
 // 编译单元包含 v1 的 net/Msg.h，而它与 net/Protocol.h 有同名枚举、不能同时包含；
 // v1 协议头已于 2026-08-14 删除，那条限制不复存在。现在保留它的理由变成：本头
 // 文件被大量 UI 侧文件包含，不宜为四个状态值把整个协议头拖进来。要换成直接用
@@ -229,14 +229,14 @@ enum MyPresenceValue
 
 // FMG_MSG_CHANGE_MY_PRESENCE 的 lParam 取值：本次状态切换是<u>谁</u>发起的。
 //
-// CMainDlg::OnChangeMyPresence 据它维护"当前这个离开是不是自动切过去的"标志：
+// 会话控制器据它维护"当前这个离开是不是自动切过去的"标志：
 // 手动改状态一律把标志清掉，于是"自动离开期间用户自己切成忙碌"之后回到电脑前
 // 不会被擅自切回在线。取值 0 表示手动是刻意的 —— 主面板状态菜单与托盘菜单两个
 // 既有入口传的都是 0，语义天然正确，加这个字段时一行都不用改。
 enum PresenceChangeSource
 {
     kPresenceChangeManual = 0,   // 用户手动选的（状态菜单 / 托盘菜单）
-    kPresenceChangeAuto   = 1,   // "无操作自动离开"功能自动切的（见 CMainDlg::CheckAutoAway）
+    kPresenceChangeAuto   = 1,   // "无操作自动离开"功能自动切的（见 balloonmain::CAutoAwayController）
 };
 //——v2 聊天图片发送相关，lParam 携带堆上 net:: 结构体指针，由 UI 线程处理后 delete——
 #define     FMG_MSG_V2_IMAGE_SEND_PROGRESS  WM_USER + 470			//v2 发图上传进度，lParam=net::ImageSendProgress*（按 clientmsgid 更新"发送中"气泡进度）
@@ -285,7 +285,7 @@ enum PresenceChangeSource
 //（FMG_MSG_V2_USERINFO_CHANGED、FMG_MSG_V2_IMAGE_DOWNLOAD_RESULT、
 // FMG_MSG_V2_FILE_SEND_PROGRESS、FMG_MSG_V2_SET_REMARK_RESULT）。当时没出问题，
 //全靠「收件窗口不同」这个没有任何机制保证的前提：这四条由某个窗口直接
-//PostMessage 给主面板，那四条经代理窗转给 CMainDlg。整改一律搬走本段这一条、
+//PostMessage 给主面板，那四条也经代理窗转给主面板。整改一律搬走本段这一条、
 //保留网络应答那一条，因为本段不经代理窗、影响面最小。
 //号段规约见开发约定文档「UI 约定」第 6 条，重号由
 //Source\Tests\MessageIdRegistryTests.cpp 的守卫用例把关。
@@ -309,10 +309,10 @@ enum PresenceChangeSource
 //空闲的 498。教训：取新号不能只看"当前最大号"，还要确认这个号没被别人占着 —— 本文件里
 //号段并非按顺序排列，光看末尾很容易挑中一个中间已被用掉的号。
 #define     FMG_MSG_LINK_OPTION_CHANGED     WM_USER + 498			//系统设置里改了"自动识别链接"开关，wParam=1 开 / 0 关。主面板据此更新进程级开关，并让已打开的单聊 / 群聊窗重新测量重绘（无 lParam）
-//——托盘"新消息闪头像"相关（v2）。主面板 → 隐藏的 CMainDlg（持有托盘图标）——
-#define     FMG_MSG_TRAY_FLASH              WM_USER + 475			//有应在托盘闪烁的新消息（非窗口抖动、对端发来、对应聊天窗当前未打开），lParam=堆上 TrayFlashData*（CMainDlg 处理后 delete）
-#define     FMG_MSG_TRAY_CLEAR              WM_USER + 476			//某会话已读：从托盘闪烁集合移除该会话，wParam=ctype（1单聊 2群聊），lParam=堆上 long long* cid（CMainDlg 处理后 delete）
-#define     FMG_MSG_TRAY_MINIMIZE_TIP       WM_USER + 496			//主面板刚最小化隐藏到托盘：请 CMainDlg 弹一次"已最小化到托盘"气泡提示（无参；"是否首次"由主面板据 CUserConfig 判定，CMainDlg 收到就弹）
+//——托盘"新消息闪头像"相关（v2）。主面板投给自己，由它持有的托盘控制器处理——
+#define     FMG_MSG_TRAY_FLASH              WM_USER + 475			//有应在托盘闪烁的新消息（非窗口抖动、对端发来、对应聊天窗当前未打开），lParam=堆上 TrayFlashData*（托盘控制器处理后 delete）
+#define     FMG_MSG_TRAY_CLEAR              WM_USER + 476			//某会话已读：从托盘闪烁集合移除该会话，wParam=ctype（1单聊 2群聊），lParam=堆上 long long* cid（托盘控制器处理后 delete）
+#define     FMG_MSG_TRAY_MINIMIZE_TIP       WM_USER + 496			//主面板刚最小化隐藏到托盘：请托盘控制器弹一次"已最小化到托盘"气泡提示（无参；"是否首次"由主面板据 CUserConfig 判定，收到就弹）
 
 
 // 闸门下界。2026-08-16 由 WM_USER + 1 上抬到 WM_USER + 50：本文件里最小的一条
@@ -336,7 +336,7 @@ enum PresenceChangeSource
 // case，还必须确认号段没有越过 FMG_MSG_LAST</u>，必要时把它一起抬高。
 //
 // 这个坑非常隐蔽，已经踩中过：越界时代码看着处处都对（ProxyWndProc 的转发 case 写了、
-// CMainDlg 的消息映射加了、收帧日志也照常打出来），消息却在 ProxyWndProc 门口被
+// 消息映射加了、收帧日志也照常打出来），消息却在 ProxyWndProc 门口被
 // DefWindowProc 静默丢掉，连 switch 都进不去，lParam 上的堆对象一并泄漏，且<u>全程
 // 没有任何报错</u>——排查时极易误判成别的原因。
 //
@@ -369,7 +369,7 @@ struct ConvSendBumpData
     }
 };
 
-//托盘"新消息闪头像"载荷（FMG_MSG_TRAY_FLASH 的 lParam，堆分配，CMainDlg 处理后 delete）。
+//托盘"新消息闪头像"载荷（FMG_MSG_TRAY_FLASH 的 lParam，堆分配，托盘控制器处理后 delete）。
 //由 CBalloonMainPanel::OnRecvChatMessage 在"该消息应在托盘闪烁"时填好回投：承载会话
 //标识与画 monogram 头像所需的首字 / 底色（与会话列表头像同口径，保证两处颜色一致）。
 //会话用 (ctype,cid) 唯一标识：单聊 ctype=1、cid=对端userid；群聊 ctype=2、cid=群id。

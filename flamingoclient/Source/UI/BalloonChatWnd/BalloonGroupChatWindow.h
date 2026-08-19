@@ -74,9 +74,9 @@ public:
 
     /**
      *  创建并显示群聊窗口。
-     *    hMainDlg：CMainDlg 的窗口句柄；为 NULL 时关闭本窗口只销毁自身、
+     *    hMainDlg：主面板的窗口句柄；为 NULL 时关闭本窗口只销毁自身、
      *              不退出程序（从主面板打开时如此）；非 NULL 时（调试
-     *              入口）关闭即通知 CMainDlg 退出程序。
+     *              入口）关闭即请求退出程序。
      */
     void CreateAndShow(HWND hMainDlg);
 
@@ -497,7 +497,7 @@ public:
 
 private:
     /**
-     *  WM_CLOSE 处理：销毁本窗口；m_hMainDlg 非空时同时通知 CMainDlg
+     *  WM_CLOSE 处理：销毁本窗口；m_hMainDlg 非空时同时请求
      *  退出程序。
      */
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
@@ -978,7 +978,7 @@ private:
     // 不让输入框自己跟着滚。
     static const UINT kMentionWheelMsg = WM_APP + 0x56;
 
-    HWND    m_hMainDlg;     // CMainDlg 窗口句柄（为 NULL 时关闭不退出程序）
+    HWND    m_hMainDlg;     // 主面板窗口句柄（为 NULL 时关闭不退出程序）
     int     m_replyIndex;   // mock 自动回复轮转下标（仅无群 id 的调试入口下用）
     // 当前连接态（ConnectionUiState：0=在线 1=正在连接 2=离线）。由 ApplyConnectionState
     // 写入，发送路径读它做门禁。默认按"在线"起步 —— 窗口能被打开说明此刻本就在线。

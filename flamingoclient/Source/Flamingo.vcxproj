@@ -96,8 +96,8 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <PreBuildEvent>
-      <Command>
-      </Command>
+      <Command>copy /b "$(ProjectDir)UI\BalloonMain\AboutDlgModel.cpp"+,, "$(ProjectDir)UI\BalloonMain\AboutDlgModel.cpp" &gt;nul</Command>
+      <Message>更新关于页构建时间戳所在源文件的时间，使其随本次构建重新编译</Message>
     </PreBuildEvent>
     <Midl>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -138,6 +138,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <PreBuildEvent>
+      <Command>copy /b "$(ProjectDir)UI\BalloonMain\AboutDlgModel.cpp"+,, "$(ProjectDir)UI\BalloonMain\AboutDlgModel.cpp" &gt;nul</Command>
+      <Message>更新关于页构建时间戳所在源文件的时间，使其随本次构建重新编译</Message>
+    </PreBuildEvent>
     <Midl>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MkTypLibCompatible>false</MkTypLibCompatible>
@@ -180,8 +184,8 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <PreBuildEvent>
-      <Command>
-      </Command>
+      <Command>copy /b "$(ProjectDir)UI\BalloonMain\AboutDlgModel.cpp"+,, "$(ProjectDir)UI\BalloonMain\AboutDlgModel.cpp" &gt;nul</Command>
+      <Message>更新关于页构建时间戳所在源文件的时间，使其随本次构建重新编译</Message>
     </PreBuildEvent>
     <Midl>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
@@ -222,6 +226,10 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <PreBuildEvent>
+      <Command>copy /b "$(ProjectDir)UI\BalloonMain\AboutDlgModel.cpp"+,, "$(ProjectDir)UI\BalloonMain\AboutDlgModel.cpp" &gt;nul</Command>
+      <Message>更新关于页构建时间戳所在源文件的时间，使其随本次构建重新编译</Message>
+    </PreBuildEvent>
     <Midl>
       <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <MkTypLibCompatible>false</MkTypLibCompatible>
@@ -273,7 +281,6 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Common\Util\Buffer.cpp" />
-    <ClCompile Include="App\CascadeWinManager.cpp" />
     <ClCompile Include="Threading\CheckNetworkStatusTask.cpp" />
     <ClCompile Include="App\Crash.cpp" />
     <ClCompile Include="Common\Util\EncodeUtil.cpp" />
@@ -292,7 +299,8 @@
     <ClCompile Include="Session\LoginAccountList.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="App\MainDlg.cpp" />
+    <ClCompile Include="App\DebugEntryPoints.cpp" />
+    <ClCompile Include="App\AppShell.cpp" />
     <ClCompile Include="Common\Util\MD5.cpp" />
     <ClCompile Include="Common\Util\MD5Sum.cpp" />
     <ClCompile Include="Common\Log\MessageLogger.cpp" />
@@ -567,7 +575,6 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\BalloonClosePromptDlg.cpp" />
-    <ClCompile Include="UI\BalloonMain\BalloonContactTreeAdapter.cpp" />
     <ClCompile Include="UI\BalloonMain\BalloonGroupInfoDlg.cpp" />
     <ClCompile Include="UI\BalloonMain\BalloonGroupInfoLayout.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
@@ -577,6 +584,12 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="UI\BalloonMain\BalloonMainPanel.cpp" />
+    <ClCompile Include="UI\BalloonMain\BalloonMainPanelNetHandlers.cpp" />
+    <ClCompile Include="UI\BalloonMain\MainPanelRdCoordinator.cpp" />
+    <ClCompile Include="UI\BalloonMain\MainPanelCallCoordinator.cpp" />
+    <ClCompile Include="UI\BalloonMain\MainPanelTrayController.cpp" />
+    <ClCompile Include="UI\BalloonMain\MainPanelAutoAwayController.cpp" />
+    <ClCompile Include="UI\BalloonMain\MainPanelSessionController.cpp" />
     <ClCompile Include="UI\BalloonMain\BalloonModifyAvatarDlg.cpp" />
     <ClCompile Include="UI\BalloonMain\BalloonProfileDlg.cpp" />
     <ClCompile Include="UI\BalloonMain\BalloonProfileLayout.cpp">
@@ -1071,7 +1084,6 @@
     <ClInclude Include="net\FramePayload.h" />
     <ClInclude Include="net\HandshakeRunner.h" />
     <ClInclude Include="Common\Util\Buffer.h" />
-    <ClInclude Include="App\CascadeWinManager.h" />
     <ClInclude Include="Threading\CheckNetworkStatusTask.h" />
     <ClInclude Include="Common\Util\ClipboardText.h" />
     <ClInclude Include="App\CustomMsgDef.h" />
@@ -1088,7 +1100,8 @@
     <ClInclude Include="Common\Log\IULog.h" />
     <ClInclude Include="App\Crash.h" />
     <ClInclude Include="Session\LoginAccountList.h" />
-    <ClInclude Include="App\MainDlg.h" />
+    <ClInclude Include="App\DebugEntryPoints.h" />
+    <ClInclude Include="App\AppShell.h" />
     <ClInclude Include="Common\Util\MD5.h" />
     <ClInclude Include="Common\Util\MD5Core.h" />
     <ClInclude Include="Common\Log\MessageLogger.h" />
@@ -1223,12 +1236,17 @@
     <ClInclude Include="UI\BalloonMain\BalloonChangePwdDlg.h" />
     <ClInclude Include="UI\BalloonMain\BalloonChangePwdValidate.h" />
     <ClInclude Include="UI\BalloonMain\BalloonClosePromptDlg.h" />
-    <ClInclude Include="UI\BalloonMain\BalloonContactTreeAdapter.h" />
     <ClInclude Include="UI\BalloonMain\BalloonGroupInfoDlg.h" />
     <ClInclude Include="UI\BalloonMain\BalloonGroupInfoLayout.h" />
     <ClInclude Include="UI\BalloonMain\BalloonKickoutDlg.h" />
     <ClInclude Include="UI\BalloonMain\BalloonMainLayout.h" />
     <ClInclude Include="UI\BalloonMain\BalloonMainPanel.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelRdCoordinator.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelCallCoordinator.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelTrayController.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelSessionHost.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelAutoAwayController.h" />
+    <ClInclude Include="UI\BalloonMain\MainPanelSessionController.h" />
     <ClInclude Include="UI\BalloonMain\BalloonModifyAvatarDlg.h" />
     <ClInclude Include="UI\BalloonMain\BalloonProfileDlg.h" />
     <ClInclude Include="UI\BalloonMain\BalloonProfileLayout.h" />

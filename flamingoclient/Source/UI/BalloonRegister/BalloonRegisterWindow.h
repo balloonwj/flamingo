@@ -19,7 +19,7 @@
  *  于找回密码）。
  *
  *  本窗口是注册功能唯一的实现：旧版 MFC 注册框 CRegisterDialog 已于
- *  2026-08-14 随 v1 清理删除。它是独立的 balloonui 窗口，调试期由 CMainDlg 的
+ *  2026-08-14 随 v1 清理删除。它是独立的 balloonui 窗口，调试期由命令行
  *  --register 入口直接弹出；接入登录流程另议。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL
@@ -97,8 +97,8 @@ public:
 
     /**
      *  创建并显示注册窗口。
-     *    hMainDlg：CMainDlg 的窗口句柄（隐藏的消息中枢）；关闭本窗口时
-     *              据此通知 CMainDlg 退出（调试入口语义）。
+     *    hMainDlg：主面板的窗口句柄；关闭本窗口时
+     *              据此请求退出程序（调试入口语义）。
      */
     void CreateAndShow(HWND hMainDlg);
 
@@ -172,7 +172,7 @@ private:
     // 把当前步表单各输入框内容提交回 m_model（供校验 / 步骤切换用）。
     void CommitFormToModel();
 
-    // WM_CLOSE：调试入口下关闭即结束程序，转交 CMainDlg。
+    // WM_CLOSE：调试入口下关闭即请求退出程序。
     LRESULT OnCloseMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     // WM_DUI_NOTIFY：处理返回 / 提交注册 / 立即登录等按钮点击。
@@ -209,7 +209,7 @@ private:
 
 private:
     CFlamingoClient* m_lpFMGClient;   // 所属客户端（消息中枢），只引用不持有
-    HWND             m_hMainDlg;      // CMainDlg 句柄（隐藏的消息中枢）
+    HWND             m_hMainDlg;      // 主面板句柄
     HBITMAP          m_hBgBitmap;     // 窗体 9-grid 背景图（橙 banner + 白），本类持有
     bool             m_modalRunning;  // DoModal 模态循环是否进行中
     INT_PTR          m_modalResult;   // DoModal 的返回值

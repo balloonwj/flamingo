@@ -96,9 +96,9 @@ public:
     /**
      *  登记主窗口句柄。升级包安装前必须让主程序先退出，本类据此句柄请它关闭。
      *
-     *    hWnd： CMainDlg 的窗口句柄；传 NULL 表示清除
+     *    hWnd： 主面板的窗口句柄；传 NULL 表示清除
      *
-     *  由 CMainDlg 在自己创建完成后调一次。不登记的话，用户点「立即重启并安装」时
+     *  由进程外壳在主面板创建完成后调一次。不登记的话，用户点「立即重启并安装」时
      *  更新器会因为等不到主进程退出而超时放弃 —— 不会损坏任何文件，但升级做不成。
      */
     void SetHostWindow(HWND hWnd);
@@ -109,7 +109,7 @@ public:
         //没有登记被挡窗口
         kGatedNone      = 0,
         //登录窗。关掉升级窗要放行那次被拦下的登录；退出程序时交给登录窗自己收尾，
-        //由 CMainDlg::StartLogin 在它的模态循环结束后统一处理。
+        //由会话控制器的 StartLogin 在它的模态循环结束后统一处理。
         kGatedLoginDlg  = 1,
         //关于框一类的模态对话框。关掉升级窗只需恢复它可用；退出程序前必须先请它关闭，
         //否则它的模态循环仍在运行，主窗口在其下被销毁会出问题。
@@ -215,7 +215,7 @@ private:
      *
      *  这两条路<u>不能混用</u>：
      *    · 登录前（被挡的是登录窗）——把 WM_CLOSE 投给登录窗，让它自己退出模态循环。
-     *      随后 CMainDlg::StartLogin 见 DoModal 返回非 IDOK，会统一调一次 CloseDialog
+     *      随后会话控制器的 StartLogin 见 DoModal 返回非 IDOK，会统一请求一次退出
      *      收尾。此时若由本窗口先调一次 CloseDialog，登录窗的模态循环随后仍会返回、
      *      StartLogin 再收尾一次，第二次对着已销毁的窗口调 DestroyWindow，触发
      *      ATL 断言 `::IsWindow(this->m_hWnd)`（atlwin.h:4066）—— 已实测崩过。

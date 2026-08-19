@@ -7,7 +7,7 @@
  *  走 v2 cmd_change_password 发往服务端，应答回投后提示结果。
  *
  *  与主面板的关系：主面板系统菜单"修改密码"项点击时创建并显示本对话框；改密应答
- *  由 CMainDlg → 主面板 → 转发到本对话框的 OnChangePwdResult。
+ *  由主面板转发到本对话框的 OnChangePwdResult。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL。
  *

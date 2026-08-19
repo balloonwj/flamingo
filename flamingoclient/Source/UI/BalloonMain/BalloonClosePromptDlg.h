@@ -93,7 +93,7 @@ public:
      *    ownerPanel：主面板窗口句柄；同时作为本框的 owner（z 序恒在其上）、模态
      *                期间被禁用的宿主窗，以及"最小化 / 退出"动作执行时隐藏的对象。
      *                可为 NULL（调试入口单独起本框时），此时不做禁用。
-     *    hMainDlg：  隐藏的消息中枢 CMainDlg 句柄；"退出"时向它 PostMessage
+     *    hMainDlg：  主面板句柄；"退出"时向它 PostMessage
      *                WM_CLOSE_MAINDLG 触发整体收尾。
      *    client：    所属客户端对象；读 / 写 m_UserConfig 偏好并落盘，本类只引用不持有。
      *
@@ -147,7 +147,7 @@ private:
 private:
     CFlamingoClient* m_lpFMGClient;   //所属客户端（取 / 存 UserConfig），引用不持有
     HWND             m_panelHwnd;     //主面板窗口句柄（执行动作时隐藏它）
-    HWND             m_mainDlgHwnd;   //CMainDlg 句柄（退出时 PostMessage WM_CLOSE_MAINDLG）
+    HWND             m_mainDlgHwnd;   //主面板句柄（退出时 PostMessage WM_CLOSE_MAINDLG）
 
     //控件指针（借用，控件树持有）：切换选中 / 读复选框 / 改确认按钮变体时用。
     balloonmain::ClosePromptOptionCard* m_cardMinimize;   //"最小化到任务栏"卡片

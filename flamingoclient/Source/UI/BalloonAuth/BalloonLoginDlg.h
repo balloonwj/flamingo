@@ -53,10 +53,10 @@ namespace balloonauth { class AuthBanner; }
  *  CBalloonLoginDlg
  *
  *  旧 CLoginDlg 的等价替代。继承 balloonwjui::DuiFrameWindow —— 由它
- *  提供调用方（CMainDlg）依赖的 WTL CWindowImpl 接口：Create /
+ *  提供调用方（会话控制器）依赖的 WTL CWindowImpl 接口：Create /
  *  ShowWindow / IsWindow / SetFocus / PostMessage / m_hWnd 等。
  *
- *  公共接口与旧 CLoginDlg 保持一致，故 CMainDlg 侧调用点除 #include
+ *  公共接口与旧 CLoginDlg 保持一致，故调用方除 #include
  *  行外无需改动（见文件末尾的 typedef 兼容别名）。
  */
 class CBalloonLoginDlg : public balloonwjui::DuiFrameWindow
@@ -128,7 +128,7 @@ public:
     /**
      *  本窗口的模态循环当前是否在运行，即登录窗是否还摆在用户面前。
      *
-     *  CMainDlg 用它判断一条登录结果该不该交给本窗口处理。<u>不能改用
+     *  会话控制器用它判断一条登录结果该不该交给本窗口处理。<u>不能改用
      *  IsLogining</u>：用户点过「取消登录」之后阶段已回到空闲，可后台线程仍会
      *  在几秒后把结果投回来。若那时按「不归登录窗管」处理，结果就会漏进旧路径
      *  的「弹 MessageBox + StartLogin」，而登录窗此刻还活着，StartLogin 再
@@ -140,7 +140,7 @@ public:
     bool IsLoginWindowActive() const { return m_modalRunning; }
 
     /**
-     *  登录成功后关闭本窗口，由 CMainDlg 在接管后续流程之前调用。
+     *  登录成功后关闭本窗口，由会话控制器在接管后续流程之前调用。
      *
      *  单独开这个方法而不是把 EndModal 放开，是因为「关掉登录窗」这件事从外部看
      *  只该有这一个理由；EndModal 是模态循环的实现细节，暴露出去容易被用在别处。
@@ -310,7 +310,7 @@ private:
     /**
      *  把当前账号的两个勾选项（记住密码 / 自动登录）就地写回历史账号列表并落盘。
      *
-     *  存在理由：勾选项此前要等到<u>登录成功之后</u>才由 CMainDlg 落盘，于是用户
+     *  存在理由：勾选项此前要等到<u>登录成功之后</u>才由会话控制器落盘，于是用户
      *  取消勾选后如果直接关掉登录窗、并不登录，改动就丢了，下次启动照旧自动登录。
      *  改成点一下复选框就落一次盘，"取消自动登录"才真的取消得掉。
      *
@@ -318,7 +318,7 @@ private:
      *  这个取消就名不副实。
      *  账号为空、或该账号尚未在本机成功登录过（不在列表里）时什么都不做：此刻
      *  替它建条目会凭空多出一条从没登录成功过的账号，入列应当等登录成功后由
-     *  CMainDlg 用真实采集到的信息来做。
+     *  会话控制器用真实采集到的信息来做。
      */
     void PersistCheckStateForCurrentAccount();
 
@@ -420,6 +420,6 @@ private:
     HBITMAP            m_hBgBitmap;           // 窗体 9-grid 背景图，本类持有并释放
 };
 
-// 兼容别名：CMainDlg 等调用点仍用旧名 CLoginDlg，本 typedef 让它们
+// 兼容别名：会话控制器等调用点仍用旧名 CLoginDlg，本 typedef 让它们
 // 在不改类型名的前提下指向新的 balloonui 实现。
 typedef CBalloonLoginDlg CLoginDlg;

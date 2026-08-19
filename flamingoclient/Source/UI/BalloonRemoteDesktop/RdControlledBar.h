@@ -4,7 +4,7 @@
  *  本端作为被控端（cmd_rd_relay_info 下发 role=被控端）开始抓屏推流后，在屏幕
  *  顶部居中浮一条醒目的置顶提示条：「您的桌面正在被 XXX 远程控制」+「结束控制」
  *  按钮，让被控方随时知情、并能随手主动终止远程控制。点「结束控制」时本条不直接
- *  操作推流器，而是向宿主（CMainDlg）PostMessage 一条
+ *  操作推流器，而是向宿主（主面板）PostMessage 一条
  *  FMG_MSG_RD_CONTROLLED_END_BY_USER，由宿主统一收尾（发 cmd_rd_close + 停推流
  *  + 关本条），收尾逻辑与服务端推来的 cmd_rd_state_notify 收尾保持一处。
  *

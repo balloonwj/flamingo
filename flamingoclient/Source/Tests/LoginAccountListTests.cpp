@@ -430,7 +430,7 @@ TEST_CASE("LAL4 最后登录账号与自动登录标志随账号切换")
 // =====================================================================
 // LAL-A —— "取消自动登录"依赖的落盘语义
 //
-// CMainDlg::ClearAutoLoginFlag / ForgetSavedPasswordForCurrentAccount 与
+// 会话控制器的 ClearAutoLoginFlag / ForgetSavedPasswordForCurrentAccount 与
 // CBalloonLoginDlg::PersistCheckStateForCurrentAccount 都是"改 LOGIN_ACCOUNT_INFO
 // 的字段 + SaveFile"这个套路。那三个函数本身挂在窗口类上、测试工程不编译它们，
 // 但它们赖以成立的这一层语义能在这里钉死：改完落盘、重新加载后必须还是改后的值。
@@ -512,7 +512,7 @@ TEST_CASE("LAL-A4 清自动登录标志不动记住密码与密码本身", "[lal
 
 TEST_CASE("LAL-A5 清掉最后登录账号的标志后 IsAutoLogin 返回假", "[lal][autologin]")
 {
-    // IsAutoLogin 只看"最后登录账号"那一条(CMainDlg::OnInitDialog 据它决定要不要
+    // IsAutoLogin 只看"最后登录账号"那一条(会话控制器的 StartInitialLogin 据它决定要不要
     // 跳过登录窗),故清标志之后必须能从这个入口看出来。
     CLoginAccountList list;
     REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, FALSE));
@@ -529,7 +529,7 @@ TEST_CASE("LAL-A5 清掉最后登录账号的标志后 IsAutoLogin 返回假", "
 
 TEST_CASE("LAL-A6 密码错误后忘掉密码:密码清空且两个勾选项一并取消", "[lal][autologin]")
 {
-    // 对应 CMainDlg::ForgetSavedPasswordForCurrentAccount。存下的密码已经不对了,
+    // 对应会话控制器的 ForgetSavedPasswordForCurrentAccount。存下的密码已经不对了,
     // 留着只会让勾了自动登录的用户每次开机被自动登一次、再被弹一次"密码错误"。
     const std::wstring path = FreshTempDat(L"flamingo_lal_a6.dat");
 

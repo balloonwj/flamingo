@@ -1244,16 +1244,6 @@ void CIUSocket::SendThreadProc()
     LOG_INFO("Recv data thread finish...");
 }
 
-void CIUSocket::Send(const std::string& strBuffer)
-{
-    //v1 业务消息发送接口。v2 改造期内，v1 业务（好友/消息等）尚未迁移，
-    //其上层调用产生的是 v1 格式数据，不能再发往只认 v2 帧的服务端，故此处
-    //留空桩丢弃，避免污染连接。
-    //TODO(v2-migrate): 各业务迁到 v2 后，改为按 cmd 走 EnqueueFrame 发送。
-    (void)strBuffer;
-    LOG_ERROR("CIUSocket::Send(v1) called but disabled during v2 migration.");
-}
-
 void CIUSocket::RecvThreadProc()
 {
     LOG_INFO("Recv data thread start...");
@@ -2822,7 +2812,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
     case cmd_leave_group:
     {
         //群资料对话框三个写操作（置顶/免打扰、改群名片、退群）的通用 {code,msg} 应答。
-        //解析后把 code 经 wParam、msg 经堆上 std::string 投到 UI 线程，由 CMainDlg 记日志、
+        //解析后把 code 经 wParam、msg 经堆上 std::string 投到 UI 线程，由主面板记日志、
         //失败时给用户一个通用提示。乐观更新在发起端已生效，本路径只做结果反馈。
         int code = -1;
         std::string msg;
