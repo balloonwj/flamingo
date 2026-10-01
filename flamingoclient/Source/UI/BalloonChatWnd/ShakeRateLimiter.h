@@ -8,7 +8,7 @@
  *
  *  典型用法：
  *      ShakeRateLimiter limiter;
- *      if (!limiter.TryPass(::GetTickCount64(), kShakeMinIntervalMs))
+ *      if (!limiter.TryPass(::GetTickCount64(), kShakeSendMinIntervalMs))
  *      {
  *          // 距上次放行不足最小间隔 —— 被拦截，给出提示并 return。
  *      }
@@ -20,6 +20,15 @@
 #pragma once
 
 namespace balloonchatwnd {
+
+// 发送侧：对同一聊天对象，两次发送窗口抖动之间的最小间隔（毫秒）。间隔不足时拦截
+// 这次点击，并在本窗口提示用户稍后再试。
+const unsigned long long kShakeSendMinIntervalMs = 5000;
+
+// 接收侧：同一来源两次窗口抖动之间的最小间隔（毫秒），间隔不足的抖动静默忽略，防止被
+// 连续抖动刷屏。比发送侧短 1 秒：对方按发送侧间隔发出的两次抖动，到达本端的间隔会随网络
+// 延迟上下浮动，两侧取值相同时，早到一点的第二次会被误当作刷屏丢掉（ST2）。
+const unsigned long long kShakeRecvMinIntervalMs = 4000;
 
 /**
  *  ShakeRateLimiter —— 窗口抖动频率节流器。

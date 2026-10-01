@@ -27,6 +27,7 @@
 #include "CustomMsgDef.h"
 #include "..\Common\Util\File2.h"
 #include "..\Common\Util\Path.h"
+#include "../net/UserCachePath.h"     // net::UserConfigFilePath：账号配置文件路径
 #include <sstream>
 
 //进程内正在使用的那一个 CFlamingoClient 的地址。由 balloonapp::CAppShell 在构造时登记、析构时
@@ -287,7 +288,7 @@ void CFlamingoClient::SendHeartbeatMessage()
 }
 
 // 登录
-void CFlamingoClient::Login(int nStatus/* = STATUS_ONLINE*/)
+bool CFlamingoClient::Login(int nStatus/* = STATUS_ONLINE*/)
 {
     //前置条件不满足就不发登录请求。这三条<u>必须</u>留下日志：唯一的调用方是断线重连
     //定时器，它每 5 秒调一次，被这里挡住时既不报错也不弹框，现场看起来就是"什么都
@@ -317,7 +318,7 @@ void CFlamingoClient::Login(int nStatus/* = STATUS_ONLINE*/)
                         bOffline ? 1 : 0, bHasAccount ? 1 : 0, bHasPassword ? 1 : 0,
                         (unsigned int)nSkipMask);
         }
-        return;
+        return false;   // 没有入队，也就不会有登录结果投回
     }
 
     //本次放行：把去重标志复位，下一次再被挡住时仍会记下第一条。
@@ -327,7 +328,7 @@ void CFlamingoClient::Login(int nStatus/* = STATUS_ONLINE*/)
 
 	CLoginRequest* pLoginRequest = new CLoginRequest();
 	if(pLoginRequest == NULL)
-		return;
+		return false;
 	
 	char szData[64] = {0};
     EncodeUtil::UnicodeToUtf8(m_UserMgr.m_UserInfo.m_strAccount.c_str(), szData, ARRAYSIZE(szData));
@@ -354,6 +355,7 @@ void CFlamingoClient::Login(int nStatus/* = STATUS_ONLINE*/)
 	
 
 	m_SendMsgThread.AddItem(pLoginRequest);
+	return true;   // 已入队：发送线程的 HandleLogon 只有一个出口，结果一定会投回
 }
 
 // 注销
@@ -708,7 +710,7 @@ void CFlamingoClient::OnNetworkStatusChange(UINT message, WPARAM wParam, LPARAM 
 		//故把决定权交给会话控制器 —— 登录态在它手里，它用与掉线事件、重连定时器同一个
 		//守卫函数(balloonmain::ShouldAutoReconnect)判断，三处共用一个判定，不再各判各的。
 		LOG_WARNING("Local connection is on service, ask main window whether to relogon.");
-		if (m_UserMgr.m_hCallBackWnd != NULL)
+		if (::IsWindow(m_UserMgr.m_hCallBackWnd))
 			::PostMessage(m_UserMgr.m_hCallBackWnd, FMG_MSG_NETWORK_RESUMED, 0, 0);
 	}
 	else
@@ -793,28 +795,21 @@ void CFlamingoClient::OnLoginResult(UINT message, WPARAM wParam, LPARAM lParam)
 // 加载用户设置信息
 void CFlamingoClient::LoadUserConfig()
 {
-	if(m_UserMgr.m_UserInfo.m_strAccount.empty())
+	//账号配置文件 <数据根目录>Users\<账号>\<账号>.ini，路径统一由 net::UserConfigFilePath 拼出
+	const std::wstring configPath = net::UserConfigFilePath(g_szDataRoot, m_UserMgr.m_UserInfo.m_strAccount);
+	if (configPath.empty())
 		return;
 
-	PCTSTR pszAccount = m_UserMgr.m_UserInfo.m_strAccount.c_str();
-	
-	TCHAR szConfigPath[MAX_PATH] = {0};
-	_stprintf_s(szConfigPath, MAX_PATH, _T("%sUsers\\%s\\%s.cfg"), g_szDataRoot, pszAccount, pszAccount);
-
-	m_UserConfig.LoadConfig(szConfigPath);
+	m_UserConfig.LoadConfig(configPath.c_str());
 }
 
 void CFlamingoClient::SaveUserConfig()
 {
-	if(m_UserMgr.m_UserInfo.m_strAccount.empty())
+	const std::wstring configPath = net::UserConfigFilePath(g_szDataRoot, m_UserMgr.m_UserInfo.m_strAccount);
+	if (configPath.empty())
 		return;
 
-	PCTSTR pszAccount = m_UserMgr.m_UserInfo.m_strAccount.c_str();
-	
-	TCHAR szConfigPath[MAX_PATH] = {0};
-	_stprintf_s(szConfigPath, MAX_PATH,_T("%sUsers\\%s\\%s.cfg"),  g_szDataRoot, pszAccount, pszAccount);
-
-	m_UserConfig.SaveConfig(szConfigPath);
+	m_UserConfig.SaveConfig(configPath.c_str());
 }
 
 
@@ -920,11 +915,13 @@ BOOL CFlamingoClient::CreateProxyWnd()
 // 销毁代理窗口
 BOOL CFlamingoClient::DestroyProxyWnd()
 {
-	if (m_UserMgr.m_hProxyWnd != NULL)
+	//用 IsWindow 而不是只判 NULL：窗口可能已随进程收尾被系统销毁，而句柄值不会自动清零。
+	if (::IsWindow(m_UserMgr.m_hProxyWnd))
 	{
 		::DestroyWindow(m_UserMgr.m_hProxyWnd);
-		m_UserMgr.m_hProxyWnd = NULL;
 	}
+	//无论窗口此前是否仍然存在，都把句柄清零，避免后续代码把失效句柄当作可用窗口
+	m_UserMgr.m_hProxyWnd = NULL;
 	return TRUE;
 }
 
@@ -937,6 +934,10 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 	if (message < FMG_MSG_FIRST || message > FMG_MSG_LAST)
 		return ::DefWindowProc(hWnd, message, wParam, lParam);
 
+	//以下各分支转发前都用 IsWindow 判断主窗口，而不是只判 NULL：m_hCallBackWnd 只在
+	//SetCallBackWnd 里赋值、从不清零，主窗口销毁后它仍是一个非 NULL 的失效句柄，此时
+	//PostMessage 会失败，lParam 上的堆对象既没有送达，也不会走 else 分支释放。
+	//各分支注释里所说的「主窗口未就绪」，包括尚未设置与已经销毁两种情况。
 	switch (message)
 	{
     //网络错误
@@ -956,7 +957,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //则在此就地释放，避免泄漏。
     case FMG_MSG_V2_RECV_CHATMSG:
     case FMG_MSG_V2_SEND_CHATMSG_ACK:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else if (message == FMG_MSG_V2_RECV_CHATMSG)
             delete (net::MessageNotify*)lParam;
@@ -966,7 +967,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 通讯录应答：转发给主窗口填充联系人面板；主窗口未就绪则就地释放。
     case FMG_MSG_V2_CONTACTS:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::ContactsResult*)lParam;
@@ -974,7 +975,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 会话列表应答：转发给主窗口填充"消息"页；主窗口未就绪则就地释放。
     case FMG_MSG_V2_CONVERSATIONS:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::ConversationsResult*)lParam;
@@ -982,7 +983,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 建群应答：转发给主窗口提示建群结果；主窗口未就绪则就地释放。
     case FMG_MSG_V2_CREATE_GROUP_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::CreateGroupResponse*)lParam;
@@ -991,7 +992,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //v2 修改密码应答：转发给主窗口（→改密对话框提示成功/失败并关闭）；未就绪则就地释放。
     //2026-08-18 补：本 case 此前缺失，应答会落进 default 被丢弃，改密对话框永远等不到结果。
     case FMG_MSG_V2_CHANGE_PWD_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::ChangePasswordResponse*)lParam;
@@ -1001,7 +1002,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //并把新昵称同步进历史登录账号列表）；未就绪则就地释放。
     //2026-08-18 补：本 case 此前缺失，失败时界面不回退，昵称也不会同步到登录账号列表。
     case FMG_MSG_V2_UPDATE_PROFILE_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::UpdateProfileResponse*)lParam;
@@ -1009,7 +1010,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 修改头像应答：转发给主窗口（→修改头像对话框提示/关闭、本端头像刷新）；未就绪则就地释放。
     case FMG_MSG_V2_CHANGE_AVATAR_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::UpdateProfileResponse*)lParam;
@@ -1017,7 +1018,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 头像图片上传结果：转发给主窗口（→修改头像对话框，成功后发 cmd_change_avatar）；未就绪则就地释放。
     case FMG_MSG_V2_AVATAR_UPLOAD_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::AvatarUploadResult*)lParam;
@@ -1025,7 +1026,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 头像图片下载结果：转发给主窗口（→主面板按 fileid 刷新联系人/会话节点头像）；未就绪则就地释放。
     case FMG_MSG_V2_AVATAR_DOWNLOAD_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::AvatarDownloadResult*)lParam;
@@ -1033,7 +1034,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 联系人资料变更推送（头像/昵称）：转发给主窗口实时刷新联系人/会话头像；未就绪则就地释放。
     case FMG_MSG_V2_USERINFO_CHANGED:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::UserInfoChangedNotify*)lParam;
@@ -1043,7 +1044,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //立刻出现在联系人列表里；未就绪则就地释放。管理控制台改员工资料 / 启停用 / 设角色、
     //增删改部门、改企业名称，都会推这条。
     case FMG_MSG_V2_ORG_STRUCTURE_CHANGED:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::OrgStructureChangedNotify*)lParam;
@@ -1052,7 +1053,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //v2 会话属性多端同步推送：转发给主窗口按新状态刷新会话列表（置顶 / 免打扰 / 删除）；
     //未就绪则就地释放。
     case FMG_MSG_V2_CONVERSATION_CHANGED:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::ConversationChangedNotify*)lParam;
@@ -1062,7 +1063,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //审批/敏感词增删共用）：转发给主窗口，成功不动界面（等 1317/1318 推送统一刷新），
     //失败据 code 提示。wParam 带的是具体哪条协议，须原样传下去。
     case FMG_MSG_V2_GROUP_OP_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::GroupOpResult*)lParam;
@@ -1075,7 +1076,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     case FMG_MSG_V2_SET_CONVERSATION_RESULT:
     case FMG_MSG_V2_SET_MEMBER_CARD_RESULT:
     case FMG_MSG_V2_LEAVE_GROUP_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (std::string*)lParam;
@@ -1083,7 +1084,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 待审批加群申请列表应答：转发给群管理窗口的"加群审批"页
     case FMG_MSG_V2_GROUP_JOIN_REQUESTS:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::GroupJoinRequestsResult*)lParam;
@@ -1091,7 +1092,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 群敏感词库应答：转发给群权限页的"管理词库"
     case FMG_MSG_V2_SENSITIVE_WORDS:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::SensitiveWordsResult*)lParam;
@@ -1099,7 +1100,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 群成员变动推送：转发给主窗口，刷新群管理窗口、群聊窗成员边栏与标题
     case FMG_MSG_V2_GROUP_MEMBER_CHANGED:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::GroupMemberChangedNotify*)lParam;
@@ -1107,7 +1108,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 群资料变更推送：转发给主窗口，刷新群名与各页；changetype=2 时关窗
     case FMG_MSG_V2_GROUP_INFO_CHANGED:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::GroupInfoChangedNotify*)lParam;
@@ -1115,7 +1116,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 群公告列表应答：转发给主窗口，再由它分给群管理窗的公告页或群聊窗的公告边栏
     case FMG_MSG_V2_GROUP_ANNOUNCEMENTS:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::GroupAnnouncementsResult*)lParam;
@@ -1123,7 +1124,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 群公告变更推送：转发给主窗口刷新公告界面；新发布时还要弹一次提示
     case FMG_MSG_V2_ANNOUNCEMENT_CHANGED:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::GroupAnnouncementNotify*)lParam;
@@ -1131,7 +1132,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 有人申请加群推送：转发给主窗口，让审批入口出现待处理红点
     case FMG_MSG_V2_JOIN_GROUP_REQUEST:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::GroupJoinRequestItem*)lParam;
@@ -1140,7 +1141,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //v2 切换通话媒体类型应答：转发给主窗口按 code 提示失败原因（成功不动界面，等推送）；
     //未就绪则就地释放，避免堆对象泄漏。
     case FMG_MSG_V2_CALL_SWITCH_MEDIA_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::CallSwitchMediaResponse*)lParam;
@@ -1149,7 +1150,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //v2 通话媒体类型已变更推送：转发给主窗口重建通话窗媒体层、启停视频引擎；
     //未就绪则就地释放。
     case FMG_MSG_V2_CALL_MEDIA_CHANGED:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::CallMediaChangedNotify*)lParam;
@@ -1158,7 +1159,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //v2 撤回消息应答：转发给主窗口按 code 提示失败原因（成功不动界面，等下面的推送）；
     //未就绪则就地释放，避免堆对象泄漏。
     case FMG_MSG_V2_RECALL_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::RecallMessageResponse*)lParam;
@@ -1167,16 +1168,63 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //v2 某条消息被撤回的推送：转发给主窗口把气泡改成提示行 / 刷会话列表预览 /
     //标记本地消息库；未就绪则就地释放。
     case FMG_MSG_V2_MESSAGE_RECALLED:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::MessageRecalledNotify*)lParam;
         break;
 
+    //v2 转发消息应答：转发给主面板，由转发调度器按 wParam 里的帧 seq 对回请求、汇总结果、
+    //在本端显示新消息；未就绪则就地释放，避免堆对象泄漏。
+    case FMG_MSG_V2_FORWARD_RESULT:
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::ForwardMessageResponse*)lParam;
+        break;
+
+    //v2 删除单条消息应答：转发给主面板按 code 提示失败原因（成功不动界面，等删除推送）；
+    //未就绪则就地释放，避免堆对象泄漏。
+    case FMG_MSG_V2_DELETE_MESSAGE_RESULT:
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::DeleteMessageResponse*)lParam;
+        break;
+
+    //v2 按时间范围清理应答：转发给主面板，由它转交清理聊天记录对话框提示结果；
+    //未就绪则就地释放。
+    case FMG_MSG_V2_DELETE_BY_TIME_RESULT:
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::DeleteMessagesByTimeResponse*)lParam;
+        break;
+
+    //v2 本人删除了消息的推送（单条或区间）：转发给主面板删本地库、更新已打开的窗口；
+    //未就绪则就地释放。本 case 漏掉的话推送会落进 default 被静默丢弃 —— 日志里有
+    //Recv 那一条、界面上的消息却一直在。
+    case FMG_MSG_V2_MESSAGES_DELETED:
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::MessagesDeletedNotify*)lParam;
+        break;
+
+    //v2 对方已读推送：转发给主面板记下对方的已读位点、并转给已打开的单聊窗把气泡
+    //标为已读；未就绪则就地释放。本 case 漏掉的话推送会在上面的号段判断之后落进
+    //default 被静默丢弃 —— 日志里有 Recv 那一条、界面却一直是「未读」。
+    case FMG_MSG_V2_MESSAGE_READ_NOTIFY:
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
+            ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
+        else
+            delete (net::MessageReadNotify*)lParam;
+        break;
+
     //v2 平台公告列表应答：转发给主窗口落本地库 announce.db 并刷新铃铛角标；
     //未就绪则就地释放，避免堆对象泄漏。
     case FMG_MSG_V2_ANNOUNCEMENTS:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::AnnouncementsResult*)lParam;
@@ -1185,7 +1233,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //v2 平台公告新发布 / 被撤回的推送：转发给主窗口落本地库、刷角标、刷消息盒子窗；
     //未就绪则就地释放。
     case FMG_MSG_V2_ANNOUNCEMENT_NOTIFY:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::AnnouncementNotify*)lParam;
@@ -1194,7 +1242,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //v2 平台公告已读上报的应答：转发给主窗口（成功不动界面，仅失败时留痕）；
     //未就绪则就地释放。
     case FMG_MSG_V2_ANN_MARK_READ_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::AnnounceMarkReadResult*)lParam;
@@ -1203,7 +1251,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //v2 设置联系人标签的应答：转发给主窗口（主面板拿应答回带的列表覆盖本地缓存，
     //成功是对齐归一结果、失败是退回服务端真值）；未就绪则就地释放。
     case FMG_MSG_V2_SET_TAGS_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::SetContactTagsResult*)lParam;
@@ -1212,7 +1260,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //v2 设置好友备注名的应答：转发给主窗口（成功只记日志，失败时主面板据回带的
     //userid 把那一个人的备注回滚）；未就绪则就地释放。
     case FMG_MSG_V2_SET_REMARK_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::SetFriendRemarkResult*)lParam;
@@ -1224,7 +1272,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //对应 case 时会落进 default 被丢掉，堆负载顺带泄漏。表现是"收藏失败时界面毫无
     //反应"（成功路径靠乐观更新，看不出问题），故一直没被发现。
     case FMG_MSG_V2_SET_FAVORITE_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::SetFavoriteResult*)lParam;
@@ -1233,7 +1281,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //v2 特别关注设置应答：转发给主窗口（成功只记日志，失败时主面板据回带的
     //target/starred 把那一个人的关注状态回滚）；未就绪则就地释放。
     case FMG_MSG_V2_SET_STARRED_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::SetStarredResult*)lParam;
@@ -1242,7 +1290,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //v2 Pin 消息应答：转发给主窗口按 code 提示失败原因（成功不动界面，等下面的推送）；
     //未就绪则就地释放，避免堆对象泄漏。
     case FMG_MSG_V2_PIN_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::PinMessageResponse*)lParam;
@@ -1251,7 +1299,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //v2 某条消息被 Pin / 取消 Pin 的推送：转发给主窗口落本地消息库标记 / 刷气泡上的
     //图钉 / 刷消息记录窗；未就绪则就地释放。
     case FMG_MSG_V2_MESSAGE_PINNED:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::MessagePinnedNotify*)lParam;
@@ -1260,7 +1308,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //v2 被 Pin 消息全集应答：转发给主窗口补齐本地库缺的消息体并与服务端对账；
     //未就绪则就地释放。
     case FMG_MSG_V2_PINNED_MESSAGES:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::PinnedMessagesResult*)lParam;
@@ -1269,7 +1317,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //v2 被踢下线推送：转发给主窗口进入离线态（停自动重连）并弹托盘气泡。
     //wParam 是被踢原因，无堆负载，主窗口未就绪时直接丢掉即可（此时也没有界面可提示）。
     case FMG_MSG_V2_KICKOUT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         break;
 
@@ -1277,7 +1325,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //未就绪则就地释放。
     //2026-08-18 补：本 case 此前缺失，改状态失败时胶囊不会回退到原来的状态。
     case FMG_MSG_V2_CHANGE_PRESENCE_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::ChangePresenceResponse*)lParam;
@@ -1285,7 +1333,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 联系人在线状态变更推送：转发给主窗口重着联系人/会话状态点；未就绪则就地释放。
     case FMG_MSG_V2_PRESENCE_CHANGED:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::PresenceChangedNotify*)lParam;
@@ -1293,7 +1341,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 群资料应答：转发给主窗口写群信息缓存 / 刷新群名；未就绪则就地释放。
     case FMG_MSG_V2_GROUP_INFO:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::GroupInfoResult*)lParam;
@@ -1301,7 +1349,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 群成员应答：转发给主窗口路由到对应群聊窗；未就绪则就地释放。
     case FMG_MSG_V2_GROUP_MEMBERS:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::GroupMembersResult*)lParam;
@@ -1309,7 +1357,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 群文件列表应答：转发给主窗口路由到对应群聊窗；未就绪则就地释放。
     case FMG_MSG_V2_GROUP_FILES:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::GetGroupFilesResult*)lParam;
@@ -1317,7 +1365,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 群文件变更推送：转发给主窗口路由到对应群聊窗；未就绪则就地释放。
     case FMG_MSG_V2_GROUP_FILES_CHANGED:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::GroupFilesChangedNotify*)lParam;
@@ -1325,7 +1373,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 群文件上传结果：转发给主窗口路由到对应群聊窗；未就绪则就地释放。
     case FMG_MSG_V2_GROUP_FILE_UPLOAD_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::GroupFileUploadResult*)lParam;
@@ -1333,7 +1381,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 群文件下载结果：转发给主窗口路由到对应群聊窗；未就绪则就地释放。
     case FMG_MSG_V2_GROUP_FILE_DOWNLOAD_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::GroupFileDownloadResult*)lParam;
@@ -1341,7 +1389,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 群文件上传进度：转发给主窗口路由到对应群聊窗；未就绪则就地释放。
     case FMG_MSG_V2_GROUP_FILE_UPLOAD_PROGRESS:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::GroupFileUploadProgress*)lParam;
@@ -1349,7 +1397,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 群文件下载进度：转发给主窗口路由到对应群聊窗；未就绪则就地释放。
     case FMG_MSG_V2_GROUP_FILE_DOWNLOAD_PROGRESS:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::GroupFileDownloadProgress*)lParam;
@@ -1357,7 +1405,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 我的群列表应答：转发给主窗口填"群"Tab；未就绪则就地释放。
     case FMG_MSG_V2_USER_GROUPS:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::UserGroupsResult*)lParam;
@@ -1365,7 +1413,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 历史消息应答：转发给主窗口路由到对应聊天窗渲染历史；未就绪则就地释放。
     case FMG_MSG_V2_SYNC_MESSAGES:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::SyncMessagesResult*)lParam;
@@ -1373,7 +1421,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 远程桌面邀请应答：转发给主窗口（→控制端呼叫窗按 code 置会话 / 提示失败）；未就绪则就地释放。
     case FMG_MSG_V2_RD_INVITE_ACK:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::RDInviteResponse*)lParam;
@@ -1381,7 +1429,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 远程桌面邀请推送：转发给主窗口（→被控端弹授权窗）；未就绪则就地释放。
     case FMG_MSG_V2_RD_INVITE_NOTIFY:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::RDInviteNotify*)lParam;
@@ -1389,7 +1437,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 远程桌面中转参数下发：转发给主窗口（→双方接通，连 imgserver 中转通道）；未就绪则就地释放。
     case FMG_MSG_V2_RD_RELAY_INFO:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::RDRelayInfo*)lParam;
@@ -1397,7 +1445,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 远程桌面状态推送：转发给主窗口（→关对话框并按 state 提示拒绝 / 取消 / 离线 / 超时 / 断开）；未就绪则就地释放。
     case FMG_MSG_V2_RD_STATE_NOTIFY:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::RDStateNotify*)lParam;
@@ -1411,7 +1459,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 文件夹传输邀请应答：转发给主窗口（→绑定服务端会话 id，或按 code 把气泡标失败）；未就绪则就地释放。
     case FMG_MSG_V2_FOLDER_INVITE_ACK:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::FolderInviteResponse*)lParam;
@@ -1419,7 +1467,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 文件夹传输邀请推送：转发给主窗口（→接收端会话里出一条带「接收 / 拒绝」的邀请气泡）；未就绪则就地释放。
     case FMG_MSG_V2_FOLDER_INVITE_NOTIFY:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::FolderInviteNotify*)lParam;
@@ -1427,7 +1475,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 文件夹传输通用应答（应答 / 撤回 / 结束 / 重试四条共用）：转发给主窗口；未就绪则就地释放。
     case FMG_MSG_V2_FOLDER_SESSION_ACK:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::FolderSessionResponse*)lParam;
@@ -1435,7 +1483,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 文件夹传输状态推送：转发给主窗口（→按 state 把气泡切成拒绝 / 取消 / 失败 / 完成等）；未就绪则就地释放。
     case FMG_MSG_V2_FOLDER_STATE_NOTIFY:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::FolderStateNotify*)lParam;
@@ -1443,7 +1491,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 文件夹传输中转参数下发：转发给主窗口（→起收发状态机、气泡转传输中）；未就绪则就地释放。
     case FMG_MSG_V2_FOLDER_RELAY_INFO:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::FolderRelayInfo*)lParam;
@@ -1451,7 +1499,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //本地目录扫描完成：转发给主窗口（→把文件数 / 目录数 / 总大小补进气泡）；未就绪则就地释放。
     case FMG_MSG_V2_FOLDER_SCANNED:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (foldertransfer::FolderScanNotice*)lParam;
@@ -1460,7 +1508,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //文件夹发送 / 接收进度：转发给主窗口（→更新气泡进度条与状态行）；未就绪则就地释放。
     case FMG_MSG_V2_FOLDER_SEND_PROGRESS:
     case FMG_MSG_V2_FOLDER_RECV_PROGRESS:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (foldertransfer::FolderProgressNotice*)lParam;
@@ -1469,7 +1517,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
     //文件夹发送 / 接收最终结果：转发给主窗口（→收尾气泡并回调管理器停线程、发 1814）；未就绪则就地释放。
     case FMG_MSG_V2_FOLDER_SEND_RESULT:
     case FMG_MSG_V2_FOLDER_RECV_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (foldertransfer::FolderResultNotice*)lParam;
@@ -1477,7 +1525,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 音视频通话邀请应答：转发给主窗口（→主叫呼叫窗按 code 置会话 / 提示失败）；未就绪则就地释放。
     case FMG_MSG_V2_CALL_INVITE_ACK:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::CallInviteResponse*)lParam;
@@ -1485,7 +1533,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 音视频通话邀请推送：转发给主窗口（→被叫弹来电窗）；未就绪则就地释放。
     case FMG_MSG_V2_CALL_INVITE_NOTIFY:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::CallInviteNotify*)lParam;
@@ -1493,7 +1541,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 音视频通话中转参数下发：转发给主窗口（→双方接通，连 imgserver 中转通道）；未就绪则就地释放。
     case FMG_MSG_V2_CALL_SIGNALING:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::CallSignalingInfo*)lParam;
@@ -1501,7 +1549,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 音视频通话状态推送：转发给主窗口（→关对话框并按 state 提示 / 收尾）；未就绪则就地释放。
     case FMG_MSG_V2_CALL_STATE_NOTIFY:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::CallStateNotify*)lParam;
@@ -1509,7 +1557,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 发图上传进度：转发给主窗口按 clientmsgid 更新"发送中"气泡进度；未就绪则就地释放。
     case FMG_MSG_V2_IMAGE_SEND_PROGRESS:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::ImageSendProgress*)lParam;
@@ -1517,7 +1565,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 发图最终结果：转发给主窗口收尾"发送中"气泡（成功转正常 / 失败标红）；未就绪则就地释放。
     case FMG_MSG_V2_IMAGE_SEND_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::ImageSendResult*)lParam;
@@ -1525,7 +1573,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 收图下载结果：转发给主窗口按 msgid 把"下载中"气泡回填渲染 / 标失败；未就绪则就地释放。
     case FMG_MSG_V2_IMAGE_DOWNLOAD_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::ImageDownloadResult*)lParam;
@@ -1533,7 +1581,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 发文件上传进度：转发给主窗口更新"发送中"文件气泡进度；未就绪则就地释放。
     case FMG_MSG_V2_FILE_SEND_PROGRESS:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::FileSendProgress*)lParam;
@@ -1541,7 +1589,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 发文件最终结果：转发给主窗口收尾"发送中"文件气泡（成功转完成 / 失败标红）；未就绪则就地释放。
     case FMG_MSG_V2_FILE_SEND_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::FileSendResult*)lParam;
@@ -1549,7 +1597,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 收文件下载进度：转发给主窗口按 msgid 更新"下载中"文件气泡进度；未就绪则就地释放。
     case FMG_MSG_V2_FILE_DOWNLOAD_PROGRESS:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::FileDownloadProgress*)lParam;
@@ -1557,7 +1605,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 收文件下载结果：转发给主窗口按 msgid 把"下载中"文件气泡回填渲染 / 标失败；未就绪则就地释放。
     case FMG_MSG_V2_FILE_DOWNLOAD_RESULT:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::FileDownloadResult*)lParam;
@@ -1565,7 +1613,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 对方收取本端所发文件的状态：转发给主窗口按 msgid 更新那条文件气泡的状态行；未就绪则就地释放。
     case FMG_MSG_V2_FILE_TRANSFER_ACK:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::FileTransferAckNotify*)lParam;
@@ -1573,7 +1621,7 @@ LRESULT CALLBACK CFlamingoClient::ProxyWndProc(HWND hWnd, UINT message, WPARAM w
 
     //v2 对端正在 / 停止输入：转发给主窗口按 cid 路由到单聊窗刷新头部提示；未就绪则就地释放。
     case FMG_MSG_V2_TYPING_NOTIFY:
-        if (lpFMGClient->m_UserMgr.m_hCallBackWnd != NULL)
+        if (::IsWindow(lpFMGClient->m_UserMgr.m_hCallBackWnd))
             ::PostMessage(lpFMGClient->m_UserMgr.m_hCallBackWnd, message, wParam, lParam);
         else
             delete (net::TypingNotify*)lParam;

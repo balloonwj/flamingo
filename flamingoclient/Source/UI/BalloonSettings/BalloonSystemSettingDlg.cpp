@@ -29,13 +29,14 @@
 
 #include "../../Common/Log/IULog.h"
 #include "../../App/FlamingoClient.h"            // CFlamingoClient::m_UserConfig / SaveUserConfig
-#include "../../Session/UserSessionData.h"           // FMG_MSG_OPEN_CHANGEPWD（"修改密码"转发主面板）、g_szHomePath / g_szDataRoot
+#include "../../Session/UserSessionData.h"           // FMG_MSG_OPEN_CHANGEPWD / FMG_MSG_SET_AUTO_LOGIN（转发主面板）、g_szHomePath / g_szDataRoot
 #include "../../Common/Util/IniFile.h"                  // CIniFile（数据存储位置存在全局 flamingo.ini 里）
 #include "../../Common/Log/LogCleanupPolicy.h"         // 「启动时清空历史日志」开关的读写与默认值
 #include "BalloonCacheCleanDlg.h"        // 「立即清理」弹出的清理对话框
 #include "SettingsNavList.h"
 #include "SettingsPageModel.h"
 #include "SettingsBinding.h"
+#include "ChatFontPreview.h"              // 「默认聊天字体」预览标签的外观
 #include "../BalloonMain/TitleBarIcon.h"   // CreateProgramIconBitmap（标题栏左侧图标）
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"        // DuiVBox / DuiHBox
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
@@ -105,6 +106,7 @@ static const COLORREF kValueClr     = RGB(0x66, 0x66, 0x6C);   // 只读取值�
 
 // ---- 按钮行（逻辑像素 / 配色）-----------------------------------------
 static const int kBtnWidth   = 88;     // 普通按钮宽
+static const int kChatFontPreviewW = 120;   // 「默认聊天字体」预览文字的宽度：放得下常用字号的"Aa 字体预览"，再宽会把左侧副标题挤得截断
 static const int kBtnHeight  = 32;     // 按钮高
 
 // ---- 键帽 chip（逻辑像素 / 配色）--------------------------------------
@@ -137,7 +139,6 @@ enum SettingCtrlId
     kIdAutoStart       = 101,   // 开机自启动（落注册表 Run，不入配置）
     kIdCloseAction     = 102,   // 关闭主面板时（下拉）→ ExitWhenCloseMainDlg
     kIdLanguage        = 103,   // 语言（下拉，本期仅存）
-    kIdFontScale       = 104,   // 字体大小（下拉，本期仅存）
     kIdAutoAway        = 105,   // 无操作自动切到"离开"（开关）→ EnableAutoAway
     kIdAutoAwayDelay   = 106,   // 自动离开的等待时长（下拉）→ SetAutoAwayDelayIndex
     kIdKeepAwake       = 107,   // 禁止机器休眠（开关）→ EnableKeepAwake；开启时把上面两项置灰
@@ -157,6 +158,10 @@ enum SettingCtrlId
     kIdAutoRecvFile    = 303,   // 自动接收文件
     kIdMsgRoaming      = 304,   // 消息漫游
     kIdLinkDetect      = 306,   // 自动识别聊天中的链接
+    kIdChatFontPreview = 307,   // 默认聊天字体：预览文字（标签）
+    kIdChatFontEdit    = 308,   // 默认聊天字体：「修改」按钮，打开字体浮层
+    kIdChatFontReset   = 309,   // 默认聊天字体：「恢复默认」按钮，清除全局默认
+    kIdChatClean       = 310,   // 清理聊天记录：「清理…」按钮，打开按时间范围清理的对话框
 
     // 音视频页
     kIdMicDevice       = 401,   // 麦克风设备（下拉）
@@ -176,6 +181,7 @@ enum SettingCtrlId
     kIdTwoFactor       = 603,   // 二次验证（开关，占位）
     kIdLoginLog        = 604,   // 登录日志（按钮，占位）
     kIdDeactivate      = 605,   // 注销账号（按钮，危险，占位）
+    kIdAutoLogin       = 606,   // 自动登录（开关，转交主面板修改本机历史账号列表，不入 CUserConfig）
 };
 
 // =======================================================================
@@ -415,12 +421,18 @@ CBalloonSystemSettingDlg::CBalloonSystemSettingDlg(CFlamingoClient* pFMGClient)
     , m_built(false)
     , m_curPage(-1)
     , m_ownerHwnd(NULL)
+    , m_autoLoginOn(false)
     , m_pNav(NULL)
     , m_pContentHost(NULL)
     , m_pRecvPathLabel(NULL)
     , m_hTitleIcon(NULL)
     , m_cacheCleanDlg(pFMGClient)
+    , m_serverConnected(true)
+    , m_hChatFontPreview(NULL)
 {
+    // 「默认聊天字体」的字体浮层：只装"变化"回调，不装"使用默认字体"回调 —— 这里编辑的
+    // 就是全局默认本身，浮层上因而没有那个按钮。
+    m_chatFontPopup.SetChangeCallback(&CBalloonSystemSettingDlg::OnDefaultChatFontChanged, this);
 }
 
 CBalloonSystemSettingDlg::~CBalloonSystemSettingDlg()
@@ -430,6 +442,12 @@ CBalloonSystemSettingDlg::~CBalloonSystemSettingDlg()
     {
         ::DeleteObject(m_hTitleIcon);
         m_hTitleIcon = NULL;
+    }
+    // 预览标签只借用字体句柄，由本类释放。
+    if (m_hChatFontPreview != NULL)
+    {
+        ::DeleteObject(m_hChatFontPreview);
+        m_hChatFontPreview = NULL;
     }
 }
 
@@ -478,6 +496,53 @@ void CBalloonSystemSettingDlg::OpenSettings(HWND owner)
     UpdateWindow();
     ::SetForegroundWindow(m_hWnd);
     LOG_INFO(_T("系统设置对话框已打开。"));
+}
+
+void CBalloonSystemSettingDlg::SetAutoLoginSwitchState(bool on)
+{
+    m_autoLoginOn = on;
+
+    //窗口尚未创建：建页时 BuildAccountPage 会按 m_autoLoginOn 设置开关初始状态
+    if (!IsWindow())
+    {
+        return;
+    }
+
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    balloonwjui::DuiSwitch* sw =
+        dynamic_cast<balloonwjui::DuiSwitch*>(content->FindCtrlById(kIdAutoLogin));
+    if (sw != NULL)
+    {
+        //不发通知：这里只是把界面同步到已生效的状态，若发出 DUIN_VALUECHANGED，
+        //ApplySettingChange 会再向主面板投递一次同值的设置请求
+        sw->SetChecked(on, /*animated*/false, /*notify*/false);
+    }
+}
+
+void CBalloonSystemSettingDlg::SetServerConnected(bool connected)
+{
+    m_serverConnected = connected;
+    //清理对话框未打开时 SetConnected 内部直接返回，下次打开时按 m_serverConnected 初始化
+    m_chatCleanDlg.SetConnected(connected);
+}
+
+void CBalloonSystemSettingDlg::OpenChatCleanDialog()
+{
+    m_chatCleanDlg.OpenDialog(m_hWnd, m_serverConnected);
+}
+
+void CBalloonSystemSettingDlg::OnChatCleanResult(int code, int64_t beginTime, int64_t endTime)
+{
+    if (!m_chatCleanDlg.OnCleanResult(code, beginTime, endTime))
+    {
+        //对话框已关闭或没有在途请求：本机记录的删除由主面板收到删除推送后照常进行，这里只记日志
+        LOG_INFO("Settings: chat clean result not shown by the dialog, code=%d, range=[%lld, %lld].",
+                 code, (long long)beginTime, (long long)endTime);
+    }
 }
 
 LRESULT CBalloonSystemSettingDlg::OnCloseMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
@@ -643,15 +708,7 @@ std::unique_ptr<balloonwjui::DuiVBox> CBalloonSystemSettingDlg::BuildGeneralPage
     int langIdx = (cfg != NULL) ? balloonsettings::ClampLanguageIndex(cfg->GetLanguageIndex()) : 0;
     AddComboRow(page.get(), _T("语言"), NULL,
                 kIdLanguage, balloonsettings::LanguageOptions(),
-                balloonsettings::LanguageOptionCount(), langIdx, true);
-
-    // 字体大小（下拉，本期仅存）。
-    int fontIdx = (cfg != NULL)
-                ? balloonsettings::ClampFontScaleIndex(cfg->GetUiFontScaleIndex())
-                : balloonsettings::kFontScaleMedium;
-    AddComboRow(page.get(), _T("字体大小"), NULL,
-                kIdFontScale, balloonsettings::FontScaleOptions(),
-                balloonsettings::FontScaleOptionCount(), fontIdx, false);   // 末行不加分隔线
+                balloonsettings::LanguageOptionCount(), langIdx, false);   // 末行不加分隔线
 
     // 底部留白把各行顶到内容区顶部。
     page->AddChild(std::unique_ptr<balloonwjui::DuiControl>(new balloonwjui::DuiControl()),
@@ -704,11 +761,18 @@ std::unique_ptr<balloonwjui::DuiVBox> CBalloonSystemSettingDlg::BuildChatPage()
                 balloonsettings::SendKeyOptionCount(),
                 balloonsettings::SendKeyIndexFromPressEnter(pressEnter), true);
 
+    // 默认聊天字体（预览 + 修改 + 恢复默认）。
+    AddChatFontRow(page.get());
+
     AddSwitchRow(page.get(), _T("自动接收图片"), NULL, kIdAutoRecvImage, autoRecvImg, true);
     AddSwitchRow(page.get(), _T("自动接收文件"), NULL, kIdAutoRecvFile, autoRecvFile, true);
     AddSwitchRow(page.get(), _T("消息漫游"), _T("多设备间同步最近 30 天的消息"), kIdMsgRoaming, roaming, true);
     AddSwitchRow(page.get(), _T("自动识别链接"), _T("关闭后聊天里的网址以普通文字显示"),
-                 kIdLinkDetect, linkDetect, false);
+                 kIdLinkDetect, linkDetect, true);
+
+    // 清理聊天记录（按钮，打开按时间范围清理的对话框；docs/清理聊天记录方案.md §11.1）。
+    AddButtonRow(page.get(), _T("清理聊天记录"), _T("按时间范围删除本机和服务器上的记录，对方不受影响"),
+                 kIdChatClean, _T("清理…"), false, false);   // 末行不加分隔线
 
     page->AddChild(std::unique_ptr<balloonwjui::DuiControl>(new balloonwjui::DuiControl()),
                    balloonwjui::DuiLayout::Hint().Weight(1));
@@ -742,6 +806,131 @@ void CBalloonSystemSettingDlg::AddButtonRow(balloonwjui::DuiVBox* page, LPCTSTR 
     {
         AddRowDivider(page);
     }
+}
+
+void CBalloonSystemSettingDlg::AddChatFontRow(balloonwjui::DuiVBox* page)
+{
+    const net::TextFont def = (m_lpFMGClient != NULL)
+        ? m_lpFMGClient->m_UserConfig.ChatFonts().GetDefault()
+        : net::TextFont();
+
+    std::unique_ptr<balloonwjui::DuiHBox> row(new balloonwjui::DuiHBox());
+    row->SetGap(kRowGap);
+    row->AddChild(BuildRowTextBlock(_T("默认聊天字体"), _T("单独设过字体的聊天窗除外")),
+                  balloonwjui::DuiLayout::Hint().Weight(1));
+
+    // 预览文字：按全局默认字体画；未设置时灰字「未设置」。控件尚未挂进树，直接对它设外观
+    std::unique_ptr<balloonwjui::DuiLabel> preview(new balloonwjui::DuiLabel());
+    preview->SetCtrlId(kIdChatFontPreview);
+    preview->SetTextAlign(DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    balloonsettings::ApplyChatFontPreview(preview.get(), def, m_hChatFontPreview);
+    row->AddChild(std::move(preview),
+                  balloonwjui::DuiLayout::Hint().Fixed(kChatFontPreviewW, kRowH)
+                      .AlignC(balloonwjui::DuiLayout::AlignCenter));
+
+    std::unique_ptr<balloonwjui::DuiButton> edit(new balloonwjui::DuiButton());
+    edit->SetButtonType(balloonwjui::DuiButton::StylePushButton);
+    edit->SetVariant(balloonwjui::DuiButton::Variant::Default);
+    edit->SetCtrlId(kIdChatFontEdit);
+    edit->SetText(_T("修改"));
+    row->AddChild(std::move(edit),
+                  balloonwjui::DuiLayout::Hint().Fixed(kBtnWidth, kBtnHeight)
+                      .AlignC(balloonwjui::DuiLayout::AlignCenter));
+
+    // 「恢复默认」：清除全局默认，发出的消息不再带字体。未设置时不可点
+    std::unique_ptr<balloonwjui::DuiButton> reset(new balloonwjui::DuiButton());
+    reset->SetButtonType(balloonwjui::DuiButton::StylePushButton);
+    reset->SetVariant(balloonwjui::DuiButton::Variant::Default);
+    reset->SetCtrlId(kIdChatFontReset);
+    reset->SetText(_T("恢复默认"));
+    reset->SetEnabled(def.m_valid);
+    row->AddChild(std::move(reset),
+                  balloonwjui::DuiLayout::Hint().Fixed(kBtnWidth, kBtnHeight)
+                      .AlignC(balloonwjui::DuiLayout::AlignCenter));
+
+    page->AddChild(std::move(row), balloonwjui::DuiLayout::Hint().Fixed(kRowH));
+    AddRowDivider(page);
+}
+
+void CBalloonSystemSettingDlg::RefreshChatFontRow()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    const net::TextFont def = (m_lpFMGClient != NULL)
+        ? m_lpFMGClient->m_UserConfig.ChatFonts().GetDefault()
+        : net::TextFont();
+
+    balloonwjui::DuiLabel* preview =
+        dynamic_cast<balloonwjui::DuiLabel*>(content->FindCtrlById(kIdChatFontPreview));
+    if (preview != NULL)
+    {
+        balloonsettings::ApplyChatFontPreview(preview, def, m_hChatFontPreview);
+    }
+    balloonwjui::DuiControl* reset = content->FindCtrlById(kIdChatFontReset);
+    if (reset != NULL)
+    {
+        reset->SetEnabled(def.m_valid);
+    }
+}
+
+void CBalloonSystemSettingDlg::OpenDefaultChatFontPopup()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL || m_lpFMGClient == NULL)
+    {
+        return;
+    }
+    balloonwjui::DuiControl* btn = content->FindCtrlById(kIdChatFontEdit);
+    if (btn == NULL)
+    {
+        return;
+    }
+
+    // 以「修改」按钮的屏幕矩形为锚点（控件矩形是客户区坐标，转屏幕）
+    RECT rc = btn->GetRect();
+    POINT tl = { rc.left, rc.top };
+    POINT br = { rc.right, rc.bottom };
+    ::ClientToScreen(m_hWnd, &tl);
+    ::ClientToScreen(m_hWnd, &br);
+    RECT anchor = { tl.x, tl.y, br.x, br.y };
+
+    // 回显当前全局默认；未设置时浮层按内置默认（14px、黑、无样式）显示
+    m_chatFontPopup.SetFont(m_lpFMGClient->m_UserConfig.ChatFonts().GetDefault());
+    m_chatFontPopup.OpenAt(anchor, m_hWnd);
+}
+
+void CBalloonSystemSettingDlg::OnDefaultChatFontChanged(void* userdata, const net::TextFont& font)
+{
+    CBalloonSystemSettingDlg* self = (CBalloonSystemSettingDlg*)userdata;
+    if (self == NULL)
+    {
+        return;
+    }
+    self->ApplyDefaultChatFont(font);
+}
+
+void CBalloonSystemSettingDlg::ApplyDefaultChatFont(const net::TextFont& font)
+{
+    if (m_lpFMGClient == NULL)
+    {
+        return;
+    }
+    // 改即生效：写进账号配置并立刻存盘，与本对话框其它设置项一致
+    m_lpFMGClient->m_UserConfig.ChatFonts().SetDefault(font);
+    m_lpFMGClient->SaveUserConfig();
+    RefreshChatFontRow();
+
+    // 已打开的聊天窗要立刻跟着变：请主面板让没有单独设过字体的聊天窗改用新的默认字体。
+    // 聊天窗归主面板持有，设置窗够不着，故经主面板中转
+    if (m_ownerHwnd != NULL && ::IsWindow(m_ownerHwnd))
+    {
+        ::PostMessage(m_ownerHwnd, FMG_MSG_DEFAULT_CHAT_FONT_CHANGED, 0, 0);
+    }
+    LOG_INFO("Settings: default chat font %s (size %d).",
+             font.m_valid ? "set" : "cleared", font.m_valid ? font.m_size : 0);
 }
 
 void CBalloonSystemSettingDlg::AddValueRow(balloonwjui::DuiVBox* page, LPCTSTR title,
@@ -1091,7 +1280,7 @@ void CBalloonSystemSettingDlg::ChooseDataRoot()
         return;
     }
 
-    // 写全局配置。<u>不能</u>写进账号配置 —— <账号>.cfg 本身就在要搬走的那棵树里，
+    // 写全局配置。<u>不能</u>写进账号配置 —— <账号>.ini 本身就在要搬走的那棵树里，
     // 存进去的话下次启动会去新位置找它、找不到就用默认值，这一项永远不会生效
     // （原委见 net/StorageLocation.h）。
     CIniFile iniFile;
@@ -1115,7 +1304,7 @@ void CBalloonSystemSettingDlg::ChooseDataRoot()
 }
 
 // =======================================================================
-// 账号安全页（修改密码复用面板改密对话框；其余按钮/二次验证为占位）
+// 账号安全页（修改密码复用面板改密对话框；自动登录转交主面板；其余按钮/二次验证为占位）
 // =======================================================================
 
 std::unique_ptr<balloonwjui::DuiVBox> CBalloonSystemSettingDlg::BuildAccountPage()
@@ -1129,6 +1318,9 @@ std::unique_ptr<balloonwjui::DuiVBox> CBalloonSystemSettingDlg::BuildAccountPage
     AddButtonRow(page.get(), _T("登录设备"), _T("管理已登录的设备"),
                  kIdManageDevices, _T("管理"), false, true);
     AddButtonRow(page.get(), _T("修改密码"), NULL, kIdChangePwd, _T("修改"), false, true);
+    //自动登录：初始状态由主面板经 SetAutoLoginSwitchState 传入（本对话框读不到账号列表）
+    AddSwitchRow(page.get(), _T("自动登录"), _T("启动客户端时自动登录当前账号，登录过程中可以取消"),
+                 kIdAutoLogin, m_autoLoginOn, true);
     AddSwitchRow(page.get(), _T("二次验证"),
                  twoFactor ? _T("已开启") : _T("未开启"), kIdTwoFactor, twoFactor, true);
     AddButtonRow(page.get(), _T("登录日志"), NULL, kIdLoginLog, _T("查看"), false, true);
@@ -1367,6 +1559,26 @@ bool CBalloonSystemSettingDlg::ApplySettingChange(UINT ctrlId, int value)
         return true;
     }
 
+    //自动登录：标志存在本机历史账号列表里，列表归主面板的会话控制器持有，
+    //故只记下新状态并转交主面板，由会话控制器修改列表并落盘（不写 CUserConfig）
+    if (ctrlId == kIdAutoLogin)
+    {
+        m_autoLoginOn = on;
+        if (m_ownerHwnd != NULL && ::IsWindow(m_ownerHwnd))
+        {
+            ::PostMessage(m_ownerHwnd, FMG_MSG_SET_AUTO_LOGIN, (WPARAM)(on ? 1 : 0), 0);
+            LOG_INFO("Settings: auto-login switch turned %s, forwarded to the main panel.",
+                     on ? "on" : "off");
+        }
+        else
+        {
+            //只有调试入口会在没有主面板的情况下打开本对话框，此时无处保存
+            LOG_WARNING("Settings: auto-login switch turned %s, but there is no main panel to save it.",
+                        on ? "on" : "off");
+        }
+        return true;
+    }
+
     CUserConfig* cfg = (m_lpFMGClient != NULL) ? &m_lpFMGClient->m_UserConfig : NULL;
     if (cfg == NULL)
     {
@@ -1383,9 +1595,6 @@ bool CBalloonSystemSettingDlg::ApplySettingChange(UINT ctrlId, int value)
         break;
     case kIdLanguage:
         cfg->SetLanguageIndex(balloonsettings::ClampLanguageIndex(value));
-        break;
-    case kIdFontScale:
-        cfg->SetUiFontScaleIndex(balloonsettings::ClampFontScaleIndex(value));
         break;
     case kIdAutoAway:
         cfg->EnableAutoAway(on ? TRUE : FALSE);
@@ -1472,7 +1681,7 @@ bool CBalloonSystemSettingDlg::ApplySettingChange(UINT ctrlId, int value)
 
     if (handled && m_lpFMGClient != NULL)
     {
-        // 设计无"保存"按钮，改即生效：立刻持久化到该账号的 .cfg。
+        // 设计无"保存"按钮，改即生效：立刻持久化到该账号的 .ini。
         m_lpFMGClient->SaveUserConfig();
         LOG_INFO(_T("系统设置项已更新并保存。"));
     }
@@ -1505,9 +1714,24 @@ bool CBalloonSystemSettingDlg::HandleButtonClick(UINT ctrlId)
                      _T("系统设置"), MB_OK | MB_ICONINFORMATION);
         return true;
 
+    //「默认聊天字体」的「修改」：打开字体浮层编辑全局默认
+    case kIdChatFontEdit:
+        OpenDefaultChatFontPopup();
+        return true;
+
+    //「默认聊天字体」的「恢复默认」：清除全局默认，发出的消息不再带字体
+    case kIdChatFontReset:
+        ApplyDefaultChatFont(net::TextFont());
+        return true;
+
     //「立即清理」：弹清理对话框，由它列出各类缓存的占用量并按用户勾选执行删除。
     case kIdClearCache:
         m_cacheCleanDlg.OpenDialog(m_hWnd);
+        return true;
+
+    //聊天页「清理聊天记录」的「清理…」：弹按时间范围清理的对话框
+    case kIdChatClean:
+        OpenChatCleanDialog();
         return true;
 
     case kIdChangeRecvPath:

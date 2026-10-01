@@ -88,7 +88,7 @@ static void EnsureTrayTipClassRegistered()
 
 bool CTrayMsgTipPopup::EnsureCreated()
 {
-    if (m_hWnd != NULL)
+    if (IsWindow())
     {
         return true;   // 已创建
     }
@@ -260,7 +260,7 @@ void CTrayMsgTipPopup::ShowForEntries(const std::vector<balloonmain::TrayFlashEn
 
 void CTrayMsgTipPopup::HidePopup()
 {
-    if (m_hideTimerId != 0 && m_hWnd != NULL)
+    if (m_hideTimerId != 0 && IsWindow())
     {
         ::KillTimer(m_hWnd, kHideTimerId);
         m_hideTimerId = 0;

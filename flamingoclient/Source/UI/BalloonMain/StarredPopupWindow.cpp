@@ -294,7 +294,7 @@ LRESULT CStarredPopupWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         {
             const int64_t userid = (int64_t)m_list->GetItemParam(idx);
             //汇总行（「等 N 人」）没有对应的人，lParam 为 0，点它不开窗。
-            if (userid > 0 && m_panelHwnd != NULL)
+            if (userid > 0 && ::IsWindow(m_panelHwnd))
             {
                 //请主面板打开单聊。用 PostMessage 而不是直接调：本处仍在控件的事件
                 //回调栈上，而开窗会走一串建窗 / 布局，投递出去更稳妥。

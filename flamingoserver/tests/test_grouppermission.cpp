@@ -1,7 +1,8 @@
 ﻿/**
  *  群管理权限判定单元测试（Suite GP），test_grouppermission.cpp
  *  覆盖 CheckSetMemberRole 的全部判定分支与判定优先级，以及结论到协议错误码、
- *  到提示原文的两张翻译表。
+ *  到提示原文的两张翻译表；另有群内发言的禁言判定 IsMutedForSpeaking（FWD-S6，
+ *  普通群发与转发到群共用，见 docs/聊天消息转发方案.md）。
  *
  *  这一层是"设置 / 取消管理员"里最值得测的部分：规则要在"操作者三种角色 ×
  *  目标三种角色 × 是否本人 × 请求角色是否合法 × 群是否存在"这么多格里都站得住，
@@ -221,4 +222,24 @@ TEST_CASE("GP16 移出前置结论到错误码与提示原文的翻译")
     CHECK(std::string(KickGroupMemberCheckToMessage(kick_check_ok))              == "ok");
     CHECK(std::string(KickGroupMemberCheckToMessage(kick_check_group_not_exist)) == "group not exist");
     CHECK(std::string(KickGroupMemberCheckToMessage(kick_check_not_admin))       == "only owner or admin can kick");
+}
+
+TEST_CASE("FWD-S6 群内发言的禁言判定（普通群发与转发到群共用）")
+{
+    //没有任何禁言：各种角色都能发言
+    CHECK_FALSE(IsMutedForSpeaking(0, 0, group_role_member));
+    CHECK_FALSE(IsMutedForSpeaking(0, 0, group_role_admin));
+    CHECK_FALSE(IsMutedForSpeaking(0, 0, group_role_owner));
+
+    //被单独禁言：不论角色都不能发言（与抽取前 sendGroupMessage 的判定一致）
+    CHECK(IsMutedForSpeaking(1, 0, group_role_member));
+    CHECK(IsMutedForSpeaking(1, 0, group_role_admin));
+
+    //全员禁言：普通成员不能发言，群主与管理员放行
+    CHECK(IsMutedForSpeaking(0, 1, group_role_member));
+    CHECK_FALSE(IsMutedForSpeaking(0, 1, group_role_admin));
+    CHECK_FALSE(IsMutedForSpeaking(0, 1, group_role_owner));
+
+    //全员禁言同时被单独禁言：仍不能发言
+    CHECK(IsMutedForSpeaking(1, 1, group_role_admin));
 }

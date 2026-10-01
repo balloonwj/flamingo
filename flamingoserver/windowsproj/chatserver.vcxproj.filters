@@ -165,10 +165,16 @@
     <ClCompile Include="..\chatserversrc\MessagePinManager.cpp">
       <Filter>chatserversrc\app</Filter>
     </ClCompile>
+    <ClCompile Include="..\chatserversrc\MessageDeleteRange.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
     <ClCompile Include="..\chatserversrc\GroupProtocol.cpp">
       <Filter>chatserversrc\app</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\GroupPermission.cpp">
+      <Filter>chatserversrc\app</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\GroupAutoName.cpp">
       <Filter>chatserversrc\app</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\GroupManager.cpp">
@@ -566,10 +572,16 @@
     <ClInclude Include="..\chatserversrc\MessagePinManager.h">
       <Filter>chatserversrc\app</Filter>
     </ClInclude>
+    <ClInclude Include="..\chatserversrc\MessageDeleteRange.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupProtocol.h">
       <Filter>chatserversrc\app</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupPermission.h">
+      <Filter>chatserversrc\app</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\GroupAutoName.h">
       <Filter>chatserversrc\app</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupManager.h">

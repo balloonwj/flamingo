@@ -6,7 +6,7 @@
  *  超出视口即可用鼠标滚轮滚动，右侧画一条细滚动条。
  *
  *  本控件还承载消息的"多选模式"：进入后底部让出一条操作条（取消 /
- *  转发 N / 删除 N），各 ChatBubble 行首显示勾选圈。复制 / 删除 /
+ *  逐条转发 N / 合并转发 N / 删除 N），各 ChatBubble 行首显示勾选圈。复制 / 删除 /
  *  撤回 / 转发 / 引用回复等单条操作由 ChatBubble 的右键菜单回调到
  *  本类对应的 RequestXxx 接口。
  *
@@ -17,10 +17,108 @@
 
 #pragma once
 
+#include <memory>
+#include <vector>
+
 #include "../../../third-party/balloonui/balloonui/DuiControl.h"
 #include "ChatMockData.h"
+#include "ChatSmoothScroll.h"   // 滚轮的平滑滚动（成员需完整类型）
+
+/**
+ *  消息列表请宿主聊天窗删除消息（右键「删除」或多选「删除 N」里已有服务器 msgid 的那些行）。
+ *  lParam = 堆上 std::vector<long long>*（要删除的服务器 msgid，均为正数、至少一个），
+ *  宿主处理后 delete；异步消息。宿主弹确认框，确认后逐条发 cmd_delete_message；
+ *  气泡等服务端推来 cmd_messages_deleted_notify 后才移除（docs/清理聊天记录方案.md §10）。
+ *
+ *  列表只投给自己所在的聊天窗，按开发约定文档「UI 约定」第 6 条属窗口私有消息，走 WM_APP 段，
+ *  因此定义在这里而不是 CustomMsgDef.h（后者只放 WM_USER 段的窗口间消息，消息号守卫要求
+ *  其中的号都低于代理窗闸门下界）。两个聊天窗的头文件为消息映射包含了本文件。
+ */
+#define WM_CHAT_DELETE_REQUEST  (WM_APP + 0x61)
+
+/**
+ *  消息列表请宿主聊天窗转发多选中的消息（多选操作条上的「逐条转发」「合并转发」）。
+ *  wParam 不用（恒为 0）；lParam = 堆上 balloonchatwnd::ChatForwardRequest*，宿主处理后
+ *  delete；异步消息。宿主补上源会话信息后交给主面板打开目标选择窗。
+ *  与 WM_CHAT_DELETE_REQUEST 同属窗口私有消息，理由见上。
+ */
+#define WM_CHAT_FORWARD_REQUEST (WM_APP + 0x62)
+
+/**
+ *  合并卡片请宿主聊天窗打开聊天记录查看窗（单击了卡片）。
+ *  wParam 不用（恒为 0）；lParam = 堆上 std::string*（合并消息的 content 原文，UTF-8），
+ *  宿主转投给主面板（FMG_MSG_OPEN_MERGED_VIEWER，所有权随之转交）或自行 delete；异步消息。
+ *  与 WM_CHAT_DELETE_REQUEST 同属窗口私有消息，理由见上。
+ */
+#define WM_CHAT_OPEN_MERGED_RECORD (WM_APP + 0x64)
 
 namespace balloonchatwnd {
+
+/**
+ *  WM_CHAT_FORWARD_REQUEST 的负载：用户在多选操作条上要转发哪些消息、用哪种模式。
+ *  由 ChatMessageList::RequestForwardSelected 在堆上创建，宿主聊天窗处理后 delete。
+ */
+struct ChatForwardRequest
+{
+    bool                   m_merge;     //true 合并转发为一条聊天记录，false 逐条转发
+    std::vector<long long> m_msgids;    //要转发的服务器 msgid，按 msgid 升序、去重，至少一个
+    size_t                 m_skipped;   //选中了但不能转发的行数，供宿主提示「已跳过 N 条」
+
+    ChatForwardRequest()
+        : m_merge(false)
+        , m_skipped(0)
+    {
+    }
+};
+
+/**
+ *  多选操作条上的按钮，从左到右四等分排列。
+ */
+enum MultiSelectBarButton
+{
+    kBarButtonNone          = 0,   // 没有命中任何按钮（落点在操作条之外）
+    kBarButtonCancel        = 1,   // 取消：退出多选
+    kBarButtonForwardEach   = 2,   // 逐条转发：选中的每条消息在目标会话里各生成一条
+    kBarButtonForwardMerged = 3,   // 合并转发：选中的消息打包成一条聊天记录
+    kBarButtonDelete        = 4    // 删除：删除选中的消息
+};
+
+/**
+ *  判断落点命中多选操作条上的哪个按钮。四个按钮等分操作条宽度，分界点归右侧那一段。
+ *  绘制与点击共用本函数和 MultiSelectBarButtonRect，避免两处的分段随时间漂移。
+ *    bar：操作条矩形（客户区坐标）。
+ *    pt： 落点（与 bar 同一坐标系）。
+ *  @return 命中的按钮；落点在操作条之外时返回 kBarButtonNone。本函数无副作用。
+ */
+MultiSelectBarButton MultiSelectBarHitTest(const RECT& bar, POINT pt);
+
+/**
+ *  取多选操作条上某个按钮的矩形。
+ *    bar：    操作条矩形。
+ *    button： 按钮，取 kBarButtonCancel ~ kBarButtonDelete；kBarButtonNone 返回空矩形。
+ *  @return 按钮矩形（与 bar 同一坐标系）。最后一个按钮的右边界取 bar.right，吸收整除余数。
+ */
+RECT MultiSelectBarButtonRect(const RECT& bar, MultiSelectBarButton button);
+
+class ChatMessageList;
+
+/**
+ *  平滑滚动逐帧驱动与消息列表之间的"主人令牌"。
+ *
+ *  逐帧驱动交给 balloonui 的 DuiAnimMgr（进程级 60Hz 脉冲）调度，由它持有；消息列表
+ *  可能先于驱动被销毁（关窗时动画还没走完）。驱动与列表共用一份令牌：列表析构时把
+ *  m_owner 置空，驱动下次触发时读到空就什么都不做。令牌本身由 shared_ptr 保活，读
+ *  m_owner 永远安全。做法与 balloonui 的 DuiSwitch 相同。
+ */
+struct ChatScrollAnimToken
+{
+    ChatMessageList* m_owner;   // 所属消息列表；列表析构时置 NULL
+
+    ChatScrollAnimToken()
+        : m_owner(NULL)
+    {
+    }
+};
 
 /**
  *  把一段 Unicode 文字放进剪贴板。
@@ -46,6 +144,8 @@ public:
     ~ChatMessageList();
 
     // 把滚动位置移到底部（显示最新消息）。须在填充消息后调用一次。
+    // 本控件已经摆好位置时当场重新排版，滚动位置与滚动条随即就是正确的；尚未摆好位置时
+    // 由之后的第一次排版夹紧。副作用：取消进行中的平滑滚动，请求重画。
     void ScrollToBottom();
 
     // 滚动到带指定服务器 msgid 的消息行，使其进入视口顶部附近（供历史消息记录窗"定位"
@@ -56,6 +156,28 @@ public:
     // 追加一条消息 —— 新建一个 ChatBubble 挂到末尾，重新布局并滚到底部。
     //   msg：要追加的消息。
     void AppendMessage(const ChatMessage& msg);
+
+    /**
+     *  设置本列表是否显示已读回执。单聊窗建列表后调用一次开启；群聊窗不调用（默认关闭）
+     *  —— 按协议群聊不做已读回执，服务端不向群成员推送 cmd_message_read_notify。
+     *    b：true 开启。之后追加的每一行都继承这个设置；已有的行也一并改掉并重排。
+     */
+    void SetReadReceiptEnabled(bool b);
+
+    /**
+     *  应用对方的已读位点：把自己发出、已拿到服务器 msgid、且 msgid 不大于位点的消息
+     *  标为已读，并记住这个位点。之后追加的行（翻页加载的历史）、之后才回填 msgid 的行
+     *  （发送回执晚于已读推送到达），都按记住的位点当场判定。
+     *
+     *  位点只增不减：比已记住的位点小的（乱序到达的旧推送）直接忽略，已读不会改回未读。
+     *    readMsgid：对方已读到的最大消息 msgid；<=0 直接忽略。
+     *  返回：本次新标为已读的行数；为 0 表示没有任何变化，调用方可以不重绘。
+     *  来源：cmd_message_read_notify 推送（实时）与单聊同步消息应答里的对方已读位点。
+     */
+    int ApplyPeerReadPosition(long long readMsgid);
+
+    // 当前记住的对方已读位点；0 表示还不知道。
+    long long PeerReadMsgid() const { return m_peerReadMsgid; }
 
     /**
      *  向上翻页渲染的<u>开始</u>标记。
@@ -91,6 +213,26 @@ public:
     int ScrollY() const       { return m_scrollY; }
     int ViewHeight() const    { return m_viewHeight; }
     int ContentHeight() const { return m_contentHeight; }
+
+    // 当前滚动条滑块的矩形（宿主客户区坐标）；内容没有超出可视区时为空矩形（全 0）。
+    // 供测试核对滑块位置，与绘制、命中判断用的是同一份计算。无副作用。
+    RECT ScrollThumbRect() const { return ThumbRect(); }
+
+    // ---- 平滑滚动 ----------------------------------------------------
+
+    /**
+     *  把进行中的平滑滚动推进到 nowMs 时刻：按动画曲线算出此刻的滚动位置，位置有变化
+     *  就重排、重绘，并在接近顶部时通知宿主加载更早的消息。动画走完后自动停止。
+     *  没有进行中的动画时什么都不做。
+     *
+     *  平时由逐帧驱动（DuiAnimMgr 的 60Hz 脉冲）调用；单元测试直接调用它，传一个足够
+     *  靠后的时刻即可把动画推到结束。
+     *    nowMs：当前时刻（毫秒），与滚轮起动画时用同一个时钟（PerfNowMs）。
+     */
+    void AdvanceSmoothScroll(double nowMs);
+
+    // 是否有进行中的平滑滚动。
+    bool IsSmoothScrolling() const;
 
 
     // 清空所有消息行（销毁全部 ChatBubble、滚动位置归零、重排重绘）。历史消息
@@ -158,7 +300,16 @@ public:
 
     // 接收方：按服务器 msgid 定位文件气泡。
     void UpdateFileDownloadProgress(long long msgid, int percent);
-    void SetFileDownloadedByMsgid(long long msgid, const CString& localPath);
+    /**
+     *  文件下载完成：把 fileMsgid 为 msgid 的文件气泡置为完成态并填上本地路径。
+     *    msgid：    服务器消息ID；为 0 时直接返回 false。
+     *    localPath：下载落地的本地完整路径。
+     *    incoming： [出参，可为 NULL] 命中时写入该文件是否为对方发来（true）、自己发出（false）；
+     *               未命中时不修改。单聊窗据此只对对方发来的文件上报「已接收」回执。
+     *  @return 本列表里有这条文件气泡、已回填时返回 true；没有时返回 false，列表不变。
+     *          下载结果按 msgid 广播给所有聊天窗，绝大多数窗口都会得到 false。
+     */
+    bool SetFileDownloadedByMsgid(long long msgid, const CString& localPath, bool* incoming = NULL);
     void MarkFileDownloadFailedByMsgid(long long msgid);
     void MarkFileCancelledByMsgid(long long msgid);
     // 用户点「拒绝」：把该条置「已拒绝接收」态（仍可再点「重新下载」反悔）。
@@ -346,8 +497,60 @@ public:
 
     // ---- ChatBubble 右键菜单 / 多选点击回调进来的请求 -----------------
 
-    // 删除某一条消息行（从列表移除并销毁该 ChatBubble，随后重排）。
-    void RequestDeleteBubble(ChatBubble* bubble);
+    /**
+     *  删除某一条消息行（气泡右键「删除」）。
+     *
+     *  删除是本人视角的真删除（docs/清理聊天记录方案.md §10），按该行有没有服务器 msgid 分两种：
+     *    · msgid 非正（发送中、发送失败，服务器上没有这条）：直接从列表移除并销毁该 ChatBubble，
+     *      随后重排，与改造前的行为相同；
+     *    · msgid 为正：本方法<u>不</u>就地改界面，只把 msgid 经 WM_CHAT_DELETE_REQUEST 投给
+     *      宿主聊天窗，由宿主确认后发 cmd_delete_message；气泡等服务端推来
+     *      cmd_messages_deleted_notify 后走 RemoveMessagesByMsgid 移除。
+     *
+     *    bubble：目标消息行；NULL 时什么都不做。
+     *  @return 已就地移除（bubble 已销毁，调用方其后不得再访问它）返回 true；
+     *          转交宿主或 bubble 为 NULL 时返回 false，bubble 仍然有效。
+     */
+    bool RequestDeleteBubble(ChatBubble* bubble);
+
+    /**
+     *  删除多选模式下选中的全部消息行（多选操作条上的「删除 N」）。
+     *
+     *  与 RequestDeleteBubble 同一口径：选中行里 msgid 非正的立即移除；msgid 为正的留在列表里，
+     *  它们的 msgid 一次性经 WM_CHAT_DELETE_REQUEST 投给宿主，等删除推送到达后再移除。
+     *  无论选中行是哪一种，都会退出多选模式并重排。未处于多选模式或一行都没选中时什么都不做。
+     *
+     *  @return 投给宿主、等待服务端删除的 msgid（按列表顺序）；没有这类行时返回空数组。
+     *          列表不在窗口里（单元测试）时照样返回，只是投递这一步会跳过。
+     */
+    std::vector<long long> DeleteSelected();
+
+    /**
+     *  取多选模式下选中的、可以转发的消息 msgid（多选操作条上的「逐条转发」「合并转发」用）。
+     *
+     *  每一行按 CanForwardMessage 判定能否转发，msgid 按 ForwardMsgidOf 取（单聊里收到的
+     *  文件行取 fileMsgid）。结果按 msgid 升序排列并去重，与服务端处理转发源的顺序一致
+     *  （服务端按 msgid 升序取源消息）。本方法只读，不改选中态、不退出多选。
+     *
+     *  @param skipped [出参，可为 NULL] 选中了但不能转发的行数（发送中 / 发送失败、文件夹行
+     *                 等），供调用方提示「已跳过 N 条不能转发的消息」
+     *  @return 可转发的 msgid；未处于多选模式或没有可转发的选中行时返回空数组
+     */
+    std::vector<long long> GetSelectedForwardMsgids(size_t* skipped) const;
+
+    /**
+     *  判断列表里是否已有同一条消息，供群聊窗对本人消息的回显去重。
+     *
+     *  服务端把群消息推给包括发送者在内的全体成员。本人普通发送的消息已有乐观气泡，回显要
+     *  跳过；本人转发到本群、或在别的设备上发出的消息，列表里没有，回显要显示。两种情况都按
+     *  本方法判断：乐观气泡在回执回填之前只有 clientmsgid，回填之后才有 msgid，故两者都比。
+     *
+     *  @param msgid       服务器 msgid；与某行的 msgid 或 fileMsgid 相同即命中，0 不参与比较
+     *  @param clientMsgId 客户端消息ID；与某行的 clientMsgId 或 fileClientMsgId 相同即命中，
+     *                     空串不参与比较
+     *  @return 命中任意一行返回 true
+     */
+    bool ContainsMessage(long long msgid, const std::string& clientMsgId) const;
 
     // 请求撤回某一条消息行。本方法<u>不</u>就地改界面 —— 它只把该行的服务器 msgid
     // 经 WM_CHAT_RECALL_REQUEST 投给宿主聊天窗，由宿主连同自己的 ctype/cid 发
@@ -400,6 +603,20 @@ public:
     // 找到并改成提示行返回 true，否则 false。
     bool RecallMessageByMsgid(long long msgid, const CString& tipText);
 
+    /**
+     *  移除带指定服务器 msgid 的消息行（收到"本人删除了消息"推送后调用，见
+     *  docs/清理聊天记录方案.md §8）。
+     *
+     *  移除之后，若某个时间分隔行后面紧跟的是另一个时间分隔行、或已到列表末尾（即它下面的
+     *  消息全被删光了），这个分隔行也一并移除，免得留下一行孤零零的时间。撤回提示行虽然也是
+     *  居中样式，但它带着原消息的 msgid，属于内容而不是分隔，不会被当成孤立的分隔行。
+     *  全部移除完只重排、重绘一次。
+     *
+     *  @param msgids 要移除的服务器 msgid；非正的项忽略
+     *  @return 实际移除的消息行数（不含顺带移除的时间分隔行）；列表里没有的 msgid 不计入
+     */
+    int RemoveMessagesByMsgid(const std::vector<long long>& msgids);
+
     // 发送回执到达后，按本端生成的 clientMsgId 找到那条"刚发出"的消息行，把服务器
     // 分配的 msgid 与消息时间回填进去。没有这一步，本端发出的气泡会一直是
     // msgid=0 / 时间=0，右键菜单里就永远不会出现"撤回"（时限判断拿不到依据）。
@@ -414,8 +631,18 @@ public:
     // 以某一条消息为起点进入多选模式（该行预选中）。
     void EnterMultiSelectWith(ChatBubble* bubble);
 
-    // 转发某一条消息（mock 阶段为占位提示，真实转发待接入）。
-    void RequestForwardBubble(ChatBubble* bubble);
+    /**
+     *  转发多选中的消息（多选操作条上的「逐条转发」「合并转发」）。
+     *
+     *  按 GetSelectedForwardMsgids 取可转发的 msgid；一条都没有时什么都不做、也不退出多选
+     *  （操作条上这两个按钮此时是灰的）。否则把 msgid、模式与跳过条数经
+     *  WM_CHAT_FORWARD_REQUEST 投给宿主聊天窗，随后退出多选。消息列表不直接碰网络，
+     *  与删除、撤回同一做法。列表不在窗口里（单元测试）时投递这一步跳过。
+     *
+     *  @param merge true 合并转发，false 逐条转发
+     *  @return 投给宿主（或本应投给宿主）的 msgid 条数；0 表示没有可转发的行、未做任何事
+     */
+    size_t RequestForwardSelected(bool merge);
 
     // 引用回复某一条消息（mock 阶段为占位提示，真实引用待接入）。
     void RequestReplyBubble(ChatBubble* bubble);
@@ -439,8 +666,9 @@ public:
     CString GetSelectedText() const;
 
     /**
-     *  把当前选中的那段文字复制到剪贴板（内容口径与气泡右键「复制」完全一致，
-     *  内联表情替换成 "[表情]"）。
+     *  把当前选中的那段内容复制到剪贴板（内容口径与气泡右键「复制」完全一致）：同时写
+     *  纯文字（内联表情替换成 "[表情]"）与 Flamingo 自己的格式（粘到聊天输入框时表情能
+     *  还原成表情，见 ChatClipboardIo.h）。
      *
      *  供宿主聊天窗响应 Ctrl+C。<u>没有任何气泡有选区时什么都不做</u> —— 不去
      *  "退而复制整条"，那种情形下"整条"指的是哪一条说不清楚。
@@ -464,11 +692,13 @@ public:
     // DuiControl 覆写：绘制消息行 + 右侧细滚动条 +（多选时）底部操作条。
     void OnPaint(HDC hdc, const RECT& rcDirty) override;
 
-    // DuiControl 覆写：滚轮滚动消息列表。
+    // DuiControl 覆写：滚轮滚动消息列表。只更新平滑滚动的目标（delta 按比例换算成像素，
+    // 一格 64 像素），位置由逐帧驱动在约 150 毫秒内过渡过去，所以返回时 ScrollY 尚未变化。
+    // 可滚动范围为零时也消费滚轮（返回 true），不再向外层冒。
     bool OnMouseWheel(POINT pt, short zDelta, UINT mkFlags) override;
 
     // DuiControl 覆写：左键点击 —— 命中滚动条滑块则开始拖动；否则多选模式下
-    // 命中底部操作条执行 取消 / 转发所选 / 删除所选。
+    // 命中底部操作条执行 取消 / 逐条转发所选 / 合并转发所选 / 删除所选。
     bool OnLButtonDown(POINT pt, UINT mkFlags) override;
 
     // DuiControl 覆写：鼠标移动 —— 正在拖动滚动条滑块时据 pt.y 更新滚动位置。
@@ -491,8 +721,24 @@ public:
     balloonwjui::DuiControl* HitTest(POINT ptHostClient) override;
 
 private:
+    // 逐帧驱动与它的完成回调（都定义在 ChatMessageList.cpp）走完一段时要回调本列表，
+    // 需要访问下面的私有方法。
+    friend class ChatScrollTicker;
+    friend struct ChatScrollTickerDone;
+
+    // 确保平滑滚动的逐帧驱动在运行：没有在运行就向 DuiAnimMgr 挂一个。同一时刻只挂一个，
+    // 避免一个脉冲里重复重排。
+    void EnsureScrollTicker();
+
+    // 逐帧驱动走完一段（一个动画时长）时调用：动画还没结束（期间又收到了滚轮）就再挂一段。
+    void OnScrollTickerDone();
+
     // 滚动条滑块矩形（host 客户区坐标）；内容不溢出（无滚动条）时返回空矩形。
     RECT ThumbRect() const;
+
+    // 只把滚动位置置为"滚到底部"的占位值、取消进行中的平滑滚动，不排版也不重画；由调用方
+    // 随后的排版夹紧成真实位置。AppendMessage 紧接着就要排版，用它免得每追加一条排两遍。
+    void RequestScrollToBottom();
 
     /**
      *  落点是否位于滚动条的命中带内。命中带 = 滑块所在竖直窄带（左右各放宽
@@ -518,6 +764,11 @@ private:
 
     // 取本列表所属窗口的 HWND（用于弹消息框 / 操作剪贴板）。
     HWND HostHwnd() const;
+
+    // 把要删除的服务器 msgid 经 WM_CHAT_DELETE_REQUEST 投给宿主聊天窗。
+    //   msgids：要删除的服务器 msgid，调用方保证均为正数；为空时什么都不做。
+    // 宿主窗口无效（单元测试里列表不在窗口中、或窗口已销毁）时不投递，也不泄漏。
+    void PostDeleteRequest(const std::vector<long long>& msgids);
 
     // 按需(重)建离屏合成缓冲，使其至少 w×h 大；ref 提供位图色彩格式。
     void EnsureOffscreen(HDC ref, int w, int h);
@@ -549,9 +800,26 @@ private:
     long long m_prependSavedLastMs;
 
     int  m_scrollY;        // 当前纵向滚动偏移
+
+    // 滚轮的平滑滚动状态：目标位置与动画进度。滚轮只改它的目标，m_scrollY 由逐帧驱动
+    // 按它的曲线推进。直接改滚动位置的操作（拖滚动条、滚到底、定位消息、清空）会取消它。
+    ChatSmoothScroll m_smooth;
+
+    // 与逐帧驱动共用的主人令牌，见 ChatScrollAnimToken。构造时建立，析构时把主人置空。
+    std::shared_ptr<ChatScrollAnimToken> m_scrollAnimToken;
+
+    // 逐帧驱动是否已挂在 DuiAnimMgr 上。由 EnsureScrollTicker 置位、OnScrollTickerDone 复位。
+    bool m_scrollTickerRunning;
+
     int  m_contentHeight;  // 全部消息行的总高
     int  m_viewHeight;     // 视口高（消息行区域的高，已扣除多选操作条）
     bool m_multiSelect;    // 是否处于多选模式
+    // 是否显示已读回执：单聊窗开启，群聊窗保持关闭。AppendMessage 新建的每一行都继承它。
+    bool m_readReceiptEnabled;
+    // 对方的已读位点（服务器 msgid）：自己发出的消息 msgid 不大于它即为对方已读。
+    // 只增不减；0 表示还不知道。由 ApplyPeerReadPosition 更新，AppendMessage 与
+    // BackfillSentMessage 据它为新出现的行当场判定。
+    long long m_peerReadMsgid;
 
     // "该成员是否仍在群里"的查询钩子与其透传数据（借用，不持有）。群聊窗装上，
     // 单聊窗不装 —— 为空时 IsMemberInGroup 恒返回 true。

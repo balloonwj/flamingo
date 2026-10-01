@@ -431,7 +431,8 @@ public:
 
     /**
      *  取 UI 代理窗口句柄，供 ImageTransfer 把发图进度 / 结果异步回投到 UI。
-     *  @return UI 代理窗口句柄；接收线程未就绪时返回 NULL
+     *  @return UI 代理窗口句柄；接收线程未就绪时返回 NULL。代理窗口销毁后本类保存的句柄
+     *          不会被清零，调用方投递前必须用 ::IsWindow 判断，不能只判 NULL。
      */
     HWND    GetUIProxyWnd();
 
@@ -505,7 +506,7 @@ public:
      *  发送创建群聊请求（v2，cmd_create_group=1301）。线程安全，可在 UI 线程调用：
      *  内部组帧后追加进发送缓冲、唤醒发送线程。应答经 cmd_create_group 异步回投到
      *  UI（FMG_MSG_V2_CREATE_GROUP_RESULT）。
-     *  @param groupName  群名称（UTF-8，非空；调用方须保证）
+     *  @param groupName  群名称（UTF-8）；空串表示由服务端按成员昵称生成自动群名
      *  @param memberIds  初始成员 userid 列表（不含创建者；可为空）
      */
     void    SendCreateGroup(const std::string& groupName, const std::vector<int64_t>& memberIds);
@@ -932,6 +933,31 @@ public:
     void    RecallMessage(int ctype, int64_t cid, int64_t msgid);
 
     /**
+     *  删除单条消息（cmd_delete_message=1512），本人视角的软删除，对方不受影响。
+     *
+     *  与撤回同一套路：应答只用于失败时提示（投 FMG_MSG_V2_DELETE_MESSAGE_RESULT），
+     *  成功后服务端向本人全部在线设备（含本机）推送 cmd_messages_deleted_notify，客户端
+     *  统一在收到<u>推送</u>时删本地库、移除气泡，本机与其他设备的结果因此始终一致。
+     *
+     *  @param msgid 要删除的消息的服务器 msgid；须 >0，否则本方法直接跳过不发包
+     */
+    void    DeleteMessage(int64_t msgid);
+
+    /**
+     *  按时间范围清理本人的聊天记录（cmd_delete_messages_by_time=1521），作用于本人全部
+     *  单聊与群聊，对方不受影响。
+     *
+     *  应答投 FMG_MSG_V2_DELETE_BY_TIME_RESULT，带回服务端截断后的实际区间；本地删除同样
+     *  等 cmd_messages_deleted_notify 推送到达后再做。
+     *
+     *  @param begintime 区间开始，Unix毫秒；0 表示从最早开始；须 >=0
+     *  @param endtime   区间结束，Unix毫秒；须不早于 begintime。服务端会把它截断到服务端
+     *                   当前这一秒开始之前
+     *  @return 请求已发出返回 true；区间非法未发出返回 false（调用方据此不进入"清理中"状态）
+     */
+    bool    DeleteMessagesByTime(int64_t begintime, int64_t endtime);
+
+    /**
      *  Pin / 取消 Pin 一条消息（v2，cmd_pin_message=1518）。线程安全。
      *
      *  Pin 是<u>会话内共享</u>的状态：单聊里对方也看得到，群里全体成员都看得到。
@@ -947,6 +973,26 @@ public:
      *  @param pin   true 钉住、false 取消
      */
     void    PinMessage(int ctype, int64_t cid, int64_t msgid, bool pin);
+
+    /**
+     *  把若干条消息转发到一个目标会话（v2，cmd_forward_message=1511）。线程安全。
+     *
+     *  一次请求只有一个目标；转发给多个目标时由调用方逐个调用。应答经
+     *  FMG_MSG_V2_FORWARD_RESULT 回投 UI，wParam 为本方法返回的帧 seq —— 失败应答不带
+     *  clientmsgid，调用方只能按 seq 把应答对回到是哪一次转发。
+     *
+     *  @param clientMsgId 本次转发的客户端ID（非空，UUID）
+     *  @param toctype     目标会话类型（1 单聊、2 群聊）
+     *  @param tocid       目标会话ID（单聊=对方userid，群聊=群id），须 >0
+     *  @param merge       true 合并转发为一条聊天记录，false 逐条转发
+     *  @param title       合并转发的标题（UTF-8），逐条转发时忽略；为空时由服务端取缺省值
+     *  @param msgids      被转发的消息 msgid，条数 1 ~ net::kForwardMaxMessages
+     *  @return 本次请求的帧 seq（>0）；参数非法、或当前离线 / 未连接而无法发出时返回 0，
+     *          此时不会有应答回投，调用方应立即按失败处理
+     */
+    uint32_t ForwardMessage(const std::string& clientMsgId, int toctype, int64_t tocid,
+                            bool merge, const std::string& title,
+                            const std::vector<int64_t>& msgids);
 
     /**
      *  拉取某会话当前被 Pin 的消息全集（v2，cmd_get_pinned_messages=1520）。线程安全。
@@ -1203,6 +1249,10 @@ private:
 
     std::string                     m_strSendBuf;
     std::string                     m_strRecvBuf;
+    //主连接单次 recv 使用的临时缓冲，大小为 net::kRecvChunkSize（64 KB）。只由收包线程
+    //在 Recv() 中使用；第一次收包时才分配，随本对象一同释放。放在成员里而不是栈上，
+    //是为了不在收包线程的栈上占用 64 KB。
+    std::vector<char>               m_vecRecvChunk;
 
     std::mutex                      m_mtSendBuf;
 

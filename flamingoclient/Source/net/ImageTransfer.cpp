@@ -15,6 +15,8 @@
 #include "../Common/Util/MD5Core.h"   // MD5Init / MD5Update / MD5Final（纯 C 接口）
 #include "../Common/Util/EncodeUtil.h"          // UnicodeToUtf8（日志里打登录账号用）
 #include "UserCachePath.h"          // UserCacheDir（Users\<登录账号>\ 的统一口径）
+#include "ImageCacheStore.h"        // StoreImageToCache（发图成功后把图写进本地缓存）
+#include "CurrentUserAccount.h"     // CurrentUserAccount（发图任务入队时记下登录账号）
 
 #include <fstream>
 #include <chrono>
@@ -218,7 +220,7 @@ public:
 
     void onProgress(int64_t sent, int64_t total) override
     {
-        if (m_hUI == NULL)
+        if (!::IsWindow(m_hUI))
             return;
         ImageSendProgress* p = new ImageSendProgress();
         p->m_clientmsgid = m_clientmsgid;
@@ -384,6 +386,9 @@ void ImageTransfer::EnqueueSend(int ctype, int64_t cid, const std::string& clien
     task.m_cid         = cid;
     task.m_clientmsgid = clientMsgId;
     task.m_localpath   = localPath;
+    //发送成功后要把图写进 Users\<账号>\ChatImage\ 缓存，故在入队时（调用方所在的界面
+    //线程）记下登录账号，而不是到工作线程里再去读全局登录态。
+    task.m_selfAccount = CurrentUserAccount();
 
     {
         std::lock_guard<std::mutex> guard(m_queueMtx);
@@ -588,11 +593,27 @@ void ImageTransfer::ProcessSend(const Task& task)
                  ru.m_fileid.c_str(), task.m_clientmsgid.c_str());
     }
 
-    //7. 发图片消息（发送回执沿用 FMG_MSG_V2_SEND_CHATMSG_ACK）
+    //7. 把图写进本地缓存 Users\<账号>\ChatImage\<md5>（正常上传与秒传命中都写）。
+    //   消息记录窗、重新打开的聊天窗都只按这个缓存找本地图片：不写的话，自己发出去的
+    //   图在消息记录窗里一律显示"需要下载"，聊天窗重新打开时也要再从服务器下一遍。
+    //   写入失败不影响发送（图片已在服务器上），只记一条警告。
+    std::wstring cachePath = buildImageCachePath(task.m_selfAccount, md5);
+    if (cachePath.empty() || !StoreImageToCache(cachePath, bytes))
+    {
+        LOG_WARNING("ImageTransfer: store sent image in local cache failed, md5=%s, clientmsgid=%s.",
+                    md5.c_str(), task.m_clientmsgid.c_str());
+    }
+    else
+    {
+        LOG_INFO("ImageTransfer: sent image stored in local cache, md5=%s, clientmsgid=%s.",
+                 md5.c_str(), task.m_clientmsgid.c_str());
+    }
+
+    //8. 发图片消息（发送回执沿用 FMG_MSG_V2_SEND_CHATMSG_ACK）
     CIUSocket::GetInstance().SendChatImageMessage(task.m_ctype, task.m_cid, task.m_clientmsgid,
                                                   ru.m_fileid, md5, width, height, size);
 
-    //8. 成功回投
+    //9. 成功回投
     LOG_INFO("ImageTransfer: image sent, fileid=%s, %dx%d, size=%lld, clientmsgid=%s.",
              ru.m_fileid.c_str(), width, height, (long long)size, task.m_clientmsgid.c_str());
     PostSendResult(task, true, 0, "", ru.m_fileid, md5, width, height, size);
@@ -716,7 +737,7 @@ void ImageTransfer::PostAvatarUploadResult(bool ok, int errcode, const std::stri
     r->m_md5      = md5;
     r->m_localpath = localPath;
 
-    if (hUI != NULL)
+    if (::IsWindow(hUI))
         ::PostMessage(hUI, FMG_MSG_V2_AVATAR_UPLOAD_RESULT, 0, (LPARAM)r);
     else
         delete r;   //UI 未就绪，丢弃以免泄漏
@@ -807,7 +828,7 @@ void ImageTransfer::PostAvatarDownloadResult(const std::string& fileid, bool ok,
     r->m_ok       = ok;
     r->m_localpath = localPath;
 
-    if (hUI != NULL)
+    if (::IsWindow(hUI))
         ::PostMessage(hUI, FMG_MSG_V2_AVATAR_DOWNLOAD_RESULT, 0, (LPARAM)r);
     else
         delete r;
@@ -831,7 +852,7 @@ void ImageTransfer::PostSendResult(const Task& task, bool ok, int errcode, const
     r->m_height      = height;
     r->m_size        = size;
 
-    if (hUI != NULL)
+    if (::IsWindow(hUI))
         ::PostMessage(hUI, FMG_MSG_V2_IMAGE_SEND_RESULT, 0, (LPARAM)r);
     else
         delete r;   //UI 未就绪，丢弃以免泄漏
@@ -1009,7 +1030,7 @@ void ImageTransfer::PostDownloadResult(int64_t msgid, bool ok, int errcode, cons
     r->m_errcode  = errcode;
     r->m_localpath = localPath;
 
-    if (hUI != NULL)
+    if (::IsWindow(hUI))
         ::PostMessage(hUI, FMG_MSG_V2_IMAGE_DOWNLOAD_RESULT, 0, (LPARAM)r);
     else
         delete r;

@@ -2,7 +2,96 @@
 #include "UserConfig.h"
 #include "..\Common\Util\IniFile.h"
 
-CUserConfig::CUserConfig() : m_strFontName(_T("微软雅黑"))
+#include <utility>
+#include <vector>
+
+// ---- 聊天字体偏好在账号配置里的存放位置（格式见 ChatFontPrefs.h）----
+// 全局默认字体放在 [ChatDlg] 段，各会话的自定义字体单独成 [ChatFontOverride] 段，
+// 一个会话一行，键为"会话类型_会话ID"。
+static const TCHAR* const kChatFontSection      = _T("ChatDlg");
+static const TCHAR* const kDefaultChatFontKey   = _T("DefaultChatFont");
+static const TCHAR* const kChatFontOverrideSection = _T("ChatFontOverride");
+
+// 读全局默认字体时的缓冲区长度（字符）。编码后最长约 40 个字符，留足余量。
+static const DWORD kChatFontValueChars = 64;
+
+// 读 [ChatFontOverride] 整段时缓冲区的初始长度与上限（字符）。一行约 50 个字符，
+// 初始长度够放几百个会话；放不下时按倍数扩大，到上限为止。
+static const DWORD kOverrideSectionInitChars = 32 * 1024;
+static const DWORD kOverrideSectionMaxChars  = 4 * 1024 * 1024;
+
+// GetPrivateProfileSection 在缓冲区不够时返回"缓冲区长度 - 2"，据此判断要不要扩大。
+static const DWORD kSectionTruncatedDelta = 2;
+
+// 从账号配置读出聊天字体偏好，整体替换 prefs。缺键时为"未设置、无会话自定义"。
+//   iniFile：   读写 ini 的工具对象；
+//   pszFilePath：账号配置文件路径；
+//   prefs：     [出参] 读出的偏好。
+static void LoadChatFontPrefs(CIniFile& iniFile, PCTSTR pszFilePath, chatfont::ChatFontPrefs& prefs)
+{
+	prefs = chatfont::ChatFontPrefs();
+
+	TCHAR szDefault[kChatFontValueChars] = {0};
+	iniFile.ReadString(kChatFontSection, kDefaultChatFontKey, _T("0"), szDefault, kChatFontValueChars, pszFilePath);
+	net::TextFont defaultFont;
+	//格式不对（被手工改坏）时按未设置处理
+	if (chatfont::DecodeFont(szDefault, defaultFont))
+		prefs.SetDefault(defaultFont);
+
+	//整段读 [ChatFontOverride]：结果是 "键=值\0键=值\0\0"。缓冲区不够时加倍重读
+	std::vector<TCHAR> buf(kOverrideSectionInitChars);
+	DWORD got = 0;
+	while (true)
+	{
+		got = ::GetPrivateProfileSection(kChatFontOverrideSection, &buf[0], (DWORD)buf.size(), pszFilePath);
+		if (got + kSectionTruncatedDelta < (DWORD)buf.size() || buf.size() >= kOverrideSectionMaxChars)
+			break;
+		buf.resize(buf.size() * 2);
+	}
+
+	std::vector<std::pair<CString, CString> > entries;
+	const TCHAR* p = &buf[0];
+	while (*p != _T('\0'))
+	{
+		const CString line(p);
+		const int eq = line.Find(_T('='));
+		if (eq > 0)
+			entries.push_back(std::make_pair(line.Left(eq), line.Mid(eq + 1)));
+		p += line.GetLength() + 1;
+	}
+	prefs.ImportOverrides(entries);
+}
+
+// 把聊天字体偏好写回账号配置。[ChatFontOverride] 段整段重写：没有任何会话自定义时删掉该段。
+//   iniFile：   读写 ini 的工具对象；
+//   pszFilePath：账号配置文件路径；
+//   prefs：     要写入的偏好。
+static void SaveChatFontPrefs(CIniFile& iniFile, PCTSTR pszFilePath, const chatfont::ChatFontPrefs& prefs)
+{
+	iniFile.WriteString(kChatFontSection, kDefaultChatFontKey, chatfont::EncodeFont(prefs.GetDefault()), pszFilePath);
+
+	std::vector<std::pair<CString, CString> > entries;
+	prefs.ExportOverrides(entries);
+	if (entries.empty())
+	{
+		::WritePrivateProfileString(kChatFontOverrideSection, NULL, NULL, pszFilePath);
+		return;
+	}
+
+	//拼成 WritePrivateProfileSection 要的 "键=值\0键=值\0\0"
+	std::vector<TCHAR> block;
+	for (size_t i = 0; i < entries.size(); ++i)
+	{
+		CString line = entries[i].first + _T("=") + entries[i].second;
+		for (int k = 0; k < line.GetLength(); ++k)
+			block.push_back(line[k]);
+		block.push_back(_T('\0'));
+	}
+	block.push_back(_T('\0'));
+	::WritePrivateProfileSection(kChatFontOverrideSection, &block[0], pszFilePath);
+}
+
+CUserConfig::CUserConfig()
 {
 	m_bMute = FALSE;
 	m_bDestroyAfterRead = FALSE;
@@ -32,12 +121,6 @@ CUserConfig::CUserConfig() : m_strFontName(_T("微软雅黑"))
 	m_cyGroupDlg = 600;
 	
 	m_bPressEnterToSend = TRUE;
-	m_nFontSize = 12;
-	m_lFontColor = 0;
-	m_bFontBold = FALSE;
-	m_bFontItalic = FALSE;
-	m_bFontItalic = FALSE;
-	m_bFontUnderline = FALSE;
 
 	m_uFaceID = 0;
 	memset(m_szCustomFace, 0, sizeof(m_szCustomFace));
@@ -46,7 +129,6 @@ CUserConfig::CUserConfig() : m_strFontName(_T("微软雅黑"))
 
 	// 系统设置（新版对话框）新增项默认值，对照 design/系统设置1~3.png 各开关初始态。
 	m_nLanguageIndex = 0;			//简体中文
-	m_nUiFontScaleIndex = 1;		//中
 	m_bNewMsgNotify = TRUE;
 	m_bDesktopPopup = TRUE;
 	m_bShakeFlashIcon = FALSE;
@@ -112,13 +194,7 @@ BOOL CUserConfig::LoadConfig(PCTSTR pszFilePath)
 	m_cxChatDlg = iniFile.ReadInt(_T("ChatDlg"), _T("ChatDlgWidth"), nChatDlgDefaultWidth, pszFilePath);
 	m_cyChatDlg = iniFile.ReadInt(_T("ChatDlg"), _T("ChatDlgWidth"), nChatDlgDefaultHeight, pszFilePath);
 	m_bPressEnterToSend = iniFile.ReadInt(_T("ChatDlg"), _T("EnableEnterToSend"), 1, pszFilePath) ? TRUE : FALSE;
-	iniFile.ReadString(_T("ChatDlg"), _T("FontName"), _T("微软雅黑"), m_strFontName.GetBuffer(32), 32, pszFilePath);
-	m_strFontName.ReleaseBuffer();
-	m_nFontSize = iniFile.ReadInt(_T("ChatDlg"), _T("FontSize"), 12, pszFilePath);
-	m_lFontColor = iniFile.ReadInt(_T("ChatDlg"), _T("FontColor"), 0,pszFilePath);
-	m_bFontBold = iniFile.ReadInt(_T("ChatDlg"), _T("FontBold"), 0, pszFilePath) ? TRUE : FALSE;
-	m_bFontItalic = iniFile.ReadInt(_T("ChatDlg"), _T("FontItalic"), 0, pszFilePath) ? TRUE : FALSE;
-	m_bFontUnderline = iniFile.ReadInt(_T("ChatDlg"), _T("FontUnderLine"), 0, pszFilePath) ? TRUE : FALSE;
+	LoadChatFontPrefs(iniFile, pszFilePath, m_chatFontPrefs);
 	m_bShowLastMsg = iniFile.ReadInt(_T("ChatDlg"), _T("EnableShowLastMsg"), 1, pszFilePath) ? TRUE : FALSE;
 
 	m_uFaceID = (UINT)iniFile.ReadInt(_T("UserInfo"), _T("FaceID"), 0, pszFilePath);
@@ -127,9 +203,10 @@ BOOL CUserConfig::LoadConfig(PCTSTR pszFilePath)
 	m_cxGroupDlg = iniFile.ReadInt(_T("GroupDlg"), _T("GroupDlgWidth"), nGroupDlgDefaultWidth, pszFilePath);
 	m_cyGroupDlg = iniFile.ReadInt(_T("GroupDlg"), _T("GroupDlgWidth"), nGroupDlgDefaultHeight, pszFilePath);
 
+	winplace::LoadWindowPlacementPrefs(iniFile, pszFilePath, _T("HistoryDlg"), _T("HistoryDlg"), m_historyDlgPlacement);
+
 	// 系统设置（新版对话框）新增项 —— 默认值与构造函数一致，缺键时回落默认。
 	m_nLanguageIndex = iniFile.ReadInt(_T("Settings"), _T("LanguageIndex"), 0, pszFilePath);
-	m_nUiFontScaleIndex = iniFile.ReadInt(_T("Settings"), _T("UiFontScaleIndex"), 1, pszFilePath);
 	m_bNewMsgNotify = iniFile.ReadInt(_T("Settings"), _T("NewMsgNotify"), 1, pszFilePath) ? TRUE : FALSE;
 	m_bDesktopPopup = iniFile.ReadInt(_T("Settings"), _T("DesktopPopup"), 1, pszFilePath) ? TRUE : FALSE;
 	m_bShakeFlashIcon = iniFile.ReadInt(_T("Settings"), _T("ShakeFlashIcon"), 0, pszFilePath) ? TRUE : FALSE;
@@ -185,12 +262,7 @@ BOOL CUserConfig::SaveConfig(PCTSTR pszFilePath)
 	iniFile.WriteInt(_T("ChatDlg"), _T("ChatDlgWidth"), m_cxChatDlg, pszFilePath);
 	iniFile.WriteInt(_T("ChatDlg"), _T("ChatDlgHeight"), m_cyChatDlg, pszFilePath);
 	iniFile.WriteInt(_T("ChatDlg"), _T("EnableEnterToSend"), m_bPressEnterToSend, pszFilePath);
-	iniFile.WriteString(_T("ChatDlg"), _T("FontName"), m_strFontName, pszFilePath);
-	iniFile.WriteInt(_T("ChatDlg"), _T("FontSize"), m_nFontSize, pszFilePath);
-	iniFile.WriteInt(_T("ChatDlg"), _T("FontColor"), m_lFontColor, pszFilePath);
-	iniFile.WriteInt(_T("ChatDlg"), _T("FontBold"), m_bFontBold, pszFilePath);
-	iniFile.WriteInt(_T("ChatDlg"), _T("FontItalic"), m_bFontItalic, pszFilePath);
-	iniFile.WriteInt(_T("ChatDlg"), _T("FontUnderLine"), m_bFontUnderline, pszFilePath);
+	SaveChatFontPrefs(iniFile, pszFilePath, m_chatFontPrefs);
 	iniFile.WriteInt(_T("ChatDlg"), _T("EnableShowLastMsg"), m_bShowLastMsg, pszFilePath);
 
 	iniFile.WriteInt(_T("UserInfo"), _T("FaceID"), m_uFaceID, pszFilePath);
@@ -199,9 +271,10 @@ BOOL CUserConfig::SaveConfig(PCTSTR pszFilePath)
 	iniFile.WriteInt(_T("GroupDlg"), _T("GroupDlgWidth"), m_cxGroupDlg, pszFilePath);
 	iniFile.WriteInt(_T("GroupDlg"), _T("GroupDlgHeight"), m_cyGroupDlg, pszFilePath);
 
+	winplace::SaveWindowPlacementPrefs(iniFile, pszFilePath, _T("HistoryDlg"), _T("HistoryDlg"), m_historyDlgPlacement);
+
 	// 系统设置（新版对话框）新增项 —— [Settings] 节。
 	iniFile.WriteInt(_T("Settings"), _T("LanguageIndex"), m_nLanguageIndex, pszFilePath);
-	iniFile.WriteInt(_T("Settings"), _T("UiFontScaleIndex"), m_nUiFontScaleIndex, pszFilePath);
 	iniFile.WriteInt(_T("Settings"), _T("NewMsgNotify"), m_bNewMsgNotify, pszFilePath);
 	iniFile.WriteInt(_T("Settings"), _T("DesktopPopup"), m_bDesktopPopup, pszFilePath);
 	iniFile.WriteInt(_T("Settings"), _T("ShakeFlashIcon"), m_bShakeFlashIcon, pszFilePath);
@@ -447,69 +520,29 @@ void CUserConfig::EnablePressEnterToSend(BOOL bEnable)
 	m_bPressEnterToSend = bEnable;
 }
 
-void CUserConfig::SetFontName(PCTSTR pszFontName)
-{
-	m_strFontName = pszFontName;
-}
-
-void CUserConfig::SetFontSize(long nSize)
-{
-	m_nFontSize = nSize;
-}
-
-void CUserConfig::SetFontColor(long lColor)
-{
-	m_lFontColor = lColor;
-}
-
-void CUserConfig::EnableFontBold(BOOL bBold)
-{
-	m_bFontBold = bBold;
-}
-
-void CUserConfig::EnableFontItalic(BOOL bItalic)
-{
-	m_bFontItalic = bItalic;
-}
-
-void CUserConfig::EnableFontUnderline(BOOL bUnderline)
-{
-	m_bFontUnderline = bUnderline;
-}
-
 BOOL CUserConfig::IsEnablePressEnterToSend() const
 {
 	return m_bPressEnterToSend;
 }
 
-PCTSTR CUserConfig::GetFontName() const
+chatfont::ChatFontPrefs& CUserConfig::ChatFonts()
 {
-	return m_strFontName;
+	return m_chatFontPrefs;
 }
 
-long CUserConfig::GetFontSize() const
+const chatfont::ChatFontPrefs& CUserConfig::ChatFonts() const
 {
-	return m_nFontSize;
+	return m_chatFontPrefs;
 }
 
-long CUserConfig::GetFontColor() const
+const winplace::WindowPlacementPrefs& CUserConfig::GetHistoryDlgPlacement() const
 {
-	return m_lFontColor;
+	return m_historyDlgPlacement;
 }
 
-BOOL CUserConfig::IsEnableFontBold() const
+void CUserConfig::SetHistoryDlgPlacement(const winplace::WindowPlacementPrefs& placement)
 {
-	return m_bFontBold;
-}
-
-BOOL CUserConfig::IsEnableFontItalic() const
-{
-	return m_bFontItalic;
-}
-
-BOOL CUserConfig::IsEnableFontUnderline() const
-{
-	return m_bFontUnderline;
+	m_historyDlgPlacement = placement;
 }
 
 void CUserConfig::SetFaceID(UINT uFaceID)
@@ -552,16 +585,6 @@ void CUserConfig::SetLanguageIndex(long nIndex)
 long CUserConfig::GetLanguageIndex() const
 {
 	return m_nLanguageIndex;
-}
-
-void CUserConfig::SetUiFontScaleIndex(long nIndex)
-{
-	m_nUiFontScaleIndex = nIndex;
-}
-
-long CUserConfig::GetUiFontScaleIndex() const
-{
-	return m_nUiFontScaleIndex;
 }
 
 void CUserConfig::EnableNewMsgNotify(BOOL bEnable)

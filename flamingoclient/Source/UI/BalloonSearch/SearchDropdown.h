@@ -12,7 +12,9 @@
  *
  *  内部结构：顶部分类筛选标签栏（全部 / 联系人 / 群组 / 消息 / 文件，后两置灰
  *  占位）+ 结果滚动区（命中的联系人 / 群组行，命中昵称/群名时黄底高亮）。匹配
- *  复用 contactsearch::Match（子串 + 拼音首字母，大小写不敏感）。
+ *  复用 contactsearch 的匹配规则（子串 + 拼音首字母 + 全拼，大小写不敏感）。各候选
+ *  与查询词无关的预处理结果（显示名、小写形式、首字母串、音节序列）保存在
+ *  SearchCandidateCache 里，每次按键只做比对与匹配，不再逐个现算。
  *
  *  通知路由：建窗时 owner 传 NULL，故 DuiHost::SendNotify 的目标 GetParent 为空、
  *  自路由回本窗口，结果行 / 标签点击在本类 OnChildNotify 内自行处理（命中行 →
@@ -31,6 +33,7 @@
 
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"
+#include "SearchCandidateCache.h"   // balloonsearch::SearchCandidateCache
 
 #include <stdint.h>
 #include <vector>
@@ -113,6 +116,24 @@ public:
     void SetContactDeptPaths(const std::map<UINT, CString>* deptPaths);
 
     /**
+     *  预热搜索候选缓存：按给定的联系人资料池与群列表执行一次 Sync，把本来要在第一次
+     *  按键时才做的整批预处理提前完成。之后数据再变化，按键时的 Sync 照样会补上，因此
+     *  本方法只影响第一次按键的快慢，不影响搜索结果。
+     *    contacts：联系人资料池，须与随后经 SetData 绑定的是同一份数据（主面板的 m_contacts）。
+     *    groups：  "我的群"列表，同上（主面板的 m_myGroups）。两者都只读取，不持有。
+     *  不要求下拉窗口已创建。耗时与数据量成正比，数据量大时可能需要数百毫秒，
+     *  调用方应安排在不影响界面绘制的时机（主面板在列表绘制完成后调用）。
+     */
+    void WarmUpCandidates(const std::vector<net::ContactItem>& contacts,
+                          const std::vector<net::UserGroupItem>& groups);
+
+    /**
+     *  清空搜索候选缓存（登出时调用），释放上一个账号的联系人与群名字。下一次 Sync
+     *  或预热会整批重建。
+     */
+    void ClearCandidates();
+
+    /**
      *  设新查询词并据它在搜索框下方展示 / 刷新结果。查询词去首尾空白后为空则
      *  隐藏下拉（"空内容不显示"）。
      *    anchorScreenRect：搜索框矩形（<u>屏幕坐标</u>，调用方对 searchBox->GetRect()
@@ -192,6 +213,9 @@ private:
     // userid → 部门路径的查询表，<u>借用不持有</u>（宿主主面板持有那份表）。非空且能
     // 查到时，联系人结果行的副行显示部门路径；NULL 或查不到时退回「账号 xxx · 地区」。
     const std::map<UINT, CString>* m_deptPaths;
+    // 联系人与群的搜索候选缓存，与 m_contacts / m_groups 按位置一一对应。每次
+    // RefreshResults 开头先 Sync 一次（只重算与数据源不一致的条目），生命周期同本对象。
+    balloonsearch::SearchCandidateCache m_candidates;
 
     bool    m_built;          // 控件树是否已构建
     int     m_filter;         // 当前分类筛选（FilterKind）

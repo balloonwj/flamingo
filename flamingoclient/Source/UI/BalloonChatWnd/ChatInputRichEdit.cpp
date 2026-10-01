@@ -6,10 +6,28 @@
 #include "ChatInputRichEdit.h"
 
 #include "../../App/CustomMsgDef.h"   // WM_CHAT_FOCUS_AREA / WM_CHAT_COPY_SELECTION
+#include "../../Common/Log/IULog.h"   // LOG_INFO
+#include "ChatClipboardIo.h"          // 读剪贴板里的 Flamingo 聊天内容
+#include "ChatFaceTag.h"              // FaceTagFromId / kFaceDisplayPx（插入表情）
+#include "ChatInlineText.h"           // FaceImagePathFromId（表情编号 → 图片文件）
+#include "ChatScrollThumb.h"          // 与消息区同一种细滚动条：几何计算与滑块绘制
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"   // 取宿主窗口句柄作剪贴板归属
+
+#include <gdiplus.h>   // 画滑块（半透明圆角）
 
 namespace balloonchatwnd {
 
 namespace {
+
+// 输入框文字区的内边距（像素）。左、上、下沿用库内文本控件的默认值；右侧留出细滚动条的位置：
+// 滑块宽 kChatScrollBarWidth，左右各空 kChatScrollBarMargin，文字不会被滑块盖住
+const int kInputMarginLeft   = 4;
+const int kInputMarginTop    = 2;
+const int kInputMarginRight  = kChatScrollBarWidth + kChatScrollBarMargin * 2;
+const int kInputMarginBottom = 2;
+
+// 外边框宽度（像素）：显示边框时基类在控件矩形内侧画 1 像素边框，文字区相应内缩（DuiRichEdit::UpdateTextRect）
+const int kInputBorderPx = 1;
 
 // 按键按下消息里表示「自动重复」的那一位：为 1 说明这个键在本次消息之前
 // 就已经按着了。按住回车不该连发多条消息，发送路径据此忽略重复。
@@ -29,6 +47,20 @@ bool IsMentionNavKey(UINT vk)
         || vk == VK_RETURN || vk == VK_TAB || vk == VK_ESCAPE;
 }
 
+// 判断当前按键组合是不是「粘贴」：Ctrl+V，或 Shift+Insert。按着 Alt 的不算（留给菜单
+// 加速键等其它用途）。
+bool IsPasteShortcut(UINT vk)
+{
+    const bool ctrl  = (::GetKeyState(VK_CONTROL) & kKeyDownMask) != 0;
+    const bool shift = (::GetKeyState(VK_SHIFT) & kKeyDownMask) != 0;
+    const bool alt   = (::GetKeyState(VK_MENU) & kKeyDownMask) != 0;
+    if (alt)
+    {
+        return false;
+    }
+    return (vk == 'V' && ctrl) || (vk == VK_INSERT && shift && !ctrl);
+}
+
 } // 匿名命名空间
 
 ChatInputRichEdit::ChatInputRichEdit()
@@ -41,7 +73,18 @@ ChatInputRichEdit::ChatInputRichEdit()
     , m_bImeComposing(false)
     , m_pfnSendQuery(NULL)
     , m_pSendQueryCtx(NULL)
+    , m_pfnStageImage(NULL)
+    , m_pStageImageCtx(NULL)
+    , m_marginTop(kInputMarginTop)
+    , m_thumbDragging(false)
+    , m_thumbDragOffsetY(0)
+    , m_thumbCacheDirty(true)
+    , m_thumbQuerying(false)
+    , m_thumbQueryCount(0)
 {
+    ::SetRectEmpty(&m_thumbCacheRect);
+    ::SetRectEmpty(&m_thumbCacheItem);
+
     // 关掉基类自带的拖放，且<u>必须在构造时就关</u>。
     //
     // 操作系统的拖放目标是按窗口注册的，一个窗口只能注册一个。基类在第一次
@@ -57,6 +100,110 @@ ChatInputRichEdit::ChatInputRichEdit()
     //
     // 守卫用例：Source/Tests/ChatDropRegistrationTests.cpp（Suite CDR）。
     SetDragDropEnabled(false);
+
+    // 滚动条与消息区统一：关掉基类自带的覆盖式滚动条，改由 OnPaint 画细滚动条，内容超出时
+    // 一直显示。滚轮仍由基类转交排版引擎处理，不受影响。右侧内边距放宽到能容下滑块
+    SetVScrollPolicy(kScrollBarNever);
+    SetMargins(kInputMarginLeft, kInputMarginTop, kInputMarginRight, kInputMarginBottom);
+}
+
+void ChatInputRichEdit::SetMargins(int left, int top, int right, int bottom)
+{
+    m_marginTop = (top > 0) ? top : 0;
+    DuiRichEdit::SetMargins(left, top, right, bottom);
+}
+
+bool ChatInputRichEdit::ThumbGeometry(RECT& view, int& viewH, int& contentH, int& scrollY) const
+{
+    if (!GetVScrollMetrics(contentH, scrollY, viewH) || viewH <= 0)
+    {
+        return false;
+    }
+    //横向取整个控件（去掉边框），滑块贴着右缘；纵向取文字区，与引擎报告的可视高度一致
+    const int border = IsShowBorder() ? kInputBorderPx : 0;
+    view.left   = m_rcItem.left + border;
+    view.top    = m_rcItem.top + border + m_marginTop;
+    view.right  = m_rcItem.right - border;
+    view.bottom = view.top + viewH;
+    return true;
+}
+
+RECT ChatInputRichEdit::ScrollThumbRect() const
+{
+    RECT none = { 0, 0, 0, 0 };
+    RECT view = { 0, 0, 0, 0 };
+    int viewH = 0;
+    int contentH = 0;
+    int scrollY = 0;
+    if (!ThumbGeometry(view, viewH, contentH, scrollY))
+    {
+        return none;
+    }
+    return ComputeChatScrollThumb(view, viewH, contentH, scrollY);
+}
+
+void ChatInputRichEdit::ScrollToThumbTop(int thumbTop)
+{
+    RECT view = { 0, 0, 0, 0 };
+    int viewH = 0;
+    int contentH = 0;
+    int scrollY = 0;
+    if (!ThumbGeometry(view, viewH, contentH, scrollY))
+    {
+        return;
+    }
+    SetVScrollPos(ChatScrollYFromThumbTop(thumbTop, view, viewH, contentH));
+    Invalidate();
+}
+
+bool ChatInputRichEdit::RefreshThumbCache()
+{
+    if (!m_thumbCacheDirty && ::EqualRect(&m_thumbCacheItem, &m_rcItem))
+    {
+        return false;
+    }
+    m_thumbCacheDirty = false;
+    m_thumbCacheItem  = m_rcItem;
+    m_thumbQuerying   = true;
+    ++m_thumbQueryCount;
+    m_thumbCacheRect  = ScrollThumbRect();
+    m_thumbQuerying   = false;
+    return true;
+}
+
+void ChatInputRichEdit::OnPaint(HDC hdc, const RECT& rcDirty)
+{
+    DuiRichEdit::OnPaint(hdc, rcDirty);
+    if (!IsVisible())
+    {
+        return;
+    }
+    const RECT oldThumb = m_thumbCacheRect;
+    if (RefreshThumbCache() && !::EqualRect(&oldThumb, &m_thumbCacheRect))
+    {
+        //滑块位置或长度变了：本次的脏区不一定盖住旧、新两处，补请求一次重画。下一次绘制时缓存
+        //未标脏、不再查询，滑块也不再变化，不会接着请求，因此不会循环
+        Invalidate();
+    }
+    //滑块浮在文字之上，画在右侧内边距里，与消息区的滑块同一种画法
+    if (m_thumbCacheRect.bottom > m_thumbCacheRect.top)
+    {
+        Gdiplus::Graphics g(hdc);
+        g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        PaintChatScrollThumb(g, m_thumbCacheRect);
+    }
+}
+
+void ChatInputRichEdit::TxSiteScrollInfoChanged(bool bVertical)
+{
+    DuiRichEdit::TxSiteScrollInfoChanged(bVertical);
+    //本方法是在排版引擎的回调里被调用的，此时不能反过来查询引擎；这里只把滑块缓存标脏并请求
+    //重画，新位置与长度在随后的 OnPaint 里查询。自己查询期间收到的回调忽略（见 m_thumbQuerying）
+    if (bVertical && !m_thumbQuerying)
+    {
+        m_thumbCacheDirty = true;
+        Invalidate();
+    }
 }
 
 void ChatInputRichEdit::SetNotifyTarget(HWND hWnd)
@@ -129,6 +276,15 @@ bool ChatInputRichEdit::OnKeyDown(UINT vk, UINT flags)
         {
             return true;   // 已由消息区复制，吞掉这次按键
         }
+    }
+
+    // ---- 粘贴：剪贴板里有 Flamingo 聊天内容时按片段插入 ----
+    //
+    // 从聊天记录复制的内容带着 Flamingo 自己的格式，按片段插入才能把表情、图片还原出来。
+    // 只接管这一种；剪贴板里没有这种格式时不拦，仍由基类按原来的方式粘贴。
+    if (IsPasteShortcut(vk) && TryPasteChatContent())
+    {
+        return true;
     }
 
     // ---- @提醒浮层的导航键 ----
@@ -222,7 +378,56 @@ bool ChatInputRichEdit::OnLButtonDown(POINT pt, UINT mkFlags)
     // 光靠获得焦点那条路不够：点消息区时输入框**并没有**失去焦点，再点回
     // 输入框自然也就不会有获得焦点这一步。
     NotifyFocusInput();
+
+    // 落在细滚动条命中带里：开始拖动滑块，不交给基类（否则会被当成在文字上按下、开始选择）。
+    // 命中带的判断与消息区共用 HitChatScrollBand，两处手感一致
+    RECT view = { 0, 0, 0, 0 };
+    int viewH = 0;
+    int contentH = 0;
+    int scrollY = 0;
+    if (ThumbGeometry(view, viewH, contentH, scrollY))
+    {
+        const RECT thumb = ComputeChatScrollThumb(view, viewH, contentH, scrollY);
+        if (HitChatScrollBand(pt, thumb, view))
+        {
+            if (pt.y >= thumb.top && pt.y < thumb.bottom)
+            {
+                //抓在滑块上：记住抓点相对滑块上沿的偏移，拖动时滑块不跳
+                m_thumbDragOffsetY = pt.y - thumb.top;
+            }
+            else
+            {
+                //点在轨道空白处：滑块中心先跳到点击处，再按住继续拖
+                m_thumbDragOffsetY = (thumb.bottom - thumb.top) / 2;
+                ScrollToThumbTop(pt.y - m_thumbDragOffsetY);
+            }
+            m_thumbDragging = true;
+            Capture();
+            return true;
+        }
+    }
     return DuiRichEdit::OnLButtonDown(pt, mkFlags);
+}
+
+bool ChatInputRichEdit::OnMouseMove(POINT pt, UINT mkFlags)
+{
+    if (!m_thumbDragging)
+    {
+        return DuiRichEdit::OnMouseMove(pt, mkFlags);
+    }
+    ScrollToThumbTop(pt.y - m_thumbDragOffsetY);
+    return true;
+}
+
+bool ChatInputRichEdit::OnLButtonUp(POINT pt, UINT mkFlags)
+{
+    if (!m_thumbDragging)
+    {
+        return DuiRichEdit::OnLButtonUp(pt, mkFlags);
+    }
+    m_thumbDragging = false;
+    ReleaseCapture();
+    return true;
 }
 
 bool ChatInputRichEdit::OnMouseWheel(POINT pt, short zDelta, UINT mkFlags)
@@ -262,6 +467,8 @@ HRESULT ChatInputRichEdit::TxSiteNotify(DWORD iNotify, void* pv)
     // 「正在输入」用来决定要不要给对端发提示，@提醒用来重算光标前的 @ 前缀。
     if (iNotify == EN_CHANGE)
     {
+        //内容变了，内容高度可能随之变化：滑块缓存标脏，下次绘制时重新查询
+        m_thumbCacheDirty = true;
         NotifyTyping(/*bKillFocus=*/false);
         if (m_nMentionChangedMsg != 0 && HasTarget())
         {
@@ -269,6 +476,91 @@ HRESULT ChatInputRichEdit::TxSiteNotify(DWORD iNotify, void* pv)
         }
     }
     return DuiRichEdit::TxSiteNotify(iNotify, pv);
+}
+
+void ChatInputRichEdit::SetImageStager(StageImageFn fn, void* pCtx)
+{
+    m_pfnStageImage  = fn;
+    m_pStageImageCtx = pCtx;
+}
+
+void ChatInputRichEdit::InsertClipSegments(const std::vector<ChatClipSegment>& segs)
+{
+    for (size_t i = 0; i < segs.size(); ++i)
+    {
+        const ChatClipSegment& seg = segs[i];
+        switch (seg.m_kind)
+        {
+        //文字：原样插在光标处（有选区时替换选区），可撤销
+        case kChatClipText:
+            ReplaceSel(seg.m_text.c_str(), true);
+            break;
+
+        //表情：与从表情面板选表情走同一个插入口，带编号标记，发送时还原成表情；
+        //表情图片找不到时以"[表情]"占位
+        case kChatClipFace:
+            if (!InsertTaggedImage(FaceImagePathFromId(seg.m_faceId),
+                                   FaceTagFromId(seg.m_faceId), kFaceDisplayPx))
+            {
+                ReplaceSel(kChatClipFacePlaceholder, true);
+            }
+            break;
+
+        //图片：交给聊天窗登记源文件并插入；文件已不在（缓存被清理）或没有注册回调时以
+        //"[图片]"占位，不悄悄丢掉
+        case kChatClipImage:
+            {
+                bool staged = false;
+                if (m_pfnStageImage != NULL
+                    && ::GetFileAttributesW(seg.m_imagePath.c_str()) != INVALID_FILE_ATTRIBUTES)
+                {
+                    staged = m_pfnStageImage(m_pStageImageCtx, seg.m_imagePath);
+                }
+                if (!staged)
+                {
+                    ReplaceSel(kChatClipImagePlaceholder, true);
+                }
+            }
+            break;
+
+        //不认识的片段类型：跳过
+        default:
+            break;
+        }
+    }
+    Invalidate();
+}
+
+bool ChatInputRichEdit::TryPasteChatContent()
+{
+    if (IsReadOnly() || !IsChatContentOnClipboard())
+    {
+        return false;
+    }
+    //剪贴板归属窗口：宿主窗口有效就用它，否则按"不指定归属"打开。
+    HWND owner = NULL;
+    if (GetHost() != NULL && ::IsWindow(GetHost()->m_hWnd))
+    {
+        owner = GetHost()->m_hWnd;
+    }
+    std::vector<ChatClipSegment> segs;
+    if (!ReadChatContentFromClipboard(owner, segs) || segs.empty())
+    {
+        return false;   //读不出来就交回原来的粘贴，至少还能粘出纯文字
+    }
+    InsertClipSegments(segs);
+    LOG_INFO("chat input: pasted chat content, %u segment(s).", (unsigned)segs.size());
+    return true;
+}
+
+bool ChatInputRichEdit::OnContextMenuCommand(UINT nId)
+{
+    //右键「粘贴」：与 Ctrl+V 同口径。只接管带 Flamingo 格式的内容，其余交给基类。
+    if (nId == balloonwjui::kRichEditCmdPaste && TryPasteChatContent())
+    {
+        return true;
+    }
+    return DuiRichEdit::OnContextMenuCommand(nId);
 }
 
 } // namespace balloonchatwnd

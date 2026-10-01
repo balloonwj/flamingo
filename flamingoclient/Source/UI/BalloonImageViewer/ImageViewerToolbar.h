@@ -11,7 +11,8 @@
  *  缩放比例读数实时取自 ImageCanvas，画布每次缩放变化重绘即随之刷新。
  *
  *  本轮（增量 3）按钮范围：缩小 / 比例 / 放大 / 1:1 / 适应 / 旋转 / 另存为；编辑标注、
- *  转发、更多菜单留待后续。
+ *  转发、更多菜单留待后续。2026-09-30 在「另存为」左边补了「复制图片」：复制后可以直接
+ *  粘进聊天输入框发送（走与聊天气泡右键「复制」相同的剪贴板格式）。
  *
  *  本文件遵循 balloonui 头文件约定：包含它之前调用方须已引入 ATL/WTL。
  *
@@ -38,6 +39,7 @@ enum ToolbarItemKind
     kTbRotateLeft,    // 向左旋转 90°（逆时针圆形箭头）
     kTbRotate,        // 向右旋转 90°（顺时针圆形箭头）
     kTbSaveAs,        // 另存为（下载箭头）
+    kTbCopyImage,     // 复制图片（两个叠放的圆角矩形）：复制后可粘进聊天输入框直接发送
 };
 
 // 看图工具栏控件。
@@ -51,6 +53,22 @@ public:
 
     // 工具栏整体固定尺寸（逻辑像素），供画布把它摆到底部中央。
     SIZE GetBarSize() const;
+
+    // ---- 按钮编排查询（纯数据，不依赖实例；供单元测试核对按钮顺序与属性）----
+
+    // 工具栏元素个数（含比例读数与分隔线）。
+    static int ItemCount();
+
+    // 从左往右第 index 个元素的种类。
+    //   index：0 ~ ItemCount()-1；越界返回 kTbSeparator（不可点击的占位）。
+    static ToolbarItemKind ItemKindAt(int index);
+
+    // 某种元素是否可点击：图标 / 文字按钮可点，比例读数与分隔线不可点。
+    static bool IsClickableKind(ToolbarItemKind kind);
+
+    // 某种元素的悬停提示文字；没有提示的元素（比例读数、分隔线）返回空串。
+    //   返回：静态字符串，调用方不得释放。
+    static LPCTSTR TooltipForKind(ToolbarItemKind kind);
 
     // ---- DuiControl 覆写 ----
     void OnPaint(HDC hdc, const RECT& rcDirty) override;

@@ -38,6 +38,10 @@ public:
     //          false = 灰色徽章（一般计数，如成员数）。
     void SetBadge(int count, bool alert);
 
+    // 读取右侧计数徽章的数值（即最近一次 SetBadge 传入的 count）。
+    // 返回：计数值；<= 0 表示不显示徽章。供单元测试核对导航角标。
+    int GetBadgeCount() const { return m_count; }
+
     // 设置 / 读取选中态（选中：高亮底 + 文字加粗）。
     void SetActive(bool active);
     bool IsActive() const { return m_active; }

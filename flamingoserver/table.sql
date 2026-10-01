@@ -400,6 +400,21 @@ CREATE TABLE IF NOT EXISTS  t_message_deleted  (
          PRIMARY KEY ( f_userid, f_msgid )
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8
 
+//按时间范围清理聊天记录的区间表（cmd_delete_messages_by_time 1521）：一行表示某用户清理了
+//某段时间内自己的全部单聊与群聊消息。与 t_message_deleted 是同一种"本人视角软删除"，区别是
+//只记区间、不逐条展开，清理一次的写入量与消息条数无关（逐条展开时一次可能写入几十万行，会长时间
+//占住网络 I/O 线程）。读取时按 t_chatmsg.f_create_time 落在任一区间内过滤，见
+//chatserversrc/MessageDeleteRange.h 与 docs/清理聊天记录方案.md §5。
+//同一用户的区间在写入时已合并为互不相交、也不首尾相接的若干段，所以每个用户只有寥寥几行。
+//列名刻意不用 f_create_time：读取过滤是相关子查询，与 t_chatmsg.f_create_time 同名容易混淆。
+CREATE TABLE IF NOT EXISTS  t_message_deleted_range  (
+         f_userid       bigint(20) NOT NULL COMMENT '执行清理的用户userid',
+         f_begin_time   bigint(20) NOT NULL COMMENT '区间开始,Unix毫秒(含)',
+         f_end_time     bigint(20) NOT NULL COMMENT '区间结束,Unix毫秒(含)',
+         f_update_time  bigint(20) NOT NULL DEFAULT 0 COMMENT '本行写入时间,Unix毫秒,供排查',
+         PRIMARY KEY ( f_userid, f_begin_time )
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8
+
 //文件收取状态表：一行表示某条文件消息被接收方收到了什么程度（正在接收/已接收/已拒绝）。
 //接收方经 cmd_file_transfer_ack 上报，服务端落库并转推发送方；发送方离线时不推，
 //等其下次 cmd_sync_messages 拉历史时随消息带出，故此状态必须持久化而非仅内存转发。
@@ -466,6 +481,11 @@ CREATE TABLE IF NOT EXISTS  t_starred  (
          INDEX idx_starred_user ( f_userid )
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8
 
+//群表。f_name_custom 区分两种群名：1 = 用户设定的群名，此后固定不变；0 = 自动群名
+//（建群时没填名字、或群主把群名清空），由服务端按当前成员昵称生成，成员增减、转让
+//群主、成员改昵称后都会重算，并经 cmd_group_info_changed_notify 推给全群。
+//默认值取 1：老库升级补列时，已有的群一律按"用户设定"处理，不会被悄悄改名；其中
+//当年由客户端自动拼出来的群名，另由 migrations/v7_mark_auto_group_names.py 识别后改标记。
 CREATE TABLE IF NOT EXISTS  t_group  (
          f_groupid       bigint(20)    NOT NULL COMMENT '群ID(高位id空间,>=GROUPID_BOUBDARY)',
          f_name          varchar(64)   NOT NULL COMMENT '群名称',
@@ -486,6 +506,7 @@ CREATE TABLE IF NOT EXISTS  t_group  (
          f_announce_id   bigint(20)    NOT NULL DEFAULT 0 COMMENT '最新已发布公告的f_id(t_group_announcement);0=本群还没有公告',
          f_announce_title varchar(128) NOT NULL DEFAULT '' COMMENT '最新已发布公告的标题(冗余快照,群聊窗头部摘要行直接读它)',
          f_announce_time bigint(20)    NOT NULL DEFAULT 0 COMMENT '最新已发布公告的发布时间(Unix毫秒)',
+         f_name_custom   int(2)        NOT NULL DEFAULT 1 COMMENT '群名是否由用户设定:1是(固定不变) 0否(自动群名,成员或昵称变化时由服务端重算)',
          PRIMARY KEY ( f_groupid )
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8
 

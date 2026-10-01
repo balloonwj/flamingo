@@ -38,10 +38,16 @@ namespace balloonhistory {
  *  行内那枚常驻的「取消」按钮在最右侧，扫一列行时不容易看出"这条钉着"；把标记放到
  *  名字与时间旁边，纵向扫下来一眼就能挑出来。图形复用聊天气泡那套矢量图标
  *  （ChatIcons 的 kChatIconPin），两处形状一致。
+ *
+ *  图钉可以点击取消 Pin（2026-09-30 起）：单击由基类 DuiControl::OnLButtonUp 以本控件
+ *  的 ctrlId 发 DUIN_CLICK，窗口据 id 认出是哪一行（见 ResolveHistoryPinClick）；
+ *  光标停在上面时显示手型，并弹出「取消 Pin」悬停提示。
  */
 class HistoryPinMark : public balloonwjui::DuiControl
 {
 public:
+    //构造时向 DuiToolTipMgr 登记「取消 Pin」悬停提示（本控件只出现在已 Pin 的行上，
+    //提示文字固定）。登记在基类析构时自动撤销。
     HistoryPinMark();
 
     //设置图钉颜色。默认暖琥珀 RGB(0xE6, 0x8A, 0x2E)，与聊天气泡上那枚同色。
@@ -49,6 +55,14 @@ public:
 
     //DuiControl 覆写：在本控件矩形内居中画一枚图钉。
     void OnPaint(HDC hdc, const RECT& rcDirty) override;
+
+    //DuiControl 覆写：把光标设为手形并返回 true，提示图钉可以点击。
+    bool OnSetCursor(POINT pt) override;
+
+    //DuiControl 覆写：忽略双击，返回 true 且不发任何通知。双击的第一下已经作为单击
+    //发出了取消请求；若照基类那样再发 DUIN_DBLCLK，窗口会把它当成双击整行去定位，
+    //取消 Pin 的同时窗口跳到聊天窗。
+    bool OnLButtonDblClk(POINT pt, UINT mkFlags) override;
 
 private:
     COLORREF m_color;   //图钉颜色
@@ -61,9 +75,13 @@ private:
  *  让图片与文件在视觉上直接分开。
  *
  *  图片走 `ChatImageCache`（聊天气泡在用的那套后台解码 + 按"路径 + 展示尺寸"缓存）：
- *  命中就画，未命中画占位并请求后台解码，完成后由宿主窗收到 WM_CHAT_IMAGE_READY 重绘。
- *  **本地缓存里没有原图时不会去下载** —— 消息记录窗是浏览界面，为一个 36px 的缩略图
- *  拉整张原图不划算；此时一直是占位块。
+ *  命中就画，未命中画占位并请求后台解码，完成后由宿主窗收到 WM_CHAT_IMAGE_READY 重绘；
+ *  解码失败（文件损坏）画破图。
+ *
+ *  本地缓存里没有原图时**不会自动下载** —— 消息记录窗是浏览界面，为一个 36px 的缩略图
+ *  拉整张原图不划算。此时按窗口算好的状态（见 ImagePlaceholder.h 的 HistoryThumbState）
+ *  画"需要下载 / 下载中 / 破图"占位；可点击时鼠标悬停底色加深、光标变手形，单击以本控件
+ *  的 ctrlId 向窗口发 DUIN_CLICK，由窗口发起下载（2026-09-30 起）。
  */
 class HistoryRowThumb : public balloonwjui::DuiControl
 {
@@ -79,11 +97,20 @@ public:
     HistoryRowThumb();
 
     /**
-     *  按图片本地缓存路径显示缩略图。
-     *    path：图片文件完整路径；空串等同于 kNone。
-     *  路径指向的文件不存在时画占位块，不报错、也不触发下载。
+     *  显示一张图片的缩略图或占位。
+     *    path：     图片本地缓存文件的完整路径；可以为空（调试入口、消息缺少 MD5），
+     *               此时 state 为 kHistoryThumbImage 也只铺底色。
+     *    state：    显示状态，取值见 ImagePlaceholder.h 的 balloonchatwnd::HistoryThumbState。
+     *    clickable：单击是否发起下载。为 true 时悬停加深底色、光标变手形，单击发 DUIN_CLICK。
+     *  本控件不会自己触发下载，下载由窗口收到 DUIN_CLICK 后发起。
      */
-    void SetImage(const std::wstring& path);
+    void SetImage(const std::wstring& path, int state, bool clickable);
+
+    //图片缩略图的显示状态（HistoryThumbState 的取值）；非图片时返回 kHistoryThumbImage。
+    int GetImageState() const;
+
+    //单击本缩略图是否会发起下载。
+    bool IsClickable() const;
 
     /**
      *  按扩展名显示文件类型色块。
@@ -91,13 +118,32 @@ public:
      */
     void SetFile(const CString& ext);
 
-    //DuiControl 覆写：按当前 Kind 画缩略图或类型色块。
+    //DuiControl 覆写：按当前 Kind 与图片状态画缩略图、占位或类型色块。
     void OnPaint(HDC hdc, const RECT& rcDirty) override;
 
+    //DuiControl 覆写：可点击时记下悬停态并重绘（底色加深、下载标记变深）。返回 true，
+    //不再向窗口冒 DUIN_MOUSEENTER / DUIN_MOUSELEAVE。
+    bool OnMouseEnter() override;
+    bool OnMouseLeave() override;
+
+    //DuiControl 覆写：可点击时把光标设为手形并返回 true；否则返回 false 交给默认处理。
+    bool OnSetCursor(POINT pt) override;
+
+    //DuiControl 覆写：可点击且松开点仍在本控件内时，以本控件 ctrlId 发 DUIN_CLICK 并
+    //返回 true；不可点击时什么都不发，返回 false。
+    bool OnLButtonUp(POINT pt, UINT mkFlags) override;
+
+    //DuiControl 覆写：双击转交给所在的行（父控件），使窗口收到的是行的 ctrlId ——
+    //"双击这一行打开看图窗"在缩略图上同样有效。
+    bool OnLButtonDblClk(POINT pt, UINT mkFlags) override;
+
 private:
-    Kind         m_kind;   //本块画什么
-    std::wstring m_path;   //kImage 时的图片本地路径
-    CString      m_ext;    //kFile 时的小写扩展名
+    Kind         m_kind;        //本块画什么
+    std::wstring m_path;        //kImage 时的图片本地路径；可以为空
+    CString      m_ext;         //kFile 时的小写扩展名
+    int          m_imageState;  //kImage 时的显示状态（HistoryThumbState 的取值）
+    bool         m_clickable;   //单击是否发起下载
+    bool         m_hot;         //鼠标是否正悬停在本控件上（仅可点击时记录）
 };
 
 /**
@@ -140,6 +186,16 @@ public:
     //当前是否处于悬停态。
     bool IsHovered() const { return m_hovered; }
 
+    /**
+     *  置 / 撤"定位高亮"：「查看上下文」「跳到这一天」翻到这一行时，铺一层淡黄底色标出它，
+     *  直到用户下一次操作。定位高亮比悬停底色优先。
+     *    located：true 显示定位高亮。重复设同一个值不做任何事（不重绘）。
+     */
+    void SetLocated(bool located);
+
+    //当前是否处于定位高亮。
+    bool IsLocated() const { return m_located; }
+
     //双击整行：向宿主冒 DUIN_DBLCLK（带本行的 ctrlId），由窗口去定位该消息。
     bool OnLButtonDblClk(POINT pt, UINT mkFlags) override;
 
@@ -158,6 +214,7 @@ private:
     std::vector<balloonwjui::DuiControl*> m_hoverOnly;
     COLORREF                              m_hoverBg;   //悬停底色
     bool                                  m_hovered;   //鼠标是否正停在本行上
+    bool                                  m_located;   //是否处于定位高亮（见 SetLocated）
 };
 
 } // namespace balloonhistory

@@ -11,6 +11,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -228,6 +229,55 @@ struct SearchMessagesRequest
     }
 };
 
+//cmd_forward_message 单次请求可带的源消息条数上限。
+//
+//逐条转发时 ChatSession::onForwardMessage 在 EventLoop 线程上串行地逐条落库，理由与
+//下文 MASS_SEND_MAX_TARGETS 相同：条数一多，该 loop 上的所有客户端连接都被卡住。
+//合并转发虽然只落一条，但条数决定了这条消息 content 的体积。故在解析阶段就把超限
+//的请求拒掉（回 error_code_bad_request）。
+//
+//本值必须与客户端 flamingoclient/Source/net/MessageProtocolClient.h 的
+//kForwardMaxMessages（转发方案第 1a 步新增）保持一致，改动时两处要一起改。
+constexpr size_t FORWARD_MAX_MESSAGES = 100;
+
+//合并转发标题的长度上限，单位为<u>字符</u>（UTF-8 码点），不是字节。超长的标题在解析
+//阶段截断到本值，不拒绝请求：标题由客户端按会话名拼出（如「<群名>的聊天记录」），
+//群名很长时超限是正常情况，不应因此转发失败。
+constexpr size_t FORWARD_TITLE_MAX_CHARS = 64;
+
+//以下几项体积上限的单位换算：1 KiB = 1024 字节
+constexpr size_t MSG_BYTES_PER_KIB = 1024;
+
+//合并记录（msgtype=15）content 的体积上限，单位字节。
+//
+//客户端解码 chatserver 的帧时，要求原始长度不超过 MAX_BODY_CHATSERVER（1 MiB），超了就
+//断开连接（见 bugs.md 的 BUG-32）。一条合并记录会被推送、被同步、还可能被再次合并转发，
+//其 content 必须明显小于 1 MiB，给消息体的其余字段与同一帧里的其他消息留出余量。
+//超限的合并转发回 error_code_msg_too_large。普通长度的文字 100 条打包后约 30 KB，
+//本值留有充分余量。
+constexpr size_t FORWARD_MERGED_CONTENT_MAX_BYTES = 256 * MSG_BYTES_PER_KIB;
+
+//普通消息 content 与 quote 合计的体积上限，单位字节。适用于 cmd_send_message、cmd_mass_send，
+//以及逐条转发时复制出的每一条。按服务端重新序列化后的紧凑 JSON 计量：jsoncpp 把非 ASCII
+//字符写成 \uXXXX，一个汉字计 6 字节，与它在推送帧里实际占的字节数一致。
+//
+//理由与合并记录上限相同（见 bugs.md 的 BUG-32）：一条消息会被推送、被同步，推送帧或同步页
+//超过客户端单帧上限 MAX_BODY_CHATSERVER（1 MiB）时对方会断线；而同步页按体积截断时单条
+//消息至少保留一条，因此单条消息本身必须明显小于 1 MiB。取与合并记录相同的 256 KiB，两种
+//消息口径一致。超限回 error_code_msg_too_large，不落库、不推送。客户端发送前按同一口径检查。
+constexpr size_t MESSAGE_CONTENT_MAX_BYTES = 256 * MSG_BYTES_PER_KIB;
+
+//cmd_forward_message 应答里 messages 数组的体积预算，单位字节。
+//逐条转发 100 条长消息时，全部消息体放进一个应答会超过单帧上限。按顺序放入，放不下的
+//那一条及其后的只在 msgids 里出现、不带消息体，客户端对这部分改用同步拉取。
+constexpr size_t FORWARD_RESPONSE_MESSAGES_BUDGET_BYTES = 512 * MSG_BYTES_PER_KIB;
+
+//cmd_sync_messages、cmd_search_messages、cmd_get_pinned_messages 应答里消息体的体积预算，
+//单位字节。一页最多 100 条，几条长消息就能让整页超过 1 MiB 的单帧上限；超过预算时由
+//trimMessagesToBudget 截断并把 hasmore 置为真（Pin 列表靠 total 表达截断）。
+//预算低于 1 MiB，是给应答的其余字段留出余量。
+constexpr size_t RESPONSE_MESSAGES_BUDGET_BYTES = 768 * MSG_BYTES_PER_KIB;
+
 //cmd_forward_message 请求
 struct ForwardMessageRequest
 {
@@ -235,8 +285,8 @@ struct ForwardMessageRequest
     int         toctype;          //目标会话类型
     int64_t     tocid;            //目标会话ID
     bool        merge;            //true=合并转发为一条 msgtype=15；false=逐条转发
-    std::string title;            //合并转发的标题；空串则用默认
-    std::vector<int64_t> msgids;  //被转发的消息msgid列表
+    std::string title;            //合并转发的标题；解析时已经 normalizeForwardTitle 处理（截断、空串取缺省值）
+    std::vector<int64_t> msgids;  //被转发的消息msgid列表，条数不超过 FORWARD_MAX_MESSAGES
 
     ForwardMessageRequest()
         : toctype(1), tocid(0), merge(false)
@@ -294,6 +344,19 @@ struct MassSendResult
     }
 };
 
+//cmd_delete_messages_by_time 请求：按时间范围清理本人的聊天记录。
+//两端都包含；取值为解析出的原始值，截断与合法性校验由 NormalizeDeleteRange 负责。
+struct DeleteMessagesByTimeRequest
+{
+    int64_t begintime;  //区间开始，Unix毫秒；0 表示从最早开始
+    int64_t endtime;    //区间结束，Unix毫秒
+
+    DeleteMessagesByTimeRequest()
+        : begintime(0), endtime(0)
+    {
+    }
+};
+
 //会话与消息报文编解码工具类；全部为静态方法，不可实例化
 class MessageProtocol
 {
@@ -305,6 +368,32 @@ public:
      *  @return clientmsgid 非空、cid 为正、msgtype 为正、content 为对象时返回 true
      */
     static bool parseSendMessageRequest(const std::string& json, SendMessageRequest& req);
+
+    /**
+     *  从消息 content 里取出所引用文件的 fileid。
+     *
+     *  用途：发送方引用某个 fileid 发出消息，说明该文件已上传完成（客户端总是传完才发
+     *  消息），服务端据此把文件记录标记为已完成，使后续同内容的上传能命中秒传。
+     *
+     *  只处理会携带文件的消息类型（图片、文件、语音、短视频、大表情、截图），其余类型
+     *  （如文本）不解析 JSON、直接返回 false。
+     *  @param msgtype 消息类型，取值见 enum message_type
+     *  @param content content 对象的紧凑 JSON 文本（即 SendMessageRequest::content）
+     *  @param fileid  [出参] 取到时回填文件ID
+     *  @return content 顶层有字符串字段 fileid 且其值为正整数时返回 true；消息类型不带
+     *          文件、JSON 不合法、字段缺失或取值不是正整数时返回 false
+     */
+    static bool extractContentFileId(int msgtype, const std::string& content, int64_t& fileid);
+
+    /**
+     *  把一段 fileid 文本解析成文件ID。协议约定 64 位 ID 以十进制字符串传输；头像的
+     *  customface 字段存的也是这种文本。
+     *  @param text   fileid 文本
+     *  @param fileid [出参] 解析成功时回填
+     *  @return 整串都是十进制数字、不超过 19 位且值为正时返回 true；空串、含非数字
+     *          字符（如 "img_8f3c"、"117abc"、"-5"）或值为 0 时返回 false
+     */
+    static bool parseFileIdText(const std::string& text, int64_t& fileid);
 
     /**
      *  解析 cmd_message_received_ack 请求；msgid 缺失或非正返回 false。
@@ -368,15 +457,29 @@ public:
                                                       int64_t synctime,
                                                       const std::vector<ConversationBrief>& items);
 
+    //buildSyncMessagesResponse 的 peerReadMsgid 取这个值时表示「不输出对方已读位点」。
+    //cmd_search_messages 复用同一个构造函数，搜索结果与已读回执无关，走的就是这个默认值。
+    static const int64_t kPeerReadMsgidOmitted = -1;
+
     /**
      *  构造 cmd_sync_messages 应答 JSON：
-     *  { code, msg, ctype, cid, hasmore, messages:[ 完整消息体... ] }。
+     *  { code, msg, ctype, cid, hasmore, [peerreadmsgid,] messages:[ 完整消息体... ] }。
      *  messages 各元素结构与 cmd_message_notify 包体一致。
-     *  @param hasmore 锚点方向上是否还有更多消息
+     *  @param hasmore       锚点方向上是否还有更多消息
+     *  @param peerReadMsgid 单聊时对方已读到的最大消息 msgid（取对方那一行 t_conversation
+     *                       的 f_readmsgid，从没读过为 0），以字符串编码输出为 peerreadmsgid，
+     *                       供发送方在重开聊天窗、或离线期间对方读过之后显示正确的已读状态。
+     *                       群聊按协议不做已读回执，不输出；取 kPeerReadMsgidOmitted 时也不输出。
+     *  @param anchorReq     本次同步请求（借用，不持有），用于原样回带锚点：翻历史模式输出
+     *                       beforemsgid（0 输出为 "0"），补齐模式输出 aftermsgid，二者只出现其一。
+     *                       客户端据此算出本页覆盖了哪段 msgid（见 docs/清理聊天记录方案.md §7.2）。
+     *                       传 NULL 时两者都不输出 —— 复用本结构的搜索应答就是这样。
      */
     static std::string buildSyncMessagesResponse(int code, const std::string& msg,
                                                  int ctype, int64_t cid, bool hasmore,
-                                                 const std::vector<MessageRecord>& messages);
+                                                 const std::vector<MessageRecord>& messages,
+                                                 int64_t peerReadMsgid = kPeerReadMsgidOmitted,
+                                                 const SyncMessagesRequest* anchorReq = NULL);
 
     /**
      *  按消息类型生成会话列表用的内容摘要（digest）。
@@ -562,23 +665,103 @@ public:
     static bool parseSearchMessagesRequest(const std::string& json, SearchMessagesRequest& req);
 
     /**
-     *  解析 cmd_forward_message 请求；clientmsgid/tocid/msgids 缺失或为空返回 false。
+     *  解析 cmd_forward_message 请求。
+     *  clientmsgid / tocid / msgids 缺失或为空、或 msgids 超过 FORWARD_MAX_MESSAGES 条时
+     *  返回 false；title 字段经 normalizeForwardTitle 处理后写入 req.title。
      */
     static bool parseForwardMessageRequest(const std::string& json, ForwardMessageRequest& req);
 
     /**
-     *  构造 cmd_forward_message 应答 JSON：{ code, msg, msgids:[新建消息ID...] }。
+     *  规范化合并转发的标题：空串取缺省值「聊天记录」；超过 FORWARD_TITLE_MAX_CHARS 个
+     *  字符时截断，截断点落在多字节字符中间时整个字符一起舍去，不会留下半个字符。
+     *  @param raw 客户端传来的标题（UTF-8），可以为空
+     *  @return 规范化后的标题，非空
      */
-    static std::string buildForwardMessageResponse(int code, const std::string& msg,
-                                                   const std::vector<int64_t>& msgids);
+    static std::string normalizeForwardTitle(const std::string& raw);
 
     /**
-     *  构造"合并转发"消息（msgtype=15）的 content JSON：{ title, messages:[子消息体...] }。
-     *  @param title 合并转发标题
-     *  @param subs  被合并的源消息列表
+     *  构造逐条转发时新消息的 content。
+     *  文字消息（msgtype=1）去掉 content 里的 at 与 quote，其余字段（text、font 等）原样保留：
+     *  at 里的 uid 是源会话的成员，带进目标会话会让同一个人误收到「有人@我」提醒；
+     *  quote 指向源会话里的消息，在目标会话里无法定位。
+     *  非文字消息、以及解析失败的 content 原样返回。合并转发不经过本函数，子消息保持原样。
+     *  @param msgtype 源消息的内容类型
+     *  @param content 源消息的 content JSON 文本（即 MessageRecord::content）
+     *  @return 新消息的 content JSON 文本
+     */
+    static std::string buildForwardedContent(int msgtype, const std::string& content);
+
+    /**
+     *  收集一次转发中需要过群敏感词的全部文字，供转发到开启了过滤的群时逐条匹配。
+     *  文字消息取 content.text；合并记录（msgtype=15）逐条取其中文字子消息的 text，
+     *  嵌套的合并记录继续向里取；其余类型的 content 是结构化字段，不参与匹配。
+     *  逐条转发与合并转发都用本函数：逐条转发一条合并记录，同样会把其中的文字带进目标群。
+     *  @param sources 转发源消息（只用到 msgtype 与 content 两个字段）
+     *  @return 按源消息顺序排列的文字列表，空串不收集；没有任何文字时为空
+     */
+    static std::vector<std::string> collectForwardTexts(const std::vector<MessageRecord>& sources);
+
+    /**
+     *  判断合并记录的 content 是否超过 FORWARD_MERGED_CONTENT_MAX_BYTES。
+     *  @param mergedContent buildMergedContent 构造出的 content JSON 文本
+     *  @return 超过上限返回 true，调用方应回 error_code_msg_too_large
+     */
+    static bool isMergedContentTooLarge(const std::string& mergedContent);
+
+    /**
+     *  判断一条普通消息的 content 与 quote 合计是否超过 MESSAGE_CONTENT_MAX_BYTES。
+     *  @param content content 对象的紧凑 JSON 文本：解析请求时重新序列化的结果，
+     *                 或逐条转发时 buildForwardedContent 的结果
+     *  @param quote   quote 对象的紧凑 JSON 文本；没有引用时传空串
+     *  @return 超过上限返回 true，调用方应回 error_code_msg_too_large，不落库、不推送
+     */
+    static bool isMessageContentTooLarge(const std::string& content, const std::string& quote);
+
+    /**
+     *  按体积截断一页消息，使其消息体序列化后的累计字节数不超过 budgetBytes。
+     *  从锚点一侧开始逐条累计，放不下的那一条及其后的全部删去，保证留下的是连续的一段，
+     *  客户端按留下的消息计算翻页锚点与本地覆盖区间时不会跳过或误删消息。
+     *  至少保留一条：单条就超过预算时仍保留它，否则客户端永远翻不过这一条。
+     *  @param messages    [入参/出参] 一页消息；截断后只剩留下的那一段，顺序不变
+     *  @param cid         消息体里 cid 字段的取值，与构造应答时一致（用于准确计算体积）
+     *  @param keepTail    true 表示锚点在末尾、保留末尾一段（msgid 升序的翻历史与搜索应答）；
+     *                     false 表示锚点在开头、保留开头一段（补齐模式、按时间倒序的 Pin 列表）
+     *  @param budgetBytes 体积预算，单位字节；正式调用传 RESPONSE_MESSAGES_BUDGET_BYTES
+     *  @return 删去的条数；0 表示没有截断
+     */
+    static size_t trimMessagesToBudget(std::vector<MessageRecord>& messages, int64_t cid,
+                                       bool keepTail, size_t budgetBytes);
+
+    /**
+     *  构造 cmd_forward_message 的成功应答 JSON：
+     *  { code, msg, clientmsgid, msgids:[新建消息ID...], messages:[新建消息的完整消息体...] }。
+     *  messages 的元素结构与 cmd_message_notify 包体相同，供转发人在本端直接显示与落库 ——
+     *  目标为单聊时服务端只把新消息推给对方，转发人除应答之外拿不到这些消息。
+     *  msgids 与 messages 条数、顺序一致；保留 msgids 是为了兼容只认它的老客户端。
+     *  @param code        错误码，0 表示成功
+     *  @param msg         说明文字（英文）
+     *  @param clientmsgid 请求里的 clientmsgid，原样回带
+     *  @param created     本次新建的消息，按新建顺序排列；可以为空
+     *  @param cid         消息体里 cid 字段的取值：转发人视角的会话ID，即请求里的 tocid
+     */
+    static std::string buildForwardMessageResponse(int code, const std::string& msg,
+                                                   const std::string& clientmsgid,
+                                                   const std::vector<MessageRecord>& created,
+                                                   int64_t cid);
+
+    /**
+     *  构造"合并转发"消息（msgtype=15）的 content JSON：
+     *  { title, messages:[子消息体...] }，子消息体结构与 cmd_message_notify 包体相同，
+     *  另外在 fromNames 查得到名字时多一个 fromname 字段（转发当时发送者的昵称）。
+     *  @param title     合并转发标题
+     *  @param subs      被合并的源消息列表
+     *  @param fromNames 发送者 userid 到昵称的映射；查不到的发送者不写 fromname，由接收方
+     *                   按本地通讯录解析。缺省为空映射，即一个都不写
      */
     static std::string buildMergedContent(const std::string& title,
-                                          const std::vector<MessageRecord>& subs);
+                                          const std::vector<MessageRecord>& subs,
+                                          const std::map<int64_t, std::string>& fromNames =
+                                              std::map<int64_t, std::string>());
 
     /**
      *  解析 cmd_delete_message 请求（请求体为 { "msgid": "..." }）。
@@ -586,6 +769,43 @@ public:
      *  @return msgid 缺失或非正返回 false
      */
     static bool parseDeleteMessageRequest(const std::string& json, int64_t& msgid);
+
+    /**
+     *  解析 cmd_delete_messages_by_time 请求（请求体为 { "begintime": 毫秒, "endtime": 毫秒 }）。
+     *  两个字段都必须出现，且都是非负整数（JSON 数字；字符串不接受）。本函数只做格式校验，
+     *  "结束不早于开始""按服务端当前时刻截断"由 NormalizeDeleteRange 负责。
+     *  @param json 请求体
+     *  @param req  [出参] 解析结果
+     *  @return 格式合法返回 true；缺字段、类型不对、值为负、JSON 非法或不是对象返回 false
+     */
+    static bool parseDeleteMessagesByTimeRequest(const std::string& json,
+                                                 DeleteMessagesByTimeRequest& req);
+
+    /**
+     *  构造 cmd_delete_messages_by_time 应答 JSON：{ code, msg, begintime, endtime }。
+     *  @param begintime 实际生效的区间开始（Unix毫秒），即截断校验之后的值
+     *  @param endtime   实际生效的区间结束（Unix毫秒），即截断校验之后的值
+     */
+    static std::string buildDeleteMessagesByTimeResponse(int code, const std::string& msg,
+                                                         int64_t begintime, int64_t endtime);
+
+    /**
+     *  构造单条形式的 cmd_messages_deleted_notify 推送 JSON：{ ctype, cid, msgids:[...] }。
+     *  由 cmd_delete_message 成功后推给删除者本人的全部在线设备。
+     *  @param ctype  会话类型：1 单聊 2 群聊
+     *  @param cid    删除者视角的会话ID（单聊为对方userid，群聊为群id），以字符串输出
+     *  @param msgids 被删除的消息msgid，各以字符串输出
+     */
+    static std::string buildMessagesDeletedNotify(int ctype, int64_t cid,
+                                                  const std::vector<int64_t>& msgids);
+
+    /**
+     *  构造区间形式的 cmd_messages_deleted_notify 推送 JSON：{ begintime, endtime }，不带 msgids。
+     *  由 cmd_delete_messages_by_time 成功后推给清理者本人的全部在线设备。
+     *  @param begintime 实际生效的区间开始（Unix毫秒）
+     *  @param endtime   实际生效的区间结束（Unix毫秒）
+     */
+    static std::string buildMessagesDeletedRangeNotify(int64_t begintime, int64_t endtime);
 
     /**
      *  解析 cmd_mass_send 请求；clientmsgid/content/targets 缺失或为空返回 false，

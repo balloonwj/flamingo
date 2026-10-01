@@ -64,7 +64,11 @@ public:
 	//void StartGetUserInfoTask(long nType);					//获取好友
 	void StartHeartbeatTask();
 
-    void Login(int nStatus = STATUS_ONLINE);				    // 登录
+    // 登录：把一个登录请求放进发送线程的队列，结果经 FMG_MSG_LOGIN_RESULT 异步投回。
+    // 返回 true 表示请求已入队（之后一定会投回一个结果）；前置条件不满足（不在离线态、
+    // 缺账号或密码）而没有入队时返回 false，此时不会有结果投回。断线重连的节流据此判断
+    // 是否进入"等结果"状态，见 UI/BalloonMain/ReconnectThrottle.h。
+    bool Login(int nStatus = STATUS_ONLINE);
 	BOOL Logout();												// 注销
 	void CancelLogin();											// 取消登录
 

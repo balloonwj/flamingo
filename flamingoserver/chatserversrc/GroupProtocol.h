@@ -11,6 +11,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <set>        //buildUserGroupsResponse 的置顶群ID集合
 #include <string>
 #include <vector>
 #include "Protocol.h"   //群相关枚举（group_member_role / group_join_mode / 两个 changetype）
@@ -57,6 +58,11 @@ struct GroupRecord
     std::string announcetitle; //最新已发布公告的标题（群聊窗头部摘要行显示它）
     int64_t     announcetime;  //最新已发布公告的发布时间，Unix毫秒；0 表示没有公告
 
+    //群名是否由用户设定，对应 t_group.f_name_custom：1 是，群名固定不变；0 否，是按成员
+    //昵称生成的自动群名，成员增减、转让群主、成员改昵称后由服务端重算（见 GroupAutoName.h）。
+    //只在服务端内部使用，不下发给客户端。
+    int         namecustom;
+
     GroupRecord()
         : groupid(0), facetype(0), ownerid(0)
         , joinmode(group_join_approval), muteall(0), createtime(0), membercount(0)
@@ -65,6 +71,7 @@ struct GroupRecord
         , atallscope(group_at_all_owner_admin), newseehistory(1), memberinvite(0)
         , welcomeon(0), sensitiveon(0)
         , announceid(0), announcetime(0)
+        , namecustom(1)
     {
     }
 };
@@ -264,7 +271,7 @@ struct HandleJoinGroupRequest
 //cmd_create_group 请求
 struct CreateGroupRequest
 {
-    std::string name;                //群名称
+    std::string name;                //群名称；空串表示由服务端生成自动群名
     std::vector<int64_t> memberids;  //初始成员userid列表（不含创建者）
 };
 
@@ -288,7 +295,7 @@ struct UpdateGroupInfoRequest
 {
     int64_t     groupid;          //目标群ID
     bool        has_name;         //本次是否更新群名称
-    std::string name;             //群名称目标值
+    std::string name;             //群名称目标值；空串表示恢复为自动群名
     bool        has_facetype;     //本次是否更新头像类型
     int         facetype;         //头像类型目标值
     bool        has_customface;   //本次是否更新自定义头像
@@ -341,7 +348,8 @@ public:
      *  解析 cmd_create_group 请求。
      *  @param json 请求包体（UTF-8 JSON）：{ groupname, memberids:[...] }
      *  @param req  [出参] 解析结果
-     *  @return groupname 非空时返回 true（memberids 允许为空）
+     *  @return 带有字符串类型的 groupname 时返回 true。groupname 可以为空串，表示使用
+     *          自动群名；memberids 允许为空
      */
     static bool parseCreateGroupRequest(const std::string& json, CreateGroupRequest& req);
 
@@ -407,12 +415,16 @@ public:
                                                  const std::vector<GroupMemberRecord>& members);
 
     /**
-     *  构造 cmd_get_user_groups 应答 JSON：{ code, msg, groups:[ {群资料}... ] }。
-     *  groups 每项字段与 cmd_get_group_info 一致（groupid/name/ownerid/membercount 等）。
-     *  供客户端"群"Tab 显示本人加入的完整群列表（含无消息的空群）。
+     *  构造 cmd_get_user_groups 应答 JSON：{ code, msg, groups:[ {群资料, pinned}... ] }。
+     *  groups 每项字段与 cmd_get_group_info 一致（groupid/name/ownerid/membercount 等），
+     *  另加 pinned：本人是否置顶了该群（1 是 0 否）。
+     *  供客户端"群"Tab 显示本人加入的完整群列表（含无消息的空群），并把置顶的群排在最前。
+     *  @param groups         本人加入的群
+     *  @param pinnedGroupIds 本人置顶的群ID集合（见 MessageManager::getPinnedConversationIds）
      */
     static std::string buildUserGroupsResponse(int code, const std::string& msg,
-                                               const std::vector<GroupRecord>& groups);
+                                               const std::vector<GroupRecord>& groups,
+                                               const std::set<int64_t>& pinnedGroupIds);
 
     /**
      *  构造 cmd_group_info_changed_notify 推送 JSON。

@@ -14,10 +14,25 @@
 //Pin 那几个用例要自己建一个"旧结构"的库来验证补列，故直接用 sqlite3 的 C 接口，
 //不经产品代码 —— 拿产品代码建出来的库已经带上新列，那样测等于什么都没验证。
 #include "sqlite3.h"
+#include <algorithm>   //CS2：对账取数的结果顺序不限，比对前先排序
 #include <string>
 #include <windows.h>
 
 using namespace balloonhistory;
+
+//把临时库路径转成 sqlite3_open 要的 UTF-8。不能用 std::string(w.begin(), w.end()) 逐个截断：
+//那样非 ASCII 字符会被截坏，编译器也会报 C4244（wchar_t 转 char 可能丢失数据）。
+static std::string WidePathToUtf8(const std::wstring& path)
+{
+    const int bytes = ::WideCharToMultiByte(CP_UTF8, 0, path.c_str(), -1, NULL, 0, NULL, NULL);
+    if (bytes <= 1)
+    {
+        return std::string();
+    }
+    std::string out((size_t)bytes - 1, '\0');
+    ::WideCharToMultiByte(CP_UTF8, 0, path.c_str(), -1, &out[0], bytes, NULL, NULL);
+    return out;
+}
 
 //取一个临时目录下的 db 全路径，并先删掉同名旧文件，保证每个用例从空库开始。
 //@param name  文件名（各用例传不同名，避免跨用例文件占用冲突）
@@ -794,4 +809,426 @@ TEST_CASE("V2S22 ReplacePinnedSet 把 Pin 时间一并对齐成服务端给的�
     REQUIRE(rows.size() == 1);
     CHECK(rows[0].m_pinned);
     CHECK(rows[0].m_pinTime == 987654321);
+}
+
+// =====================================================================
+// LD1~LD4、LDB1 —— 本地库删除接口（清理聊天记录，见 docs/清理聊天记录方案.md §7.1）
+// =====================================================================
+
+//统计某会话在本地库里的全部可见消息条数（不带任何类型 / 时间 / 关键字过滤）
+static int64_t CountConversation(CV2MsgStore& store, int ctype, int64_t cid)
+{
+    HistoryFilter f;
+    f.m_ctype = ctype;
+    f.m_cid = cid;
+    return store.Count(f, 0);
+}
+
+TEST_CASE("LD1 按 msgid 删除只动指定会话里的指定行", "[msgdelete]")
+{
+    std::wstring path = FreshTempDb(L"flamingo_ld1.db");
+    CV2MsgStore store;
+    REQUIRE(store.Open(path.c_str()));
+
+    //单聊 10 三条；单聊 20 有一条 msgid 与之相同的消息 —— 主键含会话，删 10 的那条不能误伤它
+    store.Upsert(MakeRecord(1, 1, 10, 10, 1, 100, "a", false, false));
+    store.Upsert(MakeRecord(2, 1, 10, 10, 1, 200, "b", false, false));
+    store.Upsert(MakeRecord(3, 1, 10, 10, 1, 300, "c", false, false));
+    store.Upsert(MakeRecord(2, 1, 20, 20, 1, 200, "d", false, false));
+
+    //99 在本地根本没有、0 是非法 msgid：都不算失败，也不计入删除条数
+    std::vector<int64_t> ids;
+    ids.push_back(2);
+    ids.push_back(99);
+    ids.push_back(0);
+    int deleted = -1;
+    REQUIRE(store.DeleteMessages(1, 10, ids, deleted));
+    CHECK(deleted == 1);
+
+    CHECK(CountConversation(store, 1, 10) == 2);
+    CHECK(CountConversation(store, 1, 20) == 1);
+}
+
+TEST_CASE("LD2 按时间范围分批删除：跨会话、含两端、每批不超过上限、删到 0 为止", "[msgdelete]")
+{
+    std::wstring path = FreshTempDb(L"flamingo_ld2.db");
+    CV2MsgStore store;
+    REQUIRE(store.Open(path.c_str()));
+
+    //三个会话，时间铺在 100~500；落在 [200, 300] 的共 5 条
+    store.Upsert(MakeRecord(1, 1, 10, 10, 1, 100, "a1", false, false));
+    store.Upsert(MakeRecord(2, 1, 10, 10, 1, 200, "a2", false, false));
+    store.Upsert(MakeRecord(3, 1, 10, 10, 1, 300, "a3", false, false));
+    store.Upsert(MakeRecord(4, 1, 20, 20, 1, 200, "b1", false, false));
+    store.Upsert(MakeRecord(5, 1, 20, 20, 1, 300, "b2", false, false));
+    store.Upsert(MakeRecord(6, 1, 20, 20, 1, 400, "b3", false, false));
+    store.Upsert(MakeRecord(7, 2, 30, 11, 1, 300, "g1", false, false));
+    store.Upsert(MakeRecord(8, 2, 30, 12, 1, 500, "g2", false, false));
+
+    //每批最多 2 行：应当是 2、2、1，第四次为 0
+    const int kBatch = 2;
+    int total = 0;
+    int rounds = 0;
+    const int kMaxRounds = 10;   //防止实现有误时死循环
+    while (rounds < kMaxRounds)
+    {
+        int deleted = -1;
+        REQUIRE(store.DeleteByTimeRangeBatch(200, 300, kBatch, deleted));
+        CHECK(deleted >= 0);
+        CHECK(deleted <= kBatch);
+        ++rounds;
+        if (deleted == 0)
+            break;
+        total += deleted;
+    }
+    CHECK(total == 5);
+    CHECK(rounds == 4);
+
+    //区间外的三条都还在，区间内的一条都查不到
+    CHECK(CountConversation(store, 1, 10) == 1);
+    CHECK(CountConversation(store, 1, 20) == 1);
+    CHECK(CountConversation(store, 2, 30) == 1);
+
+    HistoryFilter f;
+    f.m_ctype = 1;
+    f.m_cid = 10;
+    std::vector<HistoryRecord> rows;
+    REQUIRE(store.QueryPage(f, 0, rows));
+    REQUIRE(rows.size() == 1);
+    CHECK(rows[0].m_msgid == 1);
+}
+
+TEST_CASE("LD3 批大小非正时不删任何行", "[msgdelete]")
+{
+    std::wstring path = FreshTempDb(L"flamingo_ld3.db");
+    CV2MsgStore store;
+    REQUIRE(store.Open(path.c_str()));
+    store.Upsert(MakeRecord(1, 1, 10, 10, 1, 100, "a", false, false));
+
+    int deleted = -1;
+    REQUIRE(store.DeleteByTimeRangeBatch(0, 1000, 0, deleted));
+    CHECK(deleted == 0);
+    CHECK(CountConversation(store, 1, 10) == 1);
+}
+
+TEST_CASE("LD4 数据库未打开时两个删除接口都返回失败", "[msgdelete]")
+{
+    CV2MsgStore store;
+    std::vector<int64_t> ids;
+    ids.push_back(1);
+    int deleted = -1;
+    CHECK_FALSE(store.DeleteMessages(1, 10, ids, deleted));
+    CHECK_FALSE(store.DeleteByTimeRangeBatch(0, 1000, 10, deleted));
+}
+
+//LDB1 用：造一份 totalRows 条消息的库，按 batch 行一批删掉较早的 90%，打印单批最长与总耗时。
+//@param totalRows      造多少条消息
+//@param batch          每批删除的行数
+//@param conversations  消息均匀分布到多少个会话里
+static void RunRangeDeleteBench(int totalRows, int batch, int conversations)
+{
+    const int kTotalRows = totalRows;
+    const int kBatch = batch;
+    const int kConversations = conversations;
+
+    std::wstring path = FreshTempDb(L"flamingo_ldb1.db");
+    {
+        //先经产品代码建表建索引，再用 SQLite 的 C 接口在一个事务里灌数据：
+        //逐条 Upsert 各自一个隐式事务，灌 10 万条要等很久，而灌数据不是被测对象
+        CV2MsgStore creator;
+        REQUIRE(creator.Open(path.c_str()));
+    }
+    {
+        sqlite3* db = NULL;
+        const std::string pathUtf8 = WidePathToUtf8(path);
+        REQUIRE(sqlite3_open(pathUtf8.c_str(), &db) == SQLITE_OK);
+        REQUIRE(sqlite3_exec(db, "BEGIN", NULL, NULL, NULL) == SQLITE_OK);
+        sqlite3_stmt* stmt = NULL;
+        REQUIRE(sqlite3_prepare_v2(db,
+            "INSERT INTO t_msg(msgid,ctype,cid,fromid,msgtype,content,search_text,timestamp) "
+            "VALUES(?,1,?,1,1,'{}','bench',?)", -1, &stmt, NULL) == SQLITE_OK);
+        for (int i = 1; i <= kTotalRows; ++i)
+        {
+            sqlite3_bind_int64(stmt, 1, i);
+            sqlite3_bind_int64(stmt, 2, 10 + (i % kConversations));
+            sqlite3_bind_int64(stmt, 3, static_cast<sqlite3_int64>(i) * 1000);
+            REQUIRE(sqlite3_step(stmt) == SQLITE_DONE);
+            sqlite3_reset(stmt);
+        }
+        sqlite3_finalize(stmt);
+        REQUIRE(sqlite3_exec(db, "COMMIT", NULL, NULL, NULL) == SQLITE_OK);
+        sqlite3_close(db);
+    }
+
+    CV2MsgStore store;
+    REQUIRE(store.Open(path.c_str()));
+
+    //清理较早的 90%，与服务端 MDB1 的口径一致
+    const int64_t endMs = static_cast<int64_t>(kTotalRows) * 9 / 10 * 1000;
+    double maxBatchMs = 0;
+    double totalMs = 0;
+    int totalDeleted = 0;
+    int batches = 0;
+    LARGE_INTEGER freq;
+    ::QueryPerformanceFrequency(&freq);
+    while (true)
+    {
+        LARGE_INTEGER t0;
+        LARGE_INTEGER t1;
+        ::QueryPerformanceCounter(&t0);
+        int deleted = 0;
+        REQUIRE(store.DeleteByTimeRangeBatch(0, endMs, kBatch, deleted));
+        ::QueryPerformanceCounter(&t1);
+        const double ms = static_cast<double>(t1.QuadPart - t0.QuadPart) * 1000.0 / freq.QuadPart;
+        totalMs += ms;
+        if (ms > maxBatchMs)
+            maxBatchMs = ms;
+        if (deleted == 0)
+            break;
+        totalDeleted += deleted;
+        ++batches;
+    }
+
+    WARN("LDB1: deleted " << totalDeleted << " rows in " << batches << " batches of " << kBatch
+         << ", total " << totalMs << " ms, max single batch " << maxBatchMs << " ms, average "
+         << (batches > 0 ? totalMs / batches : 0) << " ms");
+    CHECK(totalDeleted == kTotalRows * 9 / 10);
+}
+
+TEST_CASE("LDB1 本地库 10 万条消息按时间范围分批删除的单批耗时", "[.][msgdeletebench]")
+{
+    //方案 §12 的目标：单批不超过 50 毫秒。依次测三种批大小，据结果定产品代码里的批大小
+    const int kTotalRows = 100000;
+    const int kConversations = 200;
+    const int kBatchSizes[] = { 500, 1000, 2000 };
+    for (size_t i = 0; i < sizeof(kBatchSizes) / sizeof(kBatchSizes[0]); ++i)
+    {
+        RunRangeDeleteBench(kTotalRows, kBatchSizes[i], kConversations);
+    }
+}
+
+// =====================================================================
+// CS1~CS2 —— 覆盖区间的读写与对账取数（规则见 UI/BalloonHistory/HistoryCoverage.h）
+// =====================================================================
+
+//造一个已建立的覆盖区间
+static CoverRange MakeStoredCover(int64_t lo, int64_t hi, bool reachedOldest)
+{
+    CoverRange c;
+    c.m_valid = true;
+    c.m_lo = lo;
+    c.m_hi = hi;
+    c.m_reachedOldest = reachedOldest;
+    return c;
+}
+
+TEST_CASE("CS1 覆盖区间写入后读回一致，不同会话互不影响，全部清空后都没有区间", "[coverage]")
+{
+    std::wstring path = FreshTempDb(L"flamingo_cs1.db");
+    CV2MsgStore store;
+    REQUIRE(store.Open(path.c_str()));
+
+    //从没写过：读回未建立
+    CoverRange got;
+    REQUIRE(store.GetCoverage(1, 10, got));
+    CHECK_FALSE(got.m_valid);
+
+    //单聊 10 与群 10 同 cid 不同 ctype，各写各的
+    REQUIRE(store.SetCoverage(1, 10, MakeStoredCover(500, 950, false)));
+    REQUIRE(store.SetCoverage(2, 10, MakeStoredCover(0, 300, true)));
+
+    REQUIRE(store.GetCoverage(1, 10, got));
+    REQUIRE(got.m_valid);
+    CHECK(got.m_lo == 500);
+    CHECK(got.m_hi == 950);
+    CHECK_FALSE(got.m_reachedOldest);
+
+    REQUIRE(store.GetCoverage(2, 10, got));
+    REQUIRE(got.m_valid);
+    CHECK(got.m_lo == 0);
+    CHECK(got.m_hi == 300);
+    CHECK(got.m_reachedOldest);
+
+    //覆盖写入
+    REQUIRE(store.SetCoverage(1, 10, MakeStoredCover(100, 1000, false)));
+    REQUIRE(store.GetCoverage(1, 10, got));
+    CHECK(got.m_lo == 100);
+    CHECK(got.m_hi == 1000);
+
+    //写入未建立的区间等于删掉该会话的记录
+    REQUIRE(store.SetCoverage(2, 10, CoverRange()));
+    REQUIRE(store.GetCoverage(2, 10, got));
+    CHECK_FALSE(got.m_valid);
+
+    //全部清空
+    REQUIRE(store.ClearAllCoverage());
+    REQUIRE(store.GetCoverage(1, 10, got));
+    CHECK_FALSE(got.m_valid);
+
+    //数据库未打开时各接口都返回失败
+    CV2MsgStore closed;
+    CHECK_FALSE(closed.GetCoverage(1, 10, got));
+    CHECK_FALSE(closed.SetCoverage(1, 10, MakeStoredCover(1, 2, false)));
+    CHECK_FALSE(closed.ClearAllCoverage());
+}
+
+TEST_CASE("CS2 对账取数只返回指定会话、指定 msgid 范围内的行", "[coverage]")
+{
+    std::wstring path = FreshTempDb(L"flamingo_cs2.db");
+    CV2MsgStore store;
+    REQUIRE(store.Open(path.c_str()));
+
+    store.Upsert(MakeRecord(100, 1, 10, 10, 1, 1000, "a", false, false));
+    store.Upsert(MakeRecord(150, 1, 10, 10, 1, 1500, "b", false, false));
+    store.Upsert(MakeRecord(200, 1, 10, 10, 1, 2000, "c", false, false));
+    store.Upsert(MakeRecord(250, 1, 10, 10, 1, 2500, "d", false, false));
+    //另一个会话里落在同一范围内的行不能混进来
+    store.Upsert(MakeRecord(160, 1, 20, 20, 1, 1600, "e", false, false));
+    //已撤回的行同样要取出来：对账时服务端也会返回已撤回的消息，二者口径一致
+    store.Upsert(MakeRecord(180, 1, 10, 10, 1, 1800, "f", false, true));
+
+    std::vector<int64_t> ids;
+    REQUIRE(store.QueryMsgidsInRange(1, 10, 150, 200, ids));
+    std::sort(ids.begin(), ids.end());
+    REQUIRE(ids.size() == 3);
+    CHECK(ids[0] == 150);
+    CHECK(ids[1] == 180);
+    CHECK(ids[2] == 200);
+
+    CV2MsgStore closed;
+    CHECK_FALSE(closed.QueryMsgidsInRange(1, 10, 0, 1000, ids));
+}
+
+TEST_CASE("CS3 区间内最早一条的时间：只看指定会话、msgid 不小于下界的行", "[coverage]")
+{
+    std::wstring path = FreshTempDb(L"flamingo_cs3.db");
+    CV2MsgStore store;
+    REQUIRE(store.Open(path.c_str()));
+
+    //msgid 与时间不一定同序（服务端时钟回拨、或手工造的数据），取的是时间的最小值
+    store.Upsert(MakeRecord(100, 1, 10, 10, 1, 1000, "a", false, false));
+    store.Upsert(MakeRecord(200, 1, 10, 10, 1, 2000, "b", false, false));
+    store.Upsert(MakeRecord(300, 1, 10, 10, 1, 1500, "c", false, false));
+    //另一个会话里更早的行不能算进来
+    store.Upsert(MakeRecord(250, 1, 20, 20, 1, 500, "d", false, false));
+
+    int64_t ts = -1;
+    bool found = false;
+    REQUIRE(store.QueryOldestTimestampFrom(1, 10, 150, ts, found));
+    CHECK(found);
+    CHECK(ts == 1500);
+
+    //下界以上一行都没有
+    REQUIRE(store.QueryOldestTimestampFrom(1, 10, 400, ts, found));
+    CHECK_FALSE(found);
+
+    CV2MsgStore closed;
+    CHECK_FALSE(closed.QueryOldestTimestampFrom(1, 10, 0, ts, found));
+}
+
+// =====================================================================
+// HS2 —— 消息记录窗按关键字搜索的耗时基准（默认不运行，标签 [.][historysearchbench]）
+//
+// 搜索走 search_text LIKE '%关键字%'，前导通配符用不上索引，只能在该会话的行里逐行比对。
+// 本基准在一个会话里造 10 万条消息，分别测"关键字命中约 1%""关键字一条都不命中""不带关键字"
+// 三种情况下统计条数（Count）与取第一页（QueryPage，每页 30 条）的耗时，各跑 5 次取平均。
+// 只测量、不断言耗时：数字报给用户，再决定要不要改用全文索引。
+// =====================================================================
+
+namespace {
+
+// 基准里每种查询重复的次数，取平均以减小抖动
+const int kSearchBenchRepeat = 5;
+
+// 跑一种查询 kSearchBenchRepeat 次，返回 Count 与 QueryPage 各自的平均耗时（毫秒）以及统计到的条数
+void RunSearchBench(CV2MsgStore& store, const char* keywordUtf8, double& countMs, double& pageMs,
+                    int64_t& total)
+{
+    HistoryFilter f;
+    f.m_ctype = 1;
+    f.m_cid = 10;
+    f.m_keyword = keywordUtf8;
+    f.m_page = 1;
+    f.m_pageSize = 30;
+
+    LARGE_INTEGER freq;
+    ::QueryPerformanceFrequency(&freq);
+    double sumCount = 0;
+    double sumPage = 0;
+    for (int i = 0; i < kSearchBenchRepeat; ++i)
+    {
+        LARGE_INTEGER t0;
+        LARGE_INTEGER t1;
+        LARGE_INTEGER t2;
+        ::QueryPerformanceCounter(&t0);
+        total = store.Count(f, 0);
+        ::QueryPerformanceCounter(&t1);
+        std::vector<HistoryRecord> page;
+        REQUIRE(store.QueryPage(f, 0, page));
+        ::QueryPerformanceCounter(&t2);
+        sumCount += static_cast<double>(t1.QuadPart - t0.QuadPart) * 1000.0 / freq.QuadPart;
+        sumPage += static_cast<double>(t2.QuadPart - t1.QuadPart) * 1000.0 / freq.QuadPart;
+    }
+    countMs = sumCount / kSearchBenchRepeat;
+    pageMs = sumPage / kSearchBenchRepeat;
+}
+
+} // anonymous namespace
+
+TEST_CASE("HS2 一个会话 10 万条消息时按关键字搜索的耗时", "[.][historysearchbench]")
+{
+    const int kTotalRows = 100000;
+    // 每隔多少条放一条带关键字的消息（命中约 1%）
+    const int kHitEvery = 100;
+
+    std::wstring path = FreshTempDb(L"flamingo_hs2.db");
+    {
+        CV2MsgStore creator;
+        REQUIRE(creator.Open(path.c_str()));
+    }
+    {
+        // 与 LDB1 相同：经 SQLite 的 C 接口在一个事务里灌数据，灌数据不是被测对象
+        sqlite3* db = NULL;
+        const std::string pathUtf8 = WidePathToUtf8(path);
+        REQUIRE(sqlite3_open(pathUtf8.c_str(), &db) == SQLITE_OK);
+        REQUIRE(sqlite3_exec(db, "BEGIN", NULL, NULL, NULL) == SQLITE_OK);
+        sqlite3_stmt* stmt = NULL;
+        REQUIRE(sqlite3_prepare_v2(db,
+            "INSERT INTO t_msg(msgid,ctype,cid,fromid,msgtype,content,search_text,timestamp) "
+            "VALUES(?,1,10,1,1,'{}',?,?)", -1, &stmt, NULL) == SQLITE_OK);
+        // 正文取一段常见长度的中文（UTF-8），每隔 kHitEvery 条带上关键字"测试环境"
+        const std::string plain = "这一版的改动比较多，主要集中在消息列表和输入区两块，大家回归的时候重点看一下。";
+        const std::string withHit = "测试环境的数据库我重置了一下，账号还是原来那几个。" + plain;
+        for (int i = 1; i <= kTotalRows; ++i)
+        {
+            const std::string& text = (i % kHitEvery == 0) ? withHit : plain;
+            sqlite3_bind_int64(stmt, 1, i);
+            sqlite3_bind_text(stmt, 2, text.c_str(), (int)text.size(), SQLITE_TRANSIENT);
+            sqlite3_bind_int64(stmt, 3, static_cast<sqlite3_int64>(i) * 1000);
+            REQUIRE(sqlite3_step(stmt) == SQLITE_DONE);
+            sqlite3_reset(stmt);
+        }
+        sqlite3_finalize(stmt);
+        REQUIRE(sqlite3_exec(db, "COMMIT", NULL, NULL, NULL) == SQLITE_OK);
+        sqlite3_close(db);
+    }
+
+    CV2MsgStore store;
+    REQUIRE(store.Open(path.c_str()));
+
+    double countMs = 0;
+    double pageMs = 0;
+    int64_t total = 0;
+
+    RunSearchBench(store, "", countMs, pageMs, total);
+    WARN("HS2 no keyword: total " << total << ", count " << countMs << " ms, first page " << pageMs << " ms");
+    CHECK(total == kTotalRows);
+
+    RunSearchBench(store, "测试环境", countMs, pageMs, total);
+    WARN("HS2 keyword hits 1%: total " << total << ", count " << countMs << " ms, first page " << pageMs << " ms");
+    CHECK(total == kTotalRows / kHitEvery);
+
+    RunSearchBench(store, "一条都不会命中的关键字", countMs, pageMs, total);
+    WARN("HS2 keyword hits none: total " << total << ", count " << countMs << " ms, first page " << pageMs << " ms");
+    CHECK(total == 0);
 }

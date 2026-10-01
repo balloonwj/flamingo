@@ -20,6 +20,9 @@
  *    GI7  ResolveGroupOwnerName / ResolveMyGroupCard:群名片优先、空回退账号昵称、
  *         未命中返回空串
  *    GI8  全部 ctrlId 互不重复
+ *    GIC1 群名、群号那一行可点，点击复制的文字
+ *    GIC2 「查看消息记录」打开本群的消息记录
+ *    GIC3 复制提示条落在头部资料区下方，不遮住群名、群号
  *
  *  用 Catch2 v3(amalgamated)。全局 _Module 由 BalloonChatLayoutTests.cpp
  *  统一定义,本文件只引用。
@@ -36,8 +39,12 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiToast.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
+#include "../../../third-party/balloonui/balloonui/DuiResMgr.h"
+#include "../../../third-party/balloonui/balloonui/DuiDpi.h"
 
 using namespace balloonwjui;
 using namespace balloonmain;
@@ -268,4 +275,203 @@ TEST_CASE("GI8 全部 ctrlId 互不重复", "[groupinfo][ids]")
     CollectIdsGroupInfo(root.get(), ids);
     CHECK_FALSE(ids.empty());
     CHECK_FALSE(HasDuplicateGroupInfoId(ids));
+}
+
+// =====================================================================
+// FD. 字号随所在窗口的 DPI 变化
+// =====================================================================
+//
+// 群资料里的文字标签只记磅值、绘制时按所在窗口的 DPI 现取字体。控件树没有挂到窗口上，
+// 按全局 DPI 取字体，用例通过切换全局 DPI 观察字高变化。
+
+namespace {
+
+// 用例里切换的两档 DPI：96 对应 100% 缩放，192 对应 200% 缩放。
+const int kFdLowDpi  = 96;
+const int kFdHighDpi = 192;
+// 1 英寸 = 72 磅。字高按 lfHeight = -MulDiv(磅值, DPI, 72) 计算。
+const int kFdPointsPerInch = 72;
+
+// 在作用域结束时把 DuiResMgr 的全局 DPI 恢复为进入时的值（断言失败提前退出时也恢复）。
+class FdGroupDpiRestorer
+{
+public:
+    FdGroupDpiRestorer()
+        : m_savedDpi(DuiResMgr::Inst().GetDpi())
+    {
+    }
+
+    ~FdGroupDpiRestorer()
+    {
+        // GetDpi 返回 0 表示进入时尚未设置过 DPI，此时恢复为系统 DPI。
+        DuiResMgr::Inst().SetDpi(m_savedDpi > 0 ? m_savedDpi : DuiDpi::GetSystemDpi());
+    }
+
+    FdGroupDpiRestorer(const FdGroupDpiRestorer&) = delete;
+    FdGroupDpiRestorer& operator=(const FdGroupDpiRestorer&) = delete;
+
+private:
+    int m_savedDpi;   // 进入作用域时的全局 DPI，析构时据此恢复
+};
+
+// 取字体的 lfHeight；句柄为空或无效时返回 0。
+int FdGroupFontHeight(HFONT hf)
+{
+    LOGFONT lf;
+    ::memset(&lf, 0, sizeof(lf));
+    if (hf == NULL || ::GetObject(hf, sizeof(lf), &lf) == 0)
+    {
+        return 0;
+    }
+    return lf.lfHeight;
+}
+
+} // anonymous namespace
+
+TEST_CASE("FD3 群资料的群名与公告正文标签按磅值设字号，字高随 DPI 变化",
+          "[fontdpi][groupinfo]")
+{
+    FdGroupDpiRestorer restore;
+    std::unique_ptr<DuiControl> root = BuildGroupInfoBody();
+    REQUIRE(root != nullptr);
+
+    const UINT ids[] = { kIdGroupName, kIdGroupAnnouncement };
+    for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i)
+    {
+        DuiLabel* lbl = dynamic_cast<DuiLabel*>(root->FindCtrlById(ids[i]));
+        REQUIRE(lbl != nullptr);
+        const int pt = lbl->GetTextPointSize();
+        CHECK(pt > 0);
+
+        DuiResMgr::Inst().SetDpi(kFdLowDpi);
+        CHECK(FdGroupFontHeight(lbl->GetFont()) == -::MulDiv(pt, kFdLowDpi, kFdPointsPerInch));
+        DuiResMgr::Inst().SetDpi(kFdHighDpi);
+        CHECK(FdGroupFontHeight(lbl->GetFont()) == -::MulDiv(pt, kFdHighDpi, kFdPointsPerInch));
+    }
+}
+
+// =====================================================================
+// GIC1 / GIC2：点击群名 / 群号复制、「查看消息记录」接入（2026-10-01）
+// =====================================================================
+
+TEST_CASE("GIC1 群名、群号那一行可点；点群名复制完整群名，点群号复制纯数字群号", "[groupinfo][copy]")
+{
+    //群资料窗口的客户区尺寸量级（像素），取值无特殊含义
+    const int kBodyW = 420;
+    const int kBodyH = 520;
+
+    std::unique_ptr<DuiControl> root = BuildGroupInfoBody();
+    REQUIRE(root != nullptr);
+    const GroupInfoViewData d = MakeProjectGroupData();
+    REQUIRE(ApplyGroupInfoDataToView(root.get(), d));
+    root->ForceLayout(RECT{ 0, 0, kBodyW, kBodyH });
+
+    //可点：悬停在标签上时给手形光标（OnSetCursor 返回 true），普通标签返回 false
+    const UINT clickable[] = { kIdGroupName, kIdGroupMeta };
+    for (size_t i = 0; i < sizeof(clickable) / sizeof(clickable[0]); ++i)
+    {
+        INFO("ctrlId " << clickable[i]);
+        DuiControl* lbl = root->FindCtrlById(clickable[i]);
+        REQUIRE(lbl != nullptr);
+        const RECT rc = lbl->GetRect();
+        REQUIRE(rc.right > rc.left);
+        const POINT inside = { rc.left + 2, (rc.top + rc.bottom) / 2 };
+        CHECK(lbl->OnSetCursor(inside));
+    }
+    DuiControl* owner = root->FindCtrlById(kIdGroupOwner);
+    REQUIRE(owner != nullptr);
+    const RECT rcOwner = owner->GetRect();
+    const POINT inOwner = { rcOwner.left + 2, (rcOwner.top + rcOwner.bottom) / 2 };
+    CHECK_FALSE(owner->OnSetCursor(inOwner));
+
+    //复制的文字
+    CString text;
+    REQUIRE(GroupInfoCopyText(d, kIdGroupName, text));
+    CHECK(text == CString(_T("FlamingoIM 项目组")));
+    REQUIRE(GroupInfoCopyText(d, kIdGroupMeta, text));
+    CHECK(text == CString(_T("700001")));
+    //与标签上显示的群号一致
+    DuiLabel* meta = dynamic_cast<DuiLabel*>(root->FindCtrlById(kIdGroupMeta));
+    REQUIRE(meta != nullptr);
+    CHECK(meta->GetText().Find(text) >= 0);
+
+    //其余控件不复制；群名为空、群 id 无效时没有可复制的内容
+    CHECK_FALSE(GroupInfoCopyText(d, kIdGroupOwner, text));
+    GroupInfoViewData empty;
+    CHECK_FALSE(GroupInfoCopyText(empty, kIdGroupName, text));
+    CHECK_FALSE(GroupInfoCopyText(empty, kIdGroupMeta, text));
+}
+
+TEST_CASE("GIC2 查看消息记录：打开群聊类型、本群 id 的消息记录；按钮可用", "[groupinfo][copy]")
+{
+    const GroupInfoViewData d = MakeProjectGroupData();
+    int ctype = 0;
+    __int64 cid = 0;
+    REQUIRE(GroupInfoHistoryTarget(d, ctype, cid));
+    //会话类型 2 即群聊（与协议、FMG_MSG_OPEN_HISTORY 的约定一致）
+    CHECK(ctype == 2);
+    CHECK(cid == d.groupid);
+
+    //群 id 无效时不打开
+    GroupInfoViewData empty;
+    CHECK_FALSE(GroupInfoHistoryTarget(empty, ctype, cid));
+
+    //按钮存在且可用（不再是占位）
+    std::unique_ptr<DuiControl> root = BuildGroupInfoBody();
+    REQUIRE(root != nullptr);
+    DuiButton* btn = dynamic_cast<DuiButton*>(root->FindCtrlById(kIdGroupBtnHistory));
+    REQUIRE(btn != nullptr);
+    CHECK(btn->IsEnabled());
+}
+
+TEST_CASE("GIC3 复制提示条落在头部资料区下方，不遮住头像、群名、群号与群主", "[groupinfo][copy]")
+{
+    //群资料窗口的客户区尺寸量级（像素），取值无特殊含义
+    const int kBodyW = 420;
+    const int kBodyH = 520;
+
+    std::unique_ptr<DuiControl> root = BuildGroupInfoBody();
+    REQUIRE(root != nullptr);
+    REQUIRE(ApplyGroupInfoDataToView(root.get(), MakeProjectGroupData()));
+
+    //与群资料窗口相同的挂法：提示条挂在根容器末尾，布局高度为 0
+    DuiVBox* rootBox = dynamic_cast<DuiVBox*>(root.get());
+    REQUIRE(rootBox != nullptr);
+    std::unique_ptr<DuiToast> toastOwner(new DuiToast());
+    DuiToast* toast = toastOwner.get();
+    rootBox->AddChild(std::move(toastOwner), DuiLayout::Hint().Fixed(0));
+    root->ForceLayout(RECT{ 0, 0, kBodyW, kBodyH });
+
+    //默认位置（距顶 40 像素）会压在群号那一行上，这正是要改的情形
+    const int offset = GroupInfoToastTopOffset(root.get());
+    REQUIRE(offset > 0);
+    toast->SetTopOffset(offset);
+    toast->Show(_T("已复制群号"));
+    const RECT rcToast = toast->GetRect();
+    toast->HideNow();
+    REQUIRE(rcToast.bottom > rcToast.top);
+
+    //提示条的文字框顶边不高于头部各控件的底边：头部任何一处都不被遮住
+    const UINT header[] = { kIdGroupAvatar, kIdGroupName, kIdGroupMeta, kIdGroupOwner };
+    for (size_t i = 0; i < sizeof(header) / sizeof(header[0]); ++i)
+    {
+        INFO("ctrlId " << header[i]);
+        DuiControl* c = root->FindCtrlById(header[i]);
+        REQUIRE(c != nullptr);
+        const RECT rc = c->GetRect();
+        CHECK(root->GetRect().top + offset >= rc.bottom);
+    }
+
+    //提示条仍在客户区之内，且挨着头部（不跑到窗口底部去）
+    CHECK(rcToast.bottom <= kBodyH);
+    DuiControl* owner = root->FindCtrlById(kIdGroupOwner);
+    DuiControl* avatar = root->FindCtrlById(kIdGroupAvatar);
+    REQUIRE(owner != nullptr);
+    REQUIRE(avatar != nullptr);
+    const LONG headerBottom = (owner->GetRect().bottom > avatar->GetRect().bottom)
+                            ? owner->GetRect().bottom : avatar->GetRect().bottom;
+    CHECK(root->GetRect().top + offset == headerBottom);
+
+    //空根控件返回 -1，调用方保持提示条原有位置
+    CHECK(GroupInfoToastTopOffset(nullptr) == -1);
 }

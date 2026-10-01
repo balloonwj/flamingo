@@ -93,32 +93,9 @@ int                   LanguageOptionCount();
 int ClampLanguageIndex(int index);
 
 // =====================================================================
-// 字体大小（design 系统设置1.png：下拉「小 / 中 / 大」）—— 本期仅存索引、暂不生效
-// =====================================================================
-
-/**
- *  字体大小档位索引。
- */
-enum FontScaleIndex
-{
-    kFontScaleSmall  = 0,   // 小
-    kFontScaleMedium = 1,   // 中（默认）
-    kFontScaleLarge  = 2,   // 大
-};
-
-const wchar_t* const* FontScaleOptions();
-int                   FontScaleOptionCount();
-
-/**
- *  把字体大小索引夹到合法区间 [0, FontScaleOptionCount())。越界 / 负数回落到
- *  默认档「中」(kFontScaleMedium)。
- */
-int ClampFontScaleIndex(int index);
-
-// =====================================================================
 // 自动离开的等待时长（通用页：下拉「5 / 10 / 15 / 30 分钟」）
 // 对应 CUserConfig::GetAutoAwayDelayIndex —— 存的是<u>索引</u>不是分钟数，
-// 与语言 / 字体大小等下拉项同口径。分钟数只在这里映射一次，别处不再写死。
+// 与语言等下拉项同口径。分钟数只在这里映射一次，别处不再写死。
 // =====================================================================
 
 /**

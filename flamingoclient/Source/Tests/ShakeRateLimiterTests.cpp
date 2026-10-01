@@ -93,3 +93,33 @@ TEST_CASE("S6 Reset 后回到从未放行", "[shake][ratelimit]")
     // 复位后下一次必放行，哪怕紧接着调用。
     CHECK(limiter.TryPass(kBase + 2, kInterval));
 }
+
+
+// ---- 2026-09-30：接收侧间隔比发送侧短，容纳网络延迟的波动 ----
+//
+// 发送、接收两侧原先都是 5 秒。对方严格按 5 秒间隔发出的两次抖动，到达本端时的
+// 间隔会随网络延迟上下浮动；若第二次早到一点、间隔不足 5 秒，就被接收侧静默忽略：
+// 不前置、不提示、不晃动，发送方却看到"你向对方发送了窗口抖动"。
+
+TEST_CASE("ST1 接收侧最小间隔小于发送侧", "[shake][ratelimit]")
+{
+    INFO("send = " << kShakeSendMinIntervalMs << " ms, recv = " << kShakeRecvMinIntervalMs << " ms");
+    CHECK(kShakeRecvMinIntervalMs < kShakeSendMinIntervalMs);
+}
+
+TEST_CASE("ST2 对方按发送侧间隔发出的第二次抖动早到一点仍被接收侧放行", "[shake][ratelimit]")
+{
+    // 对方两次发送正好间隔 5 秒，第二次因网络波动早到 200 毫秒，本端收到的间隔为 4.8 秒。
+    const unsigned long long kJitterMs = 200;
+    ShakeRateLimiter recv;
+    REQUIRE(recv.TryPass(kBase, kShakeRecvMinIntervalMs));
+    CHECK(recv.TryPass(kBase + kShakeSendMinIntervalMs - kJitterMs, kShakeRecvMinIntervalMs));
+}
+
+TEST_CASE("ST3 接收侧最小间隔之内的第二次抖动仍被拦截", "[shake][ratelimit]")
+{
+    // 防刷屏的作用保留：比接收侧最小间隔还短 1 毫秒的第二次抖动照样忽略。
+    ShakeRateLimiter recv;
+    REQUIRE(recv.TryPass(kBase, kShakeRecvMinIntervalMs));
+    CHECK_FALSE(recv.TryPass(kBase + kShakeRecvMinIntervalMs - 1, kShakeRecvMinIntervalMs));
+}

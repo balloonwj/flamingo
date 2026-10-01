@@ -21,6 +21,9 @@
  *    · 取消 Pin 的权限<u>不在客户端预判</u>：本端不一定知道一条历史消息是谁钉的
  *      （operator 只随推送来、历史行未必有），预判会出现"该显示的没显示"。故菜单项
  *      一律给出，无权时由服务端以 error_code_pin_not_allowed 拒绝并提示。
+ *    · 「转发」只在本条能转发时出现（判定见 CanForwardMessage）；点它进入多选模式并预先
+ *      勾选本条，由用户在多选操作条上选逐条转发或合并转发（2026-10-01 与用户确认，
+ *      见 docs/聊天消息转发方案.md §3.1）。
  *
  *  balloonwj@qq.com   2026-08-04
  */
@@ -42,7 +45,7 @@ enum ChatMessageMenuId
     kChatMsgMenuReply       = 4,   // 引用回复：在输入区挂出对本条的引用条
     kChatMsgMenuForward     = 5,   // 转发：把本条转给别的会话
     kChatMsgMenuRecall      = 6,   // 撤回：仅自己发出、且仍在可撤回时限内时出现
-    kChatMsgMenuDelete      = 7,   // 删除：只从本端列表移除这一行
+    kChatMsgMenuDelete      = 7,   // 删除：本人视角的真删除。已有服务器 msgid 的行经宿主确认后发 cmd_delete_message，等删除推送到达再移除；发送中 / 发送失败的行直接从列表移除
     kChatMsgMenuMultiSelect = 8,   // 多选：以本行为起点进入多选模式
     kChatMsgMenuPin         = 9,   // Pin / 取消 Pin：把本条钉在会话里（会话内共享，对方与全体群成员都看得到）
     kChatMsgMenuOpenLink    = 10,  // 在浏览器中打开：仅当右键点在正文里的超链接上时出现，排在菜单最前
@@ -85,12 +88,46 @@ const int kChatMenuKindImage = 3;
 //不留点不动的项。
 const int kChatMenuKindFolder = 5;
 
+//时间分隔行的 kind 取值。与 ChatMockData.h 里 ChatMsgKind 的 kMsgTime 必须一致，单列一份
+//的理由同上面的 kChatMenuKindImage。消息被撤回后气泡也会变成这种提示行（保留原 msgid），
+//它已经不是一条可以拿来操作的消息。
+const int kChatMenuKindTime = 0;
+
+//合并转发聊天记录的 kind 取值。与 ChatMockData.h 里 ChatMsgKind 的 kMsgMerged 必须一致，单列
+//一份的理由同上。合并卡片没有可复制的正文，菜单里不给「复制」，其余各项照常。
+const int kChatMenuKindMerged = 6;
+
+/**
+ *  判断一条消息能不能转发（决定右键菜单里有没有「转发」，以及多选转发时收不收这一行）。
+ *
+ *  规则：
+ *    · 须有服务器 msgid：发送中 / 发送失败的行两个 id 都是 0，服务端不认识这条消息；
+ *    · 单聊里收到的文件与历史文件，服务器 msgid 放在 fileMsgid 而 msgid 为 0，同样能转发；
+ *    · 文件夹行不能转发（理由见 kChatMenuKindFolder 的注释）；
+ *    · 时间分隔行与撤回后的提示行不能转发。
+ *
+ *    msgKind：   消息类型，取值见 ChatMockData.h 的 ChatMsgKind。
+ *    msgid：     消息的服务器 msgid，没有时为 0。
+ *    fileMsgid： 文件行的服务器 msgid，非文件行或没有时为 0。
+ *  @return 能转发返回 true。本函数无副作用。
+ */
+bool CanForwardMessage(int msgKind, long long msgid, long long fileMsgid);
+
+/**
+ *  取一条消息转发时交给服务端的 msgid：msgid 非 0 时取它，否则取 fileMsgid。
+ *    msgid / fileMsgid：同 CanForwardMessage。
+ *  @return 服务器 msgid；两者都为 0 时返回 0。
+ */
+long long ForwardMsgidOf(long long msgid, long long fileMsgid);
+
 //图片就绪态。与 ChatMessage::imageState 的取值一一对应（见 ChatMockData.h，那边是
 //裸数字加注释），这里给它们名字，供本模型与其测试引用。
 const int kChatImageStateReady       = 0;   // 正常 / 已就绪：本地文件可用，两个图片项才出现
 const int kChatImageStateUploading   = 1;   // 上传中：本地虽有文件，但这条消息还没发成功
-const int kChatImageStateFailed      = 2;   // 失败：上传或下载失败
+const int kChatImageStateFailed      = 2;   // 上传失败：本端发出的图片没有发送成功
 const int kChatImageStateDownloading = 3;   // 下载中：本地还没有文件
+const int kChatImageStateDownloadFailed = 4;   // 下载失败：收到的图片（含自己在别的设备上发出的）没下载下来。
+                                               // 2026-09-30 从状态 2 拆出，二者显示的说明文字不同
 
 /**
  *  判断某条消息的右键菜单里该不该出现「图片另存为」「再次发送」两项。
@@ -121,6 +158,9 @@ bool ShouldShowImageActions(int msgKind, int imageState, bool hasLocalPath);
  *    canPin：       本条现在能不能 Pin —— 即服务器是否已给它分配 msgid。为 false 时
  *                   整项不出现（本端刚发出、回执还没回填的那一瞬）。
  *    pinned：       本条当前是否已被钉住，决定这一项的文案是「Pin」还是「取消 Pin」。
+ *    canForward：   本条现在能不能转发，由调用方经 CanForwardMessage 判定。为 false 时
+ *                   「转发」整项不出现。点「转发」进入多选模式并预先勾选本条，由用户在
+ *                   多选操作条上选择逐条转发或合并转发。
  *
  *  @return 行模型（值语义，调用方拥有）。
  */
@@ -129,7 +169,8 @@ std::vector<ChatMessageMenuEntry> BuildChatMessageMenuModel(int msgKind,
                                                             bool hasLocalPath,
                                                             bool canRecall,
                                                             bool canPin,
-                                                            bool pinned);
+                                                            bool pinned,
+                                                            bool canForward);
 
 /**
  *  算「图片另存为」对话框里的默认文件名。

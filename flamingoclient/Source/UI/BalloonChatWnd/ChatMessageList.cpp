@@ -5,7 +5,7 @@
  *  右侧画细滚动条。每个气泡绘制时单独设一次裁剪区，确保滚动时跨越视口
  *  边界的气泡（含彩色 emoji）不会画到头部 / 标题栏 / 输入区上。
  *
- *  进入多选模式后，底部让出一条操作条（取消 / 转发 N / 删除 N）。
+ *  进入多选模式后，底部让出一条操作条（取消 / 逐条转发 N / 合并转发 N / 删除 N）。
  *
  *  本 .cpp 不 include Flamingo 的 stdafx.h —— 它要被 Flamingo.vcxproj 与
  *  FlamingoUnit.vcxproj 共用。在 Flamingo.vcxproj 里需标记
@@ -38,18 +38,25 @@ extern CAppModule _Module;
 #include <atlgdi.h>
 
 #include <vector>
+#include <set>         // RemoveMessagesByMsgid：待移除 msgid 的查找表
 #include <algorithm>   // std::rotate —— PrependMessages 把新追加的一段挪到列表头部
 
 #include <gdiplus.h>
 #pragma comment(lib, "gdiplus.lib")
 
 #include "ChatMessageList.h"
+#include "ChatScrollThumb.h"   // 滚动条的尺寸与颜色（与群聊窗成员侧栏共用）
 #include "ChatBubble.h"
 #include "ChatHistoryPaging.h"   // kHistoryLoadTriggerY（滚到多近算"到顶了"）
 #include "ChatTimeSeparator.h"    // 时间分隔行的判定与文案（何时插、插什么字）
+#include "ChatClipboardIo.h"      // Ctrl+C 时写入纯文字 + Flamingo 格式
+#include "ChatMessageMenu.h"      // CanForwardMessage / ForwardMsgidOf（多选转发时判定与取 msgid）
 #include <time.h>                // time（取当前时刻，用于"今天 / 昨天"的判定）
 #include "../../App/CustomMsgDef.h"   // WM_CHAT_RECALL_REQUEST（撤回请求转交宿主聊天窗）
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"
+#include "../../../third-party/balloonui/balloonui/DuiTrace.h"   // BUI_TRACE：滚轮与绘制耗时的时序跟踪
+#include "../../../third-party/balloonui/balloonui/DuiAnimation.h"   // DuiAnim / DuiAnimMgr：平滑滚动的逐帧驱动
+#include "../../Common/Util/PerfStopWatch.h"                      // 滚轮排版、列表绘制的计时
 
 namespace balloonchatwnd {
 
@@ -57,12 +64,8 @@ namespace {
 
 // 一个滚轮刻度滚动的像素数。
 const int kWheelStep = 64;
-// 滚动条几何。
-const int kBarWidth   = 5;
-const int kBarMargin  = 2;
-const int kBarMinThumb = 36;
-// 滚动条滑块色（半透明灰）。
-const Gdiplus::Color kThumbColor(120, 0x5A, 0x5A, 0x5A);
+// 滚动条的几何计算、绘制、拖动换算与命中判断都用 ChatScrollThumb.h 的公共函数，与群聊窗成员
+// 侧栏、聊天输入框同一份实现，外观与手感因此完全一致；改尺寸或颜色请改那一份。
 
 // 一个用于"滚到底部"的足够大的初值（Layout 时会夹紧到真实最大值）。
 const int kScrollToBottomSentinel = 0x3FFFFFF;
@@ -72,7 +75,7 @@ const int kMultiSelectBarH = 48;
 
 // 多选操作条文字色。
 const COLORREF kBarCancelColor  = RGB(0x6B, 0x6B, 0x6B);  // "取消"
-const COLORREF kBarForwardColor = RGB(0xFF, 0x7A, 0x45);  // "转发 N"
+const COLORREF kBarForwardColor = RGB(0xFF, 0x7A, 0x45);  // "逐条转发 N" 与 "合并转发 N"
 const COLORREF kBarDeleteColor  = RGB(0xE5, 0x39, 0x35);  // "删除 N"
 const COLORREF kBarDisabledColor = RGB(0xBB, 0xBB, 0xBB); // 选中数为 0 时
 
@@ -108,11 +111,69 @@ void DrawBarText(HDC hdc, LPCWSTR text, const RECT& rc, COLORREF color)
 
 } // anonymous namespace
 
+/**
+ *  平滑滚动的逐帧驱动：挂在 balloonui 的 DuiAnimMgr 上，由它的 60Hz 脉冲逐帧调用。
+ *
+ *  它不自己算位置，只是在每一帧让消息列表按平滑滚动的曲线推进一次。位置按高精度时钟
+ *  （PerfNowMs）计算，与 DuiAnimMgr 传进来的进度无关 —— 后者基于系统毫秒计数，约 15.6
+ *  毫秒才跳一次，拿它算位置会有帧原地不动。
+ *
+ *  一段驱动的时长等于一次动画的时长；期间又收到滚轮、动画被延长时，由完成回调再挂一段
+ *  （见 ChatMessageList::OnScrollTickerDone）。列表先于驱动销毁时，经主人令牌得知，
+ *  什么都不做。
+ */
+class ChatScrollTicker : public balloonwjui::DuiAnim
+{
+public:
+    // token：与消息列表共用的主人令牌（共享所有权）。
+    explicit ChatScrollTicker(const std::shared_ptr<ChatScrollAnimToken>& token)
+        : balloonwjui::DuiAnim(kChatSmoothScrollDurationMs)
+        , m_token(token)
+    {
+    }
+
+protected:
+    // DuiAnim 覆写：每一帧推进一次列表的平滑滚动。传入的进度不用，理由见类说明。
+    void OnTick(double /*tEased*/) override
+    {
+        if (m_token->m_owner != NULL)
+        {
+            m_token->m_owner->AdvanceSmoothScroll(PerfNowMs());
+        }
+    }
+
+private:
+    std::shared_ptr<ChatScrollAnimToken> m_token;   // 主人令牌，与消息列表共享
+};
+
+/**
+ *  逐帧驱动走完一段时的回调（交给 DuiAnim::SetOnComplete）。写成函数对象而不是 lambda，
+ *  遵循仓库「尽量不使用 lambda」的约定。
+ */
+struct ChatScrollTickerDone
+{
+    std::shared_ptr<ChatScrollAnimToken> m_token;   // 主人令牌，与消息列表共享
+
+    // 列表仍在时通知它这一段驱动已结束，由它决定要不要再挂一段。
+    void operator()() const
+    {
+        if (m_token && m_token->m_owner != NULL)
+        {
+            m_token->m_owner->OnScrollTickerDone();
+        }
+    }
+};
+
 ChatMessageList::ChatMessageList()
     : m_scrollY(0)
+    , m_smooth()
+    , m_scrollAnimToken(std::make_shared<ChatScrollAnimToken>())
+    , m_scrollTickerRunning(false)
     , m_contentHeight(0)
     , m_viewHeight(0)
     , m_multiSelect(false)
+    , m_readReceiptEnabled(false)
+    , m_peerReadMsgid(0)
     , m_thumbDragging(false)
     , m_thumbDragOffsetY(0)
     , m_memDC(NULL)
@@ -133,6 +194,7 @@ ChatMessageList::ChatMessageList()
     , m_lastMsgTimestampMs(0)
     , m_prependSavedLastMs(0)
 {
+    m_scrollAnimToken->m_owner = this;
 }
 
 void ChatMessageList::RefreshAllRows()
@@ -207,6 +269,8 @@ int ChatMessageList::MyNetRole() const
 
 ChatMessageList::~ChatMessageList()
 {
+    //逐帧驱动可能还挂在 DuiAnimMgr 上：把令牌里的主人置空，它下次触发时就不会再访问本对象
+    m_scrollAnimToken->m_owner = NULL;
     ReleaseOffscreen();
 }
 
@@ -313,10 +377,24 @@ int ChatMessageList::SelectedCount() const
     return count;
 }
 
+void ChatMessageList::RequestScrollToBottom()
+{
+    // 直接改滚动位置：取消进行中的平滑滚动，否则它的下一帧会把位置拉回去。
+    m_smooth.Cancel();
+    // 置一个足够大的值；随后的 Layout 会夹紧到真实的最大滚动量。
+    m_scrollY = kScrollToBottomSentinel;
+}
+
 void ChatMessageList::ScrollToBottom()
 {
-    // 置一个足够大的值；下一次 Layout 会夹紧到真实的最大滚动量。
-    m_scrollY = kScrollToBottomSentinel;
+    RequestScrollToBottom();
+    // 当场排一次版，把占位值夹紧成真实的滚动位置。原先只请求重画、等"下一次 Layout"：聊天窗
+    // 渲染完首屏历史后调用本函数，之后并没有排版，滚动位置一直停在占位值上，滑块按占位值算到了
+    // 可视区之外，表现为刚打开聊天窗时消息区没有滚动条，滚动一下才出现（2026-10-01 修复）
+    if (m_rcItem.right > m_rcItem.left && m_rcItem.bottom > m_rcItem.top)
+    {
+        ForceLayout(m_rcItem);
+    }
     Invalidate();
 }
 
@@ -344,6 +422,9 @@ bool ChatMessageList::ScrollToMsgid(long long msgid)
     {
         return false;   // 该 msgid 不在已加载的行里（如较早消息未加载）
     }
+
+    // 直接改滚动位置：取消进行中的平滑滚动，理由同 ScrollToBottom。
+    m_smooth.Cancel();
 
     // 由目标气泡当前 rect 反推其在内容坐标里的顶部偏移，把滚动偏移设到那里（留点上边距）。
     // 下一次 Layout 会把 m_scrollY 夹紧到合法范围（目标靠近底部时会被夹住，但仍在视口内）。
@@ -398,7 +479,14 @@ void ChatMessageList::AppendMessage(const ChatMessage& msg)
     }
 
     std::unique_ptr<ChatBubble> bubble(new ChatBubble());
+    bubble->SetReadReceiptEnabled(m_readReceiptEnabled);
     bubble->SetMessage(msg);
+    // 对方的已读位点先于本行到达（例如先收到已读推送、后翻页加载到这条历史消息）：
+    // 追加时就按位点判定，不必等下一次推送。
+    if (msg.fromMe && msg.msgid > 0 && msg.msgid <= m_peerReadMsgid)
+    {
+        bubble->MarkPeerRead();
+    }
     AddChild(std::unique_ptr<balloonwjui::DuiControl>(bubble.release()));
 
     // 新增行后重新堆叠，并把视图滚到底部显示这条新消息。
@@ -406,10 +494,65 @@ void ChatMessageList::AppendMessage(const ChatMessage& msg)
     // 滚动位置由 EndPrependBatch 统一按新增高度补偿。
     if (!m_prependActive)
     {
-        ScrollToBottom();
+        //紧接着就要排版，这里只置占位值，由下面这次排版夹紧，免得每追加一条排两遍
+        RequestScrollToBottom();
     }
     ForceLayout(GetRect());
     Invalidate();
+}
+
+void ChatMessageList::SetReadReceiptEnabled(bool b)
+{
+    if (m_readReceiptEnabled == b)
+    {
+        return;
+    }
+    m_readReceiptEnabled = b;
+
+    // 已有的行一并改掉：开关影响自己消息的行高，改完要重排。
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* bubble = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (bubble != NULL)
+        {
+            bubble->SetReadReceiptEnabled(b);
+        }
+    }
+    ForceLayout(GetRect());
+    Invalidate();
+}
+
+int ChatMessageList::ApplyPeerReadPosition(long long readMsgid)
+{
+    // 位点只增不减：更小或相同的位点（乱序到达的旧推送、重复推送）不会带来任何新的已读。
+    if (readMsgid <= 0 || readMsgid <= m_peerReadMsgid)
+    {
+        return 0;
+    }
+    m_peerReadMsgid = readMsgid;
+
+    int marked = 0;
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* bubble = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (bubble == NULL)
+        {
+            continue;
+        }
+        const ChatMessage& msg = bubble->GetMessage();
+        // 只看自己发出、已拿到 msgid 的消息；尚未拿到 msgid 的等回填时再判定。
+        if (!msg.fromMe || msg.msgid <= 0 || msg.msgid > readMsgid)
+        {
+            continue;
+        }
+        if (bubble->MarkPeerRead())
+        {
+            ++marked;
+        }
+    }
+    return marked;
 }
 
 void ChatMessageList::BeginPrependBatch()
@@ -497,6 +640,8 @@ void ChatMessageList::EndPrependBatch()
     {
         // 上方长高了多少，滚动偏移就加多少 —— 视口里看到的内容位置不变。
         m_scrollY += grew;
+        // 进行中的平滑滚动也整体平移同样的量，否则它的下一帧会把视口拉回插入前的位置。
+        m_smooth.Shift(grew);
         ForceLayout(GetRect());
     }
     Invalidate();
@@ -564,6 +709,8 @@ void ChatMessageList::ClearAllMessages()
     {
         RemoveChild(Children().back().get());
     }
+    // 内容整个换掉了，进行中的平滑滚动失去意义，取消。
+    m_smooth.Cancel();
     m_scrollY = 0;
     ForceLayout(GetRect());
     Invalidate();
@@ -712,7 +859,7 @@ void ChatMessageList::UpdateFileUploadProgress(const std::string& clientMsgId, i
             b->SetFileUploadProgress(percent);
             Invalidate();
             HWND host = HostHwnd();
-            if (host != NULL)
+            if (::IsWindow(host))
                 ::UpdateWindow(host);
             return;
         }
@@ -791,29 +938,35 @@ void ChatMessageList::UpdateFileDownloadProgress(long long msgid, int percent)
             b->SetFileDownloadProgress(percent);
             Invalidate();
             HWND host = HostHwnd();
-            if (host != NULL)
+            if (::IsWindow(host))
                 ::UpdateWindow(host);
             return;
         }
     }
 }
 
-void ChatMessageList::SetFileDownloadedByMsgid(long long msgid, const CString& localPath)
+bool ChatMessageList::SetFileDownloadedByMsgid(long long msgid, const CString& localPath,
+                                               bool* incoming)
 {
     if (msgid == 0)
-        return;
+        return false;
     const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
     for (size_t i = 0; i < kids.size(); ++i)
     {
         ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
         if (b != NULL && b->FileMsgid() == msgid)
         {
+            if (incoming != NULL)
+            {
+                *incoming = !b->GetMessage().fromMe;
+            }
             b->SetFileDownloaded(localPath);
             ForceLayout(GetRect());
             Invalidate();
-            return;
+            return true;
         }
     }
+    return false;
 }
 
 void ChatMessageList::MarkFileDownloadFailedByMsgid(long long msgid)
@@ -1074,16 +1227,163 @@ void ChatMessageList::SetMultiSelectMode(bool on)
     Invalidate();
 }
 
-void ChatMessageList::RequestDeleteBubble(ChatBubble* bubble)
+bool ChatMessageList::RequestDeleteBubble(ChatBubble* bubble)
 {
     if (bubble == NULL)
     {
-        return;
+        return false;
     }
-    // RemoveChild 会立即销毁 bubble；调用方其后不得再访问它。
+
+    //服务器上已有这条消息：删除要经服务端完成，界面等删除推送回来再改，
+    //这样本人其他设备与本窗口看到的结果一致
+    const long long msgid = bubble->Msgid();
+    if (msgid > 0)
+    {
+        std::vector<long long> msgids;
+        msgids.push_back(msgid);
+        PostDeleteRequest(msgids);
+        return false;
+    }
+
+    //发送中 / 发送失败的行服务器上没有，只存在于本窗口，直接移除。
+    //RemoveChild 会立即销毁 bubble；调用方其后不得再访问它。
     RemoveChild(bubble);
     ForceLayout(GetRect());
     Invalidate();
+    return true;
+}
+
+std::vector<long long> ChatMessageList::DeleteSelected()
+{
+    std::vector<long long> serverMsgids;
+    if (!m_multiSelect || SelectedCount() == 0)
+    {
+        return serverMsgids;
+    }
+
+    //先收集，再移除：RemoveChild 会改动子控件数组，不能在遍历 Children() 的过程中直接删
+    std::vector<ChatBubble*> localOnly;
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+        if (b == NULL || !b->IsSelected())
+        {
+            continue;
+        }
+        if (b->Msgid() > 0)
+        {
+            serverMsgids.push_back(b->Msgid());
+        }
+        else
+        {
+            localOnly.push_back(b);
+        }
+    }
+    for (size_t i = 0; i < localOnly.size(); ++i)
+    {
+        RemoveChild(localOnly[i]);
+    }
+
+    //退出多选并重排（SetMultiSelectMode 内含 ForceLayout），留下的行一并清掉选中态
+    SetMultiSelectMode(false);
+
+    PostDeleteRequest(serverMsgids);
+    return serverMsgids;
+}
+
+std::vector<long long> ChatMessageList::GetSelectedForwardMsgids(size_t* skipped) const
+{
+    if (skipped != NULL)
+    {
+        *skipped = 0;
+    }
+
+    std::vector<long long> msgids;
+    if (!m_multiSelect)
+    {
+        return msgids;
+    }
+
+    //去重用 set：同一条消息理论上不会出现两行，这里只是防止将来列表里出现重复行时
+    //把同一个 msgid 发两遍
+    std::set<long long> seen;
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        const ChatBubble* b = dynamic_cast<const ChatBubble*>(kids[i].get());
+        if (b == NULL || !b->IsSelected())
+        {
+            continue;
+        }
+
+        const ChatMessage& msg = b->GetMessage();
+        if (!CanForwardMessage(msg.kind, msg.msgid, msg.fileMsgid))
+        {
+            if (skipped != NULL)
+            {
+                ++(*skipped);
+            }
+            continue;
+        }
+
+        const long long id = ForwardMsgidOf(msg.msgid, msg.fileMsgid);
+        if (seen.insert(id).second)
+        {
+            msgids.push_back(id);
+        }
+    }
+
+    //按 msgid 升序：列表里的显示顺序基本就是 msgid 顺序，但本端刚发出的消息按回执回填
+    //的先后排在末尾，不一定严格有序；服务端也是按 msgid 升序处理转发源
+    std::sort(msgids.begin(), msgids.end());
+    return msgids;
+}
+
+bool ChatMessageList::ContainsMessage(long long msgid, const std::string& clientMsgId) const
+{
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
+    {
+        const ChatBubble* b = dynamic_cast<const ChatBubble*>(kids[i].get());
+        if (b == NULL)
+        {
+            continue;
+        }
+        const ChatMessage& msg = b->GetMessage();
+        if (msgid > 0 && (msg.msgid == msgid || msg.fileMsgid == msgid))
+        {
+            return true;
+        }
+        if (!clientMsgId.empty()
+            && (msg.clientMsgId == clientMsgId || msg.fileClientMsgId == clientMsgId))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void ChatMessageList::PostDeleteRequest(const std::vector<long long>& msgids)
+{
+    if (msgids.empty())
+    {
+        return;
+    }
+
+    //消息列表是纯 UI 控件、不直接碰网络：与撤回、Pin 相同，把 msgid 投给宿主聊天窗，
+    //由它确认后发 cmd_delete_message。堆上分配，宿主处理后 delete。
+    HWND hwnd = HostHwnd();
+    if (!::IsWindow(hwnd))
+    {
+        return;
+    }
+    std::vector<long long>* pMsgids = new std::vector<long long>(msgids);
+    if (!::PostMessage(hwnd, WM_CHAT_DELETE_REQUEST, 0, (LPARAM)pMsgids))
+    {
+        //投递失败（窗口已销毁）时自行释放，避免泄漏。
+        delete pMsgids;
+    }
 }
 
 void ChatMessageList::RequestRecallBubble(ChatBubble* bubble)
@@ -1105,7 +1405,7 @@ void ChatMessageList::RequestRecallBubble(ChatBubble* bubble)
     //ctype/cid 发 cmd_recall_message。堆上分配，宿主处理后 delete。
     balloonwjui::DuiHost* host = GetHost();
     HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
-    if (hwnd == NULL)
+    if (!::IsWindow(hwnd))
     {
         return;
     }
@@ -1137,7 +1437,7 @@ void ChatMessageList::RequestPinBubble(ChatBubble* bubble, bool pin)
     //推 cmd_message_pinned_notify 回来再做，本方法<u>不</u>就地改标记。
     balloonwjui::DuiHost* host = GetHost();
     HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
-    if (hwnd == NULL)
+    if (!::IsWindow(hwnd))
     {
         return;
     }
@@ -1225,6 +1525,11 @@ bool ChatMessageList::BackfillSentMessage(const std::string& clientMsgId, long l
         //SetMessage：它会清空选区模型并令折行测量缓存失效，而本处又不触发重排，
         //于是这一行在下次重排前都选不中文字。改用只动 msgid / 时间的轻量回填。
         b->BackfillServerIds(msgid, timestampMs);
+        // 发送回执晚于对方的已读推送到达时，回填的 msgid 可能已经在位点之内。
+        if (cur.fromMe && msgid > 0 && msgid <= m_peerReadMsgid)
+        {
+            b->MarkPeerRead();
+        }
         return true;
     }
 
@@ -1263,6 +1568,88 @@ bool ChatMessageList::RecallMessageByMsgid(long long msgid, const CString& tipTe
     return false;
 }
 
+int ChatMessageList::RemoveMessagesByMsgid(const std::vector<long long>& msgids)
+{
+    std::set<long long> targets;
+    for (size_t i = 0; i < msgids.size(); ++i)
+    {
+        //msgid 非正的行是本端刚发出、还没拿到服务器 ID 的，不可能是服务端删掉的那条
+        if (msgids[i] > 0)
+        {
+            targets.insert(msgids[i]);
+        }
+    }
+    if (targets.empty())
+    {
+        return 0;
+    }
+
+    //第一遍：先收集，再移除。RemoveChild 会立即销毁该行并改动子控件数组，
+    //边遍历边移除会让下标错位
+    std::vector<ChatBubble*> doomed;
+    {
+        const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+        for (size_t i = 0; i < kids.size(); ++i)
+        {
+            ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
+            if (b != NULL && b->Msgid() > 0 && targets.find(b->Msgid()) != targets.end())
+            {
+                doomed.push_back(b);
+            }
+        }
+    }
+    if (doomed.empty())
+    {
+        return 0;
+    }
+    for (size_t i = 0; i < doomed.size(); ++i)
+    {
+        RemoveChild(doomed[i]);
+    }
+
+    //第二遍：从后往前找孤立的时间分隔行 —— 后面紧跟另一个分隔行、或已到列表末尾。
+    //"纯粹的分隔行"认 kind 为 kMsgTime 且没有 msgid：撤回提示行也是 kMsgTime 样式，
+    //但保留着原消息的 msgid（见 ChatBubble::RecallToTip），属于内容，不算分隔行。
+    //一个分隔行无论保留还是移除，它前面那一行看到的"后一行"都仍是分隔行或末尾，
+    //所以一遍倒序扫描即可，不必反复扫
+    std::vector<ChatBubble*> orphans;
+    {
+        const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+        bool nextIsSeparatorOrEnd = true;
+        for (size_t i = kids.size(); i > 0; --i)
+        {
+            ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i - 1].get());
+            if (b == NULL)
+            {
+                nextIsSeparatorOrEnd = false;
+                continue;
+            }
+            const bool isSeparator = (b->GetMessage().kind == kMsgTime && b->Msgid() <= 0);
+            if (isSeparator)
+            {
+                if (nextIsSeparatorOrEnd)
+                {
+                    orphans.push_back(b);
+                }
+                nextIsSeparatorOrEnd = true;
+            }
+            else
+            {
+                nextIsSeparatorOrEnd = false;
+            }
+        }
+    }
+    for (size_t i = 0; i < orphans.size(); ++i)
+    {
+        RemoveChild(orphans[i]);
+    }
+
+    //全部移除完只重排、重绘一次，下方各行补上空出来的位置
+    ForceLayout(GetRect());
+    Invalidate();
+    return static_cast<int>(doomed.size());
+}
+
 void ChatMessageList::EnterMultiSelectWith(ChatBubble* bubble)
 {
     m_multiSelect = true;
@@ -1282,12 +1669,77 @@ void ChatMessageList::EnterMultiSelectWith(ChatBubble* bubble)
     Invalidate();
 }
 
-void ChatMessageList::RequestForwardBubble(ChatBubble* /*bubble*/)
+size_t ChatMessageList::RequestForwardSelected(bool merge)
 {
-    // mock 阶段：真实转发（选联系人 / 发送）待接入，先给占位提示。
-    ::MessageBoxW(HostHwnd(),
-                  L"转发功能正在开发中（当前为 mock 演示）。",
-                  L"FlamingoIM", MB_OK | MB_ICONINFORMATION);
+    size_t skipped = 0;
+    const std::vector<long long> msgids = GetSelectedForwardMsgids(&skipped);
+    if (msgids.empty())
+    {
+        return 0;
+    }
+
+    //与删除相同：消息列表不直接碰网络，把请求投给宿主聊天窗，由它补上源会话信息后
+    //交给主面板打开目标选择窗。堆上分配，宿主处理后 delete
+    HWND hwnd = HostHwnd();
+    if (::IsWindow(hwnd))
+    {
+        ChatForwardRequest* pReq = new ChatForwardRequest();
+        pReq->m_merge = merge;
+        pReq->m_msgids = msgids;
+        pReq->m_skipped = skipped;
+        if (!::PostMessage(hwnd, WM_CHAT_FORWARD_REQUEST, 0, (LPARAM)pReq))
+        {
+            //投递失败（窗口已销毁）时自行释放，避免泄漏
+            delete pReq;
+        }
+    }
+
+    //退出多选并重排（SetMultiSelectMode 内含 ForceLayout），留下的行一并清掉选中态
+    SetMultiSelectMode(false);
+    return msgids.size();
+}
+
+MultiSelectBarButton MultiSelectBarHitTest(const RECT& bar, POINT pt)
+{
+    const bool inBar = (pt.x >= bar.left && pt.x < bar.right
+                        && pt.y >= bar.top && pt.y < bar.bottom);
+    if (!inBar)
+    {
+        return kBarButtonNone;
+    }
+
+    //逐个按钮比对矩形，与绘制用的是同一份分段
+    const MultiSelectBarButton buttons[] = {
+        kBarButtonCancel, kBarButtonForwardEach, kBarButtonForwardMerged, kBarButtonDelete
+    };
+    for (size_t i = 0; i < sizeof(buttons) / sizeof(buttons[0]); ++i)
+    {
+        const RECT r = MultiSelectBarButtonRect(bar, buttons[i]);
+        if (pt.x >= r.left && pt.x < r.right)
+        {
+            return buttons[i];
+        }
+    }
+    return kBarButtonNone;
+}
+
+RECT MultiSelectBarButtonRect(const RECT& bar, MultiSelectBarButton button)
+{
+    RECT r = { 0, 0, 0, 0 };
+    if (button < kBarButtonCancel || button > kBarButtonDelete)
+    {
+        return r;
+    }
+
+    //按钮个数就是枚举里最后一个按钮的取值（从 1 起连续编号）
+    const int count = (int)kBarButtonDelete;
+    const int width = (bar.right - bar.left) / count;
+    const int index = (int)button - (int)kBarButtonCancel;
+    r.left = bar.left + width * index;
+    r.right = (button == kBarButtonDelete) ? bar.right : (r.left + width);
+    r.top = bar.top;
+    r.bottom = bar.bottom;
+    return r;
 }
 
 void ChatMessageList::RequestReplyBubble(ChatBubble* bubble)
@@ -1306,7 +1758,7 @@ void ChatMessageList::RequestReplyBubble(ChatBubble* bubble)
     }
 
     HWND hwnd = HostHwnd();
-    if (hwnd == NULL)
+    if (!::IsWindow(hwnd))
     {
         return;
     }
@@ -1388,13 +1840,25 @@ void PutTextToClipboard(HWND owner, LPCWSTR text)
 
 bool ChatMessageList::CopySelectedTextToClipboard()
 {
-    const CString text = GetSelectedText();
-    if (text.IsEmpty())
+    const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids = Children();
+    for (size_t i = 0; i < kids.size(); ++i)
     {
-        return false;   // 没有选区：这一下按键不归消息区，交回原处理者
+        const ChatBubble* b = dynamic_cast<const ChatBubble*>(kids[i].get());
+        if (b == NULL || !b->HasTextSelection())
+        {
+            continue;
+        }
+        // 同一时刻只会有一个气泡有选区。与气泡右键「复制」同口径：同时写纯文字与
+        // Flamingo 自己的格式，粘到聊天输入框时表情能还原成表情。
+        const std::vector<ChatClipSegment> segs = b->GetSelectedClipSegments();
+        if (segs.empty())
+        {
+            return false;
+        }
+        WriteChatContentToClipboard(HostHwnd(), segs);
+        return true;
     }
-    PutTextToClipboard(HostHwnd(), (LPCWSTR)text);
-    return true;
+    return false;   // 没有选区：这一下按键不归消息区，交回原处理者
 }
 
 void ChatMessageList::Layout(const RECT& rcAvail)
@@ -1446,6 +1910,8 @@ void ChatMessageList::Layout(const RECT& rcAvail)
 
 void ChatMessageList::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
 {
+    PerfStopWatch sw;
+    int paintedRows = 0;   // 本帧实际绘制的消息行数（与可视区相交的行）
     const RECT rowsRect = RowsViewRect();
     const int  rowsW = rowsRect.right - rowsRect.left;
     const int  rowsH = rowsRect.bottom - rowsRect.top;
@@ -1486,6 +1952,7 @@ void ChatMessageList::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
                     continue;   // 整行滚出可视区
                 }
                 child->OnPaint(m_memDC, rcInter);
+                ++paintedRows;
             }
 
             // 只把消息行可视区那一条搬回 hdc：行区以外不搬运 → 气泡
@@ -1515,32 +1982,12 @@ void ChatMessageList::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     ::DeleteObject(sep);
 
     // 内容溢出时，右侧画一条细滚动条（限定在消息行可视区内）。
-    if (m_contentHeight > m_viewHeight && m_viewHeight > 0)
+    const RECT thumb = ThumbRect();
+    if (thumb.bottom > thumb.top)
     {
-        int thumbH = (int)((LONGLONG)m_viewHeight * m_viewHeight / m_contentHeight);
-        if (thumbH < kBarMinThumb) { thumbH = kBarMinThumb; }
-        if (thumbH > m_viewHeight) { thumbH = m_viewHeight; }
-
-        const int maxScroll = m_contentHeight - m_viewHeight;
-        int thumbY = rowsRect.top;
-        if (maxScroll > 0)
-        {
-            thumbY += (int)((LONGLONG)m_scrollY * (m_viewHeight - thumbH) / maxScroll);
-        }
-        const int thumbX = m_rcItem.right - kBarWidth - kBarMargin;
-
         Gdiplus::Graphics g(hdc);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
-        Gdiplus::GraphicsPath path;
-        const Gdiplus::REAL r = (Gdiplus::REAL)kBarWidth / 2.0f;
-        const Gdiplus::REAL d = r * 2.0f;
-        path.AddArc((Gdiplus::REAL)thumbX, (Gdiplus::REAL)thumbY, d, d,
-                    180.0f, 180.0f);
-        path.AddArc((Gdiplus::REAL)thumbX, (Gdiplus::REAL)(thumbY + thumbH) - d,
-                    d, d, 0.0f, 180.0f);
-        path.CloseFigure();
-        Gdiplus::SolidBrush brush(kThumbColor);
-        g.FillPath(&brush, &path);
+        PaintChatScrollThumb(g, thumb);
     }
 
     // ---- 多选操作条 ----
@@ -1551,28 +1998,37 @@ void ChatMessageList::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         ::FillRect(hdc, &bar, white);
         ::DeleteObject(white);
 
+        // 四个按钮等分操作条，分段与点击共用 MultiSelectBarButtonRect。
+        // 删除按选中条数计；转发按其中能转发的条数计（发送中 / 发送失败、文件夹行不算），
+        // 能转发的一条都没有时两个转发按钮置灰、点击不响应。
         const int n = SelectedCount();
-        const int third = (bar.right - bar.left) / 3;
+        const int forwardable = (int)GetSelectedForwardMsgids(NULL).size();
 
-        // 取消（左）。
-        RECT cCancel = { bar.left, bar.top, bar.left + third, bar.bottom };
-        DrawBarText(hdc, L"取消", cCancel, kBarCancelColor);
+        // 取消。
+        DrawBarText(hdc, L"取消", MultiSelectBarButtonRect(bar, kBarButtonCancel), kBarCancelColor);
 
-        // 转发 N（中）。
-        CString fwd;
-        fwd.Format(_T("转发 %d"), n);
-        RECT cForward = { bar.left + third, bar.top,
-                          bar.left + third * 2, bar.bottom };
-        DrawBarText(hdc, (LPCWSTR)fwd, cForward,
-                    (n > 0) ? kBarForwardColor : kBarDisabledColor);
+        // 逐条转发 N。
+        CString fwdEach;
+        fwdEach.Format(_T("逐条转发 %d"), forwardable);
+        DrawBarText(hdc, (LPCWSTR)fwdEach, MultiSelectBarButtonRect(bar, kBarButtonForwardEach),
+                    (forwardable > 0) ? kBarForwardColor : kBarDisabledColor);
 
-        // 删除 N（右）。
+        // 合并转发 N。
+        CString fwdMerged;
+        fwdMerged.Format(_T("合并转发 %d"), forwardable);
+        DrawBarText(hdc, (LPCWSTR)fwdMerged, MultiSelectBarButtonRect(bar, kBarButtonForwardMerged),
+                    (forwardable > 0) ? kBarForwardColor : kBarDisabledColor);
+
+        // 删除 N。
         CString del;
         del.Format(_T("删除 %d"), n);
-        RECT cDelete = { bar.left + third * 2, bar.top, bar.right, bar.bottom };
-        DrawBarText(hdc, (LPCWSTR)del, cDelete,
+        DrawBarText(hdc, (LPCWSTR)del, MultiSelectBarButtonRect(bar, kBarButtonDelete),
                     (n > 0) ? kBarDeleteColor : kBarDisabledColor);
     }
+
+    BUI_TRACE("CHATLIST-PAINT rows=%u painted=%d scroll=%d content=%d view=%d rect=%d,%d,%d,%d cost=%.3fms",
+              (unsigned)Children().size(), paintedRows, m_scrollY, m_contentHeight, m_viewHeight,
+              m_rcItem.left, m_rcItem.top, m_rcItem.right, m_rcItem.bottom, sw.ElapsedMs());
 }
 
 
@@ -1585,18 +2041,90 @@ bool ChatMessageList::OnMouseWheel(POINT /*pt*/, short zDelta, UINT /*mkFlags*/)
         return true;   // 无需滚动，但仍消费滚轮
     }
 
-    int newScroll = m_scrollY - (zDelta / WHEEL_DELTA) * kWheelStep;
-    if (newScroll > maxScroll) { newScroll = maxScroll; }
-    if (newScroll < 0)         { newScroll = 0; }
-
-    if (newScroll != m_scrollY)
+    //ScrollToBottom 只把位置设成哨兵值、等下一次重排才归到真实的最大值；此时画面其实
+    //已经在底部。先把位置归到可滚动范围内再算目标，否则目标从哨兵值算起、夹紧后正好是
+    //最大值，第一格滚轮就被吞掉了（打开聊天窗后的第一次滚动实测如此）。
+    if (m_scrollY > maxScroll)
     {
-        m_scrollY = newScroll;
+        m_scrollY = maxScroll;
+    }
+
+    //只改平滑滚动的目标，滚动位置由逐帧驱动按缓出曲线推进过去（见 ChatSmoothScroll.h）。
+    //delta 按比例换算成像素：触控板与高精度滚轮送来的小于一格的 delta 不再被丢弃。
+    const bool animating = m_smooth.OnWheel(m_scrollY, maxScroll, zDelta, kWheelStep, PerfNowMs());
+    if (animating)
+    {
+        EnsureScrollTicker();
+    }
+    BUI_TRACE("CHATLIST-WHEEL delta=%d scroll=%d target=%.1f animating=%d rows=%u",
+              (int)zDelta, m_scrollY, m_smooth.Target(), animating ? 1 : 0,
+              (unsigned)Children().size());
+    return true;
+}
+
+void ChatMessageList::AdvanceSmoothScroll(double nowMs)
+{
+    if (!m_smooth.IsActive())
+    {
+        return;
+    }
+    PerfStopWatch sw;
+    const int oldScroll = m_scrollY;
+    int pos = m_smooth.Advance(nowMs);
+    //动画开始后内容高度可能变了（窗口缩放、图片下载完成撑高了气泡），再夹紧一次
+    const int maxScroll = (m_contentHeight > m_viewHeight) ? (m_contentHeight - m_viewHeight) : 0;
+    if (pos > maxScroll)
+    {
+        pos = maxScroll;
+    }
+    if (pos < 0)
+    {
+        pos = 0;
+    }
+    if (pos != m_scrollY)
+    {
+        m_scrollY = pos;
         ForceLayout(GetRect());
         Invalidate();
         NotifyMaybeLoadOlder();
     }
-    return true;
+    BUI_TRACE("CHATLIST-SMOOTH scroll=%d->%d active=%d layout=%.3fms",
+              oldScroll, m_scrollY, m_smooth.IsActive() ? 1 : 0, sw.ElapsedMs());
+}
+
+bool ChatMessageList::IsSmoothScrolling() const
+{
+    return m_smooth.IsActive();
+}
+
+void ChatMessageList::EnsureScrollTicker()
+{
+    if (m_scrollTickerRunning)
+    {
+        return;
+    }
+    std::unique_ptr<ChatScrollTicker> ticker(new ChatScrollTicker(m_scrollAnimToken));
+    ChatScrollTickerDone done;
+    done.m_token = m_scrollAnimToken;
+    ticker->SetOnComplete(std::function<void()>(done));
+    m_scrollTickerRunning = true;
+    balloonwjui::DuiAnimMgr::Inst().Add(std::unique_ptr<balloonwjui::DuiAnim>(ticker.release()));
+}
+
+void ChatMessageList::OnScrollTickerDone()
+{
+    m_scrollTickerRunning = false;
+    if (!m_smooth.IsActive())
+    {
+        return;
+    }
+    //这一段驱动走完了，但期间又收到了滚轮、动画被延长：先推进到此刻，没走完就再挂一段。
+    //在完成回调里向 DuiAnimMgr 添加新动画是它明确支持的用法（见 DuiAnimMgr::Add 的说明）。
+    AdvanceSmoothScroll(PerfNowMs());
+    if (m_smooth.IsActive())
+    {
+        EnsureScrollTicker();
+    }
 }
 
 void ChatMessageList::NotifyMaybeLoadOlder()
@@ -1604,12 +2132,13 @@ void ChatMessageList::NotifyMaybeLoadOlder()
     // 只在<u>接近顶部</u>时才惊动宿主，免得每一格滚轮都投一条消息。真正"要不要拉"
     // 的判定（有没有在途、还有没有更早的、锚点是什么）在宿主那边用
     // ShouldLoadOlderHistory 做 —— 那些状态本控件不持有，也不该持有。
-    if (m_scrollY > kHistoryLoadTriggerY)
+    // "接近顶部"的口径与宿主那边共用 IsNearTopForOlderHistory（离顶一屏以内）。
+    if (!IsNearTopForOlderHistory(m_scrollY, m_viewHeight))
     {
         return;
     }
     HWND hwnd = HostHwnd();
-    if (hwnd != NULL)
+    if (::IsWindow(hwnd))
     {
         ::PostMessage(hwnd, WM_CHAT_LOAD_OLDER, 0, 0);
     }
@@ -1617,39 +2146,16 @@ void ChatMessageList::NotifyMaybeLoadOlder()
 
 RECT ChatMessageList::ThumbRect() const
 {
-    RECT empty = { 0, 0, 0, 0 };
-    if (m_contentHeight <= m_viewHeight || m_viewHeight <= 0)
-        return empty;
-
-    RECT rows = RowsViewRect();
-    int thumbH = (int)((LONGLONG)m_viewHeight * m_viewHeight / m_contentHeight);
-    if (thumbH < kBarMinThumb)
-        thumbH = kBarMinThumb;
-    if (thumbH > m_viewHeight)
-        thumbH = m_viewHeight;
-
-    int maxScroll = m_contentHeight - m_viewHeight;
-    int thumbY = rows.top;
-    if (maxScroll > 0)
-        thumbY += (int)((LONGLONG)m_scrollY * (m_viewHeight - thumbH) / maxScroll);
-
-    int thumbX = m_rcItem.right - kBarWidth - kBarMargin;
-    RECT r = { thumbX, thumbY, thumbX + kBarWidth, thumbY + thumbH };
-    return r;
+    //ComputeChatScrollThumb 内部会先把滚动位置收进合法范围：即便某条路径留下了未经排版夹紧的
+    //占位值，滑块也落在可视区内，不会画到几百万像素之外
+    return ComputeChatScrollThumb(RowsViewRect(), m_viewHeight, m_contentHeight, m_scrollY);
 }
 
 bool ChatMessageList::HitScrollBarBand(POINT pt) const
 {
-    const RECT thumb = ThumbRect();
-    if (thumb.bottom <= thumb.top)
-    {
-        return false;   // 内容没溢出，压根没有滚动条
-    }
-    const RECT rows = RowsViewRect();
-    // 命中带：滑块所在竖直窄带（左右各放宽 kBarMargin 便于点中），且纵向落在消息区内。
-    const bool inBand  = (pt.x >= thumb.left - kBarMargin && pt.x <= thumb.right + kBarMargin);
-    const bool inRowsY = (pt.y >= rows.top && pt.y < rows.bottom);
-    return inBand && inRowsY;
+    // 命中带：滑块所在竖直窄带（左右各放宽一点便于点中），且纵向落在消息区内；内容没溢出时
+    // 没有滚动条，恒为 false。判断规则与成员侧栏、输入框共用
+    return HitChatScrollBand(pt, ThumbRect(), RowsViewRect());
 }
 
 balloonwjui::DuiControl* ChatMessageList::HitTest(POINT ptHostClient)
@@ -1661,6 +2167,18 @@ balloonwjui::DuiControl* ChatMessageList::HitTest(POINT ptHostClient)
     {
         return this;
     }
+
+    // 多选操作条同理：进入多选时可视区底部让出操作条的高度，而消息行的矩形并不随之截短，
+    // 最后几行会伸到操作条下面。不截下的话，点「取消 / 转发 / 删除」会落到下面的消息行上，
+    // 变成切换那一行的选中态（2026-10-01 联调发现，见 ChatMessageDeleteTests 的 CD7）。
+    if (hit != NULL && m_multiSelect)
+    {
+        const RECT bar = MultiSelectBarRect();
+        if (::PtInRect(&bar, ptHostClient))
+        {
+            return this;
+        }
+    }
     return hit;
 }
 
@@ -1669,26 +2187,11 @@ void ChatMessageList::ScrollToThumbTop(int thumbTopY)
     if (m_contentHeight <= m_viewHeight || m_viewHeight <= 0)
         return;
 
-    RECT rows = RowsViewRect();
-    int thumbH = (int)((LONGLONG)m_viewHeight * m_viewHeight / m_contentHeight);
-    if (thumbH < kBarMinThumb)
-        thumbH = kBarMinThumb;
-    if (thumbH > m_viewHeight)
-        thumbH = m_viewHeight;
+    //由滑块上沿反推滚动位置，与 ThumbRect 的几何互逆（ChatScrollThumb 的公共函数）
+    const int newScroll = ChatScrollYFromThumbTop(thumbTopY, RowsViewRect(), m_viewHeight, m_contentHeight);
 
-    int track     = m_viewHeight - thumbH;        // 滑块可移动的像素范围
-    int maxScroll = m_contentHeight - m_viewHeight;
-    int rel       = thumbTopY - rows.top;
-    if (rel < 0)
-        rel = 0;
-    if (rel > track)
-        rel = track;
-
-    int newScroll = (track > 0) ? (int)((LONGLONG)rel * maxScroll / track) : 0;
-    if (newScroll < 0)
-        newScroll = 0;
-    if (newScroll > maxScroll)
-        newScroll = maxScroll;
+    // 拖动滚动条直接决定位置：取消进行中的平滑滚动，免得它与拖动争夺位置。
+    m_smooth.Cancel();
 
     if (newScroll != m_scrollY)
     {
@@ -1749,61 +2252,42 @@ bool ChatMessageList::OnLButtonDown(POINT pt, UINT /*mkFlags*/)
     {
         return false;
     }
-    const RECT bar = MultiSelectBarRect();
-    const bool inBar = (pt.x >= bar.left && pt.x < bar.right
-                        && pt.y >= bar.top && pt.y < bar.bottom);
-    if (!inBar)
+    const MultiSelectBarButton button = MultiSelectBarHitTest(MultiSelectBarRect(), pt);
+    switch (button)
     {
+    // 落点不在操作条上：交给其它逻辑处理
+    case kBarButtonNone:
         return false;
-    }
 
-    const int third = (bar.right - bar.left) / 3;
-    const int rel = pt.x - bar.left;
-
-    // 左 1/3：取消多选。
-    if (rel < third)
-    {
+    // 取消：退出多选。
+    case kBarButtonCancel:
         SetMultiSelectMode(false);
         return true;
-    }
 
-    const int n = SelectedCount();
+    // 逐条转发：没有可转发的行时 RequestForwardSelected 什么都不做、也不退出多选
+    // （按钮此时是灰的）；否则投给宿主并退出多选。
+    case kBarButtonForwardEach:
+        RequestForwardSelected(false);
+        return true;
 
-    // 中 1/3：转发所选（选中数为 0 时无动作）。
-    if (rel < third * 2)
-    {
-        if (n > 0)
+    // 合并转发：同上，只是模式为合并。
+    case kBarButtonForwardMerged:
+        RequestForwardSelected(true);
+        return true;
+
+    // 删除所选（选中数为 0 时无动作）。本地独有的行立即移除，服务器上已有的行转交
+    // 宿主确认并发删除请求，随后退出多选。
+    case kBarButtonDelete:
+        if (SelectedCount() > 0)
         {
-            RequestForwardBubble(NULL);
-            SetMultiSelectMode(false);
+            DeleteSelected();
         }
         return true;
-    }
 
-    // 右 1/3：删除所选（选中数为 0 时无动作）。
-    if (n > 0)
-    {
-        // 先收集选中行指针，再逐个移除（RemoveChild 会改动子控件容器，
-        // 不能在遍历 Children() 的过程中直接删）。
-        std::vector<ChatBubble*> selected;
-        const std::vector<std::unique_ptr<balloonwjui::DuiControl> >& kids =
-            Children();
-        for (size_t i = 0; i < kids.size(); ++i)
-        {
-            ChatBubble* b = dynamic_cast<ChatBubble*>(kids[i].get());
-            if (b != NULL && b->IsSelected())
-            {
-                selected.push_back(b);
-            }
-        }
-        for (size_t i = 0; i < selected.size(); ++i)
-        {
-            RemoveChild(selected[i]);
-        }
-        // 退出多选并重排（SetMultiSelectMode 内含 ForceLayout）。
-        SetMultiSelectMode(false);
+    // 枚举之外的取值不会出现，按"已处理"吞掉，避免点到操作条下面的消息行
+    default:
+        return true;
     }
-    return true;
 }
 
 } // namespace balloonchatwnd

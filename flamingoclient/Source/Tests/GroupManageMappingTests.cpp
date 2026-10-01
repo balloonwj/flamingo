@@ -1354,3 +1354,228 @@ TEST_CASE("GM64 CanChangeGroupAvatar 只放行群主与管理员", "[groupmanage
     //再放开，也好过点了才发现没权限。
     CHECK_FALSE(grouprole::CanChangeGroupAvatar(-1));
 }
+
+// =====================================================================
+// LS1~LS8 —— 开窗时的模型与数据加载状态
+// =====================================================================
+//
+// 群管理窗原先在构造时用 FillMockData 填一整套示例数据，开窗后要等应答到达才
+// 换成真实内容，于是每次打开都先显示 7 名示例成员、再跳成真实成员。现在开窗时
+// 模型只写入主面板已知的群号、群名、本人角色，其余内容留空并标为"未加载"，
+// 界面据加载状态显示加载提示、失败提示或真实内容。这一组钉住模型这一侧的约定。
+
+// 本组用例使用的群ID与群名。群名与 MakeAvatarInfo 的默认群名一致（UTF-8 的
+// "技术部"），LS3 要拿两边算出的占位头像做比对。
+static const int64_t kCtxGroupId = 10000000001LL;
+static const wchar_t kCtxGroupName[] = L"技术部";
+
+// 造一份含 count 名普通成员的群成员应答，userid 从 100001 起依次递增。
+static net::GroupMembersResult MakeMembersResult(int count)
+{
+    net::GroupMembersResult members;
+    members.m_code = 0;
+    members.m_groupid = kCtxGroupId;
+    for (int i = 0; i < count; ++i)
+    {
+        net::GroupMemberItem item;
+        item.m_userid = 100001 + i;
+        item.m_nickname = "member";
+        members.m_members.push_back(item);
+    }
+    return members;
+}
+
+// 造一份含 count 条申请的加群申请应答，requestid 从 55 起、userid 从 200001 起依次递增。
+static net::GroupJoinRequestsResult MakeRequestsResult(int count)
+{
+    net::GroupJoinRequestsResult requests;
+    requests.m_code = 0;
+    requests.m_groupid = kCtxGroupId;
+    for (int i = 0; i < count; ++i)
+    {
+        net::GroupJoinRequestItem item;
+        item.m_requestid = 55 + i;
+        item.m_userid = 200001 + i;
+        item.m_nickname = "applicant";
+        item.m_timestamp = kNow - kOneMinute;
+        item.m_source = kJoinFromSearch;
+        requests.m_requests.push_back(item);
+    }
+    return requests;
+}
+
+TEST_CASE("LS1 新建的模型不带任何成员、申请、禁言数据，两项状态都是未加载",
+          "[groupmanage][loadstate]")
+{
+    GroupManageModel model;
+
+    CHECK(model.m_members.empty());
+    CHECK(model.m_requests.empty());
+    CHECK(model.m_muted.empty());
+    CHECK(model.m_membersState == kLoadPending);
+    CHECK(model.m_requestsState == kLoadPending);
+}
+
+TEST_CASE("LS2 写入群上下文：群名、群号、本人角色，列表与加载状态不受影响",
+          "[groupmanage][loadstate]")
+{
+    GroupManageModel model;
+    ApplyGroupContext(kCtxGroupId, kCtxGroupName, 2, model);
+
+    CHECK(model.m_groupName == CString(kCtxGroupName));
+    CHECK(model.m_groupNumber == CString(_T("10000000001")));
+    CHECK(model.m_myRole == kRoleOwner);
+    CHECK(model.m_members.empty());
+    CHECK(model.m_requests.empty());
+    CHECK(model.m_muted.empty());
+    CHECK(model.m_membersState == kLoadPending);
+    CHECK(model.m_requestsState == kLoadPending);
+
+    //协议角色与界面角色顺序相反，越界值一律按普通成员处理
+    const int      netRoles[] = { 2, 1, 0, 7, -1 };
+    const GroupRole uiRoles[] = { kRoleOwner, kRoleAdmin, kRoleMember, kRoleMember, kRoleMember };
+    for (size_t i = 0; i < sizeof(netRoles) / sizeof(netRoles[0]); ++i)
+    {
+        GroupManageModel m;
+        ApplyGroupContext(kCtxGroupId, kCtxGroupName, netRoles[i], m);
+        INFO("netRole=" << netRoles[i]);
+        CHECK(m.m_myRole == uiRoles[i]);
+    }
+
+    //模型里已有的列表与加载状态原样保留：本函数只负责群上下文这几项
+    GroupManageModel loaded;
+    ApplyGroupMembers(MakeMembersResult(1), kNow, loaded);
+    ApplyJoinRequests(MakeRequestsResult(1), kNow, loaded);
+    const LoadState membersBefore = loaded.m_membersState;
+    const LoadState requestsBefore = loaded.m_requestsState;
+    ApplyGroupContext(kCtxGroupId, kCtxGroupName, 2, loaded);
+    CHECK(loaded.m_members.size() == 1);
+    CHECK(loaded.m_requests.size() == 1);
+    CHECK(loaded.m_membersState == membersBefore);
+    CHECK(loaded.m_requestsState == requestsBefore);
+}
+
+TEST_CASE("LS3 群上下文的占位头像与群资料到达后的自动头像一致",
+          "[groupmanage][loadstate]")
+{
+    GroupManageModel ctx;
+    ApplyGroupContext(kCtxGroupId, kCtxGroupName, 2, ctx);
+
+    //对照组：同一个群的群资料应答到达、头像为自动类型（facetype=0）时的映射结果
+    GroupManageModel info;
+    ApplyGroupInfo(MakeAvatarInfo(0, ""), info);
+
+    CHECK(ctx.m_groupAvatarText == _T("技"));
+    CHECK(ctx.m_groupAvatarText == info.m_groupAvatarText);
+    CHECK(ctx.m_groupAvatarColor == info.m_groupAvatarColor);
+    CHECK(ctx.m_groupAvatarKind == info.m_groupAvatarKind);
+}
+
+TEST_CASE("LS4 群号无效或群名为空时对应字段留空", "[groupmanage][loadstate]")
+{
+    GroupManageModel model;
+    ApplyGroupContext(0, _T(""), 2, model);
+    CHECK(model.m_groupNumber.IsEmpty());   //不能写成 "0"
+    CHECK(model.m_groupName.IsEmpty());
+    CHECK(model.m_groupAvatarText.IsEmpty());
+
+    GroupManageModel nullName;
+    ApplyGroupContext(-5, NULL, 1, nullName);
+    CHECK(nullName.m_groupNumber.IsEmpty());
+    CHECK(nullName.m_groupName.IsEmpty());
+    CHECK(nullName.m_groupAvatarText.IsEmpty());
+    CHECK(nullName.m_myRole == kRoleAdmin);
+}
+
+TEST_CASE("LS5 成员应答到达后成员状态为已加载，空列表也一样", "[groupmanage][loadstate]")
+{
+    GroupManageModel some;
+    ApplyGroupMembers(MakeMembersResult(2), kNow, some);
+    CHECK(some.m_members.size() == 2);
+    CHECK(some.m_membersState == kLoadDone);
+
+    GroupManageModel none;
+    ApplyGroupMembers(MakeMembersResult(0), kNow, none);
+    CHECK(none.m_members.empty());
+    CHECK(none.m_membersState == kLoadDone);
+
+    //成员应答只影响成员这一项，申请状态不变
+    CHECK(some.m_requestsState == kLoadPending);
+}
+
+TEST_CASE("LS6 加群申请应答到达后申请状态为已加载，空列表也一样", "[groupmanage][loadstate]")
+{
+    GroupManageModel some;
+    ApplyJoinRequests(MakeRequestsResult(2), kNow, some);
+    CHECK(some.m_requests.size() == 2);
+    CHECK(some.m_requestsState == kLoadDone);
+
+    GroupManageModel none;
+    ApplyJoinRequests(MakeRequestsResult(0), kNow, none);
+    CHECK(none.m_requests.empty());
+    CHECK(none.m_requestsState == kLoadDone);
+
+    //申请应答只影响申请这一项，成员状态不变
+    CHECK(some.m_membersState == kLoadPending);
+}
+
+TEST_CASE("LS7 应答失败：从未成功过才显示失败，成功过的数据保留", "[groupmanage][loadstate]")
+{
+    CHECK(LoadStateAfterFailure(kLoadPending) == kLoadFailed);
+    //后续刷新失败时继续显示上一次的真实数据，不切换成失败提示
+    CHECK(LoadStateAfterFailure(kLoadDone) == kLoadDone);
+    CHECK(LoadStateAfterFailure(kLoadFailed) == kLoadFailed);
+}
+
+TEST_CASE("LS8 示例数据的两项状态都是已加载", "[groupmanage][loadstate]")
+{
+    //调试入口 --groupmanage 与 HD / DP / PG 等布局用例都用这份示例数据，
+    //它必须按"数据已到齐"显示，否则这些界面会全部变成加载提示
+    GroupManageModel model;
+    FillMockData(model);
+    CHECK_FALSE(model.m_members.empty());
+    CHECK(model.m_membersState == kLoadDone);
+    CHECK(model.m_requestsState == kLoadDone);
+}
+
+TEST_CASE("LS9 新建的模型与只写入群上下文的模型，群资料状态都是未加载", "[groupmanage][loadstate]")
+{
+    //群简介、欢迎语、七项群权限、全员禁言都来自群资料应答；应答到达之前模型里只有
+    //构造时的默认值，界面不能把它们当成真实设置显示（2026-10-01 修复前正是如此）
+    GroupManageModel fresh;
+    CHECK(fresh.m_groupInfoState == kLoadPending);
+
+    GroupManageModel ctx;
+    ApplyGroupContext(kCtxGroupId, kCtxGroupName, 2, ctx);
+    CHECK(ctx.m_groupInfoState == kLoadPending);
+}
+
+TEST_CASE("LS10 群资料到达后状态为已加载，群资料变更推送也一样且不覆盖本人角色",
+          "[groupmanage][loadstate]")
+{
+    GroupManageModel model;
+    ApplyGroupInfo(MakeAvatarInfo(0, ""), model);
+    CHECK(model.m_groupInfoState == kLoadDone);
+    CHECK(model.m_myRole == kRoleOwner);
+
+    //群资料变更推送（1318）同样经 ApplyGroupInfo 写入，报文里没有 myrole（解析为 -1）
+    net::GroupInfoResult notify = MakeAvatarInfo(0, "");
+    notify.m_myrole = -1;
+    GroupManageModel pushed;
+    ApplyGroupContext(kCtxGroupId, kCtxGroupName, 2, pushed);
+    ApplyGroupInfo(notify, pushed);
+    CHECK(pushed.m_groupInfoState == kLoadDone);
+    CHECK(pushed.m_myRole == kRoleOwner);
+
+    //群资料只影响自己这一项，成员与申请的状态不变
+    CHECK(model.m_membersState == kLoadPending);
+    CHECK(model.m_requestsState == kLoadPending);
+}
+
+TEST_CASE("LS11 示例数据的群资料状态是已加载", "[groupmanage][loadstate]")
+{
+    //与 LS8 同理：调试入口与布局用例里的基本信息页、群权限页都要按"已到齐"显示表单
+    GroupManageModel model;
+    FillMockData(model);
+    CHECK(model.m_groupInfoState == kLoadDone);
+}

@@ -141,12 +141,15 @@ struct UserGroupItem
     int         m_membercount;   //群成员总数
     int         m_facetype;      //群头像类型（见 BalloonMain/AvatarSpec.h AvatarKind：0 自动 1 字形 2 自定义图）
     std::string m_customface;    //群头像标识（UTF-8）：字形头像为 "glyph|colorIdx"，自定义图为 fileid；空表示自动
+    int         m_pinned;        //本人是否置顶了该群：1 是 0 否。老服务端不带该字段时为 0。
+                                 //登录时随群列表下发，之后由本端切换置顶与多端同步推送更新
 
     UserGroupItem()
         : m_groupid(0)
         , m_ownerid(0)
         , m_membercount(0)
         , m_facetype(0)
+        , m_pinned(0)
     {
     }
 };
@@ -450,14 +453,24 @@ public:
     /**
      *  构造创建群聊的发送请求 JSON 包体（cmd_create_group=1301，紧凑 UTF-8）。
      *  与服务端 GroupProtocol::parseCreateGroupRequest 对齐：群名承载在 groupname
-     *  字段（服务端要求非空，调用方须保证）；初始成员 userid 列表承载在 memberids
-     *  数组，每个 id 以字符串编码（避免 64 位精度丢失），不含创建者自己。
-     *  @param groupname   群名称（UTF-8，非空）
+     *  字段，该字段总是带上；为空串时由服务端按成员昵称生成自动群名，此后群名随
+     *  成员变化重算。初始成员 userid 列表承载在 memberids 数组，每个 id 以字符串
+     *  编码（避免 64 位精度丢失），不含创建者自己。
+     *  @param groupname   群名称（UTF-8）；空串表示使用自动群名
      *  @param memberids   初始成员 userid 列表（不含创建者；可为空）
      *  @return 紧凑格式的请求 JSON 文本
      */
     static std::string buildCreateGroupRequest(const std::string& groupname,
                                                const std::vector<int64_t>& memberids);
+
+    /**
+     *  把用户在建群对话框、群管理基本信息页输入的群名规整成要发给服务端的值：
+     *  去掉首尾的空白（半角空格、制表符、回车换行，以及全角空格 U+3000），中间的
+     *  空白保留。未填写或只填了空白时返回空串，发给服务端即表示使用自动群名。
+     *  @param utf8Input 输入框里的原始文字（UTF-8）
+     *  @return 规整后的群名（UTF-8），可能为空串。纯函数，无副作用
+     */
+    static std::string normalizeGroupNameInput(const std::string& utf8Input);
 
     /**
      *  解析创建群聊应答 JSON 包体（cmd_create_group=1301 的应答）。

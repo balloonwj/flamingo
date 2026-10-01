@@ -83,7 +83,7 @@ void CBalloonGroupManageWindow::RequestGroupData()
     //未绑定真实群（调试入口 --groupmanage 直接弹出的假数据窗口）时什么都不做
     if (m_groupId <= 0)
     {
-        LOG_INFO(_T("群管理窗未绑定真实群，沿用假数据，不发请求。"));
+        LOG_INFO("Group manage window: no real group bound, using mock data, no request sent.");
         return;
     }
 
@@ -105,18 +105,60 @@ void CBalloonGroupManageWindow::RequestGroupData()
     //算左侧导航「群公告」那个计数徽章。
     RequestAnnouncementPage(0);
 
-    LOG_INFO(_T("群管理窗开始拉取真实数据，groupid=%lld。"), (long long)m_groupId);
+    LOG_INFO("Group manage window: requesting group data, groupid=%lld.", (long long)m_groupId);
 }
 
 void CBalloonGroupManageWindow::RefreshNavAndPage()
 {
+    //整体重建会新建全部控件。重建前先记下三样东西，重建后还给用户，否则后台任何一次数据
+    //返回或推送都会清空正在写的公告、打断正在进行的输入、把列表滚回顶部：
+    //输入框里尚未提交的文字（CaptureInputDrafts，切页时同样处理）、焦点所在的输入框及其
+    //选区、滚动位置。
+    const int pageBefore = m_currentPage;
+    const int scrollBefore = (m_pContentScroll != NULL) ? m_pContentScroll->GetScrollPos() : 0;
+    int  focusId  = 0;
+    long selStart = 0;
+    long selEnd   = 0;
+    balloonwjui::DuiEdit* pFocusEdit = dynamic_cast<balloonwjui::DuiEdit*>(GetDuiFocus());
+    if (pFocusEdit != NULL && IsDraftInput((int)pFocusEdit->GetCtrlId()))
+    {
+        focusId = (int)pFocusEdit->GetCtrlId();
+        pFocusEdit->GetSel(selStart, selEnd);
+    }
+    CaptureInputDrafts();
+
     //整体重建客户区。InitUi 内部走的是 SetClientContent，它会先摘掉旧的客户区
     //再挂新的，反复调用是安全的；调完停在成员管理页，故随后再切回原来那一页。
+    //InitUi 与 SwitchToPage 建好页面后都会调用 RestoreInputDrafts 填回草稿。
     const int wanted = PickVisiblePage(m_currentPage);
     InitUi();
     if (wanted != m_currentPage)
     {
         SwitchToPage(wanted);
+    }
+
+    //滚动位置要在布局完成、内容高度算好之后再恢复：InitUi 的 SetClientContent 与
+    //SwitchToPage 都已完成布局。越界的位置由 SetScrollPos 收回到新内容的范围内
+    const int scrollPos = ScrollPosAfterRebuild(pageBefore, m_currentPage, scrollBefore);
+    if (m_pContentScroll != NULL && scrollPos > 0)
+    {
+        m_pContentScroll->SetScrollPos(scrollPos);
+    }
+
+    //焦点只在两种条件同时满足时还原：仍停在原来那一页（换了页说明原来的输入框已不可见），
+    //且本窗口是当前活动窗口。给输入框设焦点时 DuiHost 会调用 ::SetFocus 拿 Win32 焦点，
+    //本窗口在后台时这样做会把键盘焦点从用户正在使用的窗口（例如聊天窗）抢过来
+    if (focusId != 0 && m_currentPage == pageBefore && ::GetActiveWindow() == m_hWnd)
+    {
+        balloonwjui::DuiControl* content = GetClientContent();
+        balloonwjui::DuiEdit* pEdit = (content != NULL)
+            ? dynamic_cast<balloonwjui::DuiEdit*>(content->FindCtrlById(focusId))
+            : NULL;
+        if (pEdit != NULL)
+        {
+            pEdit->SetFocus();
+            pEdit->SetSel(selStart, selEnd);
+        }
     }
 }
 
@@ -140,7 +182,15 @@ void CBalloonGroupManageWindow::OnGroupInfoArrived(const net::GroupInfoResult& i
 {
     if (info.m_code != 0)
     {
-        LOG_ERROR(_T("群管理窗拉取群资料失败，code=%d。"), info.m_code);
+        LOG_ERROR("Group manage window: get group info failed, code=%d.", info.m_code);
+        //规则同 OnGroupMembersArrived：从未成功过时「基本信息」「群权限」两页改为显示失败
+        //提示，否则模型里的默认值会被当成真实设置显示；已经成功过时保留上一次的真实数据
+        const LoadState before = m_model.m_groupInfoState;
+        m_model.m_groupInfoState = LoadStateAfterFailure(before);
+        if (m_model.m_groupInfoState != before)
+        {
+            RefreshNavAndPage();
+        }
         return;
     }
 
@@ -158,7 +208,7 @@ void CBalloonGroupManageWindow::OnGroupInfoArrived(const net::GroupInfoResult& i
         CIUSocket::GetInstance().SendGetGroupJoinRequests(m_groupId);
     }
 
-    LOG_INFO(_T("群管理窗群资料到达，groupid=%lld，成员数=%d，本人角色=%d。"),
+    LOG_INFO("Group manage window: group info arrived, groupid=%lld, membercount=%d, myRole=%d.",
              (long long)info.m_groupid, info.m_membercount, (int)m_model.m_myRole);
 }
 
@@ -166,14 +216,22 @@ void CBalloonGroupManageWindow::OnGroupMembersArrived(const net::GroupMembersRes
 {
     if (members.m_code != 0)
     {
-        LOG_ERROR(_T("群管理窗拉取群成员失败，code=%d。"), members.m_code);
+        LOG_ERROR("Group manage window: get group members failed, code=%d.", members.m_code);
+        //从未成功过时改为显示失败提示，否则「正在加载」会一直挂着；已经成功过
+        //（成员变动推送触发的重新拉取失败）时保留上一次的真实列表，界面不必重建
+        const LoadState before = m_model.m_membersState;
+        m_model.m_membersState = LoadStateAfterFailure(before);
+        if (m_model.m_membersState != before)
+        {
+            RefreshNavAndPage();
+        }
         return;
     }
 
     ApplyGroupMembers(members, NowMilliseconds(), m_model);
     RefreshNavAndPage();
 
-    LOG_INFO(_T("群管理窗群成员到达，groupid=%lld，成员=%u，禁言=%u。"),
+    LOG_INFO("Group manage window: group members arrived, groupid=%lld, members=%u, muted=%u.",
              (long long)members.m_groupid,
              (unsigned)m_model.m_members.size(), (unsigned)m_model.m_muted.size());
 }
@@ -184,15 +242,23 @@ void CBalloonGroupManageWindow::OnJoinRequestsArrived(const net::GroupJoinReques
     {
         //普通成员拉这条会被服务端拒（error_code_not_group_admin），属预期内，
         //记 INFO 不记 ERROR，免得日志里一堆吓人的红字
-        LOG_INFO(_T("群管理窗拉取加群申请未通过，code=%d（非群主/管理员时属正常）。"),
+        LOG_INFO("Group manage window: get join requests rejected, code=%d (expected when not owner/admin).",
                  requests.m_code);
+        //规则同 OnGroupMembersArrived：从未成功过才改为显示失败提示。普通成员看不到
+        //「加群审批」页，状态变为失败对界面没有影响
+        const LoadState before = m_model.m_requestsState;
+        m_model.m_requestsState = LoadStateAfterFailure(before);
+        if (m_model.m_requestsState != before)
+        {
+            RefreshNavAndPage();
+        }
         return;
     }
 
     ApplyJoinRequests(requests, NowMilliseconds(), m_model);
     RefreshNavAndPage();
 
-    LOG_INFO(_T("群管理窗加群申请到达，groupid=%lld，待处理=%u。"),
+    LOG_INFO("Group manage window: join requests arrived, groupid=%lld, pending=%u.",
              (long long)requests.m_groupid, (unsigned)m_model.m_requests.size());
 }
 
@@ -200,7 +266,7 @@ void CBalloonGroupManageWindow::OnSensitiveWordsArrived(const net::SensitiveWord
 {
     if (words.m_code != 0)
     {
-        LOG_INFO(_T("群管理窗拉取敏感词库未通过，code=%d。"), words.m_code);
+        LOG_INFO("Group manage window: get sensitive words rejected, code=%d.", words.m_code);
         //拉失败也要把"加载中"落下去，否则界面会一直停在那句话上
         m_model.m_sensitiveWordsLoaded = true;
         if (m_currentPage == kPageSensitive)
@@ -218,7 +284,7 @@ void CBalloonGroupManageWindow::OnSensitiveWordsArrived(const net::SensitiveWord
         RefreshNavAndPage();
     }
 
-    LOG_INFO(_T("群管理窗敏感词库到达，groupid=%lld，词条=%u。"),
+    LOG_INFO("Group manage window: sensitive words arrived, groupid=%lld, words=%u.",
              (long long)words.m_groupid, (unsigned)words.m_words.size());
 }
 
@@ -234,7 +300,7 @@ void CBalloonGroupManageWindow::OnAnnouncementsArrived(const net::GroupAnnouncem
 
     if (result.m_code != 0)
     {
-        LOG_INFO(_T("群管理窗拉取群公告未通过，code=%d。"), result.m_code);
+        LOG_INFO("Group manage window: get announcements rejected, code=%d.", result.m_code);
         //拉失败也要把"加载中"落下去，否则界面会一直停在那句话上
         m_model.m_announcementsLoaded = true;
         if (m_currentPage == kPageAnnouncement)
@@ -249,7 +315,7 @@ void CBalloonGroupManageWindow::OnAnnouncementsArrived(const net::GroupAnnouncem
     //公告条数会改左侧导航的计数徽章，故无论当前停在哪一页都要重建一次
     RefreshNavAndPage();
 
-    LOG_INFO(_T("群管理窗群公告到达，groupid=%lld，本页=%u 条，共=%d 条。"),
+    LOG_INFO("Group manage window: announcements arrived, groupid=%lld, pageItems=%u, total=%d.",
              (long long)result.m_groupid,
              (unsigned)m_model.m_announcements.size(), result.m_total);
 }
@@ -277,7 +343,7 @@ void CBalloonGroupManageWindow::OnAnnouncementChanged(const net::GroupAnnounceme
     }
     RequestAnnouncementPage(m_model.m_announcementPage);
 
-    LOG_INFO(_T("群管理窗收到群公告变更推送，groupid=%lld，changetype=%d，重拉第 %d 页。"),
+    LOG_INFO("Group manage window: announcement change notify, groupid=%lld, changetype=%d, reloading page %d.",
              (long long)notify.m_groupid, notify.m_changetype,
              m_model.m_announcementPage + 1);
 }
@@ -296,13 +362,13 @@ void CBalloonGroupManageWindow::OnGroupOpResult(int cmd, int code, const std::st
         {
             CIUSocket::GetInstance().SendGetSensitiveWords(m_groupId);
         }
-        LOG_INFO(_T("群管理操作成功，cmd=%d，等推送刷新界面。"), cmd);
+        LOG_INFO("Group manage operation succeeded, cmd=%d, waiting for notify to refresh UI.", cmd);
         return;
     }
 
     //失败没有推送，只能靠这条应答给反馈
     const CString tip = DescribeGroupOpFailure(cmd, code, msgUtf8);
-    LOG_ERROR(_T("群管理操作失败，cmd=%d，code=%d。"), cmd, code);
+    LOG_ERROR("Group manage operation failed, cmd=%d, code=%d.", cmd, code);
     ::MessageBox(m_hWnd, (LPCTSTR)tip, _T("提示"), MB_OK | MB_ICONWARNING);
 
     //失败后本地可能已被乐观改过（如开关拨到一半），重拉一次拉回真实状态
@@ -330,7 +396,7 @@ void CBalloonGroupManageWindow::OnMemberChanged(const net::GroupMemberChangedNot
         }
     }
 
-    LOG_INFO(_T("群管理窗收到成员变动推送，groupid=%lld，changetype=%d，重拉成员列表。"),
+    LOG_INFO("Group manage window: member change notify, groupid=%lld, changetype=%d, reloading members.",
              (long long)notify.m_groupid, notify.m_changetype);
 }
 
@@ -340,7 +406,7 @@ bool CBalloonGroupManageWindow::OnInfoChanged(const net::GroupInfoChangedNotify&
     const int kInfoChangeDismissed = 2;
     if (notify.m_changetype == kInfoChangeDismissed)
     {
-        LOG_INFO(_T("群管理窗收到群解散推送，groupid=%lld，关闭窗口。"),
+        LOG_INFO("Group manage window: group dismissed notify, groupid=%lld, closing window.",
                  (long long)notify.m_info.m_groupid);
         ::MessageBox(m_hWnd, _T("该群聊已被解散。"), _T("提示"), MB_OK | MB_ICONINFORMATION);
         if (IsWindow())
@@ -355,7 +421,7 @@ bool CBalloonGroupManageWindow::OnInfoChanged(const net::GroupInfoChangedNotify&
     ResolveGroupAvatarImage();
     RefreshNavAndPage();
 
-    LOG_INFO(_T("群管理窗收到群资料变更推送，groupid=%lld。"),
+    LOG_INFO("Group manage window: group info change notify, groupid=%lld.",
              (long long)notify.m_info.m_groupid);
     return false;
 }
@@ -369,7 +435,7 @@ void CBalloonGroupManageWindow::OnJoinRequestNotify()
 
     //推送只带一条申请，而审批页要显示全部待处理的，重拉一次
     CIUSocket::GetInstance().SendGetGroupJoinRequests(m_groupId);
-    LOG_INFO(_T("群管理窗收到加群申请推送，重拉待审批列表。"));
+    LOG_INFO("Group manage window: join request notify, reloading pending requests.");
 }
 
 // ====================================================================
@@ -436,7 +502,7 @@ void CBalloonGroupManageWindow::ShowMuteDurationMenu(int64_t userId, POINT ancho
 
     //禁言原因走完整对话框才好填，右键这条快捷路径不填 —— 服务端允许为空。
     CIUSocket::GetInstance().SendMuteMember(m_groupId, userId, true, duration, std::string());
-    LOG_INFO(_T("发出禁言请求，groupid=%lld，userid=%lld，时长=%d 秒。"),
+    LOG_INFO("Send mute request, groupid=%lld, userid=%lld, duration=%d sec.",
              (long long)m_groupId, (long long)userId, duration);
 }
 
@@ -451,7 +517,7 @@ void CBalloonGroupManageWindow::ShowMemberContextMenu(int memberIndex)
     //未绑定真实群（调试入口的假数据）时不弹菜单 —— 点了也发不出请求
     if (m_groupId <= 0)
     {
-        LOG_INFO(_T("群管理窗未绑定真实群，成员右键菜单不弹出。"));
+        LOG_INFO("Group manage window: no real group bound, member context menu not shown.");
         return;
     }
 
@@ -496,15 +562,15 @@ void CBalloonGroupManageWindow::ShowMemberContextMenu(int memberIndex)
     {
     case kMemberMenuSendMsg:
         //打开单聊窗归主面板管（窗口集合在它手里），这里发一条窗口间消息请它
-        //代劳。没有宿主面板（调试入口直接弹出的窗口）时静默跳过。
-        if (m_hHostPanel != NULL)
+        //代劳。没有宿主面板（调试入口直接弹出的窗口）或宿主面板已销毁时静默跳过。
+        if (::IsWindow(m_hHostPanel))
         {
             ::PostMessage(m_hHostPanel, FMG_MSG_OPEN_CHAT, (WPARAM)member.userid, 0);
         }
         break;
 
     case kMemberMenuProfile:
-        if (m_hHostPanel != NULL)
+        if (::IsWindow(m_hHostPanel))
         {
             ::PostMessage(m_hHostPanel, FMG_MSG_OPEN_CONTACT_PROFILE,
                           (WPARAM)member.userid, 0);
@@ -711,6 +777,7 @@ bool CBalloonGroupManageWindow::HandlePageButton(UINT ctrlId, LPARAM extra)
 
     //---- 基本信息：重置（丢弃编辑，重拉一次）----
     case kIdBtnReset:
+        RevertBasicInfoInputs();
         RequestGroupData();
         return true;
 
@@ -806,7 +873,7 @@ void CBalloonGroupManageWindow::ResolveGroupAvatarImage()
     //缓存没命中：先留空（这一轮画字形占位），同时把图拉下来。下载完成后主面板
     //会把结果转回本窗口的 OnAvatarDownloaded，那时再解析一次并重建界面。
     net::ImageTransfer::GetInstance().EnqueueAvatarDownload(fileId, net::CurrentUserAccount());
-    LOG_INFO(_T("群头像真图未命中缓存，已发起下载，groupid=%lld。"), (long long)m_groupId);
+    LOG_INFO("Group avatar image not in cache, download requested, groupid=%lld.", (long long)m_groupId);
 }
 
 void CBalloonGroupManageWindow::OnAvatarDownloaded(const std::string& fileId)
@@ -825,7 +892,7 @@ void CBalloonGroupManageWindow::OnAvatarDownloaded(const std::string& fileId)
 
     ResolveGroupAvatarImage();
     RefreshNavAndPage();
-    LOG_INFO(_T("群头像真图已下好，群管理窗已刷新，groupid=%lld。"), (long long)m_groupId);
+    LOG_INFO("Group avatar image downloaded, group manage window refreshed, groupid=%lld.", (long long)m_groupId);
 }
 
 void CBalloonGroupManageWindow::RequestOpenAvatarDlg()
@@ -844,10 +911,11 @@ void CBalloonGroupManageWindow::RequestOpenAvatarDlg()
         return;
     }
 
-    if (m_hHostPanel == NULL)
+    if (!::IsWindow(m_hHostPanel))
     {
-        //调试入口（--groupmanage）单独起窗口时没有宿主主面板，此路不通。
-        LOG_ERROR(_T("请求打开修改群头像对话框失败：没有宿主主面板。"));
+        //调试入口（--groupmanage）单独起窗口时没有宿主主面板；宿主主面板已销毁时同样
+        //无法代为打开对话框。
+        LOG_ERROR("Open group avatar dialog failed: host panel is not set or already destroyed.");
         return;
     }
 
@@ -861,7 +929,7 @@ void CBalloonGroupManageWindow::RequestOpenAvatarDlg()
 
     //投递后所有权转给主面板，由它处理完 delete
     ::PostMessage(m_hHostPanel, FMG_MSG_OPEN_GROUP_AVATAR_DLG, 0, (LPARAM)req.release());
-    LOG_INFO(_T("请求打开修改群头像对话框，groupid=%lld。"), (long long)m_groupId);
+    LOG_INFO("Request to open group avatar dialog, groupid=%lld.", (long long)m_groupId);
 }
 
 void CBalloonGroupManageWindow::SaveBasicInfo()
@@ -886,11 +954,15 @@ void CBalloonGroupManageWindow::SaveBasicInfo()
         content->FindCtrlById(kIdEditGroupName));
     if (pName != NULL)
     {
-        const CString value = pName->GetText();
-        if (value != m_model.m_groupName)
+        //去掉首尾空白后再比较；清空（或只剩空白）时发空串，服务端据此恢复为自动群名
+        const std::string value = net::GroupProtocolClient::normalizeGroupNameInput(
+            EncodeUtil::UnicodeToUtf8(std::wstring((LPCTSTR)pName->GetText())));
+        const std::string current = EncodeUtil::UnicodeToUtf8(
+            std::wstring((LPCTSTR)m_model.m_groupName));
+        if (value != current)
         {
             params.m_hasName = true;
-            params.m_name = EncodeUtil::UnicodeToUtf8(std::wstring((LPCTSTR)value));
+            params.m_name = value;
         }
     }
 
@@ -917,7 +989,7 @@ void CBalloonGroupManageWindow::SaveBasicInfo()
     }
 
     CIUSocket::GetInstance().SendUpdateGroupInfo(params);
-    LOG_INFO(_T("发出修改群资料请求，groupid=%lld，改名=%d，改简介=%d。"),
+    LOG_INFO("Send update group info request, groupid=%lld, hasName=%d, hasIntro=%d.",
              (long long)m_groupId, (int)params.m_hasName, (int)params.m_hasIntro);
 }
 
@@ -1043,6 +1115,26 @@ void CBalloonGroupManageWindow::ClearAnnouncementDraft()
     }
 }
 
+void CBalloonGroupManageWindow::RevertBasicInfoInputs()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    const int ids[] = { kIdEditGroupName, kIdEditIntro };
+    for (size_t i = 0; i < sizeof(ids) / sizeof(ids[0]); ++i)
+    {
+        std::wstring baseline;
+        if (!m_inputDrafts.Revert(ids[i], &baseline) || content == NULL)
+        {
+            continue;
+        }
+        balloonwjui::DuiEdit* pEdit = dynamic_cast<balloonwjui::DuiEdit*>(content->FindCtrlById(ids[i]));
+        if (pEdit != NULL)
+        {
+            pEdit->SetText(baseline.c_str());
+        }
+    }
+    LOG_INFO("Group manage window: basic info inputs reverted, groupid=%lld.", (long long)m_groupId);
+}
+
 void CBalloonGroupManageWindow::PublishAnnouncementFromInput()
 {
     if (m_groupId <= 0)
@@ -1092,7 +1184,7 @@ void CBalloonGroupManageWindow::PublishAnnouncementFromInput()
     //以为没发出去又发一遍"。
     ClearAnnouncementDraft();
 
-    LOG_INFO(_T("发出发布群公告请求，groupid=%lld，优先级=%d。"),
+    LOG_INFO("Send publish announcement request, groupid=%lld, severity=%d.",
              (long long)m_groupId, m_model.m_draftSeverity);
 }
 
@@ -1145,11 +1237,11 @@ void CBalloonGroupManageWindow::OpenMemberPicker(int purpose)
     {
         return;
     }
-    if (m_hHostPanel == NULL)
+    if (!::IsWindow(m_hHostPanel))
     {
         //选人对话框归主面板持有（它掌握通讯录缓存，也负责对话框的生命周期）。
-        //没有宿主时这几个入口不可用 —— 调试入口打开的假数据窗口即属此列。
-        LOG_INFO(_T("群管理窗没有宿主面板，选人对话框不可用。"));
+        //没有宿主或宿主已销毁时这几个入口不可用 —— 调试入口打开的假数据窗口即属此列。
+        LOG_INFO("Group manage window has no live host panel, member picker is unavailable.");
         return;
     }
 
@@ -1208,7 +1300,7 @@ void CBalloonGroupManageWindow::OpenMemberPicker(int purpose)
 
     //投递后所有权转给主面板，由它处理完 delete
     ::PostMessage(m_hHostPanel, FMG_MSG_OPEN_MEMBER_PICKER, 0, (LPARAM)req.release());
-    LOG_INFO(_T("请求打开选人对话框，purpose=%d，groupid=%lld。"),
+    LOG_INFO("Request to open member picker, purpose=%d, groupid=%lld.",
              purpose, (long long)m_groupId);
 }
 
@@ -1275,7 +1367,7 @@ bool CBalloonGroupManageWindow::SendPermChange(UINT ctrlId, int value)
     }
 
     CIUSocket::GetInstance().SendUpdateGroupInfo(params);
-    LOG_INFO(_T("群权限变更已发出，groupid=%lld，ctrlid=%u，value=%d。"),
+    LOG_INFO("Group permission change sent, groupid=%lld, ctrlid=%u, value=%d.",
              (long long)m_groupId, ctrlId, value);
     return true;
 }
@@ -1328,5 +1420,5 @@ void CBalloonGroupManageWindow::AddSensitiveWordFromInput()
     //清空输入框，方便接着加下一个
     pEdit->SetText(_T(""));
 
-    LOG_INFO(_T("添加敏感词已发出，groupid=%lld。"), (long long)m_groupId);
+    LOG_INFO("Add sensitive word request sent, groupid=%lld.", (long long)m_groupId);
 }

@@ -364,7 +364,7 @@ LRESULT CAnnouncePopupWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         {
             //请主面板打开消息盒子。用 PostMessage 而不是直接调：本处仍在按钮的事件
             //回调栈上，而打开窗口会走一串建窗 / 布局，投递出去更稳妥。
-            if (m_panelHwnd != NULL)
+            if (::IsWindow(m_panelHwnd))
             {
                 ::PostMessage(m_panelHwnd, FMG_MSG_OPEN_ANNOUNCE_BOX, 0, 0);
             }

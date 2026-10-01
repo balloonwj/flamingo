@@ -52,11 +52,11 @@ void HistoryHighlightLabel::PaintHighlights(HDC hdc)
     }
 
     //测量用的字体必须与基类绘制时用的是同一个，否则底色会与文字错位。
-    //基类的取法是"没设就用 DuiResMgr 的默认字体"，这里照搬。
+    //基类的取法是"没设就用本控件所在窗口 DPI 下的默认字体"，这里照搬。
     HFONT useFont = GetFont();
     if (useFont == NULL)
     {
-        useFont = balloonwjui::DuiResMgr::Inst().GetDefaultFont();
+        useFont = GetDefaultFont();
     }
     HFONT oldFont = (HFONT)::SelectObject(hdc, useFont);
 

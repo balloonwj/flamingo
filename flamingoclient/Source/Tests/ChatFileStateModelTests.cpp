@@ -8,7 +8,8 @@
  *    CFSM3  已拒绝态给一个「重试」，用户可反悔重新下载；
  *    CFSM4  传输中（上传 / 下载）只给「取消」；
  *    CFSM5  完成态给「打开 / 打开所在文件夹 / 另存为」三个，顺序固定；
- *    CFSM6  失败态给「重试 / 取消」；
+ *    CFSM6  失败态只给「重试」：失败时传输已经结束，没有可取消的任务，原先给出的「取消」
+ *           点了没有任何反应（bugs.md 的 BUG-37）；
  *    CFSM7  已删除态无操作；
  *    CFSM8  未知状态按无操作保守处理，不越界写 out[]；
  *    CFSM9  每个状态的按钮数与实际写入的动作数一致（防止画了按钮却点不到，
@@ -90,14 +91,15 @@ TEST_CASE("CFSM5 完成态给三个文件操作")
     CHECK(acts[2] == kChatFileSaveAs);
 }
 
-TEST_CASE("CFSM6 失败态给「重试 / 取消」")
+TEST_CASE("CFSM6 失败态只给「重试」，不给「取消」")
 {
-    REQUIRE(FileStateButtonCount(kFileFailed, kFromMe) == 2);
+    //失败时传输任务已经结束，「取消」没有可取消的对象（BUG-37），只留重新发送 / 重新下载
+    REQUIRE(FileStateButtonCount(kFileFailed, kFromMe) == 1);
+    REQUIRE(FileStateButtonCount(kFileFailed, kFromPeer) == 1);
 
     int acts[kMaxChatFileActions] = { 0 };
-    REQUIRE(FileButtonActions(kFileFailed, kFromMe, acts) == 2);
+    REQUIRE(FileButtonActions(kFileFailed, kFromMe, acts) == 1);
     CHECK(acts[0] == kChatFileRetry);
-    CHECK(acts[1] == kChatFileCancel);
 }
 
 TEST_CASE("CFSM7 已删除态无操作")

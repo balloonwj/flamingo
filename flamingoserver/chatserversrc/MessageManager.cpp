@@ -12,6 +12,7 @@
 #include "../dbapi/DbFactory.h"
 #include "../dbapi/DbConfig.h"
 #include "../dbapi/SqlDialect.h"
+#include "../dbapi/DbTransaction.h"   //CDbTransaction：addDeletedRange 的删与插须一起成败
 #include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
 #include "Protocol.h"   //会话类型常量 conversation_single / conversation_group
@@ -175,12 +176,19 @@ static void fillMessageRecord(Field* pRow, MessageRecord& rec)
                                         rec.mentionall, rec.quote);
 }
 
-//生成"排除该用户已删除消息"的 SQL 片段（拼到 WHERE 条件之后，自带前置空格）
+//生成"排除该用户已删除消息"的 SQL 片段（拼到 WHERE 条件之后，自带前置空格）。
+//已删除有两种来源，两项条件同时生效：
+//  1. t_message_deleted：cmd_delete_message 逐条删除的；
+//  2. t_message_deleted_range：cmd_delete_messages_by_time 按时间范围清理的，只记区间，
+//     按消息时间落在任一区间内过滤（见 MessageDeleteRange.h）。
+//本文件各查询的 FROM 子句都直接写 t_chatmsg、不起别名，所以时间列写成 t_chatmsg.f_create_time；
+//必须带表名，否则在区间过滤的相关子查询里会被解析成子查询自己的列。
 static std::string notDeletedClause(int32_t userid)
 {
     std::ostringstream os;
     os << " AND f_msgid NOT IN (SELECT f_msgid FROM t_message_deleted WHERE f_userid = "
-       << userid << ")";
+       << userid << ")"
+       << msgdelete::BuildNotInDeletedRangeClause(userid, "t_chatmsg.f_create_time");
     return os.str();
 }
 
@@ -539,6 +547,37 @@ bool MessageManager::markRead(int32_t userid, int32_t ctype, int64_t cid,
     return true;
 }
 
+bool MessageManager::getReadMsgid(int32_t userid, int32_t ctype, int64_t cid, int64_t& out)
+{
+    out = 0;
+
+    std::unique_ptr<IDatabase> pConn;
+    pConn.reset(DbFactory::createConnection());
+    if (!pConn)
+    {
+        LOGE("MessageManager::getReadMsgid db init failed, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
+        return false;
+    }
+
+    //(f_userid, f_ctype, f_cid) 是 t_conversation 的联合主键，最多一行。
+    //没有这一行（从没上报过已读）时 query 返回空结果，位点按 0 处理。
+    std::ostringstream osSql;
+    osSql << "SELECT f_readmsgid FROM t_conversation WHERE f_userid = " << userid
+          << " AND f_ctype = " << ctype << " AND f_cid = " << cid;
+    QueryResult* pResult = pConn->query(osSql.str().c_str());
+    if (pResult != NULL)
+    {
+        Field* pRow = pResult->fetch();
+        if (pRow != NULL)
+        {
+            out = static_cast<int64_t>(pRow[0].getUInt64());
+        }
+        pResult->endQuery();
+        delete pResult;
+    }
+    return true;
+}
+
 bool MessageManager::getMessageById(int64_t msgid, MessageRecord& out)
 {
     std::unique_ptr<IDatabase> pConn;
@@ -774,6 +813,41 @@ bool MessageManager::getConversationState(int32_t userid, int32_t ctype, int64_t
     return true;
 }
 
+bool MessageManager::getPinnedConversationIds(int32_t userid, int32_t ctype, std::set<int64_t>& out)
+{
+    std::unique_ptr<IDatabase> pConn;
+    pConn.reset(DbFactory::createConnection());
+    if (!pConn)
+    {
+        LOGE("MessageManager::getPinnedConversationIds db init failed, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
+        return false;
+    }
+
+    //不看 f_deleted：删除会话只是把它从会话列表里隐藏，置顶标记仍然有效
+    std::ostringstream osSql;
+    osSql << "SELECT f_cid FROM t_conversation WHERE f_userid = " << userid
+          << " AND f_ctype = " << ctype << " AND f_pinned = 1";
+    QueryResult* pResult = pConn->query(osSql.str().c_str());
+    //结果集为空时 query 也返回 NULL：该用户没有置顶任何此类会话
+    if (pResult == NULL)
+        return true;
+
+    while (true)
+    {
+        Field* pRow = pResult->fetch();
+        if (pRow == NULL)
+            break;
+
+        out.insert(static_cast<int64_t>(pRow[0].getUInt64()));
+
+        if (!pResult->nextRow())
+            break;
+    }
+    pResult->endQuery();
+    delete pResult;
+    return true;
+}
+
 bool MessageManager::searchMessages(int32_t userid, const SearchMessagesRequest& req,
                                     std::vector<MessageRecord>& out, bool& hasMore)
 {
@@ -869,7 +943,127 @@ bool MessageManager::deleteMessageForUser(int32_t userid, int64_t msgid)
     return true;
 }
 
-bool MessageManager::getMessagesByIds(const std::vector<int64_t>& msgids,
+//在给定连接上读出某用户的全部清理区间（按开始时间升序）。addDeletedRange 要在同一个事务、
+//同一条连接上先读后写，故单独成函数、由调用方传入连接。
+//  pConn：数据库连接（借用，不持有）；userid：用户ID；out：[出参] 区间列表，调用前清空。
+//  返回：查询成功返回 true（没有任何区间也算成功）；查询出错返回 false。
+static bool readDeletedRanges(IDatabase* pConn, int32_t userid,
+                              std::vector<msgdelete::DeleteRange>& out)
+{
+    out.clear();
+
+    std::ostringstream osSql;
+    osSql << "SELECT f_begin_time, f_end_time FROM t_message_deleted_range WHERE f_userid = "
+          << userid << " ORDER BY f_begin_time";
+    QueryResult* pResult = pConn->query(osSql.str().c_str());
+    if (pResult == NULL)
+    {
+        //两种后端在"查询成功但没有任何行"时都返回空结果集而不是 NULL（DatabaseSqlite.cpp /
+        //DatabaseMysql.cpp 的 query），NULL 只表示出错。这里必须按失败处理：addDeletedRange
+        //若把出错当成"没有旧区间"，随后会删掉本人的全部旧行、只写回本次的区间，
+        //之前清理过的消息就会重新出现
+        LOGE("MessageManager readDeletedRanges query error, userid: %d", userid);
+        return false;
+    }
+
+    while (true)
+    {
+        Field* pRow = pResult->fetch();
+        if (pRow == NULL)
+            break;
+
+        msgdelete::DeleteRange range;
+        range.begintime = static_cast<int64_t>(pRow[0].getUInt64());
+        range.endtime = static_cast<int64_t>(pRow[1].getUInt64());
+        out.push_back(range);
+
+        if (!pResult->nextRow())
+            break;
+    }
+    pResult->endQuery();
+    delete pResult;
+    return true;
+}
+
+bool MessageManager::addDeletedRange(int32_t userid, const msgdelete::DeleteRange& range,
+                                     int64_t nowMs)
+{
+    std::unique_ptr<IDatabase> pConn;
+    pConn.reset(DbFactory::createConnection());
+    if (!pConn)
+    {
+        LOGE("MessageManager::addDeletedRange db init failed, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
+        return false;
+    }
+
+    //先读后写必须在同一个事务里：两台设备同时清理时，若读写之间被对方插进来一次写入，
+    //各自按旧数据合并再整体覆盖，就会把对方刚写的区间冲掉
+    CDbTransaction transaction(pConn.get());
+    if (!transaction.IsActive())
+    {
+        LOGE("MessageManager::addDeletedRange begin transaction error, userid: %d", userid);
+        return false;
+    }
+
+    std::vector<msgdelete::DeleteRange> existing;
+    if (!readDeletedRanges(pConn.get(), userid, existing))
+        return false;
+
+    const std::vector<msgdelete::DeleteRange> merged =
+        msgdelete::MergeDeleteRanges(existing, range);
+
+    //整体替换：删掉本人的全部旧行，再逐段写回合并结果。段数通常只有几段
+    std::ostringstream osDelete;
+    osDelete << "DELETE FROM t_message_deleted_range WHERE f_userid = " << userid;
+    if (!pConn->execute(osDelete.str().c_str()))
+    {
+        LOGE("MessageManager::addDeletedRange delete error, userid: %d", userid);
+        return false;
+    }
+
+    for (size_t i = 0; i < merged.size(); ++i)
+    {
+        std::ostringstream osInsert;
+        osInsert << "INSERT INTO t_message_deleted_range(f_userid, f_begin_time, f_end_time, "
+                    "f_update_time) VALUES("
+                 << userid << ", " << merged[i].begintime << ", " << merged[i].endtime << ", "
+                 << nowMs << ")";
+        if (!pConn->execute(osInsert.str().c_str()))
+        {
+            LOGE("MessageManager::addDeletedRange insert error, userid: %d, begin: %lld, end: %lld",
+                 userid, (long long)merged[i].begintime, (long long)merged[i].endtime);
+            return false;
+        }
+    }
+
+    //提交失败时守卫仍持有该事务，由它的析构补一次回滚
+    if (!transaction.Commit())
+    {
+        LOGE("MessageManager::addDeletedRange commit error, userid: %d", userid);
+        return false;
+    }
+
+    LOGI("add deleted range ok, userid: %d, begin: %lld, end: %lld, ranges: %u -> %u",
+         userid, (long long)range.begintime, (long long)range.endtime,
+         static_cast<unsigned>(existing.size()), static_cast<unsigned>(merged.size()));
+    return true;
+}
+
+bool MessageManager::getDeletedRanges(int32_t userid, std::vector<msgdelete::DeleteRange>& out)
+{
+    out.clear();
+
+    std::unique_ptr<IDatabase> pConn;
+    pConn.reset(DbFactory::createConnection());
+    if (!pConn)
+    {
+        LOGE("MessageManager::getDeletedRanges db init failed, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
+        return false;
+    }
+    return readDeletedRanges(pConn.get(), userid, out);
+}
+
+bool MessageManager::getMessagesByIds(int32_t viewerUserid, const std::vector<int64_t>& msgids,
                                       std::vector<MessageRecord>& out)
 {
     if (msgids.empty())
@@ -892,7 +1086,8 @@ bool MessageManager::getMessagesByIds(const std::vector<int64_t>& msgids,
             osSql << ",";
         osSql << msgids[i];
     }
-    osSql << ") ORDER BY f_msgid ASC";
+    //排除本人已删除的：否则构造请求直接带上已删除消息的 msgid，仍能把它转发出去
+    osSql << ")" << notDeletedClause(viewerUserid) << " ORDER BY f_msgid ASC";
 
     QueryResult* pResult = pConn->query(osSql.str().c_str());
     if (pResult == NULL)

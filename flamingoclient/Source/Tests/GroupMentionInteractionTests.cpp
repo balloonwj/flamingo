@@ -12,8 +12,10 @@
  *    S 组 —— 选中文字（含 @ 的气泡可选、与不含 @ 的排版一致、取文本正确）
  *    R 组 —— 收敛后的渲染回归（@ 底色块画得出来、不含 @ 的不会凭空出现）
  *    M 组 —— @ 片段命中测试与右键菜单模型
+ *    D 组 —— 群成员侧栏的成员行双击：投递与右键菜单「与 TA 聊天」相同的动作
  *
- *  用 Catch2 v3（amalgamated）。纯内存 + 离屏位图，不创建窗口、不要 HWND。
+ *  用 Catch2 v3（amalgamated）。除 D 组外均为纯内存 + 离屏位图，不创建窗口、不要 HWND；
+ *  D 组要一个真实窗口接收成员行的投递，故建一个不显示的 DuiHost。
  *  全局 _Module 由 BalloonChatLayoutTests.cpp 统一定义，本文件只引用。
  *
  *  balloonwj@qq.com   2026-08-03
@@ -23,10 +25,14 @@
 
 #include "catch_amalgamated.hpp"
 
+#include <memory>
 #include <string>
 #include <vector>
 #include <utility>
 
+#include "../../../third-party/balloonui/balloonui/DuiHost.h"   // D 组：成员行投递的目标窗口
+#include "../App/CustomMsgDef.h"                                 // D 组：WM_CHAT_MENTION_ACTION
+#include "../UI/BalloonChatWnd/GroupMemberItem.h"                // D 组：被测的成员行
 #include "../UI/BalloonChatWnd/ChatBubble.h"
 #include "../UI/BalloonChatWnd/ChatMessageList.h"
 #include "../UI/BalloonChatWnd/ChatMockData.h"
@@ -764,4 +770,200 @@ TEST_CASE("M26 成员已退群仍可特别关注", "[mention][menu][starred]")
     const int idx = FindEntryIndex(items, kMentionMenuStarred);
     REQUIRE(idx >= 0);
     CHECK(items[(size_t)idx].enabled);
+}
+
+// =====================================================================
+// D 组：群成员侧栏的成员行双击 —— 打开与该成员的单聊窗
+//
+//   成员行被双击时，向宿主群聊窗投递一条与右键菜单「与 TA 聊天」完全相同的
+//   WM_CHAT_MENTION_ACTION，后续由群聊窗转请主面板打开或激活单聊窗（那一段是
+//   右键菜单一直在用的既有路径，不在本组范围）。本组建一个不显示的 DuiHost 作为
+//   宿主，直接调用成员行的 OnLButtonDblClk，再从宿主窗口的消息队列里取出消息
+//   核对负载。系统层面的双击识别（DuiHost 的双击合成）属 balloonui 的职责，群聊窗
+//   已经开启，也不在本组范围。
+// =====================================================================
+
+namespace {
+
+// 宿主窗口尺寸（像素）。窗口不显示，尺寸只需非零。
+const int kDblClkHostWidth  = 320;
+const int kDblClkHostHeight = 240;
+
+// 双击落点（宿主客户区坐标）。成员行不关心落点，任取一点即可。
+const POINT kDblClkPt = { 10, 10 };
+
+// 被双击成员的显示名与头像字。
+const wchar_t* const kDblClkOtherName  = L"李四";
+const wchar_t* const kDblClkAvatarText = L"李";
+
+// 头像底色。本组不看绘制，任取一色即可。
+const COLORREF kDblClkAvatarColor = RGB(0x4A, 0x90, 0xE2);
+
+/**
+ *  不显示的宿主窗口，作用域结束时销毁。
+ *  成员行投递的目标是 GetHost()->m_hWnd，故必须是真实窗口。须比挂在它上面的成员行
+ *  活得久：DuiControl 析构时会回头清理宿主里指向自己的指针。
+ */
+class ScopedHiddenHost
+{
+public:
+    // 创建宿主窗口（WS_POPUP、不带 WS_VISIBLE，跑测试时屏幕上不会闪出窗口）。
+    ScopedHiddenHost()
+    {
+        RECT rc = { 0, 0, kDblClkHostWidth, kDblClkHostHeight };
+        m_host.Create(NULL, rc, _T("GroupMemberDblClkTests"), WS_POPUP);
+    }
+
+    // 销毁宿主窗口。窗口已被用例提前销毁时跳过。
+    ~ScopedHiddenHost()
+    {
+        if (m_host.IsWindow())
+        {
+            m_host.DestroyWindow();
+        }
+    }
+
+    // 返回宿主对象（由本类持有，调用方借用）。
+    DuiHost& Host()
+    {
+        return m_host;
+    }
+
+private:
+    DuiHost m_host;   // 宿主对象，生命周期与本类相同
+};
+
+/**
+ *  造一行成员行。
+ *    host：   要挂上去的宿主（借用）；传 NULL 表示不挂宿主。
+ *    uid：    成员 userid；0 表示未绑定（mock / 占位行）。
+ *    isSelf： 是否为本人那一行。
+ *    netRole：该成员在本群的角色，取值见 grouprole::NetGroupRole。
+ *  @return 新建的成员行，所有权归调用方。
+ */
+std::unique_ptr<GroupMemberItem> MakeMemberRow(DuiHost* host, long long uid,
+                                               bool isSelf, int netRole)
+{
+    std::unique_ptr<GroupMemberItem> row(new GroupMemberItem());
+    row->SetUserId(uid);
+    row->SetIsSelf(isSelf);
+    row->SetMember(CString(kDblClkOtherName), CString(kDblClkAvatarText),
+                   kDblClkAvatarColor, netRole);
+    row->SetMyNetRole(kMember);
+    if (host != NULL)
+    {
+        row->AttachToHost(host);
+    }
+    return row;
+}
+
+/**
+ *  取走消息队列里全部 WM_CHAT_MENTION_ACTION。
+ *    hWnd：只取投给该窗口的；传 NULL 取本线程所有窗口的。
+ *  @return 各条消息的负载。所有权转给调用方，用完须交给 DeleteMentionActions 释放
+ *          （与宿主群聊窗处理完负责 delete 的约定一致）。
+ */
+std::vector<MentionActionData*> TakeMentionActions(HWND hWnd)
+{
+    std::vector<MentionActionData*> out;
+    MSG msg;
+    while (::PeekMessageW(&msg, hWnd, WM_CHAT_MENTION_ACTION, WM_CHAT_MENTION_ACTION, PM_REMOVE))
+    {
+        out.push_back((MentionActionData*)msg.lParam);
+    }
+    return out;
+}
+
+// 释放 TakeMentionActions 取出的全部负载。
+void DeleteMentionActions(std::vector<MentionActionData*>& actions)
+{
+    for (size_t i = 0; i < actions.size(); ++i)
+    {
+        delete actions[i];
+    }
+    actions.clear();
+}
+
+} // anonymous namespace
+
+TEST_CASE("D1 双击普通成员行投递「与 TA 聊天」，群主与管理员行同样有效", "[groupmember][dblclick]")
+{
+    ScopedHiddenHost host;
+    REQUIRE(host.Host().IsWindow());
+
+    const int roles[] = { kMember, kAdmin, kOwner };
+    for (size_t i = 0; i < sizeof(roles) / sizeof(roles[0]); ++i)
+    {
+        INFO("netRole=" << roles[i]);
+        std::unique_ptr<GroupMemberItem> row =
+            MakeMemberRow(&host.Host(), kOtherUid, false, roles[i]);
+
+        CHECK(row->OnLButtonDblClk(kDblClkPt, 0));
+
+        //与右键菜单选「与 TA 聊天」投的是同一条消息、同样的负载
+        std::vector<MentionActionData*> actions = TakeMentionActions(host.Host().m_hWnd);
+        REQUIRE(actions.size() == 1);
+        CHECK(actions[0]->id == kMentionMenuChat);
+        CHECK(actions[0]->uid == kOtherUid);
+        CHECK(actions[0]->displayName == std::wstring(kDblClkOtherName));
+        DeleteMentionActions(actions);
+    }
+}
+
+TEST_CASE("D2 双击本人那一行什么都不做", "[groupmember][dblclick]")
+{
+    //主面板本来就拒绝和自己聊天，右键自己时菜单里也没有「与 TA 聊天」
+    ScopedHiddenHost host;
+    REQUIRE(host.Host().IsWindow());
+    std::unique_ptr<GroupMemberItem> row = MakeMemberRow(&host.Host(), kMyUid, true, kMember);
+
+    row->OnLButtonDblClk(kDblClkPt, 0);
+
+    std::vector<MentionActionData*> actions = TakeMentionActions(host.Host().m_hWnd);
+    CHECK(actions.empty());
+    DeleteMentionActions(actions);
+}
+
+TEST_CASE("D3 双击未绑定 userid 的行什么都不做", "[groupmember][dblclick]")
+{
+    //mock / 占位行没有可以聊天的对象
+    ScopedHiddenHost host;
+    REQUIRE(host.Host().IsWindow());
+    std::unique_ptr<GroupMemberItem> row = MakeMemberRow(&host.Host(), 0, false, kMember);
+
+    row->OnLButtonDblClk(kDblClkPt, 0);
+
+    std::vector<MentionActionData*> actions = TakeMentionActions(host.Host().m_hWnd);
+    CHECK(actions.empty());
+    DeleteMentionActions(actions);
+}
+
+TEST_CASE("D4 没有可用的宿主窗口时不投递、不崩溃", "[groupmember][dblclick]")
+{
+    SECTION("成员行没有挂到任何宿主上")
+    {
+        std::unique_ptr<GroupMemberItem> row = MakeMemberRow(NULL, kOtherUid, false, kMember);
+
+        row->OnLButtonDblClk(kDblClkPt, 0);
+
+        std::vector<MentionActionData*> actions = TakeMentionActions(NULL);
+        CHECK(actions.empty());
+        DeleteMentionActions(actions);
+    }
+
+    SECTION("宿主窗口已经销毁")
+    {
+        ScopedHiddenHost host;
+        REQUIRE(host.Host().IsWindow());
+        std::unique_ptr<GroupMemberItem> row =
+            MakeMemberRow(&host.Host(), kOtherUid, false, kMember);
+        host.Host().DestroyWindow();
+
+        row->OnLButtonDblClk(kDblClkPt, 0);
+
+        //窗口已不存在，只能按本线程的整个队列查
+        std::vector<MentionActionData*> actions = TakeMentionActions(NULL);
+        CHECK(actions.empty());
+        DeleteMentionActions(actions);
+    }
 }

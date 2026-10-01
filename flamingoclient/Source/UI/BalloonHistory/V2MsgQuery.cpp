@@ -121,6 +121,31 @@ std::string BuildSearchText(const net::MessageNotify& notify)
     {
         return notify.m_folderName;
     }
+    //合并转发的聊天记录：标题加上每条子消息的搜索文本，嵌套的记录逐层展开。用户回头
+    //找的往往是记录里某句话，只存标题就搜不到。各段之间以空格分隔，LIKE 匹配不受影响
+    if (notify.m_msgtype == ::message_type_merged)
+    {
+        net::MergedRecord record;
+        if (!net::MessageProtocolClient::parseMergedContent(notify.m_mergedContent, record))
+        {
+            return std::string();
+        }
+        std::string text = record.m_title;
+        for (size_t i = 0; i < record.m_messages.size(); ++i)
+        {
+            const std::string part = BuildSearchText(record.m_messages[i]);
+            if (part.empty())
+            {
+                continue;
+            }
+            if (!text.empty())
+            {
+                text += " ";
+            }
+            text += part;
+        }
+        return text;
+    }
     return std::string();
 }
 
@@ -194,6 +219,29 @@ std::string BuildContentJson(const net::MessageNotify& notify)
         }
         root["folder"] = folder;
     }
+    else if (notify.m_msgtype == ::message_type_merged)
+    {
+        //合并转发的聊天记录：content 原文整体放进 merged 子对象，打开查看窗时原样取出
+        //交给 parseMergedContent。原文解析不了时留一个空的 merged 子对象，历史行退化成
+        //只显示"[聊天记录]"，不至于崩
+        Json::Value merged(Json::objectValue);
+        if (!notify.m_mergedContent.empty())
+        {
+            Json::CharReaderBuilder b;
+            JSONCPP_STRING errs;
+            Json::CharReader* reader = b.newCharReader();
+            Json::Value parsed;
+            const bool ok = reader->parse(notify.m_mergedContent.c_str(),
+                                          notify.m_mergedContent.c_str() + notify.m_mergedContent.size(),
+                                          &parsed, &errs);
+            delete reader;
+            if (ok && parsed.isObject())
+            {
+                merged = parsed;
+            }
+        }
+        root["merged"] = merged;
+    }
     //其它类型（语音/抖动/系统等）本期不带结构化内容，content 留空对象 {}。
     return WriteCompact(root);
 }
@@ -213,7 +261,22 @@ HistoryRecord RecordFromNotify(const net::MessageNotify& notify, int ctype, int6
     rec.m_isLink = (notify.m_msgtype == ::message_type_text) && IsLink(notify.m_text);
     rec.m_timestamp = notify.m_timestamp;
     rec.m_recalled = notify.m_recalled;
+    rec.m_raw = notify.m_rawJson;
     return rec;
+}
+
+bool NotifyFromRecord(const HistoryRecord& rec, net::MessageNotify& out)
+{
+    if (rec.m_raw.empty())
+        return false;
+    if (!net::MessageProtocolClient::parseMessageNotify(rec.m_raw, out))
+        return false;
+
+    //撤回状态以本地库为准：实时收到撤回通知时只调了 MarkRecalled 更新 recalled 列，
+    //原始JSON仍是撤回之前的样子
+    if (rec.m_recalled)
+        out.m_recalled = true;
+    return true;
 }
 
 void TimeRangeToBounds(HistoryTimeRange range, int64_t nowMs,
@@ -314,6 +377,21 @@ static std::string BuildWhereClause(const HistoryFilter& filter, int64_t nowMs)
         where += Int64ToText(maxMs);
     }
 
+    //显示下界：只查覆盖区间内的消息，断层以下的旧行不显示（见 HistoryCoverage.h）。
+    //Pin 分类不加 —— Pin 列表是服务端单独给的全集，与本地历史是否连续无关
+    if (filter.m_minMsgid > 0 && filter.m_type != kHistoryTypePinned)
+    {
+        where += " AND msgid>=";
+        where += Int64ToText(filter.m_minMsgid);
+    }
+
+    //发送人筛选。fromid 是整数，直接拼进语句即可，不必像关键字那样占位绑定
+    if (filter.m_fromid > 0)
+    {
+        where += " AND fromid=";
+        where += Int64ToText(filter.m_fromid);
+    }
+
     if (!filter.m_keyword.empty())
     {
         //关键字以 ? 占位，由 CV2MsgStore 绑定 "%关键字%"，避免引号转义与注入。
@@ -328,6 +406,20 @@ std::string BuildCountSql(const HistoryFilter& filter, int64_t nowMs)
     sql += kTableName;
     sql += " WHERE ";
     sql += BuildWhereClause(filter, nowMs);
+    return sql;
+}
+
+std::string BuildCountBeforeSql(const HistoryFilter& filter, int64_t nowMs, int64_t timestamp, int64_t msgid)
+{
+    std::string sql = BuildCountSql(filter, nowMs);
+    //时间与 msgid 都是整数，直接拼进语句；关键字的 ? 占位仍是语句里唯一的占位
+    sql += " AND (timestamp>";
+    sql += Int64ToText(timestamp);
+    sql += " OR (timestamp=";
+    sql += Int64ToText(timestamp);
+    sql += " AND msgid>";
+    sql += Int64ToText(msgid);
+    sql += "))";
     return sql;
 }
 

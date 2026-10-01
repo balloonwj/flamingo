@@ -62,7 +62,7 @@ void FileStoreManager::getServerForScene(int scene, std::string& host, int& port
     }
 }
 
-bool FileStoreManager::findCompletedByMd5(const std::string& md5, FileRecord& out)
+bool FileStoreManager::findCompletedByMd5(const std::string& md5, int scene, FileRecord& out)
 {
     std::unique_ptr<IDatabase> pConn;
     pConn.reset(DbFactory::createConnection());
@@ -76,10 +76,13 @@ bool FileStoreManager::findCompletedByMd5(const std::string& md5, FileRecord& ou
     std::vector<char> escMd5(md5.size() * 2 + 1, '\0');
     pConn->escapeString(&escMd5[0], md5.c_str(), static_cast<uint32_t>(md5.size()));
 
+    //只取同场景的记录：跨场景复用会让接收方连错服务器或被群文件鉴权拒绝，
+    //详见头文件中本函数的注释。scene 是整数，直接拼接即可。
     std::ostringstream osSql;
     osSql << "SELECT f_id, f_md5, f_name, f_ext, f_size, f_scene, f_uploaderid, "
              "f_status, f_createtime FROM t_file WHERE f_md5 = '" << &escMd5[0]
-          << "' AND f_status = " << file_status_completed << " LIMIT 1";
+          << "' AND f_scene = " << scene
+          << " AND f_status = " << file_status_completed << " LIMIT 1";
     QueryResult* pResult = pConn->query(osSql.str().c_str());
     if (pResult == NULL)
         return false;
@@ -207,6 +210,31 @@ bool FileStoreManager::markCompleted(int64_t fileid)
     {
         LOGE("FileStoreManager::markCompleted error, fileid: %lld",
              static_cast<long long>(fileid));
+        return false;
+    }
+    return true;
+}
+
+bool FileStoreManager::markCompletedByUploader(int64_t fileid, int64_t uploaderid)
+{
+    std::unique_ptr<IDatabase> pConn;
+    pConn.reset(DbFactory::createConnection());
+    if (!pConn)
+    {
+        LOGE("FileStoreManager::markCompletedByUploader db init failed, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
+        return false;
+    }
+
+    //上传者条件写进 WHERE：不是上传者本人时一行都不改，但这不算出错。两个参数都是
+    //整数，直接拼接即可。
+    std::ostringstream osSql;
+    osSql << "UPDATE t_file SET f_status = " << file_status_completed
+          << " WHERE f_id = " << static_cast<long long>(fileid)
+          << " AND f_uploaderid = " << static_cast<long long>(uploaderid);
+    if (!pConn->execute(osSql.str().c_str()))
+    {
+        LOGE("FileStoreManager::markCompletedByUploader error, fileid: %lld, uploaderid: %lld",
+             static_cast<long long>(fileid), static_cast<long long>(uploaderid));
         return false;
     }
     return true;

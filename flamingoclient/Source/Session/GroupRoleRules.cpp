@@ -90,4 +90,21 @@ bool CanChangeGroupAvatar(int myNetRole)
     return myNetRole == kNetRoleOwner || myNetRole == kNetRoleAdmin;
 }
 
+bool ShouldRefetchMyRoleOnMemberChange(int changetype, const std::vector<int64_t>& userids,
+                                       int64_t selfId)
+{
+    if (changetype != kMemberChangeRole || selfId <= 0)
+    {
+        return false;
+    }
+    for (size_t i = 0; i < userids.size(); ++i)
+    {
+        if (userids[i] == selfId)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace grouprole

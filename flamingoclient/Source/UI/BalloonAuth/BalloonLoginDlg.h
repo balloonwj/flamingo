@@ -31,7 +31,7 @@ class CFlamingoClient;
 // 文件的 .cpp（典型是经 BalloonMainPanel.h 间接包含）都会编不过，报的是"DuiXxx
 // 不是 balloonwjui 的成员"、位置指向本文件，与那个 .cpp 看不出关系，很难查。
 namespace balloonwjui { class DuiComboBox; class DuiEdit; class DuiButton;
-                        class DuiLabel; class DuiProgressBar; }
+                        class DuiProgressBar; }
 // 自绘 Banner 控件 —— 同上，前置声明即可。
 namespace balloonauth { class AuthBanner; }
 
@@ -48,6 +48,12 @@ namespace balloonauth { class AuthBanner; }
 // CFlamingoClient::ProxyWndProc 的 FMG_MSG_FIRST / FMG_MSG_LAST 闸门约束；
 // 本消息是登录窗投给自己的，不经代理窗，另起一段最省心、也不会与那批撞号。
 #define WM_APP_REMOVE_ACCOUNT   (WM_APP + 1)
+
+// 登录窗投给自己的"自动开始登录"消息（无参）。自动登录时由 DoModal 在窗口显示出来
+// 之后投递，模态消息循环跑起来后处理：若账号密码都已填好，就等同于替用户点一次
+// 「登录」（见 docs/自动登录方案.md §3.1）。投递而不是在 DoModal 里直接调用，是因为
+// 那时模态循环还没开始，登录中的界面变化、以及登录结果的派发都要靠这个循环。
+#define WM_APP_AUTO_START_LOGIN (WM_APP + 2)
 
 /**
  *  CBalloonLoginDlg
@@ -78,7 +84,8 @@ public:
     BOOL GetLoginAccountInfo(LOGIN_ACCOUNT_INFO* lpAccount);
 
     /**
-     *  设置登录账号信息（自动登录路径用：调用方先填好再调 DoLogin）。
+     *  设置登录账号信息（调用方先填好再调 DoLogin）。2026-09-30 起自动登录改为弹出
+     *  登录窗、由窗口自己发起，已不再调用本方法，保留以备不经界面的登录场景使用。
      *    lpAccount：账号信息源，不可为 NULL。
      *  返回：成功 TRUE；lpAccount 为 NULL 时 FALSE。
      */
@@ -97,9 +104,21 @@ public:
     void SetDefaultPassword(PCTSTR pszDefaultPassword);
 
     /**
+     *  要求下一次 DoModal 显示出来之后自动开始登录（自动登录）。
+     *
+     *  窗口显示后若账号与密码都已填好（balloonauth::ShouldAutoStartLogin），就等同于替
+     *  用户点一次「登录」，界面直接进入「登录中」，主按钮为「取消登录」；用户在这一轮
+     *  里点「取消登录」时，顺带取消「自动登录」的勾选并落盘。账号或密码为空时不自动
+     *  开始，停在登录窗等用户输入。
+     *    autoStart：true 表示要求自动开始；该要求只对下一次 DoModal 生效，用过即清。
+     */
+    void SetAutoStartLogin(bool autoStart);
+
+    /**
      *  发起登录 —— 起一个后台线程，用 m_stAccountInfo 里的账号 / 密码
      *  向服务器请求登录，结果通过 FMG_MSG_LOGIN_RESULT 消息回投给主窗口
-     *  代理窗口。可在登录窗口尚未创建时直接调用（自动登录路径）。
+     *  代理窗口。窗口尚未创建时也可调用（只推进状态机、不动界面）；目前的调用方
+     *  都在窗口显示之后调用，自动登录也不例外（见 SetAutoStartLogin）。
      */
     void DoLogin();
 
@@ -166,6 +185,8 @@ public:
         MESSAGE_HANDLER(WM_SYSCOMMAND, OnSysCommand)
         MESSAGE_HANDLER(WM_CLOSE,      OnCloseMsg)
         MESSAGE_HANDLER(WM_APP_REMOVE_ACCOUNT, OnRemoveAccount)
+        //自动登录：窗口显示后替用户点一次「登录」
+        MESSAGE_HANDLER(WM_APP_AUTO_START_LOGIN, OnAutoStartLogin)
         //登录前那次检查更新的结果（升级窗 / UpdateManager 投来）
         MESSAGE_HANDLER(FMG_MSG_UPDATE_RESULT, OnPreLoginUpdateResult)
         //用户关掉了升级窗，被拦下的登录可以继续了
@@ -235,7 +256,17 @@ private:
     LRESULT OnTimerMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     // “登录”按钮点击：登录中时它是「取消登录」，否则校验输入 → 采集账号信息 → 发起登录。
-    void OnLoginClicked();
+    //   byAutoLogin：true 表示这一下是自动登录替用户点的（OnAutoStartLogin），false 为
+    //                用户手动点击。随后发起的那一轮据此标记为自动发起；取消自动发起的
+    //                一轮时顺带取消「自动登录」的勾选。
+    void OnLoginClicked(bool byAutoLogin = false);
+
+    /**
+     *  WM_APP_AUTO_START_LOGIN 处理：若之前 SetAutoStartLogin(true) 过、且账号与密码都已
+     *  填好，就替用户点一次「登录」；否则什么都不做，停在登录窗等用户输入。自动开始
+     *  的要求在这里用掉即清。
+     */
+    LRESULT OnAutoStartLogin(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
      *  把界面切到「登录中」：状态区显示“正在登录…”与滚动进度条，输入区与选项禁用，
@@ -257,18 +288,6 @@ private:
      *    enabled：true 恢复可用，false 禁用（登录期间不允许改账号口令）。
      */
     void SetInputEnabled(bool enabled);
-
-    /**
-     *  按当前客户区尺寸把客户区控件树重排一遍。
-     *
-     *  <u>状态区显隐之后必须调它</u>：DuiControl::SetVisible 只置标志位并 Invalidate、
-     *  不触发重新布局，而竖直布局排版时会跳过不可见的子控件。两者叠加的后果是，
-     *  控件被隐藏期间若发生过一次重排，它就停在一份过时的矩形上，再显示出来时
-     *  那份矩形也不会被重新算过。实测表现为进度条右侧顶到窗口边框。
-     *
-     *  副作用：对客户区控件树强制重排并重绘。窗口尚未创建时直接返回。
-     */
-    void RelayoutClientContent();
 
     // 点击头像下方"在线状态胶囊"后弹出在线状态选择菜单（在线 / 离开 / 忙碌）。锚定在胶囊
     // 正下方；选中后把所选 v2 状态存入 m_loginPresence、并刷新 Banner 胶囊的颜色与文字。
@@ -392,9 +411,9 @@ private:
     balloonwjui::DuiButton*   m_pRememberPwd;    // “记住密码”复选框
     balloonwjui::DuiButton*   m_pAutoLogin;      // “自动登录”复选框
     balloonauth::AuthBanner*  m_pBanner;         // 顶部品牌 / 头像 Banner（含可点击的在线状态胶囊）
-    balloonwjui::DuiControl*  m_pStatusArea;     // 状态区容器：登录中与登录失败时才显示
-    balloonwjui::DuiLabel*    m_pStatusText;     // 状态文字：“正在登录…”或失败原因
-    balloonwjui::DuiProgressBar* m_pStatusProgress;  // 不确定进度条，仅登录中显示
+    // 不确定进度条，仅登录中显示；本类只负责按定时器推进它的 marquee 相位，显隐与重排
+    // 统一经 balloonauth::ApplyLoginStatusView。指向客户区控件树内部，生命周期随控件树。
+    balloonwjui::DuiProgressBar* m_pStatusProgress;
 
     // 登录流程状态机：管「空闲 / 登录中 / 已登录」的流转，以及迟到结果的作废判定。
     // 纯逻辑、有单元测试（Tests/LoginProgressStateTests.cpp），本类只按它的状态画界面。
@@ -414,6 +433,13 @@ private:
     //本次进程内是否已经做过"登录前检查更新"。只查一次：用户点「稍后」之后再点登录
     //不该又被拦一遍，否则永远登不进去。
     bool               m_preLoginUpdateChecked;
+
+    //会话控制器是否要求下一次 DoModal 显示后自动开始登录（SetAutoStartLogin 写入，
+    //OnAutoStartLogin 用掉即清）。
+    bool               m_autoStartRequested;
+    //下一次 DoLogin 发起的那一轮是否由自动登录发起。OnLoginClicked 写入、DoLogin 读取
+    //后清除：两者之间可能隔着一次登录前的更新检查，故要用成员把标记带过去。
+    bool               m_pendingAutoLoginRound;
 
     bool               m_modalRunning;        // 模态消息循环是否在运行
     INT_PTR            m_modalResult;         // DoModal 的返回值缓存

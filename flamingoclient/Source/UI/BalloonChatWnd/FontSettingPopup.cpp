@@ -59,6 +59,15 @@ const int kSizeMin  = 8;
 const int kSizeMax  = 72;
 const int kSizeStep = 1;
 
+// 面板各行之间的纵向间距（逻辑像素），与 BuildContentOnce 里 root->SetGap 的取值一致。
+const int kPanelRowGap = 12;
+// 「使用默认字体」那一行的高度与按钮宽度（逻辑像素）。宽度放得下六个汉字加两侧留白。
+const int kUseDefaultRowH  = 26;
+const int kUseDefaultChipW = 96;
+
+// 不可点的按钮的文字色（浅灰），与可点时的 kChipText 拉开。
+const COLORREF kChipTextDisabled = RGB(0xB8, 0xB6, 0xB1);
+
 // ---- 控件 id（面板内唯一；取一段不与其它弹窗冲突的较大基址）----
 const UINT kIdBold       = 9301;
 const UINT kIdItalic     = 9302;
@@ -199,10 +208,15 @@ public:
         }
         else
         {
-            const COLORREF fill = IsHover() ? RGB(0xF6, 0xF5, 0xF2) : RGB(0xFF, 0xFF, 0xFF);
+            //不可点时没有悬停反馈，底色恒为白
+            const COLORREF fill = (IsHover() && IsEnabled()) ? RGB(0xF6, 0xF5, 0xF2) : RGB(0xFF, 0xFF, 0xFF);
             FillRoundRect(hdc, m_rcItem, 5.0f, fill, kChipBorder, 1.0f);
         }
-        const COLORREF txt = m_active ? RGB(0xFF, 0xFF, 0xFF) : kChipText;
+        COLORREF txt = m_active ? RGB(0xFF, 0xFF, 0xFF) : kChipText;
+        if (!IsEnabled())
+        {
+            txt = kChipTextDisabled;
+        }
         DrawGdi(hdc, (LPCWSTR)GetText(), m_rcItem, 13, m_gBold,
                 m_gItalic, m_gUnderline, m_gStrike, txt,
                 DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
@@ -313,10 +327,14 @@ std::unique_ptr<DuiControl> MakeChip(UINT id, LPCTSTR text)
 CFontSettingPopup::CFontSettingPopup()
     : m_cb(NULL)
     , m_ud(NULL)
+    , m_useDefaultCb(NULL)
+    , m_useDefaultUd(NULL)
+    , m_useDefaultEnabled(false)
     , m_built(false)
     , m_pRoot(NULL)
     , m_pSizeValue(NULL)
     , m_pPreview(NULL)
+    , m_pUseDefault(NULL)
 {
     // 默认字体：14px、黑、无样式（m_valid 先置 true，使面板始终代表一份具体字体）。
     m_font.m_valid     = true;
@@ -333,6 +351,21 @@ void CFontSettingPopup::SetChangeCallback(FontChangeCallback cb, void* userdata)
 {
     m_cb = cb;
     m_ud = userdata;
+}
+
+void CFontSettingPopup::SetUseDefaultCallback(UseDefaultCallback cb, void* userdata)
+{
+    m_useDefaultCb = cb;
+    m_useDefaultUd = userdata;
+}
+
+void CFontSettingPopup::SetUseDefaultEnabled(bool enabled)
+{
+    m_useDefaultEnabled = enabled;
+    if (m_pUseDefault != NULL)
+    {
+        m_pUseDefault->SetEnabled(enabled);
+    }
 }
 
 void CFontSettingPopup::SetFont(const net::TextFont& font)
@@ -438,11 +471,25 @@ void CFontSettingPopup::BuildContentOnce()
         root->AddChild(std::unique_ptr<DuiControl>(pv.release()), Hint().Fixed(40));
     }
 
+    // ---- 「使用默认字体」：只有宿主装了对应回调（聊天窗）才有这一行，靠右放 ----
+    int extraH = 0;
+    if (m_useDefaultCb != NULL)
+    {
+        std::unique_ptr<DuiHBox> defaultRow(new DuiHBox());
+        defaultRow->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Weight(1));
+        std::unique_ptr<DuiControl> chip = MakeChip(kIdUseDefault, _T("使用默认字体"));
+        chip->SetEnabled(m_useDefaultEnabled);
+        m_pUseDefault = chip.get();
+        defaultRow->AddChild(std::move(chip), Hint().Fixed(kUseDefaultChipW));
+        root->AddChild(std::move(defaultRow), Hint().Fixed(kUseDefaultRowH));
+        extraH = kPanelRowGap + kUseDefaultRowH;
+    }
+
     m_pRoot = root.get();
     SetContent(std::unique_ptr<DuiControl>(root.release()));
 
     // 面板宽高（逻辑像素）：宽容纳字号行，高 = padding + 各行 + gap。
-    SetSize(360, 14 + 30 + 12 + 30 + 12 + 24 + 12 + 40 + 14);
+    SetSize(360, 14 + 30 + 12 + 30 + 12 + 24 + 12 + 40 + 14 + extraH);
     // toolbar 在窗口底部，面板优先朝上弹（越界时 DuiPopupHost 自动翻边）。
     SetEdge(balloonwjui::DuiPopupHost::EdgeAbove);
 
@@ -534,7 +581,31 @@ LRESULT CFontSettingPopup::OnChildNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         return 0;
     }
 
-    const UINT id = pNotify->ctrlId;
+    if (HandleClick(pNotify->ctrlId))
+    {
+        return 0;
+    }
+
+    bHandled = FALSE;
+    return 0;
+}
+
+bool CFontSettingPopup::HandleClick(UINT ctrlId)
+{
+    const UINT id = ctrlId;
+
+    //「使用默认字体」：不改面板里的字体设置，只回调宿主，由宿主删掉会话自定义字体、
+    //改用全局默认后再经 SetFont 回显。没有该按钮或按钮不可点时不处理
+    if (id == kIdUseDefault)
+    {
+        if (m_useDefaultCb == NULL || !m_useDefaultEnabled)
+        {
+            return false;
+        }
+        m_useDefaultCb(m_useDefaultUd);
+        return true;
+    }
+
     bool handled = true;
 
     if (id == kIdBold)
@@ -589,9 +660,6 @@ LRESULT CFontSettingPopup::OnChildNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         m_font.m_valid = true;
         RefreshControls();
         NotifyChange();
-        return 0;
     }
-
-    bHandled = FALSE;
-    return 0;
+    return handled;
 }

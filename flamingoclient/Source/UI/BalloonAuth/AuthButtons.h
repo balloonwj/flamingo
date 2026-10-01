@@ -54,6 +54,10 @@ public:
     //   c：COLORREF 颜色值。默认主题橙 #FF7A45。
     void SetLinkColor(COLORREF c) { m_linkColor = c; Invalidate(); }
 
+    // 当前绘制用的字号（像素）。字号随控件高度按比例算出（design 12px 对 20 高），
+    // 所以同一行里想要更大的字，就给这一行更高的 fixedHeight。供单元测试核对字号。
+    int FontPx() const;
+
     // DuiControl 覆写：只画一行居中的彩色文字。
     void OnPaint(HDC hdc, const RECT& rcDirty) override;
 

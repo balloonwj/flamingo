@@ -107,6 +107,18 @@ const double kStarStepAngleDeg = 36.0;
 // 本文件只用这一处，直接给个常量省得为它动编译选项。
 const double kPi = 3.14159265358979323846;
 
+// ---- 「我的收藏」书签徽章（kIconBookmark）----
+// 书签的外形是五边形：左上 → 右上 → 右下 → 底边中间的缺口 → 左下。
+// 以下坐标均为 viewBox 24 单位。宽 12、高 19，与星标（外接直径 20）视觉重量相当，
+// 窄一些是书签本身的比例。
+const Gdiplus::REAL kBookmarkLeftX   = 6.0f;    // 左边线 x
+const Gdiplus::REAL kBookmarkRightX  = 18.0f;   // 右边线 x
+const Gdiplus::REAL kBookmarkTopY    = 2.5f;    // 上沿 y
+const Gdiplus::REAL kBookmarkBottomY = 21.5f;   // 左右两个下角的 y
+const Gdiplus::REAL kBookmarkNotchY  = 16.0f;   // 底边 V 形缺口顶点的 y（在中线上）
+// 书签五边形的顶点数。
+const int kBookmarkPointCount = 5;
+
 // 徽标上的字形恒为白色 —— 圆底已经带了状态色，字形再着色会两种颜色打架；
 // 同类状态徽标的通行做法也是彩色圆底 + 纯白字形。
 const Gdiplus::Color kBadgeGlyphColor(255, 255, 255, 255);
@@ -420,6 +432,24 @@ void DrawLineIcon(Gdiplus::Graphics& g, int kind,
 
             Gdiplus::SolidBrush brush(color);
             g.FillPolygon(&brush, pts, kStarPointCount);
+        }
+        break;
+
+    case kIconBookmark:
+        // 收藏：实心书签。顺时针依次为左上、右上、右下、底边中间的缺口顶点、左下。
+        {
+            const Gdiplus::REAL centerX = (kBookmarkLeftX + kBookmarkRightX) / 2.0f;
+            Gdiplus::PointF pts[kBookmarkPointCount] =
+            {
+                Gdiplus::PointF(kBookmarkLeftX,  kBookmarkTopY),
+                Gdiplus::PointF(kBookmarkRightX, kBookmarkTopY),
+                Gdiplus::PointF(kBookmarkRightX, kBookmarkBottomY),
+                Gdiplus::PointF(centerX,         kBookmarkNotchY),
+                Gdiplus::PointF(kBookmarkLeftX,  kBookmarkBottomY),
+            };
+
+            Gdiplus::SolidBrush brush(color);
+            g.FillPolygon(&brush, pts, kBookmarkPointCount);
         }
         break;
 

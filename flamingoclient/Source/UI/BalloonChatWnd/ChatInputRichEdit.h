@@ -7,6 +7,10 @@
  *  输入框改用无窗口富文本控件之后没有子窗口可挂，这些判断改由控件自己的按键、
  *  字符、焦点、滚轮处理函数完成。
  *
+ *  滚动条与消息区统一（2026-10-01）：关掉基类自带的覆盖式滚动条（8 像素实色、淡入淡出），
+ *  改画与消息区、群成员侧栏同一种细滚动条（ChatScrollThumb.h：5 像素半透明圆角滑块），内容
+ *  超出时一直显示，可拖动、可点轨道跳转；右侧内边距相应放宽，文字不会被滑块盖住。
+ *
  *  **与聊天窗之间的消息协议原样保留** —— 发什么消息、什么时机发、同步还是异步、
  *  返回值怎么解释，全部与子类过程版本一致。因此聊天窗那一侧接消息的代码不需要
  *  任何改动，这次替换只换实现机制、不换契约。
@@ -26,6 +30,10 @@
 #pragma once
 
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEdit.h"
+#include "ChatClipboardContent.h"   // ChatClipSegment（粘贴 / 拖入的聊天内容片段）
+
+#include <string>
+#include <vector>
 
 namespace balloonchatwnd {
 
@@ -102,18 +110,81 @@ public:
      */
     void SetMentionMsgs(UINT nChangedMsg, UINT nNavMsg, UINT nWheelMsg);
 
+    /**
+     *  「把一张图片登记为待发送、并插入输入框当前光标处」的回调原型。粘贴或拖入的聊天
+     *  内容里有图片时调用：图片要连同源文件一起登记，发送时才能取回原图，而待发送表归聊天
+     *  窗管（见聊天窗的 StageImageInInput），故由调用方注入。
+     *    pCtx：注册时传入的上下文，原样透传。
+     *    path：图片本地文件完整路径。
+     *    返回：插入成功返回 true。
+     */
+    typedef bool (*StageImageFn)(void* pCtx, const std::wstring& path);
+
+    /**
+     *  注册插入图片用的回调。
+     *    fn：  回调；传 NULL 表示不支持插入图片（聊天内容里的图片以"[图片]"文字占位）。
+     *    pCtx：透传给回调的上下文，可为 NULL；不持有所有权。
+     */
+    void SetImageStager(StageImageFn fn, void* pCtx);
+
+    /**
+     *  按顺序把聊天内容片段插入当前光标处（有选区时先替换选区）。粘贴与拖入 Flamingo 聊天
+     *  内容时调用。
+     *    · 文字：原样插入；
+     *    · 表情：以带编号标记的内联图插入，与从表情面板选的表情完全一样，发送时还原成表情；
+     *    · 图片：交给 SetImageStager 注册的回调登记并插入。
+     *  表情图片或图片文件找不到、没有注册图片回调时，插入"[表情]" / "[图片]"文字占位，不丢内容。
+     *    segs：片段序列。
+     *  副作用：修改输入框内容（可撤销）；可能经回调向聊天窗登记待发送图片。
+     */
+    void InsertClipSegments(const std::vector<ChatClipSegment>& segs);
+
+    /**
+     *  当前细滚动条滑块的矩形（宿主客户区坐标）。内容没有超出可视区、或排版引擎不可用时
+     *  返回空矩形（全 0）。几何与消息区相同，见 ComputeChatScrollThumb。无副作用。
+     */
+    RECT ScrollThumbRect() const;
+
+    // 是否正按住细滚动条的滑块拖动（在滚动条命中带里按下左键之后、松开之前为 true）。
+    bool IsDraggingScrollThumb() const { return m_thumbDragging; }
+
+    // 绘制时向排版引擎查询滚动状态的累计次数（仅供测试核对"没有变化时绘制不再查询"）。
+    unsigned long PaintScrollQueryCount() const { return m_thumbQueryCount; }
+
     // ---- 基类覆写 ----
     bool OnKeyDown(UINT vk, UINT flags) override;
     bool OnChar(TCHAR ch) override;
     bool OnSetFocus() override;
     bool OnKillFocus() override;
+    // 落在细滚动条命中带里时开始拖动滑块（点在轨道空白处时滑块中心先跳到点击处），
+    // 否则照常交给基类（定位光标、开始选择文字）。
     bool OnLButtonDown(POINT pt, UINT mkFlags) override;
+    // 拖动滑块时按指针位置滚动，否则交给基类。
+    bool OnMouseMove(POINT pt, UINT mkFlags) override;
+    // 结束拖动滑块，否则交给基类。
+    bool OnLButtonUp(POINT pt, UINT mkFlags) override;
     bool OnMouseWheel(POINT pt, short zDelta, UINT mkFlags) override;
     bool OnRawMessage(UINT uMsg, WPARAM wParam, LPARAM lParam,
                       LRESULT& lResult) override;
+    // 先画基类内容，内容超出可视区时再在右侧画细滚动条滑块。滑块矩形取自缓存，只在缓存
+    // 标脏时向引擎查询一次（见 RefreshThumbCache）；滑块位置变了时补请求一次重画。
+    void OnPaint(HDC hdc, const RECT& rcDirty) override;
+    // 记下上内边距（细滚动条的纵向范围从文字区上沿算起），再交给基类。
+    void SetMargins(int left, int top, int right, int bottom) override;
     HRESULT TxSiteNotify(DWORD iNotify, void* pv) override;
+    // 滚动状态变化（打字换行、滚轮、拖动）时把滑块缓存标脏并请求重画，滑块的位置与长度随之更新。
+    void TxSiteScrollInfoChanged(bool bVertical) override;
+
+protected:
+    // 右键菜单「粘贴」：剪贴板里有 Flamingo 聊天内容时按片段插入（与 Ctrl+V 同口径），
+    // 其余命令交给基类。
+    bool OnContextMenuCommand(UINT nId) override;
 
 private:
+    //剪贴板里有 Flamingo 聊天内容时按片段粘贴并返回 true；没有、只读或读取失败时返回
+    //false，调用方继续走原来的粘贴。
+    bool TryPasteChatContent();
+
     //告诉宿主「用户现在在发送框操作」。宿主据此决定 Ctrl+C 归谁。
     void NotifyFocusInput();
 
@@ -123,6 +194,21 @@ private:
 
     //宿主窗口是否可用。
     bool HasTarget() const;
+
+    //算细滚动条用到的量：可视区矩形（横向为整个控件、纵向为文字区）、可视高度、内容总高、
+    //当前滚动位置（像素）。排版引擎不可用或可视高度不大于 0 时返回 false。
+    bool ThumbGeometry(RECT& view, int& viewH, int& contentH, int& scrollY) const;
+
+    //把内容滚动到"滑块上沿位于 thumbTop"对应的位置，并请求重画。
+    //  thumbTop：滑块上沿的目标纵坐标（宿主客户区坐标），超出轨道时按轨道两端算。
+    void ScrollToThumbTop(int thumbTop);
+
+    //缓存标脏或控件矩形变了时，向引擎查询一次滚动状态、更新缓存的滑块矩形；否则什么都不做。
+    //  返回：本次确实查询过时返回 true。
+    //不能每次绘制都查询：内容放得下时，查询会让基类再做一次内容测量，测量又让引擎请求重画，
+    //每次绘制都查就成了"绘制 → 测量 → 重画"的死循环，消息队列里永远有待处理的 WM_PAINT，
+    //计时器消息排不上，聊天窗消息区的平滑滚动因此停摆（2026-10-01 实测，表现为滚轮失效）
+    bool RefreshThumbCache();
 
     HWND m_hNotifyTarget;      // 宿主聊天窗；不持有所有权
     UINT m_nSendOnEnterMsg;    // 按回车发送时投递的消息号；0 = 不启用
@@ -136,6 +222,19 @@ private:
 
     SendOnEnterQueryFn m_pfnSendQuery;   // 回车含义的查询回调；NULL = 用默认判断
     void*              m_pSendQueryCtx;  // 上述回调的上下文；不持有所有权
+
+    StageImageFn       m_pfnStageImage;  // 插入图片的回调；NULL = 图片以"[图片]"文字占位
+    void*              m_pStageImageCtx; // 上述回调的上下文；不持有所有权
+
+    int  m_marginTop;          // 当前上内边距（像素），由 SetMargins 记下；细滚动条的纵向范围从文字区上沿算起
+    bool m_thumbDragging;      // 是否正按住细滚动条的滑块拖动
+    int  m_thumbDragOffsetY;   // 拖动时按下点相对滑块上沿的偏移（像素），拖动中保持不变，滑块不跳
+
+    bool m_thumbCacheDirty;    // 滑块缓存是否需要重新查询：滚动状态或内容变化时置位，查询后清除
+    bool m_thumbQuerying;      // 正在向引擎查询滚动状态；期间引擎若回调"滚动状态变化"则忽略，免得查询本身把缓存标脏
+    RECT m_thumbCacheRect;     // 缓存的滑块矩形（宿主客户区坐标）；空矩形表示内容放得下、没有滑块
+    RECT m_thumbCacheItem;     // 查询时的控件矩形；控件矩形变了（缩放、重排）也要重新查询
+    unsigned long m_thumbQueryCount;   // 绘制时向引擎查询滚动状态的累计次数，仅供测试
 };
 
 } // namespace balloonchatwnd

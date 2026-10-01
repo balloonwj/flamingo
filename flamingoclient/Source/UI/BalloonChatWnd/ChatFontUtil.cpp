@@ -6,81 +6,9 @@
 #include "stdafx.h"
 #include "ChatFontUtil.h"
 
-#include "../../Common/Util/IniFile.h"
-#include "../../Session/UserSessionData.h"   // g_szHomePath
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEdit.h"
 
 namespace balloonchatwnd {
-
-namespace {
-
-// flamingo.ini 里承载聊天字体的段名与各键名（全 ASCII）。
-const TCHAR* const kSection = _T("chatfont");
-
-// 字号上下限（与面板一致）。
-const int kSizeMin = 8;
-const int kSizeMax = 72;
-
-// 拼出 flamingo.ini 的完整路径（与网络设置窗同口径）。
-CString IniFilePath()
-{
-    CString path(g_szHomePath);
-    path += _T("config\\flamingo.ini");
-    return path;
-}
-
-} // anonymous namespace
-
-net::TextFont LoadChatFont()
-{
-    net::TextFont f;
-    const CString ini = IniFilePath();
-    CIniFile io;
-
-    // set==0（默认）表示从未设过字体：返回 m_valid=false。
-    if ((int)io.ReadInt(kSection, _T("set"), 0, ini) == 0)
-    {
-        f.m_valid = false;
-        return f;
-    }
-
-    f.m_valid     = true;
-    f.m_size      = (int)io.ReadInt(kSection, _T("size"), 14, ini);
-    f.m_bold      = io.ReadInt(kSection, _T("bold"),      0, ini) != 0;
-    f.m_italic    = io.ReadInt(kSection, _T("italic"),    0, ini) != 0;
-    f.m_underline = io.ReadInt(kSection, _T("underline"), 0, ini) != 0;
-    f.m_strike    = io.ReadInt(kSection, _T("strike"),    0, ini) != 0;
-    f.m_colorRgb  = (unsigned int)io.ReadInt(kSection, _T("color"), 0x1A1A1A, ini) & 0xFFFFFFu;
-
-    if (f.m_size < kSizeMin)
-    {
-        f.m_size = kSizeMin;
-    }
-    if (f.m_size > kSizeMax)
-    {
-        f.m_size = kSizeMax;
-    }
-    return f;
-}
-
-void SaveChatFont(const net::TextFont& font)
-{
-    const CString ini = IniFilePath();
-    CIniFile io;
-
-    if (!font.m_valid)
-    {
-        io.WriteInt(kSection, _T("set"), 0, ini);
-        return;
-    }
-    io.WriteInt(kSection, _T("set"),       1, ini);
-    io.WriteInt(kSection, _T("size"),      font.m_size, ini);
-    io.WriteInt(kSection, _T("bold"),      font.m_bold      ? 1 : 0, ini);
-    io.WriteInt(kSection, _T("italic"),    font.m_italic    ? 1 : 0, ini);
-    io.WriteInt(kSection, _T("underline"), font.m_underline ? 1 : 0, ini);
-    io.WriteInt(kSection, _T("strike"),    font.m_strike    ? 1 : 0, ini);
-    io.WriteInt(kSection, _T("color"),     (long)(font.m_colorRgb & 0xFFFFFFu), ini);
-}
 
 HFONT ApplyChatFontToEdit(balloonwjui::DuiRichEdit* edit, const net::TextFont& font)
 {
@@ -107,6 +35,17 @@ HFONT ApplyChatFontToEdit(balloonwjui::DuiRichEdit* edit, const net::TextFont& f
     edit->SetDefaultFontFromHFONT(hFont);
     edit->SetTextColor(color);
     return hFont;
+}
+
+void ResetChatInputFont(balloonwjui::DuiRichEdit* edit, COLORREF defaultColor)
+{
+    if (edit == NULL)
+    {
+        return;
+    }
+    // 传 NULL 时控件改用 balloonui 的默认字体（见 DuiRichEdit::SetDefaultFontFromHFONT）。
+    edit->SetDefaultFontFromHFONT(NULL);
+    edit->SetTextColor(defaultColor);
 }
 
 } // namespace balloonchatwnd

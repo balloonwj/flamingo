@@ -57,6 +57,8 @@ enum ChatMsgKind
                       // 不进服务端消息表，只是本端会话里的一条本地气泡（退出登录后不再
                       // 出现），承载「邀请 → 应答 → 建目录 → 传字节 → 收尾」整条链路的
                       // 界面表达。设计见 docs/单聊文件夹传输方案.md 第 7.2 节
+    kMsgMerged = 6,   // 合并转发的聊天记录（msgtype=15）：画成「标题 + 前几条摘要 + 共 N 条」的卡片，
+                      // 点击打开聊天记录查看窗。设计见 docs/聊天消息转发方案.md §3.5
 };
 
 /**
@@ -104,7 +106,8 @@ struct ChatMessage
     CString     imageFileId;     // 原图 fileid（字符串编码）
     CString     imageMd5;        // 原图内容 MD5（小写十六进制）
     std::string clientMsgId;     // 关联本端"发送中"气泡，与发图进度/结果/回执对回（UTF-8）
-    int         imageState = 0;  // 图片态：0 正常/已就绪，1 上传中，2 失败，3 下载中
+    int         imageState = 0;  // 图片态：0 正常/已就绪，1 上传中，2 上传失败，3 下载中，4 下载失败
+                                 // （取值有名字，见 ChatMessageMenu.h 的 kChatImageState*）
     int         imageProgress = 0;  // 上传进度 0-100（仅 imageState==1 时有意义）
     long long   msgid = 0;       // 服务器消息ID；收到的图片按它与下载结果对回（0=本端发出/无）
 
@@ -127,6 +130,9 @@ struct ChatMessage
     // 与 fileState 是两回事：fileState 说的是"本端这一侧传得怎么样"，本字段说的是
     // "对端收得怎么样"，两者同时存在（自己传完了 ≠ 对方收了）。
     int         filePeerState = 0;
+    // 该会话是否没有「接收 / 拒绝」流程。群聊里的文件消息（转发进群的文件）不需要谁来决定
+    // 收不收，待接收态只给一个「下载」按钮、状态文字写"未下载"；单聊保持 false，走接收流程。
+    bool        fileDirectDownload = false;
 
     // ---- kMsgFolder —— 文件夹整体传输态。状态取值与「状态 → 可用操作」的映射都在
     //      ChatFolderStateModel.h（ChatFolderState / FolderStateHasProgress /
@@ -160,6 +166,13 @@ struct ChatMessage
                                             // 由宿主按失败时刻与保留期时长算出；气泡把它交给 FolderRetryEnabled
                                             // 决定「重试」按钮画成可用还是不可用
 
+    // ---- 合并转发的聊天记录（kind == kMsgMerged）----
+    // 由 ChatMergedCard 的 ApplyMergedCard 从 content 原文解析填写，气泡据此画卡片。
+    CString              mergedTitle;          // 记录标题，如「张三和李四的聊天记录」
+    std::vector<CString> mergedLines;          // 卡片上的预览行「发送者：摘要」，最多 kMergedCardPreviewLines 行
+    int                  mergedCount = 0;      // 记录里的消息条数，画在卡片底部；0=内容不可用
+    std::string          mergedContent;        // content 原文（紧凑 JSON，UTF-8），点卡片打开查看窗时原样交给它
+
     // 引用回复（气泡上方的引用块）
     // ---- 引用回复（气泡上方的引用块）----
     // hasQuote 为假时其余 quote* 字段无意义。协议侧对应 content.quote，读写见
@@ -186,7 +199,10 @@ struct ChatMessage
     // 为真时气泡右上角画一枚小图钉，右键菜单里那一项文案变为「取消 Pin」。
     bool     pinned = false;
 
-    bool     read = false;  // 自己消息是否已读（显示"✓ 已读"）
+    // 自己发出的消息对方是否已读（气泡下方显示"✓ 已读"还是"未读"，见 DecideReadReceipt）。
+    // 构造时一律为 false，只能由对方的已读位点置为 true（ChatMessageList::ApplyPeerReadPosition），
+    // 构造函数不得按 fromMe 预置 —— 那样给离线的人发消息也会显示已读。
+    bool     read = false;
 
     // ---- 群聊发送者（单聊消息留空 —— 此时气泡不显示发送者名、头像
     //      回退到单聊对象 ChatPartner）----

@@ -3,7 +3,7 @@
  *
  *  覆盖：
  *    CCP1  正常账号产出三个类别，目录分别是 ChatFile / ChatImage /（Avatar + UserThumb）；
- *    CCP2  计划里<u>永远</u>不出现 ChatLog 与 .cfg —— 聊天记录、公告、登记表、配置不可清；
+ *    CCP2  计划里<u>永远</u>不出现 ChatLog 与 .ini —— 聊天记录、公告、登记表、配置不可清；
  *    CCP3  未登录（账号为空）或数据根为空时产出空计划；
  *    CCP4  账号里混进路径分隔符 / 上跳时，产出的目录仍落在 Users\ 之下（靠净化）；
  *    CCP5  边界检查放行 Users\ 之下的目录；
@@ -82,9 +82,9 @@ TEST_CASE("CCP2 计划里永远不出现聊天记录与账号配置", "[cachecle
     const std::vector<CacheCleanEntry> plan = BuildCacheCleanPlan(kRoot, kAccount);
 
     //这几样是本地唯一副本，删了就没了：聊天记录、公告、文件落点登记表都在 ChatLog 下，
-    //账号配置是 <账号>.cfg。清理缓存一律不许碰。
+    //账号配置是 <账号>.ini。清理缓存一律不许碰。
     CHECK_FALSE(AnyDirContains(plan, L"ChatLog"));
-    CHECK_FALSE(AnyDirContains(plan, L".cfg"));
+    CHECK_FALSE(AnyDirContains(plan, L".ini"));
     CHECK_FALSE(AnyDirContains(plan, L"msg.db"));
     CHECK_FALSE(AnyDirContains(plan, L"announce.db"));
     CHECK_FALSE(AnyDirContains(plan, L"filelocal.db"));

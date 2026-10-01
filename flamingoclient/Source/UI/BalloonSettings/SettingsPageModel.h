@@ -28,7 +28,7 @@ namespace balloonsettings {
  */
 enum SettingsPageId : int
 {
-    kPageGeneral     = 0,   // 通用 —— 开机自启动 / 关闭行为 / 语言 / 字体大小
+    kPageGeneral     = 0,   // 通用 —— 开机自启动 / 关闭行为 / 自动离开 / 语言
     kPageNotify      = 1,   // 消息通知 —— 新消息提醒 / 桌面弹窗 / 提示音 / 勿扰等
     kPageChat        = 2,   // 聊天 —— 发送快捷键 / 自动接收 / 消息漫游 / 链接识别
     kPageAudioVideo  = 3,   // 音视频 —— 麦克风 / 扬声器 / 摄像头 / 回声消除

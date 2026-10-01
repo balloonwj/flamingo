@@ -165,7 +165,7 @@ INT_PTR CBalloonNetSettingsWindow::DoModal(HWND hWndParent)
         return IDCANCEL;
     }
 
-    if (hWndParent != NULL)
+    if (::IsWindow(hWndParent))
         ::EnableWindow(hWndParent, FALSE);
 
     MSG msg;
@@ -177,7 +177,7 @@ INT_PTR CBalloonNetSettingsWindow::DoModal(HWND hWndParent)
             break;
     }
 
-    if (hWndParent != NULL)
+    if (::IsWindow(hWndParent))
     {
         ::EnableWindow(hWndParent, TRUE);
         ::SetForegroundWindow(hWndParent);

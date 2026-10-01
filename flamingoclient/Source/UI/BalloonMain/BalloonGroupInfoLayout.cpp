@@ -38,8 +38,8 @@ extern CAppModule _Module;
 
 #include "BalloonGroupInfoLayout.h"
 #include "MainPanelUserData.h"   // GetUserAvatarColor
+#include "MainPanelGroupMenu.h"  // FormatGroupNumber（点群号复制的文字，与右键菜单「复制群号」一致）
 #include "../../net/GroupProtocolClient.h"   // net::GroupMemberItem(ResolveXxx 用)
-#include "../../../third-party/balloonui/balloonui/DuiResMgr.h"   // GetFontByPointSize
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"   // DuiVBox / DuiHBox
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
@@ -148,12 +148,6 @@ public:
     }
 };
 
-// 取一个指向点尺寸字体的 HFONT(caller 不持有,DuiResMgr 缓存)。
-HFONT Font(int pt, bool bold)
-{
-    return balloonwjui::DuiResMgr::Inst().GetFontByPointSize(pt, bold);
-}
-
 // 造一个纯文本 DuiLabel。ctrlId 为 0 时不设 id(装饰性固定文字)。
 std::unique_ptr<balloonwjui::DuiLabel> MakeLabel(LPCTSTR text, UINT ctrlId,
                                                  int pt, bool bold,
@@ -168,7 +162,8 @@ std::unique_ptr<balloonwjui::DuiLabel> MakeLabel(LPCTSTR text, UINT ctrlId,
     {
         lbl->SetCtrlId(ctrlId);
     }
-    lbl->SetFont(Font(pt, bold));
+    // 按磅值设字号:标签绘制时按所在窗口的 DPI 现取字体,随 DPI 变化。
+    lbl->SetTextPointSize(pt, bold);
     lbl->SetTextColor(color);
     lbl->SetTextAlign(align);
     return lbl;
@@ -189,7 +184,7 @@ std::unique_ptr<balloonwjui::DuiLabel> MakeClickableLabel(LPCTSTR text, UINT ctr
     {
         lbl->SetCtrlId(ctrlId);
     }
-    lbl->SetFont(Font(pt, bold));
+    lbl->SetTextPointSize(pt, bold);
     lbl->SetTextColor(color);
     lbl->SetTextAlign(align);
     return std::unique_ptr<balloonwjui::DuiLabel>(lbl.release());
@@ -262,11 +257,12 @@ std::unique_ptr<balloonwjui::DuiControl> BuildGroupInfoBody()
 
         std::unique_ptr<balloonwjui::DuiVBox> info(new balloonwjui::DuiVBox());
         info->SetGap(4);
-        info->AddChild(MakeLabel(_T(""), kIdGroupName, kFontGroupName, true, kClrText,
-                                 DT_LEFT | DT_VCENTER | DT_SINGLELINE),
+        // 群名、群号两行可点：点群名复制完整群名，点群号那一行复制纯数字群号（悬停时手形光标）
+        info->AddChild(MakeClickableLabel(_T(""), kIdGroupName, kFontGroupName, true, kClrText,
+                                          DT_LEFT | DT_VCENTER | DT_SINGLELINE),
                        balloonwjui::DuiLayout::Hint().Fixed(26));
-        info->AddChild(MakeLabel(_T(""), kIdGroupMeta, kFontMeta, false, kClrMuted,
-                                 DT_LEFT | DT_VCENTER | DT_SINGLELINE),
+        info->AddChild(MakeClickableLabel(_T(""), kIdGroupMeta, kFontMeta, false, kClrMuted,
+                                          DT_LEFT | DT_VCENTER | DT_SINGLELINE),
                        balloonwjui::DuiLayout::Hint().Fixed(18));
         info->AddChild(MakeLabel(_T(""), kIdGroupOwner, kFontMeta, false, kClrMuted,
                                  DT_LEFT | DT_VCENTER | DT_SINGLELINE),
@@ -296,7 +292,7 @@ std::unique_ptr<balloonwjui::DuiControl> BuildGroupInfoBody()
 
         std::unique_ptr<balloonwjui::DuiLabel> noticeText(new balloonwjui::DuiLabel());
         noticeText->SetCtrlId(kIdGroupAnnouncement);
-        noticeText->SetFont(Font(kFontBody, false));
+        noticeText->SetTextPointSize(kFontBody, false);
         noticeText->SetTextColor(kClrNoticeText);
         noticeText->SetWordWrap(true);   // 多行自动换行
         notice->AddChild(std::move(noticeText), balloonwjui::DuiLayout::Hint().Weight(1));
@@ -546,6 +542,70 @@ std::string ResolveMyGroupCard(const std::vector<net::GroupMemberItem>& members,
         }
     }
     return std::string();
+}
+
+bool GroupInfoCopyText(const GroupInfoViewData& data, UINT ctrlId, CString& text)
+{
+    switch (ctrlId)
+    {
+    //点群名：复制完整群名（标签显示不下时会以省略号截断，复制的是全文）
+    case kIdGroupName:
+        if (data.groupName.IsEmpty())
+        {
+            return false;
+        }
+        text = data.groupName;
+        return true;
+
+    //点群号那一行：只复制数字群号，不带"群号"字样与人数
+    case kIdGroupMeta:
+    {
+        const std::wstring number = FormatGroupNumber(data.groupid);
+        if (number.empty())
+        {
+            return false;
+        }
+        text = number.c_str();
+        return true;
+    }
+
+    //其余控件没有可复制的内容
+    default:
+        return false;
+    }
+}
+
+bool GroupInfoHistoryTarget(const GroupInfoViewData& data, int& ctype, __int64& cid)
+{
+    //会话类型取值与协议一致：1 单聊、2 群聊
+    const int kCtypeGroup = 2;
+    if (data.groupid <= 0)
+    {
+        return false;
+    }
+    ctype = kCtypeGroup;
+    cid = data.groupid;
+    return true;
+}
+
+int GroupInfoToastTopOffset(balloonwjui::DuiControl* root)
+{
+    if (root == NULL)
+    {
+        return -1;
+    }
+    //头部资料区的下边取头像与群主两行中较低者：群名、群号、群主三行的总高略大于头像边长，
+    //群主一行可能比头像更低
+    balloonwjui::DuiControl* avatar = root->FindCtrlById(kIdGroupAvatar);
+    balloonwjui::DuiControl* owner = root->FindCtrlById(kIdGroupOwner);
+    if (avatar == NULL || owner == NULL)
+    {
+        return -1;
+    }
+    const RECT rcAvatar = avatar->GetRect();
+    const RECT rcOwner = owner->GetRect();
+    const LONG headerBottom = (rcOwner.bottom > rcAvatar.bottom) ? rcOwner.bottom : rcAvatar.bottom;
+    return (int)(headerBottom - root->GetRect().top);
 }
 
 } // namespace balloonmain

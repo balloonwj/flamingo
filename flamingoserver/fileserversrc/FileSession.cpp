@@ -389,6 +389,12 @@ bool FileSession::onUploadChunk(const std::shared_ptr<TcpConnection>& conn,
     //场景与服务器种类须匹配：图片服务器只收图片类场景，文件服务器只收文件类场景
     if (!isSceneAllowedOnServer(m_serverKind, payload.scene))
     {
+        //这一拒绝只会在令牌被拿到错误的服务器上用时发生，属于上游逻辑错误，必须
+        //留下记录；否则日志里只看得到连接建立又断开，无从判断原因（2026-09-30 排查
+        //图片消息下载失败时即是如此）。
+        LOGE("upload: scene not allowed on this server, scene: %d, serverkind: %d, md5: %s, client: %s",
+             payload.scene, m_serverKind, payload.md5.c_str(),
+             conn->peerAddress().toIpPort().c_str());
         sendJsonResponse(cmd_file_upload, seq,
             buildErrorJson(error_code_permission_denied, "scene not allowed on this server"));
         return true;
@@ -584,6 +590,10 @@ bool FileSession::onDownloadChunk(const std::shared_ptr<TcpConnection>& conn,
     //场景与服务器种类须匹配：图片服务器只收图片类场景，文件服务器只收文件类场景
     if (!isSceneAllowedOnServer(m_serverKind, payload.scene))
     {
+        //理由同上传分支：令牌被拿到了错误的服务器上，属于上游逻辑错误，必须留下记录。
+        LOGE("download: scene not allowed on this server, scene: %d, serverkind: %d, md5: %s, client: %s",
+             payload.scene, m_serverKind, payload.md5.c_str(),
+             conn->peerAddress().toIpPort().c_str());
         sendDownloadError(seq, error_code_permission_denied, "scene not allowed on this server");
         return true;
     }

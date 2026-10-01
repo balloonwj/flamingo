@@ -8,7 +8,7 @@
  *  不该重复弹、而"更旧的那条"补到时同样不该弹（推送乱序时可能发生）。这些格子
  *  靠手工点界面几乎覆盖不全，抽出来才能被 FlamingoUnit 逐条断言。
  *
- *  记账落在用户配置文件（<账号>.cfg）的一个专属小节里，按群记"最后弹过的公告ID"。
+ *  记账落在用户配置文件（<账号>.ini）的一个专属小节里，按群记"最后弹过的公告ID"。
  *  用 INI 而不是内存：重启客户端后不该把开机前那条公告再弹一遍。
  *
  *  本文件不 include stdafx.h，与 FlamingoUnit 测试工程逐字共用同一份源码。
@@ -69,7 +69,7 @@ bool ShouldPopupAnnouncement(const AnnouncePopupInput& input);
 
 /**
  *  读某个群"最后弹过的公告ID"。
- *    configPath：用户配置文件（<账号>.cfg）全路径；
+ *    configPath：用户配置文件（<账号>.ini）全路径；
  *    groupId：   群ID。
  *  返回：记过的公告ID；从没弹过、或路径为空 / 文件不存在时返回 0。
  */
@@ -77,7 +77,7 @@ int64_t LoadLastPoppedAnnounceId(LPCTSTR configPath, int64_t groupId);
 
 /**
  *  记下某个群"最后弹过的公告ID"。
- *    configPath：用户配置文件（<账号>.cfg）全路径；路径为空时什么都不做；
+ *    configPath：用户配置文件（<账号>.ini）全路径；路径为空时什么都不做；
  *    groupId：   群ID；
  *    announceId：本次弹过的公告ID。
  */

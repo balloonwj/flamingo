@@ -64,6 +64,7 @@
 #pragma once
 
 #include "../../../third-party/balloonui/balloonui/DuiDropTarget.h"
+#include "ChatClipboardContent.h"   // ChatClipSegment（从聊天记录拖进来的内容）
 #include <string>
 #include <vector>
 
@@ -108,6 +109,14 @@ public:
      */
     virtual void OnChatFilesDropped(const std::vector<std::wstring>& paths,
                                     bool forceAsFile) = 0;
+
+    /**
+     *  从聊天记录里拖出来的内容（带 Flamingo 聊天内容格式的文字、表情、图片）被放进了
+     *  发送框。这种内容插入输入框当前光标处、<u>不直接发送</u>，与粘贴一致（2026-09-30）。
+     *  回调在 UI 线程执行。
+     *    segs：还原出的聊天内容片段，非空。
+     */
+    virtual void OnChatContentDropped(const std::vector<ChatClipSegment>& segs) = 0;
 };
 
 /**
@@ -189,6 +198,33 @@ private:
     //把上面四个回调装到一个拖放目标上。两块区域（窗口 / 输入框）各有一份目标，
     //但回调完全一样，故抽出来避免两处 std::bind 写重。
     void WireCallbacks(balloonwjui::DuiDropTargetHelper& helper, bool fromInput);
+
+    // ---- 从聊天记录拖进来的内容（Flamingo 聊天内容格式）----
+    //
+    //balloonui 的拖放辅助类只认文件与位图，拿不到别的格式。窗口上实际注册的是一层包装
+    //（ChatContentDropTarget，见 .cpp）：数据里有 Flamingo 格式就由下面几个函数处理，
+    //否则把每一步原样转给辅助类原来的目标，拖文件的行为一点不变。
+    friend class ChatContentDropTarget;
+
+    //数据对象里有没有 Flamingo 聊天内容格式。
+    bool HasChatContent(IDataObject* pdo) const;
+
+    //拖入与移动时判断落点：在发送框内返回 DROPEFFECT_COPY（且拖放源允许复制），否则
+    //返回 DROPEFFECT_NONE；并按落点显示 / 收起提示。ptScreen 为 OLE 给的屏幕坐标。
+    //  allowed：拖放源允许的效果（DragEnter / DragOver 传入的 *pdwEffect）。
+    //  entering：是否为刚拖入窗口的那一次（只用于打日志）。
+    DWORD OnContentDragMove(const POINTL& ptScreen, DWORD allowed, bool entering);
+
+    //拖离窗口：收起提示。
+    void OnContentDragLeave();
+
+    //松手：落点在发送框内时解析出片段交给 sink 插入输入框，返回 DROPEFFECT_COPY；
+    //落点不在发送框内或解析失败时不插入，返回 DROPEFFECT_NONE。
+    DWORD OnContentDrop(IDataObject* pdo, const POINTL& ptScreen);
+
+    //实际注册在聊天窗 HWND 上的包装目标（本类持有一份引用，Detach 时释放）；未绑定、
+    //或包装注册失败退回辅助类原目标时为 NULL。
+    IDropTarget*                     m_pContentTarget;
 
     balloonwjui::DuiDropTargetHelper m_target;      // 注册在聊天窗 HWND 上的拖放目标
     balloonwjui::DuiDropTargetHelper m_inputTarget; // 注册在输入框子 HWND 上的拖放目标

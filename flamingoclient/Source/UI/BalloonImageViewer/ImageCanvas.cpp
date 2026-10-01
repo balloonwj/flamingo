@@ -13,6 +13,8 @@
 
 #include "stdafx.h"
 
+#include <atldlgs.h>   // CFileDialog（另存为）。主工程的 stdafx.h 已含，单元测试工程的没有，这里显式引入
+
 #include <gdiplus.h>
 #pragma comment(lib, "gdiplus.lib")
 
@@ -20,6 +22,10 @@
 #include "ImageViewerToolbar.h"
 #include "ImageViewerGeometry.h"
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiToast.h"   // 复制成功的「已复制」轻提示
+#include "../BalloonChatWnd/ChatClipboardIo.h"   // WriteChatContentToClipboard（与聊天气泡右键「复制」同一套剪贴板格式）
+#include "../../Common/Log/IULog.h"              // LOG_INFO / LOG_ERROR
+#include "../../Common/Util/EncodeUtil.h"        // UnicodeToUtf8（日志里记路径）
 
 namespace balloonimageviewer {
 
@@ -62,18 +68,29 @@ ImageCanvas::ImageCanvas()
     , m_scale(1.0)
     , m_fitOnLayout(true)
     , m_dragging(false)
+    , m_pressed(false)
     , m_pToolbar(NULL)
+    , m_pToast(NULL)
 {
     m_origin.x = 0;
     m_origin.y = 0;
     m_dragLastPt.x = 0;
     m_dragLastPt.y = 0;
+    m_pressPt.x = 0;
+    m_pressPt.y = 0;
 
     // 底部悬浮工具栏作为本画布子控件，初始隐藏（无图时不显示）。
     std::unique_ptr<ImageViewerToolbar> toolbar(new ImageViewerToolbar(this));
     m_pToolbar = toolbar.get();
     m_pToolbar->SetVisible(false);
     AddChild(std::unique_ptr<balloonwjui::DuiControl>(toolbar.release()));
+
+    // 顶部轻提示（复制成功后显示「已复制」）。放在工具栏之后加入：基类按子控件顺序
+    // 绘制，后加入的画在上层。它自己按父控件（本画布）的矩形算出「顶部居中」的落点，
+    // 不需要本画布摆放；平时不可见，也不参与命中。
+    std::unique_ptr<balloonwjui::DuiToast> toast(new balloonwjui::DuiToast());
+    m_pToast = toast.get();
+    AddChild(std::unique_ptr<balloonwjui::DuiControl>(toast.release()));
 }
 
 ImageCanvas::~ImageCanvas()
@@ -295,19 +312,34 @@ void ImageCanvas::OnPaint(HDC hdc, const RECT& rcDirty)
 
 bool ImageCanvas::OnLButtonDown(POINT pt, UINT /*mkFlags*/)
 {
-    if (m_image == NULL)
-    {
-        return false;
-    }
-    // 开始拖动平移（小图不可平移时拖动无副作用，ClampOrigin 会把落点锁回居中）。
-    m_dragging = true;
-    m_dragLastPt = pt;
+    // 记下按下点并捕获鼠标：之后按拖动的情况决定平移图片还是移动窗口（见 ResolveCanvasDrag）。
+    // 底部工具栏是本画布的子控件，按在工具栏上的点击由工具栏自己消费，不会走到这里。
+    m_pressed = true;
+    m_pressPt = pt;
     Capture();
+    // 图片放大到超出窗口：从按下起就平移，与改动前一致
+    if (ResolveCanvasDrag(false, IsPannable(), pt, pt, SIZE()) == kCanvasDragPanImage)
+    {
+        m_dragging = true;
+        m_dragLastPt = pt;
+    }
     return true;
 }
 
 bool ImageCanvas::OnMouseMove(POINT pt, UINT /*mkFlags*/)
 {
+    // 图片不可平移（能完整显示、或还没有图片）：移出系统拖动阈值后改为移动整个窗口
+    if (m_pressed && !m_dragging)
+    {
+        SIZE threshold;
+        threshold.cx = ::GetSystemMetrics(SM_CXDRAG);
+        threshold.cy = ::GetSystemMetrics(SM_CYDRAG);
+        if (ResolveCanvasDrag(false, IsPannable(), m_pressPt, pt, threshold) == kCanvasDragMoveWindow)
+        {
+            StartWindowMove(pt);
+        }
+        return true;
+    }
     if (!m_dragging)
     {
         return false;
@@ -323,13 +355,51 @@ bool ImageCanvas::OnMouseMove(POINT pt, UINT /*mkFlags*/)
 
 bool ImageCanvas::OnLButtonUp(POINT /*pt*/, UINT /*mkFlags*/)
 {
+    const bool wasPressed = m_pressed;
+    m_pressed = false;
     if (!m_dragging)
     {
+        //按下后没移出阈值就松开（单击）：释放捕获即可
+        if (wasPressed)
+        {
+            ReleaseCapture();
+            return true;
+        }
         return false;
     }
     m_dragging = false;
     ReleaseCapture();
     return true;
+}
+
+void ImageCanvas::StartWindowMove(POINT ptHost)
+{
+    m_pressed = false;
+    ReleaseCapture();
+    balloonwjui::DuiHost* host = GetHost();
+    HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+    if (!::IsWindow(hwnd))
+    {
+        return;
+    }
+    //系统的窗口移动要求当前没有窗口占着鼠标捕获，否则移动循环收不到鼠标消息
+    ::ReleaseCapture();
+    //系统的移动从当前光标位置起算，按下后到移出拖动阈值之间的那一小段位移不在其内。先把
+    //窗口挪过这段距离，按下处就仍在光标下方，窗口跟手、不会慢半拍
+    RECT rcWnd = { 0, 0, 0, 0 };
+    if (::GetWindowRect(hwnd, &rcWnd))
+    {
+        ::SetWindowPos(hwnd, NULL,
+                       rcWnd.left + (ptHost.x - m_pressPt.x), rcWnd.top + (ptHost.y - m_pressPt.y),
+                       0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+    //窗口挪过之后，当前光标在客户区里的位置正好回到按下点
+    POINT screenPt = m_pressPt;
+    ::ClientToScreen(hwnd, &screenPt);
+    LOG_INFO("image viewer: drag on canvas starts window move, at (%ld,%ld).",
+             screenPt.x, screenPt.y);
+    //与拖动标题栏走同一条系统路径；移动循环在松开左键后返回，那次松开不会再送到画布
+    ::SendMessage(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, MAKELPARAM(screenPt.x, screenPt.y));
 }
 
 bool ImageCanvas::OnLButtonDblClk(POINT pt, UINT /*mkFlags*/)
@@ -481,6 +551,63 @@ void ImageCanvas::PositionToolbar()
     br.right = x + bar.cx;
     br.bottom = y + bar.cy;
     m_pToolbar->SetRect(br);
+}
+
+std::vector<balloonchatwnd::ChatClipSegment> BuildImageViewerCopySegments(const CString& sourcePath,
+                                                                          bool hasImage)
+{
+    if (!hasImage || sourcePath.IsEmpty())
+    {
+        return std::vector<balloonchatwnd::ChatClipSegment>();
+    }
+    // 源文件必须还在：剪贴板里记的是路径，粘进输入框后发送时才去读文件，文件没了
+    // 发送就会失败。目录不算。
+    const DWORD attrs = ::GetFileAttributesW((LPCWSTR)sourcePath);
+    if (attrs == INVALID_FILE_ATTRIBUTES || (attrs & FILE_ATTRIBUTE_DIRECTORY) != 0)
+    {
+        return std::vector<balloonchatwnd::ChatClipSegment>();
+    }
+    // 与聊天气泡右键「复制」一张图片时构造的片段完全相同。
+    return balloonchatwnd::BuildClipSegmentsForImage(sourcePath);
+}
+
+std::vector<balloonchatwnd::ChatClipSegment> ImageCanvas::BuildCopySegments() const
+{
+    return BuildImageViewerCopySegments(m_sourcePath, HasImage());
+}
+
+void ImageCanvas::CopyImage()
+{
+    balloonwjui::DuiHost* host = GetHost();
+    HWND owner = (host != NULL) ? host->m_hWnd : NULL;
+
+    const std::vector<balloonchatwnd::ChatClipSegment> segs = BuildCopySegments();
+    if (segs.empty())
+    {
+        // 无图时按钮本不可见；走到这里多半是源文件在打开看图窗之后被移走或删除了。
+        LOG_ERROR("image viewer: copy image skipped, no image or source file missing.");
+        ::MessageBox(owner, _T("复制图片失败，图片文件可能已被移动或删除。"),
+                     _T("图片查看"), MB_ICONWARNING | MB_OK);
+        return;
+    }
+
+    // 一次写入 Flamingo 聊天内容格式（粘进聊天输入框还原成可发送的图片）、位图（粘到画图、
+    // Word 等程序）与纯文字「[图片]」，与聊天气泡右键「复制」同一个函数。
+    if (!balloonchatwnd::WriteChatContentToClipboard(owner, segs))
+    {
+        LOG_ERROR("image viewer: copy image failed, clipboard unavailable.");
+        ::MessageBox(owner, _T("复制图片失败，剪贴板可能正被其他程序占用，请重试。"),
+                     _T("图片查看"), MB_ICONWARNING | MB_OK);
+        return;
+    }
+
+    // 窄字符日志按 UTF-8 原样落盘，路径里可能有中文，先转成 UTF-8 再记。
+    LOG_INFO("image viewer: image copied to clipboard, path=%s.",
+             EncodeUtil::UnicodeToUtf8(std::wstring((LPCWSTR)m_sourcePath)).c_str());
+    if (m_pToast != NULL)
+    {
+        m_pToast->Show(_T("已复制"));
+    }
 }
 
 void ImageCanvas::SaveImageAs()

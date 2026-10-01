@@ -19,13 +19,31 @@
 #pragma once
 
 #include "../../../third-party/balloonui/balloonui/DuiControl.h"
+#include "../BalloonChatWnd/ChatClipboardContent.h"   // ChatClipSegment（复制图片时写进剪贴板的聊天内容片段）
+
+#include <vector>
 
 // 只用到 Gdiplus::Bitmap 的指针，前置声明以免在头文件里拉入沉重的 <gdiplus.h>。
 namespace Gdiplus { class Bitmap; }
+// 只用到 DuiToast 的指针（复制成功的轻提示）。
+namespace balloonwjui { class DuiToast; }
 
 namespace balloonimageviewer {
 
 class ImageViewerToolbar;
+
+/**
+ *  算出看图窗「复制图片」要写进剪贴板的聊天内容片段。纯函数（只查询文件是否存在）。
+ *
+ *  复制与聊天气泡右键「复制」走同一条路：把图片按本地文件路径写成一段图片片段，聊天
+ *  输入框粘贴时据此把它插成一张可发送的图片（见 ChatInputRichEdit::TryPasteChatContent）。
+ *    sourcePath：看图窗当前图片的源文件路径。
+ *    hasImage：  画布上是否已成功载入图片（解码失败时为 false）。
+ *  返回：恰好一段图片片段；画布上没有图、路径为空、或源文件已经不存在时返回空序列
+ *        —— 不能把一个指向不存在文件的路径写进剪贴板，那样粘贴后发送会失败。
+ */
+std::vector<balloonchatwnd::ChatClipSegment> BuildImageViewerCopySegments(const CString& sourcePath,
+                                                                          bool hasImage);
 
 // 看图画布控件。
 class ImageCanvas : public balloonwjui::DuiControl
@@ -60,6 +78,15 @@ public:
     // 无损、保持原格式）。无图或无源路径时静默返回。由底部工具栏「另存为」调用。
     void SaveImageAs();
 
+    // 当前图片可复制的内容（见 BuildImageViewerCopySegments）；无图或源文件已不存在时为空。
+    std::vector<balloonchatwnd::ChatClipSegment> BuildCopySegments() const;
+
+    // 复制图片：把当前图片写进剪贴板（Flamingo 聊天内容格式 + 位图 + 纯文字「[图片]」），
+    // 之后可以直接粘进聊天输入框发送，也可以粘到画图等程序。由底部工具栏「复制图片」调用。
+    // 副作用：清空并改写系统剪贴板；成功时在看图窗顶部弹「已复制」轻提示，没有可复制的
+    // 内容或剪贴板被占用时弹失败提示。
+    void CopyImage();
+
     // 当前缩放比的百分数读数（形如 "96%"），供工具栏显示。
     CString GetZoomReadout() const;
 
@@ -92,6 +119,13 @@ private:
     // 把底部悬浮工具栏摆到画布底部中央（在 Layout 里调用）。
     void PositionToolbar();
 
+    // 把这次按住左键的拖动交给系统原生的窗口移动（等同拖动标题栏：贴边分屏、最大化时
+    // 拖动先还原，都与标题栏一致）。先释放本控件的鼠标捕获，再向宿主窗口发
+    // WM_NCLBUTTONDOWN + HTCAPTION；该消息在移动结束（松开左键）之后才返回。
+    //   ptHost：当前鼠标位置（宿主客户区坐标）。开始移动前先把窗口挪过"按下点到当前点"
+    //           这段距离，按下处始终在光标下方。
+    void StartWindowMove(POINT ptHost);
+
     // 按给定增量旋转（deltaDegreesCW 为顺时针度数，可负），归一到 [0,360)，
     // 再按新朝向重新适应窗口并刷新。RotateClockwise/CounterClockwise 的共用实现。
     void ApplyRotation(int deltaDegreesCW);
@@ -106,8 +140,12 @@ private:
     bool     m_fitOnLayout;         // 是否处于"适应窗口"态：为真时窗口尺寸变化会跟随重新适应
     bool     m_dragging;            // 是否正在按住左键拖动平移
     POINT    m_dragLastPt;          // 上一次拖动鼠标点（宿主客户区坐标），用于算平移增量
-    CString  m_sourcePath;          // 当前图片的源文件路径（另存为用）；空表示无图
+    bool     m_pressed;             // 左键是否按在画布上、尚未松开且还没开始移动窗口。图片不可平移时，
+                                    // 移出系统拖动阈值后据此开始移动窗口；松开或开始移动窗口时清除
+    POINT    m_pressPt;             // 左键按下时的位置（宿主客户区坐标），判断是否移出拖动阈值用
+    CString  m_sourcePath;          // 当前图片的源文件路径（另存为、复制图片用）；空表示无图
     ImageViewerToolbar* m_pToolbar; // 底部悬浮工具栏（子控件，所有权在控件树）
+    balloonwjui::DuiToast* m_pToast; // 顶部轻提示（复制成功后显示「已复制」；子控件，所有权在控件树）
 };
 
 } // namespace balloonimageviewer

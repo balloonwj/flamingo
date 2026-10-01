@@ -232,7 +232,7 @@ public:
 
     void onProgress(int64_t sent, int64_t total) override
     {
-        if (m_hUI == NULL)
+        if (!::IsWindow(m_hUI))
             return;
         FileSendProgress* p = new FileSendProgress();
         p->m_clientmsgid = m_clientmsgid;
@@ -258,7 +258,7 @@ public:
 
     void onProgress(int64_t received, int64_t total) override
     {
-        if (m_hUI == NULL)
+        if (!::IsWindow(m_hUI))
             return;
         FileDownloadProgress* p = new FileDownloadProgress();
         p->m_msgid    = m_msgid;
@@ -287,7 +287,7 @@ public:
 
     void onProgress(int64_t sent, int64_t total) override
     {
-        if (m_hUI == NULL)
+        if (!::IsWindow(m_hUI))
             return;
         int pct = (total > 0) ? static_cast<int>((sent * 100) / total) : 0;
         if (pct == m_lastPercent)
@@ -323,7 +323,7 @@ public:
 
     void onProgress(int64_t received, int64_t total) override
     {
-        if (m_hUI == NULL)
+        if (!::IsWindow(m_hUI))
             return;
         int pct = (total > 0) ? static_cast<int>((received * 100) / total) : 0;
         if (pct == m_lastPercent)
@@ -750,7 +750,7 @@ void FileTransfer::PostSendResult(const Task& task, bool ok, int errcode, const 
     r->m_size        = size;
     r->m_localpath   = task.m_localpath;   //成功时供 UI 登记本地落点
 
-    if (hUI != NULL)
+    if (::IsWindow(hUI))
         ::PostMessage(hUI, FMG_MSG_V2_FILE_SEND_RESULT, 0, (LPARAM)r);
     else
         delete r;   //UI 未就绪，丢弃以免泄漏
@@ -949,7 +949,7 @@ void FileTransfer::PostDownloadResult(int64_t msgid, bool ok, int errcode,
     r->m_md5       = md5;        //成功时供 UI 按 (md5, 文件名) 登记本地落点
     r->m_filename  = filename;
 
-    if (hUI != NULL)
+    if (::IsWindow(hUI))
         ::PostMessage(hUI, FMG_MSG_V2_FILE_DOWNLOAD_RESULT, 0, (LPARAM)r);
     else
         delete r;
@@ -1077,7 +1077,7 @@ void FileTransfer::PostGroupFileUploadResult(int64_t groupId, int uploadId, bool
     r->m_fileid   = fileid;
     r->m_filename = filename;
     r->m_size     = size;
-    if (hUI != NULL)
+    if (::IsWindow(hUI))
         ::PostMessage(hUI, FMG_MSG_V2_GROUP_FILE_UPLOAD_RESULT, 0, (LPARAM)r);
     else
         delete r;
@@ -1165,7 +1165,7 @@ void FileTransfer::PostGroupFileDownloadResult(int64_t groupId, const std::strin
     r->m_ok        = ok;
     r->m_errcode   = errcode;
     r->m_localpath = localPath;
-    if (hUI != NULL)
+    if (::IsWindow(hUI))
         ::PostMessage(hUI, FMG_MSG_V2_GROUP_FILE_DOWNLOAD_RESULT, 0, (LPARAM)r);
     else
         delete r;

@@ -147,4 +147,25 @@ CString FormatZoomReadout(double scale)
     return s;
 }
 
+CanvasDragAction ResolveCanvasDrag(bool overToolbar, bool pannable, POINT pressPt,
+                                   POINT currentPt, SIZE threshold)
+{
+    //工具栏整块是按钮区域，按在上面的拖动一概不处理
+    if (overToolbar)
+    {
+        return kCanvasDragNone;
+    }
+    //图片超出窗口：拖动用来平移，从按下起就跟手
+    if (pannable)
+    {
+        return kCanvasDragPanImage;
+    }
+    //图片能完整显示（或没有图片）：移出系统拖动阈值才算拖动窗口，单击与双击因此不受影响
+    const int dx = currentPt.x - pressPt.x;
+    const int dy = currentPt.y - pressPt.y;
+    const bool movedX = (dx > threshold.cx) || (-dx > threshold.cx);
+    const bool movedY = (dy > threshold.cy) || (-dy > threshold.cy);
+    return (movedX || movedY) ? kCanvasDragMoveWindow : kCanvasDragNone;
+}
+
 } // namespace balloonimageviewer

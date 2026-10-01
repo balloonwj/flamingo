@@ -9,6 +9,7 @@
  *  docs/消息记录内容交互方案.md §8 测试用例清单第 9~15 条，外加两条不变式：
  *    · 分隔线不连续、不落在首尾（对所有类型 × 本地有无 × 下载中的组合循环验证）；
  *    · msgid 未分配时「Pin」整项不出现，而不是置灰。
+ *  以及「转发」一项的出现条件与位置（FWD-C19a～d，见 docs/聊天消息转发方案.md §9 第 9 步）。
  *
  *  用 Catch2 v3（amalgamated），纯内存断言，不建窗口、不查库、不碰文件系统。
  *  全局 _Module 由其它测试文件统一定义，本文件只是随 stdafx.h 引用其声明。
@@ -138,7 +139,8 @@ TEST_CASE("HRM1 文本消息：复制 / 定位 / Pin", "[historymenu]")
 
     const std::vector<int> expect = {
         kHistoryRowMenuCopy, kSeparatorMark,
-        kHistoryRowMenuLocate, kHistoryRowMenuPin
+        kHistoryRowMenuLocate, kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
+        kSeparatorMark, kHistoryRowMenuDelete
     };
     CHECK(IdsOf(model) == expect);
 
@@ -157,7 +159,8 @@ TEST_CASE("HRM2 图片消息 + 本地有文件：复制图片 / 图片另存为 
     const std::vector<int> expect = {
         kHistoryRowMenuCopyImage, kHistoryRowMenuSaveImageAs, kHistoryRowMenuOpenFolder,
         kSeparatorMark,
-        kHistoryRowMenuLocate, kHistoryRowMenuPin
+        kHistoryRowMenuLocate, kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
+        kSeparatorMark, kHistoryRowMenuDelete
     };
     CHECK(IdsOf(model) == expect);
 
@@ -176,7 +179,8 @@ TEST_CASE("HRM3 图片消息 + 本地无文件：只给下载", "[historymenu]")
 
     const std::vector<int> expect = {
         kHistoryRowMenuDownload, kSeparatorMark,
-        kHistoryRowMenuLocate, kHistoryRowMenuPin
+        kHistoryRowMenuLocate, kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
+        kSeparatorMark, kHistoryRowMenuDelete
     };
     CHECK(IdsOf(model) == expect);
 
@@ -195,7 +199,8 @@ TEST_CASE("HRM4 文件消息 + 本地有文件：打开文件 / 打开所在文�
     const std::vector<int> expect = {
         kHistoryRowMenuOpenFile, kHistoryRowMenuOpenFolder, kHistoryRowMenuSaveFileAs,
         kSeparatorMark,
-        kHistoryRowMenuLocate, kHistoryRowMenuPin
+        kHistoryRowMenuLocate, kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
+        kSeparatorMark, kHistoryRowMenuDelete
     };
     CHECK(IdsOf(model) == expect);
 
@@ -213,7 +218,8 @@ TEST_CASE("HRM5 文件消息 + 本地无文件：只给下载", "[historymenu]")
 
     const std::vector<int> expect = {
         kHistoryRowMenuDownload, kSeparatorMark,
-        kHistoryRowMenuLocate, kHistoryRowMenuPin
+        kHistoryRowMenuLocate, kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
+        kSeparatorMark, kHistoryRowMenuDelete
     };
     CHECK(IdsOf(model) == expect);
 
@@ -243,7 +249,8 @@ TEST_CASE("HRM6 正在下载时只给取消下载，且优先于本地文件状�
 
             const std::vector<int> expect = {
                 kHistoryRowMenuCancelDownload, kSeparatorMark,
-                kHistoryRowMenuLocate, kHistoryRowMenuPin
+                kHistoryRowMenuLocate, kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
+                kSeparatorMark, kHistoryRowMenuDelete
             };
             CHECK(IdsOf(model) == expect);
 
@@ -254,7 +261,7 @@ TEST_CASE("HRM6 正在下载时只给取消下载，且优先于本地文件状�
     }
 }
 
-TEST_CASE("HRM7 语音及其它未单独支持的类型：只有定位与 Pin", "[historymenu]")
+TEST_CASE("HRM7 语音及其它未单独支持的类型：只有定位、转发、Pin 与删除", "[historymenu]")
 {
     //这些类型在消息记录窗里还只是一行占位文字，没有可以"拿内容做点什么"的操作。
     //宁可少给项，也不给一个点下去没反应的项。
@@ -273,9 +280,20 @@ TEST_CASE("HRM7 语音及其它未单独支持的类型：只有定位与 Pin", 
             BuildHistoryRowMenuModel(MakeCtx(types[t], kHasLocal, kNotDownloading,
                                              kNotPinned, kAssignedMsgId));
 
-        const std::vector<int> expect = {
-            kHistoryRowMenuLocate, kHistoryRowMenuPin
-        };
+        //通话记录与系统提示是服务端生成的记录条，不给「转发」（见 CanForwardHistoryRow）
+        const bool forwardable = (types[t] != ::message_type_rtc
+                                  && types[t] != ::message_type_system);
+        std::vector<int> expect;
+        expect.push_back(kHistoryRowMenuLocate);
+        if (forwardable)
+        {
+            expect.push_back(kHistoryRowMenuForward);
+        }
+        //「多选」只看 msgid，不能转发的记录条也能选进来删除
+        expect.push_back(kHistoryRowMenuMultiSelect);
+        expect.push_back(kHistoryRowMenuPin);
+        expect.push_back(kSeparatorMark);
+        expect.push_back(kHistoryRowMenuDelete);
         CHECK(IdsOf(model) == expect);
     }
 }
@@ -393,7 +411,8 @@ TEST_CASE("HRM11 截图按图片行处理", "[historymenu]")
     const std::vector<int> expectWithFile = {
         kHistoryRowMenuCopyImage, kHistoryRowMenuSaveImageAs, kHistoryRowMenuOpenFolder,
         kSeparatorMark,
-        kHistoryRowMenuLocate, kHistoryRowMenuPin
+        kHistoryRowMenuLocate, kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
+        kSeparatorMark, kHistoryRowMenuDelete
     };
     CHECK(IdsOf(withFile) == expectWithFile);
 
@@ -402,7 +421,8 @@ TEST_CASE("HRM11 截图按图片行处理", "[historymenu]")
                                          kNotDownloading, kNotPinned, kAssignedMsgId));
     const std::vector<int> expectWithoutFile = {
         kHistoryRowMenuDownload, kSeparatorMark,
-        kHistoryRowMenuLocate, kHistoryRowMenuPin
+        kHistoryRowMenuLocate, kHistoryRowMenuForward, kHistoryRowMenuMultiSelect, kHistoryRowMenuPin,
+        kSeparatorMark, kHistoryRowMenuDelete
     };
     CHECK(IdsOf(withoutFile) == expectWithoutFile);
 }
@@ -426,8 +446,8 @@ TEST_CASE("HRM12 同一份菜单里各项 id 互不相同", "[historymenu]")
     std::sort(ids.begin(), ids.end());
     ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
     CHECK(ids.size() == before);
-    //这个组合下五项应当全在：打开文件 / 打开所在文件夹 / 另存为 / 定位 / 取消 Pin
-    CHECK(before == 5u);
+    //这个组合下八项应当全在：打开文件 / 打开所在文件夹 / 另存为 / 定位 / 转发 / 多选 / 取消 Pin / 删除
+    CHECK(before == 8u);
 }
 
 TEST_CASE("HRM13 文件夹传输记录行：本机有落点才给「打开文件夹」")
@@ -478,4 +498,167 @@ TEST_CASE("HRM15 IsHistoryRowFolderType 只认 18，不与文件行混用")
     //反向：文件夹记录不能被当成文件行，否则菜单会给出下载 / 另存为这类无效项
     CHECK_FALSE(IsHistoryRowFileType(::message_type_folder));
     CHECK_FALSE(IsHistoryRowImageType(::message_type_folder));
+}
+
+TEST_CASE("HRM16 有 msgid 的各类行：菜单末尾是「删除」，前面隔一条线", "[historymenu][msgdelete]")
+{
+    //删除是"拿这条消息本身做点什么"里最危险的一项，放在最末、单独隔开，避免手滑误点
+    const int types[] = { ::message_type_text, ::message_type_image, ::message_type_file,
+                          ::message_type_folder, ::message_type_voice };
+    const bool locals[] = { kHasLocal, kNoLocal };
+    for (std::size_t t = 0; t < sizeof(types) / sizeof(types[0]); ++t)
+    {
+        for (std::size_t l = 0; l < sizeof(locals) / sizeof(locals[0]); ++l)
+        {
+            INFO("msgType=" << types[t] << " hasLocal=" << (locals[l] ? 1 : 0));
+            const std::vector<HistoryRowMenuItem> model =
+                BuildHistoryRowMenuModel(MakeCtx(types[t], locals[l], kNotDownloading,
+                                                 kNotPinned, kAssignedMsgId));
+            const std::vector<int> ids = IdsOf(model);
+            REQUIRE(ids.size() >= 2);
+            CHECK(ids[ids.size() - 1] == (int)kHistoryRowMenuDelete);
+            CHECK(ids[ids.size() - 2] == kSeparatorMark);
+            CHECK(SeparatorInvariantHolds(model));
+        }
+    }
+}
+
+TEST_CASE("HRM17 msgid 未分配时不出现「删除」，也不会以分隔线结尾", "[historymenu][msgdelete]")
+{
+    //服务端还没给这条分配 msgid：删除请求必被判非法，整项不显示（与 Pin 同一处理）
+    const int types[] = { ::message_type_text, ::message_type_voice };
+    for (std::size_t t = 0; t < sizeof(types) / sizeof(types[0]); ++t)
+    {
+        INFO("msgType=" << types[t]);
+        const std::vector<HistoryRowMenuItem> model =
+            BuildHistoryRowMenuModel(MakeCtx(types[t], kNoLocal, kNotDownloading,
+                                             kNotPinned, kHistoryRowMsgIdUnassigned));
+        CHECK_FALSE(HasItem(model, kHistoryRowMenuDelete));
+        CHECK(SeparatorInvariantHolds(model));
+    }
+}
+
+TEST_CASE("HRM18 「查看上下文」按调用方的判定出现，紧跟「定位到聊天窗」", "[historymenu][historycontext]")
+{
+    HistoryRowMenuContext ctx = MakeCtx(::message_type_text, kNoLocal, kNotDownloading,
+                                        kNotPinned, kAssignedMsgId);
+    CHECK_FALSE(HasItem(BuildHistoryRowMenuModel(ctx), kHistoryRowMenuViewContext));
+
+    ctx.m_canViewContext = true;
+    const std::vector<int> ids = IdsOf(BuildHistoryRowMenuModel(ctx));
+    bool adjacent = false;
+    for (std::size_t i = 0; i + 1 < ids.size(); ++i)
+    {
+        if (ids[i] == (int)kHistoryRowMenuLocate && ids[i + 1] == (int)kHistoryRowMenuViewContext)
+        {
+            adjacent = true;
+        }
+    }
+    CHECK(adjacent);
+    CHECK(SeparatorInvariantHolds(BuildHistoryRowMenuModel(ctx)));
+}
+
+namespace {
+
+//某一项在 id 序列里的下标；没有该项时返回 -1。
+int IndexOf(const std::vector<int>& ids, int id)
+{
+    for (std::size_t i = 0; i < ids.size(); ++i)
+    {
+        if (ids[i] == id)
+        {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+} // anonymous namespace
+
+TEST_CASE("FWD-C19a 有 msgid 的普通行有「转发」，排在定位与查看上下文之后、Pin 之前", "[historymenu][forward]")
+{
+    //文本、图片、文件、合并记录、语音：本地文件标志取 true，让图片 / 文件走"本地已有"那一支
+    const int types[] = { ::message_type_text, ::message_type_image, ::message_type_file,
+                          ::message_type_merged, ::message_type_voice };
+    for (std::size_t t = 0; t < sizeof(types) / sizeof(types[0]); ++t)
+    {
+        INFO("msgType=" << types[t]);
+        HistoryRowMenuContext ctx = MakeCtx(types[t], kHasLocal, kNotDownloading,
+                                            kNotPinned, kAssignedMsgId);
+        CHECK(CanForwardHistoryRow(types[t], kAssignedMsgId));
+
+        //没有筛选条件：紧跟「定位到聊天窗」
+        std::vector<int> ids = IdsOf(BuildHistoryRowMenuModel(ctx));
+        int fwd = IndexOf(ids, kHistoryRowMenuForward);
+        REQUIRE(fwd > 0);
+        CHECK(ids[(std::size_t)fwd - 1] == (int)kHistoryRowMenuLocate);
+        REQUIRE((std::size_t)fwd + 1 < ids.size());
+        CHECK(ids[(std::size_t)fwd + 1] == (int)kHistoryRowMenuMultiSelect);
+        CHECK(LabelOf(BuildHistoryRowMenuModel(ctx), kHistoryRowMenuForward) == L"转发");
+
+        //有筛选条件：排在「查看上下文」之后
+        ctx.m_canViewContext = true;
+        ids = IdsOf(BuildHistoryRowMenuModel(ctx));
+        fwd = IndexOf(ids, kHistoryRowMenuForward);
+        REQUIRE(fwd > 0);
+        CHECK(ids[(std::size_t)fwd - 1] == (int)kHistoryRowMenuViewContext);
+        REQUIRE((std::size_t)fwd + 1 < ids.size());
+        CHECK(ids[(std::size_t)fwd + 1] == (int)kHistoryRowMenuMultiSelect);
+        CHECK(SeparatorInvariantHolds(BuildHistoryRowMenuModel(ctx)));
+    }
+}
+
+TEST_CASE("FWD-C19b msgid 未分配或为负数时没有「转发」", "[historymenu][forward]")
+{
+    const int types[] = { ::message_type_text, ::message_type_file };
+    const int64_t msgIds[] = { kHistoryRowMsgIdUnassigned, -1 };
+    for (std::size_t t = 0; t < sizeof(types) / sizeof(types[0]); ++t)
+    {
+        for (std::size_t m = 0; m < sizeof(msgIds) / sizeof(msgIds[0]); ++m)
+        {
+            INFO("msgType=" << types[t] << " msgId=" << (long long)msgIds[m]);
+            CHECK_FALSE(CanForwardHistoryRow(types[t], msgIds[m]));
+            const std::vector<HistoryRowMenuItem> model =
+                BuildHistoryRowMenuModel(MakeCtx(types[t], kHasLocal, kNotDownloading,
+                                                 kNotPinned, msgIds[m]));
+            CHECK_FALSE(HasItem(model, kHistoryRowMenuForward));
+            CHECK(SeparatorInvariantHolds(model));
+        }
+    }
+}
+
+TEST_CASE("FWD-C19c 文件夹传输记录、通话记录、系统提示没有「转发」", "[historymenu][forward]")
+{
+    const int types[] = { ::message_type_folder, ::message_type_rtc, ::message_type_system };
+    for (std::size_t t = 0; t < sizeof(types) / sizeof(types[0]); ++t)
+    {
+        INFO("msgType=" << types[t]);
+        CHECK_FALSE(CanForwardHistoryRow(types[t], kAssignedMsgId));
+        const std::vector<HistoryRowMenuItem> model =
+            BuildHistoryRowMenuModel(MakeCtx(types[t], kHasLocal, kNotDownloading,
+                                             kNotPinned, kAssignedMsgId));
+        CHECK_FALSE(HasItem(model, kHistoryRowMenuForward));
+        //通用组其余各项照常
+        CHECK(HasItem(model, kHistoryRowMenuLocate));
+        CHECK(HasItem(model, kHistoryRowMenuPin));
+    }
+}
+
+TEST_CASE("FWD-C19d 图片或文件本地没有、或正在下载时仍有「转发」", "[historymenu][forward]")
+{
+    //转发由服务端按原消息重新落一条，与本端有没有下载这份文件无关
+    const int types[] = { ::message_type_image, ::message_type_screenshot, ::message_type_file };
+    for (std::size_t t = 0; t < sizeof(types) / sizeof(types[0]); ++t)
+    {
+        INFO("msgType=" << types[t]);
+        CHECK(HasItem(BuildHistoryRowMenuModel(MakeCtx(types[t], kNoLocal, kNotDownloading,
+                                                       kNotPinned, kAssignedMsgId)),
+                      kHistoryRowMenuForward));
+        CHECK(HasItem(BuildHistoryRowMenuModel(MakeCtx(types[t], kNoLocal, kDownloading,
+                                                       kNotPinned, kAssignedMsgId)),
+                      kHistoryRowMenuForward));
+        CHECK(HasItem(BuildHistoryRowMenuModel(MakeCtx(types[t], kHasLocal, kDownloading,
+                                                       kNotPinned, kAssignedMsgId)),
+                      kHistoryRowMenuForward));
+    }
 }

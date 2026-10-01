@@ -10,7 +10,7 @@
  *  <u>只</u>包含前者，且提供一支独立的边界判断函数供真正执行删除前再核一遍。
  *
  *      <数据根>Users\<账号>\
- *        ├─ <账号>.cfg        不清
+ *        ├─ <账号>.ini        不清
  *        ├─ ChatLog\          不清（msg.db 聊天记录、announce.db 公告、filelocal.db 登记表）
  *        ├─ ChatFile\         可清：聊天文件的下载缓存
  *        ├─ ChatImage\        可清：聊天图片缓存
@@ -63,7 +63,7 @@ struct CacheCleanEntry
  *
  *  @return 三个类别的计划；任一前置条件不满足时返回空 vector。
  *          产出的目录<u>一定</u>落在 <dataRoot>Users\<净化后账号>\ 之下，且不含
- *          ChatLog 与 .cfg。
+ *          ChatLog 与 .ini。
  */
 std::vector<CacheCleanEntry> BuildCacheCleanPlan(const std::wstring& dataRoot,
                                                  const std::wstring& account);

@@ -72,12 +72,11 @@ bool GroupProtocol::parseCreateGroupRequest(const std::string& json, CreateGroup
     if (!parseObject(json, root))
         return false;
 
-    //群名称必填且非空
+    //群名称字段必须带上；值可以为空串，表示由服务端按成员昵称生成自动群名
+    //（见 GroupAutoName.h），此后群名随成员变化重算
     if (!root["groupname"].isString())
         return false;
     req.name = root["groupname"].asString();
-    if (req.name.empty())
-        return false;
 
     //初始成员列表可缺省（允许建一个只有群主的群）
     const Json::Value& arr = root["memberids"];
@@ -205,7 +204,8 @@ bool GroupProtocol::parseUpdateGroupInfoRequest(const std::string& json, UpdateG
     if (req.groupid <= 0)
         return false;
 
-    //以下字段均可选，仅出现的字段会被更新
+    //以下字段均可选，仅出现的字段会被更新。
+    //name 为空串也算带了群名，表示恢复为自动群名，由 GroupManager::updateGroupInfo 处理
     if (root["name"].isString())
     {
         req.has_name = true;
@@ -331,18 +331,22 @@ std::string GroupProtocol::buildGroupMembersResponse(int code, const std::string
 }
 
 std::string GroupProtocol::buildUserGroupsResponse(int code, const std::string& msg,
-                                                   const std::vector<GroupRecord>& groups)
+                                                   const std::vector<GroupRecord>& groups,
+                                                   const std::set<int64_t>& pinnedGroupIds)
 {
     Json::Value root;
     root["code"] = code;
     root["msg"]  = msg;
 
     //groups 数组：逐群写群资料（与 get_group_info 同字段，复用 fillGroupValue）。
+    //pinned 是本人对该群的置顶状态，因人而异，所以只在这里加，不放进 fillGroupValue ——
+    //后者还要用于发给全群的 cmd_group_info_changed_notify。
     Json::Value arr(Json::arrayValue);
     for (size_t i = 0; i < groups.size(); ++i)
     {
         Json::Value jo;
         fillGroupValue(jo, groups[i]);
+        jo["pinned"] = (pinnedGroupIds.count(groups[i].groupid) != 0) ? 1 : 0;
         arr.append(jo);
     }
     root["groups"] = arr;

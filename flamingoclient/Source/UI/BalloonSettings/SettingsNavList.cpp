@@ -83,7 +83,7 @@ void CSettingsNavList::PaintRow(HDC hdc, int rowIndex, const RECT& rowRect,
     }
 
     // 标题文字：选中橙、其余深灰；左对齐 + 垂直居中。
-    HFONT hOldFont = (HFONT)::SelectObject(hdc, balloonwjui::DuiResMgr::Inst().GetDefaultFont());
+    HFONT hOldFont = (HFONT)::SelectObject(hdc, GetDefaultFont());
     int oldBk = ::SetBkMode(hdc, TRANSPARENT);
     COLORREF txtColor = selected ? kAccentOrange : kTextNormalClr;
     COLORREF oldClr = ::SetTextColor(hdc, txtColor);

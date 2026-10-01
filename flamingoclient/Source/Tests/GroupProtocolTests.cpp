@@ -707,3 +707,45 @@ TEST_CASE("GP51 还没发过请求的窗口不认领任何应答", "[group][anno
     REQUIRE(GroupProtocolClient::parseAnnouncementsResponse(body, out));
     CHECK_FALSE(out.MatchesRequest(-1, -1));
 }
+
+TEST_CASE("GP56 normalizeGroupNameInput 去掉首尾空白，只剩空白时为空串", "[group][autoname]")
+{
+    //未填写或只填了空白：空串，表示由服务端按成员昵称生成自动群名
+    CHECK(GroupProtocolClient::normalizeGroupNameInput("") == "");
+    CHECK(GroupProtocolClient::normalizeGroupNameInput("   ") == "");
+    CHECK(GroupProtocolClient::normalizeGroupNameInput(" \t\r\n") == "");
+    //全角空格（U+3000）同样算空白
+    CHECK(GroupProtocolClient::normalizeGroupNameInput(u8"　 　") == "");
+    //只去首尾，中间的空白保留
+    CHECK(GroupProtocolClient::normalizeGroupNameInput(u8"  项目 一组　") == std::string(u8"项目 一组"));
+    CHECK(GroupProtocolClient::normalizeGroupNameInput(u8"项目组") == std::string(u8"项目组"));
+}
+
+TEST_CASE("GP57 buildCreateGroupRequest 群名为空串时照样带上 groupname 字段", "[group][autoname]")
+{
+    std::vector<int64_t> members;
+    members.push_back(5001);
+    std::string json = GroupProtocolClient::buildCreateGroupRequest("", members);
+    Json::Value root;
+    REQUIRE(parseJsonText(json, root));
+    //服务端要求 groupname 字段存在且为字符串；空串表示使用自动群名
+    REQUIRE(root["groupname"].isString());
+    CHECK(root["groupname"].asString().empty());
+}
+
+TEST_CASE("GP58 parseUserGroupsResponse 取出本人置顶状态，老服务端不带时为 0", "[group][grouppin]")
+{
+    const std::string body =
+        "{\"code\":0,\"msg\":\"ok\",\"groups\":["
+        "{\"groupid\":\"10000000001\",\"name\":\"team\",\"membercount\":8,\"pinned\":1},"
+        "{\"groupid\":\"10000000002\",\"name\":\"ops\",\"membercount\":3,\"pinned\":0},"
+        "{\"groupid\":\"10000000003\",\"name\":\"old\",\"membercount\":2}]}";
+
+    UserGroupsResult out;
+    REQUIRE(GroupProtocolClient::parseUserGroupsResponse(body, out));
+    REQUIRE(out.m_groups.size() == 3);
+    CHECK(out.m_groups[0].m_pinned == 1);
+    CHECK(out.m_groups[1].m_pinned == 0);
+    //老服务端没有 pinned 字段：按未置顶处理
+    CHECK(out.m_groups[2].m_pinned == 0);
+}

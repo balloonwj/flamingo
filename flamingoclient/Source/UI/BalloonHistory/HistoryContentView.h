@@ -37,6 +37,7 @@
 #include "../BalloonChatWnd/ChatInlineText.h"      // 排版 / 绘制引擎与 InlinePlaced
 #include "../BalloonChatWnd/ChatLinkDetect.h"      // LinkSpan（成员需完整类型）
 #include "../BalloonChatWnd/ChatTextSelection.h"   // SelLayout（成员需完整类型）
+#include "../BalloonChatWnd/ChatClipboardContent.h" // ChatClipSegment（复制选区时返回）
 #include "HistoryView.h"                           // HighlightRange
 
 namespace balloonhistory {
@@ -105,6 +106,14 @@ public:
     bool IsExpanded() const { return m_expanded; }
 
     /**
+     *  设置单行模式：只画一行，放不下时末行以省略号收尾（与折叠态的省略号同一套画法）。
+     *  用于文件卡片上的文件名 —— 名字再长也只占一行，又保留搜索高亮与拖选。
+     *    singleLine：true=单行；false（默认）=按折叠 / 展开态决定行数。
+     *  单行模式优先于折叠 / 展开态。副作用：作废高度测量缓存并触发重绘。
+     */
+    void SetSingleLine(bool singleLine);
+
+    /**
      *  取当前正文的「扁平文本」：各文字段原样拼接，每个内联表情占一个 U+FFFC
      *  占位字符（口径见类注释）。纯文本入口喂进来的内容原样返回。
      *
@@ -168,11 +177,84 @@ public:
     bool OnSetCursor(POINT pt) override;
 
     /**
-     *  DuiControl 覆写：左键抬起时若落在超链接上，请宿主窗打开它（投
-     *  WM_CHAT_OPEN_LINK，URL 用堆上的 std::wstring* 传递，宿主处理后 delete）。
-     *  本控件不直接 ShellExecute —— 协议白名单校验只该有一处，放在宿主窗里。
+     *  DuiControl 覆写：左键抬起。结束拖选；若这一趟没有选出文字、且按下与抬起落在
+     *  同一条超链接上，就当成点击，请宿主窗打开它（投 WM_CHAT_OPEN_LINK，URL 用堆上的
+     *  std::wstring* 传递，宿主处理后 delete）。本控件不直接 ShellExecute —— 协议
+     *  白名单校验只该有一处，放在宿主窗里。
      */
     bool OnLButtonUp(POINT pt, UINT mkFlags) override;
+
+    // ---- 文字选区：鼠标拖选、双击选中整条、复制 ----
+    //
+    // 选区下标按扁平文本口径（见类注释），与高亮区间同一套。同一时刻整棵控件树里
+    // 只有一个本类实例持有选区：在某一条上开始拖选时，其它条的选区会被清掉。
+
+    /**
+     *  DuiControl 覆写：左键按下即开始拖选。记下按下处的字符下标作为选区起点，并
+     *  抓取鼠标（拖出本控件乃至拖出窗口都要继续收到移动事件）；同时清掉树里其它
+     *  实例的选区。还没绘制过（没有排版模型）时不处理。
+     *  @return 开始了拖选返回 true（消费这次按下）
+     */
+    bool OnLButtonDown(POINT pt, UINT mkFlags) override;
+
+    /**
+     *  DuiControl 覆写：拖选过程中把当前点映射成字符下标作为选区另一端并重绘。
+     *  折叠态下终点不会越过可见部分的末尾。
+     *  @return 正在拖选时返回 true；否则 false，交给框架继续分发
+     */
+    bool OnMouseMove(POINT pt, UINT mkFlags) override;
+
+    /**
+     *  DuiControl 覆写：双击选中整条消息（折叠态下也包括没显示出来的部分），与聊天
+     *  气泡的双击行为一致。
+     *  @return 恒为 true（消费这次双击）
+     */
+    bool OnLButtonDblClk(POINT pt, UINT mkFlags) override;
+
+    /**
+     *  当前是否有非空选区。
+     *  @return 有选中的文字（或表情）时返回 true
+     */
+    bool HasTextSelection() const;
+
+    //清除选区（没有选区时什么都不做）。副作用：有选区时触发重绘。
+    void ClearTextSelection();
+
+    //选中整条消息，等同于双击。副作用：触发重绘。
+    void SelectAllText();
+
+    /**
+     *  给定点是否落在当前选区的高亮矩形里。右键菜单据此决定"复制"复制选中部分还是
+     *  整条：点在选区上复制选中部分，点在别处复制整条。
+     *    pt：宿主客户区坐标。
+     *  @return 有选区、已绘制过、且点落在某块高亮矩形里时返回 true
+     */
+    bool PointInTextSelection(POINT pt) const;
+
+    /**
+     *  取当前选区的内容，拆成剪贴板片段（文字段 + 表情段），交给
+     *  balloonchatwnd::WriteChatContentToClipboard 写剪贴板：表情在聊天输入框里能还原，
+     *  纯文字形式里写成 "[表情]"。
+     *  @return 片段列表；没有选区时返回空
+     */
+    std::vector<balloonchatwnd::ChatClipSegment> GetSelectedClipSegments() const;
+
+    /**
+     *  清除 root 这棵控件树里除 keep 以外所有本类实例的选区。控件自己开始新的拖选时
+     *  调用；宿主窗也可以用它一次性清掉整页的选区。
+     *    root：要遍历的树根（引用，不转移所有权）；为空时什么都不做。
+     *    keep：保留选区的那个实例；传 NULL 表示全部清除。
+     */
+    static void ClearTextSelectionsInTree(balloonwjui::DuiControl* root,
+                                          const HistoryContentView* keep);
+
+    /**
+     *  测试接口：最近一次绘制得到的字符级排版模型（相对本控件左上角），用来算出
+     *  某个字符的屏幕位置、模拟鼠标拖选。
+     *  @return 已绘制过时返回模型指针（归本控件所有，下次绘制或换内容后失效）；
+     *          还没绘制过返回 NULL
+     */
+    const balloonchatwnd::SelLayout* Test_GetSelLayout() const;
 
 private:
     //建一支绘制 / 测量共用的字体（微软雅黑，字号取 m_fontPx）。与
@@ -200,18 +282,35 @@ private:
     //作废高度测量缓存（内容 / 字号变了必须调，否则行高还是按旧内容算的）。
     void InvalidateMeasureCache();
 
-    //把各高亮区间画成底色矩形。placed 是本次绘制用的排版结果，rc 为本控件矩形。
-    void PaintHighlights(HDC hdc, const RECT& rc,
-                         const std::vector<balloonchatwnd::InlinePlaced>& placed);
+    //把各高亮区间画成底色矩形。按本次绘制建好的 m_charLayout 取矩形，rc 为本控件矩形。
+    void PaintHighlights(HDC hdc, const RECT& rc);
+
+    //把当前选区画成底色矩形（与聊天气泡选区同色）。须在文字之前画，rc 为本控件矩形。
+    void PaintSelection(HDC hdc, const RECT& rc);
+
+    //把字符区间 [start, end) 的矩形用给定画刷铺底，超出本控件的部分裁掉。高亮与选区
+    //两处共用。
+    void FillCharRanges(HDC hdc, const RECT& rc, int start, int end, HBRUSH brush);
+
+    //把宿主客户区坐标映射成拖选端点的字符下标，不越过可见部分的末尾。
+    //须在已绘制过（m_charLayoutValid 为 true）时调用。
+    int CharIndexAtPoint(POINT pt) const;
+
+    //沿父链找到控件树的根，给 ClearTextSelectionsInTree 用。
+    balloonwjui::DuiControl* TreeRoot();
+
+    //请宿主窗打开第 index 条超链接（投 WM_CHAT_OPEN_LINK）。
+    void OpenLinkByIndex(int index);
+
+    //丢弃选区与拖选状态，不触发重绘。换内容时调用：旧下标对新内容没有意义。
+    void ResetSelectionState();
 
     //折叠态内容没画完时，在末行末尾画一个省略号（与正文同字体同颜色）。
     void PaintCollapsedEllipsis(HDC hdc, const RECT& rc,
                                 const std::vector<balloonchatwnd::InlinePlaced>& placed);
 
-    //把识别出的超链接用链接色 + 下划线重画一遍，并把本次的字符级排版模型存进
-    //m_linkLayout 供命中测试用。placed 为本次绘制用的排版结果，rc 为本控件矩形。
-    void PaintLinks(HDC hdc, const RECT& rc,
-                    const std::vector<balloonchatwnd::InlinePlaced>& placed);
+    //把识别出的超链接用链接色 + 下划线重画一遍（按 m_charLayout 定位）。rc 为本控件矩形。
+    void PaintLinks(HDC hdc, const RECT& rc);
 
     //落点命中了第几条超链接；没命中（或还没画过、没有链接）返回 -1。
     //  pt：落点（宿主客户区坐标）。
@@ -236,12 +335,17 @@ private:
     //关掉时恒为空，于是渲染与命中两处自然退化成"没有链接"。
     std::vector<balloonchatwnd::LinkSpan> m_links;
 
-    //最近一次绘制时的字符级排版模型与控件原点。命中测试要拿它把落点映射回字符
-    //区间 —— 排版只在绘制时算得出来（要 HDC 与字体），故存下来给鼠标事件用。
-    //m_linkLayoutValid 为 false 表示还没画过，此时一律判为没命中。
-    mutable balloonchatwnd::SelLayout m_linkLayout;
-    mutable POINT                     m_linkOrigin;
-    mutable bool                      m_linkLayoutValid;
+    //最近一次绘制时的字符级排版模型与控件原点。链接命中、拖选时把落点映射成字符
+    //下标、画选区与关键字高亮底色都用它 —— 排版只在绘制时算得出来（要 HDC 与字体），
+    //故每次绘制都重建一份存下来给鼠标事件用。m_charLayoutValid 为 false 表示还没画过
+    //（或内容已换），此时鼠标事件一律不处理。
+    mutable balloonchatwnd::SelLayout m_charLayout;
+    mutable POINT                     m_charOrigin;
+    mutable bool                      m_charLayoutValid;
+
+    //最近一次绘制时可见部分的末尾下标（扁平文本口径）。折叠态下它小于全文长度，
+    //拖选的终点不越过它，免得把没显示出来的内容也选进去。
+    mutable int m_visibleEnd;
 
     //正文颜色。
     COLORREF m_textColor;
@@ -251,6 +355,24 @@ private:
 
     //折叠 / 展开态；true=画全。
     bool m_expanded;
+
+    //是否单行模式（只画一行、放不下补省略号）；为 true 时优先于折叠 / 展开态。
+    bool m_singleLine;
+
+    // ---- 文字选区（扁平文本口径；换内容时清空）----
+
+    //选区锚点：按下处的字符下标。-1 表示没有选区。
+    int m_selAnchor;
+
+    //选区活动端：拖动中鼠标当前所在的字符下标。-1 表示没有选区；与锚点相等时是空选区。
+    int m_selCaret;
+
+    //是否正在拖选：左键按下后置 true，抬起时置 false。拖选期间本控件抓着鼠标。
+    bool m_selDragging;
+
+    //按下时命中的超链接下标，-1 表示没按在链接上。链接在抬起时才判定为点击：只有按下
+    //与抬起落在同一条链接上、且期间没有选出文字，才打开它。
+    int m_linkPressIdx;
 
     // ---- 高度测量缓存（生命周期同本控件；内容 / 字号变化时由 InvalidateMeasureCache 作废）----
 

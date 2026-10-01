@@ -13,6 +13,7 @@
 #include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
 #include "UserManager.h"   //仅为复用群ID下界宏 GROUPID_BOUBDARY
+#include "GroupAutoName.h" //自动群名的生成规则
 
 GroupManager::GroupManager()
 {
@@ -83,7 +84,7 @@ static const char* const kGroupSelectColumns =
     "g.f_ownerid, g.f_join_mode, g.f_mute_all, g.f_create_time, "
     "g.f_intro, g.f_at_all_scope, g.f_new_see_history, g.f_member_invite, "
     "g.f_welcome_on, g.f_welcome_text, g.f_sensitive_on, "
-    "g.f_announce_id, g.f_announce_title, g.f_announce_time";
+    "g.f_announce_id, g.f_announce_title, g.f_announce_time, g.f_name_custom";
 
 //群成员数子查询，接在 kGroupSelectColumns 之后作为最后一列
 static const char* const kGroupMemberCountColumn =
@@ -111,7 +112,8 @@ static void fillGroupRecord(Field* pRow, GroupRecord& g)
     g.announceid    = static_cast<int64_t>(pRow[16].getUInt64());
     g.announcetitle = pRow[17].getCppString();
     g.announcetime  = static_cast<int64_t>(pRow[18].getUInt64());
-    g.membercount   = pRow[19].getInt32();
+    g.namecustom    = pRow[19].getInt32();
+    g.membercount   = pRow[20].getInt32();
 }
 
 int64_t GroupManager::createGroup(const std::string& name, int32_t ownerid,
@@ -131,10 +133,13 @@ int64_t GroupManager::createGroup(const std::string& name, int32_t ownerid,
     std::vector<char> escName(name.size() * 2 + 1, '\0');
     pConn->escapeString(&escName[0], name.c_str(), static_cast<uint32_t>(name.size()));
 
-    //1) 写 t_group（facetype/customface/announcement/join_mode/mute_all 取列默认值）
+    //1) 写 t_group（facetype/customface/announcement/join_mode/mute_all 取列默认值）。
+    //   群名为空时先写空串并标记为自动群名，等成员行写完再由 refreshAutoGroupName 生成
+    const int nameCustom = name.empty() ? 0 : 1;
     std::ostringstream osGroup;
-    osGroup << "INSERT INTO t_group(f_groupid, f_name, f_ownerid, f_create_time) VALUES("
-            << groupid << ", '" << &escName[0] << "', " << ownerid << ", " << createTime << ")";
+    osGroup << "INSERT INTO t_group(f_groupid, f_name, f_name_custom, f_ownerid, f_create_time) VALUES("
+            << groupid << ", '" << &escName[0] << "', " << nameCustom << ", "
+            << ownerid << ", " << createTime << ")";
     if (!pConn->execute(osGroup.str().c_str()))
     {
         LOGE("GroupManager::createGroup insert t_group error, name: %s", name.c_str());
@@ -160,6 +165,13 @@ int64_t GroupManager::createGroup(const std::string& name, int32_t ownerid,
         pConn->execute(osMember.str().c_str());
     }
 
+    //4) 没给群名的，按刚写入的成员生成自动群名
+    if (nameCustom == 0)
+    {
+        std::string autoName;
+        refreshAutoGroupName(groupid, autoName);
+    }
+
     return groupid;
 }
 
@@ -181,10 +193,13 @@ int64_t GroupManager::createGroup(const std::string& name, int32_t ownerid,
     std::vector<char> escName(name.size() * 2 + 1, '\0');
     pConn->escapeString(&escName[0], name.c_str(), static_cast<uint32_t>(name.size()));
 
-    //1) 写 t_group（facetype/customface/announcement/join_mode/mute_all 取列默认值）
+    //1) 写 t_group（facetype/customface/announcement/join_mode/mute_all 取列默认值）。
+    //   群名为空时先写空串并标记为自动群名，等成员行写完再由 refreshAutoGroupName 生成
+    const int nameCustom = name.empty() ? 0 : 1;
     std::ostringstream osGroup;
-    osGroup << "INSERT INTO t_group(f_groupid, f_name, f_ownerid, f_create_time) VALUES("
-            << groupid << ", '" << &escName[0] << "', " << ownerid << ", " << createTime << ")";
+    osGroup << "INSERT INTO t_group(f_groupid, f_name, f_name_custom, f_ownerid, f_create_time) VALUES("
+            << groupid << ", '" << &escName[0] << "', " << nameCustom << ", "
+            << ownerid << ", " << createTime << ")";
     if (!pConn->execute(osGroup.str().c_str()))
     {
         LOGE("GroupManager::createGroup(admin) insert t_group error, name: %s", name.c_str());
@@ -221,6 +236,13 @@ int64_t GroupManager::createGroup(const std::string& name, int32_t ownerid,
                  << groupid << ", " << memberids[i] << ", " << group_role_member << ", "
                  << createTime << ")";
         pConn->execute(osMember.str().c_str());
+    }
+
+    //5) 没给群名的，按刚写入的成员生成自动群名
+    if (nameCustom == 0)
+    {
+        std::string autoName;
+        refreshAutoGroupName(groupid, autoName);
     }
 
     return groupid;
@@ -500,8 +522,16 @@ bool GroupManager::updateGroupInfo(const UpdateGroupInfoRequest& req)
 
     //逐项拼 SET 片段，只含 has_* 为 true 的列；文本列经 makeTextSet 转义
     std::vector<std::string> sets;
-    if (req.has_name)
+    //群名非空：改为用户设定的群名，此后不再随成员变化；
+    //群名为空串：恢复为自动群名，群名本身在 UPDATE 之后由 refreshAutoGroupName 重算
+    const bool restoreAutoName = req.has_name && req.name.empty();
+    if (req.has_name && !restoreAutoName)
+    {
         sets.push_back(makeTextSet(pConn.get(), "f_name", req.name));
+        sets.push_back("f_name_custom = 1");
+    }
+    if (restoreAutoName)
+        sets.push_back("f_name_custom = 0");
     if (req.has_facetype)
         sets.push_back("f_facetype = " + std::to_string(req.facetype));
     if (req.has_customface)
@@ -554,6 +584,13 @@ bool GroupManager::updateGroupInfo(const UpdateGroupInfoRequest& req)
     {
         LOGE("GroupManager::updateGroupInfo error, groupid: %lld", (long long)req.groupid);
         return false;
+    }
+
+    if (restoreAutoName)
+    {
+        std::string autoName;
+        refreshAutoGroupName(req.groupid, autoName);
+        LOGI("group name restored to auto, groupid: %lld", (long long)req.groupid);
     }
     return true;
 }
@@ -883,6 +920,145 @@ bool GroupManager::transferOwner(int64_t groupid, int32_t oldOwner, int32_t newO
           << " WHERE f_groupid = " << groupid << " AND f_userid = " << oldOwner;
     pConn->execute(osOld.str().c_str());
 
+    return true;
+}
+
+// ====================================================================
+// 自动群名
+// ====================================================================
+
+bool GroupManager::refreshAutoGroupName(int64_t groupid, std::string& newName)
+{
+    std::unique_ptr<IDatabase> pConn;
+    pConn.reset(DbFactory::createConnection());
+    if (!pConn)
+    {
+        LOGE("GroupManager::refreshAutoGroupName db init failed, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
+        return false;
+    }
+
+    //1) 读群主、当前群名与自定义标记；用户设定了群名的群不做改动
+    std::ostringstream osGroup;
+    osGroup << "SELECT f_ownerid, f_name, f_name_custom FROM t_group WHERE f_groupid = " << groupid;
+    QueryResult* pGroup = pConn->query(osGroup.str().c_str());
+    if (pGroup == NULL)
+        return false;
+
+    Field* pGroupRow = pGroup->fetch();
+    if (pGroupRow == NULL)
+    {
+        pGroup->endQuery();
+        delete pGroup;
+        return false;
+    }
+    const int64_t     ownerid    = static_cast<int64_t>(pGroupRow[0].getUInt64());
+    const std::string oldName    = pGroupRow[1].getCppString();
+    const int         nameCustom = pGroupRow[2].getInt32();
+    pGroup->endQuery();
+    delete pGroup;
+    if (nameCustom != 0)
+        return false;
+
+    //2) 读全部成员的 userid、昵称与入群时间。用 LEFT JOIN 是为了在用户行缺失时成员
+    //   仍被读出（昵称为空串，生成群名时被跳过），而不是整行消失
+    std::ostringstream osMembers;
+    osMembers << "SELECT m.f_userid, u.f_nickname, m.f_join_time FROM t_group_member m "
+                 "LEFT JOIN t_user u ON u.f_user_id = m.f_userid WHERE m.f_groupid = " << groupid;
+    QueryResult* pMembers = pConn->query(osMembers.str().c_str());
+    //群里至少有群主一行，读不到任何成员只可能是数据库出错，此时不改群名
+    if (pMembers == NULL)
+        return false;
+
+    std::vector<chatserver::GroupNameMember> members;
+    while (true)
+    {
+        Field* pRow = pMembers->fetch();
+        if (pRow == NULL)
+            break;
+
+        chatserver::GroupNameMember m;
+        m.userid   = static_cast<int64_t>(pRow[0].getUInt64());
+        m.nickname = pRow[1].getCppString();
+        m.jointime = static_cast<int64_t>(pRow[2].getUInt64());
+        members.push_back(m);
+
+        if (!pMembers->nextRow())
+            break;
+    }
+    pMembers->endQuery();
+    delete pMembers;
+
+    //3) 与当前群名相同就不写库，调用方也就不必推送
+    const std::string name = chatserver::BuildAutoGroupName(ownerid, members);
+    if (name == oldName)
+        return false;
+
+    //4) 写库。条件里再判一次 f_name_custom，避免读与写之间群主刚好设定了群名时被覆盖
+    std::ostringstream osUpdate;
+    osUpdate << "UPDATE t_group SET " << makeTextSet(pConn.get(), "f_name", name)
+             << " WHERE f_groupid = " << groupid << " AND f_name_custom = 0";
+    if (!pConn->execute(osUpdate.str().c_str()))
+    {
+        LOGE("GroupManager::refreshAutoGroupName update error, groupid: %lld", (long long)groupid);
+        return false;
+    }
+
+    LOGI("auto group name refreshed, groupid: %lld, members: %d, name: %s",
+         (long long)groupid, (int)members.size(), name.c_str());
+    newName = name;
+    return true;
+}
+
+bool GroupManager::refreshAutoGroupNamesOfMember(int32_t userid,
+                                                 std::vector<std::pair<int64_t, std::string> >& changes)
+{
+    std::unique_ptr<IDatabase> pConn;
+    pConn.reset(DbFactory::createConnection());
+    if (!pConn)
+    {
+        LOGE("GroupManager::refreshAutoGroupNamesOfMember db init failed, db: %s", Singleton<CDbConfig>::Instance().describe().c_str());
+        return false;
+    }
+
+    //该成员所在的全部自动命名群
+    std::ostringstream osSql;
+    osSql << "SELECT g.f_groupid FROM t_group g "
+             "INNER JOIN t_group_member m ON m.f_groupid = g.f_groupid "
+             "WHERE m.f_userid = " << userid << " AND g.f_name_custom = 0";
+    QueryResult* pResult = pConn->query(osSql.str().c_str());
+    //结果集为空时 query 也返回 NULL：该成员不在任何自动命名群里，无事可做
+    if (pResult == NULL)
+        return true;
+
+    std::vector<int64_t> groupids;
+    while (true)
+    {
+        Field* pRow = pResult->fetch();
+        if (pRow == NULL)
+            break;
+
+        groupids.push_back(static_cast<int64_t>(pRow[0].getUInt64()));
+
+        if (!pResult->nextRow())
+            break;
+    }
+    pResult->endQuery();
+    delete pResult;
+
+    //逐个群重算；某成员是群主时他的昵称不在群名里，重算结果不变，不会产生推送
+    int renamed = 0;
+    for (size_t i = 0; i < groupids.size(); ++i)
+    {
+        std::string name;
+        if (refreshAutoGroupName(groupids[i], name))
+        {
+            changes.push_back(std::make_pair(groupids[i], name));
+            ++renamed;
+        }
+    }
+
+    LOGI("auto group names refreshed for member, userid: %d, auto groups: %d, renamed: %d",
+         userid, (int)groupids.size(), renamed);
     return true;
 }
 

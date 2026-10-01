@@ -99,18 +99,42 @@ public:
      *  之后两个列表都是空的，落点还能保持一致。
      *
      *  星的横坐标由基类的 GetItemLabelTextRect 给出（文字实际画到哪儿结束，取决于
-     *  缩进层级、图标尺寸、右侧占位与省略号截断，只有基类算得出）。因此本标记<u>不需要</u>
-     *  调用方预留宽度：名字过长时基类会先把名字省略号截断，星跟在截断处之后。
+     *  缩进层级、图标尺寸、右侧占位与省略号截断，只有基类算得出）。调用方不必预留
+     *  宽度：本类会把星的宽度计入该行的右侧占位，名字过长时基类先把名字省略号截断，
+     *  星跟在截断处之后，不会压到右侧的时间 / 成员数 / 状态徽标。
+     *
+     *  注意：打了标记的行由本类接管基类 rightText（写入等宽空格占位），调用方不要再
+     *  对这些行直接调用 SetItemRightText。
      *    id       节点 id（AddRoot / AddChild 的返回值）。
      *    starred  该联系人是否被特别关注。
      */
     void SetItemStarred(int id, bool starred);
 
     /**
-     *  清空所有节点的行装饰接管记录（上排右侧文字 / 未读红点 / 置顶 / 免打扰 / 特别关注）。
+     *  设置某节点是否画「我的收藏」徽章：在名字之后画一个实心书签（见 MainPanelIcons.h
+     *  kIconBookmark），同时被特别关注时排在星标之后。部门树的联系人行、群列表的群行、
+     *  会话列表的会话行共用；「我的收藏」分区里的行全是收藏，调用方不必再打这个标记。
+     *
+     *  位置规则与星标相同：横坐标取自 GetItemLabelTextRect，徽章宽度计入右侧占位，
+     *  名字过长时先截断名字，徽章不会压到右侧内容。使用约束也与星标相同（本类接管
+     *  该行的基类 rightText）。
+     *    id        节点 id（AddRoot / AddChild 的返回值）。
+     *    favorite  该联系人 / 群是否已收藏。
+     */
+    void SetItemFavorite(int id, bool favorite);
+
+    // 某行当前是否画收藏徽章（SetItemFavorite 设过且为 true）。只读查询，供核对行标记
+    // 是否与收藏模型一致（主面板基准测试用）。
+    //   id：节点 id。返回：带徽章返回 true。
+    bool IsItemFavorite(int id) const { return m_favoriteRows.count(id) != 0; }
+
+    /**
+     *  清空所有节点的行装饰接管记录（上排右侧文字 / 未读红点 / 置顶 / 免打扰 / 特别关注 /
+     *  收藏 / 已写入的占位空格个数）。
      *  任何一棵树整表重建（Clear 后重填）之前都要调用 —— 基类 Clear 只清节点，
-     *  不认识本子类的这几个映射，而节点 id 会被复用，不清的话新节点会莫名其妙
-     *  继承上一批节点的角标与标记。会话树与群树都要调。
+     *  不认识本子类的这几个映射。基类 Clear 不重置节点 id 计数（DuiTreeView.cpp 的
+     *  AddRoot / AddChild 一律 m_nextId++），新节点不会继承旧节点的记录，但旧条目会
+     *  一直留在映射里，且绘制时要逐条遍历。会话树与群树都要调。
      */
     void ClearAllRowDecorations();
 
@@ -129,10 +153,27 @@ public:
      */
     void OnPaint(HDC hdc, const RECT& rcDirty) override;
 
+    /**
+     *  所在窗口的 DPI 变化时由宿主调用。各行写进基类 rightText 的占位空格个数，是按
+     *  旧 DPI 下的默认字体量出来的；字号变了以后要按新字体重新算一遍，否则右侧时间、
+     *  角标的预留宽度与实际绘制宽度对不上。
+     *    dpi  新的 DPI（重算时经 GetDefaultFont 间接使用，不直接读取）。
+     */
+    void OnDpiChanged(int dpi) override;
+
 private:
     /**
-     *  画所有被「特别关注」的行的星标（在各自主标签文字之后）。由 OnPaint 在基类
-     *  画完之后调用；m_starredRows 为空时立即返回，不产生任何开销。
+     *  算出与脏区相交的可见行号范围 [outFirst, outLast]（行矩形与 DuiTreeView 单列绘制
+     *  同口径）。没有相交的行时 outLast < outFirst。OnPaint 与 PaintNameMarks 只遍历这一段，
+     *  几千行的列表每次绘制只看十几行。
+     *    rcDirty：本次重画的区域（客户区坐标）。
+     */
+    void DirtyRowRange_(const RECT& rcDirty, int& outFirst, int& outLast) const;
+
+    /**
+     *  画名字之后的标记：先画「特别关注」星标，再画「我的收藏」书签徽章（两者都有时
+     *  徽章紧跟在星之后）。由 OnPaint 在基类画完之后调用；两个集合都为空时立即返回，
+     *  不产生任何开销。
      *
      *  横坐标取自基类的 GetItemLabelTextRect —— 名字画到哪儿结束只有基类算得出
      *  （缩进层级、图标尺寸、右侧占位、省略号截断都影响它）。取不到（节点不可见、
@@ -140,12 +181,27 @@ private:
      *    hdc      目标设备上下文。
      *    rcDirty  脏矩形（客户区坐标）；不与之相交的行跳过。
      */
-    void PaintStarredMarks(HDC hdc, const RECT& rcDirty);
+    void PaintNameMarks(HDC hdc, const RECT& rcDirty);
+
+    /**
+     *  某节点名字之后的标记（星标、收藏徽章）连同间距一共占多宽，单位像素；没有标记时为 0。
+     *    id  节点 id。
+     */
+    int NameMarksWidth_(int id) const;
+
+    /**
+     *  某节点右侧列（上排文字、下排未读胶囊与静音图标）要给行右端的状态徽标让出多宽，
+     *  单位像素：有状态徽标时为"徽标宽 + 间距"，没有时为 0。基类把状态徽标贴在行右端，
+     *  本类画的右侧列须整体让到它左边，否则会压在徽标上（回归用例见 MainPanelRowMarkTests 的 CRL1）。
+     *    id  节点 id。
+     */
+    int StatusIconReserve_(int id) const;
 
     /**
      *  重算某节点右侧列的预留宽度并写回基类 rightText（等宽空格占位）。预留宽取
-     *  "上排时间宽"与"下排（静音图标 + 未读胶囊）宽"的较大者，让基类把左侧标题 /
-     *  预览裁剪在右侧列左边、不顶进来。时间 / 未读数 / 免打扰任一变化后都要调。
+     *  "上排时间宽"与"下排（静音图标 + 未读胶囊）宽"的较大者，再加上名字之后的标记
+     *  宽度，让基类把左侧标题 / 预览裁剪在右侧列左边、并给标记留出位置。时间 / 未读数 /
+     *  免打扰 / 特别关注 / 收藏任一变化后都要调。
      *    id  节点 id。
      */
     void UpdateRightReserve_(int id);
@@ -158,7 +214,7 @@ private:
     // 节点 id → 未读角标数字。值 <= 0 或键不存在表示该行不画红点。仅会话树填充。
     std::map<int, int> m_badges;
 
-    // 置顶会话的节点 id 集合。命中即给整行覆一层淡暗色。仅会话树填充。
+    // 置顶的节点 id 集合。命中即给整行覆一层淡暗色并在左侧画橙色竖条。会话树与群树填充。
     std::set<int> m_pinnedRows;
 
     // 免打扰会话的节点 id 集合。命中即在右下角画静音图标、且未读胶囊改用灰底。
@@ -168,6 +224,19 @@ private:
     // 被「特别关注」的节点 id 集合。通讯录行与最近会话行共用，为空时 OnPaint 的
     // 星标那一段整段跳过（群树、以及一个人都没关注时零开销）。
     std::set<int> m_starredRows;
+
+    // 已收藏的节点 id 集合。部门树、群树、会话树共用；与 m_starredRows 同时为空时
+    // OnPaint 的名字标记那一段整段跳过。整表重建前由 ClearAllRowDecorations 清空。
+    std::set<int> m_favoriteRows;
+
+    // 节点 id → 上次经 UpdateRightReserve_ 写进基类 rightText 的占位空格个数。算出来的
+    // 个数与上次相同时不再写回：基类 SetItemRightText 要按 id 逐个扫描节点，会话树
+    // 每个节点在填充时要算三四次占位，而结果几乎总是不变（2026-10-01 基准实测这部分
+    // 约占一次会话列表重建的四成）。
+    // 约定：设了上排文字 / 角标 / 标记的行，其基类 rightText 只由 UpdateRightReserve_
+    // 写，调用方不要再直接 SetItemRightText，否则这里记的个数与实际内容不一致，下次
+    // 个数相同时会跳过写回。整表重建前由 ClearAllRowDecorations 清空。
+    std::map<int, int> m_rightSpacerLen;
 };
 
 } // namespace balloonmain

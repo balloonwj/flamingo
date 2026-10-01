@@ -37,6 +37,7 @@
 #include "../UI/BalloonChatWnd/ChatBubble.h"
 #include "../UI/BalloonChatWnd/ChatMessageList.h"
 #include "../UI/BalloonChatWnd/ChatMockData.h"
+#include "../Common/Util/PerfStopWatch.h"   // PerfNowMs：WHB4 把平滑滚动推到结束
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox / DuiHBox
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiScrollBar.h"   // DuiScrollView
@@ -66,6 +67,9 @@ const int kChatListH = 300;
 
 //聊天列表里追加的消息条数。二十条长文本稳稳超过 kChatListH。
 const int kChatMsgCount = 20;
+
+//把聊天列表的平滑滚动推到结束所用的时间余量（毫秒）：远大于动画时长，推进一次必然走完。
+const double kFinishSmoothScrollMs = 100000.0;
 
 /**
  *  搭一棵「滚动视口 → 内容 VBox → 单个待测控件」的最小控件树，并排好版。
@@ -202,6 +206,10 @@ TEST_CASE("WHB4 聊天气泡上的滚轮上冒到消息列表", "[wheel][bubble]
 
     //已经在底部，只能向上滚：zDelta 取 +WHEEL_DELTA。
     CHECK(DuiHost::DispatchMouseWheel(bubble, kWheelPt, WHEEL_DELTA, 0) == true);
+    //列表收到滚轮后启动的是平滑滚动（2026-09-30 起），位置由逐帧驱动推进，这里直接
+    //推到动画结束再看位置。
+    CHECK(list.IsSmoothScrolling());
+    list.AdvanceSmoothScroll(PerfNowMs() + kFinishSmoothScrollMs);
     CHECK(list.ScrollY() < posAtBottom);
 }
 

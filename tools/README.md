@@ -29,9 +29,10 @@
    时长是否归零。屏幕保护程序与自动锁屏依据的正是这个计时器。
 4. **（可选）持续合成输入时屏保确实不启动** —— 需要显式加 `-LiveScreenSaver`，见下文。
 
-产品代码中对应的实现在 `flamingoclient/Source/BalloonMain/KeepAwakeSession.{h,cpp}`，
+产品代码中对应的实现在 `flamingoclient/Source/UI/BalloonMain/KeepAwakeSession.{h,cpp}`，
 判定逻辑在 `KeepAwakePolicy.{h,cpp}`（有单元测试 `Source/Tests/KeepAwakePolicyTests.cpp`）。
-Win32 API 那一层没有单元测试，本脚本就是它的验收手段。
+Win32 API 那一层没有单元测试，本脚本就是它的验收手段。完整的技术方案见
+`docs/禁止机器休眠方案.md`。
 
 ### 怎么运行
 

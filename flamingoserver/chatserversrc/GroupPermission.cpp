@@ -176,4 +176,16 @@ const char* SetMemberRoleCheckToMessage(set_member_role_check result)
     }
 }
 
+bool IsMutedForSpeaking(int selfMuted, int groupMuteAll, int role)
+{
+    //被单独禁言：群主与管理员也不例外（能被单独禁言的本就不会是群主）
+    if (selfMuted != 0)
+    {
+        return true;
+    }
+
+    //全员禁言只约束普通成员，群主与管理员仍可发言
+    return groupMuteAll != 0 && role < group_role_admin;
+}
+
 } // namespace chatserver

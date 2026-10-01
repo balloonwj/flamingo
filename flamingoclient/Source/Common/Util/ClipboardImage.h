@@ -27,7 +27,7 @@
  *    · <u>调用前进程须已初始化 GDI+</u>（用 Gdiplus::Bitmap 解码，才能吃下 PNG /
  *      JPG / GIF / BMP 等各种格式）。客户端在启动时已初始化。
  *
- *  本文件只有一个 inline 函数、纯 header，无需加进工程文件。
+ *  本文件只有两个 inline 函数、纯 header，无需加进工程文件。
  *  包含它之前调用方须已引入 <windows.h> 与 <gdiplus.h>。
  *
  *  balloonwj@qq.com   2026-08-05
@@ -40,34 +40,33 @@
 namespace flamingo {
 
 /**
- *  把一个本地图片文件放进系统剪贴板（CF_BITMAP）。
+ *  把一个本地图片文件解码并合成到白底上，得到一张可以放进剪贴板的位图（CF_BITMAP 用的 DDB）。
  *
- *    imagePath：图片文件完整路径（UTF-16）。NULL 或空串直接返回 false。
- *               支持 GDI+ 认得的所有格式（PNG / JPG / BMP / GIF / TIFF）。
+ *  与 CopyImageFileToClipboard 的区别是本函数不碰剪贴板：调用方需要在同一次打开剪贴板时
+ *  写入多种格式（例如聊天记录复制时同时写纯文字、Flamingo 自己的格式与位图）时用它。
  *
- *  @return 成功 true；文件不存在 / 解码失败 / 打开剪贴板失败 / 位图创建失败返回 false。
+ *    imagePath：图片文件完整路径（UTF-16）。NULL 或空串直接返回 NULL。
  *
- *  副作用：成功时会<u>清空</u>剪贴板原有内容再写入。写入成功后位图所有权转交系统，
- *          本函数不再释放；失败路径上自己释放干净，不泄漏 GDI 对象。
- *          剪贴板归属当前任务（OpenClipboard(NULL)）。
+ *  @return 成功返回位图句柄，<u>所有权归调用方</u>：交给 SetClipboardData 成功后归剪贴板，
+ *          否则须自行 DeleteObject。文件不存在 / 解码失败 / 位图创建失败返回 NULL。
  */
-inline bool CopyImageFileToClipboard(LPCWSTR imagePath)
+inline HBITMAP CreateClipboardBitmapFromFile(LPCWSTR imagePath)
 {
     if (imagePath == NULL || imagePath[0] == L'\0')
     {
-        return false;
+        return NULL;
     }
 
     // 先解码。用 GDI+ 而不是 LoadImage —— 后者只认 BMP，聊天里的图多是 PNG / JPG。
     Gdiplus::Bitmap* pSrc = Gdiplus::Bitmap::FromFile(imagePath);
     if (pSrc == NULL)
     {
-        return false;
+        return NULL;
     }
     if (pSrc->GetLastStatus() != Gdiplus::Ok)
     {
         delete pSrc;   // 解码失败也要释放探针对象
-        return false;
+        return NULL;
     }
 
     const int srcW = (int)pSrc->GetWidth();
@@ -75,7 +74,7 @@ inline bool CopyImageFileToClipboard(LPCWSTR imagePath)
     if (srcW <= 0 || srcH <= 0)
     {
         delete pSrc;
-        return false;
+        return NULL;
     }
 
     // 造一张与屏幕兼容的 DDB，把源图画上去。
@@ -89,7 +88,7 @@ inline bool CopyImageFileToClipboard(LPCWSTR imagePath)
     if (hdcScreen == NULL)
     {
         delete pSrc;
-        return false;
+        return NULL;
     }
 
     HBITMAP hBmp = ::CreateCompatibleBitmap(hdcScreen, srcW, srcH);
@@ -132,6 +131,29 @@ inline bool CopyImageFileToClipboard(LPCWSTR imagePath)
         {
             ::DeleteObject(hBmp);
         }
+        return NULL;
+    }
+
+    return hBmp;
+}
+
+/**
+ *  把一个本地图片文件放进系统剪贴板（CF_BITMAP）。
+ *
+ *    imagePath：图片文件完整路径（UTF-16）。NULL 或空串直接返回 false。
+ *               支持 GDI+ 认得的所有格式（PNG / JPG / BMP / GIF / TIFF）。
+ *
+ *  @return 成功 true；文件不存在 / 解码失败 / 打开剪贴板失败 / 位图创建失败返回 false。
+ *
+ *  副作用：成功时会<u>清空</u>剪贴板原有内容再写入。写入成功后位图所有权转交系统，
+ *          本函数不再释放；失败路径上自己释放干净，不泄漏 GDI 对象。
+ *          剪贴板归属当前任务（OpenClipboard(NULL)）。
+ */
+inline bool CopyImageFileToClipboard(LPCWSTR imagePath)
+{
+    HBITMAP hBmp = CreateClipboardBitmapFromFile(imagePath);
+    if (hBmp == NULL)
+    {
         return false;
     }
 

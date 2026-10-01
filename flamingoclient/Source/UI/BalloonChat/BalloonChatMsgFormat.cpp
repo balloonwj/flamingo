@@ -350,4 +350,17 @@ CString BuildRecallTipText(bool bIsSelf, const CString& operatorName)
     return tip;
 }
 
+CString BuildDeleteMessagesConfirmText(size_t count)
+{
+    if (count <= 1)
+    {
+        return _T("删除后，本机和你的其他设备都不再显示这条消息，对方不受影响。\n确定要删除吗？");
+    }
+
+    CString text;
+    text.Format(_T("删除后，本机和你的其他设备都不再显示这 %u 条消息，对方不受影响。\n确定要删除吗？"),
+                (unsigned int)count);
+    return text;
+}
+
 } // namespace balloonchat

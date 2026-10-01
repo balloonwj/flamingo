@@ -2027,14 +2027,44 @@ void SetContactText(DuiControl* root, UINT ctrlId, LPCTSTR text)
     }
 }
 
+namespace {
+
+// 自上而下，对 node 以及它所有可见的后代逐个按各自当前的矩形调用 ForceLayout。
+//
+// 只对根控件调一次 ForceLayout 是不够的：根控件排版时经 SetRect 摆放子容器，
+// 子容器矩形没有变化时 SetRect 直接返回，更深层的容器便不会重新排版。只要某个
+// 控件在隐藏期间经历过一次重排（容器排版时跳过不可见的子控件），它的矩形就已经
+// 过时，重新显示后若所在容器没有重新排版，它就按过时的矩形绘制。2026-09-30 的
+// 「备注名」文本框错位即由此而来：文本框位于根控件往下第三层，中间两层容器的
+// 矩形都没有变化。
+//
+// 父控件先排版、子控件后排版，于是每一层拿到的都是父控件刚算出的矩形。不可见的
+// 子树整棵跳过 —— 它的矩形本就无效，等它重新显示后由下一次重排算出。
+void ForceLayoutVisibleSubtree(DuiControl* node)
+{
+    if (node == NULL || !node->IsVisible())
+    {
+        return;
+    }
+    node->ForceLayout(node->GetRect());
+    const std::vector<std::unique_ptr<DuiControl>>& children = node->Children();
+    for (size_t i = 0; i < children.size(); ++i)
+    {
+        ForceLayoutVisibleSubtree(children[i].get());
+    }
+}
+
+} // anonymous namespace
+
 void RelayoutContactBody(DuiControl* root)
 {
     if (root == NULL)
     {
         return;
     }
-    // 以根控件当前矩形强制重排整树 —— 标签流式容器据此重新换行排布。
-    root->ForceLayout(root->GetRect());
+    // 以根控件当前矩形强制重排整树 —— 标签流式容器据此重新换行排布，显隐刚发生
+    // 变化的控件（如备注名的当前值、铅笔按钮与文本框）也据此拿到正确的矩形。
+    ForceLayoutVisibleSubtree(root);
     root->Invalidate();
 }
 

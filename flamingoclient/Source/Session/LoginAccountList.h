@@ -56,6 +56,32 @@ public:
 	 */
 	BOOL SetNickName(LPCTSTR lpszUser, LPCTSTR lpszNickName);
 
+	/**
+	 *  按系统设置里「自动登录」开关的新状态修改指定账号(见 docs/自动登录方案.md §4)。
+	 *  只改内存里的列表，随后由调用方 SaveFile 落盘。
+	 *    lpszUser：   账号名，不可为 NULL；账号须已在列表里。
+	 *    bAutoLogin： TRUE=打开自动登录：同时打开"记住密码"，并存下 lpszPwd
+	 *                 (否则下次启动没有密码可用)；FALSE=关闭自动登录：只取消该
+	 *                 标志，不动"记住密码"与已存的密码。
+	 *    lpszPwd：    打开时要存下的密码(本次登录所用的密码)；NULL 或空串表示
+	 *                 不改动已存的密码。关闭时忽略。超长时截断。
+	 *  返回：账号存在并已修改返回 TRUE；lpszUser 为 NULL 或账号不在列表里返回
+	 *        FALSE(此时列表不变)。
+	 */
+	BOOL ApplyAutoLoginSetting(LPCTSTR lpszUser, BOOL bAutoLogin, LPCTSTR lpszPwd);
+
+	/**
+	 *  登录成功后，把本次登录所用的账号信息记入列表。只改内存里的列表，随后由调用方
+	 *  SaveFile 落盘。
+	 *    lpInfo：本次登录的账号信息(登录窗采集的账号、密码、登录状态与两个勾选项)，
+	 *            由调用方持有，本函数只读、不修改；szNickName 字段被忽略。
+	 *  行为：账号已在列表里时更新其密码、登录状态与两个勾选项，已存的姓名保持不变；
+	 *        不在列表里时新增一条。无论哪种情况，bRememberPwd 为假时列表里<u>不</u>
+	 *        保存密码(已存的密码一并清空)。
+	 *  返回：已记入返回 TRUE；lpInfo 为 NULL 或账号为空串返回 FALSE(此时列表不变)。
+	 */
+	BOOL RecordLoginSuccess(const LOGIN_ACCOUNT_INFO* lpInfo);
+
 	BOOL Add(LPCTSTR lpszUser, LPCTSTR lpszPwd,				// 添加帐号
 		int nStatus, BOOL bRememberPwd, BOOL bAutoLogin);
 	BOOL Del(int nIndex);									// 删除帐号
@@ -115,6 +141,16 @@ private:
 	 *  让姓名整体错位。
 	 */
 	void PurgeBlankAccounts();
+
+	/**
+	 *  清空没勾"记住密码"的账号里残留的密码，由 LoadFile 在读入之后调用。
+	 *
+	 *  2026-09-30 之前，会话控制器在登录成功时把登录窗采集的整条信息复制进列表，没勾
+	 *  "记住密码"时密码也照样落盘。这样的记录已经存在于用户机器
+	 *  上，读入时清掉，下次保存即写回不含密码的文件；否则一个账号只要不再登录，它的
+	 *  密码就会一直留在文件里。勾了"记住密码"的账号不受影响。
+	 */
+	void ClearUnrememberedPasswords();
 
 	void Encrypt(char* lpBuf, int nLen);					// 加密
 	void Decrypt(char* lpBuf, int nLen);					// 解密

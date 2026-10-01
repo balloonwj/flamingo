@@ -104,8 +104,22 @@ BOOL CLoginAccountList::LoadFile(LPCTSTR lpszFileName)
 	// 姓名补齐之后再清理空账号 —— 尾块按位置对应主体记录，先删会让姓名错位。
 	PurgeBlankAccounts();
 
+	// 修复之前的客户端写下的、没勾"记住密码"却带着密码的记录，读入时清掉密码。
+	ClearUnrememberedPasswords();
+
 	fclose(fp);
 	return TRUE;
+}
+
+// 清空没勾"记住密码"的账号里残留的密码
+void CLoginAccountList::ClearUnrememberedPasswords()
+{
+	for (size_t i = 0; i < m_arrLoginAccount.size(); i++)
+	{
+		LOGIN_ACCOUNT_INFO* lpAccount = m_arrLoginAccount[i];
+		if (lpAccount != NULL && !lpAccount->bRememberPwd)
+			memset(lpAccount->szPwd, 0, sizeof(lpAccount->szPwd));
+	}
 }
 
 // 丢弃用户名为空的账号记录，并同步修正最后登录索引
@@ -422,6 +436,68 @@ BOOL CLoginAccountList::SetNickName(LPCTSTR lpszUser, LPCTSTR lpszNickName)
 
 	_tcsncpy(lpAccount->szNickName, lpszNickName, kLoginAccountNickNameLen);
 	lpAccount->szNickName[kLoginAccountNickNameLen-1] = _T('\0');
+	return TRUE;
+}
+
+BOOL CLoginAccountList::RecordLoginSuccess(const LOGIN_ACCOUNT_INFO* lpInfo)
+{
+	if (NULL == lpInfo || _T('\0') == lpInfo->szUser[0])
+		return FALSE;
+
+	//新账号：Add 本身就只在勾了"记住密码"时保存密码
+	LOGIN_ACCOUNT_INFO* lpAccount = Find(lpInfo->szUser);
+	if (NULL == lpAccount)
+	{
+		return Add(lpInfo->szUser, lpInfo->szPwd, lpInfo->nStatus,
+			lpInfo->bRememberPwd, lpInfo->bAutoLogin);
+	}
+
+	//已有账号：逐项更新，不整条覆盖 —— 登录窗采集的信息里没有姓名，
+	//整条覆盖会把已存的姓名清空
+	const size_t nPwdCapacity = sizeof(lpAccount->szPwd) / sizeof(TCHAR);
+	if (lpInfo->bRememberPwd)
+	{
+		_tcsncpy(lpAccount->szPwd, lpInfo->szPwd, nPwdCapacity);
+		lpAccount->szPwd[nPwdCapacity - 1] = _T('\0');
+	}
+	else
+	{
+		//没勾"记住密码"：不保存本次密码，此前存下的密码也一并清空
+		memset(lpAccount->szPwd, 0, sizeof(lpAccount->szPwd));
+	}
+	lpAccount->nStatus = lpInfo->nStatus;
+	lpAccount->bRememberPwd = lpInfo->bRememberPwd;
+	lpAccount->bAutoLogin = lpInfo->bAutoLogin;
+	return TRUE;
+}
+
+BOOL CLoginAccountList::ApplyAutoLoginSetting(LPCTSTR lpszUser, BOOL bAutoLogin, LPCTSTR lpszPwd)
+{
+	if (NULL == lpszUser)
+		return FALSE;
+
+	LOGIN_ACCOUNT_INFO* lpAccount = Find(lpszUser);
+	if (NULL == lpAccount)
+		return FALSE;
+
+	//关闭：只取消自动登录，"记住密码"与已存的密码保持原样，
+	//下次打开登录窗仍能回填密码，只是不再自动开始登录
+	if (!bAutoLogin)
+	{
+		lpAccount->bAutoLogin = FALSE;
+		return TRUE;
+	}
+
+	//打开：自动登录依赖已存的密码，故同时打开"记住密码"；
+	//传入的密码为空时保留已存的密码，不以空串覆盖
+	lpAccount->bAutoLogin = TRUE;
+	lpAccount->bRememberPwd = TRUE;
+	if (lpszPwd != NULL && lpszPwd[0] != _T('\0'))
+	{
+		const size_t nPwdCapacity = sizeof(lpAccount->szPwd) / sizeof(TCHAR);
+		_tcsncpy(lpAccount->szPwd, lpszPwd, nPwdCapacity);
+		lpAccount->szPwd[nPwdCapacity - 1] = _T('\0');
+	}
 	return TRUE;
 }
 

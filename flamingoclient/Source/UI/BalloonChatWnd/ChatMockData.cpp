@@ -28,6 +28,7 @@
 #include "ChatMockData.h"
 #include "FileBubbleFormat.h"   // FormatFileSize / FileTypeLabelFromName（文件气泡大小文字与类型标签）
 #include "ChatFolderStateModel.h"   // ChatFolderState（文件夹 mock 消息的传输状态取值）
+#include "ChatMessageMenu.h"        // kChatImageState*（失败图片 mock 消息的图片状态取值）
 //文件夹失败原因的错误码取值。（此处原有一句"本 .cpp 不含 v1 的 Msg.h，故与
 //Protocol.h 不冲突"，v1 协议头已于 2026-08-14 删除，该顾虑不复存在。）
 #include "../../net/Protocol.h"
@@ -62,7 +63,11 @@ ChatMessage MakeText(int kind, bool fromMe, LPCTSTR text)
     m.fileProgress = 0;
     m.hasQuote = false;
     m.senderAvatarColor = 0;   // 单聊消息无发送者信息
-    m.read = fromMe;   // 自己的消息：mock 一律已读
+    // 一律从「未读」开始。本函数也是真实消息 MakeTextMessage 的底子（表情内嵌在文字消息
+    // 里，也走这里），已读与否只能由对方的已读位点决定（见 ChatMessageList::
+    // ApplyPeerReadPosition）。2026-09-30 之前这里写的是 read = fromMe（「mock 一律已读」），
+    // 真实消息跟着被预置成已读，给离线的人发消息也显示「✓ 已读」。
+    m.read = false;
     return m;
 }
 
@@ -78,7 +83,7 @@ ChatMessage MakeImage(bool fromMe, LPCTSTR caption, int w, int h)
     m.fileProgress = 0;
     m.hasQuote = false;
     m.senderAvatarColor = 0;   // 单聊消息无发送者信息
-    m.read = fromMe;
+    m.read = false;            // 一律从「未读」开始，理由同 MakeText
     return m;
 }
 
@@ -96,7 +101,7 @@ ChatMessage MakeFile(bool fromMe, LPCTSTR name, LPCTSTR size,
     m.imageW = m.imageH = 0;
     m.hasQuote = false;
     m.senderAvatarColor = 0;   // 单聊消息无发送者信息
-    m.read = fromMe;
+    m.read = false;            // 一律从「未读」开始，理由同 MakeText
     return m;
 }
 
@@ -128,7 +133,7 @@ ChatMessage MakeFolder(bool fromMe, LPCTSTR name, int fileCount, int dirCount,
     m.fileProgress = 0;
     m.hasQuote = false;
     m.senderAvatarColor = 0;   // 单聊消息无发送者信息
-    m.read = fromMe;
+    m.read = false;            // 文件夹行不显示回执，与其余构造函数保持一致
     return m;
 }
 
@@ -306,6 +311,26 @@ const std::vector<ChatMessage>& ChatMessages()
         folderDone.folderSessionId      = "mock-folder-done";
         folderDone.folderLocalRoot      = _T("D:\\下载\\培训课件");
         msgs.push_back(folderDone);
+
+        //图片无法显示时的破图占位（2026-09-30 新增）。四种失败情形各留一条，调试入口下
+        //才能核对破图图标、说明文字与"放不下就只留图标"的排版：
+        //  一、对方发来的图片下载失败：破图 + 灰色"图片加载失败"；
+        //  二、自己发出的图片上传失败：破图 + 红色"图片发送失败"；
+        //  三、小图下载失败：占位块太小放不下文字，只显示图标；
+        //  四、状态正常但本地文件不存在：图片缓存解码失败后，同样按"图片加载失败"显示。
+        msgs.push_back(MakeTime(_T("今天 15:30")));
+        ChatMessage downloadFailed = MakeImage(false, _T(""), 220, 165);
+        downloadFailed.imageState = kChatImageStateDownloadFailed;
+        msgs.push_back(downloadFailed);
+        ChatMessage uploadFailed = MakeImage(true, _T(""), 160, 120);
+        uploadFailed.imageState = kChatImageStateFailed;
+        msgs.push_back(uploadFailed);
+        ChatMessage smallFailed = MakeImage(false, _T(""), 64, 64);
+        smallFailed.imageState = kChatImageStateDownloadFailed;
+        msgs.push_back(smallFailed);
+        ChatMessage missingFile = MakeImage(false, _T(""), 180, 120);
+        missingFile.imagePath = _T("C:\\flamingo_mock_not_exist\\missing.png");
+        msgs.push_back(missingFile);
 
         //给各条补上假的服务器 msgid。真实会话里每条消息都带 msgid（见
         //CBalloonChatWindow::MakeRealTextMessage），而凡是"拿 msgid 说事"的界面

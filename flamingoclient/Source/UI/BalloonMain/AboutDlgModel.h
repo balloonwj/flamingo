@@ -80,8 +80,8 @@ std::wstring BuildAboutTitle(unsigned long processId);
 /**
  *  算功能行（用户协议 / 隐私政策 / 开源许可 / 官方网站）右侧那个链接式按钮该多宽。
  *
- *  这一行的右侧按钮原先是写死宽度的，装不下完整的官网地址；而 balloonui 的 DuiButton
- *  按 DT_RIGHT 绘制文字，宽度不够时削掉的是<u>开头</u>，于是
+ *  这一行的右侧按钮原先是写死宽度的，装不下完整的官网地址；而当时按钮文字按
+ *  DT_RIGHT 绘制，宽度不够时削掉的是<u>开头</u>，于是
  *  https://github.com/balloonwj/flamingo 显示成 os://github.com/balloonwj/flamingo，
  *  看着像乱码。官网地址还是运行期从 flamingo.ini 读的，长度不可预知，写死宽度不可能
  *  永远合适，故改为按文字实际宽度撑开。本函数只做那一点钳位算术，不碰任何 UI 对象，
@@ -89,7 +89,7 @@ std::wstring BuildAboutTitle(unsigned long processId);
  *
  *    textWidth： 链接文字按<u>真正绘制时用的字体</u>量出来的像素宽度。量宽的字体取错
  *                结果就不准，调用方须与控件实际使用的字体保持一致。无文字传 0。
- *    minWidth：  最小宽度（像素）。文字很短时（如「查看」）按它走，使各行右缘对齐。
+ *    minWidth：  最小宽度（像素）。文字极短时按它走，保证按钮不至于窄得难以点中。
  *    maxWidth：  上限（像素）。由行宽减去左侧标题至少要占的宽度算出，防止标题被挤没。
  *    pad：       在文字宽度之外额外留的余量（像素），防止不同 DPI / 字体版本下文字
  *                正好卡在边界上被削掉一两个像素。

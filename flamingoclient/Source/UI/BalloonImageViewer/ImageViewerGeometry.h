@@ -75,4 +75,26 @@ POINT OriginForZoomAtAnchor(POINT oldTopLeft, double oldScale, double newScale,
 //   返回： 形如 "96%" 的字符串。
 CString FormatZoomReadout(double scale);
 
+// 在画布上按住左键拖动时该做什么。
+enum CanvasDragAction
+{
+    kCanvasDragNone       = 0,   // 什么都不做：按在工具栏上，或移动还没超出系统拖动阈值（单击、
+                                 // 双击切换缩放都落在这里，不能被当成拖动）
+    kCanvasDragPanImage   = 1,   // 平移图片：图片放大到超出窗口，拖动用来查看被挡住的部分
+    kCanvasDragMoveWindow = 2,   // 移动窗口：图片能完整显示、或还没有图片时，拖动画布等同于拖动
+                                 // 标题栏（交给系统原生的窗口移动）
+};
+
+// 判断在画布上按住左键拖动时应当平移图片、移动窗口还是什么都不做。
+//   overToolbar：按下点是否落在底部工具栏上。工具栏整块按按钮区域处理，按钮之间的空隙也算，
+//                免得在工具栏上误拖动窗口。
+//   pannable：   图片当前是否可平移（缩放后的图片超出视口）。没有图片时为 false。
+//   pressPt：    左键按下时的位置（宿主客户区坐标）。
+//   currentPt：  当前鼠标位置（与 pressPt 同一坐标系）。
+//   threshold：  系统拖动阈值（SM_CXDRAG / SM_CYDRAG）。横向或纵向偏移超过它才算开始拖动，
+//                与系统 DragDetect 的判定一致。
+//   返回：       见 CanvasDragAction。可平移时从按下起就平移，不等阈值（与改动前的行为一致）。
+CanvasDragAction ResolveCanvasDrag(bool overToolbar, bool pannable, POINT pressPt,
+                                   POINT currentPt, SIZE threshold);
+
 } // namespace balloonimageviewer

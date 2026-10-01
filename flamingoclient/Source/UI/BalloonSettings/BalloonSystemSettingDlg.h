@@ -23,6 +23,8 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"
 #include "BalloonCacheCleanDlg.h"   // m_cacheCleanDlg 按值持有，需完整类型
+#include "BalloonChatCleanDlg.h"    // m_chatCleanDlg 按值持有，需完整类型
+#include "../BalloonChatWnd/FontSettingPopup.h"   // m_chatFontPopup 按值持有，需完整类型
 
 #include <vector>
 
@@ -51,6 +53,39 @@ public:
      *           回本对话框（与修改密码 / 新建群对话框同处理），owner 仅作语义留存。
      */
     void OpenSettings(HWND owner);
+
+    /**
+     *  设置「账号安全」页「自动登录」开关应显示的状态。
+     *
+     *  自动登录的标志存在本机历史账号列表里，而列表归主面板的会话控制器持有，本对话框
+     *  读不到，只能由主面板在打开本对话框之前传进来（见 docs/自动登录方案.md §4）。
+     *    on：当前账号是否已开启自动登录。
+     *  副作用：窗口尚未创建时只记下该值，建页时据它设置开关初始状态；窗口已存在时
+     *          立即把开关拨到该状态（无动画、不发通知，不会反过来触发一次保存）。
+     */
+    void SetAutoLoginSwitchState(bool on);
+
+    /**
+     *  告知当前是否已连接服务器（主面板在连接状态变化时、以及打开本对话框之前调用）。
+     *  「清理聊天记录」对话框据此决定「清理」按钮是否可用；该对话框开着时立即转告它。
+     *    connected：true 表示已连接且已登录（主面板连接态为 kConnUiOnline）。
+     */
+    void SetServerConnected(bool connected);
+
+    /**
+     *  打开「清理聊天记录」对话框（聊天页「清理…」按钮与调试入口 --chatclean 共用）。
+     *  已打开时前置显示。
+     */
+    void OpenChatCleanDialog();
+
+    /**
+     *  收到按时间范围清理（1521）的应答，转交「清理聊天记录」对话框提示结果。
+     *  对话框未打开（如用户在清理中就关掉了它）时只记日志。
+     *    code：     应答的 code，0 表示成功。
+     *    beginTime：实际生效的区间开始（Unix 毫秒），失败时为 0。
+     *    endTime：  实际生效的区间结束（Unix 毫秒），失败时为 0。
+     */
+    void OnChatCleanResult(int code, int64_t beginTime, int64_t endTime);
 
     BEGIN_MSG_MAP(CBalloonSystemSettingDlg)
         MESSAGE_HANDLER(WM_CLOSE, OnCloseMsg)
@@ -81,7 +116,8 @@ private:
     //   音视频：真实枚举麦克风/扬声器设备 + 摄像头占位 + 回声消除 + 麦克风测试按钮（占位）。
     //   快捷键：只读键帽展示（发送/换行随聊天页设置联动，其余为文档默认值）。
     //   存储：真实文件保存路径 + 占用量分段条（按本地数据目录扫描）+ 清理缓存（占位）。
-    //   账号安全：修改密码（复用面板改密对话框）+ 二次验证开关 + 其余按钮占位。
+    //   账号安全：修改密码（复用面板改密对话框）+ 自动登录开关（转交主面板）+ 二次验证开关
+    //             + 其余按钮占位。
     std::unique_ptr<balloonwjui::DuiVBox> BuildAudioVideoPage();
     std::unique_ptr<balloonwjui::DuiVBox> BuildShortcutPage();
     std::unique_ptr<balloonwjui::DuiVBox> BuildStoragePage();
@@ -184,12 +220,33 @@ private:
     //   index：要显示的页索引（与当前页相同则无操作）。
     void ShowPage(int index);
 
+    // ---- 「聊天」页的「默认聊天字体」一行 ----
+
+    // 构建该行：左侧标题 + 副标题，右侧预览文字、「修改」与「恢复默认」两个按钮，行末加分隔线。
+    //   page：聊天页容器。
+    void AddChatFontRow(balloonwjui::DuiVBox* page);
+
+    // 按当前全局默认字体刷新该行：预览文字的外观，以及「恢复默认」是否可点（未设置时不可点）。
+    void RefreshChatFontRow();
+
+    // 「修改」按钮：在按钮上方打开字体浮层（与聊天窗「AF」同一个浮层，但没有「使用默认
+    // 字体」按钮），浮层里每改一项即经 OnDefaultChatFontChanged 生效并存盘。
+    void OpenDefaultChatFontPopup();
+
+    // 字体浮层变化回调（userdata 为本对话框 this）：把新字体设为全局默认。
+    static void OnDefaultChatFontChanged(void* userdata, const net::TextFont& font);
+
+    // 设置全局默认聊天字体、存盘并刷新该行。
+    //   font：新的全局默认；m_valid 为 false 表示清除（「恢复默认」按钮）。
+    void ApplyDefaultChatFont(const net::TextFont& font);
+
 private:
     CFlamingoClient* m_lpFMGClient;   // 所属客户端（配置 / 消息源），引用不持有
 
     bool m_built;                     // 骨架是否已构建（避免重复构建）
     int  m_curPage;                   // 当前显示页索引；初值 -1 表示尚未定页
     HWND m_ownerHwnd;                 // 打开本对话框的宿主（主面板）HWND；"修改密码"按钮据此转发
+    bool m_autoLoginOn;               // 「自动登录」开关的初始状态，由主面板经 SetAutoLoginSwitchState 传入；默认 false
 
     // 控件指针（借用，控件树持有所有权）：切页 / 重排时用。
     balloonsettings::CSettingsNavList* m_pNav;          // 左侧导航
@@ -201,4 +258,19 @@ private:
     // 「立即清理」弹出的清理对话框。按值持有（与主面板持有改密对话框同套路），
     // 由本窗负责其生命周期；未打开时不占任何资源。
     CBalloonCacheCleanDlg              m_cacheCleanDlg;
+
+    // 聊天页「清理聊天记录」弹出的对话框。按值持有，由本窗负责其生命周期；未打开时不占资源。
+    CBalloonChatCleanDlg               m_chatCleanDlg;
+
+    // 当前是否已连接服务器，由主面板经 SetServerConnected 传入；打开清理对话框时据此置灰「清理」。
+    // 默认 true：主面板在登录成功后才创建，打开本窗之前也会先传一次实际值。
+    bool                               m_serverConnected;
+
+    // 「默认聊天字体」的字体浮层（按需打开，本类持有）。
+    CFontSettingPopup                  m_chatFontPopup;
+
+    // 「默认聊天字体」预览标签当前使用的字体句柄。DuiLabel 不接管字体所有权，故由本类
+    // 持有：每次刷新预览时替换并释放上一只（见 ApplyChatFontPreview），析构时释放。
+    // NULL 表示未设置、标签用默认字体。
+    HFONT                              m_hChatFontPreview;
 };

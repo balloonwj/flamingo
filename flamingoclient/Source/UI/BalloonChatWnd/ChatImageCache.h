@@ -13,7 +13,12 @@
  *  线程懒启动、随进程退出由 OS 回收（解码空闲时 worker 多在条件变量上等待，退出风险
  *  极低）。
  *
- *  线程安全：Get / Request / RegisterListener / UnregisterListener 均加锁；后台线程
+ *  解码失败（文件不存在、内容损坏、格式不支持）会连同文件当时的状态一起记下：IsFailed
+ *  可查询，界面据此画破图占位；文件不变时再 Request 不会重新排队（否则"解码失败 → 通知
+ *  重绘 → 重绘时再请求"会一直循环），文件一旦变化（如后来被下载下来）则自动清除记录、
+ *  重新解码。
+ *
+ *  线程安全：Get / Request / IsFailed / RegisterListener / UnregisterListener 均加锁；后台线程
  *  产出的 Gdiplus::Bitmap 在构造完成后才加锁发布到缓存，UI 线程加锁读取后只读不改。
  *
  *  典型用法（气泡绘制）：
@@ -58,6 +63,15 @@ public:
     //   path / w / h：同 Get。
     void Request(const std::wstring& path, int w, int h);
 
+    // 查询这张图按该展示尺寸解码是否已失败（文件不存在、内容损坏或格式不支持）。线程安全；
+    // 由 UI 线程在绘制时调用，用来决定画"加载中"占位还是破图占位。
+    //   path / w / h：同 Get。
+    // 返回：记录过失败、且文件自失败以来没有变化时返回 true。文件后来被下载下来或被替换
+    //       （是否存在、大小、修改时间任一变化）时自动清除这条失败记录并返回 false，下一次
+    //       Request 会重新解码。
+    // 副作用：可能清除过期的失败记录；会读一次文件属性（仅对记录过失败的图片）。
+    bool IsFailed(const std::wstring& path, int w, int h);
+
     // 注册 / 注销"图片就绪需重绘"的窗口（聊天窗 HWND）。聊天窗创建后注册、销毁前注销，
     // 避免向已销毁窗口 PostMessage。线程安全。
     void RegisterListener(HWND hwnd);
@@ -71,6 +85,10 @@ private:
 
     // 懒启动 worker 线程。调用方须已持有 m_mutex。
     void EnsureWorkerLocked();
+
+    // 把一个解码任务放进队列并唤醒 worker。调用方须已持有 m_mutex，并已确认该键
+    // 既未缓存、也不在进行中。
+    void EnqueueLocked(const std::wstring& key, const std::wstring& path, int w, int h);
     // 后台线程主循环：取任务 → 解码缩放 → 发布到缓存 → 通知窗口重绘。
     void WorkerLoop();
 
@@ -85,11 +103,31 @@ private:
         int          m_h;      // 展示高
     };
 
+    // 文件在某一时刻的状态，用来判断解码失败之后文件有没有变化。
+    struct FileStamp
+    {
+        bool             m_exists;      // 文件是否存在
+        ULARGE_INTEGER   m_size;        // 文件大小（字节）；不存在时为 0
+        FILETIME         m_lastWrite;   // 最后修改时间；不存在时为 0
+    };
+
+    // 读取文件当前的状态（不加锁，调用方无须持有 m_mutex）。
+    static FileStamp ReadFileStamp(const std::wstring& path);
+
+    // 两份文件状态是否完全相同。
+    static bool SameStamp(const FileStamp& a, const FileStamp& b);
+
+    // 检查 key 对应的失败记录是否仍然有效：仍有效返回 true；文件已变化则删除记录并返回
+    // false；没有记录返回 false。调用方须已持有 m_mutex，current 须在加锁前读好。
+    bool CheckFailureLocked(const std::wstring& key, const FileStamp& current);
+
     std::mutex                               m_mutex;        // 保护以下所有共享态
     std::condition_variable                  m_cv;           // worker 等待新任务
     std::deque<Task>                         m_queue;        // 待解码任务队列
     std::set<std::wstring>                   m_inProgress;   // 进行中的缓存键（请求去重）
     std::map<std::wstring, Gdiplus::Bitmap*> m_cache;        // 缓存键 → 缩放图（本类持有，须 delete）
+    std::map<std::wstring, FileStamp>        m_failed;       // 解码失败的缓存键 → 解码前读到的文件状态；
+                                                             // 文件状态变化后由 CheckFailureLocked 删除
     std::set<HWND>                           m_listeners;    // 就绪时待 PostMessage 重绘的窗口
     std::thread                              m_worker;       // 后台解码线程（懒启动）
     bool                                     m_workerStarted;// worker 是否已启动

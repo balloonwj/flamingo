@@ -142,18 +142,98 @@ void DrawInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& seg
                        int maxLines = 0);
 
 /**
- *  把已排好版的内容里<u>某一段字符区间</u>用另一种样式重画一遍。
+ *  按样式建字体，把消息段序列折行排版成放置项。与 DrawInlineContent 内部的排版完全相同（同一
+ *  字体、同一宽度），调用方可以把结果缓存起来，之后用 DrawInlinePlaced 反复绘制而不再排版。
+ *    hdc：      用来测量的设备上下文；本函数自建字体、用完还原。
+ *    segs：     正文解析出的段序列。
+ *    maxW：     可用宽度（像素），绘制时文本区矩形的宽度。
+ *    faceSize： 表情格边长（像素）。
+ *    st：       字体样式（字号 / 粗体 / 斜体等；颜色不影响排版）。
+ *    outPlaced：非 NULL 时填入各放置项。
+ *    maxLines： 最多排几行；<= 0 表示不限行。
+ *  @return 内容整体尺寸；建字体失败时为 0×0。
+ */
+SIZE LayoutInlineContentForStyle(HDC hdc, const std::vector<balloonchat::ChatSegment>& segs,
+                                 int maxW, int faceSize, const InlineTextStyle& st,
+                                 std::vector<InlinePlaced>* outPlaced, int maxLines = 0);
+
+/**
+ *  按已排好的放置项绘制「文字 + 内联表情」，不再排版。只画与 hdc 当前裁剪区（左右各放宽一个
+ *  字号）相交的项：设了小块裁剪区只重画局部时，耗时只与该区域里的项数有关。
+ *    hdc：   目标设备上下文。
+ *    placed：LayoutInlineContentForStyle 按同一样式、同一宽度排出的放置项。
+ *    rc：    文本区矩形（绝对坐标），放置项相对它的左上角平移。
+ *    st：    字体与颜色。
+ */
+void DrawInlinePlaced(HDC hdc, const std::vector<InlinePlaced>& placed, const RECT& rc,
+                      const InlineTextStyle& st);
+
+/**
+ *  一段要换样式重画的字符区间（扁平文本口径，右开），DrawInlineContentRestyledRanges 的入参。
+ */
+struct InlineCharRange
+{
+    int m_begin;   // 区间起始字符下标
+    int m_end;     // 区间结束字符下标（右开）；不大于 m_begin 时该区间不画
+
+    InlineCharRange()
+        : m_begin(0)
+        , m_end(0)
+    {
+    }
+
+    InlineCharRange(int begin, int end)
+        : m_begin(begin)
+        , m_end(end)
+    {
+    }
+};
+
+/**
+ *  把已排好版的内容里<u>若干段字符区间</u>用另一种样式重画一遍（@提醒高亮、超链接）。
  *
- *  做法是「按该区间占的矩形设裁剪区、再把整段内容重画一遍」，而不是只画那几个字的
- *  子串 —— 后者遇到区间跨行就得自己按行拆、还得复刻本引擎的折行规则；裁剪重画沿用
- *  同一次排版，落在矩形里的字形恰好就是那几个字，跨行天然正确。
+ *  做法是「按各区间占的矩形设裁剪区、在裁剪区里重画落在矩形上的那些放置项」，而不是
+ *  只画那几个字的子串 —— 后者遇到区间跨行就得自己按行拆、还得复刻本引擎的折行规则；
+ *  裁剪重画沿用同一次排版，落在矩形里的字形恰好就是那几个字，跨行天然正确。
  *
- *  代价是每个矩形都要重跑一次 DrawInlineContent（内含一次折行排版）。一条消息里
- *  这类区间（@提醒、超链接）通常个位数，且整行绘制结果有渲染缓存兜着、不是每帧都跑，
- *  这个代价可以接受。
+ *  整条内容只排版一次，所有区间共用；每个矩形只重画与它相交的放置项（判断时把矩形左右
+ *  各扩一个字号，斜体等伸出放置项矩形的字形部分也照样重画）。2026-10-01 之前是每个矩形都
+ *  把整条内容重新排版、全部重画一遍，一条几十行、每行一个链接的消息首次绘制要好几秒。
  *
  *  <u>本函数是 @提醒高亮与超链接渲染共用的那一份</u> —— 两处都要"把某几个字换个样子
  *  画"，实现必须只有一份，否则两边的折行 / 裁剪细节迟早漂移。
+ *
+ *    hdc：       目标设备上下文。
+ *    segs：      正文解析出的段序列（与 DrawInlineContent 用的同一份）。
+ *    layout：    字符级排版模型（BuildSelLayoutFromPlaced 的产物）。
+ *    ranges：    要重画的各段字符区间；为空时不画。
+ *    rcText：    文本区矩形（绝对坐标），须与排版时用的是同一块。
+ *    style：     这些区间要用的样式（颜色 / 下划线等）；各区间共用同一种样式。
+ *    faceSize：  内联表情显示边长（像素）。
+ */
+void DrawInlineContentRestyledRanges(HDC hdc,
+                                     const std::vector<balloonchat::ChatSegment>& segs,
+                                     const SelLayout& layout,
+                                     const std::vector<InlineCharRange>& ranges,
+                                     const RECT& rcText,
+                                     const InlineTextStyle& style,
+                                     int faceSize);
+
+/**
+ *  与 DrawInlineContentRestyledRanges 相同，但使用已排好的放置项，不再排版（调用方缓存了排版
+ *  结果时用它）。放置项须是按同一宽度、字号相同的样式排出来的（颜色、下划线不影响排版）。
+ *    placed：已排好的放置项；其余参数同 DrawInlineContentRestyledRanges。
+ */
+void DrawInlinePlacedRestyledRanges(HDC hdc,
+                                    const std::vector<InlinePlaced>& placed,
+                                    const SelLayout& layout,
+                                    const std::vector<InlineCharRange>& ranges,
+                                    const RECT& rcText,
+                                    const InlineTextStyle& style);
+
+/**
+ *  把已排好版的内容里<u>某一段字符区间</u>用另一种样式重画一遍。等同于只传一个区间的
+ *  DrawInlineContentRestyledRanges，做法与代价见那里的说明。
  *
  *    hdc：       目标设备上下文。
  *    segs：      正文解析出的段序列（与 DrawInlineContent 用的同一份）。
@@ -182,6 +262,14 @@ void DrawInlineContentRestyledRange(HDC hdc,
 std::wstring BuildFlatText(const std::vector<balloonchat::ChatSegment>& segs);
 
 /**
+ *  取某个系统表情的图片文件路径：<exe 目录>\Face\face<faceId>.png。气泡绘制内联表情与
+ *  输入框插入表情（粘贴、拖入聊天内容时）都按这个位置找图，二者必须一致。
+ *    faceId：表情编号（Face/FaceConfig.xml 的 id）。
+ *  @return 完整路径；不检查文件是否存在。
+ */
+CString FaceImagePathFromId(int faceId);
+
+/**
  *  把排版放置结果转成选区模型：按 top 分行，每项转成一段，并逐字符量出右边界
  *  （选区左右边界、命中测试都要精确到字符）。
  *
@@ -193,5 +281,16 @@ std::wstring BuildFlatText(const std::vector<balloonchat::ChatSegment>& segs);
  */
 void BuildSelLayoutFromPlaced(HDC hdc, const std::vector<InlinePlaced>& placed,
                               int totalChars, SelLayout& out);
+
+// ---- 性能探针计数器（只在界面线程上累加，供单元测试核对工作量，不参与任何业务判断）----
+
+// 自进程启动或上次 ResetInlineProbeCounters 以来，LayoutInlineContent 被调用的次数。
+unsigned long InlineLayoutCallCount();
+
+// 自进程启动或上次 ResetInlineProbeCounters 以来，绘制放置项（文字段与表情格）的次数。
+unsigned long InlinePlacedDrawCount();
+
+// 把上面两个计数器清零。
+void ResetInlineProbeCounters();
 
 } // namespace balloonchatwnd

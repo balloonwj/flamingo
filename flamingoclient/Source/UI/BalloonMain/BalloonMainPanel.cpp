@@ -29,9 +29,13 @@
 #include "MainPanelSystemMenu.h"    // BuildSystemMenuModel / SystemMenuId（系统菜单行模型）
 #include "MainPanelConversationMenu.h" // BuildConversationMenuModel / ConversationMenuId（会话右键菜单行模型）
 #include "MainPanelContactMenu.h"     // BuildContactMenuModel / ContactMenuId（联系人右键菜单行模型）
+#include "MainPanelGroupMenu.h"       // BuildGroupMenuModel / GroupMenuId / FormatGroupNumber（群列表右键菜单行模型）
+#include "../../Common/Util/ClipboardText.h"   // 右键菜单「复制联系人名 / 复制群号 / 复制群名」写剪贴板
 #include "ConversationListOps.h"    // 会话列表纯操作（排序 / 查找 / 删除 / 置顶 / 免打扰）
+#include "GroupListOps.h"           // 群 Tab 群列表纯操作（置顶优先的显示顺序 / 改置顶状态）
 #include "FolderInviteNotifyPolicy.h" // 文件夹邀请的会话列表预览文字与"记未读 / 闪托盘"判据
 #include "../BalloonChatWnd/ChatLinkDetect.h"  // SetChatLinkOptionEnabled（链接识别开关改动后转发到各会话窗）
+#include "../BalloonChatWnd/ChatSendLimit.h"   // SendFailureText（发送失败回执的提示文案）
 #include "MainPanelStatusMenu.h"    // BuildStatusMenuModel / StatusMenuEntry / GetPresenceVisual（状态菜单）
 #include "PresenceBadge.h"          // CreatePresenceBadgeBitmap（树里行右端的状态徽标位图）
 #include "OnlineCapability.h"       // 离线门禁：连接态、被拦操作的提示文案
@@ -64,7 +68,12 @@
 #include "MainPanelUserData.h"        // P2:把当前登录用户字段注入到 Header
 #include "NotificationSound.h"        // 收消息 / 好友上线时异步播放提示音（PlayNotifySound）
 #include "../../net/MessageProtocolClient.h"  // net::MessageNotify / net::SendMessageResponse
+#include "../../../third-party/balloonui/balloonui/DuiTrace.h"   // BUI_TRACE：历史应答落库与渲染的时序跟踪
+#include "../../Common/Util/PerfStopWatch.h"                      // 历史应答落库、渲染的计时
+#include "SyncArrivalFlow.h"                                    // 历史应答各项处理的先后顺序
 #include "../../net/Protocol.h"                   // conversation_group / message_type_system（撤回处理用）、announcement_change_*（平台公告推送用）
+#include "../../Session/GroupRoleRules.h"          // ShouldRefetchMyRoleOnMemberChange：本人角色变更后补拉群资料
+#include "../BalloonChatWnd/GroupMemberItem.h"     // kMemberPresenceUnknown：群成员在线状态查不到时的取值
 #include "../BalloonChat/BalloonChatMsgFormat.h"  // BuildRecallTipText（撤回提示文案）
 #include "../../net/ContactsProtocolClient.h" // net::ContactsResult / net::ContactItem
 #include "../../net/GroupProtocolClient.h"    // net::GroupInfoResult / net::GroupMembersResult
@@ -73,6 +82,7 @@
 #include "../../net/FileTransfer.h"            // net::GroupFileUploadResult / GroupFileDownloadResult
 #include "../../net/IUSocket.h"               // CIUSocket::RequestGroupInfo 等
 #include "../../net/ImageTransfer.h"
+#include "../../net/UserCachePath.h"        // net::UserConfigFilePath：账号配置文件路径
 #include "../../net/CurrentUserAccount.h"   // net::CurrentUserAccount（本地缓存目录按登录账号分）          // net::ImageSendProgress / net::ImageSendResult
 #include "../../net/FileTransfer.h"           // net::FileSendProgress / net::FileSendResult / net::FileDownload*
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
@@ -169,22 +179,9 @@ const int kMockStarredStride = 3;
 // 取 10 秒：够通讯录应答回来，短到不至于漏掉登录后不久真正发生的上下线。
 const DWORD kStarredSilenceMs = 10 * 1000;
 const UINT kCMenuRemark       = balloonmain::kContactMenuRemark;
+const UINT kCMenuCopyName     = balloonmain::kContactMenuCopyName;
 
-// 群聊右键菜单项 id（必须非 0；结构对照 design/群聊右键菜单.png）。
-enum GroupMenuId
-{
-    // 1 曾是顶部群名（禁用项，作菜单标题），已与联系人 / 会话两个菜单一同去掉，
-    // 理由见 ContactMenuId 的说明。此 id 撤销，日后不要复用 1。
-    kGMenuEnter       = 2,    // 进入群聊
-    kGMenuViewInfo    = 3,    // 查看群资料
-    kGMenuManage      = 4,    // 群管理（仅群主 / 管理员可见）
-    kGMenuPin         = 5,    // 置顶群聊
-    kGMenuMute        = 6,    // 消息免打扰
-    kGMenuClearMsgs   = 7,    // 清空聊天记录
-    kGMenuQuit        = 8,    // 退出群聊
-    kGMenuViewHistory = 9,    // 查看历史消息
-    kGMenuFavorite    = 10,   // 添加到收藏 / 取消收藏（文案随当前状态取反）
-};
+// 群聊右键菜单的项 id 与行模型见 MainPanelGroupMenu.h（2026-10-01 从本文件抽出，便于单测）。
 
 // 系统菜单（左下角汉堡按钮弹出菜单）相关常量。
 // 图标边长必须与 DuiMenu 的图标列尺寸一致（DuiMenu 以源矩形 (0,0,16,16) 采样）。
@@ -395,17 +392,23 @@ CBalloonMainPanel::CBalloonMainPanel(CFlamingoClient* pFMGClient)
     , m_sessionController(pFMGClient)
     , m_netSettingsWindow(pFMGClient)
     , m_hTitleIcon(NULL)
+    , m_searchWarmUpPending(false)   // 构造时没有在途的预热消息
     , m_contactWindow(pFMGClient)
     , m_createGroupDlg(pFMGClient)
+    , m_forwardTimerOn(false)
     , m_changePwdDlg(pFMGClient)
     , m_modifyAvatarDlg(pFMGClient)
     , m_systemSettingDlg(pFMGClient)
     , m_historyWindow(pFMGClient)
     , m_announceBoxWindow(pFMGClient)
     , m_currentTabId(balloonmain::kIdTabContacts)
+    , m_avatarCache(balloonmain::MakeMonogramAvatar, balloonmain::MakeRoundedAvatarFromFile)
+    , m_favoritesRootId(-1)
     , m_pGroupManageWindow(NULL)
     , m_groupManageGroupId(0)
     , m_groupInfoDlgGroupId(0)
+    , m_rangeDeletedRows(0)          // 按时间范围清理本地库：当前区间已删行数
+    , m_rangeDeleteRunning(false)    // 按时间范围清理本地库：没有续批消息在途
     , m_presenceBeforeChange(kMyPresenceOnline)   // 默认在线(与 v2 presence_online 同值)；ShowStatusMenu 改状态前会刷新它
     , m_connUiState(0)                            // kConnUiOnline：主面板是登录成功后才创建的
     // 主面板是登录成功后才创建的，故构造这一刻就是"刚登录"，静默期从这里起算。
@@ -420,7 +423,7 @@ CBalloonMainPanel::CBalloonMainPanel(CFlamingoClient* pFMGClient)
 
 CBalloonMainPanel::~CBalloonMainPanel()
 {
-    // 子窗口与头像位图池的回收，与"登出复位"要做的事完全一样，故统一收敛到两个私有
+    // 子窗口与头像位图缓存的回收，与"登出复位"要做的事完全一样，故统一收敛到两个私有
     // 辅助函数里，避免析构与 ResetForLogout 各写一份、日后改动只改了其中一份。
     DestroyOwnedSubWindows();
 
@@ -443,8 +446,8 @@ CBalloonMainPanel::~CBalloonMainPanel()
     }
 
     // 客户区控件树与 HWND 由 DuiFrameWindow 基类析构兜底。
-    // 三个 monogram 头像位图池由本类持有，这里统一释放。
-    ReleaseAvatarBitmapPools();
+    // 头像位图缓存由本类持有，这里统一释放。
+    ReleaseAvatarBitmapCache();
 
     // 标题栏图标位图：DuiFrameWindow::SetIcon 只借用不释放，由本类收回。
     if (m_hTitleIcon != NULL)
@@ -524,6 +527,15 @@ void CBalloonMainPanel::DestroyOwnedSubWindows()
         m_signEditPopup.DestroyWindow();
     if (m_createGroupDlg.IsWindow())
         m_createGroupDlg.DestroyWindow();
+    if (m_forwardDlg.IsWindow())
+        m_forwardDlg.DestroyWindow();
+    // 聊天记录查看窗同样是独立的顶层窗口，逐个销毁后清空（对象析构时仍持有窗口句柄会触发断言）
+    for (size_t i = 0; i < m_mergedViewers.size(); ++i)
+    {
+        if (m_mergedViewers[i] && m_mergedViewers[i]->IsWindow())
+            m_mergedViewers[i]->DestroyWindow();
+    }
+    m_mergedViewers.clear();
     if (m_changePwdDlg.IsWindow())
         m_changePwdDlg.DestroyWindow();
     if (m_modifyAvatarDlg.IsWindow())
@@ -534,7 +546,7 @@ void CBalloonMainPanel::DestroyOwnedSubWindows()
         m_systemSettingDlg.DestroyWindow();
     if (m_aboutDlg.IsWindow())
         m_aboutDlg.DestroyWindow();
-    // 下面五个同样是按值持有的独立顶层窗口，2026-08-18 修 BUG-14 时补齐 —— 此前它们
+    // 下面五个同样是按值持有的独立顶层窗口，2026-08-18 修复「登出后窗口不关闭」时补齐 —— 此前它们
     // 既不在析构里销毁、也不随主面板一起销毁，用户登出后会一直留在屏幕上。
     if (m_historyWindow.IsWindow())
         m_historyWindow.DestroyWindow();
@@ -548,45 +560,21 @@ void CBalloonMainPanel::DestroyOwnedSubWindows()
         m_announcePopupDlg.DestroyWindow();
 }
 
-void CBalloonMainPanel::ReleaseAvatarBitmapPools()
+void CBalloonMainPanel::ReleaseAvatarBitmapCache()
 {
-    // 通讯录树的 monogram 头像位图池。
-    for (size_t i = 0; i < m_avatarBitmaps.size(); ++i)
-    {
-        if (m_avatarBitmaps[i] != NULL)
-        {
-            ::DeleteObject(m_avatarBitmaps[i]);
-        }
-    }
-    m_avatarBitmaps.clear();
-
-    // 「消息」树（会话列表）专用的头像位图池。
-    for (size_t i = 0; i < m_msgAvatarBitmaps.size(); ++i)
-    {
-        if (m_msgAvatarBitmaps[i] != NULL)
-        {
-            ::DeleteObject(m_msgAvatarBitmaps[i]);
-        }
-    }
-    m_msgAvatarBitmaps.clear();
-
-    // 「群」树专用的头像位图池。
-    for (size_t i = 0; i < m_groupAvatarBitmaps.size(); ++i)
-    {
-        if (m_groupAvatarBitmaps[i] != NULL)
-        {
-            ::DeleteObject(m_groupAvatarBitmaps[i]);
-        }
-    }
-    m_groupAvatarBitmaps.clear();
+    LOG_INFO("MainPanel: releasing %u cached avatar bitmaps.", (unsigned)m_avatarCache.Count());
+    m_avatarCache.Clear();
 }
 
 void CBalloonMainPanel::ResetForLogout()
 {
     LOG_INFO("MainPanel::ResetForLogout: destroy sub-windows and clear per-login state.");
 
+    // 已读上报的去重记录只在本次登录内有效，换账号或重新登录后须重新上报
+    ResetReadReportDedupe();
+
     // 先把远程桌面会话收尾：停被控端推流、关控制端观看窗、隐藏受控提示条。
-    // 这一步在协作类抽出之前是缺的（见 bugs.md 的 BUG-19）—— 正在被控时登出，屏幕仍会
+    // 这一步在协作类抽出之前是缺的 —— 正在被控时登出，屏幕仍会
     // 继续往中转服务器推送，而用户看到的已经是登录窗，会以为早就断开了。
     m_rdCoordinator.ResetForLogout();
 
@@ -599,7 +587,7 @@ void CBalloonMainPanel::ResetForLogout()
     // 单聊窗、群聊窗、历史记录窗等都是 Create(NULL, ...) 建出来的独立顶层窗口，既不是
     // 本面板的子窗口、也没有把本面板设为 owner，所以销毁本面板并不会连带关掉它们。不在
     // 这里显式销毁的话，用户登出后这些窗口会继续留在屏幕上，而且还带着上一个账号的聊天
-    // 内容 —— 这正是 BUG-14 的表层现象。
+    // 内容。
     DestroyOwnedSubWindows();
 
     // 搜索下拉不销毁、只收起（理由见 DestroyOwnedSubWindows）。它内部引用的是
@@ -607,8 +595,8 @@ void CBalloonMainPanel::ResetForLogout()
     // 之后它拿到的就是空结果，不会残留上一个账号的联系人。
     m_searchDropdown.HideDropdown();
 
-    // 第二步：清空三棵树的节点。必须排在位图池释放之前 —— 树节点里存的是位图池中
-    // HBITMAP 的原值（DuiTreeView::SetItemIcon 只借用、不复制），先释放位图池会让树在
+    // 第二步：清空三棵树的节点。必须排在头像位图缓存释放之前 —— 树节点里存的是缓存中
+    // HBITMAP 的原值（DuiTreeView::SetItemIcon 只借用、不复制），先释放缓存会让树在
     // 随后的重绘中用到已经销毁的 GDI 对象。
     // 本类不持有树控件指针，三棵树都按控件 id 现查（与各 FillXxxTree 的做法一致）。
     balloonwjui::DuiControl* content = GetClientContent();
@@ -640,22 +628,27 @@ void CBalloonMainPanel::ResetForLogout()
         }
     }
 
-    // 第三步：释放三个头像位图池。
-    ReleaseAvatarBitmapPools();
+    // 第三步：释放头像位图缓存（三棵树已在上一步清空，不再有节点引用这些位图）。
+    // 换账号登录后真图头像的本地路径会变，旧账号的位图留着也用不上。
+    ReleaseAvatarBitmapCache();
 
     // 第四步：清空本次登录期间累积的全部数据缓存。这些容器都以 userid / groupid /
     // 树节点 id 为键，换个账号登录后键的含义完全变了，不清就会串账号：轻则新账号看到上
     // 一个账号的联系人与会话，重则点某一行跳到不相干的人。
     m_contacts.clear();
+    m_contactIndex.Clear();   // 资料池清空后索引必须同步清空，否则下标会越界
     m_departments.clear();
     m_contactNodeUserId.clear();
     m_contactNodeParent.clear();
     m_contactOrgNode.clear();
     m_contactDeptPaths.clear();
+    m_contactDeptInfo.clear();
     m_lastContactsResult = net::ContactsResult();
 
     m_conversations.clear();
     m_msgNodeConv.clear();
+    m_convNodeId.clear();
+    m_peerReadMsgids.clear();
 
     m_myGroups.clear();
     m_groupNodeId.clear();
@@ -664,6 +657,15 @@ void CBalloonMainPanel::ResetForLogout()
     // 群一旦群 id 与旧账号的记录重合，就再也不会发出资料请求，群名与成员数会一直为空。
     m_groupInfoRequested.clear();
     m_favoriteGroupNodeId.clear();
+    m_favoritesRootId = -1;
+    m_favoriteSectionNodes.clear();
+
+    // 搜索候选缓存里存着上一个账号联系人与群的名字。下次按键时的 Sync 本来也会把它
+    // 截成空，这里直接清掉，不让这些数据在登出后继续留在内存里。
+    m_searchDropdown.ClearCandidates();
+    // 在途的预热消息若因窗口销毁而不再送达，标志会一直停在 true、以后再也不会预热，
+    // 故一并复位；即使那条消息稍后仍被处理，也只是多做一次 Sync，结果不变。
+    m_searchWarmUpPending = false;
 
     // 乐观更新的回滚快照：都是"请求已发出、应答未回"期间的临时存档。连接已经断开，对应
     // 的应答不会再来，留着只会在下次登录时被当成本次的回滚数据用。
@@ -1036,12 +1038,10 @@ void CBalloonMainPanel::FillContactsTree()
             {
                 mtv->SetItemStarred(id, (i % kMockStarredStride) == 0);
             }
-            // monogram avatar(底色 + 单字)。HBITMAP 存入池,析构释放。
-            HBITMAP hAvatar = balloonmain::MakeMonogramAvatar(
-                c.avatarText, c.avatarColor, kAvatarSizePx);
+            // monogram avatar(底色 + 单字)。位图归头像缓存所有,这里只借用。
+            HBITMAP hAvatar = m_avatarCache.GetMonogram(c.avatarText, c.avatarColor, kAvatarSizePx);
             if (hAvatar != NULL)
             {
-                m_avatarBitmaps.push_back(hAvatar);
                 tv->SetItemIcon(id, hAvatar);
             }
         }
@@ -1067,11 +1067,9 @@ void CBalloonMainPanel::FillContactsTree()
                 tv->SetItemSubLabel(id, c.signature);
             }
             // 服务号不带状态点,不调 SetItemStatusColor。
-            HBITMAP hAvatar = balloonmain::MakeMonogramAvatar(
-                c.avatarText, c.avatarColor, kAvatarSizePx);
+            HBITMAP hAvatar = m_avatarCache.GetMonogram(c.avatarText, c.avatarColor, kAvatarSizePx);
             if (hAvatar != NULL)
             {
-                m_avatarBitmaps.push_back(hAvatar);
                 tv->SetItemIcon(id, hAvatar);
             }
         }
@@ -1099,19 +1097,11 @@ void CBalloonMainPanel::FillGroupsTree()
     }
 
     // 用真实群替换 mock：清空旧节点、旧行装饰（第一行右侧的成员数）、旧"节点→groupid"
-    // 映射、旧头像位图（只清群树自己的位图池，不影响通讯录/会话树）。基类 Clear 不认识
-    // 子类的行装饰映射，而节点 id 会被复用，不清的话新群会继承上一批群的人数。
+    // 映射。基类 Clear 不认识子类的行装饰映射，而节点 id 会被复用，不清的话新群会继承
+    // 上一批群的人数。头像位图归头像缓存所有，重建时不释放，新节点直接复用。
     tv->Clear();
     tv->ClearAllRowDecorations();
     m_groupNodeId.clear();
-    for (size_t i = 0; i < m_groupAvatarBitmaps.size(); ++i)
-    {
-        if (m_groupAvatarBitmaps[i] != NULL)
-        {
-            ::DeleteObject(m_groupAvatarBitmaps[i]);
-        }
-    }
-    m_groupAvatarBitmaps.clear();
 
     // 行高同 Contacts 页(40px);与 XML row-height 对齐。
     tv->SetRowHeight(40);
@@ -1130,8 +1120,12 @@ void CBalloonMainPanel::FillGroupsTree()
     // root 节点是分组标题,点击只 toggle 展开,不显示选中底色。
     tv->SetItemSelectable(rootId, false);
 
-    for (size_t i = 0; i < m_myGroups.size(); ++i)
+    // 置顶的群排在最前面，置顶群之间、其余群之间各自保持群列表原有的顺序。
+    // 只取显示顺序、不改 m_myGroups 本身，取消置顶后群会回到原来的位置。
+    const std::vector<size_t> order = balloonmain::OrderGroupsForList(m_myGroups);
+    for (size_t k = 0; k < order.size(); ++k)
     {
+        const size_t i = order[k];
         int64_t gid = m_myGroups[i].m_groupid;
 
         // 行版式：第一行是"群名（左） + 成员数（右）"，第二行是群号。三段文案统一由
@@ -1145,12 +1139,23 @@ void CBalloonMainPanel::FillGroupsTree()
         // SetItemRightText —— 后者按整行垂直居中，两行节点里会落在群名与群号的中缝上。
         tv->SetItemRightTopText(id, texts.m_memberText);
 
+        // 置顶样式与会话 Tab 完全一致（整行淡灰底 + 左侧橙色竖条）。群 Tab 不显示
+        // 免打扰标记 —— 群行下排是群号，没有未读胶囊可以配合静音图标。
+        if (m_myGroups[i].m_pinned != 0)
+        {
+            tv->SetItemConversationFlags(id, true, false);
+        }
+
+        // 「我的收藏」徽章：画在群名之后。收藏状态在别处改动时由 RefreshFavoriteMarks
+        // 就地刷新。
+        ApplyFavoriteMark(tv, id, 2, gid);
+
         // 副标签（第二行）放群号。人数未知时这一行仍在，各行高度保持一致。
         tv->SetItemSubLabel(id, texts.m_groupNoText);
 
         // 群头像：尊重群主设置的 (facetype, customface)——字形自定义现画、真图命中
         // 缓存即画、真图未缓存回退 monogram 并触发下载，与联系人树同一套。位图归
-        // 群树池所有。
+        // 头像缓存所有。
         //
         // 头像两项取自 m_groupInfo 而<u>不是</u> m_myGroups：后者只在拉群列表(1320)
         // 时整体替换，改群头像并不会让它重拉，从它取会一直画着登录时那份旧头像
@@ -1164,11 +1169,10 @@ void CBalloonMainPanel::FillGroupsTree()
             gFacetype   = brIt->second.m_facetype;
             gCustomface = brIt->second.m_customface;
         }
-        HBITMAP hAvatar = MakeEntityAvatarBitmap(
+        HBITMAP hAvatar = GetEntityAvatarBitmap(
             gid, texts.m_name, gFacetype, gCustomface, kAvatarSizePx);
         if (hAvatar != NULL)
         {
-            m_groupAvatarBitmaps.push_back(hAvatar);
             tv->SetItemIcon(id, hAvatar);
         }
 
@@ -1251,13 +1255,10 @@ void CBalloonMainPanel::FillMessagesTree()
             }
             ++mockSingleIndex;
         }
-        // monogram avatar。会话树用自己的位图池(m_msgAvatarBitmaps),与通讯录
-        // 树的池分开,避免一方刷新清池误删另一方仍引用的位图。
-        HBITMAP hAvatar = balloonmain::MakeMonogramAvatar(
-            c.avatarText, c.avatarColor, kAvatarSizePx);
+        // monogram avatar。位图归头像缓存所有,这里只借用。
+        HBITMAP hAvatar = m_avatarCache.GetMonogram(c.avatarText, c.avatarColor, kAvatarSizePx);
         if (hAvatar != NULL)
         {
-            m_msgAvatarBitmaps.push_back(hAvatar);
             tv->SetItemIcon(id, hAvatar);
         }
     }
@@ -1655,6 +1656,22 @@ void CBalloonMainPanel::AttachAppHost(balloonmain::ISessionAppHost* pAppHost)
 void CBalloonMainPanel::NotifyMyPresenceChanged(int presence, int source)
 {
     m_autoAwayController.OnPresenceChanged(presence, source);
+
+    //已打开的每个群聊窗的成员侧栏里都有本人，本人那一行头像角上的状态徽标跟着变。
+    //本人的取值与 presence_type 一致（kMyPresenceOnline 等，见 UserSessionData.h）
+    const UINT selfId = SelfUserId();
+    if (selfId == 0)
+    {
+        return;
+    }
+    for (std::map<int64_t, CBalloonGroupChatWindow*>::iterator it = m_groupChatWindows.begin();
+         it != m_groupChatWindows.end(); ++it)
+    {
+        if (it->second != NULL && it->second->IsWindow())
+        {
+            it->second->SetMemberPresence((int64_t)selfId, presence);
+        }
+    }
 }
 
 LRESULT CBalloonMainPanel::OnPanelDestroyMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
@@ -1720,6 +1737,14 @@ LRESULT CBalloonMainPanel::OnCollaboratorTimer(UINT /*uMsg*/, WPARAM wParam,
     // 自动重连定时器。
     if (m_sessionController.PumpTimer((UINT_PTR)wParam))
     {
+        bHandled = TRUE;
+        return 0;
+    }
+
+    // 转发应答的超时检查定时器（见 BalloonMainPanelForward.cpp）。
+    if ((UINT_PTR)wParam == balloonmain::kForwardTimeoutTimerId)
+    {
+        OnForwardTimeoutTimer();
         bHandled = TRUE;
         return 0;
     }
@@ -2411,17 +2436,14 @@ CBalloonChatWindow* CBalloonMainPanel::EnsureChatWindow(UINT peerUserId)
     // 从通讯录缓存取真实昵称 / 在线状态 / 个性签名传给窗口（v2 下 CUserMgr 好友列表为空、
     // 查不到）。在线状态 / 签名注入头部信息块，使其不再用 mock；后续好友改状态由
     // OnPresenceChanged 找到本窗口实时刷新头部。
-    for (size_t i = 0; i < m_contacts.size(); ++i)
+    const net::ContactItem* pPeer = FindCachedContact(peerUserId);
+    if (pPeer != NULL)
     {
-        if ((UINT)m_contacts[i].m_userid == peerUserId)
-        {
-            // 备注优先，与通讯录树 / 会话列表同一口径。
-            pWin->SetPeerName(ContactDisplayName(peerUserId));
-            pWin->SetPeerPresence(m_contacts[i].m_presence);
-            pWin->SetPeerSignature(Utf8ToCStr(m_contacts[i].m_signature));
-            pWin->SetPeerAvatar(m_contacts[i].m_facetype, m_contacts[i].m_customface);
-            break;
-        }
+        // 备注优先，与通讯录树 / 会话列表同一口径。
+        pWin->SetPeerName(ContactDisplayName(peerUserId));
+        pWin->SetPeerPresence(pPeer->m_presence);
+        pWin->SetPeerSignature(Utf8ToCStr(pPeer->m_signature));
+        pWin->SetPeerAvatar(pPeer->m_facetype, pPeer->m_customface);
     }
 
     pWin->CreateAndShow(NULL);
@@ -2436,6 +2458,14 @@ CBalloonChatWindow* CBalloonMainPanel::EnsureChatWindow(UINT peerUserId)
     // 转发，而这个窗口是刚建的、错过了之前那次广播；不补这一下，离线状态下新开的
     // 聊天窗不会显示顶部提示条，输入框和发送按钮也不会置灰。
     pWin->ApplyConnectionState(m_connUiState);
+
+    // 窗口没开时收到的已读推送记在位点表里，这里补给新窗口。历史消息是随后异步拉回来的，
+    // 窗口的消息列表记住位点后，拉回来的每一条都会在追加时按位点判定已读与否。
+    std::map<UINT, int64_t>::iterator rit = m_peerReadMsgids.find(peerUserId);
+    if (rit != m_peerReadMsgids.end())
+    {
+        pWin->ApplyPeerReadPosition(rit->second);
+    }
 
     m_chatWindows[peerUserId] = pWin;
     return pWin;
@@ -2471,6 +2501,8 @@ void CBalloonMainPanel::OnContactsArrived(const net::ContactsResult& result)
     // 缓存联系人资料池 + 部门列表（部门列表用于算联系人职位/部门路径）。搜索结果
     // 下拉在每次输入时实时绑定 m_contacts（见 UpdateSearchDropdown），无需在此预绑。
     m_contacts    = result.m_contacts;
+    //资料池整体替换，索引必须紧跟着重建（FindCachedContact 靠它定位，下标随资料池变化）
+    m_contactIndex.Rebuild(m_contacts);
     //缓存整份应答，供收藏变化 / 群列表到达后原样重建这棵树（见 RebuildContactsTree）。
     //重建时会把本成员自己传回来，故要防自赋值。
     if (&result != &m_lastContactsResult)
@@ -2494,6 +2526,10 @@ void CBalloonMainPanel::OnContactsArrived(const net::ContactsResult& result)
     // 搜索下拉照样该能显示部门，两者没有依赖关系。
     RebuildContactDeptPaths();
 
+    // 资料池已整体替换，安排一次搜索候选缓存的预热，免得第一次按键时才整批建立。
+    // 放在这里而不是函数末尾：下面取不到树控件时会提前返回，预热与树没有依赖关系。
+    ScheduleSearchWarmUp();
+
     // 通讯录与会话列表是两条相互独立、各自异步到达的应答。若会话先到、通讯录
     // 后到，会话行此前只能显示"用户<id>"；这里通讯录到位后用真实昵称/头像重绘
     // 一次会话树（只在已有会话时做，避免把尚未到达的会话页清成空）。本调用只
@@ -2502,6 +2538,11 @@ void CBalloonMainPanel::OnContactsArrived(const net::ContactsResult& result)
     {
         FillConversationsTree();
     }
+
+    // 群列表：收藏列表随通讯录一起到达，若群列表先到，群行此前画不出收藏徽章。这里只
+    // 就地给已有的群行重打徽章、不重填群树 —— 改备注、切换收藏等也会经
+    // RebuildContactsTree 走到这里，整树重填会让群 Tab 的滚动位置跳回顶部。
+    RefreshGroupsTreeFavoriteMarks();
 
     balloonwjui::DuiControl* content = GetClientContent();
     if (content == NULL)
@@ -2522,18 +2563,12 @@ void CBalloonMainPanel::OnContactsArrived(const net::ContactsResult& result)
     tv->Clear();
     m_contactNodeUserId.clear();
     m_favoriteGroupNodeId.clear();
+    m_favoritesRootId = -1;            // 收藏分区随整棵树一起清掉，下面 AddFavoritesSection 重新登记
+    m_favoriteSectionNodes.clear();
     // 树整棵重建，节点 id 会重新编号，两份定位索引必须一起作废重填，否则定位会跳到
-    // 上一棵树的某个不相干的行上。
+    // 上一棵树的某个不相干的行上。头像位图归头像缓存所有，重建时不释放。
     m_contactNodeParent.clear();
     m_contactOrgNode.clear();
-    for (size_t i = 0; i < m_avatarBitmaps.size(); ++i)
-    {
-        if (m_avatarBitmaps[i] != NULL)
-        {
-            ::DeleteObject(m_avatarBitmaps[i]);
-        }
-    }
-    m_avatarBitmaps.clear();
 
     tv->SetRowHeight(40);
     // 头像走 monogram bitmap + AlphaBlend 路径（圆形无锯齿），与 FillContactsTree 同设置。
@@ -2790,9 +2825,9 @@ HBITMAP CBalloonMainPanel::GetPresenceBadgeBitmap(int presence)
     return m_presenceBadges[slot];
 }
 
-HBITMAP CBalloonMainPanel::MakeEntityAvatarBitmap(int64_t id, const CString& displayName,
-                                                  int facetype, const std::string& customface,
-                                                  int sizePx)
+HBITMAP CBalloonMainPanel::GetEntityAvatarBitmap(int64_t id, const CString& displayName,
+                                                 int facetype, const std::string& customface,
+                                                 int sizePx)
 {
     balloonmain::AvatarSpec spec = balloonmain::DecodeAvatar(facetype, customface, displayName, id);
 
@@ -2804,24 +2839,24 @@ HBITMAP CBalloonMainPanel::MakeEntityAvatarBitmap(int64_t id, const CString& dis
             net::ImageTransfer::AvatarCacheFilePathForFileId(net::CurrentUserAccount(), customface);
         if (!path.empty() && ::GetFileAttributesW(path.c_str()) != INVALID_FILE_ATTRIBUTES)
         {
-            // 缓存命中：画圆形真图（圆角半径=半边长即圆，匹配树里 monogram 的圆形）。
-            HBITMAP hbm = balloonmain::MakeRoundedAvatarFromFile(path.c_str(), sizePx, sizePx / 2);
+            // 本地已有图片文件：取圆形真图（圆角半径=半边长即圆，匹配树里 monogram 的圆形）。
+            HBITMAP hbm = m_avatarCache.GetImage(path.c_str(), sizePx);
             if (hbm != NULL)
             {
                 return hbm;
             }
         }
-        // 未缓存：触发下载（完成后 OnAvatarDownloadResult 刷新本节点），先回退 monogram 占位。
+        // 本地没有：触发下载（完成后 OnAvatarDownloadResult 刷新本节点），先回退 monogram 占位。
         if (selfId > 0)
         {
             net::ImageTransfer::GetInstance().EnqueueAvatarDownload(
                 customface, net::CurrentUserAccount());
         }
-        return balloonmain::MakeMonogramAvatar(spec.m_glyph, spec.m_color, sizePx);
+        return m_avatarCache.GetMonogram(spec.m_glyph, spec.m_color, sizePx);
     }
 
-    // 字形 / 自动：现画 monogram（字形 + 底色由 DecodeAvatar 给出）。
-    return balloonmain::MakeMonogramAvatar(spec.m_glyph, spec.m_color, sizePx);
+    // 字形 / 自动：字形头像（字形 + 底色由 DecodeAvatar 给出）。
+    return m_avatarCache.GetMonogram(spec.m_glyph, spec.m_color, sizePx);
 }
 
 void CBalloonMainPanel::AddContactLeaf(balloonwjui::DuiTreeView* tv, int parentNode,
@@ -2842,14 +2877,12 @@ void CBalloonMainPanel::AddContactLeaf(balloonwjui::DuiTreeView* tv, int parentN
     }
 
     // 头像：尊重对方设置的 (facetype, customface)——字形自定义现画、真图命中缓存即画、
-    // 真图未缓存回退 monogram 并触发下载。位图所有权归本类，存入 m_avatarBitmaps，
-    // 析构/重填时统一释放。
-    HBITMAP hAvatar = MakeEntityAvatarBitmap(
+    // 真图未缓存回退 monogram 并触发下载。位图归头像缓存所有，这里只借用。
+    HBITMAP hAvatar = GetEntityAvatarBitmap(
         c.m_userid, display, c.m_facetype, c.m_customface, kContactAvatarSizePx);
     int node;
     if (hAvatar != NULL)
     {
-        m_avatarBitmaps.push_back(hAvatar);
         node = tv->AddChild(parentNode, display, hAvatar);
     }
     else
@@ -2873,6 +2906,11 @@ void CBalloonMainPanel::AddContactLeaf(balloonwjui::DuiTreeView* tv, int parentN
     // 「特别关注」星标：画在姓名之后。标记在别处（右键菜单）改动时由
     // RefreshStarredMarks 就地刷新，不必整树重建。
     ApplyStarredMark(tv, node, (int64_t)c.m_userid);
+
+    // 「我的收藏」徽章：画在姓名（有星标时在星标）之后。本方法只建部门树等分组下的行，
+    // 「我的收藏」分区自己建行、不经这里，所以分区里的行不会重复画徽章。收藏变化时
+    // 整棵联系人树会重建（RebuildContactsTree），徽章随之重打。
+    ApplyFavoriteMark(tv, node, 1, (int64_t)c.m_userid);
 
     // 记录"节点 → userid"，供点击开聊。
     m_contactNodeUserId[node] = (UINT)c.m_userid;
@@ -2941,6 +2979,67 @@ bool CBalloonMainPanel::EnsureMsgStoreOpen()
         LOG_ERROR(_T("打开文件夹本地落点登记库失败: %s"), folderDbPath.c_str());
     }
     return true;
+}
+
+void CBalloonMainPanel::ReconcileHistoryCoverage(const net::SyncMessagesResult& result)
+{
+    //没有锚点就算不出本页覆盖的范围：旧服务端不回带，补齐模式回带的是 aftermsgid
+    if (!result.m_hasAnchor)
+    {
+        return;
+    }
+    if (!EnsureMsgStoreOpen())
+    {
+        return;
+    }
+
+    balloonhistory::SyncPageInfo page;
+    page.m_beforeMsgid = result.m_beforeMsgid;
+    page.m_hasMore = result.m_hasmore;
+    for (size_t i = 0; i < result.m_messages.size(); ++i)
+    {
+        if (result.m_messages[i].m_msgid > 0)
+        {
+            page.m_msgids.push_back(result.m_messages[i].m_msgid);
+        }
+    }
+
+    const balloonhistory::PageSpan span = balloonhistory::ComputePageSpan(page);
+    if (!span.m_valid)
+    {
+        return;
+    }
+
+    //一、对账：本页覆盖范围内本地有、服务端没返回的，已在别处被删除或清理
+    std::vector<int64_t> localIds;
+    if (m_msgStore.QueryMsgidsInRange(result.m_ctype, result.m_cid, span.m_lo, span.m_hi, localIds))
+    {
+        const std::vector<int64_t> toDelete =
+            balloonhistory::ComputeReconcileDeletions(page, localIds);
+        if (!toDelete.empty())
+        {
+            int deleted = 0;
+            m_msgStore.DeleteMessages(result.m_ctype, result.m_cid, toDelete, deleted);
+            LOG_INFO("History reconcile: ctype=%d, cid=%lld, span=[%lld, %lld], removed %d local rows.",
+                     result.m_ctype, (long long)result.m_cid,
+                     (long long)span.m_lo, (long long)span.m_hi, deleted);
+        }
+    }
+
+    //二、把本页并入覆盖区间
+    balloonhistory::CoverRange cur;
+    m_msgStore.GetCoverage(result.m_ctype, result.m_cid, cur);
+    const balloonhistory::CoverRange merged = balloonhistory::MergeCoverage(cur, page);
+    if (merged.m_valid != cur.m_valid || merged.m_lo != cur.m_lo || merged.m_hi != cur.m_hi
+        || merged.m_reachedOldest != cur.m_reachedOldest)
+    {
+        m_msgStore.SetCoverage(result.m_ctype, result.m_cid, merged);
+        LOG_INFO("History coverage: ctype=%d, cid=%lld, before=%lld, [%lld, %lld]%s -> [%lld, %lld]%s.",
+                 result.m_ctype, (long long)result.m_cid, (long long)result.m_beforeMsgid,
+                 (long long)cur.m_lo, (long long)cur.m_hi, cur.m_reachedOldest ? " oldest" : "",
+                 (long long)merged.m_lo, (long long)merged.m_hi,
+                 merged.m_reachedOldest ? " oldest" : "");
+    }
 }
 
 /**
@@ -3158,8 +3257,11 @@ void CBalloonMainPanel::OnRecvChatMessage(const net::MessageNotify& notify)
              peerUserId, selfId, (pWin != NULL) ? 1 : 0, notify.m_msgtype,
              (int)kRecvMsgTypeShake, bConvMuted ? 1 : 0, bWatching ? 1 : 0);
 
+    // 「不是本人发出的」要按发送方判断，不能只看对端：本人转发给别人的消息（主面板用转发
+    // 应答里的消息体调本函数）与文件夹传输记录条里本端是发送方的那一帧，对端都是别人、
+    // 发送方却是本人，只判对端会给本人自己发出的消息闪托盘、响提示音。
     if (pWin == NULL && notify.m_msgtype != kRecvMsgTypeShake && peerUserId != selfId
-        && !bConvMuted)
+        && (UINT)notify.m_from != selfId && !bConvMuted)
     {
         PostTrayFlash(1, (int64_t)peerUserId, digest);
         // 单聊窗未打开、非窗口抖动、非自己同步消息：闪托盘的同时异步播放新消息提示音。
@@ -3171,7 +3273,7 @@ void CBalloonMainPanel::OnSendChatAck(const net::SendMessageResponse& resp)
 {
     if (resp.m_code == 0)
     {
-        LOG_INFO("单聊发送成功: clientmsgid=%s, msgid=%lld.",
+        LOG_INFO("send message ok: clientmsgid=%s, msgid=%lld.",
                  resp.m_clientmsgid.c_str(), (long long)resp.m_msgid);
 
         // 把服务器分配的 msgid 与消息时间回填到那条乐观气泡上 —— 没有这一步，本端
@@ -3199,12 +3301,11 @@ void CBalloonMainPanel::OnSendChatAck(const net::SendMessageResponse& resp)
         }
         return;
     }
-    // 失败：弹框提示（对端不存在 / 被拉黑 / 不能发给自己等）。
-    LOG_ERROR("单聊发送失败: code=%d, msg=%s, clientmsgid=%s.",
+    // 失败：弹框提示（对端不存在 / 被拉黑 / 不能发给自己 / 内容过长等）。单聊群聊共用本回执。
+    LOG_ERROR("send message failed: code=%d, msg=%s, clientmsgid=%s.",
               resp.m_code, resp.m_msg.c_str(), resp.m_clientmsgid.c_str());
-    CString tip;
-    tip.Format(_T("消息发送失败（错误码 %d）。"), resp.m_code);
-    ::MessageBox(m_hWnd, tip, _T("FlamingoIM"), MB_OK | MB_ICONWARNING);
+    const std::wstring tip = balloonchatwnd::SendFailureText(resp.m_code);
+    ::MessageBox(m_hWnd, tip.c_str(), _T("FlamingoIM"), MB_OK | MB_ICONWARNING);
 }
 
 void CBalloonMainPanel::OnImageSendProgress(const net::ImageSendProgress& prog)
@@ -3304,6 +3405,8 @@ void CBalloonMainPanel::OnImageDownloadResult(const net::ImageDownloadResult& re
     //它自己按 msgid 判断这一笔是不是它要的，不是就安静忽略。
     m_historyWindow.OnImageDownloadFinished(result.m_msgid, result.m_ok,
                                             result.m_localpath);
+    //聊天记录查看窗同理，各窗口按 msgid 认领自己发起的那一笔
+    NotifyMergedViewersDownload(result.m_msgid, result.m_ok, result.m_localpath, false, false);
 }
 
 void CBalloonMainPanel::OnFileSendProgress(const net::FileSendProgress& prog)
@@ -3397,6 +3500,14 @@ void CBalloonMainPanel::OnFileDownloadProgress(const net::FileDownloadProgress& 
             git->second->OnFileDownloadProgress(prog.m_msgid, prog.m_received, prog.m_total);
         }
     }
+    //聊天记录查看窗的文件卡片同样显示下载进度，各窗口只认自己发起的那一笔
+    for (size_t i = 0; i < m_mergedViewers.size(); ++i)
+    {
+        if (m_mergedViewers[i] && m_mergedViewers[i]->IsWindow())
+        {
+            m_mergedViewers[i]->OnFileDownloadProgress(prog.m_msgid, prog.m_received, prog.m_total);
+        }
+    }
 }
 
 void CBalloonMainPanel::OnFileDownloadResult(const net::FileDownloadResult& result)
@@ -3438,6 +3549,9 @@ void CBalloonMainPanel::OnFileDownloadResult(const net::FileDownloadResult& resu
     //消息记录窗同理：它可能从行右键菜单发起过下载，按 msgid 认领属于自己的那一笔。
     m_historyWindow.OnFileDownloadFinished(result.m_msgid, result.m_ok,
                                            result.m_localpath, result.m_cancelled);
+    //聊天记录查看窗同理，各窗口按 msgid 认领自己发起的那一笔
+    NotifyMergedViewersDownload(result.m_msgid, result.m_ok, result.m_localpath, true,
+                                result.m_cancelled);
 }
 
 void CBalloonMainPanel::OnFileTransferAck(const net::FileTransferAckNotify& notify)
@@ -3637,14 +3751,26 @@ void CBalloonMainPanel::OnTypingNotify(const net::TypingNotify& notify)
 
 const net::ContactItem* CBalloonMainPanel::FindCachedContact(UINT userId) const
 {
-    for (size_t i = 0; i < m_contacts.size(); ++i)
+    // 经索引直接定位。下标越界说明资料池被替换后漏了 Rebuild，按查不到处理并记日志，
+    // 不去访问越界元素。
+    const int idx = m_contactIndex.Find(userId);
+    if (idx < 0)
     {
-        if ((UINT)m_contacts[i].m_userid == userId)
-        {
-            return &m_contacts[i];
-        }
+        return NULL;
     }
-    return NULL;
+    if ((size_t)idx >= m_contacts.size())
+    {
+        LOG_ERROR("FindCachedContact: stale contact index (idx=%d, pool=%u), index not rebuilt after the pool changed.",
+                  idx, (unsigned)m_contacts.size());
+        return NULL;
+    }
+    return &m_contacts[(size_t)idx];
+}
+
+net::ContactItem* CBalloonMainPanel::FindCachedContactMutable(UINT userId)
+{
+    return const_cast<net::ContactItem*>(
+        static_cast<const CBalloonMainPanel*>(this)->FindCachedContact(userId));
 }
 
 void CBalloonMainPanel::OnConversationsArrived(const net::ConversationsResult& result)
@@ -3820,14 +3946,17 @@ void CBalloonMainPanel::OnUserGroupsArrived(const net::UserGroupsResult& result)
     FillConversationsTree();
 
     //群列表比通讯录晚到（实测差十几毫秒），收藏分区是在通讯录到达时建的，那会儿
-    //m_myGroups 还是空的、群收藏会被当成"查不到资料"跳过。这里补建一次联系人树，
-    //把群收藏行补出来。没有群收藏就不必白重建一棵树。
-    if (m_favorites.HasGroupFavorite())
+    //m_myGroups 还是空的、群收藏会被当成"查不到资料"跳过。这里补建收藏分区，把群收藏
+    //行补出来；只有收藏分区变了，部门树不必重建。没有群收藏就什么都不用做。
+    if (m_favorites.HasGroupFavorite() && !RebuildFavoritesSection())
     {
         RebuildContactsTree();
     }
 
     LOG_INFO("我的群列表已填充: 群 %u 个。", (uint32_t)m_myGroups.size());
+
+    // 群列表已整体替换，安排一次搜索候选缓存的预热（与通讯录到达时的那次会合并成一次）。
+    ScheduleSearchWarmUp();
 }
 
 void CBalloonMainPanel::OnGroupMembersArrived(const net::GroupMembersResult& members)
@@ -3838,6 +3967,28 @@ void CBalloonMainPanel::OnGroupMembersArrived(const net::GroupMembersResult& mem
     if (it != m_groupChatWindows.end() && it->second != NULL && it->second->IsWindow())
     {
         it->second->OnGroupMembersArrived(members);
+
+        //成员头像角上的在线状态徽标：本人取状态胶囊上的当前状态，其他人取通讯录缓存里的
+        //presence；不在通讯录里的成员查不到，传"未知"，不画徽标
+        const UINT selfId = SelfUserId();
+        for (size_t i = 0; i < members.m_members.size(); ++i)
+        {
+            const int64_t uid = members.m_members[i].m_userid;
+            int presence = balloonchatwnd::kMemberPresenceUnknown;
+            if (selfId != 0 && uid == (int64_t)selfId)
+            {
+                presence = GetPresence();
+            }
+            else
+            {
+                const net::ContactItem* pc = FindCachedContact((UINT)uid);
+                if (pc != NULL)
+                {
+                    presence = pc->m_presence;
+                }
+            }
+            it->second->SetMemberPresence(uid, presence);
+        }
     }
 
     // 若群资料对话框正为该群打开：从成员列表挑出群主显示名 + 我的群名片（群名片优先、
@@ -4238,10 +4389,13 @@ void CBalloonMainPanel::OnPinnedMessagesArrived(const net::PinnedMessagesResult&
         return;
     }
 
-    //一、把返回的完整消息体逐条落库，补齐本地缺的那些行。口径与 OnSyncMessagesArrived
+    //一、把返回的完整消息体落库，补齐本地缺的那些行。口径与 OnSyncMessagesArrived
     //    完全一致：用应答里的 ctype/cid 作归属键，不依赖每条 notify 自身的 cid。
+    //    同样整批放进一个事务写入，理由见 OnSyncMessagesArrived。
     std::vector<balloonhistory::PinnedItem> items;
+    std::vector<balloonhistory::HistoryRecord> recs;
     items.reserve(result.m_items.size());
+    recs.reserve(result.m_items.size());
     for (size_t i = 0; i < result.m_items.size(); ++i)
     {
         const net::MessageNotify& m = result.m_items[i].m_msg;
@@ -4249,14 +4403,18 @@ void CBalloonMainPanel::OnPinnedMessagesArrived(const net::PinnedMessagesResult&
         {
             continue;
         }
-        balloonhistory::HistoryRecord rec =
-            balloonhistory::RecordFromNotify(m, result.m_ctype, result.m_cid);
-        m_msgStore.Upsert(rec);
+        recs.push_back(balloonhistory::RecordFromNotify(m, result.m_ctype, result.m_cid));
 
         balloonhistory::PinnedItem item;
         item.m_msgid = m.m_msgid;
         item.m_pinTime = result.m_items[i].m_pinTime;
         items.push_back(item);
+    }
+    if (!m_msgStore.UpsertBatch(recs))
+    {
+        LOG_ERROR("local message store: batch upsert of pinned messages failed, ctype=%d, "
+                  "cid=%lld, count=%u.", result.m_ctype, (long long)result.m_cid,
+                  (uint32_t)recs.size());
     }
 
     //二、与服务端对账，把本地多出来的 Pin 标记清掉（在别的设备上取消的、或推送因离线
@@ -4543,47 +4701,163 @@ void CBalloonMainPanel::OnAnnounceMarkReadResult(const net::AnnounceMarkReadResu
 
 void CBalloonMainPanel::OnSyncMessagesArrived(const net::SyncMessagesResult& result)
 {
-    // 落本地库：把本批历史 / 同步消息持久化（无论对应窗口是否仍打开）。用顶层会话的
-    // ctype/cid 作归属键，避免依赖每条 notify 自身 cid 是否回填；自己发出的消息也靠
-    // 这条同步链路（服务端单聊查询双向）回流落库。
-    if (EnsureMsgStoreOpen())
+    // 这一页是不是消息记录窗为"往前拉更早的消息"发出的。是的话只落库、不转给聊天窗：
+    // 聊天窗只靠自己的翻页标志区分首屏与翻页，一页更早的消息转过去会被当成首屏，把聊天窗
+    // 清空、换成一页旧消息（见 docs/清理聊天记录方案.md §9.2）。必须在函数开头判：下面刷新
+    // 消息记录窗时它会结束这一轮或发出下一轮，锚点随之变化，之后再问就认不出了。
+    const bool historyOwnFetch = result.m_hasAnchor
+        && m_historyWindow.IsOwnOlderFetch(result.m_ctype, result.m_cid, result.m_beforeMsgid);
+
+    BUI_TRACE("MAINPANEL-SYNC-ARRIVED ctype=%d cid=%lld count=%u",
+              result.m_ctype, (long long)result.m_cid, (unsigned)result.m_messages.size());
+
+    //本页各项处理的具体动作。先后顺序由 balloonmain::RunSyncArrival 决定：先交给聊天窗并让它
+    //立即画出来，再写本地消息库 —— 写库一页 50 条约 20 毫秒，放在前面的话聊天窗要等它写完
+    //才显示内容；聊天窗的渲染不读本地库，调换顺序不影响显示结果。
+    //定义成函数内的局部类：它只服务于本函数，且作为成员函数的局部类可以直接访问本类的私有成员。
+    class Steps : public balloonmain::ISyncArrivalSteps
     {
-        for (size_t i = 0; i < result.m_messages.size(); ++i)
+    public:
+        Steps(CBalloonMainPanel& panel, const net::SyncMessagesResult& result)
+            : m_panel(panel)
+            , m_result(result)
         {
-            const net::MessageNotify& m = result.m_messages[i];
-            if (m.m_msgid <= 0)
+        }
+
+        //本页所属会话的聊天窗是否仍打开着。历史只渲染进"仍打开着"的那个窗口（请求历史的就是它）：
+        //用户在应答到达前已关窗就丢弃，不能用 Ensure* 把已关的窗重新弹开
+        virtual bool HasOpenChatWindow()
+        {
+            return ChatWindow() != NULL;
+        }
+
+        virtual void RenderToChatWindow()
+        {
+            if (m_result.m_ctype == 2)
             {
-                continue;
+                CBalloonGroupChatWindow* pGroup = GroupWindow();
+                if (pGroup != NULL)
+                    pGroup->OnHistoryMessages(m_result);
             }
-            balloonhistory::HistoryRecord rec =
-                balloonhistory::RecordFromNotify(m, result.m_ctype, result.m_cid);
-            m_msgStore.Upsert(rec);
+            else
+            {
+                CBalloonChatWindow* pChat = SingleWindow();
+                if (pChat != NULL)
+                    pChat->OnHistoryMessages(m_result);
+            }
         }
-    }
 
-    // 若历史消息记录窗正显示本会话，落库后刷新它，让回填 / 新到的消息即时出现。
-    m_historyWindow.RefreshIfConversation(result.m_ctype, result.m_cid);
+        //单聊应答带回对方的已读位点：记下来并转给单聊窗。放在渲染历史之后，这样本批刚追加
+        //进来的自己的消息也会一并按位点判定。发送方重开聊天窗、或离线期间对方读过的消息，
+        //都靠这一步显示成「已读」—— 实时推送只在双方都在线时才会到达
+        virtual void ApplyPeerRead()
+        {
+            m_panel.ApplyPeerReadPosition((UINT)m_result.m_cid, m_result.m_peerReadMsgid);
+        }
 
-    // 历史只渲染进"仍打开着"的那个窗口（请求历史的就是它）：若用户在应答到达前
-    // 已关窗，就丢弃，不能用 Ensure* 把已关的窗重新弹开。按 cid 在窗口表里查现存窗。
-    if (result.m_ctype == 2)
-    {
-        std::map<int64_t, CBalloonGroupChatWindow*>::iterator it =
-            m_groupChatWindows.find(result.m_cid);
-        if (it != m_groupChatWindows.end() && it->second != NULL && it->second->IsWindow())
+        //WM_PAINT 要等消息队列空闲才会派发，紧接着的写库会把它推迟约 20 毫秒；
+        //这里用 UpdateWindow 让聊天窗当场同步完成一次绘制
+        virtual void PaintChatWindowNow()
         {
-            it->second->OnHistoryMessages(result);
+            HWND hWnd = ChatWindow();
+            if (hWnd != NULL)
+                ::UpdateWindow(hWnd);
+            BUI_TRACE("MAINPANEL-SYNC-PAINTED ctype=%d cid=%lld",
+                      m_result.m_ctype, (long long)m_result.m_cid);
         }
-    }
-    else
-    {
-        std::map<UINT, CBalloonChatWindow*>::iterator it =
-            m_chatWindows.find((UINT)result.m_cid);
-        if (it != m_chatWindows.end() && it->second != NULL && it->second->IsWindow())
+
+        //落本地库：把本批历史 / 同步消息持久化（无论对应窗口是否仍打开）。用顶层会话的
+        //ctype/cid 作归属键，避免依赖每条 notify 自身 cid 是否回填；自己发出的消息也靠
+        //这条同步链路（服务端单聊查询双向）回流落库。
+        //整批放进一个事务写入（UpsertBatch）：逐条 Upsert 时每条各自提交刷盘，一页 50 条在
+        //UI 线程上实测约 300 毫秒。
+        virtual bool StoreBatch()
         {
-            it->second->OnHistoryMessages(result);
+            m_storeStopWatch.Restart();
+            if (!m_panel.EnsureMsgStoreOpen())
+                return false;
+
+            std::vector<balloonhistory::HistoryRecord> recs;
+            recs.reserve(m_result.m_messages.size());
+            for (size_t i = 0; i < m_result.m_messages.size(); ++i)
+            {
+                const net::MessageNotify& m = m_result.m_messages[i];
+                if (m.m_msgid <= 0)
+                {
+                    continue;
+                }
+                recs.push_back(balloonhistory::RecordFromNotify(m, m_result.m_ctype, m_result.m_cid));
+            }
+            if (!m_panel.m_msgStore.UpsertBatch(recs))
+            {
+                LOG_ERROR("local message store: batch upsert failed, ctype=%d, cid=%lld, count=%u.",
+                          m_result.m_ctype, (long long)m_result.m_cid, (uint32_t)recs.size());
+                return false;
+            }
+            return true;
         }
-    }
+
+        //按本页对账并更新覆盖区间：本页覆盖范围内本地有、服务端没返回的，已在别处被删除，
+        //从本地库删掉。必须放在写库之后、刷新消息记录窗之前 —— 刷新看到的才是对完账的结果
+        virtual void ReconcileCoverage()
+        {
+            m_panel.ReconcileHistoryCoverage(m_result);
+        }
+
+        //若历史消息记录窗正显示本会话，落库后刷新它，让回填 / 新到的消息即时出现
+        virtual void RefreshHistoryWindow()
+        {
+            m_panel.m_historyWindow.RefreshIfConversation(m_result.m_ctype, m_result.m_cid);
+            BUI_TRACE("MAINPANEL-SYNC-STORED count=%u store=%.3fms",
+                      (unsigned)m_result.m_messages.size(), m_storeStopWatch.ElapsedMs());
+        }
+
+    private:
+        //仍打开着的群聊窗；没有或已关闭时为 NULL
+        CBalloonGroupChatWindow* GroupWindow() const
+        {
+            std::map<int64_t, CBalloonGroupChatWindow*>::iterator it =
+                m_panel.m_groupChatWindows.find(m_result.m_cid);
+            if (it != m_panel.m_groupChatWindows.end() && it->second != NULL && it->second->IsWindow())
+                return it->second;
+            return NULL;
+        }
+
+        //仍打开着的单聊窗；没有或已关闭时为 NULL
+        CBalloonChatWindow* SingleWindow() const
+        {
+            std::map<UINT, CBalloonChatWindow*>::iterator it =
+                m_panel.m_chatWindows.find((UINT)m_result.m_cid);
+            if (it != m_panel.m_chatWindows.end() && it->second != NULL && it->second->IsWindow())
+                return it->second;
+            return NULL;
+        }
+
+        //本页所属会话的聊天窗句柄（按 ctype 取群聊窗或单聊窗）；没有打开时为 NULL
+        HWND ChatWindow() const
+        {
+            if (m_result.m_ctype == 2)
+            {
+                CBalloonGroupChatWindow* pGroup = GroupWindow();
+                return (pGroup != NULL) ? pGroup->m_hWnd : NULL;
+            }
+            CBalloonChatWindow* pChat = SingleWindow();
+            return (pChat != NULL) ? pChat->m_hWnd : NULL;
+        }
+
+        //所属主面板，生命周期覆盖本对象
+        CBalloonMainPanel&                m_panel;
+        //本页应答，生命周期覆盖本对象
+        const net::SyncMessagesResult&    m_result;
+        //写库、对账、刷新消息记录窗三项合计的计时，写进 MAINPANEL-SYNC-STORED 跟踪
+        PerfStopWatch                     m_storeStopWatch;
+    };
+
+    Steps steps(*this, result);
+    balloonmain::SyncArrivalContext ctx;
+    ctx.m_historyOwnFetch = historyOwnFetch;
+    ctx.m_isSingleChat = (result.m_ctype != 2);
+    balloonmain::RunSyncArrival(steps, ctx);
 }
 
 CString CBalloonMainPanel::GroupDisplayName(int64_t groupId) const
@@ -4614,18 +4888,11 @@ void CBalloonMainPanel::FillConversationsTree()
     }
 
     // 用真实会话替换占位：清空旧节点、旧行装饰（未读角标 / 置顶 / 免打扰标记）、
-    // 旧"节点→会话"映射、旧头像位图（只清会话树自己的位图池，不影响通讯录树）。
+    // 旧"节点↔会话"两份映射。头像位图归头像缓存所有，重建时不释放，新节点直接复用。
     tv->Clear();
     tv->ClearAllRowDecorations();
     m_msgNodeConv.clear();
-    for (size_t i = 0; i < m_msgAvatarBitmaps.size(); ++i)
-    {
-        if (m_msgAvatarBitmaps[i] != NULL)
-        {
-            ::DeleteObject(m_msgAvatarBitmaps[i]);
-        }
-    }
-    m_msgAvatarBitmaps.clear();
+    m_convNodeId.clear();
 
     // 会话行高 48px：容纳头像 + 主行(标题) + 副行(最后消息)；与 mock 填充一致。
     tv->SetRowHeight(48);
@@ -4665,7 +4932,22 @@ void CBalloonMainPanel::RefreshMessagesTabBadge()
     tab->SetBadgeCount(total);
 }
 
-void CBalloonMainPanel::AddConversationNode(balloonmain::MainPanelTreeView* tv,
+int CBalloonMainPanel::AddConversationNode(balloonmain::MainPanelTreeView* tv,
+                                           const net::ConversationItem& conv)
+{
+    // 扁平结构 —— 每个会话作为顶层 AddRoot（无子节点，DuiTreeView 不画 ▶）。标题等
+    // 内容统一由 FillConversationRow 填写，与就地刷新走同一段代码。
+    const int id = tv->AddRoot(_T(""));
+
+    FillConversationRow(tv, id, conv);
+
+    // 记录"节点 ↔ (ctype, cid)"：正向供点击分流开聊 / 清未读，反向供收发消息时就地刷新。
+    m_msgNodeConv[id] = std::make_pair(conv.m_ctype, conv.m_cid);
+    m_convNodeId[balloonmain::ConvNodeKey(conv.m_ctype, conv.m_cid)] = id;
+    return id;
+}
+
+void CBalloonMainPanel::FillConversationRow(balloonmain::MainPanelTreeView* tv, int id,
                                             const net::ConversationItem& conv)
 {
     const int kMsgAvatarSizePx = 36;   // 与 FillConversationsTree 同口径
@@ -4676,16 +4958,11 @@ void CBalloonMainPanel::AddConversationNode(balloonmain::MainPanelTreeView* tv,
     CString  glyph;
     COLORREF avColor = RGB(0, 0, 0);
     ComputeConvDisplay(conv.m_ctype, conv.m_cid, title, glyph, avColor);
+    tv->SetItemLabel(id, title);
 
-    // 扁平结构 —— 每个会话作为顶层 AddRoot（无子节点，DuiTreeView 不画 ▶）。
-    int id = tv->AddRoot(title);
-
-    // 副行：最后一条消息预览（服务端已拼好 digest，如"[图片]"/正文）。
-    CString digest = Utf8ToCStr(conv.m_digest);
-    if (!digest.IsEmpty())
-    {
-        tv->SetItemSubLabel(id, digest);
-    }
+    // 副行：最后一条消息预览（服务端已拼好 digest，如"[图片]"/正文）。刷新已有行时
+    // 预览可能从有变无（例如最后一条被撤回后服务端给了空摘要），所以空串也要写进去。
+    tv->SetItemSubLabel(id, Utf8ToCStr(conv.m_digest));
 
     // 右侧"时间 + 未读红点"上下两排，交 MainPanelTreeView 接管绘制：时间在上排
     // （与姓名同高）、未读红点在下排（与预览同高，>0 才画、0 不显示）。
@@ -4698,15 +4975,15 @@ void CBalloonMainPanel::AddConversationNode(balloonmain::MainPanelTreeView* tv,
 
     // 头像：单聊尊重对端、群聊尊重群主设置的 (facetype, customface)（字形自定义 /
     // 真图，与联系人树同一套）。两种会话各有自己的资料缓存，取到哪一份都可能为空
-    // （资料还没到），那时回退 ComputeConvDisplay 的首字 + 底色。位图归会话树池所有。
+    // （资料还没到），那时回退 ComputeConvDisplay 的首字 + 底色。位图归头像缓存所有。
     HBITMAP hAvatar = NULL;
     if (conv.m_ctype == 1)
     {
         const net::ContactItem* pc = FindCachedContact((UINT)conv.m_cid);
         if (pc != NULL)
         {
-            hAvatar = MakeEntityAvatarBitmap(conv.m_cid, title,
-                                             pc->m_facetype, pc->m_customface, kMsgAvatarSizePx);
+            hAvatar = GetEntityAvatarBitmap(conv.m_cid, title,
+                                            pc->m_facetype, pc->m_customface, kMsgAvatarSizePx);
         }
     }
     else
@@ -4714,18 +4991,17 @@ void CBalloonMainPanel::AddConversationNode(balloonmain::MainPanelTreeView* tv,
         std::map<int64_t, GroupBrief>::const_iterator git = m_groupInfo.find(conv.m_cid);
         if (git != m_groupInfo.end())
         {
-            hAvatar = MakeEntityAvatarBitmap(conv.m_cid, title,
-                                             git->second.m_facetype, git->second.m_customface,
-                                             kMsgAvatarSizePx);
+            hAvatar = GetEntityAvatarBitmap(conv.m_cid, title,
+                                            git->second.m_facetype, git->second.m_customface,
+                                            kMsgAvatarSizePx);
         }
     }
     if (hAvatar == NULL)
     {
-        hAvatar = balloonmain::MakeMonogramAvatar(glyph, avColor, kMsgAvatarSizePx);
+        hAvatar = m_avatarCache.GetMonogram(glyph, avColor, kMsgAvatarSizePx);
     }
     if (hAvatar != NULL)
     {
-        m_msgAvatarBitmaps.push_back(hAvatar);
         tv->SetItemIcon(id, hAvatar);
     }
 
@@ -4735,21 +5011,75 @@ void CBalloonMainPanel::AddConversationNode(balloonmain::MainPanelTreeView* tv,
     if (conv.m_ctype == 1)
     {
         int presence = kMyPresenceOffline;
-        for (size_t i = 0; i < m_contacts.size(); ++i)
+        const net::ContactItem* pPeer = FindCachedContact((UINT)conv.m_cid);
+        if (pPeer != NULL && pPeer->m_userid == conv.m_cid)
         {
-            if (m_contacts[i].m_userid == conv.m_cid)
-            {
-                presence = m_contacts[i].m_presence;
-                break;
-            }
+            presence = pPeer->m_presence;
         }
         tv->SetItemStatusIcon(id, GetPresenceBadgeBitmap(presence));
         //单聊会话行带「特别关注」星标（群会话不带 —— 群不能被关注）。
         ApplyStarredMark(tv, id, conv.m_cid);
     }
 
-    // 记录"节点 → (ctype, cid)"，供点击分流开聊 / 清未读。
-    m_msgNodeConv[id] = std::make_pair(conv.m_ctype, conv.m_cid);
+    // 「我的收藏」徽章：单聊与群聊会话都可能被收藏，画在名字（有星标时在星标）之后。
+    // 收藏状态在别处改动时由 RefreshFavoriteMarks 就地刷新。
+    ApplyFavoriteMark(tv, id, conv.m_ctype, conv.m_cid);
+}
+
+bool CBalloonMainPanel::RefreshConversationRow(int ctype, int64_t cid, bool reposition)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonmain::MainPanelTreeView* tv = (content != NULL)
+        ? dynamic_cast<balloonmain::MainPanelTreeView*>(content->FindCtrlById(balloonmain::kIdMessagesTree))
+        : NULL;
+    if (tv == NULL)
+    {
+        return false;
+    }
+    const net::ConversationItem* conv = balloonmain::FindConversation(m_conversations, ctype, cid);
+    if (conv == NULL)
+    {
+        return false;
+    }
+
+    // 有行就刷新内容；没有行（新会话）且需要定位时追加一行，随后挪到正确位置。
+    bool added = false;
+    std::map<balloonmain::ConvNodeKey, int>::const_iterator it =
+        m_convNodeId.find(balloonmain::ConvNodeKey(ctype, cid));
+    if (it != m_convNodeId.end())
+    {
+        FillConversationRow(tv, it->second, *conv);
+    }
+    else if (reposition)
+    {
+        AddConversationNode(tv, *conv);
+        added = true;
+    }
+    else
+    {
+        return false;
+    }
+
+    if (reposition)
+    {
+        int node = -1;
+        int before = -1;
+        if (!balloonmain::FindConversationMoveTarget(m_conversations, m_convNodeId, ctype, cid,
+                                                     node, before)
+            || !tv->MoveRoot(node, before))
+        {
+            LOG_WARNING("RefreshConversationRow: cannot place row in place (ctype=%d cid=%lld), falling back to a full rebuild.",
+                        ctype, (long long)cid);
+            return false;
+        }
+    }
+
+    if (added)
+    {
+        SyncPaneContentHeight(balloonmain::kIdPaneMessages, balloonmain::kIdMessagesTree, 0);
+    }
+    RefreshMessagesTabBadge();
+    return true;
 }
 
 void CBalloonMainPanel::ComputeConvDisplay(int ctype, int64_t cid, CString& outName,
@@ -4859,6 +5189,46 @@ void CBalloonMainPanel::AppendCallTipToChat(UINT peerUserId, const CString& tip)
     pWin->AppendSystemTip(tip);
 }
 
+void CBalloonMainPanel::OnMessageReadNotify(const net::MessageReadNotify& notify)
+{
+    //群聊按协议不做已读回执，服务端也不会对群聊推送本条；万一收到就记一条日志后忽略，
+    //免得把群 id 当成单聊对端的 userid 记进位点表。
+    if (notify.m_ctype != conversation_single)
+    {
+        LOG_WARNING("MainPanel::OnMessageReadNotify: ignore non-single ctype=%d, cid=%lld.",
+                    notify.m_ctype, (long long)notify.m_cid);
+        return;
+    }
+    //单聊推送里的 cid 是读消息的那个人（对端）的 userid。
+    ApplyPeerReadPosition((UINT)notify.m_cid, notify.m_readmsgid);
+}
+
+void CBalloonMainPanel::ApplyPeerReadPosition(UINT peerUserId, int64_t readMsgid)
+{
+    if (peerUserId == 0 || readMsgid <= 0)
+    {
+        return;
+    }
+
+    //位点只增不减：乱序到达的旧推送、或同步应答带回的较小位点都不能把已读退回去。
+    std::map<UINT, int64_t>::iterator it = m_peerReadMsgids.find(peerUserId);
+    if (it != m_peerReadMsgids.end() && readMsgid <= it->second)
+    {
+        return;
+    }
+    m_peerReadMsgids[peerUserId] = readMsgid;
+
+    //与对方的单聊窗开着就当场标记；没开着的话 EnsureChatWindow 建窗时会补给它。
+    int marked = 0;
+    std::map<UINT, CBalloonChatWindow*>::iterator wit = m_chatWindows.find(peerUserId);
+    if (wit != m_chatWindows.end() && wit->second != NULL && wit->second->IsWindow())
+    {
+        marked = wit->second->ApplyPeerReadPosition(readMsgid);
+    }
+    LOG_INFO("MainPanel::ApplyPeerReadPosition: peer=%u, readmsgid=%lld, marked rows=%d.",
+             peerUserId, (long long)readMsgid, marked);
+}
+
 void CBalloonMainPanel::OnMessageRecalled(const net::MessageRecalledNotify& notify)
 {
     UINT selfId = (m_lpFMGClient != NULL)
@@ -4932,6 +5302,135 @@ void CBalloonMainPanel::OnMessageRecalled(const net::MessageRecalledNotify& noti
     }
 }
 
+//按时间范围清理本地库时每批删除的行数。实测（docs/清理聊天记录方案.md §15 的 LDB1）单批耗时
+//主要是事务提交的落盘开销、与批大小关系不大：批改小不会降低每批的卡顿，只会拉长总耗时，故取 2000。
+static const int kRangeDeleteBatchRows = 2000;
+
+void CBalloonMainPanel::OnMessagesDeleted(const net::MessagesDeletedNotify& notify)
+{
+    //区间形式：作用于全部会话，行数可能很多，入队后逐批删除（见 OnRangeDeleteStep）
+    if (notify.m_isRange)
+    {
+        LOG_INFO("Messages deleted (range): [%lld, %lld], %u range(s) already pending.",
+                 (long long)notify.m_begintime, (long long)notify.m_endtime,
+                 (unsigned)m_pendingRangeDeletes.size());
+        m_pendingRangeDeletes.push_back(std::make_pair(notify.m_begintime, notify.m_endtime));
+        if (!m_rangeDeleteRunning)
+        {
+            m_rangeDeleteRunning = true;
+            m_rangeDeletedRows = 0;
+            PostMessage(kMsgRangeDeleteStep, 0, 0);
+        }
+        return;
+    }
+
+    //单条形式：一、删本地库。本机没同步过这几条属正常，删 0 行不算失败
+    int deleted = 0;
+    if (EnsureMsgStoreOpen())
+    {
+        m_msgStore.DeleteMessages(notify.m_ctype, notify.m_cid, notify.m_msgids, deleted);
+    }
+
+    //二、移除已打开聊天窗里对应的气泡。窗口没开、或该条不在当前视图里都无需处理
+    const std::vector<long long> ids(notify.m_msgids.begin(), notify.m_msgids.end());
+    if (notify.m_ctype == conversation_group)
+    {
+        std::map<int64_t, CBalloonGroupChatWindow*>::iterator it =
+            m_groupChatWindows.find(notify.m_cid);
+        if (it != m_groupChatWindows.end() && it->second != NULL && it->second->IsWindow())
+        {
+            it->second->OnMessagesDeleted(ids);
+        }
+    }
+    else
+    {
+        std::map<UINT, CBalloonChatWindow*>::iterator it =
+            m_chatWindows.find((UINT)notify.m_cid);
+        if (it != m_chatWindows.end() && it->second != NULL && it->second->IsWindow())
+        {
+            it->second->OnMessagesDeleted(ids);
+        }
+    }
+
+    //三、消息记录窗若正显示这个会话，重查本地库
+    m_historyWindow.RefreshIfConversation(notify.m_ctype, notify.m_cid);
+
+    //四、重拉会话列表：删掉的可能正是会话的最后一条，预览与未读由服务端重新算最省事，
+    //   也与多端保持一致
+    CIUSocket::GetInstance().RequestConversations();
+
+    LOG_INFO("Messages deleted: ctype=%d, cid=%lld, requested=%u, local rows removed=%d.",
+             notify.m_ctype, (long long)notify.m_cid, (unsigned)notify.m_msgids.size(), deleted);
+}
+
+LRESULT CBalloonMainPanel::OnRangeDeleteStep(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/)
+{
+    if (m_pendingRangeDeletes.empty())
+    {
+        m_rangeDeleteRunning = false;
+        return 0;
+    }
+
+    const std::pair<int64_t, int64_t> range = m_pendingRangeDeletes.front();
+    int deleted = 0;
+    bool ok = EnsureMsgStoreOpen()
+           && m_msgStore.DeleteByTimeRangeBatch(range.first, range.second,
+                                                kRangeDeleteBatchRows, deleted);
+    if (ok && deleted > 0)
+    {
+        //本批删到了行：区间里可能还有剩余，投下一条续批消息，两批之间让出 UI 线程
+        m_rangeDeletedRows += deleted;
+        PostMessage(kMsgRangeDeleteStep, 0, 0);
+        return 0;
+    }
+
+    //区间已删完（或本地库出错，删不动就不再重试，避免无限循环）
+    if (!ok)
+    {
+        LOG_ERROR("Range delete of local store failed, range=[%lld, %lld], removed %d rows before the error.",
+                  (long long)range.first, (long long)range.second, m_rangeDeletedRows);
+    }
+    else
+    {
+        LOG_INFO("Range delete of local store done, range=[%lld, %lld], removed %d rows.",
+                 (long long)range.first, (long long)range.second, m_rangeDeletedRows);
+    }
+    m_pendingRangeDeletes.pop_front();
+    m_rangeDeletedRows = 0;
+
+    //还有排队的区间就接着删，全部删完之后才刷新界面 —— 每删完一个区间就刷新一次没有意义
+    if (!m_pendingRangeDeletes.empty())
+    {
+        PostMessage(kMsgRangeDeleteStep, 0, 0);
+        return 0;
+    }
+    m_rangeDeleteRunning = false;
+
+    //已打开的聊天窗整页重新加载：区间可能盖住列表里任意多行，逐行移除不如重载
+    for (std::map<UINT, CBalloonChatWindow*>::iterator it = m_chatWindows.begin();
+         it != m_chatWindows.end(); ++it)
+    {
+        if (it->second != NULL && it->second->IsWindow())
+        {
+            it->second->ReloadLatestMessages();
+        }
+    }
+    for (std::map<int64_t, CBalloonGroupChatWindow*>::iterator it = m_groupChatWindows.begin();
+         it != m_groupChatWindows.end(); ++it)
+    {
+        if (it->second != NULL && it->second->IsWindow())
+        {
+            it->second->ReloadLatestMessages();
+        }
+    }
+
+    //消息记录窗不论显示哪个会话都受影响；会话列表的预览、未读、甚至会话本身是否还在，
+    //都由服务端重新算
+    m_historyWindow.RefreshIfOpen();
+    CIUSocket::GetInstance().RequestConversations();
+    return 0;
+}
+
 void CBalloonMainPanel::BumpConversation(int ctype, int64_t cid, UINT fromUserId,
                                          const std::string& digestUtf8, int msgType,
                                          int64_t timestampMs, int64_t msgid, bool incUnread)
@@ -4988,9 +5487,13 @@ void CBalloonMainPanel::BumpConversation(int ctype, int64_t cid, UINT fromUserId
         }
     }
 
-    // 重排后整表重绘（置顶优先、其余按时间倒序，把刚更新的会话冒到对应位置）。
+    // 重排（置顶优先、其余按时间倒序），再就地刷新这一行并把它挪到对应位置。3000 个
+    // 会话时整表重建要几百毫秒，挪一行只要几毫秒；树或映射不完整时退回整表重建。
     balloonmain::SortConversations(m_conversations);
-    FillConversationsTree();
+    if (!RefreshConversationRow(ctype, cid, true))
+    {
+        FillConversationsTree();
+    }
 }
 
 void CBalloonMainPanel::MarkConversationRead(int ctype, int64_t cid)
@@ -5025,10 +5528,18 @@ void CBalloonMainPanel::MarkConversationRead(int ctype, int64_t cid)
     // 向服务端上报已读位点（cmd_mark_read），更新 t_conversation.f_readmsgid，使重新
     // 登录时该会话未读数据此重新计算而清零——这是修复"看过消息后重新登录未读仍不
     // 清零"的关键。readmsgid<=0（会话尚无已知消息）时 ReportConversationRead 内部跳过。
-    CIUSocket::GetInstance().ReportConversationRead(ctype, cid, readmsgid);
+    // 本次登录内已向服务端报过同样或更大的位点时不再重复上报：打开一个会话时点击处理与
+    // 窗口激活各调一次本函数，双击会话列表还会再执行一遍（见 ReadReportDedupe.h）。
+    // 本地清未读与托盘停闪不受影响，照常执行。
+    if (m_readReportDedupe.ShouldReport(ctype, cid, readmsgid))
+        CIUSocket::GetInstance().ReportConversationRead(ctype, cid, readmsgid);
+    else
+        LOG_INFO("MarkConversationRead: skip duplicate read report, ctype=%d, cid=%lld, readmsgid=%lld.",
+                 ctype, (long long)cid, (long long)readmsgid);
 
-    // 未读数变了才重绘（顺序不受未读影响，这里只为刷掉行尾的"(N)"）。
-    if (changed)
+    // 未读数变了才刷新。顺序不受未读影响，只就地刷新这一行的未读胶囊，不挪位置；
+    // 取不到那一行时退回整表重建。
+    if (changed && !RefreshConversationRow(ctype, cid, false))
     {
         FillConversationsTree();
     }
@@ -5123,28 +5634,30 @@ void CBalloonMainPanel::AddFavoritesSection(balloonwjui::DuiTreeView* tv)
     tv->SetExpanded(rootId, true);
     //根节点是分区标题，点击只展开 / 折叠，不显示选中底色（与其它分组标题一致）。
     tv->SetItemSelectable(rootId, false);
+    //登记分区根节点，RebuildFavoritesSection 据它只重建这一段
+    m_favoritesRootId = rootId;
 
     for (size_t i = 0; i < rows.size(); ++i)
     {
         const balloonmain::FavoriteRow& row = rows[i];
 
-        //FavoriteRow 里的头像标识是 CString，而 MakeEntityAvatarBitmap 与通讯录
+        //FavoriteRow 里的头像标识是 CString，而 GetEntityAvatarBitmap 与通讯录
         //那几处一样收 UTF-8 的 std::string（头像 fileid 本就是协议侧的字节串），
-        //故在此转一道。
-        HBITMAP hAvatar = MakeEntityAvatarBitmap(
+        //故在此转一道。位图归头像缓存所有，这里只借用。
+        HBITMAP hAvatar = GetEntityAvatarBitmap(
             row.m_cid, row.m_displayName, row.m_facetype,
             CStrToUtf8(row.m_customface), kContactAvatarSizePx);
 
         int node;
         if (hAvatar != NULL)
         {
-            m_avatarBitmaps.push_back(hAvatar);
             node = tv->AddChild(rootId, row.m_displayName, hAvatar);
         }
         else
         {
             node = tv->AddChild(rootId, row.m_displayName);
         }
+        m_favoriteSectionNodes.insert(node);
 
         if (!row.m_subLabel.IsEmpty())
         {
@@ -5166,8 +5679,10 @@ void CBalloonMainPanel::AddFavoritesSection(balloonwjui::DuiTreeView* tv)
         {
             //群行不画状态点（群没有"在线"这个概念），单独记一张表供开群聊 / 弹群菜单。
             m_favoriteGroupNodeId[node] = row.m_cid;
-            LOG_INFO("收藏分区登记群行: node=%d, groupid=%lld, 名称=%s。",
-                     node, (long long)row.m_cid, (LPCTSTR)row.m_displayName);
+            //群名是宽字符串，必须先转成 UTF-8 再按窄字符 %s 打印：直接传宽字符串会把
+            //UTF-16 的字节当成窄字符串写进日志；改用 %ls 则遇到中文时格式化失败，整条日志被丢弃
+            LOG_INFO("favorites section: group row registered, node=%d, groupid=%lld, name=%s.",
+                     node, (long long)row.m_cid, CStrToUtf8(row.m_displayName).c_str());
         }
     }
 }
@@ -5185,11 +5700,103 @@ void CBalloonMainPanel::RebuildContactsTree()
     m_favorites.ExportItems(m_lastContactsResult.m_favorites);
     //「特别关注」同理：不写回缓存，刚点下去的标记会被上一次应答里的旧名单覆盖。
     m_starred.ExportItems(m_lastContactsResult.m_starred);
+    //联系人资料池同理：OnContactsArrived 开头就是 m_contacts = result.m_contacts。
+    //登录之后对 m_contacts 的即时更新（备注、标签、在线状态、资料变更推送里的头像
+    //昵称签名）都只写在 m_contacts 上，不写回快照的话，任何一次重建联系人树都会把
+    //它们还原成登录时下发的旧值。2026-09-30 的「改完备注一失焦就变回原样」即由此
+    //而来：SetContactRemark 先把新备注写进 m_contacts，紧接着 RefreshContactDisplayName
+    //调本函数重建树，新备注随即被快照里的旧备注覆盖，资料窗又按覆盖后的缓存刷新。
+    m_lastContactsResult.m_contacts = m_contacts;
 
     LOG_INFO("重建联系人树: 收藏 %d 条, 群列表 %u 个。",
              m_favorites.Count(), (uint32_t)m_myGroups.size());
 
     OnContactsArrived(m_lastContactsResult);
+}
+
+bool CBalloonMainPanel::RebuildFavoritesSection()
+{
+    //还没收到过通讯录时没有树可改，交给调用方决定（RebuildContactsTree 此时也什么都不做）
+    if (m_lastContactsResult.m_contacts.empty() && m_lastContactsResult.m_departments.empty())
+    {
+        return false;
+    }
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonwjui::DuiTreeView* tv = (content != NULL)
+        ? dynamic_cast<balloonwjui::DuiTreeView*>(content->FindCtrlById(balloonmain::kIdContactsTree))
+        : NULL;
+    if (tv == NULL)
+    {
+        return false;
+    }
+
+    //1) 锚点：现在紧跟在收藏分区之后的那个根节点（没有分区时就是树里的第一个根节点）。
+    //   新分区追加到末尾之后要挪回它前面，也就是树顶。分区里的行都是叶子，所以分区
+    //   展开时占 1 + 行数 个可见行，折叠时只占根节点这一行
+    bool wasExpanded = true;
+    int anchor = -1;
+    if (m_favoritesRootId != -1 && tv->GetVisibleRow(m_favoritesRootId) >= 0)
+    {
+        wasExpanded = tv->IsExpanded(m_favoritesRootId);
+        const int afterRow = tv->GetVisibleRow(m_favoritesRootId) + 1
+                           + (wasExpanded ? (int)m_favoriteSectionNodes.size() : 0);
+        anchor = (afterRow < tv->GetVisibleCount()) ? tv->GetIdAtVisibleRow(afterRow) : -1;
+
+        //2) 注销旧分区各行的映射，再删掉整个分区
+        for (std::set<int>::const_iterator it = m_favoriteSectionNodes.begin();
+             it != m_favoriteSectionNodes.end(); ++it)
+        {
+            m_contactNodeUserId.erase(*it);
+            m_favoriteGroupNodeId.erase(*it);
+        }
+        tv->Remove(m_favoritesRootId);
+    }
+    else if (tv->GetVisibleCount() > 0)
+    {
+        anchor = tv->GetIdAtVisibleRow(0);
+    }
+    m_favoritesRootId = -1;
+    m_favoriteSectionNodes.clear();
+
+    //3) 追加新分区（收藏为空时不建），挪回锚点之前，恢复展开状态
+    AddFavoritesSection(tv);
+    if (m_favoritesRootId != -1)
+    {
+        tv->SetExpanded(m_favoritesRootId, wasExpanded);
+        if (anchor != -1)
+        {
+            tv->MoveRoot(m_favoritesRootId, anchor);
+        }
+    }
+
+    SyncPaneContentHeight(balloonmain::kIdPaneContacts,
+                          balloonmain::kIdContactsTree, kContactsPaneTitleHeight);
+    LOG_INFO("favorites section rebuilt in place: rows=%u, expanded=%d.",
+             (unsigned)m_favoriteSectionNodes.size(), wasExpanded ? 1 : 0);
+    return true;
+}
+
+void CBalloonMainPanel::RefreshContactFavoriteBadges(int64_t userid)
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    balloonwjui::DuiTreeView* tv = (content != NULL)
+        ? dynamic_cast<balloonwjui::DuiTreeView*>(content->FindCtrlById(balloonmain::kIdContactsTree))
+        : NULL;
+    if (tv == NULL || userid <= 0)
+    {
+        return;
+    }
+    //同一个人在部门树里可能有多行（主部门 + 兼属部门），m_contactOrgNode 只记了其中一行，
+    //所以遍历全部联系人行。收藏分区自己的行不画徽章，跳过
+    for (std::map<int, UINT>::const_iterator it = m_contactNodeUserId.begin();
+         it != m_contactNodeUserId.end(); ++it)
+    {
+        if (it->second != (UINT)userid || m_favoriteSectionNodes.count(it->first) != 0)
+        {
+            continue;
+        }
+        ApplyFavoriteMark(tv, it->first, conversation_single, userid);
+    }
 }
 
 void CBalloonMainPanel::ToggleFavorite(int ctype, int64_t cid)
@@ -5220,7 +5827,21 @@ void CBalloonMainPanel::SetFavoriteState(int ctype, int64_t cid, bool favorite)
     //先本地生效再发协议：点完立刻能看到收藏区的变化，不必等一个来回。
     //应答失败时按服务端回带的 ctype/cid/favorite 回滚（见 OnSetFavoriteResult）。
     m_favorites.SetFavorite(ctype, cid, favorite);
-    RebuildContactsTree();
+    //联系人树只有收藏分区与此人名字后面的收藏徽章变了：只重建分区、就地刷新徽章，
+    //不整棵重建（5000 人时整棵重建要几百毫秒，点一下收藏会明显卡顿）。
+    if (RebuildFavoritesSection())
+    {
+        if (ctype == conversation_single)
+        {
+            RefreshContactFavoriteBadges(cid);
+        }
+    }
+    else
+    {
+        RebuildContactsTree();
+    }
+    //群列表与会话列表上的收藏徽章就地刷新，不必整树重建。
+    RefreshFavoriteMarks(ctype, cid);
 
     CIUSocket::GetInstance().SendSetFavorite(ctype, cid, favorite);
 
@@ -5241,7 +5862,19 @@ void CBalloonMainPanel::OnSetFavoriteResult(const net::SetFavoriteResult& result
     //本次请求的意图是 m_favorite，回滚就是把它设成相反值。
     const bool intended = (result.m_favorite != 0);
     m_favorites.SetFavorite(result.m_ctype, result.m_cid, !intended);
-    RebuildContactsTree();
+    //与 SetFavorite 同理：只重建收藏分区、就地刷新徽章
+    if (RebuildFavoritesSection())
+    {
+        if (result.m_ctype == conversation_single)
+        {
+            RefreshContactFavoriteBadges(result.m_cid);
+        }
+    }
+    else
+    {
+        RebuildContactsTree();
+    }
+    RefreshFavoriteMarks(result.m_ctype, result.m_cid);
     //资料对话框上的收藏开关此刻还停在用户拨过去的位置，跟着退回来，否则界面显示的
     //状态与实际状态不一致，而用户没有任何提示。群收藏不影响该窗口，故只处理联系人。
     if (result.m_ctype == conversation_single)
@@ -5278,6 +5911,82 @@ void CBalloonMainPanel::ApplyStarredMark(balloonwjui::DuiTreeView* tv, int node,
         return;
     }
     mtv->SetItemStarred(node, m_starred.IsStarred(userid));
+}
+
+void CBalloonMainPanel::ApplyFavoriteMark(balloonwjui::DuiTreeView* tv, int node,
+                                          int ctype, int64_t cid)
+{
+    //与 ApplyStarredMark 同理：徽章是 MainPanelTreeView 的扩展，转不过去就安静跳过。
+    balloonmain::MainPanelTreeView* mtv = dynamic_cast<balloonmain::MainPanelTreeView*>(tv);
+    if (mtv == NULL)
+    {
+        return;
+    }
+    mtv->SetItemFavorite(node, m_favorites.IsFavorite(ctype, cid));
+}
+
+void CBalloonMainPanel::RefreshFavoriteMarks(int ctype, int64_t cid)
+{
+    if (cid <= 0)
+    {
+        return;
+    }
+
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+
+    const bool favorite = m_favorites.IsFavorite(ctype, cid);
+
+    //群树：只有群才在这里出现。
+    const int kCtypeGroup = 2;
+    if (ctype == kCtypeGroup)
+    {
+        RefreshGroupsTreeFavoriteMarks();
+    }
+
+    //会话树：单聊与群聊会话都可能被收藏，按 (ctype, cid) 匹配。
+    balloonmain::MainPanelTreeView* mtv = dynamic_cast<balloonmain::MainPanelTreeView*>(
+        content->FindCtrlById(balloonmain::kIdMessagesTree));
+    if (mtv != NULL)
+    {
+        for (std::map<int, std::pair<int, int64_t> >::iterator it = m_msgNodeConv.begin();
+             it != m_msgNodeConv.end(); ++it)
+        {
+            if (it->second.first == ctype && it->second.second == cid)
+            {
+                mtv->SetItemFavorite(it->first, favorite);
+            }
+        }
+    }
+
+    LOG_INFO("refresh favorite marks: ctype=%d, cid=%lld, favorite=%d.",
+             ctype, (long long)cid, (int)favorite);
+}
+
+void CBalloonMainPanel::RefreshGroupsTreeFavoriteMarks()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    balloonmain::MainPanelTreeView* gtv = dynamic_cast<balloonmain::MainPanelTreeView*>(
+        content->FindCtrlById(balloonmain::kIdGroupsTree));
+    if (gtv == NULL)
+    {
+        return;
+    }
+
+    //节点 → 群ID 的映射由 FillGroupsTree 维护；群树还没填过时映射为空，什么都不做。
+    const int kCtypeGroup = 2;
+    for (std::map<int, int64_t>::iterator it = m_groupNodeId.begin();
+         it != m_groupNodeId.end(); ++it)
+    {
+        gtv->SetItemFavorite(it->first, m_favorites.IsFavorite(kCtypeGroup, it->second));
+    }
 }
 
 void CBalloonMainPanel::RefreshStarredMarks(int64_t userid)
@@ -5876,6 +6585,11 @@ void CBalloonMainPanel::ShowContactContextMenu(UINT peerUserId)
         BeginContactRemarkEdit(peerUserId);
         break;
 
+    //复制联系人名：复制列表上显示的名字（备注优先，其次昵称）
+    case kCMenuCopyName:
+        CopyContactName(peerUserId);
+        break;
+
     case 0:
         break;   // 未选中（失焦 / ESC）
 
@@ -5969,37 +6683,38 @@ void CBalloonMainPanel::ShowGroupContextMenu(int64_t groupId)
 {
     const int role = MyRoleInGroup(groupId);
 
-    // 置顶 / 免打扰的当前状态取自会话缓存。无消息的空群不在会话列表里，查不到就按
-    // "未置顶、未免打扰"显示，用户点了照样发协议生效（下次会话同步会把状态带回来）。
-    bool pinned = false;
-    bool muted  = false;
+    // 置顶状态取自群列表：它随群列表应答下发、本端切换与多端同步时都会更新，没有消息的
+    // 空群也有，与群 Tab 上画出来的置顶样式同一来源。免打扰仍取自会话缓存，空群查不到
+    // 就按"未免打扰"显示，用户点了照样发协议生效（下次会话同步会把状态带回来）。
+    const bool pinned = balloonmain::IsUserGroupPinned(m_myGroups, groupId);
+    bool muted = false;
     const net::ConversationItem* pConv =
         balloonmain::FindConversation(m_conversations, 2, groupId);
     if (pConv != NULL)
     {
-        pinned = (pConv->m_pinned != 0);
-        muted  = (pConv->m_mute != 0);
+        muted = (pConv->m_mute != 0);
     }
 
-    // 组装菜单（结构对照 design/群聊右键菜单.png）。本轮文字版：退出群聊暂无法
-    // 标红（DuiMenu 不支持单项配色），图标待补资源；"群管理"仅群主/管理员显示。
+    // 组装菜单（结构对照 design/群聊右键菜单.png，行模型见 MainPanelGroupMenu.h）。本轮文字版：
+    // 退出群聊暂无法标红（DuiMenu 不支持单项配色），图标待补资源；"群管理"仅群主/管理员显示。
+    balloonmain::GroupMenuState state;
+    state.m_canManage = (role == kGroupRoleOwner || role == kGroupRoleAdmin);
+    state.m_pinned    = pinned;
+    state.m_muted     = muted;
+    state.m_favorite  = m_favorites.IsFavorite(2, groupId);
+    const std::vector<balloonmain::GroupMenuEntry> rows = balloonmain::BuildGroupMenuModel(state);
     balloonwjui::DuiMenu menu;
-    menu.AppendItem(kGMenuEnter,    _T("进入群聊"));
-    menu.AppendItem(kGMenuViewInfo, _T("查看群资料"));
-    // 收藏项紧跟在"查看群资料"之后，与联系人菜单同一位置。
-    menu.AppendItem(kGMenuFavorite,
-        balloonmain::FavoritesModel::GetMenuLabel(m_favorites.IsFavorite(2, groupId)));
-    menu.AppendItem(kGMenuViewHistory, _T("查看历史消息"));
-    if (role == kGroupRoleOwner || role == kGroupRoleAdmin)
+    for (size_t i = 0; i < rows.size(); ++i)
     {
-        menu.AppendItem(kGMenuManage, _T("群管理"));
+        if (rows[i].m_isSeparator)
+        {
+            menu.AppendSeparator();
+        }
+        else
+        {
+            menu.AppendItem(rows[i].m_id, rows[i].m_label);
+        }
     }
-    // 文案随当前状态取反，与会话列表右键菜单同一套写法（见 BuildConversationMenuModel）。
-    menu.AppendItem(kGMenuPin,  pinned ? _T("取消置顶") : _T("置顶群聊"));
-    menu.AppendItem(kGMenuMute, muted  ? _T("取消免打扰") : _T("消息免打扰"));
-    menu.AppendSeparator();
-    menu.AppendItem(kGMenuClearMsgs, _T("清空聊天记录"));
-    menu.AppendItem(kGMenuQuit,      _T("退出群聊"));
 
     // 弹出前把落点夹进显示器工作区（DuiMenu 不自动翻转，见 PopupMenuPlacement.h）。
     POINT pt = { 0, 0 };
@@ -6009,32 +6724,44 @@ void CBalloonMainPanel::ShowGroupContextMenu(int64_t groupId)
 
     switch (chosen)
     {
-    case kGMenuEnter:
+    //进入群聊：打开群聊窗
+    case balloonmain::kGroupMenuEnter:
         OpenGroupChat(groupId);
         break;
 
-    case kGMenuManage:
+    //群管理：仅群主 / 管理员的菜单里有这一项
+    case balloonmain::kGroupMenuManage:
         OpenGroupManage(groupId);
         break;
 
-    case kGMenuViewInfo:
+    //查看群资料
+    case balloonmain::kGroupMenuViewInfo:
         OpenGroupInfo(groupId);
         break;
 
-    case kGMenuViewHistory:
+    //查看历史消息：打开消息记录窗口并定位到本群
+    case balloonmain::kGroupMenuViewHistory:
         OpenHistory(2, groupId);
         break;
 
-    case kGMenuFavorite:
+    //添加到收藏 / 取消收藏
+    case balloonmain::kGroupMenuFavorite:
         ToggleFavorite(2, groupId);
         break;
 
-    case kGMenuPin:
-        // 菜单文案是按当前状态取反给出的，故这里直接取反写入。
+    //复制群号 / 复制群名：写入剪贴板
+    case balloonmain::kGroupMenuCopyGroupNo:
+    case balloonmain::kGroupMenuCopyGroupName:
+        CopyGroupInfoText(groupId, chosen == balloonmain::kGroupMenuCopyGroupNo);
+        break;
+
+    //置顶群聊 / 取消置顶：菜单文案是按当前状态取反给出的，故这里直接取反写入
+    case balloonmain::kGroupMenuPin:
         SetConversationPinnedState(2, groupId, !pinned);
         break;
 
-    case kGMenuMute:
+    //消息免打扰 / 取消免打扰
+    case balloonmain::kGroupMenuMute:
         SetConversationMuteState(2, groupId, !muted);
         break;
 
@@ -6146,6 +6873,17 @@ void CBalloonMainPanel::ShowConversationContextMenu(int ctype, int64_t cid)
         DeleteConversation(ctype, cid);
         break;
 
+    //复制联系人名（单聊会话）：复制列表上显示的名字（备注优先，其次昵称）
+    case balloonmain::kConvMenuCopyName:
+        CopyContactName((UINT)cid);
+        break;
+
+    //复制群号 / 复制群名（群会话）
+    case balloonmain::kConvMenuCopyGroupNo:
+    case balloonmain::kConvMenuCopyGroupName:
+        CopyGroupInfoText(cid, chosen == balloonmain::kConvMenuCopyGroupNo);
+        break;
+
     case balloonmain::kConvMenuDeleteAll:
         DeleteAllConversations();
         break;
@@ -6156,6 +6894,23 @@ void CBalloonMainPanel::ShowConversationContextMenu(int ctype, int64_t cid)
     default:
         break;   // 行模型里没有别的项，落到这里说明 id 对不上，静默忽略
     }
+}
+
+void CBalloonMainPanel::CopyContactName(UINT peerUserId)
+{
+    const CString name = ContactDisplayName(peerUserId);
+    const bool ok = flamingo::CopyTextToClipboard((LPCTSTR)name);
+    LOG_INFO("context menu: copy contact name, userid=%u, length %d, ok=%d.",
+             peerUserId, name.GetLength(), (int)ok);
+}
+
+void CBalloonMainPanel::CopyGroupInfoText(int64_t groupId, bool copyNumber)
+{
+    const CString text = copyNumber ? CString(balloonmain::FormatGroupNumber(groupId).c_str())
+                                    : GroupDisplayName(groupId);
+    const bool ok = flamingo::CopyTextToClipboard((LPCTSTR)text);
+    LOG_INFO("context menu: copy group %s, groupid=%lld, length %d, ok=%d.",
+             copyNumber ? "number" : "name", (long long)groupId, text.GetLength(), (int)ok);
 }
 
 void CBalloonMainPanel::OpenConversationProfile(int ctype, int64_t cid)
@@ -6258,6 +7013,14 @@ void CBalloonMainPanel::SetConversationPinnedState(int ctype, int64_t cid, bool 
     if (balloonmain::SetConversationPinned(m_conversations, ctype, cid, pinned))
     {
         FillConversationsTree();
+    }
+
+    // 群的置顶还要同步到群 Tab。没有消息的空群不在会话缓存里，上面那一步改不到它，
+    // 群 Tab 只认群列表里的置顶状态，所以两份各改各的。
+    const int kCtypeGroup = 2;
+    if (ctype == kCtypeGroup && balloonmain::SetUserGroupPinned(m_myGroups, cid, pinned))
+    {
+        FillGroupsTree();
     }
 
     CIUSocket::GetInstance().SendSetConversation(ctype, cid,
@@ -6513,13 +7276,11 @@ CString CBalloonMainPanel::GetUserConfigPath() const
         return CString();
     }
 
-    //路径拼法与 CFlamingoClient::LoadUserConfig / SaveUserConfig 一致 ——
-    //三处必须指同一个文件，否则记的账下次读不回来。
-    const TCHAR* pszAccount = m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount.c_str();
-    TCHAR szConfigPath[MAX_PATH] = { 0 };
-    _stprintf_s(szConfigPath, MAX_PATH, _T("%sUsers\\%s\\%s.cfg"),
-                g_szDataRoot, pszAccount, pszAccount);
-    return CString(szConfigPath);
+    //与 CFlamingoClient::LoadUserConfig / SaveUserConfig 用同一个函数拼路径 ——
+    //几处必须指同一个文件，否则记的账下次读不回来。
+    const std::wstring configPath = net::UserConfigFilePath(g_szDataRoot,
+                                                            m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount);
+    return CString(configPath.c_str());
 }
 
 LRESULT CBalloonMainPanel::OnOpenGroupAnnounceMsg(UINT /*uMsg*/, WPARAM wParam,
@@ -6553,6 +7314,9 @@ void CBalloonMainPanel::OnGroupMemberChanged(const net::GroupMemberChangedNotify
         pWin->OnMemberChanged(notify);
     }
 
+    //本次是否已经为刷新本人角色补拉过群资料，避免下面两处各发一次
+    bool infoRequested = false;
+
     //2) 该群的聊天窗开着 —— 让它重拉成员边栏（@提醒 的候选、成员数标题都靠它）
     std::map<int64_t, CBalloonGroupChatWindow*>::iterator itChat =
         m_groupChatWindows.find(notify.m_groupid);
@@ -6571,7 +7335,21 @@ void CBalloonMainPanel::OnGroupMemberChanged(const net::GroupMemberChangedNotify
             LOG_INFO(_T("群 %lld 有成员角色变更，补拉群资料以刷新本人角色。"),
                      (long long)notify.m_groupid);
             CIUSocket::GetInstance().RequestGroupInfo(notify.m_groupid);
+            infoRequested = true;
         }
+    }
+
+    //2.5) 名单里有本人的角色变更（被设为 / 撤销管理员、转让群主时的新旧群主）：不管聊天窗
+    //     开没开都补拉一次群资料，应答到达后 OnGroupInfoArrived 会更新本人角色的缓存
+    //     （m_groupInfo[群].m_myrole）。主面板群右键菜单里的「群管理」、打开群管理窗前的权限
+    //     判断、之后打开聊天窗时右上角的齿轮都按这份缓存走，不补拉就要等重新登录才更新
+    if (!infoRequested
+        && grouprole::ShouldRefetchMyRoleOnMemberChange(notify.m_changetype, notify.m_userids,
+                                                        (int64_t)SelfUserId()))
+    {
+        LOG_INFO("Group %lld: my role changed, refetch group info to refresh the cached role.",
+                 (long long)notify.m_groupid);
+        CIUSocket::GetInstance().RequestGroupInfo(notify.m_groupid);
     }
 
     //3) 本人被移出本群：把该群的会话从列表里去掉，并关掉它的聊天窗。
@@ -6732,6 +7510,17 @@ void CBalloonMainPanel::OnConversationChanged(const net::ConversationChangedNoti
         FillConversationsTree();
         LOG_INFO("会话多端同步(置顶/免打扰): ctype=%d, cid=%lld, pinned=%d, mute=%d。",
                  notify.m_ctype, (long long)notify.m_cid, notify.m_pinned, notify.m_mute);
+    }
+
+    // 群的置顶同步到群 Tab。与会话缓存不同，群列表里总有这个群（哪怕是没有消息的空群），
+    // 所以另一台设备置顶空群时，本端的群 Tab 也能跟着变。
+    const int kCtypeGroup = 2;
+    if (notify.m_ctype == kCtypeGroup
+        && balloonmain::SetUserGroupPinned(m_myGroups, notify.m_cid, notify.m_pinned != 0))
+    {
+        FillGroupsTree();
+        LOG_INFO("group pin synced from another device: groupid=%lld, pinned=%d.",
+                 (long long)notify.m_cid, notify.m_pinned);
     }
 }
 
@@ -7137,6 +7926,10 @@ void CBalloonMainPanel::ApplyConnectionState(int state)
     {
         m_contactWindow.ApplyConnectionState(state);
     }
+
+    // 系统设置：「清理聊天记录」对话框按连接态决定「清理」是否可用。设置窗对象常驻，
+    // 不论开着与否都转告一次，下次打开清理对话框时即按最新状态初始化。
+    m_systemSettingDlg.SetServerConnected(state == balloonmain::kConnUiOnline);
 }
 
 void CBalloonMainPanel::ApplyPresenceOptimistic(int targetPresence)
@@ -7162,72 +7955,15 @@ void CBalloonMainPanel::ComputeContactDeptInfo(UINT userId, CString& outPosition
     outPosition.Empty();
     outDeptPath.Empty();
 
-    // deptid → 部门指针索引，便于沿 parentdeptid 上溯。
-    std::map<int64_t, const net::DepartmentItem*> byId;
-    for (size_t i = 0; i < m_departments.size(); ++i)
+    // 查 RebuildContactDeptPaths 算好的表。选部门的规则（主部门优先，否则第一个所在部门）
+    // 与路径的拼法见 ContactDeptTable.h；不在任何部门的人查不到，两个出参保持为空。
+    std::map<UINT, balloonmain::ContactDeptInfo>::const_iterator it = m_contactDeptInfo.find(userId);
+    if (it == m_contactDeptInfo.end())
     {
-        byId[m_departments[i].m_deptid] = &m_departments[i];
+        return;
     }
-
-    // 找该用户的主部门（isprimary==1）并取其职务；无主部门则取首个所在部门。
-    const net::DepartmentItem* primaryDept = NULL;
-    const net::DepartmentItem* anyDept = NULL;
-    std::string position;
-    for (size_t i = 0; i < m_departments.size() && primaryDept == NULL; ++i)
-    {
-        const std::vector<net::DeptMemberItem>& ms = m_departments[i].m_members;
-        for (size_t k = 0; k < ms.size(); ++k)
-        {
-            if ((UINT)ms[k].m_userid != userId)
-            {
-                continue;
-            }
-            if (anyDept == NULL)
-            {
-                anyDept   = &m_departments[i];
-                position  = ms[k].m_position;   // 兜底用首个所在部门的职务
-            }
-            if (ms[k].m_isprimary == 1)
-            {
-                primaryDept = &m_departments[i];
-                position    = ms[k].m_position;
-                break;
-            }
-        }
-    }
-    const net::DepartmentItem* dept = (primaryDept != NULL) ? primaryDept : anyDept;
-    if (dept == NULL)
-    {
-        return;   // 不在任何部门
-    }
-    outPosition = Utf8ToCStr(position);
-
-    // 自该部门沿 parentdeptid 上溯到根，收集名称后反转拼成"产品部 / 设计组"。
-    std::vector<CString> chain;
-    const net::DepartmentItem* cur = dept;
-    int guard = 0;
-    while (cur != NULL && guard < 32)   // guard 防异常数据成环
-    {
-        chain.push_back(Utf8ToCStr(cur->m_name));
-        if (cur->m_parentdeptid == 0)
-        {
-            break;
-        }
-        std::map<int64_t, const net::DepartmentItem*>::iterator it =
-            byId.find(cur->m_parentdeptid);
-        cur = (it != byId.end()) ? it->second : NULL;
-        ++guard;
-    }
-    CString path;
-    for (size_t i = chain.size(); i > 0; --i)
-    {
-        if (!path.IsEmpty())
-        {
-            path += _T(" / ");
-        }
-        path += chain[i - 1];
-    }
-    outDeptPath = path;
+    outPosition = Utf8ToCStr(it->second.m_position);
+    outDeptPath = Utf8ToCStr(it->second.m_deptPath);
 }
 
 bool CBalloonMainPanel::BuildContactModelFromCache(UINT peerUserId,
@@ -7317,17 +8053,19 @@ void CBalloonMainPanel::RefreshContactWindowIfShowing(UINT peerUserId)
 
 void CBalloonMainPanel::RebuildContactDeptPaths()
 {
+    // 一次扫描全部部门，得出每个人的职务与部门路径。原先是每个人都把全部部门重扫一遍，
+    // 5000 人、120 个部门时要一秒多（2026-10-01 基准实测）。
+    balloonmain::BuildContactDeptTable(m_departments, m_contactDeptInfo);
+
     m_contactDeptPaths.clear();
     for (size_t i = 0; i < m_contacts.size(); ++i)
     {
         const UINT userId = (UINT)m_contacts[i].m_userid;
-        CString position;
-        CString deptPath;
-        ComputeContactDeptInfo(userId, position, deptPath);
+        std::map<UINT, balloonmain::ContactDeptInfo>::const_iterator it = m_contactDeptInfo.find(userId);
         //没有部门归属的人不进表 —— 搜索结果行查不到就退回展示账号与地区。
-        if (!deptPath.IsEmpty())
+        if (it != m_contactDeptInfo.end() && !it->second.m_deptPath.empty())
         {
-            m_contactDeptPaths[userId] = deptPath;
+            m_contactDeptPaths[userId] = Utf8ToCStr(it->second.m_deptPath);
         }
     }
     LOG_INFO("contact dept path table rebuilt: %u of %u contacts have a department.",
@@ -7699,6 +8437,33 @@ LRESULT CBalloonMainPanel::OnLinkOptionChangedMsg(UINT /*uMsg*/, WPARAM wParam,
     return 0;
 }
 
+LRESULT CBalloonMainPanel::OnDefaultChatFontChangedMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                                       LPARAM /*lParam*/, BOOL& /*bHandled*/)
+{
+    // 逐个已打开的会话窗处理；单独设过字体的窗口由窗口自己判断后跳过。没开窗时两个 map
+    // 是空的，什么都不做。
+    for (std::map<UINT, CBalloonChatWindow*>::iterator it = m_chatWindows.begin();
+         it != m_chatWindows.end(); ++it)
+    {
+        if (it->second != NULL)
+        {
+            it->second->ApplyDefaultChatFontIfNotOverridden();
+        }
+    }
+    for (std::map<int64_t, CBalloonGroupChatWindow*>::iterator it = m_groupChatWindows.begin();
+         it != m_groupChatWindows.end(); ++it)
+    {
+        if (it->second != NULL)
+        {
+            it->second->ApplyDefaultChatFontIfNotOverridden();
+        }
+    }
+
+    LOG_INFO("default chat font changed: notified %d single chat windows and %d group chat windows.",
+             (int)m_chatWindows.size(), (int)m_groupChatWindows.size());
+    return 0;
+}
+
 void CBalloonMainPanel::StartCallWithContact(UINT peerUserId, bool video)
 {
     if (peerUserId == 0)
@@ -7803,6 +8568,32 @@ void CBalloonMainPanel::UpdateSearchDropdown()
     m_searchDropdown.UpdateQuery(anchorScreen, panelWidth, edit->GetText());
 }
 
+void CBalloonMainPanel::ScheduleSearchWarmUp()
+{
+    //已有一条在途：通讯录与群列表先后到达时只预热一次，那一次会按处理时的最新数据 Sync
+    if (m_searchWarmUpPending || !IsWindow())
+    {
+        return;
+    }
+    if (PostMessage(kMsgSearchWarmUp, 0, 0))
+    {
+        m_searchWarmUpPending = true;
+    }
+}
+
+LRESULT CBalloonMainPanel::OnSearchWarmUp(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM /*lParam*/)
+{
+    m_searchWarmUpPending = false;
+
+    //投递的消息排在 WM_PAINT 之前处理，直接预热会让刚填好的列表晚几百毫秒才画出来。
+    //先把待绘制的内容画完，再做耗时的预热。
+    ::UpdateWindow(m_hWnd);
+
+    //与 UpdateSearchDropdown 绑定给下拉的是同一份资料池与群列表，预热结果在按键时可直接复用
+    m_searchDropdown.WarmUpCandidates(m_contacts, m_myGroups);
+    return 0;
+}
+
 void CBalloonMainPanel::SyncSearchDropdownPos()
 {
     RECT anchorScreen = { 0, 0, 0, 0 };
@@ -7874,6 +8665,11 @@ void CBalloonMainPanel::OpenChangePwdDlg()
 void CBalloonMainPanel::OpenSystemSettingDlg()
 {
     // 系统设置对话框自包含（本期仅本地配置），创建并显示即可。
+    // 唯一的例外是「自动登录」开关：它的状态存在会话控制器持有的历史账号列表里，
+    // 设置窗读不到，须在打开前传进去（见 docs/自动登录方案.md §4）。
+    m_systemSettingDlg.SetAutoLoginSwitchState(m_sessionController.IsAutoLoginEnabledForCurrentAccount());
+    // 「清理聊天记录」要连着服务器才能用，同样在打开前把当前连接态传进去。
+    m_systemSettingDlg.SetServerConnected(m_connUiState == balloonmain::kConnUiOnline);
     m_systemSettingDlg.OpenSettings(m_hWnd);
 }
 
@@ -7960,12 +8756,11 @@ void CBalloonMainPanel::OnAvatarDownloadResult(const net::AvatarDownloadResult& 
             {
                 name = Utf8ToCStr(pc->m_username);
             }
-            HBITMAP hbm = MakeEntityAvatarBitmap(pc->m_userid, name,
-                                                 pc->m_facetype, pc->m_customface, kContactAvatarSizePx);
+            HBITMAP hbm = GetEntityAvatarBitmap(pc->m_userid, name,
+                                                pc->m_facetype, pc->m_customface, kContactAvatarSizePx);
             if (hbm != NULL)
             {
-                m_avatarBitmaps.push_back(hbm);   //入池，重填/析构时统一释放
-                ctv->SetItemIcon(it->first, hbm);
+                ctv->SetItemIcon(it->first, hbm);   //位图归头像缓存所有，这里只借用
                 any = true;
             }
         }
@@ -8025,12 +8820,11 @@ void CBalloonMainPanel::OnAvatarDownloadResult(const net::AvatarDownloadResult& 
                 continue;
             }
 
-            HBITMAP hbm = MakeEntityAvatarBitmap(entityId, name, facetype, customface,
-                                                 kMsgAvatarSizePx);
+            HBITMAP hbm = GetEntityAvatarBitmap(entityId, name, facetype, customface,
+                                                kMsgAvatarSizePx);
             if (hbm != NULL)
             {
-                m_msgAvatarBitmaps.push_back(hbm);
-                mtv->SetItemIcon(it->first, hbm);
+                mtv->SetItemIcon(it->first, hbm);   //位图归头像缓存所有，这里只借用
                 any = true;
             }
         }
@@ -8060,13 +8854,12 @@ void CBalloonMainPanel::OnAvatarDownloadResult(const net::AvatarDownloadResult& 
             {
                 continue;
             }
-            HBITMAP hbm = MakeEntityAvatarBitmap(it->second, GroupDisplayName(it->second),
-                                                 bit->second.m_facetype, bit->second.m_customface,
-                                                 kGroupAvatarSizePx);
+            HBITMAP hbm = GetEntityAvatarBitmap(it->second, GroupDisplayName(it->second),
+                                                bit->second.m_facetype, bit->second.m_customface,
+                                                kGroupAvatarSizePx);
             if (hbm != NULL)
             {
-                m_groupAvatarBitmaps.push_back(hbm);
-                gtv->SetItemIcon(it->first, hbm);
+                gtv->SetItemIcon(it->first, hbm);   //位图归头像缓存所有，这里只借用
                 any = true;
             }
         }
@@ -8169,14 +8962,11 @@ void CBalloonMainPanel::OnPresenceChanged(int64_t userid, int presence)
     //    同时记录变化前的旧 presence，用于下面判定该好友是否"刚上线"。通讯录里查不到该好友
     //    时按离线（presence_offline=0）处理 —— 这样首次出现为在线也能算上线。
     int oldPresence = 0;
-    for (size_t i = 0; i < m_contacts.size(); ++i)
+    net::ContactItem* pCached = FindCachedContactMutable((UINT)userid);
+    if (pCached != NULL && pCached->m_userid == userid)
     {
-        if (m_contacts[i].m_userid == userid)
-        {
-            oldPresence = m_contacts[i].m_presence;
-            m_contacts[i].m_presence = presence;
-            break;
-        }
+        oldPresence = pCached->m_presence;
+        pCached->m_presence = presence;
     }
 
     // 1.5) 好友从离线跳变为可见在线（上线）时，异步播放上线提示音。放在下面取面板
@@ -8200,6 +8990,21 @@ void CBalloonMainPanel::OnPresenceChanged(int64_t userid, int presence)
     if (wit != m_chatWindows.end() && wit->second != NULL && wit->second->IsWindow())
     {
         wit->second->SetPeerPresence(presence);
+    }
+
+    // 2.5) 群聊窗：已打开的群聊窗成员侧栏里该好友头像角上的状态徽标跟着变。群聊窗按 userid
+    //      自己判断侧栏里有没有这个人，不在时只记录。同样放在下面可能早退的地方之前。
+    //      本人的状态变化不走这里（见上面 1.5 的说明），由 NotifyMyPresenceChanged 负责
+    if ((UINT)userid != selfId)
+    {
+        for (std::map<int64_t, CBalloonGroupChatWindow*>::iterator git = m_groupChatWindows.begin();
+             git != m_groupChatWindows.end(); ++git)
+        {
+            if (git->second != NULL && git->second->IsWindow())
+            {
+                git->second->SetMemberPresence(userid, presence);
+            }
+        }
     }
 
     // 3) 联系人树上对应节点重着色 + 刷新。同一好友在树上只挂一个叶子，遍历"节点→userid"
@@ -8298,7 +9103,7 @@ void CBalloonMainPanel::OnUserInfoChanged(const net::UserInfoChangedNotify& noti
         return;
     }
 
-    // 2) 联系人树：重画该 userid 节点头像（字形即时生效；真图未缓存则 MakeEntityAvatarBitmap
+    // 2) 联系人树：重画该 userid 节点头像（字形即时生效；真图未缓存则 GetEntityAvatarBitmap
     //    内部触发下载，下载完成再经 OnAvatarDownloadResult 刷新）。
     balloonwjui::DuiTreeView* ctv = dynamic_cast<balloonwjui::DuiTreeView*>(
         content->FindCtrlById(balloonmain::kIdContactsTree));
@@ -8327,12 +9132,11 @@ void CBalloonMainPanel::OnUserInfoChanged(const net::UserInfoChangedNotify& noti
             ctv->SetItemLabel(it->first, ContactDisplayName((UINT)pc->m_userid));
             // 副行个性签名同步更新（与 AddContactLeaf 一致：联系人节点副标签 = 签名）。
             ctv->SetItemSubLabel(it->first, Utf8ToCStr(pc->m_signature));
-            HBITMAP hbm = MakeEntityAvatarBitmap(pc->m_userid, realName,
-                                                 pc->m_facetype, pc->m_customface, kContactAvatarSizePx);
+            HBITMAP hbm = GetEntityAvatarBitmap(pc->m_userid, realName,
+                                                pc->m_facetype, pc->m_customface, kContactAvatarSizePx);
             if (hbm != NULL)
             {
-                m_avatarBitmaps.push_back(hbm);
-                ctv->SetItemIcon(it->first, hbm);
+                ctv->SetItemIcon(it->first, hbm);   //位图归头像缓存所有，这里只借用
             }
             any = true;
             ++contactMatched;
@@ -8380,11 +9184,10 @@ void CBalloonMainPanel::OnUserInfoChanged(const net::UserInfoChangedNotify& noti
             {
                 mtv->SetItemLabel(it->first, display);
             }
-            HBITMAP hbm = MakeEntityAvatarBitmap(notify.m_userid, name, facetype, customface, kMsgAvatarSizePx);
+            HBITMAP hbm = GetEntityAvatarBitmap(notify.m_userid, name, facetype, customface, kMsgAvatarSizePx);
             if (hbm != NULL)
             {
-                m_msgAvatarBitmaps.push_back(hbm);
-                mtv->SetItemIcon(it->first, hbm);
+                mtv->SetItemIcon(it->first, hbm);   //位图归头像缓存所有，这里只借用
             }
             any = true;
         }
@@ -8435,6 +9238,29 @@ void CBalloonMainPanel::OnOrgStructureChanged(const net::OrgStructureChangedNoti
 void CBalloonMainPanel::ResetUnknownSenderPolicy()
 {
     m_unknownSenderPolicy.Reset();
+}
+
+void CBalloonMainPanel::ResetHistoryCoverage()
+{
+    //先确保打开的是本次登录账号的库：切换账号后 EnsureMsgStoreOpen 会关旧库、开新库，
+    //清的必须是新账号的覆盖区间
+    if (!EnsureMsgStoreOpen())
+    {
+        LOG_ERROR("Reset history coverage skipped: local message store not ready.");
+        return;
+    }
+    if (!m_msgStore.ClearAllCoverage())
+    {
+        LOG_ERROR("Reset history coverage failed.");
+        return;
+    }
+    LOG_INFO("History coverage reset after login.");
+}
+
+void CBalloonMainPanel::ResetReadReportDedupe()
+{
+    m_readReportDedupe.Reset();
+    LOG_INFO("Read report dedupe reset.");
 }
 
 void CBalloonMainPanel::OnSearchPick(void* userdata, UINT peerUserId)

@@ -275,6 +275,17 @@ enum PresenceChangeSource
 #define     FMG_MSG_CONV_MARK_READ          WM_USER + 497			//聊天窗/群聊窗被切到前台（WM_ACTIVATE）后通知主面板把该会话未读清零，wParam=ctype（1单聊 2群聊），lParam=堆上 long long* cid（处理后 delete）。窗口间直投、不经 ProxyWndProc，故无须在 FlamingoClient.cpp 加转发 case
 #define     FMG_MSG_OPEN_CHANGEPWD          WM_USER + 473			//请求主面板打开修改密码对话框（系统设置「账号安全」页"修改"按钮转发；无参）
 
+//——A 段（WM_USER + 4000 ~ 4499）：网络应答与推送 → 代理窗 → 主面板 CBalloonMainPanel——
+//
+//2026-08-16 号段整改划出的新段，段内按功能每档 100：4000 账号 / 4100 资料 / 4200 联系人 /
+//4300 群 / 4400 消息，档位顺序与 v2 协议 cmd 分组一致。本段的消息都由 IUSocket 投给代理窗，
+//必须在 FlamingoClient.cpp 的 ProxyWndProc 里加转发 case，否则会被静默丢弃、堆负载泄漏。
+#define     FMG_MSG_V2_MESSAGE_READ_NOTIFY  WM_USER + 4400			//v2 推送：对方已读你的消息(cmd_message_read_notify 1507)，lParam=net::MessageReadNotify*（单聊：cid=读消息的那个人的 userid，readmsgid=对方已读位点；主面板记下位点并转给已打开的单聊窗，处理后 delete）
+#define     FMG_MSG_V2_DELETE_MESSAGE_RESULT WM_USER + 4401			//v2 应答：删除单条消息(cmd_delete_message 1512)，lParam=net::DeleteMessageResponse*（成功时界面不做任何事，本地删行与移除气泡等 FMG_MSG_V2_MESSAGES_DELETED；失败时主面板提示原因，处理后 delete）
+#define     FMG_MSG_V2_DELETE_BY_TIME_RESULT WM_USER + 4402			//v2 应答：按时间范围清理聊天记录(cmd_delete_messages_by_time 1521)，lParam=net::DeleteMessagesByTimeResponse*（主面板转交系统设置 → 清理聊天记录对话框提示结果，处理后 delete）
+#define     FMG_MSG_V2_MESSAGES_DELETED     WM_USER + 4403			//v2 推送：本人删除了消息(cmd_messages_deleted_notify 1522)，lParam=net::MessagesDeletedNotify*（单条形式或区间形式；主面板据此删本地库、更新已打开的聊天窗与消息记录窗、重拉会话列表，处理后 delete）
+#define     FMG_MSG_V2_FORWARD_RESULT       WM_USER + 4404			//v2 应答：转发消息(cmd_forward_message 1511)，wParam=请求帧 seq（CIUSocket::ForwardMessage 的返回值；失败应答不带 clientmsgid，只能按它对回请求），lParam=net::ForwardMessageResponse*（主面板交给转发调度器处理，处理后 delete）
+
 //——B 段（WM_USER + 4500 ~ 4799）：窗口 → 主面板 CBalloonMainPanel——
 //
 //这一段是 2026-08-16 号段整改新划出来的，段内按<u>发起窗口</u>分档：
@@ -291,6 +302,8 @@ enum PresenceChangeSource
 //Source\Tests\MessageIdRegistryTests.cpp 的守卫用例把关。
 #define     FMG_MSG_OPEN_HISTORY            WM_USER + 4500			//聊天窗 / 群聊窗→主面板：打开某会话的历史消息记录窗，wParam 低字节=ctype(1单聊 2群聊)、次低字节=打开后预选的类型胶囊(balloonhistory::HistoryTypeFilter，0=全部 6=Pin；不填即 0)，lParam=堆上 int64_t* cid（处理后 delete）
 #define     FMG_MSG_OPEN_GROUP_MANAGE       WM_USER + 4501			//群聊窗→主面板：打开某群的群管理对话框，lParam=堆上 int64_t* groupId（处理后 delete）
+#define     FMG_MSG_OPEN_FORWARD_PICKER     WM_USER + 4502			//聊天窗 / 群聊窗→主面板：转发多选中的消息，打开目标选择窗，lParam=堆上 balloonmain::ForwardRequest*（UI/BalloonMain/ForwardRequest.h，处理后 delete）。窗口间直投、不经 ProxyWndProc
+#define     FMG_MSG_OPEN_MERGED_VIEWER      WM_USER + 4503			//聊天窗 / 群聊窗 / 聊天记录查看窗→主面板：打开一份合并转发的聊天记录，lParam=堆上 std::string*（合并消息的 content 原文，UTF-8，处理后 delete）。窗口间直投、不经 ProxyWndProc
 #define     FMG_MSG_REFRESH_SELF_HEADER     WM_USER + 4520			//个人信息对话框→主面板：乐观保存后请它按 m_UserInfo 立即刷新本人 Header（昵称/签名/头像）（无参）
 //下面四条是联系人资料对话框的动作出口。该窗口既没有 socket 也没有通讯录 / 收藏 /
 //特别关注三份缓存，判定与执行一律交给主面板，做法与备注名(553)、标签(562)一致。
@@ -300,6 +313,11 @@ enum PresenceChangeSource
 #define     FMG_MSG_SET_CONTACT_FAVORITE    WM_USER + 4522			//联系人资料窗→主面板：设置该联系人的收藏状态，wParam=对端 userid，lParam=目标状态(1 收藏 / 0 取消)；无堆负载，无需 delete
 #define     FMG_MSG_SET_CONTACT_STARRED     WM_USER + 4523			//联系人资料窗→主面板：设置该联系人的特别关注状态，wParam=对端 userid，lParam=目标状态(1 关注 / 0 取消)；无堆负载，无需 delete
 #define     FMG_MSG_LOCATE_CONTACT          WM_USER + 4524			//联系人资料窗→主面板：在通讯录树里定位该联系人（切到通讯录页、展开各级部门、滚动到该行并选中），wParam=对端 userid，lParam=0；无堆负载，无需 delete
+//本机历史账号列表由主面板上的会话控制器持有（内存一份、整份写回文件），系统设置窗若自行
+//读写 LoginAccountList.dat，写入的内容会被会话控制器下次落盘时整份覆盖，故只能转交它处理。
+//同样传目标状态而不是"取反"，理由同上。见 docs/自动登录方案.md §4。
+#define     FMG_MSG_SET_AUTO_LOGIN          WM_USER + 4525			//系统设置窗→主面板（由会话控制器处理）：设置当前账号的「自动登录」，wParam=目标状态(1 开 / 0 关)，lParam=0；无堆负载，无需 delete
+#define     FMG_MSG_DEFAULT_CHAT_FONT_CHANGED WM_USER + 4526		//系统设置窗→主面板：全局默认聊天字体改了（或恢复默认），请它让已打开、且没有单独设过字体的单聊 / 群聊窗改用新的默认字体（字体本身已写进账号配置，主面板从那里读），wParam=0，lParam=0；无堆负载，无需 delete
 #define     FMG_MSG_OPEN_ANNOUNCE_BOX       WM_USER + 4540			//新公告提示窗→主面板：点「查看全部」，请它打开「消息盒子」窗口，wParam=0，lParam=0；无堆负载，无需 delete
 //这条原先取的是 WM_USER + 497，与上面的 FMG_MSG_CONV_MARK_READ 撞了号，而两者<u>由同一个
 //窗口 CBalloonMainPanel 处理</u>。ATL 消息映射先匹配先赢，靠后的这条处理器永远不会执行：

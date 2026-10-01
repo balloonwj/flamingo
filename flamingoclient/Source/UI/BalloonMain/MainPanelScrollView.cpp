@@ -110,22 +110,34 @@ void MainPanelScrollView::SetEdgeInsetPx(int px)
     Invalidate();
 }
 
-void MainPanelScrollView::StartAnimPulse()
+bool MainPanelScrollView::StartAnimPulse()
 {
     balloonwjui::DuiHost* host = GetHost();
-    if (host == NULL || host->m_hWnd == NULL)
+    if (host == NULL || !::IsWindow(host->m_hWnd))
     {
-        return;
+        return false;
     }
     // 同 id 重复 SetTimer 等于重设该定时器，三个面板共用一份，互不冲突。
     ::SetTimer(host->m_hWnd, kScrollbarAnimTimerId, kScrollbarAnimIntervalMs, NULL);
+    return true;
 }
 
 void MainPanelScrollView::WakeScrollBar()
 {
+    // 已处于显现态时 pulse 定时器一定还在跑：宿主只在全部面板都报告"不再需要下一帧"
+    // 时才 KillTimer，而显现态的面板总是报告需要（见 TickScrollBarFade 的返回值）。
+    // 此时不能再调 SetTimer —— 以同一 id 重设会把定时器的计时清零，滚轮消息间隔小于
+    // 定时器周期时（快速拨动滚轮、触摸板连续滑动），定时器永远等不到触发，滚动条要
+    // 等用户停下来才会淡入。
+    if (!m_awake)
+    {
+        if (!StartAnimPulse())
+        {
+            return;   // 宿主未就绪：没有窗口可画，也就不进入显现态
+        }
+    }
     m_awake  = true;
     m_idleMs = 0;
-    StartAnimPulse();
 }
 
 void MainPanelScrollView::HideScrollBarNow()
@@ -226,11 +238,14 @@ bool MainPanelScrollView::OnMouseWheel(POINT pt, short zDelta, UINT mkFlags)
 
     // 滚动 → 滚动条淡入显现，并重新开始空闲计时。
     //
-    // 这两句不按 handled 分流：内容放得下时 CurrentScrollBar() 算出的
-    // m_visible 为 false，OnPaint 会提前返回，唤出动作画不出任何东西，
-    // 因此无须为这种情况单开一条分支。
+    // 不按 handled 分流：内容放得下时 CurrentScrollBar() 算出的 m_visible 为
+    // false，OnPaint 会提前返回，唤出动作画不出任何东西，因此无须为这种情况单开
+    // 一条分支。
+    //
+    // 这里不再调用 Invalidate：位置确有变化时，基类已失效视口并立即 UpdateWindow，
+    // 滑块的新位置随那次重绘一起画出；滑块透明度只在 TickScrollBarFade 里变化，
+    // 变化时那里会自行 Invalidate。再失效一次只会让每格滚轮把整个列表多画一遍。
     WakeScrollBar();
-    Invalidate();
     return handled;
 }
 

@@ -416,13 +416,10 @@ void CBalloonUpdateWindow::BuildUiOnce()
 
     // ---- 标题 ----
     {
-        HFONT titleFont = balloonwjui::DuiResMgr::Inst().GetFontByPointSize(kTitlePt, true);
+        // 按磅值设字号，绘制时按窗口 DPI 取字体。
         std::unique_ptr<balloonwjui::DuiLabel> lab(new balloonwjui::DuiLabel());
         lab->SetTextColor(kTitleColor);
-        if (titleFont != NULL)
-        {
-            lab->SetFont(titleFont);
-        }
+        lab->SetTextPointSize(kTitlePt, true);
         lab->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
         m_labTitle = lab.get();
         root->AddChild(std::move(lab), balloonwjui::DuiLayout::Hint().Fixed(kTitleH));
@@ -458,14 +455,10 @@ void CBalloonUpdateWindow::BuildUiOnce()
 
     // ---- 「更新说明」小标题 ----
     {
-        HFONT capFont = balloonwjui::DuiResMgr::Inst().GetFontByPointSize(kCaptionPt, false);
         std::unique_ptr<balloonwjui::DuiLabel> lab(new balloonwjui::DuiLabel());
         lab->SetText(_T("更新说明"));
         lab->SetTextColor(kGrayTextColor);
-        if (capFont != NULL)
-        {
-            lab->SetFont(capFont);
-        }
+        lab->SetTextPointSize(kCaptionPt, false);
         //顶部对齐：行高比文字高，空出来的部分落在文字下方，与正文框拉开距离
         lab->SetTextAlign(DT_LEFT | DT_TOP | DT_SINGLELINE);
         root->AddChild(std::move(lab), balloonwjui::DuiLayout::Hint().Fixed(kNoteCaptionH));

@@ -45,8 +45,8 @@ enum GroupInfoCtrlId : UINT
 {
     // ---- 顶部 Banner ----
     kIdGroupAvatar       = 360,  // 群头像格(字形 + 底色)
-    kIdGroupName         = 361,  // 群名(大字)
-    kIdGroupMeta         = 362,  // "群号 N · M 人"
+    kIdGroupName         = 361,  // 群名(大字;可点,点了复制完整群名)
+    kIdGroupMeta         = 362,  // "群号 N · M 人"(可点,点了复制纯数字群号)
     kIdGroupOwner        = 363,  // "群主:<显示名>"
 
     // ---- 群公告 ----
@@ -62,7 +62,7 @@ enum GroupInfoCtrlId : UINT
     kIdGroupPinSwitch    = 369,  // 置顶群聊 DuiSwitch
 
     // ---- 底部按钮 ----
-    kIdGroupBtnHistory   = 370,  // 查看消息记录(本轮占位)
+    kIdGroupBtnHistory   = 370,  // 查看消息记录(打开本群的消息记录窗口)
     kIdGroupBtnQuit      = 371,  // 退出群聊(危险红)
 };
 
@@ -145,5 +145,34 @@ std::string ResolveGroupOwnerName(const std::vector<net::GroupMemberItem>& membe
  */
 std::string ResolveMyGroupCard(const std::vector<net::GroupMemberItem>& members,
                                __int64 myUserid);
+
+/**
+ *  群资料窗口里点击群名 / 群号那一行时要复制的文字。
+ *    data：   当前展示的群资料。
+ *    ctrlId： 被点击的控件编号：kIdGroupName 复制完整群名；kIdGroupMeta 复制纯数字群号（不带
+ *             "群号"字样与人数，与 balloonmain::FormatGroupNumber 一致）；其余编号不复制。
+ *    text：   [出参] 要复制的文字；返回 false 时不可用。
+ *  @return 有可复制的文字时返回 true；控件编号不对应、群名为空或群 id 不大于 0 时返回 false。纯函数。
+ */
+bool GroupInfoCopyText(const GroupInfoViewData& data, UINT ctrlId, CString& text);
+
+/**
+ *  「查看消息记录」按钮要打开的会话：群聊类型与群 id，交给主面板的 OpenHistory。
+ *    data：  当前展示的群资料。
+ *    ctype： [出参] 会话类型，恒为 2（群聊）。
+ *    cid：   [出参] 群 id。
+ *  @return 群 id 有效（大于 0）时返回 true；否则返回 false，出参不可用。纯函数。
+ */
+bool GroupInfoHistoryTarget(const GroupInfoViewData& data, int& ctype, __int64& cid);
+
+/**
+ *  复制提示条（挂在根容器上的 DuiToast）距根容器顶边的偏移，供 DuiToast::SetTopOffset 使用。
+ *  提示条默认距顶 40 像素，正好压在群号那一行上；按本函数的结果放置后，提示条的文字框紧贴头部
+ *  资料区（头像、群名、群号、群主）的下边，刚复制的群名、群号不会被遮住。
+ *    root： BuildGroupInfoBody 建出的根控件，须已排过版；不转移所有权，不修改控件。
+ *  @return 偏移（像素，与控件矩形同一单位，因此随 DPI 自动缩放）：头像与群主两行底边中较低者减去
+ *          根容器顶边。root 为空或找不到头部控件时返回 -1，调用方应保持提示条原有位置。
+ */
+int GroupInfoToastTopOffset(balloonwjui::DuiControl* root);
 
 } // namespace balloonmain

@@ -68,8 +68,9 @@ TEST_CASE("CMENU1 常规单聊会话的菜单行序与分隔条位置", "[convme
 {
     std::vector<ConversationMenuEntry> items = BuildConversationMenuModel(MakeState());
 
-    // 10 个功能项 + 2 条分隔条 = 12 行（MakeState 造的是单聊会话，故有「特别关注」）。
-    REQUIRE(items.size() == 12);
+    // 11 个功能项 + 2 条分隔条 = 13 行（MakeState 造的是单聊会话，故有「特别关注」与
+    // 「复制联系人名」）。
+    REQUIRE(items.size() == 13);
 
     CHECK(items[0].m_id == kConvMenuOpen);
     CHECK(items[1].m_id == kConvMenuMarkRead);
@@ -79,16 +80,18 @@ TEST_CASE("CMENU1 常规单聊会话的菜单行序与分隔条位置", "[convme
     CHECK(items[4].m_id == kConvMenuFavorite);
     // 特别关注又紧跟收藏，同样与联系人右键菜单同一位置。
     CHECK(items[5].m_id == kConvMenuStarred);
-    CHECK(items[6].m_isSeparator == true);
-    CHECK(items[7].m_id == kConvMenuPin);
-    CHECK(items[8].m_id == kConvMenuMute);
-    CHECK(items[9].m_isSeparator == true);
-    CHECK(items[10].m_id == kConvMenuDelete);
-    CHECK(items[11].m_id == kConvMenuDeleteAll);
+    // 复制项放在第一组末尾。
+    CHECK(items[6].m_id == kConvMenuCopyName);
+    CHECK(items[7].m_isSeparator == true);
+    CHECK(items[8].m_id == kConvMenuPin);
+    CHECK(items[9].m_id == kConvMenuMute);
+    CHECK(items[10].m_isSeparator == true);
+    CHECK(items[11].m_id == kConvMenuDelete);
+    CHECK(items[12].m_id == kConvMenuDeleteAll);
 
     // 两个删除项排在最末一组，与上面的日常动作被分隔条隔开，减少误点。
-    CHECK(items[10].m_isSeparator == false);
     CHECK(items[11].m_isSeparator == false);
+    CHECK(items[12].m_isSeparator == false);
 }
 
 TEST_CASE("CMENU2 分隔条不带 id 与文本，功能项都有文本", "[convmenu]")
@@ -133,7 +136,8 @@ TEST_CASE("CMENU3 功能项 id 均非 0 且互不重复", "[convmenu]")
         CHECK(seen.count(items[i].m_id) == 0);
         seen.insert(items[i].m_id);
     }
-    CHECK(funcCount == 10);
+    //单聊会话：10 个原有功能项 + 「复制联系人名」（2026-10-01）
+    CHECK(funcCount == 11);
 }
 
 TEST_CASE("CMENU3b 第一项就是「打开会话」，前面没有标题行", "[convmenu]")
@@ -170,8 +174,9 @@ TEST_CASE("CMENU4 群会话的资料项文案是「查看群资料」", "[convme
     REQUIRE(eGroup.m_label != NULL);
     CHECK(wcscmp(eGroup.m_label, L"查看群资料") == 0);
 
-    // 切类型只换文案，不增减菜单项。
-    CHECK(groupItems.size() == 11);
+    // 群会话没有「特别关注」与「复制联系人名」，换成「复制群号」「复制群名」两项，总行数
+    // 与单聊相同（13 行，见 CMENU8）。
+    CHECK(groupItems.size() == 13);
 }
 
 TEST_CASE("CMENU4b 收藏项文案随当前收藏状态取反", "[convmenu]")
@@ -229,8 +234,8 @@ TEST_CASE("CMENU4c 特别关注只在单聊会话出现，文案随状态取反"
         INFO("行 index = " << i);
         CHECK((groupItems[i].m_isSeparator || groupItems[i].m_id != kConvMenuStarred));
     }
-    //群会话因此比单聊少一行
-    CHECK(groupItems.size() == BuildConversationMenuModel(single).size() - 1);
+    //群会话少了「特别关注」「复制联系人名」两行、多了「复制群号」「复制群名」两行，总行数与单聊相同
+    CHECK(groupItems.size() == BuildConversationMenuModel(single).size());
 }
 
 TEST_CASE("CMENU5 置顶项文案随当前置顶状态取反", "[convmenu]")
@@ -295,4 +300,36 @@ TEST_CASE("CMENU7 未读为 0 时标记已读灰显，有未读时可点", "[con
         }
         CHECK(items[i].m_enabled == true);
     }
+}
+
+// =====================================================================
+// CMENU8 —— 复制项（2026-10-01）
+// =====================================================================
+
+TEST_CASE("CMENU8 复制项：单聊只有复制联系人名，群聊只有复制群号与复制群名", "[convmenu][copymenu]")
+{
+    //单聊：复制联系人名紧跟特别关注，没有群相关的复制项
+    const std::vector<ConversationMenuEntry> single = BuildConversationMenuModel(MakeState());
+    const ConversationMenuEntry copyName = FindEntry(single, kConvMenuCopyName);
+    REQUIRE(copyName.m_id == kConvMenuCopyName);
+    REQUIRE(copyName.m_label != NULL);
+    CHECK(wcscmp(copyName.m_label, L"复制联系人名") == 0);
+    CHECK(copyName.m_enabled);
+    CHECK(FindEntry(single, kConvMenuCopyGroupNo).m_id == 0);
+    CHECK(FindEntry(single, kConvMenuCopyGroupName).m_id == 0);
+
+    //群聊：复制群号、复制群名依次紧跟收藏，排在第一组末尾；没有复制联系人名
+    ConversationMenuState groupState = MakeState();
+    groupState.m_isGroup = true;
+    const std::vector<ConversationMenuEntry> group = BuildConversationMenuModel(groupState);
+    REQUIRE(group.size() == 13);
+    CHECK(group[4].m_id == kConvMenuFavorite);
+    CHECK(group[5].m_id == kConvMenuCopyGroupNo);
+    CHECK(group[6].m_id == kConvMenuCopyGroupName);
+    CHECK(group[7].m_isSeparator);
+    REQUIRE(group[5].m_label != NULL);
+    REQUIRE(group[6].m_label != NULL);
+    CHECK(wcscmp(group[5].m_label, L"复制群号") == 0);
+    CHECK(wcscmp(group[6].m_label, L"复制群名") == 0);
+    CHECK(FindEntry(group, kConvMenuCopyName).m_id == 0);
 }

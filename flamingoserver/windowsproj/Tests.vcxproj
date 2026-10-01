@@ -91,6 +91,9 @@
     <ClCompile Include="..\chatserversrc\MessageProtocol.cpp" />
     <ClCompile Include="..\tests\test_messagepinmanager.cpp" />
     <ClCompile Include="..\chatserversrc\MessagePinManager.cpp" />
+    <ClCompile Include="..\tests\test_messagedeleterange.cpp" />
+    <ClCompile Include="..\tests\test_forwardsource.cpp" />
+    <ClCompile Include="..\chatserversrc\MessageDeleteRange.cpp" />
     <ClCompile Include="..\dbapi\DbFactory.cpp" />
     <ClCompile Include="..\tests\test_remotedesktopprotocol.cpp" />
     <ClCompile Include="..\chatserversrc\RemoteDesktopProtocol.cpp" />
@@ -102,7 +105,11 @@
     <ClCompile Include="..\tests\test_groupprotocol.cpp" />
     <ClCompile Include="..\chatserversrc\GroupProtocol.cpp" />
     <ClCompile Include="..\tests\test_grouppermission.cpp" />
+    <ClCompile Include="..\tests\test_groupautoname.cpp" />
+    <ClCompile Include="..\tests\test_pinnedgroups.cpp" />
     <ClCompile Include="..\chatserversrc\GroupPermission.cpp" />
+    <ClCompile Include="..\chatserversrc\GroupAutoName.cpp" />
+    <ClCompile Include="..\chatserversrc\GroupManager.cpp" />
     <ClCompile Include="..\tests\test_cardprotocol.cpp" />
     <ClCompile Include="..\chatserversrc\CardProtocol.cpp" />
     <ClCompile Include="..\tests\test_filetoken.cpp" />
@@ -117,6 +124,8 @@
     <ClCompile Include="..\tests\test_folderrelayhub.cpp" />
     <ClCompile Include="..\tests\test_fileprotocol.cpp" />
     <ClCompile Include="..\chatserversrc\FileProtocol.cpp" />
+    <ClCompile Include="..\tests\test_filestoremanager.cpp" />
+    <ClCompile Include="..\chatserversrc\FileStoreManager.cpp" />
     <ClCompile Include="..\tests\test_groupfileprotocol.cpp" />
     <ClCompile Include="..\chatserversrc\GroupFileProtocol.cpp" />
     <ClCompile Include="..\tests\test_sqlite_translator.cpp" />
@@ -195,6 +204,7 @@
     <ClInclude Include="..\tests\doctest.h" />
     <ClInclude Include="..\chatserversrc\DepartmentPath.h" />
     <ClInclude Include="..\chatserversrc\DepartmentMsg.h" />
+    <ClInclude Include="..\chatserversrc\MessageDeleteRange.h" />
     <ClInclude Include="..\chatserversrc\Protocol.h" />
     <ClInclude Include="..\net\FrameCodec.h" />
     <ClInclude Include="..\utils\PasswordHasher.h" />
@@ -219,6 +229,8 @@
     <ClInclude Include="..\chatserversrc\CallManager.h" />
     <ClInclude Include="..\chatserversrc\GroupProtocol.h" />
     <ClInclude Include="..\chatserversrc\GroupPermission.h" />
+    <ClInclude Include="..\chatserversrc\GroupAutoName.h" />
+    <ClInclude Include="..\chatserversrc\GroupManager.h" />
     <ClInclude Include="..\chatserversrc\CardProtocol.h" />
     <ClInclude Include="..\utils\FileToken.h" />
     <ClInclude Include="..\utils\ServerConfigLoader.h" />

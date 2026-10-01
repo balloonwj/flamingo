@@ -69,6 +69,7 @@ const TbItemDef kItemDefs[] =
     { kTbRotate,     kIconCellW },
     { kTbRotateLeft, kIconCellW },
     { kTbSeparator,  kSepCellW  },
+    { kTbCopyImage,  kIconCellW },
     { kTbSaveAs,     kIconCellW },
 };
 
@@ -175,6 +176,41 @@ void DrawDownload(Gdiplus::Graphics& g, Gdiplus::Pen& pen, float cx, float cy)
     g.DrawLine(&pen, cx + 4.0f, cy - 1.0f, cx, cy + 3.0f);
     // 托盘底线。
     g.DrawLine(&pen, cx - 7.0f, cy + 7.0f, cx + 7.0f, cy + 7.0f);
+}
+
+// 「复制图片」图标的几何尺寸（像素，相对按钮中心）：两张叠放的纸，前一张完整画出，
+// 后一张向左上错开、只画露在外面的那一截折线，这样不必先涂底色去遮挡。
+const float kCopySheetW      = 9.0f;    // 每张纸的宽
+const float kCopySheetH      = 11.0f;   // 每张纸的高
+const float kCopyFrontLeft   = -3.0f;   // 前一张纸左边相对按钮中心的偏移
+const float kCopyFrontTop    = -4.0f;   // 前一张纸上边相对按钮中心的偏移
+const float kCopySheetOffset = 4.0f;    // 后一张纸相对前一张向左、向上错开的距离
+const float kCopyCornerR     = 1.5f;    // 前一张纸的圆角半径
+
+// 画「复制图片」图标：两张叠放的纸。
+void DrawCopy(Gdiplus::Graphics& g, Gdiplus::Pen& pen, float cx, float cy)
+{
+    // 前一张纸：完整的圆角矩形。
+    const float fl = cx + kCopyFrontLeft;
+    const float ft = cy + kCopyFrontTop;
+    Gdiplus::GraphicsPath front;
+    AddRoundRect(front, Gdiplus::RectF(fl, ft, kCopySheetW, kCopySheetH), kCopyCornerR);
+    g.DrawPath(&pen, &front);
+
+    // 后一张纸：只画露在前一张左边、上边之外的折线（左下 → 左上 → 右上 → 右边落到前一张顶边）。
+    const float bl = fl - kCopySheetOffset;
+    const float bt = ft - kCopySheetOffset;
+    const float br = bl + kCopySheetW;
+    const float bb = bt + kCopySheetH;
+    Gdiplus::PointF back[] =
+    {
+        Gdiplus::PointF(fl, bb),
+        Gdiplus::PointF(bl, bb),
+        Gdiplus::PointF(bl, bt),
+        Gdiplus::PointF(br, bt),
+        Gdiplus::PointF(br, ft),
+    };
+    g.DrawLines(&pen, back, (INT)(sizeof(back) / sizeof(back[0])));
 }
 
 } // anonymous namespace
@@ -288,6 +324,10 @@ void ImageViewerToolbar::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         case kTbSaveAs:
             DrawDownload(g, pen, cx, cy);
             break;
+        //复制图片：两张叠放的纸
+        case kTbCopyImage:
+            DrawCopy(g, pen, cx, cy);
+            break;
         case kTbActual:
         {
             // "1:1" 文字按钮。
@@ -387,14 +427,32 @@ int ImageViewerToolbar::HitItemIndex(POINT ptHost) const
     return -1;
 }
 
+int ImageViewerToolbar::ItemCount()
+{
+    return kItemCount;
+}
+
+ToolbarItemKind ImageViewerToolbar::ItemKindAt(int index)
+{
+    if (index < 0 || index >= kItemCount)
+    {
+        return kTbSeparator;
+    }
+    return kItemDefs[index].kind;
+}
+
+bool ImageViewerToolbar::IsClickableKind(ToolbarItemKind kind)
+{
+    return (kind != kTbZoomPct && kind != kTbSeparator);
+}
+
 bool ImageViewerToolbar::IsClickable(int index) const
 {
     if (index < 0 || index >= kItemCount)
     {
         return false;
     }
-    ToolbarItemKind k = kItemDefs[index].kind;
-    return (k != kTbZoomPct && k != kTbSeparator);
+    return IsClickableKind(kItemDefs[index].kind);
 }
 
 void ImageViewerToolbar::TriggerItem(int index)
@@ -426,6 +484,10 @@ void ImageViewerToolbar::TriggerItem(int index)
     case kTbSaveAs:
         m_pCanvas->SaveImageAs();
         break;
+    //复制图片：写进剪贴板，之后可粘进聊天输入框直接发送
+    case kTbCopyImage:
+        m_pCanvas->CopyImage();
+        break;
     default:
         break;
     }
@@ -437,22 +499,38 @@ LPCTSTR ImageViewerToolbar::TooltipFor(int index) const
     {
         return _T("");
     }
-    switch (kItemDefs[index].kind)
+    return TooltipForKind(kItemDefs[index].kind);
+}
+
+LPCTSTR ImageViewerToolbar::TooltipForKind(ToolbarItemKind kind)
+{
+    switch (kind)
     {
+    //缩小一档
     case kTbZoomOut:
         return _T("缩小");
+    //放大一档
     case kTbZoomIn:
         return _T("放大");
+    //切到 100% 原始像素
     case kTbActual:
         return _T("原始尺寸");
+    //等比放进窗口
     case kTbFit:
         return _T("适应窗口");
+    //逆时针旋转 90°
     case kTbRotateLeft:
         return _T("向左旋转");
+    //顺时针旋转 90°
     case kTbRotate:
         return _T("向右旋转");
+    //把源文件另存到别处
     case kTbSaveAs:
         return _T("另存为");
+    //把图片放进剪贴板，可粘进聊天输入框发送
+    case kTbCopyImage:
+        return _T("复制图片");
+    //比例读数、分隔线：不可点击，没有提示
     default:
         return _T("");
     }

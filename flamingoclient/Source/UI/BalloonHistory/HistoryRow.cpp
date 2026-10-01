@@ -8,9 +8,11 @@
 #include <gdiplus.h>
 
 #include "../../../third-party/balloonui/balloonui/DuiNotify.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiToolTip.h"   // 图钉的「取消 Pin」悬停提示
 #include "../BalloonChatWnd/ChatIcons.h"       // kChatIconPin / DrawChatIcon
 #include "../BalloonChatWnd/ChatFileVisual.h"  // FileTypeColor（与文件气泡共用配色）
 #include "../BalloonChatWnd/ChatImageCache.h"  // 缩略图的后台解码与缓存
+#include "../BalloonChatWnd/ImagePlaceholder.h"  // 破图 / 需要下载 / 下载中的占位绘制（与聊天气泡共用）
 
 namespace balloonhistory {
 
@@ -48,9 +50,25 @@ static const COLORREF kDefaultPinColor = RGB(0xE6, 0x8A, 0x2E);
 //图钉描边宽，以 ChatIcons 的 viewBox 24 为基准。
 static const Gdiplus::REAL kPinStrokeWidth = 1.6f;
 
+//鼠标停在图钉上时的提示文字：点击图钉就是取消 Pin（与聊天气泡上那枚的提示一致）。
+static const wchar_t* const kPinMarkTooltip = L"取消 Pin";
+
 HistoryPinMark::HistoryPinMark()
     : m_color(kDefaultPinColor)
 {
+    //鼠标进入本控件时 DuiHost 会为已登记的控件自动弹出提示，不必自己处理悬停。
+    balloonwjui::DuiToolTipMgr::Inst().Register(this, kPinMarkTooltip);
+}
+
+bool HistoryPinMark::OnSetCursor(POINT /*pt*/)
+{
+    ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+    return true;
+}
+
+bool HistoryPinMark::OnLButtonDblClk(POINT /*pt*/, UINT /*mkFlags*/)
+{
+    return true;
 }
 
 void HistoryPinMark::SetIconColor(COLORREF color)
@@ -85,33 +103,144 @@ void HistoryPinMark::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
 //默认悬停底色：极淡的暖灰，与列表白底拉开一点点层次即可。太重会让鼠标划过时
 //整屏跟着闪，比不加还糟。
 static const COLORREF kDefaultHoverBg = RGB(0xF6, 0xF4, 0xF0);
+//定位高亮的底色：淡黄，与搜索命中的高亮同一色系，一眼看出是"翻到的那一条"
+static const COLORREF kLocatedBg = RGB(0xFF, 0xF4, 0xCC);
 
 // ---- HistoryRowThumb ------------------------------------------------------
 
 //缩略图 / 色块的圆角半径。
 static const int kThumbCorner = 6;
-//未命中缓存时的占位块底色（极淡的灰）。
-static const COLORREF kThumbPlaceholderBg = RGB(0xEE, 0xEC, 0xE8);
+//未命中缓存时的占位块底色，与聊天气泡的破图占位同一个颜色。
+static const COLORREF kThumbPlaceholderBg = balloonchatwnd::kImagePlaceholderBg;
 //类型色块里那几个字的字号（磅）。扩展名一般 2~4 个字符，小一号才塞得下。
 static const int kThumbExtPointSize = 8;
 
+//占位图标所在方框的边长（像素），即设计稿里缩略图的大小。预览图比它大时，图标按这个
+//大小画在预览图中央，不随之放大（见 HistoryRowThumb::OnPaint）。
+static const float kThumbGlyphDesignSide = 36.0f;
+
+//以下比例都相对上面那个方框的边长（设计稿里是 36 像素），见
+//snapshots/history_image_download_placeholder_design.png。
+//破图图标的宽度：36 像素下为 24。
+static const float kThumbBrokenGlyphRatio = 24.0f / 36.0f;
+//"需要下载 / 下载中"里照片图标的宽度：36 像素下为 22，给右下角的标记让出位置。
+static const float kThumbPhotoGlyphRatio = 22.0f / 36.0f;
+//照片图标的中心点（横纵相同）：36 像素下为 15.5，略偏左上。
+static const float kThumbPhotoCenterRatio = 15.5f / 36.0f;
+//右下角下载标记 / 加载圆环的圆心（横纵相同）：36 像素下为 26.5。
+static const float kThumbBadgeCenterRatio = 26.5f / 36.0f;
+//右下角下载标记 / 加载圆环的直径：36 像素下为 13。
+static const float kThumbBadgeDiameterRatio = 13.0f / 36.0f;
+
+//铺一块圆角底色。
+static void FillThumbBg(Gdiplus::Graphics& g, const RECT& rc, COLORREF color)
+{
+    Gdiplus::SolidBrush brush(Gdiplus::Color(255, GetRValue(color), GetGValue(color),
+                                             GetBValue(color)));
+    Gdiplus::GraphicsPath path;
+    AddRoundRectPath(path, rc, kThumbCorner);
+    g.FillPath(&brush, &path);
+}
+
 HistoryRowThumb::HistoryRowThumb()
     : m_kind(kNone)
+    , m_imageState(balloonchatwnd::kHistoryThumbImage)
+    , m_clickable(false)
+    , m_hot(false)
 {
 }
 
-void HistoryRowThumb::SetImage(const std::wstring& path)
+void HistoryRowThumb::SetImage(const std::wstring& path, int state, bool clickable)
 {
-    m_kind = path.empty() ? kNone : kImage;
-    m_path = path;
+    m_kind       = kImage;
+    m_path       = path;
+    m_imageState = state;
+    m_clickable  = clickable;
+    if (!clickable)
+    {
+        m_hot = false;   //不可点击就不显示悬停态
+    }
     Invalidate();
+}
+
+int HistoryRowThumb::GetImageState() const
+{
+    return (m_kind == kImage) ? m_imageState : (int)balloonchatwnd::kHistoryThumbImage;
+}
+
+bool HistoryRowThumb::IsClickable() const
+{
+    return m_kind == kImage && m_clickable;
 }
 
 void HistoryRowThumb::SetFile(const CString& ext)
 {
-    m_kind = kFile;
-    m_ext  = ext;
+    m_kind      = kFile;
+    m_ext       = ext;
+    m_clickable = false;
+    m_hot       = false;
     Invalidate();
+}
+
+bool HistoryRowThumb::OnMouseEnter()
+{
+    if (!IsClickable())
+    {
+        return balloonwjui::DuiControl::OnMouseEnter();
+    }
+    m_hot = true;
+    Invalidate();
+    return true;
+}
+
+bool HistoryRowThumb::OnMouseLeave()
+{
+    if (!IsClickable())
+    {
+        return balloonwjui::DuiControl::OnMouseLeave();
+    }
+    m_hot = false;
+    Invalidate();
+    return true;
+}
+
+bool HistoryRowThumb::OnSetCursor(POINT /*pt*/)
+{
+    if (!IsClickable())
+    {
+        return false;
+    }
+    ::SetCursor(::LoadCursor(NULL, IDC_HAND));
+    return true;
+}
+
+bool HistoryRowThumb::OnLButtonUp(POINT pt, UINT /*mkFlags*/)
+{
+    const RECT rc = GetRect();
+    if (!IsClickable() || !::PtInRect(&rc, pt))
+    {
+        return false;   //不可点击：什么都不发，免得窗口把它当成一次下载请求
+    }
+    NotifyParent(balloonwjui::DUIN_CLICK);
+    return true;
+}
+
+bool HistoryRowThumb::OnLButtonDblClk(POINT pt, UINT mkFlags)
+{
+    //转交给所在的行：行会以自己的 ctrlId 冒 DUIN_DBLCLK，窗口据此认出是哪一行。
+    //若直接交给基类，冒出去的是缩略图的 ctrlId，窗口认不出，双击就没有反应。
+    //
+    //要沿父链往上找行，不能只看直接父控件：图片预览与文件卡片都放在昵称下方的内容列
+    //里（文件色块外面还多一层卡片），直接父控件是那一列或那张卡片，不是行。
+    for (balloonwjui::DuiControl* node = GetParent(); node != NULL; node = node->GetParent())
+    {
+        HistoryRow* row = dynamic_cast<HistoryRow*>(node);
+        if (row != NULL)
+        {
+            return row->OnLButtonDblClk(pt, mkFlags);
+        }
+    }
+    return balloonwjui::DuiControl::OnLButtonDblClk(pt, mkFlags);
 }
 
 void HistoryRowThumb::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
@@ -164,29 +293,89 @@ void HistoryRowThumb::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         return;
     }
 
+    //图片占位里的图标先在一个设计稿大小（36 像素）的方框里按比例排好，再把方框居中放进
+    //控件。预览图显示在昵称下方、可达 200×150，图标若随之放大会显得笨重，故方框不随
+    //控件放大；控件比方框还小时（很扁的小图）方框按短边缩小。
+    const float shortSide   = (float)((w < h) ? w : h);
+    const float side        = (shortSide < kThumbGlyphDesignSide) ? shortSide : kThumbGlyphDesignSide;
+    const float boxLeft     = (float)rc.left + ((float)w - side) / 2.0f;
+    const float boxTop      = (float)rc.top + ((float)h - side) / 2.0f;
+    const float photoCx     = boxLeft + side * kThumbPhotoCenterRatio;
+    const float photoCy     = boxTop + side * kThumbPhotoCenterRatio;
+    const float badgeCx     = boxLeft + side * kThumbBadgeCenterRatio;
+    const float badgeCy     = boxTop + side * kThumbBadgeCenterRatio;
+    const float badgeD      = side * kThumbBadgeDiameterRatio;
+    const float centerX     = (float)rc.left + (float)w / 2.0f;
+    const float centerY     = (float)rc.top + (float)h / 2.0f;
+    const float brokenSize  = side * kThumbBrokenGlyphRatio;
+    //可点击且鼠标悬停时底色深一档，提示"这里能点"。
+    const COLORREF bg = (m_clickable && m_hot) ? balloonchatwnd::kImagePlaceholderHoverBg
+                                               : kThumbPlaceholderBg;
+
+    switch (m_imageState)
+    {
+    //需要下载：灰色照片图标 + 右下角蓝色下载标记
+    case balloonchatwnd::kHistoryThumbNeedDownload:
+        FillThumbBg(g, rc, bg);
+        balloonchatwnd::DrawPhotoGlyph(g, photoCx, photoCy, side * kThumbPhotoGlyphRatio,
+                                       balloonchatwnd::kImagePlaceholderGlyphStroke);
+        balloonchatwnd::DrawDownloadBadge(g, badgeCx, badgeCy, badgeD,
+                                          m_hot ? balloonchatwnd::kImagePlaceholderBadgeBlueHover
+                                                : balloonchatwnd::kImagePlaceholderBadgeBlue);
+        return;
+
+    //下载中：照片图标变淡，右下角换成加载圆环；此时不可点击
+    case balloonchatwnd::kHistoryThumbDownloading:
+        FillThumbBg(g, rc, kThumbPlaceholderBg);
+        balloonchatwnd::DrawPhotoGlyph(g, photoCx, photoCy, side * kThumbPhotoGlyphRatio,
+                                       balloonchatwnd::kImagePlaceholderGlyphFaded);
+        balloonchatwnd::DrawDownloadingBadge(g, badgeCx, badgeCy, badgeD);
+        return;
+
+    //破图：下载失败（仍可单击重试时悬停底色加深）、文件损坏或缺少下载信息
+    case balloonchatwnd::kHistoryThumbBroken:
+        FillThumbBg(g, rc, bg);
+        balloonchatwnd::DrawBrokenImageGlyph(g, centerX, centerY, brokenSize,
+                                             balloonchatwnd::kImagePlaceholderGlyphStroke);
+        return;
+
+    //显示真实缩略图：交给下面的缓存查询
+    default:
+        break;
+    }
+
     //图片：命中缓存就画缩放好的图，未命中画占位块并请求后台解码。
     //缓存键含展示尺寸，故这里传的宽高要与实际绘制尺寸一致。
-    Gdiplus::Bitmap* bmp = balloonchatwnd::ChatImageCache::Inst().Get(m_path, w, h);
-    if (bmp != NULL)
+    if (!m_path.empty())
     {
-        Gdiplus::GraphicsPath clipPath;
-        AddRoundRectPath(clipPath, rc, kThumbCorner);
-        g.SetClip(&clipPath);
-        g.DrawImage(bmp, rc.left, rc.top, w, h);
-        g.ResetClip();
+        Gdiplus::Bitmap* bmp = balloonchatwnd::ChatImageCache::Inst().Get(m_path, w, h);
+        if (bmp != NULL)
+        {
+            Gdiplus::GraphicsPath clipPath;
+            AddRoundRectPath(clipPath, rc, kThumbCorner);
+            g.SetClip(&clipPath);
+            g.DrawImage(bmp, rc.left, rc.top, w, h);
+            g.ResetClip();
+            return;
+        }
+    }
+
+    FillThumbBg(g, rc, kThumbPlaceholderBg);
+    if (m_path.empty())
+    {
+        return;   //调试入口没有登录态、或消息缺少 MD5：算不出缓存路径，只铺底色
+    }
+
+    //本地原图解码失败（文件损坏）：画破图。窗口判定状态时并不解码，所以这一情形只能
+    //在绘制时按缓存的失败记录来认。
+    if (balloonchatwnd::ChatImageCache::Inst().IsFailed(m_path, w, h))
+    {
+        balloonchatwnd::DrawBrokenImageGlyph(g, centerX, centerY, brokenSize,
+                                             balloonchatwnd::kImagePlaceholderGlyphStroke);
         return;
     }
 
-    Gdiplus::SolidBrush ph(Gdiplus::Color(255,
-        GetRValue(kThumbPlaceholderBg), GetGValue(kThumbPlaceholderBg),
-        GetBValue(kThumbPlaceholderBg)));
-    Gdiplus::GraphicsPath phPath;
-    AddRoundRectPath(phPath, rc, kThumbCorner);
-    g.FillPath(&ph, &phPath);
-
-    //请求后台解码。已缓存 / 进行中会被内部去重，重复调用无害。文件不存在时
-    //解码失败、缓存里不会有东西，本块就一直是占位 —— 这正是"缓存没有原图就不下载"
-    //那条约定下的表现。
+    //请求后台解码。已缓存 / 进行中 / 已记下失败的都会被内部去重，重复调用无害。
     balloonchatwnd::ChatImageCache::Inst().Request(m_path, w, h);
 }
 
@@ -195,6 +384,7 @@ void HistoryRowThumb::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
 HistoryRow::HistoryRow()
     : m_hoverBg(kDefaultHoverBg)
     , m_hovered(false)
+    , m_located(false)
 {
 }
 
@@ -254,12 +444,23 @@ void HistoryRow::SetHovered(bool hovered)
     Invalidate();
 }
 
+void HistoryRow::SetLocated(bool located)
+{
+    if (m_located == located)
+    {
+        return;
+    }
+    m_located = located;
+    Invalidate();
+}
+
 void HistoryRow::OnPaint(HDC hdc, const RECT& rcDirty)
 {
-    if (m_hovered)
+    //定位高亮优先于悬停底色：鼠标正好停在翻到的那一行上时，仍要看得出是它
+    if (m_located || m_hovered)
     {
         const RECT rc = GetRect();
-        HBRUSH brush = ::CreateSolidBrush(m_hoverBg);
+        HBRUSH brush = ::CreateSolidBrush(m_located ? kLocatedBg : m_hoverBg);
         ::FillRect(hdc, &rc, brush);
         ::DeleteObject(brush);
     }
@@ -269,8 +470,9 @@ void HistoryRow::OnPaint(HDC hdc, const RECT& rcDirty)
 
 bool HistoryRow::OnLButtonDblClk(POINT /*pt*/, UINT /*mkFlags*/)
 {
-    //双击整行 = 点「定位」。本行不认识"会话是哪个""要跳到哪条消息"，故只把
-    //"第几行被双击了"冒给宿主窗（DuiNotify 带的是本行的 ctrlId），由它去做。
+    //双击整行：图片行打开看图窗，其余类型定位到聊天窗（由宿主窗按消息类型决定）。
+    //本行不认识"会话是哪个""要跳到哪条消息"，故只把"第几行被双击了"冒给宿主窗
+    //（DuiNotify 带的是本行的 ctrlId），由它去做。
     //宿主窗须调过 DuiHost::EnableDoubleClick(true)，否则这个虚函数根本不会被调到。
     NotifyParent(balloonwjui::DUIN_DBLCLK);
     return true;

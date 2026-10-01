@@ -21,6 +21,14 @@ constexpr int MSGTYPE_SHAKE    = 13;  //抖一抖
 constexpr int MSGTYPE_MERGED   = 15;  //合并转发的聊天记录
 constexpr int MSGTYPE_SYSTEM   = 17;  //系统消息
 
+//合并转发标题的缺省值：客户端没有给出标题时使用
+constexpr const char* DEFAULT_MERGED_TITLE = u8"聊天记录";
+
+//UTF-8 续字节的判定：字节与 0xC0 相与后等于 0x80（即 10xxxxxx）的是多字节字符的
+//后续字节，不是一个新字符的开始。截断标题时据此找字符边界。
+constexpr unsigned char UTF8_CONTINUATION_MASK = 0xC0;
+constexpr unsigned char UTF8_CONTINUATION_BITS = 0x80;
+
 //把 Json::Value 序列化为紧凑（无缩进、无换行）的 JSON 文本
 static std::string writeCompact(const Json::Value& v)
 {
@@ -128,6 +136,69 @@ bool MessageProtocol::parseSendMessageRequest(const std::string& json, SendMessa
         req.quote = "";
 
     return true;
+}
+
+//int64 正数最多 19 位十进制数字（上限 9223372036854775807），超过即视为非法 fileid
+constexpr size_t MAX_INT64_DECIMAL_DIGITS = 19;
+
+//该消息类型的 content 是否可能引用一个上传过的文件（带 fileid 字段）
+static bool msgtypeMayReferenceFile(int msgtype)
+{
+    switch (msgtype)
+    {
+    //图片：{ fileid, md5, width, height, size }
+    case message_type_image:
+    //文件：{ fileid, md5, name, size, ext }
+    case message_type_file:
+    //语音：{ fileid, md5, duration, size }
+    case message_type_voice:
+    //短视频：与语音同样以 fileid 引用上传的文件
+    case message_type_video:
+    //大表情：自定义表情带 fileid，内置表情只有 emoji 字段（后者由调用方按字段缺失处理）
+    case message_type_emoji:
+    //截图：本质为图片子类，content 与图片一致
+    case message_type_screenshot:
+        return true;
+
+    //其余类型（文本、名片、卡片、系统消息等）不引用上传的文件
+    default:
+        return false;
+    }
+}
+
+bool MessageProtocol::parseFileIdText(const std::string& text, int64_t& fileid)
+{
+    //只接受纯十进制数字：atoll 会把 "117abc" 读成 117，这里要求整串都是数字
+    if (text.empty() || text.size() > MAX_INT64_DECIMAL_DIGITS)
+        return false;
+    for (size_t i = 0; i < text.size(); ++i)
+    {
+        if (text[i] < '0' || text[i] > '9')
+            return false;
+    }
+
+    const int64_t value = static_cast<int64_t>(strtoll(text.c_str(), NULL, 10));
+    if (value <= 0)
+        return false;
+
+    fileid = value;
+    return true;
+}
+
+bool MessageProtocol::extractContentFileId(int msgtype, const std::string& content, int64_t& fileid)
+{
+    //先按类型筛掉：文本消息占绝大多数，不必为它们解析 JSON
+    if (!msgtypeMayReferenceFile(msgtype))
+        return false;
+
+    Json::Value root;
+    if (!parseObject(content, root))
+        return false;
+
+    //协议约定 64 位 ID 一律编码为字符串，数值形态不认
+    if (!root["fileid"].isString())
+        return false;
+    return parseFileIdText(root["fileid"].asString(), fileid);
 }
 
 bool MessageProtocol::parseReceivedAck(const std::string& json, int64_t& msgid)
@@ -347,7 +418,9 @@ std::string MessageProtocol::buildSyncConversationsResponse(int code, const std:
 
 std::string MessageProtocol::buildSyncMessagesResponse(int code, const std::string& msg,
                                                        int ctype, int64_t cid, bool hasmore,
-                                                       const std::vector<MessageRecord>& messages)
+                                                       const std::vector<MessageRecord>& messages,
+                                                       int64_t peerReadMsgid,
+                                                       const SyncMessagesRequest* anchorReq)
 {
     Json::Value root;
     root["code"]    = code;
@@ -355,6 +428,24 @@ std::string MessageProtocol::buildSyncMessagesResponse(int code, const std::stri
     root["ctype"]   = ctype;
     root["cid"]     = std::to_string(cid);
     root["hasmore"] = hasmore;
+
+    //对方已读位点只对单聊有意义（群聊按协议不做已读回执）；调用方不给（搜索应答）时不输出。
+    //位点为 0（对方从没读过）照样输出，客户端据此知道「查过了，一条都没读」。
+    //以字符串编码，避免超过 2^53 的 msgid 在客户端丢精度。
+    if (ctype == conversation_single && peerReadMsgid >= 0)
+    {
+        root["peerreadmsgid"] = std::to_string(peerReadMsgid);
+    }
+
+    //原样回带请求锚点，客户端据此算出本页覆盖了哪段 msgid（docs/清理聊天记录方案.md §7.2）。
+    //两种模式只回带各自的那一个；搜索应答不传请求，两者都不输出
+    if (anchorReq != NULL)
+    {
+        if (anchorReq->isAfterMode)
+            root["aftermsgid"] = std::to_string(anchorReq->aftermsgid);
+        else
+            root["beforemsgid"] = std::to_string(anchorReq->beforemsgid);
+    }
 
     Json::Value arr(Json::arrayValue);
     for (size_t i = 0; i < messages.size(); ++i)
@@ -683,11 +774,13 @@ bool MessageProtocol::parseForwardMessageRequest(const std::string& json, Forwar
         return false;
 
     req.merge = root["merge"].isBool() ? root["merge"].asBool() : false;
-    req.title = root["title"].isString() ? root["title"].asString() : "";
+    req.title = normalizeForwardTitle(root["title"].isString() ? root["title"].asString() : "");
 
-    //msgids 必填且非空
+    //msgids 必填且非空；超过单次上限的请求直接拒掉，理由见 FORWARD_MAX_MESSAGES
     const Json::Value& arr = root["msgids"];
     if (!arr.isArray() || arr.size() == 0)
+        return false;
+    if (arr.size() > FORWARD_MAX_MESSAGES)
         return false;
     for (Json::ArrayIndex i = 0; i < arr.size(); ++i)
     {
@@ -699,29 +792,189 @@ bool MessageProtocol::parseForwardMessageRequest(const std::string& json, Forwar
     return true;
 }
 
-std::string MessageProtocol::buildForwardMessageResponse(int code, const std::string& msg,
-                                                         const std::vector<int64_t>& msgids)
+std::string MessageProtocol::normalizeForwardTitle(const std::string& raw)
 {
-    Json::Value root;
-    root["code"] = code;
-    root["msg"]  = msg;
+    if (raw.empty())
+        return std::string(DEFAULT_MERGED_TITLE);
 
-    Json::Value arr(Json::arrayValue);
-    for (size_t i = 0; i < msgids.size(); ++i)
-        arr.append(std::to_string(msgids[i]));
-    root["msgids"] = arr;
+    //逐字节扫描，遇到字符的首字节（不是 10xxxxxx 形式的续字节）就计一个字符。
+    //第 FORWARD_TITLE_MAX_CHARS + 1 个字符的首字节位置就是截断点：在首字节处截断，
+    //前一个字符的续字节已经全部保留，不会留下半个字符。
+    size_t chars = 0;
+    for (size_t i = 0; i < raw.size(); ++i)
+    {
+        const unsigned char b = static_cast<unsigned char>(raw[i]);
+        if ((b & UTF8_CONTINUATION_MASK) == UTF8_CONTINUATION_BITS)
+            continue;
+        if (chars == FORWARD_TITLE_MAX_CHARS)
+            return raw.substr(0, i);
+        ++chars;
+    }
+    return raw;
+}
+
+std::string MessageProtocol::buildForwardedContent(int msgtype, const std::string& content)
+{
+    if (msgtype != MSGTYPE_TEXT)
+        return content;
+
+    Json::Value root;
+    if (!parseObject(content, root))
+        return content;
+
+    //两项都不存在时原样返回，免得重新序列化改变字段顺序与数字格式
+    if (!root.isMember("at") && !root.isMember("quote"))
+        return content;
+
+    root.removeMember("at");
+    root.removeMember("quote");
     return writeCompact(root);
 }
 
+//从一条消息的 content 里收集需要过敏感词的文字，追加到 out。
+//合并记录向里递归。递归深度不另设上限：content 由 jsoncpp 解析而来，而 jsoncpp 默认
+//把嵌套深度限制在 1000 层（json_reader.cpp 的 stackLimit），更深的内容根本解析不出来。
+static void collectTextsFromContent(int msgtype, const Json::Value& content,
+                                    std::vector<std::string>& out)
+{
+    if (!content.isObject())
+        return;
+
+    if (msgtype == MSGTYPE_TEXT)
+    {
+        const Json::Value& text = content["text"];
+        if (text.isString() && !text.asString().empty())
+            out.push_back(text.asString());
+        return;
+    }
+
+    if (msgtype != MSGTYPE_MERGED)
+        return;
+
+    const Json::Value& subs = content["messages"];
+    if (!subs.isArray())
+        return;
+    for (Json::ArrayIndex i = 0; i < subs.size(); ++i)
+    {
+        const Json::Value& sub = subs[i];
+        if (!sub.isObject() || !sub["msgtype"].isInt())
+            continue;
+        collectTextsFromContent(sub["msgtype"].asInt(), sub["content"], out);
+    }
+}
+
+std::vector<std::string> MessageProtocol::collectForwardTexts(const std::vector<MessageRecord>& sources)
+{
+    std::vector<std::string> texts;
+    for (size_t i = 0; i < sources.size(); ++i)
+    {
+        const MessageRecord& src = sources[i];
+        if (src.msgtype != MSGTYPE_TEXT && src.msgtype != MSGTYPE_MERGED)
+            continue;
+
+        Json::Value content;
+        if (!parseObject(src.content, content))
+            continue;
+        collectTextsFromContent(src.msgtype, content, texts);
+    }
+    return texts;
+}
+
+std::string MessageProtocol::buildForwardMessageResponse(int code, const std::string& msg,
+                                                         const std::string& clientmsgid,
+                                                         const std::vector<MessageRecord>& created,
+                                                         int64_t cid)
+{
+    Json::Value root;
+    root["code"]        = code;
+    root["msg"]         = msg;
+    root["clientmsgid"] = clientmsgid;
+
+    //msgids 总是完整的；messages 按顺序放入，累计体积超过预算后不再放，
+    //使 messages 始终是 msgids 的前缀，客户端按下标即可对应
+    Json::Value ids(Json::arrayValue);
+    Json::Value bodies(Json::arrayValue);
+    size_t usedBytes = 0;
+    bool budgetExhausted = false;
+    for (size_t i = 0; i < created.size(); ++i)
+    {
+        ids.append(std::to_string(created[i].msgid));
+        if (budgetExhausted)
+            continue;
+
+        Json::Value body = messageBodyValue(created[i], cid);
+        const size_t bodyBytes = writeCompact(body).size();
+        if (usedBytes + bodyBytes > FORWARD_RESPONSE_MESSAGES_BUDGET_BYTES)
+        {
+            budgetExhausted = true;
+            continue;
+        }
+        usedBytes += bodyBytes;
+        bodies.append(body);
+    }
+    root["msgids"]   = ids;
+    root["messages"] = bodies;
+    return writeCompact(root);
+}
+
+bool MessageProtocol::isMergedContentTooLarge(const std::string& mergedContent)
+{
+    return mergedContent.size() > FORWARD_MERGED_CONTENT_MAX_BYTES;
+}
+
+bool MessageProtocol::isMessageContentTooLarge(const std::string& content, const std::string& quote)
+{
+    //content 与 quote 都随消息落库、推送、同步，按两者合计计量
+    return content.size() + quote.size() > MESSAGE_CONTENT_MAX_BYTES;
+}
+
+size_t MessageProtocol::trimMessagesToBudget(std::vector<MessageRecord>& messages, int64_t cid,
+                                             bool keepTail, size_t budgetBytes)
+{
+    const size_t total = messages.size();
+    if (total == 0)
+        return 0;
+
+    //从锚点一侧逐条累计，数出能留下几条；第一条无论多大都留下
+    size_t usedBytes = 0;
+    size_t keep = 0;
+    for (size_t n = 0; n < total; ++n)
+    {
+        const size_t idx = keepTail ? (total - 1 - n) : n;
+        const size_t bodyBytes = writeCompact(messageBodyValue(messages[idx], cid)).size();
+        if (keep > 0 && usedBytes + bodyBytes > budgetBytes)
+            break;
+        usedBytes += bodyBytes;
+        ++keep;
+    }
+
+    const size_t removed = total - keep;
+    if (removed == 0)
+        return 0;
+
+    if (keepTail)
+        messages.erase(messages.begin(), messages.begin() + static_cast<std::ptrdiff_t>(removed));
+    else
+        messages.resize(keep);
+    return removed;
+}
+
 std::string MessageProtocol::buildMergedContent(const std::string& title,
-                                                const std::vector<MessageRecord>& subs)
+                                                const std::vector<MessageRecord>& subs,
+                                                const std::map<int64_t, std::string>& fromNames)
 {
     Json::Value root;
     root["title"] = title;
 
     Json::Value arr(Json::arrayValue);
     for (size_t i = 0; i < subs.size(); ++i)
-        arr.append(messageBodyValue(subs[i], subs[i].from));
+    {
+        Json::Value body = messageBodyValue(subs[i], subs[i].from);
+        std::map<int64_t, std::string>::const_iterator it = fromNames.find(subs[i].from);
+        if (it != fromNames.end() && !it->second.empty())
+            body["fromname"] = it->second;
+        arr.append(body);
+    }
     root["messages"] = arr;
     return writeCompact(root);
 }
@@ -734,6 +987,66 @@ bool MessageProtocol::parseDeleteMessageRequest(const std::string& json, int64_t
 
     msgid = getStringId(root, "msgid");
     return msgid > 0;
+}
+
+bool MessageProtocol::parseDeleteMessagesByTimeRequest(const std::string& json,
+                                                       DeleteMessagesByTimeRequest& req)
+{
+    Json::Value root;
+    if (!parseObject(json, root))
+        return false;
+
+    //两个时间都必须是 JSON 整数。jsoncpp 的 isInt64 对缺失字段、字符串、带小数的
+    //数字都返回 false，三种不合法情形由这一项判断一并排除
+    const Json::Value& beginValue = root["begintime"];
+    const Json::Value& endValue = root["endtime"];
+    if (!beginValue.isInt64() || !endValue.isInt64())
+        return false;
+
+    const int64_t begintime = beginValue.asInt64();
+    const int64_t endtime = endValue.asInt64();
+    if (begintime < 0 || endtime < 0)
+        return false;
+
+    req.begintime = begintime;
+    req.endtime = endtime;
+    return true;
+}
+
+std::string MessageProtocol::buildDeleteMessagesByTimeResponse(int code, const std::string& msg,
+                                                               int64_t begintime, int64_t endtime)
+{
+    Json::Value root;
+    root["code"] = code;
+    root["msg"]  = msg;
+    //时间与消息体的 timestamp 同一口径按数字输出：毫秒值远小于 2^53，客户端不会丢精度
+    root["begintime"] = static_cast<Json::Int64>(begintime);
+    root["endtime"]   = static_cast<Json::Int64>(endtime);
+    return writeCompact(root);
+}
+
+std::string MessageProtocol::buildMessagesDeletedNotify(int ctype, int64_t cid,
+                                                        const std::vector<int64_t>& msgids)
+{
+    Json::Value root;
+    root["ctype"] = ctype;
+    root["cid"]   = std::to_string(cid);
+
+    //msgid 可能超过 2^53，与协议里其它 64 位 ID 一样按字符串输出
+    Json::Value arr(Json::arrayValue);
+    for (size_t i = 0; i < msgids.size(); ++i)
+        arr.append(std::to_string(msgids[i]));
+    root["msgids"] = arr;
+    return writeCompact(root);
+}
+
+std::string MessageProtocol::buildMessagesDeletedRangeNotify(int64_t begintime, int64_t endtime)
+{
+    //不带 msgids：客户端以是否带 msgids 区分单条形式与区间形式
+    Json::Value root;
+    root["begintime"] = static_cast<Json::Int64>(begintime);
+    root["endtime"]   = static_cast<Json::Int64>(endtime);
+    return writeCompact(root);
 }
 
 bool MessageProtocol::parseMassSendRequest(const std::string& json, MassSendRequest& req)

@@ -109,11 +109,13 @@ private:
     // 按当前视口 / 内容高 / 滚动位置 / 让位宽度算滑块与命中带。
     OverlayScrollBarMetrics CurrentScrollBar() const;
 
-    // 令滚动条进入"显现"态：重置空闲计时并确保 pulse 定时器在跑。
+    // 令滚动条进入"显现"态：重置空闲计时并确保 pulse 定时器在跑。只在从隐藏态
+    // 转入显现态时才启动定时器，已在显现态时不再重设（理由见实现处的注释）。
     void WakeScrollBar();
 
-    // 在宿主 HWND 上（重新）起 pulse 定时器。宿主未就绪时静默返回。
-    void StartAnimPulse();
+    // 在宿主 HWND 上（重新）起 pulse 定时器。返回 true 表示已启动；宿主未就绪时
+    // 不做任何事并返回 false。
+    bool StartAnimPulse();
 
 private:
     int  m_alpha;            // 滑块当前不透明度，0 到 kScrollbarThumbAlpha

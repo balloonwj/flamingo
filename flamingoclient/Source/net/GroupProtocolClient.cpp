@@ -110,6 +110,51 @@ std::string GroupProtocolClient::buildCreateGroupRequest(const std::string& grou
     return writeCompact(root);
 }
 
+//全角空格 U+3000 的 UTF-8 编码，占 3 个字节。中文输入法下按空格键常常输入的是它。
+static const char kFullWidthSpace[] = "\xE3\x80\x80";
+static const size_t kFullWidthSpaceLen = sizeof(kFullWidthSpace) - 1;
+
+//text 的 pos 处是否以全角空格开头
+static bool startsWithFullWidthSpace(const std::string& text, size_t pos)
+{
+    return text.compare(pos, kFullWidthSpaceLen, kFullWidthSpace) == 0;
+}
+
+//单字节的半角空白：空格、制表符、回车、换行、垂直制表符、换页符
+static bool isAsciiBlank(char c)
+{
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == '\v' || c == '\f';
+}
+
+std::string GroupProtocolClient::normalizeGroupNameInput(const std::string& utf8Input)
+{
+    //从头往后跳过空白
+    size_t begin = 0;
+    while (begin < utf8Input.size())
+    {
+        if (isAsciiBlank(utf8Input[begin]))
+            ++begin;
+        else if (startsWithFullWidthSpace(utf8Input, begin))
+            begin += kFullWidthSpaceLen;
+        else
+            break;
+    }
+
+    //从尾往前跳过空白；end 为结果的尾后下标
+    size_t end = utf8Input.size();
+    while (end > begin)
+    {
+        if (isAsciiBlank(utf8Input[end - 1]))
+            --end;
+        else if (end - begin >= kFullWidthSpaceLen
+                 && startsWithFullWidthSpace(utf8Input, end - kFullWidthSpaceLen))
+            end -= kFullWidthSpaceLen;
+        else
+            break;
+    }
+    return utf8Input.substr(begin, end - begin);
+}
+
 bool GroupProtocolClient::parseCreateGroupResponse(const std::string& jsonbody, CreateGroupResponse& resp)
 {
     Json::Value root;
@@ -267,6 +312,8 @@ bool GroupProtocolClient::parseUserGroupsResponse(const std::string& jsonbody, U
             g.m_facetype    = jg["facetype"].isInt() ? jg["facetype"].asInt() : 0;
             //老服务端不带 customface 时取空串，配合 facetype 默认 0 即回落到自动头像。
             g.m_customface  = jg["customface"].isString() ? jg["customface"].asString() : std::string();
+            //本人的置顶状态；老服务端不带时按未置顶处理。
+            g.m_pinned      = (jg["pinned"].isInt() && jg["pinned"].asInt() != 0) ? 1 : 0;
 
             //groupid 非法的群跳过。
             if (g.m_groupid <= 0)

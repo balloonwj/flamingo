@@ -370,10 +370,12 @@ bool ParseDecDigits(const CString& s, int start, int count, long& out)
     return true;
 }
 
-// 递归遍历控件树,对每个 DuiLabel 调 visitor;visitor 在 ctrlId == 0(行
-// 标签未命名)时设默认字号 10pt,其余按 ctrlId 跳过(BuildProfileBody 末尾
-// 已对每个命名 label 单独设字号 / 对齐)。
-void WalkUnnamedLabelsSetDefaultFont(balloonwjui::DuiControl* node, HFONT defaultFont)
+// 递归遍历控件树,对每个 ctrlId == 0(行标签未命名)的 DuiLabel 按磅值设字号,
+// 其余按 ctrlId 跳过(BuildProfileBody 末尾已对每个命名 label 单独设字号 / 对齐)。
+// 按磅值而不是按字体句柄设置:标签绘制时按所在窗口的 DPI 现取字体,窗口换到缩放
+// 比例不同的显示器后字号会跟着变。
+//   pt / bold:磅值与是否加粗。
+void WalkUnnamedLabelsSetPointSize(balloonwjui::DuiControl* node, int pt, bool bold)
 {
     if (node == NULL)
     {
@@ -382,7 +384,7 @@ void WalkUnnamedLabelsSetDefaultFont(balloonwjui::DuiControl* node, HFONT defaul
     balloonwjui::DuiLabel* lbl = dynamic_cast<balloonwjui::DuiLabel*>(node);
     if (lbl != NULL && lbl->GetCtrlId() == 0)
     {
-        lbl->SetFont(defaultFont);
+        lbl->SetTextPointSize(pt, bold);
         // 兜底加省略号:列宽已按字体量过、正常放得下,但万一将来字段名更长、或者
         // 列宽被上限夹住,溢出时退化成"个性签…"而不是被 DrawText 从中间硬裁半个字。
         // DuiLabel 默认绘制标志不含 DT_END_ELLIPSIS(见 DuiLabel.h),故需显式设。
@@ -392,7 +394,7 @@ void WalkUnnamedLabelsSetDefaultFont(balloonwjui::DuiControl* node, HFONT defaul
         node->Children();
     for (size_t i = 0; i < children.size(); ++i)
     {
-        WalkUnnamedLabelsSetDefaultFont(children[i].get(), defaultFont);
+        WalkUnnamedLabelsSetPointSize(children[i].get(), pt, bold);
     }
 }
 
@@ -752,11 +754,10 @@ int ComputeFieldLabelColumnWidth(HFONT hFont)
 
 std::unique_ptr<balloonwjui::DuiControl> BuildProfileBody()
 {
-    // 左列宽度按<u>真正会被设上去的那个字体</u>现场测量 —— 下面
-    // WalkUnnamedLabelsSetDefaultFont 设的就是同一个 viewFont,两处必须同源,
+    // 左列宽度按<u>真正会被设上去的那个字号</u>现场测量 —— 下面
+    // WalkUnnamedLabelsSetPointSize 设的就是同一个 kFontTitle,两处必须同源,
     // 否则量的是一套字体、画的是另一套,又会裁字。
-    balloonwjui::DuiResMgr& res = balloonwjui::DuiResMgr::Inst();
-    HFONT viewFont = res.GetFontByPointSize(kFontTitle, false);
+    HFONT viewFont = balloonwjui::DuiResMgr::Inst().GetFontByPointSize(kFontTitle, false);
     const int fieldLabelWidth = ComputeFieldLabelColumnWidth(viewFont);
 
     const std::string xml = BuildXml(fieldLabelWidth);
@@ -788,14 +789,15 @@ std::unique_ptr<balloonwjui::DuiControl> BuildProfileBody()
         avatar->SetCornerRadius(kAvatarRadius);
     }
 
-    // ---- 字号设置 ----（res / viewFont 已在本函数开头取到,用于测量左列宽度）
+    // ---- 字号设置 ----（viewFont 只用于本函数开头测量左列宽度;各标签按磅值设字号,
+    // 绘制时按所在窗口的 DPI 现取字体）
 
     // 顶部昵称 13pt 600
     balloonwjui::DuiLabel* nickname =
         FindCtrl<balloonwjui::DuiLabel>(root.get(), kIdProfileNickname);
     if (nickname != NULL)
     {
-        nickname->SetFont(res.GetFontByPointSize(kFontNickname, true));
+        nickname->SetTextPointSize(kFontNickname, true);
         nickname->SetTextColor(RGB(0x1A, 0x1A, 0x1A));   // --text
     }
 
@@ -806,7 +808,7 @@ std::unique_ptr<balloonwjui::DuiControl> BuildProfileBody()
         FindCtrl<balloonwjui::DuiLabel>(root.get(), kIdProfileAccount);
     if (account != NULL)
     {
-        account->SetFont(res.GetFontByPointSize(kFontAccount, false));
+        account->SetTextPointSize(kFontAccount, false);
         account->SetTextColor(RGB(0x6B, 0x6B, 0x6B));    // --text-muted
         account->SetMode(balloonwjui::DuiLabel::ModeLink);
         account->SetLinkColor(RGB(0x6B, 0x6B, 0x6B));    // 常态同 muted 灰
@@ -827,7 +829,7 @@ std::unique_ptr<balloonwjui::DuiControl> BuildProfileBody()
             root.get(), viewIds[i]);
         if (lbl != NULL)
         {
-            lbl->SetFont(viewFont);
+            lbl->SetTextPointSize(kFontTitle, false);
             lbl->SetTextAlign(kRightAlign);
             // 个性签名 view 用 muted 字色(设计稿 PersonalInfoDialog 行:
             //   {edit ? <BareInput.../> : <span style={{... color:'var(--text-muted)'...
@@ -841,7 +843,7 @@ std::unique_ptr<balloonwjui::DuiControl> BuildProfileBody()
 
     // 行左标签(未命名 DuiLabel)默认字号 10pt + 字色 text 黑(设计稿 13.5)。
     // 用 walk 给所有 ctrlId==0 的 DuiLabel 统一设默认字号。
-    WalkUnnamedLabelsSetDefaultFont(root.get(), viewFont);
+    WalkUnnamedLabelsSetPointSize(root.get(), kFontTitle, false);
 
     return root;
 }

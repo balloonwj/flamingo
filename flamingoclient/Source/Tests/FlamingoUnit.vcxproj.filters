@@ -264,7 +264,76 @@
     <ClCompile Include="ChatBubbleBackfillRepaintTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="ChatReadReceiptTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatPinClickTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatMessageDeleteTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatForwardSelectionTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MergedRecordRowsTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatFileAckTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatFileCardTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="NinePatchOrientationTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ForwardTargetModelTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ForwardDispatcherTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatScrollPerfTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatSmoothScrollTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatTextExtentCacheTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatTextWarmupTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="LocalFirstStoreTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="SyncArrivalFlowTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ReadReportDedupeTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="SocketRecvDrainTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="IULogTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatAvatarCacheTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupSenderRefreshTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="ChatDropModelTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatClipboardContentTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatDragSourceTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="ChatDropRegistrationTests.cpp">
@@ -294,16 +363,31 @@
     <ClCompile Include="ChatInlineTextTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="ChatImageCacheTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="ChatImageMenuTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="ChatMessageListMeasureTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="ChatMessageListScrollTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatBubbleSelectionRepaintTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="ChatQuoteModelTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="ChatRichContentSplitTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatSendLimitTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="SendLimitLiveTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="ChatTextSelectionTests.cpp">
@@ -331,6 +415,21 @@
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="ContactTagModelTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatFontPrefsTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="WindowPlacementPrefsTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistorySelectionTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistoryExportTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistoryImageGridTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="ContactTests.cpp">
@@ -393,6 +492,9 @@
     <ClCompile Include="GroupFileUploadTrackerTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="GroupManageInputCarryTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="GroupManageLayoutTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
@@ -402,13 +504,31 @@
     <ClCompile Include="GroupMemberOrderTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="GroupMemberPresenceTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupMemberScrollTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupMemberSearchTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="InlineRestyleTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="GroupMentionInteractionTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupRoleRefreshTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="GroupMentionTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="GroupProtocolTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="GroupListOpsTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="GroupRowTextTests.cpp">
@@ -420,16 +540,31 @@
     <ClCompile Include="HistoryContentViewTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="HistoryContentSelectionTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistoryPinClickTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="HistoryRowMenuTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="HistoryDateRangeTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="HistoryModelTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MsgStoreBatchTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="HistoryViewTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="HistoryWindowLayoutTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ImagePlaceholderTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="ImageDownloadDriverTests.cpp">
@@ -439,6 +574,9 @@
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="ImageViewerGeometryTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ImageViewerCopyTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="KickoutNoticeTests.cpp">
@@ -465,6 +603,12 @@
     <ClCompile Include="MainPanelConversationMenuTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="MainPanelGroupMenuTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MainPanelRowMarkTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="MainPanelStatusMenuTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
@@ -484,6 +628,9 @@
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="VcxprojFiltersTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="PchConsistencyTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="MessageEscapeTests.cpp">
@@ -519,6 +666,30 @@
     <ClCompile Include="KeepAwakePolicyTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="AvatarBitmapCacheTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ContactLookupIndexTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ReconnectThrottleTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ContactDeptTableTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="TextWidthCacheTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ConversationRowSyncTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="SearchCandidateCacheTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="MainPanelWheelRepaintTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="PanelDragZoneTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
@@ -535,6 +706,9 @@
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="UserCachePathTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ImageCacheStoreTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="StorageLocationTests.cpp">
@@ -606,6 +780,12 @@
     <ClCompile Include="CacheCleanPlanTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="ChatCleanRangeTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ChatCleanFlowTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="SettingsPageModelTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
@@ -613,6 +793,9 @@
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="ShakeRateLimiterTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="WindowAttentionTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="SideTabTextTests.cpp">
@@ -645,16 +828,34 @@
     <ClCompile Include="V2MsgStoreTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="HistoryCoverageTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="HistoryWindowKeysTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="VideoFrameConvertTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="ZlibUtilTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
     <ClCompile Include="..\Common\Util\EncodeUtil.cpp">
       <Filter>Common\Util</Filter>
     </ClCompile>
+    <ClCompile Include="..\Session\ChatFontPrefs.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Session\WindowPlacementPrefs.cpp">
+      <Filter>Session</Filter>
+    </ClCompile>
     <ClCompile Include="..\Session\GroupRoleRules.cpp">
       <Filter>Session</Filter>
     </ClCompile>
     <ClCompile Include="..\Common\Log\IULog.cpp">
+      <Filter>Common\Log</Filter>
+    </ClCompile>
+    <ClCompile Include="..\Common\Log\AsyncLog.cpp">
       <Filter>Common\Log</Filter>
     </ClCompile>
     <ClCompile Include="..\Session\LoginAccountList.cpp">
@@ -684,10 +885,28 @@
     <ClCompile Include="..\UI\BalloonChatWnd\ChatBubble.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatFileCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatFileCardControl.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatPaintUtil.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatInlineText.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatDropModel.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatClipboardContent.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatClipboardIo.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatDragSource.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatDropController.cpp">
@@ -720,10 +939,37 @@
     <ClCompile Include="..\UI\BalloonChatWnd\ChatFontMap.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\FontSettingPopup.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatHeaderInfo.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatHistoryPaging.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatSmoothScroll.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatTextExtentCache.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatTextWarmup.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\SyncArrivalFlow.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\ReadReportDedupe.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\SocketRecvDrain.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatAvatarBitmapCache.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\GroupSenderRefresh.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatIconButton.cpp">
@@ -747,7 +993,16 @@
     <ClCompile Include="..\UI\BalloonChatWnd\ChatQuoteModel.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatMergedCard.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatRichContentSplit.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatScrollThumb.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ChatSendLimit.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\ChatRootPanel.cpp">
@@ -780,6 +1035,9 @@
     <ClCompile Include="..\UI\BalloonChatWnd\GroupFileLibrary.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\WindowAttention.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\GroupFileList.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
@@ -805,6 +1063,9 @@
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\GroupSideTab.cpp">
+      <Filter>UI\BalloonChatWnd</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonChatWnd\ImagePlaceholder.cpp">
       <Filter>UI\BalloonChatWnd</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonChatWnd\SideTabText.cpp">
@@ -834,6 +1095,9 @@
     <ClCompile Include="..\UI\BalloonGroupManage\GroupManageIcons.cpp">
       <Filter>UI\BalloonGroupManage</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonGroupManage\GroupManageInputCarry.cpp">
+      <Filter>UI\BalloonGroupManage</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonGroupManage\GroupManageLayout.cpp">
       <Filter>UI\BalloonGroupManage</Filter>
     </ClCompile>
@@ -858,6 +1122,9 @@
     <ClCompile Include="..\UI\BalloonHistory\FolderLocalStore.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryDateRange.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonHistory\HistoryHighlightLabel.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
@@ -870,6 +1137,15 @@
     <ClCompile Include="..\UI\BalloonHistory\HistoryRowMenu.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistorySelection.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryExport.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryImageGrid.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonHistory\HistoryRow.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
@@ -878,6 +1154,12 @@
     </ClCompile>
     <ClCompile Include="..\UI\BalloonAnnounce\AnnounceBoxLayout.cpp">
       <Filter>UI\BalloonAnnounce</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryRowFormat.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\MergedRecordRows.cpp">
+      <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonHistory\HistoryView.cpp">
       <Filter>UI\BalloonHistory</Filter>
@@ -888,10 +1170,22 @@
     <ClCompile Include="..\UI\BalloonHistory\V2MsgQuery.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryCoverage.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonHistory\HistoryWindowKeys.cpp">
+      <Filter>UI\BalloonHistory</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonHistory\V2MsgStore.cpp">
       <Filter>UI\BalloonHistory</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonImageViewer\ImageViewerGeometry.cpp">
+      <Filter>UI\BalloonImageViewer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonImageViewer\ImageCanvas.cpp">
+      <Filter>UI\BalloonImageViewer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonImageViewer\ImageViewerToolbar.cpp">
       <Filter>UI\BalloonImageViewer</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\AboutDlgModel.cpp">
@@ -948,6 +1242,9 @@
     <ClCompile Include="..\UI\BalloonMain\CornerPopupPlacement.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\GroupListOps.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\GroupRowText.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
@@ -958,6 +1255,9 @@
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\MainPanelContactMenu.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\MainPanelGroupMenu.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\MainPanelConversationMenu.cpp">
@@ -993,6 +1293,24 @@
     <ClCompile Include="..\UI\BalloonMain\KeepAwakePolicy.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\AvatarBitmapCache.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\ContactLookupIndex.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\ReconnectThrottle.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\ContactDeptTable.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\TextWidthCache.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\ConversationRowSync.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\MainPanelSystemMenu.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
@@ -1012,6 +1330,15 @@
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\MemberPickerTreeModel.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\ForwardRequest.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\ForwardTargetModel.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\ForwardDispatcher.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\MemberPickerTreeView.cpp">
@@ -1039,6 +1366,9 @@
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="..\net\UserCachePath.cpp">
+      <Filter>net</Filter>
+    </ClCompile>
+    <ClCompile Include="..\net\ImageCacheStore.cpp">
       <Filter>net</Filter>
     </ClCompile>
     <ClCompile Include="..\net\StorageLocation.cpp">
@@ -1089,6 +1419,12 @@
     <ClCompile Include="..\UI\BalloonSearch\PinyinInitials.cpp">
       <Filter>UI\BalloonSearch</Filter>
     </ClCompile>
+    <ClCompile Include="..\UI\BalloonSearch\SearchCandidateCache.cpp">
+      <Filter>UI\BalloonSearch</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSettings\ChatFontPreview.cpp">
+      <Filter>UI\BalloonSettings</Filter>
+    </ClCompile>
     <ClCompile Include="..\UI\BalloonSettings\SettingsBinding.cpp">
       <Filter>UI\BalloonSettings</Filter>
     </ClCompile>
@@ -1096,6 +1432,12 @@
       <Filter>UI\BalloonSettings</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonSettings\CacheCleanPlan.cpp">
+      <Filter>UI\BalloonSettings</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSettings\ChatCleanRange.cpp">
+      <Filter>UI\BalloonSettings</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonSettings\ChatCleanFlow.cpp">
       <Filter>UI\BalloonSettings</Filter>
     </ClCompile>
     <ClCompile Include="..\Feature\Call\AudioPcmUtils.cpp">

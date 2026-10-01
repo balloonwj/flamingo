@@ -10,6 +10,8 @@
 #include "../chatserversrc/GroupProtocol.h"
 #include "../jsoncpp1.9.0/json.h"
 
+#include <set>
+
 //把 JSON 文本解析成 Json::Value，供断言检查
 static bool parseJson(const std::string& text, Json::Value& root)
 {
@@ -34,9 +36,16 @@ TEST_CASE("X1 parseCreateGroupRequest 解析与校验")
     CreateGroupRequest req2;
     REQUIRE(GroupProtocol::parseCreateGroupRequest("{\"groupname\":\"solo\"}", req2));
     CHECK(req2.memberids.empty());
-    //groupname 缺失或为空被拒
+    //groupname 缺失或不是字符串被拒
     CHECK_FALSE(GroupProtocol::parseCreateGroupRequest("{\"memberids\":[\"1\"]}", req));
-    CHECK_FALSE(GroupProtocol::parseCreateGroupRequest("{\"groupname\":\"\"}", req));
+    CHECK_FALSE(GroupProtocol::parseCreateGroupRequest("{\"groupname\":1}", req));
+    //groupname 为空串合法：表示由服务端按成员昵称生成自动群名
+    CreateGroupRequest req3;
+    REQUIRE(GroupProtocol::parseCreateGroupRequest(
+        "{\"groupname\":\"\",\"memberids\":[\"100001\"]}", req3));
+    CHECK(req3.name.empty());
+    REQUIRE(req3.memberids.size() == 1);
+    CHECK(req3.memberids[0] == 100001);
 }
 
 TEST_CASE("X2 parseGroupIdRequest 解析与校验")
@@ -625,6 +634,22 @@ TEST_CASE("parseUpdateGroupInfoRequest: 七个新可选项各自独立")
     }
 }
 
+TEST_CASE("parseUpdateGroupInfoRequest: 群名为空串表示恢复自动群名")
+{
+    //空串不能被当成"没带群名"而丢掉，否则群主清空群名后什么也不会发生
+    UpdateGroupInfoRequest req;
+    REQUIRE(GroupProtocol::parseUpdateGroupInfoRequest(
+        "{\"groupid\":\"10000000001\",\"name\":\"\"}", req));
+    CHECK(req.has_name);
+    CHECK(req.name.empty());
+
+    //不带 name 字段时不改群名
+    UpdateGroupInfoRequest req2;
+    REQUIRE(GroupProtocol::parseUpdateGroupInfoRequest(
+        "{\"groupid\":\"10000000001\",\"muteall\":1}", req2));
+    CHECK(req2.has_name == false);
+}
+
 TEST_CASE("parseUpdateGroupInfoRequest: 只带老字段时七项全不更新")
 {
     //老客户端只改群名时发来的请求形态，不该把新设置项一并重置
@@ -689,9 +714,41 @@ TEST_CASE("buildGroupInfoChangedNotify 与 buildUserGroupsResponse 同样带新�
 
     std::vector<GroupRecord> groups;
     groups.push_back(g);
-    const std::string list = GroupProtocol::buildUserGroupsResponse(0, "ok", groups);
+    const std::string list = GroupProtocol::buildUserGroupsResponse(0, "ok", groups,
+                                                                    std::set<int64_t>());
     CHECK(list.find("\"intro\":\"intro-text\"") != std::string::npos);
     CHECK(list.find("\"atallscope\":1") != std::string::npos);
+}
+
+TEST_CASE("UGP1 buildUserGroupsResponse 每个群带本人的置顶状态")
+{
+    //群 Tab 要把置顶的群排在最前面；没有消息的空群不在会话列表里，置顶状态只能随群列表下发
+    GroupRecord pinnedGroup;
+    pinnedGroup.groupid = 10000000011LL;
+    pinnedGroup.name    = "group-a";
+    GroupRecord normalGroup;
+    normalGroup.groupid = 10000000012LL;
+    normalGroup.name    = "group-b";
+
+    std::vector<GroupRecord> groups;
+    groups.push_back(pinnedGroup);
+    groups.push_back(normalGroup);
+    std::set<int64_t> pinnedIds;
+    pinnedIds.insert(pinnedGroup.groupid);
+
+    Json::Value root;
+    REQUIRE(parseJson(GroupProtocol::buildUserGroupsResponse(0, "ok", groups, pinnedIds), root));
+    REQUIRE(root["groups"].size() == 2);
+    CHECK(root["groups"][0]["groupid"].asString() == "10000000011");
+    CHECK(root["groups"][0]["pinned"].asInt() == 1);
+    CHECK(root["groups"][1]["groupid"].asString() == "10000000012");
+    CHECK(root["groups"][1]["pinned"].asInt() == 0);
+
+    //群资料变更推送（1318）是发给全群的，不带某个人的置顶状态
+    Json::Value notify;
+    REQUIRE(parseJson(GroupProtocol::buildGroupInfoChangedNotify(
+        pinnedGroup, group_info_change_updated), notify));
+    CHECK_FALSE(notify.isMember("pinned"));
 }
 
 TEST_CASE("buildGroupMembersResponse: 带禁言到期时间与原因")

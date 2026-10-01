@@ -162,7 +162,7 @@ INT_PTR CBalloonKickoutDlg::DoModal(HWND hWndParent, int reason, const RECT& tra
 
     // 模态化：禁用 owner，跑独立消息循环，直到 EndModal 把 m_modalRunning 置 false。
     // 与 CBalloonLoginDlg::DoModal 同一套写法。
-    if (hWndParent != NULL)
+    if (::IsWindow(hWndParent))
     {
         ::EnableWindow(hWndParent, FALSE);
     }
@@ -178,7 +178,7 @@ INT_PTR CBalloonKickoutDlg::DoModal(HWND hWndParent, int reason, const RECT& tra
         }
     }
 
-    if (hWndParent != NULL)
+    if (::IsWindow(hWndParent))
     {
         // 先恢复 owner 再销毁本窗口：顺序反了的话，本窗口销毁时焦点会落到别的进程窗口上。
         ::EnableWindow(hWndParent, TRUE);

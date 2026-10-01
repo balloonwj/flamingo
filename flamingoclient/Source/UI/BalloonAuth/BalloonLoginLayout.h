@@ -28,7 +28,7 @@ namespace balloonauth {
  *  对话框侧再用 DuiControl::FindCtrlById(id) 取回控件指针。集中成一个
  *  enum，避免 XML 字符串与 C++ 代码各写一份魔数、对不上。
  *
- *  纯装饰、不需代码引用的控件（Banner 占位、底部 spacer）在 XML 里不写
+ *  纯装饰、不需代码引用的控件（Banner 占位、布局用的中间容器）在 XML 里不写
  *  id，GetCtrlId() 返回 0 —— 0 视为"未命名"，不属于本 enum。
  */
 enum CtrlId : UINT
@@ -48,9 +48,9 @@ enum CtrlId : UINT
     kIdLoginButton   = 120,   // “登录”按钮：push 风格 DuiButton。登录期间文字变为
                               // “取消登录”，点击即中止本轮等待（见 LoginProgressState）
 
-    // ---- 状态区（登录按钮下方，平时整块隐藏）----
-    kIdStatusArea    = 150,   // 状态区容器（vbox）：登录中与登录失败时才显示
-    kIdStatusText    = 151,   // 状态文字：登录中显示“正在登录…”，失败显示具体原因
+    // ---- 状态区（登录按钮下方，始终占位）----
+    kIdStatusArea    = 150,   // 状态区容器（vbox）：始终可见，内容由 ApplyLoginStatusView 切换
+    kIdStatusText    = 151,   // 状态文字：平时为空，登录中显示“正在登录…”，失败显示具体原因
     kIdStatusProgress = 152,  // 不确定进度条（marquee），仅登录中显示；相位由对话框定时器驱动
 
     // ---- 底部链接 ----
@@ -70,6 +70,78 @@ enum CtrlId : UINT
  */
 std::unique_ptr<balloonwjui::DuiControl> BuildLoginBody();
 
+// =====================================================================
+// 登录窗尺寸与边框（逻辑像素）—— CBalloonLoginDlg 与单元测试共用这一份，
+// 免得两处各写一个数、改了一边忘了另一边
+// =====================================================================
+
+// 窗口宽度。对应设计稿 AuthShell 的宽 380。DuiFrameWindow 把系统非客户区整个并入了
+// 客户区，所以窗口尺寸就是客户区尺寸；对话框须按这个值直接设置窗口大小，不能经
+// ResizeClient（它会再叠加一圈系统标题栏与边框，见 CBalloonLoginDlg::DoModal）。
+const int kLoginWindowWidth = 380;
+
+// 标题栏高度。标题栏透明、只承载 min/close 按钮；其同高的橙色区由窗体背景图透出，
+// 与下方 Banner 渐变衔接，使 Banner 视觉上直抵窗口顶端。
+const int kLoginTitleBarHeight = 28;
+
+// 窗口高度（含标题栏），按内容算得正好、不留弹性空白：
+//   标题栏 28 + Banner 240
+//   + 表单：上内边距 14、账号框 40、密码框 40、选项行 22、三段间距 12
+//   + 底部一组：登录按钮 42、状态区 44、链接行 22、两段间距 8
+//   + 表单下内边距 20 + 底部灰边 1
+//   = 565。
+// 由 Tests/BalloonLoginLayoutTests.cpp 的 LSA7 / LSA14 把关，前者防内容溢出，后者防
+// 链接行下方多出空白。改动布局后按 LSA14 报出的差值调整。
+const int kLoginWindowHeight = 565;
+
+// 窗口四周灰边的宽度。登录窗用了自绘背景图，DuiFrameWindow 默认那圈客户区描边
+// （只在没有背景图时才画）画不出来，灰边改由背景图最外一圈承担。
+const int kLoginFrameBorderPx = 1;
+
+// 窗口四周灰边的颜色。与 DuiFrameWindow 默认的客户区描边同色，各窗口边框观感一致；
+// 在白色背景上也看得清窗口边界。
+const COLORREF kLoginFrameBorderColor = RGB(200, 200, 200);
+
+/**
+ *  生成登录窗的窗体背景图（九宫格用）：顶部 kLoginTitleBarHeight 像素橙色（与 Banner
+ *  渐变起点同色），其余白色，最外一圈是 kLoginFrameBorderPx 宽的灰边。位图与窗口同样
+ *  大小（kLoginWindowWidth × kLoginWindowHeight），配合 LoginFrameBgInsets() 交给
+ *  DuiFrameWindow::SetBgImage 后每一格都按 1:1 绘制，不经插值拉伸，灰边与白色区边界
+ *  清晰（小位图拉伸会让灰边混进白色区，见 LSA15）。
+ *  返回：位图句柄，调用方负责 DeleteObject；创建失败返回 NULL。
+ */
+HBITMAP CreateLoginFrameBgBitmap();
+
+/**
+ *  与 CreateLoginFrameBgBitmap 配套的九宫格边距：上边距等于标题栏高度（橙色条不拉伸），
+ *  左右与下边距至少包含灰边（灰边不被拉伸成一片）。
+ */
+RECT LoginFrameBgInsets();
+
+/**
+ *  状态区（登录按钮与底部链接之间那一块）当前该显示什么。
+ */
+enum LoginStatusView
+{
+    kLoginStatusIdle     = 0,   // 平时：不显示文字也不显示进度条，但状态区照样占着位置
+    kLoginStatusLogining = 1,   // 登录中：显示状态文字（如"正在登录…"）与不确定进度条
+    kLoginStatusMessage  = 2,   // 显示一行消息（如登录失败原因），不显示进度条
+};
+
+/**
+ *  切换状态区的显示内容，并把状态区重新排版。
+ *
+ *  状态区容器本身<u>始终可见、始终占位</u>，只切换里面文字与进度条的显隐，这样登录
+ *  按钮与底部两个链接的位置在任何状态下都不跳动。容器矩形不变时，对客户区根控件做
+ *  ForceLayout 并不会重排到状态区内部（中间的表单容器矩形没变，SetRect 直接返回），
+ *  进度条就会停在隐藏期间那份过时的矩形上，所以本函数直接对状态区容器做 ForceLayout。
+ *    root：客户区根控件（BuildLoginBody 的产物，排版前后调用均可）；为 NULL 时什么都不做。
+ *    view：要显示的内容，见 LoginStatusView。
+ *    text：状态文字；kLoginStatusIdle 时忽略；为 NULL 视同空串。
+ *  说明：进度条 marquee 的启停由调用方负责（它要配合对话框的定时器）。
+ */
+void ApplyLoginStatusView(balloonwjui::DuiControl* root, LoginStatusView view, LPCTSTR text);
+
 /**
  *  ValidateLoginInput 的判定结果。
  */
@@ -87,6 +159,19 @@ enum LoginInputResult
  *  返回：见 LoginInputResult。纯空白字符串（全空格 / 制表符等）视同空。
  */
 LoginInputResult ValidateLoginInput(const CString& account, const CString& password);
+
+/**
+ *  登录窗显示出来之后，要不要自己点一次「登录」（自动登录）。
+ *
+ *  自动登录改为弹出登录窗、由窗口自己发起（见 docs/自动登录方案.md §3.1）。只有账号与
+ *  密码都已填好时才自动开始；本地没存密码（例如刚因密码错误被清掉）时停在登录窗等
+ *  用户输入，免得一弹出来就报"请输入密码"。
+ *    requested：会话控制器是否要求这次自动开始（上次登录的账号勾了自动登录）。
+ *    account：  账号下拉框当前文本。
+ *    password： 密码输入框当前文本。
+ *  返回：要求自动开始、且账号密码都非空（口径同 ValidateLoginInput）时返回 true。
+ */
+bool ShouldAutoStartLogin(bool requested, const CString& account, const CString& password);
 
 /**
  *  MakePostRegisterFill 的产物 —— 注册成功后登录表单各控件应处的状态。

@@ -33,6 +33,7 @@ extern CAppModule _Module;
 #include <atlmisc.h>
 
 #include "GroupManageModel.h"
+#include "../BalloonSearch/ContactMatch.h"   // contactsearch::Match：成员页搜索按名字（含拼音）与职务匹配
 
 namespace balloongroupmanage {
 
@@ -41,6 +42,9 @@ GroupManageModel::GroupManageModel()
     , m_groupAvatarKind(0)          //默认按群名首字 + 群 id 取色自动渲染
     , m_groupFacetype(0)            //协议原值，与上面的解码结果配套
     , m_myRole(kRoleOwner)
+    , m_membersState(kLoadPending)  //开窗时成员与申请都还没拉回来
+    , m_requestsState(kLoadPending)
+    , m_groupInfoState(kLoadPending)  //群资料同样要等应答
     , m_muteAll(false)
     , m_sensitiveWordsLoaded(false)
     , m_announcementTotal(0)
@@ -89,6 +93,36 @@ int GroupManageModel::CountByRole(GroupRole role) const
         }
     }
     return count;
+}
+
+int GroupManageModel::CountByRoleMatching(GroupRole role) const
+{
+    int count = 0;
+    for (std::vector<GroupMember>::const_iterator it = m_members.begin();
+         it != m_members.end(); ++it)
+    {
+        if (it->role == role && MemberMatchesKeyword(*it, m_memberKeyword))
+        {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool MemberMatchesKeyword(const GroupMember& m, const CString& keyword)
+{
+    CString k = keyword;
+    k.Trim();
+    if (k.IsEmpty())
+    {
+        return true;
+    }
+    //职务借用匹配器的"地区"一档：该档就是不区分大小写的子串匹配，排在名字与拼音之前
+    //还是之后对这里没有影响，只关心命中与否。账号一档不用，传空串
+    const contactsearch::MatchResult r = contactsearch::Match(
+        std::wstring((LPCTSTR)k), std::wstring((LPCTSTR)m.name), std::wstring(),
+        std::wstring((LPCTSTR)m.title));
+    return r.m_matched;
 }
 
 // =====================================================================
@@ -197,6 +231,11 @@ void FillMockData(GroupManageModel& model)
     // ---- 权限默认值（对照群管理5.png）----
     model.m_perms = GroupPermissions();
     model.m_muteAll = false;
+
+    // ---- 加载状态：示例数据视为已全部到齐，界面按内容显示而不是加载提示 ----
+    model.m_membersState   = kLoadDone;
+    model.m_requestsState  = kLoadDone;
+    model.m_groupInfoState = kLoadDone;
 }
 
 } // namespace balloongroupmanage

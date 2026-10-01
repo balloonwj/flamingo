@@ -181,14 +181,11 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
         _tcscpy_s(g_szDataRoot, MAX_PATH, dataRoot.c_str());
     }
 
-    SYSTEMTIME st = { 0 };
-    ::GetLocalTime(&st);
-
-    //加上PID，便于同一个目录启动多个进程区分是哪个程序的日志
-    DWORD dwProcessId = ::GetCurrentProcessId();
-    TCHAR szLogFileName[MAX_PATH] = { 0 };
-    _stprintf_s(szLogFileName, MAX_PATH, _T("%s\\Logs\\%04d%02d%02d%02d%02d%02d_%d.log"), g_szHomePath, st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, (int32_t)dwProcessId);
-    CIULog::Init(true, false, szLogFileName);
+    //日志文件名由日志模块在此前缀后追加"年月日时分秒.进程 id.log"，同一目录下
+    //多个进程的日志据此区分；单个文件写满 10 MB 后自动另起一个
+    TCHAR szLogFilePathPrefix[MAX_PATH] = { 0 };
+    _stprintf_s(szLogFilePathPrefix, MAX_PATH, _T("%sLogs\\flamingo"), g_szHomePath);
+    CIULog::Init(true, false, szLogFilePathPrefix);
 
     //TODO: 统一到AppConfig类中去
     CIniFile iniFile;
@@ -208,8 +205,9 @@ int WINAPI _tWinMain(HINSTANCE hInstance, HINSTANCE /*hPrevInstance*/, LPTSTR lp
     }
 
     //日志级别
+    //取值 0 输出全部，1 只输出 WARNING 与 ERROR，2 只输出 ERROR，换算见 CIULog::SetLevel
     int nLogLevel = iniFile.ReadInt(_T("app"), _T("loglevel"), 0, strIniFilePath);
-    CIULog::SetLevel((LOG_LEVEL)nLogLevel);
+    CIULog::SetLevel(nLogLevel);
 
     //建好转储目录；若本次<u>恰好</u>以管理员权限运行，顺手把 WER LocalDumps 配置写进注册表。
     //未提权时静默跳过——不弹界面、不请求提权（详见 docs/崩溃转储方案.md）。放在这里是因为

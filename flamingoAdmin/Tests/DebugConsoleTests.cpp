@@ -1,8 +1,8 @@
 /**
  *  flamingoAdmin —— 调试控制台数据层（DebugConsole）单元测试。
  *
- *  覆盖 6 组用例：敏感字段掩码、业务 code 提取、环形缓冲淘汰、Begin/End
- *  配对、暂停录制、Kind 结果类别推导。
+ *  覆盖 7 组用例：敏感字段掩码、业务 code 提取、环形缓冲淘汰、Begin/End
+ *  配对、暂停录制、Kind 结果类别推导、美化输出格式。
  *
  *  DebugConsole 是进程级单例：每个用例在开头都先 SetPaused(false) + Clear()
  *  把单例复位到「未暂停、空缓冲」的已知状态，避免用例间相互污染（注意
@@ -252,6 +252,53 @@ void Test_KindDerivation()
                  static_cast<int>(DebugEntryKind::TransportFail));
 }
 
+// 用例⑦：美化输出格式 —— 钉住 MaskAndPrettyPrint 当前的排版：缩进为
+// 3 个空格、键与值之间用 " : " 分隔、元素少的短数组排在一行内、整段文本
+// 以换行结尾。这些细节没有任何调用方依赖，但调试控制台的可读性全靠它们，
+// 一旦序列化实现换代（例如从 Json::StyledWriter 换成 Json::StreamWriterBuilder）
+// 极易在无人察觉的情况下变样，故在此逐字节比对。
+void Test_PrettyPrintFormat()
+{
+    BeginCase("DebugConsole：美化输出格式");
+    ResetConsole();
+
+    // 请求体特意覆盖四种结构：整数、短数组、嵌套对象、字符串值。
+    // 键名按 code / list / obj 排列，与 jsoncpp 按键名排序后的输出顺序一致。
+    const std::string body =
+        "{\"code\":0,\"list\":[1,2],\"obj\":{\"k\":\"v\"}}";
+
+    // 期望的排版。此处逐字节写出，任何缩进宽度、分隔符、换行位置的变化都会
+    // 让本用例失败。
+    //
+    // 注意倒数第四行："obj" 冒号之后是一个空格加换行，嵌套对象的
+    // 左花括号单独占一行。这是 jsoncpp 新接口 Json::StreamWriterBuilder 的排版；
+    // 旧接口 Json::StyledWriter 把左花括号留在键名同一行。2026-08-20 为消除
+    // C4996 弃用警告而改用新接口时产生此差异，两个写入器在这一点上的
+    // 行为无法通过配置对齐。行尾那个空格是写入器输出的真实字节，不是
+    // 笔误，请勿删除。
+    const char* const kExpected =
+        "{\n"
+        "   \"code\" : 0,\n"
+        "   \"list\" : [ 1, 2 ],\n"
+        "   \"obj\" : \n"
+        "   {\n"
+        "      \"k\" : \"v\"\n"
+        "   }\n"
+        "}\n";
+
+    DebugConsole::Instance().BeginEntry(kTestHost, kTestPort, false,
+                                        kTestPath, body);
+
+    std::vector<DebugEntry> snap = DebugConsole::Instance().Snapshot();
+    FA_EXPECT_EQ(snap.size(), 1);
+    if (snap.size() != 1)
+    {
+        return;
+    }
+
+    FA_EXPECT_STREQ(snap[0].m_reqBodyUtf8.c_str(), kExpected);
+}
+
 } // anonymous namespace
 
 void RunAllDebugConsoleTests()
@@ -264,6 +311,7 @@ void RunAllDebugConsoleTests()
     Test_BeginEndPairing();
     Test_Paused();
     Test_KindDerivation();
+    Test_PrettyPrintFormat();
 }
 
 }} // namespace flamingoadmin::test

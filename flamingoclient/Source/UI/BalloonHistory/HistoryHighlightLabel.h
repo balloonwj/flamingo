@@ -60,7 +60,7 @@ public:
 private:
     //按当前字体与对齐方式算出各高亮区间在本控件客户区里的矩形，逐块填色。
     //测量用的字体与基类绘制时用的必须是同一个，否则底色会与文字错位 ——
-    //故这里同样走 GetFont()，为空时退回 DuiResMgr 的默认字体（与基类一致）。
+    //故这里同样走 GetFont()，为空时退回本控件 DPI 下的默认字体（与基类一致）。
     void PaintHighlights(HDC hdc);
 
 private:

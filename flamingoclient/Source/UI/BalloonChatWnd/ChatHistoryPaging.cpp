@@ -12,6 +12,12 @@
 
 namespace balloonchatwnd {
 
+bool IsNearTopForOlderHistory(int scrollY, int viewHeight)
+{
+    const int threshold = (viewHeight > kHistoryLoadTriggerY) ? viewHeight : kHistoryLoadTriggerY;
+    return scrollY <= threshold;
+}
+
 bool ShouldLoadOlderHistory(const HistoryPagingState& st,
                             int scrollY, int viewHeight, int contentHeight)
 {
@@ -33,7 +39,7 @@ bool ShouldLoadOlderHistory(const HistoryPagingState& st,
         // 会在"消息很少"的会话里一进窗口就无条件拉一页。
         return false;
     }
-    return scrollY <= kHistoryLoadTriggerY;
+    return IsNearTopForOlderHistory(scrollY, viewHeight);
 }
 
 void OnFirstPageLoaded(HistoryPagingState& st, long long oldestMsgid, bool hasMore)

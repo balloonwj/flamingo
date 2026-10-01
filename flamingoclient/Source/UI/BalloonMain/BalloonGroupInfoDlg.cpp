@@ -19,6 +19,9 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiSwitch.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiToast.h"   // 复制后的轻提示条
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h" // 轻提示条挂在客户区根容器（DuiVBox）上
+#include "../../Common/Util/ClipboardText.h"   // 点击群名 / 群号复制到剪贴板
 
 #include <vector>                        // CStrToUtf8 缓冲
 #include <windowsx.h>                    // GET_X_LPARAM / GET_Y_LPARAM(鼠标消息取坐标)
@@ -320,6 +323,7 @@ CBalloonGroupInfoDlg::CBalloonGroupInfoDlg()
     , m_quitBgPressed(NULL)
     , m_iconHistory(NULL)
     , m_iconQuit(NULL)
+    , m_pToast(NULL)
 {
 }
 
@@ -504,6 +508,18 @@ void CBalloonGroupInfoDlg::OpenForGroup(HWND hParent, CFlamingoClient* pFMGClien
     if (cardEdit != NULL)
     {
         cardEdit->SetBgColor(RGB(0xF4, 0xF3, 0xF0));   // 与全 app 输入框统一柔灰底
+    }
+
+    // 轻提示条挂在客户区根容器末尾（基类按子控件顺序绘制，末尾即最上层），布局 Fixed(0)
+    // 使它不占竖直方向的空间。水平居中由 DuiToast 自己计算，距顶偏移在每次弹出前按头部资料区的
+    // 实际下边重新设定（见 OnDuiNotify 中复制群名 / 群号的分支），避免压住群号那一行
+    m_pToast = NULL;
+    balloonwjui::DuiVBox* rootBox = dynamic_cast<balloonwjui::DuiVBox*>(GetClientContent());
+    if (rootBox != NULL)
+    {
+        std::unique_ptr<balloonwjui::DuiToast> toast(new balloonwjui::DuiToast());
+        m_pToast = toast.get();
+        rootBox->AddChild(std::move(toast), balloonwjui::DuiLayout::Hint().Fixed(0));
     }
 
     // 注入初始数据。
@@ -748,10 +764,43 @@ LRESULT CBalloonGroupInfoDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
             EnterCardEdit();
             return 0;
         case kIdGroupBtnHistory:
-            // 查看消息记录:本轮占位。
-            ::MessageBox(m_hWnd, _T("查看消息记录功能正在开发中。"),
-                         _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+        {
+            // 查看消息记录:交给宿主主面板打开本群的消息记录窗口(与聊天窗、右键菜单走同一个
+            // OpenHistory)。群资料窗口保持打开。调试入口没有宿主时只记日志。
+            int ctype = 0;
+            __int64 cid = 0;
+            if (GroupInfoHistoryTarget(m_data, ctype, cid) && m_pHost != NULL)
+            {
+                m_pHost->OpenHistory(ctype, cid);
+            }
+            LOG_INFO("group info dialog: open history, group=%lld, host=%d.",
+                     (long long)m_data.groupid, (int)(m_pHost != NULL));
             return 0;
+        }
+        case kIdGroupName:
+        case kIdGroupMeta:
+        {
+            // 点群名复制完整群名,点群号那一行复制纯数字群号;复制后在头部资料区下方轻提示
+            CString text;
+            if (GroupInfoCopyText(m_data, pNotify->ctrlId, text))
+            {
+                const bool ok = flamingo::CopyTextToClipboard((LPCTSTR)text);
+                if (ok && m_pToast != NULL)
+                {
+                    // 偏移每次现算：窗口尺寸与 DPI 都可能在打开之后变化
+                    const int topOffset = GroupInfoToastTopOffset(GetClientContent());
+                    if (topOffset >= 0)
+                    {
+                        m_pToast->SetTopOffset(topOffset);
+                    }
+                    m_pToast->Show(pNotify->ctrlId == kIdGroupName ? _T("已复制群名") : _T("已复制群号"));
+                }
+                LOG_INFO("group info dialog: copy %s, group=%lld, length %d, ok=%d.",
+                         pNotify->ctrlId == kIdGroupName ? "name" : "number",
+                         (long long)m_data.groupid, text.GetLength(), (int)ok);
+            }
+            return 0;
+        }
         case kIdGroupBtnQuit:
             ConfirmAndLeave();
             return 0;

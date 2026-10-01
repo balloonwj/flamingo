@@ -137,4 +137,22 @@ const char* KickGroupMemberCheckToMessage(kick_member_check result);
  */
 bool CanKickTarget(int operatorRole, int targetRole, bool targetIsSelf);
 
+/**
+ *  判定某成员此刻在群里是否处于禁言状态、不能发言。
+ *  普通群发（ChatSession::sendGroupMessage）与转发到群（ChatSession::onForwardMessage）
+ *  共用这一条规则，免得两处各写一份、改一处漏一处。
+ *
+ *  规则：
+ *    · 本人被单独禁言时不能发言，不论角色；
+ *    · 群开启全员禁言时，普通成员不能发言，群主与管理员不受影响。
+ *
+ *    selfMuted：    本人的个人禁言状态，非 0 表示禁言中。须是已按到期时间折算过的值
+ *                   （GroupManager::getMemberRoleAndMuted 的出参即是）。
+ *    groupMuteAll： 群的全员禁言开关（GroupRecord::muteall），非 0 表示开启。
+ *    role：         本人在该群的角色，取值见 group_member_role。
+ *
+ *  @return true 表示禁言中、应拒绝本次发言。本函数无副作用。
+ */
+bool IsMutedForSpeaking(int selfMuted, int groupMuteAll, int role);
+
 } // namespace chatserver

@@ -41,7 +41,12 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
 
 // ---- 对话框固定尺寸（逻辑像素）-----------------------------------------
-static const int kDlgWidth      = 430;   // 客户区宽
+// 客户区宽。本对话框的布局常量是固定像素、不随 DPI 放大，而字体会按系统 DPI 放大，
+// 故宽度按 125% 缩放（系统 DPI 120）下的实测文字宽度取值：该缩放下"官方网站"标题宽
+// 72px、官网地址宽 285px，加上链接两侧余量 16px、行内间距 10px、左右内边距 56px，
+// 整行需要 439px。原先取 430 放不下，官网链接获得焦点时文字会贴住虚线焦点框。
+// 150% 缩放下整行需要 511px，仍放不下，届时官网地址由 DT_END_ELLIPSIS 在尾部收成省略号。
+static const int kDlgWidth      = 440;
 static const int kDlgHeight     = 534;   // 客户区高（按下方品牌区 + 5 行 + 页脚算出）
 static const int kDlgMinWidth   = 400;
 static const int kDlgMinHeight  = 500;
@@ -71,18 +76,22 @@ static const int kFooterH       = 20;    // 页脚行高
 static const int kCheckBtnW     = 78;    // "检查"按钮宽
 static const int kCheckBtnH     = 32;    // "检查"按钮高（行内竖向居中）
 static const int kLinkBtnH      = 30;    // 链接式按钮高（行内竖向居中）
-static const int kViewLinkW     = 56;    // "查看"链接按钮宽
-// 官网 URL 链接按钮的<u>最小</u>宽。实际宽度由 AddLinkRow 按文字量出来的宽度撑开
-// （官网地址是从 flamingo.ini 读的，长度不可预知，写死宽度必然有配不上的时候），
-// 这个值只保证地址很短时按钮不至于缩得比"查看"还窄、右缘看起来参差不齐。
-static const int kUrlLinkW      = 260;
+// 链接式按钮的<u>最小</u>宽（逻辑像素），四个功能行共用。按钮宽度由 AddLinkRow 按
+// 文字实际宽度撑开，本值只在文字极短时起作用，保证按钮不至于窄得难以点中。
+// 取值必须小于"查看"两字的宽度加上 kLinkTextPad：按钮文字是居中绘制的，按钮一旦被
+// 最小宽度撑得比"文字宽度 + 余量"还宽，文字右缘就会与官网那一行对不齐。
+static const int kLinkMinW      = 32;
 
-// 链接式按钮在量出的文字宽度之外再留的余量（逻辑像素）。防止不同 DPI / 字体版本下
-// 文字正好卡在边界上被削掉最后一两个像素。
-static const int kLinkTextPad   = 8;
+// 链接式按钮在量出的文字宽度之外再留的余量（逻辑像素），左右各占一半。它同时满足
+// 两项要求：一是防止不同 DPI / 字体版本下文字正好卡在边界上被削掉一两个像素；二是
+// 按钮获得焦点时，DuiButton 沿按钮矩形向内缩 3px 画虚线焦点框（DuiButton.cpp 的
+// kFocusRectInsetPx），文字与虚线框之间要留出间隙。取 16 时每侧 8px，扣掉内缩的
+// 3px 后，文字与虚线框之间还有 5px。
+static const int kLinkTextPad   = 16;
 
 // 功能行左侧标题至少要留的宽度（逻辑像素）。右侧链接按钮按文字实际宽度撑开，但不能
-// 把标题挤没了 —— "官方网站"四个汉字在 11pt 下约 60px，留 72px 有余量。
+// 把标题挤没了。"官方网站"四个汉字在 11pt 下实测宽度：100% 缩放 60px、125% 缩放 72px、
+// 150% 缩放 88px。取 72 保证 125% 及以下不被截断，本值不能再调小。
 static const int kRowTitleMinW  = 72;
 
 // flamingo.ini 里"官方网站"地址的段名 / 键名。文件路径为
@@ -411,14 +420,14 @@ void CBalloonAboutDlg::AddSeparator(balloonwjui::DuiVBox* root)
 }
 
 void CBalloonAboutDlg::AddCenteredLabel(balloonwjui::DuiVBox* root, LPCTSTR text,
-                                        HFONT font, COLORREF color, int height)
+                                        int pt, bool bold, COLORREF color, int height)
 {
     std::unique_ptr<balloonwjui::DuiLabel> lab(new balloonwjui::DuiLabel());
     lab->SetText(text);
     lab->SetTextColor(color);
-    if (font != NULL)
+    if (pt > 0)
     {
-        lab->SetFont(font);
+        lab->SetTextPointSize(pt, bold);
     }
     lab->SetTextAlign(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
     root->AddChild(std::move(lab), balloonwjui::DuiLayout::Hint().Fixed(height));
@@ -427,19 +436,14 @@ void CBalloonAboutDlg::AddCenteredLabel(balloonwjui::DuiVBox* root, LPCTSTR text
 void CBalloonAboutDlg::AddLinkRow(balloonwjui::DuiVBox* root, LPCTSTR title,
                                   LPCTSTR linkText, UINT ctrlId, int linkWidth)
 {
-    HFONT titleFont = balloonwjui::DuiResMgr::Inst().GetFontByPointSize(kRowTitlePt, false);
-
     std::unique_ptr<balloonwjui::DuiHBox> row(new balloonwjui::DuiHBox());
     row->SetGap(kRowGap);
 
-    // 左侧标题（占满剩余宽度，竖向居中）。
+    // 左侧标题（占满剩余宽度，竖向居中）。按磅值设字号，绘制时按窗口 DPI 取字体。
     std::unique_ptr<balloonwjui::DuiLabel> lab(new balloonwjui::DuiLabel());
     lab->SetText(title);
     lab->SetTextColor(kRowTitleColor);
-    if (titleFont != NULL)
-    {
-        lab->SetFont(titleFont);
-    }
+    lab->SetTextPointSize(kRowTitlePt, false);
     lab->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     row->AddChild(std::move(lab), balloonwjui::DuiLayout::Hint().Weight(1));
 
@@ -451,22 +455,29 @@ void CBalloonAboutDlg::AddLinkRow(balloonwjui::DuiVBox* root, LPCTSTR title,
     link->SetCtrlId(ctrlId);
     link->SetText(linkText);
     link->SetTextColor(kLinkColor);
+    // 文字水平居中，不能用 DT_RIGHT。DuiButton 获得焦点时，虚线焦点框画在按钮矩形
+    // 向内缩 3px 的范围上，而文字是在<u>整个</u>按钮矩形里按这里给的对齐方式绘制的
+    // （见 DuiButton::OnPaint）。此前用 DT_RIGHT，"查看"按钮又固定 56px 宽，文字
+    // 贴着按钮右边绘制：虚线框左半边是空的，右边框线还压在文字上。改为居中后文字与
+    // 虚线框中心重合；再配合下面"按钮宽度 = 文字宽度 + 余量"，各行文字的右缘仍然
+    // 对齐，都距行的右缘 kLinkTextPad / 2。
     // DT_END_ELLIPSIS 是兜底：地址长到连下面算出的上限都放不下时，让它在<u>尾部</u>
     // 收成省略号，而不是被硬生生截断 —— 见下面对截断方向的说明。
-    link->SetTextAlign(DT_RIGHT | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
+    link->SetTextAlign(DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_END_ELLIPSIS);
 
-    // 按钮宽度按文字实际宽度撑开，不再直接吃调用方传进来的 linkWidth。
-    // 原先"官方网站"那行写死 260px，装不下完整地址，而 DuiButton 的文字是
-    // DT_RIGHT 绘制的、宽度不够时削掉的是<u>开头</u>，于是
+    // 按钮宽度按文字实际宽度撑开，linkWidth 只作最小宽度。
+    // 原先"官方网站"那行写死 260px，装不下完整地址，而当时文字按 DT_RIGHT 绘制，
+    // 宽度不够时削掉的是<u>开头</u>，于是
     // https://github.com/balloonwj/flamingo 显示成 os://github.com/balloonwj/flamingo，
     // 看着像乱码。地址还是从 flamingo.ini 读的，写死宽度更不可能永远合适。
     //
-    // 量宽的字体必须与真正绘制时用的是同一支：调用方没 SetFont 时 DuiButton 会回落到
-    // DuiResMgr 的默认字体（见 DuiButton.cpp 里 useFont 的取法），这里照同样的优先级取。
+    // 量宽的字体必须与真正绘制时用的是同一支：调用方没设字体时 DuiButton 会回落到
+    // 按控件 DPI 取的默认字体（见 DuiButton.cpp 里 useFont 的取法），这里照同样的
+    // 优先级取。
     HFONT linkFont = link->GetFont();
     if (linkFont == NULL)
     {
-        linkFont = balloonwjui::DuiResMgr::Inst().GetDefaultFont();
+        linkFont = link->GetDefaultFont();
     }
 
     // 上限：行宽减去左侧标题至少要占的宽度，不能把标题挤没。撑到上限还放不下的，
@@ -486,8 +497,6 @@ void CBalloonAboutDlg::AddLinkRow(balloonwjui::DuiVBox* root, LPCTSTR title,
 
 void CBalloonAboutDlg::AddCheckUpdateRow(balloonwjui::DuiVBox* root)
 {
-    HFONT titleFont = balloonwjui::DuiResMgr::Inst().GetFontByPointSize(kRowTitlePt, false);
-
     std::unique_ptr<balloonwjui::DuiHBox> row(new balloonwjui::DuiHBox());
     row->SetGap(kRowGap);
 
@@ -501,10 +510,7 @@ void CBalloonAboutDlg::AddCheckUpdateRow(balloonwjui::DuiVBox* root)
     std::unique_ptr<balloonwjui::DuiLabel> titleLab(new balloonwjui::DuiLabel());
     titleLab->SetText(_T("检查更新"));
     titleLab->SetTextColor(kRowTitleColor);
-    if (titleFont != NULL)
-    {
-        titleLab->SetFont(titleFont);
-    }
+    titleLab->SetTextPointSize(kRowTitlePt, false);
     titleLab->SetTextAlign(DT_LEFT | DT_VCENTER | DT_SINGLELINE);
     left->AddChild(std::move(titleLab), balloonwjui::DuiLayout::Hint().Fixed(20));
 
@@ -591,11 +597,10 @@ void CBalloonAboutDlg::BuildUiOnce()
         root->AddChild(std::move(gap), balloonwjui::DuiLayout::Hint().Fixed(kBrandIconGap));
     }
 
-    HFONT appNameFont = balloonwjui::DuiResMgr::Inst().GetFontByPointSize(kAppNamePt, true);
-    AddCenteredLabel(root.get(), balloonmain::kAboutAppName, appNameFont, kAppNameColor, kAppNameH);
+    AddCenteredLabel(root.get(), balloonmain::kAboutAppName, kAppNamePt, true, kAppNameColor, kAppNameH);
     const std::wstring versionLine = balloonmain::AboutVersionLine();
-    AddCenteredLabel(root.get(), versionLine.c_str(), NULL, kGrayTextColor, kVerLineH);
-    AddCenteredLabel(root.get(), balloonmain::kAboutSlogan, NULL, kGrayTextColor, kSloganH);
+    AddCenteredLabel(root.get(), versionLine.c_str(), 0, false, kGrayTextColor, kVerLineH);
+    AddCenteredLabel(root.get(), balloonmain::kAboutSlogan, 0, false, kGrayTextColor, kSloganH);
 
     {
         std::unique_ptr<balloonwjui::DuiControl> gap(new balloonwjui::DuiControl());
@@ -606,13 +611,13 @@ void CBalloonAboutDlg::BuildUiOnce()
     AddSeparator(root.get());
     AddCheckUpdateRow(root.get());
     AddSeparator(root.get());
-    AddLinkRow(root.get(), _T("用户协议"), _T("查看"), kIdAgreement, kViewLinkW);
+    AddLinkRow(root.get(), _T("用户协议"), _T("查看"), kIdAgreement, kLinkMinW);
     AddSeparator(root.get());
-    AddLinkRow(root.get(), _T("隐私政策"), _T("查看"), kIdPrivacy, kViewLinkW);
+    AddLinkRow(root.get(), _T("隐私政策"), _T("查看"), kIdPrivacy, kLinkMinW);
     AddSeparator(root.get());
-    AddLinkRow(root.get(), _T("开源许可"), _T("查看"), kIdLicense, kViewLinkW);
+    AddLinkRow(root.get(), _T("开源许可"), _T("查看"), kIdLicense, kLinkMinW);
     AddSeparator(root.get());
-    AddLinkRow(root.get(), _T("官方网站"), (LPCTSTR)m_websiteUrl, kIdWebsite, kUrlLinkW);
+    AddLinkRow(root.get(), _T("官方网站"), (LPCTSTR)m_websiteUrl, kIdWebsite, kLinkMinW);
     AddSeparator(root.get());
 
     // ---- 页脚版权 ----
@@ -620,7 +625,7 @@ void CBalloonAboutDlg::BuildUiOnce()
         std::unique_ptr<balloonwjui::DuiControl> gap(new balloonwjui::DuiControl());
         root->AddChild(std::move(gap), balloonwjui::DuiLayout::Hint().Fixed(kFooterTopGap));
     }
-    AddCenteredLabel(root.get(), balloonmain::kAboutCopyright, NULL, kGrayTextColor, kFooterH);
+    AddCenteredLabel(root.get(), balloonmain::kAboutCopyright, 0, false, kGrayTextColor, kFooterH);
 
     SetClientContent(std::move(root));
     m_built = true;

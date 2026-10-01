@@ -67,19 +67,23 @@ private:
     void AddSeparator(balloonwjui::DuiVBox* root);
 
     // 往 root 加一行"居中文本"标签（品牌区的应用名 / 版本 / 标语 / 页脚版权用）。
-    //   text   显示文本；font 字体（caller / DuiResMgr 持有，可为 NULL 走默认）；
+    //   text   显示文本；
+    //   pt     字号（磅）；<= 0 表示用默认字体。标签按磅值记下字号，绘制时按所在
+    //          窗口的 DPI 取字体；
+    //   bold   是否加粗（pt <= 0 时忽略）；
     //   color  文字色；height 行高（逻辑像素）。
     void AddCenteredLabel(balloonwjui::DuiVBox* root, LPCTSTR text,
-                          HFONT font, COLORREF color, int height);
+                          int pt, bool bold, COLORREF color, int height);
 
     // 往 root 加一个"左标题 + 右链接式按钮"功能行（用户协议 / 隐私政策 / 开源许可 /
     // 官方网站）。链接式按钮走 DuiButton 的 Text 变体（橙字、无底无边、hover 浅底）。
     //   title     左侧标题文本；linkText 右侧按钮文本；
     //   ctrlId    右侧按钮命令 id（点击经 DUIN_CLICK 回到 OnDuiNotify 分发）；
     //   linkWidth 右侧按钮的<u>最小</u>宽度（逻辑像素）。实际宽度按 linkText 量出来的
-    //             宽度撑开，故不必也不能靠它来"留够位置"；它只管住文字很短时按钮
-    //             不要缩得各行右缘参差不齐。撑开后仍会受左侧标题最小宽度的限制，
-    //             真放不下时由 DT_END_ELLIPSIS 在尾部收成省略号。
+    //             宽度加固定余量撑开，故不必也不能靠它来"留够位置"；它只保证文字
+    //             极短时按钮不至于窄得难以点中。按钮文字是居中绘制的，本值不要大于
+    //             "文字宽度 + 余量"，否则该行文字右缘会与其它行对不齐。撑开后仍会受
+    //             左侧标题最小宽度的限制，真放不下时由 DT_END_ELLIPSIS 在尾部收成省略号。
     void AddLinkRow(balloonwjui::DuiVBox* root, LPCTSTR title,
                     LPCTSTR linkText, UINT ctrlId, int linkWidth);
 

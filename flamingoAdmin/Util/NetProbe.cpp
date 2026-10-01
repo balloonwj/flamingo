@@ -5,12 +5,15 @@
  *  否则 windows.h 会拉入旧版 winsock.h 引发冲突。本工程未开启预编译头，
  *  故可在此把 winsock 头放到 stdafx.h 之前。
  *
+ *  本文件在 stdafx.h 之前就引入了 Windows SDK 的头文件，因此不能依赖
+ *  stdafx.h 去设定 WINVER / _WIN32_WINNT / _WIN32_IE —— 那样 SDK 会先按
+ *  默认值展开、再被 stdafx.h 改写，既报 warning C4005，取值也前后不一。
+ *  这三个宏统一由工程文件的预处理器定义给出（见 flamingoAdmin.vcxproj），
+ *  在任何头文件之前就已生效，GetAddrInfoW 等 API 所需的 Windows 7 版本
+ *  条件由此满足，本文件无须再自行定义。
+ *
  *  balloonwj@qq.com   2026-05-21
  */
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0601      // Windows 7，GetAddrInfoW 等 API 所需
-#endif
-
 #include <winsock2.h>
 #include <ws2tcpip.h>
 

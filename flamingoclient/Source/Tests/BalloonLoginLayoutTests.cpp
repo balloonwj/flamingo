@@ -26,12 +26,15 @@
 #include "catch_amalgamated.hpp"
 
 #include "../UI/BalloonAuth/BalloonLoginLayout.h"
+#include "../UI/BalloonAuth/AuthButtons.h"
+#include "../../../third-party/balloonui/balloonui/DuiNinePatch.h"
 #include "../UI/BalloonMain/AvatarPalette.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Feedback/DuiProgressBar.h"
 
+#include <gdiplus.h>
 #include <set>
 
 using namespace balloonwjui;
@@ -218,6 +221,27 @@ TEST_CASE("V4 账号纯空格 → kLoginInputNoAccount", "[p1b][login]")
 TEST_CASE("V5 账号非空、密码纯空白 → kLoginInputNoPassword", "[p1b][login]")
 {
     CHECK(ValidateLoginInput(_T("88234561"), _T("  \t ")) == kLoginInputNoPassword);
+}
+
+// ---- 登录窗显示后要不要自己点「登录」（docs/自动登录方案.md §3.1）----
+
+TEST_CASE("ALS1 要求自动开始且账号密码都有 → 自动开始", "[login][autologin]")
+{
+    CHECK(ShouldAutoStartLogin(true, _T("MY0127"), _T("flamingo")));
+}
+
+TEST_CASE("ALS2 要求自动开始但密码为空 → 不自动开始", "[login][autologin]")
+{
+    //本地没存密码（例如刚因密码错误被清掉）：停在登录窗等用户输入
+    CHECK_FALSE(ShouldAutoStartLogin(true, _T("MY0127"), _T("")));
+    CHECK_FALSE(ShouldAutoStartLogin(true, _T("MY0127"), _T("  \t ")));
+    //账号为空同理
+    CHECK_FALSE(ShouldAutoStartLogin(true, _T(""), _T("flamingo")));
+}
+
+TEST_CASE("ALS3 没有要求自动开始 → 不自动开始", "[login][autologin]")
+{
+    CHECK_FALSE(ShouldAutoStartLogin(false, _T("MY0127"), _T("flamingo")));
 }
 
 // =====================================================================
@@ -508,13 +532,11 @@ TEST_CASE("MAP3 越出映射表范围时原样返回，由调用方判越界", "
 
 namespace {
 
-// 登录窗客户区的尺寸，与 BalloonLoginDlg.cpp 里 ResizeClient 用的一致。
-// 布局结果依赖它，所以两处要对得上。
-const int kTestClientWidth  = 380;
-const int kTestClientHeight = 562;
-
-// 标题栏高度，与 BalloonLoginDlg.cpp 里 SetTitleBarHeight 传的值一致。
-const int kTestTitleBarHeight = 28;
+// 登录窗客户区的尺寸与标题栏高度。直接取 BalloonLoginLayout.h 里对话框也在用的那一份
+// （2026-09-30 之前测试里各抄了一份数字，窗口一改高度就得两处同步）。
+const int kTestClientWidth    = kLoginWindowWidth;
+const int kTestClientHeight   = kLoginWindowHeight;
+const int kTestTitleBarHeight = kLoginTitleBarHeight;
 
 // <u>客户区内容真正拿到的高度</u>。DuiFrameWindow 的骨架是「标题栏 + 客户区内容」
 // 上下两块，内容那块只占标题栏以下的部分。本文件早先按整个客户区高度布局，比实机
@@ -637,12 +659,8 @@ TEST_CASE("LSA8 状态区隐藏时，内容同样排得下", "[login][statusarea
     std::unique_ptr<DuiControl> root = LayoutLoginBody();
     REQUIRE(root != nullptr);
 
-    DuiControl* status = root->FindCtrlById(kIdStatusArea);
-    REQUIRE(status != nullptr);
-    status->SetVisible(false);
-
-    RECT rc = root->GetRect();
-    root->ForceLayout(rc);   // 显隐变化后必须重排，理由见 LSA5
+    // 与对话框同一个入口切到空闲态（函数内部会自己重排）。
+    ApplyLoginStatusView(root.get(), kLoginStatusIdle, NULL);
 
     const int contentBottom = root->GetRect().bottom;
     const int deepestBottom = MaxVisibleBottom(root.get());
@@ -705,8 +723,10 @@ TEST_CASE("LSA5 状态区隐藏后再显示，重排过才拿得到正确宽度"
     REQUIRE(bar != nullptr);
     REQUIRE(button != nullptr);
 
-    // 复现实机的时序：登录窗建好后先把状态区藏起来（InitLoginUi 就是这么做的），
-    // 藏着的时候发生一次重排（窗口尺寸变化、内容替换都会触发），点登录时再显示。
+    // 复现 2026-09-30 之前实机的时序：登录窗建好后先把状态区藏起来（当时 InitLoginUi
+    // 就是这么做的），藏着的时候发生一次重排（窗口尺寸变化、内容替换都会触发），点登录时
+    // 再显示。此后状态区容器改为一直占位、只切换其中的进度条（新时序见 LSA10），本条保留，
+    // 用来看住「整块隐藏再显示」这条通用路径。
     //
     // 这一步是本组用例最初漏掉的：SetVisible 不触发重新布局，而竖直布局排版时会
     // 跳过不可见的子控件，于是状态区在隐藏期间被排成了一份过时的矩形，显示回来
@@ -722,7 +742,7 @@ TEST_CASE("LSA5 状态区隐藏后再显示，重排过才拿得到正确宽度"
     root->ForceLayout(rc);
 
     area->SetVisible(true);
-    // 显示回来之后必须重排一次，这正是 CBalloonLoginDlg::RelayoutClientContent 做的事
+    // 显示回来之后必须重排一次（2026-09-30 之前的 CBalloonLoginDlg::RelayoutClientContent 就是这样做的）
     root->ForceLayout(rc);
 
     const RECT& rcBar    = bar->GetRect();
@@ -734,4 +754,338 @@ TEST_CASE("LSA5 状态区隐藏后再显示，重排过才拿得到正确宽度"
     CHECK(rcBar.left == rcButton.left);
     CHECK(rcBar.right == rcButton.right);
     CHECK(rcBar.right <= kTestClientWidth - kFormPaddingRight);
+}
+
+// ======================= 2026-09-30：底部链接间距、字号与窗口边框 =======================
+//
+// 用户反馈（snapshots/203246.png）：白色背景下登录窗边框看不出来；底部「注册账号 /
+// 网络设置」字号偏小，且离登录按钮太远（实测 106 像素）。
+//
+// 这 106 像素的来历：状态区平时隐藏、不参与排版，按钮与链接行之间只有两段 12 像素间距
+// 和一块弹性空白；而窗口实际尺寸是 398×609（120 DPI 下实测，snapshots/login_before.png），
+// 比代码里的 380×562 宽 18、高 47 —— ResizeClient 按 WS_OVERLAPPEDWINDOW 叠加了系统
+// 标题栏与边框，而 DuiFrameWindow 在 WM_NCCALCSIZE 里把非客户区整个并入客户区，多出的
+// 高度全部分给了弹性空白。
+//
+// 确认后的改法：状态区容器一直占位（登录中、失败时布局不跳动），去掉弹性空白，按钮与状态区、
+// 状态区与链接行之间各 8 像素；窗口按精确尺寸设置，高度正好容下内容；链接字号与「忘记
+// 密码？」一致取 13；窗口四周画 1 像素灰边。
+
+namespace {
+
+// 登录按钮与状态区、状态区与底部链接行之间的间距（像素），即确认方案里的 8 / 8。
+const int kExpectedStatusGap = 8;
+
+// 状态区容器的高度，与 BalloonLoginLayout.cpp 里 id=150 的 fixedHeight 一致。
+const int kExpectedStatusAreaHeight = 44;
+
+// 底部链接期望的字号：与「忘记密码？」一致。
+const int kExpectedLinkFontPx = 13;
+
+// 表单下内边距，与 padding="24,14,24,20" 的第 4 个数一致。
+const int kFormPaddingBottom = 20;
+
+// 按 id 取控件矩形（断言控件存在）。
+RECT RectOf(DuiControl* root, UINT id)
+{
+    DuiControl* c = root->FindCtrlById(id);
+    REQUIRE(c != nullptr);
+    return c->GetRect();
+}
+
+// 读一张位图 (x, y) 处的像素颜色。
+COLORREF PixelOf(HBITMAP hbm, int x, int y)
+{
+    HDC screen = ::GetDC(NULL);
+    HDC mem = ::CreateCompatibleDC(screen);
+    ::ReleaseDC(NULL, screen);
+    HGDIOBJ old = ::SelectObject(mem, hbm);
+    const COLORREF c = ::GetPixel(mem, x, y);
+    ::SelectObject(mem, old);
+    ::DeleteDC(mem);
+    return c;
+}
+
+} // anonymous namespace
+
+TEST_CASE("LSA9 空闲态下登录按钮到底部链接只隔着占位的状态区与两段 8 像素间距", "[login][statusarea][spacing]")
+{
+    std::unique_ptr<DuiControl> root = LayoutLoginBody();
+    REQUIRE(root != nullptr);
+    ApplyLoginStatusView(root.get(), kLoginStatusIdle, NULL);
+
+    // 状态区平时也占位：容器保持可见，只是里面什么都不显示。
+    DuiControl* area = root->FindCtrlById(kIdStatusArea);
+    REQUIRE(area != nullptr);
+    CHECK(area->IsVisible());
+
+    const RECT button = RectOf(root.get(), kIdLoginButton);
+    const RECT link   = RectOf(root.get(), kIdLinkRegister);
+    const int gap = link.top - button.bottom;
+    INFO("login button bottom = " << button.bottom << ", link top = " << link.top << ", gap = " << gap);
+    CHECK(gap == kExpectedStatusGap + kExpectedStatusAreaHeight + kExpectedStatusGap);
+}
+
+TEST_CASE("LSA10 切换状态区内容时按钮与链接不动，进度条显示后与登录按钮对齐", "[login][statusarea][spacing]")
+{
+    // 状态区改成一直占位之后，它自己的矩形从头到尾不变，于是对根控件 ForceLayout 时
+    // 一路下传的 SetRect 会在状态区这一层直接返回（矩形未变），里面的进度条不会被重排。
+    // 时序按对话框的真实顺序复现：InitLoginUi 在<u>第一次布局之前</u>就切到空闲态（进度条
+    // 隐藏），所以进度条从未以可见状态参与过布局，矩形是空的；点登录时显示出来，若没人
+    // 专门重排状态区，就按空矩形去画，界面上看不到进度条。
+    std::unique_ptr<DuiControl> root = BuildLoginBody();
+    REQUIRE(root != nullptr);
+    ApplyLoginStatusView(root.get(), kLoginStatusIdle, NULL);
+
+    RECT rcContent;
+    rcContent.left   = 0;
+    rcContent.top    = kTestTitleBarHeight;
+    rcContent.right  = kTestClientWidth;
+    rcContent.bottom = kTestClientHeight;
+    root->ForceLayout(rcContent);
+    const RECT buttonIdle = RectOf(root.get(), kIdLoginButton);
+    const RECT linkIdle   = RectOf(root.get(), kIdLinkRegister);
+
+    ApplyLoginStatusView(root.get(), kLoginStatusLogining, _T("正在登录…"));
+    const RECT buttonBusy = RectOf(root.get(), kIdLoginButton);
+    const RECT linkBusy   = RectOf(root.get(), kIdLinkRegister);
+    const RECT area       = RectOf(root.get(), kIdStatusArea);
+    const RECT text       = RectOf(root.get(), kIdStatusText);
+    const RECT bar        = RectOf(root.get(), kIdStatusProgress);
+    INFO("bar = (" << bar.left << "," << bar.top << ")-(" << bar.right << "," << bar.bottom
+         << "), text = (" << text.left << "," << text.top << ")-(" << text.right << "," << text.bottom
+         << "), area = (" << area.left << "," << area.top << ")-(" << area.right << "," << area.bottom
+         << "), button = (" << buttonBusy.left << "," << buttonBusy.right << ")");
+
+    // 布局不跳动
+    CHECK(::EqualRect(&buttonIdle, &buttonBusy) != FALSE);
+    CHECK(::EqualRect(&linkIdle, &linkBusy) != FALSE);
+
+    // 进度条可见，且与登录按钮左右对齐、落在状态区之内、在状态文字下方
+    DuiControl* barCtrl = root->FindCtrlById(kIdStatusProgress);
+    REQUIRE(barCtrl != nullptr);
+    CHECK(barCtrl->IsVisible());
+    CHECK(bar.left == buttonBusy.left);
+    CHECK(bar.right == buttonBusy.right);
+    CHECK(bar.top >= text.bottom);
+    CHECK(bar.top >= area.top);
+    CHECK(bar.bottom <= area.bottom);
+
+    // 失败提示：只留文字、不显示进度条，布局照样不动
+    ApplyLoginStatusView(root.get(), kLoginStatusMessage, _T("登录失败"));
+    CHECK_FALSE(barCtrl->IsVisible());
+    const RECT linkMsg = RectOf(root.get(), kIdLinkRegister);
+    CHECK(::EqualRect(&linkIdle, &linkMsg) != FALSE);
+
+    // 再回到登录中：隐藏期间可能发生过重排，显示回来仍要对齐
+    ApplyLoginStatusView(root.get(), kLoginStatusLogining, _T("正在登录…"));
+    const RECT bar2 = RectOf(root.get(), kIdStatusProgress);
+    CHECK(bar2.left == buttonBusy.left);
+    CHECK(bar2.right == buttonBusy.right);
+    CHECK(::EqualRect(&bar, &bar2) != FALSE);
+}
+
+TEST_CASE("LSA11 底部两个链接的字号与「忘记密码？」一致", "[login][spacing]")
+{
+    std::unique_ptr<DuiControl> root = LayoutLoginBody();
+    REQUIRE(root != nullptr);
+
+    AuthLinkLabel* reg    = dynamic_cast<AuthLinkLabel*>(root->FindCtrlById(kIdLinkRegister));
+    AuthLinkLabel* net    = dynamic_cast<AuthLinkLabel*>(root->FindCtrlById(kIdLinkNetwork));
+    AuthLinkLabel* forgot = dynamic_cast<AuthLinkLabel*>(root->FindCtrlById(kIdLinkForgotPwd));
+    REQUIRE(reg != nullptr);
+    REQUIRE(net != nullptr);
+    REQUIRE(forgot != nullptr);
+
+    CHECK(reg->FontPx() == kExpectedLinkFontPx);
+    CHECK(net->FontPx() == kExpectedLinkFontPx);
+    CHECK(forgot->FontPx() == kExpectedLinkFontPx);
+}
+
+TEST_CASE("LSA12 窗体背景图四边是 1 像素灰边，内部顶部橙、其余白", "[login][border]")
+{
+    HBITMAP hbm = CreateLoginFrameBgBitmap();
+    REQUIRE(hbm != NULL);
+    BITMAP bm;
+    REQUIRE(::GetObject(hbm, sizeof(bm), &bm) == (int)sizeof(bm));
+    const int w = bm.bmWidth;
+    const int h = bm.bmHeight;
+    REQUIRE(w > kLoginFrameBorderPx * 2);
+    REQUIRE(h > kLoginTitleBarHeight + kLoginFrameBorderPx);
+
+    // 四条边：逐边统计颜色不对的像素个数（逐像素 CHECK 一旦失败会刷出几十条相同的报告）
+    int badLeft = 0;
+    int badRight = 0;
+    int badTop = 0;
+    int badBottom = 0;
+    for (int y = 0; y < h; ++y)
+    {
+        if (PixelOf(hbm, 0, y) != kLoginFrameBorderColor)
+            ++badLeft;
+        if (PixelOf(hbm, w - 1, y) != kLoginFrameBorderColor)
+            ++badRight;
+    }
+    for (int x = 0; x < w; ++x)
+    {
+        if (PixelOf(hbm, x, 0) != kLoginFrameBorderColor)
+            ++badTop;
+        if (PixelOf(hbm, x, h - 1) != kLoginFrameBorderColor)
+            ++badBottom;
+    }
+    INFO("bitmap " << w << "x" << h << ", non-border pixels on edges: left " << badLeft
+         << ", right " << badRight << ", top " << badTop << ", bottom " << badBottom);
+    CHECK(badLeft == 0);
+    CHECK(badRight == 0);
+    CHECK(badTop == 0);
+    CHECK(badBottom == 0);
+
+    // 内部：标题栏那一条橙色（与 Banner 渐变起点同色），其下白色
+    const COLORREF kOrange = RGB(0xFF, 0xB7, 0x93);
+    const COLORREF kWhite  = RGB(0xFF, 0xFF, 0xFF);
+    CHECK(PixelOf(hbm, w / 2, kLoginTitleBarHeight / 2) == kOrange);
+    CHECK(PixelOf(hbm, w / 2, kLoginTitleBarHeight + 1) == kWhite);
+    CHECK(PixelOf(hbm, w / 2, h - 2) == kWhite);
+    ::DeleteObject(hbm);
+
+    // 九宫格边距：上边距等于标题栏高度；左右下至少包住灰边，灰边不会被拉伸成一片
+    const RECT ins = LoginFrameBgInsets();
+    CHECK(ins.top == kLoginTitleBarHeight);
+    CHECK(ins.left == kLoginFrameBorderPx);
+    CHECK(ins.right == kLoginFrameBorderPx);
+    CHECK(ins.bottom >= kLoginFrameBorderPx);
+}
+
+TEST_CASE("LSA13 客户区内容不盖住窗口左右与底部的灰边", "[login][border]")
+{
+    std::unique_ptr<DuiControl> root = LayoutLoginBody();
+    REQUIRE(root != nullptr);
+
+    // 逐个检查根控件的直接子控件（Banner 与表单区）。根控件自己铺满整个客户区内容，
+    // 灰边要靠它的内边距留出来，所以只看子控件、不看根控件本身。Banner 横向铺满，
+    // 是最容易盖住左右灰边的那一个。
+    const std::vector<std::unique_ptr<DuiControl> >& children = root->Children();
+    REQUIRE_FALSE(children.empty());
+    for (size_t i = 0; i < children.size(); ++i)
+    {
+        const RECT rc = children[i]->GetRect();
+        INFO("root child #" << i << " = (" << rc.left << "," << rc.top << ")-(" << rc.right << ","
+             << rc.bottom << "), client = " << kTestClientWidth << "x" << kTestClientHeight);
+        CHECK(rc.left >= kLoginFrameBorderPx);
+        CHECK(rc.right <= kTestClientWidth - kLoginFrameBorderPx);
+        CHECK(MaxVisibleBottom(children[i].get()) <= kTestClientHeight - kLoginFrameBorderPx);
+    }
+}
+
+TEST_CASE("LSA14 窗口高度正好容下内容，底部不多留空白", "[login][statusarea][spacing]")
+{
+    // LSA7 只防「排不下」，本条防另一头：窗口比内容高出一截，多出来的空白又会堆到
+    // 链接行下面或上面。空闲态下链接行底边加上表单下内边距与底部灰边，应当正好是客户区底边。
+    std::unique_ptr<DuiControl> root = LayoutLoginBody();
+    REQUIRE(root != nullptr);
+    ApplyLoginStatusView(root.get(), kLoginStatusIdle, NULL);
+
+    const RECT link = RectOf(root.get(), kIdLinkRegister);
+    const int slack = kTestClientHeight - link.bottom;
+    INFO("link bottom = " << link.bottom << ", client height = " << kTestClientHeight << ", slack = " << slack);
+    CHECK(slack == kFormPaddingBottom + kLoginFrameBorderPx);
+}
+
+TEST_CASE("LSA15 窗体背景图按窗口尺寸画出来后，灰边清晰、内部是纯色而非渐变", "[login][border]")
+{
+    // LSA12 只核对位图本身。实机上位图要经 DuiNinePatch 按九宫格拉伸到整个窗口，
+    // 而拉伸用的是 GDI+ 双线性插值：拉伸格的边缘会混入源图里相邻格的像素。2026-09-30
+    // 第一版位图中间只有 2 像素宽，旁边就是灰边，拉到 378 像素后整片白色区都被混成了
+    // 从 228 到 255 的灰白渐变（snapshots/login_after.png）。本用例按 DuiHost 的画法
+    // （源、目标边距相同，默认选项）画一遍，逐区域统计颜色不对的像素。
+    ULONG_PTR token = 0;
+    Gdiplus::GdiplusStartupInput startupInput;
+    REQUIRE(Gdiplus::GdiplusStartup(&token, &startupInput, NULL) == Gdiplus::Ok);
+
+    const int w = kLoginWindowWidth;
+    const int h = kLoginWindowHeight;
+
+    // 32 位自顶向下的画布，先整片涂成品红：画完之后还是品红的像素说明根本没画到。
+    const COLORREF kSentinel = RGB(0xFF, 0x00, 0xFF);
+    BITMAPINFO bi;
+    ::ZeroMemory(&bi, sizeof(bi));
+    bi.bmiHeader.biSize        = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth       = w;
+    bi.bmiHeader.biHeight      = -h;
+    bi.bmiHeader.biPlanes      = 1;
+    bi.bmiHeader.biBitCount    = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = NULL;
+    HDC screen = ::GetDC(NULL);
+    HDC canvas = ::CreateCompatibleDC(screen);
+    ::ReleaseDC(NULL, screen);
+    HBITMAP hCanvas = ::CreateDIBSection(canvas, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
+    REQUIRE(hCanvas != NULL);
+    HGDIOBJ oldCanvas = ::SelectObject(canvas, hCanvas);
+    RECT rcAll = { 0, 0, w, h };
+    HBRUSH brSentinel = ::CreateSolidBrush(kSentinel);
+    ::FillRect(canvas, &rcAll, brSentinel);
+    ::DeleteObject(brSentinel);
+
+    HBITMAP hbm = CreateLoginFrameBgBitmap();
+    REQUIRE(hbm != NULL);
+    const RECT ins = LoginFrameBgInsets();
+    balloonwjui::DuiNinePatch::Insets nine;
+    nine.left   = ins.left;
+    nine.top    = ins.top;
+    nine.right  = ins.right;
+    nine.bottom = ins.bottom;
+    REQUIRE(balloonwjui::DuiNinePatch::Draw(canvas, hbm, rcAll, nine, nine));
+
+    const COLORREF kOrange = RGB(0xFF, 0xB7, 0x93);
+    const COLORREF kWhite  = RGB(0xFF, 0xFF, 0xFF);
+    int badBorder = 0;
+    int badTitle = 0;
+    int badWhite = 0;
+    COLORREF firstBadWhite = kWhite;
+    int firstBadWhiteX = -1;
+    int firstBadWhiteY = -1;
+    for (int y = 0; y < h; ++y)
+    {
+        for (int x = 0; x < w; ++x)
+        {
+            const COLORREF c = ::GetPixel(canvas, x, y);
+            const bool onBorder = (x == 0 || x == w - 1 || y == 0 || y == h - 1);
+            if (onBorder)
+            {
+                if (c != kLoginFrameBorderColor)
+                    ++badBorder;
+            }
+            else if (y < kLoginTitleBarHeight)
+            {
+                if (c != kOrange)
+                    ++badTitle;
+            }
+            else if (c != kWhite)
+            {
+                if (badWhite == 0)
+                {
+                    firstBadWhite = c;
+                    firstBadWhiteX = x;
+                    firstBadWhiteY = y;
+                }
+                ++badWhite;
+            }
+        }
+    }
+    INFO("canvas " << w << "x" << h << ": wrong pixels on border " << badBorder << ", in title strip "
+         << badTitle << ", in white area " << badWhite << "; first wrong white-area pixel at ("
+         << firstBadWhiteX << "," << firstBadWhiteY << ") = RGB(" << (int)GetRValue(firstBadWhite) << ","
+         << (int)GetGValue(firstBadWhite) << "," << (int)GetBValue(firstBadWhite) << ")");
+    CHECK(badBorder == 0);
+    CHECK(badTitle == 0);
+    CHECK(badWhite == 0);
+
+    ::DeleteObject(hbm);
+    ::SelectObject(canvas, oldCanvas);
+    ::DeleteObject(hCanvas);
+    ::DeleteDC(canvas);
+
+    // 刻意不调 GdiplusShutdown，理由见 ChatBubbleBackfillRepaintTests.cpp 同类用例的注释：
+    // 产品代码按「初始化一次、从不关闭」使用 GDI+，测试中途关掉会让后续用例访问已释放的 GDI+。
+    (void)token;
 }

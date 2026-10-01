@@ -20,6 +20,7 @@
 
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "GroupManageModel.h"
+#include "GroupManageInputCarry.h"   // InputDraftTable：整页重建 / 切页时保留输入框草稿
 
 #include <string>
 
@@ -45,12 +46,21 @@ class CBalloonGroupManageWindow : public balloonwjui::DuiFrameWindow
 {
 public:
     /**
-     *  构造函数。
+     *  构造函数。模型初始为空（成员与加群申请均为"未加载"），不填任何示例数据。
      *    pFMGClient：所属客户端对象（消息中枢），本类只引用、不持有；
-     *                本轮假数据阶段未使用，留作后续接入真实数据用。
+     *                用于取本人 userid。
      */
     explicit CBalloonGroupManageWindow(CFlamingoClient* pFMGClient);
     ~CBalloonGroupManageWindow();
+
+    /**
+     *  用示例数据填充模型（7 名成员、3 条加群申请、2 名禁言成员等）。
+     *
+     *  仅供调试入口（命令行 --groupmanage）预览界面使用，须在 CreateAndShow 之前
+     *  调用。真实开窗的路径不得调用：示例数据会在应答到达前先显示出来，表现为
+     *  打开窗口时先闪一下一个无关的群、再切换成真实内容。
+     */
+    void LoadMockData();
 
     /**
      *  创建并显示群管理窗口（调试入口用，非模态、无父窗口）。
@@ -60,9 +70,10 @@ public:
     void CreateAndShow(HWND hMainDlg);
 
     /**
-     *  绑定本对话框到某个真实群：写入群 id、真实群名与本人角色，供 Header 显示
-     *  真实群名与"我是群主/管理员"。须在 CreateAndShow 之前调用。
-     *  本轮各页内容仍为假数据，仅 Header 取真实值。
+     *  绑定本对话框到某个真实群：写入群 id、真实群名、本人角色，以及由群名算出的
+     *  占位头像（见 balloongroupmanage::ApplyGroupContext）。须在 CreateAndShow
+     *  之前调用。其余内容等 RequestGroupData 发出的请求应答到达后再填，在此之前
+     *  各页显示"正在加载"。
      *    groupId：群 id；
      *    name：   真实群名；
      *    myRole： 本人在群内角色（0成员 1管理员 2群主，见 group_member_role）。
@@ -231,6 +242,25 @@ private:
     // 比重建一次多得多，而这件事只在数据到达 / 推送到达时发生，不在热路径上。
     void RefreshNavAndPage();
 
+    // 成员管理页搜索框的文字变了：更新模型里的搜索关键词，只重建搜索栏以下的成员分组
+    // （搜索框本身不重建，焦点保留），并回到列表顶部。不在成员页、或关键词去掉首尾空白后
+    // 没有变化时什么都不做。纯本地过滤，不发任何请求。
+    void OnMemberSearchChanged();
+
+    // 当前页即将被换掉（整页重建或切页）之前，采集页上各输入框的文字：用户改过的存为草稿，
+    // 没改过的作废草稿（规则见 GroupManageInputCarry.h）。当前页上没有的输入框不受影响。
+    void CaptureInputDrafts();
+
+    // 新页面建好之后，登记页上各输入框建页时的文字，并把存有草稿的输入框改成草稿文字。
+    // 群资料未加载时基本信息页不建表单，找不到的输入框直接跳过、草稿留到下次。
+    void RestoreInputDrafts();
+
+    // 某个控件编号是不是需要在重建时保留内容的输入框（公告标题 / 正文、新增敏感词、
+    // 群名称、群简介）。
+    //   ctrlId：控件编号，取值见 GroupManageLayout.h。
+    //   返回：是返回 true。
+    static bool IsDraftInput(int ctrlId);
+
     // 按本人角色挑一个当前可见的页面。角色变化（如被撤销管理员）后，原先停留
     // 的页面可能已经不可见，此时要落回一个还看得见的页，而不是显示空白。
     //   preferredPageId：优先保留的页面 id。
@@ -330,6 +360,13 @@ private:
     void ClearAnnouncementDraft();
 
     /**
+     *  基本信息页「重置」：作废群名称、群简介两项的草稿，并立即把两个输入框改回建页时的文字
+     *  （即服务端的当前取值）。随后的重新拉取引发整页重建时，采集到的就是原值，不会再把修改
+     *  当作草稿填回去。输入框不存在（群资料未加载时不建表单）时只作废草稿。
+     */
+    void RevertBasicInfoInputs();
+
+    /**
      *  处理「群公告」页上的按钮（优先级三选一、清空、发布、逐条重新发布 / 撤回）。
      *    ctrlId：控件的 ctrl id，取值见 GroupManageLayout.h 的 GmCtrlId。
      *  返回：已处理返回 true；不是本页的 id 返回 false。
@@ -360,6 +397,10 @@ private:
     balloonwjui::DuiScrollView* m_pContentScroll;   // 右侧滚动视口（裸指针，所有权在控件树）
     balloonwjui::DuiControl*    m_pNav;             // 左侧导航容器（裸指针，所有权在控件树）
     int                         m_currentPage;      // 当前显示页 id
+
+    // 各输入框的草稿与建页时的文字（按控件编号）。整页重建或切页时靠它把用户尚未提交的
+    // 输入带到新页面上；只在内存里，随窗口对象存在，关窗即丢弃
+    balloongroupmanage::InputDraftTable m_inputDrafts;
 
     // 本窗口最近一次拉公告时发出去的分页参数。1323 应答由主面板同时投给本窗口与
     // 群聊窗的公告边栏，而两边要的页大小不同（这里每页 8 条，边栏一次 1 条），

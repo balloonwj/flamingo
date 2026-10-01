@@ -143,7 +143,18 @@ COLORREF AvatarTextColor(COLORREF bg)
 MemberPickerRow::MemberPickerRow()
     : m_avatarColor(RGB(0xFF, 0x7A, 0x45))
     , m_checkState(kPickerUnchecked)
+    , m_checkVisible(true)
 {
+}
+
+void MemberPickerRow::SetCheckVisible(bool visible)
+{
+    if (m_checkVisible == visible)
+    {
+        return;
+    }
+    m_checkVisible = visible;
+    Invalidate();
 }
 
 int MemberPickerRow::CheckboxStripWidth()
@@ -200,7 +211,11 @@ void MemberPickerRow::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
                      (Gdiplus::REAL)kCheckBoxSize, (Gdiplus::REAL)kCheckBoxSize,
                      kCheckBoxRadius);
 
-        if (m_checkState == kPickerUnchecked)
+        if (!m_checkVisible)
+        {
+            // 不可勾选的行（如转发选择窗里的部门行）：条带留空，不画复选框。
+        }
+        else if (m_checkState == kPickerUnchecked)
         {
             // 未选：白底 + 浅灰细边。
             Gdiplus::SolidBrush fill(kBoxFill);

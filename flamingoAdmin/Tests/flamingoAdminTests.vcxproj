@@ -87,7 +87,7 @@
   <ItemDefinitionGroup>
     <ClCompile>
       <AdditionalIncludeDirectories>..;..\third-party\jsoncpp;..\..\third-party\balloonui\balloonui;..\..\third-party\balloonui\wtl10.1;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
-      <PreprocessorDefinitions>WIN32;_CONSOLE;_CRT_SECURE_NO_WARNINGS;_CRT_NON_CONFORMING_SWPRINTFS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_CONSOLE;WINVER=0x0601;_WIN32_WINNT=0x0601;_WIN32_IE=0x0601;_CRT_SECURE_NO_WARNINGS;_CRT_NON_CONFORMING_SWPRINTFS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <WarningLevel>Level3</WarningLevel>
       <PrecompiledHeader />
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -144,7 +144,15 @@
     <ClCompile Include="..\Util\Logger.cpp" />
     <ClCompile Include="..\Util\DebugConsole.cpp" />
     <!-- DebugConsole 依赖的 jsoncpp:请求/响应体的敏感字段掩码与美化缩进 -->
-    <ClCompile Include="..\third-party\jsoncpp\json_reader.cpp" />
+    <!--
+      jsoncpp 1.9.0 上游代码在 json_reader.cpp 里把 asUInt64() 的结果赋给
+      size_t 类型的 stackLimit_，Win32 下 size_t 是 32 位，编译器报 C4244。
+      按本仓库对第三方源码的既有做法（参见 flamingoclient/Source/Flamingo.vcxproj
+      对 zlib 的 C4267 处理），在此对该文件单独抑制，不改第三方源码。
+    -->
+    <ClCompile Include="..\third-party\jsoncpp\json_reader.cpp">
+      <DisableSpecificWarnings>4244;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+    </ClCompile>
     <ClCompile Include="..\third-party\jsoncpp\json_value.cpp" />
     <ClCompile Include="..\third-party\jsoncpp\json_writer.cpp" />
     <!-- 被测:自绘悬浮滚动条几何计算(纯函数,不依赖 balloonui) -->

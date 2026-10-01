@@ -35,6 +35,8 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiComboBox.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
+#include "../../../third-party/balloonui/balloonui/DuiResMgr.h"
+#include "../../../third-party/balloonui/balloonui/DuiDpi.h"
 
 using namespace balloonwjui;
 using namespace balloonmain;
@@ -683,4 +685,119 @@ TEST_CASE("PW7 字体为空时返回下限而不是 0", "[p2][profile][labelwidt
 {
     // 取不到字体时整列宽度若返回 0,标签会整条消失。必须退回原设计值兜底。
     CHECK(ComputeFieldLabelColumnWidth(NULL) == kColumnWidthMin);
+}
+
+// =====================================================================
+// FD. 字号随所在窗口的 DPI 变化
+// =====================================================================
+//
+// 标签只记磅值、绘制时按所在窗口的 DPI 现取字体，窗口换到缩放比例不同的显示器后
+// 字号才会跟着变。这组用例确认资料卡里的文字标签走的是按磅值设字号这条路，而不是
+// 把某个固定 DPI 下的字体句柄存进标签。控件树没有挂到窗口上，按全局 DPI 取字体，
+// 用例通过切换全局 DPI 观察字高变化。
+
+namespace {
+
+// 用例里切换的两档 DPI：96 对应 100% 缩放，192 对应 200% 缩放。
+const int kFdLowDpi  = 96;
+const int kFdHighDpi = 192;
+// 1 英寸 = 72 磅。字高按 lfHeight = -MulDiv(磅值, DPI, 72) 计算。
+const int kFdPointsPerInch = 72;
+
+// 在作用域结束时把 DuiResMgr 的全局 DPI 恢复为进入时的值（断言失败提前退出时也恢复）。
+class FdDpiRestorer
+{
+public:
+    FdDpiRestorer()
+        : m_savedDpi(DuiResMgr::Inst().GetDpi())
+    {
+    }
+
+    ~FdDpiRestorer()
+    {
+        // GetDpi 返回 0 表示进入时尚未设置过 DPI，此时恢复为系统 DPI。
+        DuiResMgr::Inst().SetDpi(m_savedDpi > 0 ? m_savedDpi : DuiDpi::GetSystemDpi());
+    }
+
+    FdDpiRestorer(const FdDpiRestorer&) = delete;
+    FdDpiRestorer& operator=(const FdDpiRestorer&) = delete;
+
+private:
+    int m_savedDpi;   // 进入作用域时的全局 DPI，析构时据此恢复
+};
+
+// 取字体的 lfHeight；句柄为空或无效时返回 0。
+int FdFontHeight(HFONT hf)
+{
+    LOGFONT lf;
+    ::memset(&lf, 0, sizeof(lf));
+    if (hf == NULL || ::GetObject(hf, sizeof(lf), &lf) == 0)
+    {
+        return 0;
+    }
+    return lf.lfHeight;
+}
+
+// 断言标签按磅值设了字号，且在两档 DPI 下取到的字高都按该磅值换算。
+void FdCheckLabelFollowsDpi(DuiLabel* lbl)
+{
+    REQUIRE(lbl != nullptr);
+    const int pt = lbl->GetTextPointSize();
+    CHECK(pt > 0);
+
+    DuiResMgr::Inst().SetDpi(kFdLowDpi);
+    CHECK(FdFontHeight(lbl->GetFont()) == -::MulDiv(pt, kFdLowDpi, kFdPointsPerInch));
+    DuiResMgr::Inst().SetDpi(kFdHighDpi);
+    CHECK(FdFontHeight(lbl->GetFont()) == -::MulDiv(pt, kFdHighDpi, kFdPointsPerInch));
+}
+
+// 递归收集子树里 ctrlId 为 0 的 DuiLabel（资料卡各行左侧的字段名标签）。
+void FdCollectUnnamedLabels(DuiControl* node, std::vector<DuiLabel*>& out)
+{
+    if (node == nullptr)
+    {
+        return;
+    }
+    DuiLabel* lbl = dynamic_cast<DuiLabel*>(node);
+    if (lbl != nullptr && lbl->GetCtrlId() == 0)
+    {
+        out.push_back(lbl);
+    }
+    for (size_t i = 0; i < node->Children().size(); ++i)
+    {
+        FdCollectUnnamedLabels(node->Children()[i].get(), out);
+    }
+}
+
+} // anonymous namespace
+
+TEST_CASE("FD1 资料卡顶部昵称、账号与各行值标签按磅值设字号，字高随 DPI 变化",
+          "[fontdpi][profile]")
+{
+    FdDpiRestorer restore;
+    std::unique_ptr<DuiControl> root = BuildProfileBody();
+    REQUIRE(root != nullptr);
+
+    DuiLabel* nickname = dynamic_cast<DuiLabel*>(root->FindCtrlById(kIdProfileNickname));
+    FdCheckLabelFollowsDpi(nickname);
+    CHECK(nickname->IsTextBold());
+
+    FdCheckLabelFollowsDpi(dynamic_cast<DuiLabel*>(root->FindCtrlById(kIdProfileAccount)));
+    FdCheckLabelFollowsDpi(dynamic_cast<DuiLabel*>(root->FindCtrlById(kIdNicknameView)));
+}
+
+TEST_CASE("FD2 资料卡各行左侧字段名标签按磅值设字号，字高随 DPI 变化",
+          "[fontdpi][profile]")
+{
+    FdDpiRestorer restore;
+    std::unique_ptr<DuiControl> root = BuildProfileBody();
+    REQUIRE(root != nullptr);
+
+    std::vector<DuiLabel*> labels;
+    FdCollectUnnamedLabels(root.get(), labels);
+    REQUIRE_FALSE(labels.empty());
+    for (size_t i = 0; i < labels.size(); ++i)
+    {
+        FdCheckLabelFollowsDpi(labels[i]);
+    }
 }

@@ -28,13 +28,6 @@ static const wchar_t* const kLanguageOpts[] =
     L"简体中文",       // 本期仅一项（占位，暂不真正切换）
 };
 
-static const wchar_t* const kFontScaleOpts[] =
-{
-    L"小",             // kFontScaleSmall
-    L"中",             // kFontScaleMedium
-    L"大",             // kFontScaleLarge
-};
-
 static const wchar_t* const kAutoAwayDelayOpts[] =
 {
     L"5 分钟",         // kAutoAwayDelay5Min（默认）
@@ -109,28 +102,6 @@ int ClampLanguageIndex(int index)
     if (index < 0 || index >= count)
     {
         return 0;
-    }
-    return index;
-}
-
-// ---- 字体大小 ----------------------------------------------------------
-
-const wchar_t* const* FontScaleOptions()
-{
-    return kFontScaleOpts;
-}
-
-int FontScaleOptionCount()
-{
-    return (int)(sizeof(kFontScaleOpts) / sizeof(kFontScaleOpts[0]));
-}
-
-int ClampFontScaleIndex(int index)
-{
-    int count = FontScaleOptionCount();
-    if (index < 0 || index >= count)
-    {
-        return kFontScaleMedium;   // 越界回落到默认「中」
     }
     return index;
 }

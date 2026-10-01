@@ -261,6 +261,18 @@ private:
     void onSendMessage(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //发送群聊消息：onSendMessage 在 ctype=2 时调用
     void sendGroupMessage(const SendMessageRequest& req);
+    //本人引用某个 fileid 发出消息、或把它设为头像之后调用：若本人正是该文件的上传者，
+    //把文件记录标记为已完成，使后续同内容、同场景的上传能命中秒传；不是上传者（例如
+    //转发别人的图片）时不改动记录。客户端总是上传成功后才引用 fileid，故此时文件
+    //已完整落在文件服务器上。
+    //  fileid：被引用的文件ID
+    //  source：引用来源，只用于日志（如 "message"、"avatar"、"group avatar"）
+    void markReferencedFileCompleted(int64_t fileid, const char* source);
+    //消息落库成功后调用：从 content 里取出所引用的 fileid，交给 markReferencedFileCompleted；
+    //消息类型不带文件、或 content 里没有合法的 fileid 时什么都不做。
+    //  msgtype：消息类型，取值见 enum message_type
+    //  content：content 对象的紧凑 JSON 文本
+    void markMessageFileCompleted(int32_t msgtype, const std::string& content);
     //收到客户端送达回执（cmd_message_received_ack）
     void onReceivedAck(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //同步最近会话列表（cmd_sync_conversations）
@@ -338,8 +350,13 @@ private:
     void onSearchMessages(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //转发 / 合并转发消息（cmd_forward_message）
     void onForwardMessage(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
-    //删除本端消息（cmd_delete_message）
+    //删除本端消息（cmd_delete_message）；成功后向本人全部在线设备推送单条形式的
+    //cmd_messages_deleted_notify
     void onDeleteMessage(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
+    //按时间范围清理本人的聊天记录（cmd_delete_messages_by_time）：校验并截断区间、并入
+    //t_message_deleted_range，成功后向本人全部在线设备推送区间形式的 cmd_messages_deleted_notify。
+    //方案见 docs/清理聊天记录方案.md §5
+    void onDeleteMessagesByTime(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //群发助手：一条消息发给多个对端（cmd_mass_send）
     void onMassSend(const std::string& body, const std::shared_ptr<TcpConnection>& conn);
     //创建群聊（cmd_create_group）
@@ -478,9 +495,32 @@ private:
     //向某卡片所在会话的全体成员推送一条通知帧（群→群成员，单聊→收发双方）
     void notifyCardConversation(const MessageRecord& card, uint16_t cmd, const std::string& body);
     //把一条消息存入会话并推送，返回新消息ID（失败返回 0）：ctype=1 推给对端、
-    //ctype=2 fan-out 给全体群成员。供 cmd_forward_message / cmd_mass_send 复用
+    //ctype=2 fan-out 给全体群成员。供 cmd_forward_message / cmd_mass_send 复用。
+    //outRec 非空且投递成功时，写入新消息的完整记录（转发应答要回带消息体）；失败时不改动它
     int64_t deliverConversationMessage(int ctype, int64_t cid, int32_t msgtype,
-                                       const std::string& content, const std::string& clientmsgid);
+                                       const std::string& content, const std::string& clientmsgid,
+                                       MessageRecord* outRec = NULL);
+    /**
+     *  群内发言的前置校验，普通群发（sendGroupMessage）与转发到群（onForwardMessage）共用：
+     *  本人须为该群成员、群须存在、本人不在禁言中（规则见 chatserver::IsMutedForSpeaking）。
+     *  顺带清掉本人已经到期的定时禁言，并把状态变更推给全群。
+     *    cmd：     校验不通过时回错误应答所用的命令号（cmd_send_message 或 cmd_forward_message）
+     *    groupid： 目标群ID
+     *    myrole：  [出参] 本人在该群的角色，取值见 group_member_role
+     *    group：   [出参] 群资料
+     *  @return 允许发言返回 true；否则已按 cmd 回过错误应答，返回 false，调用方直接结束处理
+     */
+    bool checkGroupSpeakAllowed(uint16_t cmd, int64_t groupid, int& myrole, GroupRecord& group);
+    /**
+     *  在开启了敏感词过滤的群里逐条匹配 texts，任意一条命中即返回 true；群未开启过滤、
+     *  或 texts 为空时直接返回 false。
+     *    groupid： 目标群ID
+     *    group：   群资料，据其 sensitiveon 判断是否开启过滤
+     *    texts：   待匹配的文字（UTF-8）
+     *    hitWord： [出参] 命中的敏感词，供记日志
+     */
+    bool hitGroupSensitiveWord(int64_t groupid, const GroupRecord& group,
+                               const std::vector<std::string>& texts, std::string& hitWord);
     //向指定 userid 的所有在线会话推送一条通知帧（seq=0）
     void sendToUser(int32_t userid, uint16_t cmd, const std::string& body);
 

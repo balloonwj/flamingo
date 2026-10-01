@@ -18,6 +18,8 @@
 #include <string>   //群头像 customface 原值按 UTF-8 原样保存，不转宽字符
 #include <vector>
 
+#include "../../net/Protocol.h"   //group_join_mode：加群方式的默认值
+
 namespace balloongroupmanage {
 
 // =====================================================================
@@ -53,6 +55,21 @@ enum JoinSource
     kJoinFromFriend = 0,    // 好友邀请（可附带推荐人）
     kJoinFromSearch = 1,    // 群搜索
     kJoinFromQrCode = 2     // 扫码加群
+};
+
+// =====================================================================
+// 数据加载状态
+// =====================================================================
+//
+// 群管理窗打开时模型是空的，各项数据要等对应的应答到达后才填进来。界面据此
+// 区分三种情形：还没拉回来、拉回来了、拉取失败，分别显示加载提示、真实内容、
+// 失败提示。不能用"列表是否为空"来推断，因为空列表本身就是合法结果（没有
+// 待处理的申请、没有人被禁言）。
+enum LoadState
+{
+    kLoadPending = 0,   // 请求已发出、应答尚未到达（开窗时的初始值），界面显示"正在加载"
+    kLoadDone    = 1,   // 应答已到达且成功，界面按模型里的真实数据显示（列表可以为空）
+    kLoadFailed  = 2    // 应答已到达但失败，且此前从未成功过，界面显示"加载失败"
 };
 
 // =====================================================================
@@ -198,7 +215,10 @@ struct SensitiveWord
 // 群权限设置项的当前取值。对照 design/群管理5.png。
 struct GroupPermissions
 {
-    int  joinMethodIndex;       // 加群方式下拉选中项（0=需要验证消息，1=允许任何人，2=禁止任何人）
+    // 加群方式下拉选中项，取值与服务端 group_join_mode 相同（0=允许任何人加入，1=需要验证消息，
+    // 2=禁止任何人加入）。收发两处都直接把它当作 joinmode 使用，不做换算，故下拉框各项的顺序
+    // 必须与该枚举一致。
+    int  joinMethodIndex;
     int  atAllScopeIndex;       // 「谁能 @ 全体成员」下拉选中项（0=仅群主和管理员，1=所有人）
     bool newMemberSeeHistory;   // 新成员查看历史消息
     bool memberInviteFriend;    // 成员邀请好友加群（无需审批）
@@ -206,7 +226,7 @@ struct GroupPermissions
     bool sensitiveWordFilter;   // 消息敏感词过滤
 
     GroupPermissions()
-        : joinMethodIndex(0)
+        : joinMethodIndex(group_join_approval)
         , atAllScopeIndex(0)
         , newMemberSeeHistory(true)
         , memberInviteFriend(false)
@@ -269,6 +289,26 @@ public:
     std::vector<JoinRequest> m_requests;  // 待处理加群申请
     std::vector<MutedMember> m_muted;     // 被禁言成员
 
+    // 成员管理页搜索框里的关键词（已去掉首尾空白）。为空表示不过滤、显示全部成员；
+    // 非空时成员页只显示 MemberMatchesKeyword 命中的成员。存在模型里而不是只留在搜索框上：
+    // 整页重建与切页后，成员页要按同一个关键词重新过滤
+    CString m_memberKeyword;
+
+    // 成员列表（连同由它派生的禁言列表）的加载状态。开窗时为 kLoadPending，
+    // 群成员应答（1304）成功后由 ApplyGroupMembers 置为 kLoadDone。「成员管理」
+    // 「禁言管理」两页与顶栏的成员人数据此决定显示加载提示、失败提示还是真实内容。
+    LoadState m_membersState;
+
+    // 加群申请列表的加载状态。开窗时为 kLoadPending，加群申请应答（1319）成功后
+    // 由 ApplyJoinRequests 置为 kLoadDone。「加群审批」页据此决定显示什么。
+    LoadState m_requestsState;
+
+    // 群资料（群简介、入群欢迎语正文、七项群权限、全员禁言）的加载状态。开窗时为
+    // kLoadPending，群资料应答（1303）或群资料变更推送到达后由 ApplyGroupInfo 置为
+    // kLoadDone。「基本信息」「群权限」两页与禁言管理页的「全员禁言」开关据此决定
+    // 显示提示还是表单：数据未到时模型里只有构造时的默认值，不能当作真实设置显示。
+    LoadState m_groupInfoState;
+
     // 本群敏感词库（"管理词库"二级界面用）。只有进入该界面时才会去拉，
     // 平时为空 —— 主界面各页都不显示它。
     std::vector<SensitiveWord> m_sensitiveWords;
@@ -299,9 +339,9 @@ public:
     //
     // 它必须存在模型里而不是只留在控件上：优先级是用三个按钮做的三选一，选中态
     // 靠"哪个按钮画成主色"表达，而每次点击都要整页重建才能换掉配色 —— 重建后
-    // 控件是新造的，选中态只能从模型里取回来。标题与正文没有同样存进模型：
-    // GroupManageLayout.cpp 的 BuildPage 只给新造的输入框设占位文字、不回填
-    // 已输入内容，所以整页重建后这两项会回到空白。
+    // 控件是新造的，选中态只能从模型里取回来。标题与正文不放在模型里：它们是
+    // 输入框，整页重建或切页时由窗口的 InputDraftTable（GroupManageInputCarry.h）
+    // 在重建前采集、重建后填回，群名称、群简介、新增敏感词三个输入框也一样。
     int m_draftSeverity;
 
     // ---- 权限 ----
@@ -329,7 +369,21 @@ public:
     //   role：要统计的角色。
     //   返回：该角色的成员数量。
     int CountByRole(GroupRole role) const;
+
+    // 按角色统计命中当前搜索关键词（m_memberKeyword）的成员数量。供成员页搜索时各分组
+    // 标题上的人数；关键词为空时与 CountByRole 相同。
+    //   role：要统计的角色。
+    //   返回：该角色中命中关键词的成员数量。
+    int CountByRoleMatching(GroupRole role) const;
 };
+
+// 判断一名成员是否命中成员管理页的搜索关键词。名字（有群名片时为群名片）按
+// contactsearch::Match 的规则匹配：子串、拼音首字母、全拼，英文不区分大小写；职务按
+// 不区分大小写的子串匹配。
+//   m：      要判断的成员。
+//   keyword：关键词；先去掉首尾空白，去掉后为空时视为全部命中。
+//   返回：命中返回 true。本函数无副作用。
+bool MemberMatchesKeyword(const GroupMember& m, const CString& keyword);
 
 // =====================================================================
 // 假数据

@@ -552,7 +552,7 @@ bool GroupFileItem::OnLButtonDown(POINT pt, UINT /*mkFlags*/)
         {
             balloonwjui::DuiHost* host = GetHost();
             HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
-            if (hwnd != NULL && !m_entryid.IsEmpty())
+            if (::IsWindow(hwnd) && !m_entryid.IsEmpty())
             {
                 CString* p = new CString(m_entryid);
                 if (!::PostMessage(hwnd, WM_GROUP_FILE_DELETE, 0, (LPARAM)p))
@@ -572,7 +572,7 @@ bool GroupFileItem::OnLButtonDown(POINT pt, UINT /*mkFlags*/)
         {
             balloonwjui::DuiHost* host = GetHost();
             HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
-            if (hwnd != NULL)
+            if (::IsWindow(hwnd))
             {
                 if (m_uploading)
                 {
@@ -598,7 +598,7 @@ bool GroupFileItem::OnLButtonDown(POINT pt, UINT /*mkFlags*/)
         // 条目并发起下载（宿主处理后 delete）。本控件不直接联网。
         balloonwjui::DuiHost* host = GetHost();
         HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
-        if (hwnd != NULL && !m_entryid.IsEmpty())
+        if (::IsWindow(hwnd) && !m_entryid.IsEmpty())
         {
             CString* p = new CString(m_entryid);
             if (!::PostMessage(hwnd, WM_GROUP_FILE_DOWNLOAD, 0, (LPARAM)p))

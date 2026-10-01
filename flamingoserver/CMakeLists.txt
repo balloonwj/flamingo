@@ -199,7 +199,9 @@ chatserversrc/AnnouncementProtocol.cpp
 chatserversrc/ServiceAccountManager.cpp
 chatserversrc/MessageManager.cpp
 chatserversrc/MessagePinManager.cpp
+chatserversrc/MessageDeleteRange.cpp
 chatserversrc/GroupManager.cpp
+chatserversrc/GroupAutoName.cpp
 chatserversrc/CardManager.cpp)
 
 set(fileserver_srcs
@@ -287,8 +289,13 @@ tests/test_iothreadcount.cpp
 tests/test_asynclog.cpp
 tests/test_messageprotocol.cpp
 tests/test_messagepinmanager.cpp
+tests/test_messagedeleterange.cpp
+# 转发取源消息的过滤口径（Suite FWD）。被测的 MessageManager 已在下方的实现清单中
+tests/test_forwardsource.cpp
 tests/test_groupprotocol.cpp
 tests/test_grouppermission.cpp
+tests/test_groupautoname.cpp
+tests/test_pinnedgroups.cpp
 tests/test_cardprotocol.cpp
 tests/test_filetoken.cpp
 tests/test_relaytoken.cpp
@@ -298,6 +305,7 @@ tests/test_remotedesktopprotocol.cpp
 tests/test_callprotocol.cpp
 tests/test_callmanager.cpp
 tests/test_fileprotocol.cpp
+tests/test_filestoremanager.cpp
 tests/test_groupfileprotocol.cpp
 tests/test_sqlite_translator.cpp
 tests/test_sqlite_database.cpp
@@ -367,10 +375,18 @@ chatserversrc/AdminManager.cpp
 chatserversrc/MessageManager.cpp
 chatserversrc/MessageProtocol.cpp
 chatserversrc/MessagePinManager.cpp
+# MessageManager / MessagePinManager 读取时按清理区间过滤，test_messagedeleterange.cpp 也直接测它
+chatserversrc/MessageDeleteRange.cpp
 chatserversrc/GroupProtocol.cpp
 chatserversrc/GroupPermission.cpp
+# tests/test_groupautoname.cpp 的 GN 组用到的自动群名生成规则
+chatserversrc/GroupAutoName.cpp
+# tests/test_groupautoname.cpp 的 GM 组用到的群组存储管理器：经 DbFactory 对着临时库跑建群与重算
+chatserversrc/GroupManager.cpp
 chatserversrc/CardProtocol.cpp
 chatserversrc/FileProtocol.cpp
+# tests/test_filestoremanager.cpp 用到的实现：经 DbFactory 对着临时 .db 文件跑秒传查询
+chatserversrc/FileStoreManager.cpp
 chatserversrc/GroupFileProtocol.cpp
 chatserversrc/RemoteDesktopProtocol.cpp
 chatserversrc/RemoteDesktopManager.cpp

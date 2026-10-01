@@ -25,6 +25,7 @@
 #include "../../net/ProfileProtocolClient.h"             // net::UpdateProfileResponse
 #include "../../net/AccountProtocolClient.h"             // net::ChangePresenceResponse 等
 #include "../../net/CurrentUserAccount.h"                // 登录成功后校验账号取值口是否接上
+#include "../../net/UserCachePath.h"                     // net::EnsureUserEssentialDirs：登录后建账号目录
 #include "../../Common/Log/IULog.h"
 #include "../../Common/Util/IniFile.h"
 #include "../../Common/Util/EncodeUtil.h"
@@ -49,7 +50,6 @@ CSessionController::CSessionController(CFlamingoClient* pFMGClient)
     , m_dwReconnectTimerId(0)
     , m_bEnableReconnect(true)
     , m_uReconnectInterval(3000)
-    , m_bAlreadySendReloginRequest(false)
     , m_bKickoutNoticeShowing(false)
 {
     // BEGIN_MSG_MAP_EX 声明的这个标志在首次派发时会被先读后写，非窗口类必须自己置初值。
@@ -81,6 +81,18 @@ bool CSessionController::StartInitialLogin()
     return StartLogin(m_LoginAccountList.IsAutoLogin());
 }
 
+bool CSessionController::IsAutoLoginEnabledForCurrentAccount()
+{
+    //m_stAccountInfo.szUser 是本次登录所用的账号，登录成功时已写入历史列表；
+    //尚未登录时为空串，Find 查不到，自然返回 false
+    if (m_stAccountInfo.szUser[0] == _T('\0'))
+    {
+        return false;
+    }
+    LOGIN_ACCOUNT_INFO* lpAccount = m_LoginAccountList.Find(m_stAccountInfo.szUser);
+    return (lpAccount != NULL && lpAccount->bAutoLogin);
+}
+
 void CSessionController::MarkLoggedInForDebugPreview()
 {
     m_bAlreadyLogin = TRUE;
@@ -107,10 +119,25 @@ bool CSessionController::PumpTimer(UINT_PTR nIDEvent)
         return true;
     }
 
-    if (!m_bAlreadySendReloginRequest)
+    //一轮重连里同一时刻只有一个登录请求在途：上一个还没有结果就不再发，也不再弹托盘气泡。
+    //原先这里的标志从没被置真，每次触发都发一个请求，单次尝试比重连间隔长时请求会在发送
+    //队列里越积越多（bugs.md 的 BUG-21）。
+    const balloonmain::ReconnectTickAction action = m_reconnectThrottle.OnTick();
+    if (action == balloonmain::kReconnectTickWait)
     {
+        return true;
+    }
+    if (action == balloonmain::kReconnectTickResendStale)
+    {
+        LOG_WARNING("Reconnect: no login result after %d timer ticks, assuming the request "
+            "was lost and sending a new one.", balloonmain::kReconnectResultWaitTicks);
+    }
+
+    //只有请求确实入队才进入等结果状态并弹气泡；被前置条件挡下时没有结果会回来，下一次照常再试
+    if (m_lpFMGClient->Login())
+    {
+        m_reconnectThrottle.OnRequestQueued();
         m_pPanel->TrayController().ShowReconnectingBalloon();
-        m_lpFMGClient->Login();
     }
     return true;
 }
@@ -122,75 +149,49 @@ bool CSessionController::StartLogin(BOOL bAutoLogin/* = FALSE*/)
     // 派发链上的协作类里。主面板是常驻窗口，句柄在整个进程生命周期内不变，所以这里取到
     // 的一定是有效句柄，登出再登录也不必重设。
     m_lpFMGClient->SetCallBackWnd(m_pPanel->m_hWnd);
-    if (bAutoLogin)
-    {
-        //此处原先在自动登录前同步跑一遍 v1 时代的自动升级（Updater + CUpdateDlg），
-        //并用 #ifndef _DEBUG 把它挡在 Release 才生效。那条链路在 v2 改造后已经跑不通，
-        //现已整体删除。检查更新改为登录成功后异步进行，见本文件 OnLoginResult 里的
-        //静默检查，以及 Source/Update、Source/BalloonUpdate。
 
-        BOOL bRet = m_LoginAccountList.GetLastLoginAccountInfo(&m_stAccountInfo);
-        if (!bRet)
-            return true;
-
-        m_LoginDlg.SetLoginAccountInfo(&m_stAccountInfo);
-
-        //置"登录中"必须在真正发起登录之前，理由见下面手动登录分支里的说明。
-        //自动登录这条路本身没有时序问题（DoLogin 起线程即返回，结果稍后才到），
-        //提前置位只是让两条路的写法一致。
-        m_nSessionStatus = kSessionLogining;
-        m_LoginDlg.DoLogin();
-    }
-    else
-    {
-        // 尚未登录：GetConnectionUiState 为离线，托盘先挂灰色图标。
-        m_pPanel->TrayController().AddIcon(_T("Flamingo未登录"));
-
-        //ShowWindow(SW_HIDE);
-        //ShowWindow(SW_SHOW);
-
-        m_LoginDlg.m_lpFMGClient = m_lpFMGClient;
-        m_LoginDlg.m_pLoginAccountList = &m_LoginAccountList;
-        m_LoginDlg.SetDefaultAccount(m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount.c_str());
-        m_LoginDlg.SetDefaultPassword(m_lpFMGClient->m_UserMgr.m_UserInfo.m_strPassword.c_str());
-
-        //置"登录中"必须在 DoModal 之前。登录窗是模态的，且登录期间不关窗，登录结果是
-        //在它的模态消息循环内部派发到 OnLoginResult 的，那里已经把状态推进到
-        //kSessionLogin；若等 DoModal 返回之后再置一次"登录中"，就把登录成功
-        //的状态盖了回去，此后 m_nSessionStatus 一直停在"登录中"。凡是以
-        //"m_bAlreadyLogin && m_nSessionStatus == kSessionLogin" 为条件的分支
-        //都会走错，2026-08-14 实测到两处后果：切换到离开 / 忙碌时不发 cmd_change_presence
-        //而是误走"从离线恢复在线"分支、托盘图标也不刷新（徽标出不来）；
-        //"无操作自动离开"因判定为连接未就绪而永不触发。
-        //没有任何代码判断 kSessionLogining 本身，故提前置位不影响其它逻辑。
-        m_nSessionStatus = kSessionLogining;
-
-        if (m_LoginDlg.DoModal(g_hwndOwner) != IDOK)	// 显示登录对话框
-        {
-            m_pAppHost->RequestAppExit();
-            return false;
-        }
-        m_LoginDlg.GetLoginAccountInfo(&m_stAccountInfo);
-    }
-
-    // 不再显示旧的 "正在登录" 进度面板：登录进度由登录窗自己呈现。
+    //自动登录与手动登录走同一条路：都弹出登录窗（2026-09-30 起，见
+    //docs/自动登录方案.md）。原先自动登录不弹窗、直接在后台登录，用户在登录过程中
+    //没有任何办法取消（没有「取消登录」按钮，点托盘图标也找不到可显示的窗口）。
+    //现在自动登录只是让登录窗显示出来之后自己点一次「登录」：界面进入「登录中」、
+    //主按钮为「取消登录」；失败原因也与手动登录一样就地显示在登录窗里。
     //
-    //托盘图标的登录动画只在自动登录这条路上启动，原因是两条路的时序不同：
-    //  自动登录：上面的 DoLogin 起一个后台线程就返回，登录结果稍后经消息队列
-    //            投递到 OnLoginResult，那里的 KillTimer 能正常停掉动画。
-    //  手动登录：登录窗是模态的，且登录期间不关窗，登录结果是在 DoModal 的模态
-    //            消息循环内部派发到 OnLoginResult 的（见该函数里的详细说明）。
-    //            结果到达时本函数还停在 DoModal 那一行，动画尚未启动，
-    //            OnLoginResult 里的 KillTimer 因而杀了个空；等 DoModal 返回、
-    //            执行到这里，动画反倒在登录成功之后才开始，并且再没有人停它。
-    //            表现为登录成功后托盘图标持续闪烁 —— Loading_1/3/5.ico 与
-    //            imonline.ico 是同一张图，Loading_2/4/6.ico 与 offline.ico 是
-    //            同一张图，所以看上去就是在线与离线两个图标每 200 毫秒交替。
-    //            手动登录本来就有登录窗自己显示"登录中"，托盘无须重复提示。
-    if (bAutoLogin)
+    //此处原先在自动登录前同步跑一遍 v1 时代的自动升级（Updater + CUpdateDlg），那条
+    //链路在 v2 改造后已经跑不通、早已删除；登录前的更新检查由登录窗自己做。
+
+    // 尚未登录：GetConnectionUiState 为离线，托盘先挂灰色图标。
+    m_pPanel->TrayController().AddIcon(_T("Flamingo未登录"));
+
+    m_LoginDlg.m_lpFMGClient = m_lpFMGClient;
+    m_LoginDlg.m_pLoginAccountList = &m_LoginAccountList;
+    //默认账号为空时（进程刚启动），登录窗会预填上次登录的账号及其保存的密码，
+    //自动登录要登的正是这个账号（IsAutoLogin 看的也是它）。
+    m_LoginDlg.SetDefaultAccount(m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount.c_str());
+    m_LoginDlg.SetDefaultPassword(m_lpFMGClient->m_UserMgr.m_UserInfo.m_strPassword.c_str());
+    m_LoginDlg.SetAutoStartLogin(bAutoLogin != FALSE);
+    LOG_INFO("SessionController::StartLogin: showing the login dialog, autoStart=%d.",
+             (int)(bAutoLogin != FALSE));
+
+    //置"登录中"必须在 DoModal 之前。登录窗是模态的，且登录期间不关窗，登录结果是
+    //在它的模态消息循环内部派发到 OnLoginResult 的，那里已经把状态推进到
+    //kSessionLogin；若等 DoModal 返回之后再置一次"登录中"，就把登录成功
+    //的状态盖了回去，此后 m_nSessionStatus 一直停在"登录中"。凡是以
+    //"m_bAlreadyLogin && m_nSessionStatus == kSessionLogin" 为条件的分支
+    //都会走错，2026-08-14 实测到两处后果：切换到离开 / 忙碌时不发 cmd_change_presence
+    //而是误走"从离线恢复在线"分支、托盘图标也不刷新（徽标出不来）；
+    //"无操作自动离开"因判定为连接未就绪而永不触发。
+    //没有任何代码判断 kSessionLogining 本身，故提前置位不影响其它逻辑。
+    m_nSessionStatus = kSessionLogining;
+
+    if (m_LoginDlg.DoModal(g_hwndOwner) != IDOK)	// 显示登录对话框
     {
-        m_pPanel->TrayController().StartLoginAnimation();
+        m_pAppHost->RequestAppExit();
+        return false;
     }
+    m_LoginDlg.GetLoginAccountInfo(&m_stAccountInfo);
+
+    // 不再显示旧的 "正在登录" 进度面板：登录进度由登录窗自己呈现。托盘的登录动画
+    // 原先只服务于"不弹登录窗"的自动登录，现在两条路都有登录窗显示进度，不再需要。
 
     m_lpFMGClient->SetUser(m_stAccountInfo.szUser, m_stAccountInfo.szPwd);
 
@@ -261,6 +262,9 @@ LRESULT CSessionController::OnNetError(UINT uMsg, WPARAM wParam, LPARAM lParam)
     if (balloonmain::ShouldAutoReconnect(userWentOffline, m_bEnableReconnect))
     {
         m_nSessionStatus = kSessionReconnecting;
+        //新一轮重连：丢弃上一轮遗留的等待状态。例如上次重连的请求发出后用户切到了离线，
+        //结果回来时不在重连状态，等待状态可能没被清掉，不重置的话本轮一个请求都发不出去
+        m_reconnectThrottle.Reset();
         //SetTimer 返回 UINT_PTR，而 m_dwReconnectTimerId 声明为 DWORD。定时器标识由本处
         //以常量 RECONNECT_TIMER_ID 传入、系统原样返回，取值远小于 32 位上限，收窄不会丢数据。
         m_dwReconnectTimerId = static_cast<DWORD>(::SetTimer(m_hHost, kReconnectTimerId, m_uReconnectInterval, NULL));
@@ -420,10 +424,12 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
         "3=RECONNECTING 4=USERGOOFFLINE).",
         nCode, m_nSessionStatus);
 
-    //重连不成功，清除以发送登录请求包标识，再次发送重连登录数据包
+    //任何登录结果都表示在途的那个请求已经结束，清除重连节流的等待状态，下一次触发可以再发
+    m_reconnectThrottle.OnResult();
+
+    //重连不成功：等重连定时器下一次触发时再发登录请求
     if (m_nSessionStatus == kSessionReconnecting && nCode != LOGIN_SUCCESS)
     {
-        m_bAlreadySendReloginRequest = false;
         return 0;
     }
 
@@ -435,6 +441,7 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
     //
     //「从离线恢复在线」那条路不经登录窗（主面板还开着、根本没有登录窗），
     //IsLoginWindowActive 为假，自然落到下面原有的处理里，行为不变。
+    //自动登录自 2026-09-30 起也弹出登录窗，其结果同样由登录窗就地处理。
     if (m_LoginDlg.IsLoginWindowActive())
     {
         //本消息的 lParam 是结果码（函数开头已取走），wParam 是登录轮次号 ——
@@ -559,20 +566,18 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
         m_lpFMGClient->StartCheckNetworkStatusTask();
         //m_lpFMGClient->StartHeartbeatTask();
 
-        // 保存登录帐号列表
-        LOGIN_ACCOUNT_INFO* lpAccount = m_LoginAccountList.Find(m_stAccountInfo.szUser);
-        if (lpAccount != NULL)
-            memcpy(lpAccount, &m_stAccountInfo, sizeof(LOGIN_ACCOUNT_INFO));
-        else
-            m_LoginAccountList.Add(m_stAccountInfo.szUser, m_stAccountInfo.szPwd,
-                m_stAccountInfo.nStatus, m_stAccountInfo.bRememberPwd, m_stAccountInfo.bAutoLogin);
+        // 保存登录帐号列表。没勾"记住密码"时 RecordLoginSuccess 不保存密码(已存的
+        // 一并清空)。原先这里整条 memcpy，没勾时密码也照样落盘（2026-09-30 修复）。
+        // m_stAccountInfo 本身不改：其中的密码之后还要用，系统设置里打开"自动登录"时
+        // 由 OnSetAutoLogin 用它存下本次登录的密码。
+        if (!m_LoginAccountList.RecordLoginSuccess(&m_stAccountInfo))
+        {
+            LOG_WARNING("login succeeded but the account could not be recorded in the history list (empty account).");
+        }
 
         // 记下本账号的姓名(昵称) —— 登录窗下次切到这个账号时，在头像下方
         // 显示姓名而不是账号。昵称此刻已由 CFlamingoClient::OnLoginResult 从
         // 登录应答的 profile 填进 m_UserInfo（它先于本消息被调用）。
-        //
-        // 必须放在上面的 memcpy 之后：m_stAccountInfo 是登录窗采集来的，只有
-        // 账号 / 密码 / 勾选项，没有姓名，直接 memcpy 会把已存下的姓名冲掉。
         m_LoginAccountList.SetNickName(m_stAccountInfo.szUser,
             m_lpFMGClient->m_UserMgr.m_UserInfo.m_strNickName.c_str());
         LOG_INFO(_T("save login account: account=%s, nickname=%s."),
@@ -649,9 +654,6 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
 
         m_nSessionStatus = kSessionLogin;
 
-        //登录成功也清除该标志位，以便下次重连
-        m_bAlreadySendReloginRequest = false;
-
         // 显示主面板。窗口在进程启动时就已经建好（OnInitDialog 里的 EnsureCreated），
         // 这里只负责用本次登录用户的资料刷新 Header、再把它显示出来并置于前台。
         //
@@ -667,6 +669,15 @@ LRESULT CSessionController::OnLoginResult(UINT uMsg, WPARAM wParam, LPARAM lPara
         //掉线重连期间组织架构可能变过、cmd_org_structure_notify 也可能错过，
         //上一轮攒下的"这些人已经问过了"不该继续压着本轮的补拉。
         m_pPanel->ResetUnknownSenderPolicy();
+
+        //同理，本地消息记录的"覆盖区间"也要作废：离线或断线期间在别的设备上删掉的消息，
+        //本机收不到删除推送，之前验证为"完整"的区间可能已经不准。清空后各会话在打开
+        //消息记录窗时从最新一页重新验证（见 docs/清理聊天记录方案.md §7.4）。
+        m_pPanel->ResetHistoryCoverage();
+
+        //已读上报的去重记录同样作废：断线期间发出的已读上报可能已被丢弃，
+        //清空后再打开会话时会重新上报一次（见 ReadReportDedupe.h）。
+        m_pPanel->ResetReadReportDedupe();
 
         //登录成功后拉取一次 v2 通讯录，应答经 FMG_MSG_V2_CONTACTS 异步回投，
         //在 OnV2Contacts 里填充联系人面板（让联系人树由 mock 变真实）。
@@ -900,8 +911,8 @@ void CSessionController::ClearAutoLoginFlag(LPCTSTR lpszAccount)
     if (lpAccount == NULL)
     {
         //该账号还没在本机成功登录过（历史列表里没有它），本来就没有标志可清。
-        LOG_INFO("SessionController::ClearAutoLoginFlag: account is not in the history list, skipped. account=%ls.",
-            lpszAccount);
+        LOG_INFO("SessionController::ClearAutoLoginFlag: account is not in the history list, skipped. account=%s.",
+            EncodeUtil::UnicodeToUtf8(std::wstring(lpszAccount)).c_str());
         return;
     }
 
@@ -912,7 +923,43 @@ void CSessionController::ClearAutoLoginFlag(LPCTSTR lpszAccount)
 
     lpAccount->bAutoLogin = FALSE;
     SaveLoginAccountListFile();
-    LOG_INFO("SessionController::ClearAutoLoginFlag: auto-login flag cleared. account=%ls.", lpszAccount);
+    LOG_INFO("SessionController::ClearAutoLoginFlag: auto-login flag cleared. account=%s.",
+             EncodeUtil::UnicodeToUtf8(std::wstring(lpszAccount)).c_str());
+}
+
+// 系统设置「自动登录」开关：wParam = 目标状态（1 开 / 0 关），lParam 未用，无堆负载
+LRESULT CSessionController::OnSetAutoLogin(UINT /*uMsg*/, WPARAM wParam, LPARAM /*lParam*/)
+{
+    const BOOL bEnable = (wParam != 0) ? TRUE : FALSE;
+    if (m_stAccountInfo.szUser[0] == _T('\0'))
+    {
+        //设置窗只在登录成功后才能打开，正常流程不会走到这里
+        LOG_WARNING("SessionController::OnSetAutoLogin: no logged-in account, ignored. enable=%d.", bEnable);
+        return 0;
+    }
+
+    //打开时传入本次登录所用的密码：自动登录要靠已存的密码完成，
+    //而本次登录若没勾"记住密码"，列表里存的密码可能是空的
+    if (!m_LoginAccountList.ApplyAutoLoginSetting(m_stAccountInfo.szUser, bEnable, m_stAccountInfo.szPwd))
+    {
+        LOG_WARNING("SessionController::OnSetAutoLogin: account is not in the history list, ignored. account=%s, enable=%d.",
+            EncodeUtil::UnicodeToUtf8(std::wstring(m_stAccountInfo.szUser)).c_str(), bEnable);
+        return 0;
+    }
+
+    //m_stAccountInfo 也要同步：每次登录成功（包括断线自动重连成功）时，OnLoginResult 会按它
+    //（经 RecordLoginSuccess）更新历史列表里该账号的密码与两个勾选项。只改列表不改它的话，
+    //下一次重连就会把这里的修改恢复成旧值
+    m_stAccountInfo.bAutoLogin = bEnable;
+    if (bEnable)
+    {
+        m_stAccountInfo.bRememberPwd = TRUE;
+    }
+
+    SaveLoginAccountListFile();
+    LOG_INFO("SessionController::OnSetAutoLogin: auto-login turned %s from settings. account=%s.",
+        bEnable ? "on" : "off", EncodeUtil::UnicodeToUtf8(std::wstring(m_stAccountInfo.szUser)).c_str());
+    return 0;
 }
 
 // 忘掉当前账号在本机存下的密码，并取消"记住密码" / "自动登录"
@@ -928,8 +975,8 @@ void CSessionController::ForgetSavedPasswordForCurrentAccount()
     LOGIN_ACCOUNT_INFO* lpAccount = m_LoginAccountList.Find(strAccount.c_str());
     if (lpAccount == NULL)
     {
-        LOG_INFO("SessionController::ForgetSavedPasswordForCurrentAccount: account is not in the history list, skipped. account=%ls.",
-            strAccount.c_str());
+        LOG_INFO("SessionController::ForgetSavedPasswordForCurrentAccount: account is not in the history list, skipped. account=%s.",
+            EncodeUtil::UnicodeToUtf8(strAccount).c_str());
         return;
     }
 
@@ -937,8 +984,8 @@ void CSessionController::ForgetSavedPasswordForCurrentAccount()
     lpAccount->bRememberPwd = FALSE;
     lpAccount->bAutoLogin   = FALSE;
     SaveLoginAccountListFile();
-    LOG_INFO("SessionController::ForgetSavedPasswordForCurrentAccount: saved password cleared, remember-password and auto-login turned off. account=%ls.",
-        strAccount.c_str());
+    LOG_INFO("SessionController::ForgetSavedPasswordForCurrentAccount: saved password cleared, remember-password and auto-login turned off. account=%s.",
+        EncodeUtil::UnicodeToUtf8(strAccount).c_str());
 }
 
 // 把历史登录账号列表写回磁盘
@@ -1128,7 +1175,7 @@ void CSessionController::ReturnToLoginWindow(int exitKind, int kickoutReason)
     //    的话用户登出后这些窗口仍留在屏幕上，还带着上一个账号的聊天内容。
     //  · 通讯录、会话、群资料等缓存都以 userid / groupid 为键，换账号登录后键的含义
     //    完全变了，不清就会串账号。
-    //以上两点即 BUG-14，2026-08-18 修复。
+    //以上两点于 2026-08-18 修复。
     //
     //两步的先后顺序不能颠倒：ResetForLogout 要按控件 id 现查三棵树来清空节点，
     //窗口隐藏本身不影响查找，但把顺序写死在这里可以避免日后改成销毁时踩坑。
@@ -1284,29 +1331,22 @@ int CSessionController::GetCurrentPresence()
 
 void CSessionController::CreateEssentialDirectories()
 {
-    CString strAppPath(g_szHomePath);
-
-    CString strUsersDirectory(strAppPath);
-    strUsersDirectory += _T("Users");
-    if (!Hootina::CPath::IsDirectoryExist(strUsersDirectory))
-        Hootina::CPath::CreateDirectory(strUsersDirectory);
-
-    CString strCurrentUserDirectory;
-    strCurrentUserDirectory.Format(_T("%s\\%s"), strUsersDirectory, m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount.c_str());
-
-    if (!Hootina::CPath::IsDirectoryExist(strCurrentUserDirectory))
-        Hootina::CPath::CreateDirectory(strCurrentUserDirectory);
-
-    CString strChatImagesDirectory;
-    strChatImagesDirectory.Format(_T("%s\\ChatImage\\"), strCurrentUserDirectory);
-    if (!Hootina::CPath::IsDirectoryExist(strChatImagesDirectory))
-        Hootina::CPath::CreateDirectory(strChatImagesDirectory);
-
-    CString strUserThumbDirectory;
-    strUserThumbDirectory.Format(_T("%s\\UserThumb\\"), strCurrentUserDirectory);
-    if (!Hootina::CPath::IsDirectoryExist(strUserThumbDirectory))
-        Hootina::CPath::CreateDirectory(strUserThumbDirectory);
-
+    //账号目录建在数据根目录（g_szDataRoot）下，与账号配置、最近联系人列表、本地消息库的
+    //读写位置一致。2026-10-01 之前这里按程序目录（g_szHomePath）建：用户改过数据目录后，
+    //数据根目录下的账号目录要等第一个头像下载落地时才被顺带建出来，在那之前本地消息库
+    //打不开，账号配置也写不进去（WritePrivateProfileString 不会自动建父目录）。
+    const std::wstring& account = m_lpFMGClient->m_UserMgr.m_UserInfo.m_strAccount;
+    if (net::EnsureUserEssentialDirs(g_szDataRoot, account))
+    {
+        LOG_INFO("Essential user directories ready under data root, account=%s.",
+                 EncodeUtil::UnicodeToUtf8(account).c_str());
+    }
+    else
+    {
+        LOG_ERROR("Failed to create essential user directories under data root [%s], account=%s.",
+                  EncodeUtil::UnicodeToUtf8(std::wstring(g_szDataRoot)).c_str(),
+                  EncodeUtil::UnicodeToUtf8(account).c_str());
+    }
 }
 
 bool CSessionController::IsLoggedIn()

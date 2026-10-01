@@ -12,7 +12,7 @@
  *  登录态」以及要请求的「切换状态 / 登出 / 退出」，答案都在本类手里。
  *
  *  典型用法：由 CBalloonMainPanel 按值持有，创建窗口后调一次 Attach，并在自己的消息映射
- *  里加一行 CHAIN_MSG_MAP_MEMBER(m_sessionController)，十一条消息即由本类接管。
+ *  里加一行 CHAIN_MSG_MAP_MEMBER(m_sessionController)，十二条消息即由本类接管。
  *
  *      // CBalloonMainPanel 的消息映射
  *      CHAIN_MSG_MAP_MEMBER(m_sessionController)
@@ -37,6 +37,7 @@
 #include "../BalloonAuth/BalloonLoginDlg.h"     // CLoginDlg（本类按值持有登录窗）
 #include "../../Session/LoginAccountList.h"     // CLoginAccountList / LOGIN_ACCOUNT_INFO
 #include "../../Session/UserSessionData.h"      // FMG_MSG_* 消息号
+#include "ReconnectThrottle.h"                  // balloonmain::ReconnectThrottle（断线重连的登录请求节流）
 
 class CBalloonMainPanel;
 class CFlamingoClient;
@@ -110,10 +111,18 @@ public:
                 ISessionAppHost* pAppHost);
 
     /**
-     *  发起进程启动后的第一次登录：勾了自动登录就直接登，否则弹出登录窗。
+     *  发起进程启动后的第一次登录：弹出登录窗；上次登录的账号勾了自动登录时，登录窗
+     *  显示后自动开始登录（可取消）。
      *  返回 false 表示用户直接关掉了登录窗、没有走正常登录流程，调用方应停止后续初始化。
      */
     bool StartInitialLogin();
+
+    /**
+     *  当前登录账号在本机历史账号列表里是否开启了自动登录。主面板打开系统设置时据此
+     *  设置「自动登录」开关的初始状态。
+     *  返回：开启返回 true；尚未登录、或该账号不在历史列表里返回 false。
+     */
+    bool IsAutoLoginEnabledForCurrentAccount();
 
     /**
      *  把定时器消息交给本类处理。
@@ -186,10 +195,12 @@ public:
         MESSAGE_HANDLER_EX(FMG_MSG_V2_KICKOUT, OnV2Kickout)
         //本机网络由断开恢复：过自动重连守卫，非离线态才连回服务器
         MESSAGE_HANDLER_EX(FMG_MSG_NETWORK_RESUMED, OnNetworkResumed)
+        //系统设置「自动登录」开关：修改当前账号在本机历史账号列表里的标志并落盘
+        MESSAGE_HANDLER_EX(FMG_MSG_SET_AUTO_LOGIN, OnSetAutoLogin)
     END_MSG_MAP()
 
 private:
-    // ---- 十一条消息的处理器 ----
+    // ---- 十二条消息的处理器 ----
     // wParam / lParam 的含义写在各自实现的头部注释里；凡 lParam 为堆上结构体的，
     // 处理完由处理器自己 delete。
     LRESULT OnNetError(UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -203,10 +214,13 @@ private:
     LRESULT OnV2PresenceChanged(UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT OnV2Kickout(UINT uMsg, WPARAM wParam, LPARAM lParam);
     LRESULT OnNetworkResumed(UINT uMsg, WPARAM wParam, LPARAM lParam);
+    LRESULT OnSetAutoLogin(UINT uMsg, WPARAM wParam, LPARAM lParam);
 
     /**
-     *  发起一次登录。
-     *    bAutoLogin  TRUE 表示按本机存下的账号直接登录，不弹登录窗。
+     *  发起一次登录：弹出登录窗（模态）。
+     *    bAutoLogin  TRUE 表示自动登录：登录窗显示出来之后自己点一次「登录」，
+     *                登的是上次登录的账号；用户可在「登录中」点「取消登录」中止，
+     *                中止时顺带取消「自动登录」的勾选（见 docs/自动登录方案.md）。
      *  返回 false 表示用户直接关掉了登录窗、没有走正常登录流程。
      */
     bool StartLogin(BOOL bAutoLogin = FALSE);
@@ -252,7 +266,9 @@ private:
     // 并落盘（用户刚改过昵称的情形）。
     void SyncNickNameToLoginAccountList();
 
-    // 登录成功后创建该账号需要的本地目录（缓存、头像等）。
+    // 登录成功后在数据根目录（g_szDataRoot）下创建该账号需要的本地目录：账号目录本身
+    // 及其下的 ChatImage、UserThumb。账号配置、最近联系人列表、本地消息库都依赖账号目录
+    // 事先存在。创建失败只记日志，不影响登录。
     void CreateEssentialDirectories();
 
     HWND m_hHost;                       // 宿主窗口句柄（主面板），借用不拥有
@@ -265,7 +281,7 @@ private:
     LOGIN_ACCOUNT_INFO m_stAccountInfo;  // 当前即将登录 / 已登录的账号信息
 
     int m_nSessionStatus;               // 会话状态机，取值见 SessionStatus
-    BOOL m_bAlreadyLogin;               // 本进程是否已经登录成功过；登出后不复位（用于区分「从未登录」与「登录过又退出」）
+    BOOL m_bAlreadyLogin;               // 当前是否处于已登录状态：登录成功置真，退出登录或被踢下线回到登录窗时（ReturnToLoginWindow）置假
 
     //本次登录是否由「从离线恢复在线」发起（用户在离线态下选了在线 / 离开 / 忙碌）。
     //登录失败时据它决定：恢复在线失败就退回离线态并提示，而不是像首次登录失败那样
@@ -275,7 +291,9 @@ private:
     DWORD m_dwReconnectTimerId;         // 自动重连定时器标识；0 表示未启动
     bool m_bEnableReconnect;            // 是否启用断线重连，来自 flamingo.ini
     UINT m_uReconnectInterval;          // 重连时间间隔，必须大于 0，单位毫秒
-    bool m_bAlreadySendReloginRequest;  // 重连过程中是否已经发送过登录请求包
+    // 断线重连的登录请求节流：一轮重连里同一时刻只有一个登录请求在途，等到结果再发下一个
+    //（bugs.md 的 BUG-21）。每轮重连开始时重置，收到登录结果时清除等待状态。
+    balloonmain::ReconnectThrottle m_reconnectThrottle;
 
     //被踢下线提示框是否正在显示。它是模态框、跑嵌套消息循环，期间托盘点击与重复的
     //被踢下线通知都要挡掉，否则会重入「回到登录界面」的收尾序列。

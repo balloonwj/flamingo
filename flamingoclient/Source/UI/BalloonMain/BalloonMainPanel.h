@@ -21,6 +21,7 @@
 
 #include <vector>
 #include <map>
+#include <deque>      // m_pendingRangeDeletes：按时间范围清理本地库的待办区间
 #include <set>
 #include <utility>
 #include <stdint.h>
@@ -40,7 +41,12 @@
 #include "../BalloonNetSettings/BalloonNetSettingsWindow.h"  // 网络设置窗（本面板按值持有）
 #include "../BalloonSearch/SearchDropdown.h"       // 搜索结果下拉（主面板下方顶层浮窗）
 #include "FavoritesModel.h"                        // 「我的收藏」模型（成员按值持有，需完整类型）
+#include "AvatarBitmapCache.h"                     // 三棵树共用的头像位图缓存（成员按值持有，需完整类型）
+#include "ContactLookupIndex.h"                    // 联系人资料池的 userid 索引（成员按值持有，需完整类型）
+#include "ContactDeptTable.h"                      // 联系人职务与部门路径表（成员的值类型，需完整类型）
+#include "ConversationRowSync.h"                   // ConvNodeKey（m_convNodeId 的键类型）
 #include "StarredModel.h"                          // 「特别关注」模型（成员按值持有，需完整类型）
+#include "ReadReportDedupe.h"                      // 已读位点上报去重（成员按值持有，需完整类型）
 #include "../../net/FavoriteProtocolClient.h"          // net::SetFavoriteResult（应答回调形参）
 #include "../../net/StarredProtocolClient.h"           // net::SetStarredResult（应答回调形参）
 #include "../../net/FriendProtocolClient.h"            // net::SetFriendRemarkResult（设置备注名应答回调形参）
@@ -49,6 +55,8 @@
 #include "UnknownSenderRefreshPolicy.h"            // 陌生发送方补拉通讯录的节流器（成员按值持有，需完整类型）
 #include "OnlineCapability.h"                      // kConnUiOnline（备注提交前的连接态门禁）
 #include "CreateGroupDlg.h"                        // 新建群聊对话框（成员需完整类型）
+#include "ForwardTargetDlg.h"                      // 转发目标选择窗（成员需完整类型）与 IForwardTargetSink
+#include "ForwardDispatcher.h"                     // 转发调度器（成员需完整类型）
 #include "BalloonChangePwdDlg.h"                   // 修改密码对话框（成员需完整类型）
 #include "BalloonModifyAvatarDlg.h"                // 修改头像对话框（成员需完整类型）
 #include "BalloonClosePromptDlg.h"                 // 关闭确认对话框（成员需完整类型）
@@ -69,15 +77,18 @@
 #include "../BalloonAnnounce/AnnouncePopupWindow.h"       // 新公告桌面提示窗（成员按值持有，需完整类型）
 #include "StarredPopupWindow.h"                          // 特别关注上下线提示窗（成员按值持有，需完整类型）
 #include "../BalloonHistory/BalloonHistoryWindow.h"  // 历史消息记录窗口（成员需完整类型）
+#include "../BalloonHistory/MergedRecordWindow.h"    // 合并转发的聊天记录查看窗（成员需完整类型）
 
 class CFlamingoClient;
 
 namespace balloonmain { class MainPanelSectionHeader; }
 namespace balloonmain { class MainPanelTreeView; }   // 会话树（支持未读数字红点角标）
 namespace balloonmain { class MainPanelScrollView; } // 列表面板滚动视口（悬浮滚动条）
+namespace balloonmain { class CMainPanelBench; }     // 主面板基准测试（调试入口专用，本类的友元）
 
 //v2 通讯录 / 单聊消息投递载体（解析层结构体，定义在 net/*.h）。
 namespace net { struct ContactsResult; struct MessageNotify; struct SendMessageResponse;
+                struct MessageReadNotify; struct ForwardMessageResponse;
                 struct DepartmentItem; struct ConversationsResult; struct CreateGroupResponse;
                 struct GroupInfoResult; struct GroupMembersResult; struct UserGroupsResult;
                 struct SyncMessagesResult; struct ChangePasswordResponse;
@@ -117,8 +128,23 @@ namespace balloonwjui { class DuiTreeView; }
  *  消息由进程主消息循环统一泵送。
  */
 class CBalloonMainPanel : public balloonwjui::DuiFrameWindow
+                        , public balloonmain::IForwardTargetSink
 {
+    //基准测试要切换页签、收起搜索下拉，这两件事没有公开接口；只供调试入口
+    //--mainpanel --bench 使用（见 MainPanelBench.h），正式流程不经过它
+    friend class balloonmain::CMainPanelBench;
+
 public:
+    //按时间范围分批删除本地库时投给自己的续批消息（D 段窗口私有消息，号段规约见
+    //开发约定文档「UI 约定」第 6 条）。每收到一条删一批，删到没有剩余为止，两批之间让出
+    //UI 线程，本地库再大也不会让界面长时间冻结。wParam / lParam 不用。
+    static const UINT kMsgRangeDeleteStep = WM_APP + 0x60;
+
+    //通讯录或群列表加载完后投给自己的消息，收到后预热搜索候选缓存（D 段窗口私有消息，
+    //号段规约见开发约定文档「UI 约定」第 6 条）。不在加载函数里直接预热，是为了让列表先
+    //画出来：处理函数先 UpdateWindow 完成待绘制的内容，再做耗时的预热。wParam / lParam 不用。
+    static const UINT kMsgSearchWarmUp = WM_APP + 0x65;
+
     /**
      *  构造函数。
      *    pFMGClient：所属客户端对象（消息中枢），本类只引用、不持有；
@@ -189,7 +215,7 @@ public:
      *  现查三棵树来清空节点，窗口销毁后就查不到了）。
      *
      *  做四件事：销毁本面板拉起的全部子窗口（单聊窗、群聊窗、各对话框与浮窗）、
-     *  清空三棵树的节点、释放三个头像位图池、清空本次登录期间累积的全部数据缓存。
+     *  清空三棵树的节点、释放头像位图缓存、清空本次登录期间累积的全部数据缓存。
      *
      *  必要性：本面板对象由进程外壳按值持有，登出时只隐藏窗口、对象本身一直
      *  活到进程结束，因此上述状态不会随窗口一起消失。不复位会有两个后果——聊天窗
@@ -593,6 +619,33 @@ private:
     void RefreshStarredMarks(int64_t userid);
 
     /**
+     *  给刚建好的树节点打上「我的收藏」徽章（按收藏模型现状）。填部门树的联系人行、
+     *  群列表的群行、会话列表的会话行时调用；「我的收藏」分区里的行全是收藏，不调用。
+     *    tv：    目标树；实际必须是 MainPanelTreeView，不是则安静跳过。
+     *    node：  节点 id。
+     *    ctype： 1 联系人（单聊）、2 群。
+     *    cid：   联系人为对端 userid，群为群ID。
+     */
+    void ApplyFavoriteMark(balloonwjui::DuiTreeView* tv, int node, int ctype, int64_t cid);
+
+    /**
+     *  某个联系人 / 群的收藏状态变了之后，就地刷新群列表与会话列表上对应行的徽章。
+     *  联系人 Tab 不在这里处理 —— 收藏变化时「我的收藏」分区要增删行，调用方已经
+     *  整树重建（RebuildContactsTree），部门树行的徽章随之重打。
+     *
+     *  两处调用：SetFavoriteState 的乐观更新、OnSetFavoriteResult 的失败回滚。
+     *    ctype： 1 联系人、2 群。
+     *    cid：   联系人为对端 userid，群为群ID；<= 0 时什么都不做。
+     */
+    void RefreshFavoriteMarks(int ctype, int64_t cid);
+
+    /**
+     *  按收藏模型现状，就地重打群列表上每一行的收藏徽章，不重建群树（保留滚动位置与
+     *  展开状态）。收藏列表到达（随通讯录一起）与某个群的收藏状态改变时调用。
+     */
+    void RefreshGroupsTreeFavoriteMarks();
+
+    /**
      *  收到一条 presence 推送后，判断要不要为它弹「特别关注」的上下线提示，该弹就弹。
      *  由 OnPresenceChanged 调用；五条抑制条件（不在名单、是自己、不是上下线跳变、
      *  登录静默期内、勿扰）任意一条成立都不弹，理由逐条写在实现里。
@@ -794,6 +847,21 @@ public:
     void ResetUnknownSenderPolicy();
 
     /**
+     *  清空本地消息库里全部会话的覆盖区间。由会话控制器在每次登录成功（含断线重连成功）
+     *  后调用：离线期间在别的设备上删掉的消息本机收不到删除推送，之前验证为"完整"的区间
+     *  可能已经不准。清空后各会话在打开消息记录窗时从最新一页重新验证，本地的消息行保留。
+     *  本地库打不开时只记日志，不影响登录。方案见 docs/清理聊天记录方案.md §7.4。
+     */
+    void ResetHistoryCoverage();
+
+    /**
+     *  清空已读位点上报的去重记录（见 m_readReportDedupe）。由会话控制器在每次登录成功
+     *  （含断线重连成功）后调用，登出时 ResetForLogout 也会调用：断线期间发出的上报可能
+     *  已被丢弃，清空后再打开会话时会重新上报一次。只清内存记录，不发请求。
+     */
+    void ResetReadReportDedupe();
+
+    /**
      *  打开（或前置）指定会话并把其未读本地清零 —— 供托盘控制器在用户单击闪烁的托盘
      *  图标时调用。单聊走 OpenSingleChat、群聊走 OpenGroupChat，随后 MarkConversationRead
      *  清未读角标（其内部会回投 FMG_MSG_TRAY_CLEAR，使托盘停闪 / 切目标）。
@@ -814,6 +882,16 @@ public:
      *                       让窗口直接开在 Pin 分类上。取值非法时按"全部"处理。
      */
     void OpenHistory(int ctype, int64_t cid, int initialTypeFilter = 0);
+
+    // 右键菜单「复制联系人名」：把该联系人在列表上显示的名字（备注优先，其次昵称，见
+    // ContactDisplayName）写入剪贴板。
+    //   peerUserId：联系人 userid。
+    void CopyContactName(UINT peerUserId);
+
+    // 右键菜单「复制群号」/「复制群名」：把群号（十进制数字，见 balloonmain::FormatGroupNumber）
+    // 或群名（GroupDisplayName）写入剪贴板。
+    //   groupId：群 id；copyNumber：true 复制群号，false 复制群名。
+    void CopyGroupInfoText(int64_t groupId, bool copyNumber);
 
     /**
      *  按 userid 解析显示昵称（本人→本人昵称；联系人→缓存昵称 / 账号；都查不到→
@@ -882,7 +960,10 @@ public:
         MESSAGE_HANDLER(FMG_MSG_OPEN_CHANGEPWD, OnOpenChangePwdMsg)
         MESSAGE_HANDLER(FMG_MSG_REFRESH_SELF_HEADER, OnRefreshSelfHeaderMsg)
         MESSAGE_HANDLER(FMG_MSG_LINK_OPTION_CHANGED, OnLinkOptionChangedMsg)
+        MESSAGE_HANDLER(FMG_MSG_DEFAULT_CHAT_FONT_CHANGED, OnDefaultChatFontChangedMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_HISTORY, OnOpenHistoryMsg)
+        MESSAGE_HANDLER(FMG_MSG_OPEN_FORWARD_PICKER, OnOpenForwardPickerMsg)
+        MESSAGE_HANDLER(FMG_MSG_OPEN_MERGED_VIEWER, OnOpenMergedViewerMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_ANNOUNCE_BOX, OnOpenAnnounceBoxMsg)
         // WM_SETFOCUS：拦掉基类"没有已聚焦控件时自动聚焦第一个控件"的回退行为，
         // 详见 OnPanelSetFocusMsg 的说明。须排在 CHAIN_MSG_MAP 之前才能拦得住。
@@ -926,6 +1007,13 @@ public:
         MESSAGE_HANDLER_EX(FMG_MSG_V2_SYNC_MESSAGES, OnV2SyncMessages)   //v2 历史消息应答：路由到聊天窗渲染
         MESSAGE_HANDLER_EX(FMG_MSG_V2_RECALL_RESULT, OnV2RecallResult)   //v2 撤回消息应答：失败时提示原因，成功不动界面（等推送）
         MESSAGE_HANDLER_EX(FMG_MSG_V2_MESSAGE_RECALLED, OnV2MessageRecalled)  //v2 消息被撤回推送：转发到主面板改气泡/刷会话列表/标记本地库
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_FORWARD_RESULT, OnV2ForwardResult)              //v2 转发消息应答：交给转发调度器按 seq 对回请求
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_DELETE_MESSAGE_RESULT, OnV2DeleteMessageResult)  //v2 删除单条消息应答：失败时提示原因，成功不动界面（等删除推送）
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_DELETE_BY_TIME_RESULT, OnV2DeleteByTimeResult)   //v2 按时间范围清理应答：转交清理聊天记录对话框
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_MESSAGES_DELETED, OnV2MessagesDeleted)           //v2 本人删除了消息推送：删本地库、更新已打开的窗口
+        MESSAGE_HANDLER_EX(kMsgRangeDeleteStep, OnRangeDeleteStep)                     //按时间范围分批删本地库：投给自己的续批消息，每条删一批
+        MESSAGE_HANDLER_EX(kMsgSearchWarmUp, OnSearchWarmUp)                           //通讯录或群列表加载完后投给自己的消息：预热搜索候选缓存
+        MESSAGE_HANDLER_EX(FMG_MSG_V2_MESSAGE_READ_NOTIFY, OnV2MessageReadNotify)  //v2 对方已读推送：记下对方已读位点并转给已打开的单聊窗
         MESSAGE_HANDLER_EX(FMG_MSG_V2_PIN_RESULT, OnV2PinResult)    //v2 Pin 消息应答：失败时提示原因，成功不动界面（等推送）
         MESSAGE_HANDLER_EX(FMG_MSG_V2_MESSAGE_PINNED, OnV2MessagePinned)  //v2 消息被 Pin / 取消 Pin 推送：转发到主面板落本地标记并刷新消息记录窗
         MESSAGE_HANDLER_EX(FMG_MSG_V2_PINNED_MESSAGES, OnV2PinnedMessages)  //v2 被 Pin 消息全集应答：转发到主面板补齐本地库缺行并对账
@@ -1026,6 +1114,13 @@ private:
     LRESULT OnV2TypingNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);   // v2 对端正在/停止输入(lParam=net::TypingNotify*，处理后 delete)
     LRESULT OnV2RecallResult(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 撤回消息应答(lParam=net::RecallMessageResponse*，处理后 delete)
     LRESULT OnV2MessageRecalled(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 消息被撤回推送(lParam=net::MessageRecalledNotify*，处理后 delete)
+    LRESULT OnV2ForwardResult(UINT uMsg, WPARAM wParam, LPARAM lParam);        // v2 转发消息应答(wParam=请求帧 seq，lParam=net::ForwardMessageResponse*，处理后 delete)
+    LRESULT OnV2DeleteMessageResult(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 删除单条消息应答(lParam=net::DeleteMessageResponse*，处理后 delete)
+    LRESULT OnV2DeleteByTimeResult(UINT uMsg, WPARAM wParam, LPARAM lParam);   // v2 按时间范围清理应答(lParam=net::DeleteMessagesByTimeResponse*，处理后 delete)
+    LRESULT OnV2MessagesDeleted(UINT uMsg, WPARAM wParam, LPARAM lParam);      // v2 本人删除了消息推送(lParam=net::MessagesDeletedNotify*，处理后 delete)
+    LRESULT OnRangeDeleteStep(UINT uMsg, WPARAM wParam, LPARAM lParam);        // 按时间范围分批删本地库的续批消息(kMsgRangeDeleteStep)，每条删一批
+    LRESULT OnSearchWarmUp(UINT uMsg, WPARAM wParam, LPARAM lParam);           // 预热搜索候选缓存(kMsgSearchWarmUp)：先完成待绘制内容，再按当前资料池与群列表 Sync 一次
+    LRESULT OnV2MessageReadNotify(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 对方已读推送(lParam=net::MessageReadNotify*，处理后 delete)
     LRESULT OnV2PinResult(UINT uMsg, WPARAM wParam, LPARAM lParam);    // v2 Pin 消息应答(lParam=net::PinMessageResponse*，处理后 delete)：仅失败时据 code 提示原因
     LRESULT OnV2MessagePinned(UINT uMsg, WPARAM wParam, LPARAM lParam);   // v2 消息被 Pin / 取消 Pin 推送(lParam=net::MessagePinnedNotify*，处理后 delete)
     LRESULT OnV2PinnedMessages(UINT uMsg, WPARAM wParam, LPARAM lParam);  // v2 被 Pin 消息全集应答(lParam=net::PinnedMessagesResult*，处理后 delete)
@@ -1286,6 +1381,18 @@ private:
     bool EnsureMsgStoreOpen();
 
     /**
+     *  按一页同步应答对账并更新该会话的覆盖区间（规则见 UI/BalloonHistory/HistoryCoverage.h）：
+     *  本页覆盖范围内、本地有而服务端没返回的行视为已在别处删除，从本地库删掉；再把本页并入
+     *  覆盖区间。由 OnSyncMessagesArrived 在把本页消息写入本地库之后、刷新消息记录窗之前调用。
+     *
+     *  应答没有回带锚点（旧服务端、或补齐模式）时什么都不做 —— 不知道本页是从哪里往前拉的，
+     *  就算不出它覆盖的范围。方案见 docs/清理聊天记录方案.md §7.2、§7.3。
+     *
+     *  @param result 一页同步应答（code 已确认为 0）
+     */
+    void ReconcileHistoryCoverage(const net::SyncMessagesResult& result);
+
+    /**
      *  确保平台公告本地库 announce.db 已按当前登录账号打开（惰性打开 + 账号切换切库）。
      *  库文件与历史消息库同目录：<个人目录>\ChatLog\announce.db。
      *
@@ -1386,11 +1493,14 @@ private:
     void RefreshMessagesTabBadge();
 
     /**
-     *  在 m_contacts 缓存里按 userid 查联系人资料；找不到返回 NULL。返回的
-     *  指针指向 m_contacts 内元素，调用方不得跨"下次通讯录刷新"持有。
+     *  在 m_contacts 缓存里按 userid 查联系人资料（经 m_contactIndex 直接定位）；找不到
+     *  返回 NULL。返回的指针指向 m_contacts 内元素，调用方不得跨"下次通讯录刷新"持有。
      *    userId   联系人 userid。
      */
     const net::ContactItem* FindCachedContact(UINT userId) const;
+
+    // 同 FindCachedContact，但返回可修改的指针，供就地更新在线状态等字段。
+    net::ContactItem* FindCachedContactMutable(UINT userId);
 
 public:
     /**
@@ -1405,6 +1515,37 @@ public:
      *  @param notify 撤回通知（ctype / cid / msgid / operator 均已校验为有效）
      */
     void OnMessageRecalled(const net::MessageRecalledNotify& notify);
+
+    /**
+     *  处理服务端推来的"本人删除了消息"通知（cmd_messages_deleted_notify）。
+     *  由本面板的 OnV2MessagesDeleted 转交。发起删除的这台设备自己也会收到本通知，
+     *  本机与其他设备统一在这里删本地库、更新界面，结果因此始终一致。
+     *
+     *  单条形式：删本地库里的这几行、移除已打开聊天窗里的对应气泡、刷新消息记录窗；
+     *  区间形式：分批删本地库里该时间段的全部消息、让已打开的聊天窗重新加载最新一页、
+     *  刷新消息记录窗。两种形式最后都重新拉一次会话列表，由服务端算出新的预览。
+     *  方案见 docs/清理聊天记录方案.md §8。
+     *
+     *  @param notify 删除通知（两种形式各自的字段均已校验为有效）
+     */
+    void OnMessagesDeleted(const net::MessagesDeletedNotify& notify);
+
+    /**
+     *  处理服务端推来的"对方已读你的消息"通知（cmd_message_read_notify）。
+     *  由本面板的 OnV2MessageReadNotify 转交。只处理单聊（群聊按协议不做已读回执）：
+     *  把对方的已读位点记下来，并转给与对方的单聊窗（若已打开）把对应气泡标为已读。
+     *  @param notify 已读通知（cid / readmsgid 均已校验为正）
+     */
+    void OnMessageReadNotify(const net::MessageReadNotify& notify);
+
+    /**
+     *  记下某个单聊对端的已读位点，并转给与他的单聊窗（若已打开）。
+     *  位点只增不减：比已记下的小的直接忽略。窗口没开时只记下，EnsureChatWindow 建窗时补给窗口。
+     *  来源：cmd_message_read_notify 推送，以及单聊同步消息应答里的对方已读位点。
+     *    peerUserId：单聊对端 userid；0 忽略。
+     *    readMsgid： 对方已读到的最大消息 msgid；<=0 忽略。
+     */
+    void ApplyPeerReadPosition(UINT peerUserId, int64_t readMsgid);
 
     /**
      *  处理"某条消息被 Pin / 取消 Pin"的推送（cmd_message_pinned_notify）。
@@ -1537,14 +1678,38 @@ public:
 private:
 
     /**
-     *  把一条单聊会话渲染成 Messages 树的一个根节点（头像 + 昵称 + 预览 +
-     *  时间 + 未读计数），并记录"节点 → 对端 userid"。供 FillConversationsTree
-     *  复用。
+     *  在 Messages 树末尾追加一个根节点并填好这一行（见 FillConversationRow），登记
+     *  "节点 ↔ 会话"两份映射。供 FillConversationsTree 整表重建与 RefreshConversationRow
+     *  新增会话时复用。
      *    tv     Messages 树控件（MainPanelTreeView，支持未读红点角标）。
-     *    conv   会话数据（须为单聊 ctype==1）。
+     *    conv   会话数据（单聊或群聊）。
+     *  返回：新节点 id。
      */
-    void AddConversationNode(balloonmain::MainPanelTreeView* tv,
+    int  AddConversationNode(balloonmain::MainPanelTreeView* tv,
                              const net::ConversationItem& conv);
+
+    /**
+     *  按会话数据填写（或刷新）Messages 树里的一行：标题、预览、时间与未读、置顶与
+     *  免打扰标记、头像、在线状态、星标与收藏徽章。整表重建与就地刷新都走这里，两条
+     *  路径显示的内容因此一模一样。
+     *    tv     Messages 树控件。
+     *    id     该会话那一行的节点 id。
+     *    conv   会话数据。
+     */
+    void FillConversationRow(balloonmain::MainPanelTreeView* tv, int id,
+                             const net::ConversationItem& conv);
+
+    /**
+     *  就地刷新某个会话在 Messages 树里的那一行，按需把它挪到排序后应处的位置，不整表
+     *  重建。会话还没有行时（新会话）追加一行。调用前 m_conversations 须已排好序。
+     *    ctype / cid  会话。
+     *    reposition   true：刷新后按 m_conversations 的顺序挪到正确位置（收到 / 发出消息）；
+     *                 false：只刷新内容、不挪位置（标记已读，顺序不受未读影响）。
+     *  返回：true 表示已就地完成；false 表示树或映射不完整（取不到树、会话不在列表里、
+     *        缺相关的行），调用方应退回 FillConversationsTree 整表重建。
+     *  副作用：刷新"消息"Tab 的未读角标；新增行时同步滚动区内容高度。
+     */
+    bool RefreshConversationRow(int ctype, int64_t cid, bool reposition);
 
     /**
      *  把一个 Tab 内容面板的滚动视口内容高度同步成"实际内容高"。
@@ -1733,25 +1898,25 @@ private:
                         const net::ContactItem& c);
 
     /**
-     *  按某实体（联系人 / 单聊对端）的 (facetype, customface) 生成一张 sizePx 圆形头像
-     *  位图（树图标用，调用方负责入池释放）：字形自定义 / 自动 → 现画 monogram；真图
-     *  → 命中本地缓存即画真图，未命中则回退 monogram 并触发头像下载（下载完成经
-     *  OnAvatarDownloadResult 刷新本节点）。
-     *    id          实体 id（联系人 userid；自动取色 / 回退首字用）
+     *  按某实体（联系人 / 单聊对端 / 群）的 (facetype, customface) 取一张 sizePx 圆形头像
+     *  位图（树图标用）：字形自定义 / 自动 → 字形头像；真图 → 本地已有图片文件即用真图，
+     *  没有则回退字形头像并触发头像下载（下载完成经 OnAvatarDownloadResult 刷新本节点）。
+     *    id          实体 id（联系人 userid / 群 id；自动取色 / 回退首字用）
      *    displayName 显示名（回退首字用）
      *    facetype    头像类型（见 balloonmain::AvatarKind）
      *    customface  头像标识（UTF-8）
      *    sizePx      位图边长（像素）
-     *  返回：HBITMAP（所有权归调用方）；失败可能返回 NULL。
+     *  返回：头像缓存 m_avatarCache 中的位图，<u>归缓存所有，调用方不得释放</u>，也不要
+     *        存进任何随重建释放的容器；失败可能返回 NULL。
      */
-    HBITMAP MakeEntityAvatarBitmap(int64_t id, const CString& displayName,
-                                   int facetype, const std::string& customface, int sizePx);
+    HBITMAP GetEntityAvatarBitmap(int64_t id, const CString& displayName,
+                                  int facetype, const std::string& customface, int sizePx);
 
     /**
      *  取某个在线状态的徽标位图，用于往 DuiTreeView 的行右端挂状态点
      *  （DuiTreeView::SetItemStatusIcon）。四种徽标是常量图形，本方法按 presence
      *  缓存复用，首次用到时才创建，位图归本类所有、析构时统一释放 —— 调用方
-     *  <u>不得</u> DeleteObject，也不要存进 m_avatarBitmaps 那几个随刷新清空的池子里。
+     *  <u>不得</u> DeleteObject。
      *    presence：v2 在线状态（presence_type）；越界值按"离线"取，
      *              与 GetPresenceBadgeIconKind 的兜底口径一致。
      *  返回：徽标位图；创建失败返回 NULL（此时调用方跳过挂图即可，树会退回不画状态点）。
@@ -1976,6 +2141,25 @@ private:
     void RebuildContactsTree();
 
     /**
+     *  只重建联系人树顶部的「我的收藏」分区，不动下面的部门树：删掉旧分区，用
+     *  AddFavoritesSection 追加一个新分区，再 MoveRoot 挪回树顶。分区原先的展开 / 折叠
+     *  状态保留；部门树的滚动位置与各节点的展开状态也都不受影响。
+     *  用于群列表到达（补出群收藏行）与收藏切换 / 回滚 —— 这几种情况只有收藏分区变了，
+     *  整棵重建在 5000 人时要几百毫秒到几秒。
+     *  返回：true 表示已就地完成；false 表示取不到联系人树或尚未收到过通讯录，调用方
+     *        应视情况退回 RebuildContactsTree。
+     *  副作用：重新登记分区各行的节点映射；同步滚动区内容高度。
+     */
+    bool RebuildFavoritesSection();
+
+    /**
+     *  按收藏模型的现状，就地刷新部门树里某个联系人所有行（主部门与兼属部门各一行）
+     *  名字后面的收藏徽章。「我的收藏」分区自己的行不画徽章，跳过。
+     *    userid：联系人 userid。
+     */
+    void RefreshContactFavoriteBadges(int64_t userid);
+
+    /**
      *  删除一条会话 —— 把它从"最近会话列表"移除，<u>不删除聊天消息本体</u>（历史消息
      *  记录窗仍能查到，服务端 t_chatmsg 不动）。先弹二次确认；确认后向服务端发
      *  cmd_set_conversation{deleted:true}，并乐观地从本地会话缓存移除、重填会话树、
@@ -2065,6 +2249,14 @@ private:
      *  按词展示 / 刷新（空词由下拉自行隐藏）。
      */
     void UpdateSearchDropdown();
+
+    /**
+     *  安排一次搜索候选缓存的预热 —— 通讯录或群列表加载（或整体替换）后调用。给自己
+     *  投递 kMsgSearchWarmUp，由 OnSearchWarmUp 在列表绘制完成后执行。已有一条尚未
+     *  处理时不再重复投递：通讯录与群列表先后到达只预热一次，后到的数据由那一次一并覆盖。
+     *  窗口尚未创建时不投递，届时第一次按键会照常建立缓存。
+     */
+    void ScheduleSearchWarmUp();
 
     /**
      *  算出搜索结果下拉的落点 —— 即搜索框矩形（屏幕坐标）与主面板客户区宽。
@@ -2182,7 +2374,7 @@ private:
     LRESULT OnOpenGroupAnnounceMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
-     *  取当前登录账号的配置文件（<账号>.cfg）全路径。
+     *  取当前登录账号的配置文件（<账号>.ini）全路径。
      *  新公告弹窗的"已弹过哪条"记在这个文件的一个专属小节里，重启后仍然有效。
      *  返回：全路径；未登录（账号为空）时返回空串，调用方据此跳过记账。
      */
@@ -2196,10 +2388,87 @@ private:
     // 更新进程级开关，再让已打开的单聊 / 群聊窗重新测量重绘 —— 链接片段是在气泡测量阶段
     // 算出来的，不重新测量已开着的窗口就还是旧样子。
     LRESULT OnLinkOptionChangedMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+    // FMG_MSG_DEFAULT_CHAT_FONT_CHANGED：系统设置里改了（或恢复了）全局默认聊天字体。让已打开、
+    // 且没有单独设过字体的单聊 / 群聊窗改用新的默认字体；新字体已在账号配置里，各窗自己去读。
+    LRESULT OnDefaultChatFontChangedMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     // FMG_MSG_OPEN_HISTORY：聊天窗"消息记录"按钮转发来——打开该会话的历史消息记录窗。
     // wParam=ctype（1单聊 2群聊），lParam=堆上 int64_t* cid（处理后 delete）。
     LRESULT OnOpenHistoryMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // FMG_MSG_OPEN_FORWARD_PICKER：聊天窗 / 群聊窗在多选操作条上点了「逐条转发」或「合并转发」，
+    // 打开转发目标选择窗。lParam=堆上 balloonmain::ForwardRequest*（处理后 delete）。
+    // 实现在 BalloonMainPanelForward.cpp，主面板里与转发相关的代码都放在那个文件。
+    LRESULT OnOpenForwardPickerMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // FMG_MSG_OPEN_MERGED_VIEWER：聊天窗 / 群聊窗点了合并卡片，或查看窗里双击了嵌套记录，
+    // 新开一个聊天记录查看窗。lParam=堆上 std::string*（合并消息的 content 原文，处理后 delete）。
+    // 子消息没带 fromname 的，按 userid 经 ResolveSenderName 解析好名字交给查看窗。
+    // 实现在 BalloonMainPanelForward.cpp。
+    LRESULT OnOpenMergedViewerMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    // 把一笔图片 / 文件下载的结果转给每个打开着的聊天记录查看窗，各窗口只认自己发起的那些；
+    // 顺带清理已经关闭的查看窗。实现在 BalloonMainPanelForward.cpp。
+    //   msgid：下载对应的消息 msgid，传 0 表示只清理已关闭的查看窗、不转任何结果；
+    //   ok：是否成功；localPath：成功时的本地路径；
+    //   isFile：true 为文件下载、false 为图片下载；cancelled：文件下载是否被用户取消（图片恒 false）
+    void NotifyMergedViewersDownload(int64_t msgid, bool ok, const std::wstring& localPath,
+                                     bool isFile, bool cancelled);
+
+    /**
+     *  IForwardTargetSink 实现：用户在转发目标选择窗里点了「发送」，把请求与选定的目标
+     *  交给转发调度器逐个发出 cmd_forward_message。实现在 BalloonMainPanelForward.cpp。
+     *    request：转发请求（源会话、msgid、模式、标题）；调用期间有效。
+     *    targets：选定的目标，1 ~ kForwardMaxTargets 个；调用期间有效。
+     */
+    void OnForwardTargetsConfirmed(const balloonmain::ForwardRequest& request,
+                                   const std::vector<balloonmain::ForwardTarget>& targets) override;
+
+    /**
+     *  按会话列表的口径为一个会话生成转发候选：名字与首字头像走 ComputeConvDisplay，
+     *  有资料缓存时头像取真实头像（位图借自 m_avatarCache）。
+     *    ctype：会话类型，1 单聊、2 群聊。
+     *    cid：  会话 id。
+     *  @return 候选；名字查不到时为「用户<id>」或「群聊(<id>)」
+     */
+    balloonmain::ForwardTarget MakeForwardTargetForConversation(int ctype, int64_t cid);
+
+    /**
+     *  转发应答到达（由 OnV2ForwardResult 转来）：交给转发调度器按 seq 对回目标；成功时在
+     *  本端显示新消息；本批全部目标都有结果后提示用户。实现在 BalloonMainPanelForward.cpp。
+     *    seq： 请求帧 seq。
+     *    resp：应答解析结果。
+     */
+    void OnForwardResponse(uint32_t seq, const net::ForwardMessageResponse& resp);
+
+    /**
+     *  转发到某个目标成功后，在本端显示新消息并更新会话列表。
+     *  目标是单聊时，服务端不把新消息推回给本人，只能用应答里的消息体：逐条交给
+     *  OnRecvChatMessage（落本地库、显示到已打开的聊天窗、刷新会话列表）；应答里消息体
+     *  不全（服务端体积预算用尽，或旧服务端不带）时再拉一次该会话的最新消息补齐。
+     *  目标是群时什么都不做：服务端向全体群成员（含本人）推送，走普通的收消息流程。
+     *    target：成功的目标。
+     *    resp：  该目标的应答。
+     */
+    void ApplyForwardedMessages(const balloonmain::ForwardTarget& target,
+                                const net::ForwardMessageResponse& resp);
+
+    /**
+     *  一次转发全部目标都有结果后提示用户：全部成功时在发起转发的聊天窗顶部提示
+     *  「已转发」；有失败时弹框列出失败的目标与原因。
+     *    outcome：本批的汇总结果。
+     */
+    void ShowForwardOutcome(const balloonmain::ForwardBatchOutcome& outcome);
+
+    /**
+     *  按转发调度器里是否还有请求在等应答，开启或关闭超时检查定时器。
+     */
+    void UpdateForwardTimeoutTimer();
+
+    /**
+     *  超时检查定时器到点：把等太久的转发请求记为超时失败，并提示因此完成的批次。
+     */
+    void OnForwardTimeoutTimer();
 
     /**
      *  FMG_MSG_OPEN_ANNOUNCE_BOX 处理：新公告提示窗点了「查看全部」，打开消息盒子。
@@ -2208,7 +2477,7 @@ private:
     LRESULT OnOpenAnnounceBoxMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
 
-    // 从通讯录缓存计算某联系人的职位与部门路径（"产品部 / 设计组"）。
+    // 取某联系人的职位与部门路径（"产品部 / 设计组"），查 m_contactDeptInfo。
     //   userId       联系人 userid。
     //   outPosition  [出参] 职位（主部门里的职务），无则空。
     //   outDeptPath  [出参] 部门路径（自顶向下，" / " 连接），无则空。
@@ -2222,8 +2491,9 @@ private:
     // 把该 userid 在组织架构树里的那一行滚出来选中。
     static void OnSearchLocate(void* userdata, UINT peerUserId);
 
-    // 按当前通讯录缓存重算"userid → 部门路径"查询表（写进 m_contactDeptPaths），
-    // 供搜索结果行的副行展示。每次收到通讯录应答后调一次。
+    // 按当前部门列表重算"userid → 职务与部门路径"表（m_contactDeptInfo），并据它填好
+    // 搜索结果行要用的"userid → 部门路径"表（m_contactDeptPaths）。每次收到通讯录应答后
+    // 调一次。
     void RebuildContactDeptPaths();
 
     // 销毁本类持有的全部子窗口：堆分配的单聊窗 / 群聊窗 / 群管理对话框（销毁后
@@ -2231,9 +2501,9 @@ private:
     // 对象本身随本类析构）。析构与 ResetForLogout 共用，避免两处各写一份而漏项。
     void DestroyOwnedSubWindows();
 
-    // 释放三个 monogram 头像位图池（通讯录树 / 会话树 / 群树各一个）并清空容器。
-    // 调用方须保证三棵树的节点已经先行清空——树节点只借用池中的 HBITMAP，不复制。
-    void ReleaseAvatarBitmapPools();
+    // 释放头像位图缓存中的全部位图。调用方须保证三棵树的节点已经先行清空 ——
+    // 树节点只借用缓存中的 HBITMAP，不复制。
+    void ReleaseAvatarBitmapCache();
 
 private:
     // 标题栏左侧图标位图（程序主图标 IDR_MAINFRAME 合成到标题栏底色上）。
@@ -2245,6 +2515,15 @@ private:
     // 识别账号切换以便切库。
     balloonhistory::CV2MsgStore m_msgStore;
     std::wstring                m_msgStoreDbPath;  // 当前已打开的本地库全路径，空=未打开
+
+    // 按时间范围清理本地库的待办区间（开始、结束，Unix毫秒，两端都含）。删除推送到达时入队，
+    // 由 OnRangeDeleteStep 逐批删除；正在删一个区间时又来了新推送（在别的设备上连着清理
+    // 两次）就排在后面依次处理。
+    std::deque<std::pair<int64_t, int64_t> > m_pendingRangeDeletes;
+    // 队首区间到目前为止已删除的行数，删完时写进日志
+    int  m_rangeDeletedRows;
+    // 是否已有一条续批消息在途：防止同一时刻投出两条、两路同时删
+    bool m_rangeDeleteRunning;
     // 历史消息记录窗口：右键"查看历史消息" / 聊天窗"消息记录"按钮打开；惰性建窗，
     // 复用同一实例（换会话即重定向刷新）。
     CBalloonHistoryWindow       m_historyWindow;
@@ -2265,6 +2544,10 @@ private:
     // 释放；窗口被用户关闭后对象仍在表中（IsWindow()==false），下次开同一
     // 对端时惰性回收重建。
     std::map<UINT, CBalloonChatWindow*> m_chatWindows;
+    // 各单聊对端的已读位点（服务器 msgid）：自己发给他的消息 msgid 不大于它即为他已读。
+    // 按对端 userid 索引，只增不减。窗口没开时收到的已读推送记在这里，建窗时补给窗口。
+    // 注销时清空（键是 userid，换账号后含义不同）。
+    std::map<UINT, int64_t> m_peerReadMsgids;
     // 联系人树"节点id → userid"映射，OnContactsArrived 填充，树节点点击时
     // 据此取对端 userid 开聊。
     std::map<int, UINT>     m_contactNodeUserId;
@@ -2281,8 +2564,16 @@ private:
     // RebuildContactDeptPaths 在每次收到通讯录应答后重算。搜索结果下拉借用它，
     // 把联系人结果行的副行从"账号 · 地区"换成部门路径，让人一眼看出对方在哪个部门。
     std::map<UINT, CString> m_contactDeptPaths;
+    // "userid → 职务与部门路径"表（UTF-8），由 RebuildContactDeptPaths 用
+    // BuildContactDeptTable 一次算出，ComputeContactDeptInfo 直接查它。与 m_departments
+    // 同时更新：OnContactsArrived 赋值后立即重算，登出时一并清空。
+    std::map<UINT, balloonmain::ContactDeptInfo> m_contactDeptInfo;
     // 缓存的联系人资料池（OnContactsArrived 存入），搜索弹窗据此本地过滤。
     std::vector<net::ContactItem> m_contacts;
+    // m_contacts 的 userid → 下标索引，FindCachedContact 据它直接定位。<u>m_contacts
+    // 整体替换或清空之后必须立即 Rebuild / Clear</u>（目前只有 OnContactsArrived 与
+    // ResetForLogout 两处），只改某个联系人的字段则不影响。
+    balloonmain::ContactLookupIndex m_contactIndex;
     // 备注名乐观更新的回滚快照："userid → 改动前的备注名"。SetContactRemark 发请求
     // 前存入，应答到达时按服务端回带的 userid 取出：成功即丢弃，失败则写回缓存并
     // 重刷显示名。用 map 而不是单个成员，是因为用户可以连着改几个人、多条请求同时
@@ -2310,6 +2601,11 @@ private:
     // Messages 树"节点id → (ctype, cid)"映射，FillConversationsTree 填充，树节点
     // 点击时据此分流：单聊开单聊窗、群聊开群聊窗，并清未读。
     std::map<int, std::pair<int, int64_t> > m_msgNodeConv;
+    // m_msgNodeConv 的反向映射："(ctype, cid) → Messages 树节点 id"。收发消息时据它
+    // 找到那一行就地刷新并挪动位置（见 RefreshConversationRow），不必整表重建。与
+    // m_msgNodeConv 在同样的地方维护：AddConversationNode 登记，FillConversationsTree
+    // 与 ResetForLogout 清空。
+    std::map<balloonmain::ConvNodeKey, int> m_convNodeId;
     // "群"Tab 群树"节点id → 群id"映射，FillGroupsTree 填充，点群节点据此开群聊窗。
     std::map<int, int64_t>  m_groupNodeId;
 
@@ -2342,12 +2638,23 @@ private:
     // 收藏分区里<u>群行</u>的"节点id → 群id"映射。联系人行不用这张表 —— 它们直接
     // 登记进 m_contactNodeUserId，双击开聊、右键弹联系人菜单两条路都能白捡。
     std::map<int, int64_t>  m_favoriteGroupNodeId;
+    // 「我的收藏」分区根节点的 id；分区不存在时为 -1。由 AddFavoritesSection 登记，
+    // 联系人树整棵重建（OnContactsArrived 的 Clear）与登出时复位。RebuildFavoritesSection
+    // 据它只重建这一段，不必整棵重建联系人树。
+    int                     m_favoritesRootId;
+    // 「我的收藏」分区里各行（不含根节点）的节点 id。重建分区前据它把这些行从
+    // m_contactNodeUserId / m_favoriteGroupNodeId 里注销；刷新部门树里某人的收藏徽章时
+    // 据它跳过分区自己的行（分区里的行不画收藏徽章）。与 m_favoritesRootId 同时维护。
+    std::set<int>           m_favoriteSectionNodes;
     // 「我的收藏」模型（OnContactsArrived 灌入）。三处右键菜单据它决定文案，
     // 「联系人」Tab 树顶的收藏分区据它出行。改动走乐观更新 + 应答失败回滚。
     balloonmain::FavoritesModel m_favorites;
     // 「特别关注」模型（OnContactsArrived 灌入）。四处右键菜单据它决定文案，收到
     // 上下线推送时据它决定要不要弹右下角提示。改动走乐观更新 + 应答失败回滚。
     balloonmain::StarredModel m_starred;
+    // 已读位点上报的去重记录：每个会话本次登录内最近一次上报给服务端的已读位点。
+    // MarkConversationRead 据它跳过重复上报；登录成功、重连成功与登出时清空。
+    balloonmain::ReadReportDedupe m_readReportDedupe;
     // 群聊窗口：一个群一个，按 groupid 索引（类比 m_chatWindows）。堆分配、本类
     // 持有，析构统一释放；窗口被关闭后对象仍在表中，下次开同群惰性回收重建。
     std::map<int64_t, CBalloonGroupChatWindow*> m_groupChatWindows;
@@ -2359,6 +2666,9 @@ private:
     // 关闭时只隐藏不销毁，下条公告来了换内容再显示。
     CBalloonAnnouncePopupDlg   m_announcePopupDlg;
     CSearchDropdown         m_searchDropdown;   // 搜索结果下拉（紧贴搜索框下方的顶层浮窗）
+    // 已投递 kMsgSearchWarmUp 但尚未处理时为 true，用于合并通讯录与群列表先后到达时的
+    // 两次预热请求。ScheduleSearchWarmUp 投递成功后置 true，OnSearchWarmUp 开头清回 false。
+    bool                    m_searchWarmUpPending;
     CBalloonContactWindow   m_contactWindow;    // 联系人资料窗（按 userid 复用）
     balloonmain::CBalloonProfileDlg m_profileDlg; // Header 头像点击弹出的个人信息对话框
     balloonmain::CBalloonGroupInfoDlg m_groupInfoDlg; // 群会话右键"查看群资料"弹出的群资料对话框（按 GroupId 复用）
@@ -2376,6 +2686,17 @@ private:
     // 默认按"在线"起步 —— 主面板是登录成功后才创建的。
     int                     m_connUiState;
     CCreateGroupDlg         m_createGroupDlg;   // "群"页"建群"按钮弹出的新建群对话框
+    // 聊天窗多选转发时弹出的转发目标选择窗。候选的头像位图借自 m_avatarCache，故本窗口
+    // 必须在头像缓存释放之前关闭：析构与 ResetForLogout 都先调 DestroyOwnedSubWindows
+    // （其中关闭本窗口）、再调 ReleaseAvatarBitmapCache
+    balloonmain::CForwardTargetDlg m_forwardDlg;
+    // 转发调度器：记录已发出的转发请求，按帧 seq 对回应答、汇总每次转发的结果
+    balloonmain::ForwardDispatcher m_forwardDispatcher;
+    // 转发超时检查定时器是否在运行；有请求在等应答时开，没有时关
+    bool m_forwardTimerOn;
+    // 打开着的聊天记录查看窗（点合并卡片、或在查看窗里双击嵌套记录时新建）。主面板持有它们，
+    // 以便把下载结果转过去；已关闭的在下次打开或转发结果时清理，DestroyOwnedSubWindows 全部销毁
+    std::vector<std::unique_ptr<CMergedRecordWindow> > m_mergedViewers;
     CBalloonChangePwdDlg    m_changePwdDlg;     // 系统菜单"修改密码"弹出的改密对话框
     CBalloonModifyAvatarDlg m_modifyAvatarDlg;  // Header 头像点击弹出的修改头像对话框
     CBalloonClosePromptDlg  m_closePromptDlg;   // 点关闭按钮弹出的关闭确认对话框
@@ -2385,21 +2706,15 @@ private:
     // 群页→建群、其余→查找。初值为登录后默认选中的"联系人"页。
     UINT                    m_currentTabId;
 
-    // 三个 Tab 的 DuiTreeView 用到的 monogram avatar HBITMAP 池。
-    // DuiTreeView::SetItemIcon contract:位图所有权由调用方持有(控件
-    // 内部只存裸指针),所以本类持有,析构时统一 DeleteObject。每次
-    // Refresh 重建 TreeView 节点前会先 ClearAvatarBitmaps_() 清空旧的。
-    std::vector<HBITMAP> m_avatarBitmaps;
-
-    // Messages 树（会话列表）专用的 monogram avatar HBITMAP 池。会话列表与
-    // 通讯录是两条相互独立、各自异步到达的应答，各自重建各自的树；若共用一个
-    // 位图池，一方刷新清池会误删另一方仍在引用的位图。故会话树单独用本池：
-    // FillConversationsTree 重建前只清本池，析构时统一释放。
-    std::vector<HBITMAP> m_msgAvatarBitmaps;
-
-    // "群"Tab 群树专用的 monogram 头像位图池（同理与通讯录树池分开，避免一方
-    // 刷新清池误删另一方仍引用的位图）。FillGroupsTree 重建前只清本池。
-    std::vector<HBITMAP> m_groupAvatarBitmaps;
+    // 三个 Tab 的 DuiTreeView 共用的头像位图缓存（见 AvatarBitmapCache.h）。
+    // DuiTreeView::SetItemIcon 只存裸指针、不接管所有权，位图由本缓存持有。
+    // 同样的首字、底色、边长只画一次，三棵树共用；重建树时<u>不</u>清空缓存，
+    // 旧节点用过的位图直接被新节点复用。只在登出（ResetForLogout，三棵树已先清空）
+    // 与析构时整体释放。
+    //
+    // 2026-09-30 之前是三个"随重建清空"的位图池，每个节点各画一张：5000 人规模下
+    // 一次会话列表重建有近一半时间花在画头像上，GDI 对象数逼近每进程一万的上限。
+    balloonmain::CAvatarBitmapCache m_avatarCache;
 
     // 状态徽标缓存的槽位数 —— 对应 presence_type 的 0..3（离线 / 在线 / 离开 / 忙碌）。
     // 一切越界值（含已作废的取值 4）都归到离线槽，故四个槽够用。
@@ -2410,7 +2725,6 @@ private:
     // 几百次 DIB 分配，纯属浪费。首次用到时才创建（见 GetPresenceBadgeBitmap），
     // 析构时统一 DeleteObject。
     //
-    // 与上面三个头像池的区别：头像池随刷新重建，本缓存<u>不随刷新清空</u>——
-    // 徽标与具体是谁无关，重建树时继续借用同一批位图即可。
+    // 与头像缓存一样不随刷新清空 —— 徽标与具体是谁无关，重建树时继续借用同一批位图即可。
     HBITMAP m_presenceBadges[kPresenceBadgeSlotCount];
 };

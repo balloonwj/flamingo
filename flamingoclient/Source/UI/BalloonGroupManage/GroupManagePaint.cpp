@@ -34,10 +34,14 @@ extern CAppModule _Module;
 #include <gdiplus.h>
 
 #include "GroupManagePaint.h"
+#include "../../../third-party/balloonui/balloonui/DuiDpi.h"   // Scale / GetSystemDpi
 
 namespace balloongroupmanage {
 
 namespace {
+
+// 单元测试指定的 DPI；0 表示未指定，取系统 DPI。
+int g_dpiOverride = 0;
 
 // 把 GmFontWeight 映射成 GDI 的 LOGFONT 字重值。
 int ToGdiWeight(int weight)
@@ -61,6 +65,142 @@ Gdiplus::Color ToGdipColor(COLORREF c)
 
 } // anonymous namespace
 
+GmTextSpec GmTextStyleSpec(int style)
+{
+    // 各档字号（96 DPI 下的像素），取值依据见头文件 GmTextStyle 的说明
+    const int kPageTitlePx = 15;
+    const int kTitlePx     = 14;
+    const int kBodyPx      = 13;
+    const int kCaptionPx   = 12;
+
+    GmTextSpec spec;
+    spec.m_px     = kBodyPx;
+    spec.m_weight = kGmFontNormal;
+
+    switch (style)
+    {
+    //页面大标题、顶栏群名
+    case kGmTextPageTitle:
+        spec.m_px     = kPageTitlePx;
+        spec.m_weight = kGmFontBold;
+        break;
+
+    //卡片标题一类：与条目标题同字号，靠粗体拉开层级
+    case kGmTextCardTitle:
+        spec.m_px     = kTitlePx;
+        spec.m_weight = kGmFontBold;
+        break;
+
+    //导航项、设置行标题、表单标签
+    case kGmTextItemTitle:
+        spec.m_px = kTitlePx;
+        break;
+
+    //说明一类的小字
+    case kGmTextCaption:
+        spec.m_px = kCaptionPx;
+        break;
+
+    //正文，以及越界的取值
+    case kGmTextBody:
+    default:
+        break;
+    }
+    return spec;
+}
+
+COLORREF GmInputBorderColor(bool enabled, bool focused, bool hover)
+{
+    const COLORREF kBorderNormal  = RGB(0xED, 0xED, 0xED);   // 常态 / 禁用
+    const COLORREF kBorderHover   = RGB(0xD6, 0xD3, 0xCE);   // 鼠标悬停
+    const COLORREF kBorderFocused = RGB(0xFF, 0x7A, 0x45);   // 持有焦点（品牌橙）
+
+    if (!enabled)
+    {
+        return kBorderNormal;
+    }
+    if (focused)
+    {
+        return kBorderFocused;
+    }
+    if (hover)
+    {
+        return kBorderHover;
+    }
+    return kBorderNormal;
+}
+
+int GmDpi()
+{
+    if (g_dpiOverride > 0)
+    {
+        return g_dpiOverride;
+    }
+    // 与 DuiResMgr 建默认字体时取的是同一个值（系统 DPI），见 DuiResMgr.cpp
+    return balloonwjui::DuiDpi::GetSystemDpi();
+}
+
+void GmSetDpiOverride(int dpi)
+{
+    g_dpiOverride = (dpi > 0) ? dpi : 0;
+}
+
+int GmScale(int logicalPx)
+{
+    return balloonwjui::DuiDpi::Scale(logicalPx, GmDpi());
+}
+
+int GmFontPixelHeight(int logicalPx)
+{
+    return GmScale(logicalPx);
+}
+
+namespace {
+
+// 建群管理窗统一使用的文字字体（微软雅黑）。GmDrawText 与 GmMeasureTextWidth
+// 共用这一处，保证量出的宽度与实际绘制一致。
+//   pixelHeight：96 DPI 下的字号，内部经 GmFontPixelHeight 换算；
+//   weight：     字重，取值见 GmFontWeight。
+// @return 新建的字体，调用方负责 DeleteObject；失败返回 NULL。
+HFONT CreateGmFont(int pixelHeight, int weight)
+{
+    return ::CreateFontW(
+        -GmFontPixelHeight(pixelHeight), 0, 0, 0,
+        ToGdiWeight(weight),
+        FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+}
+
+} // anonymous namespace
+
+int GmMeasureTextWidth(LPCWSTR text, int style)
+{
+    if (text == NULL || text[0] == L'\0')
+    {
+        return 0;
+    }
+    const GmTextSpec spec = GmTextStyleSpec(style);
+    HFONT hFont = CreateGmFont(spec.m_px, spec.m_weight);
+    if (hFont == NULL)
+    {
+        return 0;
+    }
+    HDC hdc = ::GetDC(NULL);
+    if (hdc == NULL)
+    {
+        ::DeleteObject(hFont);
+        return 0;
+    }
+    HFONT hOld = (HFONT)::SelectObject(hdc, hFont);
+    SIZE sz = { 0, 0 };
+    ::GetTextExtentPoint32W(hdc, text, (int)::wcslen(text), &sz);
+    ::SelectObject(hdc, hOld);
+    ::ReleaseDC(NULL, hdc);
+    ::DeleteObject(hFont);
+    return sz.cx;
+}
+
 void GmDrawText(HDC hdc, LPCWSTR text, const RECT& rc,
                 int pixelHeight, int weight, COLORREF color, UINT dtFlags)
 {
@@ -69,12 +209,7 @@ void GmDrawText(HDC hdc, LPCWSTR text, const RECT& rc,
         return;
     }
 
-    HFONT hFont = ::CreateFontW(
-        -pixelHeight, 0, 0, 0,
-        ToGdiWeight(weight),
-        FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+    HFONT hFont = CreateGmFont(pixelHeight, weight);
     if (hFont == NULL)
     {
         return;

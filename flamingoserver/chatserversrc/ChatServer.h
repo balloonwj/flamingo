@@ -170,6 +170,25 @@ public:
     void pushToUsers(const std::vector<int64_t>& userids, int32_t msgType, const std::string& body);
 
     /**
+     *  重算一个群的自动群名；群名确实改变时，向该群全体在线成员推送
+     *  cmd_group_info_changed_notify，客户端据此刷新会话列表与聊天窗标题。
+     *  群名由用户设定（t_group.f_name_custom = 1）、或重算结果与原名相同时不做任何事。
+     *  供邀请入群、审批入群、退群、踢人、转让群主等改变成员或群主的操作在成功后调用。
+     *  @param groupid 目标群ID
+     *  @return 群名改变并已推送返回 true
+     */
+    bool refreshAutoGroupNameAndNotify(int64_t groupid);
+
+    /**
+     *  某用户的昵称改变后，重算他所在的全部自动命名群，群名改变的逐群向在线成员推送
+     *  cmd_group_info_changed_notify。
+     *  供客户端修改个人资料（ChatSession）与管理后台修改员工信息（HttpSession）两处调用；
+     *  昵称其实没变时调用也无害，只是多几次查询。
+     *  @param userid 昵称改变的用户userid
+     */
+    void refreshAutoGroupNamesOfMemberAndNotify(int32_t userid);
+
+    /**
      *  把一条平台公告的「新发布」通知（cmd_announcement_notify）推给它的在线受众。
      *
      *  管理员点「立即发布」、以及后台调度器把定时公告转为已发布之后调用。只推在线用户

@@ -116,19 +116,19 @@ bool CKeepAwakeSession::Acquire()
         if (okSystem || okDisplay)
         {
             m_hPowerRequest = hRequest;
-            LOG_INFO(_T("禁止机器休眠：已获取系统电源请求（句柄 0x%p，阻止休眠=%d，阻止关屏=%d）。"),
+            LOG_INFO("keep-awake: power request acquired (handle 0x%p, systemRequired=%d, displayRequired=%d).",
                      hRequest, (int)okSystem, (int)okDisplay);
             return true;
         }
 
         //句柄创建成功但两项都未设置上，等同于未生效，释放后改走回落路径。
-        LOG_ERROR(_T("禁止机器休眠：PowerSetRequest 两项均失败（错误码 %u），改用 SetThreadExecutionState。"),
+        LOG_ERROR("keep-awake: both PowerSetRequest calls failed (error %u), falling back to SetThreadExecutionState.",
                   ::GetLastError());
         ::CloseHandle(hRequest);
     }
     else
     {
-        LOG_ERROR(_T("禁止机器休眠：PowerCreateRequest 失败（错误码 %u），改用 SetThreadExecutionState。"),
+        LOG_ERROR("keep-awake: PowerCreateRequest failed (error %u), falling back to SetThreadExecutionState.",
                   ::GetLastError());
     }
 
@@ -136,11 +136,11 @@ bool CKeepAwakeSession::Acquire()
     if (::SetThreadExecutionState(kExecStateKeepAwake) != 0)
     {
         m_execStateHeld = true;
-        LOG_INFO(_T("禁止机器休眠：已通过 SetThreadExecutionState 保持（阻止休眠与关屏）。"));
+        LOG_INFO("keep-awake: holding via SetThreadExecutionState (system and display required).");
         return true;
     }
 
-    LOG_ERROR(_T("禁止机器休眠：两条路径均失败，本次未能阻止休眠。"));
+    LOG_ERROR("keep-awake: both paths failed, sleep is not prevented this time.");
     return false;
 }
 
@@ -152,7 +152,7 @@ void CKeepAwakeSession::Release()
         ::PowerClearRequest(m_hPowerRequest, PowerRequestDisplayRequired);
         ::CloseHandle(m_hPowerRequest);
         m_hPowerRequest = NULL;
-        LOG_INFO(_T("禁止机器休眠：已释放系统电源请求。"));
+        LOG_INFO("keep-awake: power request released.");
     }
 
     if (m_execStateHeld)
@@ -160,7 +160,7 @@ void CKeepAwakeSession::Release()
         //只保留 ES_CONTINUOUS 即撤销此前设置的两项要求，恢复正常的休眠与关屏行为。
         ::SetThreadExecutionState(ES_CONTINUOUS);
         m_execStateHeld = false;
-        LOG_INFO(_T("禁止机器休眠：已撤销 SetThreadExecutionState。"));
+        LOG_INFO("keep-awake: SetThreadExecutionState cleared.");
     }
 }
 
@@ -200,12 +200,12 @@ bool CKeepAwakeSession::Nudge()
 
     //每次都记录：事后需要依据这条日志判断合成是否在执行、频率是否足够。合成前的空闲
     //时长尤为关键 —— 它应当稳定在一个合成间隔左右；若持续增长，说明合成没有生效。
-    LOG_INFO(_T("禁止机器休眠：已合成一次鼠标移动事件，合成前全系统空闲 %u 秒，SendInput 返回 %u。"),
+    LOG_INFO("keep-awake: synthesized a mouse move, system idle %u sec before it, SendInput returned %u.",
              (unsigned int)(idleBeforeMs / kMsPerSecond), (unsigned int)sent);
 
     if (sent == 0)
     {
-        LOG_ERROR(_T("禁止机器休眠：SendInput 合成失败（错误码 %u），本次未能推迟锁屏。"),
+        LOG_ERROR("keep-awake: SendInput failed (error %u), screen lock is not deferred this time.",
                   ::GetLastError());
         return false;
     }
@@ -221,8 +221,8 @@ void CKeepAwakeSession::LogIdlePolicySnapshot()
     const int saverSecure  = QuerySpi(SPI_GETSCREENSAVESECURE);
     const int policySecs   = QueryInactivityPolicySecs();
 
-    LOG_INFO(_T("禁止机器休眠：当前系统空闲策略 —— 屏保启用=%d，屏保超时=%d 秒，")
-             _T("屏保恢复要求密码=%d，组策略计算机不活动限制=%d 秒（-1 表示未配置）。"),
+    LOG_INFO("keep-awake: idle policy snapshot - screensaverActive=%d, screensaverTimeout=%d sec, "
+             "screensaverSecure=%d, inactivityPolicy=%d sec (-1 means not configured).",
              saverActive, saverTimeout, saverSecure, policySecs);
 }
 

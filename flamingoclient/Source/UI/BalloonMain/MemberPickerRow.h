@@ -59,6 +59,15 @@ public:
     int  GetCheckState() const { return m_checkState; }
 
     /**
+     *  设置是否画复选框。缺省为画。不画时复选框条带留空，行内其余内容位置不变。
+     *  用途：转发目标选择窗的通讯录页里，部门行不能作为转发目标，不给复选框。
+     *  点击条带仍会让 MemberPickerTreeView 发出勾选通知，由宿主判断节点种类后忽略。
+     *    visible：true 画复选框，false 不画。
+     *  副作用：触发重绘。
+     */
+    void SetCheckVisible(bool visible);
+
+    /**
      *  DuiControl 覆写：画复选框 + 头像 + 姓名。形状走 GDI+ 抗锯齿，
      *  文字走 GDI DrawText（清晰）。
      *    hdc      目标设备上下文。
@@ -71,6 +80,7 @@ private:
     CString  m_avatarText;    // 头像内的字；空 = 不画头像（部门行）
     COLORREF m_avatarColor;   // 头像底色
     int      m_checkState;    // 勾选态（MemberPickerCheckState）
+    bool     m_checkVisible;  // 是否画复选框；false 时条带留空（不可勾选的行）
 };
 
 } // namespace balloonmain

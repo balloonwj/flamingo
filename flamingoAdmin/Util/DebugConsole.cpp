@@ -112,15 +112,57 @@ void MaskJsonValue(Json::Value& value)
     }
 }
 
+// ---- jsoncpp 序列化 / 反序列化参数 ----
+
+// 美化输出时每一层缩进使用的空白。取 3 个空格，与 jsoncpp 旧版
+// Json::StyledWriter 的固定缩进宽度一致（见 third-party/jsoncpp/writer.h
+// 的 indentSize_），使调试控制台里的排版在实现换代前后保持不变。
+const char* const kJsonIndentation = "   ";
+
+// 美化输出时的注释输出策略。取 "None" 而非 jsoncpp 的默认值 "All"：
+// 默认值会让所有非空数组一律展开成多行，而旧版 Json::StyledWriter 会把
+// 元素少的短数组排在一行内。调试控制台记录的是 HTTP 报文，其中不含
+// JSON 注释，关掉注释输出没有信息损失。
+const char* const kJsonCommentStyleNone = "None";
+
+// 美化输出末尾补的换行。jsoncpp 新接口不会自动补，而旧版
+// Json::StyledWriter::write 会，故在此显式补齐。
+const char* const kJsonTrailingNewline = "\n";
+
+// 把一段 UTF-8 JSON 文本解析为 Json::Value。
+//   text：待解析的 JSON 文本（UTF-8 字节）。
+//   root：出参，解析成功时承载解析结果；失败时内容未定义，调用方不应使用。
+//   返回：解析成功返回 true，文本不是合法 JSON 时返回 false。
+// 说明：顶层是对象还是数组一概接受，由调用方自行判断。
+bool ParseJsonText(const std::string& text, Json::Value& root)
+{
+    Json::CharReaderBuilder builder;
+    std::unique_ptr<Json::CharReader> reader(builder.newCharReader());
+    std::string errs;
+    const bool ok = reader->parse(text.data(), text.data() + text.size(),
+                                  &root, &errs);
+    return ok && errs.empty();
+}
+
+// 把 Json::Value 序列化为带缩进的多行 UTF-8 JSON 文本。
+//   root：待序列化的 JSON 值。
+//   返回：带缩进、以换行结尾的 UTF-8 JSON 文本。
+std::string DumpPrettyJson(const Json::Value& root)
+{
+    Json::StreamWriterBuilder builder;
+    builder.settings_["indentation"]  = kJsonIndentation;
+    builder.settings_["commentStyle"] = kJsonCommentStyleNone;
+    return Json::writeString(builder, root) + kJsonTrailingNewline;
+}
+
 // 把一段 UTF-8 JSON 文本掩码敏感字段后美化（带缩进）重新序列化。
 //   bodyUtf8：原始 JSON 文本（UTF-8 字节）。
 //   返回：掩码并美化后的 UTF-8 JSON 文本；若 bodyUtf8 不是合法 JSON
 //         （如 CSV 导出响应），原样返回 —— 非 JSON 内容不含密钥。
 std::string MaskAndPrettyPrint(const std::string& bodyUtf8)
 {
-    Json::Reader reader;
     Json::Value root;
-    if (!reader.parse(bodyUtf8, root))
+    if (!ParseJsonText(bodyUtf8, root))
     {
         // 解析失败：内容不是 JSON，原样返回。
         return bodyUtf8;
@@ -128,9 +170,8 @@ std::string MaskAndPrettyPrint(const std::string& bodyUtf8)
 
     MaskJsonValue(root);
 
-    // StyledWriter 输出带缩进的多行 JSON，便于调试控制台逐行查看。
-    Json::StyledWriter writer;
-    return writer.write(root);
+    // 输出带缩进的多行 JSON，便于调试控制台逐行查看。
+    return DumpPrettyJson(root);
 }
 
 // 从响应体里解析顶层整数字段 "code"。
@@ -139,9 +180,8 @@ std::string MaskAndPrettyPrint(const std::string& bodyUtf8)
 //         成员或 "code" 非整数时，返回 kDebugNoBusinessCode。
 int ParseBusinessCode(const std::string& respBodyUtf8)
 {
-    Json::Reader reader;
     Json::Value root;
-    if (!reader.parse(respBodyUtf8, root))
+    if (!ParseJsonText(respBodyUtf8, root))
     {
         // 响应体不是合法 JSON：无业务 code 可取。
         return kDebugNoBusinessCode;

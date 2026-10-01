@@ -90,12 +90,24 @@ public:
     void getServerForScene(int scene, std::string& host, int& port, bool& tls) const;
 
     /**
-     *  按 MD5 查找一条已完成的文件记录，用于秒传判断。
-     *  @param md5 文件内容MD5
-     *  @param out [出参] 命中时回填文件记录
-     *  @return 找到已完成记录返回 true；无命中或数据库出错返回 false
+     *  按 MD5 与场景查找一条已完成的文件记录，用于秒传判断。
+     *
+     *  只命中**同一场景**的记录，不跨场景复用，原因有两点：
+     *    - 下载时令牌场景与目标服务器都取自记录本身。图片消息若复用了群文件的
+     *      记录，接收方会被指向 fileserver，而客户端收图固定连 imgserver，
+     *      imgserver 按场景拒绝，图片永远下载失败。
+     *    - 同一台服务器上的两种场景也不能互相复用：下载鉴权只要 fileid 登记在
+     *      群文件表里就要求调用者是群成员，聊天文件若复用了群文件的记录，
+     *      不在该群的接收方同样会被拒绝。
+     *  按场景精确匹配不会让同一内容在磁盘上存两份：fileserver / imgserver 接收
+     *  上传前会按 MD5 判断磁盘上是否已有该文件，有则直接回复完成。
+     *
+     *  @param md5   文件内容MD5
+     *  @param scene 本次上传的用途场景，取值见 enum file_scene
+     *  @param out   [出参] 命中时回填文件记录
+     *  @return 找到同场景的已完成记录返回 true；无命中或数据库出错返回 false
      */
-    bool findCompletedByMd5(const std::string& md5, FileRecord& out);
+    bool findCompletedByMd5(const std::string& md5, int scene, FileRecord& out);
 
     /**
      *  新建一条待上传（status=pending）的文件记录。
@@ -121,12 +133,30 @@ public:
     bool getFileById(int64_t fileid, FileRecord& out);
 
     /**
-     *  把文件记录标记为已完成（status=completed）。
-     *  客户端首次以该 fileid 发消息 / 更新头像时惰性调用，使后续可秒传命中。
+     *  把文件记录标记为已完成（status=completed），不校验调用者是否为上传者。
+     *  目前只有登记群文件（cmd_add_group_file）调用；发消息、更新头像时引用 fileid
+     *  走的是 markCompletedByUploader。
      *  @param fileid 文件ID
      *  @return 数据库访问成功返回 true
      */
     bool markCompleted(int64_t fileid);
+
+    /**
+     *  由上传者本人把文件记录标记为已完成，使后续同内容、同场景的上传可命中秒传。
+     *
+     *  发送方用某个 fileid 发出图片 / 文件消息、或把它设为头像时调用。客户端总是在
+     *  上传成功之后才引用 fileid，所以此时文件已完整落在对应的文件服务器上。
+     *
+     *  只有记录的上传者本人引用时才会标记：只有上传者知道自己的上传确实完成了；
+     *  别人（例如转发者）引用同一 fileid 时不改动记录，也就不可能把一份半途失败的
+     *  上传标记为已完成。
+     *
+     *  @param fileid     文件ID
+     *  @param uploaderid 引用该文件的用户 userid；与记录的上传者不同时不做任何修改
+     *  @return 数据库访问成功返回 true（包括"不是上传者、未作修改"与"本已完成"两种
+     *          情形）；数据库出错返回 false
+     */
+    bool markCompletedByUploader(int64_t fileid, int64_t uploaderid);
 
 private:
 

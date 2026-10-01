@@ -1149,10 +1149,10 @@ bool CBalloonContactWindow::CheckOnlineFor(int action)
 void CBalloonContactWindow::DoSendMessage()
 {
     // 真实入口（m_hostPanel 有效）：请主面板按 userid 打开单聊，并关闭本资料窗。
-    if (m_hostPanel != NULL && m_peerUserId != 0)
+    if (::IsWindow(m_hostPanel) && m_peerUserId != 0)
     {
         ::PostMessage(m_hostPanel, FMG_MSG_OPEN_CHAT, (WPARAM)m_peerUserId, 0);
-        LOG_INFO("联系人资料对话框「发消息」: 请求打开单聊, userid=%u。", m_peerUserId);
+        LOG_INFO("Contact profile dialog 'send message': ask host panel to open chat, userid=%u.", m_peerUserId);
         if (IsWindow())
         {
             DestroyWindow();

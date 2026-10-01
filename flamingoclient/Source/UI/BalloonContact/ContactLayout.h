@@ -324,6 +324,10 @@ void SetContactText(balloonwjui::DuiControl* root, UINT ctrlId,
  *  标签流式容器（ContactTagFlow）会按可用宽度换行排布子胶囊；窗口在
  *  增删标签后调用本函数，传入客户区根控件即可触发整树重排。
  *
+ *  切换任何控件的显隐之后也要调用本函数（DuiControl::SetVisible 不触发重排）。
+ *  本函数对每一层可见的容器都按其当前矩形强制重排，而不只是根控件这一层，
+ *  因此嵌套在深处的控件（如「备注名」行内的文本框）同样能拿到正确的矩形。
+ *
  *    root：客户区根控件（SetClientContent 时传入的那个）；nullptr 忽略。
  */
 void RelayoutContactBody(balloonwjui::DuiControl* root);

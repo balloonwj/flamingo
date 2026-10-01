@@ -442,7 +442,7 @@ static void CaptureThread(CamTestState* st)
                 buf->Unlock();
 
                 //触发窗口重绘
-                if (st->hwnd != NULL)
+                if (::IsWindow(st->hwnd))
                     ::InvalidateRect(st->hwnd, NULL, FALSE);
             }
             else

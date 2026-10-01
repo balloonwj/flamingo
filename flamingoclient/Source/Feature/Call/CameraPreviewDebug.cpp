@@ -108,7 +108,7 @@ public:
             WriteBmp32("E:\\flamingo\\camera_first_frame.bmp", m_bgra.data(), m_w, m_h);
             LOG_INFO("CameraPreview: dumped first frame to E:\\flamingo\\camera_first_frame.bmp (%dx%d).", m_w, m_h);
         }
-        if (m_hwnd != NULL)
+        if (::IsWindow(m_hwnd))
             ::InvalidateRect(m_hwnd, NULL, FALSE);
     }
 

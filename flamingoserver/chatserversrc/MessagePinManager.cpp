@@ -13,6 +13,7 @@
 #include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
 #include "Protocol.h"      //conversation_type
+#include "MessageDeleteRange.h"   //按时间范围清理的区间过滤条件，与 MessageManager 共用同一份
 
 //联表查询里各列的固定顺序：前 9 列是消息本体（与 MessageManager 里那份 SELECT 列表
 //刻意保持同序，便于两处对照），末尾两列是 Pin 元信息。fillPinnedRow 按这个顺序读，
@@ -70,6 +71,10 @@ static std::string buildPinnedWhere(int ctype, int64_t cid, int64_t selfUserId)
     //区别只是这里必须写成 m.f_msgid —— 联表之后裸 f_msgid 有歧义。
     os << " AND m.f_msgid NOT IN (SELECT f_msgid FROM t_message_deleted WHERE f_userid = "
        << selfUserId << ")";
+
+    //再排除该用户按时间范围清理掉的消息（cmd_delete_messages_by_time）。时间列同样要带
+    //别名 m，理由同上
+    os << msgdelete::BuildNotInDeletedRangeClause(selfUserId, "m.f_create_time");
     return os.str();
 }
 

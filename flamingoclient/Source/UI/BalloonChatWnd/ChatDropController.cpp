@@ -11,13 +11,153 @@
 #include "ChatDropController.h"
 
 #include <functional>   // std::bind / std::placeholders
+#include <string.h>     // strnlen
 #include "../../Common/Log/IULog.h"   // LOG_INFO
 #include "../../../third-party/balloonui/balloonui/DuiHost.h"   // EnableDropDispatch
+#include "ChatClipboardIo.h"          // GetChatClipFormat（Flamingo 聊天内容格式）
 
 namespace balloonchatwnd {
 
+namespace {
+
+// FORMATETC 里"不分页，取整份数据"的约定取值。
+const LONG kWholeDataIndex = -1;
+
+} // anonymous namespace
+
+/**
+ *  注册在聊天窗 HWND 上的包装拖放目标。
+ *
+ *  拖进来的数据里有 Flamingo 聊天内容格式（从聊天记录里拖出来的文字、表情、图片）时，
+ *  由 ChatDropController 的 OnContent* 系列处理 —— 落在发送框里就插入输入框，不发送；
+ *  否则（例如从资源管理器拖文件）把每一步原样转给 balloonui 拖放辅助类原来的目标，
+ *  拖文件的行为与以前完全一致。
+ *
+ *  是否按聊天内容处理在 DragEnter 时定下，整次拖拽保持不变：DragOver / DragLeave 不带
+ *  数据对象，只能沿用进入时的判断。只在注册它的 UI 线程上使用。
+ */
+class ChatContentDropTarget : public IDropTarget
+{
+public:
+    /**
+     *  owner：拖放接收器，引用不持有，须在本对象注销之前一直有效。
+     *  inner：辅助类原来的拖放目标；本对象 AddRef 持有一份，析构时 Release。
+     */
+    ChatContentDropTarget(ChatDropController* owner, IDropTarget* inner)
+        : m_refs(1)
+        , m_owner(owner)
+        , m_inner(inner)
+        , m_isContent(false)
+    {
+        if (m_inner != NULL)
+        {
+            m_inner->AddRef();
+        }
+    }
+
+    // IUnknown：只认 IUnknown 与 IDropTarget 两个接口。
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override
+    {
+        if (ppv == NULL)
+        {
+            return E_POINTER;
+        }
+        if (riid == IID_IUnknown || riid == IID_IDropTarget)
+        {
+            *ppv = static_cast<IDropTarget*>(this);
+            AddRef();
+            return S_OK;
+        }
+        *ppv = NULL;
+        return E_NOINTERFACE;
+    }
+
+    // IUnknown：增加引用计数，返回新的计数。
+    STDMETHODIMP_(ULONG) AddRef() override
+    {
+        return (ULONG)::InterlockedIncrement(&m_refs);
+    }
+
+    // IUnknown：减少引用计数，减到 0 时销毁自身；返回新的计数。
+    STDMETHODIMP_(ULONG) Release() override
+    {
+        const LONG refs = ::InterlockedDecrement(&m_refs);
+        if (refs == 0)
+        {
+            delete this;
+        }
+        return (ULONG)refs;
+    }
+
+    // IDropTarget：拖入。先看数据里有没有聊天内容，据此决定整次拖拽由谁处理。
+    STDMETHODIMP DragEnter(IDataObject* pDataObj, DWORD grfKeyState, POINTL pt,
+                           DWORD* pdwEffect) override
+    {
+        m_isContent = (m_owner != NULL && m_owner->HasChatContent(pDataObj));
+        if (m_isContent)
+        {
+            *pdwEffect = m_owner->OnContentDragMove(pt, *pdwEffect, true);
+            return S_OK;
+        }
+        return (m_inner != NULL) ? m_inner->DragEnter(pDataObj, grfKeyState, pt, pdwEffect)
+                                 : E_UNEXPECTED;
+    }
+
+    // IDropTarget：拖动中。聊天内容按落点逐帧改判；其余转给原目标。
+    STDMETHODIMP DragOver(DWORD grfKeyState, POINTL pt, DWORD* pdwEffect) override
+    {
+        if (m_isContent)
+        {
+            *pdwEffect = m_owner->OnContentDragMove(pt, *pdwEffect, false);
+            return S_OK;
+        }
+        return (m_inner != NULL) ? m_inner->DragOver(grfKeyState, pt, pdwEffect) : E_UNEXPECTED;
+    }
+
+    // IDropTarget：拖离窗口。
+    STDMETHODIMP DragLeave() override
+    {
+        if (m_isContent)
+        {
+            m_isContent = false;
+            m_owner->OnContentDragLeave();
+            return S_OK;
+        }
+        return (m_inner != NULL) ? m_inner->DragLeave() : E_UNEXPECTED;
+    }
+
+    // IDropTarget：松手。
+    STDMETHODIMP Drop(IDataObject* pDataObj, DWORD grfKeyState, POINTL pt,
+                      DWORD* pdwEffect) override
+    {
+        if (m_isContent)
+        {
+            m_isContent = false;
+            *pdwEffect = m_owner->OnContentDrop(pDataObj, pt);
+            return S_OK;
+        }
+        return (m_inner != NULL) ? m_inner->Drop(pDataObj, grfKeyState, pt, pdwEffect)
+                                 : E_UNEXPECTED;
+    }
+
+private:
+    ~ChatContentDropTarget()
+    {
+        if (m_inner != NULL)
+        {
+            m_inner->Release();
+        }
+    }
+
+    LONG                m_refs;       // COM 引用计数；为 0 时销毁
+    ChatDropController* m_owner;      // 拖放接收器，引用不持有
+    IDropTarget*        m_inner;      // 辅助类原来的拖放目标，持有一份引用
+    bool                m_isContent;  // 本次拖拽是否按聊天内容处理（DragEnter 时定下）
+};
+
 ChatDropController::ChatDropController()
-    : m_sink(NULL)
+    : m_pContentTarget(NULL)
+    , m_sink(NULL)
     , m_frameHwnd(NULL)
     , m_inputHwnd(NULL)
     , m_attached(false)
@@ -72,6 +212,24 @@ bool ChatDropController::Attach(balloonwjui::DuiHost* host, HWND inputHwnd, ICha
         return false;
     }
 
+    //换上能认出 Flamingo 聊天内容的包装目标。辅助类先照常注册一次是有意的：它借此记下
+    //窗口句柄，被转发过去的拖文件事件照样能把屏幕坐标换算成客户区坐标。之后撤下它、
+    //把包装注册上去；包装注册不上时退回辅助类原来的目标，拖文件至少仍然可用。
+    IDropTarget* inner = m_target.GetDropTarget();
+    ChatContentDropTarget* wrapper = new ChatContentDropTarget(this, inner);
+    ::RevokeDragDrop(frameHwnd);
+    if (::RegisterDragDrop(frameHwnd, wrapper) == S_OK)
+    {
+        m_pContentTarget = wrapper;   //本类持有创建时的那一份引用，Detach 时释放
+    }
+    else
+    {
+        wrapper->Release();
+        ::RegisterDragDrop(frameHwnd, inner);
+        LOG_ERROR("Chat drop: failed to register the chat content drop target, "
+                  "dragging chat content into this window will not work.");
+    }
+
     //输入框那块单独再注册一份：先摘掉 RichEdit 自带的目标（一个 HWND 只能有一个
     //拖放目标，不摘的话 RegisterDragDrop 会返回 DRAGDROP_E_ALREADYREGISTERED），
     //再换上我们的。理由见头文件。
@@ -115,8 +273,14 @@ void ChatDropController::Detach()
     {
         return;
     }
+    //辅助类注销时会对窗口调 RevokeDragDrop，撤下的正是包装目标；随后释放本类持有的那份引用。
     m_target.Unregister();
     m_inputTarget.Unregister();
+    if (m_pContentTarget != NULL)
+    {
+        m_pContentTarget->Release();
+        m_pContentTarget = NULL;
+    }
     m_sink      = NULL;
     m_frameHwnd = NULL;
     m_inputHwnd = NULL;
@@ -129,6 +293,11 @@ IDropTarget* ChatDropController::GetFrameDropTarget()
     if (!m_attached)
     {
         return NULL;
+    }
+    //返回实际注册在窗口上的那一个：包装目标注册成功时是它，否则是辅助类原来的目标。
+    if (m_pContentTarget != NULL)
+    {
+        return m_pContentTarget;
     }
     return m_target.GetDropTarget();
 }
@@ -225,6 +394,92 @@ void ChatDropController::OnFilesDropped(bool fromInput, const std::vector<CStrin
     const bool forceAsFile = IsForceAsFileHeld();
     LOG_INFO("Chat drop received %d paths, shift=%d.", (int)paths.size(), forceAsFile ? 1 : 0);
     m_sink->OnChatFilesDropped(paths, forceAsFile);
+}
+
+bool ChatDropController::HasChatContent(IDataObject* pdo) const
+{
+    const UINT format = GetChatClipFormat();
+    if (pdo == NULL || format == 0)
+    {
+        return false;
+    }
+    FORMATETC fe = { (CLIPFORMAT)format, NULL, DVASPECT_CONTENT, kWholeDataIndex, TYMED_HGLOBAL };
+    return pdo->QueryGetData(&fe) == S_OK;
+}
+
+DWORD ChatDropController::OnContentDragMove(const POINTL& ptScreen, DWORD allowed, bool entering)
+{
+    POINT pt;
+    pt.x = ptScreen.x;
+    pt.y = ptScreen.y;
+    if (::IsWindow(m_frameHwnd))
+    {
+        ::ScreenToClient(m_frameHwnd, &pt);
+    }
+    //与拖文件同一套判定：只有发送框能放，消息区显示禁止符。拖放源只允许"复制"。
+    const bool inZone = InDropZone(false, pt);
+    if (entering)
+    {
+        LOG_INFO("Chat drop: chat content drag enter (%d,%d), inSendBox=%d.",
+                 (int)pt.x, (int)pt.y, inZone ? 1 : 0);
+    }
+    SetHintVisible(inZone);
+    return (inZone && (allowed & DROPEFFECT_COPY) != 0) ? DROPEFFECT_COPY : DROPEFFECT_NONE;
+}
+
+void ChatDropController::OnContentDragLeave()
+{
+    SetHintVisible(false);
+}
+
+DWORD ChatDropController::OnContentDrop(IDataObject* pdo, const POINTL& ptScreen)
+{
+    SetHintVisible(false);
+
+    POINT pt;
+    pt.x = ptScreen.x;
+    pt.y = ptScreen.y;
+    if (::IsWindow(m_frameHwnd))
+    {
+        ::ScreenToClient(m_frameHwnd, &pt);
+    }
+    //最终落点兜底：DragOver 已把消息区判成不能放，但落点是最终事实。
+    if (m_sink == NULL || !InDropZone(false, pt))
+    {
+        LOG_INFO("Chat drop: chat content dropped outside the send box, ignored.");
+        return DROPEFFECT_NONE;
+    }
+
+    //取出 Flamingo 聊天内容（UTF-8 文本，结尾带 0）并还原成片段。
+    FORMATETC fe = { (CLIPFORMAT)GetChatClipFormat(), NULL, DVASPECT_CONTENT, kWholeDataIndex,
+                     TYMED_HGLOBAL };
+    STGMEDIUM sm;
+    ::ZeroMemory(&sm, sizeof(sm));
+    if (pdo == NULL || FAILED(pdo->GetData(&fe, &sm)))
+    {
+        LOG_ERROR("Chat drop: failed to read the chat content from the drop data.");
+        return DROPEFFECT_NONE;
+    }
+    std::string data;
+    const char* src = (const char*)::GlobalLock(sm.hGlobal);
+    if (src != NULL)
+    {
+        //只在这块内存的范围内找结尾的 0，数据被改坏了也不会越界读。
+        data.assign(src, ::strnlen(src, ::GlobalSize(sm.hGlobal)));
+        ::GlobalUnlock(sm.hGlobal);
+    }
+    ::ReleaseStgMedium(&sm);
+
+    std::vector<ChatClipSegment> segs;
+    if (!ParseClipSegments(data, segs) || segs.empty())
+    {
+        LOG_ERROR("Chat drop: the dropped chat content could not be parsed.");
+        return DROPEFFECT_NONE;
+    }
+    LOG_INFO("Chat drop: chat content dropped into the send box, %u segment(s).",
+             (unsigned)segs.size());
+    m_sink->OnChatContentDropped(segs);
+    return DROPEFFECT_COPY;
 }
 
 void ChatDropController::SetHintVisible(bool visible)

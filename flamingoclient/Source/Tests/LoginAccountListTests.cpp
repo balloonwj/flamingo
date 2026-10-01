@@ -581,6 +581,265 @@ TEST_CASE("LAL-A7 取消记住密码时一并清空密码", "[lal][autologin]")
 }
 
 // =====================================================================
+// ALB —— 系统设置里「自动登录」开关对账号列表的修改(ApplyAutoLoginSetting)
+//
+// 见 docs/自动登录方案.md §4。开关在登录成功之后才能拨动，此时账号必然已在列表里，
+// 本次登录用的密码也在会话控制器手里，故"打开"时顺带存下密码、打开记住密码，
+// 否则下次启动登录窗里没有密码可填，自动登录无从谈起。
+// =====================================================================
+
+TEST_CASE("ALB1 关闭自动登录只清该标志,不动记住密码与已存的密码", "[lal][autologin]")
+{
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, TRUE));
+
+    CHECK(list.ApplyAutoLoginSetting(_T("alice"), FALSE, _T("ignored")) == TRUE);
+
+    LOGIN_ACCOUNT_INFO* lpAlice = list.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    CHECK(lpAlice->bAutoLogin == FALSE);
+    CHECK(lpAlice->bRememberPwd == TRUE);
+    // 关闭时传入的密码被忽略，原先存下的密码保持不变。
+    CHECK(wcscmp(lpAlice->szPwd, _T("pwd_a")) == 0);
+}
+
+TEST_CASE("ALB2 打开自动登录时一并打开记住密码并存下本次密码", "[lal][autologin]")
+{
+    // 典型场景：本次登录时没勾"记住密码"，列表里只存了账号、密码为空。
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T(""), 1, FALSE, FALSE));
+
+    CHECK(list.ApplyAutoLoginSetting(_T("alice"), TRUE, _T("pwd_now")) == TRUE);
+
+    LOGIN_ACCOUNT_INFO* lpAlice = list.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    CHECK(lpAlice->bAutoLogin == TRUE);
+    CHECK(lpAlice->bRememberPwd == TRUE);
+    CHECK(wcscmp(lpAlice->szPwd, _T("pwd_now")) == 0);
+
+    // 打开时传空密码：不改动已存的密码。
+    REQUIRE(list.ApplyAutoLoginSetting(_T("alice"), FALSE, NULL) == TRUE);
+    CHECK(list.ApplyAutoLoginSetting(_T("alice"), TRUE, _T("")) == TRUE);
+    CHECK(lpAlice->bAutoLogin == TRUE);
+    CHECK(wcscmp(lpAlice->szPwd, _T("pwd_now")) == 0);
+}
+
+TEST_CASE("ALB3 账号为空或不在列表里时返回失败,列表不变", "[lal][autologin]")
+{
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, FALSE));
+
+    CHECK(list.ApplyAutoLoginSetting(_T("nobody"), TRUE, _T("pwd_x")) == FALSE);
+    CHECK(list.ApplyAutoLoginSetting(NULL, TRUE, _T("pwd_x")) == FALSE);
+
+    CHECK(list.GetCount() == 1);
+    LOGIN_ACCOUNT_INFO* lpAlice = list.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    CHECK(lpAlice->bAutoLogin == FALSE);
+    CHECK(lpAlice->bRememberPwd == TRUE);
+    CHECK(wcscmp(lpAlice->szPwd, _T("pwd_a")) == 0);
+}
+
+TEST_CASE("ALB4 打开 / 关闭后落盘,重新加载仍是修改后的值", "[lal][autologin]")
+{
+    const std::wstring path = FreshTempDat(L"flamingo_alb4.dat");
+
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T(""), 1, FALSE, FALSE));
+    REQUIRE(list.Add(_T("bob"),   _T("pwd_b"), 1, TRUE, TRUE));
+
+    REQUIRE(list.ApplyAutoLoginSetting(_T("alice"), TRUE, _T("pwd_a")) == TRUE);
+    REQUIRE(list.ApplyAutoLoginSetting(_T("bob"), FALSE, NULL) == TRUE);
+    REQUIRE(list.SaveFile(path.c_str()));
+
+    CLoginAccountList reloaded;
+    REQUIRE(reloaded.LoadFile(path.c_str()));
+    LOGIN_ACCOUNT_INFO* lpAlice = reloaded.Find(_T("alice"));
+    LOGIN_ACCOUNT_INFO* lpBob   = reloaded.Find(_T("bob"));
+    REQUIRE(lpAlice != NULL);
+    REQUIRE(lpBob != NULL);
+    CHECK(lpAlice->bAutoLogin == TRUE);
+    CHECK(lpAlice->bRememberPwd == TRUE);
+    CHECK(wcscmp(lpAlice->szPwd, _T("pwd_a")) == 0);
+    CHECK(lpBob->bAutoLogin == FALSE);
+    CHECK(lpBob->bRememberPwd == TRUE);
+    CHECK(wcscmp(lpBob->szPwd, _T("pwd_b")) == 0);
+}
+
+TEST_CASE("ALB5 关闭最后登录账号的自动登录后 IsAutoLogin 返回假,超长密码被截断", "[lal][autologin]")
+{
+    // IsAutoLogin 决定下次启动时登录窗是否自动开始登录，关掉开关后必须从这个入口看得出来。
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("bob"), _T("pwd_b"), 1, TRUE, TRUE));
+    list.SetLastLoginUser(_T("bob"));
+    REQUIRE(list.IsAutoLogin() == TRUE);
+
+    REQUIRE(list.ApplyAutoLoginSetting(_T("bob"), FALSE, NULL) == TRUE);
+    CHECK(list.IsAutoLogin() == FALSE);
+
+    REQUIRE(list.ApplyAutoLoginSetting(_T("bob"), TRUE, NULL) == TRUE);
+    CHECK(list.IsAutoLogin() == TRUE);
+
+    // 密码字段容量有限(见 LOGIN_ACCOUNT_INFO::szPwd，含结束符)，超长时截断且必须以 NUL 结尾。
+    const size_t kPwdCapacity = sizeof(LOGIN_ACCOUNT_INFO::szPwd) / sizeof(TCHAR);
+    const std::wstring longPwd(kPwdCapacity * 2, L'x');
+    REQUIRE(list.ApplyAutoLoginSetting(_T("bob"), TRUE, longPwd.c_str()) == TRUE);
+    LOGIN_ACCOUNT_INFO* lpBob = list.Find(_T("bob"));
+    REQUIRE(lpBob != NULL);
+    CHECK(wcslen(lpBob->szPwd) == kPwdCapacity - 1);
+}
+
+// =====================================================================
+// RLS —— 登录成功后记入账号列表(RecordLoginSuccess)不得保存未要求记住的密码
+//
+// 原先会话控制器在登录成功时把登录窗采集的整条信息 memcpy 进列表，没勾"记住密码"时
+// 密码也照样落盘(2026-09-30 修复)。登录窗只在勾了"记住密码"时才回填密码，界面上
+// 看不出问题，只有这组用例能发现密码被写进了文件。
+// =====================================================================
+
+namespace {
+
+// 按登录窗采集的样子填一条本次登录的账号信息，铺平 RLS 用例的样板代码。
+LOGIN_ACCOUNT_INFO MakeLoginInfo(const wchar_t* user, const wchar_t* pwd,
+                                 int status, BOOL rememberPwd, BOOL autoLogin)
+{
+    LOGIN_ACCOUNT_INFO info;
+    memset(&info, 0, sizeof(info));
+    wcsncpy_s(info.szUser, _countof(info.szUser), user, _TRUNCATE);
+    wcsncpy_s(info.szPwd, _countof(info.szPwd), pwd, _TRUNCATE);
+    info.nStatus = status;
+    info.bRememberPwd = rememberPwd;
+    info.bAutoLogin = autoLogin;
+    return info;
+}
+
+} // namespace
+
+TEST_CASE("RLS1 已有账号这次没勾记住密码:列表里的密码被清空", "[lal][remember]")
+{
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("old_pwd"), 1, TRUE, FALSE));
+
+    const LOGIN_ACCOUNT_INFO info = MakeLoginInfo(L"alice", L"typed_pwd", 1, FALSE, FALSE);
+    CHECK(list.RecordLoginSuccess(&info) == TRUE);
+
+    LOGIN_ACCOUNT_INFO* lpAlice = list.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    CHECK(lpAlice->bRememberPwd == FALSE);
+    CHECK(wcslen(lpAlice->szPwd) == 0);
+    // 传入的信息只读：会话控制器之后还要用这份密码(系统设置里打开自动登录时存下它)。
+    CHECK(wcscmp(info.szPwd, L"typed_pwd") == 0);
+}
+
+TEST_CASE("RLS2 已有账号这次勾了记住密码:密码更新为本次的密码", "[lal][remember]")
+{
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("old_pwd"), 1, TRUE, FALSE));
+
+    const LOGIN_ACCOUNT_INFO info = MakeLoginInfo(L"alice", L"new_pwd", 3, TRUE, TRUE);
+    CHECK(list.RecordLoginSuccess(&info) == TRUE);
+
+    LOGIN_ACCOUNT_INFO* lpAlice = list.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    CHECK(wcscmp(lpAlice->szPwd, L"new_pwd") == 0);
+    CHECK(lpAlice->bRememberPwd == TRUE);
+    CHECK(lpAlice->bAutoLogin == TRUE);
+    CHECK(lpAlice->nStatus == 3);
+    CHECK(list.GetCount() == 1);   // 更新原记录，不新增
+}
+
+TEST_CASE("RLS3 新账号没勾记住密码:加入列表且密码为空", "[lal][remember]")
+{
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("bob"), _T("pwd_b"), 1, TRUE, FALSE));
+
+    const LOGIN_ACCOUNT_INFO info = MakeLoginInfo(L"alice", L"typed_pwd", 1, FALSE, FALSE);
+    CHECK(list.RecordLoginSuccess(&info) == TRUE);
+
+    CHECK(list.GetCount() == 2);
+    LOGIN_ACCOUNT_INFO* lpAlice = list.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    CHECK(wcslen(lpAlice->szPwd) == 0);
+    CHECK(lpAlice->bRememberPwd == FALSE);
+}
+
+TEST_CASE("RLS4 更新已有账号时已存的姓名保持不变", "[lal][remember]")
+{
+    // 登录窗采集的信息里没有姓名，整条覆盖会把已存的姓名清空。
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, FALSE));
+    REQUIRE(list.SetNickName(_T("alice"), L"张三"));
+
+    const LOGIN_ACCOUNT_INFO info = MakeLoginInfo(L"alice", L"pwd_a", 1, TRUE, FALSE);
+    CHECK(list.RecordLoginSuccess(&info) == TRUE);
+
+    LOGIN_ACCOUNT_INFO* lpAlice = list.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    CHECK(wcscmp(lpAlice->szNickName, L"张三") == 0);
+}
+
+TEST_CASE("RLS5 传入 NULL 或账号为空串时返回失败,列表不变", "[lal][remember]")
+{
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("pwd_a"), 1, TRUE, FALSE));
+
+    CHECK(list.RecordLoginSuccess(NULL) == FALSE);
+    const LOGIN_ACCOUNT_INFO blank = MakeLoginInfo(L"", L"pwd_x", 1, TRUE, FALSE);
+    CHECK(list.RecordLoginSuccess(&blank) == FALSE);
+
+    CHECK(list.GetCount() == 1);
+    LOGIN_ACCOUNT_INFO* lpAlice = list.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    CHECK(wcscmp(lpAlice->szPwd, L"pwd_a") == 0);
+}
+
+TEST_CASE("RLS6 没勾记住密码的登录落盘后读回,密码仍为空", "[lal][remember]")
+{
+    const std::wstring path = FreshTempDat(L"flamingo_rls6.dat");
+
+    CLoginAccountList list;
+    REQUIRE(list.Add(_T("alice"), _T("old_pwd"), 1, TRUE, FALSE));
+    const LOGIN_ACCOUNT_INFO info = MakeLoginInfo(L"alice", L"typed_pwd", 1, FALSE, FALSE);
+    REQUIRE(list.RecordLoginSuccess(&info) == TRUE);
+    REQUIRE(list.SaveFile(path.c_str()));
+
+    CLoginAccountList reloaded;
+    REQUIRE(reloaded.LoadFile(path.c_str()));
+    LOGIN_ACCOUNT_INFO* lpAlice = reloaded.Find(_T("alice"));
+    REQUIRE(lpAlice != NULL);
+    CHECK(wcslen(lpAlice->szPwd) == 0);
+    CHECK(lpAlice->bRememberPwd == FALSE);
+}
+
+TEST_CASE("RLS7 读入旧文件时清掉未勾记住密码的记录里残留的密码", "[lal][remember]")
+{
+    // 修复之前的客户端已经在用户机器上写下了这样的记录：记住密码为假，密码却存在文件里。
+    // 读入时一并清理，下次写文件即为干净的内容；勾了记住密码的记录不受影响。
+    const std::wstring path = FreshTempDat(L"flamingo_rls7.dat");
+
+    FILE* fp = _wfopen(path.c_str(), L"wb");
+    REQUIRE(fp != NULL);
+    int nCount = 2;
+    int nLastLoginUser = 0;
+    WriteEncrypted(fp, &nCount, sizeof(nCount));
+    WriteEncrypted(fp, &nLastLoginUser, sizeof(nLastLoginUser));
+    LoginAccountRecordV1 rec0 = MakeV1Record(L"alice", L"leaked_pwd", 1, FALSE, FALSE);
+    LoginAccountRecordV1 rec1 = MakeV1Record(L"bob", L"pwd_b", 1, TRUE, FALSE);
+    WriteEncrypted(fp, &rec0, sizeof(rec0));
+    WriteEncrypted(fp, &rec1, sizeof(rec1));
+    fclose(fp);
+
+    CLoginAccountList loaded;
+    REQUIRE(loaded.LoadFile(path.c_str()));
+    LOGIN_ACCOUNT_INFO* lpAlice = loaded.Find(_T("alice"));
+    LOGIN_ACCOUNT_INFO* lpBob   = loaded.Find(_T("bob"));
+    REQUIRE(lpAlice != NULL);
+    REQUIRE(lpBob != NULL);
+    CHECK(wcslen(lpAlice->szPwd) == 0);
+    CHECK(wcscmp(lpBob->szPwd, L"pwd_b") == 0);
+}
+
+// =====================================================================
 // LAL-D —— 删除账号时"最后登录账号"下标的修正
 //
 // 登录窗下拉里那个删除叉走的就是 CLoginAccountList::Del。m_nLastLoginUser

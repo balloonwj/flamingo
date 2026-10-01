@@ -15,6 +15,9 @@
  */
 #pragma once
 
+#include <stdint.h>
+#include <vector>
+
 namespace grouprole {
 
 /**
@@ -96,5 +99,25 @@ bool CanKickMember(int myNetRole, int targetNetRole, bool targetIsSelf);
  *  @return true 表示可以改。纯函数，无副作用。
  */
 bool CanChangeGroupAvatar(int myNetRole);
+
+//群成员变更推送（cmd_group_member_changed_notify）里"角色变更"的 changetype 取值。设 / 撤
+//管理员与转让群主都用它。取值必须与 net/Protocol.h 的 group_member_change_role 一致，在此
+//复制一份的理由同 NetGroupRole。
+const int kMemberChangeRole = 4;
+
+/**
+ *  收到群成员变更推送后，判断要不要为刷新"本人在本群的角色"补拉一次群资料（cmd_get_group_info）。
+ *
+ *  推送只带"谁的角色变了"，不带变成了什么；本人的角色只在群资料应答里回填（myrole 字段），
+ *  客户端各处判断本人角色用的都是那份缓存。名单里有本人的角色变更（被设为 / 撤销管理员、
+ *  转让群主时的新旧群主）就要补拉，否则缓存要等重新登录才更新。其它类型的变更与本人角色无关。
+ *
+ *    changetype：推送的变更类型，角色变更为 kMemberChangeRole。
+ *    userids：   推送里本次发生变动的成员 userid 名单。
+ *    selfId：    当前登录者的 userid；0 表示未登录，此时一律返回 false。
+ *  @return 需要补拉返回 true。纯函数，无副作用。
+ */
+bool ShouldRefetchMyRoleOnMemberChange(int changetype, const std::vector<int64_t>& userids,
+                                       int64_t selfId);
 
 } // namespace grouprole

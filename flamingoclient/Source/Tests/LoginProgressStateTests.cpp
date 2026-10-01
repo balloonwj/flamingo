@@ -240,3 +240,62 @@ TEST_CASE("LPS12 已登录成功的状态也能被复位", "[loginprogress]")
     CHECK(st.canStartLogin());
     CHECK(st.startLogin() != kInvalidLoginGeneration);
 }
+
+// ---- 自动登录发起的一轮（docs/自动登录方案.md §3.1）----
+//
+// 自动登录改为弹出登录窗、由窗口自己点一次「登录」。用户在这一轮里点「取消登录」时，
+// 要顺带取消「自动登录」的勾选；用户自己点的那一轮被取消时则不动勾选。状态机要能
+// 回答"被取消的这一轮是不是自动发起的"。
+
+TEST_CASE("LPA1 自动发起的一轮被取消，报告是自动发起的", "[loginprogress]")
+{
+    LoginProgressState st;
+    REQUIRE(st.startLogin(true) != kInvalidLoginGeneration);
+    CHECK(st.isAutoLoginRound());
+
+    bool wasAuto = false;
+    REQUIRE(st.cancelLogin(&wasAuto));
+    CHECK(wasAuto);
+    //取消之后回到空闲，标记不再成立
+    CHECK_FALSE(st.isAutoLoginRound());
+}
+
+TEST_CASE("LPA2 手动发起的一轮被取消，报告不是自动发起的", "[loginprogress]")
+{
+    LoginProgressState st;
+    REQUIRE(st.startLogin() != kInvalidLoginGeneration);
+    CHECK_FALSE(st.isAutoLoginRound());
+
+    //出参先置成 true，确认取消时确实被回填为 false，而不是没有写
+    bool wasAuto = true;
+    REQUIRE(st.cancelLogin(&wasAuto));
+    CHECK_FALSE(wasAuto);
+}
+
+TEST_CASE("LPA3 自动发起的一轮结束后，下一轮手动发起的不沿用标记", "[loginprogress]")
+{
+    //自动发起的一轮以失败结束：用户改完口令手动重试，再取消 —— 这时不该清勾选。
+    {
+        LoginProgressState st;
+        const uint32_t gen = st.startLogin(true);
+        REQUIRE(st.acceptFailure(gen));
+        CHECK_FALSE(st.isAutoLoginRound());
+
+        REQUIRE(st.startLogin() != kInvalidLoginGeneration);
+        bool wasAuto = true;
+        REQUIRE(st.cancelLogin(&wasAuto));
+        CHECK_FALSE(wasAuto);
+    }
+    //自动发起的一轮以复位结束（窗口被复用），之后手动发起的一轮同样不沿用。
+    {
+        LoginProgressState st;
+        REQUIRE(st.startLogin(true) != kInvalidLoginGeneration);
+        st.reset();
+        CHECK_FALSE(st.isAutoLoginRound());
+
+        REQUIRE(st.startLogin() != kInvalidLoginGeneration);
+        bool wasAuto = true;
+        REQUIRE(st.cancelLogin(&wasAuto));
+        CHECK_FALSE(wasAuto);
+    }
+}

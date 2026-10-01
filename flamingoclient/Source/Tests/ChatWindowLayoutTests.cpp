@@ -8,6 +8,8 @@
  *  覆盖用例（与需求确认一致）：
  *    W1-W7  单聊窗布局契约
  *    C1     CtrlId enum 自洽
+ *    IS1-IS4 输入框的滚动条与消息区统一：内置滚动条不出现、细滑块几何、拖动、文字不被滑块盖住
+ *    IS5    没有任何变化时重复绘制输入框，不再向引擎查询滚动状态（避免绘制死循环饿死计时器）
  *
  *  用 Catch2 v3（amalgamated 形态）作测试框架。本工程不创建任何窗口，
  *  纯粹在内存里 build 控件树 + 断言。全局 _Module 由 BalloonChatLayout
@@ -30,6 +32,9 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../UI/BalloonChatWnd/ChatInputRichEdit.h"
+#include "../UI/BalloonChatWnd/ChatScrollThumb.h"   // IS2：与消息区共用的细滚动条常量
+
+#include <gdiplus.h>   // IS5：绘制带滑块的输入框
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiSplitter.h"   // 消息区/输入区可拖分隔
 
 using namespace balloonwjui;
@@ -899,4 +904,181 @@ TEST_CASE("DZ1 拖放投放区（输入区块）的矩形", "[chatwnd][dropzone]
     // 就知道可以回头考虑描边了。
     CHECK(rcBlock.left == 0);
     CHECK(rcBlock.right == kW);
+}
+
+// =====================================================================
+// IS1-IS4：输入框的滚动条与消息区统一（2026-10-01）
+// =====================================================================
+
+namespace {
+
+// 输入框尺寸（像素）：宽度取单聊窗默认大小下输入区的量级，高度只容得下三四行
+const int kIsInputW = 300;
+const int kIsInputH = 60;
+
+// 内容放得下的短文字，与必然超出可视区的长文字（十余行）
+const TCHAR* const kIsShortText = _T("一行短短的文字");
+const int kIsLongLines = 16;
+
+// 拖动滑块时指针往下移动的距离（像素），足以让内容滚动一段
+const int kIsDragDistance = 30;
+
+// 造一个排好版的聊天输入框，内容为 text。与真实输入框的配置一致：多行、自动换行、无边框。
+std::unique_ptr<ChatInputRichEdit> MakeIsInput(const CString& text)
+{
+    std::unique_ptr<ChatInputRichEdit> input(new ChatInputRichEdit());
+    input->SetMultiLine(true);
+    input->SetWordWrap(true);
+    input->SetShowBorder(false);
+    RECT rc = { 0, 0, kIsInputW, kIsInputH };
+    input->Layout(rc);
+    input->SetText(text);
+    return input;
+}
+
+// 十余行的长文字，每行一句、行间换行。
+CString IsLongText()
+{
+    CString text;
+    for (int i = 0; i < kIsLongLines; ++i)
+    {
+        if (i > 0)
+        {
+            text += _T("\r");
+        }
+        text.AppendFormat(_T("第 %d 行：这一行的内容足够把输入框撑出滚动条"), i + 1);
+    }
+    return text;
+}
+
+// 输入框当前的滚动位置（像素）。
+int IsScrollPos(const ChatInputRichEdit& input)
+{
+    int contentH = 0;
+    int pos = 0;
+    int viewH = 0;
+    input.GetVScrollMetrics(contentH, pos, viewH);
+    return pos;
+}
+
+} // anonymous namespace
+
+TEST_CASE("IS1 输入框内容超出可视区时，基类自带的滚动条不出现", "[chatwnd][inputscroll]")
+{
+    std::unique_ptr<ChatInputRichEdit> input = MakeIsInput(IsLongText());
+    REQUIRE(input->Test_IsEngineReady());
+    int contentH = 0;
+    int pos = 0;
+    int viewH = 0;
+    REQUIRE(input->GetVScrollMetrics(contentH, pos, viewH));
+    //前提：内容确实超出了可视区
+    REQUIRE(contentH > viewH);
+    CHECK_FALSE(input->Test_IsVScrollBarVisible());
+}
+
+TEST_CASE("IS2 输入框的细滑块与消息区同一套几何：宽 5、离右缘 2，内容放得下时没有滑块", "[chatwnd][inputscroll]")
+{
+    //内容放得下：没有滑块
+    std::unique_ptr<ChatInputRichEdit> shortInput = MakeIsInput(kIsShortText);
+    REQUIRE(shortInput->Test_IsEngineReady());
+    const RECT noThumb = shortInput->ScrollThumbRect();
+    CHECK(::IsRectEmpty(&noThumb));
+
+    //内容超出：滑块贴着右缘，宽度、边距、最短长度都与消息区相同
+    std::unique_ptr<ChatInputRichEdit> input = MakeIsInput(IsLongText());
+    const RECT thumb = input->ScrollThumbRect();
+    REQUIRE_FALSE(::IsRectEmpty(&thumb));
+    CHECK(thumb.right - thumb.left == kChatScrollBarWidth);
+    CHECK(thumb.right == kIsInputW - kChatScrollBarMargin);
+    CHECK(thumb.bottom - thumb.top >= kChatScrollMinThumb);
+    //滚动位置在顶部时，滑块从文字区上沿开始，且整个落在控件内
+    const RECT text = input->Test_GetTextRect();
+    CHECK(IsScrollPos(*input) == 0);
+    CHECK(thumb.top == text.top);
+    CHECK(thumb.bottom <= kIsInputH);
+}
+
+TEST_CASE("IS3 在滑块上按下拖动会滚动内容；在命中带以外按下仍是文字选择，不进入拖动", "[chatwnd][inputscroll]")
+{
+    std::unique_ptr<ChatInputRichEdit> input = MakeIsInput(IsLongText());
+    const RECT thumb = input->ScrollThumbRect();
+    REQUIRE_FALSE(::IsRectEmpty(&thumb));
+
+    //在命中带以外（文字上）按下：不进入拖动；在可视区内移动不会让内容滚动
+    const RECT text = input->Test_GetTextRect();
+    POINT inText = { text.left + 10, text.top + 5 };
+    input->OnLButtonDown(inText, MK_LBUTTON);
+    CHECK_FALSE(input->IsDraggingScrollThumb());
+    POINT inTextBelow = { text.left + 20, text.top + 15 };
+    input->OnMouseMove(inTextBelow, MK_LBUTTON);
+    input->OnLButtonUp(inTextBelow, 0);
+    CHECK(IsScrollPos(*input) == 0);
+
+    //抓住滑块往下拖：进入拖动，松开后内容已经往下滚了一段
+    POINT onThumb = { (thumb.left + thumb.right) / 2, (thumb.top + thumb.bottom) / 2 };
+    input->OnLButtonDown(onThumb, MK_LBUTTON);
+    CHECK(input->IsDraggingScrollThumb());
+    POINT dragTo = { onThumb.x, onThumb.y + kIsDragDistance };
+    input->OnMouseMove(dragTo, MK_LBUTTON);
+    input->OnLButtonUp(dragTo, 0);
+    CHECK_FALSE(input->IsDraggingScrollThumb());
+    CHECK(IsScrollPos(*input) > 0);
+    //滑块跟着下移
+    CHECK(input->ScrollThumbRect().top > thumb.top);
+}
+
+TEST_CASE("IS4 输入框文字区的右边缘不超过滑块的左边缘，文字不会被滑块盖住", "[chatwnd][inputscroll]")
+{
+    std::unique_ptr<ChatInputRichEdit> input = MakeIsInput(IsLongText());
+    const RECT thumb = input->ScrollThumbRect();
+    REQUIRE_FALSE(::IsRectEmpty(&thumb));
+    CHECK(input->Test_GetTextRect().right <= thumb.left);
+}
+
+TEST_CASE("IS5 没有任何变化时重复绘制输入框，不再向引擎查询滚动状态", "[chatwnd][inputscroll]")
+{
+    //内容放得下时，查询滚动状态会让基类做一次内容测量，测量又让引擎请求重画。若每次绘制都查询，
+    //就成了"绘制 → 测量 → 重画"的死循环：消息队列里永远有待处理的 WM_PAINT，计时器消息排不上，
+    //聊天窗消息区的平滑滚动停摆，表现为滚轮失效（2026-10-01 实测）。
+    Gdiplus::GdiplusStartupInput gdipInput;
+    ULONG_PTR gdipToken = 0;
+    REQUIRE(Gdiplus::GdiplusStartup(&gdipToken, &gdipInput, NULL) == Gdiplus::Ok);
+
+    HDC screen = ::GetDC(NULL);
+    HDC dc = ::CreateCompatibleDC(screen);
+    HBITMAP bmp = ::CreateCompatibleBitmap(screen, kIsInputW, kIsInputH);
+    ::ReleaseDC(NULL, screen);
+    REQUIRE(dc != NULL);
+    REQUIRE(bmp != NULL);
+    HGDIOBJ oldBmp = ::SelectObject(dc, bmp);
+    const RECT rc = { 0, 0, kIsInputW, kIsInputH };
+    //重复绘制的次数，取值无特殊含义
+    const int kRepaints = 5;
+
+    const CString texts[] = { CString(kIsShortText), IsLongText() };
+    for (size_t t = 0; t < sizeof(texts) / sizeof(texts[0]); ++t)
+    {
+        INFO("text " << t << (t == 0 ? " (fits)" : " (overflows)"));
+        std::unique_ptr<ChatInputRichEdit> input = MakeIsInput(texts[t]);
+        input->OnPaint(dc, rc);
+        const unsigned long first = input->PaintScrollQueryCount();
+        CHECK(first >= 1);
+        for (int i = 0; i < kRepaints; ++i)
+        {
+            input->OnPaint(dc, rc);
+        }
+        CHECK(input->PaintScrollQueryCount() == first);
+
+        //滚动状态变化之后，下一次绘制重新查询一次，再往后又不再查询
+        input->TxSiteScrollInfoChanged(true);
+        input->OnPaint(dc, rc);
+        CHECK(input->PaintScrollQueryCount() == first + 1);
+        input->OnPaint(dc, rc);
+        CHECK(input->PaintScrollQueryCount() == first + 1);
+    }
+
+    ::SelectObject(dc, oldBmp);
+    ::DeleteObject(bmp);
+    ::DeleteDC(dc);
+    Gdiplus::GdiplusShutdown(gdipToken);
 }

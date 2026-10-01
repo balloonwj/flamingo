@@ -12,9 +12,6 @@ namespace balloonchatwnd {
 
 namespace {
 
-// RichEdit 纯文本里代表一个内嵌对象（OLE 图片等）的占位符。
-const wchar_t kEmbedding = 0xFFFC;
-
 // 判断一段文本是否"只含空白"（空格 / 制表 / 回车 / 换行）。空串视为全空白。
 bool IsWhitespaceOnly(const CString& s)
 {
@@ -28,61 +25,6 @@ bool IsWhitespaceOnly(const CString& s)
     }
     return true;
 }
-
-} // anonymous namespace
-
-std::vector<RichOutgoingPart> SplitRichInputToParts(const wchar_t* textWithEmbeds)
-{
-    std::vector<RichOutgoingPart> parts;
-    if (textWithEmbeds == NULL)
-    {
-        return parts;
-    }
-
-    CString run;          // 当前累积的文字段
-    int     imageIndex = 0;
-
-    for (const wchar_t* p = textWithEmbeds; *p != L'\0'; ++p)
-    {
-        if (*p == kEmbedding)
-        {
-            // 先收尾前面的文字段（非全空白才发），再追加一个图片部分。
-            if (!IsWhitespaceOnly(run))
-            {
-                RichOutgoingPart t;
-                t.kind = kRichPartText;
-                t.text = run;
-                t.imageIndex = -1;
-                parts.push_back(t);
-            }
-            run.Empty();
-
-            RichOutgoingPart img;
-            img.kind = kRichPartImage;
-            img.imageIndex = imageIndex;
-            parts.push_back(img);
-            ++imageIndex;
-        }
-        else
-        {
-            run += *p;
-        }
-    }
-
-    // 收尾最后一段文字。
-    if (!IsWhitespaceOnly(run))
-    {
-        RichOutgoingPart t;
-        t.kind = kRichPartText;
-        t.text = run;
-        t.imageIndex = -1;
-        parts.push_back(t);
-    }
-
-    return parts;
-}
-
-namespace {
 
 // 把当前累积的"文本 + 表情"组收尾成一个 text 部分（追加进 parts），并清空组。
 // 编码规则见头文件 BuildOutgoingParts 注释。
@@ -140,7 +82,8 @@ std::vector<RichOutgoingPart> BuildOutgoingParts(const std::vector<RichInputSegm
 {
     std::vector<RichOutgoingPart> parts;
     std::vector<balloonchat::ChatSegment> group;   // 当前累积的"文本 + 表情"组
-    int imageIndex = 0;                            // 非表情内嵌图序号（对应 m_pendingShotPaths）
+    int imageIndex = 0;                            // 未带标记的内嵌图序号（旧方式插入的图，对应
+                                                   // m_pendingShotPaths 的插入顺序）
 
     for (size_t i = 0; i < segs.size(); ++i)
     {
@@ -162,9 +105,18 @@ std::vector<RichOutgoingPart> BuildOutgoingParts(const std::vector<RichInputSegm
             RichOutgoingPart img;
             img.kind = kRichPartImage;
             img.text = _T("");
-            img.imageIndex = imageIndex;
+            if (IsImageTag(seg.tag))
+            {
+                // 带图片标记：源文件下标就记在标记里，与这张图在文档里排第几无关。
+                img.imageIndex = ImageIndexFromTag(seg.tag);
+            }
+            else
+            {
+                // 未带标记（旧方式插入的图）：沿用"文档第几张 = 第几个源文件"的对应。
+                img.imageIndex = imageIndex;
+                ++imageIndex;
+            }
             parts.push_back(img);
-            ++imageIndex;
         }
     }
     FlushRichGroup(group, parts);

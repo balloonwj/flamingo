@@ -199,8 +199,8 @@ void CallVideoCanvas::DrawPlaceholder(HDC hdc, const RECT& rc)
     if (m_placeholder.IsEmpty())
         return;
 
-    //用 balloonui 的默认字体（已按当前 DPI 构建），与窗口其余文字观感一致
-    HFONT font = balloonwjui::DuiResMgr::Inst().GetDefaultFont();
+    //用 balloonui 的默认字体（按本控件所在窗口的 DPI 取），与窗口其余文字观感一致
+    HFONT font = GetDefaultFont();
     HFONT oldFont = NULL;
     if (font != NULL)
         oldFont = static_cast<HFONT>(::SelectObject(hdc, font));

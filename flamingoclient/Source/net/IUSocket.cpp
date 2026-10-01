@@ -8,6 +8,7 @@
 #include "../Common/Log/IULog.h"
 #include "../Common/Util/ZlibUtil.h"
 #include "FrameCodec.h"             // v2 帧编解码（内含 net/Protocol.h）
+#include "SocketRecvDrain.h"        // 主连接收包循环 net::DrainSocketRecv
 #include "FramePayload.h"           // 包体的压缩与加密管线
 #include "HandshakeRunner.h"         // 三帧握手的共用流程（四条链路复用同一份）
 #include "Sha256.h"                 // 口令 SHA-256 哈希
@@ -187,7 +188,7 @@ void CIUSocket::NotifyNetError()
         return;
     }
     m_bNetError = true;
-    if (m_hProxyWnd != NULL)
+    if (::IsWindow(m_hProxyWnd))
     {
         ::PostMessage(m_hProxyWnd, FMG_MSG_NET_ERROR, 0, 0);
     }
@@ -900,7 +901,12 @@ bool CIUSocket::Send()
         if (m_strSendBuf.empty())
             break;
 
-        ::Sleep(1);
+        //只发出去一部分时立即再发，不等待。旧实现在此处 Sleep(1)，实际要睡约 16 毫秒
+        //（见 net::DrainSocketRecv 内的说明），大请求因此被拖慢。系统发送缓冲写满时
+        //send 会报告 WSAEWOULDBLOCK，由上面的分支退出本循环，剩余数据留在 m_strSendBuf 里，
+        //由 SendThreadProc 再次调用本函数发送。注意：SendThreadProc 看到缓冲非空会立即重试，
+        //发送缓冲持续写满期间是一个忙等循环；这一点与这里是否 Sleep 无关，改动前就存在，
+        //见仓库根目录 bugs.md。
     }
 
     {
@@ -914,32 +920,26 @@ bool CIUSocket::Send()
 
 bool CIUSocket::Recv()
 {
-    int nRet = 0;
-    char buff[10 * 1024];
-    while (true)
+    //把接收缓冲里现有的数据一次读完。读取循环抽到了 net::DrainSocketRecv（便于单元测试），
+    //两次 recv 之间不再 Sleep(1)，原因与实测数据见该函数内的注释。
+    if (m_vecRecvChunk.empty())
+        m_vecRecvChunk.resize((size_t)net::kRecvChunkSize);
+
+    net::SocketDrainStats stats;
+    const net::SocketDrainResult result =
+        net::DrainSocketRecv(m_hSocket, m_strRecvBuf, &m_vecRecvChunk[0],
+                             (int)m_vecRecvChunk.size(), &stats);
+    //出错或对端关闭：由调用方关闭连接并上报网络错误
+    if (result == net::kSocketDrainError)
     {
-
-        nRet = ::recv(m_hSocket, buff, 10 * 1024, 0);
-        if (nRet == SOCKET_ERROR)				//一旦出现错误就立刻关闭Socket
-        {
-            if (::WSAGetLastError() == WSAEWOULDBLOCK)
-                break;
-            else
-            {
-                LOG_ERROR("Recv data error, errorNO=%d.", ::WSAGetLastError());
-                //Close();
-                return false;
-            }
-        } else if (nRet < 1)
-        {
-            LOG_ERROR("Recv data error, errorNO=%d.", ::WSAGetLastError());
-            //Close();
-            return false;
-        }
-
-        m_strRecvBuf.append(buff, nRet);
-
-        ::Sleep(1);
+        LOG_ERROR("Recv data error, errorNO=%d.", stats.m_nLastError);
+        return false;
+    }
+    if (result == net::kSocketDrainClosed)
+    {
+        LOG_ERROR("Recv data error, connection closed by peer, bytes read before close=%u.",
+                  (unsigned)stats.m_nBytes);
+        return false;
     }
 
     {
@@ -1636,7 +1636,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         //气泡告知原因。必须投递到 UI 线程做 —— 本函数跑在收数据线程上，不能直接碰窗口。
         //本消息无堆负载，UI 侧收不到也不会泄漏。
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             ::PostMessage(hUI, FMG_MSG_V2_KICKOUT, (WPARAM)notify.m_reason, 0);
         }
@@ -1667,7 +1667,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 send-message ack, code=%d, clientmsgid=%s, msgid=%lld.",
                      pResp->m_code, pResp->m_clientmsgid.c_str(), (long long)pResp->m_msgid);
@@ -1694,7 +1694,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 recall-message ack, code=%d, msg=%s.",
                      pResp->m_code, pResp->m_msg.c_str());
@@ -1721,12 +1721,146 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 message-recalled notify, ctype=%d, cid=%lld, msgid=%lld, operator=%lld.",
                      pNotify->m_ctype, (long long)pNotify->m_cid,
                      (long long)pNotify->m_msgid, (long long)pNotify->m_operator);
             ::PostMessage(hUI, FMG_MSG_V2_MESSAGE_RECALLED, 0, (LPARAM)pNotify);
+        }
+        else
+        {
+            delete pNotify;
+        }
+        break;
+    }
+
+    //转发消息的应答：按帧 seq 投给 UI，由主面板的转发调度器对回是哪一次转发
+    case cmd_forward_message:
+    {
+        net::ForwardMessageResponse* pResp = new net::ForwardMessageResponse();
+        if (!net::MessageProtocolClient::parseForwardMessageResponse(body, *pResp))
+        {
+            LOG_ERROR("Parse v2 forward-message response failed, seq=%u, body=%s.", seq, body.c_str());
+            delete pResp;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 forward-message response, seq=%u, code=%d, created=%u, bodies=%u.",
+                     seq, pResp->m_code, (unsigned)pResp->m_msgids.size(),
+                     (unsigned)pResp->m_messages.size());
+            ::PostMessage(hUI, FMG_MSG_V2_FORWARD_RESULT, (WPARAM)seq, (LPARAM)pResp);
+        }
+        else
+        {
+            delete pResp;
+        }
+        break;
+    }
+
+    //删除单条消息的应答：只用于失败时提示，成功后的本地删除等 cmd_messages_deleted_notify
+    case cmd_delete_message:
+    {
+        net::DeleteMessageResponse* pResp = new net::DeleteMessageResponse();
+        if (!net::MessageProtocolClient::parseDeleteMessageResponse(body, *pResp))
+        {
+            LOG_ERROR("Parse v2 delete-message response failed, seq=%u, body=%s.", seq, body.c_str());
+            delete pResp;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 delete-message response, seq=%u, code=%d.", seq, pResp->m_code);
+            ::PostMessage(hUI, FMG_MSG_V2_DELETE_MESSAGE_RESULT, 0, (LPARAM)pResp);
+        }
+        else
+        {
+            delete pResp;
+        }
+        break;
+    }
+
+    //按时间范围清理的应答：带回服务端截断后的实际区间，交清理对话框提示结果
+    case cmd_delete_messages_by_time:
+    {
+        net::DeleteMessagesByTimeResponse* pResp = new net::DeleteMessagesByTimeResponse();
+        if (!net::MessageProtocolClient::parseDeleteMessagesByTimeResponse(body, *pResp))
+        {
+            LOG_ERROR("Parse v2 delete-messages-by-time response failed, seq=%u, body=%s.",
+                      seq, body.c_str());
+            delete pResp;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 delete-messages-by-time response, seq=%u, code=%d, range=[%lld, %lld].",
+                     seq, pResp->m_code, (long long)pResp->m_begintime, (long long)pResp->m_endtime);
+            ::PostMessage(hUI, FMG_MSG_V2_DELETE_BY_TIME_RESULT, 0, (LPARAM)pResp);
+        }
+        else
+        {
+            delete pResp;
+        }
+        break;
+    }
+
+    //本人删除了消息的推送：服务端推给本人全部在线设备（含发起删除的这一台）。本地库删行、
+    //移除或重新加载已打开窗口里的消息，统一在 UI 线程收到本推送时做
+    case cmd_messages_deleted_notify:
+    {
+        net::MessagesDeletedNotify* pNotify = new net::MessagesDeletedNotify();
+        if (!net::MessageProtocolClient::parseMessagesDeletedNotify(body, *pNotify))
+        {
+            LOG_ERROR("Parse v2 messages-deleted notify failed, body=%s.", body.c_str());
+            delete pNotify;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            if (pNotify->m_isRange)
+            {
+                LOG_INFO("Recv v2 messages-deleted notify (range), range=[%lld, %lld].",
+                         (long long)pNotify->m_begintime, (long long)pNotify->m_endtime);
+            }
+            else
+            {
+                LOG_INFO("Recv v2 messages-deleted notify, ctype=%d, cid=%lld, count=%u, first msgid=%lld.",
+                         pNotify->m_ctype, (long long)pNotify->m_cid,
+                         (unsigned)pNotify->m_msgids.size(), (long long)pNotify->m_msgids[0]);
+            }
+            ::PostMessage(hUI, FMG_MSG_V2_MESSAGES_DELETED, 0, (LPARAM)pNotify);
+        }
+        else
+        {
+            delete pNotify;
+        }
+        break;
+    }
+
+    case cmd_message_read_notify:
+    {
+        //对方已读你的消息：接收方查看会话后上报 cmd_mark_read，服务端向发送方推送本条，
+        //带上对方的已读位点。只有单聊会收到。解析后投递到 UI 线程，由主面板记下位点并
+        //转给已打开的单聊窗把对应气泡标为已读。堆对象由 UI 处理后 delete。
+        net::MessageReadNotify* pNotify = new net::MessageReadNotify();
+        if (!net::MessageProtocolClient::parseMessageReadNotify(body, *pNotify))
+        {
+            LOG_ERROR("Parse v2 message-read notify failed, body=%s.", body.c_str());
+            delete pNotify;
+            break;
+        }
+        HWND hUI = GetUIProxyWnd();
+        if (::IsWindow(hUI))
+        {
+            LOG_INFO("Recv v2 message-read notify, ctype=%d, cid=%lld, readmsgid=%lld, readcount=%d.",
+                     pNotify->m_ctype, (long long)pNotify->m_cid,
+                     (long long)pNotify->m_readmsgid, pNotify->m_readcount);
+            ::PostMessage(hUI, FMG_MSG_V2_MESSAGE_READ_NOTIFY, 0, (LPARAM)pNotify);
         }
         else
         {
@@ -1748,7 +1882,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 pin-message ack, code=%d, msg=%s, ctype=%d, cid=%lld, msgid=%lld, pin=%d.",
                      pResp->m_code, pResp->m_msg.c_str(), pResp->m_ctype,
@@ -1776,7 +1910,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 message-pinned notify, ctype=%d, cid=%lld, msgid=%lld, pin=%d, operator=%lld.",
                      pNotify->m_ctype, (long long)pNotify->m_cid,
@@ -1804,7 +1938,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 get-pinned-messages ack, code=%d, ctype=%d, cid=%lld, returned=%d, total=%lld.",
                      pResult->m_code, pResult->m_ctype, (long long)pResult->m_cid,
@@ -1831,7 +1965,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 file-transfer-ack notify, cid=%lld, msgid=%lld, state=%d.",
                      (long long)pNotify->m_cid, (long long)pNotify->m_msgid, pNotify->m_state);
@@ -1857,7 +1991,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 typing notify, cid=%lld, state=%d.",
                      (long long)pNotify->m_cid, pNotify->m_state);
@@ -1882,7 +2016,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 message-notify, from=%lld, msgid=%lld, msgtype=%d.",
                      (long long)pNotify->m_from, (long long)pNotify->m_msgid, pNotify->m_msgtype);
@@ -1906,7 +2040,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 rd invite-ack, code=%d, sessionid=%s.", pResp->m_code, pResp->m_sessionId.c_str());
             ::PostMessage(hUI, FMG_MSG_V2_RD_INVITE_ACK, 0, (LPARAM)pResp);
@@ -1929,7 +2063,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 rd invite-notify, from=%lld, session=%s.",
                      (long long)pNotify->m_fromId, pNotify->m_sessionId.c_str());
@@ -1953,7 +2087,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 rd relay-info, session=%s, role=%d, %s:%d.",
                      pInfo->m_sessionId.c_str(), pInfo->m_role, pInfo->m_relayIp.c_str(), pInfo->m_relayPort);
@@ -1977,7 +2111,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 rd state-notify, session=%s, state=%d.",
                      pState->m_sessionId.c_str(), pState->m_state);
@@ -2005,7 +2139,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 folder invite-ack, seq=%u, code=%d, session=%s, maxfiles=%lld, "
                      "maxsize=%lld.",
@@ -2032,7 +2166,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 folder invite-notify, session=%s, from=%lld, files=%lld, bytes=%lld.",
                      pNotify->m_sessionId.c_str(), (long long)pNotify->m_fromId,
@@ -2062,7 +2196,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 folder session-ack, cmd=%u, code=%d, session=%s.",
                      cmd, pResp->m_code, pResp->m_sessionId.c_str());
@@ -2087,7 +2221,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 folder state-notify, session=%s, state=%d, errcode=%d.",
                      pState->m_sessionId.c_str(), pState->m_state, pState->m_errCode);
@@ -2112,7 +2246,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 folder relay-info, session=%s, role=%d, %s:%d, lanes=%d.",
                      pInfo->m_sessionId.c_str(), pInfo->m_role,
@@ -2137,7 +2271,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 call invite-ack, code=%d, sessionid=%s.", pResp->m_code, pResp->m_sessionId.c_str());
             ::PostMessage(hUI, FMG_MSG_V2_CALL_INVITE_ACK, 0, (LPARAM)pResp);
@@ -2160,7 +2294,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 call invite-notify, from=%lld, session=%s.",
                      (long long)pNotify->m_fromId, pNotify->m_sessionId.c_str());
@@ -2184,7 +2318,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 call signaling, session=%s, role=%d, %s:%d.",
                      pInfo->m_sessionId.c_str(), pInfo->m_role, pInfo->m_relayIp.c_str(), pInfo->m_relayPort);
@@ -2209,7 +2343,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 call switch-media ack, code=%d, msg=%s.",
                      pResp->m_code, pResp->m_msg.c_str());
@@ -2234,7 +2368,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 call media-changed notify, session=%s, media=%d, operator=%lld.",
                      pNotify->m_sessionId.c_str(), pNotify->m_media,
@@ -2259,7 +2393,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 call state-notify, session=%s, state=%d.",
                      pState->m_sessionId.c_str(), pState->m_state);
@@ -2283,7 +2417,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 contacts, code=%d, enterprise=%lld, contacts=%u.",
                      pResult->m_code, (long long)pResult->m_enterpriseid,
@@ -2308,7 +2442,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 conversations, code=%d, count=%u.",
                      pResult->m_code, (uint32_t)pResult->m_items.size());
@@ -2332,7 +2466,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 create-group result, code=%d, groupid=%lld.",
                      pResp->m_code, (long long)pResp->m_groupid);
@@ -2356,7 +2490,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 change-password result, code=%d.", pResp->code);
             ::PostMessage(hUI, FMG_MSG_V2_CHANGE_PWD_RESULT, 0, (LPARAM)pResp);
@@ -2380,7 +2514,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 update-profile result, code=%d.", pResp->code);
             ::PostMessage(hUI, FMG_MSG_V2_UPDATE_PROFILE_RESULT, 0, (LPARAM)pResp);
@@ -2405,7 +2539,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 change-avatar result, code=%d.", pResp->code);
             ::PostMessage(hUI, FMG_MSG_V2_CHANGE_AVATAR_RESULT, 0, (LPARAM)pResp);
@@ -2429,7 +2563,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 change-presence result, code=%d.", pResp->code);
             ::PostMessage(hUI, FMG_MSG_V2_CHANGE_PRESENCE_RESULT, 0, (LPARAM)pResp);
@@ -2453,7 +2587,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 user-info-changed notify, userid=%lld, facetype=%d.",
                      (long long)pNotify->m_userid, pNotify->m_facetype);
@@ -2480,7 +2614,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 org-structure-changed notify, changetype=%d, deptid=%lld.",
                      pNotify->m_changetype, (long long)pNotify->m_deptid);
@@ -2505,7 +2639,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 presence-changed notify, userid=%lld, presence=%d.",
                      (long long)pNotify->m_userid, pNotify->m_presence);
@@ -2545,7 +2679,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 group op result, cmd=%u, code=%d, msg=%s.",
                      (uint32_t)cmd, pResult->m_code, pResult->m_msg.c_str());
@@ -2569,7 +2703,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 join requests, code=%d, groupid=%lld, count=%u.",
                      pResult->m_code, (long long)pResult->m_groupid,
@@ -2593,7 +2727,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 sensitive words, code=%d, groupid=%lld, count=%u.",
                      pResult->m_code, (long long)pResult->m_groupid,
@@ -2617,7 +2751,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 group announcements, code=%d, groupid=%lld, count=%u, total=%d.",
                      pResult->m_code, (long long)pResult->m_groupid,
@@ -2642,7 +2776,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 group announcement notify, groupid=%lld, changetype=%d, id=%lld.",
                      (long long)pNotify->m_groupid, pNotify->m_changetype,
@@ -2668,7 +2802,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 group member changed, groupid=%lld, changetype=%d, count=%u, operator=%lld.",
                      (long long)pNotify->m_groupid, pNotify->m_changetype,
@@ -2693,7 +2827,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 group info changed, groupid=%lld, changetype=%d.",
                      (long long)pNotify->m_info.m_groupid, pNotify->m_changetype);
@@ -2717,7 +2851,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 join group request, groupid=%lld, requestid=%lld, from=%lld.",
                      (long long)pNotify->m_groupid, (long long)pNotify->m_requestid,
@@ -2742,7 +2876,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 group info, code=%d, groupid=%lld, members=%d.",
                      pResult->m_code, (long long)pResult->m_groupid, pResult->m_membercount);
@@ -2766,7 +2900,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 group members, code=%d, groupid=%lld, count=%u.",
                      pResult->m_code, (long long)pResult->m_groupid,
@@ -2793,7 +2927,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 conversation-changed notify, ctype=%d, cid=%lld, pinned=%d, mute=%d, deleted=%d.",
                      pNotify->m_ctype, (long long)pNotify->m_cid,
@@ -2832,7 +2966,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             uiMsg = FMG_MSG_V2_LEAVE_GROUP_RESULT;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 group write-op result, cmd=%u, code=%d.",
                      (uint32_t)cmd, code);
@@ -2856,7 +2990,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         }
 
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 set favorite result, code=%d, ctype=%d, cid=%lld, favorite=%d.",
                      pResult->m_code, pResult->m_ctype,
@@ -2885,7 +3019,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         }
 
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 set starred result, code=%d, target=%lld, starred=%d.",
                      pResult->m_code, (long long)pResult->m_target, pResult->m_starred);
@@ -2913,7 +3047,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         }
 
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 set contact tags result, code=%d, userid=%lld, tagcount=%u.",
                      pResult->m_code, (long long)pResult->m_userid,
@@ -2942,7 +3076,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         }
 
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 set friend remark result, code=%d, userid=%lld.",
                      pResult->m_code, (long long)pResult->m_userid);
@@ -2970,7 +3104,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         }
 
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 announcements, code=%d, count=%u, hasmore=%d.",
                      pResult->m_code, (uint32_t)pResult->m_items.size(),
@@ -3000,7 +3134,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         }
 
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 mark announcement read result, code=%d, announcementid=%lld.",
                      pResult->m_code, (long long)pResult->m_announcementId);
@@ -3027,7 +3161,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
         }
 
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 announcement notify, changetype=%d, announcementid=%lld.",
                      pNotify->m_changeType, (long long)pNotify->m_item.m_announcementId);
@@ -3051,7 +3185,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 group files, code=%d, groupid=%s, total=%d, hasmore=%d, count=%u.",
                      pResult->m_code, pResult->m_groupid.c_str(), pResult->m_total,
@@ -3076,7 +3210,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 group-files-changed notify, groupid=%s, changetype=%d.",
                      pNotify->m_groupid.c_str(), pNotify->m_changetype);
@@ -3134,7 +3268,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 user groups, code=%d, count=%u.",
                      pResult->m_code, (uint32_t)pResult->m_groups.size());
@@ -3158,7 +3292,7 @@ void CIUSocket::HandleV2Frame(uint16_t cmd, uint32_t seq, const std::string& bod
             break;
         }
         HWND hUI = GetUIProxyWnd();
-        if (hUI != NULL)
+        if (::IsWindow(hUI))
         {
             LOG_INFO("Recv v2 sync messages, code=%d, ctype=%d, cid=%lld, count=%u.",
                      pResult->m_code, pResult->m_ctype, (long long)pResult->m_cid,
@@ -3221,6 +3355,40 @@ void CIUSocket::RecallMessage(int ctype, int64_t cid, int64_t msgid)
              ctype, (long long)cid, (long long)msgid);
 }
 
+void CIUSocket::DeleteMessage(int64_t msgid)
+{
+    //msgid 非正时 buildDeleteMessageRequest 返回空串：服务端必判非法，直接放弃发送
+    std::string body = net::MessageProtocolClient::buildDeleteMessageRequest(msgid);
+    if (body.empty())
+    {
+        LOG_ERROR("Skip v2 delete-message: invalid msgid=%lld.", (long long)msgid);
+        return;
+    }
+
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_delete_message, seq, body);
+    LOG_INFO("Request v2 delete-message (cmd_delete_message), msgid=%lld, seq=%u.",
+             (long long)msgid, seq);
+}
+
+bool CIUSocket::DeleteMessagesByTime(int64_t begintime, int64_t endtime)
+{
+    //开始为负或结束早于开始时返回空串：服务端必判非法，直接放弃发送
+    std::string body = net::MessageProtocolClient::buildDeleteMessagesByTimeRequest(begintime, endtime);
+    if (body.empty())
+    {
+        LOG_ERROR("Skip v2 delete-messages-by-time: invalid range [%lld, %lld].",
+                  (long long)begintime, (long long)endtime);
+        return false;
+    }
+
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_delete_messages_by_time, seq, body);
+    LOG_INFO("Request v2 delete-messages-by-time (cmd_delete_messages_by_time), range=[%lld, %lld], seq=%u.",
+             (long long)begintime, (long long)endtime, seq);
+    return true;
+}
+
 void CIUSocket::PinMessage(int ctype, int64_t cid, int64_t msgid, bool pin)
 {
     //cid / msgid 非正时 buildPinMessageRequest 返回空串，说明这个请求服务端必判非法，
@@ -3237,6 +3405,37 @@ void CIUSocket::PinMessage(int ctype, int64_t cid, int64_t msgid, bool pin)
     EnqueueFrame(cmd_pin_message, seq, body);
     LOG_INFO("Request v2 pin-message (cmd_pin_message), ctype=%d, cid=%lld, msgid=%lld, pin=%d.",
              ctype, (long long)cid, (long long)msgid, pin ? 1 : 0);
+}
+
+uint32_t CIUSocket::ForwardMessage(const std::string& clientMsgId, int toctype, int64_t tocid,
+                                   bool merge, const std::string& title,
+                                   const std::vector<int64_t>& msgids)
+{
+    //参数非法时 buildForwardMessageRequest 返回空串，服务端必判非法，直接放弃发送
+    std::string body = net::MessageProtocolClient::buildForwardMessageRequest(
+        clientMsgId, toctype, tocid, merge, title, msgids);
+    if (body.empty())
+    {
+        LOG_ERROR("Skip v2 forward-message: invalid request, toctype=%d, tocid=%lld, merge=%d, count=%u.",
+                  toctype, (long long)tocid, merge ? 1 : 0, (unsigned)msgids.size());
+        return 0;
+    }
+
+    //EnqueueFrame 在离线或未连接时丢弃帧且不告知调用方；这里提前判断，返回 0 让调用方
+    //立即按失败处理，而不是一直等一个不会到来的应答
+    if (IsUserOffline() || IsClosed())
+    {
+        LOG_ERROR("Skip v2 forward-message: not connected, toctype=%d, tocid=%lld, merge=%d, count=%u.",
+                  toctype, (long long)tocid, merge ? 1 : 0, (unsigned)msgids.size());
+        return 0;
+    }
+
+    uint32_t seq = (uint32_t)(++m_seq);
+    EnqueueFrame(cmd_forward_message, seq, body);
+    LOG_INFO("Request v2 forward-message, toctype=%d, tocid=%lld, merge=%d, count=%u, clientmsgid=%s, seq=%u.",
+             toctype, (long long)tocid, merge ? 1 : 0, (unsigned)msgids.size(),
+             clientMsgId.c_str(), seq);
+    return seq;
 }
 
 void CIUSocket::GetPinnedMessages(int ctype, int64_t cid)

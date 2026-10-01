@@ -50,16 +50,35 @@ bool ShouldShowImageActions(int msgKind, int imageState, bool hasLocalPath)
     return hasLocalPath;
 }
 
+bool CanForwardMessage(int msgKind, long long msgid, long long fileMsgid)
+{
+    if (msgKind == kChatMenuKindFolder || msgKind == kChatMenuKindTime)
+    {
+        return false;
+    }
+    return ForwardMsgidOf(msgid, fileMsgid) > 0;
+}
+
+long long ForwardMsgidOf(long long msgid, long long fileMsgid)
+{
+    return (msgid > 0) ? msgid : fileMsgid;
+}
+
 std::vector<ChatMessageMenuEntry> BuildChatMessageMenuModel(int msgKind,
                                                             int imageState,
                                                             bool hasLocalPath,
                                                             bool canRecall,
                                                             bool canPin,
-                                                            bool pinned)
+                                                            bool pinned,
+                                                            bool canForward)
 {
     std::vector<ChatMessageMenuEntry> model;
 
-    AppendItem(model, kChatMsgMenuCopy, L"复制");
+    //合并卡片没有可复制的正文（复制出来只会是一个「[聊天记录]」占位），不给「复制」
+    if (msgKind != kChatMenuKindMerged)
+    {
+        AppendItem(model, kChatMsgMenuCopy, L"复制");
+    }
 
     //文件夹行：本地气泡，没有服务端 msgid，「引用回复」「转发」「Pin」「撤回」四项对它
     //都无从谈起（见头文件 kChatMenuKindFolder 的注释），故只留下这三项就收尾。
@@ -79,7 +98,12 @@ std::vector<ChatMessageMenuEntry> BuildChatMessageMenuModel(int msgKind,
     }
 
     AppendItem(model, kChatMsgMenuReply,   L"引用回复");
-    AppendItem(model, kChatMsgMenuForward, L"转发");
+    //没有服务器 msgid 时整项不出现：转发请求必被服务端判非法，与「撤回」超时即整项
+    //消失同一种处理
+    if (canForward)
+    {
+        AppendItem(model, kChatMsgMenuForward, L"转发");
+    }
 
     //Pin 紧跟在「转发」之后：三者都属于"把这条消息挪到别处去用"，放一起最顺手。
     //文案随当前状态取反；服务器还没给这条消息分配 msgid 时整项不出现（发过去必被

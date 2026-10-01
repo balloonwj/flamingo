@@ -74,6 +74,8 @@ std::vector<ContactMenuEntry> BuildContactMenuModel(const ContactMenuState& stat
              StarredModel::GetMenuLabel(state.m_starred));
     PushItem(items, kContactMenuViewHistory, L"查看历史消息");
     PushItem(items, kContactMenuRemark,      L"修改备注");
+    // 复制的是列表上显示的名字（备注优先），紧跟"修改备注"：两项都与这个名字有关
+    PushItem(items, kContactMenuCopyName,    L"复制联系人名");
     PushSeparator(items);
 
     // 第三组：打扰控制。文案随当前状态取反。

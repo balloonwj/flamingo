@@ -16,6 +16,8 @@
 #include <memory>
 #include "../../../third-party/balloonui/balloonui/DuiControl.h"
 
+namespace balloonwjui { class DuiVBox; }
+
 namespace balloongroupmanage {
 
 class GroupManageModel;
@@ -126,7 +128,32 @@ enum GmCtrlId
     kIdAnnounceRepublishBase = 3120,   // 「重新发布」
     kIdAnnounceRepublishMax  = 3139,
     kIdAnnounceDeleteBase    = 3140,   // 「删除」（真删，不可恢复）
-    kIdAnnounceDeleteMax     = 3159
+    kIdAnnounceDeleteMax     = 3159,
+
+    // 顶栏：群名 / 本人角色标签 / 成员人数。纯展示，不响应点击；给 id 是为了
+    // 单元测试能按 id 取回它们核对排版。
+    kIdHeaderName            = 3170,
+    kIdHeaderRole            = 3171,
+    kIdHeaderMeta            = 3172,
+
+    // 各页顶部的标题与副标题。同一时刻只有一页在控件树里，各页共用这两个 id；
+    // 纯展示，给 id 是为了单元测试能取回它们核对间距。
+    kIdPageTitle             = 3180,
+    kIdPageSubtitle          = 3181,
+
+    // 基本信息页：装着各表单行与行间分隔线的列表容器。纯布局，给 id 是为了单元
+    // 测试能取回它核对行的对齐与分隔。
+    kIdBasicFormList         = 3182,
+
+    // 数据尚未到达时显示的「正在加载…」提示行，以及加载失败时显示的失败提示行。
+    // 成员管理、加群审批、禁言管理三页共用（同一时刻只有一页在控件树里）。纯展示，
+    // 给 id 是为了单元测试能判断当前显示的是哪一种提示。
+    kIdLoadPending           = 3183,
+    kIdLoadFailed            = 3184,
+
+    // 成员管理页：搜索关键词一个成员也没命中时显示的「没有找到匹配的成员」提示行。
+    // 纯展示，给 id 是为了单元测试能判断它是否出现。
+    kIdMemberSearchEmpty     = 3185
 };
 
 // =====================================================================
@@ -134,7 +161,8 @@ enum GmCtrlId
 // =====================================================================
 
 // 构建顶部 Header（群头像 + 群名 + 「我是群主·N 名成员」副标题）。
-//   model：数据来源（读取群名 / 头像 / 成员数）。
+// 成员尚未加载完成（model.m_membersState 不是 kLoadDone）时不显示人数一项。
+//   model：数据来源（读取群名 / 头像 / 成员数 / 成员加载状态）。
 //   返回：Header 控件（调用方负责放入根容器）。
 std::unique_ptr<balloonwjui::DuiControl> BuildHeader(const GroupManageModel& model);
 
@@ -149,5 +177,44 @@ std::unique_ptr<balloonwjui::DuiControl> BuildNav(const GroupManageModel& model)
 //   返回：该页内容控件（其内部子控件高度均为固定值，便于滚动视口测高）。
 std::unique_ptr<balloonwjui::DuiControl> BuildPage(int pageId,
                                                    const GroupManageModel& model);
+
+// 搜索关键词变化后重建成员管理页搜索栏以下的部分：摘掉搜索栏之后的全部子控件，按
+// model.m_memberKeyword 重新追加（成员未加载时为加载提示；否则为过滤后的三个角色分组，
+// 一个成员也没命中时为「没有找到匹配的成员」提示行），再按页面当前矩形强制重新排版。
+// 搜索框本身不重建，输入焦点与光标不受影响。页面高度随之变化，调用方还须让外层滚动视口
+// 重新排版（ForceLayout）以更新滚动范围。
+//   page： 成员管理页的根容器（BuildPage(kPageMembers, ...) 返回的纵向容器），不可为空。
+//   model：数据来源。
+void RefilterMembersPage(balloonwjui::DuiVBox* page, const GroupManageModel& model);
+
+// 判断某个控件是不是群管理窗样式的输入框（GmEdit / GmSearchBox，描边按
+// GmInputBorderColor 取色）。供单元测试核对各页没有漏换的原生输入框。
+//   ctrl：待判断的控件，可为空指针。
+//   返回：是则 true。纯函数，无副作用。
+bool IsGmStyledInput(const balloonwjui::DuiControl* ctrl);
+
+// 拼出危险区域页「解散群聊」卡片的说明文字，带上群名，形如
+// 「解散后 设计组·周会 的聊天记录将全部删除，所有成员将被移出，此操作不可恢复」。
+//   groupName：群名；超过 16 个字时只保留前 16 个字并加省略号，免得卡片放不下。
+//   返回：说明文字。纯函数，无副作用。
+CString BuildDismissDescription(const CString& groupName);
+
+// =====================================================================
+// 窗口尺寸
+// =====================================================================
+
+// 计算窗口的最小客户区尺寸：按 96 DPI 设计的最小尺寸换算到 dpi 下。
+//   dpi：窗口所在显示器的 DPI；<= 0 按 96 处理。
+//   返回：最小客户区宽高（像素）。纯函数，无副作用。
+SIZE ComputeMinClientSize(int dpi);
+
+// 计算窗口打开时的客户区尺寸。
+// 设计尺寸按 dpi 等比放大；超出屏幕工作区（四周各留一段按 dpi 换算的边距）时
+// 缩到工作区以内；但不小于 ComputeMinClientSize(dpi) —— 窗口本来就不允许比最小
+// 尺寸更小，系统在 WM_GETMINMAXINFO 里也会把它撑回来。
+//   dpi：     窗口所在显示器的 DPI；<= 0 按 96 处理。
+//   workArea：可用的屏幕工作区（像素），调用方须已扣掉窗口非客户区占用的部分。
+//   返回：客户区宽高（像素）。纯函数，无副作用。
+SIZE ComputeInitialClientSize(int dpi, const RECT& workArea);
 
 } // namespace balloongroupmanage

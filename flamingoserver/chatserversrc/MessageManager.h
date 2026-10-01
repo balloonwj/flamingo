@@ -16,7 +16,9 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <set>        //getPinnedConversationIds 的出参
 #include "MessageProtocol.h"
+#include "MessageDeleteRange.h"   //msgdelete::DeleteRange：按时间范围清理的区间
 
 //数据库连接接口。私有辅助方法按指针借用它，不需要完整类型，前向声明即可 ——
 //免得让每个包含本头文件的编译单元都跟着引入 dbapi 那一串。
@@ -137,6 +139,18 @@ public:
                   int64_t readmsgid, int64_t updateTime);
 
     /**
+     *  取某人对某会话记下的已读位点（t_conversation 的 f_readmsgid）。
+     *  单聊同步消息应答用它带出「对方已读到哪条」：查的是<u>对方</u>那一行，即
+     *  userid=对端、cid=请求者本人。
+     *  @param userid 会话归属用户（记位点的那个人）
+     *  @param ctype  会话类型
+     *  @param cid    会话ID（单聊为对端userid）
+     *  @param out    [出参] 已读位点；该行不存在（从没读过）时为 0
+     *  @return 数据库访问成功返回 true（行不存在也算成功）；失败时 out 为 0
+     */
+    bool getReadMsgid(int32_t userid, int32_t ctype, int64_t cid, int64_t& out);
+
+    /**
      *  按 msgid 取单条消息（撤回前的校验用）。
      *  @param msgid 目标消息ID
      *  @param out   [出参] 消息记录
@@ -194,6 +208,17 @@ public:
                               bool& pinned, bool& mute, bool& deleted);
 
     /**
+     *  取某用户置顶的全部会话ID（cmd_get_user_groups 给每个群带上置顶状态时用）。
+     *  直接查 t_conversation，所以没有任何消息的空群、被删除（从会话列表隐藏）的会话，
+     *  只要置顶标记还在，都会被取出来。
+     *  @param userid 会话归属用户
+     *  @param ctype  会话类型：1 单聊（结果为对端userid）、2 群聊（结果为群ID）
+     *  @param out    [出参] 置顶的会话ID集合；调用前不会被清空
+     *  @return 数据库访问成功返回 true
+     */
+    bool getPinnedConversationIds(int32_t userid, int32_t ctype, std::set<int64_t>& out);
+
+    /**
      *  会话内按关键字搜索消息（cmd_search_messages 用）。
      *  对 f_content 做 LIKE 匹配，排除该用户已删除的消息，按 beforemsgid 翻页。
      *  @param userid  发起搜索的用户ID
@@ -215,12 +240,41 @@ public:
     bool deleteMessageForUser(int32_t userid, int64_t msgid);
 
     /**
-     *  按 msgid 列表批量取消息（cmd_forward_message 取转发源用）。
-     *  @param msgids 目标消息ID列表
-     *  @param out    [出参] 命中的消息，按 msgid 升序返回（不存在的 id 直接略过）
+     *  按时间范围清理本人的聊天记录（cmd_delete_messages_by_time 用）：把区间并入
+     *  t_message_deleted_range。
+     *
+     *  在一个事务里读出本人已有的区间，经 msgdelete::MergeDeleteRanges 合并后删掉本人的全部
+     *  旧行、写回合并结果。写入量只与本人的区间段数有关（通常只有几行），与区间内的消息条数
+     *  无关，因此不会长时间占住网络 I/O 线程。消息本体不动、对方与其他群成员不受影响；读取时
+     *  由 notDeletedClause 按区间过滤。
+     *
+     *  @param userid 执行清理的用户ID
+     *  @param range  本次清理的区间，须已经过 msgdelete::NormalizeDeleteRange
+     *  @param nowMs  当前时刻（Unix毫秒），写入 f_update_time 供排查
+     *  @return 数据库访问成功返回 true；失败时事务整体回滚，本人原有的区间不受影响
+     */
+    bool addDeletedRange(int32_t userid, const msgdelete::DeleteRange& range, int64_t nowMs);
+
+    /**
+     *  读出某用户已清理的全部区间，按开始时间升序。
+     *  @param userid 用户ID
+     *  @param out    [出参] 区间列表；调用前会被清空，没有清理过时为空
      *  @return 数据库访问成功返回 true
      */
-    bool getMessagesByIds(const std::vector<int64_t>& msgids, std::vector<MessageRecord>& out);
+    bool getDeletedRanges(int32_t userid, std::vector<msgdelete::DeleteRange>& out);
+
+    /**
+     *  按 msgid 列表批量取消息（cmd_forward_message 取转发源用）。
+     *  排除 viewerUserid 本人已删除的消息（单条删除与按时间范围清理两种），口径与同步、
+     *  搜索所用的 notDeletedClause 一致；删除只对本人生效，别人删了不影响本人取得到。
+     *  是否撤回、本人能否看到该会话，仍由调用方判断。
+     *  @param viewerUserid 取消息的用户ID（即转发人）
+     *  @param msgids       目标消息ID列表
+     *  @param out          [出参] 命中的消息，按 msgid 升序返回（不存在或已被本人删除的 id 直接略过）
+     *  @return 数据库访问成功返回 true
+     */
+    bool getMessagesByIds(int32_t viewerUserid, const std::vector<int64_t>& msgids,
+                          std::vector<MessageRecord>& out);
 
 private:
     /**

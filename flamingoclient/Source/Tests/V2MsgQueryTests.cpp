@@ -2,7 +2,9 @@
  *  v2 历史消息本地库——查询纯逻辑单元测试（Suite V2Q），V2MsgQueryTests.cpp
  *
  *  覆盖：URL 识别、关键字搜索文本构造、内容 JSON 归一、时间区间换算、类型筛选到
- *  SQL 片段、COUNT/分页 SQL 拼装、MessageNotify→入库记录转换。纯逻辑、不触数据库。
+ *  SQL 片段、COUNT/分页 SQL 拼装、MessageNotify→入库记录转换；合并转发的聊天记录
+ *  （msgtype=15）的内容归一与搜索文本（FWD-C5，见 docs/聊天消息转发方案.md）。
+ *  纯逻辑、不触数据库。
  *  框架 Catch2 v3。
  *  balloonwj@qq.com   2026-06-09
  */
@@ -460,4 +462,90 @@ TEST_CASE("V2Q17 类型筛选未新增「文件夹」一档，SQL 片段维持�
     CHECK(fileFrag == "msgtype=3");
     CHECK(fileFrag.find("18") == std::string::npos);
     CHECK(TypeFilterToSqlFragment(kHistoryTypeAll).empty());
+}
+
+TEST_CASE("V2Q18 显示下界：设了下界时多出 msgid>=N，Pin 分类不加，为 0 时与原来相同", "[coverage]")
+{
+    const int64_t kNowMs = 1700000000000LL;
+
+    HistoryFilter base;
+    base.m_ctype = 1;
+    base.m_cid = 10001;
+    const std::string original = BuildCountSql(base, kNowMs);
+    CHECK(original.find("msgid>=") == std::string::npos);
+
+    //下界为 0：与不设下界完全相同，现有行为不变
+    HistoryFilter zero = base;
+    zero.m_minMsgid = 0;
+    CHECK(BuildCountSql(zero, kNowMs) == original);
+
+    //设了下界：计数与分页两条 SQL 都要带上
+    HistoryFilter bounded = base;
+    bounded.m_minMsgid = 500;
+    CHECK(BuildCountSql(bounded, kNowMs).find(" AND msgid>=500") != std::string::npos);
+    CHECK(BuildPageSql(bounded, kNowMs).find(" AND msgid>=500") != std::string::npos);
+
+    //Pin 分类：服务端单独给的全集，不受下界限制
+    HistoryFilter pinned = bounded;
+    pinned.m_type = kHistoryTypePinned;
+    CHECK(BuildCountSql(pinned, kNowMs).find("msgid>=") == std::string::npos);
+    CHECK(BuildPageSql(pinned, kNowMs).find("msgid>=") == std::string::npos);
+}
+
+//构造一条合并记录（msgtype=15）：内含文字（带内联表情）、文件、以及一条嵌套的合并记录
+static net::MessageNotify MakeMergedNotify()
+{
+    net::MessageNotify n;
+    n.m_msgid = 9007199254741100LL;
+    n.m_from = 100001;
+    n.m_msgtype = ::message_type_merged;
+    n.m_timestamp = 1716268800000LL;
+    n.m_mergedContent =
+        u8"{\"title\":\"项目周会的聊天记录\",\"messages\":["
+        u8"{\"msgid\":\"501\",\"from\":\"100003\",\"msgtype\":1,"
+        u8"\"content\":{\"text\":\"排期定了/f[\\\"12\\\"]\"},\"timestamp\":1,\"fromname\":\"张三\"},"
+        u8"{\"msgid\":\"502\",\"from\":\"100004\",\"msgtype\":3,"
+        u8"\"content\":{\"fileid\":\"77\",\"filename\":\"排期表.xlsx\",\"filesize\":10,\"md5\":\"m\"},\"timestamp\":2},"
+        u8"{\"msgid\":\"503\",\"from\":\"100001\",\"msgtype\":15,\"timestamp\":3,"
+        u8"\"content\":{\"title\":\"内层记录\",\"messages\":["
+        u8"{\"msgid\":\"401\",\"from\":\"100005\",\"msgtype\":1,\"content\":{\"text\":\"内层的话\"},\"timestamp\":0}]}}]}";
+    return n;
+}
+
+TEST_CASE("FWD-C5 类型 15 落本地库：content 存为 merged 子对象，搜索文本含标题与子消息文字", "[forward]")
+{
+    const net::MessageNotify n = MakeMergedNotify();
+
+    //content：{"merged": 原 content}，标题与子消息原样保留
+    Json::Value root;
+    REQUIRE(ParseJson(BuildContentJson(n), root));
+    REQUIRE(root["merged"].isObject());
+    CHECK(root["merged"]["title"].asString() == u8"项目周会的聊天记录");
+    REQUIRE(root["merged"]["messages"].isArray());
+    CHECK(root["merged"]["messages"].size() == 3);
+    CHECK(root["merged"]["messages"][0]["fromname"].asString() == u8"张三");
+
+    //搜索文本：标题、文字子消息（内联表情已净化）、文件名、嵌套记录的标题与文字都在里面
+    const std::string text = BuildSearchText(n);
+    CHECK(text.find(u8"项目周会的聊天记录") != std::string::npos);
+    CHECK(text.find(u8"排期定了[表情]") != std::string::npos);
+    CHECK(text.find("/f[") == std::string::npos);
+    CHECK(text.find(u8"排期表.xlsx") != std::string::npos);
+    CHECK(text.find(u8"内层记录") != std::string::npos);
+    CHECK(text.find(u8"内层的话") != std::string::npos);
+
+    //RecordFromNotify：类型正确、不算链接
+    const HistoryRecord rec = RecordFromNotify(n, 1, 100002);
+    CHECK(rec.m_msgtype == ::message_type_merged);
+    CHECK_FALSE(rec.m_isLink);
+    CHECK(rec.m_searchText == text);
+
+    //content 不可用时退化成空的 merged 子对象、搜索文本为空，而不是崩掉
+    net::MessageNotify broken = n;
+    broken.m_mergedContent = "not json";
+    Json::Value brokenRoot;
+    REQUIRE(ParseJson(BuildContentJson(broken), brokenRoot));
+    CHECK(brokenRoot["merged"].isObject());
+    CHECK(brokenRoot["merged"].size() == 0);
+    CHECK(BuildSearchText(broken).empty());
 }

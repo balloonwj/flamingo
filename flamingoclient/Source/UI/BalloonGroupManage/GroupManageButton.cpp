@@ -40,7 +40,7 @@ namespace balloongroupmanage {
 
 namespace {
 
-// 默认字号 / 圆角（像素）。
+// 默认字号 / 圆角（96 DPI 下的像素，绘制时按当前 DPI 换算）。
 const int kDefaultTextPx  = 13;
 const int kDefaultCornerR = 8;
 
@@ -58,9 +58,10 @@ const COLORREF kSecondaryBorder     = RGB(0xD6, 0xD3, 0xCE);
 const COLORREF kSecondaryText       = RGB(0x55, 0x55, 0x55);
 
 // 危险实心：淡红底 + 红字。
-const COLORREF kDangerFillNormal = RGB(0xFB, 0xE7, 0xE7);
-const COLORREF kDangerFillHover  = RGB(0xF6, 0xD6, 0xD6);
-const COLORREF kDangerText       = RGB(0xD9, 0x3F, 0x3F);
+// 危险按钮（取自 design/群管理6.png）：淡红底 + 深红字；悬停时底色加深一档。
+const COLORREF kDangerFillNormal = RGB(0xFE, 0xE4, 0xE2);
+const COLORREF kDangerFillHover  = RGB(0xFC, 0xD3, 0xD0);
+const COLORREF kDangerText       = RGB(0xB4, 0x23, 0x18);
 
 // 危险描边：透明底 + 红边 + 红字。
 const COLORREF kDangerOutlineBorder = RGB(0xE6, 0xB4, 0xB4);
@@ -99,6 +100,17 @@ void GroupManageButton::SetCornerRadius(int px)
     }
 }
 
+int GroupManageButton::TextWeightForStyle(int style)
+{
+    //只有主操作按钮加粗；危险按钮按设计稿（design/群管理6.png）用常规字重，
+    //靠淡红底与深红字表明危险，不再加粗
+    if (style == kGmBtnPrimary)
+    {
+        return kGmFontSemiBold;
+    }
+    return kGmFontNormal;
+}
+
 void GroupManageButton::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
 {
     const int w = m_rcItem.right  - m_rcItem.left;
@@ -113,41 +125,43 @@ void GroupManageButton::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     COLORREF fill   = CLR_INVALID;
     COLORREF border = CLR_INVALID;
     COLORREF text   = kSecondaryText;
-    int      weight = kGmFontNormal;
+    const int weight = TextWeightForStyle(m_style);
 
     switch (m_style)
     {
+    //主操作：橙色实心 + 白字
     case kGmBtnPrimary:
         fill   = hover ? kPrimaryFillHover : kPrimaryFillNormal;
         text   = kPrimaryText;
-        weight = kGmFontSemiBold;
         break;
 
+    //次操作：白底 + 灰边 + 深字
     case kGmBtnSecondary:
         fill   = hover ? kSecondaryFillHover : kSecondaryFillNormal;
         border = kSecondaryBorder;
         text   = kSecondaryText;
-        weight = kGmFontNormal;
         break;
 
+    //不可逆危险操作：淡红实心 + 深红字
     case kGmBtnDanger:
         fill   = hover ? kDangerFillHover : kDangerFillNormal;
         text   = kDangerText;
-        weight = kGmFontSemiBold;
         break;
 
+    //弱危险操作：透明底 + 红边 + 深红字
     case kGmBtnDangerOutline:
         fill   = hover ? kDangerOutlineHover : CLR_INVALID;
         border = kDangerOutlineBorder;
         text   = kDangerText;
-        weight = kGmFontNormal;
         break;
 
+    //未知风格：按次操作的文字色绘制，不画底与边
     default:
         break;
     }
 
-    GmFillRoundRect(hdc, m_rcItem, (Gdiplus::REAL)m_cornerR,
+    //圆角按 DPI 换算；描边恒为 1px 细线
+    GmFillRoundRect(hdc, m_rcItem, (Gdiplus::REAL)GmScale(m_cornerR),
                     fill, border, 1.0f);
 
     GmDrawText(hdc, (LPCWSTR)GetText(), m_rcItem, m_textPx, weight, text,

@@ -75,9 +75,22 @@ std::string PreviewFromContent(int msgtype, const std::string& contentJson)
         //窗口抖动：与会话列表 digestForMsgType 口径对齐，显示“[抖一抖]”，
         //不再落到通用“[消息]”兜底（此前缺本分支导致抖动消息显示成“[消息]”）。
         return "[抖一抖]";
+    //合并转发的聊天记录：「[聊天记录] 标题」，标题取自 merged 子对象；取不到时只写
+    //「[聊天记录]」，与会话列表摘要 digestForMsgType 的类型文字一致
+    case ::message_type_merged:
+        if (ok && root.isMember("merged") && root["merged"].isObject())
+        {
+            const Json::Value& merged = root["merged"];
+            if (merged.isMember("title") && merged["title"].isString()
+                && !merged["title"].asString().empty())
+            {
+                return std::string("[聊天记录] ") + merged["title"].asString();
+            }
+        }
+        return "[聊天记录]";
     default:
         //其余尚未在历史窗单独渲染的类型（位置 / 名片 / 投票 / 接龙 / 待办 /
-        //合并转发 / 通话记录 / 系统等）暂用通用占位，与会话列表兜底口径一致。
+        //通话记录 / 系统等）暂用通用占位，与会话列表兜底口径一致。
         return "[消息]";
     }
 }
@@ -142,6 +155,16 @@ HistoryContentBrief ParseContentBrief(int msgtype, const std::string& contentJso
                 {
                     brief.m_imageSize = (int64_t)image["size"].asInt64();
                 }
+            }
+            //原图宽高：本地库落盘时写成 w / h 两个整数（见 V2MsgQuery.cpp）。列表据此
+            //等比算出预览图尺寸；缺字段或非正时保持 0，由排版按默认尺寸显示。
+            if (image.isMember("w") && image["w"].isIntegral() && image["w"].asInt() > 0)
+            {
+                brief.m_imageWidth = image["w"].asInt();
+            }
+            if (image.isMember("h") && image["h"].isIntegral() && image["h"].asInt() > 0)
+            {
+                brief.m_imageHeight = image["h"].asInt();
             }
         }
         return brief;
@@ -229,6 +252,27 @@ HistoryContentBrief ParseContentBrief(int msgtype, const std::string& contentJso
             {
                 brief.m_folderResult = folder["result"].asInt();
             }
+        }
+    }
+    else if (msgtype == ::message_type_merged)
+    {
+        //合并转发的聊天记录：落库时 content 原文整体放在 merged 子对象里（见 V2MsgQuery.cpp
+        //的 BuildContentJson）。取出标题与条数给卡片显示，再把整个子对象序列化回紧凑 JSON，
+        //打开查看窗时原样交给 parseMergedContent
+        if (root.isMember("merged") && root["merged"].isObject())
+        {
+            const Json::Value& merged = root["merged"];
+            if (merged.isMember("title") && merged["title"].isString())
+            {
+                brief.m_mergedTitle = merged["title"].asString();
+            }
+            if (merged.isMember("messages") && merged["messages"].isArray())
+            {
+                brief.m_mergedCount = (int)merged["messages"].size();
+            }
+            Json::StreamWriterBuilder w;
+            w["indentation"] = "";
+            brief.m_mergedContent = Json::writeString(w, merged);
         }
     }
     return brief;
@@ -365,7 +409,8 @@ HistoryTimeRange TimeRangeFromComboIndex(int comboIndex)
 {
     //枚举值与下拉项下标是一一对应的（见 HistoryTimeRange 的注释），故这里只做
     //一次范围检查，越界（下拉没选中时 GetCurSel 会给 -1）一律退回“全部时间”。
-    if (comboIndex >= (int)kHistoryTimeAll && comboIndex <= (int)kHistoryTimeCustom)
+    //下拉框只到「近一年」，自定义起止不在下拉框里
+    if (comboIndex >= (int)kHistoryTimeAll && comboIndex <= (int)kHistoryTime1Year)
     {
         return (HistoryTimeRange)comboIndex;
     }
@@ -603,6 +648,14 @@ HistoryEmptyText BuildEmptyStateText(const HistoryFilter& filter)
     {
         text.m_title    = "没有找到「" + filter.m_keyword + "」相关的消息";
         text.m_subtitle = "换个词，或者把类型与时间的筛选放宽试试";
+        return text;
+    }
+
+    //选了发送人：说成"这个会话还没有消息"是误导，别人发的消息可能有一堆
+    if (filter.m_fromid > 0)
+    {
+        text.m_title    = "所选发送人在当前筛选条件下没有消息";
+        text.m_subtitle = "把发送人改回「全部成员」试试";
         return text;
     }
 

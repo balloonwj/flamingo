@@ -18,11 +18,12 @@ static const uint32_t kFirstLoginGeneration = 1;
 LoginProgressState::LoginProgressState()
     : m_phase(login_phase_idle),
       m_generation(kInvalidLoginGeneration),
-      m_nextGeneration(kFirstLoginGeneration)
+      m_nextGeneration(kFirstLoginGeneration),
+      m_autoLoginRound(false)
 {
 }
 
-uint32_t LoginProgressState::startLogin()
+uint32_t LoginProgressState::startLogin(bool byAutoLogin)
 {
     if (!canStartLogin())
     {
@@ -34,10 +35,11 @@ uint32_t LoginProgressState::startLogin()
     m_generation = m_nextGeneration;
     ++m_nextGeneration;
     m_phase = login_phase_logining;
+    m_autoLoginRound = byAutoLogin;
     return m_generation;
 }
 
-bool LoginProgressState::cancelLogin()
+bool LoginProgressState::cancelLogin(bool* outWasAutoLogin)
 {
     if (m_phase != login_phase_logining)
     {
@@ -45,6 +47,13 @@ bool LoginProgressState::cancelLogin()
         //一下取消」这类竞态上，按无操作处理即可，不该把状态搅乱。
         return false;
     }
+
+    //先把"本轮是否自动发起"交给调用方，再清掉：取消即本轮结束。
+    if (outWasAutoLogin != nullptr)
+    {
+        *outWasAutoLogin = m_autoLoginRound;
+    }
+    m_autoLoginRound = false;
 
     //把本轮的号作废：后台线程稍后带着它回来时，shouldAcceptResult 会判为过期而丢弃。
     //不去中止那个线程——它阻塞在 socket 上，中止不了，只能等它自己回来。
@@ -59,6 +68,7 @@ void LoginProgressState::reset()
     //m_nextGeneration 只增不减，不在此处动它。
     m_phase = login_phase_idle;
     m_generation = kInvalidLoginGeneration;
+    m_autoLoginRound = false;
 }
 
 bool LoginProgressState::shouldAcceptResult(uint32_t generation) const
@@ -81,6 +91,7 @@ bool LoginProgressState::acceptSuccess(uint32_t generation)
     m_phase = login_phase_done;
     //已成功，本轮结束；号一并作废，使之后任何迟到的结果都对不上
     m_generation = kInvalidLoginGeneration;
+    m_autoLoginRound = false;
     return true;
 }
 
@@ -91,6 +102,8 @@ bool LoginProgressState::acceptFailure(uint32_t generation)
 
     m_phase = login_phase_idle;
     m_generation = kInvalidLoginGeneration;
+    //本轮以失败结束；用户随后改完口令手动重试的那一轮与自动登录无关
+    m_autoLoginRound = false;
     return true;
 }
 

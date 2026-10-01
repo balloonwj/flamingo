@@ -39,6 +39,9 @@
  *    · 「取消 Pin」的权限<u>不在客户端预判</u>：本端不一定知道一条历史消息是谁钉的
  *      （operator 只随推送来、历史行未必带），预判会出现"该显示的没显示"。故这一项
  *      一律给出，无权时由服务端以 error_code_pin_not_allowed 拒绝并提示。
+ *    · 「转发」排在「定位到聊天窗」（以及「查看上下文」）之后、「Pin」之前，出现条件见
+ *      CanForwardHistoryRow。转发不依赖本地文件：服务端按原消息重新落一条，图片 / 文件
+ *      本地没下载、甚至正在下载时照样给出（方案见 docs/聊天消息转发方案.md §9 第 9 步）。
  *
  *  balloonwj@qq.com   2026-08-05
  */
@@ -61,7 +64,7 @@ constexpr int64_t kHistoryRowMsgIdUnassigned = 0;
  */
 enum HistoryRowMenuId
 {
-    kHistoryRowMenuCopy           = 1,   // 复制：仅文本 / 链接行出现，把整条正文写进剪贴板，内联表情写成“[表情]”
+    kHistoryRowMenuCopy           = 1,   // 复制：仅文本 / 链接行出现。右键点在正文选区上时复制选中部分，否则复制整条正文；按聊天内容格式写剪贴板（纯文字里表情写成“[表情]”，粘回聊天输入框时还原成表情）
     kHistoryRowMenuCopyImage      = 2,   // 复制图片：仅图片行且本地已有原图时出现，把图片本身放进剪贴板（CF_BITMAP）
     kHistoryRowMenuSaveImageAs    = 3,   // 图片另存为：仅图片行且本地已有原图时出现，把原图另存到用户选定位置
     kHistoryRowMenuOpenFile       = 4,   // 打开文件：仅文件行且本地文件在时出现，用系统默认程序打开
@@ -72,6 +75,10 @@ enum HistoryRowMenuId
     kHistoryRowMenuLocate         = 9,   // 定位到聊天窗：所有类型的行都有，是本窗口的主操作 —— 跳到聊天窗并高亮这条
     kHistoryRowMenuPin            = 10,  // Pin / 取消 Pin：所有类型的行都有，文案随当前是否已钉住取反；msgid 未分配时整项不出现
     kHistoryRowMenuOpenFolderRoot = 11,  // 打开文件夹：仅文件夹传输记录行、且本机登记过这次传输的根目录且目录还在时出现，在资源管理器里打开<u>那个目录本身</u>。与 kHistoryRowMenuOpenFolder（打开文件所在的父目录并选中文件）不是一回事，故另开一个 id
+    kHistoryRowMenuDelete         = 12,  // 删除：所有类型的行都有，放在菜单末尾、前面隔一条线；msgid 未分配时整项不出现。本人视角的删除（cmd_delete_message），本机与本人其他设备都不再显示，对方不受影响；确认后发出，界面等删除推送到达再更新（见 docs/清理聊天记录方案.md §9.1）
+    kHistoryRowMenuViewContext    = 13,  // 查看上下文：当前有筛选条件（关键字、类型、时间、发送人）时出现，紧跟「定位到聊天窗」；清掉筛选、在本窗口里翻到这条所在的页并高亮它（判定见 HistoryModel.h 的 ShouldOfferViewContext）
+    kHistoryRowMenuForward        = 14,  // 转发：本条能转发时出现（判定见 CanForwardHistoryRow），排在「查看上下文」之后、「Pin」之前；点它打开主面板的目标选择窗，按逐条转发把这一条发给选定的会话
+    kHistoryRowMenuMultiSelect    = 15,  // 多选：msgid 已分配的行都有，紧跟「转发」；点它进入多选模式并预先选中这一条，之后可合并转发、逐条转发或批量删除（选择集合见 HistorySelection.h）
 };
 
 /**
@@ -127,12 +134,17 @@ struct HistoryRowMenuContext
     //服务端还没分配，此时「Pin」整项不出现；负数不是合法 msgid，一并按未分配处理。
     int64_t m_msgId;
 
+    //是否给「查看上下文」。由调用方按 ShouldOfferViewContext（HistoryModel.h）算好填入，
+    //本模块不看筛选条件
+    bool    m_canViewContext;
+
     HistoryRowMenuContext()
         : m_msgType(0)
         , m_hasLocalFile(false)
         , m_downloading(false)
         , m_pinned(false)
         , m_msgId(kHistoryRowMsgIdUnassigned)
+        , m_canViewContext(false)
     {
     }
 };
@@ -186,5 +198,22 @@ bool IsHistoryRowFileType(int msgType);
  *  @return 算文件夹记录行返回 true。
  */
 bool IsHistoryRowFolderType(int msgType);
+
+/**
+ *  判断消息记录窗里的一行能不能转发（决定右键菜单里有没有「转发」）。
+ *
+ *  规则：
+ *    · 须有服务器 msgid：服务端按 msgid 取转发源消息，未分配（0）或负数时必被判
+ *      message_not_exist；
+ *    · 文件夹传输记录（18）、通话记录（16）、系统提示（17）不能转发：三者都是服务端生成的
+ *      记录条，转发出去没有对应的产品语义（聊天窗对文件夹记录同样不给「转发」）；
+ *    · 其余类型一律可以，与本地文件在不在、是否正在下载无关。
+ *  撤回的消息不会出现在消息记录窗的查询结果里，这里不必再判。
+ *
+ *  @param msgType 消息内容类型，取值见 net/Protocol.h 的 enum message_type。
+ *  @param msgId   服务器 msgid；kHistoryRowMsgIdUnassigned（0）表示尚未分配。
+ *  @return 能转发返回 true。本函数无副作用。
+ */
+bool CanForwardHistoryRow(int msgType, int64_t msgId);
 
 } // namespace balloonhistory

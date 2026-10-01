@@ -123,6 +123,9 @@
     <ClCompile Include="..\tests\test_starredmanager.cpp">
       <Filter>tests\manager</Filter>
     </ClCompile>
+    <ClCompile Include="..\tests\test_filestoremanager.cpp">
+      <Filter>tests\manager</Filter>
+    </ClCompile>
     <ClCompile Include="..\tests\test_conversationbench.cpp">
       <Filter>tests\manager</Filter>
     </ClCompile>
@@ -142,6 +145,9 @@
       <Filter>chatserversrc</Filter>
     </ClCompile>
     <ClCompile Include="..\chatserversrc\StarredManager.cpp">
+      <Filter>chatserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\FileStoreManager.cpp">
       <Filter>chatserversrc</Filter>
     </ClCompile>
     <ClCompile Include="..\tests\test_contactremarkmanager.cpp">
@@ -273,6 +279,15 @@
     <ClCompile Include="..\chatserversrc\MessagePinManager.cpp">
       <Filter>chatserversrc</Filter>
     </ClCompile>
+    <ClCompile Include="..\tests\test_messagedeleterange.cpp">
+      <Filter>tests\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="..\tests\test_forwardsource.cpp">
+      <Filter>tests\manager</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\MessageDeleteRange.cpp">
+      <Filter>chatserversrc</Filter>
+    </ClCompile>
     <ClCompile Include="..\dbapi\DbFactory.cpp">
       <Filter>dbapi</Filter>
     </ClCompile>
@@ -306,7 +321,19 @@
     <ClCompile Include="..\tests\test_grouppermission.cpp">
       <Filter>tests\logic</Filter>
     </ClCompile>
+    <ClCompile Include="..\tests\test_groupautoname.cpp">
+      <Filter>tests\logic</Filter>
+    </ClCompile>
+    <ClCompile Include="..\tests\test_pinnedgroups.cpp">
+      <Filter>tests\logic</Filter>
+    </ClCompile>
     <ClCompile Include="..\chatserversrc\GroupPermission.cpp">
+      <Filter>chatserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\GroupAutoName.cpp">
+      <Filter>chatserversrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\chatserversrc\GroupManager.cpp">
       <Filter>chatserversrc</Filter>
     </ClCompile>
     <ClCompile Include="..\tests\test_cardprotocol.cpp">
@@ -548,6 +575,9 @@
     <ClInclude Include="..\chatserversrc\DepartmentMsg.h">
       <Filter>chatserversrc</Filter>
     </ClInclude>
+    <ClInclude Include="..\chatserversrc\MessageDeleteRange.h">
+      <Filter>chatserversrc</Filter>
+    </ClInclude>
     <ClInclude Include="..\chatserversrc\Protocol.h">
       <Filter>chatserversrc</Filter>
     </ClInclude>
@@ -618,6 +648,12 @@
       <Filter>chatserversrc</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\GroupPermission.h">
+      <Filter>chatserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\GroupAutoName.h">
+      <Filter>chatserversrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\chatserversrc\GroupManager.h">
       <Filter>chatserversrc</Filter>
     </ClInclude>
     <ClInclude Include="..\chatserversrc\CardProtocol.h">

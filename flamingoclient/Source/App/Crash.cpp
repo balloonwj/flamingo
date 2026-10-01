@@ -156,7 +156,14 @@ public:
 	}
 	static LONG WINAPI AutoUnhandleExceptionFilter::MyUnhandledExceptionFilter(struct _EXCEPTION_POINTERS* ExceptionInfo)
 	{
-		if(IDYES == ::MessageBox(NULL, _T("程序遇到一个致命的问题，需要关闭，我们对此表示非常的抱歉。我们将帮您重启，现在就重新启动吗？"), _T("程序出错"), MB_YESNO|MB_ICONERROR|MB_SYSTEMMODAL))
+		// 日志是异步写入的，崩溃前最后几行可能还在队列里。先等它们写进文件再弹框，
+		// 崩溃前后的日志往往是排查时最需要的
+		LOG_ERROR("unhandled exception 0x%08X, flushing log before exit.",
+		          ExceptionInfo != NULL && ExceptionInfo->ExceptionRecord != NULL
+		              ? (unsigned int)ExceptionInfo->ExceptionRecord->ExceptionCode : 0u);
+		CIULog::Flush(kIULogFlushTimeoutMs);
+
+		if(IDYES ==::MessageBox(NULL, _T("程序遇到一个致命的问题，需要关闭，我们对此表示非常的抱歉。我们将帮您重启，现在就重新启动吗？"), _T("程序出错"), MB_YESNO|MB_ICONERROR|MB_SYSTEMMODAL))
 		{
 			::ShellExecute(NULL,NULL, _T("Flamingo.exe"), NULL, g_szHomePath, SW_SHOW);
 		}

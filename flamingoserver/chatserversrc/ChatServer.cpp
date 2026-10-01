@@ -402,6 +402,44 @@ void ChatServer::pushToUsers(const std::vector<int64_t>& userids, int32_t msgTyp
          static_cast<unsigned>(targets.size()), msgType, pushed);
 }
 
+//读回最新群资料，向该群全体成员推送 cmd_group_info_changed_notify（资料变更）
+static void pushGroupInfoUpdated(ChatServer& server, int64_t groupid)
+{
+    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+    GroupRecord updated;
+    if (!groupMgr.getGroup(groupid, updated))
+        return;
+
+    std::vector<GroupMemberRecord> members;
+    groupMgr.getGroupMembers(groupid, members);
+    std::vector<int64_t> userids;
+    for (size_t i = 0; i < members.size(); ++i)
+        userids.push_back(members[i].userid);
+
+    server.pushToUsers(userids, cmd_group_info_changed_notify,
+                       GroupProtocol::buildGroupInfoChangedNotify(updated, group_info_change_updated));
+}
+
+bool ChatServer::refreshAutoGroupNameAndNotify(int64_t groupid)
+{
+    std::string newName;
+    if (!Singleton<GroupManager>::Instance().refreshAutoGroupName(groupid, newName))
+        return false;
+
+    pushGroupInfoUpdated(*this, groupid);
+    return true;
+}
+
+void ChatServer::refreshAutoGroupNamesOfMemberAndNotify(int32_t userid)
+{
+    std::vector<std::pair<int64_t, std::string> > changes;
+    if (!Singleton<GroupManager>::Instance().refreshAutoGroupNamesOfMember(userid, changes))
+        return;
+
+    for (size_t i = 0; i < changes.size(); ++i)
+        pushGroupInfoUpdated(*this, changes[i].first);
+}
+
 void ChatServer::collectOnlineUserIds(std::vector<int32_t>& outUserIds)
 {
     outUserIds.clear();

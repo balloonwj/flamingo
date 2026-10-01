@@ -69,9 +69,6 @@ static const int kAvatarSize   = 32;   // 成员行头像边长
 static const int kChipAvatar   = 26;   // 已选成员头像边长
 static const COLORREF kSectionColor = RGB(0x9A, 0x9A, 0x9A);   // 分组标题/计数 灰
 
-// 自动生成群名时最多拼接的成员昵称个数（超过则补"等"）。
-static const int kAutoNameMaxNames = 4;
-
 // =======================================================================
 // 文件作用域编码 / 配色辅助
 // =======================================================================
@@ -513,7 +510,7 @@ void CCreateGroupDlg::RebuildMemberList(const CString& filter)
             filter.IsEmpty() ? CString(_T("暂无联系人")) : CString(_T("无匹配联系人")));
         m_memberTree->SetItemSelectable(hintId, false);
         SyncTreeHeight();
-        if (m_hWnd != NULL)
+        if (IsWindow())
         {
             ::InvalidateRect(m_hWnd, NULL, FALSE);
         }
@@ -564,7 +561,7 @@ void CCreateGroupDlg::RebuildMemberList(const CString& filter)
     }
 
     SyncTreeHeight();
-    if (m_hWnd != NULL)
+    if (IsWindow())
     {
         ::InvalidateRect(m_hWnd, NULL, FALSE);
     }
@@ -735,7 +732,7 @@ void CCreateGroupDlg::RebuildSelected()
         text.Format(_T("已选 %d 人"), (int)m_selected.size());
         m_countLabel->SetText(text);
     }
-    if (m_hWnd != NULL)
+    if (IsWindow())
     {
         ::InvalidateRect(m_hWnd, NULL, FALSE);
     }
@@ -783,39 +780,13 @@ void CCreateGroupDlg::DoCreate()
         return;
     }
 
-    // 群名：取输入框文字；为空则用已选成员昵称自动拼一个（服务端要求非空）。
-    CString name;
+    // 群名：取输入框文字并去掉首尾空白。未填写时发空串，由服务端按成员昵称生成自动
+    // 群名，此后群名随成员增减、改昵称而重算；客户端自己拼出的名字会被服务端当成
+    // 用户设定的群名，从此固定不变。
+    std::string name;
     if (m_nameInput != NULL)
     {
-        name = m_nameInput->GetText();
-        name.Trim();
-    }
-    if (name.IsEmpty())
-    {
-        int shown = 0;
-        for (size_t i = 0; i < m_selected.size() && shown < kAutoNameMaxNames; ++i)
-        {
-            const net::ContactItem* c = FindContact(m_selected[i]);
-            CString one = (c != NULL) ? DisplayNameOf(*c) : CString();
-            if (one.IsEmpty())
-            {
-                continue;
-            }
-            if (!name.IsEmpty())
-            {
-                name += _T("、");
-            }
-            name += one;
-            ++shown;
-        }
-        if ((int)m_selected.size() > shown && !name.IsEmpty())
-        {
-            name += _T("等");
-        }
-        if (name.IsEmpty())
-        {
-            name = _T("群聊");
-        }
+        name = net::GroupProtocolClient::normalizeGroupNameInput(CStrToUtf8(m_nameInput->GetText()));
     }
 
     std::vector<int64_t> memberIds;
@@ -825,7 +796,7 @@ void CCreateGroupDlg::DoCreate()
     }
 
     m_creating = true;
-    CIUSocket::GetInstance().SendCreateGroup(CStrToUtf8(name), memberIds);
+    CIUSocket::GetInstance().SendCreateGroup(name, memberIds);
     LOG_INFO("发起建群: members=%u。", (uint32_t)memberIds.size());
 }
 
@@ -896,7 +867,7 @@ LRESULT CCreateGroupDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
     if (pNotify->code == balloonmain::MemberPickerTreeView::DUIN_PICKER_HEIGHT_CHANGED)
     {
         SyncTreeHeight();
-        if (m_hWnd != NULL)
+        if (IsWindow())
         {
             ::InvalidateRect(m_hWnd, NULL, FALSE);
         }

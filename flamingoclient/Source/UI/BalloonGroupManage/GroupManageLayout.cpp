@@ -47,6 +47,7 @@ extern CAppModule _Module;
 #include "GroupManagePaint.h"
 #include "GroupManageIcons.h"
 
+#include "../../../third-party/balloonui/balloonui/DuiDpi.h"   // Scale：窗口尺寸按 DPI 换算
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiAvatar.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiBadge.h"
@@ -87,36 +88,39 @@ const COLORREF kColorPageTitle  = RGB(0x22, 0x22, 0x22);   // 页面大标题
 const COLORREF kColorSubtitle   = RGB(0x9A, 0x98, 0x93);   // 副标题 / 说明文字
 const COLORREF kColorName       = RGB(0x2A, 0x2A, 0x2A);   // 卡片主标题（昵称）
 const COLORREF kColorFieldLabel = RGB(0x3A, 0x3A, 0x3A);   // 表单字段标签
-const COLORREF kColorDanger     = RGB(0xD9, 0x3F, 0x3F);   // 危险红
+const COLORREF kColorDanger     = RGB(0xEF, 0x44, 0x44);   // 危险红（与导航危险项同色，取自设计稿）
 
 const COLORREF kCardBg     = RGB(0xFA, 0xF9, 0xF6);   // 普通卡片底
 const COLORREF kCardBorder = RGB(0xEC, 0xEA, 0xE6);   // 普通卡片描边
-const COLORREF kDangerCardBg     = RGB(0xFE, 0xF4, 0xF4);   // 危险卡片底（淡红）
-const COLORREF kDangerCardBorder = RGB(0xF3, 0xDD, 0xDD);   // 危险卡片描边
+// 危险区域页的两种卡片（取自 design/群管理6.png）：不可逆操作用淡红卡片，
+// 转让群主这类可挽回的操作用中性浅灰卡片，不让整页都是红色。
+const COLORREF kDangerCardBg      = RGB(0xFE, 0xF8, 0xF8);   // 危险卡片底（淡红）
+const COLORREF kDangerCardBorder  = RGB(0xFC, 0xDD, 0xDD);   // 危险卡片描边
+const COLORREF kNeutralCardBg     = RGB(0xF5, 0xF4, 0xF1);   // 中性卡片底（浅灰）
+const COLORREF kNeutralCardBorder = RGB(0xE4, 0xE3, 0xE0);   // 中性卡片描边
 const COLORREF kSeparator  = RGB(0xEC, 0xEA, 0xE6);   // 分隔线
+
+// 左侧导航的底色与分组标题色（取自 design/群管理8.png）。导航用浅灰底，右侧内容
+// 区是白底，两边靠底色区分层次；选中项的白色卡片浮在这层浅灰上。
+const COLORREF kNavBg              = RGB(0xFA, 0xFA, 0xF9);
+const COLORREF kNavGroupTitleColor = RGB(0x9A, 0x9A, 0x9A);
 
 // 分组标题前的圆点色（按角色）。
 const COLORREF kDotOwner  = RGB(0xFF, 0x7A, 0x45);
 const COLORREF kDotAdmin  = RGB(0x45, 0x6C, 0xDF);
 const COLORREF kDotMember = RGB(0xB4, 0xB4, 0xB0);
 
+// 分隔线粗细（像素）。恒为 1px 细线，不经 GmScale 换算 —— 高 DPI 下随之加粗
+// 反而显得笨重。
+const int kSeparatorPx  = 1;
+
 const int kCardCorner   = 10;   // 卡片圆角
 const int kMemberCardH  = 58;   // 成员卡高度
 const int kGridGap      = 10;   // 成员网格行列间距
 const int kMemberCols   = 3;    // 成员网格列数
 
-// 全局字号收紧量（像素）。各处文本 / 按钮统一比设计基准小这么多，使整体
-// 界面文字稍紧凑；下限 kFontFloorPx 防止过小。集中在 MakeText /
-// MakeMultiText / MakeButton 应用，避免逐处改字号。
-const int kFontTrim   = 1;
-const int kFontFloorPx = 11;
-
-// 应用字号收紧（带下限）。
-int TrimFont(int px)
-{
-    const int v = px - kFontTrim;
-    return (v < kFontFloorPx) ? kFontFloorPx : v;
-}
+// 字号不在本文件里写像素值：MakeText / MakeMultiText / MakeButton 只收
+// GmTextStyle，字号与字重统一取自 GmTextStyleSpec（GroupManagePaint.h）。
 
 // =====================================================================
 // 自绘小控件
@@ -193,9 +197,14 @@ public:
 
     void OnPaint(HDC hdc, const RECT& /*rcDirty*/) override
     {
+        // 圆点半径、圆点左缩进、圆点与文字的间距（96 DPI 下的像素，经 GmScale 换算）
+        const int kDotRadius  = 4;
+        const int kDotIndent  = 2;
+        const int kDotTextGap = 8;
+
         const int cy   = (m_rcItem.top + m_rcItem.bottom) / 2;
-        const int dotR = 4;
-        const int dotX = m_rcItem.left + 2;
+        const int dotR = GmScale(kDotRadius);
+        const int dotX = m_rcItem.left + GmScale(kDotIndent);
 
         Gdiplus::Graphics g(hdc);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
@@ -205,8 +214,10 @@ public:
                       Gdiplus::RectF((Gdiplus::REAL)dotX, (Gdiplus::REAL)(cy - dotR),
                                      (Gdiplus::REAL)(dotR * 2), (Gdiplus::REAL)(dotR * 2)));
 
-        RECT tr = { dotX + dotR * 2 + 8, m_rcItem.top, m_rcItem.right, m_rcItem.bottom };
-        GmDrawText(hdc, (LPCWSTR)m_text, tr, 12, kGmFontNormal, kColorSubtitle,
+        RECT tr = { dotX + dotR * 2 + GmScale(kDotTextGap), m_rcItem.top,
+                    m_rcItem.right, m_rcItem.bottom };
+        const GmTextSpec spec = GmTextStyleSpec(kGmTextBody);
+        GmDrawText(hdc, (LPCWSTR)m_text, tr, spec.m_px, spec.m_weight, kColorSubtitle,
                    DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX);
     }
 
@@ -256,7 +267,8 @@ public:
         Gdiplus::Graphics g(hdc);
         g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
 
-        //描边宽度取 2.0，与左侧导航各图标一致
+        //描边宽度取 2.0，与左侧导航各图标一致。单位是图标 24 格视图坐标，已随图标
+        //边长缩放，不再按 DPI 换算
         const Gdiplus::REAL kIconStrokeWidth = 2.0f;
         DrawGmNavIcon(g, m_kind, x, y, (Gdiplus::REAL)side,
                       Gdiplus::Color(255, GetRValue(m_color), GetGValue(m_color),
@@ -276,20 +288,24 @@ private:
 // =====================================================================
 
 // 造一个单行文本控件。
-std::unique_ptr<GmText> MakeText(LPCTSTR text, int px, int weight,
+//   style：文字样式，字号与字重取自 GmTextStyleSpec。参数类型是枚举而不是 int，
+//          传像素值会编译不过，避免有人绕开字号表另写一个数。
+std::unique_ptr<GmText> MakeText(LPCTSTR text, GmTextStyle style,
                                  COLORREF color, UINT align)
 {
+    const GmTextSpec spec = GmTextStyleSpec(style);
     std::unique_ptr<GmText> t(new GmText());
-    t->Configure(text, TrimFont(px), weight, color, align, false);
+    t->Configure(text, spec.m_px, spec.m_weight, color, align, false);
     return t;
 }
 
-// 造一个多行文本控件。
-std::unique_ptr<GmText> MakeMultiText(LPCTSTR text, int px, int weight,
+// 造一个多行文本控件。style 的含义同 MakeText。
+std::unique_ptr<GmText> MakeMultiText(LPCTSTR text, GmTextStyle style,
                                       COLORREF color)
 {
+    const GmTextSpec spec = GmTextStyleSpec(style);
     std::unique_ptr<GmText> t(new GmText());
-    t->Configure(text, TrimFont(px), weight, color, DT_LEFT, true);
+    t->Configure(text, spec.m_px, spec.m_weight, color, DT_LEFT, true);
     return t;
 }
 
@@ -333,24 +349,29 @@ public:
 };
 
 // 造一个圆角卡片容器（DuiVBox 卡片底）。
+//   corner：96 DPI 下的圆角半径（像素），内部经 GmScale 换算。
+// 描边恒为 1px 细线，不随 DPI 加粗。
 std::unique_ptr<DuiVBox> MakeCard(COLORREF bg, COLORREF border, int corner)
 {
     std::unique_ptr<DuiVBox> card(new DuiVBox());
     card->SetBgColor(bg);
     card->SetBorderColor(border);
     card->SetBorderWidth(1.0f);
-    card->SetCornerRadius(corner);
+    card->SetCornerRadius(GmScale(corner));
     return card;
 }
 
 // 造一个操作按钮。
+//   style：    按钮风格，取值见 GmButtonStyle；
+//   textStyle：文字样式，只取其字号（字重由按钮风格决定）。普通按钮用 kGmTextBody，
+//              小按钮用 kGmTextCaption。
 std::unique_ptr<GroupManageButton> MakeButton(LPCTSTR text, int style,
-                                              UINT ctrlId, int textPx)
+                                              UINT ctrlId, GmTextStyle textStyle)
 {
     std::unique_ptr<GroupManageButton> btn(new GroupManageButton());
     btn->SetText(text);
     btn->SetButtonStyle(style);
-    btn->SetTextPx(TrimFont(textPx));
+    btn->SetTextPx(GmTextStyleSpec(textStyle).m_px);
     btn->SetCtrlId(ctrlId);
     return btn;
 }
@@ -370,13 +391,14 @@ int AvatarStatusFromOnline(int online)
 }
 
 // 造一个圆角方形头像。
+//   corner：96 DPI 下的圆角半径（像素），内部经 GmScale 换算。
 std::unique_ptr<DuiAvatar> MakeAvatar(LPCTSTR text, COLORREF color,
                                       int corner, int online)
 {
     std::unique_ptr<DuiAvatar> av(new DuiAvatar());
     av->SetName(text);
     av->SetShape(DuiAvatar::ShapeRoundRect);
-    av->SetCornerRadius(corner);
+    av->SetCornerRadius(GmScale(corner));
     av->SetFallbackBgColor(color);
     av->SetStatus((DuiAvatar::Status)AvatarStatusFromOnline(online));
     return av;
@@ -384,8 +406,8 @@ std::unique_ptr<DuiAvatar> MakeAvatar(LPCTSTR text, COLORREF color,
 
 // 造群头像控件：真图已下到本地就画真图，否则画字形 + 底色。
 //   model：  数据来源（真图路径 / 字形 / 底色）。
-//   sizePx： 边长（像素），生成真图位图时按它缩放。
-//   corner： 圆角半径（像素）。
+//   sizePx： 96 DPI 下的边长（像素），生成真图位图时按它换算后的尺寸缩放。
+//   corner： 96 DPI 下的圆角半径（像素）。
 // 真图用 AvatarPickerTile 承载而不是 DuiAvatar：后者的 SetBitmap 只借用位图、
 // 由调用方负责释放，而布局层是一串自由函数，没有地方存这个 HBITMAP；前者的
 // SetOwnedBitmap 自持并在析构时释放，位图生命周期随控件树走，不会漏。
@@ -393,14 +415,15 @@ std::unique_ptr<DuiAvatar> MakeGroupAvatar(const GroupManageModel& model, int si
 {
     if (!model.m_groupAvatarImagePath.IsEmpty())
     {
+        //位图按换算后的物理尺寸生成，高 DPI 下才不会被放大发虚
         HBITMAP hbm = balloonmain::MakeRoundedAvatarFromFile(
-            model.m_groupAvatarImagePath, sizePx, corner);
+            model.m_groupAvatarImagePath, GmScale(sizePx), GmScale(corner));
         if (hbm != NULL)
         {
             std::unique_ptr<balloonmain::AvatarPickerTile> tile(
                 new balloonmain::AvatarPickerTile());
             tile->SetShape(DuiAvatar::ShapeRoundRect);
-            tile->SetCornerRadius(corner);
+            tile->SetCornerRadius(GmScale(corner));
             tile->SetOwnedBitmap(hbm);
             return std::unique_ptr<DuiAvatar>(tile.release());
         }
@@ -432,7 +455,7 @@ std::unique_ptr<DuiBadge> MakeRoleBadge(int role)
     std::unique_ptr<DuiBadge> badge(new DuiBadge());
     badge->SetText(label);
     badge->SetMaxDisplayChars(0);    // 不截断（chip 用法）
-    badge->SetCornerRadius(4);
+    badge->SetCornerRadius(GmScale(4));
     badge->SetHideWhenEmpty(false);
     badge->SetBgColor(bg);
     badge->SetTextColor(fg);
@@ -446,6 +469,196 @@ std::unique_ptr<DuiControl> MakeSeparatorRow()
     sep->SetOrientation(DuiSeparator::Horizontal);
     sep->SetColor(kSeparator);
     return std::unique_ptr<DuiControl>(sep.release());
+}
+
+// ---- 页面框架：内容限宽 + 标题块 -----------------------------------------
+
+// 限宽页的内容最大宽度（96 DPI 下的像素）。按设计稿实测，基本信息、群权限、危险区域
+// 三页的内容宽约 650 / 625 / 600 设计稿像素，按窗口宽度比例 960/1125 折算为
+// 555 / 533 / 512，统一取 560。成员管理、加群审批、禁言管理、群公告四页铺满。
+const int kMaxContentWidth = 560;
+
+// 页面标题块（96 DPI 下的像素）：标题行高、副标题行高、两行之间的间距，以及标题块
+// 与下方正文之间统一留出的距离。设计稿里标题与副标题几乎贴在一起，与正文则隔开一段。
+const int kPageTitleHeight      = 24;
+const int kPageSubtitleHeight   = 18;
+const int kPageTitleGap         = 4;
+const int kPageTitleBlockBottom = 16;
+
+/**
+ *  限宽的页面容器：可用宽度超过「最大内容宽度 + 左右内边距」时，只按这个宽度靠左
+ *  排版，右侧留白；可用宽度不足时照常铺满。与 DuiVBox 只差 Layout 里这一步。
+ */
+class GmMaxWidthBox : public DuiVBox
+{
+public:
+    // maxContentWidth：内容区（不含左右内边距）的最大宽度，当前 DPI 下的像素。
+    explicit GmMaxWidthBox(int maxContentWidth)
+        : m_maxContentWidth(maxContentWidth)
+    {
+    }
+
+    void Layout(const RECT& rcAvail) override
+    {
+        RECT rc = rcAvail;
+        const int maxOuterWidth = m_maxContentWidth + m_padL + m_padR;
+        if (rc.right - rc.left > maxOuterWidth)
+        {
+            rc.right = rc.left + maxOuterWidth;
+        }
+        DuiVBox::Layout(rc);
+    }
+
+private:
+    int m_maxContentWidth;   // 内容区最大宽度（当前 DPI 下的像素，不含内边距）
+};
+
+// 造一个限宽页面容器，内边距与间距由调用方设置。
+std::unique_ptr<DuiVBox> MakeWidthLimitedPage()
+{
+    return std::unique_ptr<DuiVBox>(new GmMaxWidthBox(GmScale(kMaxContentWidth)));
+}
+
+/**
+ *  造页面标题块：标题 + 可选的副标题，两行紧挨着。标题与副标题分别带
+ *  kIdPageTitle / kIdPageSubtitle。
+ *    title：     标题文字；
+ *    titleColor：标题颜色（危险区域用红色，其余用标题色）；
+ *    subtitle：  副标题文字，NULL 或空串表示没有副标题。
+ *  @return 标题块；高度见 PageTitleBlockHeight。
+ */
+std::unique_ptr<DuiVBox> MakePageTitleBlock(LPCTSTR title, COLORREF titleColor,
+                                            LPCTSTR subtitle)
+{
+    std::unique_ptr<DuiVBox> block(new DuiVBox());
+    block->SetGap(GmScale(kPageTitleGap));
+
+    std::unique_ptr<GmText> titleText = MakeText(title, kGmTextPageTitle, titleColor, DT_LEFT);
+    titleText->SetCtrlId(kIdPageTitle);
+    block->AddChild(std::unique_ptr<DuiControl>(titleText.release()),
+                    Hint().Fixed(GmScale(kPageTitleHeight)));
+
+    if (subtitle != NULL && subtitle[0] != _T('\0'))
+    {
+        std::unique_ptr<GmText> sub = MakeText(subtitle, kGmTextBody, kColorSubtitle, DT_LEFT);
+        sub->SetCtrlId(kIdPageSubtitle);
+        block->AddChild(std::unique_ptr<DuiControl>(sub.release()),
+                        Hint().Fixed(GmScale(kPageSubtitleHeight)));
+    }
+    return block;
+}
+
+// 标题块在当前 DPI 下的高度（像素）。各项分别换算后再相加，与块内逐项换算一致。
+int PageTitleBlockHeight(bool hasSubtitle)
+{
+    int h = GmScale(kPageTitleHeight);
+    if (hasSubtitle)
+    {
+        h += GmScale(kPageTitleGap) + GmScale(kPageSubtitleHeight);
+    }
+    return h;
+}
+
+/**
+ *  把标题块放到页面最上方，并保证它与下方正文之间的距离为 kPageTitleBlockBottom：
+ *  页面自身的间距不够时，用标题块的下边距补足。
+ *    page：    页面容器（借用）；
+ *    pageGap： 页面容器的子控件间距（96 DPI 下的像素，即调用方传给 SetGap 的原值）；
+ *    其余参数：同 MakePageTitleBlock。
+ */
+// ---- 表单控件样式（取自 design/群管理4/5.png）-------------------------------
+
+// 开关打开 / 关闭时的轨道色，下拉框箭头色。
+const COLORREF kSwitchOnColor  = RGB(0xFF, 0x7A, 0x45);   // 品牌橙
+const COLORREF kSwitchOffColor = RGB(0xD8, 0xD5, 0xD0);   // 暖灰
+const COLORREF kComboArrowColor = RGB(0x66, 0x66, 0x66);
+
+/**
+ *  群管理窗样式的输入框：与 DuiEdit 只差描边色，按 GmInputBorderColor 取色
+ *  （常态浅灰、焦点品牌橙），替换 DuiEdit 默认的中灰 / 蓝色描边。
+ */
+class GmEdit : public DuiEdit
+{
+protected:
+    // DuiRichEdit 覆写：按群管理窗的配色返回当前状态下的描边色。
+    COLORREF BorderColor() const override
+    {
+        return GmInputBorderColor(m_bEnabled, m_bFocused, m_bHover);
+    }
+};
+
+/**
+ *  群管理窗样式的搜索框：与 DuiSearchBox 只差描边色，取色同 GmEdit。
+ */
+class GmSearchBox : public DuiSearchBox
+{
+protected:
+    // DuiRichEdit 覆写：按群管理窗的配色返回当前状态下的描边色。
+    COLORREF BorderColor() const override
+    {
+        return GmInputBorderColor(m_bEnabled, m_bFocused, m_bHover);
+    }
+};
+
+// 给开关套上群管理窗的配色。
+void StyleSwitch(DuiSwitch* sw)
+{
+    sw->SetOnColor(kSwitchOnColor);
+    sw->SetOffColor(kSwitchOffColor);
+}
+
+// 给下拉框套上群管理窗的配色：箭头灰色；边框与输入框同一套取色（常态浅灰，
+// 悬停或浮层展开时品牌橙，对应输入框的焦点色）。
+void StyleCombo(DuiComboBox* combo)
+{
+    combo->SetArrowColor(kComboArrowColor);
+    combo->SetBorderColors(GmInputBorderColor(true, false, false),
+                           GmInputBorderColor(true, true, false));
+}
+
+void AddPageTitleBlock(DuiVBox* page, int pageGap, LPCTSTR title, COLORREF titleColor,
+                       LPCTSTR subtitle)
+{
+    const bool hasSubtitle = (subtitle != NULL && subtitle[0] != _T('\0'));
+    const int  extra = (pageGap < kPageTitleBlockBottom) ? (kPageTitleBlockBottom - pageGap) : 0;
+    page->AddChild(std::unique_ptr<DuiControl>(
+                       MakePageTitleBlock(title, titleColor, subtitle).release()),
+                   Hint().Fixed(PageTitleBlockHeight(hasSubtitle))
+                         .Margin(0, 0, 0, GmScale(extra)));
+}
+
+// 加载提示行的高度（96 DPI 下的像素），与群公告页「正在加载公告…」那一行相同。
+const int kLoadStatusHeight = 40;
+
+/**
+ *  页面数据尚未到齐时，往页面追加一行加载提示或失败提示。
+ *
+ *  群管理窗打开时成员与加群申请都还没拉回来，这时既不能显示空列表（看起来像
+ *  "一个成员都没有"），更不能显示示例数据，只显示一行提示；应答到达后整页重建，
+ *  提示行随之消失。
+ *
+ *    page：       页面容器（借用）；
+ *    state：      本页数据的加载状态，取值见 LoadState；
+ *    pendingText：数据尚未到达时的提示文字；
+ *    failedText： 数据加载失败时的提示文字。
+ *  @return 追加了提示行时返回 true，调用方不应再追加列表内容；数据已加载
+ *          （kLoadDone）时什么都不做并返回 false。
+ */
+bool AppendLoadStatus(DuiVBox* page, LoadState state,
+                      LPCTSTR pendingText, LPCTSTR failedText)
+{
+    if (state == kLoadDone)
+    {
+        return false;
+    }
+
+    const bool failed = (state == kLoadFailed);
+    std::unique_ptr<GmText> text = MakeText(failed ? failedText : pendingText,
+                                            kGmTextBody, kColorSubtitle, DT_LEFT);
+    text->SetCtrlId(failed ? kIdLoadFailed : kIdLoadPending);
+    page->AddChild(std::unique_ptr<DuiControl>(text.release()),
+                   Hint().Fixed(GmScale(kLoadStatusHeight)));
+    return true;
 }
 
 // =====================================================================
@@ -464,32 +677,32 @@ std::unique_ptr<DuiControl> MakeMemberCard(const GroupMember& m, int memberIndex
     card->SetBgColor(kCardBg);
     card->SetBorderColor(kCardBorder);
     card->SetBorderWidth(1.0f);
-    card->SetCornerRadius(kCardCorner);
-    card->SetPadding(14, 0, 14, 0);
+    card->SetCornerRadius(GmScale(kCardCorner));
+    card->SetPadding(GmScale(14), 0, GmScale(14), 0);
     if (memberIndex >= 0 && memberIndex <= (kIdMemberCardMax - kIdMemberCardBase))
     {
         card->SetCtrlId(kIdMemberCardBase + memberIndex);
     }
 
     std::unique_ptr<DuiHBox> row(new DuiHBox());
-    row->SetGap(12);
+    row->SetGap(GmScale(12));
 
     row->AddChild(MakeAvatar(m.avatarText, m.avatarColor, 8, m.online),
-                  Hint().Fixed(36, 36).AlignC(DuiLayout::AlignCenter));
+                  Hint().Fixed(GmScale(36), GmScale(36)).AlignC(DuiLayout::AlignCenter));
 
     std::unique_ptr<DuiVBox> info(new DuiVBox());
-    info->SetGap(2);
-    info->AddChild(MakeText(m.name, 14, kGmFontSemiBold, kColorName, DT_LEFT),
-                   Hint().Fixed(18));
-    info->AddChild(MakeText(m.title, 12, kGmFontNormal, kColorSubtitle, DT_LEFT),
-                   Hint().Fixed(15));
+    info->SetGap(GmScale(2));
+    info->AddChild(MakeText(m.name, kGmTextCardTitle, kColorName, DT_LEFT),
+                   Hint().Fixed(GmScale(18)));
+    info->AddChild(MakeText(m.title, kGmTextCaption, kColorSubtitle, DT_LEFT),
+                   Hint().Fixed(GmScale(15)));
     Hint infoHint;
-    infoHint.fixedCross = 35;
+    infoHint.fixedCross = GmScale(35);
     infoHint.alignCross = DuiLayout::AlignCenter;
     row->AddChild(std::move(info), infoHint);
 
     row->AddChild(MakeRoleBadge(m.role),
-                  Hint().Fixed(52, 20).AlignC(DuiLayout::AlignCenter));
+                  Hint().Fixed(GmScale(52), GmScale(20)).AlignC(DuiLayout::AlignCenter));
 
     card->AddChild(std::move(row));
     return std::unique_ptr<DuiControl>(card.release());
@@ -500,26 +713,21 @@ std::unique_ptr<DuiControl> MakeMemberGrid(const GroupManageModel& model,
                                            GroupRole role, int& outRows)
 {
     std::unique_ptr<DuiGrid> grid(new DuiGrid());
-    grid->SetGap(kGridGap);
+    grid->SetGap(GmScale(kGridGap));
 
-    int count = 0;
-    for (std::vector<GroupMember>::const_iterator it = model.m_members.begin();
-         it != model.m_members.end(); ++it)
-    {
-        if (it->role == role)
-        {
-            ++count;
-        }
-    }
+    //只收命中搜索关键词的成员；关键词为空时 MemberMatchesKeyword 恒为真，即全部成员
+    const int count = model.CountByRoleMatching(role);
     const int rows = (count + kMemberCols - 1) / kMemberCols;
     outRows = rows;
     grid->SetGrid(rows, kMemberCols);
 
     //按模型里的原始下标给卡片编 id —— 网格是按角色分组渲染的，卡片的显示顺序
-    //与模型顺序不同，故不能用网格内的序号，必须用模型下标。
+    //与模型顺序不同，故不能用网格内的序号，必须用模型下标。搜索过滤后同样如此，
+    //右键菜单才能认出点的是哪一位。
     for (size_t i = 0; i < model.m_members.size(); ++i)
     {
-        if (model.m_members[i].role == role)
+        if (model.m_members[i].role == role
+            && MemberMatchesKeyword(model.m_members[i], model.m_memberKeyword))
         {
             grid->AddChild(MakeMemberCard(model.m_members[i], (int)i));
         }
@@ -531,7 +739,8 @@ std::unique_ptr<DuiControl> MakeMemberGrid(const GroupManageModel& model,
 void AppendMemberSection(DuiVBox* page, const GroupManageModel& model,
                          GroupRole role, COLORREF dot, LPCTSTR roleName)
 {
-    const int count = model.CountByRole(role);
+    //搜索时标题上的人数是命中的人数；一个都没命中的分组整组不显示
+    const int count = model.CountByRoleMatching(role);
     if (count <= 0)
     {
         return;
@@ -539,40 +748,80 @@ void AppendMemberSection(DuiVBox* page, const GroupManageModel& model,
 
     CString header;
     header.Format(_T("%s · %d"), roleName, count);
-    page->AddChild(MakeSectionHeader(dot, header), Hint().Fixed(22));
+    page->AddChild(MakeSectionHeader(dot, header), Hint().Fixed(GmScale(22)));
 
     int rows = 0;
     std::unique_ptr<DuiControl> grid = MakeMemberGrid(model, role, rows);
-    const int gridH = rows * kMemberCardH + (rows > 0 ? (rows - 1) * kGridGap : 0);
+    //总高由换算后的卡片高与间距逐项相加，不能对总和整体换算：后者比各项分别换算
+    //再相加少若干像素的取整误差，行数一多，最后一行成员卡就会被压扁。
+    const int gridH = rows * GmScale(kMemberCardH)
+                    + (rows > 0 ? (rows - 1) * GmScale(kGridGap) : 0);
     page->AddChild(std::move(grid), Hint().Fixed(gridH));
 }
+
+void AppendMembersPageBodyImpl(DuiVBox* page, const GroupManageModel& model);   //定义紧跟在本函数之后
 
 std::unique_ptr<DuiControl> BuildMembersPage(const GroupManageModel& model)
 {
     std::unique_ptr<DuiVBox> page(new DuiVBox());
-    page->SetPadding(24, 16, 24, 18);
-    page->SetGap(16);
+    page->SetPadding(GmScale(24), GmScale(16), GmScale(24), GmScale(18));
+    page->SetGap(GmScale(16));
 
     // 顶部：搜索框 + 邀请成员。
     std::unique_ptr<DuiHBox> topRow(new DuiHBox());
-    topRow->SetGap(12);
+    topRow->SetGap(GmScale(12));
 
-    std::unique_ptr<DuiSearchBox> search(new DuiSearchBox());
+    std::unique_ptr<DuiSearchBox> search(new GmSearchBox());
     search->SetPlaceholder(_T("搜索成员姓名、备注、职务…"));
     search->SetCtrlId(kIdSearchMembers);
     search->SetShowBorder(true);
     topRow->AddChild(std::move(search), Hint().Weight(1));
 
-    topRow->AddChild(MakeButton(_T("＋ 邀请成员"), kGmBtnPrimary, kIdBtnInvite, 13),
-                     Hint().Fixed(118));
-    page->AddChild(std::move(topRow), Hint().Fixed(44));
+    topRow->AddChild(MakeButton(_T("＋ 邀请成员"), kGmBtnPrimary, kIdBtnInvite, kGmTextBody),
+                     Hint().Fixed(GmScale(118)));
+    page->AddChild(std::move(topRow), Hint().Fixed(GmScale(44)));
 
-    // 三个角色分组。
-    AppendMemberSection(page.get(), model, kRoleOwner,  kDotOwner,  _T("群主"));
-    AppendMemberSection(page.get(), model, kRoleAdmin,  kDotAdmin,  _T("管理员"));
-    AppendMemberSection(page.get(), model, kRoleMember, kDotMember, _T("普通成员"));
-
+    AppendMembersPageBodyImpl(page.get(), model);
     return std::unique_ptr<DuiControl>(page.release());
+}
+
+// 往成员管理页追加搜索栏以下的部分（加载提示，或按搜索关键词过滤后的三个角色分组与
+// 「没有找到匹配的成员」提示行）。BuildMembersPage 构建时调用一次，RefilterMembersPage
+// 在关键词变化后重新调用。
+void AppendMembersPageBodyImpl(DuiVBox* page, const GroupManageModel& model)
+{
+    if (page == NULL)
+    {
+        return;
+    }
+
+    // 成员还没拉回来或拉取失败：只显示一行提示。搜索框与邀请按钮仍保留在原位，
+    // 数据到达后页面顶部不会跳动。
+    if (AppendLoadStatus(page, model.m_membersState,
+                         _T("正在加载成员…"),
+                         _T("成员列表加载失败，请关闭本窗口后重新打开。")))
+    {
+        return;
+    }
+
+    // 三个角色分组，各自只收命中搜索关键词的成员。
+    AppendMemberSection(page, model, kRoleOwner,  kDotOwner,  _T("群主"));
+    AppendMemberSection(page, model, kRoleAdmin,  kDotAdmin,  _T("管理员"));
+    AppendMemberSection(page, model, kRoleMember, kDotMember, _T("普通成员"));
+
+    // 关键词一个成员也没命中：三个分组都不出现，给一行提示，免得页面只剩搜索框、
+    // 看不出是"没有匹配"还是"还没加载出来"。
+    const int matched = model.CountByRoleMatching(kRoleOwner)
+                      + model.CountByRoleMatching(kRoleAdmin)
+                      + model.CountByRoleMatching(kRoleMember);
+    if (matched == 0 && !model.m_memberKeyword.IsEmpty())
+    {
+        std::unique_ptr<GmText> text = MakeText(_T("没有找到匹配的成员"),
+                                                kGmTextBody, kColorSubtitle, DT_LEFT);
+        text->SetCtrlId(kIdMemberSearchEmpty);
+        page->AddChild(std::unique_ptr<DuiControl>(text.release()),
+                       Hint().Fixed(GmScale(kLoadStatusHeight)));
+    }
 }
 
 // =====================================================================
@@ -597,27 +846,27 @@ CString JoinSourceText(int source)
 std::unique_ptr<DuiControl> MakeRequestCard(const JoinRequest& r, int index)
 {
     std::unique_ptr<DuiVBox> card = MakeCard(kCardBg, kCardBorder, kCardCorner);
-    card->SetPadding(16, 14, 16, 14);
+    card->SetPadding(GmScale(16), GmScale(14), GmScale(16), GmScale(14));
 
     std::unique_ptr<DuiHBox> row(new DuiHBox());
-    row->SetGap(14);
+    row->SetGap(GmScale(14));
 
     row->AddChild(MakeAvatar(r.avatarText, r.avatarColor, 9, kOnlineNone),
-                  Hint().Fixed(40, 40).AlignC(DuiLayout::AlignCenter));
+                  Hint().Fixed(GmScale(40), GmScale(40)).AlignC(DuiLayout::AlignCenter));
 
     // 中部信息三行。
     std::unique_ptr<DuiVBox> info(new DuiVBox());
-    info->SetGap(4);
+    info->SetGap(GmScale(4));
 
     CString line1;
     line1.Format(_T("%s    账号 %s"), (LPCTSTR)r.name, (LPCTSTR)r.account);
-    info->AddChild(MakeText(line1, 14, kGmFontSemiBold, kColorName, DT_LEFT),
-                   Hint().Fixed(22));
+    info->AddChild(MakeText(line1, kGmTextCardTitle, kColorName, DT_LEFT),
+                   Hint().Fixed(GmScale(22)));
 
     CString quoted;
     quoted.Format(_T("“%s”"), (LPCTSTR)r.message);
-    info->AddChild(MakeText(quoted, 12, kGmFontNormal, RGB(0x55, 0x55, 0x55), DT_LEFT),
-                   Hint().Fixed(20));
+    info->AddChild(MakeText(quoted, kGmTextBody, RGB(0x55, 0x55, 0x55), DT_LEFT),
+                   Hint().Fixed(GmScale(20)));
 
     CString line3;
     line3.Format(_T("来源：%s"), (LPCTSTR)JoinSourceText(r.source));
@@ -629,23 +878,23 @@ std::unique_ptr<DuiControl> MakeRequestCard(const JoinRequest& r, int index)
     }
     line3 += _T(" · ");
     line3 += r.timeText;
-    info->AddChild(MakeText(line3, 11, kGmFontNormal, kColorSubtitle, DT_LEFT),
-                   Hint().Fixed(18));
+    info->AddChild(MakeText(line3, kGmTextCaption, kColorSubtitle, DT_LEFT),
+                   Hint().Fixed(GmScale(18)));
 
     row->AddChild(std::move(info), Hint().Weight(1));
 
     // 右侧：同意 / 拒绝 竖排。
     std::unique_ptr<DuiVBox> btns(new DuiVBox());
-    btns->SetGap(8);
+    btns->SetGap(GmScale(8));
     btns->AddChild(MakeButton(_T("同意"), kGmBtnPrimary,
-                              kIdApprovalAcceptBase + index, 13),
-                   Hint().Fixed(30));
+                              kIdApprovalAcceptBase + index, kGmTextBody),
+                   Hint().Fixed(GmScale(30)));
     btns->AddChild(MakeButton(_T("拒绝"), kGmBtnSecondary,
-                              kIdApprovalRejectBase + index, 13),
-                   Hint().Fixed(30));
+                              kIdApprovalRejectBase + index, kGmTextBody),
+                   Hint().Fixed(GmScale(30)));
     Hint btnHint;
-    btnHint.fixedMain  = 76;
-    btnHint.fixedCross = 68;
+    btnHint.fixedMain  = GmScale(76);
+    btnHint.fixedCross = GmScale(68);
     btnHint.alignCross = DuiLayout::AlignCenter;
     row->AddChild(std::move(btns), btnHint);
 
@@ -656,36 +905,45 @@ std::unique_ptr<DuiControl> MakeRequestCard(const JoinRequest& r, int index)
 std::unique_ptr<DuiControl> BuildApprovalPage(const GroupManageModel& model)
 {
     std::unique_ptr<DuiVBox> page(new DuiVBox());
-    page->SetPadding(24, 16, 24, 18);
-    page->SetGap(14);
+    page->SetPadding(GmScale(24), GmScale(16), GmScale(24), GmScale(18));
+    page->SetGap(GmScale(14));
 
     // 标题行：左侧标题 + 副标题，右侧批量按钮。
     std::unique_ptr<DuiHBox> titleRow(new DuiHBox());
-    titleRow->SetGap(10);
+    titleRow->SetGap(GmScale(10));
 
-    std::unique_ptr<DuiVBox> titleCol(new DuiVBox());
-    titleCol->SetGap(4);
-    titleCol->AddChild(MakeText(_T("加群申请"), 16, kGmFontBold, kColorPageTitle, DT_LEFT),
-                       Hint().Fixed(24));
+    //副标题里的条数只在申请已拉回来时才有意义；未到齐时不显示副标题，
+    //免得出现"待处理 0 条"
     CString sub;
-    sub.Format(_T("待处理 %d 条 · 已自动拒绝超过 7 天的申请"),
-               model.PendingRequestCount());
-    titleCol->AddChild(MakeText(sub, 12, kGmFontNormal, kColorSubtitle, DT_LEFT),
-                       Hint().Fixed(18));
-    titleRow->AddChild(std::move(titleCol), Hint().Weight(1));
+    if (model.m_requestsState == kLoadDone)
+    {
+        sub.Format(_T("待处理 %d 条 · 已自动拒绝超过 7 天的申请"),
+                   model.PendingRequestCount());
+    }
+    titleRow->AddChild(std::unique_ptr<DuiControl>(
+                           MakePageTitleBlock(_T("加群申请"), kColorPageTitle, sub).release()),
+                       Hint().Weight(1));
 
-    titleRow->AddChild(MakeButton(_T("批量同意"), kGmBtnSecondary, kIdBtnApproveAll, 13),
-                       Hint().Fixed(84).AlignC(DuiLayout::AlignCenter));
-    titleRow->AddChild(MakeButton(_T("批量拒绝"), kGmBtnSecondary, kIdBtnRejectAll, 13),
-                       Hint().Fixed(84).AlignC(DuiLayout::AlignCenter));
-    page->AddChild(std::move(titleRow), Hint().Fixed(48));
+    titleRow->AddChild(MakeButton(_T("批量同意"), kGmBtnSecondary, kIdBtnApproveAll, kGmTextBody),
+                       Hint().Fixed(GmScale(84)).AlignC(DuiLayout::AlignCenter));
+    titleRow->AddChild(MakeButton(_T("批量拒绝"), kGmBtnSecondary, kIdBtnRejectAll, kGmTextBody),
+                       Hint().Fixed(GmScale(84)).AlignC(DuiLayout::AlignCenter));
+    page->AddChild(std::move(titleRow), Hint().Fixed(GmScale(48)));
+
+    // 申请还没拉回来或拉取失败：只显示一行提示。
+    if (AppendLoadStatus(page.get(), model.m_requestsState,
+                         _T("正在加载加群申请…"),
+                         _T("加群申请加载失败，请关闭本窗口后重新打开。")))
+    {
+        return std::unique_ptr<DuiControl>(page.release());
+    }
 
     // 申请卡列表。
     int index = 0;
     for (std::vector<JoinRequest>::const_iterator it = model.m_requests.begin();
          it != model.m_requests.end(); ++it, ++index)
     {
-        page->AddChild(MakeRequestCard(*it, index), Hint().Fixed(88));
+        page->AddChild(MakeRequestCard(*it, index), Hint().Fixed(GmScale(88)));
     }
 
     return std::unique_ptr<DuiControl>(page.release());
@@ -699,52 +957,51 @@ std::unique_ptr<DuiControl> BuildApprovalPage(const GroupManageModel& model)
 std::unique_ptr<DuiControl> MakeMuteCard(const MutedMember& m, int index)
 {
     std::unique_ptr<DuiVBox> card = MakeCard(kCardBg, kCardBorder, kCardCorner);
-    card->SetPadding(16, 0, 16, 0);
+    card->SetPadding(GmScale(16), 0, GmScale(16), 0);
 
     std::unique_ptr<DuiHBox> row(new DuiHBox());
-    row->SetGap(14);
+    row->SetGap(GmScale(14));
 
     row->AddChild(MakeAvatar(m.avatarText, m.avatarColor, 9, kOnlineNone),
-                  Hint().Fixed(40, 40).AlignC(DuiLayout::AlignCenter));
+                  Hint().Fixed(GmScale(40), GmScale(40)).AlignC(DuiLayout::AlignCenter));
 
     std::unique_ptr<DuiVBox> info(new DuiVBox());
-    info->SetGap(3);
-    info->AddChild(MakeText(m.name, 14, kGmFontSemiBold, kColorName, DT_LEFT),
-                   Hint().Fixed(22));
+    info->SetGap(GmScale(3));
+    info->AddChild(MakeText(m.name, kGmTextCardTitle, kColorName, DT_LEFT),
+                   Hint().Fixed(GmScale(22)));
     CString reason;
     reason.Format(_T("原因：%s"), (LPCTSTR)m.reason);
-    info->AddChild(MakeText(reason, 12, kGmFontNormal, kColorSubtitle, DT_LEFT),
-                   Hint().Fixed(18));
+    info->AddChild(MakeText(reason, kGmTextCaption, kColorSubtitle, DT_LEFT),
+                   Hint().Fixed(GmScale(18)));
     Hint infoHint;
-    infoHint.fixedCross = 40;
+    infoHint.fixedCross = GmScale(40);
     infoHint.alignCross = DuiLayout::AlignCenter;
     row->AddChild(std::move(info), infoHint);
 
     // 右侧：剩余时长（永久标红）+ 延长 / 解除。
     std::unique_ptr<DuiVBox> right(new DuiVBox());
-    right->SetGap(8);
+    right->SetGap(GmScale(8));
     const COLORREF remainColor = m.permanent ? kColorDanger : kColorSubtitle;
-    right->AddChild(MakeText(m.remainingText, 12,
-                             m.permanent ? kGmFontSemiBold : kGmFontNormal,
+    right->AddChild(MakeText(m.remainingText, kGmTextCaption,
                              remainColor, DT_RIGHT),
-                    Hint().Fixed(18));
+                    Hint().Fixed(GmScale(18)));
 
     std::unique_ptr<DuiHBox> btnRow(new DuiHBox());
-    btnRow->SetGap(8);
+    btnRow->SetGap(GmScale(8));
     if (!m.permanent)
     {
         btnRow->AddChild(MakeButton(_T("延长"), kGmBtnSecondary,
-                                    kIdMuteExtendBase + index, 12),
-                         Hint().Fixed(54));
+                                    kIdMuteExtendBase + index, kGmTextCaption),
+                         Hint().Fixed(GmScale(54)));
     }
     btnRow->AddChild(MakeButton(_T("解除"), kGmBtnSecondary,
-                                kIdMuteReleaseBase + index, 12),
-                     Hint().Fixed(54));
-    right->AddChild(std::move(btnRow), Hint().Fixed(30));
+                                kIdMuteReleaseBase + index, kGmTextCaption),
+                     Hint().Fixed(GmScale(54)));
+    right->AddChild(std::move(btnRow), Hint().Fixed(GmScale(30)));
 
     Hint rightHint;
-    rightHint.fixedMain  = 130;
-    rightHint.fixedCross = 56;
+    rightHint.fixedMain  = GmScale(130);
+    rightHint.fixedCross = GmScale(56);
     rightHint.alignCross = DuiLayout::AlignCenter;
     rightHint.alignMain  = DuiLayout::AlignFar;
     row->AddChild(std::move(right), rightHint);
@@ -756,44 +1013,58 @@ std::unique_ptr<DuiControl> MakeMuteCard(const MutedMember& m, int index)
 std::unique_ptr<DuiControl> BuildMutePage(const GroupManageModel& model)
 {
     std::unique_ptr<DuiVBox> page(new DuiVBox());
-    page->SetPadding(24, 16, 24, 18);
-    page->SetGap(14);
+    page->SetPadding(GmScale(24), GmScale(16), GmScale(24), GmScale(18));
+    page->SetGap(GmScale(14));
 
     // 标题行：标题 + 副标题，右侧「全员禁言」开关。
     std::unique_ptr<DuiHBox> titleRow(new DuiHBox());
-    titleRow->SetGap(10);
+    titleRow->SetGap(GmScale(10));
 
-    std::unique_ptr<DuiVBox> titleCol(new DuiVBox());
-    titleCol->SetGap(4);
-    titleCol->AddChild(MakeText(_T("禁言管理"), 16, kGmFontBold, kColorPageTitle, DT_LEFT),
-                       Hint().Fixed(24));
+    //禁言列表由群成员应答派生，成员未到齐时不显示副标题，免得出现"禁言中 0 人"
     CString sub;
-    sub.Format(_T("禁言中 %d 人"), model.MutedCount());
-    titleCol->AddChild(MakeText(sub, 12, kGmFontNormal, kColorSubtitle, DT_LEFT),
-                       Hint().Fixed(18));
-    titleRow->AddChild(std::move(titleCol), Hint().Weight(1));
+    if (model.m_membersState == kLoadDone)
+    {
+        sub.Format(_T("禁言中 %d 人"), model.MutedCount());
+    }
+    titleRow->AddChild(std::unique_ptr<DuiControl>(
+                           MakePageTitleBlock(_T("禁言管理"), kColorPageTitle, sub).release()),
+                       Hint().Weight(1));
 
-    titleRow->AddChild(MakeText(_T("全员禁言"), 13, kGmFontNormal, kColorFieldLabel, DT_RIGHT),
-                       Hint().Fixed(72).AlignC(DuiLayout::AlignCenter));
-    std::unique_ptr<DuiSwitch> swAll(new DuiSwitch());
-    swAll->SetCtrlId(kIdSwitchMuteAll);
-    swAll->SetChecked(model.m_muteAll, false, false);
-    titleRow->AddChild(std::move(swAll), Hint().Fixed(46, 24).AlignC(DuiLayout::AlignCenter));
-    page->AddChild(std::move(titleRow), Hint().Fixed(48));
+    //全员禁言取自群资料。群资料未到齐时不显示这个开关（与上面副标题的处理一致），
+    //否则显示的是默认的"关"，管理员会误以为本群没有开启全员禁言
+    if (model.m_groupInfoState == kLoadDone)
+    {
+        titleRow->AddChild(MakeText(_T("全员禁言"), kGmTextItemTitle, kColorFieldLabel, DT_RIGHT),
+                           Hint().Fixed(GmScale(72)).AlignC(DuiLayout::AlignCenter));
+        std::unique_ptr<DuiSwitch> swAll(new DuiSwitch());
+        swAll->SetCtrlId(kIdSwitchMuteAll);
+        StyleSwitch(swAll.get());
+        swAll->SetChecked(model.m_muteAll, false, false);
+        titleRow->AddChild(std::move(swAll), Hint().Fixed(GmScale(46), GmScale(24)).AlignC(DuiLayout::AlignCenter));
+    }
+    page->AddChild(std::move(titleRow), Hint().Fixed(GmScale(48)));
 
     // 添加禁言成员按钮。
     std::unique_ptr<DuiHBox> addRow(new DuiHBox());
-    addRow->AddChild(MakeButton(_T("＋ 添加禁言成员"), kGmBtnPrimary, kIdBtnAddMute, 13),
-                     Hint().Fixed(140));
+    addRow->AddChild(MakeButton(_T("＋ 添加禁言成员"), kGmBtnPrimary, kIdBtnAddMute, kGmTextBody),
+                     Hint().Fixed(GmScale(140)));
     addRow->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Weight(1));
-    page->AddChild(std::move(addRow), Hint().Fixed(40));
+    page->AddChild(std::move(addRow), Hint().Fixed(GmScale(40)));
+
+    // 成员还没拉回来或拉取失败：只显示一行提示。
+    if (AppendLoadStatus(page.get(), model.m_membersState,
+                         _T("正在加载禁言成员…"),
+                         _T("禁言成员加载失败，请关闭本窗口后重新打开。")))
+    {
+        return std::unique_ptr<DuiControl>(page.release());
+    }
 
     // 禁言卡列表。
     int index = 0;
     for (std::vector<MutedMember>::const_iterator it = model.m_muted.begin();
          it != model.m_muted.end(); ++it, ++index)
     {
-        page->AddChild(MakeMuteCard(*it, index), Hint().Fixed(70));
+        page->AddChild(MakeMuteCard(*it, index), Hint().Fixed(GmScale(70)));
     }
 
     return std::unique_ptr<DuiControl>(page.release());
@@ -803,68 +1074,98 @@ std::unique_ptr<DuiControl> BuildMutePage(const GroupManageModel& model)
 // 基本信息页（design/群管理4.png）
 // =====================================================================
 
-// 造一行表单：左侧标签（可带副说明）+ 右侧控件。
+// 基本信息页表单行的尺寸（96 DPI 下的像素，取自 design/群管理4.png）：每行高度、
+// 右侧控件高度，以及左侧标签与说明两行各自的行高和两行之间的间距。
+const int kFormRowHeight     = 48;
+const int kFormControlHeight = 32;
+const int kFormLabelHeight   = 22;
+const int kFormDescHeight    = 18;
+const int kFormLabelDescGap  = 3;
+
+// 造一行表单：左侧标签（可带副说明）+ 右侧控件，两者在行内上下居中。
+//   controlWidth：右侧控件宽度（96 DPI 下的像素）；控件高度统一为 kFormControlHeight。
 std::unique_ptr<DuiControl> MakeFormRow(LPCTSTR label, LPCTSTR desc,
                                         std::unique_ptr<DuiControl> control,
-                                        int controlWidth, int rowHeight)
+                                        int controlWidth)
 {
     std::unique_ptr<DuiHBox> row(new DuiHBox());
-    row->SetGap(12);
+    row->SetGap(GmScale(12));
 
+    const bool hasDesc = (desc != NULL && desc[0] != _T('\0'));
     std::unique_ptr<DuiVBox> labelCol(new DuiVBox());
-    labelCol->SetGap(3);
-    if (desc != NULL && desc[0] != _T('\0'))
+    labelCol->SetGap(GmScale(kFormLabelDescGap));
+    labelCol->AddChild(MakeText(label, kGmTextItemTitle, kColorFieldLabel, DT_LEFT),
+                       Hint().Fixed(GmScale(kFormLabelHeight)));
+    int labelBlockHeight = GmScale(kFormLabelHeight);
+    if (hasDesc)
     {
-        labelCol->AddChild(MakeText(label, 14, kGmFontNormal, kColorFieldLabel, DT_LEFT),
-                           Hint().Fixed(22));
-        labelCol->AddChild(MakeText(desc, 12, kGmFontNormal, kColorSubtitle, DT_LEFT),
-                           Hint().Fixed(18));
+        labelCol->AddChild(MakeText(desc, kGmTextCaption, kColorSubtitle, DT_LEFT),
+                           Hint().Fixed(GmScale(kFormDescHeight)));
+        labelBlockHeight += GmScale(kFormLabelDescGap) + GmScale(kFormDescHeight);
     }
-    else
-    {
-        labelCol->AddChild(MakeText(label, 14, kGmFontNormal, kColorFieldLabel, DT_LEFT),
-                           Hint().Fixed(22));
-    }
+
+    //交叉轴高度必须给成标签块的实际高度：不给（-1）就会被拉满整行，居中不起作用，
+    //文字从顶部开始排，看起来是顶对齐
     Hint labelHint;
     labelHint.weight     = 1;
+    labelHint.fixedCross = labelBlockHeight;
     labelHint.alignCross = DuiLayout::AlignCenter;
     row->AddChild(std::move(labelCol), labelHint);
 
     row->AddChild(std::move(control),
-                  Hint().Fixed(controlWidth).AlignC(DuiLayout::AlignCenter));
+                  Hint().Fixed(GmScale(controlWidth), GmScale(kFormControlHeight))
+                        .AlignC(DuiLayout::AlignCenter));
 
     return std::unique_ptr<DuiControl>(row.release());
 }
 
+// 把一行表单放进表单列表，并在它下面加一条 1px 分隔线（design/群管理4.png）。
+void AddFormRow(DuiVBox* list, std::unique_ptr<DuiControl> row)
+{
+    list->AddChild(std::move(row), Hint().Fixed(GmScale(kFormRowHeight)));
+    list->AddChild(MakeSeparatorRow(), Hint().Fixed(kSeparatorPx));
+}
+
 std::unique_ptr<DuiControl> BuildBasicInfoPage(const GroupManageModel& model)
 {
-    std::unique_ptr<DuiVBox> page(new DuiVBox());
-    page->SetPadding(24, 16, 24, 18);
-    page->SetGap(16);
+    // 本页的页面间距（96 DPI 下的像素）
+    const int kBasicPageGap = 16;
 
-    page->AddChild(MakeText(_T("基本信息"), 16, kGmFontBold, kColorPageTitle, DT_LEFT),
-                   Hint().Fixed(28));
+    //限宽页：内容不超过 kMaxContentWidth，右侧留白（design/群管理4.png）
+    std::unique_ptr<DuiVBox> page = MakeWidthLimitedPage();
+    page->SetPadding(GmScale(24), GmScale(16), GmScale(24), GmScale(18));
+    page->SetGap(GmScale(kBasicPageGap));
+
+    AddPageTitleBlock(page.get(), kBasicPageGap, _T("基本信息"), kColorPageTitle, NULL);
+
+    // 群资料还没拉回来或拉取失败：只显示一行提示，不显示表单。此时模型里的群简介等
+    // 只是构造时的默认值，不能当作真实内容显示（见 GroupManageModel::m_groupInfoState）。
+    if (AppendLoadStatus(page.get(), model.m_groupInfoState,
+                         _T("正在加载群资料…"),
+                         _T("群资料加载失败，请关闭本窗口后重新打开。")))
+    {
+        return std::unique_ptr<DuiControl>(page.release());
+    }
 
     // 群头像卡。
     std::unique_ptr<DuiVBox> avatarCard = MakeCard(kCardBg, kCardBorder, kCardCorner);
-    avatarCard->SetPadding(18, 0, 18, 0);
+    avatarCard->SetPadding(GmScale(18), 0, GmScale(18), 0);
     std::unique_ptr<DuiHBox> avatarRow(new DuiHBox());
-    avatarRow->SetGap(16);
+    avatarRow->SetGap(GmScale(16));
     const int kBasicAvatarPx     = 56;   //基本信息页头像卡里的头像边长
     const int kBasicAvatarCorner = 10;   //其圆角半径
     avatarRow->AddChild(MakeGroupAvatar(model, kBasicAvatarPx, kBasicAvatarCorner),
-                        Hint().Fixed(kBasicAvatarPx, kBasicAvatarPx)
+                        Hint().Fixed(GmScale(kBasicAvatarPx), GmScale(kBasicAvatarPx))
                               .AlignC(DuiLayout::AlignCenter));
     std::unique_ptr<DuiVBox> avatarInfo(new DuiVBox());
-    avatarInfo->SetGap(4);
-    avatarInfo->AddChild(MakeText(_T("群头像"), 14, kGmFontSemiBold, kColorName, DT_LEFT),
-                         Hint().Fixed(22));
-    avatarInfo->AddChild(MakeText(_T("支持 JPG、PNG，建议 200×200 以上"), 12,
-                                  kGmFontNormal, kColorSubtitle, DT_LEFT),
-                         Hint().Fixed(18));
+    avatarInfo->SetGap(GmScale(4));
+    avatarInfo->AddChild(MakeText(_T("群头像"), kGmTextCardTitle, kColorName, DT_LEFT),
+                         Hint().Fixed(GmScale(22)));
+    avatarInfo->AddChild(MakeText(_T("支持 JPG、PNG，建议 200×200 以上"), kGmTextBody, kColorSubtitle, DT_LEFT),
+                         Hint().Fixed(GmScale(18)));
     Hint avatarInfoHint;
     avatarInfoHint.weight     = 1;
-    avatarInfoHint.fixedCross = 44;
+    avatarInfoHint.fixedCross = GmScale(44);
     avatarInfoHint.alignCross = DuiLayout::AlignCenter;
     avatarRow->AddChild(std::move(avatarInfo), avatarInfoHint);
     //只有群主和管理员能改群头像（服务端同口径，见 grouprole::CanChangeGroupAvatar）。
@@ -873,36 +1174,42 @@ std::unique_ptr<DuiControl> BuildBasicInfoPage(const GroupManageModel& model)
     //类型跟着 MakeButton 的返回值走（GroupManageButton 派生自 DuiButton）——
     //写成 unique_ptr<DuiButton> 既要多 include 一个头，也没有额外好处。
     std::unique_ptr<GroupManageButton> btnChangeAvatar =
-        MakeButton(_T("更换头像"), kGmBtnSecondary, kIdBtnChangeAvatar, 13);
+        MakeButton(_T("更换头像"), kGmBtnSecondary, kIdBtnChangeAvatar, kGmTextBody);
     if (!grouprole::CanChangeGroupAvatar(UiRoleToNetRole(model.m_myRole)))
     {
         btnChangeAvatar->SetEnabled(false);
     }
     avatarRow->AddChild(std::move(btnChangeAvatar),
-                        Hint().Fixed(96, 34).AlignC(DuiLayout::AlignCenter));
+                        Hint().Fixed(GmScale(96), GmScale(34)).AlignC(DuiLayout::AlignCenter));
     avatarCard->AddChild(std::move(avatarRow));
-    page->AddChild(std::move(avatarCard), Hint().Fixed(82));
+    page->AddChild(std::move(avatarCard), Hint().Fixed(GmScale(82)));
 
-    // 群名称。
-    std::unique_ptr<DuiEdit> nameEdit(new DuiEdit());
+    // 表单列表：群名称、群号、群公告、群简介四行，每行下面一条分隔线，行与线紧挨着
+    //（design/群管理4.png）。
+    std::unique_ptr<DuiVBox> formList(new DuiVBox());
+    formList->SetCtrlId(kIdBasicFormList);
+    formList->SetGap(0);
+
+    // 群名称。清空后保存即恢复为自动群名（服务端按成员昵称生成，并随成员变化重算），
+    // 占位文字把这一点告诉用户。
+    std::unique_ptr<DuiEdit> nameEdit(new GmEdit());
     nameEdit->SetCtrlId(kIdEditGroupName);
     nameEdit->SetShowBorder(true);
+    nameEdit->SetPlaceholder(_T("留空则按成员自动生成"));
     nameEdit->SetText(model.m_groupName);
-    page->AddChild(MakeFormRow(_T("群名称"), _T(""),
-                               std::unique_ptr<DuiControl>(nameEdit.release()), 260, 38),
-                   Hint().Fixed(40));
+    AddFormRow(formList.get(), MakeFormRow(_T("群名称"), _T(""),
+                                           std::unique_ptr<DuiControl>(nameEdit.release()), 260));
 
     // 群号（只读文本 + 复制按钮）。
     std::unique_ptr<DuiHBox> numberBox(new DuiHBox());
-    numberBox->SetGap(8);
-    numberBox->AddChild(MakeText(model.m_groupNumber, 14, kGmFontNormal,
+    numberBox->SetGap(GmScale(8));
+    numberBox->AddChild(MakeText(model.m_groupNumber, kGmTextItemTitle,
                                  kColorName, DT_RIGHT),
                         Hint().Weight(1).AlignC(DuiLayout::AlignCenter));
-    numberBox->AddChild(MakeButton(_T("复制"), kGmBtnSecondary, kIdBtnCopyGroupNo, 11),
-                        Hint().Fixed(44, 26).AlignC(DuiLayout::AlignCenter));
-    page->AddChild(MakeFormRow(_T("群号"), _T(""),
-                               std::unique_ptr<DuiControl>(numberBox.release()), 200, 38),
-                   Hint().Fixed(40));
+    numberBox->AddChild(MakeButton(_T("复制"), kGmBtnSecondary, kIdBtnCopyGroupNo, kGmTextCaption),
+                        Hint().Fixed(GmScale(44), GmScale(26)).AlignC(DuiLayout::AlignCenter));
+    AddFormRow(formList.get(), MakeFormRow(_T("群号"), _T(""),
+                                           std::unique_ptr<DuiControl>(numberBox.release()), 200));
 
     // 群公告（只读摘要 + 跳转按钮）。
     //
@@ -911,43 +1218,46 @@ std::unique_ptr<DuiControl> BuildBasicInfoPage(const GroupManageModel& model)
     // 再留一个直接改文本的框，同一份数据就有了两条写入路径，先后顺序不同结果就不同。
     // 故本行只显示当前最新一条公告，编辑走右边那个跳转按钮。
     std::unique_ptr<DuiHBox> annBox(new DuiHBox());
-    annBox->SetGap(8);
+    annBox->SetGap(GmScale(8));
     CString annSummary = model.m_announcement;
     if (annSummary.IsEmpty())
     {
         annSummary = _T("暂无群公告");
     }
-    annBox->AddChild(MakeText(annSummary, 13, kGmFontNormal, kColorSubtitle, DT_LEFT),
+    annBox->AddChild(MakeText(annSummary, kGmTextBody, kColorSubtitle, DT_LEFT),
                      Hint().Weight(1).AlignC(DuiLayout::AlignCenter));
     //普通成员看不到「群公告」页，给他们一个点了会落空的按钮没有意义
     if (IsPageVisibleForRole(kPageAnnouncement, model.m_myRole))
     {
-        annBox->AddChild(MakeButton(_T("去管理"), kGmBtnSecondary, kIdBtnAnnounceGoto, 11),
-                         Hint().Fixed(64, 26).AlignC(DuiLayout::AlignCenter));
+        annBox->AddChild(MakeButton(_T("去管理"), kGmBtnSecondary, kIdBtnAnnounceGoto, kGmTextCaption),
+                         Hint().Fixed(GmScale(64), GmScale(26)).AlignC(DuiLayout::AlignCenter));
     }
-    page->AddChild(MakeFormRow(_T("群公告"), _T("在「群公告」里发布与管理"),
-                               std::unique_ptr<DuiControl>(annBox.release()), 260, 38),
-                   Hint().Fixed(48));
+    AddFormRow(formList.get(), MakeFormRow(_T("群公告"), _T("在「群公告」里发布与管理"),
+                                           std::unique_ptr<DuiControl>(annBox.release()), 260));
 
     // 群简介。
-    std::unique_ptr<DuiEdit> introEdit(new DuiEdit());
+    std::unique_ptr<DuiEdit> introEdit(new GmEdit());
     introEdit->SetCtrlId(kIdEditIntro);
     introEdit->SetShowBorder(true);
     introEdit->SetPlaceholder(_T("介绍一下这个群…"));
     introEdit->SetText(model.m_intro);
-    page->AddChild(MakeFormRow(_T("群简介"), _T("可选，显示在群资料页"),
-                               std::unique_ptr<DuiControl>(introEdit.release()), 260, 38),
-                   Hint().Fixed(48));
+    AddFormRow(formList.get(), MakeFormRow(_T("群简介"), _T("可选，显示在群资料页"),
+                                           std::unique_ptr<DuiControl>(introEdit.release()), 260));
+
+    // 列表高度 = 各行高 + 各分隔线高。行数取自列表本身，增删行时不用改这里。
+    const int formRowCount = (int)formList->Children().size() / 2;
+    page->AddChild(std::unique_ptr<DuiControl>(formList.release()),
+                   Hint().Fixed(formRowCount * (GmScale(kFormRowHeight) + kSeparatorPx)));
 
     // 底部：重置 / 保存修改（右对齐）。
     std::unique_ptr<DuiHBox> btnRow(new DuiHBox());
-    btnRow->SetGap(12);
+    btnRow->SetGap(GmScale(12));
     btnRow->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Weight(1));
-    btnRow->AddChild(MakeButton(_T("重置"), kGmBtnSecondary, kIdBtnReset, 13),
-                     Hint().Fixed(80));
-    btnRow->AddChild(MakeButton(_T("保存修改"), kGmBtnPrimary, kIdBtnSave, 13),
-                     Hint().Fixed(110));
-    page->AddChild(std::move(btnRow), Hint().Fixed(40));
+    btnRow->AddChild(MakeButton(_T("重置"), kGmBtnSecondary, kIdBtnReset, kGmTextBody),
+                     Hint().Fixed(GmScale(80)));
+    btnRow->AddChild(MakeButton(_T("保存修改"), kGmBtnPrimary, kIdBtnSave, kGmTextBody),
+                     Hint().Fixed(GmScale(110)));
+    page->AddChild(std::move(btnRow), Hint().Fixed(GmScale(40)));
 
     return std::unique_ptr<DuiControl>(page.release());
 }
@@ -964,28 +1274,28 @@ std::unique_ptr<DuiControl> MakePermRow(LPCTSTR title, LPCTSTR desc,
                                         int trailingWidth)
 {
     std::unique_ptr<DuiHBox> row(new DuiHBox());
-    row->SetGap(12);
-    row->SetPadding(18, 0, 18, 0);
+    row->SetGap(GmScale(12));
+    row->SetPadding(GmScale(18), 0, GmScale(18), 0);
 
     std::unique_ptr<DuiVBox> labelCol(new DuiVBox());
-    labelCol->SetGap(3);
-    labelCol->AddChild(MakeText(title, 14, kGmFontNormal, kColorFieldLabel, DT_LEFT),
-                       Hint().Fixed(22));
-    labelCol->AddChild(MakeText(desc, 12, kGmFontNormal, kColorSubtitle, DT_LEFT),
-                       Hint().Fixed(18));
+    labelCol->SetGap(GmScale(3));
+    labelCol->AddChild(MakeText(title, kGmTextItemTitle, kColorFieldLabel, DT_LEFT),
+                       Hint().Fixed(GmScale(22)));
+    labelCol->AddChild(MakeText(desc, kGmTextCaption, kColorSubtitle, DT_LEFT),
+                       Hint().Fixed(GmScale(18)));
     Hint labelHint;
     labelHint.weight     = 1;
-    labelHint.fixedCross = 40;
+    labelHint.fixedCross = GmScale(40);
     labelHint.alignCross = DuiLayout::AlignCenter;
     row->AddChild(std::move(labelCol), labelHint);
 
     if (trailing)
     {
         row->AddChild(std::move(trailing),
-                      Hint().Fixed(trailingWidth, 30).AlignC(DuiLayout::AlignCenter));
+                      Hint().Fixed(GmScale(trailingWidth), GmScale(30)).AlignC(DuiLayout::AlignCenter));
     }
     row->AddChild(std::move(control),
-                  Hint().Fixed(controlWidth, controlWidth >= 100 ? 34 : 24)
+                  Hint().Fixed(GmScale(controlWidth), GmScale(controlWidth >= 100 ? 34 : 24))
                         .AlignC(DuiLayout::AlignCenter));
     return std::unique_ptr<DuiControl>(row.release());
 }
@@ -995,6 +1305,7 @@ std::unique_ptr<DuiControl> MakePermSwitch(UINT ctrlId, bool checked)
 {
     std::unique_ptr<DuiSwitch> sw(new DuiSwitch());
     sw->SetCtrlId(ctrlId);
+    StyleSwitch(sw.get());
     sw->SetChecked(checked, false, false);
     return std::unique_ptr<DuiControl>(sw.release());
 }
@@ -1014,28 +1325,28 @@ const int kWordAddRowH = 36;   // 顶部"输入 + 添加"行的高度
 std::unique_ptr<DuiControl> MakeSensitiveWordRow(const SensitiveWord& w, int wordIndex)
 {
     std::unique_ptr<DuiVBox> card = MakeCard(kCardBg, kCardBorder, kCardCorner);
-    card->SetPadding(14, 0, 12, 0);
+    card->SetPadding(GmScale(14), 0, GmScale(12), 0);
 
     std::unique_ptr<DuiHBox> row(new DuiHBox());
-    row->SetGap(10);
+    row->SetGap(GmScale(10));
 
     // 词本身占主要宽度
     Hint wordHint;
     wordHint.weight = 1;
-    wordHint.fixedCross = 20;
+    wordHint.fixedCross = GmScale(20);
     wordHint.alignCross = DuiLayout::AlignCenter;
-    row->AddChild(MakeText(w.word, 13, kGmFontSemiBold, kColorName, DT_LEFT), wordHint);
+    row->AddChild(MakeText(w.word, kGmTextCardTitle, kColorName, DT_LEFT), wordHint);
 
     // 添加时间靠右显示，比词本身淡一档
-    row->AddChild(MakeText(w.timeText, 12, kGmFontNormal, kColorSubtitle, DT_RIGHT),
-                  Hint().Fixed(90, 18).AlignC(DuiLayout::AlignCenter));
+    row->AddChild(MakeText(w.timeText, kGmTextCaption, kColorSubtitle, DT_RIGHT),
+                  Hint().Fixed(GmScale(90), GmScale(18)).AlignC(DuiLayout::AlignCenter));
 
     // 删除按钮。id 用模型下标算，点击时反查是哪一条。
     if (wordIndex >= 0 && wordIndex <= (kIdSensitiveDelMax - kIdSensitiveDelBase))
     {
         row->AddChild(MakeButton(_T("删除"), kGmBtnDanger,
-                                 kIdSensitiveDelBase + wordIndex, 12),
-                      Hint().Fixed(56, 26).AlignC(DuiLayout::AlignCenter));
+                                 kIdSensitiveDelBase + wordIndex, kGmTextCaption),
+                      Hint().Fixed(GmScale(56), GmScale(26)).AlignC(DuiLayout::AlignCenter));
     }
 
     card->AddChild(std::move(row));
@@ -1061,12 +1372,17 @@ const int kAnnBellSize     = 26;    // 左侧铃铛图标的边长
 const int kAnnRowBtnH      = 26;    // 历史条目右侧「重新发布」「删除」按钮的高
 const int kAnnRowBtnGap    = 6;     // 上下两个按钮之间的间距
 
-// 一条历史公告的整体行高。由内部各行累加得到，写死一个数字迟早对不上。
+// 一条历史公告在当前 DPI 下的整体行高（像素）。由内部各行累加得到，写死一个数字
+// 迟早对不上；各项分别换算后再相加，与条目内部逐项换算的结果一致。
 //
 // 右侧按钮列要的高度是 kAnnRowBtnH * 2 + kAnnRowBtnGap = 58，比中间那三行
 // 累加出来的 60 略小，正好放得下。日后调这几个常量时留意别让按钮列超过中间列，
 // 否则按钮会被行高截掉一截。
-const int kAnnRowH = kAnnRowPadV * 2 + kAnnRowTitleH + kAnnRowBodyH + kAnnRowMetaH;
+int AnnRowHeight()
+{
+    return GmScale(kAnnRowPadV) * 2 + GmScale(kAnnRowTitleH)
+         + GmScale(kAnnRowBodyH) + GmScale(kAnnRowMetaH);
+}
 
 // 把优先级翻译成徽章的文案与配色。
 //   severity：取值见 AnnounceSeverity；
@@ -1101,7 +1417,7 @@ std::unique_ptr<DuiBadge> MakeSeverityBadge(int severity)
     std::unique_ptr<DuiBadge> badge(new DuiBadge());
     badge->SetText(label);
     badge->SetMaxDisplayChars(0);    // 不截断（chip 用法）
-    badge->SetCornerRadius(4);
+    badge->SetCornerRadius(GmScale(4));
     badge->SetHideWhenEmpty(false);
     badge->SetBgColor(bg);
     badge->SetTextColor(fg);
@@ -1115,39 +1431,39 @@ std::unique_ptr<DuiBadge> MakeSeverityBadge(int severity)
 std::unique_ptr<DuiControl> MakeAnnouncementRow(const GroupAnnouncement& a, int index)
 {
     std::unique_ptr<DuiVBox> card = MakeCard(kCardBg, kCardBorder, kCardCorner);
-    card->SetPadding(14, kAnnRowPadV, 12, kAnnRowPadV);
+    card->SetPadding(GmScale(14), GmScale(kAnnRowPadV), GmScale(12), GmScale(kAnnRowPadV));
 
     std::unique_ptr<DuiHBox> row(new DuiHBox());
-    row->SetGap(12);
+    row->SetGap(GmScale(12));
 
     // 左侧铃铛图标。复用导航「群公告」项那枚图标，两处是同一个概念。
     std::unique_ptr<GmIcon> bell(new GmIcon());
     bell->Configure(kGmIconAnnounce, RGB(0xE0, 0x6A, 0x2E));
     row->AddChild(std::unique_ptr<DuiControl>(bell.release()),
-                  Hint().Fixed(kAnnBellSize, kAnnBellSize).AlignC(DuiLayout::AlignCenter));
+                  Hint().Fixed(GmScale(kAnnBellSize), GmScale(kAnnBellSize)).AlignC(DuiLayout::AlignCenter));
 
     // 中间：标题行（标题 + 优先级徽章 + 已撤回标记）/ 正文摘要 / 发布人·时间
     std::unique_ptr<DuiVBox> col(new DuiVBox());
-    col->SetGap(2);
+    col->SetGap(GmScale(2));
 
     std::unique_ptr<DuiHBox> titleRow(new DuiHBox());
-    titleRow->SetGap(8);
+    titleRow->SetGap(GmScale(8));
     //标题按内容自然占宽，徽章紧随其后 —— 让徽章贴着标题，而不是被推到最右边
-    titleRow->AddChild(MakeText(a.title, 14, kGmFontBold, kColorName, DT_LEFT),
+    titleRow->AddChild(MakeText(a.title, kGmTextCardTitle, kColorName, DT_LEFT),
                        Hint().Weight(1).AlignC(DuiLayout::AlignCenter));
     titleRow->AddChild(std::unique_ptr<DuiControl>(MakeSeverityBadge(a.severity).release()),
-                       Hint().Fixed(kAnnChipW, kAnnChipH).AlignC(DuiLayout::AlignCenter));
-    col->AddChild(std::move(titleRow), Hint().Fixed(kAnnRowTitleH));
+                       Hint().Fixed(GmScale(kAnnChipW), GmScale(kAnnChipH)).AlignC(DuiLayout::AlignCenter));
+    col->AddChild(std::move(titleRow), Hint().Fixed(GmScale(kAnnRowTitleH)));
 
     //正文只显示一行摘要 —— 历史列表是用来"找到某条公告"的，不是用来通读的，
     //完整正文在群聊窗边栏的公告卡里看
-    col->AddChild(MakeText(a.content, 13, kGmFontNormal, kColorSubtitle, DT_LEFT),
-                  Hint().Fixed(kAnnRowBodyH));
+    col->AddChild(MakeText(a.content, kGmTextBody, kColorSubtitle, DT_LEFT),
+                  Hint().Fixed(GmScale(kAnnRowBodyH)));
 
     CString meta;
     meta.Format(_T("%s · %s"), (LPCTSTR)a.publisherName, (LPCTSTR)a.timeText);
-    col->AddChild(MakeText(meta, 12, kGmFontNormal, kColorSubtitle, DT_LEFT),
-                  Hint().Fixed(kAnnRowMetaH));
+    col->AddChild(MakeText(meta, kGmTextCaption, kColorSubtitle, DT_LEFT),
+                  Hint().Fixed(GmScale(kAnnRowMetaH)));
 
     Hint colHint;
     colHint.weight     = 1;
@@ -1158,20 +1474,20 @@ std::unique_ptr<DuiControl> MakeAnnouncementRow(const GroupAnnouncement& a, int 
     if (index >= 0 && index <= (kIdAnnounceRepublishMax - kIdAnnounceRepublishBase))
     {
         std::unique_ptr<DuiVBox> btnCol(new DuiVBox());
-        btnCol->SetGap(kAnnRowBtnGap);
+        btnCol->SetGap(GmScale(kAnnRowBtnGap));
         //Hint::Fixed 的第一个参数是<u>主轴</u>尺寸。btnCol 是 DuiVBox，主轴是竖直
         //方向，故这里传的是行高；交叉轴（宽）留 -1 撑满，两个按钮才等宽。
         //曾误写成 Fixed(0, 26)（高 0、宽 26），两个按钮都被压成零高度，界面上
         //一个都看不见。
         btnCol->AddChild(MakeButton(_T("重新发布"), kGmBtnSecondary,
-                                    kIdAnnounceRepublishBase + index, 12),
-                         Hint().Fixed(kAnnRowBtnH));
+                                    kIdAnnounceRepublishBase + index, kGmTextCaption),
+                         Hint().Fixed(GmScale(kAnnRowBtnH)));
         //删除是这一页上唯一不可恢复的操作，用危险色，点击时还要过一道确认
         btnCol->AddChild(MakeButton(_T("删除"), kGmBtnDanger,
-                                    kIdAnnounceDeleteBase + index, 12),
-                         Hint().Fixed(kAnnRowBtnH));
+                                    kIdAnnounceDeleteBase + index, kGmTextCaption),
+                         Hint().Fixed(GmScale(kAnnRowBtnH)));
         row->AddChild(std::move(btnCol),
-                      Hint().Fixed(84).AlignC(DuiLayout::AlignCenter));
+                      Hint().Fixed(GmScale(84)).AlignC(DuiLayout::AlignCenter));
     }
 
     card->AddChild(std::move(row));
@@ -1180,29 +1496,29 @@ std::unique_ptr<DuiControl> MakeAnnouncementRow(const GroupAnnouncement& a, int 
 
 std::unique_ptr<DuiControl> BuildAnnouncementPage(const GroupManageModel& model)
 {
-    std::unique_ptr<DuiVBox> page(new DuiVBox());
-    page->SetPadding(24, 16, 24, 18);
-    page->SetGap(8);
+    // 本页的页面间距（96 DPI 下的像素）
+    const int kAnnPageGap = 8;
 
-    page->AddChild(MakeText(_T("群公告"), 16, kGmFontBold, kColorPageTitle, DT_LEFT),
-                   Hint().Fixed(28));
-    page->AddChild(MakeText(_T("发布后所有成员将收到弹窗通知，并可在群聊窗的「公告」里再次查看"),
-                            12, kGmFontNormal, kColorSubtitle, DT_LEFT),
-                   Hint().Fixed(22));
+    std::unique_ptr<DuiVBox> page(new DuiVBox());
+    page->SetPadding(GmScale(24), GmScale(16), GmScale(24), GmScale(18));
+    page->SetGap(GmScale(kAnnPageGap));
+
+    AddPageTitleBlock(page.get(), kAnnPageGap, _T("群公告"), kColorPageTitle,
+                      _T("发布后所有成员将收到弹窗通知，并可在群聊窗的「公告」里再次查看"));
 
     // ---- 发布新公告卡片 ----
     {
         std::unique_ptr<DuiVBox> card = MakeCard(kColorWhite, kCardBorder, kCardCorner);
-        card->SetPadding(16, 12, 16, 12);
-        card->SetGap(10);
+        card->SetPadding(GmScale(16), GmScale(12), GmScale(16), GmScale(12));
+        card->SetGap(GmScale(10));
 
         // 卡片头：「发布新公告」+ 右侧优先级三选一
         std::unique_ptr<DuiHBox> head(new DuiHBox());
-        head->SetGap(6);
-        head->AddChild(MakeText(_T("发布新公告"), 14, kGmFontSemiBold, kColorName, DT_LEFT),
+        head->SetGap(GmScale(6));
+        head->AddChild(MakeText(_T("发布新公告"), kGmTextCardTitle, kColorName, DT_LEFT),
                        Hint().Weight(1).AlignC(DuiLayout::AlignCenter));
-        head->AddChild(MakeText(_T("优先级"), 12, kGmFontNormal, kColorSubtitle, DT_RIGHT),
-                       Hint().Fixed(48).AlignC(DuiLayout::AlignCenter));
+        head->AddChild(MakeText(_T("优先级"), kGmTextCaption, kColorSubtitle, DT_RIGHT),
+                       Hint().Fixed(GmScale(48)).AlignC(DuiLayout::AlignCenter));
 
         //三个 chip 用普通按钮做，选中的那个用主色、其余用次要色 —— 与群文件面板
         //的分类筛选 chips 同一套做法，不必为此新造一个单选控件
@@ -1214,97 +1530,99 @@ std::unique_ptr<DuiControl> BuildAnnouncementPage(const GroupManageModel& model)
         for (int i = 0; i < 3; ++i)
         {
             const int style = (i == model.m_draftSeverity) ? kGmBtnPrimary : kGmBtnSecondary;
-            head->AddChild(MakeButton(chipLabels[i], style, chipIds[i], 12),
-                           Hint().Fixed(kAnnChipW, kAnnChipH).AlignC(DuiLayout::AlignCenter));
+            head->AddChild(MakeButton(chipLabels[i], style, chipIds[i], kGmTextCaption),
+                           Hint().Fixed(GmScale(kAnnChipW), GmScale(kAnnChipH)).AlignC(DuiLayout::AlignCenter));
         }
-        card->AddChild(std::move(head), Hint().Fixed(26));
+        card->AddChild(std::move(head), Hint().Fixed(GmScale(26)));
 
         // 标题（必填）
-        std::unique_ptr<DuiEdit> titleEdit(new DuiEdit());
+        std::unique_ptr<DuiEdit> titleEdit(new GmEdit());
         titleEdit->SetCtrlId(kIdEditAnnounceTitle);
         titleEdit->SetShowBorder(true);
         titleEdit->SetPlaceholder(_T("公告标题（必填）"));
         card->AddChild(std::unique_ptr<DuiControl>(titleEdit.release()),
-                       Hint().Fixed(kAnnFormTitleH));
+                       Hint().Fixed(GmScale(kAnnFormTitleH)));
 
         // 正文（多行）
-        std::unique_ptr<DuiEdit> bodyEdit(new DuiEdit());
+        std::unique_ptr<DuiEdit> bodyEdit(new GmEdit());
         bodyEdit->SetCtrlId(kIdEditAnnounceBody);
         bodyEdit->SetMultiLine(true);
         bodyEdit->SetWordWrap(true);
         bodyEdit->SetShowBorder(true);
         bodyEdit->SetPlaceholder(_T("公告内容（支持换行，Shift+Enter 换行）"));
         card->AddChild(std::unique_ptr<DuiControl>(bodyEdit.release()),
-                       Hint().Fixed(kAnnFormBodyH));
+                       Hint().Fixed(GmScale(kAnnFormBodyH)));
 
         // 底部：清空 / 发布公告（右对齐）
         std::unique_ptr<DuiHBox> btnRow(new DuiHBox());
-        btnRow->SetGap(10);
+        btnRow->SetGap(GmScale(10));
         btnRow->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Weight(1));
-        btnRow->AddChild(MakeButton(_T("清空"), kGmBtnSecondary, kIdBtnAnnounceClear, 13),
-                         Hint().Fixed(76, kAnnFormBtnH));
-        btnRow->AddChild(MakeButton(_T("发布公告"), kGmBtnPrimary, kIdBtnAnnouncePublish, 13),
-                         Hint().Fixed(110, kAnnFormBtnH));
-        card->AddChild(std::move(btnRow), Hint().Fixed(kAnnFormBtnH));
+        btnRow->AddChild(MakeButton(_T("清空"), kGmBtnSecondary, kIdBtnAnnounceClear, kGmTextBody),
+                         Hint().Fixed(GmScale(76), GmScale(kAnnFormBtnH)));
+        btnRow->AddChild(MakeButton(_T("发布公告"), kGmBtnPrimary, kIdBtnAnnouncePublish, kGmTextBody),
+                         Hint().Fixed(GmScale(110), GmScale(kAnnFormBtnH)));
+        card->AddChild(std::move(btnRow), Hint().Fixed(GmScale(kAnnFormBtnH)));
 
-        //卡片高度 = 内边距 + 各行 + 行间距（4 行 3 个 gap）
-        const int cardH = 12 * 2 + 26 + kAnnFormTitleH + kAnnFormBodyH + kAnnFormBtnH + 10 * 3;
-        page->AddChild(std::move(card), Hint().Fixed(cardH).Margin(0, 6, 0, 0));
+        //卡片高度 = 内边距 + 各行 + 行间距（4 行 3 个 gap）。各项分别换算后再相加，
+        //与卡片内部逐项换算的结果一致，不会因取整误差挤压最后一行。
+        const int cardH = GmScale(12) * 2 + GmScale(26) + GmScale(kAnnFormTitleH)
+                        + GmScale(kAnnFormBodyH) + GmScale(kAnnFormBtnH) + GmScale(10) * 3;
+        page->AddChild(std::move(card), Hint().Fixed(cardH).Margin(0, GmScale(6), 0, 0));
     }
 
     // ---- 历史公告列表 ----
     if (!model.m_announcementsLoaded)
     {
         //还没拉回来 —— 与"拉过但一条都没有"要分开说，否则用户会以为公告全没了
-        page->AddChild(MakeText(_T("正在加载公告…"), 13, kGmFontNormal,
+        page->AddChild(MakeText(_T("正在加载公告…"), kGmTextBody,
                                 kColorSubtitle, DT_LEFT),
-                       Hint().Fixed(40).Margin(0, 14, 0, 0));
+                       Hint().Fixed(GmScale(40)).Margin(0, GmScale(14), 0, 0));
     }
     else if (model.m_announcements.empty())
     {
         page->AddChild(MakeText(_T("还没有发布过公告。在上面写一条，全体成员都会收到提醒。"),
-                                13, kGmFontNormal, kColorSubtitle, DT_LEFT),
-                       Hint().Fixed(40).Margin(0, 14, 0, 0));
+                                kGmTextBody, kColorSubtitle, DT_LEFT),
+                       Hint().Fixed(GmScale(40)).Margin(0, GmScale(14), 0, 0));
     }
     else
     {
-        page->AddChild(MakeText(_T("历史公告"), 12, kGmFontNormal, kColorSubtitle, DT_LEFT),
-                       Hint().Fixed(22).Margin(0, 12, 0, 0));
+        page->AddChild(MakeText(_T("历史公告"), kGmTextBody, kColorSubtitle, DT_LEFT),
+                       Hint().Fixed(GmScale(22)).Margin(0, GmScale(12), 0, 0));
 
         //本页的条目。id 用本页内的下标算 —— 翻页后同一个 id 指向的是另一条，
         //这没关系：按钮点下去时读的是当时那一页的模型。
         for (size_t i = 0; i < model.m_announcements.size(); ++i)
         {
             page->AddChild(MakeAnnouncementRow(model.m_announcements[i], (int)i),
-                           Hint().Fixed(kAnnRowH).Margin(0, 0, 0, kAnnRowGap));
+                           Hint().Fixed(AnnRowHeight()).Margin(0, 0, 0, GmScale(kAnnRowGap)));
         }
 
         //底部分页栏：「共 N 条 · 第 x/y 页」+ 上一页 / 下一页。与群文件面板同一套
         //交互，公告攒到几百条也只在这一页里翻，不会把控件树撑爆。
         const int pageCount = model.AnnouncementPageCount();
         std::unique_ptr<DuiHBox> pager(new DuiHBox());
-        pager->SetGap(8);
+        pager->SetGap(GmScale(8));
 
         CString pageText;
         pageText.Format(_T("共 %d 条 · 第 %d/%d 页"),
                         model.m_announcementTotal, model.m_announcementPage + 1, pageCount);
-        pager->AddChild(MakeText(pageText, 12, kGmFontNormal, kColorSubtitle, DT_LEFT),
+        pager->AddChild(MakeText(pageText, kGmTextCaption, kColorSubtitle, DT_LEFT),
                         Hint().Weight(1).AlignC(DuiLayout::AlignCenter));
 
         //已经在第一页 / 最后一页时那个方向的按钮不建 —— 建出来点了没反应，
         //不如不给。只有一页时两个都不出现。
         if (model.m_announcementPage > 0)
         {
-            pager->AddChild(MakeButton(_T("‹"), kGmBtnSecondary, kIdAnnouncePagePrev, 12),
-                            Hint().Fixed(28, 26).AlignC(DuiLayout::AlignCenter));
+            pager->AddChild(MakeButton(_T("‹"), kGmBtnSecondary, kIdAnnouncePagePrev, kGmTextCaption),
+                            Hint().Fixed(GmScale(28), GmScale(26)).AlignC(DuiLayout::AlignCenter));
         }
         if (model.m_announcementPage + 1 < pageCount)
         {
-            pager->AddChild(MakeButton(_T("›"), kGmBtnSecondary, kIdAnnouncePageNext, 12),
-                            Hint().Fixed(28, 26).AlignC(DuiLayout::AlignCenter));
+            pager->AddChild(MakeButton(_T("›"), kGmBtnSecondary, kIdAnnouncePageNext, kGmTextCaption),
+                            Hint().Fixed(GmScale(28), GmScale(26)).AlignC(DuiLayout::AlignCenter));
         }
 
-        page->AddChild(std::move(pager), Hint().Fixed(30).Margin(0, 4, 0, 0));
+        page->AddChild(std::move(pager), Hint().Fixed(GmScale(30)).Margin(0, GmScale(4), 0, 0));
     }
 
     return std::unique_ptr<DuiControl>(page.release());
@@ -1312,74 +1630,76 @@ std::unique_ptr<DuiControl> BuildAnnouncementPage(const GroupManageModel& model)
 
 std::unique_ptr<DuiControl> BuildSensitiveWordsPage(const GroupManageModel& model)
 {
-    std::unique_ptr<DuiVBox> page(new DuiVBox());
-    page->SetPadding(24, 16, 24, 18);
-    page->SetGap(8);
+    // 本页的页面间距（96 DPI 下的像素）
+    const int kSensitivePageGap = 8;
 
-    // 标题行：返回按钮 + 页面标题。二级界面必须给回去的路 —— 这一页不在左侧
-    // 导航里，没有返回按钮就只能靠切到别的页再切回来。
+    //群权限的子页面，与群权限一样限宽
+    std::unique_ptr<DuiVBox> page = MakeWidthLimitedPage();
+    page->SetPadding(GmScale(24), GmScale(16), GmScale(24), GmScale(18));
+    page->SetGap(GmScale(kSensitivePageGap));
+
+    // 标题行：返回按钮 + 标题块（标题与副标题上下紧挨着）。二级界面必须给回去的
+    // 路 —— 这一页不在左侧导航里，没有返回按钮就只能靠切到别的页再切回来。
     {
         std::unique_ptr<DuiHBox> titleRow(new DuiHBox());
-        titleRow->SetGap(10);
+        titleRow->SetGap(GmScale(10));
         titleRow->AddChild(MakeButton(_T("‹ 返回"), kGmBtnSecondary,
-                                      kIdBtnSensitiveBack, 12),
-                           Hint().Fixed(64, 26).AlignC(DuiLayout::AlignCenter));
-        Hint titleHint;
-        titleHint.weight = 1;
-        titleHint.fixedCross = 26;
-        titleHint.alignCross = DuiLayout::AlignCenter;
-        titleRow->AddChild(MakeText(_T("管理词库"), 16, kGmFontBold, kColorPageTitle, DT_LEFT),
-                           titleHint);
-        page->AddChild(std::move(titleRow), Hint().Fixed(28));
+                                      kIdBtnSensitiveBack, kGmTextCaption),
+                           Hint().Fixed(GmScale(64), GmScale(26)).AlignC(DuiLayout::AlignCenter));
+        titleRow->AddChild(std::unique_ptr<DuiControl>(
+                               MakePageTitleBlock(_T("管理词库"), kColorPageTitle,
+                                   _T("命中词库的消息将被拒绝发送；匹配为子串、不区分大小写"))
+                                   .release()),
+                           Hint().Weight(1));
+        //标题块与正文之间统一留 kPageTitleBlockBottom，页面间距不够的部分用下边距补足
+        const int extra = kPageTitleBlockBottom - kSensitivePageGap;
+        page->AddChild(std::move(titleRow),
+                       Hint().Fixed(PageTitleBlockHeight(true)).Margin(0, 0, 0, GmScale(extra)));
     }
-
-    page->AddChild(MakeText(_T("命中词库的消息将被拒绝发送；匹配为子串、不区分大小写"),
-                            12, kGmFontNormal, kColorSubtitle, DT_LEFT),
-                   Hint().Fixed(22));
 
     // 新增行：输入框 + 添加按钮。
     {
         std::unique_ptr<DuiHBox> addRow(new DuiHBox());
-        addRow->SetGap(10);
+        addRow->SetGap(GmScale(10));
 
-        std::unique_ptr<DuiEdit> edit(new DuiEdit());
+        std::unique_ptr<DuiEdit> edit(new GmEdit());
         edit->SetCtrlId(kIdEditSensitiveNew);
         edit->SetShowBorder(true);
         edit->SetPlaceholder(_T("输入要屏蔽的词"));
         addRow->AddChild(std::unique_ptr<DuiControl>(edit.release()),
-                         Hint().Weight(1).Fixed(0, kWordAddRowH));
+                         Hint().Weight(1).Fixed(0, GmScale(kWordAddRowH)));
 
-        addRow->AddChild(MakeButton(_T("添加"), kGmBtnPrimary, kIdBtnSensitiveAdd, 13),
-                         Hint().Fixed(76, kWordAddRowH));
+        addRow->AddChild(MakeButton(_T("添加"), kGmBtnPrimary, kIdBtnSensitiveAdd, kGmTextBody),
+                         Hint().Fixed(GmScale(76), GmScale(kWordAddRowH)));
 
-        page->AddChild(std::move(addRow), Hint().Fixed(kWordAddRowH));
+        page->AddChild(std::move(addRow), Hint().Fixed(GmScale(kWordAddRowH)));
     }
 
     // 词条列表 / 空状态。
     if (!model.m_sensitiveWordsLoaded)
     {
         // 还没拉回来 —— 与"拉过但是空的"要分开说，否则用户会以为词全没了
-        page->AddChild(MakeText(_T("正在加载词库…"), 13, kGmFontNormal,
+        page->AddChild(MakeText(_T("正在加载词库…"), kGmTextBody,
                                 kColorSubtitle, DT_LEFT),
-                       Hint().Fixed(40).Margin(0, 12, 0, 0));
+                       Hint().Fixed(GmScale(40)).Margin(0, GmScale(12), 0, 0));
     }
     else if (model.m_sensitiveWords.empty())
     {
         page->AddChild(MakeText(_T("还没有敏感词。在上面的输入框里添加第一个。"),
-                                13, kGmFontNormal, kColorSubtitle, DT_LEFT),
-                       Hint().Fixed(40).Margin(0, 12, 0, 0));
+                                kGmTextBody, kColorSubtitle, DT_LEFT),
+                       Hint().Fixed(GmScale(40)).Margin(0, GmScale(12), 0, 0));
     }
     else
     {
         CString countText;
         countText.Format(_T("共 %d 个词"), (int)model.m_sensitiveWords.size());
-        page->AddChild(MakeText(countText, 12, kGmFontNormal, kColorSubtitle, DT_LEFT),
-                       Hint().Fixed(22).Margin(0, 6, 0, 0));
+        page->AddChild(MakeText(countText, kGmTextCaption, kColorSubtitle, DT_LEFT),
+                       Hint().Fixed(GmScale(22)).Margin(0, GmScale(6), 0, 0));
 
         for (size_t i = 0; i < model.m_sensitiveWords.size(); ++i)
         {
             page->AddChild(MakeSensitiveWordRow(model.m_sensitiveWords[i], (int)i),
-                           Hint().Fixed(kWordRowH).Margin(0, 0, 0, kWordRowGap));
+                           Hint().Fixed(GmScale(kWordRowH)).Margin(0, 0, 0, GmScale(kWordRowGap)));
         }
     }
 
@@ -1388,44 +1708,58 @@ std::unique_ptr<DuiControl> BuildSensitiveWordsPage(const GroupManageModel& mode
 
 std::unique_ptr<DuiControl> BuildPermsPage(const GroupManageModel& model)
 {
-    std::unique_ptr<DuiVBox> page(new DuiVBox());
-    page->SetPadding(24, 16, 24, 18);
-    page->SetGap(8);
+    // 本页的页面间距（96 DPI 下的像素）
+    const int kPermsPageGap = 8;
 
-    page->AddChild(MakeText(_T("群权限"), 16, kGmFontBold, kColorPageTitle, DT_LEFT),
-                   Hint().Fixed(28));
-    page->AddChild(MakeText(_T("管理成员可做的操作及消息权限"), 12,
-                            kGmFontNormal, kColorSubtitle, DT_LEFT),
-                   Hint().Fixed(22));
+    //限宽页（design/群管理5.png、群管理8.png）
+    std::unique_ptr<DuiVBox> page = MakeWidthLimitedPage();
+    page->SetPadding(GmScale(24), GmScale(16), GmScale(24), GmScale(18));
+    page->SetGap(GmScale(kPermsPageGap));
+
+    AddPageTitleBlock(page.get(), kPermsPageGap, _T("群权限"), kColorPageTitle,
+                      _T("管理成员可做的操作及消息权限"));
+
+    // 群资料还没拉回来或拉取失败：只显示一行提示。若照常显示开关，默认值看上去与真实
+    // 设置无异，管理员据此拨动开关还会把错误的值写回服务端。
+    if (AppendLoadStatus(page.get(), model.m_groupInfoState,
+                         _T("正在加载群权限…"),
+                         _T("群权限加载失败，请关闭本窗口后重新打开。")))
+    {
+        return std::unique_ptr<DuiControl>(page.release());
+    }
 
     std::unique_ptr<DuiVBox> card = MakeCard(kColorWhite, kCardBorder, kCardCorner);
-    card->SetPadding(0, 6, 0, 6);
+    card->SetPadding(0, GmScale(6), 0, GmScale(6));
     card->SetGap(0);
 
     // 加群方式（下拉）。
     std::unique_ptr<DuiComboBox> joinCombo(new DuiComboBox());
     joinCombo->SetCtrlId(kIdComboJoinMethod);
-    joinCombo->AddString(_T("需要验证消息"));
+    StyleCombo(joinCombo.get());
+    //各项顺序必须与服务端 group_join_mode 一致（0 自由加入、1 需审批、2 禁止）：选中下标在
+    //收发两处都直接当作 joinmode 使用，顺序一乱，界面显示与实际设置就对不上
     joinCombo->AddString(_T("允许任何人加入"));
+    joinCombo->AddString(_T("需要验证消息"));
     joinCombo->AddString(_T("禁止任何人加入"));
     joinCombo->SetCurSel(model.m_perms.joinMethodIndex);
     card->AddChild(MakePermRow(_T("加群方式"), _T("控制哪些人可以加入本群"),
                                std::unique_ptr<DuiControl>(joinCombo.release()), 150,
                                std::unique_ptr<DuiControl>(), 0),
-                   Hint().Fixed(52));
-    card->AddChild(MakeSeparatorRow(), Hint().Fixed(1).Margin(18, 0, 18, 0));
+                   Hint().Fixed(GmScale(52)));
+    card->AddChild(MakeSeparatorRow(), Hint().Fixed(kSeparatorPx).Margin(GmScale(18), 0, GmScale(18), 0));
 
     // 谁能 @ 全体成员（下拉）。
     std::unique_ptr<DuiComboBox> atCombo(new DuiComboBox());
     atCombo->SetCtrlId(kIdComboAtAllScope);
+    StyleCombo(atCombo.get());
     atCombo->AddString(_T("仅群主和管理员"));
     atCombo->AddString(_T("所有人"));
     atCombo->SetCurSel(model.m_perms.atAllScopeIndex);
     card->AddChild(MakePermRow(_T("谁能 @ 全体成员"), _T("控制谁可以发起全体提醒"),
                                std::unique_ptr<DuiControl>(atCombo.release()), 150,
                                std::unique_ptr<DuiControl>(), 0),
-                   Hint().Fixed(52));
-    card->AddChild(MakeSeparatorRow(), Hint().Fixed(1).Margin(18, 0, 18, 0));
+                   Hint().Fixed(GmScale(52)));
+    card->AddChild(MakeSeparatorRow(), Hint().Fixed(kSeparatorPx).Margin(GmScale(18), 0, GmScale(18), 0));
 
     // 新成员查看历史消息（开关）。
     card->AddChild(MakePermRow(_T("新成员查看历史消息"),
@@ -1433,8 +1767,8 @@ std::unique_ptr<DuiControl> BuildPermsPage(const GroupManageModel& model)
                                MakePermSwitch(kIdSwitchHistory,
                                               model.m_perms.newMemberSeeHistory),
                                46, std::unique_ptr<DuiControl>(), 0),
-                   Hint().Fixed(52));
-    card->AddChild(MakeSeparatorRow(), Hint().Fixed(1).Margin(18, 0, 18, 0));
+                   Hint().Fixed(GmScale(52)));
+    card->AddChild(MakeSeparatorRow(), Hint().Fixed(kSeparatorPx).Margin(GmScale(18), 0, GmScale(18), 0));
 
     // 成员邀请好友加群（开关）。
     card->AddChild(MakePermRow(_T("成员邀请好友加群"),
@@ -1442,8 +1776,8 @@ std::unique_ptr<DuiControl> BuildPermsPage(const GroupManageModel& model)
                                MakePermSwitch(kIdSwitchInvite,
                                               model.m_perms.memberInviteFriend),
                                46, std::unique_ptr<DuiControl>(), 0),
-                   Hint().Fixed(52));
-    card->AddChild(MakeSeparatorRow(), Hint().Fixed(1).Margin(18, 0, 18, 0));
+                   Hint().Fixed(GmScale(52)));
+    card->AddChild(MakeSeparatorRow(), Hint().Fixed(kSeparatorPx).Margin(GmScale(18), 0, GmScale(18), 0));
 
     // 入群欢迎语（开关）。
     card->AddChild(MakePermRow(_T("入群欢迎语"),
@@ -1451,8 +1785,8 @@ std::unique_ptr<DuiControl> BuildPermsPage(const GroupManageModel& model)
                                MakePermSwitch(kIdSwitchWelcome,
                                               model.m_perms.welcomeMessage),
                                46, std::unique_ptr<DuiControl>(), 0),
-                   Hint().Fixed(52));
-    card->AddChild(MakeSeparatorRow(), Hint().Fixed(1).Margin(18, 0, 18, 0));
+                   Hint().Fixed(GmScale(52)));
+    card->AddChild(MakeSeparatorRow(), Hint().Fixed(kSeparatorPx).Margin(GmScale(18), 0, GmScale(18), 0));
 
     // 消息敏感词过滤（开关 + 管理词库）。
     card->AddChild(MakePermRow(_T("消息敏感词过滤"),
@@ -1461,12 +1795,14 @@ std::unique_ptr<DuiControl> BuildPermsPage(const GroupManageModel& model)
                                               model.m_perms.sensitiveWordFilter),
                                46,
                                MakeButton(_T("管理词库"), kGmBtnSecondary,
-                                          kIdBtnSensitiveDict, 12),
+                                          kIdBtnSensitiveDict, kGmTextCaption),
                                76),
-                   Hint().Fixed(52));
+                   Hint().Fixed(GmScale(52)));
 
-    // 卡片高度 = 6 行 * 52 + 5 条分隔 + 上下 padding 12。
-    page->AddChild(std::move(card), Hint().Fixed(6 * 52 + 5 * 1 + 12));
+    // 卡片高度 = 6 行 * 52 + 5 条分隔 + 上下 padding 各 6。各项分别换算后再相加；
+    // 分隔线恒为 1px 细线，不随 DPI 加粗。
+    page->AddChild(std::move(card),
+                   Hint().Fixed(6 * GmScale(52) + 5 * kSeparatorPx + GmScale(6) * 2));
 
     return std::unique_ptr<DuiControl>(page.release());
 }
@@ -1475,60 +1811,68 @@ std::unique_ptr<DuiControl> BuildPermsPage(const GroupManageModel& model)
 // 危险区域页（design/群管理6.png）
 // =====================================================================
 
-// 造一张危险操作卡：左侧标题 + 说明，右侧操作按钮。
+// 造一张危险区域操作卡：左侧标题 + 说明，右侧操作按钮。
+//   cardBg / cardBorder：卡片底色与描边色（淡红或中性浅灰，见 kDangerCardBg 一组常量）；
+//   btnWidth：按钮宽度（96 DPI 下的像素）。
 std::unique_ptr<DuiControl> MakeDangerCard(LPCTSTR title, LPCTSTR desc,
                                            LPCTSTR btnText, int btnStyle,
-                                           UINT btnId, int btnWidth)
+                                           UINT btnId, int btnWidth,
+                                           COLORREF cardBg, COLORREF cardBorder)
 {
-    std::unique_ptr<DuiVBox> card = MakeCard(kDangerCardBg, kDangerCardBorder, kCardCorner);
-    card->SetPadding(18, 0, 18, 0);
+    std::unique_ptr<DuiVBox> card = MakeCard(cardBg, cardBorder, kCardCorner);
+    card->SetPadding(GmScale(18), 0, GmScale(18), 0);
 
     std::unique_ptr<DuiHBox> row(new DuiHBox());
-    row->SetGap(14);
+    row->SetGap(GmScale(14));
 
     std::unique_ptr<DuiVBox> info(new DuiVBox());
-    info->SetGap(4);
-    info->AddChild(MakeText(title, 14, kGmFontSemiBold, kColorName, DT_LEFT),
-                   Hint().Fixed(22));
-    info->AddChild(MakeMultiText(desc, 12, kGmFontNormal, kColorSubtitle),
-                   Hint().Fixed(36));
+    info->SetGap(GmScale(4));
+    info->AddChild(MakeText(title, kGmTextCardTitle, kColorName, DT_LEFT),
+                   Hint().Fixed(GmScale(22)));
+    info->AddChild(MakeMultiText(desc, kGmTextBody, kColorSubtitle),
+                   Hint().Fixed(GmScale(36)));
     Hint infoHint;
     infoHint.weight     = 1;
-    infoHint.fixedCross = 60;
+    infoHint.fixedCross = GmScale(60);
     infoHint.alignCross = DuiLayout::AlignCenter;
     row->AddChild(std::move(info), infoHint);
 
-    row->AddChild(MakeButton(btnText, btnStyle, btnId, 13),
-                  Hint().Fixed(btnWidth, 36).AlignC(DuiLayout::AlignCenter));
+    row->AddChild(MakeButton(btnText, btnStyle, btnId, kGmTextBody),
+                  Hint().Fixed(GmScale(btnWidth), GmScale(36)).AlignC(DuiLayout::AlignCenter));
 
     card->AddChild(std::move(row));
     return std::unique_ptr<DuiControl>(card.release());
 }
 
-std::unique_ptr<DuiControl> BuildDangerPage(const GroupManageModel& /*model*/)
+std::unique_ptr<DuiControl> BuildDangerPage(const GroupManageModel& model)
 {
-    std::unique_ptr<DuiVBox> page(new DuiVBox());
-    page->SetPadding(24, 16, 24, 18);
-    page->SetGap(14);
+    // 本页的页面间距（96 DPI 下的像素）
+    const int kDangerPageGap = 14;
 
-    page->AddChild(MakeText(_T("危险区域"), 16, kGmFontBold, kColorDanger, DT_LEFT),
-                   Hint().Fixed(28));
-    page->AddChild(MakeText(_T("以下操作不可撤销，请谨慎操作"), 12,
-                            kGmFontNormal, kColorSubtitle, DT_LEFT),
-                   Hint().Fixed(22));
+    //限宽页（design/群管理6.png）
+    std::unique_ptr<DuiVBox> page = MakeWidthLimitedPage();
+    page->SetPadding(GmScale(24), GmScale(16), GmScale(24), GmScale(18));
+    page->SetGap(GmScale(kDangerPageGap));
 
+    AddPageTitleBlock(page.get(), kDangerPageGap, _T("危险区域"), kColorDanger,
+                      _T("以下操作不可撤销，请谨慎操作"));
+
+    //转让群主可以再转回来，用中性卡片；后两项不可逆，用淡红卡片
     page->AddChild(MakeDangerCard(_T("转让群主"),
                                   _T("将群主身份转让给其他成员，转让后你将成为普通成员"),
-                                  _T("转让群主"), kGmBtnSecondary, kIdBtnTransfer, 96),
-                   Hint().Fixed(78));
+                                  _T("转让群主"), kGmBtnSecondary, kIdBtnTransfer, 96,
+                                  kNeutralCardBg, kNeutralCardBorder),
+                   Hint().Fixed(GmScale(78)));
     page->AddChild(MakeDangerCard(_T("移除全部成员"),
                                   _T("移除除群主以外的所有成员，群聊仍然保留"),
-                                  _T("移除全部成员"), kGmBtnDanger, kIdBtnRemoveAll, 116),
-                   Hint().Fixed(78));
-    page->AddChild(MakeDangerCard(_T("解散群聊"),
-                                  _T("解散后本群的聊天记录将全部删除，所有成员将被移出，此操作不可恢复"),
-                                  _T("解散群聊"), kGmBtnDanger, kIdBtnDismiss, 96),
-                   Hint().Fixed(86));
+                                  _T("移除全部成员"), kGmBtnDanger, kIdBtnRemoveAll, 116,
+                                  kDangerCardBg, kDangerCardBorder),
+                   Hint().Fixed(GmScale(78)));
+    const CString dismissDesc = BuildDismissDescription(model.m_groupName);
+    page->AddChild(MakeDangerCard(_T("解散群聊"), dismissDesc,
+                                  _T("解散群聊"), kGmBtnDanger, kIdBtnDismiss, 96,
+                                  kDangerCardBg, kDangerCardBorder),
+                   Hint().Fixed(GmScale(86)));
 
     return std::unique_ptr<DuiControl>(page.release());
 }
@@ -1539,34 +1883,151 @@ std::unique_ptr<DuiControl> BuildDangerPage(const GroupManageModel& /*model*/)
 // Header
 // =====================================================================
 
+namespace {
+
+// 顶栏各部分的尺寸（96 DPI 下的像素，使用前经 GmScale 换算）。
+const int kHeaderPadLeft      = 22;   // 左内边距
+const int kHeaderPadRight     = 20;   // 右内边距
+const int kHeaderAvatarPx     = 32;   // 群头像边长
+const int kHeaderAvatarCorner = 8;    // 群头像圆角半径
+const int kHeaderAvatarGap    = 12;   // 群头像与群名之间的间距
+const int kHeaderItemGap      = 8;    // 群名、角色标签、人数三者之间的间距
+const int kHeaderRoleHPad     = 8;    // 角色标签文字左右内边距
+const int kHeaderRoleHeight   = 20;   // 角色标签高度
+
+// 量出的文字宽度之外再留的余量（96 DPI 下的像素），避免取整误差让本来放得下的
+// 文字被 DT_END_ELLIPSIS 截成省略号。
+const int kHeaderTextSlack    = 2;
+
+/**
+ *  顶栏容器：横排群头像、群名、角色标签、人数，末尾一个占位控件占掉剩余空间。
+ *
+ *  与普通 DuiHBox 只差一件事：群名宽度 = min(群名文字宽度, 剩余可用宽度)。群名
+ *  放得下时按文字宽度撑开，角色标签与人数紧跟其后；放不下时只收窄群名（末尾显示
+ *  省略号），后两项仍完整显示。文字宽度在构建时量好，剩余可用宽度要到排版时才
+ *  知道，故覆写 Layout，在排版前把群名的固定宽度算出来。
+ */
+class GmHeaderRow : public DuiHBox
+{
+public:
+    GmHeaderRow()
+        : m_name(NULL)
+        , m_nameTextWidth(0)
+        , m_nameMarginLeft(0)
+        , m_otherWidth(0)
+    {
+    }
+
+    /**
+     *  登记群名控件及排版所需的宽度。
+     *    name：          群名控件，须已加入本容器（借用，随本容器析构）；
+     *    nameTextWidth： 群名文字宽度（当前 DPI 下的像素，含余量）；
+     *    nameMarginLeft：群名左侧额外留的边距（像素），用于让头像与群名的间距
+     *                    大于其余各项之间的间距；
+     *    otherWidth：    群名以外所有子控件的固定宽度、全部间距、群名左边距与
+     *                    左右内边距之和（当前 DPI 下的像素）。
+     */
+    void SetNameMetrics(DuiControl* name, int nameTextWidth, int nameMarginLeft,
+                        int otherWidth)
+    {
+        m_name           = name;
+        m_nameTextWidth  = nameTextWidth;
+        m_nameMarginLeft = nameMarginLeft;
+        m_otherWidth     = otherWidth;
+    }
+
+    void Layout(const RECT& rcAvail) override
+    {
+        // 本函数里要 SetHint，先挡住它触发的二次排版（见 DuiLayout::LayoutGuard）
+        DuiLayout::LayoutGuard guard(*this);
+        if (m_name != NULL)
+        {
+            int avail = (rcAvail.right - rcAvail.left) - m_otherWidth;
+            if (avail < 0)
+            {
+                avail = 0;
+            }
+            const int width = (m_nameTextWidth < avail) ? m_nameTextWidth : avail;
+            SetHint(m_name, Hint().Fixed(width)
+                                  .Margin(m_nameMarginLeft, 0, 0, 0)
+                                  .AlignC(DuiLayout::AlignCenter));
+        }
+        DuiHBox::Layout(rcAvail);
+    }
+
+private:
+    DuiControl* m_name;            // 群名控件（借用，随本容器一起析构）
+    int         m_nameTextWidth;   // 群名文字宽度（当前 DPI 下的像素，含余量）
+    int         m_nameMarginLeft;  // 群名左边距（像素）
+    int         m_otherWidth;      // 群名以外各项宽度 + 间距 + 内边距之和（像素）
+};
+
+} // anonymous namespace
+
 std::unique_ptr<DuiControl> BuildHeader(const GroupManageModel& model)
 {
-    std::unique_ptr<DuiHBox> header(new DuiHBox());
-    header->SetPadding(22, 0, 20, 0);
-    header->SetGap(12);
+    const int padLeft    = GmScale(kHeaderPadLeft);
+    const int padRight   = GmScale(kHeaderPadRight);
+    const int avatarPx   = GmScale(kHeaderAvatarPx);
+    const int itemGap    = GmScale(kHeaderItemGap);
+    const int nameMargin = GmScale(kHeaderAvatarGap - kHeaderItemGap);
+    const int slack      = GmScale(kHeaderTextSlack);
 
-    const int kHeaderAvatarPx     = 32;   //顶部 Header 里的群头像边长
-    const int kHeaderAvatarCorner = 8;    //其圆角半径
+    std::unique_ptr<GmHeaderRow> header(new GmHeaderRow());
+    header->SetPadding(padLeft, 0, padRight, 0);
+    header->SetGap(itemGap);
+
     header->AddChild(MakeGroupAvatar(model, kHeaderAvatarPx, kHeaderAvatarCorner),
-                     Hint().Fixed(kHeaderAvatarPx, kHeaderAvatarPx)
+                     Hint().Fixed(avatarPx, avatarPx).AlignC(DuiLayout::AlignCenter));
+
+    // 群名：宽度在 GmHeaderRow::Layout 里按剩余空间确定，这里先给文字宽度
+    const int nameTextWidth =
+        GmMeasureTextWidth(model.m_groupName, kGmTextPageTitle) + slack;
+    std::unique_ptr<GmText> name =
+        MakeText(model.m_groupName, kGmTextPageTitle, kColorPageTitle, DT_LEFT);
+    name->SetCtrlId(kIdHeaderName);
+    DuiControl* nameCtrl = name.get();
+    header->AddChild(std::unique_ptr<DuiControl>(name.release()),
+                     Hint().Fixed(nameTextWidth).Margin(nameMargin, 0, 0, 0)
                            .AlignC(DuiLayout::AlignCenter));
 
-    header->AddChild(MakeText(model.m_groupName, 16, kGmFontBold, kColorPageTitle, DT_LEFT),
-                     Hint().Fixed(130).AlignC(DuiLayout::AlignCenter));
+    // 本人角色标签：与成员卡上的角色标签同一套文案与配色
+    std::unique_ptr<DuiBadge> role = MakeRoleBadge(model.m_myRole);
+    role->SetCtrlId(kIdHeaderRole);
+    const int roleWidth = GmMeasureTextWidth(role->GetText(), kGmTextCaption)
+                        + GmScale(kHeaderRoleHPad) * 2;
+    header->AddChild(std::unique_ptr<DuiControl>(role.release()),
+                     Hint().Fixed(roleWidth, GmScale(kHeaderRoleHeight))
+                           .AlignC(DuiLayout::AlignCenter));
 
-    LPCTSTR roleText = _T("我是成员");
-    if (model.m_myRole == kRoleOwner)
+    // 成员人数。只在成员已拉回来时显示：开窗时成员尚未到达，此时显示"0 名成员"
+    // 是错误信息，故整项不建；应答到达后整窗重建，人数随之出现在角色标签右侧，
+    // 前面几项的位置不变。
+    int metaWidth = 0;
+    const bool showMeta = (model.m_membersState == kLoadDone);
+    if (showMeta)
     {
-        roleText = _T("我是群主");
+        CString meta;
+        meta.Format(_T("· %d 名成员"), model.MemberCount());
+        metaWidth = GmMeasureTextWidth(meta, kGmTextCaption) + slack;
+        std::unique_ptr<GmText> metaText = MakeText(meta, kGmTextCaption, kColorSubtitle, DT_LEFT);
+        metaText->SetCtrlId(kIdHeaderMeta);
+        header->AddChild(std::unique_ptr<DuiControl>(metaText.release()),
+                         Hint().Fixed(metaWidth).AlignC(DuiLayout::AlignCenter));
     }
-    else if (model.m_myRole == kRoleAdmin)
-    {
-        roleText = _T("我是管理员");
-    }
-    CString sub;
-    sub.Format(_T("%s · %d 名成员"), roleText, model.MemberCount());
-    header->AddChild(MakeText(sub, 12, kGmFontNormal, kColorSubtitle, DT_LEFT),
-                     Hint().Weight(1).AlignC(DuiLayout::AlignCenter));
+
+    // 末尾占位：占掉剩余空间，前面几项因此靠左紧挨着排
+    header->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Weight(1));
+
+    // 群名以外的占用：内边距 + 头像 + 标签 + 人数 + 各段间距 + 群名左边距。
+    // 显示人数时有 4 段间距（头像-群名、群名-标签、标签-人数、人数-占位），
+    // 不显示人数时少了「标签-人数」这一段，为 3 段。
+    const int kHeaderGapCountWithMeta    = 4;
+    const int kHeaderGapCountWithoutMeta = 3;
+    const int gapCount = showMeta ? kHeaderGapCountWithMeta : kHeaderGapCountWithoutMeta;
+    const int otherWidth = padLeft + padRight + avatarPx + roleWidth + metaWidth
+                         + itemGap * gapCount + nameMargin;
+    header->SetNameMetrics(nameCtrl, nameTextWidth, nameMargin, otherWidth);
 
     return std::unique_ptr<DuiControl>(header.release());
 }
@@ -1581,7 +2042,7 @@ namespace {
 std::unique_ptr<DuiControl> MakeNavGroupTitle(LPCTSTR text)
 {
     return std::unique_ptr<DuiControl>(
-        MakeText(text, 12, kGmFontNormal, RGB(0xAE, 0xAC, 0xA6), DT_LEFT).release());
+        MakeText(text, kGmTextCaption, kNavGroupTitleColor, DT_LEFT).release());
 }
 
 // 造一个导航项。
@@ -1600,30 +2061,30 @@ std::unique_ptr<DuiControl> MakeNavItem(int pageId, int iconKind, LPCTSTR label,
 std::unique_ptr<DuiControl> BuildNav(const GroupManageModel& model)
 {
     std::unique_ptr<DuiVBox> nav(new DuiVBox());
-    nav->SetBgColor(kColorWhite);
-    nav->SetPadding(12, 14, 12, 14);
-    nav->SetGap(2);
+    nav->SetBgColor(kNavBg);
+    nav->SetPadding(GmScale(12), GmScale(14), GmScale(12), GmScale(14));
+    nav->SetGap(GmScale(2));
 
     // 按登录者角色决定哪些页出现在导航里：普通成员看不到审批 / 禁言 / 权限，
     // 管理员看不到危险区域。不可见的页整项不构建 —— 灰着显示只会让人反复去点。
     const int myRole = model.m_myRole;
 
     // 分组：成员。成员管理页对所有角色都可见，故本分组标题恒显示。
-    nav->AddChild(MakeNavGroupTitle(_T("成员")), Hint().Fixed(22));
+    nav->AddChild(MakeNavGroupTitle(_T("成员")), Hint().Fixed(GmScale(22)));
     nav->AddChild(MakeNavItem(kPageMembers, kGmIconMembers, _T("成员管理"),
                               false, model.MemberCount(), false),
-                  Hint().Fixed(36));
+                  Hint().Fixed(GmScale(36)));
     if (IsPageVisibleForRole(kPageApproval, myRole))
     {
         nav->AddChild(MakeNavItem(kPageApproval, kGmIconApproval, _T("加群审批"),
                                   false, model.PendingRequestCount(), true),
-                      Hint().Fixed(36));
+                      Hint().Fixed(GmScale(36)));
     }
     if (IsPageVisibleForRole(kPageMute, myRole))
     {
         nav->AddChild(MakeNavItem(kPageMute, kGmIconMute, _T("禁言管理"),
                                   false, model.MutedCount(), false),
-                      Hint().Fixed(36));
+                      Hint().Fixed(GmScale(36)));
     }
 
     // 分组：群公告。对照 design/群管理7.png，它在导航里自成一组（而不是并进
@@ -1631,33 +2092,33 @@ std::unique_ptr<DuiControl> BuildNav(const GroupManageModel& model)
     // 配置不是一回事。整组仅群主 / 管理员可见，故组标题也跟着一起隐藏。
     if (IsPageVisibleForRole(kPageAnnouncement, myRole))
     {
-        nav->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Fixed(10));
-        nav->AddChild(MakeNavGroupTitle(_T("群公告")), Hint().Fixed(22));
+        nav->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Fixed(GmScale(10)));
+        nav->AddChild(MakeNavGroupTitle(_T("群公告")), Hint().Fixed(GmScale(22)));
         //徽章数用总条数（服务端给的 total），不是本页条数 —— 分页后本地只留一页
         nav->AddChild(MakeNavItem(kPageAnnouncement, kGmIconAnnounce, _T("群公告"),
                                   false, model.m_announcementTotal, false),
-                      Hint().Fixed(36));
+                      Hint().Fixed(GmScale(36)));
     }
 
     // 间隔。
-    nav->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Fixed(10));
+    nav->AddChild(std::unique_ptr<DuiControl>(new DuiControl()), Hint().Fixed(GmScale(10)));
 
     // 分组：设置。基本信息对所有角色可见，故本分组标题同样恒显示。
-    nav->AddChild(MakeNavGroupTitle(_T("设置")), Hint().Fixed(22));
+    nav->AddChild(MakeNavGroupTitle(_T("设置")), Hint().Fixed(GmScale(22)));
     nav->AddChild(MakeNavItem(kPageBasicInfo, kGmIconInfo, _T("基本信息"),
                               false, 0, false),
-                  Hint().Fixed(36));
+                  Hint().Fixed(GmScale(36)));
     if (IsPageVisibleForRole(kPagePerms, myRole))
     {
         nav->AddChild(MakeNavItem(kPagePerms, kGmIconLock, _T("群权限"),
                                   false, 0, false),
-                      Hint().Fixed(36));
+                      Hint().Fixed(GmScale(36)));
     }
     if (IsPageVisibleForRole(kPageDanger, myRole))
     {
         nav->AddChild(MakeNavItem(kPageDanger, kGmIconDanger, _T("危险区域"),
                                   true, 0, false),
-                      Hint().Fixed(36));
+                      Hint().Fixed(GmScale(36)));
     }
 
     // 余下空间。
@@ -1669,6 +2130,31 @@ std::unique_ptr<DuiControl> BuildNav(const GroupManageModel& model)
 // =====================================================================
 // 页面分发
 // =====================================================================
+
+void RefilterMembersPage(DuiVBox* page, const GroupManageModel& model)
+{
+    if (page == NULL)
+    {
+        return;
+    }
+    //成员页根容器的第一个子控件是搜索栏，其余全部摘掉。先复制指针清单再逐个摘，
+    //避免一边遍历一边改动子控件数组
+    std::vector<DuiControl*> stale;
+    const std::vector<std::unique_ptr<DuiControl> >& kids = page->Children();
+    for (size_t i = 1; i < kids.size(); ++i)
+    {
+        stale.push_back(kids[i].get());
+    }
+    for (size_t i = 0; i < stale.size(); ++i)
+    {
+        page->RemoveChild(stale[i]);
+    }
+    AppendMembersPageBodyImpl(page, model);
+
+    //增删子控件不会触发重新排版，而页面矩形没变时 SetRect 会直接返回，所以必须用
+    //ForceLayout，否则新追加的成员卡没有排过版、显示为空白（开发约定文档 UI 约定第 5 条）
+    page->ForceLayout(page->GetRect());
+}
 
 std::unique_ptr<DuiControl> BuildPage(int pageId, const GroupManageModel& model)
 {
@@ -1696,6 +2182,93 @@ std::unique_ptr<DuiControl> BuildPage(int pageId, const GroupManageModel& model)
 
     // 未知页：返回一个空白容器，避免空指针。
     return std::unique_ptr<DuiControl>(new DuiControl());
+}
+
+// =====================================================================
+// 表单控件样式判定
+// =====================================================================
+
+bool IsGmStyledInput(const balloonwjui::DuiControl* ctrl)
+{
+    return dynamic_cast<const GmEdit*>(ctrl) != NULL
+        || dynamic_cast<const GmSearchBox*>(ctrl) != NULL;
+}
+
+// =====================================================================
+// 危险区域：解散说明
+// =====================================================================
+
+CString BuildDismissDescription(const CString& groupName)
+{
+    // 群名最多保留的字数；再长就截断加省略号，免得说明在卡片里排到第三行
+    const int kMaxNameChars = 16;
+
+    CString name = groupName;
+    if (name.GetLength() > kMaxNameChars)
+    {
+        name = name.Left(kMaxNameChars) + _T("…");
+    }
+    CString desc;
+    desc.Format(_T("解散后 %s 的聊天记录将全部删除，所有成员将被移出，此操作不可恢复"),
+                (LPCTSTR)name);
+    return desc;
+}
+
+// =====================================================================
+// 窗口尺寸
+// =====================================================================
+
+namespace {
+
+// 窗口客户区的设计尺寸与最小尺寸（96 DPI 下的像素）。
+const int kClientDesignWidth  = 960;
+const int kClientDesignHeight = 660;
+const int kClientMinWidth     = 820;
+const int kClientMinHeight    = 560;
+
+// 窗口初始尺寸与屏幕工作区边缘之间至少留出的距离（96 DPI 下的像素），
+// 避免窗口一打开就贴满整个屏幕。
+const int kWorkAreaMargin = 20;
+
+// 把 value 限制在 [lower, upper] 之内；两者矛盾（upper < lower）时以 lower 为准。
+int ClampWithFloor(int value, int lower, int upper)
+{
+    if (value > upper)
+    {
+        value = upper;
+    }
+    if (value < lower)
+    {
+        value = lower;
+    }
+    return value;
+}
+
+} // anonymous namespace
+
+SIZE ComputeMinClientSize(int dpi)
+{
+    SIZE sz;
+    sz.cx = balloonwjui::DuiDpi::Scale(kClientMinWidth, dpi);
+    sz.cy = balloonwjui::DuiDpi::Scale(kClientMinHeight, dpi);
+    return sz;
+}
+
+SIZE ComputeInitialClientSize(int dpi, const RECT& workArea)
+{
+    const SIZE minSize = ComputeMinClientSize(dpi);
+    const int  margin  = balloonwjui::DuiDpi::Scale(kWorkAreaMargin, dpi);
+
+    // 工作区扣掉四周边距后还能给多大
+    const int availWidth  = (workArea.right - workArea.left) - margin * 2;
+    const int availHeight = (workArea.bottom - workArea.top) - margin * 2;
+
+    SIZE sz;
+    sz.cx = ClampWithFloor(balloonwjui::DuiDpi::Scale(kClientDesignWidth, dpi),
+                           minSize.cx, availWidth);
+    sz.cy = ClampWithFloor(balloonwjui::DuiDpi::Scale(kClientDesignHeight, dpi),
+                           minSize.cy, availHeight);
+    return sz;
 }
 
 } // namespace balloongroupmanage

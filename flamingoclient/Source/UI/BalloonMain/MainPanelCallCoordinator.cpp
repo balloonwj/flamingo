@@ -3,7 +3,7 @@
  *    · 提示框的属主窗口用宿主句柄 m_hHost，也就是主面板；
  *    · 静音开关与本人 userid 改从绑定进来的 CFlamingoClient 读，通话结果提示改经主面板写；
  *    · 通话窗的 owner 由 NULL 换成 m_hHost —— 原先传 NULL 使得通话窗记下的 owner 恒为空，
- *      「关窗即请求停媒体会话」那条兜底路径从未生效（见 bugs.md 的 BUG-20）。
+ *      「关窗即请求停媒体会话」那条兜底路径从未生效。
  *
  *  balloonwj@qq.com   2026-08-18
  */

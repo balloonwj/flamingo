@@ -129,7 +129,8 @@ CString BuildSendBody(const std::vector<ChatSegment>& segs);
  *  content.text 里随消息传递，接收端据本函数还原）。
  *
  *  解析规则（与 BuildSendBody / CreateMsgContent 口径一致）：
- *    · "//"           → 文本里的一个字面 '/'；
+ *    · //f["<整数>"]  → 文本里字面的 /f["<整数>"]（"//" 只有紧跟表情标记时才是转义；
+ *                       其余位置的 "//"，如网址里的 http://，原样保留）；
  *    · /f["<整数>"]   → 一个系统表情段（faceId 为该整数）；
  *    · 其余字符        → 文本，原样保留；残缺 / 无法识别的 "/x..." 当普通文本，不吞正文。
  *
@@ -183,5 +184,15 @@ CString BodyToDigest(const CString& body);
  *  返回：可直接显示的提示文案。
  */
 CString BuildRecallTipText(bool bIsSelf, const CString& operatorName);
+
+/**
+ *  生成删除消息前的确认文案。单聊窗、群聊窗的「删除」与消息记录窗的「删除」共用这一函数，
+ *  保证措辞一致（docs/清理聊天记录方案.md §10）。删除是本人视角的：本机与本人其他设备都不再
+ *  显示，对方不受影响，文案须把这一点说清楚。
+ *
+ *    count：要删除的消息条数。1（及非法的 0）时说"这条消息"，大于 1 时说"这 N 条消息"。
+ *  返回：可直接用作消息框正文的文案（含换行）。
+ */
+CString BuildDeleteMessagesConfirmText(size_t count);
 
 } // namespace balloonchat

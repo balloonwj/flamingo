@@ -6,7 +6,8 @@
  *       图片消息（MP-IMG 系列）：buildSendImageRequest 单聊/群聊 content、
  *       parseMessageNotify / parseSyncMessagesResponse 对 msgtype=2 的图片字段解析；
  *       消息 Pin（MP-PIN 系列）：请求构造、应答与推送解析、被 Pin 消息列表的
- *       total 与 pin 子对象（见 docs/消息Pin接入方案.md）。
+ *       total 与 pin 子对象（见 docs/消息Pin接入方案.md）；
+ *       转发消息（FWD-C1、FWD-C2）：请求构造与应答解析（见 docs/聊天消息转发方案.md）。
  *  框架 Catch2 v3。
  *  balloonwj@qq.com   2026-06-01
  */
@@ -1235,4 +1236,402 @@ TEST_CASE("MP-FOLDER5 超大总字节数经推送解析不丢精度")
         "\"content\":{\"sessionid\":\"s\",\"foldername\":\"f\",\"totaldirs\":1,"
         "\"totalfiles\":1,\"totalsize\":53687091200,\"result\":8,\"errcode\":0}}", notify));
     CHECK(notify.m_folderTotalSize == 53687091200LL);
+}
+
+// =====================================================================
+// MP-READ1 ~ MP-READ3 对方已读推送 cmd_message_read_notify（1507）的解析
+// =====================================================================
+//
+// 背景（2026-09-30）：服务端早已在接收方上报 cmd_mark_read 后向发送方推送本条，
+// 客户端却一直没有解析与处理，气泡上的「已读」又是无条件画的。报文格式见
+// docs/协议设计-v2.md 10.5 节，与服务端 MessageProtocol::buildMessageReadNotify 互为镜像。
+
+TEST_CASE("MP-READ1 parseMessageReadNotify 字段齐全时逐项解析正确", "[readnotify]")
+{
+    //单聊：cid 是推送方（读消息的人）的 userid，readcount 恒为 1。
+    //readmsgid 取一个超过 2^53 的值：它以字符串编码，解析时不能走 double 而丢精度。
+    net::MessageReadNotify notify;
+    REQUIRE(MessageProtocolClient::parseMessageReadNotify(
+        "{\"ctype\":1,\"cid\":\"100000\",\"readmsgid\":\"9007199254741001\",\"readcount\":1}",
+        notify));
+    CHECK(notify.m_ctype == 1);
+    CHECK(notify.m_cid == 100000);
+    CHECK(notify.m_readmsgid == 9007199254741001LL);
+    CHECK(notify.m_readcount == 1);
+}
+
+TEST_CASE("MP-READ2 cid 或 readmsgid 缺失、非正时整条推送不可用", "[readnotify]")
+{
+    net::MessageReadNotify notify;
+    //缺 cid：不知道是哪个会话被读了
+    CHECK_FALSE(MessageProtocolClient::parseMessageReadNotify(
+        "{\"ctype\":1,\"readmsgid\":\"20002\",\"readcount\":1}", notify));
+    //缺 readmsgid：不知道读到了哪条
+    CHECK_FALSE(MessageProtocolClient::parseMessageReadNotify(
+        "{\"ctype\":1,\"cid\":\"100000\",\"readcount\":1}", notify));
+    //readmsgid 为 0：服务端不会发，出现即视为脏数据
+    CHECK_FALSE(MessageProtocolClient::parseMessageReadNotify(
+        "{\"ctype\":1,\"cid\":\"100000\",\"readmsgid\":\"0\",\"readcount\":1}", notify));
+    //cid 为负
+    CHECK_FALSE(MessageProtocolClient::parseMessageReadNotify(
+        "{\"ctype\":1,\"cid\":\"-5\",\"readmsgid\":\"20002\",\"readcount\":1}", notify));
+}
+
+TEST_CASE("MP-READ4 单聊同步消息应答带出对方已读位点", "[readnotify]")
+{
+    //单聊：peerreadmsgid 以字符串编码，超过 2^53 也要原样解析出来。
+    //发送方重开聊天窗、或离线期间对方读过的消息，都靠它显示正确的已读状态。
+    const std::string single =
+        "{\"code\":0,\"ctype\":1,\"cid\":\"100001\",\"hasmore\":false,"
+        "\"peerreadmsgid\":\"9007199254741001\",\"messages\":[]}";
+    net::SyncMessagesResult outSingle;
+    REQUIRE(MessageProtocolClient::parseSyncMessagesResponse(single, outSingle));
+    CHECK(outSingle.m_peerReadMsgid == 9007199254741001LL);
+
+    //群聊：服务端不带这个字段（群聊不做已读回执），解析结果为 0。
+    const std::string group =
+        "{\"code\":0,\"ctype\":2,\"cid\":\"600001\",\"hasmore\":false,\"messages\":[]}";
+    net::SyncMessagesResult outGroup;
+    REQUIRE(MessageProtocolClient::parseSyncMessagesResponse(group, outGroup));
+    CHECK(outGroup.m_peerReadMsgid == 0);
+}
+
+TEST_CASE("MP-READ3 包体不是合法 JSON 对象时解析失败", "[readnotify]")
+{
+    net::MessageReadNotify notify;
+    CHECK_FALSE(MessageProtocolClient::parseMessageReadNotify("", notify));
+    CHECK_FALSE(MessageProtocolClient::parseMessageReadNotify("not json", notify));
+    CHECK_FALSE(MessageProtocolClient::parseMessageReadNotify("[1,2,3]", notify));
+}
+
+// =====================================================================
+// MP-DEL1~MP-DEL7、MP-SYNC-A1 —— 删除单条消息（1512）、按时间范围清理（1521）、
+// 删除推送（1522）与同步应答回带的锚点，见 docs/清理聊天记录方案.md §4、§6
+// =====================================================================
+
+namespace {
+
+//用例里的区间端点（Unix毫秒）。取两个互不相同的固定值，便于核对取值原样。
+const int64_t kDelRangeBegin = 1754300000000LL;
+const int64_t kDelRangeEnd   = 1754399999999LL;
+
+//超过 2^53 的 msgid：按数字经 double 解析会丢精度，协议约定以字符串编码
+const int64_t kDelBigMsgid = 9007199254741001LL;
+
+} // anonymous namespace
+
+TEST_CASE("MP-DEL1 buildDeleteMessageRequest msgid 按字符串写，非正时不构造", "[msgdelete]")
+{
+    Json::Value root;
+    REQUIRE(parseJsonText(MessageProtocolClient::buildDeleteMessageRequest(kDelBigMsgid), root));
+    REQUIRE(root["msgid"].isString());
+    CHECK(root["msgid"].asString() == "9007199254741001");
+
+    //非正的 msgid 服务端必然判非法，返回空串让调用方放弃发送
+    CHECK(MessageProtocolClient::buildDeleteMessageRequest(0).empty());
+    CHECK(MessageProtocolClient::buildDeleteMessageRequest(-1).empty());
+}
+
+TEST_CASE("MP-DEL2 parseDeleteMessageResponse 取出 code 与 msg，缺 code 时失败", "[msgdelete]")
+{
+    net::DeleteMessageResponse ok;
+    REQUIRE(MessageProtocolClient::parseDeleteMessageResponse("{\"code\":0,\"msg\":\"ok\"}", ok));
+    CHECK(ok.m_code == 0);
+    CHECK(ok.m_msg == "ok");
+
+    net::DeleteMessageResponse fail;
+    REQUIRE(MessageProtocolClient::parseDeleteMessageResponse(
+        "{\"code\":501,\"msg\":\"message not exist\"}", fail));
+    CHECK(fail.m_code == 501);
+
+    net::DeleteMessageResponse bad;
+    CHECK_FALSE(MessageProtocolClient::parseDeleteMessageResponse("{\"msg\":\"ok\"}", bad));
+    CHECK_FALSE(MessageProtocolClient::parseDeleteMessageResponse("not json", bad));
+}
+
+TEST_CASE("MP-DEL3 buildDeleteMessagesByTimeRequest 时间按数字写，区间非法时不构造", "[msgdelete]")
+{
+    Json::Value root;
+    REQUIRE(parseJsonText(
+        MessageProtocolClient::buildDeleteMessagesByTimeRequest(kDelRangeBegin, kDelRangeEnd), root));
+    //时间与消息体的 timestamp 同一口径按数字传，服务端只接受数字
+    REQUIRE(root["begintime"].isInt64());
+    REQUIRE(root["endtime"].isInt64());
+    CHECK(root["begintime"].asInt64() == kDelRangeBegin);
+    CHECK(root["endtime"].asInt64() == kDelRangeEnd);
+
+    //从最早开始、以及只清理某一毫秒都合法
+    CHECK_FALSE(MessageProtocolClient::buildDeleteMessagesByTimeRequest(0, kDelRangeEnd).empty());
+    CHECK_FALSE(MessageProtocolClient::buildDeleteMessagesByTimeRequest(kDelRangeEnd, kDelRangeEnd).empty());
+
+    //开始为负、结束早于开始：返回空串
+    CHECK(MessageProtocolClient::buildDeleteMessagesByTimeRequest(-1, kDelRangeEnd).empty());
+    CHECK(MessageProtocolClient::buildDeleteMessagesByTimeRequest(kDelRangeEnd, kDelRangeBegin).empty());
+}
+
+TEST_CASE("MP-DEL4 parseDeleteMessagesByTimeResponse 成功带回实际区间，失败应答只有 code", "[msgdelete]")
+{
+    net::DeleteMessagesByTimeResponse ok;
+    REQUIRE(MessageProtocolClient::parseDeleteMessagesByTimeResponse(
+        "{\"code\":0,\"msg\":\"ok\",\"begintime\":0,\"endtime\":1754399999999}", ok));
+    CHECK(ok.m_code == 0);
+    CHECK(ok.m_begintime == 0);
+    CHECK(ok.m_endtime == kDelRangeEnd);
+
+    //失败应答由服务端 buildSimpleResponse 构造，只有 code / msg：照样解析成功，时间为 0
+    net::DeleteMessagesByTimeResponse fail;
+    REQUIRE(MessageProtocolClient::parseDeleteMessagesByTimeResponse(
+        "{\"code\":1,\"msg\":\"invalid time range\"}", fail));
+    CHECK(fail.m_code == 1);
+    CHECK(fail.m_msg == "invalid time range");
+    CHECK(fail.m_begintime == 0);
+    CHECK(fail.m_endtime == 0);
+
+    net::DeleteMessagesByTimeResponse bad;
+    CHECK_FALSE(MessageProtocolClient::parseDeleteMessagesByTimeResponse("{\"msg\":\"ok\"}", bad));
+    CHECK_FALSE(MessageProtocolClient::parseDeleteMessagesByTimeResponse("", bad));
+}
+
+TEST_CASE("MP-DEL5 parseMessagesDeletedNotify 单条形式：ctype、cid、msgids，大 msgid 不丢精度", "[msgdelete]")
+{
+    net::MessagesDeletedNotify notify;
+    REQUIRE(MessageProtocolClient::parseMessagesDeletedNotify(
+        "{\"ctype\":2,\"cid\":\"268435456\",\"msgids\":[\"9007199254741001\"]}", notify));
+    CHECK_FALSE(notify.m_isRange);
+    CHECK(notify.m_ctype == 2);
+    CHECK(notify.m_cid == 268435456);
+    REQUIRE(notify.m_msgids.size() == 1);
+    CHECK(notify.m_msgids[0] == kDelBigMsgid);
+}
+
+TEST_CASE("MP-DEL6 parseMessagesDeletedNotify 区间形式：取出起止时间", "[msgdelete]")
+{
+    net::MessagesDeletedNotify notify;
+    REQUIRE(MessageProtocolClient::parseMessagesDeletedNotify(
+        "{\"begintime\":1754300000000,\"endtime\":1754399999999}", notify));
+    CHECK(notify.m_isRange);
+    CHECK(notify.m_begintime == kDelRangeBegin);
+    CHECK(notify.m_endtime == kDelRangeEnd);
+    CHECK(notify.m_msgids.empty());
+}
+
+TEST_CASE("MP-DEL7 parseMessagesDeletedNotify 非法输入一律失败", "[msgdelete]")
+{
+    const char* const kBad[] =
+    {
+        "",                                                          //空串
+        "[1,2]",                                                     //不是对象
+        "{\"ctype\":1}",                                             //两种形式都不像
+        "{\"ctype\":1,\"cid\":\"0\",\"msgids\":[\"501\"]}",          //单条形式 cid 为 0
+        "{\"ctype\":1,\"cid\":\"100001\",\"msgids\":[]}",            //单条形式 msgids 为空
+        "{\"ctype\":1,\"cid\":\"100001\",\"msgids\":[\"0\"]}",       //单条形式含非正 msgid
+        "{\"begintime\":-1,\"endtime\":1754399999999}",              //区间形式开始为负
+        "{\"begintime\":1754399999999,\"endtime\":1754300000000}",   //区间形式结束早于开始
+        "{\"begintime\":0}"                                          //区间形式缺结束
+    };
+    for (size_t i = 0; i < sizeof(kBad) / sizeof(kBad[0]); ++i)
+    {
+        INFO("case #" << i << ": " << kBad[i]);
+        net::MessagesDeletedNotify notify;
+        CHECK_FALSE(MessageProtocolClient::parseMessagesDeletedNotify(kBad[i], notify));
+    }
+}
+
+TEST_CASE("MP-SYNC-A1 parseSyncMessagesResponse 取出回带的锚点，没有时标记为无锚点", "[msgdelete]")
+{
+    //从最新开始拉：锚点为 0
+    net::SyncMessagesResult latest;
+    REQUIRE(MessageProtocolClient::parseSyncMessagesResponse(
+        "{\"code\":0,\"ctype\":1,\"cid\":\"100001\",\"beforemsgid\":\"0\",\"hasmore\":true,"
+        "\"messages\":[]}", latest));
+    CHECK(latest.m_hasAnchor);
+    CHECK(latest.m_beforeMsgid == 0);
+
+    //往前翻页：锚点非 0，按字符串解析不丢精度
+    net::SyncMessagesResult older;
+    REQUIRE(MessageProtocolClient::parseSyncMessagesResponse(
+        "{\"code\":0,\"ctype\":2,\"cid\":\"268435456\",\"beforemsgid\":\"9007199254741001\","
+        "\"hasmore\":false,\"messages\":[]}", older));
+    CHECK(older.m_hasAnchor);
+    CHECK(older.m_beforeMsgid == kDelBigMsgid);
+
+    //旧服务端不带锚点
+    net::SyncMessagesResult legacy;
+    REQUIRE(MessageProtocolClient::parseSyncMessagesResponse(
+        "{\"code\":0,\"ctype\":1,\"cid\":\"100001\",\"hasmore\":false,\"messages\":[]}", legacy));
+    CHECK_FALSE(legacy.m_hasAnchor);
+
+    //补齐模式回带的是 aftermsgid：不算翻历史的锚点
+    net::SyncMessagesResult after;
+    REQUIRE(MessageProtocolClient::parseSyncMessagesResponse(
+        "{\"code\":0,\"ctype\":1,\"cid\":\"100001\",\"aftermsgid\":\"501\",\"hasmore\":false,"
+        "\"messages\":[]}", after));
+    CHECK_FALSE(after.m_hasAnchor);
+}
+
+// =====================================================================
+// FWD-C. 转发消息（cmd_forward_message=1511），见 docs/聊天消息转发方案.md §7.2
+
+TEST_CASE("FWD-C1 buildForwardMessageRequest 字段类型与合并标题", "[forward]")
+{
+    std::vector<int64_t> ids;
+    ids.push_back(501);
+    ids.push_back(9007199254741001LL);
+
+    //逐条转发：tocid 与 msgids 为字符串（大 msgid 不丢精度），merge 为布尔值，不带 title
+    Json::Value one;
+    REQUIRE(parseJsonText(MessageProtocolClient::buildForwardMessageRequest(
+        "fwd-1", 1, 100002, false, "应被忽略的标题", ids), one));
+    CHECK(one["clientmsgid"].asString() == "fwd-1");
+    CHECK(one["toctype"].isInt());
+    CHECK(one["toctype"].asInt() == 1);
+    CHECK(one["tocid"].isString());
+    CHECK(one["tocid"].asString() == "100002");
+    CHECK(one["merge"].isBool());
+    CHECK(one["merge"].asBool() == false);
+    CHECK_FALSE(one.isMember("title"));
+    REQUIRE(one["msgids"].isArray());
+    REQUIRE(one["msgids"].size() == 2);
+    CHECK(one["msgids"][0].isString());
+    CHECK(one["msgids"][0].asString() == "501");
+    CHECK(one["msgids"][1].asString() == "9007199254741001");
+
+    //合并转发：带 title
+    Json::Value merged;
+    REQUIRE(parseJsonText(MessageProtocolClient::buildForwardMessageRequest(
+        "fwd-2", 2, 268435456, true, "张三和李四的聊天记录", ids), merged));
+    CHECK(merged["toctype"].asInt() == 2);
+    CHECK(merged["tocid"].asString() == "268435456");
+    CHECK(merged["merge"].asBool() == true);
+    CHECK(merged["title"].asString() == "张三和李四的聊天记录");
+
+    //合并转发但标题为空：不写 title，由服务端取缺省值
+    Json::Value noTitle;
+    REQUIRE(parseJsonText(MessageProtocolClient::buildForwardMessageRequest(
+        "fwd-3", 1, 100002, true, "", ids), noTitle));
+    CHECK_FALSE(noTitle.isMember("title"));
+
+    //客户端单次转发条数上限与服务端 FORWARD_MAX_MESSAGES 一致
+    CHECK(kForwardMaxMessages == 100);
+}
+
+TEST_CASE("FWD-C2 parseForwardMessageResponse 成功、失败与带 messages 三种应答", "[forward]")
+{
+    //成功且带完整消息体：messages 可以只是 msgids 的前缀（服务端体积预算用尽）
+    ForwardMessageResponse ok;
+    REQUIRE(MessageProtocolClient::parseForwardMessageResponse(
+        "{\"code\":0,\"msg\":\"ok\",\"clientmsgid\":\"fwd-1\","
+        "\"msgids\":[\"9007199254741001\",\"9007199254741002\"],"
+        "\"messages\":[{\"msgid\":\"9007199254741001\",\"clientmsgid\":\"fwd-1-0\",\"ctype\":2,"
+        "\"cid\":\"268435456\",\"from\":\"100001\",\"to\":\"268435456\",\"msgtype\":1,"
+        "\"content\":{\"text\":\"转发的内容\"},\"timestamp\":1716268800000}]}", ok));
+    CHECK(ok.m_code == 0);
+    CHECK(ok.m_clientmsgid == "fwd-1");
+    REQUIRE(ok.m_msgids.size() == 2);
+    CHECK(ok.m_msgids[0] == 9007199254741001LL);
+    CHECK(ok.m_msgids[1] == 9007199254741002LL);
+    REQUIRE(ok.m_messages.size() == 1);
+    CHECK(ok.m_messages[0].m_msgid == 9007199254741001LL);
+    CHECK(ok.m_messages[0].m_clientmsgid == "fwd-1-0");
+    CHECK(ok.m_messages[0].m_ctype == 2);
+    CHECK(ok.m_messages[0].m_cid == 268435456);
+    CHECK(ok.m_messages[0].m_from == 100001);
+    CHECK(ok.m_messages[0].m_msgtype == 1);
+    CHECK(ok.m_messages[0].m_text == "转发的内容");
+    CHECK(ok.m_messages[0].m_timestamp == 1716268800000LL);
+
+    //失败：只有 code 与 msg，其余为空
+    ForwardMessageResponse fail;
+    REQUIRE(MessageProtocolClient::parseForwardMessageResponse(
+        "{\"code\":502,\"msg\":\"you are muted in this group\"}", fail));
+    CHECK(fail.m_code == 502);
+    CHECK(fail.m_msg == "you are muted in this group");
+    CHECK(fail.m_clientmsgid.empty());
+    CHECK(fail.m_msgids.empty());
+    CHECK(fail.m_messages.empty());
+
+    //旧服务端的成功应答：只有 msgids，没有 clientmsgid 与 messages
+    ForwardMessageResponse legacy;
+    REQUIRE(MessageProtocolClient::parseForwardMessageResponse(
+        "{\"code\":0,\"msg\":\"ok\",\"msgids\":[\"7\"]}", legacy));
+    CHECK(legacy.m_code == 0);
+    REQUIRE(legacy.m_msgids.size() == 1);
+    CHECK(legacy.m_msgids[0] == 7);
+    CHECK(legacy.m_messages.empty());
+
+    //messages 里解析不了的元素跳过，不影响其余
+    ForwardMessageResponse partial;
+    REQUIRE(MessageProtocolClient::parseForwardMessageResponse(
+        "{\"code\":0,\"msg\":\"ok\",\"msgids\":[\"8\",\"9\"],"
+        "\"messages\":[{\"msgid\":\"0\"},{\"msgid\":\"9\",\"from\":\"100001\",\"ctype\":1,"
+        "\"cid\":\"100002\",\"msgtype\":1,\"content\":{\"text\":\"x\"},\"timestamp\":1}]}", partial));
+    REQUIRE(partial.m_messages.size() == 1);
+    CHECK(partial.m_messages[0].m_msgid == 9);
+
+    //畸形输入：不是 JSON 对象、或缺 code
+    ForwardMessageResponse bad;
+    CHECK_FALSE(MessageProtocolClient::parseForwardMessageResponse("not json", bad));
+    CHECK_FALSE(MessageProtocolClient::parseForwardMessageResponse("[]", bad));
+    CHECK_FALSE(MessageProtocolClient::parseForwardMessageResponse("{\"msg\":\"ok\"}", bad));
+}
+
+//一条合并记录推送：两条子消息，第二条本身又是一条合并记录（嵌套）
+static const char* const kMergedNotifyJson =
+    "{\"msgid\":\"9007199254741100\",\"clientmsgid\":\"fwd-m\",\"ctype\":1,\"cid\":\"100001\","
+    "\"from\":\"100001\",\"to\":\"100002\",\"msgtype\":15,\"timestamp\":1716268800000,"
+    "\"content\":{\"title\":\"张三和李四的聊天记录\",\"messages\":["
+    "{\"msgid\":\"501\",\"ctype\":1,\"cid\":\"100003\",\"from\":\"100003\",\"to\":\"100001\","
+    "\"msgtype\":1,\"content\":{\"text\":\"第一条\"},\"timestamp\":1716268700000,\"fromname\":\"张三\"},"
+    "{\"msgid\":\"502\",\"ctype\":1,\"cid\":\"100001\",\"from\":\"100001\",\"to\":\"100003\","
+    "\"msgtype\":15,\"timestamp\":1716268750000,"
+    "\"content\":{\"title\":\"内层记录\",\"messages\":["
+    "{\"msgid\":\"401\",\"ctype\":1,\"cid\":\"100004\",\"from\":\"100004\",\"to\":\"100001\","
+    "\"msgtype\":1,\"content\":{\"text\":\"内层的话\"},\"timestamp\":1716268600000}]}}]}}";
+
+TEST_CASE("FWD-C3 类型 15 解析后保留原 content，标题与子消息可取出", "[forward]")
+{
+    MessageNotify n;
+    REQUIRE(MessageProtocolClient::parseMessageNotify(kMergedNotifyJson, n));
+    CHECK(n.m_msgtype == message_type_merged);
+    CHECK(n.m_text.empty());
+    REQUIRE_FALSE(n.m_mergedContent.empty());
+
+    MergedRecord rec;
+    REQUIRE(MessageProtocolClient::parseMergedContent(n.m_mergedContent, rec));
+    CHECK(rec.m_title == "张三和李四的聊天记录");
+    REQUIRE(rec.m_messages.size() == 2);
+
+    //第一条：普通文字，带 fromname
+    CHECK(rec.m_messages[0].m_msgid == 501);
+    CHECK(rec.m_messages[0].m_from == 100003);
+    CHECK(rec.m_messages[0].m_fromName == "张三");
+    CHECK(rec.m_messages[0].m_msgtype == message_type_text);
+    CHECK(rec.m_messages[0].m_text == "第一条");
+    CHECK(rec.m_messages[0].m_timestamp == 1716268700000LL);
+
+    //第二条：嵌套的合并记录，没有 fromname；它自己的原 content 同样保留，可以再解析一层
+    CHECK(rec.m_messages[1].m_msgtype == message_type_merged);
+    CHECK(rec.m_messages[1].m_fromName.empty());
+    MergedRecord inner;
+    REQUIRE(MessageProtocolClient::parseMergedContent(rec.m_messages[1].m_mergedContent, inner));
+    CHECK(inner.m_title == "内层记录");
+    REQUIRE(inner.m_messages.size() == 1);
+    CHECK(inner.m_messages[0].m_text == "内层的话");
+
+    //非合并记录不填 m_mergedContent
+    MessageNotify text;
+    REQUIRE(MessageProtocolClient::parseMessageNotify(
+        "{\"msgid\":\"1\",\"from\":\"2\",\"msgtype\":1,\"content\":{\"text\":\"t\"}}", text));
+    CHECK(text.m_mergedContent.empty());
+
+    //content 不可用：解析失败，调用方按"内容不可用"降级显示
+    MergedRecord broken;
+    CHECK_FALSE(MessageProtocolClient::parseMergedContent("", broken));
+    CHECK_FALSE(MessageProtocolClient::parseMergedContent("{\"title\":\"t\"}", broken));
+    CHECK_FALSE(MessageProtocolClient::parseMergedContent("not json", broken));
+}
+
+TEST_CASE("FWD-C4 类型 15 的摘要为「[聊天记录]」", "[forward]")
+{
+    CHECK(MessageProtocolClient::digestForMsgType(message_type_merged, "") == "[聊天记录]");
 }

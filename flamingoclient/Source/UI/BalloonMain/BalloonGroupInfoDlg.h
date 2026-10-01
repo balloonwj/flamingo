@@ -34,6 +34,7 @@
 
 class CFlamingoClient;
 class CBalloonMainPanel;   // 写操作回主面板的宿主(更新会话缓存 / 退群清理);前置声明免引头
+namespace balloonwjui { class DuiToast; }   // 复制后的轻提示条;成员只存指针,前置声明免引头
 
 namespace balloonmain {
 
@@ -102,7 +103,7 @@ public:
 private:
     /**
      *  WM_DUI_NOTIFY 处理:两开关 VALUECHANGED、名片行 CLICK 进编辑、名片 edit
-     *  KILLFOCUS 提交、退群 / 查看记录按钮 CLICK。
+     *  KILLFOCUS 提交、退群 / 查看记录按钮 CLICK、群名 / 群号 CLICK 复制。
      */
     LRESULT OnDuiNotify(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
@@ -167,6 +168,7 @@ private:
     HBITMAP m_quitBgPressed;    // 退群按钮浅红圆角底 pressed(更深)
     HBITMAP m_iconHistory;      // "查看消息记录"按钮左侧时钟图标(PARGB,本类持有)
     HBITMAP m_iconQuit;         // "退出群聊"按钮左侧垃圾桶图标(PARGB 红,本类持有)
+    balloonwjui::DuiToast* m_pToast;   // 客户区顶部的轻提示条(点击群名 / 群号复制后提示"已复制");借用指针,所有权在控件树,窗口重建客户区时重新取
 };
 
 } // namespace balloonmain

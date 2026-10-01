@@ -27,8 +27,12 @@ const wchar_t* const kLabelSaveFileAs     = L"另存为";
 const wchar_t* const kLabelDownload       = L"下载";
 const wchar_t* const kLabelCancelDownload = L"取消下载";
 const wchar_t* const kLabelLocate         = L"定位到聊天窗";
+const wchar_t* const kLabelViewContext    = L"查看上下文";
+const wchar_t* const kLabelForward        = L"转发";
+const wchar_t* const kLabelMultiSelect    = L"多选";
 const wchar_t* const kLabelPin            = L"Pin";
 const wchar_t* const kLabelUnpin          = L"取消 Pin";
+const wchar_t* const kLabelDelete         = L"删除";
 
 //往行模型里追加一个普通菜单项。
 void AppendItem(std::vector<HistoryRowMenuItem>& out, HistoryRowMenuId id,
@@ -169,6 +173,21 @@ bool IsHistoryRowFolderType(int msgType)
     return msgType == ::message_type_folder;
 }
 
+bool CanForwardHistoryRow(int msgType, int64_t msgId)
+{
+    if (msgId <= kHistoryRowMsgIdUnassigned)
+    {
+        return false;
+    }
+    //服务端生成的三类记录条：文件夹传输记录、通话记录、系统提示，都不是用户发出的内容
+    if (msgType == ::message_type_folder || msgType == ::message_type_rtc
+        || msgType == ::message_type_system)
+    {
+        return false;
+    }
+    return true;
+}
+
 std::vector<HistoryRowMenuItem> BuildHistoryRowMenuModel(const HistoryRowMenuContext& ctx)
 {
     std::vector<HistoryRowMenuItem> model;
@@ -183,11 +202,39 @@ std::vector<HistoryRowMenuItem> BuildHistoryRowMenuModel(const HistoryRowMenuCon
     //跳回聊天窗看上下文，所以任何类型的行都给，且排在通用组头一位。
     AppendItem(model, kHistoryRowMenuLocate, kLabelLocate);
 
+    //「查看上下文」：与「定位到聊天窗」同为"看这条前后说了什么"，区别是留在本窗口里看，
+    //故紧跟其后。只在有筛选条件时给（没有筛选时这一行本来就在上下文里）
+    if (ctx.m_canViewContext)
+    {
+        AppendItem(model, kHistoryRowMenuViewContext, kLabelViewContext);
+    }
+
+    //「转发」紧挨在「Pin」之前，与聊天窗气泡菜单的排法一致：两者都是"把这条消息拿到别处去用"
+    if (CanForwardHistoryRow(ctx.m_msgType, ctx.m_msgId))
+    {
+        AppendItem(model, kHistoryRowMenuForward, kLabelForward);
+    }
+
+    //「多选」紧跟「转发」：进入多选后最常做的就是合并转发。msgid 未分配时不给 —— 这条既不能
+    //转发也不能删除，选进来也做不了什么。点它进入多选模式并预先选中这一条
+    if (ctx.m_msgId > kHistoryRowMsgIdUnassigned)
+    {
+        AppendItem(model, kHistoryRowMenuMultiSelect, kLabelMultiSelect);
+    }
+
     //Pin 项：msgid 未分配时整项不出现（不是置灰）。文案随当前是否已钉住取反；
     //「取消 Pin」的权限不在客户端预判，无权时由服务端拒绝并提示（理由见头文件）。
     if (ctx.m_msgId > kHistoryRowMsgIdUnassigned)
     {
         AppendItem(model, kHistoryRowMenuPin, ctx.m_pinned ? kLabelUnpin : kLabelPin);
+    }
+
+    //「删除」：不可撤销，放在最末、前面单独隔一条线，避免手滑误点。msgid 未分配时整项
+    //不出现 —— 服务端还没有这条消息，删除请求必被判非法（与 Pin 同一处理）
+    if (ctx.m_msgId > kHistoryRowMsgIdUnassigned)
+    {
+        AppendSeparator(model);
+        AppendItem(model, kHistoryRowMenuDelete, kLabelDelete);
     }
 
     TrimTrailingSeparator(model);

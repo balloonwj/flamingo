@@ -570,6 +570,96 @@ LRESULT CBalloonMainPanel::OnV2MessageRecalled(UINT /*uMsg*/, WPARAM /*wParam*/,
     return 0;
 }
 
+// v2 转发消息的应答。wParam 是请求时 CIUSocket::ForwardMessage 返回的帧 seq，
+// 交给 OnForwardResponse（BalloonMainPanelForward.cpp），由转发调度器据它对回是哪一次转发、
+// 哪一个目标。
+LRESULT CBalloonMainPanel::OnV2ForwardResult(UINT /*uMsg*/, WPARAM wParam, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::ForwardMessageResponse，处理后须 delete。
+    net::ForwardMessageResponse* pResp = (net::ForwardMessageResponse*)lParam;
+    if (pResp == NULL)
+        return 0;
+
+    LOG_INFO("v2 forward result, seq=%u, code=%d, msg=%s, created=%u, bodies=%u.",
+             (unsigned)wParam, pResp->m_code, pResp->m_msg.c_str(),
+             (unsigned)pResp->m_msgids.size(), (unsigned)pResp->m_messages.size());
+
+    OnForwardResponse((uint32_t)wParam, *pResp);
+    delete pResp;
+    return 0;
+}
+
+// v2 删除单条消息的应答：成功时不动界面（本地删行、移除气泡等删除推送到达后统一做），
+// 失败时按错误码提示原因。
+LRESULT CBalloonMainPanel::OnV2DeleteMessageResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::DeleteMessageResponse，处理后须 delete。
+    net::DeleteMessageResponse* pResp = (net::DeleteMessageResponse*)lParam;
+    if (pResp == NULL)
+        return 0;
+
+    if (pResp->m_code != 0)
+    {
+        //消息不存在是最常见的失败：它已在别的设备上被删掉、或被对方撤回后又被清理
+        LPCTSTR pszTip = _T("删除失败，请稍后重试。");
+        if (pResp->m_code == error_code_message_not_exist)
+            pszTip = _T("该消息不存在或已被删除。");
+
+        LOG_ERROR("v2 delete message failed, code=%d, msg=%s.", pResp->m_code, pResp->m_msg.c_str());
+        ::MessageBox(m_hWnd, pszTip, g_strAppTitle.c_str(), MB_OK | MB_ICONINFORMATION);
+    }
+
+    delete pResp;
+    return 0;
+}
+
+// v2 按时间范围清理的应答：转交系统设置 → 清理聊天记录对话框提示结果（对话框已关闭时
+// 只记日志）。
+LRESULT CBalloonMainPanel::OnV2DeleteByTimeResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::DeleteMessagesByTimeResponse，处理后须 delete。
+    net::DeleteMessagesByTimeResponse* pResp = (net::DeleteMessagesByTimeResponse*)lParam;
+    if (pResp == NULL)
+        return 0;
+
+    LOG_INFO("v2 delete messages by time result, code=%d, msg=%s, range=[%lld, %lld].",
+             pResp->m_code, pResp->m_msg.c_str(),
+             (long long)pResp->m_begintime, (long long)pResp->m_endtime);
+
+    //结果提示交给系统设置 → 清理聊天记录对话框；本机记录的删除等 1522 区间推送，与此无关
+    m_systemSettingDlg.OnChatCleanResult(pResp->m_code, pResp->m_begintime, pResp->m_endtime);
+
+    delete pResp;
+    return 0;
+}
+
+// v2 本人删除了消息的推送（单条或区间）：发起删除的这台设备自己也会收到，本机与其他
+// 设备统一在这里更新本地库与界面。
+LRESULT CBalloonMainPanel::OnV2MessagesDeleted(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::MessagesDeletedNotify，处理后须 delete。
+    net::MessagesDeletedNotify* pNotify = (net::MessagesDeletedNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+
+    OnMessagesDeleted(*pNotify);
+    delete pNotify;
+    return 0;
+}
+
+// v2 对方已读推送：记下对方的已读位点，并转给已打开的单聊窗把对应气泡标为已读。
+LRESULT CBalloonMainPanel::OnV2MessageReadNotify(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)
+{
+    //lParam 为 IUSocket 接收线程堆分配的 net::MessageReadNotify，处理后须 delete。
+    net::MessageReadNotify* pNotify = (net::MessageReadNotify*)lParam;
+    if (pNotify == NULL)
+        return 0;
+
+    OnMessageReadNotify(*pNotify);
+    delete pNotify;
+    return 0;
+}
+
 // v2 Pin 消息应答：与撤回同口径 —— 成功时什么都不做（界面改动等 cmd_message_pinned_notify
 // 推送），只在失败时据 code 给出具体原因。
 LRESULT CBalloonMainPanel::OnV2PinResult(UINT /*uMsg*/, WPARAM /*wParam*/, LPARAM lParam)

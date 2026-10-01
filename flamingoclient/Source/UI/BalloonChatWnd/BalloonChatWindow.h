@@ -31,6 +31,8 @@
 #include "ChatHistoryPaging.h"                      // HistoryPagingState（向上翻页，成员需完整类型）
 #include "ShakeRateLimiter.h"                       // 窗口抖动收发节流器（成员需完整类型）
 #include "TypingIndicator.h"                        // 「正在输入」收发状态机（成员需完整类型）
+#include "../../Common/Util/PerfStopWatch.h"        // 打开窗口到首屏历史渲染完成的计时（成员需完整类型）
+#include "ChatMessageList.h"                           // WM_CHAT_DELETE_REQUEST（消息映射里要用到消息号）
 #include <string>                                   // 发图进度 / 结果回投用 clientMsgId
 #include <vector>                                   // 待发送截图源路径表 m_pendingShotPaths
 
@@ -151,6 +153,13 @@ public:
     UINT GetPeerUserId() const { return m_peerUserId; }
 
     /**
+     *  在窗口顶部居中弹出一条轻量提示，几秒后自动消失（与拖放文件的跳过提示共用同一个
+     *  提示条）。主面板用它提示「已转发」这类不需要用户确认的结果。
+     *    text：提示文字，调用期间有效。
+     */
+    void ShowToast(LPCTSTR text);
+
+    /**
      *  某条消息被撤回：把消息区里对应的气泡就地变成居中提示行。
      *  由主面板收到 cmd_message_recalled_notify 推送后路由进来。
      *  @param msgid   被撤消息的服务器 msgid；本窗口没有该条时安静忽略
@@ -164,6 +173,21 @@ public:
     void AppendSystemTip(const CString& text);
 
     void OnMessageRecalled(long long msgid, const CString& tipText);
+
+    /**
+     *  移除本会话里已被本人删除的消息行。收到 cmd_messages_deleted_notify（单条形式）后由
+     *  主面板调用；列表里没有的 msgid（尚未加载进当前视图）安静忽略。
+     *    msgids：被删除的服务器 msgid
+     */
+    void OnMessagesDeleted(const std::vector<long long>& msgids);
+
+    /**
+     *  丢弃当前列表，重新拉取最新一页历史。按时间范围清理本地记录之后由主面板调用：
+     *  区间可能盖住列表里任意多行，逐行移除不如整页重载 —— 效果等同于重新打开本窗口。
+     *  应答照常经 OnHistoryMessages 按"首屏"处理（先清空再渲染）。调试入口（没有对端）
+     *  下什么都不做。
+     */
+    void ReloadLatestMessages();
 
     /**
      *  某条消息被 Pin / 取消 Pin（收到服务端推送后由主面板调用）：把列表里对应那行的
@@ -206,6 +230,16 @@ public:
      */
     void OnSendChatAckBackfill(const std::string& clientMsgId, long long msgid,
                                long long timestampMs);
+
+    /**
+     *  应用对方的已读位点：把本窗口里自己发出、msgid 不大于位点的消息标为已读（气泡下方
+     *  「未读」变成「✓ 已读」）。位点只增不减，之后才加载进来或才回填 msgid 的消息也会
+     *  按它判定（见 ChatMessageList::ApplyPeerReadPosition）。由主面板在收到
+     *  cmd_message_read_notify 推送、建窗、或拿到单聊同步消息应答时调用。
+     *  @param readMsgid 对方已读到的最大消息 msgid；<=0 忽略
+     *  @return 本次新标为已读的气泡行数
+     */
+    int ApplyPeerReadPosition(long long readMsgid);
 
     /**
      *  收到对方发来的一条单聊消息：渲染为对方气泡。由主面板在收到
@@ -398,6 +432,9 @@ public:
         MESSAGE_HANDLER(WM_CHAT_IMAGE_ACTION, OnChatImageAction)
         MESSAGE_HANDLER(WM_CHAT_RECALL_REQUEST, OnChatRecallRequest)
         MESSAGE_HANDLER(WM_CHAT_PIN_REQUEST, OnChatPinRequest)
+        MESSAGE_HANDLER(WM_CHAT_DELETE_REQUEST, OnChatDeleteRequest)
+        MESSAGE_HANDLER(WM_CHAT_FORWARD_REQUEST, OnChatForwardRequest)
+        MESSAGE_HANDLER(WM_CHAT_OPEN_MERGED_RECORD, OnChatOpenMergedRecord)
         MESSAGE_HANDLER(WM_CHAT_LOAD_OLDER, OnChatLoadOlder)
         MESSAGE_HANDLER(WM_CHAT_REPLY_REQUEST, OnChatReplyRequest)
         MESSAGE_HANDLER(WM_CHAT_LOCATE_QUOTED, OnChatLocateQuoted)
@@ -415,7 +452,7 @@ public:
     CFlamingoClient* m_lpFMGClient;   // 所属客户端，引用不持有
 
     /**
-     *  应用当前连接态：顶部提示条的显隐与文字、输入框是否只读、发送按钮是否可用。
+     *  应用当前连接态：顶部提示条的显隐与文字、发送按钮是否可用（离线时输入框仍可编辑）。
      *
      *  由会话控制器的 BroadcastConnectionState 经主面板逐窗转发；用户主动离线、从离线
      *  恢复在线、登录成功 / 失败、掉线时都会调到。
@@ -433,6 +470,13 @@ public:
      *  窗口尚未初始化完成时为空操作。
      */
     void RefreshLinkRendering();
+
+    /**
+     *  全局默认聊天字体改了之后，若本会话没有单独设过字体，就改用新的默认字体（输入框
+     *  随之更新，之后发出的消息也用它）；单独设过字体的会话不受影响。由主面板在收到
+     *  FMG_MSG_DEFAULT_CHAT_FONT_CHANGED 后逐窗调用，新字体从账号配置里读。
+     */
+    void ApplyDefaultChatFontIfNotOverridden();
 
 private:
     /**
@@ -469,6 +513,14 @@ public:
      */
     void OnChatFilesDropped(const std::vector<std::wstring>& paths,
                             bool forceAsFile) override;
+
+    /**
+     *  IChatDropSink 覆写：从聊天记录里拖出来的内容（文字、表情、图片）被放进了发送框。
+     *  插入输入框当前光标处，不直接发送；随后把本窗口提到前台、焦点交给输入框，方便接着
+     *  编辑（拖放的源头多半是另一个聊天窗）。
+     *    segs：聊天内容片段，非空。
+     */
+    void OnChatContentDropped(const std::vector<balloonchatwnd::ChatClipSegment>& segs) override;
 
 private:
     /**
@@ -688,6 +740,30 @@ private:
     LRESULT OnChatPinRequest(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
     /**
+     *  WM_CHAT_DELETE_REQUEST 处理：消息列表里有服务器 msgid 的行被右键「删除」或多选「删除 N」。
+     *  lParam=堆上 std::vector<long long>*（要删除的服务器 msgid），处理后 delete。
+     *  弹确认框，确认后逐条发 cmd_delete_message（该命令不带会话身份，只认 msgid）；
+     *  气泡等服务端推回 cmd_messages_deleted_notify 后经 OnMessagesDeleted 移除。
+     *  调试入口没有服务端可问，确认后直接在本窗口移除，便于核对界面效果。
+     */
+    LRESULT OnChatDeleteRequest(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_CHAT_FORWARD_REQUEST 处理：多选操作条上点了「逐条转发」或「合并转发」。
+     *  lParam=堆上 balloonchatwnd::ChatForwardRequest*，处理后 delete。补上源会话（本单聊）、
+     *  本窗口句柄与合并标题后，以 FMG_MSG_OPEN_FORWARD_PICKER 投给主面板打开目标选择窗。
+     *  调试入口没有主面板，只记日志。
+     */
+    LRESULT OnChatForwardRequest(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  WM_CHAT_OPEN_MERGED_RECORD 处理：单击了合并卡片。lParam=堆上 std::string*（合并消息的
+     *  content 原文）。转投给主面板打开聊天记录查看窗（FMG_MSG_OPEN_MERGED_VIEWER，所有权随之
+     *  转交）；调试入口没有主面板，记日志后 delete。
+     */
+    LRESULT OnChatOpenMergedRecord(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
      *  WM_CHAT_LOAD_OLDER 处理：消息区滚到接近顶部，判断要不要拉更早的一页历史。
      *  判定在 ShouldLoadOlderHistory（纯逻辑、可单测），本函数只喂当前滚动状态、
      *  并在它点头时发请求、置"在途"标志。与群聊窗同一套。
@@ -728,6 +804,10 @@ private:
     // 服务端应答里不回显 before，客户端只能自己记。
     balloonchatwnd::HistoryPagingState m_paging;
 
+    // 打开计时：CreateAndShow 开始时重置，首屏历史渲染完成时读取，得出「从打开到看到
+    // 历史消息」一共花了多久（含等待服务端应答），写进日志供性能排查。只在首屏用，翻页不读。
+    PerfStopWatch m_openStopWatch;
+
     /**
      *  WM_TIMER 处理：mock 自动回复定时器到点后，追加一条对方回复消息。
      */
@@ -749,10 +829,20 @@ private:
     //   text：该段文字原文。
     void SendTextPartReal(const CString& text);
 
-    // 发送输入框里第 imageIndex 个内嵌图（真实会话）：取 m_pendingShotPaths[imageIndex]
-    // 这个源 PNG 直接走 SendImageFile 发出（不从 OLE 抽位图）。供 DoSend 逐段发送时调用。
-    //   imageIndex：内嵌图在文档里的序号（0-based，与 0xFFFC 出现顺序一致）。
+    // 发送输入框里的一张内嵌图（真实会话）：取 m_pendingShotPaths[imageIndex] 这个源文件
+    // 直接走 SendImageFile 发出（不从 OLE 抽位图）。供 DoSend 逐段发送时调用。
+    //   imageIndex：源文件在 m_pendingShotPaths 里的下标（BuildOutgoingParts 从图片标记读回）。
     void SendImagePartReal(int imageIndex);
+
+    /**
+     *  把一张本地图片以"带源文件标记的内联图"插入输入框当前光标处，并登记它的源文件，
+     *  发送时按标记取回（见 ChatFaceTag.h 的 ImageTagFromIndex）。截图「发送到对话框」、
+     *  粘贴与拖入图片都走这里。
+     *    path：图片本地文件完整路径。
+     *  @return 插入成功返回 true；输入框不存在、文件解不开时返回 false，此时不登记。
+     *  副作用：成功时 m_pendingShotPaths 末尾追加 path。
+     */
+    bool StageImageInInput(const std::wstring& path);
 
     /**
      *  选图并作为图片消息发送：弹文件选择对话框选一张图片，乐观插入一条
@@ -787,6 +877,11 @@ private:
     //   ctx：    本窗口 this；
     //   pngPath：浮层存好的临时 PNG 文件全路径。
     static void OnScreenshotStage(void* ctx, const wchar_t* pngPath);
+
+    // 输入框「插入图片」回调（ChatInputRichEdit::StageImageFn，ctx=本窗口 this）：粘贴或
+    // 拖入的聊天内容里有图片时，转给 StageImageInInput 登记源文件并插入。
+    //   返回：插入成功返回 true。
+    static bool StageImageThunk(void* ctx, const std::wstring& path);
 
     /**
      *  把一条收到的图片消息渲染成"下载中"气泡并触发原图下载。供 OnRecvMessage
@@ -856,16 +951,6 @@ private:
      */
     void ReportFileAck(long long msgid, int state);
 
-    /**
-     *  判断某个本地路径当前是否是一份可用的完整文件（仅取属性、不读盘）。
-     *  用于渲染文件气泡前确认"登记的落点 / 缓存副本还在不在"，决定给「打开」还是「下载」。
-     *  @param path       待查的本地完整路径；空串一律返回 false
-     *  @param expectSize 期望字节数；>0 时要求实际大小与之相符（挡掉半截的下载残留与
-     *                    被改写的同名文件），<=0 时退回只判存在
-     *  @return 文件存在、非目录、且大小相符返回 true
-     */
-    static bool LocalFileUsable(const std::wstring& path, long long expectSize);
-
     void RenderIncomingFile(balloonchatwnd::ChatMessageList* list,
                             bool fromMe, const net::MessageNotify& notify);
 
@@ -883,8 +968,11 @@ private:
     void ShakeWindow();
 
     /**
-     *  把本窗口弹到前台：最小化则还原、隐藏则显示，并尽力置顶抢焦点。收到对端
-     *  窗口抖动时调用，确保接收方能立即看到抖动。
+     *  把本窗口调到用户眼前：最小化则还原、隐藏则显示，并尝试设为前台；用户正在
+     *  操作别的程序、设前台被系统拒绝时，改为只把窗口提到其他普通窗口之上并闪烁
+     *  任务栏按钮，不抢键盘焦点（见 WindowAttention.h）。收到对端窗口抖动时调用，
+     *  确保接收方能看到抖动。
+     *  副作用：可能改变窗口显示状态、层级与前台状态；写一行诊断日志。
      */
     void BringChatWindowToFront();
 
@@ -958,8 +1046,29 @@ private:
     void OpenFontPanel();
 
     // 字体设置变化回调（C 风格函数指针，userdata 为本窗口 this）：更新当前字体、
-    // 应用到输入框、写回 flamingo.ini。
+    // 应用到输入框，并存为本会话的自定义字体（账号配置，重启后仍然有效）。
     static void OnFontChanged(void* userdata, const net::TextFont& font);
+
+    // 字体浮层「使用默认字体」回调（userdata 为本窗口 this）：删掉本会话的自定义
+    // 字体、改用全局默认，应用到输入框并存盘，浮层随之回显默认字体。
+    static void OnUseDefaultFont(void* userdata);
+
+    /**
+     *  取本会话实际生效的聊天字体：本会话自定义 > 全局默认 > 未设置（见
+     *  Session/ChatFontPrefs.h）。调试入口（没有登录账号或对端）下恒为未设置。
+     */
+    net::TextFont ResolveChatFont() const;
+
+    /**
+     *  把 m_currentFont 应用到输入框：设置过就换成该字体，未设置就恢复输入框的默认
+     *  外观。负责替换并释放 m_hInputFont。
+     */
+    void ApplyCurrentFontToInput();
+
+    /**
+     *  把字体偏好存盘（写回账号配置）。调试入口下没有账号，什么都不做。
+     */
+    void SaveChatFontPrefs();
 
     /**
      *  WM_SIZE 处理：窗口尺寸变化后投递 kRelayoutMsg；不消费 WM_SIZE，
@@ -1166,26 +1275,30 @@ private:
     int     m_shakeStep;
     POINT   m_shakeOrigin;
     // 发送侧节流器：限制本窗口向对端连发窗口抖动的频率（同一目标最小间隔
-    // kShakeMinIntervalMs）。距上次发送不足该间隔的点击被拦截、本窗口给出
+    // kShakeSendMinIntervalMs，5 秒）。距上次发送不足该间隔的点击被拦截、本窗口给出
     // 提示，不发送也不晃自己。
     balloonchatwnd::ShakeRateLimiter m_sendShakeLimiter;
     // 接收侧节流器：限制处理对端连发抖动的频率（同一来源最小间隔
-    // kShakeMinIntervalMs），避免被刷屏式晃动；超频的抖动被静默忽略。
+    // kShakeRecvMinIntervalMs，4 秒），避免被刷屏式晃动；超频的抖动被静默忽略。
     balloonchatwnd::ShakeRateLimiter m_recvShakeLimiter;
 
     // 表情选择浮层（按需打开，本类持有）。
     CEmojiPickerPopup m_emojiPopup;       // 旧 Unicode emoji 浮层（保留不再挂入）
     CFaceImagePickerPopup m_facePopup;    // Bin/Face 图片表情浮层（"表情"按钮现弹它）
 
-    // 当前聊天字体（影响后续发送的消息与输入框外观）。InitUi 时从 flamingo.ini
-    // 载入，面板改动后写回；m_valid 为 false 表示尚未设过、消息不带字体。
+    // 当前聊天字体（影响后续发送的消息与输入框外观）。InitUi 时按"本会话自定义 >
+    // 全局默认"取得（见 ResolveChatFont），字体浮层改动后更新；m_valid 为 false 表示
+    // 两者都没设过、消息不带字体。
     net::TextFont m_currentFont;
+    // 输入框原本的文字色：InitUi 在应用任何聊天字体之前记下，恢复默认外观时用它。
+    COLORREF m_inputDefaultTextColor;
     // 输入框（ChatInputRichEdit）当前生效的自定义字体句柄。富文本控件的
     // SetDefaultFontFromHFONT 不接管 HFONT 所有权，故由本窗口持有：每次应用新字体
     // 前先 DeleteObject 上一只再换新，析构时释放，避免 GDI 句柄泄漏。NULL=用默认字体。
     HFONT m_hInputFont;
-    // 「发送到对话框」插入输入框的截图源 PNG 路径，按插入顺序记录。发送时第 k 个内嵌图
-    // 取本表第 k 项直接发（不从 OLE 抽位图，避免黑块 / 重编码）。每次发送后清空。
+    // 插入输入框的内联图片（截图「发送到对话框」、粘贴、拖入）的源文件路径，按插入顺序记录。
+    // 每张图的下标记在它的图片标记里，发送时按标记取对应项直接发（不从 OLE 抽位图，避免
+    // 黑块 / 重编码）。每次发送后清空。
     std::vector<std::wstring> m_pendingShotPaths;
     // 字体设置浮层（按需打开，本类持有）。
     CFontSettingPopup m_fontPopup;

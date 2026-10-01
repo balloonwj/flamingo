@@ -1746,6 +1746,10 @@ void HttpSession::onAdminUserUpdate(const std::string& body, const std::shared_p
         //deptid 传 0：本次改的是"人"而不是某个部门，客户端收到后整棵通讯录重拉，不依赖该字段。
         Singleton<ChatServer>::Instance().broadcastOrgStructureChanged(
             empEnt, dept::org_change_member, 0);
+        //姓名即 IM 昵称：该员工所在的自动命名群要按新昵称重算群名。本接口不区分姓名是否
+        //真的改了，未改时重算结果与原名相同，不会写库，也不会推送
+        Singleton<ChatServer>::Instance().refreshAutoGroupNamesOfMemberAndNotify(
+            static_cast<int32_t>(userId));
     }
     sendAdminResult(conn, code, code == error_code_ok ? "ok" : "update employee failed");
 }

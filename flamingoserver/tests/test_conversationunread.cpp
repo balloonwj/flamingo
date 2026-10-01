@@ -6,6 +6,8 @@
  *  写在动代码之前，且 CVU1~CVU5 在<u>改动前就应当全绿</u> —— 它们描述的是既有行为，
  *  不是新需求。CVU6 描述的才是这次要引入的新行为（超过上限时返回上限值），
  *  改动前预期失败、改完转绿。
+ *  CVU7（2026-09-30 补）钉住已读位点的读取口径 getReadMsgid，供单聊同步消息应答
+ *  带出「对方已读到哪条」。
  *
  *  未读的口径（读 MessageManager.cpp 得出，两条路各一份）：
  *    · 群聊：f_ctype=2 且 f_to=群id 且 <u>f_from != 本人</u> 且 f_msgid > 已读位点，
@@ -259,6 +261,42 @@ TEST_CASE("CVU6 未读超过上限时返回上限值")
         insertMsg(i, conversation_group, CVU_OTHER_ID, CVU_GROUP_ID);
     }
     CHECK(groupBrief().unread == 7);
+
+    removeCvuDbFiles();
+}
+
+//2026-09-30：单聊同步消息应答要带上「对方读到了哪条」，数据来自对方那一行
+//t_conversation 的 f_readmsgid。本条钉住读取口径：按 (userid, ctype, cid) 精确取一行，
+//没有这一行就是 0，且读回的值与 markRead 的「只增不减」一致。
+TEST_CASE("CVU7 getReadMsgid 取某人对某会话记下的已读位点")
+{
+    resetCvuDb();
+    MessageManager& mgr = Singleton<MessageManager>::Instance();
+
+    //一行都没有：对方从没读过，位点为 0，查询本身是成功的
+    int64_t pos = -1;
+    REQUIRE(mgr.getReadMsgid(CVU_USER_ID, conversation_single, CVU_PEER_ID, pos));
+    CHECK(pos == 0);
+
+    //写入之后读回
+    const int64_t kReadPos = 42;
+    setReadPos(conversation_single, CVU_PEER_ID, kReadPos);
+    REQUIRE(mgr.getReadMsgid(CVU_USER_ID, conversation_single, CVU_PEER_ID, pos));
+    CHECK(pos == kReadPos);
+
+    //更小的上报不回退：markRead 取 GREATEST，读回的仍是原来的位点
+    const int64_t kSmallerPos = 10;
+    REQUIRE(mgr.markRead(CVU_USER_ID, conversation_single, CVU_PEER_ID, kSmallerPos, CVU_BASE_TIME));
+    REQUIRE(mgr.getReadMsgid(CVU_USER_ID, conversation_single, CVU_PEER_ID, pos));
+    CHECK(pos == kReadPos);
+
+    //别的会话不串：同一个人对群会话没有记录，读到的是 0
+    REQUIRE(mgr.getReadMsgid(CVU_USER_ID, conversation_group, CVU_GROUP_ID, pos));
+    CHECK(pos == 0);
+
+    //别人对同一个 cid 也没有记录：键里的 userid 必须参与匹配
+    REQUIRE(mgr.getReadMsgid((int32_t)CVU_OTHER_ID, conversation_single, CVU_PEER_ID, pos));
+    CHECK(pos == 0);
 
     removeCvuDbFiles();
 }

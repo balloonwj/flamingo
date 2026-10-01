@@ -23,6 +23,18 @@ namespace balloonchatwnd {
 // 系统表情标记基址（"0F1C" 取意 face）。faceId 范围 0..142，远不及 10 万的安全区间。
 const DWORD_PTR kFaceTagBase = 0x0F1C0000;
 
+// 系统表情标记可容纳的编号个数：标记取值落在 [kFaceTagBase, kFaceTagBase + kFaceTagRange)。
+const DWORD_PTR kFaceTagRange = 100000;
+
+// 带源文件的内联图片（截图、粘贴或拖进输入框的图片）的标记基址。
+// dwUser == kImageTagBase + index，index 为该图源文件在聊天窗 m_pendingShotPaths 里的
+// 下标。发送时按标记取源文件，而不是按"文档里第几张图"去对应 —— 粘贴时光标可以在任何
+// 位置，文档顺序与插入顺序未必一致（2026-09-30 起）。取值刻意落在表情标记的范围之外。
+const DWORD_PTR kImageTagBase = 0x0F200000;
+
+// 图片标记可容纳的下标个数：标记取值落在 [kImageTagBase, kImageTagBase + kImageTagRange)。
+const DWORD_PTR kImageTagRange = 100000;
+
 // 内联表情统一显示边长（逻辑像素）。
 //
 // Bin/Face 下的 face<N>.png 原生是 56×56（143 张里 141 张 56×56、2 张 48×48），
@@ -43,13 +55,32 @@ inline DWORD_PTR FaceTagFromId(int faceId)
 // 某 dwUser 标记是否为系统表情。
 inline bool IsFaceTag(DWORD_PTR tag)
 {
-    return tag >= kFaceTagBase && tag < kFaceTagBase + 100000;
+    return tag >= kFaceTagBase && tag < kFaceTagBase + kFaceTagRange;
 }
 
 // dwUser 标记 → faceId（调用前须 IsFaceTag 为真）。
 inline int FaceIdFromTag(DWORD_PTR tag)
 {
     return (int)(tag - kFaceTagBase);
+}
+
+// 源文件下标 → 图片的 dwUser 标记。
+//   index：该图源文件在聊天窗 m_pendingShotPaths 里的下标，须 >= 0。
+inline DWORD_PTR ImageTagFromIndex(int index)
+{
+    return kImageTagBase + (DWORD_PTR)index;
+}
+
+// 某 dwUser 标记是否为带源文件的内联图片。
+inline bool IsImageTag(DWORD_PTR tag)
+{
+    return tag >= kImageTagBase && tag < kImageTagBase + kImageTagRange;
+}
+
+// 图片的 dwUser 标记 → 源文件下标（调用前须 IsImageTag 为真）。
+inline int ImageIndexFromTag(DWORD_PTR tag)
+{
+    return (int)(tag - kImageTagBase);
 }
 
 } // namespace balloonchatwnd

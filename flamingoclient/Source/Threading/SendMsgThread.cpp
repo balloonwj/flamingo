@@ -122,12 +122,13 @@ void CSendMsgThread::HandleItem(CNetData* pNetData)
     delete pNetData;
 }
 
-// 重连登录入口：被 MainDlg 的 m_dwReconnectTimerId 触发后，CFlamingoClient::Login()
-// 投递的 CLoginRequest 在本函数里处理。改造期内统一走 v2 协议 ——
+// 重连登录入口：会话控制器（UI/BalloonMain/MainPanelSessionController）的重连定时器触发后，
+// CFlamingoClient::Login() 投递的 CLoginRequest 在本函数里处理。改造期内统一走 v2 协议 ——
 //   1) 仍调 CIUSocket::Login() 走 cmd_login（其内部已 SHA-256 + encodeFrame）
 //   2) 应答解析改用 net::LoginProtocolClient::parseLoginResponse
-// 与 BalloonLoginDlg::LoginThreadProc 的处理保持一致，结果通过
-// FMG_MSG_LOGIN_RESULT 回投给 m_hProxyWnd（FlamingoClient → MainDlg）。
+// 与 BalloonLoginDlg::LoginThreadProc 的处理保持一致，结果通过 FMG_MSG_LOGIN_RESULT
+// 回投给 m_hProxyWnd，再转到会话控制器的 OnLoginResult。本函数只有一个出口，每个入队的
+// 请求都一定会投回一个结果 —— 重连节流（ReconnectThrottle）依赖这一点，改动时要保持。
 //
 // 历史 bug：旧实现按 v1 顶层平铺字段校验（要求 userid 为 int、username 在顶层等），
 //          而 v2 应答 userid 为 string、用户资料嵌在 profile 子对象，

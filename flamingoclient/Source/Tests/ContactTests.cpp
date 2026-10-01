@@ -17,6 +17,8 @@
  *           控件树里的契约（按 id 找得到、无部门时不可见且不占高度）。
  *    C35-C36 快捷操作行：容器与四个按钮的 id / 类型 / 文字 / 归属，以及
  *           客户区高度确实把这一行算了进去。
+ *    C37    备注名行内编辑：文本框在"隐藏期间发生过重排"之后再显示，仍落在
+ *           本行右端并纵向居中。
  *
  *  用 Catch2 v3（amalgamated 形态）作测试框架。本工程不创建任何窗口，
  *  纯粹在内存里 build 控件树 / 操作模型 + 断言。
@@ -856,4 +858,85 @@ TEST_CASE("C36 客户区高度已把快捷操作行算进去", "[contact][tag]")
           == ContactDeptBlockHeight(2));
     CHECK(ContactBodyHeight(0, 3) - ContactBodyHeight(0, 1)
           == ContactTagBlockHeight(3) - ContactTagBlockHeight(1));
+}
+
+// =====================================================================
+// C37 备注名行内编辑态的文本框位置
+// =====================================================================
+//
+// 这条用例针对"点铅笔进入备注名编辑态后，文本框没有出现在本行右侧，而是偏左、
+// 偏上"的问题（2026-09-30，截图见 snapshots/bug1.png）。
+//
+// 文本框默认隐藏，而窗口打开过程中客户区会重排不止一次；容器排版时跳过不可见的
+// 子控件，文本框的矩形因此停留在第一次布局的结果上 —— 那一次当前值文字与铅笔按钮
+// 都还占着位置，部门路径区块的高度也还是 0。进入编辑态时若只让根控件重排，中间
+// 各层容器的矩形没有变化，SetRect 直接返回，文本框所在的那一行不会被重新排版。
+
+TEST_CASE("C37 进入备注名编辑态后文本框落在本行右端并纵向居中",
+          "[contact][remark]")
+{
+    std::unique_ptr<DuiControl> root = BuildContactBody();
+    REQUIRE(root != nullptr);
+
+    DuiControl* remarkValue = root->FindCtrlById((UINT)kIdRemarkValue);
+    DuiControl* remarkBtn   = root->FindCtrlById((UINT)kIdRemarkEditBtn);
+    DuiControl* remarkEdit  = root->FindCtrlById((UINT)kIdRemarkEdit);
+    REQUIRE(remarkValue != nullptr);
+    REQUIRE(remarkBtn != nullptr);
+    REQUIRE(remarkEdit != nullptr);
+
+    // 当前值文字、铅笔按钮、文本框三者同属「备注名」这一行。
+    DuiControl* row = remarkEdit->GetParent();
+    REQUIRE(row != nullptr);
+    REQUIRE(remarkValue->GetParent() == row);
+    REQUIRE(remarkBtn->GetParent() == row);
+
+    // 以下按 CBalloonContactWindow 打开窗口、再点铅笔时的实际调用顺序重演一遍。
+    //
+    // 第一步：SetClientContent 按"没有部门、标签一行"的占位高度布局一次。此时
+    // 文本框还没被隐藏（XML 里没有写隐藏，InitUi 在这之后才隐藏它），它按"当前值
+    // 文字与铅笔按钮都占着位置"的排法拿到了矩形。
+    RECT rcClient;
+    rcClient.left   = 0;
+    rcClient.top    = 0;
+    rcClient.right  = kTestRealClientWidth;
+    rcClient.bottom = ContactBodyHeight(0, 1);
+    root->ForceLayout(rcClient);
+
+    // 第二步：InitUi 隐藏文本框，并按联系人的部门路径改写部门区块的高度。
+    remarkEdit->SetVisible(false);
+    const int deptLines = ConfigureContactDeptPath(
+        root.get(), _T("明远科技有限公司 / 技术中心 / 质量保障部"));
+    REQUIRE(deptLines >= 1);
+
+    // 第三步：ApplyBodyHeight 把客户区调整到真实高度（ResizeClient 经 WM_SIZE 让
+    // 根控件拿到新矩形），再调 RelayoutContactBody。部门区块多出来的高度使下方各
+    // 区块整体下移，备注名这一行也随之下移，但文本框此刻不可见，不参与这次排版。
+    rcClient.bottom = ContactBodyHeight(deptLines, 1);
+    root->SetRect(rcClient);
+    RelayoutContactBody(root.get());
+
+    // 第四步：点铅笔进入编辑态 —— 与 CBalloonContactWindow::SetRemarkEditing(true)
+    // 相同的显隐切换，随后同样调 RelayoutContactBody。
+    remarkValue->SetVisible(false);
+    remarkBtn->SetVisible(false);
+    remarkEdit->SetVisible(true);
+    RelayoutContactBody(root.get());
+
+    const RECT rcRow  = row->GetRect();
+    const RECT rcEdit = remarkEdit->GetRect();
+    INFO("row = (" << rcRow.left << "," << rcRow.top << ")-("
+         << rcRow.right << "," << rcRow.bottom << "), edit = ("
+         << rcEdit.left << "," << rcEdit.top << ")-("
+         << rcEdit.right << "," << rcEdit.bottom << ")");
+
+    // 当前值文字与铅笔按钮都隐藏之后，文本框是本行最右侧的可见控件，右缘应与本行
+    // 右缘对齐（本行右缘即客户区右缘减去右内边距）。
+    CHECK(rcRow.right == kTestRealClientWidth - kContactBodyPaddingH);
+    CHECK(rcEdit.right == rcRow.right);
+
+    // 文本框整个落在本行之内，且按 alignCross="center" 上下留白相等。
+    CHECK(rcEdit.top >= rcRow.top);
+    CHECK(rcEdit.bottom <= rcRow.bottom);
+    CHECK(rcEdit.top - rcRow.top == rcRow.bottom - rcEdit.bottom);
 }

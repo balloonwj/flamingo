@@ -20,6 +20,7 @@
 #include "../../App/FlamingoClient.h"               // CFlamingoClient::m_UserMgr / m_UserConfig
 #include "../../Common/Graphics/ImageEx.h"          // CImageEx（托盘菜单项图标）
 #include "../../Common/Log/IULog.h"                 // LOG_INFO / LOG_WARNING
+#include "../../Common/Util/EncodeUtil.h"           // UnicodeToUtf8（日志里的宽字符串路径转 UTF-8）
 #include "../../Common/Util/Utils.h"                // Hootina::CPath::GetAppPath
 #include "../../Session/UserSessionData.h"          // TrayFlashData / kMyPresence* / kPresenceChange*
 #include "../../../../third-party/balloonui/balloonui/Controls/List/DuiMenu.h"  // balloonui 弹出菜单
@@ -155,7 +156,7 @@ void CTrayController::ToggleMute()
     if (m_lpFMGClient == NULL)
         return;
     // 托盘右键「关闭所有声音」：翻转静音位。它与系统设置里的「提示音」开关写的是同一个
-    // 标志，收消息 / 好友上线的提示音都据此门控。改完立刻持久化到该账号的 .cfg，与系统
+    // 标志，收消息 / 好友上线的提示音都据此门控。改完立刻持久化到该账号的 .ini，与系统
     // 设置页一致，否则重启后会按配置文件里的旧值复位。
     m_lpFMGClient->m_UserConfig.EnableMute(!m_lpFMGClient->m_UserConfig.IsEnableMute());
     m_lpFMGClient->SaveUserConfig();
@@ -268,9 +269,10 @@ BOOL CTrayController::LoadAppIcon(int nConnUiState)
         nIconSize, ::GetSystemMetrics(SM_CYSMICON));
     if (m_hAppIcon == NULL)
     {
-        //格式串用窄字符（日志文件编码统一），路径是宽字符，故占位符写 %ls
-        LOG_ERROR("TrayController::LoadAppIcon: failed to load tray icon file: %ls.",
-                  strFileName.c_str());
+        //格式串用窄字符（日志文件编码统一），宽字符路径先转成 UTF-8 再按 %s 打印。
+        //不能用 %ls：安装目录含中文时格式化会失败，整条日志被丢弃，偏偏是最需要它的时候
+        LOG_ERROR("TrayController::LoadAppIcon: failed to load tray icon file: %s.",
+                  EncodeUtil::UnicodeToUtf8(strFileName).c_str());
         return FALSE;
     }
 

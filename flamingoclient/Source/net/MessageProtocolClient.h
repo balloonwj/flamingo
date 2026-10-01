@@ -182,6 +182,22 @@ struct MessageNotify
     //拒绝在下次上线拉历史时也能看到。实时的状态变化另经 cmd_file_transfer_ack 推送。
     int m_fileAckState;
 
+    //==== 合并转发的聊天记录（仅 m_msgtype==message_type_merged 时有效）====
+    //content 原文（紧凑 JSON），形如 {"title":"...","messages":[子消息体...]}。
+    //不在解析推送时展开：聊天窗只画卡片、用不到全部子消息，打开查看窗时再经
+    //MessageProtocolClient::parseMergedContent 解析；嵌套的记录也是用到哪层解析哪层。
+    std::string m_mergedContent;
+
+    //发送者昵称。只有合并记录里的子消息带（服务端转发时写入的 fromname，即转发当时
+    //发送者的名字），普通推送与历史消息恒为空，调用方为空时按本地通讯录解析名字
+    std::string m_fromName;
+
+    //这条消息的原始 JSON（服务端发来的整个消息对象，紧凑格式），解析时一并保存。
+    //本地消息库存下它，打开聊天窗时可以先用本地数据经 MessageProtocolClient::parseMessageNotify
+    //还原出与网络应答完全相同的消息，不必等服务端应答（见 V2MsgQuery.h 的 NotifyFromRecord）。
+    //手工构造、不经解析得到的消息为空串
+    std::string m_rawJson;
+
     MessageNotify()
         : m_msgid(0)
         , m_ctype(0)
@@ -287,6 +303,88 @@ struct MessageRecalledNotify
     }
 };
 
+/**
+ *  删除单条消息的应答（cmd_delete_message=1512 的应答）。
+ *  删除成功后本地的删行、移除气泡统一在收到 cmd_messages_deleted_notify 时做，
+ *  本应答只用于失败时提示用户。
+ */
+struct DeleteMessageResponse
+{
+    int         m_code;   //结果码，0 成功；非 0 见 enum error_code
+    std::string m_msg;    //结果描述（成功为 "ok"，失败为诊断信息）
+
+    DeleteMessageResponse()
+        : m_code(-1)      //-1：尚未解析出有效结果码，避免被误判为成功
+    {
+    }
+};
+
+/**
+ *  按时间范围清理聊天记录的应答（cmd_delete_messages_by_time=1521 的应答）。
+ *  成功时带回服务端截断后的实际区间，清理对话框据此提示"已清理 X 至 Y"。
+ */
+struct DeleteMessagesByTimeResponse
+{
+    int         m_code;       //结果码，0 成功；非 0 见 enum error_code
+    std::string m_msg;        //结果描述
+    int64_t     m_begintime;  //实际生效的区间开始，Unix毫秒；失败应答不带时为 0
+    int64_t     m_endtime;    //实际生效的区间结束，Unix毫秒；失败应答不带时为 0
+
+    DeleteMessagesByTimeResponse()
+        : m_code(-1)
+        , m_begintime(0)
+        , m_endtime(0)
+    {
+    }
+};
+
+/**
+ *  "本人删除了消息"的推送（cmd_messages_deleted_notify=1522），推给本人全部在线设备，
+ *  发起删除的这一台也会收到。两种形式以 m_isRange 区分：
+ *    - 单条形式（来自 1512）：m_ctype / m_cid / m_msgids 有效；
+ *    - 区间形式（来自 1521）：m_begintime / m_endtime 有效，作用于本人全部会话。
+ */
+struct MessagesDeletedNotify
+{
+    bool                 m_isRange;    //true=区间形式，false=单条形式
+    int                  m_ctype;      //会话类型（单条形式）：单聊=1、群聊=2
+    int64_t              m_cid;        //本人视角的会话ID（单条形式）：单聊=对方 userid，群聊=群 id
+    std::vector<int64_t> m_msgids;     //被删除的消息 msgid（单条形式），当前恒为一条
+    int64_t              m_begintime;  //区间开始，Unix毫秒（区间形式，含）
+    int64_t              m_endtime;    //区间结束，Unix毫秒（区间形式，含）
+
+    MessagesDeletedNotify()
+        : m_isRange(false)
+        , m_ctype(0)
+        , m_cid(0)
+        , m_begintime(0)
+        , m_endtime(0)
+    {
+    }
+};
+
+/**
+ *  对方已读推送（cmd_message_read_notify=1507）。接收方查看会话后上报 cmd_mark_read，
+ *  服务端据此向发送方推送本条，告诉它「对方已经读到了第 readmsgid 条」。已读是一个位点，
+ *  不是逐条确认：本会话里 msgid 不大于 readmsgid 的消息都算对方已读。
+ *  只有单聊会收到本推送；群聊按协议不做已读回执。
+ */
+struct MessageReadNotify
+{
+    int     m_ctype;      //会话类型：见 enum conversation_type，当前只会是单聊=1
+    int64_t m_cid;        //收件方视角的会话ID：单聊=读消息的那个人（对端）的 userid
+    int64_t m_readmsgid;  //对方已读到的最大消息 msgid（服务器分配，恒 >0）
+    int     m_readcount;  //已读人数：单聊恒为 1；为群聊预留
+
+    MessageReadNotify()
+        : m_ctype(0)
+        , m_cid(0)
+        , m_readmsgid(0)
+        , m_readcount(0)
+    {
+    }
+};
+
 //Pin / 取消 Pin 一条消息（cmd_pin_message=1518）的应答解析结果。
 //m_code==0 表示服务端已落库并向相关方推送了 cmd_message_pinned_notify；
 //非 0 时按 enum error_code 区分原因，调用方据此给出不同提示（见 Protocol.h）：
@@ -387,17 +485,73 @@ struct SyncMessagesResult
     int     m_code;       //结果码，0 成功
     int     m_ctype;      //会话类型：1 单聊 2 群聊
     int64_t m_cid;        //会话ID：单聊=对端userid，群聊=群id
-    bool    m_hasmore;    //是否还有更早的消息（本轮暂不接"上拉加载更多"）
-    std::vector<MessageNotify> m_messages;   //本次拉到的消息（最新在前）
+    bool    m_hasmore;    //锚点方向上是否还有更早的消息（聊天窗上翻加载更多时据此决定是否继续）
+    //单聊时对方已读到的最大消息 msgid（应答的 peerreadmsgid 字段，字符串编码）：自己发出的
+    //消息 msgid 不大于它即为对方已读。对方从没读过、或群聊（服务端不带该字段）时为 0。
+    int64_t m_peerReadMsgid;
+
+    //应答是否回带了翻历史模式的请求锚点（beforemsgid 字段，2026-09-30 起服务端回带）。
+    //旧服务端不带、或应答来自补齐模式（回带的是 aftermsgid）时为 false，此时 m_beforeMsgid
+    //无意义，调用方不得据本页计算本地覆盖区间（见 docs/清理聊天记录方案.md §7.2）。
+    bool    m_hasAnchor;
+    //本页请求的锚点：拉取此 msgid 之前的消息；0 表示从最新开始。仅 m_hasAnchor 为 true 时有效
+    int64_t m_beforeMsgid;
+
+    //本次拉到的消息，按 msgid 升序（时间正序）排列：服务端翻历史时按降序查、返回前统一反转
+    //为升序（flamingoserver/chatserversrc/MessageManager.cpp 的 getConversationMessages）
+    std::vector<MessageNotify> m_messages;
 
     SyncMessagesResult()
         : m_code(-1)
         , m_ctype(0)
         , m_cid(0)
         , m_hasmore(false)
+        , m_peerReadMsgid(0)
+        , m_hasAnchor(false)
+        , m_beforeMsgid(0)
     {
     }
 };
+
+//合并转发的聊天记录（msgtype=15）的 content 解析结果。
+//典型用法：聊天窗画卡片时取标题、条数与前几条的摘要；查看窗逐条显示子消息。
+struct MergedRecord
+{
+    std::string m_title;                    //记录标题（UTF-8），如「张三和李四的聊天记录」
+    //子消息，顺序与服务端打包时一致（源消息按 msgid 升序）。每条都是完整消息体，
+    //m_fromName 为转发当时发送者的名字（可能为空）；子消息本身是合并记录时，
+    //其 m_mergedContent 可再次交给 parseMergedContent 解析
+    std::vector<MessageNotify> m_messages;
+};
+
+//转发消息（cmd_forward_message=1511）应答解析结果，见 docs/协议设计-v2.md 的 1511 一节。
+//应答里没有请求的会话信息，失败应答连 clientmsgid 都不带，调用方按请求时 CIUSocket::ForwardMessage
+//返回的帧 seq 把应答对回到是哪一次转发。
+struct ForwardMessageResponse
+{
+    int         m_code;         //结果码，0 成功；非 0 见 enum error_code（如禁言、含敏感词、被拉黑）
+    std::string m_msg;          //结果描述（英文，仅供记日志）
+    std::string m_clientmsgid;  //请求里的 clientmsgid 原样回带；失败应答与旧服务端的应答为空
+
+    //本次新建的消息 msgid，按新建顺序排列。逐条转发时每条源消息各一个（被跳过的源消息
+    //没有对应项），合并转发时只有一个
+    std::vector<int64_t> m_msgids;
+
+    //新建消息的完整消息体，与 m_msgids 逐条对应，但可能只是它的前缀：服务端的消息体
+    //累计超过体积预算后只给 msgid，此时缺消息体的那部分须经 cmd_sync_messages 拉取。
+    //旧服务端不带本字段，恒为空
+    std::vector<MessageNotify> m_messages;
+
+    ForwardMessageResponse()
+        : m_code(-1)        //-1：尚未解析出有效结果码，避免被误判为成功
+    {
+    }
+};
+
+//单次转发可带的源消息条数上限。本值必须与服务端 chatserversrc/MessageProtocol.h 的
+//FORWARD_MAX_MESSAGES 保持一致，改动时两处要一起改，否则会出现"客户端允许转发、
+//服务端却拒绝"的不一致。
+const size_t kForwardMaxMessages = 100;
 
 //消息可撤回的时限（毫秒）：消息发出后 2 分钟内允许撤回，超时服务端返回
 //error_code_recall_timeout。本值必须与服务端 chatserversrc/ChatSession.cpp 里的
@@ -471,6 +625,23 @@ public:
                                                  bool atAll,
                                                  const TextFont& font = TextFont(),
                                                  const ReplyQuote& quote = ReplyQuote());
+
+    /**
+     *  计算一条文字消息 content 序列化后的字节数。口径与服务端检查单条消息体积时完全一致：
+     *  content 的组装与上面几个文本发送请求共用同一段代码（正文、字体、@、引用），序列化用
+     *  同一个紧凑写出器（非 ASCII 字符写成 \uXXXX，一个汉字计 6 字节）。发送前拿它与
+     *  MESSAGE_CONTENT_MAX_BYTES 比较，见 BalloonChatWnd/ChatSendLimit.h。
+     *  @param text  正文（UTF-8 字节）
+     *  @param font  文本字体设置；m_valid 为 true 时计入 content.font
+     *  @param quote 引用回复快照；m_valid 为 true 时计入 content.quote
+     *  @param ats   被 @ 的人及其片段；单聊或不带 @ 时传空
+     *  @param atAll 是否 @所有人
+     *  @return content 紧凑 JSON 的字节数
+     */
+    static size_t textContentBytes(const std::string& text, const TextFont& font,
+                                   const ReplyQuote& quote,
+                                   const std::vector<balloonchatwnd::MentionSpan>& ats,
+                                   bool atAll);
 
     /**
      *  构造一条图片消息的发送请求 JSON 包体（cmd_send_message=1503，紧凑 UTF-8）。
@@ -669,6 +840,65 @@ public:
                                            MessageRecalledNotify& notify);
 
     /**
+     *  构造删除单条消息的请求 JSON（cmd_delete_message=1512），形如 { "msgid": "..." }。
+     *  删除是本人视角的软删除，对方不受影响。
+     *  @param msgid 要删除的消息的服务器 msgid；须 >0
+     *  @return 紧凑格式的请求 JSON 文本；msgid 非正时返回空串（调用方不应发送）
+     */
+    static std::string buildDeleteMessageRequest(int64_t msgid);
+
+    /**
+     *  解析删除单条消息的应答 JSON（cmd_delete_message=1512 的应答）。
+     *  @param jsonbody 应答包体（UTF-8 JSON 文本）
+     *  @param resp     [出参] 解析结果；返回 true 时 m_code / m_msg 有效
+     *  @return JSON 合法且含整型 code 返回 true，否则 false
+     */
+    static bool parseDeleteMessageResponse(const std::string& jsonbody, DeleteMessageResponse& resp);
+
+    /**
+     *  构造按时间范围清理聊天记录的请求 JSON（cmd_delete_messages_by_time=1521），
+     *  形如 { "begintime": 毫秒, "endtime": 毫秒 }，两端都包含。
+     *  @param begintime 区间开始，Unix毫秒；0 表示从最早开始；须 >=0
+     *  @param endtime   区间结束，Unix毫秒；须不早于 begintime
+     *  @return 紧凑格式的请求 JSON 文本；开始为负或结束早于开始时返回空串（调用方不应发送）
+     */
+    static std::string buildDeleteMessagesByTimeRequest(int64_t begintime, int64_t endtime);
+
+    /**
+     *  解析按时间范围清理的应答 JSON（cmd_delete_messages_by_time=1521 的应答）。
+     *  失败应答只带 code / msg，此时起止时间保持为 0。
+     *  @param jsonbody 应答包体（UTF-8 JSON 文本）
+     *  @param resp     [出参] 解析结果；返回 true 时各字段有效
+     *  @return JSON 合法且含整型 code 返回 true，否则 false
+     */
+    static bool parseDeleteMessagesByTimeResponse(const std::string& jsonbody,
+                                                  DeleteMessagesByTimeResponse& resp);
+
+    /**
+     *  解析"本人删除了消息"的推送 JSON（cmd_messages_deleted_notify=1522），
+     *  与服务端 MessageProtocol::buildMessagesDeletedNotify / buildMessagesDeletedRangeNotify
+     *  互为镜像。带 msgids 的是单条形式，否则按区间形式解析。
+     *  @param jsonbody 推送包体（UTF-8 JSON 文本）
+     *  @param notify   [出参] 解析结果；返回 true 时对应形式的字段有效
+     *  @return 解析成功返回 true。以下情形返回 false（此时 notify 内容未定义，调用方不得使用）：
+     *          JSON 非法或不是对象；单条形式 cid 非正、msgids 为空或含非正的 msgid；
+     *          区间形式缺少起止时间、时间为负或结束早于开始
+     */
+    static bool parseMessagesDeletedNotify(const std::string& jsonbody, MessagesDeletedNotify& notify);
+
+    /**
+     *  解析"对方已读你的消息"的推送 JSON 包体（cmd_message_read_notify=1507）。
+     *  与服务端 MessageProtocol::buildMessageReadNotify 互为镜像，报文格式见
+     *  docs/协议设计-v2.md 10.5 节。
+     *  @param jsonbody 推送包体（UTF-8 JSON 文本）
+     *  @param notify   [出参] 解析结果；返回 true 时各字段有效
+     *  @return 解析成功返回 true；JSON 非法、或 cid / readmsgid 缺失或非正时返回 false
+     *          （此时 notify 内容未定义，调用方不得使用）
+     */
+    static bool parseMessageReadNotify(const std::string& jsonbody,
+                                       MessageReadNotify& notify);
+
+    /**
      *  构造 Pin / 取消 Pin 一条消息的请求 JSON 包体（cmd_pin_message=1518，紧凑 UTF-8）。
      *  与服务端 MessageProtocol::parsePinMessageRequest 互为镜像。
      *  @param ctype 会话类型（见 enum conversation_type，1 单聊 2 群聊）
@@ -719,6 +949,45 @@ public:
      */
     static bool parseGetPinnedMessagesResponse(const std::string& jsonbody,
                                                PinnedMessagesResult& out);
+
+    /**
+     *  构造转发消息的请求 JSON 包体（cmd_forward_message=1511，紧凑 UTF-8）。
+     *  与服务端 MessageProtocol::parseForwardMessageRequest 互为镜像。
+     *  @param clientmsgid 本次转发的客户端ID（非空）；逐条转发时服务端按 "clientmsgid-序号" 派生每条
+     *  @param toctype     目标会话类型：1 单聊、2 群聊
+     *  @param tocid       目标会话ID：单聊为对方 userid，群聊为群 id（>0）
+     *  @param merge       true 表示合并转发为一条聊天记录，false 表示逐条转发
+     *  @param title       合并转发的标题（UTF-8）；仅 merge 为 true 且非空时写入请求，
+     *                     为空时由服务端取缺省值，超长由服务端截断
+     *  @param msgids      被转发的消息 msgid，条数 1 ~ kForwardMaxMessages
+     *  @return 请求包体；clientmsgid 为空、tocid 非正、msgids 为空或超过上限时返回空串，
+     *          调用方据此放弃发送
+     */
+    static std::string buildForwardMessageRequest(const std::string& clientmsgid, int toctype,
+                                                  int64_t tocid, bool merge,
+                                                  const std::string& title,
+                                                  const std::vector<int64_t>& msgids);
+
+    /**
+     *  解析转发消息的应答 JSON 包体（cmd_forward_message=1511 的应答）。
+     *  messages 里单条解析失败的元素跳过、不影响其余，口径与 parseSyncMessagesResponse 一致；
+     *  缺 msgids / messages 按空列表处理，不算失败。
+     *  @param jsonbody 应答包体（UTF-8 JSON 文本）
+     *  @param resp     [出参] 解析结果
+     *  @return JSON 合法且含整型 code 返回 true，否则 false
+     */
+    static bool parseForwardMessageResponse(const std::string& jsonbody,
+                                            ForwardMessageResponse& resp);
+
+    /**
+     *  解析合并转发聊天记录的 content（MessageNotify::m_mergedContent）。
+     *  子消息里解析失败的元素（如缺 msgid / from 的脏数据）跳过，不影响其余。
+     *  @param contentJson content 原文（紧凑 JSON）
+     *  @param out         [出参] 标题与子消息
+     *  @return content 是 JSON 对象且含 messages 数组时返回 true；否则返回 false，
+     *          调用方按"内容不可用"降级显示
+     */
+    static bool parseMergedContent(const std::string& contentJson, MergedRecord& out);
 
     /**
      *  判断一条消息当前是否还能撤回 —— 决定右键菜单里要不要出现"撤回"项。

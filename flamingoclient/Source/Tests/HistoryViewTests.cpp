@@ -45,7 +45,7 @@ TEST_CASE("V2V1 PreviewFromContent 各类型预览正确")
     CHECK(PreviewFromContent(::message_type_system, "{}") == "[消息]");
 }
 
-TEST_CASE("V2V2 TimeRangeFromComboIndex 各档映射正确")
+TEST_CASE("V2V2 TimeRangeFromComboIndex 各档映射正确，下拉框里不再有自定义")
 {
     CHECK(TimeRangeFromComboIndex(0) == kHistoryTimeAll);
     CHECK(TimeRangeFromComboIndex(1) == kHistoryTime7Days);
@@ -53,7 +53,8 @@ TEST_CASE("V2V2 TimeRangeFromComboIndex 各档映射正确")
     CHECK(TimeRangeFromComboIndex(3) == kHistoryTime3Months);
     CHECK(TimeRangeFromComboIndex(4) == kHistoryTime6Months);
     CHECK(TimeRangeFromComboIndex(5) == kHistoryTime1Year);
-    CHECK(TimeRangeFromComboIndex(6) == kHistoryTimeCustom);
+    //自定义起止改由「选日期」弹层设置，下拉框只有 6 项，下标 6 按越界处理（DR6）
+    CHECK(TimeRangeFromComboIndex(6) == kHistoryTimeAll);
 
     //越界一律退回“全部时间”。-1 是真会出现的：下拉一项都没选中时 GetCurSel 就返回它。
     CHECK(TimeRangeFromComboIndex(-1) == kHistoryTimeAll);
@@ -451,6 +452,28 @@ TEST_CASE("V2Q-EMPTY3 选了时间范围时文案要点明是范围内没有")
     HistoryFilter onlyTime;
     onlyTime.m_range = kHistoryTime30Days;
     CHECK(BuildEmptyStateText(onlyTime).m_title.find("时间范围") != std::string::npos);
+}
+
+TEST_CASE("V2Q-EMPTY4 选了发送人时文案要点明是这个人没有消息", "[historysender]")
+{
+    //只看某个人时搜空，不能说成"这个会话还没有消息"——别人发的消息可能有一堆
+    HistoryFilter sender;
+    sender.m_fromid = 7;
+    const HistoryEmptyText t = BuildEmptyStateText(sender);
+    CHECK(t.m_title.find("发送人") != std::string::npos);
+    CHECK(t.m_subtitle.find("全部成员") != std::string::npos);
+
+    //同时选了类型：仍点明是发送人
+    HistoryFilter senderImage;
+    senderImage.m_fromid = 7;
+    senderImage.m_type = kHistoryTypeImage;
+    CHECK(BuildEmptyStateText(senderImage).m_title.find("发送人") != std::string::npos);
+
+    //关键字优先于发送人：用户刚敲完字，最想知道的是"这个词没搜到"
+    HistoryFilter senderKeyword;
+    senderKeyword.m_fromid = 7;
+    senderKeyword.m_keyword = "abc";
+    CHECK(BuildEmptyStateText(senderKeyword).m_title.find("abc") != std::string::npos);
 }
 
 // ---------------------------------------------------------------------------

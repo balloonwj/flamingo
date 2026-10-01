@@ -166,7 +166,7 @@ enum msg_type
     cmd_message_recalled_notify   = 1509,       //推送：某条消息被撤回
     cmd_typing_notify             = 1510,       //“正在输入”提示（双向，不落库、不可靠）
     cmd_forward_message           = 1511,       //转发/合并转发消息
-    cmd_delete_message            = 1512,       //删除本端消息（多端同步删除状态）
+    cmd_delete_message            = 1512,       //删除本端消息（本人视角软删除；成功后向本人全部在线设备推送 cmd_messages_deleted_notify）
     cmd_set_conversation          = 1513,       //会话置顶/免打扰/删除
     cmd_conversation_changed_notify = 1514,     //推送：会话属性多端同步
     cmd_search_messages           = 1515,       //会话内消息记录搜索（筛选+翻页）
@@ -175,6 +175,8 @@ enum msg_type
     cmd_pin_message               = 1518,       //Pin / 取消 Pin 一条消息（会话内共享；pin 字段取 1 钉住、0 取消，一条命令兼管两个方向）
     cmd_message_pinned_notify     = 1519,       //推送：某条消息被 Pin / 取消 Pin。单聊推双方、群聊推全体成员，操作者本人也会收到
     cmd_get_pinned_messages       = 1520,       //拉取某会话被 Pin 的消息（带完整消息体，供客户端本地库缺行时补齐；单次最多返回 PIN_FETCH_LIMIT 条，应答的 total 带回真实总数）
+    cmd_delete_messages_by_time   = 1521,       //按时间范围清理本人的聊天记录（本人视角软删除，作用于全部单聊与群聊，对方不受影响；服务端只记一条时间区间）
+    cmd_messages_deleted_notify   = 1522,       //推送：本人删除了消息（单条形式带 ctype/cid/msgids，区间形式带 begintime/endtime），发给本人全部在线设备，发起删除的设备也会收到
 
     //==== 群互动卡片 1600-1699 ====
     cmd_vote_poll            = 1601,            //对投票卡片投票

@@ -98,16 +98,61 @@ void ChatImageCache::Request(const std::wstring& path, int w, int h)
     {
         return;
     }
+    const std::wstring key = MakeKey(path, w, h);
+    {
+        std::lock_guard<std::mutex> lk(m_mutex);
+        if (m_cache.find(key) != m_cache.end())
+        {
+            return;   // 已就绪
+        }
+        if (m_inProgress.find(key) != m_inProgress.end())
+        {
+            return;   // 已在排队 / 解码中
+        }
+        if (m_failed.find(key) == m_failed.end())
+        {
+            EnqueueLocked(key, path, w, h);
+            return;
+        }
+    }
+
+    // 记录过失败：文件没有变化就不再排队。否则每次重绘都会再解码一次、解码完又通知
+    // 重绘，形成一个停不下来的循环。读文件属性放在锁外，读完再回到锁里判断。
+    const FileStamp current = ReadFileStamp(path);
     std::lock_guard<std::mutex> lk(m_mutex);
-    std::wstring key = MakeKey(path, w, h);
-    if (m_cache.find(key) != m_cache.end())
+    if (CheckFailureLocked(key, current))
     {
-        return;   // 已就绪
+        return;
     }
-    if (m_inProgress.find(key) != m_inProgress.end())
+    // 两次加锁之间别的线程可能已经把它排进队列，这里再确认一遍。
+    if (m_cache.find(key) != m_cache.end() || m_inProgress.find(key) != m_inProgress.end())
     {
-        return;   // 已在排队 / 解码中
+        return;
     }
+    EnqueueLocked(key, path, w, h);
+}
+
+bool ChatImageCache::IsFailed(const std::wstring& path, int w, int h)
+{
+    if (path.empty() || w <= 0 || h <= 0)
+    {
+        return false;
+    }
+    const std::wstring key = MakeKey(path, w, h);
+    {
+        std::lock_guard<std::mutex> lk(m_mutex);
+        if (m_failed.find(key) == m_failed.end())
+        {
+            return false;   // 绝大多数图片走这里，不必读文件属性
+        }
+    }
+    const FileStamp current = ReadFileStamp(path);
+    std::lock_guard<std::mutex> lk(m_mutex);
+    return CheckFailureLocked(key, current);
+}
+
+void ChatImageCache::EnqueueLocked(const std::wstring& key, const std::wstring& path, int w, int h)
+{
     m_inProgress.insert(key);
 
     Task task;
@@ -118,6 +163,49 @@ void ChatImageCache::Request(const std::wstring& path, int w, int h)
 
     EnsureWorkerLocked();
     m_cv.notify_one();
+}
+
+ChatImageCache::FileStamp ChatImageCache::ReadFileStamp(const std::wstring& path)
+{
+    FileStamp stamp;
+    stamp.m_exists = false;
+    stamp.m_size.QuadPart = 0;
+    stamp.m_lastWrite.dwLowDateTime  = 0;
+    stamp.m_lastWrite.dwHighDateTime = 0;
+
+    WIN32_FILE_ATTRIBUTE_DATA data;
+    if (!::GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data))
+    {
+        return stamp;   // 不存在或无法访问，都按"不存在"记
+    }
+    stamp.m_exists = true;
+    stamp.m_size.LowPart  = data.nFileSizeLow;
+    stamp.m_size.HighPart = data.nFileSizeHigh;
+    stamp.m_lastWrite     = data.ftLastWriteTime;
+    return stamp;
+}
+
+bool ChatImageCache::SameStamp(const FileStamp& a, const FileStamp& b)
+{
+    return a.m_exists == b.m_exists
+        && a.m_size.QuadPart == b.m_size.QuadPart
+        && ::CompareFileTime(&a.m_lastWrite, &b.m_lastWrite) == 0;
+}
+
+bool ChatImageCache::CheckFailureLocked(const std::wstring& key, const FileStamp& current)
+{
+    std::map<std::wstring, FileStamp>::iterator it = m_failed.find(key);
+    if (it == m_failed.end())
+    {
+        return false;
+    }
+    if (SameStamp(it->second, current))
+    {
+        return true;
+    }
+    // 文件自失败以来有变化（多半是后来被下载下来了）：删掉失败记录，让它重新解码。
+    m_failed.erase(it);
+    return false;
 }
 
 void ChatImageCache::EnsureWorkerLocked()
@@ -131,7 +219,7 @@ void ChatImageCache::EnsureWorkerLocked()
 
 void ChatImageCache::RegisterListener(HWND hwnd)
 {
-    if (hwnd == NULL)
+    if (!::IsWindow(hwnd))
     {
         return;
     }
@@ -165,6 +253,11 @@ void ChatImageCache::WorkerLoop()
             m_queue.pop_front();
         }
 
+        // 解码前先记下文件状态。解码失败时连同它一起记下，之后文件一旦变化（被下载下来、
+        // 被替换）就能认出来并重新解码。必须在解码之前读：若在解码之后读，解码期间恰好
+        // 写好的新文件会被当成"失败时的样子"，从此再也不会重试。
+        const FileStamp before = ReadFileStamp(task.m_path);
+
         // ---- 解码 + 缩放（无锁，耗时操作）----
         // 把原图高质量缩到展示尺寸 task.m_w x task.m_h，得到一张展示尺寸的小图。
         Gdiplus::Bitmap* scaled = NULL;
@@ -197,13 +290,19 @@ void ChatImageCache::WorkerLoop()
             if (scaled != NULL)
             {
                 m_cache[key] = scaled;   // 缓存持有，后续命中复用
+                m_failed.erase(key);
+            }
+            else
+            {
+                m_failed[key] = before;  // 记下失败；文件不变就不再排队解码
             }
             listeners = m_listeners;
         }
 
         // ---- 通知窗口重绘（无锁 PostMessage）----
-        // 解码失败也通知无副作用（占位维持现状）；广播给所有聊天窗，由各窗口的气泡按
-        // 自己的图片路径查缓存，命中才换成真图。
+        // 解码失败也要通知：界面据此重绘，经 IsFailed 查到失败后改画破图占位。失败已记下，
+        // 重绘时再 Request 不会重新排队，所以不会形成循环。广播给所有已登记的窗口，由各
+        // 窗口按自己的图片路径查缓存，命中才换成真图。
         for (std::set<HWND>::iterator it = listeners.begin(); it != listeners.end(); ++it)
         {
             if (::IsWindow(*it))

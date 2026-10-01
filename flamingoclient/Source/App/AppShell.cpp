@@ -12,6 +12,7 @@
 
 #include "../UI/BalloonUpdate/BalloonUpdateWindow.h"       // 升级窗要登记一个宿主窗口，安装前据它请本进程退出
 #include "../Common/Log/IULog.h"
+#include "../UI/BalloonChatWnd/ChatTextWarmup.h"           // 启动时预热聊天气泡的文字测量缓存
 #include "../Common/Util/Path.h"                           // Hootina::CPath（创建 Users 目录）
 #include "../Common/Graphics/GDIFactory.h"                 // CGDIFactory::Uninit（退出时释放绘图资源）
 #include "../Session/UserSessionData.h"                    // g_szHomePath
@@ -46,6 +47,8 @@ bool CAppShell::Startup(HWND hOwnerWindow)
     if (!m_FMGClient.InitProxyWnd())
     {
         ::MessageBox(NULL, _T("初始化代理窗口失败，Flamingo无法启动！"), _T(""), MB_OK | MB_TOPMOST);
+        //ExitProcess 不会走到 WinMain 末尾的 CIULog::Uninit，先把队列里的日志写进文件
+        CIULog::Flush(kIULogFlushTimeoutMs);
         ::ExitProcess(0);
         return false;
     }
@@ -58,12 +61,17 @@ bool CAppShell::Startup(HWND hOwnerWindow)
         Hootina::CPath::CreateDirectory(strUsersDirectory);
     }
 
+    //利用界面空闲时间预热聊天气泡的文字测量缓存，启动后第一次打开聊天窗时折行测量即可直接
+    //命中缓存。分批进行，由线程定时器驱动，WM_TIMER 只在消息队列空闲时产生，不影响登录与
+    //主面板的加载；约一秒内完成。见 ChatTextWarmup.h。
+    balloonchatwnd::ChatTextWarmup::Inst().Start();
+
     //先把主面板建出来（隐藏），再走登录。
     //
     //主面板是常驻窗口：进程启动建一次，登出只隐藏、退出才销毁，整个进程生命周期内
     //HWND 不变。这样做有两个理由：
     //  · 登出后聊天窗残留、缓存串账号那类问题，根子就在「面板对象活着、窗口反复生灭」
-    //    这个不对称上（见 bugs.md 的 BUG-14）；常驻之后生命周期一致，容易推理。
+    //    这个不对称上；常驻之后生命周期一致，容易推理。
     //  · 网络应答与推送的收件窗口就是主面板本身，这要求它在登录开始之前已经存在 ——
     //    登录结果本身就是一条网络应答。
     m_panel.EnsureCreated();
@@ -132,6 +140,9 @@ void CAppShell::Shutdown()
         return;
     }
     m_bShutdownDone = true;
+
+    //预热若还没做完（启动后一秒内就退出），先停掉它的定时器
+    balloonchatwnd::ChatTextWarmup::Inst().Stop();
 
     //诊断日志：记录收尾时各窗口对象是否仍持有 HWND。退出若崩，看本行即可判断是主面板、
     //托盘浮窗还是某个调试入口的预览窗口没收干净。

@@ -13,13 +13,13 @@
 #include "ContactMatch.h"
 #include "../../Common/Log/IULog.h"
 #include "../../Common/Util/EncodeUtil.h"
+#include "../../Common/Util/PerfStopWatch.h"      // 预热搜索候选缓存的耗时记入日志
 #include "../../net/ContactsProtocolClient.h"     // net::ContactItem
 #include "../../net/GroupProtocolClient.h"        // net::UserGroupItem
 #include "../BalloonMain/MainPanelListItem.h"  // 结果行（含命中高亮）
 #include "../BalloonMain/GroupRowText.h"       // BuildGroupRowTexts（群结果行的"群名+人数 / 群号"文案）
 #include "../BalloonMain/AvatarSpec.h"         // DecodeAvatar：按 (facetype,customface) 定该画什么
 #include "../BalloonMain/AvatarImageUtil.h"    // MakeRoundedAvatarFromFile：自定义图头像位图
-#include "../BalloonMain/ContactRemarkModel.h" // ResolveContactDisplayName：备注优先的统一取名口径
 #include "../../net/ImageTransfer.h"
 #include "../../net/CurrentUserAccount.h"   // net::CurrentUserAccount（本地缓存目录按登录账号分）              // 头像真图的本地缓存路径与下载
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox / DuiHBox / Hint
@@ -202,6 +202,21 @@ void CSearchDropdown::SetContactDeptPaths(const std::map<UINT, CString>* deptPat
     m_deptPaths = deptPaths;
 }
 
+void CSearchDropdown::WarmUpCandidates(const std::vector<net::ContactItem>& contacts,
+                                       const std::vector<net::UserGroupItem>& groups)
+{
+    PerfStopWatch sw;
+    const int rebuiltContacts = m_candidates.SyncContacts(contacts);
+    const int rebuiltGroups   = m_candidates.SyncGroups(groups);
+    LOG_INFO("search: candidate cache warm-up rebuilt %d contacts, %d groups in %.1f ms.",
+             rebuiltContacts, rebuiltGroups, sw.ElapsedMs());
+}
+
+void CSearchDropdown::ClearCandidates()
+{
+    m_candidates.Clear();
+}
+
 // =======================================================================
 // 创建 / 控件树构建
 // =======================================================================
@@ -235,7 +250,7 @@ static void EnsureDropdownClassRegistered()
 
 bool CSearchDropdown::EnsureCreated(HWND /*owner*/)
 {
-    if (m_hWnd != NULL)
+    if (IsWindow())
     {
         return true;   // 已创建
     }
@@ -377,7 +392,6 @@ int CSearchDropdown::RefreshResults()
     m_rowContact.clear();
     m_rowGroup.clear();
 
-    std::wstring qWide = (LPCWSTR)m_query;
     const bool wantContacts = (m_filter == kFilterAll || m_filter == kFilterContacts);
     const bool wantGroups   = (m_filter == kFilterAll || m_filter == kFilterGroups);
 
@@ -387,6 +401,19 @@ int CSearchDropdown::RefreshResults()
     std::vector<UINT> contactIds;
     std::vector<std::unique_ptr<balloonmain::MainPanelListItem> > groupRows;
     std::vector<int64_t> groupIds;
+
+    // 让候选缓存与数据源保持一致：只重算与数据源不一致的条目。打字过程中数据通常
+    // 不变，这一步只做比对；通讯录、群列表刚加载完或有人改了名时才会真正重算。
+    const int rebuiltContacts = (m_contacts != NULL) ? m_candidates.SyncContacts(*m_contacts) : 0;
+    const int rebuiltGroups   = (m_groups != NULL) ? m_candidates.SyncGroups(*m_groups) : 0;
+    if (rebuiltContacts > 0 || rebuiltGroups > 0)
+    {
+        LOG_INFO("search: candidate cache rebuilt %d contacts, %d groups.",
+                 rebuiltContacts, rebuiltGroups);
+    }
+
+    // 查询词只预处理一次，在全部候选上复用。
+    const contactsearch::PreparedQuery query = contactsearch::PrepareQuery((LPCWSTR)m_query);
 
     // —— 联系人匹配 ——
     if (m_contacts != NULL)
@@ -400,26 +427,19 @@ int CSearchDropdown::RefreshResults()
                 continue;   // 调用方要求不搜自己
             }
 
-            // 主行名：备注 → 昵称 → 账号 → 用户<id>。与通讯录树 / 会话列表收口在
-            // 同一个纯函数上，同一个人不会在搜索结果里换个名字。
-            CString display = balloonmain::ResolveContactDisplayName(Utf8ToCStr(c.m_remark),
-                                                                     Utf8ToCStr(c.m_nickname),
-                                                                     Utf8ToCStr(c.m_username),
-                                                                     (UINT)c.m_userid);
-
-            std::wstring shown = (LPCTSTR)display;             // 用户看到的那个名字
-            std::wstring nick  = Utf8ToWStr(c.m_nickname);     // 原始昵称
-            std::wstring acc   = Utf8ToWStr(c.m_username);
-            std::wstring reg   = Utf8ToWStr(c.m_address);
+            // 第 i 条候选对应资料池的第 i 个联系人（刚 Sync 过）。
+            const balloonsearch::ContactCandidate& cand = m_candidates.ContactAt(i);
 
             // 先按"看到的名字"匹配 —— 高亮区间是相对主行名给出的，用它才对得上。
-            contactsearch::MatchResult mr = contactsearch::Match(qWide, shown, acc, reg);
-            if (!mr.m_matched && shown != nick)
+            contactsearch::MatchResult mr = contactsearch::MatchPrepared(
+                query, cand.m_shownName, cand.m_accountLower, cand.m_regionLower);
+            if (!mr.m_matched && cand.m_nickDiffers)
             {
                 // 设了备注的人，用原始昵称也该能搜到：用户记得的往往还是对方的真名。
                 // 这一轮只用来决定"要不要显示这一行"，命中区间落在昵称上、与主行名
                 // 对不上，故不取它的高亮，只把行放出来。
-                contactsearch::MatchResult byNick = contactsearch::Match(qWide, nick, acc, reg);
+                contactsearch::MatchResult byNick = contactsearch::MatchPrepared(
+                    query, cand.m_nickName, cand.m_accountLower, cand.m_regionLower);
                 if (byNick.m_matched)
                 {
                     mr.m_matched     = true;
@@ -432,6 +452,10 @@ int CSearchDropdown::RefreshResults()
             {
                 continue;
             }
+
+            // 主行名：备注 → 昵称 → 账号 → 用户<id>，缓存里已按 ResolveContactDisplayName
+            // 算好，与通讯录树 / 会话列表同一口径，同一个人不会在搜索结果里换个名字。
+            CString display = cand.m_display;
             // 与通讯录树同一口径：自己那一行加"（我）"后缀，便于一眼区分。
             if (isSelf)
             {
@@ -486,15 +510,16 @@ int CSearchDropdown::RefreshResults()
         }
     }
 
-    // —— 群组匹配（群名当昵称，账号 / 地区留空，复用同一 Match）——
+    // —— 群组匹配（群名当昵称，账号 / 地区留空，复用同一套匹配规则）——
     if (m_groups != NULL)
     {
+        const std::wstring noField;   // 群没有账号与地区，两项都按空串匹配
         for (size_t i = 0; i < m_groups->size(); ++i)
         {
             const net::UserGroupItem& g = (*m_groups)[i];
-            std::wstring name = Utf8ToWStr(g.m_name);
-            contactsearch::MatchResult mr =
-                contactsearch::Match(qWide, name, std::wstring(), std::wstring());
+            // 第 i 条群候选对应群列表的第 i 个群（刚 Sync 过）。
+            contactsearch::MatchResult mr = contactsearch::MatchPrepared(
+                query, m_candidates.GroupAt(i).m_preparedName, noField, noField);
             if (!mr.m_matched)
             {
                 continue;
@@ -602,7 +627,7 @@ int CSearchDropdown::RefreshResults()
 
     // —— 按内容算高度并在搜索框下方（屏幕坐标）展示 ——
     int h = ComputeHeight(renderedContacts, renderedGroups, true);
-    if (m_hWnd != NULL)
+    if (IsWindow())
     {
         // HWND_TOPMOST：可靠地浮在仍处于前台的主面板之上；SWP_NOACTIVATE 不抢激活。
         ::SetWindowPos(m_hWnd, HWND_TOPMOST, m_anchorLeft, m_anchorBottom, m_panelWidth, h,

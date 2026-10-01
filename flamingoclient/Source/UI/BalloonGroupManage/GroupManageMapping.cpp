@@ -165,6 +165,41 @@ CString FormatRelativeTime(int64_t timestamp, int64_t nowMs)
 // 协议结构 → 界面模型
 // =====================================================================
 
+void ApplyGroupContext(int64_t groupId, LPCTSTR name, int netRole, GroupManageModel& model)
+{
+    //群号在开窗这一刻就已经知道，先填上，不必等群资料应答（1303）。应答到达后
+    //ApplyGroupInfo 会用同一个 groupid 再写一遍，值相同。这样即便应答迟到或失败，
+    //「基本信息」页的群号也是准确的。
+    if (groupId > 0)
+    {
+        model.m_groupNumber.Format(_T("%lld"), static_cast<long long>(groupId));
+    }
+    if (name != NULL && name[0] != _T('\0'))
+    {
+        model.m_groupName = name;
+    }
+    model.m_myRole = NetRoleToUiRole(netRole);
+
+    //占位头像按"自动头像"算：群名首字 + 按群ID取的底色，与 ApplyGroupInfo 在
+    //facetype 为 0 时的结果相同。群资料到达后若该群用的是字形或自定义图头像，
+    //再由 ApplyGroupInfo 替换。
+    balloonmain::AvatarSpec avatar = balloonmain::DecodeAvatar(
+        balloonmain::avatar_kind_auto, std::string(), model.m_groupName, groupId);
+    model.m_groupAvatarKind = avatar.m_kind;
+    model.m_groupAvatarColor = avatar.m_color;
+    model.m_groupAvatarText = FirstCharOf(model.m_groupName);
+}
+
+LoadState LoadStateAfterFailure(LoadState current)
+{
+    //已经成功过的数据保留：后续刷新失败时继续显示上一次的真实内容
+    if (current == kLoadDone)
+    {
+        return kLoadDone;
+    }
+    return kLoadFailed;
+}
+
 void ApplyGroupInfo(const net::GroupInfoResult& info, GroupManageModel& model)
 {
     model.m_groupName = Utf8ToCString(info.m_name);
@@ -210,6 +245,9 @@ void ApplyGroupInfo(const net::GroupInfoResult& info, GroupManageModel& model)
     model.m_perms.welcomeMessage = (info.m_welcomeon != 0);
     model.m_perms.sensitiveWordFilter = (info.m_sensitiveon != 0);
     model.m_welcomeText = Utf8ToCString(info.m_welcometext);
+
+    //群简介、欢迎语、群权限与全员禁言从此按真实值显示，不再显示加载提示
+    model.m_groupInfoState = kLoadDone;
 }
 
 void ApplyGroupMembers(const net::GroupMembersResult& members, int64_t nowMs,
@@ -276,6 +314,10 @@ void ApplyGroupMembers(const net::GroupMembersResult& members, int64_t nowMs,
         mm.remainingText = FormatMuteRemaining(m.muteUntil, nowMs);
         model.m_muted.push_back(mm);
     }
+
+    //即便一个成员都没有也要置为"已加载" —— 界面要靠它区分"还没拉回来"（显示
+    //加载提示）与"拉回来了"（按真实列表显示）
+    model.m_membersState = kLoadDone;
 }
 
 CString FormatAnnouncementTime(int64_t timestamp, int64_t nowMs)
@@ -409,6 +451,9 @@ void ApplyJoinRequests(const net::GroupJoinRequestsResult& requests, int64_t now
 
         model.m_requests.push_back(r);
     }
+
+    //空列表同样置为"已加载"：没有待处理申请是合法结果，不能一直显示加载提示
+    model.m_requestsState = kLoadDone;
 }
 
 void ApplySensitiveWords(const net::SensitiveWordsResult& words, int64_t nowMs,

@@ -1,8 +1,9 @@
 /**
  *  GroupMemberItem.cpp
  *
- *  群成员行的绘制实现。头像 / 悬停底 / 群主徽标用 GDI+ 抗锯齿，文字用
- *  GDI DrawText（清晰）。
+ *  群成员行的绘制与交互实现。头像 / 悬停底 / 群主徽标用 GDI+ 抗锯齿，文字用
+ *  GDI DrawText（清晰）。交互有两项：右键弹成员操作菜单，双击打开与该成员的
+ *  单聊窗；两者都把动作打包投给宿主群聊窗执行。
  *
  *  本 .cpp 不 include Flamingo 的 stdafx.h —— 它要被 Flamingo.vcxproj 与
  *  FlamingoUnit.vcxproj 共用。在 Flamingo.vcxproj 里需标记
@@ -42,6 +43,9 @@ extern CAppModule _Module;
 #include "../../Session/GroupRoleRules.h"                    // NetGroupRole：角色徽标与菜单门控用的角色取值
 #include "../../App/CustomMsgDef.h"                      // WM_CHAT_MENTION_ACTION
 #include "../BalloonMain/PopupMenuPlacement.h"    // ClampPopupMenuToWorkArea（菜单不越屏）
+#include "../../Common/Log/IULog.h"              // 双击开单聊的日志
+#include "../../net/Protocol.h"                  // presence_type：在线状态的合法取值范围
+#include "../BalloonMain/PresenceBadge.h"         // DrawPresenceBadge：头像角上的在线状态徽标（与主面板通讯录同一套图形）
 
 namespace balloonchatwnd {
 
@@ -50,12 +54,22 @@ namespace {
 // ---- 几何 / 配色 -------------------------------------------------------
 
 const int kEdgePad      = 10;   // 行左右内边距
-const int kAvatarSize   = 26;   // 头像边长
-const int kAvatarGap    = 8;    // 头像与昵称间距
+const int kAvatarSize   = kGroupMemberAvatarPx;      // 头像边长
+const int kAvatarGap    = kGroupMemberAvatarGapPx;   // 头像与昵称间距
 const int kNamePx       = 13;   // 昵称字号
 const int kBadgePx      = 10;   // 群主徽标字号
 
 const Gdiplus::REAL kAvatarRadius = 5.0f;   // 头像圆角
+
+// 头像角上的在线状态徽标：绘制方框边长 10（DrawPresenceBadge 实测下限，再小时钟指针会糊），
+// 中心距头像右、下边缘各 6（方框一半再加 1）
+const int           kPresenceBadgePx    = 10;
+const int           kPresenceBadgeInset = 6;
+// 徽标外圈白描边：把徽标与头像底色隔开，否则深色头像上的徽标会和底色混在一起。白圈按徽标
+// 圆底（viewBox 24 中直径 20）的半径外扩，而不是按绘制方框外扩，与主面板列表项的画法一致
+const Gdiplus::REAL kPresenceRingPx     = 1.5f;
+const Gdiplus::REAL kPresenceDiscRatio  = 20.0f / 24.0f;
+const Gdiplus::Color kPresenceRingColor(255, 255, 255, 255);
 const Gdiplus::REAL kHoverRadius  = 5.0f;   // 悬停底圆角
 
 const Gdiplus::Color kHoverFill (255, 0xF2, 0xF1, 0xEE);          // 悬停底
@@ -138,6 +152,15 @@ int MeasureTextWidth(HDC hdc, LPCWSTR text, int pixelHeight, bool bold)
 
 } // anonymous namespace
 
+RECT ComputeMemberPresenceBadgeBox(int avatarLeft, int avatarTop, int avatarSize)
+{
+    const int cx = avatarLeft + avatarSize - kPresenceBadgeInset;
+    const int cy = avatarTop + avatarSize - kPresenceBadgeInset;
+    const int half = kPresenceBadgePx / 2;
+    RECT box = { cx - half, cy - half, cx - half + kPresenceBadgePx, cy - half + kPresenceBadgePx };
+    return box;
+}
+
 GroupMemberItem::GroupMemberItem()
     : m_isSelf(false)
     , m_userid(0)
@@ -146,9 +169,25 @@ GroupMemberItem::GroupMemberItem()
     , m_myNetRole(-1)
     , m_starredQuery(NULL)
     , m_starredQueryUd(NULL)
+    , m_presence(kMemberPresenceUnknown)
     , m_avatarBmp(NULL)
     , m_avatarLoadTried(false)
 {
+}
+
+void GroupMemberItem::SetPresence(int presence)
+{
+    //协议之外的取值一律按未知处理，不画徽标
+    if (presence < ::presence_offline || presence > ::presence_busy)
+    {
+        presence = kMemberPresenceUnknown;
+    }
+    if (presence == m_presence)
+    {
+        return;
+    }
+    m_presence = presence;
+    Invalidate();
 }
 
 GroupMemberItem::~GroupMemberItem()
@@ -171,7 +210,7 @@ bool GroupMemberItem::OnRButtonDown(POINT pt, UINT /*mkFlags*/)
     }
     balloonwjui::DuiHost* host = GetHost();
     HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
-    if (hwnd == NULL)
+    if (!::IsWindow(hwnd))
     {
         return false;
     }
@@ -229,13 +268,43 @@ bool GroupMemberItem::OnRButtonDown(POINT pt, UINT /*mkFlags*/)
 
     // 四个动作都要碰业务，本控件不认识那些对象，打包投给宿主群聊窗执行 ——
     // 与气泡里 @ 菜单走的是同一条消息、同一个处理函数。
+    PostMemberAction(hwnd, cmd);
+    return true;
+}
+
+bool GroupMemberItem::OnLButtonDblClk(POINT pt, UINT mkFlags)
+{
+    // 本人那一行不开单聊：主面板本来就拒绝和自己聊天，右键自己时菜单里也没有
+    // 「与 TA 聊天」。未绑定 userid 的 mock / 占位行没有可以聊天的对象。
+    if (m_isSelf || m_userid == 0)
+    {
+        return DuiControl::OnLButtonDblClk(pt, mkFlags);
+    }
+    balloonwjui::DuiHost* host = GetHost();
+    HWND hwnd = (host != NULL) ? host->m_hWnd : NULL;
+    if (!::IsWindow(hwnd))
+    {
+        return DuiControl::OnLButtonDblClk(pt, mkFlags);
+    }
+
+    // 与右键菜单选「与 TA 聊天」投同一条消息：打开或激活单聊窗由群聊窗转请主面板
+    // 完成，本控件只负责把目标成员与动作编号投给宿主。
+    LOG_INFO("Group member row double-clicked, ask host to open chat, uid=%lld.",
+             (long long)m_userid);
+    return PostMemberAction(hwnd, balloonchatwnd::kMentionMenuChat);
+}
+
+bool GroupMemberItem::PostMemberAction(HWND hwnd, int action)
+{
+    // 负载由宿主群聊窗处理完 delete；投递失败（窗口恰好在此刻销毁）时由本函数释放。
     balloonchatwnd::MentionActionData* pData = new balloonchatwnd::MentionActionData();
-    pData->id          = (balloonchatwnd::MentionMenuId)cmd;
+    pData->id          = (balloonchatwnd::MentionMenuId)action;
     pData->uid         = m_userid;
     pData->displayName = (LPCWSTR)m_name;
     if (!::PostMessage(hwnd, WM_CHAT_MENTION_ACTION, 0, (LPARAM)pData))
     {
         delete pData;
+        return false;
     }
     return true;
 }
@@ -383,6 +452,23 @@ void GroupMemberItem::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
         RECT avRc = { avX, avY, avX + kAvatarSize, avY + kAvatarSize };
         DrawGdiText(hdc, (LPCWSTR)m_avatarText, avRc, 13, true, kAvatarText,
                     DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
+    }
+
+    // 头像右下角的在线状态徽标（盖在头像字之上，故放在字形之后另起一个 Graphics 绘制，
+    // 不与上面的 GDI 文字交错）。状态未知时不画。
+    if (m_presence != kMemberPresenceUnknown)
+    {
+        Gdiplus::Graphics gb(hdc);
+        gb.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+        const RECT box = ComputeMemberPresenceBadgeBox(avX, avY, kAvatarSize);
+        const Gdiplus::REAL cx = (Gdiplus::REAL)(box.left + box.right) / 2.0f;
+        const Gdiplus::REAL cy = (Gdiplus::REAL)(box.top + box.bottom) / 2.0f;
+        const Gdiplus::REAL ringR = (Gdiplus::REAL)kPresenceBadgePx * kPresenceDiscRatio / 2.0f
+                                  + kPresenceRingPx;
+        Gdiplus::SolidBrush ring(kPresenceRingColor);
+        gb.FillEllipse(&ring, cx - ringR, cy - ringR, ringR * 2.0f, ringR * 2.0f);
+        balloonmain::DrawPresenceBadge(gb, m_presence, false, (Gdiplus::REAL)box.left,
+                                       (Gdiplus::REAL)box.top, (Gdiplus::REAL)kPresenceBadgePx);
     }
 
     // 昵称（头像右侧，避让群主徽标）。

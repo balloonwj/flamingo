@@ -184,6 +184,11 @@ struct HistoryContentBrief
     std::string m_imageFileId;
     //图片字节数；未知为 0。只用于下载时报给传输层做日志与校验，不参与界面显示。
     int64_t     m_imageSize;
+    //图片原图的像素宽 / 高（取自本地库 image 子对象的 w / h 字段）；缺字段或非正时为 0。
+    //消息记录列表按它等比算出预览图的显示尺寸 —— 排版时图片未必已下载，只能靠消息里
+    //记下的宽高先把行高定下来，下载完成后才不会整行跳动。
+    int         m_imageWidth;
+    int         m_imageHeight;
 
     //==== 文件夹传输记录（::message_type_folder）专用 ====
     //本次传输的会话 id。拿它去 CFolderLocalStore 查这台机器上的根目录落点：查得到且
@@ -201,12 +206,24 @@ struct HistoryContentBrief
     //这类结局文字 —— 只写"发过一个文件夹"而不说传成没传成，等于没说。
     int         m_folderResult;
 
+    //==== 合并转发的聊天记录（::message_type_merged）专用 ====
+    //记录标题（UTF-8）。非合并记录、或记录里没有标题时为空串，此时卡片显示"聊天记录"。
+    std::string m_mergedTitle;
+    //记录里的子消息条数；单位：条，非合并记录为 0。
+    int         m_mergedCount;
+    //记录的 content 原文（紧凑 JSON，UTF-8），即本地库 content 里 merged 子对象序列化后的
+    //文字。打开聊天记录查看窗时原样交给它；非合并记录、或 merged 子对象缺失时为空串。
+    std::string m_mergedContent;
+
     HistoryContentBrief()
         : m_fileSize(0)
         , m_imageSize(0)
+        , m_imageWidth(0)
+        , m_imageHeight(0)
         , m_folderTotalFiles(0)
         , m_folderTotalSize(0)
         , m_folderResult(0)
+        , m_mergedCount(0)
     {
     }
 };
@@ -253,8 +270,10 @@ std::string FileExtensionOf(const std::string& fileName);
 //@return 大小文字（UTF-8）
 std::string FormatFileSize(int64_t bytes);
 
-//时间下拉选中项下标换算成 HistoryTimeRange。两者是一一对应的（0 全部 / 1 近7天 /
-//2 近30天 / 3 近3个月 / 4 近半年 / 5 近一年 / 6 自定义），越界一律退回“全部时间”。
+//时间下拉选中项下标换算成 HistoryTimeRange。下拉框只有 6 个固定时间段，下标与枚举值一一对应
+//（0 全部 / 1 近7天 / 2 近30天 / 3 近3个月 / 4 近半年 / 5 近一年），越界一律退回“全部时间”。
+//自定义起止（kHistoryTimeCustom）不在下拉框里，由「选日期」弹层的「只看这段时间」设置
+//（2026-10-01 起，见 HistoryDateRange.h），故下标 6 也按越界处理。
 //@param comboIndex  下拉项下标
 //@return 对应时间范围；越界按“全部时间”
 HistoryTimeRange TimeRangeFromComboIndex(int comboIndex);

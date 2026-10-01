@@ -94,12 +94,34 @@ TEST_CASE("P6 还没滚到顶部阈值内就不发", "[paging]")
 {
     HistoryPagingState st = ReadyState();
 
+    // 阈值是离顶一屏（2026-09-30 起，原先是 48 像素）：用户还没滚到顶，下一页就已经在
+    // 加载了，滚到顶时内容多半已经就位。
     // 远离顶部：不发。
     CHECK_FALSE(ShouldLoadOlderHistory(st, 2000, kViewH, kContentH));
-    // 阈值之内：发。
-    CHECK(ShouldLoadOlderHistory(st, kHistoryLoadTriggerY, kViewH, kContentH));
-    // 刚过阈值一像素：不发。
-    CHECK_FALSE(ShouldLoadOlderHistory(st, kHistoryLoadTriggerY + 1, kViewH, kContentH));
+    // 离顶一屏以内：发。
+    CHECK(ShouldLoadOlderHistory(st, kViewH, kViewH, kContentH));
+    // 离顶一屏多一像素：不发。
+    CHECK_FALSE(ShouldLoadOlderHistory(st, kViewH + 1, kViewH, kContentH));
+}
+
+TEST_CASE("P11 离顶一屏以内算接近顶部，一屏以外不算", "[paging]")
+{
+    CHECK(IsNearTopForOlderHistory(kAtTop, kViewH));
+    CHECK(IsNearTopForOlderHistory(kViewH / 2, kViewH));
+    CHECK(IsNearTopForOlderHistory(kViewH, kViewH));
+    CHECK_FALSE(IsNearTopForOlderHistory(kViewH + 1, kViewH));
+}
+
+TEST_CASE("P12 视口高度为 0 时不误触发，退回最小阈值", "[paging]")
+{
+    // 窗口最小化、或列表还没排版时视口高度为 0。此时退回 kHistoryLoadTriggerY：
+    // 远离顶部不触发，真正贴近顶部仍然触发，与改动前的行为一致。
+    CHECK_FALSE(IsNearTopForOlderHistory(kHistoryLoadTriggerY + 1, 0));
+    CHECK_FALSE(IsNearTopForOlderHistory(2000, 0));
+    CHECK(IsNearTopForOlderHistory(kHistoryLoadTriggerY, 0));
+    CHECK(IsNearTopForOlderHistory(kAtTop, 0));
+    // 视口很矮（比最小阈值还矮）时同样按最小阈值
+    CHECK(IsNearTopForOlderHistory(kHistoryLoadTriggerY, kHistoryLoadTriggerY / 2));
 }
 
 // =====================================================================

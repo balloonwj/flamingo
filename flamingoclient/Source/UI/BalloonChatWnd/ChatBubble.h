@@ -24,13 +24,38 @@
 #include "ChatMockData.h"
 #include "ChatFolderStateModel.h"  // kMaxChatFolderActions（文件夹按钮命中矩形数组的长度）
 #include "ChatTextSelection.h"   // SelLayout（成员需完整类型）
+#include "ChatInlineText.h"      // InlinePlaced（正文排版结果缓存，成员需完整类型）
 #include "ChatLinkDetect.h"      // LinkSpan（成员需完整类型）
+#include "ChatClipboardContent.h" // ChatClipSegment（复制时写进剪贴板的聊天内容片段）
 #include <string>
 
 //图片气泡解码用的 GDI+ 位图前置声明，避免在头文件引入 <gdiplus.h>。
 namespace Gdiplus { class Bitmap; }
 
 namespace balloonchatwnd {
+
+/**
+ *  气泡下方回执行显示的内容。
+ */
+enum ChatReceiptKind
+{
+    kReceiptNone   = 0,   // 不显示：对方的消息、未开启回执的列表（群聊）、时间分隔行、
+                          // 文件夹行，或尚未拿到服务器 msgid（发送中 / 发送失败）
+    kReceiptUnread = 1,   // 显示「未读」：单聊里自己发出、服务端已确认、对方还没读到本条
+    kReceiptRead   = 2,   // 显示「✓ 已读」：单聊里自己发出、对方的已读位点已越过本条
+};
+
+/**
+ *  判定一条消息的气泡下方回执行显示什么。纯函数，不碰控件与 GDI。
+ *
+ *  规则（2026-09-30 起）：只有开启回执的列表（单聊）里、自己发出的、已拿到服务器
+ *  msgid 的真实消息才显示回执，其中 read 为真显示「✓ 已读」、否则显示「未读」。
+ *  在此之前气泡对所有自己发的消息无条件画「已读」，给离线的人发消息也显示已读。
+ *    msg：           要判定的消息。
+ *    receiptEnabled：所在列表是否开启已读回执（单聊开启；群聊按协议不做已读回执，不开启）。
+ *  返回：回执行显示的内容，取值见 ChatReceiptKind。
+ */
+ChatReceiptKind DecideReadReceipt(const ChatMessage& msg, bool receiptEnabled);
 
 /**
  *  ChatBubble —— 一条消息行（时间分隔 / 气泡消息）。自绘控件。
@@ -144,8 +169,10 @@ public:
     /**
      *  回填服务器分配的消息 ID 与消息时间（本端发出、服务器回执到达后调用）。
      *
-     *  <u>只</u>改这两个字段。它们既不参与折行也不参与绘制，仅供撤回时限判断
-     *  （见 .cpp 里 canRecallMessage 的调用），故不置脏、不重排、不重绘。
+     *  <u>只</u>改这两个字段。它们不参与折行，除已读回执外也不参与绘制，主要供撤回
+     *  时限判断（见 .cpp 里 canRecallMessage 的调用），故不置脏、不重排。开启已读回执
+     *  的行拿到 msgid 后回执行要从「不显示」变成「未读」，因此会重画一次本行（行高
+     *  早已预留，不需要重排）。
      *
      *  不要退回用 SetMessage 做这件事：那是"整条换掉"的重路径，会连带清空选区
      *  模型、把折行测量缓存置为失效，而回填方本就没有理由触发重排 —— 于是这一行
@@ -154,6 +181,26 @@ public:
      *    timestampMs： 消息时间（Unix 毫秒）。
      */
     void BackfillServerIds(long long msgid, long long timestampMs);
+
+    /**
+     *  设置本行是否显示已读回执。由所在的消息列表在建行时设置（单聊开启、群聊不开启），
+     *  见 ChatMessageList::SetReadReceiptEnabled。
+     *    b：true 开启。开启后自己发出的消息下方预留一行回执，按 DecideReadReceipt 的
+     *       结果显示「未读」或「✓ 已读」；关闭则既不预留也不绘制。
+     *  副作用：改变本行行高（自己发出的消息），调用方须随后重排列表。
+     */
+    void SetReadReceiptEnabled(bool b);
+
+    // 本行是否显示已读回执。
+    bool IsReadReceiptEnabled() const { return m_readReceiptEnabled; }
+
+    /**
+     *  把本行标为「对方已读」（对方的已读位点越过了本条时，由消息列表调用）。
+     *  只改 read 字段并重画本行：回执行的高度早已预留，不需要重排。已读只进不退，
+     *  没有「改回未读」的接口。
+     *  返回：本行原本是未读、这次被改成已读时返回 true；原本就已读时返回 false。
+     */
+    bool MarkPeerRead();
 
     /**
      *  回填本端发出的图片的 fileid / md5（上传成功后）。
@@ -169,9 +216,23 @@ public:
     // 本行发送者 userid（真图头像下载完成后宿主按它定位本行刷新；0=未知）。
     int64_t SenderUserId() const { return m_msg.senderUserId; }
 
-    // 设置 / 更新发送者真实图片头像本地路径（真图下载完成后宿主调用）。路径变化时
-    // 丢弃旧位图缓存以重新解码并触发重绘；传空串则回退画字形头像。
+    // 设置 / 更新发送者真实图片头像本地路径（真图下载完成后宿主调用），并触发重绘；
+    // 传空串则回退画字形头像。路径没变也会作废共享头像缓存（ChatAvatarBitmapCache）
+    // 里这一路径的位图 —— 同一路径的文件可能刚被新下载的头像覆盖。
     void SetSenderAvatarImage(const CString& path);
+
+    /**
+     *  一次性更新发送者的显示信息（群聊气泡上方的名字与头像）。用于群成员列表晚于历史
+     *  消息到达时，把先按备用信息（"用户<id>"）画出来的气泡换成真实信息。
+     *  只改显示，不改行高（名字行的高度与名字内容无关）；有变化时触发重绘。
+     *    name：     发送者显示名。
+     *    glyph：    头像字形（没有真图头像时画它）。
+     *    color：    头像底色。
+     *    imagePath：真图头像本地路径；空表示画字形头像。
+     *  @return 四项里至少有一项与原值不同、本行确实被更新时返回 true。
+     */
+    bool SetSenderInfo(const CString& name, const CString& glyph, COLORREF color,
+                       const CString& imagePath);
 
     // 按消息区可用宽度测量文字气泡的折行布局（折行后气泡的宽 / 高）。
     // 须由 ChatMessageList 在排版时对每行调用一次；availWidth 变化
@@ -228,6 +289,13 @@ public:
     CString GetSelectedText() const;
 
     /**
+     *  取当前选中的内容，拆成"文字 / 表情"片段（与 GetSelectedText 是同一个选区）。
+     *  复制时写进剪贴板的 Flamingo 格式由它生成，粘贴到聊天输入框时表情能还原成表情。
+     *  @return 选中内容的片段序列；无选区时返回空序列。
+     */
+    std::vector<ChatClipSegment> GetSelectedClipSegments() const;
+
+    /**
      *  清除文字选区并重绘。点到别处、切换消息、进入多选模式时调用。
      */
     void ClearTextSelection();
@@ -246,7 +314,9 @@ public:
     // 框架经 DuiControl* 发起的非内容重绘走基类、不置脏（缓存仍有效，语义正确）。
     void Invalidate();
 
-    // DuiControl 覆写：左键点击 —— 文字气泡开始拖拽选择；多选模式下切换本行选中态。
+    // DuiControl 覆写：左键点击 —— 点在已 Pin 消息旁的图钉上时请求取消 Pin（经
+    // ChatMessageList::RequestPinBubble 投给宿主窗口，本地标记不就地修改）；否则文字气泡
+    // 开始拖拽选择；多选模式下切换本行选中态（此时图钉不响应）。
     bool OnLButtonDown(POINT pt, UINT mkFlags) override;
 
     // DuiControl 覆写：左键抬起 —— 结束拖拽选择、释放鼠标捕获。
@@ -262,13 +332,15 @@ public:
     bool OnLButtonDblClk(POINT pt, UINT mkFlags) override;
 
     // DuiControl 覆写：鼠标移动 —— 文件行据落点更新底部操作链接的悬停高亮（hover
-    // 变化时重绘，使悬停链接变深色 + 加下划线）。
+    // 变化时重绘，使悬停链接变深色 + 加下划线）；移到图钉上时登记「取消 Pin」悬停
+    // 提示，移开时撤销登记。
     bool OnMouseMove(POINT pt, UINT mkFlags) override;
 
-    // DuiControl 覆写：鼠标离开本行 —— 清除文件链接悬停态并重绘。
+    // DuiControl 覆写：鼠标离开本行 —— 清除文件链接悬停态并重绘，撤销图钉悬停提示的登记。
     bool OnMouseLeave() override;
 
-    // DuiControl 覆写：光标落在文件操作链接上时显示手型（超链接感），否则普通箭头。
+    // DuiControl 覆写：光标落在可点击的图钉、文件操作链接或正文超链接上时显示手型，
+    // 否则普通箭头。
     bool OnSetCursor(POINT pt) override;
 
 private:
@@ -307,6 +379,29 @@ private:
     // IsRenderCacheable 决定直接调它（图片 / 文件行）还是先画进缓存位图再 BitBlt。
     void RenderContent(HDC hdc);
 
+    // 图片消息的实际状态：状态值为"正常"、但本地文件丢失或无法解码（ChatImageCache 记录过
+    // 解码失败）时按"下载失败"（kChatImageStateDownloadFailed）返回，其余情况原样返回
+    // m_msg.imageState。双击放大与右键菜单以它为准，避免对打不开的文件提供"放大 / 另存为"。
+    // 非图片消息原样返回 m_msg.imageState。会读一次图片缓存（加锁），不修改本行状态。
+    int EffectiveImageState() const;
+
+    // 整条消息的剪贴板片段，没有选区时右键「复制」用：文字消息与大表情按正文拆成文字 /
+    // 表情；图片消息在本地原图可用时是一个图片片段。其余类型（文件、文件夹等）以及
+    // 本地没有原图的图片返回空序列，由调用方退回只写纯文字。
+    std::vector<ChatClipSegment> WholeMessageClipSegments() const;
+
+    // 图片消息的本地原图是否可用：状态为就绪（含"未记录解码失败"）、有本地路径、且文件
+    // 存在。复制图片与拖出图片都要求它。非图片消息返回 false。
+    bool IsLocalImageAvailable() const;
+
+    // 点 pt（宿主坐标）是否真正落在已选中的文字上（按字形矩形判断，行尾空白处不算）。
+    // 没有选区时返回 false。
+    bool PointInTextSelection(POINT pt) const;
+
+    // 开始把内容拖出去：先交还鼠标捕获，再按文字选区或整张图片取片段、发起拖拽（模态，
+    // 拖拽结束才返回）。返回后不得再访问本对象的成员 —— 拖放期间界面可能已经重建。
+    void BeginChatDrag();
+
     // 本行是不是"可以选中文字"的文字类消息（纯文字 / emoji 大表情之外的文字气泡）。
     // 时间分隔、撤回提示、图片、文件行都不参与文字选中。
     bool IsTextSelectable() const;
@@ -318,6 +413,12 @@ private:
     // 取本行文本区左上角（宿主客户区坐标）。选区矩形与命中测试都以它为原点。
     // 未测量 / 非文字消息时返回 (0,0) 并令 okOut 为 false。
     POINT TextOriginInHost(bool& okOut) const;
+
+    // 选区从 (oldAnchor, oldCaret) 变成当前的 (m_selAnchor, m_selCaret) 之后调用：只把选区变化
+    // 涉及的那几行标成待重画（渲染缓存里局部重画），并请求宿主重画；不把整张渲染缓存置脏。
+    // 选区变化之外还有别的内容变化时，调用方仍应调 Invalidate()。
+    //   oldAnchor / oldCaret：变化前的选区两端（字符下标，-1 表示无选区）。
+    void InvalidateSelectionChange(int oldAnchor, int oldCaret);
 
     // 把当前选区画成高亮矩形（在文字之下）。hdc 为本行绘制目标，origin 为文本区原点
     // （已按缓存平移过），故这里只做相对到绝对的偏移。
@@ -367,13 +468,24 @@ private:
     // 它画成灰色只是让用户知道有这条路、暂时走不通，不该给悬停高亮、手型光标和点击。
     int FolderLinkAtPoint(POINT pt) const;
 
+    // 落点 pt（宿主客户区坐标）是否落在<u>可点击</u>的图钉上。以下情况一律返回 false：
+    // 本行未 Pin、不是真实消息、尚未分配服务器 msgid（取消请求必被服务端判为消息不存在）、
+    // 处于多选模式（整行是勾选目标）、图钉尚未绘制过。供点击（OnLButtonDown）、手型光标
+    // （OnSetCursor）、悬停提示（OnMouseMove）共用，三处的判断因此始终一致。
+    bool PinIconAtPoint(POINT pt) const;
+
+    // 切换鼠标是否停在图钉上的状态，并同步悬停提示的登记：停上去时向 DuiToolTipMgr 登记
+    // 「取消 Pin」并按当前位置开始计时；离开时撤销登记。必须撤销而不是只隐藏 —— 宿主在
+    // 鼠标进入某个控件时会为已登记的控件自动弹提示，不撤销的话鼠标进入本行任意位置都会
+    // 弹出「取消 Pin」。状态未变化时不做任何事。
+    //   hover： 鼠标是否停在图钉上。
+    //   ptHost：鼠标位置（宿主客户区坐标），只在 hover 为 true 时用来定位提示浮窗。
+    void SetPinHover(bool hover, POINT ptHost);
+
     // 确保渲染缓存位图存在且为 w×h；尺寸变化则重建。ref 提供兼容 DC。
     void EnsureRenderCache(HDC ref, int w, int h);
     // 释放渲染缓存位图（尺寸变 / SetMessage 等内容变 / 析构时）。
     void ReleaseRenderCache();
-
-    // 释放缓存的头像真图位图（换头像路径 / SetMessage / 析构时调用）。
-    void ReleaseAvatarBitmap();
 
     // 文件气泡底部按钮被点击：组 ChatFileActionData 经 WM_CHAT_FILE_ACTION 发给宿主
     // 聊天窗集中处理（打开 / 另存为 / 取消 / 重试）。action 取值见 ChatFileActionKind。
@@ -394,18 +506,27 @@ private:
 private:
     ChatMessage m_msg;            // 本行承载的消息
 
+    // 本行是否显示已读回执：单聊的消息列表建行时置为 true，群聊保持 false。
+    // 为 false 时自己的消息下方既不预留回执行也不绘制回执。见 SetReadReceiptEnabled。
+    bool        m_readReceiptEnabled;
+
     // 注：图片（kMsgImage）的"解码原图 + 缩放到展示尺寸"已移到后台线程的
     // ChatImageCache（按路径 + 展示尺寸缓存）。气泡绘制时只查缓存、命中即画，未命中
     // 画占位并请求后台解码，故本类不再持有任何图片位图。
 
-    // 发送者真图头像解码缓存：首次绘制时按 m_msg.senderAvatarImagePath 解码、之后复用，
-    // 避免每帧重新解码。SetMessage 换消息 / SetSenderAvatarImage 换路径 / 析构时释放。
-    Gdiplus::Bitmap* m_avatarBmp;        // 解码后的头像真图；NULL=尚未解码 / 无真图 / 解码失败
-    bool             m_avatarLoadTried;  // 是否已尝试过解码头像真图（失败也置位，避免每帧重试）
+    // 注：发送者真图头像也不由本类持有。它放在进程级的 ChatAvatarBitmapCache 里按路径
+    // 共用（2026-09-30 起），同一发送者的所有气泡共用一张已缩放好的位图。
 
     // kMsgImage 行最近一次绘制时图片在宿主客户区坐标系里的矩形，供双击命中测试
     //（双击图片打开看图窗）。仅图片行有效；非图片行不读取此值。
     RECT             m_imageRect;
+
+    // kMsgMerged 行最近一次绘制时整张卡片在宿主客户区坐标系里的矩形，供点击命中测试
+    //（点卡片任意位置打开聊天记录查看窗）。仅合并卡片行有效；其余行不读取此值。
+    RECT             m_mergedRect;
+    // 左键是否按在了合并卡片上、尚未抬起。抬起时仍在卡片内才算一次单击、打开查看窗；
+    // 按下后拖出卡片再抬起不算，与按钮的点击习惯一致
+    bool             m_mergedPressed;
 
     // kMsgFile 行最近一次绘制时底部各按钮在宿主客户区坐标系里的矩形与动作，供左键
     // 命中测试（点击打开 / 打开所在文件夹 / 另存为 / 取消 / 重试）。m_fileBtnCount 为
@@ -455,6 +576,15 @@ private:
     // 引用缩略图入队解码的日志只打一次（绘制每帧都会走到那一支）。
     bool m_quoteThumbLogged;
 
+    // 图钉的可点击区域（相对 m_rcItem 左上角，已含外扩），绘制图钉时记下，点击、手型
+    // 光标与悬停提示都以它为准。存相对坐标的理由与 m_quoteRectRel 相同。每次绘制先清空，
+    // 本行未 Pin、或从未绘制过时为空矩形。
+    RECT m_pinRectRel;
+
+    // 鼠标当前是否停在可点击的图钉上。只在它变化时才切换悬停提示的登记，避免每次鼠标
+    // 移动都重新登记、重新计时。由 OnMouseMove 维护，离开本行 / 换消息 / 取消 Pin 时复位。
+    bool m_pinHover;
+
     SelLayout    m_selLayout;      // 字符级排版结果（供命中测试与选区矩形）
     std::wstring m_selFlatText;    // 扁平文本（表情用 U+FFFC 占位）
 
@@ -475,6 +605,13 @@ private:
     int          m_selCaret;       // 选区当前端字符下标；-1 = 无选区
     bool         m_selDragging;    // 是否正在拖拽选择（鼠标按下未抬起）
 
+    // ---- 把内容拖出去（见 ChatDragSource.h）----
+    // 按在已有选区内（文字）或已就绪的图片上时置 true：此时先不动选区，等鼠标移动超过
+    // 系统拖动阈值再真正开始拖；没拖就松手则按普通单击处理并复位。
+    bool         m_dragArmed;
+    // 按下鼠标时的位置（宿主坐标），用来算移动距离；仅 m_dragArmed 为 true 时有意义。
+    POINT        m_dragPressPt;
+
     // ---- 渲染缓存（仅文字 / emoji / 时间分隔行）----
     // 把本行画好的位图缓存下来：内容 / 尺寸 / 多选态都不变时，OnPaint 直接 BitBlt
     // 这张缓存，省掉每帧用 GDI+ 重画气泡（拖动分隔条 / 滚动时的主要每帧开销）。
@@ -487,6 +624,16 @@ private:
     int      m_renderH;           // 缓存位图对应的行高
     bool     m_renderMultiSel;    // 缓存渲染时所属列表的多选态
     bool     m_renderDirty;       // 内容已变、需重画缓存
+
+    // ---- 选区变化时的局部重画（2026-10-01）----
+    // 拖选文字时选区每变一次，原先整张缓存位图都要重画：两三万字的消息每步约 250 毫秒，
+    // 拖起来明显不跟手。现在选区变化只标出变化的那几行（m_selBandRect），OnPaint 在缓存位图里
+    // 只重画这一横条；正文的排版结果缓存在 m_textPlaced，局部重画时不再重新排版。
+    bool     m_selBandDirty;      // 缓存位图里只有 m_selBandRect 这一横条待重画（仅选区变了）
+    RECT     m_selBandRect;       // 待重画的横条（行内相对坐标，左上角为本行左上角）；m_selBandDirty 为 false 时无意义
+    std::vector<InlinePlaced> m_textPlaced;   // 正文按绘制样式、文本区宽度排出的放置项（RenderContent 用）
+    bool     m_textPlacedValid;   // m_textPlaced 是否可用；整张缓存重画时置 false，由 RenderContent 重新排版
+    int      m_textPlacedW;       // m_textPlaced 对应的文本区宽度（像素）
 
     // ---- 性能探针计数器 ----
     static unsigned long s_heavyMeasureCount;  // 重量级折行测量实际执行次数

@@ -89,29 +89,6 @@ TEST_CASE("BIND-LANG2 越界索引夹到 0", "[settings][binding]")
 }
 
 // =====================================================================
-// BIND-FONT. 字体大小（小 / 中 / 大）
-// =====================================================================
-
-TEST_CASE("BIND-FONT1 选项表为「小 / 中 / 大」三项", "[settings][binding]")
-{
-    REQUIRE(FontScaleOptionCount() == 3);
-    const wchar_t* const* opts = FontScaleOptions();
-    CHECK(::wcscmp(opts[kFontScaleSmall], L"小") == 0);
-    CHECK(::wcscmp(opts[kFontScaleMedium], L"中") == 0);
-    CHECK(::wcscmp(opts[kFontScaleLarge], L"大") == 0);
-}
-
-TEST_CASE("BIND-FONT2 合法索引原样、越界回落到默认「中」", "[settings][binding]")
-{
-    CHECK(ClampFontScaleIndex(kFontScaleSmall) == kFontScaleSmall);
-    CHECK(ClampFontScaleIndex(kFontScaleMedium) == kFontScaleMedium);
-    CHECK(ClampFontScaleIndex(kFontScaleLarge) == kFontScaleLarge);
-    CHECK(ClampFontScaleIndex(-1) == kFontScaleMedium);
-    CHECK(ClampFontScaleIndex(3) == kFontScaleMedium);
-    CHECK(ClampFontScaleIndex(999) == kFontScaleMedium);
-}
-
-// =====================================================================
 // BIND-SOUND. 提示音 ↔ 静音（取反）
 // =====================================================================
 

@@ -1,338 +1,167 @@
-﻿#include "stdafx.h"
+/**
+ *  客户端日志接口的实现：把 LOG_INFO 等宏的调用格式化成一行正文，交给异步日志 CAsyncLog。
+ *  说明见 IULog.h。
+ *
+ *  balloonwj@qq.com   2026-10-01（本次改写为异步日志；原文件的创建日期不详）
+ */
+#include "stdafx.h"
 #include "IULog.h"
-//#include "..\Util\Path.h"
-//#include "..\..\Session\UserSessionData.h"
 #include "..\Util\EncodeUtil.h"
-#include <tchar.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string>
 
-#ifndef LOG_OUTPUT
-#define LOG_OUTPUT
-#endif
+std::atomic<bool> CIULog::m_bInited(false);
+std::atomic<long> CIULog::m_nLevel(LOG_LEVEL_INFO);
 
-#define MAX_LINE_LENGTH 256
+namespace {
 
-bool CIULog::m_bToFile = false;
-bool CIULog::m_bTruncateLongLog = false;
-HANDLE CIULog::m_hLogFile = INVALID_HANDLE_VALUE;
-LOG_LEVEL CIULog::m_nLogLevel = LOG_LEVEL_INFO;
-
-bool CIULog::Init(bool bToFile, bool bTruncateLongLog, PCTSTR pszLogFileName)
+//逐级创建目录，已存在的层级跳过。pszDirectory 为不带文件名的目录路径，分隔符可以是 \ 或 /
+void CreateDirectoryChain(const std::wstring& strDirectory)
 {
-#ifdef LOG_OUTPUT
-	m_bToFile = bToFile;
-    m_bTruncateLongLog = bTruncateLongLog;
-   
-    if (pszLogFileName == NULL || pszLogFileName[0] == NULL)
-		return FALSE;
-
-    TCHAR szHomePath[MAX_PATH] = {0};
-    ::GetModuleFileName(NULL, szHomePath, MAX_PATH);
-    //szHomePath 是长度为 MAX_PATH 的栈上数组，长度不会超过 MAX_PATH；
-    //这里的下标必须是有符号数，循环才能在减到 -1 时退出，因此显式收窄为 int
-    for (int i = static_cast<int>(_tcslen(szHomePath)); i >= 0; --i)
+    std::wstring strPath(strDirectory);
+    for (size_t i = 0; i < strPath.size(); ++i)
     {
-        if (szHomePath[i] == _T('\\'))
-        {
-            szHomePath[i] = _T('\0');
-            break;
-        }
+        if (strPath[i] == L'/')
+            strPath[i] = L'\\';
     }
 
-    TCHAR szLogDirectory[MAX_PATH] = { 0 };
-    _stprintf_s(szLogDirectory, _T("%s\\Logs\\"), szHomePath);
-    
-    DWORD dwAttr = ::GetFileAttributes(szLogDirectory);
-    if (!((dwAttr != 0xFFFFFFFF) && (dwAttr & FILE_ATTRIBUTE_DIRECTORY)))
+    //从第一个分隔符之后开始逐段创建；盘符（"D:"）与网络路径开头（"\\server"）这两段
+    //本身不是可以创建的目录，CreateDirectory 对它们失败即可，不影响后面各段
+    for (size_t pos = strPath.find(L'\\', 1); pos != std::wstring::npos; pos = strPath.find(L'\\', pos + 1))
     {
-        TCHAR cPath[MAX_PATH] = { 0 };
-        TCHAR cTmpPath[MAX_PATH] = { 0 };
-        TCHAR* lpPos = NULL;
-        TCHAR cTmp = _T('\0');
-
-        _tcsncpy_s(cPath, szLogDirectory, MAX_PATH);
-
-        for (int i = 0; i < (int)_tcslen(cPath); i++)
-        {
-            if (_T('\\') == cPath[i])
-                cPath[i] = _T('/');
-        }
-
-        lpPos = _tcschr(cPath, _T('/'));
-        while (lpPos != NULL)
-        {
-            if (lpPos == cPath)
-            {
-                lpPos++;
-            }
-            else
-            {
-                cTmp = *lpPos;
-                *lpPos = _T('\0');
-                _tcsncpy_s(cTmpPath, cPath, MAX_PATH);
-                ::CreateDirectory(cTmpPath, NULL);
-                *lpPos = cTmp;
-                lpPos++;
-            }
-            lpPos = _tcschr(lpPos, _T('/'));
-        }
+        ::CreateDirectoryW(strPath.substr(0, pos).c_str(), NULL);
     }
-		
-    m_hLogFile = ::CreateFile(pszLogFileName, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ, NULL, CREATE_NEW, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (m_hLogFile == INVALID_HANDLE_VALUE)
+    ::CreateDirectoryW(strPath.c_str(), NULL);
+}
+
+//把配置文件里的 loglevel 取值换算成 CAsyncLog 的日志级别，规则见 CIULog::SetLevel 的注释
+LOG_LEVEL ConfigLevelToLogLevel(int nConfigLevel)
+{
+    //loglevel 取值：只输出 WARNING 及以上
+    const int kConfigLevelWarning = 1;
+    //loglevel 取值：只输出 ERROR
+    const int kConfigLevelError = 2;
+
+    if (nConfigLevel >= kConfigLevelError)
+        return LOG_LEVEL_ERROR;
+    if (nConfigLevel == kConfigLevelWarning)
+        return LOG_LEVEL_WARNING;
+    return LOG_LEVEL_INFO;
+}
+
+} // namespace
+
+bool CIULog::Init(bool bToFile, bool bTruncateLongLog, PCWSTR pszLogFilePathPrefix)
+{
+    //重复初始化时先停掉上一轮的写日志线程；直接再 init 会把一个仍在运行的线程对象覆盖掉，
+    //std::thread 在未 join 时被销毁会让进程直接终止
+    if (m_bInited)
+        Uninit();
+
+    if (!bToFile)
+    {
+        CAsyncLog::init(nullptr, bTruncateLongLog);
+        m_bInited = true;
+        return true;
+    }
+
+    if (pszLogFilePathPrefix == NULL || pszLogFilePathPrefix[0] == L'\0')
         return false;
 
-#endif // end LOG_OUTPUT
+    //日志目录：前缀里最后一个分隔符之前的部分
+    const std::wstring strPrefix(pszLogFilePathPrefix);
+    const size_t nLastSep = strPrefix.find_last_of(L"\\/");
+    if (nLastSep != std::wstring::npos)
+        CreateDirectoryChain(strPrefix.substr(0, nLastSep));
 
-	return true;
+    //CAsyncLog 以 UTF-8 接收文件名，内部再转回宽字符打开，路径里的任何字符都不会丢失
+    const std::string strPrefixUtf8 = EncodeUtil::UnicodeToUtf8(strPrefix);
+    CAsyncLog::init(strPrefixUtf8.c_str(), bTruncateLongLog);
+    CAsyncLog::setLevel((LOG_LEVEL)m_nLevel.load());
+    m_bInited = true;
+    return true;
 }
 
 void CIULog::Uninit()
 {
-#ifdef LOG_OUTPUT
-	if(m_hLogFile != INVALID_HANDLE_VALUE)
-	{
-		::CloseHandle(m_hLogFile);
-		m_hLogFile = INVALID_HANDLE_VALUE;
-	}
-#endif //end LOG_OUTPUT
+    //先置标志：此后到达的日志直接输出到调试器，不再进入即将没有人处理的队列
+    m_bInited = false;
+    CAsyncLog::uninit();
 }
 
-void CIULog::SetLevel(LOG_LEVEL nLevel)
+void CIULog::SetLevel(int nConfigLevel)
 {
-    m_nLogLevel = nLevel;
+    const LOG_LEVEL level = ConfigLevelToLogLevel(nConfigLevel);
+    m_nLevel = level;
+    CAsyncLog::setLevel(level);
 }
 
-bool CIULog::Log(long nLevel, PCTSTR pszFmt, ...)
+bool CIULog::Flush(int nTimeoutMs)
 {
-#ifdef LOG_OUTPUT
-    if (nLevel < m_nLogLevel)
-        return false;
-    
-    char szTime[64] = { 0 };
-    GetTime(szTime,ARRAYSIZE(szTime));
-    std::string strDebugInfo(szTime);
-	
-	std::string strLevel("[INFO]");
-    if (nLevel == LOG_LEVEL_WARNING)
-		strLevel = "[Warning]";
-    else if (nLevel == LOG_LEVEL_ERROR)
-		strLevel = "[Error]";
-
-	strDebugInfo += strLevel;
-
-    //当前线程信息
-    char szThreadID[32] = { 0 };
-    DWORD dwThreadID = ::GetCurrentThreadId();
-    sprintf_s(szThreadID, ARRAYSIZE(szThreadID), "[ThreadID: %u]", dwThreadID);  
-    strDebugInfo += szThreadID;
-
-    //log正文
-    std::wstring strLogMsg;
-    va_list ap;
-    va_start(ap, pszFmt);
-    int nLogMsgLength = _vsctprintf(pszFmt, ap);
-    //容量必须算上最后一个\0
-    if ((int)strLogMsg.capacity() < nLogMsgLength + 1)
-    {
-        strLogMsg.resize(nLogMsgLength + 1);
-    }
-    _vstprintf_s((TCHAR*)strLogMsg.data(), strLogMsg.capacity(), pszFmt, ap);
-    va_end(ap);
-
-    //string内容正确但length不对，恢复一下其length
-    std::wstring strMsgFormal;
-    strMsgFormal.append(strLogMsg.c_str(), nLogMsgLength);
-
-    //如果日志开启截断，长日志只取前MAX_LINE_LENGTH个字符
-    if (m_bTruncateLongLog)
-        strMsgFormal = strMsgFormal.substr(0, MAX_LINE_LENGTH);
-
-    std::string strLogMsgAscii;
-    strLogMsgAscii = EncodeUtil::UnicodeToAnsi(strMsgFormal);
-
-    strDebugInfo += strLogMsgAscii;
-	strDebugInfo += "\r\n";
-	
-	if(m_bToFile)
-	{
-		if(m_hLogFile == INVALID_HANDLE_VALUE)
-			return false;
-		
-		::SetFilePointer(m_hLogFile, 0, NULL, FILE_END);
-		DWORD dwBytesWritten = 0;       
-        //单条日志的长度远小于 DWORD 能表示的上限（4GB），收窄不会丢数据
-        ::WriteFile(m_hLogFile, strDebugInfo.c_str(), static_cast<DWORD>(strDebugInfo.length()), &dwBytesWritten, NULL);
-        ::FlushFileBuffers(m_hLogFile);
-        return true;
-	}
-
-    ::OutputDebugStringA(strDebugInfo.c_str());
-
-#endif // end LOG_OUTPUT
-
-	return true;
-}
-
-bool CIULog::Log(long nLevel, PCSTR pszFunctionSig, int nLineNo, PCTSTR pszFmt, ...)
-{
-#ifdef LOG_OUTPUT
-    if (nLevel < m_nLogLevel)
+    if (!m_bInited)
         return false;
 
-	//时间
-    char szTime[64] = { 0 };
-    GetTime(szTime, ARRAYSIZE(szTime));
-    std::string strDebugInfo(szTime);
-	
-	//错误级别
-	std::string strLevel("[INFO]");
-    if (nLevel == LOG_LEVEL_WARNING)
-		strLevel = "[Warning]";
-    else if (nLevel == LOG_LEVEL_ERROR)
-		strLevel = "[Error]";
+    return CAsyncLog::flush(nTimeoutMs);
+}
 
-	strDebugInfo += strLevel;
-	
-	//当前线程信息
-	char szThreadID[32] = {0};
-	DWORD dwThreadID = ::GetCurrentThreadId();
-    sprintf_s(szThreadID, ARRAYSIZE(szThreadID), "[ThreadID: %u]", dwThreadID);
-	strDebugInfo += szThreadID;
+bool CIULog::Emit(long nLevel, PCSTR pszFunctionSig, int nLineNo, const std::string& strMsg)
+{
+    if (m_bInited)
+        return CAsyncLog::output(nLevel, pszFunctionSig, nLineNo, "%s", strMsg.c_str());
 
-	//函数签名
-    //缓冲放大 + 改用 _snprintf_s(_TRUNCATE)：带多个 std::string/wstring 参数的函数其
-    //__FUNCSIG__ 展开可达数百字符，旧的 512 固定缓冲 + sprintf_s 会溢出断言崩溃；现在再长也只截断。
-    char szFuncSig[2048] = { 0 };
-    _snprintf_s(szFuncSig, sizeof(szFuncSig), _TRUNCATE, "[%s:%d]", pszFunctionSig, nLineNo);
-    strDebugInfo += szFuncSig;
+    //未初始化：没有写日志线程，只输出到调试器
+    std::string strLine("[");
+    strLine += pszFunctionSig;
+    strLine += "]";
+    strLine += strMsg;
+    strLine += "\n";
+    ::OutputDebugStringA(strLine.c_str());
+    return true;
+}
 
-	//log正文
-    std::wstring strLogMsg;
+bool CIULog::Log(long nLevel, PCSTR pszFunctionSig, int nLineNo, PCWSTR pszFmt, ...)
+{
+    if (nLevel < m_nLevel)
+        return false;
+
     va_list ap;
     va_start(ap, pszFmt);
-    int nLogMsgLength = _vsctprintf(pszFmt, ap);
-    //容量必须算上最后一个\0 
-    if ((int)strLogMsg.capacity() < nLogMsgLength + 1)
-    {
-        strLogMsg.resize(nLogMsgLength + 1);
-    }
-    _vstprintf_s((TCHAR*)strLogMsg.data(), strLogMsg.capacity(), pszFmt, ap);
+    const int nLength = _vscwprintf(pszFmt, ap);
     va_end(ap);
+    if (nLength < 0)
+        return false;
 
-    //string内容正确但length不对，恢复一下其length
-    std::wstring strMsgFormal;
-    strMsgFormal.append(strLogMsg.c_str(), nLogMsgLength);
+    //多留一个字符放结尾的 '\0'，格式化完再去掉
+    std::wstring strMsg((size_t)nLength + 1, L'\0');
+    va_list aq;
+    va_start(aq, pszFmt);
+    _vsnwprintf_s(&strMsg[0], strMsg.size(), _TRUNCATE, pszFmt, aq);
+    va_end(aq);
+    strMsg.resize((size_t)nLength);
 
-    //如果日志开启截断，长日志只取前MAX_LINE_LENGTH个字符
-    if (m_bTruncateLongLog)
-        strMsgFormal = strMsgFormal.substr(0, MAX_LINE_LENGTH);
-
-    std::string strLogMsgAscii;
-    strLogMsgAscii = EncodeUtil::UnicodeToAnsi(strMsgFormal);
-
-    strDebugInfo += strLogMsgAscii;
-	strDebugInfo += "\r\n";
-	
-	if(m_bToFile)
-	{
-		if(m_hLogFile == INVALID_HANDLE_VALUE)
-			return false;
-		
-		::SetFilePointer(m_hLogFile, 0, NULL, FILE_END);
-		DWORD dwBytesWritten = 0;
-        //单条日志的长度远小于 DWORD 能表示的上限（4GB），收窄不会丢数据
-        ::WriteFile(m_hLogFile, strDebugInfo.c_str(), static_cast<DWORD>(strDebugInfo.length()), &dwBytesWritten, NULL);
-        ::FlushFileBuffers(m_hLogFile);
-        return true;
-	}
-
-    ::OutputDebugStringA(strDebugInfo.c_str());
-
-#endif // end LOG_OUTPUT
-
-	return true;
+    return Emit(nLevel, pszFunctionSig, nLineNo, EncodeUtil::UnicodeToUtf8(strMsg));
 }
 
 bool CIULog::Log(long nLevel, PCSTR pszFunctionSig, int nLineNo, PCSTR pszFmt, ...)
 {
-#ifdef LOG_OUTPUT
-    if (nLevel < m_nLogLevel)
+    if (nLevel < m_nLevel)
         return false;
 
-	//时间
-    char szTime[64] = { 0 };
-    GetTime(szTime, ARRAYSIZE(szTime));
-    std::string strDebugInfo(szTime);
-	
-	//错误级别
-	std::string strLevel("[INFO]");
-    if (nLevel == LOG_LEVEL_WARNING)
-		strLevel = "[Warning]";
-    else if (nLevel == LOG_LEVEL_ERROR)
-		strLevel = "[Error]";
-
-	strDebugInfo += strLevel;
-	
-	//当前线程信息
-	char szThreadID[32] = {0};
-	DWORD dwThreadID = ::GetCurrentThreadId();
-	sprintf_s(szThreadID, ARRAYSIZE(szThreadID), "[ThreadID: %u]", dwThreadID);
-    strDebugInfo += szThreadID;
-
-    //函数签名
-    //缓冲放大 + 改用 _snprintf_s(_TRUNCATE)：带多个 std::string/wstring 参数的函数其
-    //__FUNCSIG__ 展开可达数百字符，旧的 512 固定缓冲 + sprintf_s 会溢出断言崩溃；现在再长也只截断。
-    char szFuncSig[2048] = { 0 };
-    _snprintf_s(szFuncSig, sizeof(szFuncSig), _TRUNCATE, "[%s:%d]", pszFunctionSig, nLineNo);
-    strDebugInfo += szFuncSig;
-
-    //日志正文
-    std::string strLogMsg;
     va_list ap;
     va_start(ap, pszFmt);
-    int nLogMsgLength = _vscprintf(pszFmt, ap);
-    //容量必须算上最后一个\0
-    if ((int)strLogMsg.capacity() < nLogMsgLength + 1)
-    {
-        strLogMsg.resize(nLogMsgLength + 1);
-    }
-    vsprintf_s((char*)strLogMsg.data(), strLogMsg.capacity(), pszFmt, ap);
+    const int nLength = _vscprintf(pszFmt, ap);
     va_end(ap);
+    if (nLength < 0)
+        return false;
 
-    //string内容正确但length不对，恢复一下其length
-    std::string strMsgFormal;
-    strMsgFormal.append(strLogMsg.c_str(), nLogMsgLength);
+    //多留一个字符放结尾的 '\0'，格式化完再去掉
+    std::string strMsg((size_t)nLength + 1, '\0');
+    va_list aq;
+    va_start(aq, pszFmt);
+    _vsnprintf_s(&strMsg[0], strMsg.size(), _TRUNCATE, pszFmt, aq);
+    va_end(aq);
+    strMsg.resize((size_t)nLength);
 
-    //如果日志开启截断，长日志只取前MAX_LINE_LENGTH个字符
-    if (m_bTruncateLongLog)
-        strMsgFormal = strMsgFormal.substr(0, MAX_LINE_LENGTH);
-
-    strDebugInfo += strMsgFormal;
-    strDebugInfo += "\r\n";
-	
-	if(m_bToFile)
-	{
-		if(m_hLogFile == INVALID_HANDLE_VALUE)
-			return false;
-		
-		::SetFilePointer(m_hLogFile, 0, NULL, FILE_END);
-		DWORD dwBytesWritten = 0;
-        //单条日志的长度远小于 DWORD 能表示的上限（4GB），收窄不会丢数据
-        ::WriteFile(m_hLogFile, strDebugInfo.c_str(), static_cast<DWORD>(strDebugInfo.length()), &dwBytesWritten, NULL);
-        ::FlushFileBuffers(m_hLogFile);
-        return true;
-	}
-
-    ::OutputDebugStringA(strDebugInfo.c_str());
-
-#endif // end LOG_OUTPUT
-
-	return true;
-}
-
-void CIULog::GetTime(char* pszTime, int nTimeStrLength)
-{
-	SYSTEMTIME st = {0};
-	::GetLocalTime(&st);
-    sprintf_s(pszTime, nTimeStrLength, "[%04d-%02d-%02d %02d:%02d:%02d:%04d]", st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+    return Emit(nLevel, pszFunctionSig, nLineNo, strMsg);
 }

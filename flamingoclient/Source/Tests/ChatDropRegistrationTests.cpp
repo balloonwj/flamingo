@@ -40,6 +40,7 @@
 #include "../UI/BalloonChatWnd/ChatWindowLayout.h"
 #include "../UI/BalloonChatWnd/GroupChatWindowLayout.h"
 #include "../UI/BalloonChatWnd/ChatDropController.h"
+#include "../UI/BalloonChatWnd/ChatDragSource.h"   // CreateChatDragDataObject：造带 Flamingo 格式的拖拽数据
 #include "../../../third-party/balloonui/balloonui/Controls/Window/DuiFrameWindow.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiRichEdit.h"
 
@@ -154,6 +155,7 @@ public:
         : m_hintVisible(false)
         , m_dropCount(0)
         , m_forceAsFile(false)
+        , m_contentDropCount(0)
     {
         ::SetRectEmpty(&m_rcZone);
     }
@@ -182,10 +184,18 @@ public:
         m_forceAsFile = forceAsFile;
     }
 
+    void OnChatContentDropped(const std::vector<balloonchatwnd::ChatClipSegment>& segs) override
+    {
+        ++m_contentDropCount;
+        m_segs = segs;
+    }
+
     bool m_hintVisible;                   // 提示浮层当前该不该显示
     int  m_dropCount;                     // 收到过几次投放
     std::vector<std::wstring> m_paths;    // 最近一次投放收到的路径
     bool m_forceAsFile;                   // 最近一次投放是否按住了 Shift
+    int  m_contentDropCount;              // 收到过几次聊天内容（Flamingo 格式）的投放
+    std::vector<balloonchatwnd::ChatClipSegment> m_segs;   // 最近一次投放收到的聊天内容片段
 
 private:
     RECT m_rcZone;   // 算作投放区的矩形（客户区坐标）
@@ -742,6 +752,191 @@ TEST_CASE("CDR9 最终落点仍在消息区时不当成发送")
     REQUIRE(pTarget->Drop(pData, MK_LBUTTON, ToScreenPoint(frame.m_hWnd, ptMsg),
                           &dwEffect) == S_OK);
     CHECK(sink.m_dropCount == 0);
+
+    pData->Release();
+    ctrl.Detach();
+    frame.DestroyWindow();
+}
+
+// =====================================================================
+// DRG3  从聊天记录拖出来的内容（带 Flamingo 聊天内容格式）落进聊天窗（2026-09-30）
+//
+// 这种内容落在发送框里要插入输入框当前光标处，不当成文件发送；落在消息区照旧拒收。
+// 从聊天记录拖出的图片还额外带一份文件列表（方便拖到桌面），聊天窗必须优先按聊天内容
+// 处理，否则一拖进来就被当成文件发出去了。DRG4（只拖文件时行为不变）由上面的 CDR8 /
+// CDR9 覆盖 —— 它们取到的拖放目标同样经过这一层包装。
+// =====================================================================
+
+namespace {
+
+// 测试用的表情编号。
+const int kDropFaceId = 5;
+
+// 建一个带单聊布局的隐藏窗口，取出发送框与消息区的矩形（客户区坐标）。
+bool BuildChatFrameForDrop(DuiFrameWindow& frame, RECT& rcSendBox, RECT& rcMsgArea)
+{
+    if (!CreateHiddenFrame(frame))
+    {
+        return false;
+    }
+    std::unique_ptr<DuiControl> root = balloonchatwnd::BuildChatWindowBody(false);
+    if (!root)
+    {
+        return false;
+    }
+    frame.SetClientContent(std::move(root));
+    DuiControl* pContent = frame.GetClientContent();
+    if (pContent == NULL)
+    {
+        return false;
+    }
+    DuiControl* pInput = pContent->FindCtrlById(balloonchatwnd::kIdInputEdit);
+    DuiControl* pMsgArea = pContent->FindCtrlById(balloonchatwnd::kIdMessageArea);
+    if (pInput == NULL || pInput->GetParent() == NULL || pMsgArea == NULL)
+    {
+        return false;
+    }
+    rcSendBox = pInput->GetParent()->GetRect();
+    rcMsgArea = pMsgArea->GetRect();
+    return rcSendBox.bottom > rcSendBox.top && rcMsgArea.bottom > rcMsgArea.top;
+}
+
+std::vector<balloonchatwnd::ChatClipSegment> MakeTextAndFace()
+{
+    std::vector<balloonchatwnd::ChatClipSegment> segs;
+    balloonchatwnd::ChatClipSegment text;
+    text.m_kind = balloonchatwnd::kChatClipText;
+    text.m_text = L"你好";
+    segs.push_back(text);
+    balloonchatwnd::ChatClipSegment face;
+    face.m_kind   = balloonchatwnd::kChatClipFace;
+    face.m_faceId = kDropFaceId;
+    segs.push_back(face);
+    return segs;
+}
+
+} // anonymous namespace
+
+TEST_CASE("DRG3 聊天内容从消息区进入、移到发送框松手：插入输入框，不当成发送文件", "[chatdrag]")
+{
+    OleScope ole;
+    REQUIRE(ole.Ok());
+    DuiFrameWindow frame;
+    RECT rcSendBox;
+    RECT rcMsgArea;
+    REQUIRE(BuildChatFrameForDrop(frame, rcSendBox, rcMsgArea));
+
+    ProbeDropSink sink;
+    sink.SetZone(rcSendBox);
+    balloonchatwnd::ChatDropController ctrl;
+    REQUIRE(ctrl.Attach(&frame, NULL, &sink));
+    IDropTarget* pTarget = ctrl.GetFrameDropTarget();
+    REQUIRE(pTarget != NULL);
+
+    IDataObject* pData = balloonchatwnd::CreateChatDragDataObject(MakeTextAndFace());
+    REQUIRE(pData != NULL);
+
+    //进入点在消息区：不亮提示，但整次拖放不作废。
+    DWORD dwEffect = DROPEFFECT_COPY;
+    REQUIRE(pTarget->DragEnter(pData, MK_LBUTTON,
+                               ToScreenPoint(frame.m_hWnd, CenterOf(rcMsgArea)), &dwEffect) == S_OK);
+    CHECK_FALSE(sink.m_hintVisible);
+
+    //移到发送框：能放，提示亮起。
+    const POINTL ptSend = ToScreenPoint(frame.m_hWnd, CenterOf(rcSendBox));
+    dwEffect = DROPEFFECT_COPY;
+    REQUIRE(pTarget->DragOver(MK_LBUTTON, ptSend, &dwEffect) == S_OK);
+    CHECK(dwEffect == DROPEFFECT_COPY);
+    CHECK(sink.m_hintVisible);
+
+    //松手：聊天内容送到"插入输入框"那一路，文件那一路一次都没有被调用。
+    dwEffect = DROPEFFECT_COPY;
+    REQUIRE(pTarget->Drop(pData, MK_LBUTTON, ptSend, &dwEffect) == S_OK);
+    CHECK(dwEffect == DROPEFFECT_COPY);
+    CHECK(sink.m_contentDropCount == 1);
+    CHECK(sink.m_dropCount == 0);
+    REQUIRE(sink.m_segs.size() == 2);
+    CHECK(sink.m_segs[0].m_text == L"你好");
+    CHECK(sink.m_segs[1].m_faceId == kDropFaceId);
+    CHECK_FALSE(sink.m_hintVisible);
+
+    pData->Release();
+    ctrl.Detach();
+    frame.DestroyWindow();
+}
+
+TEST_CASE("DRG3 聊天内容始终停在消息区：拒收，松手也不插入", "[chatdrag]")
+{
+    OleScope ole;
+    REQUIRE(ole.Ok());
+    DuiFrameWindow frame;
+    RECT rcSendBox;
+    RECT rcMsgArea;
+    REQUIRE(BuildChatFrameForDrop(frame, rcSendBox, rcMsgArea));
+
+    ProbeDropSink sink;
+    sink.SetZone(rcSendBox);
+    balloonchatwnd::ChatDropController ctrl;
+    REQUIRE(ctrl.Attach(&frame, NULL, &sink));
+    IDropTarget* pTarget = ctrl.GetFrameDropTarget();
+    REQUIRE(pTarget != NULL);
+
+    IDataObject* pData = balloonchatwnd::CreateChatDragDataObject(MakeTextAndFace());
+    REQUIRE(pData != NULL);
+
+    const POINTL ptMsg = ToScreenPoint(frame.m_hWnd, CenterOf(rcMsgArea));
+    DWORD dwEffect = DROPEFFECT_COPY;
+    REQUIRE(pTarget->DragEnter(pData, MK_LBUTTON, ptMsg, &dwEffect) == S_OK);
+    dwEffect = DROPEFFECT_COPY;
+    REQUIRE(pTarget->DragOver(MK_LBUTTON, ptMsg, &dwEffect) == S_OK);
+    CHECK(dwEffect == DROPEFFECT_NONE);
+    CHECK_FALSE(sink.m_hintVisible);
+
+    dwEffect = DROPEFFECT_COPY;
+    REQUIRE(pTarget->Drop(pData, MK_LBUTTON, ptMsg, &dwEffect) == S_OK);
+    CHECK(dwEffect == DROPEFFECT_NONE);
+    CHECK(sink.m_contentDropCount == 0);
+    CHECK(sink.m_dropCount == 0);
+
+    pData->Release();
+    ctrl.Detach();
+    frame.DestroyWindow();
+}
+
+TEST_CASE("DRG3 从聊天记录拖出的图片带着文件列表，仍按聊天内容插入、不当成文件发送", "[chatdrag]")
+{
+    OleScope ole;
+    REQUIRE(ole.Ok());
+    DuiFrameWindow frame;
+    RECT rcSendBox;
+    RECT rcMsgArea;
+    REQUIRE(BuildChatFrameForDrop(frame, rcSendBox, rcMsgArea));
+
+    ProbeDropSink sink;
+    sink.SetZone(rcSendBox);
+    balloonchatwnd::ChatDropController ctrl;
+    REQUIRE(ctrl.Attach(&frame, NULL, &sink));
+    IDropTarget* pTarget = ctrl.GetFrameDropTarget();
+    REQUIRE(pTarget != NULL);
+
+    const wchar_t* const kImagePath = L"C:\\cache\\拖出来的图.png";
+    std::vector<balloonchatwnd::ChatClipSegment> segs;
+    balloonchatwnd::ChatClipSegment image;
+    image.m_kind      = balloonchatwnd::kChatClipImage;
+    image.m_imagePath = kImagePath;
+    segs.push_back(image);
+    IDataObject* pData = balloonchatwnd::CreateChatDragDataObject(segs);
+    REQUIRE(pData != NULL);
+
+    const POINTL ptSend = ToScreenPoint(frame.m_hWnd, CenterOf(rcSendBox));
+    DWORD dwEffect = DROPEFFECT_COPY;
+    REQUIRE(pTarget->DragEnter(pData, MK_LBUTTON, ptSend, &dwEffect) == S_OK);
+    dwEffect = DROPEFFECT_COPY;
+    REQUIRE(pTarget->Drop(pData, MK_LBUTTON, ptSend, &dwEffect) == S_OK);
+    CHECK(sink.m_contentDropCount == 1);
+    CHECK(sink.m_dropCount == 0);
+    REQUIRE(sink.m_segs.size() == 1);
+    CHECK(sink.m_segs[0].m_imagePath == kImagePath);
 
     pData->Release();
     ctrl.Detach();

@@ -117,6 +117,23 @@ int MemberIndexFromCardId(UINT ctrlId);
 // =====================================================================
 
 /**
+ *  把开窗时就已知的群上下文写进界面模型：群号、群名、本人角色，以及由群名和
+ *  群ID算出的占位头像（群名首字 + 按群ID取的底色）。
+ *
+ *  窗口打开的那一刻，主面板手里已经有这几项，不必等群资料应答（1303）。其余
+ *  内容（成员、申请、禁言、群设置）一律不碰，等各自的应答到达后再填，对应的
+ *  加载状态保持原值（新建的模型为 kLoadPending）。占位头像与群资料应答到达后
+ *  「自动头像」的算法相同，应答到达时头像不会再变一次颜色。
+ *
+ *    groupId：群ID；<= 0 时不写群号，保持模型原值。
+ *    name：   群名；NULL 或空串时不写群名，保持模型原值。
+ *    netRole：本人在群内的角色，取协议侧的值（0 成员 / 1 管理员 / 2 群主），
+ *             越界值按普通成员处理。
+ *    model：  [出参] 待写入的界面模型。
+ */
+void ApplyGroupContext(int64_t groupId, LPCTSTR name, int netRole, GroupManageModel& model);
+
+/**
  *  把群资料应答映射进界面模型的群基本信息与权限部分。
  *  不触碰模型里的成员 / 申请 / 禁言列表 —— 那三份数据由各自的应答填充，
  *  三个应答是并发发出、各自到达的，谁都不该清掉别人的结果。
@@ -138,7 +155,8 @@ void ApplyGroupInfo(const net::GroupInfoResult& info, GroupManageModel& model);
  *    members：群成员应答解析结果；
  *    nowMs：  当前时刻，Unix毫秒。用来把禁言到期时间换算成"剩余 N 分钟"文本。
  *             由调用方传入而不是内部取系统时间，是为了让这个函数保持纯粹、可测。
- *    model：  [出参] 待填充的界面模型，其成员与禁言列表会被整体替换。
+ *    model：  [出参] 待填充的界面模型，其成员与禁言列表会被整体替换，并把
+ *             m_membersState 置为 kLoadDone（空列表也一样）。
  */
 void ApplyGroupMembers(const net::GroupMembersResult& members, int64_t nowMs,
                        GroupManageModel& model);
@@ -147,10 +165,25 @@ void ApplyGroupMembers(const net::GroupMembersResult& members, int64_t nowMs,
  *  把待审批加群申请应答映射成界面模型的申请列表。
  *    requests：加群申请应答解析结果；
  *    nowMs：   当前时刻，Unix毫秒，用来算"N 分钟前"这类相对时间文本；
- *    model：   [出参] 待填充的界面模型，其申请列表会被整体替换。
+ *    model：   [出参] 待填充的界面模型，其申请列表会被整体替换，并把
+ *              m_requestsState 置为 kLoadDone（空列表也一样）。
  */
 void ApplyJoinRequests(const net::GroupJoinRequestsResult& requests, int64_t nowMs,
                        GroupManageModel& model);
+
+/**
+ *  某项数据的应答失败时，算出该项新的加载状态。
+ *
+ *    · 此前从未成功过（kLoadPending）：变为 kLoadFailed，界面改为显示失败提示。
+ *    · 此前已经成功过（kLoadDone）：保持 kLoadDone。这种情况是后续刷新失败（如
+ *      成员变动推送触发的重新拉取），模型里仍是上一次的真实数据，继续显示它比
+ *      换成失败提示更有用。
+ *    · 已经是 kLoadFailed：保持不变。
+ *
+ *    current：该项当前的加载状态。
+ *  返回：新的加载状态。纯函数，无副作用。
+ */
+LoadState LoadStateAfterFailure(LoadState current);
 
 /**
  *  把敏感词库应答映射成界面模型的词条列表。

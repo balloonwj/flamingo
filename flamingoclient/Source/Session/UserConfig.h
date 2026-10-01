@@ -1,5 +1,8 @@
 ﻿#pragma once
 
+#include "ChatFontPrefs.h"		// chatfont::ChatFontPrefs：聊天字体（全局默认 + 各会话自定义）
+#include "WindowPlacementPrefs.h"	// winplace::WindowPlacementPrefs：窗口位置与大小
+
 enum NAME_STYLE
 {
 	NAME_STYLE_SHOW_NICKNAME_AND_ACCOUNT,		//显示昵称和账号
@@ -77,20 +80,20 @@ public:
 	long GetGroupDlgHeight() const;
 	
 	void EnablePressEnterToSend(BOOL bEnable);
-	void SetFontName(PCTSTR pszFontName);
-	void SetFontSize(long nSize);
-	void SetFontColor(long lColor);
-	void EnableFontBold(BOOL bBold);
-	void EnableFontItalic(BOOL bItalic);
-	void EnableFontUnderline(BOOL bUnderline);
-
 	BOOL IsEnablePressEnterToSend() const;
-	PCTSTR GetFontName() const;
-	long GetFontSize() const;
-	long GetFontColor() const;
-	BOOL IsEnableFontBold() const;
-	BOOL IsEnableFontItalic() const;
-	BOOL IsEnableFontUnderline() const;
+
+	// 聊天字体偏好：全局默认（系统设置「聊天」页）+ 各会话自定义（聊天窗「AF」浮层），
+	// 取用规则见 ChatFontPrefs.h。随 LoadConfig / SaveConfig 读写，改动后由调用方负责
+	// 调 CFlamingoClient::SaveUserConfig 存盘。返回的引用与本对象同生命周期。
+	chatfont::ChatFontPrefs& ChatFonts();
+	const chatfont::ChatFontPrefs& ChatFonts() const;
+
+	// 消息记录窗口上次关闭时的位置与大小（配置里的 [HistoryDlg] 一节）。没有保存过时
+	// m_hasSaved 为 false。打开窗口时怎么据此算出实际位置见 winplace::ResolveRestoredWindowRect。
+	const winplace::WindowPlacementPrefs& GetHistoryDlgPlacement() const;
+	// 记下消息记录窗口的位置与大小。只改内存里的值，由调用方负责调
+	// CFlamingoClient::SaveUserConfig 存盘。
+	void SetHistoryDlgPlacement(const winplace::WindowPlacementPrefs& placement);
 
 	void SetFaceID(UINT uFaceID);
 	UINT GetFaceID() const;
@@ -105,8 +108,6 @@ public:
 	// 通用页
 	void SetLanguageIndex(long nIndex);				//语言下拉索引（本期仅存、暂不真正切换）
 	long GetLanguageIndex() const;
-	void SetUiFontScaleIndex(long nIndex);			//字体大小档位索引（0小/1中/2大，本期仅存、暂不生效）
-	long GetUiFontScaleIndex() const;
 	// 消息通知页
 	void EnableNewMsgNotify(BOOL bEnable);			//新消息提醒总开关
 	BOOL IsEnableNewMsgNotify() const;
@@ -174,7 +175,7 @@ private:
 
 	BOOL    m_bEnableExitPrompt;					//退出是否提示
 	BOOL	m_bExitWhenCloseMainDlg;				//关闭主对话框时退出程序（还是最小化到托盘）
-	BOOL	m_bTrayMinimizeTipShown;				//"已最小化到托盘"气泡提示是否已弹过（每账号一次，随 .cfg 持久化，一经置位不再复位）
+	BOOL	m_bTrayMinimizeTipShown;				//"已最小化到托盘"气泡提示是否已弹过（每账号一次，随 .ini 持久化，一经置位不再复位）
 
 	long	m_nBuddyListHeadPicStyle;				//好友列表中头像风格（大头像、小头像、标准头像）
 	BOOL	m_bBuddyListShowBigHeadPicInSel;		//当显示模式是小头像时，选中某个头像是否显示大头像
@@ -192,18 +193,16 @@ private:
 	long	m_cxGroupDlg;
 	long	m_cyGroupDlg;
 	BOOL	m_bPressEnterToSend;
-	CString	m_strFontName;
-	long	m_nFontSize;
-	long	m_lFontColor;
-	BOOL	m_bFontBold;
-	BOOL	m_bFontItalic;
-	BOOL	m_bFontUnderline;
+	//聊天字体偏好（全局默认 + 各会话自定义），存在 [ChatDlg] 的 DefaultChatFont 键与
+	//[ChatFontOverride] 段；LoadConfig 时整体重建
+	chatfont::ChatFontPrefs	m_chatFontPrefs;
+	//消息记录窗口的位置与大小，存在 [HistoryDlg] 段；LoadConfig 时整体重建，窗口关闭时更新
+	winplace::WindowPlacementPrefs	m_historyDlgPlacement;
 
 	BOOL	m_bShowLastMsg;
 
 	// ---- 系统设置（新版 balloonui 系统设置对话框）新增项，持久化在 ini 的 [Settings] 节 ----
 	long	m_nLanguageIndex;		//语言下拉索引（0=简体中文）；本期仅存、暂不真正切换
-	long	m_nUiFontScaleIndex;	//字体大小档位索引（0小/1中/2大）；本期仅存、暂不生效
 	BOOL	m_bNewMsgNotify;		//新消息提醒总开关
 	BOOL	m_bDesktopPopup;		//新消息桌面气泡弹窗
 	BOOL	m_bShakeFlashIcon;		//震动 / 闪烁托盘图标提醒

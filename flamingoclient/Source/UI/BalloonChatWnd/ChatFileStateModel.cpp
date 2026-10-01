@@ -23,9 +23,10 @@ int FileStateButtonCount(int state, bool fromMe)
     case kFileNormal:
         return 3;   // 打开文件 / 打开所在文件夹 / 另存为
     case kFileFailed:
-        return 2;   // 重新发送(下载) / 取消
     case kFileCancelled:
-        return 1;   // 重新发送(下载)
+        //失败与已取消都只给重新发送(下载)。失败时传输任务已经结束，没有可取消的对象：
+        //原先给出的「取消」点了没有任何反应（bugs.md 的 BUG-37）
+        return 1;
     case kFilePendingAccept:
         // 对方发来的要用户决定收不收（接收 / 拒绝）；自己发出的没有"拒绝"可言，
         // 只给一个「下载」把它取回本地
@@ -48,9 +49,9 @@ int FileButtonActions(int state, bool fromMe, int out[kMaxChatFileActions])
     {
         out[0] = kChatFileCancel;
     }
-    else if (state == kFileCancelled || state == kFileRejected)
+    else if (state == kFileFailed || state == kFileCancelled || state == kFileRejected)
     {
-        //两者都是"没传成"，给一条回头路即可
+        //三者都是"没传成"，只给重新发送(下载)
         out[0] = kChatFileRetry;
     }
     else if (state == kFilePendingAccept)
@@ -68,11 +69,6 @@ int FileButtonActions(int state, bool fromMe, int out[kMaxChatFileActions])
         out[0] = kChatFileOpen;        // 打开文件
         out[1] = kChatFileOpenFolder;  // 打开所在文件夹
         out[2] = kChatFileSaveAs;      // 另存为
-    }
-    else   // kFileFailed
-    {
-        out[0] = kChatFileRetry;
-        out[1] = kChatFileCancel;
     }
     return count;
 }

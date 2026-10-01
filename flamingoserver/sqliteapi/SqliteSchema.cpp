@@ -283,6 +283,14 @@ const char* const SCHEMA_TABLE_STATEMENTS[] =
         "    f_msgid INTEGER NOT NULL,\n"
         "    PRIMARY KEY (f_userid, f_msgid)\n"
         ");\n",
+    "CREATE TABLE IF NOT EXISTS t_message_deleted_range\n"
+        "(\n"
+        "    f_userid INTEGER NOT NULL,\n"
+        "    f_begin_time INTEGER NOT NULL,\n"
+        "    f_end_time INTEGER NOT NULL,\n"
+        "    f_update_time INTEGER NOT NULL DEFAULT 0,\n"
+        "    PRIMARY KEY (f_userid, f_begin_time)\n"
+        ");\n",
     "CREATE TABLE IF NOT EXISTS t_file_ack\n"
         "(\n"
         "    f_msgid INTEGER NOT NULL,\n"
@@ -334,6 +342,7 @@ const char* const SCHEMA_TABLE_STATEMENTS[] =
         "    f_announce_id INTEGER NOT NULL DEFAULT 0,\n"
         "    f_announce_title VARCHAR(128) NOT NULL DEFAULT '',\n"
         "    f_announce_time INTEGER NOT NULL DEFAULT 0,\n"
+        "    f_name_custom INTEGER NOT NULL DEFAULT 1,\n"
         "    PRIMARY KEY (f_groupid)\n"
         ");\n",
     "CREATE TABLE IF NOT EXISTS t_group_announcement\n"
@@ -425,7 +434,7 @@ const char* const SCHEMA_TABLE_STATEMENTS[] =
         ");\n",
 };
 
-const int SCHEMA_TABLE_STATEMENT_COUNT = 34;
+const int SCHEMA_TABLE_STATEMENT_COUNT = 35;
 
 const char* const SCHEMA_POST_STATEMENTS[] =
 {
@@ -549,6 +558,7 @@ const char* const SCHEMA_TABLES[] =
     "t_blacklist",
     "t_conversation",
     "t_message_deleted",
+    "t_message_deleted_range",
     "t_file_ack",
     "t_message_pin",
     "t_favorite",
@@ -564,7 +574,7 @@ const char* const SCHEMA_TABLES[] =
     "t_client_version",
 };
 
-const int SCHEMA_TABLE_COUNT = 34;
+const int SCHEMA_TABLE_COUNT = 35;
 
 const SchemaColumn SCHEMA_COLUMNS[] =
 {
@@ -752,6 +762,10 @@ const SchemaColumn SCHEMA_COLUMNS[] =
     { "t_conversation", "f_update_time", "INTEGER NOT NULL DEFAULT 0" },
     { "t_message_deleted", "f_userid", "INTEGER" },
     { "t_message_deleted", "f_msgid", "INTEGER" },
+    { "t_message_deleted_range", "f_userid", "INTEGER" },
+    { "t_message_deleted_range", "f_begin_time", "INTEGER" },
+    { "t_message_deleted_range", "f_end_time", "INTEGER" },
+    { "t_message_deleted_range", "f_update_time", "INTEGER NOT NULL DEFAULT 0" },
     { "t_file_ack", "f_msgid", "INTEGER" },
     { "t_file_ack", "f_state", "INTEGER NOT NULL DEFAULT 0" },
     { "t_file_ack", "f_update_time", "INTEGER NOT NULL DEFAULT 0" },
@@ -785,6 +799,7 @@ const SchemaColumn SCHEMA_COLUMNS[] =
     { "t_group", "f_announce_id", "INTEGER NOT NULL DEFAULT 0" },
     { "t_group", "f_announce_title", "VARCHAR(128) NOT NULL DEFAULT ''" },
     { "t_group", "f_announce_time", "INTEGER NOT NULL DEFAULT 0" },
+    { "t_group", "f_name_custom", "INTEGER NOT NULL DEFAULT 1" },
     { "t_group_announcement", "f_groupid", "INTEGER" },
     { "t_group_announcement", "f_title", "VARCHAR(128) NOT NULL DEFAULT ''" },
     { "t_group_announcement", "f_content", "VARCHAR(2048) NOT NULL DEFAULT ''" },
@@ -842,6 +857,6 @@ const SchemaColumn SCHEMA_COLUMNS[] =
     { "t_client_version", "f_create_time", "INTEGER NOT NULL DEFAULT 0" },
 };
 
-const int SCHEMA_COLUMN_COUNT = 272;
+const int SCHEMA_COLUMN_COUNT = 277;
 
 } // namespace sqliteapi

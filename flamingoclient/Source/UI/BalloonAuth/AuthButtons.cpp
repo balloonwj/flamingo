@@ -182,6 +182,12 @@ AuthLinkLabel::AuthLinkLabel()
 {
 }
 
+int AuthLinkLabel::FontPx() const
+{
+    const int h = m_rcItem.bottom - m_rcItem.top;
+    return (h > 0) ? (int)(h * kLinkFontFactor) : 0;
+}
+
 void AuthLinkLabel::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
 {
     const int h = m_rcItem.bottom - m_rcItem.top;
@@ -191,7 +197,7 @@ void AuthLinkLabel::OnPaint(HDC hdc, const RECT& /*rcDirty*/)
     }
     // 链接只有文字，无形状层 —— 直接用 GDI 画。
     const CString text = GetText();
-    DrawGdiText(hdc, (LPCWSTR)text, m_rcItem, (int)(h * kLinkFontFactor),
+    DrawGdiText(hdc, (LPCWSTR)text, m_rcItem, FontPx(),
                 false, m_linkColor,
                 DT_CENTER | DT_VCENTER | DT_SINGLELINE | DT_NOCLIP);
 }

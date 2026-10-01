@@ -43,16 +43,21 @@ public:
     //   style：取值见 GmButtonStyle。
     void SetButtonStyle(int style);
 
-    // 设置文字字号（像素）。默认 13。会触发重绘。
+    // 设置文字字号（96 DPI 下的像素，绘制时按当前 DPI 换算）。默认 13。会触发重绘。
     //   px：> 0 的字号。
     void SetTextPx(int px);
 
-    // 设置圆角半径（像素）。默认 8。会触发重绘。
+    // 设置圆角半径（96 DPI 下的像素，绘制时按当前 DPI 换算）。默认 8。会触发重绘。
     //   px：>= 0 的半径。
     void SetCornerRadius(int px);
 
     // DuiControl 覆写：按当前风格 + hover 态自绘圆角按钮。
     void OnPaint(HDC hdc, const RECT& rcDirty) override;
+
+    // 查某种按钮风格的文字字重。OnPaint 与单元测试共用这一处。
+    //   style：取值见 GmButtonStyle；越界时按常规字重。
+    // @return 字重，取值见 GmFontWeight。纯函数，无副作用。
+    static int TextWeightForStyle(int style);
 
     // DuiControl 覆写：用普通箭头光标（不切手型）。
     bool OnSetCursor(POINT pt) override { return false; }

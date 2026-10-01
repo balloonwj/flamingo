@@ -9,6 +9,7 @@
 #include <set>
 #include <map>
 #include <vector>
+#include <chrono>   //onDeleteMessagesByTime 记录写库耗时
 #include "../net/TcpConnection.h"
 #include "../net/EventLoop.h"
 #include "../net/FrameCodec.h"
@@ -43,6 +44,7 @@
 #include "MessageProtocol.h"
 #include "MessageManager.h"
 #include "MessagePinManager.h"
+#include "MessageDeleteRange.h"   //onDeleteMessagesByTime：区间的校验与截断
 #include "GroupProtocol.h"
 #include "GroupPermission.h"
 #include "GroupManager.h"
@@ -78,8 +80,11 @@ constexpr int MAX_NO_PACKAGE_INTERVAL = 30;
 constexpr int HEARTBEAT_CHECK_INTERVAL_US = 15000000;
 //客户端最低版本号的兜底值；低于此版本拒绝登录。
 //正常情况下最低版本取自版本表（t_client_version 里该平台最新发布记录的 f_min_version），
-//本常量只在"该平台还没发过版"或"库不可用"时顶上，行为与接入版本表之前保持一致。
-constexpr const char* MIN_CLIENT_VERSION_FALLBACK = "3.0.0";
+//本常量只在"该平台还没发过版"或"库不可用"时启用。
+//取值须与 PC 客户端当前的版本编号体系一致：客户端版本号已于 2026-08-19 由 3.2.1
+//重新编号为 2.0.0（见 flamingoclient/Source/ClientVersion.h），原兜底值 3.0.0 会使
+//所有 2.x 客户端在版本表无已发布记录时被拒绝登录，故同步下调为 2.0.0。
+constexpr const char* MIN_CLIENT_VERSION_FALLBACK = "2.0.0";
 //cmd_search 单次最多返回的结果条数
 constexpr int SEARCH_MAX_RESULTS = 50;
 //cmd_set_blacklist 的 action 值：1=加入黑名单 0=移出黑名单
@@ -98,8 +103,6 @@ constexpr int SINGLE_CHAT_READ_COUNT = 1;
 constexpr int64_t RECALL_TIME_LIMIT_MS = 2 * 60 * 1000;
 //合并转发生成的消息其内容类型 msgtype 取 15（聊天记录），见协议 §9.4
 constexpr int MSGTYPE_MERGED_FORWARD = 15;
-//合并转发未指定标题时使用的默认标题（u8"" 确保以 UTF-8 写入 JSON）
-constexpr const char* DEFAULT_MERGED_TITLE = u8"聊天记录";
 //cmd_handle_join_group 的 action 值：1=同意加群申请 0=拒绝
 constexpr int GROUP_JOIN_ACTION_ACCEPT = 1;
 
@@ -443,6 +446,11 @@ bool ChatSession::process(const std::shared_ptr<TcpConnection>& conn,
 
         case cmd_delete_message:
             onDeleteMessage(body, conn);
+            break;
+
+        //按时间范围清理本人的全部单聊与群聊记录（系统设置 → 聊天 → 清理聊天记录）
+        case cmd_delete_messages_by_time:
+            onDeleteMessagesByTime(body, conn);
             break;
 
         case cmd_mass_send:
@@ -1312,6 +1320,9 @@ void ChatSession::onUpdateProfile(const std::string& body, const std::shared_ptr
         return;
     }
 
+    //原昵称，写库成功后据此判断昵称是否真的改变（改变时要重算所在的自动命名群）
+    const std::string oldNickname = u.nickname;
+
     //把本次提交的字段合并进当前资料；updateUserInfoInDb 会整体写回
     if (req.has_nickname)
         u.nickname = req.nickname;
@@ -1346,6 +1357,10 @@ void ChatSession::onUpdateProfile(const std::string& body, const std::shared_ptr
         Singleton<ChatServer>::Instance().broadcastToEnterprise(
             enterpriseId, cmd_user_info_changed_notify, notifyBody, m_userinfo.userid);
     }
+
+    //昵称改变后，本人所在的自动命名群的群名随之重算，群名改变的向全群推送资料变更
+    if (u.nickname != oldNickname)
+        Singleton<ChatServer>::Instance().refreshAutoGroupNamesOfMemberAndNotify(m_userinfo.userid);
 
     LOGI("update profile ok, userid: %d", m_userinfo.userid);
 }
@@ -1454,6 +1469,12 @@ void ChatSession::onChangeAvatar(const std::string& body, const std::shared_ptr<
     }
 
     LOGI("change avatar ok, userid: %d", m_userinfo.userid);
+
+    //customface 是头像图片的 fileid：本人若是上传者，把该文件记录标记为已完成。
+    //未设自定义头像时 customface 为空串，与其它非法取值一样由 parseFileIdText 过滤掉。
+    int64_t avatarFileId = 0;
+    if (MessageProtocol::parseFileIdText(req.customface, avatarFileId))
+        markReferencedFileCompleted(avatarFileId, "avatar");
 }
 
 void ChatSession::onChangePresence(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -2033,6 +2054,20 @@ void ChatSession::onSendMessage(const std::string& body, const std::shared_ptr<T
         return;
     }
 
+    //内容体积超限：不落库、不推送。放在单聊群聊分流之前，两种会话一并拦下。超大消息推送给
+    //对方、或在同步时整页下发，都会超过客户端的单帧上限导致对方断线（bugs.md 的 BUG-32）。
+    //回执带上 clientmsgid，客户端据此知道是哪一条没有发出去。
+    if (MessageProtocol::isMessageContentTooLarge(req.content, req.quote))
+    {
+        LOGW("send message rejected by content size, userid: %d, ctype: %d, cid: %lld, bytes: %u",
+             m_userinfo.userid, req.ctype, static_cast<long long>(req.cid),
+             static_cast<unsigned>(req.content.size() + req.quote.size()));
+        send(cmd_send_message, m_seq,
+             MessageProtocol::buildSendMessageResponse(error_code_msg_too_large, "message content too large",
+                                                       req.clientmsgid, 0, 0));
+        return;
+    }
+
     //群聊消息走专门的发送路径
     if (req.ctype == CHAT_TYPE_GROUP)
     {
@@ -2129,55 +2164,20 @@ void ChatSession::onSendMessage(const std::string& body, const std::shared_ptr<T
 
     LOGI("send message ok, from: %d, to: %d, msgid: %lld, msgtype: %d",
          m_userinfo.userid, peerId, (long long)msgId, req.msgtype);
+
+    //图片 / 文件等消息：发送方若是上传者，把所引用的文件记录标记为已完成
+    markMessageFileCompleted(req.msgtype, req.content);
 }
 
 void ChatSession::sendGroupMessage(const SendMessageRequest& req)
 {
     int64_t groupid = req.cid;
-    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
 
-    //发送方须为群成员；同时取回其角色与个人禁言状态。出参 mymuted 已由
-    //GroupManager 按到期时间折算过 —— 定时禁言到点后这里直接是 0。
+    //群成员身份、群是否存在、禁言三项校验，与转发到群共用；不通过时已回过错误应答
     int myrole = group_role_member;
-    int mymuted = 0;
-    int64_t mymuteuntil = 0;
-    if (!groupMgr.getMemberRoleAndMuted(groupid, m_userinfo.userid, myrole, mymuted, &mymuteuntil))
-    {
-        send(cmd_send_message, m_seq,
-             MessageProtocol::buildSimpleResponse(error_code_not_group_member, "not a group member"));
-        return;
-    }
-
-    //定时禁言刚过期：库里 f_muted 还是 1，趁这条本来就要写库的路径顺手清掉，
-    //并把状态变更推给全群，使各端界面上的"禁言中"标记同步消失。只读路径
-    //（如拉成员列表）不写库，靠 isMuteExpired 在内存里折算。
-    if (mymuted == 0 && mymuteuntil > 0)
-    {
-        if (groupMgr.clearExpiredMute(groupid, m_userinfo.userid))
-        {
-            std::vector<int64_t> expired;
-            expired.push_back(m_userinfo.userid);
-            notifyGroupMembers(groupid, cmd_group_member_changed_notify,
-                               GroupProtocol::buildGroupMemberChangedNotify(
-                                   groupid, group_member_change_muted, expired, m_userinfo.userid));
-        }
-    }
-
     GroupRecord group;
-    if (!groupMgr.getGroup(groupid, group))
-    {
-        send(cmd_send_message, m_seq,
-             MessageProtocol::buildSimpleResponse(error_code_group_not_exist, "group not exist"));
+    if (!checkGroupSpeakAllowed(cmd_send_message, groupid, myrole, group))
         return;
-    }
-
-    //禁言校验：本人被单独禁言、或全员禁言且本人非管理员 → 拒发
-    if (mymuted != 0 || (group.muteall != 0 && myrole < group_role_admin))
-    {
-        send(cmd_send_message, m_seq,
-             MessageProtocol::buildSimpleResponse(error_code_member_muted, "you are muted in this group"));
-        return;
-    }
 
     //@全体校验：群设为"仅群主和管理员可@全体"时，普通成员发带 mentionall 的消息被拒
     if (req.mentionall && group.atallscope == group_at_all_owner_admin
@@ -2193,10 +2193,12 @@ void ChatSession::sendGroupMessage(const SendMessageRequest& req)
 
     //敏感词过滤：仅对开启了过滤的群、且仅对文本消息生效。非文本消息（图片 /
     //文件 / 卡片等）的 content 是结构化 JSON，拿去做子串匹配没有意义。
-    if (group.sensitiveon != 0 && req.msgtype == message_type_text)
+    if (req.msgtype == message_type_text)
     {
+        std::vector<std::string> texts;
+        texts.push_back(MessageProtocol::extractText(req.content));
         std::string hitWord;
-        if (groupMgr.hitSensitiveWord(groupid, MessageProtocol::extractText(req.content), &hitWord))
+        if (hitGroupSensitiveWord(groupid, group, texts, hitWord))
         {
             send(cmd_send_message, m_seq,
                  MessageProtocol::buildSimpleResponse(error_code_sensitive_word,
@@ -2256,6 +2258,27 @@ void ChatSession::sendGroupMessage(const SendMessageRequest& req)
 
     LOGI("send group message ok, from: %d, group: %lld, msgid: %lld, msgtype: %d",
          m_userinfo.userid, (long long)groupid, (long long)msgId, req.msgtype);
+
+    //图片 / 文件等消息：发送方若是上传者，把所引用的文件记录标记为已完成
+    markMessageFileCompleted(req.msgtype, req.content);
+}
+
+void ChatSession::markReferencedFileCompleted(int64_t fileid, const char* source)
+{
+    //是否真的改动了记录取决于本人是不是上传者，由 SQL 的 WHERE 条件决定，这里无从得知，
+    //故日志只记"以上传者身份尝试标记"这一事实；数据库出错时 FileStoreManager 自己会记。
+    if (Singleton<FileStoreManager>::Instance().markCompletedByUploader(fileid, m_userinfo.userid))
+    {
+        LOGI("mark referenced file completed, source: %s, fileid: %lld, userid: %d",
+             source, (long long)fileid, m_userinfo.userid);
+    }
+}
+
+void ChatSession::markMessageFileCompleted(int32_t msgtype, const std::string& content)
+{
+    int64_t fileid = 0;
+    if (MessageProtocol::extractContentFileId(msgtype, content, fileid))
+        markReferencedFileCompleted(fileid, "message");
 }
 
 void ChatSession::onReceivedAck(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -2310,11 +2333,18 @@ void ChatSession::onGetUserGroups(const std::shared_ptr<TcpConnection>& conn)
     std::vector<GroupRecord> myGroups;
     Singleton<GroupManager>::Instance().getUserGroups(m_userinfo.userid, myGroups);
 
-    send(cmd_get_user_groups, m_seq,
-         GroupProtocol::buildUserGroupsResponse(0, "ok", myGroups));
+    //本人置顶的群。群会话要有消息才进会话列表，没有消息的空群置顶后，客户端只能从这里
+    //得知它的置顶状态
+    std::set<int64_t> pinnedGroupIds;
+    Singleton<MessageManager>::Instance().getPinnedConversationIds(
+        m_userinfo.userid, CHAT_TYPE_GROUP, pinnedGroupIds);
 
-    LOGI("get user groups ok, userid: %d, count: %u",
-         m_userinfo.userid, static_cast<unsigned>(myGroups.size()));
+    send(cmd_get_user_groups, m_seq,
+         GroupProtocol::buildUserGroupsResponse(0, "ok", myGroups, pinnedGroupIds));
+
+    LOGI("get user groups ok, userid: %d, count: %u, pinned: %u",
+         m_userinfo.userid, static_cast<unsigned>(myGroups.size()),
+         static_cast<unsigned>(pinnedGroupIds.size()));
 }
 
 void ChatSession::onSyncMessages(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -2398,12 +2428,43 @@ void ChatSession::onSyncMessages(const std::string& body, const std::shared_ptr<
         }
     }
 
-    send(cmd_sync_messages, m_seq,
-         MessageProtocol::buildSyncMessagesResponse(0, "ok", req.ctype, req.cid, hasMore, messages));
+    //单聊：带上对方的已读位点（查对方那一行 t_conversation：userid=对端、cid=本人）。
+    //实时的 cmd_message_read_notify 只推给在线的发送方；发送方重开聊天窗、或离线期间
+    //对方读过的消息，都靠这个字段补上正确的「已读 / 未读」。查询失败时按 0 返回，
+    //客户端只会把消息显示成「未读」，不会误显示「已读」。群聊不做已读回执，不查也不带。
+    int64_t peerReadMsgid = MessageProtocol::kPeerReadMsgidOmitted;
+    if (req.ctype == CHAT_TYPE_SINGLE)
+    {
+        msgMgr.getReadMsgid(static_cast<int32_t>(req.cid), CHAT_TYPE_SINGLE,
+                            m_userinfo.userid, peerReadMsgid);
+    }
 
-    LOGI("sync messages ok, userid: %d, cid: %lld, count: %u, hasmore: %d",
+    //按体积截断：一页里有几条长消息（或合并记录）就能超过客户端的单帧上限，客户端收到后
+    //会断线重连（bugs.md 的 BUG-32）。截掉的是远离锚点的那一端，并把 hasmore 置为真：
+    //翻历史模式锚点在最新一端（升序数组的末尾），补齐模式锚点在开头。客户端据留下的消息
+    //计算覆盖区间，截掉的消息在区间之外，不会被当作已删除
+    const size_t trimmed = MessageProtocol::trimMessagesToBudget(
+        messages, req.cid, !req.isAfterMode, RESPONSE_MESSAGES_BUDGET_BYTES);
+    if (trimmed > 0)
+    {
+        hasMore = true;
+        LOGI("sync messages trimmed by size, userid: %d, ctype: %d, cid: %lld, kept: %u, trimmed: %u",
+             m_userinfo.userid, req.ctype, (long long)req.cid,
+             static_cast<unsigned>(messages.size()), static_cast<unsigned>(trimmed));
+    }
+
+    //传入请求本身，应答据此原样回带锚点（beforemsgid 或 aftermsgid），客户端用它计算本页
+    //覆盖了哪段 msgid，见 docs/清理聊天记录方案.md §7.2
+    send(cmd_sync_messages, m_seq,
+         MessageProtocol::buildSyncMessagesResponse(0, "ok", req.ctype, req.cid, hasMore, messages,
+                                                    peerReadMsgid, &req));
+
+    LOGI("sync messages ok, userid: %d, cid: %lld, before: %lld, after: %lld, count: %u, "
+         "hasmore: %d, peerreadmsgid: %lld",
          m_userinfo.userid, (long long)req.cid,
-         static_cast<unsigned>(messages.size()), hasMore ? 1 : 0);
+         req.isAfterMode ? 0LL : (long long)req.beforemsgid,
+         req.isAfterMode ? (long long)req.aftermsgid : 0LL,
+         static_cast<unsigned>(messages.size()), hasMore ? 1 : 0, (long long)peerReadMsgid);
 }
 
 void ChatSession::onMarkRead(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -2767,6 +2828,13 @@ void ChatSession::onGetPinnedMessages(const std::string& body,
         return;
     }
 
+    //按体积截断，理由同 onSyncMessages。列表按消息时间倒序，与 PIN_FETCH_LIMIT 的条数截断
+    //一样保留开头（较新的）、截掉末尾（较老的）；pins 与 messages 一一对应，同步截短。
+    //total 保持真实总数不变，客户端据 total 大于返回条数得知发生了截断
+    MessageProtocol::trimMessagesToBudget(messages, req.cid, false, RESPONSE_MESSAGES_BUDGET_BYTES);
+    if (pins.size() > messages.size())
+        pins.resize(messages.size());
+
     send(cmd_get_pinned_messages, m_seq,
          MessageProtocol::buildGetPinnedMessagesResponse(0, "ok", req.ctype, req.cid, total,
                                                          messages, pins));
@@ -2787,7 +2855,8 @@ void ChatSession::onGetPinnedMessages(const std::string& body,
 
 int64_t ChatSession::deliverConversationMessage(int ctype, int64_t cid, int32_t msgtype,
                                                 const std::string& content,
-                                                const std::string& clientmsgid)
+                                                const std::string& clientmsgid,
+                                                MessageRecord* outRec)
 {
     MessageManager& msgMgr = Singleton<MessageManager>::Instance();
     int64_t now = static_cast<int64_t>(time(NULL)) * 1000;
@@ -2799,6 +2868,9 @@ int64_t ChatSession::deliverConversationMessage(int ctype, int64_t cid, int32_t 
                                        static_cast<int32_t>(cid), msgtype, storedContent, now);
     if (msgId == 0)
         return 0;
+
+    //群发图片时发送方就是上传者，需要标记；转发别人的图片时不是上传者，不会改动记录
+    markMessageFileCompleted(msgtype, content);
 
     MessageRecord rec;
     rec.msgid       = msgId;
@@ -2824,7 +2896,75 @@ int64_t ChatSession::deliverConversationMessage(int ctype, int64_t cid, int32_t 
         sendToUser(static_cast<int32_t>(cid), cmd_message_notify,
                    MessageProtocol::buildMessageNotify(rec, m_userinfo.userid));
     }
+
+    if (outRec != NULL)
+        *outRec = rec;
     return msgId;
+}
+
+bool ChatSession::checkGroupSpeakAllowed(uint16_t cmd, int64_t groupid, int& myrole, GroupRecord& group)
+{
+    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+
+    //发送方须为群成员；同时取回其角色与个人禁言状态。出参 mymuted 已由
+    //GroupManager 按到期时间折算过 —— 定时禁言到点后这里直接是 0。
+    myrole = group_role_member;
+    int mymuted = 0;
+    int64_t mymuteuntil = 0;
+    if (!groupMgr.getMemberRoleAndMuted(groupid, m_userinfo.userid, myrole, mymuted, &mymuteuntil))
+    {
+        send(cmd, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_not_group_member, "not a group member"));
+        return false;
+    }
+
+    //定时禁言刚过期：库里 f_muted 还是 1，趁这条本来就要写库的路径顺手清掉，
+    //并把状态变更推给全群，使各端界面上的"禁言中"标记同步消失。只读路径
+    //（如拉成员列表）不写库，靠 isMuteExpired 在内存里折算。
+    if (mymuted == 0 && mymuteuntil > 0)
+    {
+        if (groupMgr.clearExpiredMute(groupid, m_userinfo.userid))
+        {
+            std::vector<int64_t> expired;
+            expired.push_back(m_userinfo.userid);
+            notifyGroupMembers(groupid, cmd_group_member_changed_notify,
+                               GroupProtocol::buildGroupMemberChangedNotify(
+                                   groupid, group_member_change_muted, expired, m_userinfo.userid));
+        }
+    }
+
+    if (!groupMgr.getGroup(groupid, group))
+    {
+        send(cmd, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_group_not_exist, "group not exist"));
+        return false;
+    }
+
+    //禁言校验：本人被单独禁言、或全员禁言且本人非管理员 → 拒发
+    if (chatserver::IsMutedForSpeaking(mymuted, group.muteall, myrole))
+    {
+        send(cmd, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_member_muted, "you are muted in this group"));
+        LOGI("group speak rejected by mute, cmd: %u, groupid: %lld, userid: %d, role: %d",
+             static_cast<unsigned>(cmd), (long long)groupid, m_userinfo.userid, myrole);
+        return false;
+    }
+    return true;
+}
+
+bool ChatSession::hitGroupSensitiveWord(int64_t groupid, const GroupRecord& group,
+                                        const std::vector<std::string>& texts, std::string& hitWord)
+{
+    if (group.sensitiveon == 0)
+        return false;
+
+    GroupManager& groupMgr = Singleton<GroupManager>::Instance();
+    for (size_t i = 0; i < texts.size(); ++i)
+    {
+        if (groupMgr.hitSensitiveWord(groupid, texts[i], &hitWord))
+            return true;
+    }
+    return false;
 }
 
 void ChatSession::onTypingNotify(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -4121,6 +4261,18 @@ void ChatSession::onSearchMessages(const std::string& body, const std::shared_pt
     bool hasMore = false;
     msgMgr.searchMessages(m_userinfo.userid, req, messages, hasMore);
 
+    //按体积截断，理由同 onSyncMessages：搜索按 beforemsgid 往前翻页，锚点在最新一端
+    //（升序数组的末尾），截掉更早的命中并把 hasmore 置为真，下一页从留下的最早一条接着搜
+    const size_t trimmed = MessageProtocol::trimMessagesToBudget(
+        messages, req.cid, true, RESPONSE_MESSAGES_BUDGET_BYTES);
+    if (trimmed > 0)
+    {
+        hasMore = true;
+        LOGI("search messages trimmed by size, userid: %d, cid: %lld, kept: %u, trimmed: %u",
+             m_userinfo.userid, (long long)req.cid,
+             static_cast<unsigned>(messages.size()), static_cast<unsigned>(trimmed));
+    }
+
     //search 应答与 sync_messages 同构，复用 buildSyncMessagesResponse
     send(cmd_search_messages, m_seq,
          MessageProtocol::buildSyncMessagesResponse(0, "ok", req.ctype, req.cid, hasMore, messages));
@@ -4148,7 +4300,9 @@ void ChatSession::onForwardMessage(const std::string& body, const std::shared_pt
         return;
     }
 
-    //目标会话校验：单聊查对端存在 + 黑名单；群聊查本人是否为该群成员
+    //目标会话校验：单聊查对端存在 + 黑名单；群聊与普通群发同一套校验（群成员身份、
+    //群是否存在、禁言），敏感词要等取到源消息之后才能匹配，放在下面
+    GroupRecord targetGroup;
     if (req.toctype == CHAT_TYPE_SINGLE)
     {
         int32_t targetId = static_cast<int32_t>(req.tocid);
@@ -4178,19 +4332,18 @@ void ChatSession::onForwardMessage(const std::string& body, const std::shared_pt
     }
     else
     {
-        if (!Singleton<GroupManager>::Instance().isGroupMember(req.tocid, m_userinfo.userid))
-        {
-            send(cmd_forward_message, m_seq,
-                 MessageProtocol::buildSimpleResponse(error_code_not_group_member, "not a member of the target group"));
+        //不通过时已回过错误应答（不是群成员 / 群不存在 / 禁言中）
+        int myrole = group_role_member;
+        if (!checkGroupSpeakAllowed(cmd_forward_message, req.tocid, myrole, targetGroup))
             return;
-        }
     }
 
-    //取转发源消息；只保留本人可见且未撤回的（单聊须为收发方之一、群聊须为该群成员）
+    //取转发源消息；本人已删除的在取的时候就已排除，这里再只保留本人可见且未撤回的
+    //（单聊须为收发方之一、群聊须为该群成员）
     MessageManager& msgMgr = Singleton<MessageManager>::Instance();
     GroupManager& groupMgr = Singleton<GroupManager>::Instance();
     std::vector<MessageRecord> sources;
-    msgMgr.getMessagesByIds(req.msgids, sources);
+    msgMgr.getMessagesByIds(m_userinfo.userid, req.msgids, sources);
     std::vector<MessageRecord> visible;
     for (size_t i = 0; i < sources.size(); ++i)
     {
@@ -4213,35 +4366,100 @@ void ChatSession::onForwardMessage(const std::string& body, const std::shared_pt
         return;
     }
 
-    std::vector<int64_t> newMsgIds;
+    //转发到开启了敏感词过滤的群：文字消息、以及合并记录里的文字逐条匹配，命中任意一条
+    //即整体拒绝。否则可以先把含敏感词的消息发到不过滤的会话，再转发进来，绕开过滤
+    if (req.toctype == CHAT_TYPE_GROUP)
+    {
+        std::string hitWord;
+        if (hitGroupSensitiveWord(req.tocid, targetGroup,
+                                  MessageProtocol::collectForwardTexts(visible), hitWord))
+        {
+            send(cmd_forward_message, m_seq,
+                 MessageProtocol::buildSimpleResponse(error_code_sensitive_word,
+                                                      "message contains sensitive word"));
+            LOGI("forward rejected by sensitive word, groupid: %lld, userid: %d, word: %s",
+                 (long long)req.tocid, m_userinfo.userid, hitWord.c_str());
+            return;
+        }
+    }
+
+    //本次新建的消息，按新建顺序排列；应答把它们的完整消息体回带给转发人
+    std::vector<MessageRecord> created;
     if (req.merge)
     {
-        //合并转发：所有源消息打包成一条 msgtype=15 消息
-        std::string title = req.title.empty() ? std::string(DEFAULT_MERGED_TITLE) : req.title;
-        std::string mergedContent = MessageProtocol::buildMergedContent(title, visible);
-        int64_t mid = deliverConversationMessage(req.toctype, req.tocid, MSGTYPE_MERGED_FORWARD,
-                                                 mergedContent, req.clientmsgid);
-        if (mid != 0)
-            newMsgIds.push_back(mid);
+        //合并转发：所有源消息打包成一条 msgtype=15 消息。标题在解析阶段已经截断、
+        //空串已换成缺省值（MessageProtocol::normalizeForwardTitle），这里直接使用。
+        //每条子消息带上发送者此刻的昵称，使这份记录不依赖接收方的通讯录
+        std::map<int64_t, std::string> fromNames;
+        UserManager& userMgr = Singleton<UserManager>::Instance();
+        for (size_t i = 0; i < visible.size(); ++i)
+        {
+            if (fromNames.find(visible[i].from) != fromNames.end())
+                continue;
+            User sender;
+            sender.userid = 0;
+            userMgr.getUserInfoByUserId(static_cast<int32_t>(visible[i].from), sender);
+            //查不到的发送者记一个空串，只为不再重复查询；空串不会写进 fromname
+            fromNames[visible[i].from] = (sender.userid != 0) ? sender.nickname : std::string();
+        }
+
+        std::string mergedContent = MessageProtocol::buildMergedContent(req.title, visible, fromNames);
+        //体积超限的合并记录不落库：它会被推送、被同步，超过客户端单帧上限时对方会断线
+        if (MessageProtocol::isMergedContentTooLarge(mergedContent))
+        {
+            send(cmd_forward_message, m_seq,
+                 MessageProtocol::buildSimpleResponse(error_code_msg_too_large,
+                                                      "merged content too large"));
+            LOGI("forward rejected by merged content size, userid: %d, sources: %u, bytes: %u",
+                 m_userinfo.userid, static_cast<unsigned>(visible.size()),
+                 static_cast<unsigned>(mergedContent.size()));
+            return;
+        }
+        MessageRecord rec;
+        if (deliverConversationMessage(req.toctype, req.tocid, MSGTYPE_MERGED_FORWARD,
+                                       mergedContent, req.clientmsgid, &rec) != 0)
+            created.push_back(rec);
     }
     else
     {
-        //逐条转发：每条源消息在目标会话各新建一条，clientmsgid 按 "原ID-序号" 派生
+        //逐条转发：每条源消息在目标会话各新建一条，clientmsgid 按 "原ID-序号" 派生。
+        //文字消息去掉 content 里的 at 与 quote，理由见 MessageProtocol::buildForwardedContent
+        //
+        //先把每条要新建的内容组装好并逐条检查体积，有一条超限就整体拒绝、一条都不发出，
+        //避免目标会话里只出现其中一部分。会超限的只可能是单条上限生效之前存进库的旧消息
+        //（bugs.md 的 BUG-32），它被推送或同步时同样会让对方断线。
+        std::vector<std::string> contents;
+        contents.reserve(visible.size());
+        for (size_t i = 0; i < visible.size(); ++i)
+        {
+            contents.push_back(MessageProtocol::buildForwardedContent(visible[i].msgtype,
+                                                                      visible[i].content));
+            if (MessageProtocol::isMessageContentTooLarge(contents.back(), std::string()))
+            {
+                send(cmd_forward_message, m_seq,
+                     MessageProtocol::buildSimpleResponse(error_code_msg_too_large,
+                                                          "forwarded content too large"));
+                LOGI("forward rejected by message content size, userid: %d, msgid: %lld, bytes: %u",
+                     m_userinfo.userid, (long long)visible[i].msgid,
+                     static_cast<unsigned>(contents.back().size()));
+                return;
+            }
+        }
         for (size_t i = 0; i < visible.size(); ++i)
         {
             std::string cmid = req.clientmsgid + "-" + std::to_string(i);
-            int64_t mid = deliverConversationMessage(req.toctype, req.tocid,
-                                                     visible[i].msgtype, visible[i].content, cmid);
-            if (mid != 0)
-                newMsgIds.push_back(mid);
+            MessageRecord rec;
+            if (deliverConversationMessage(req.toctype, req.tocid,
+                                           visible[i].msgtype, contents[i], cmid, &rec) != 0)
+                created.push_back(rec);
         }
     }
 
     send(cmd_forward_message, m_seq,
-         MessageProtocol::buildForwardMessageResponse(0, "ok", newMsgIds));
-    LOGI("forward message ok, userid: %d, toctype: %d, tocid: %lld, merge: %d, count: %u",
+         MessageProtocol::buildForwardMessageResponse(0, "ok", req.clientmsgid, created, req.tocid));
+    LOGI("forward message ok, userid: %d, toctype: %d, tocid: %lld, merge: %d, sources: %u, created: %u",
          m_userinfo.userid, req.toctype, (long long)req.tocid, req.merge ? 1 : 0,
-         static_cast<unsigned>(newMsgIds.size()));
+         static_cast<unsigned>(visible.size()), static_cast<unsigned>(created.size()));
 }
 
 void ChatSession::onDeleteMessage(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -4285,8 +4503,74 @@ void ChatSession::onDeleteMessage(const std::string& body, const std::shared_ptr
     }
 
     send(cmd_delete_message, m_seq, MessageProtocol::buildSimpleResponse(0, "ok"));
-    //本端删除为每用户软删除：本人其他设备下次 sync_messages 时该消息已被过滤，无需额外推送
-    LOGI("delete message ok, userid: %d, msgid: %lld", m_userinfo.userid, (long long)msgid);
+
+    //推给本人全部在线设备（含发起删除的这一台）：各设备据此删掉本地库里的这一行、移除已打开
+    //窗口里的气泡。只靠"下次同步时自然被过滤"不够 —— 其他设备本地库与已打开窗口里的这一条
+    //会一直留着。cid 取本人视角：群聊为群id，单聊为对方userid
+    const int64_t selfId = static_cast<int64_t>(m_userinfo.userid);
+    const int64_t cid = (rec.ctype == CHAT_TYPE_GROUP) ? rec.to
+                      : ((rec.from == selfId) ? rec.to : rec.from);
+    std::vector<int64_t> deletedIds;
+    deletedIds.push_back(msgid);
+    sendToUser(m_userinfo.userid, cmd_messages_deleted_notify,
+               MessageProtocol::buildMessagesDeletedNotify(rec.ctype, cid, deletedIds));
+
+    LOGI("delete message ok, userid: %d, ctype: %d, cid: %lld, msgid: %lld",
+         m_userinfo.userid, rec.ctype, (long long)cid, (long long)msgid);
+}
+
+void ChatSession::onDeleteMessagesByTime(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
+{
+    (void)conn;
+    DeleteMessagesByTimeRequest req;
+    if (!MessageProtocol::parseDeleteMessagesByTimeRequest(body, req))
+    {
+        LOGE("delete messages by time bad request, userid: %d", m_userinfo.userid);
+        send(cmd_delete_messages_by_time, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        return;
+    }
+
+    //区间终点截断到服务端当前这一秒开始之前，防止客户端时钟偏快时把之后到达的新消息
+    //也算进区间（见 MessageDeleteRange.h 的 NormalizeDeleteRange）
+    const int64_t nowMs = static_cast<int64_t>(time(NULL)) * MILLISECONDS_PER_SECOND;
+    msgdelete::DeleteRange range;
+    if (!msgdelete::NormalizeDeleteRange(req.begintime, req.endtime, nowMs, range))
+    {
+        LOGE("delete messages by time invalid range, userid: %d, begin: %lld, end: %lld, now: %lld",
+             m_userinfo.userid, (long long)req.begintime, (long long)req.endtime, (long long)nowMs);
+        send(cmd_delete_messages_by_time, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_bad_request, "invalid time range"));
+        return;
+    }
+
+    //只写一条区间（与已有区间合并），写入量与区间内的消息条数无关，不会长时间占住本 I/O 线程
+    const std::chrono::steady_clock::time_point startTime = std::chrono::steady_clock::now();
+    MessageManager& msgMgr = Singleton<MessageManager>::Instance();
+    if (!msgMgr.addDeletedRange(m_userinfo.userid, range, nowMs))
+    {
+        LOGE("delete messages by time db error, userid: %d, begin: %lld, end: %lld",
+             m_userinfo.userid, (long long)range.begintime, (long long)range.endtime);
+        send(cmd_delete_messages_by_time, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_server_internal, "delete messages failed"));
+        return;
+    }
+    const long long elapsedMs = static_cast<long long>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startTime).count());
+
+    //应答回带截断后的实际区间：客户端要按它提示用户，而不是按自己请求时的值
+    send(cmd_delete_messages_by_time, m_seq,
+         MessageProtocol::buildDeleteMessagesByTimeResponse(0, "ok", range.begintime, range.endtime));
+
+    //推给本人全部在线设备（含发起的这一台），各设备据此删掉本地库里该区间的消息、刷新界面
+    sendToUser(m_userinfo.userid, cmd_messages_deleted_notify,
+               MessageProtocol::buildMessagesDeletedRangeNotify(range.begintime, range.endtime));
+
+    LOGI("delete messages by time ok, userid: %d, requested: [%lld, %lld], effective: [%lld, %lld], "
+         "elapsed: %lld ms",
+         m_userinfo.userid, (long long)req.begintime, (long long)req.endtime,
+         (long long)range.begintime, (long long)range.endtime, elapsedMs);
 }
 
 void ChatSession::onMassSend(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -4297,6 +4581,17 @@ void ChatSession::onMassSend(const std::string& body, const std::shared_ptr<TcpC
     {
         send(cmd_mass_send, m_seq,
              MessageProtocol::buildSimpleResponse(error_code_bad_request, "bad request"));
+        return;
+    }
+
+    //内容体积超限：一个目标都不发。与 cmd_send_message 同一上限，理由见 bugs.md 的 BUG-32
+    if (MessageProtocol::isMessageContentTooLarge(req.content, std::string()))
+    {
+        LOGW("mass send rejected by content size, userid: %d, targets: %u, bytes: %u",
+             m_userinfo.userid, static_cast<unsigned>(req.targets.size()),
+             static_cast<unsigned>(req.content.size()));
+        send(cmd_mass_send, m_seq,
+             MessageProtocol::buildSimpleResponse(error_code_msg_too_large, "message content too large"));
         return;
     }
 
@@ -4587,6 +4882,13 @@ void ChatSession::onUpdateGroupInfo(const std::string& body, const std::shared_p
 
     LOGI("update group info ok, groupid: %lld, by: %d",
          (long long)req.groupid, m_userinfo.userid);
+
+    //本次改了群头像：customface 是头像图片的 fileid。修改者若是上传者，把该文件记录
+    //标记为已完成。未设自定义头像时 customface 为空串，与其它非法取值一样由
+    //parseFileIdText 过滤掉。
+    int64_t avatarFileId = 0;
+    if (req.has_customface && MessageProtocol::parseFileIdText(req.customface, avatarFileId))
+        markReferencedFileCompleted(avatarFileId, "group avatar");
 }
 
 void ChatSession::notifyGroupMembers(int64_t groupid, uint16_t cmd, const std::string& body)
@@ -5138,6 +5440,9 @@ void ChatSession::onInviteToGroup(const std::string& body, const std::shared_ptr
         req.groupid, group_member_change_join, toAdd, m_userinfo.userid);
     notifyGroupMembers(req.groupid, cmd_group_member_changed_notify, notify);
 
+    //自动命名的群随成员变化重算群名，群名改变时向全群推送资料变更
+    Singleton<ChatServer>::Instance().refreshAutoGroupNameAndNotify(req.groupid);
+
     //入群欢迎语须在成员变动通知<u>之后</u>发：客户端要先把新成员并进成员列表，
     //才能把欢迎语里提到的人对应上。
     sendGroupWelcomeMessage(group, toAdd);
@@ -5201,6 +5506,9 @@ void ChatSession::onJoinGroupRequest(const std::string& body, const std::shared_
         std::string notify = GroupProtocol::buildGroupMemberChangedNotify(
             req.groupid, group_member_change_join, self, m_userinfo.userid);
         notifyGroupMembers(req.groupid, cmd_group_member_changed_notify, notify);
+
+        //自动命名的群随成员变化重算群名，群名改变时向全群推送资料变更
+        Singleton<ChatServer>::Instance().refreshAutoGroupNameAndNotify(req.groupid);
 
         sendGroupWelcomeMessage(group, self);
 
@@ -5299,6 +5607,9 @@ void ChatSession::onHandleJoinGroup(const std::string& body, const std::shared_p
         std::string notify = GroupProtocol::buildGroupMemberChangedNotify(
             rec.groupid, group_member_change_join, applicant, m_userinfo.userid);
         notifyGroupMembers(rec.groupid, cmd_group_member_changed_notify, notify);
+
+        //自动命名的群随成员变化重算群名，群名改变时向全群推送资料变更
+        Singleton<ChatServer>::Instance().refreshAutoGroupNameAndNotify(rec.groupid);
 
         //审批通过也算入群，同样要发欢迎语。这里重新读一次群资料 —— 上面的
         //流程里只用到了申请记录，手头没有 GroupRecord。
@@ -5402,6 +5713,9 @@ void ChatSession::onLeaveGroup(const std::string& body, const std::shared_ptr<Tc
     notifyGroupMembers(groupid, cmd_group_member_changed_notify, notify);
     sendToUser(m_userinfo.userid, cmd_group_member_changed_notify, notify);
 
+    //自动命名的群随成员变化重算群名，群名改变时向全群推送资料变更
+    Singleton<ChatServer>::Instance().refreshAutoGroupNameAndNotify(groupid);
+
     LOGI("leave group ok, groupid: %lld, userid: %d", (long long)groupid, m_userinfo.userid);
 }
 
@@ -5480,6 +5794,9 @@ void ChatSession::onKickGroupMember(const std::string& body, const std::shared_p
     notifyGroupMembers(req.groupid, cmd_group_member_changed_notify, notify);
     for (size_t i = 0; i < toKick.size(); ++i)
         sendToUser(static_cast<int32_t>(toKick[i]), cmd_group_member_changed_notify, notify);
+
+    //自动命名的群随成员变化重算群名，群名改变时向全群推送资料变更
+    Singleton<ChatServer>::Instance().refreshAutoGroupNameAndNotify(req.groupid);
 
     LOGI("kick group member ok, groupid: %lld, by: %d, kicked: %u",
          (long long)req.groupid, m_userinfo.userid, static_cast<unsigned>(toKick.size()));
@@ -5772,6 +6089,9 @@ void ChatSession::onTransferOwner(const std::string& body, const std::shared_ptr
         groupid, group_member_change_role, changed, m_userinfo.userid);
     notifyGroupMembers(groupid, cmd_group_member_changed_notify, notify);
 
+    //自动群名不含群主，换了群主之后原群主进入群名、新群主移出群名
+    Singleton<ChatServer>::Instance().refreshAutoGroupNameAndNotify(groupid);
+
     LOGI("transfer owner ok, groupid: %lld, from: %d, to: %d",
          (long long)groupid, m_userinfo.userid, targetId);
 }
@@ -6029,14 +6349,16 @@ void ChatSession::onRequestUpload(const std::string& body, const std::shared_ptr
 
     FileStoreManager& fileMgr = Singleton<FileStoreManager>::Instance();
 
-    //秒传判断：库中已有同 MD5 的已完成文件，则直接返回其 fileid，客户端无需上传
+    //秒传判断：库中已有同 MD5、同场景的已完成文件，则直接返回其 fileid，客户端无需上传。
+    //必须同场景：下载时令牌场景与目标服务器都取自记录本身，跨场景复用会让接收方
+    //连错服务器或被群文件鉴权拒绝（见 FileStoreManager::findCompletedByMd5 的注释）。
     FileRecord hit;
-    if (fileMgr.findCompletedByMd5(req.md5, hit))
+    if (fileMgr.findCompletedByMd5(req.md5, req.scene, hit))
     {
         send(cmd_request_upload, m_seq,
              FileProtocol::buildRequestUploadResponse(hit.fileid, true, "", "", 0, false, 0));
-        LOGI("request upload hit instant-transfer, userid: %d, md5: %s, fileid: %lld",
-             m_userinfo.userid, req.md5.c_str(), (long long)hit.fileid);
+        LOGI("request upload hit instant-transfer, userid: %d, md5: %s, fileid: %lld, scene: %d",
+             m_userinfo.userid, req.md5.c_str(), (long long)hit.fileid, req.scene);
         return;
     }
 

@@ -405,6 +405,15 @@ CREATE TABLE IF NOT EXISTS t_message_deleted
     PRIMARY KEY (f_userid, f_msgid)
 );
 
+CREATE TABLE IF NOT EXISTS t_message_deleted_range
+(
+    f_userid INTEGER NOT NULL,    -- 执行清理的用户userid
+    f_begin_time INTEGER NOT NULL,    -- 区间开始,Unix毫秒(含)
+    f_end_time INTEGER NOT NULL,    -- 区间结束,Unix毫秒(含)
+    f_update_time INTEGER NOT NULL DEFAULT 0,    -- 本行写入时间,Unix毫秒,供排查
+    PRIMARY KEY (f_userid, f_begin_time)
+);
+
 CREATE TABLE IF NOT EXISTS t_file_ack
 (
     f_msgid INTEGER NOT NULL,    -- 文件消息的msgid
@@ -464,6 +473,7 @@ CREATE TABLE IF NOT EXISTS t_group
     f_announce_id INTEGER NOT NULL DEFAULT 0,    -- 最新已发布公告的f_id(t_group_announcement);0=本群还没有公告
     f_announce_title VARCHAR(128) NOT NULL DEFAULT '',    -- 最新已发布公告的标题(冗余快照,群聊窗头部摘要行直接读它)
     f_announce_time INTEGER NOT NULL DEFAULT 0,    -- 最新已发布公告的发布时间(Unix毫秒)
+    f_name_custom INTEGER NOT NULL DEFAULT 1,    -- 群名是否由用户设定:1是(固定不变) 0否(自动群名,成员或昵称变化时由服务端重算)
     PRIMARY KEY (f_groupid)
 );
 

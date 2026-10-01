@@ -32,9 +32,11 @@
 #include "../UI/BalloonContact/BalloonContactWindow.h"
 #include "../UI/BalloonGroupManage/BalloonGroupManageWindow.h"
 #include "../UI/BalloonHistory/BalloonHistoryWindow.h"
+#include "../UI/BalloonHistory/MergedRecordWindow.h"
 #include "../UI/BalloonSettings/BalloonSystemSettingDlg.h"
 #include "../UI/BalloonMain/BalloonAboutDlg.h"
 #include "../UI/BalloonMain/BalloonGroupInfoDlg.h"
+#include "../UI/BalloonMain/ForwardTargetDlg.h"
 #include "../UI/BalloonImageViewer/BalloonImageViewerWindow.h"
 #include "../Feature/RemoteDesktop/RdSelfTestWindow.h"
 #include "../UI/BalloonRemoteDesktop/BalloonRemoteDesktopDlg.h"
@@ -148,6 +150,8 @@ private:
     CBalloonSystemSettingDlg m_systemSettingDlg;        //--syssettings：系统设置窗预览
     CBalloonAboutDlg m_aboutDlg;                        //--about：关于窗预览
     balloonmain::CBalloonGroupInfoDlg m_groupInfoDlg;   //--groupinfo：群资料窗预览
+    balloonmain::CForwardTargetDlg m_forwardPickerDlg;  //--forwardpicker：转发目标选择窗预览（压测数据）
+    CMergedRecordWindow m_mergedViewer;                 //--mergedviewer：合并转发聊天记录查看窗预览（构造的记录）
     CBalloonImageViewerWindow m_imageViewerWindow;      //--imageviewer：聊天图片放大看图窗预览
     CRdSelfTestWindow m_rdSelfTestWindow;               //--rdpselftest：远程桌面引擎自环测试窗
     CBalloonRemoteDesktopDlg m_rdDlg;                   //--rddlg：远程桌面会话提示框预览

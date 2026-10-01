@@ -343,7 +343,7 @@ void CallMediaSession::OnRelayClosed()
 void CallMediaSession::PostEvent(int eventCode, unsigned int arg)
 {
     //已 Stop 则不再投递，避免给正在收尾的 UI 投滞后事件
-    if (m_hwndNotify != NULL && m_notifyMsg != 0 && m_running.load())
+    if (::IsWindow(m_hwndNotify) && m_notifyMsg != 0 && m_running.load())
         ::PostMessage(m_hwndNotify, m_notifyMsg,
                       static_cast<WPARAM>(eventCode), static_cast<LPARAM>(arg));
 }

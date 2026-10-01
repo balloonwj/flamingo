@@ -60,11 +60,14 @@ public:
 
     /**
      *  发起一次登录：转入登录中，并分配一个新的轮次号。
+     *  @param byAutoLogin 这一轮是否由自动登录发起（启动时登录窗自己点的「登录」），
+     *                     而不是用户手动点的。取消时据此决定要不要顺带取消「自动登录」
+     *                     的勾选（见 docs/自动登录方案.md §3.1）。默认 false。
      *  @return 本次的轮次号，调用方须把它交给登录线程、由结果原样带回；
      *          当前不允许发起时返回 kInvalidLoginGeneration 且状态不变。
-     *  副作用：改变阶段与轮次号。
+     *  副作用：改变阶段、轮次号与"本轮是否自动发起"的记录。
      */
-    uint32_t startLogin();
+    uint32_t startLogin(bool byAutoLogin = false);
 
     /**
      *  取消当前这一轮登录：立即回到空闲，使用户可以重新输入并再次登录。
@@ -73,10 +76,17 @@ public:
      *  取消的实质是把本轮的轮次号作废，那个迟到的结果到达时会被 shouldAcceptResult
      *  判为过期而丢弃。
      *
+     *  @param outWasAutoLogin [出参，可为空] 确实取消时回填被取消的这一轮是否由自动
+     *                         登录发起；没有取消时不改动它。
      *  @return 确实取消了返回 true；当前不在登录中（无事可取消）返回 false。
-     *  副作用：改变阶段与轮次号。
+     *  副作用：改变阶段、轮次号，并清除"本轮是否自动发起"的记录。
      */
-    bool cancelLogin();
+    bool cancelLogin(bool* outWasAutoLogin = nullptr);
+
+    /**
+     *  当前正在进行的这一轮是否由自动登录发起。不在登录中时恒为 false。
+     */
+    bool isAutoLoginRound() const { return m_autoLoginRound; }
 
     /**
      *  复位到空闲，使窗口重新摆到用户面前时一定能再次发起登录。
@@ -120,6 +130,9 @@ private:
     login_phase m_phase;        //当前阶段
     uint32_t    m_generation;   //当前这一轮的轮次号；空闲时为 kInvalidLoginGeneration
     uint32_t    m_nextGeneration;   //下一次发起登录要用的轮次号，只增不减
+    //当前这一轮是否由自动登录发起。startLogin 时写入；本轮结束（成功、失败、取消、
+    //复位）时清除，不会带到下一轮。
+    bool        m_autoLoginRound;
 };
 
 /**

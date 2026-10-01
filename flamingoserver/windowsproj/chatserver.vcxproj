@@ -58,8 +58,10 @@
     <ClCompile Include="..\chatserversrc\FolderTransferProtocol.cpp" />
     <ClCompile Include="..\chatserversrc\MessageManager.cpp" />
     <ClCompile Include="..\chatserversrc\MessagePinManager.cpp" />
+    <ClCompile Include="..\chatserversrc\MessageDeleteRange.cpp" />
     <ClCompile Include="..\chatserversrc\GroupProtocol.cpp" />
     <ClCompile Include="..\chatserversrc\GroupPermission.cpp" />
+    <ClCompile Include="..\chatserversrc\GroupAutoName.cpp" />
     <ClCompile Include="..\chatserversrc\GroupManager.cpp" />
     <ClCompile Include="..\chatserversrc\CardProtocol.cpp" />
     <ClCompile Include="..\chatserversrc\CardManager.cpp" />
@@ -202,8 +204,10 @@
     <ClInclude Include="..\chatserversrc\CallManager.h" />
     <ClInclude Include="..\chatserversrc\MessageManager.h" />
     <ClInclude Include="..\chatserversrc\MessagePinManager.h" />
+    <ClInclude Include="..\chatserversrc\MessageDeleteRange.h" />
     <ClInclude Include="..\chatserversrc\GroupProtocol.h" />
     <ClInclude Include="..\chatserversrc\GroupPermission.h" />
+    <ClInclude Include="..\chatserversrc\GroupAutoName.h" />
     <ClInclude Include="..\chatserversrc\GroupManager.h" />
     <ClInclude Include="..\chatserversrc\CardProtocol.h" />
     <ClInclude Include="..\chatserversrc\CardManager.h" />

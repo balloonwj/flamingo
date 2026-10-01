@@ -18,6 +18,7 @@
 #include <atomic>
 #include <map>        //m_sensitiveCache
 #include <mutex>      //m_sensitiveMutex
+#include <utility>    //std::pair，refreshAutoGroupNamesOfMember 的出参
 #include "GroupProtocol.h"
 
 //群组存储管理器；全局单例，经 Singleton<GroupManager> 访问
@@ -39,7 +40,9 @@ public:
 
     /**
      *  创建群：分配群ID，写入 t_group，并写入群主与初始成员的 t_group_member 行。
-     *  @param name       群名称
+     *  @param name       群名称。非空时作为用户设定的群名（f_name_custom = 1），此后不随成员
+     *                    变化；为空串时按成员昵称生成自动群名（f_name_custom = 0），调用方
+     *                    须再用 getGroup 读回实际群名
      *  @param ownerid    群主userid
      *  @param memberids  初始成员userid列表（不含群主；调用方须已去重 / 去掉无效项）
      *  @param createTime 创建时间，Unix毫秒
@@ -54,7 +57,7 @@ public:
      *  且群主可以不是发起本次操作的后台管理员。
      *  调用方须保证 adminids / memberids 已去重、彼此互斥、且都不含 ownerid
      *  （见 GroupProtocol::validateAdminCreateGroup）。
-     *  @param name       群名称
+     *  @param name       群名称；为空串时与上面四参版本一样生成自动群名
      *  @param ownerid    群主userid
      *  @param adminids   管理员userid列表（落库角色 group_role_admin）
      *  @param memberids  普通成员userid列表（落库角色 group_role_member）
@@ -158,6 +161,9 @@ public:
 
     /**
      *  更新群资料：按 req 中 has_* 为 true 的项更新 t_group 对应列。
+     *  群名一项的含义：name 非空时改为用户设定的群名（f_name_custom 置 1）；name 为空串
+     *  时恢复为自动群名（f_name_custom 置 0）并立即按当前成员重算，调用方须再用 getGroup
+     *  读回实际群名。
      *  @param req 已解析的 cmd_update_group_info 请求
      *  @return 数据库访问成功返回 true
      */
@@ -262,6 +268,33 @@ public:
      *  @return 数据库访问成功返回 true
      */
     bool transferOwner(int64_t groupid, int32_t oldOwner, int32_t newOwner);
+
+    // ================================================================
+    // 自动群名
+    // ================================================================
+    //
+    // f_name_custom = 0 的群，群名由服务端按成员昵称生成（规则见 GroupAutoName.h）。
+    // 本类的加人、删人、转让群主等方法<u>不会</u>自行重算群名 —— 会话层在这些操作之后
+    // 调 refreshAutoGroupName，据返回值决定要不要向全群推送 cmd_group_info_changed_notify。
+
+    /**
+     *  按当前成员与昵称重算一个群的自动群名，与库中群名不同时写库。
+     *  用户设定了群名的群（f_name_custom = 1）不做任何改动。
+     *  @param groupid 目标群ID
+     *  @param newName [出参] 返回 true 时为写入库中的新群名（UTF-8）；返回 false 时不改动
+     *  @return 群名确实改变并已写库返回 true；群不存在、群名是用户设定的、重算结果与原名
+     *          相同、或数据库访问失败时返回 false
+     */
+    bool refreshAutoGroupName(int64_t groupid, std::string& newName);
+
+    /**
+     *  某成员改昵称后，重算他所在的全部自动命名群的群名。
+     *  @param userid  改了昵称的成员userid
+     *  @param changes [出参] 群名确实改变的群，每项为群ID与新群名；调用前不会被清空
+     *  @return 数据库访问成功返回 true（即便没有任何群改名）
+     */
+    bool refreshAutoGroupNamesOfMember(int32_t userid,
+                                       std::vector<std::pair<int64_t, std::string> >& changes);
 
     // ================================================================
     // 群公告

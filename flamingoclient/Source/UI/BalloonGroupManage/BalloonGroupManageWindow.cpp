@@ -2,7 +2,9 @@
  *  BalloonGroupManageWindow.cpp
  *
  *  新版群管理窗口的实现：组装 Header + 左导航 + 右滚动内容区，处理左侧
- *  导航点击切页。本轮数据为本地假数据。
+ *  导航点击切页。数据由 GroupManageWindowData.cpp 向服务端拉取；开窗时模型
+ *  为空，各页先显示"正在加载"。调试入口 --groupmanage 经 LoadMockData 使用
+ *  示例数据。
  *
  *  balloonwj@qq.com   2026-06-03
  */
@@ -15,9 +17,10 @@
 #include "../BalloonMain/TitleBarIcon.h"   // CreateProgramIconBitmap（标题栏左侧图标）
 #include "../../App/CustomMsgDef.h"          // WM_CLOSE_MAINDLG
 #include "../../Common/Log/IULog.h"                 // LOG_INFO / LOG_ERROR
-#include "GroupManageLayout.h"        // BuildHeader / BuildNav / BuildPage / 各 id
-#include "GroupManageModel.h"         // FillMockData
-#include "GroupManageMapping.h"       // MemberIndexFromCardId：成员卡右键时由卡片 id 反算成员下标
+#include "GroupManageLayout.h"        // BuildHeader / BuildNav / BuildPage / 各 id / 窗口尺寸
+#include "GroupManagePaint.h"         // GmDpi / GmScale：尺寸按 DPI 换算
+#include "GroupManageModel.h"         // FillMockData（仅调试入口经 LoadMockData 使用）
+#include "GroupManageMapping.h"       // MemberIndexFromCardId / ApplyGroupContext
 
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiSeparator.h"
@@ -28,17 +31,27 @@
 using namespace balloonwjui;
 using namespace balloongroupmanage;
 
+namespace {
+
+// 整页重建或切页时要保留输入内容的输入框（控件编号见 GroupManageLayout.h）：
+// 公告标题、公告正文、新增敏感词、群名称、群简介、成员页搜索框
+const int kDraftInputIds[] =
+{
+    kIdEditAnnounceTitle, kIdEditAnnounceBody, kIdEditSensitiveNew, kIdEditGroupName, kIdEditIntro,
+    kIdSearchMembers,
+};
+const size_t kDraftInputCount = sizeof(kDraftInputIds) / sizeof(kDraftInputIds[0]);
+
+} // anonymous namespace
+
 // ---- 文件作用域常量 -----------------------------------------------------
 
-// 窗口初始客户区尺寸（逻辑像素）。
-static const int kGmWindowWidth  = 960;
-static const int kGmWindowHeight = 660;
+// 本文件的尺寸常量都按 96 DPI（100% 缩放）设计，使用前经 GmScale 换算成当前 DPI
+// 下的物理像素（DuiFrameWindow 的标题栏高、最小尺寸都按物理像素使用，库内不换算）。
+// 窗口初始尺寸与最小尺寸在 GroupManageLayout 的 ComputeInitialClientSize /
+// ComputeMinClientSize 里，便于单元测试。
 
-// 窗口最小尺寸（逻辑像素）—— 保证 3 列成员卡与左导航不至于挤坏。
-static const int kGmMinWidth  = 820;
-static const int kGmMinHeight = 560;
-
-// 标题栏高度（逻辑像素）—— 纤细透明，承载图标 / 标题文字与三按钮。
+// 标题栏高度（96 DPI 下的像素）—— 纤细透明，承载图标 / 标题文字与三按钮。
 static const int kGmTitleBarHeight = 32;
 
 // 客户区顶部 Header 高度（群头像 + 群名 + 角色副标题）。
@@ -47,10 +60,10 @@ static const int kGmHeaderHeight = 46;
 // 左侧导航栏宽度。
 static const int kGmNavWidth = 188;
 
-// 右侧内容区滚动条宽度（逻辑像素）。
+// 右侧内容区滚动条宽度（96 DPI 下的像素）。
 static const int kGmScrollBarWidth = 10;
 
-// 标题栏左侧图标边长（逻辑像素）。
+// 标题栏左侧图标边长（96 DPI 下的像素）。
 static const int kGmTitleIconSize = 16;
 
 // 分隔线颜色。
@@ -82,39 +95,21 @@ CBalloonGroupManageWindow::CBalloonGroupManageWindow(CFlamingoClient* pFMGClient
     , m_groupId(0)
     , m_hTitleIcon(NULL)
 {
+    // 模型保持为空：成员与加群申请的加载状态默认为 kLoadPending，界面据此显示
+    // "正在加载"。不能在这里填示例数据 —— 窗口显示出来之后请求才发出，示例数据
+    // 会在应答到达前先被画出来，表现为打开窗口时先闪一下一个无关的群。
+}
+
+void CBalloonGroupManageWindow::LoadMockData()
+{
     FillMockData(m_model);
 }
 
 void CBalloonGroupManageWindow::SetGroupContext(int64_t groupId, LPCTSTR name, int myRole)
 {
-    // 群角色取值（与 Protocol.h 的 group_member_role 对齐：1 管理员、2 群主）。
-    const int kRoleAdminValue = 1;
-    const int kRoleOwnerValue = 2;
-
     m_groupId = groupId;
-    // 群号在开窗这一刻就已经知道了，先填上，不必等群资料应答（1303）到达 —— 应答
-    // 到了 ApplyGroupInfo 会用同一个 groupid 再写一遍，值一样。这样即便应答迟到或
-    // 失败，「基本信息」页的群号也是准的，排查问题时随时能看能复制。
-    if (groupId > 0)
-    {
-        m_model.m_groupNumber.Format(_T("%lld"), static_cast<long long>(groupId));
-    }
-    if (name != NULL && name[0] != _T('\0'))
-    {
-        m_model.m_groupName = name;
-    }
-    if (myRole == kRoleOwnerValue)
-    {
-        m_model.m_myRole = balloongroupmanage::kRoleOwner;
-    }
-    else if (myRole == kRoleAdminValue)
-    {
-        m_model.m_myRole = balloongroupmanage::kRoleAdmin;
-    }
-    else
-    {
-        m_model.m_myRole = balloongroupmanage::kRoleMember;
-    }
+    // 群号、群名、本人角色与占位头像的写入规则见 ApplyGroupContext（纯函数，有单测）。
+    ApplyGroupContext(groupId, name, myRole, m_model);
 }
 
 CBalloonGroupManageWindow::~CBalloonGroupManageWindow()
@@ -136,18 +131,18 @@ bool CBalloonGroupManageWindow::BuildWindow(HWND hWndParent)
     if (Create(hWndParent, CWindow::rcDefault, _T("FlamingoIM"),
                WS_OVERLAPPEDWINDOW, 0) == NULL)
     {
-        LOG_ERROR(_T("群管理窗口 Create 失败。"));
+        LOG_ERROR("Group manage window: Create failed.");
         return false;
     }
 
     SetTitle(_T("群管理"));
-    SetTitleBarHeight(kGmTitleBarHeight);
+    SetTitleBarHeight(GmScale(kGmTitleBarHeight));
     SetTitleBarTransparent(true);
     SetTitleTextColor(kGmCaptionColor);
     SetCaptionGlyphColor(kGmCaptionColor);
 
     // 标题栏左侧图标：用程序主图标，合成到白底（标题栏背景）后挂上。
-    m_hTitleIcon = balloonmain::CreateProgramIconBitmap(kGmTitleIconSize, kGmTitleBarBg);
+    m_hTitleIcon = balloonmain::CreateProgramIconBitmap(GmScale(kGmTitleIconSize), kGmTitleBarBg);
     if (m_hTitleIcon != NULL)
     {
         SetIcon(m_hTitleIcon);
@@ -155,11 +150,29 @@ bool CBalloonGroupManageWindow::BuildWindow(HWND hWndParent)
 
     SetButtons(true, true, true);     // 最小化 / 最大化 / 关闭
     SetResizable(true);
-    SetMinSize(kGmMinWidth, kGmMinHeight);
+    const SIZE minSize = ComputeMinClientSize(GmDpi());
+    SetMinSize(minSize.cx, minSize.cy);
 
     InitUi();
 
-    ResizeClient(kGmWindowWidth, kGmWindowHeight);
+    // 初始尺寸按 DPI 放大，但不超出窗口所在显示器的工作区。DuiFrameWindow 没有系统
+    // 非客户区（客户区即整个窗口矩形），工作区可以直接交给尺寸计算。
+    MONITORINFO mi;
+    mi.cbSize = sizeof(mi);
+    RECT workArea = { 0, 0, 0, 0 };
+    if (::GetMonitorInfo(::MonitorFromWindow(m_hWnd, MONITOR_DEFAULTTONEAREST), &mi))
+    {
+        workArea = mi.rcWork;
+    }
+    else
+    {
+        ::SystemParametersInfo(SPI_GETWORKAREA, 0, &workArea, 0);
+    }
+    const SIZE initSize = ComputeInitialClientSize(GmDpi(), workArea);
+    ResizeClient(initSize.cx, initSize.cy);
+    LOG_INFO("Group manage window: dpi=%d, client=%dx%d, workArea=%dx%d.",
+             GmDpi(), (int)initSize.cx, (int)initSize.cy,
+             (int)(workArea.right - workArea.left), (int)(workArea.bottom - workArea.top));
     CenterWindow();
     ShowWindow(SW_SHOW);
     UpdateWindow();
@@ -175,7 +188,7 @@ void CBalloonGroupManageWindow::CreateAndShow(HWND hMainDlg)
     {
         return;
     }
-    LOG_INFO(_T("群管理窗口已创建并显示。"));
+    LOG_INFO("Group manage window created and shown.");
 }
 
 // =======================================================================
@@ -212,7 +225,7 @@ void CBalloonGroupManageWindow::InitUi()
     root->SetGap(0);
 
     // Header。
-    root->AddChild(BuildHeader(m_model), Hint().Fixed(kGmHeaderHeight));
+    root->AddChild(BuildHeader(m_model), Hint().Fixed(GmScale(kGmHeaderHeight)));
 
     // Header 与正文之间的横向分隔线。
     std::unique_ptr<DuiSeparator> topSep(new DuiSeparator());
@@ -226,7 +239,7 @@ void CBalloonGroupManageWindow::InitUi()
 
     std::unique_ptr<DuiControl> nav = BuildNav(m_model);
     m_pNav = nav.get();
-    body->AddChild(std::move(nav), Hint().Fixed(kGmNavWidth));
+    body->AddChild(std::move(nav), Hint().Fixed(GmScale(kGmNavWidth)));
 
     std::unique_ptr<DuiSeparator> midSep(new DuiSeparator());
     midSep->SetOrientation(DuiSeparator::Vertical);
@@ -235,7 +248,7 @@ void CBalloonGroupManageWindow::InitUi()
 
     std::unique_ptr<DuiScrollView> scroll(new DuiScrollView());
     scroll->SetAutoContentHeight(true);
-    scroll->SetScrollBarWidth(kGmScrollBarWidth);
+    scroll->SetScrollBarWidth(GmScale(kGmScrollBarWidth));
     scroll->SetContent(BuildPage(kPageMembers, m_model));
     m_pContentScroll = scroll.get();
 
@@ -257,7 +270,16 @@ void CBalloonGroupManageWindow::InitUi()
     m_currentPage = kPageMembers;
     UpdateNavActive(kPageMembers);
 
-    LOG_INFO(_T("群管理窗客户区 UI 初始化完成。"));
+    // 页面建好后登记各输入框建页时的文字，有草稿的填回。成员管理页目前没有这类输入框，
+    // 与 SwitchToPage 保持同一做法，日后初始页换成别的页也不会漏掉
+    RestoreInputDrafts();
+
+    // 每次整体重建都记一行：开窗时的第一行应为 members=0、membersState=0（未加载），
+    // 据此可以确认首帧画的不是示例数据。状态取值见 balloongroupmanage::LoadState。
+    LOG_INFO("Group manage window UI built: groupid=%lld, members=%d, membersState=%d, "
+             "requests=%d, requestsState=%d.",
+             (long long)m_groupId, m_model.MemberCount(), (int)m_model.m_membersState,
+             m_model.PendingRequestCount(), (int)m_model.m_requestsState);
 }
 
 void CBalloonGroupManageWindow::SwitchToPage(int pageId)
@@ -270,6 +292,9 @@ void CBalloonGroupManageWindow::SwitchToPage(int pageId)
     {
         return;
     }
+
+    // 旧页面上的输入框马上要随旧页面销毁，先把用户尚未提交的输入记下来
+    CaptureInputDrafts();
 
     m_currentPage = pageId;
 
@@ -284,6 +309,101 @@ void CBalloonGroupManageWindow::SwitchToPage(int pageId)
     m_pContentScroll->Invalidate();
 
     UpdateNavActive(pageId);
+
+    RestoreInputDrafts();
+}
+
+void CBalloonGroupManageWindow::OnMemberSearchChanged()
+{
+    DuiControl* content = GetClientContent();
+    if (content == NULL || m_pContentScroll == NULL || m_currentPage != kPageMembers)
+    {
+        return;
+    }
+    DuiEdit* pSearch = dynamic_cast<DuiEdit*>(content->FindCtrlById(kIdSearchMembers));
+    if (pSearch == NULL)
+    {
+        return;
+    }
+    CString keyword = pSearch->GetText();
+    keyword.Trim();
+    //关键词没变（只多了首尾空白，或整页重建后填回草稿时发出的同值通知）就不必重建
+    if (keyword == m_model.m_memberKeyword)
+    {
+        return;
+    }
+    m_model.m_memberKeyword = keyword;
+
+    //只重建搜索栏以下的部分，搜索框不重建，输入焦点与光标保持原样
+    DuiVBox* page = dynamic_cast<DuiVBox*>(m_pContentScroll->GetContent());
+    if (page == NULL)
+    {
+        return;
+    }
+    RefilterMembersPage(page, m_model);
+
+    //页面高度变了，让滚动视口按当前矩形重新排版以更新滚动范围，并回到顶部，让命中的成员
+    //从第一行开始显示。必须用 ForceLayout：矩形没变时 SetRect 会直接返回、不重新排版
+    m_pContentScroll->SetScrollPos(0);
+    m_pContentScroll->ForceLayout(m_pContentScroll->GetRect());
+    m_pContentScroll->Invalidate();
+
+    LOG_INFO("Group manage window: member search keyword changed, chars=%d, groupid=%lld.",
+             keyword.GetLength(), (long long)m_groupId);
+}
+
+void CBalloonGroupManageWindow::CaptureInputDrafts()
+{
+    DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    for (size_t i = 0; i < kDraftInputCount; ++i)
+    {
+        DuiEdit* pEdit = dynamic_cast<DuiEdit*>(content->FindCtrlById(kDraftInputIds[i]));
+        if (pEdit != NULL)
+        {
+            m_inputDrafts.OnInputLeaving(kDraftInputIds[i], std::wstring((LPCTSTR)pEdit->GetText()));
+        }
+    }
+}
+
+void CBalloonGroupManageWindow::RestoreInputDrafts()
+{
+    DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
+    for (size_t i = 0; i < kDraftInputCount; ++i)
+    {
+        DuiEdit* pEdit = dynamic_cast<DuiEdit*>(content->FindCtrlById(kDraftInputIds[i]));
+        if (pEdit == NULL)
+        {
+            continue;
+        }
+        std::wstring draft;
+        if (m_inputDrafts.OnInputBuilt(kDraftInputIds[i], std::wstring((LPCTSTR)pEdit->GetText()),
+                                       &draft))
+        {
+            pEdit->SetText(draft.c_str());
+            LOG_INFO("Group manage window: restored input draft, ctrlId=%d, chars=%u.",
+                     kDraftInputIds[i], (unsigned)draft.size());
+        }
+    }
+}
+
+bool CBalloonGroupManageWindow::IsDraftInput(int ctrlId)
+{
+    for (size_t i = 0; i < kDraftInputCount; ++i)
+    {
+        if (kDraftInputIds[i] == ctrlId)
+        {
+            return true;
+        }
+    }
+    return false;
 }
 
 void CBalloonGroupManageWindow::UpdateNavActive(int pageId)
@@ -380,6 +500,13 @@ LRESULT CBalloonGroupManageWindow::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
     // 开关 / 下拉框的值变化也走 HandlePageButton（全员禁言开关、群权限各项）。
     if (pNotify->code == DUIN_VALUECHANGED)
     {
+        //成员页搜索框的文字变了：本地过滤，不涉及协议，放在 HandlePageButton 之前 ——
+        //后者在调试入口（群 id 为 0）下一律不响应
+        if (pNotify->ctrlId == (UINT)kIdSearchMembers)
+        {
+            OnMemberSearchChanged();
+            return 0;
+        }
         if (HandlePageButton(pNotify->ctrlId, pNotify->extra))
         {
             return 0;

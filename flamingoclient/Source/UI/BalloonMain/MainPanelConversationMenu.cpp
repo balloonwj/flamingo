@@ -68,6 +68,17 @@ std::vector<ConversationMenuEntry> BuildConversationMenuModel(const Conversation
         PushItem(items, kConvMenuStarred,
                  StarredModel::GetMenuLabel(state.m_starred), true);
     }
+    // 复制项放在第一组末尾：单聊复制联系人名（备注优先），群聊复制群号与群名，与主面板
+    // 联系人 / 群列表两个右键菜单给出的复制项一致。
+    if (state.m_isGroup)
+    {
+        PushItem(items, kConvMenuCopyGroupNo,   L"复制群号", true);
+        PushItem(items, kConvMenuCopyGroupName, L"复制群名", true);
+    }
+    else
+    {
+        PushItem(items, kConvMenuCopyName, L"复制联系人名", true);
+    }
 
     // 第二组：会话属性开关。文案随当前状态取反，用户一眼能看出点下去会变成什么。
     PushSeparator(items);

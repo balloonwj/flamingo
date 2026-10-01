@@ -37,7 +37,7 @@ bool ConfirmRemoveAccount(HWND hParent, const CString& account, bool& outDeleteL
 /**
  *  删掉某账号在本机的全部数据目录（<主目录>Users\<账号>\ 整棵）。
  *
- *  这个目录下是该账号的配置（<账号>.cfg）、聊天记录（ChatLog）、头像
+ *  这个目录下是该账号的配置（<账号>.ini）、聊天记录（ChatLog）、头像
  *  （UserThumb）以及文件 / 图片 / 头像缓存（ChatFile / ChatImage / Avatar）——
  *  自 2026-08-11 起这几样统一挂在同一个按登录账号命名的目录下（见
  *  net/UserCachePath.h），所以清理只需删这一处。

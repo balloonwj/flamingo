@@ -36,10 +36,15 @@
 #include <map>
 
 #include "ChatInlineText.h"
+#include "ChatTextExtentCache.h"   // 逐词元测宽的结果缓存（排版的主要开销在逐字的 GDI 测量）
 
 namespace balloonchatwnd {
 
 namespace {
+
+// 性能探针计数器，见 ChatInlineText.h 的 InlineLayoutCallCount / InlinePlacedDrawCount
+unsigned long g_inlineLayoutCalls = 0;   // LayoutInlineContent 的调用次数
+unsigned long g_inlinePlacedDraws = 0;   // 绘制放置项的次数
 
 // 排版游标是否已经越过行数上限。maxLines <= 0 表示不限行，恒返回 false。
 //   y：      当前排版游标的纵坐标（相对布局原点）。
@@ -65,6 +70,14 @@ CString FaceExeDir()
     return CString();
 }
 
+// 某 faceId 的表情图片路径：<exe 目录>\Face\face<N>.png。气泡绘制与输入框插入表情都按它定位。
+CString FacePathForId(int faceId)
+{
+    CString path;
+    path.Format(_T("%sFace\\face%d.png"), (LPCTSTR)FaceExeDir(), faceId);
+    return path;
+}
+
 // 取某 faceId 的表情位图（按 faceId==face<N>.png 约定定位）。进程级缓存、保留 alpha
 // （用 GDI+ Bitmap，绘制时 DrawImage 叠加，能正确盖在彩色气泡上）。失败返回 NULL。
 // 缓存随进程退出释放（固定 ≤143 张小图，不显式清理）。
@@ -78,8 +91,7 @@ Gdiplus::Bitmap* GetFaceGdiBitmapCached(int faceId)
     }
 
     Gdiplus::Bitmap* result = NULL;
-    CString path;
-    path.Format(_T("%sFace\\face%d.png"), (LPCTSTR)FaceExeDir(), faceId);
+    const CString path = FacePathForId(faceId);
     Gdiplus::Bitmap* bmp = Gdiplus::Bitmap::FromFile(path);
     if (bmp != NULL && bmp->GetLastStatus() == Gdiplus::Ok)
     {
@@ -273,6 +285,11 @@ void PlaceOverlongToken(HDC hdc, const CString& tok, int tokCharBegin,
 
 } // 匿名 namespace（本文件私有的排版细节）
 
+CString FaceImagePathFromId(int faceId)
+{
+    return FacePathForId(faceId);
+}
+
 // 把消息段序列按 maxW 折行排版。调用前须已把目标字体 select 进 hdc（测量按该字体）。
 //   outPlaced：非 NULL 时填入各放置项（绘制用）；NULL 时只测尺寸。
 //   返回：内容整体尺寸（不含内边距）。
@@ -280,6 +297,8 @@ SIZE LayoutInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& s
                          int maxW, int faceSize, std::vector<InlinePlaced>* outPlaced,
                          int maxLines, bool* outTruncated)
 {
+    ++g_inlineLayoutCalls;
+
     // 因行数上限而没排完时置 true，收尾处回填给调用方。
     bool truncated = false;
     if (outTruncated != NULL)
@@ -296,6 +315,10 @@ SIZE LayoutInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& s
     ::GetTextMetricsW(hdc, &tm);
     const int textH = tm.tmHeight;
     const int lineH = (textH > faceSize) ? textH : faceSize;
+    //逐词元测宽走缓存：中文每个字单独成一个词元，逐个调 GDI 是排版的主要开销
+    //（50 条消息的首次测量里约占一半以上）。缓存键取自当前选入 hdc 的字体，每次排版取一次
+    const TextExtentFontKey fontKey = TextExtentFontKey::FromDc(hdc);
+    ChatTextExtentCache& extentCache = ChatTextExtentCache::Inst();
 
     int x = 0;
     int y = 0;
@@ -377,8 +400,7 @@ SIZE LayoutInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& s
                     y += lineH;
                     continue;
                 }
-                SIZE ts;
-                ::GetTextExtentPoint32W(hdc, tok, tok.GetLength(), &ts);
+                const SIZE ts = extentCache.TextExtent(hdc, fontKey, tok, tok.GetLength());
                 const bool isSpace = (tok[0] == L' ' || tok[0] == L'\t');
                 if (x > 0 && x + ts.cx > maxW)
                 {
@@ -488,6 +510,10 @@ void BuildSelLayoutFromPlaced(HDC hdc, const std::vector<InlinePlaced>& placed,
     out.m_lines.clear();
     out.m_totalChars = totalChars;
 
+    //逐字符累计宽度走缓存，理由同 LayoutInlineContent；缓存键每次调用取一次
+    const TextExtentFontKey fontKey = TextExtentFontKey::FromDc(hdc);
+    ChatTextExtentCache& extentCache = ChatTextExtentCache::Inst();
+
     for (size_t i = 0; i < placed.size(); ++i)
     {
         const InlinePlaced& p = placed[i];
@@ -520,17 +546,12 @@ void BuildSelLayoutFromPlaced(HDC hdc, const std::vector<InlinePlaced>& placed,
         }
         else
         {
-            // 逐字符累计宽度。alpDx[k] 是前 k+1 个字符的总宽（相对段起点）。
-            std::vector<INT> alpDx((size_t)p.text.GetLength(), 0);
-            INT  fit = 0;
-            SIZE sz;
-            ::GetTextExtentExPointW(hdc, p.text, p.text.GetLength(),
-                                    kCharExtentNoLimit, &fit,
-                                    alpDx.empty() ? NULL : &alpDx[0], &sz);
-            for (size_t k = 0; k < alpDx.size(); ++k)
-            {
-                run.m_charRights.push_back(p.rc.left + alpDx[k]);
-            }
+            // 逐字符右边界 = 段左边界 + 前 k+1 个字符的累计宽度，由缓存直接追加进来，
+            // 不经过中间数组（调试版运行库下每段一次的小块分配开销与 GDI 调用相当）。
+            const int textLen = p.text.GetLength();
+            run.m_charRights.reserve((size_t)(textLen > run.m_charCount ? textLen : run.m_charCount));
+            extentCache.AppendCharRights(hdc, fontKey, p.text, textLen,
+                                         kCharExtentNoLimit, p.rc.left, run.m_charRights);
             // 兜底：万一量失败（返回的项数不足），用等分宽度补齐，宁可略有偏差
             // 也不要让选区少几个字符点不中。
             while ((int)run.m_charRights.size() < run.m_charCount)
@@ -541,7 +562,8 @@ void BuildSelLayoutFromPlaced(HDC hdc, const std::vector<InlinePlaced>& placed,
             }
         }
 
-        line.m_runs.push_back(run);
+        // run 此后不再使用，移入而不是复制（复制会把 m_charRights 再分配一遍）
+        line.m_runs.push_back(std::move(run));
     }
 }
 
@@ -559,38 +581,47 @@ bool MessageTextHasFace(const CString& text)
     return false;
 }
 
-// 在 rc 内绘制"文字 + 内联表情"。st 决定字体 / 颜色（与 DrawGdiText 同口径）。
-void DrawInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& segs,
-                       const RECT& rc, const InlineTextStyle& st, int faceSize,
-                       int maxLines)
+namespace {
+
+// 按放置项把文字与表情画出来。调用前须已把字体、文字颜色与透明背景设进 hdc。
+//   hdc：      目标设备上下文。
+//   placed：   LayoutInlineContent 产出的放置项（坐标相对布局原点）。
+//   ox / oy：  布局原点的绝对坐标。
+//   filter：   非 NULL 时只画绝对坐标矩形与它相交的项（换样式重画时跳过区间矩形之外的项）；
+//              NULL 时不按它筛。
+//   inflatePx：按 hdc 当前裁剪区筛选时，把裁剪区左右各放宽多少像素再判断相交（取字号）：
+//              斜体等字形会向左右伸出放置项矩形，放宽后伸进裁剪区的那部分照样画出来。
+// 另外始终按 hdc 当前裁剪区筛选：完全落在裁剪区之外的项画了也不出像素，直接跳过。只重画一小
+// 块区域（如长消息选区变化时只重画变化的几行）时，耗时因此只与这块区域里的项数有关。
+void DrawPlacedItems(HDC hdc, const std::vector<InlinePlaced>& placed, int ox, int oy,
+                     const RECT* filter, int inflatePx)
 {
-    HFONT hFont = ::CreateFontW(
-        -st.sizePx, 0, 0, 0,
-        st.bold ? FW_SEMIBOLD : FW_NORMAL,
-        st.italic ? TRUE : FALSE,
-        st.underline ? TRUE : FALSE,
-        st.strike ? TRUE : FALSE,
-        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
-        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
-    if (hFont == NULL)
+    RECT clip = { 0, 0, 0, 0 };
+    const int clipKind = ::GetClipBox(hdc, &clip);
+    if (clipKind == NULLREGION)
     {
-        return;
+        return;   // 裁剪区为空，什么都画不出来
     }
-    HFONT hOldFont = (HFONT)::SelectObject(hdc, hFont);
-
-    const int maxW = rc.right - rc.left;
-    std::vector<InlinePlaced> placed;
-    LayoutInlineContent(hdc, segs, maxW, faceSize, &placed, maxLines);
-
-    const int oldBkMode = ::SetBkMode(hdc, TRANSPARENT);
-    const COLORREF oldColor = ::SetTextColor(hdc, st.color);
-    const int ox = rc.left;
-    const int oy = rc.top;
+    const bool useClip = (clipKind != ERROR);
+    if (useClip)
+    {
+        ::InflateRect(&clip, inflatePx, 0);
+    }
 
     for (size_t i = 0; i < placed.size(); ++i)
     {
         const InlinePlaced& p = placed[i];
         RECT r = { p.rc.left + ox, p.rc.top + oy, p.rc.right + ox, p.rc.bottom + oy };
+        RECT overlap;
+        if (filter != NULL && !::IntersectRect(&overlap, &r, filter))
+        {
+            continue;
+        }
+        if (useClip && !::IntersectRect(&overlap, &r, &clip))
+        {
+            continue;
+        }
+        ++g_inlinePlacedDraws;
         if (p.isFace)
         {
             Gdiplus::Bitmap* pBmp = GetFaceGdiBitmapCached(p.faceId);
@@ -608,11 +639,142 @@ void DrawInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& seg
                         DT_LEFT | DT_VCENTER | DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP);
         }
     }
+}
+
+// 按样式建正文字体（微软雅黑），排版与绘制共用，保证两处的字形一致。
+HFONT CreateInlineFont(const InlineTextStyle& st)
+{
+    return ::CreateFontW(
+        -st.sizePx, 0, 0, 0,
+        st.bold ? FW_SEMIBOLD : FW_NORMAL,
+        st.italic ? TRUE : FALSE,
+        st.underline ? TRUE : FALSE,
+        st.strike ? TRUE : FALSE,
+        DEFAULT_CHARSET, OUT_TT_PRECIS, CLIP_DEFAULT_PRECIS,
+        CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Microsoft YaHei");
+}
+
+} // anonymous namespace
+
+SIZE LayoutInlineContentForStyle(HDC hdc, const std::vector<balloonchat::ChatSegment>& segs,
+                                 int maxW, int faceSize, const InlineTextStyle& st,
+                                 std::vector<InlinePlaced>* outPlaced, int maxLines)
+{
+    SIZE none = { 0, 0 };
+    HFONT hFont = CreateInlineFont(st);
+    if (hFont == NULL)
+    {
+        return none;
+    }
+    HFONT hOldFont = (HFONT)::SelectObject(hdc, hFont);
+    const SIZE sz = LayoutInlineContent(hdc, segs, maxW, faceSize, outPlaced, maxLines);
+    ::SelectObject(hdc, hOldFont);
+    ::DeleteObject(hFont);
+    return sz;
+}
+
+void DrawInlinePlaced(HDC hdc, const std::vector<InlinePlaced>& placed, const RECT& rc,
+                      const InlineTextStyle& st)
+{
+    HFONT hFont = CreateInlineFont(st);
+    if (hFont == NULL)
+    {
+        return;
+    }
+    HFONT hOldFont = (HFONT)::SelectObject(hdc, hFont);
+    const int oldBkMode = ::SetBkMode(hdc, TRANSPARENT);
+    const COLORREF oldColor = ::SetTextColor(hdc, st.color);
+    DrawPlacedItems(hdc, placed, rc.left, rc.top, NULL, st.sizePx);
+    ::SetTextColor(hdc, oldColor);
+    ::SetBkMode(hdc, oldBkMode);
+    ::SelectObject(hdc, hOldFont);
+    ::DeleteObject(hFont);
+}
+
+// 在 rc 内绘制"文字 + 内联表情"。st 决定字体 / 颜色（与 DrawGdiText 同口径）。
+void DrawInlineContent(HDC hdc, const std::vector<balloonchat::ChatSegment>& segs,
+                       const RECT& rc, const InlineTextStyle& st, int faceSize,
+                       int maxLines)
+{
+    std::vector<InlinePlaced> placed;
+    LayoutInlineContentForStyle(hdc, segs, rc.right - rc.left, faceSize, st, &placed, maxLines);
+    DrawInlinePlaced(hdc, placed, rc, st);
+}
+
+void DrawInlinePlacedRestyledRanges(HDC hdc,
+                                    const std::vector<InlinePlaced>& placed,
+                                    const SelLayout& layout,
+                                    const std::vector<InlineCharRange>& ranges,
+                                    const RECT& rcText,
+                                    const InlineTextStyle& style)
+{
+    if (ranges.empty() || layout.m_lines.empty())
+    {
+        return;
+    }
+    HFONT hFont = CreateInlineFont(style);
+    if (hFont == NULL)
+    {
+        return;
+    }
+    HFONT hOldFont = (HFONT)::SelectObject(hdc, hFont);
+    const int oldBkMode = ::SetBkMode(hdc, TRANSPARENT);
+    const COLORREF oldColor = ::SetTextColor(hdc, style.color);
+
+    for (std::size_t k = 0; k < ranges.size(); ++k)
+    {
+        if (ranges[k].m_end <= ranges[k].m_begin)
+        {
+            continue;
+        }
+        //区间可能跨行，故先取它占的若干矩形，逐个矩形裁剪重画。
+        const std::vector<SelRect> rects = BuildSelectionRects(layout, ranges[k].m_begin, ranges[k].m_end);
+        for (std::size_t r = 0; r < rects.size(); ++r)
+        {
+            const RECT clip = { rcText.left + rects[r].m_left, rcText.top + rects[r].m_top,
+                                rcText.left + rects[r].m_right, rcText.top + rects[r].m_bottom };
+
+            //保存原裁剪区。GetClipRgn 返回 1 表示原本有裁剪区、0 表示没有，
+            //恢复时据此决定是还原那个区域还是清成"不裁剪"。
+            HRGN saved = ::CreateRectRgn(0, 0, 0, 0);
+            const int hadClip = ::GetClipRgn(hdc, saved);
+            ::IntersectClipRect(hdc, clip.left, clip.top, clip.right, clip.bottom);
+
+            //只画与裁剪区相交的放置项：其余项落在裁剪区之外，画了也不出像素。矩形左右各扩一个
+            //字号再判断，斜体等向左右伸出放置项矩形的字形部分也照样重画，与整条重画的结果一致。
+            //上下不扩：放置项高度即行高，字形不会伸出上下边，扩了反而会把相邻两行的项都算进来
+            RECT filter = clip;
+            ::InflateRect(&filter, style.sizePx, 0);
+            DrawPlacedItems(hdc, placed, rcText.left, rcText.top, &filter, style.sizePx);
+
+            ::SelectClipRgn(hdc, (hadClip == 1) ? saved : NULL);
+            ::DeleteObject(saved);
+        }
+    }
 
     ::SetTextColor(hdc, oldColor);
     ::SetBkMode(hdc, oldBkMode);
     ::SelectObject(hdc, hOldFont);
     ::DeleteObject(hFont);
+}
+
+void DrawInlineContentRestyledRanges(HDC hdc,
+                                     const std::vector<balloonchat::ChatSegment>& segs,
+                                     const SelLayout& layout,
+                                     const std::vector<InlineCharRange>& ranges,
+                                     const RECT& rcText,
+                                     const InlineTextStyle& style,
+                                     int faceSize)
+{
+    if (ranges.empty() || layout.m_lines.empty())
+    {
+        return;
+    }
+    //整条内容只排版一次，各区间共用。排版用的字体与 DrawInlineContent 按同一样式建的完全相同，
+    //放置项的位置因此与底层正文逐像素对齐
+    std::vector<InlinePlaced> placed;
+    LayoutInlineContentForStyle(hdc, segs, rcText.right - rcText.left, faceSize, style, &placed);
+    DrawInlinePlacedRestyledRanges(hdc, placed, layout, ranges, rcText, style);
 }
 
 void DrawInlineContentRestyledRange(HDC hdc,
@@ -623,30 +785,25 @@ void DrawInlineContentRestyledRange(HDC hdc,
                                     const InlineTextStyle& style,
                                     int faceSize)
 {
-    if (charEnd <= charBegin || layout.m_lines.empty())
-    {
-        return;
-    }
+    std::vector<InlineCharRange> ranges;
+    ranges.push_back(InlineCharRange(charBegin, charEnd));
+    DrawInlineContentRestyledRanges(hdc, segs, layout, ranges, rcText, style, faceSize);
+}
 
-    //区间可能跨行，故先取它占的若干矩形，逐个矩形裁剪重画。
-    const std::vector<SelRect> rects = BuildSelectionRects(layout, charBegin, charEnd);
-    for (std::size_t r = 0; r < rects.size(); ++r)
-    {
-        //保存原裁剪区。GetClipRgn 返回 1 表示原本有裁剪区、0 表示没有，
-        //恢复时据此决定是还原那个区域还是清成"不裁剪"。
-        HRGN saved = ::CreateRectRgn(0, 0, 0, 0);
-        const int hadClip = ::GetClipRgn(hdc, saved);
+unsigned long InlineLayoutCallCount()
+{
+    return g_inlineLayoutCalls;
+}
 
-        ::IntersectClipRect(hdc,
-                            rcText.left + rects[r].m_left,
-                            rcText.top  + rects[r].m_top,
-                            rcText.left + rects[r].m_right,
-                            rcText.top  + rects[r].m_bottom);
-        DrawInlineContent(hdc, segs, rcText, style, faceSize);
+unsigned long InlinePlacedDrawCount()
+{
+    return g_inlinePlacedDraws;
+}
 
-        ::SelectClipRgn(hdc, (hadClip == 1) ? saved : NULL);
-        ::DeleteObject(saved);
-    }
+void ResetInlineProbeCounters()
+{
+    g_inlineLayoutCalls = 0;
+    g_inlinePlacedDraws = 0;
 }
 
 } // namespace balloonchatwnd

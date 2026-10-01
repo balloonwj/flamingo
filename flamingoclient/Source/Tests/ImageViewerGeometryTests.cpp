@@ -3,7 +3,8 @@
  *
  *  聊天图片放大窗口的纯几何运算测试（增量 1）：旋转后尺寸、适应窗口缩放比
  *  （只缩不放）、缩放档位夹取与步进、图片落点夹取与小图居中、锚点缩放落点、
- *  缩放百分数读数。对应方案用例 V1~V6。窗口本体 / GDI+ 绘制 / 键鼠交互只能
+ *  缩放百分数读数。对应方案用例 V1~V6。另有 IVD1～IVD5：在画布上按住拖动时，按图片能否
+ *  平移、是否移出系统拖动阈值、是否按在工具栏上，决定平移图片、移动窗口还是什么都不做。窗口本体 / GDI+ 绘制 / 键鼠交互只能
  *  目视核对，不在本文件覆盖范围内。
  *
  *  用 Catch2 v3（amalgamated）。全局 _Module 由 BalloonChatLayoutTests.cpp
@@ -253,4 +254,70 @@ TEST_CASE("V6 百分数读数四舍五入到整数", "[imgviewer][geom]")
     CHECK(FormatZoomReadout(1.5) == CString(_T("150%")));
     CHECK(FormatZoomReadout(0.333) == CString(_T("33%")));
     CHECK(FormatZoomReadout(4.0) == CString(_T("400%")));
+}
+
+// ---- 拖动画布：平移图片还是移动窗口（用例 IVD1～IVD5）---------------------
+
+namespace {
+
+// 测试用的系统拖动阈值（像素），与 Windows 默认的 SM_CXDRAG / SM_CYDRAG 一致
+const int kTestDragThreshold = 4;
+// 按下点（宿主客户区坐标）
+const int kTestPressX = 200;
+const int kTestPressY = 150;
+
+SIZE DragThreshold()
+{
+    return MakeSize(kTestDragThreshold, kTestDragThreshold);
+}
+
+} // namespace
+
+TEST_CASE("IVD1 图片能完整显示时，拖过阈值就移动窗口", "[imgviewer][drag]")
+{
+    const POINT press = MakePoint(kTestPressX, kTestPressY);
+    // 横向、纵向各自超过阈值都算
+    CHECK(ResolveCanvasDrag(false, false, press,
+                            MakePoint(kTestPressX + kTestDragThreshold + 1, kTestPressY),
+                            DragThreshold()) == kCanvasDragMoveWindow);
+    CHECK(ResolveCanvasDrag(false, false, press,
+                            MakePoint(kTestPressX, kTestPressY - kTestDragThreshold - 1),
+                            DragThreshold()) == kCanvasDragMoveWindow);
+}
+
+TEST_CASE("IVD2 图片放大到超出窗口时，拖动仍是平移图片", "[imgviewer][drag]")
+{
+    const POINT press = MakePoint(kTestPressX, kTestPressY);
+    // 平移从按下就开始，不等阈值（与改动前一致）
+    CHECK(ResolveCanvasDrag(false, true, press, press, DragThreshold()) == kCanvasDragPanImage);
+    CHECK(ResolveCanvasDrag(false, true, press,
+                            MakePoint(kTestPressX + kTestDragThreshold * 10, kTestPressY),
+                            DragThreshold()) == kCanvasDragPanImage);
+}
+
+TEST_CASE("IVD3 按下后没移出阈值：既不移动窗口也不平移，单击与双击不受影响", "[imgviewer][drag]")
+{
+    const POINT press = MakePoint(kTestPressX, kTestPressY);
+    CHECK(ResolveCanvasDrag(false, false, press, press, DragThreshold()) == kCanvasDragNone);
+    // 恰好等于阈值仍不算移出
+    CHECK(ResolveCanvasDrag(false, false, press,
+                            MakePoint(kTestPressX + kTestDragThreshold, kTestPressY + kTestDragThreshold),
+                            DragThreshold()) == kCanvasDragNone);
+}
+
+TEST_CASE("IVD4 还没有加载图片时，拖动移动窗口", "[imgviewer][drag]")
+{
+    const POINT press = MakePoint(kTestPressX, kTestPressY);
+    // 没有图片时谈不上平移，pannable 恒为 false，结论与图片能完整显示时相同
+    CHECK(ResolveCanvasDrag(false, false, press,
+                            MakePoint(kTestPressX + kTestDragThreshold + 1, kTestPressY),
+                            DragThreshold()) == kCanvasDragMoveWindow);
+}
+
+TEST_CASE("IVD5 按在底部工具栏上时不移动窗口", "[imgviewer][drag]")
+{
+    const POINT press = MakePoint(kTestPressX, kTestPressY);
+    const POINT distant = MakePoint(kTestPressX + kTestDragThreshold * 10, kTestPressY);
+    CHECK(ResolveCanvasDrag(true, false, press, distant, DragThreshold()) == kCanvasDragNone);
+    CHECK(ResolveCanvasDrag(true, true, press, distant, DragThreshold()) == kCanvasDragNone);
 }

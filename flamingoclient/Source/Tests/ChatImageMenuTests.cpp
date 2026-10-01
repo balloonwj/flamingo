@@ -74,6 +74,8 @@ const bool kCanPin    = true;    //服务器已给这条消息分配 msgid，可
 const bool kCannotPin = false;   //本端刚发出、回执还没回填，整项不出现
 const bool kPinned    = true;    //本条当前已被钉住，那一项文案取「取消 Pin」
 const bool kNotPinned = false;   //本条当前没被钉住，文案取「Pin」
+const bool kCanForward    = true;    //有服务器 msgid（或文件行的 fileMsgid），可以转发
+const bool kCannotForward = false;   //发送中 / 发送失败，没有服务器 msgid，「转发」整项不出现
 
 } // anonymous namespace
 
@@ -87,7 +89,7 @@ TEST_CASE("CIM1 模型里的图片 kind 取值与 ChatMsgKind 一致")
 TEST_CASE("CIM2 文字消息不出现图片两项")
 {
     const std::vector<ChatMessageMenuEntry> model =
-        BuildChatMessageMenuModel(kMsgText, kChatImageStateReady, kHasPath, kCannotRecall, kCannotPin, kNotPinned);
+        BuildChatMessageMenuModel(kMsgText, kChatImageStateReady, kHasPath, kCannotRecall, kCannotPin, kNotPinned, kCanForward);
 
     CHECK_FALSE(HasItem(model, kChatMsgMenuSaveImageAs));
     CHECK_FALSE(HasItem(model, kChatMsgMenuResendImage));
@@ -103,7 +105,7 @@ TEST_CASE("CIM2 文字消息不出现图片两项")
 TEST_CASE("CIM3 图片就绪时两项紧跟在「复制」之后，其余顺序不变")
 {
     const std::vector<ChatMessageMenuEntry> model =
-        BuildChatMessageMenuModel(kMsgImage, kChatImageStateReady, kHasPath, kCannotRecall, kCannotPin, kNotPinned);
+        BuildChatMessageMenuModel(kMsgImage, kChatImageStateReady, kHasPath, kCannotRecall, kCannotPin, kNotPinned, kCanForward);
 
     const std::vector<int> expect = {
         kChatMsgMenuCopy, kChatMsgMenuSaveImageAs, kChatMsgMenuResendImage,
@@ -123,11 +125,11 @@ TEST_CASE("CIM4 图片未就绪时两项不出现")
     //上传中 / 下载中 / 失败：这三种态下这张图要么还没传完、要么根本没有本地文件，
     //另存为与再次发送都无从谈起。按与用户确认的口径整项不显示，不置灰。
     const int notReady[] = { kChatImageStateUploading, kChatImageStateFailed,
-                             kChatImageStateDownloading };
+                             kChatImageStateDownloading, kChatImageStateDownloadFailed };
     for (std::size_t i = 0; i < sizeof(notReady) / sizeof(notReady[0]); ++i)
     {
         const std::vector<ChatMessageMenuEntry> model =
-            BuildChatMessageMenuModel(kMsgImage, notReady[i], kHasPath, kCannotRecall, kCannotPin, kNotPinned);
+            BuildChatMessageMenuModel(kMsgImage, notReady[i], kHasPath, kCannotRecall, kCannotPin, kNotPinned, kCanForward);
         CHECK_FALSE(HasItem(model, kChatMsgMenuSaveImageAs));
         CHECK_FALSE(HasItem(model, kChatMsgMenuResendImage));
         CHECK_FALSE(ShouldShowImageActions(kMsgImage, notReady[i], kHasPath));
@@ -138,7 +140,7 @@ TEST_CASE("CIM5 图片虽已就绪但没有本地路径时两项不出现")
 {
     //收图的"下载完成填路径"与"状态置就绪"是两次赋值，中间那一瞬只信状态会误判。
     const std::vector<ChatMessageMenuEntry> model =
-        BuildChatMessageMenuModel(kMsgImage, kChatImageStateReady, kNoPath, kCannotRecall, kCannotPin, kNotPinned);
+        BuildChatMessageMenuModel(kMsgImage, kChatImageStateReady, kNoPath, kCannotRecall, kCannotPin, kNotPinned, kCanForward);
     CHECK_FALSE(HasItem(model, kChatMsgMenuSaveImageAs));
     CHECK_FALSE(HasItem(model, kChatMsgMenuResendImage));
     CHECK_FALSE(ShouldShowImageActions(kMsgImage, kChatImageStateReady, kNoPath));
@@ -150,7 +152,7 @@ TEST_CASE("CIM6 文件与大表情消息不出现图片两项")
     for (std::size_t i = 0; i < sizeof(otherKinds) / sizeof(otherKinds[0]); ++i)
     {
         const std::vector<ChatMessageMenuEntry> model =
-            BuildChatMessageMenuModel(otherKinds[i], kChatImageStateReady, kHasPath, kCannotRecall, kCannotPin, kNotPinned);
+            BuildChatMessageMenuModel(otherKinds[i], kChatImageStateReady, kHasPath, kCannotRecall, kCannotPin, kNotPinned, kCanForward);
         CHECK_FALSE(HasItem(model, kChatMsgMenuSaveImageAs));
         CHECK_FALSE(HasItem(model, kChatMsgMenuResendImage));
     }
@@ -159,7 +161,7 @@ TEST_CASE("CIM6 文件与大表情消息不出现图片两项")
 TEST_CASE("CIM7 自己发的图在撤回时限内：撤回与图片两项同时出现且顺序稳定")
 {
     const std::vector<ChatMessageMenuEntry> model =
-        BuildChatMessageMenuModel(kMsgImage, kChatImageStateReady, kHasPath, kCanRecall, kCannotPin, kNotPinned);
+        BuildChatMessageMenuModel(kMsgImage, kChatImageStateReady, kHasPath, kCanRecall, kCannotPin, kNotPinned, kCanForward);
 
     const std::vector<int> expect = {
         kChatMsgMenuCopy, kChatMsgMenuSaveImageAs, kChatMsgMenuResendImage,
@@ -173,7 +175,7 @@ TEST_CASE("CIM8 所有菜单项 id 互不相同")
 {
     //分发时按 id switch，撞号会让两个功能串线，而这种错在界面上看不出来。
     const std::vector<ChatMessageMenuEntry> model =
-        BuildChatMessageMenuModel(kMsgImage, kChatImageStateReady, kHasPath, kCanRecall, kCannotPin, kNotPinned);
+        BuildChatMessageMenuModel(kMsgImage, kChatImageStateReady, kHasPath, kCanRecall, kCannotPin, kNotPinned, kCanForward);
 
     std::vector<int> ids;
     for (std::size_t i = 0; i < model.size(); ++i)
@@ -249,7 +251,7 @@ TEST_CASE("CIM-PIN1 可 Pin 时那一项出现在「转发」之后、第一条�
 {
     const std::vector<ChatMessageMenuEntry> model =
         BuildChatMessageMenuModel(kMsgText, kChatImageStateReady, kHasPath,
-                                  kCannotRecall, kCanPin, kNotPinned);
+                                  kCannotRecall, kCanPin, kNotPinned, kCanForward);
 
     //文字消息带 Pin 的完整骨架：复制 / 引用回复 / 转发 / Pin / — / 删除 / — / 多选
     const std::vector<int> expect = {
@@ -275,10 +277,10 @@ TEST_CASE("CIM-PIN2 文案随当前是否已钉住取反")
 {
     const std::vector<ChatMessageMenuEntry> off =
         BuildChatMessageMenuModel(kMsgText, kChatImageStateReady, kHasPath,
-                                  kCannotRecall, kCanPin, kNotPinned);
+                                  kCannotRecall, kCanPin, kNotPinned, kCanForward);
     const std::vector<ChatMessageMenuEntry> on =
         BuildChatMessageMenuModel(kMsgText, kChatImageStateReady, kHasPath,
-                                  kCannotRecall, kCanPin, kPinned);
+                                  kCannotRecall, kCanPin, kPinned, kCanForward);
 
     CHECK(std::wstring(LabelOf(off, kChatMsgMenuPin)) == L"Pin");
     CHECK(std::wstring(LabelOf(on, kChatMsgMenuPin)) == L"取消 Pin");
@@ -291,7 +293,7 @@ TEST_CASE("CIM-PIN3 不可 Pin 时整项不出现，而不是置灰")
     //菜单里不留点不动的项。
     const std::vector<ChatMessageMenuEntry> model =
         BuildChatMessageMenuModel(kMsgText, kChatImageStateReady, kHasPath,
-                                  kCannotRecall, kCannotPin, kNotPinned);
+                                  kCannotRecall, kCannotPin, kNotPinned, kCanForward);
     CHECK_FALSE(HasItem(model, kChatMsgMenuPin));
 
     //其余各项不受影响
@@ -307,7 +309,7 @@ TEST_CASE("CIM-PIN4 Pin 与撤回、图片两项互不干扰")
     //撤回在第一条分隔线之后，四者各就各位
     const std::vector<ChatMessageMenuEntry> model =
         BuildChatMessageMenuModel(kMsgImage, kChatImageStateReady, kHasPath,
-                                  kCanRecall, kCanPin, kPinned);
+                                  kCanRecall, kCanPin, kPinned, kCanForward);
 
     const std::vector<int> expect = {
         kChatMsgMenuCopy, kChatMsgMenuSaveImageAs, kChatMsgMenuResendImage,
@@ -334,14 +336,75 @@ TEST_CASE("CIM-PIN5 Pin 项的存在与否不影响撤回项的判定")
     //撤回不可用、Pin 可用
     const std::vector<ChatMessageMenuEntry> pinOnly =
         BuildChatMessageMenuModel(kMsgText, kChatImageStateReady, kHasPath,
-                                  kCannotRecall, kCanPin, kNotPinned);
+                                  kCannotRecall, kCanPin, kNotPinned, kCanForward);
     CHECK(HasItem(pinOnly, kChatMsgMenuPin));
     CHECK_FALSE(HasItem(pinOnly, kChatMsgMenuRecall));
 
     //撤回可用、Pin 不可用
     const std::vector<ChatMessageMenuEntry> recallOnly =
         BuildChatMessageMenuModel(kMsgText, kChatImageStateReady, kHasPath,
-                                  kCanRecall, kCannotPin, kNotPinned);
+                                  kCanRecall, kCannotPin, kNotPinned, kCanForward);
     CHECK_FALSE(HasItem(recallOnly, kChatMsgMenuPin));
     CHECK(HasItem(recallOnly, kChatMsgMenuRecall));
+}
+
+TEST_CASE("FWD-C6a 不能转发时「转发」整项不出现，其余各项不受影响", "[forward]")
+{
+    //发送中 / 发送失败的行没有服务器 msgid：转发请求必被服务端判非法，故整项不显示
+    const std::vector<ChatMessageMenuEntry> model =
+        BuildChatMessageMenuModel(kMsgText, kChatImageStateReady, kHasPath,
+                                  kCannotRecall, kCannotPin, kNotPinned, kCannotForward);
+    CHECK_FALSE(HasItem(model, kChatMsgMenuForward));
+
+    const std::vector<int> expect = {
+        kChatMsgMenuCopy, kChatMsgMenuReply, 0,
+        kChatMsgMenuDelete, 0, kChatMsgMenuMultiSelect
+    };
+    CHECK(IdsOf(model) == expect);
+
+    //文件夹行：即便传入可以转发，也只有「复制」「删除」「多选」三项
+    const std::vector<ChatMessageMenuEntry> folder =
+        BuildChatMessageMenuModel(kChatMenuKindFolder, kChatImageStateReady, kHasPath,
+                                  kCannotRecall, kCanPin, kNotPinned, kCanForward);
+    CHECK_FALSE(HasItem(folder, kChatMsgMenuForward));
+}
+
+TEST_CASE("FWD-C6b 能否转发的判定与转发所用的 msgid", "[forward]")
+{
+    //有服务器 msgid 的文字、图片、文件行都能转发
+    CHECK(CanForwardMessage(kMsgText, 501, 0));
+    CHECK(CanForwardMessage(kMsgImage, 502, 0));
+    CHECK(CanForwardMessage(kMsgFile, 503, 503));
+
+    //单聊里收到的文件与历史文件：msgid 为 0、服务器 msgid 放在 fileMsgid 里，同样能转发
+    CHECK(CanForwardMessage(kMsgFile, 0, 504));
+    CHECK(ForwardMsgidOf(0, 504) == 504);
+    CHECK(ForwardMsgidOf(503, 503) == 503);
+
+    //发送中 / 发送失败：两个 id 都是 0
+    CHECK_FALSE(CanForwardMessage(kMsgText, 0, 0));
+    CHECK(ForwardMsgidOf(0, 0) == 0);
+
+    //文件夹行与时间分隔行（含撤回后变成的提示行）即便带着 msgid 也不能转发
+    CHECK_FALSE(CanForwardMessage(kMsgFolder, 505, 0));
+    CHECK_FALSE(CanForwardMessage(kMsgTime, 506, 0));
+
+    //时间分隔行的 kind 取值与 ChatMsgKind 一致（模型里单独留了一份）
+    CHECK(kChatMenuKindTime == (int)kMsgTime);
+}
+
+TEST_CASE("FWD-C6c 合并卡片的菜单不提供「复制」，其余各项照常", "[forward]")
+{
+    CHECK(kChatMenuKindMerged == (int)kMsgMerged);
+    CHECK(CanForwardMessage(kMsgMerged, 701, 0));
+
+    const std::vector<ChatMessageMenuEntry> model =
+        BuildChatMessageMenuModel(kChatMenuKindMerged, kChatImageStateReady, kNoPath,
+                                  kCanRecall, kCanPin, kNotPinned, kCanForward);
+    CHECK_FALSE(HasItem(model, kChatMsgMenuCopy));
+    const std::vector<int> expect = {
+        kChatMsgMenuReply, kChatMsgMenuForward, kChatMsgMenuPin, 0,
+        kChatMsgMenuRecall, kChatMsgMenuDelete, 0, kChatMsgMenuMultiSelect
+    };
+    CHECK(IdsOf(model) == expect);
 }

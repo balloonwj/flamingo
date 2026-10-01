@@ -141,16 +141,66 @@ void DrawChatIcon(Gdiplus::Graphics& g, int kind,
         break;
 
     case kChatIconPin:
-        // 图钉：上部圆头 + 下方针尖（水滴形），头部中心挖一个小圆孔。
-        // 圆心取 (12,10)、半径 7；圆弧自 140° 顺时针扫 260°，留出的缺口朝下，
-        // 再由弧的终点连到针尖 (12,21)，CloseFigure 把针尖接回弧的起点。
+        // 图钉（按钉）：钉帽、收窄的钉身、向两侧张开的底盘，底盘下伸出一根钉针；整体斜放
+        // 45°，钉帽朝右上、钉针指向左下，与 📌 字符是同一造型。
+        // 不能画成「水滴形 + 中心小圆环」：那是地图定位针的造型，旧版本就是这样画的，
+        // 显示在消息旁边会被理解为「位置」，而不是「已 Pin」。
+        // 钉帽到底盘这一段填实，钉针单独描一笔。不只描边的原因是该图标实际显示尺寸只有
+        // 14~16px，描边宽度折算下来不足 1px，只描边时在该尺寸下实测线条发虚、看不出形状。
         {
-            Gdiplus::GraphicsPath pin;
-            pin.AddArc(5.0f, 3.0f, 14.0f, 14.0f, 140.0f, 260.0f);
-            pin.AddLine(17.4f, 14.5f, 12.0f, 21.0f);
-            pin.CloseFigure();
-            g.DrawPath(&pen, &pin);
-            g.DrawEllipse(&pen, 9.5f, 7.5f, 5.0f, 5.0f);
+            // 以下坐标按「钉帽朝上、钉针朝下」的竖直姿态给出，旋转在后面统一做。
+            const Gdiplus::REAL kPinAxisX   = 12.0f;   // 钉身中轴 x
+            const Gdiplus::REAL kCapHalfW   = 4.5f;    // 钉帽半宽
+            const Gdiplus::REAL kCapTop     = 4.0f;    // 钉帽顶边 y
+            const Gdiplus::REAL kCapBottom  = 7.5f;    // 钉帽底边 y，也是钉身顶端
+            const Gdiplus::REAL kNeckHalfW  = 2.2f;    // 钉身半宽
+            const Gdiplus::REAL kNeckBottom = 11.5f;   // 钉身底端 y，自此向两侧张开成底盘
+            const Gdiplus::REAL kBaseHalfW  = 6.5f;    // 底盘半宽
+            const Gdiplus::REAL kBaseTop    = 15.0f;   // 底盘两侧竖边的上端 y
+            const Gdiplus::REAL kBaseBottom = 17.5f;   // 底盘底边 y，也是钉针根部
+            const Gdiplus::REAL kNeedleTip  = 23.0f;   // 钉针尖 y
+            // 绕 viewBox 中心顺时针旋转 45°。上面的竖直坐标已按旋转后的外接框在 viewBox
+            // 内大致居中来取值（旋转后约占 x、y 各 3.5~20.8），旋转之后不需要再平移。
+            const Gdiplus::REAL kTiltCenter  = kViewBox / 2.0f;   // 旋转中心（x、y 相同）
+            const Gdiplus::REAL kTiltDegrees = 45.0f;             // 顺时针旋转角（度）
+
+            // GDI+ 的变换默认追加在已有变换之前，所以三步的实际作用顺序是：先把旋转
+            // 中心移到原点、再旋转、再移回原处，最后才是函数开头的缩放与平移。
+            g.TranslateTransform(kTiltCenter, kTiltCenter);
+            g.RotateTransform(kTiltDegrees);
+            g.TranslateTransform(-kTiltCenter, -kTiltCenter);
+
+            // 钉帽 + 钉身 + 底盘的外轮廓，自钉帽左上角起顺时针一圈。
+            const Gdiplus::PointF outline[] =
+            {
+                Gdiplus::PointF(kPinAxisX - kCapHalfW,  kCapTop),       // 钉帽左上
+                Gdiplus::PointF(kPinAxisX + kCapHalfW,  kCapTop),       // 钉帽右上
+                Gdiplus::PointF(kPinAxisX + kCapHalfW,  kCapBottom),    // 钉帽右下
+                Gdiplus::PointF(kPinAxisX + kNeckHalfW, kCapBottom),    // 钉身右上
+                Gdiplus::PointF(kPinAxisX + kNeckHalfW, kNeckBottom),   // 钉身右下
+                Gdiplus::PointF(kPinAxisX + kBaseHalfW, kBaseTop),      // 底盘右上
+                Gdiplus::PointF(kPinAxisX + kBaseHalfW, kBaseBottom),   // 底盘右下
+                Gdiplus::PointF(kPinAxisX - kBaseHalfW, kBaseBottom),   // 底盘左下
+                Gdiplus::PointF(kPinAxisX - kBaseHalfW, kBaseTop),      // 底盘左上
+                Gdiplus::PointF(kPinAxisX - kNeckHalfW, kNeckBottom),   // 钉身左下
+                Gdiplus::PointF(kPinAxisX - kNeckHalfW, kCapBottom),    // 钉身左上
+                Gdiplus::PointF(kPinAxisX - kCapHalfW,  kCapBottom),    // 钉帽左下
+            };
+            const INT kOutlinePointCount = (INT)(sizeof(outline) / sizeof(outline[0]));
+
+            Gdiplus::GraphicsPath body;
+            body.AddPolygon(outline, kOutlinePointCount);
+            g.FillPath(&brush, &body);
+            // 填实之后再沿轮廓描一圈：圆角连接让钉帽、底盘的尖角略微变圆，
+            // 与本组其它图标的圆头圆角风格一致。
+            g.DrawPath(&pen, &body);
+
+            // 钉针比其它笔画粗一些：按调用方给的描边宽度画，在 14px 下不足 1px，
+            // 实测只剩一道很淡的虚影，整枚图钉看上去就成了一个色块。
+            const Gdiplus::REAL kNeedleWidthScale = 1.5f;   // 钉针线宽相对描边宽度的倍数
+            Gdiplus::Pen needlePen(color, strokeWidth * kNeedleWidthScale);
+            MakeStrokePen(needlePen);
+            g.DrawLine(&needlePen, kPinAxisX, kBaseBottom, kPinAxisX, kNeedleTip);
         }
         break;
 

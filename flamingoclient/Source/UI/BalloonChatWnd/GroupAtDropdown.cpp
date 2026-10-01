@@ -146,7 +146,7 @@ CGroupAtDropdown::~CGroupAtDropdown()
     //
     // 收尾方式与 CBalloonMainPanel 对 m_searchDropdown、托盘控制器对 m_trayMsgTipPopup
     // 的处理同源，区别是就近放在本类自己的析构里，这样所有宿主都自动受益。
-    if (m_hWnd != NULL)
+    if (IsWindow())
     {
         // 先摘掉选中回调再销毁：销毁过程中控件树被释放，万一有残留通知冒上来，
         // 回调里的 userdata（宿主群聊窗）此刻可能已经进入析构，不能再回调过去。
@@ -164,7 +164,7 @@ CGroupAtDropdown::~CGroupAtDropdown()
 
 bool CGroupAtDropdown::EnsureCreated()
 {
-    if (m_hWnd != NULL)
+    if (IsWindow())
     {
         return true;
     }
@@ -248,7 +248,7 @@ void CGroupAtDropdown::Show(const POINT& anchorScreenPt,
 
 void CGroupAtDropdown::UpdateFilter(const CString& prefix)
 {
-    if (m_hWnd == NULL)
+    if (!IsWindow())
     {
         return;
     }

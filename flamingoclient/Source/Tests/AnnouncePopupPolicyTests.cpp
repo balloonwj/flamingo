@@ -132,7 +132,7 @@ TEST_CASE("AP10 记账：路径为空或群ID非正时安全跳过", "[announcep
     //不能因此崩溃，也不能往一个空路径写文件。
     CHECK(LoadLastPoppedAnnounceId(NULL, 10000000001LL) == 0);
     CHECK(LoadLastPoppedAnnounceId(_T(""), 10000000001LL) == 0);
-    CHECK(LoadLastPoppedAnnounceId(_T("C:\\nonexistent\\x.cfg"), 0) == 0);
+    CHECK(LoadLastPoppedAnnounceId(_T("C:\\nonexistent\\x.ini"), 0) == 0);
 
     //这几个调用只要不崩、不抛就算通过
     SaveLastPoppedAnnounceId(NULL, 10000000001LL, 15);
@@ -143,6 +143,6 @@ TEST_CASE("AP10 记账：路径为空或群ID非正时安全跳过", "[announcep
 TEST_CASE("AP11 记账：从没弹过的群读回 0", "[announcepopup]")
 {
     //"读回 0"与"确实弹过第 0 条"不会混淆 —— 公告ID 从 1 起，0 不是合法ID
-    CHECK(LoadLastPoppedAnnounceId(_T("C:\\nonexistent\\flamingo-test.cfg"),
+    CHECK(LoadLastPoppedAnnounceId(_T("C:\\nonexistent\\flamingo-test.ini"),
                                    10000000001LL) == 0);
 }

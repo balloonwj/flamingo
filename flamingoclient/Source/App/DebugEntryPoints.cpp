@@ -32,8 +32,253 @@
 #include "../Feature/Call/CallVideoUiDebug.h"                    // --callvideoui
 #include "../Common/Log/IULog.h"
 #include "../Session/UserSessionData.h"
+#include "../UI/BalloonMain/MainPanelBench.h"                  // --mainpanel --stress / --bench
+#include "../UI/BalloonMain/MainPanelStressData.h"             // --forwardpicker 的预览数据
+#include "../UI/BalloonMain/ForwardRequest.h"                  // --forwardpicker：模拟的转发请求
+#include "../Common/Util/EncodeUtil.h"                         // --forwardpicker：UTF-8 名字转宽字符串
+#include "../third-party/jsoncpp-1.9.0/json.h"                // --mergedviewer：构造合并记录的 content
+#include <time.h>                                              // --mergedviewer：子消息时间取当前时间往前推
+#include "../net/Protocol.h"                                   // conversation_single / conversation_group
 
 namespace balloonapp {
+
+namespace {
+
+//--mainpanel --stress 的延迟启动时长（毫秒）。CreateAndShow 返回时消息循环还没开始跑，
+//窗口的首次绘制也还没发生；等窗口显示稳定之后再灌数据，计时里才不会混进首次显示的开销。
+const UINT kStressStartDelayMs = 800;
+
+//压测对象与"灌完数据后是否接着跑基准场景"。线程定时器的回调拿不到任何用户数据，
+//只能经文件内的静态变量传递；对象在回调里用完即释放。仅调试入口使用。
+balloonmain::CMainPanelBench* g_pStressBench    = NULL;
+bool                          g_bStressRunBench = false;
+
+//压测的延迟启动回调：灌入压测数据，带 --bench 时再跑完全部基准场景。只触发一次。
+void CALLBACK StressStartTimerProc(HWND /*hwnd*/, UINT /*uMsg*/, UINT_PTR idEvent, DWORD /*dwTime*/)
+{
+    ::KillTimer(NULL, idEvent);
+    if (g_pStressBench == NULL)
+    {
+        return;
+    }
+    balloonmain::StressDataSpec spec;
+    g_pStressBench->LoadStressData(spec);
+    if (g_bStressRunBench)
+    {
+        g_pStressBench->RunScenarios();
+    }
+    delete g_pStressBench;
+    g_pStressBench = NULL;
+}
+
+//--forwardpicker 用的数据规模：几十个人、几个部门与群，足够核对三个页签的样子
+const int kForwardPreviewContacts      = 60;
+const int kForwardPreviewDepartments   = 6;
+const int kForwardPreviewGroups        = 8;
+const int kForwardPreviewConversations = 20;
+//预览里本人的 userid：取第一个联系人，验证「不列出自己」
+const int kForwardPreviewSelfIndex     = 0;
+//预览里模拟转发的消息条数与跳过条数
+const int kForwardPreviewMessageCount  = 3;
+const size_t kForwardPreviewSkipped    = 1;
+
+//UTF-8 转宽字符串，预览数据里的名字都是 UTF-8
+std::wstring Utf8ToWide(const std::string& utf8)
+{
+    if (utf8.empty())
+    {
+        return std::wstring();
+    }
+    std::vector<wchar_t> buf(utf8.size() + 1, 0);
+    EncodeUtil::Utf8ToUnicode(utf8.c_str(), buf.data(), (int)buf.size());
+    return std::wstring(buf.data());
+}
+
+//--forwardpicker：用一小份压测数据打开转发目标选择窗。会话列表里的名字按通讯录与
+//群列表查出，逻辑是主面板正式代码的简化版（只取昵称，不处理备注）。
+//  dlg：  调试入口持有的选择窗对象。
+//  merge：true 模拟合并转发（预览显示聊天记录标题），false 模拟逐条转发。
+void OpenForwardPickerPreview(balloonmain::CForwardTargetDlg& dlg, bool merge)
+{
+    balloonmain::StressDataSpec spec;
+    spec.m_contactCount      = kForwardPreviewContacts;
+    spec.m_departmentCount   = kForwardPreviewDepartments;
+    spec.m_groupCount        = kForwardPreviewGroups;
+    spec.m_conversationCount = kForwardPreviewConversations;
+    balloonmain::StressDataSet data;
+    balloonmain::BuildStressData(spec, data);
+    const int64_t selfId = data.ContactUserIdAt(kForwardPreviewSelfIndex);
+
+    std::vector<balloonmain::ForwardTarget> groups;
+    for (size_t i = 0; i < data.m_groups.m_groups.size(); ++i)
+    {
+        balloonmain::ForwardTarget t;
+        t.m_ctype = conversation_group;
+        t.m_cid = data.m_groups.m_groups[i].m_groupid;
+        t.m_name = Utf8ToWide(data.m_groups.m_groups[i].m_name);
+        groups.push_back(t);
+    }
+
+    std::vector<balloonmain::ForwardTarget> convs;
+    for (size_t i = 0; i < data.m_conversations.m_items.size(); ++i)
+    {
+        const net::ConversationItem& item = data.m_conversations.m_items[i];
+        balloonmain::ForwardTarget t;
+        t.m_ctype = item.m_ctype;
+        t.m_cid = item.m_cid;
+        if (item.m_ctype == conversation_group)
+        {
+            for (size_t k = 0; k < groups.size(); ++k)
+            {
+                if (groups[k].m_cid == item.m_cid)
+                {
+                    t.m_name = groups[k].m_name;
+                    break;
+                }
+            }
+        }
+        else
+        {
+            for (size_t k = 0; k < data.m_contacts.m_contacts.size(); ++k)
+            {
+                if (data.m_contacts.m_contacts[k].m_userid == item.m_cid)
+                {
+                    t.m_name = Utf8ToWide(data.m_contacts.m_contacts[k].m_nickname);
+                    t.m_account = Utf8ToWide(data.m_contacts.m_contacts[k].m_username);
+                    break;
+                }
+            }
+        }
+        convs.push_back(t);
+    }
+
+    balloonmain::ForwardRequest request;
+    request.m_srcCtype = conversation_single;
+    request.m_srcCid = data.ContactUserIdAt(kForwardPreviewSelfIndex + 1);
+    request.m_merge = merge;
+    for (int i = 1; i <= kForwardPreviewMessageCount; ++i)
+    {
+        request.m_msgids.push_back(i);
+    }
+    request.m_skipped = kForwardPreviewSkipped;
+    if (merge)
+    {
+        request.m_title = balloonmain::BuildMergedForwardTitle(conversation_single, L"我", L"张三");
+    }
+
+    dlg.Open(NULL, selfId, request, balloonmain::BuildRecentForwardTargets(convs, selfId), groups,
+             data.m_contacts.m_contacts, data.m_contacts.m_departments);
+    LOG_INFO("debug entry: forward picker opened, merge=%d.", merge ? 1 : 0);
+}
+
+//--mergedviewer 构造记录用的时间：一天与一分钟的毫秒数、一秒的毫秒数
+const int64_t kPreviewDayMs    = 24LL * 60 * 60 * 1000;
+const int64_t kPreviewMinuteMs = 60LL * 1000;
+const int64_t kPreviewSecondMs = 1000;
+//--mergedviewer 里各子消息的发送者 userid。第三个人不带 fromname，验证回退名字表
+const int64_t kPreviewUserA = 100001;
+const int64_t kPreviewUserB = 100002;
+const int64_t kPreviewUserC = 100003;
+//--mergedviewer 里文件与图片子消息的大小、原图宽高
+const int64_t kPreviewFileSize    = 90112;
+const int     kPreviewImageWidth  = 800;
+const int     kPreviewImageHeight = 600;
+
+//造一条 --mergedviewer 用的子消息（服务端合并记录里的消息体格式）。
+//  msgid：原消息 msgid；from：发送者；fromName：转发时记下的名字，空串表示不带；
+//  timestampMs：消息时间；msgtype：消息类型；content：消息内容。
+Json::Value MakePreviewSub(int64_t msgid, int64_t from, const char* fromName,
+                           int64_t timestampMs, int msgtype, const Json::Value& content)
+{
+    Json::Value sub(Json::objectValue);
+    sub["msgid"]     = std::to_string(msgid);
+    sub["from"]      = std::to_string(from);
+    sub["msgtype"]   = msgtype;
+    sub["timestamp"] = (Json::Int64)timestampMs;
+    sub["content"]   = content;
+    if (fromName != NULL && fromName[0] != '\0')
+    {
+        sub["fromname"] = fromName;
+    }
+    return sub;
+}
+
+//造一条文本内容。text：正文（UTF-8，可含 /f["<id>"] 内联表情标记）。
+Json::Value MakePreviewText(const char* text)
+{
+    Json::Value content(Json::objectValue);
+    content["text"] = text;
+    return content;
+}
+
+//--mergedviewer：构造一份覆盖各类子消息的合并记录 content —— 昨天、今天两组日期，文本（含
+//表情、链接、长文）、缺名字的子消息、文件、图片与一条嵌套记录。
+std::string BuildMergedViewerPreviewContent()
+{
+    const int64_t now       = (int64_t)::time(NULL) * kPreviewSecondMs;
+    const int64_t yesterday = now - kPreviewDayMs;
+    const int64_t today     = now - kPreviewMinuteMs * 30;
+
+    Json::Value nestedMessages(Json::arrayValue);
+    nestedMessages.append(MakePreviewSub(1, kPreviewUserA, "方亦初", yesterday - kPreviewDayMs,
+                                         message_type_text, MakePreviewText("上周的需求先按这个范围做")));
+    Json::Value nested(Json::objectValue);
+    nested["title"]    = "上周的讨论";
+    nested["messages"] = nestedMessages;
+
+    Json::Value file(Json::objectValue);
+    file["fileid"]   = "";
+    file["filename"] = "周会纪要.docx";
+    file["filesize"] = (Json::Int64)kPreviewFileSize;
+    file["md5"]      = "";
+
+    Json::Value image(Json::objectValue);
+    image["fileid"] = "";
+    image["md5"]    = "";
+    image["width"]  = kPreviewImageWidth;
+    image["height"] = kPreviewImageHeight;
+
+    Json::Value messages(Json::arrayValue);
+    int64_t msgid = 101;
+    messages.append(MakePreviewSub(msgid++, kPreviewUserA, "方亦初", yesterday, message_type_text,
+                                   MakePreviewText("早上好，周会的材料已经放到群文件里了/f[\"5\"]")));
+    messages.append(MakePreviewSub(msgid++, kPreviewUserB, "许知远", yesterday + kPreviewMinuteMs,
+                                   message_type_text, MakePreviewText("收到，我看一下")));
+    messages.append(MakePreviewSub(msgid++, kPreviewUserC, "", yesterday + kPreviewMinuteMs * 2,
+                                   message_type_text, MakePreviewText("这条没有带名字，按回退名字表显示")));
+    messages.append(MakePreviewSub(msgid++, kPreviewUserA, "方亦初", today, message_type_text,
+                                   MakePreviewText("今天的安排：上午把接口联调完，下午提测。测试环境的数据库"
+                                                   "昨晚重置过，账号还是原来那几个。如果联调时发现字段对不上，"
+                                                   "先在群里说一声，不要直接改表结构。提测之前请把自测记录补齐，"
+                                                   "尤其是异常路径。另外周五要做一次演示，演示用的数据请提前"
+                                                   "准备好，别等到当天再造。")));
+    messages.append(MakePreviewSub(msgid++, kPreviewUserB, "许知远", today + kPreviewMinuteMs,
+                                   message_type_file, file));
+    messages.append(MakePreviewSub(msgid++, kPreviewUserB, "许知远", today + kPreviewMinuteMs * 2,
+                                   message_type_image, image));
+    messages.append(MakePreviewSub(msgid++, kPreviewUserA, "方亦初", today + kPreviewMinuteMs * 3,
+                                   message_type_merged, nested));
+    messages.append(MakePreviewSub(msgid++, kPreviewUserA, "方亦初", today + kPreviewMinuteMs * 4,
+                                   message_type_text, MakePreviewText("方案见 https://example.com/doc")));
+
+    Json::Value root(Json::objectValue);
+    root["title"]    = "方亦初和许知远的聊天记录";
+    root["messages"] = messages;
+    Json::StreamWriterBuilder w;
+    w["indentation"] = "";
+    return Json::writeString(w, root);
+}
+
+//--mergedviewer：用构造的记录打开查看窗。第三个人不带 fromname，回退名字表里给出他的名字。
+void OpenMergedViewerPreview(CMergedRecordWindow& wnd)
+{
+    std::map<int64_t, CString> fallbackNames;
+    fallbackNames[kPreviewUserC] = _T("沈清");
+    wnd.Open(BuildMergedViewerPreviewContent(), fallbackNames, NULL);
+    LOG_INFO("debug entry: merged record viewer opened.");
+}
+
+} // anonymous namespace
 
 CDebugEntryRunner::CDebugEntryRunner(CFlamingoClient* pFMGClient)
     : m_lpFMGClient(pFMGClient)
@@ -78,6 +323,10 @@ void CDebugEntryRunner::DestroyPreviewWindows()
         m_aboutDlg.DestroyWindow();
     if (m_groupInfoDlg.IsWindow())
         m_groupInfoDlg.DestroyWindow();
+    if (m_forwardPickerDlg.IsWindow())
+        m_forwardPickerDlg.DestroyWindow();
+    if (m_mergedViewer.IsWindow())
+        m_mergedViewer.DestroyWindow();
     if (m_imageViewerWindow.IsWindow())
         m_imageViewerWindow.DestroyWindow();
     if (m_rdDlg.IsWindow())
@@ -99,6 +348,8 @@ int CDebugEntryRunner::CountAlivePreviewWindows() const
     n += m_systemSettingDlg.IsWindow() ? 1 : 0;
     n += m_aboutDlg.IsWindow() ? 1 : 0;
     n += m_groupInfoDlg.IsWindow() ? 1 : 0;
+    n += m_forwardPickerDlg.IsWindow() ? 1 : 0;
+    n += m_mergedViewer.IsWindow() ? 1 : 0;
     n += m_imageViewerWindow.IsWindow() ? 1 : 0;
     n += m_rdDlg.IsWindow() ? 1 : 0;
     n += m_rdControlledBar.IsWindow() ? 1 : 0;
@@ -133,6 +384,17 @@ DebugEntryResult CDebugEntryRunner::TryRun(DebugEntryContext& ctx)
             ctx.m_pPanel->ApplyConnectionState((int)balloonmain::kConnUiOffline);
         }
 
+        //再带 --stress 时灌入几千人规模的压测数据（见 MainPanelStressData.h），用于体验与测量
+        //大数据量下的流畅度；同时带 --bench 则灌完后自动跑完全部基准场景，结果写日志
+        //（见 MainPanelBench.h）。
+        if (::_tcsstr(::GetCommandLine(), _T("--stress")) != NULL && g_pStressBench == NULL)
+        {
+            g_pStressBench    = new balloonmain::CMainPanelBench(ctx.m_pPanel, m_lpFMGClient);
+            g_bStressRunBench = (::_tcsstr(::GetCommandLine(), _T("--bench")) != NULL);
+            ::SetTimer(NULL, 0, kStressStartDelayMs, StressStartTimerProc);
+            LOG_INFO("debug entry: main panel stress mode scheduled, bench=%d.", g_bStressRunBench ? 1 : 0);
+        }
+
         return kDebugEntryHandled;
     }
     // 调试入口：命令行带 --chatwindow 时跳过登录，直接弹出新版气泡式
@@ -147,6 +409,25 @@ DebugEntryResult CDebugEntryRunner::TryRun(DebugEntryContext& ctx)
     if (::_tcsstr(::GetCommandLine(), _T("--groupchatwindow")) != NULL)
     {
         m_groupChatWindow.CreateAndShow(ctx.m_hHost);
+        return kDebugEntryHandled;
+    }
+
+    // 调试入口：命令行带 --forwardpicker 时跳过登录，用一小份压测数据打开转发目标选择窗，
+    // 便于核对三个页签、已选区与预览的界面。不接结果接收方，点「发送」只记日志；
+    // 关闭窗口后进程不会自动退出，截图脚本负责结束进程。
+    if (::_tcsstr(::GetCommandLine(), _T("--forwardpicker")) != NULL)
+    {
+        OpenForwardPickerPreview(m_forwardPickerDlg,
+                                 ::_tcsstr(::GetCommandLine(), _T("--merge")) != NULL);
+        return kDebugEntryHandled;
+    }
+
+    // 调试入口：命令行带 --mergedviewer 时跳过登录，用构造的合并记录打开聊天记录查看窗，
+    // 便于核对各类子消息的行、日期分组头与嵌套记录。关闭窗口后进程不会自动退出，截图
+    // 脚本负责结束进程。
+    if (::_tcsstr(::GetCommandLine(), _T("--mergedviewer")) != NULL)
+    {
+        OpenMergedViewerPreview(m_mergedViewer);
         return kDebugEntryHandled;
     }
 
@@ -191,14 +472,25 @@ DebugEntryResult CDebugEntryRunner::TryRun(DebugEntryContext& ctx)
     // 窗口（mock 数据），便于开发期核对群管理窗视觉与各页切换。
     if (::_tcsstr(::GetCommandLine(), _T("--groupmanage")) != NULL)
     {
+        //群管理窗的模型默认为空、各页显示"正在加载"，调试入口没有服务端应答，
+        //须显式填入示例数据
+        m_groupManageWindow.LoadMockData();
         m_groupManageWindow.CreateAndShow(ctx.m_hHost);
         return kDebugEntryHandled;
     }
     // 调试入口：命令行带 --syssettings 时跳过登录，直接弹出新版系统设置
     // 对话框（配置取默认值），便于开发期核对系统设置窗视觉与三页切换。
+    // 再带 --chatclean 时接着弹出「清理聊天记录」对话框，按已连接显示；同时带 --offline
+    // 则按未连接显示（「清理」置灰并说明原因）。调试入口没有服务端，点「清理」会在 15 秒后
+    // 按超时处理。
     if (::_tcsstr(::GetCommandLine(), _T("--syssettings")) != NULL)
     {
         m_systemSettingDlg.OpenSettings(ctx.m_hHost);
+        if (::_tcsstr(::GetCommandLine(), _T("--chatclean")) != NULL)
+        {
+            m_systemSettingDlg.SetServerConnected(::_tcsstr(::GetCommandLine(), _T("--offline")) == NULL);
+            m_systemSettingDlg.OpenChatCleanDialog();
+        }
         return kDebugEntryHandled;
     }
     // 调试入口：命令行带 --about 时跳过登录，直接弹出新版关于对话框，

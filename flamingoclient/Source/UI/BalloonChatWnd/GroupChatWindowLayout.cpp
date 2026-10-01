@@ -47,6 +47,7 @@ extern CAppModule _Module;
 #include "GroupSideTab.h"
 #include "GroupMemberItem.h"
 #include "../../Session/GroupRoleRules.h"   // NetGroupRole：成员行的角色取值
+#include "../../net/Protocol.h"            // presence_type：调试入口示例成员的在线状态
 #include "GroupMemberList.h"
 #include "GroupFileItem.h"
 #include "GroupFileList.h"
@@ -381,6 +382,11 @@ void PopulateGroupMemberList(DuiControl* root)
     {
         return;
     }
+    // 调试入口没有通讯录可查，按下标轮流套用五种在线状态（未知 / 在线 / 离开 / 忙碌 / 离线），
+    // 好在调试入口里核对头像角上各种徽标的样子。取值同协议的 presence_type
+    const int kMockPresences[] = { kMemberPresenceUnknown, ::presence_online, ::presence_away,
+                                   ::presence_busy, ::presence_offline };
+    const size_t kMockPresenceCount = sizeof(kMockPresences) / sizeof(kMockPresences[0]);
     const std::vector<GroupMember>& members = MockGroupMembers();
     for (size_t i = 0; i < members.size(); ++i)
     {
@@ -389,6 +395,7 @@ void PopulateGroupMemberList(DuiControl* root)
         item->SetMember(members[i].name, members[i].avatarText, members[i].avatarColor,
                         members[i].isOwner ? grouprole::kNetRoleOwner
                                            : grouprole::kNetRoleMember);
+        item->SetPresence(kMockPresences[i % kMockPresenceCount]);
         list->AddChild(std::unique_ptr<DuiControl>(item.release()));
     }
 }

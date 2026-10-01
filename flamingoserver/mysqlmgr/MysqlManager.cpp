@@ -426,6 +426,20 @@ CMysqlManager::CMysqlManager(void)
 		m_vecTableInfo.push_back(md);
 	}
 
+	// 21a. t_message_deleted_range —— 按时间范围清理聊天记录的区间表（cmd_delete_messages_by_time）。
+	// 与 t_message_deleted 同为本人视角的软删除，只记区间、不逐条展开，写入量与消息条数无关。
+	// 结构以 table.sql 为准，两处须保持一致。
+	{
+		STableInfo mdr;
+		mdr.m_strName = "t_message_deleted_range";
+		mdr.m_mapField["f_userid"] = { "f_userid", "bigint(20) NOT NULL COMMENT '执行清理的用户userid'", "bigint(20)" };
+		mdr.m_mapField["f_begin_time"] = { "f_begin_time", "bigint(20) NOT NULL COMMENT '区间开始,Unix毫秒(含)'", "bigint(20)" };
+		mdr.m_mapField["f_end_time"] = { "f_end_time", "bigint(20) NOT NULL COMMENT '区间结束,Unix毫秒(含)'", "bigint(20)" };
+		mdr.m_mapField["f_update_time"] = { "f_update_time", "bigint(20) NOT NULL DEFAULT 0 COMMENT '本行写入时间,Unix毫秒,供排查'", "bigint(20)" };
+		mdr.m_strKeyString = "PRIMARY KEY (f_userid, f_begin_time)";
+		m_vecTableInfo.push_back(mdr);
+	}
+
 	// 21b. t_file_ack —— 文件收取状态表（发送方要知道对方收没收）
 	// 独立成表而不往 t_chatmsg 加列：这是消息的附加状态、只有文件消息才有，
 	// 与 t_message_deleted 同一思路，不动核心消息表的结构。
@@ -482,6 +496,10 @@ CMysqlManager::CMysqlManager(void)
 		gp.m_mapField["f_announce_id"] = { "f_announce_id", "bigint(20) NOT NULL DEFAULT 0 COMMENT '最新已发布公告的f_id;0=本群还没有公告'", "bigint(20)" };
 		gp.m_mapField["f_announce_title"] = { "f_announce_title", "varchar(128) NOT NULL DEFAULT '' COMMENT '最新已发布公告的标题(冗余快照)'", "varchar(128)" };
 		gp.m_mapField["f_announce_time"] = { "f_announce_time", "bigint(20) NOT NULL DEFAULT 0 COMMENT '最新已发布公告的发布时间(Unix毫秒)'", "bigint(20)" };
+		// 群名是否由用户设定（1 是 / 0 自动群名，由服务端按成员昵称重算）。默认 1：
+		// 老库升级补列时，已有的群一律按"用户设定"处理，不会被悄悄改名；当年由客户端
+		// 自动拼出的群名另由 migrations/v7_mark_auto_group_names.py 识别后改标记。
+		gp.m_mapField["f_name_custom"] = { "f_name_custom", "int(2) NOT NULL DEFAULT 1 COMMENT '群名是否由用户设定:1是 0否(自动群名)'", "int(2)" };
 		gp.m_strKeyString = "PRIMARY KEY (f_groupid)";
 		m_vecTableInfo.push_back(gp);
 	}
