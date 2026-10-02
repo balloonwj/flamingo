@@ -28,6 +28,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <string>
 
 namespace balloonchatwnd {
 
@@ -71,6 +72,46 @@ GroupSenderRender ResolveGroupSender(int64_t userId, const GroupSenderRender* fo
  *  @return 查到返回 true；不在成员表里返回 false。
  */
 typedef bool (*GroupSenderLookup)(void* ctx, int64_t userId, GroupSenderRender& out);
+
+/**
+ *  ContactBriefQuery —— 群聊窗向主面板同步查询通讯录里某人的昵称与头像（FMG_MSG_QUERY_CONTACT_BRIEF
+ *  的 lParam）。已经退群或被移出的人不在成员表里，他以前发的消息靠它显示真名（BUG-49）。
+ *  调用方在栈上构造、填好 m_userId 后 SendMessage；主面板就地填写其余字段，不转移所有权。
+ */
+struct ContactBriefQuery
+{
+    int64_t     m_userId;      // [入] 要查的 userid
+    bool        m_found;       // [出] 通讯录缓存里有没有此人
+    std::string m_nickname;    // [出] 账号昵称（UTF-8）
+    int         m_facetype;    // [出] 头像类型（0 自动 / 1 字形 / 2 真图，见 AvatarSpec.h）
+    std::string m_customface;  // [出] 头像标识（UTF-8）：字形为 "glyph|colorIdx"，真图为 fileid
+
+    ContactBriefQuery()
+        : m_userId(0)
+        , m_found(false)
+        , m_facetype(0)
+    {
+    }
+};
+
+/**
+ *  依次在成员表、通讯录里查一名发送者的显示信息。
+ *
+ *  成员表命中时以成员信息为准（群名片优先），不再查通讯录；成员表里没有时（已经退群或被移出）
+ *  再查通讯录，取账号昵称与头像 —— 这些人以前发的消息原先一律显示"用户<id>"（BUG-49）。两处都
+ *  查不到返回 false，调用方再经 ResolveGroupSender 回退。
+ *    userId：       要查的发送者 userid。
+ *    memberLookup： 查本群成员表的回调；为 NULL 时跳过成员表。
+ *    memberCtx：    透传给 memberLookup 的上下文。
+ *    contactLookup：查通讯录的回调；为 NULL 时跳过通讯录（如调试入口没有宿主主面板）。
+ *    contactCtx：   透传给 contactLookup 的上下文。
+ *    out：          [出参] 查到时填入显示信息；查不到时不保证内容。
+ *  @return 任一处查到返回 true。纯函数（副作用只取决于两个回调）。
+ */
+bool LookupGroupSenderChain(int64_t userId,
+                            GroupSenderLookup memberLookup, void* memberCtx,
+                            GroupSenderLookup contactLookup, void* contactCtx,
+                            GroupSenderRender& out);
 
 /**
  *  用成员表刷新列表里对方消息气泡的发送者显示信息。

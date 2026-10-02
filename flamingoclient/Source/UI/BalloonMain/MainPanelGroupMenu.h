@@ -58,11 +58,12 @@ enum GroupMenuId : UINT
     kGroupMenuPin         = 5,    // 置顶群聊 / 取消置顶
     kGroupMenuMute        = 6,    // 消息免打扰 / 取消免打扰
     kGroupMenuClearMsgs   = 7,    // 清空聊天记录（待接后端）
-    kGroupMenuQuit        = 8,    // 退出群聊（待接后端，目前在群资料窗口内完成）
+    kGroupMenuQuit        = 8,    // 退出群聊 —— 群主点了走"先转让群主再退出"，其余成员确认后直接退群
     kGroupMenuViewHistory = 9,    // 查看历史消息 —— 打开消息记录窗口并定位到本群
     kGroupMenuFavorite    = 10,   // 添加到收藏 / 取消收藏
     kGroupMenuCopyGroupNo   = 11, // 复制群号 —— 把群号（十进制数字）写入剪贴板
     kGroupMenuCopyGroupName = 12, // 复制群名 —— 把群名写入剪贴板
+    kGroupMenuDismiss     = 13,   // 解散群聊 —— 仅群主可见，确认后解散本群
 };
 
 /**
@@ -74,12 +75,14 @@ struct GroupMenuState
     bool m_pinned;      // 当前是否已置顶；决定置顶项文案是"置顶群聊"还是"取消置顶"
     bool m_muted;       // 当前是否已免打扰；决定免打扰项文案的正反
     bool m_favorite;    // 当前是否已收藏；决定收藏项文案是"取消收藏"还是"添加到收藏"
+    bool m_isOwner;     // 本人是不是群主；为 true 时在"退出群聊"之后多出"解散群聊"
 
     GroupMenuState()
         : m_canManage(false)
         , m_pinned(false)
         , m_muted(false)
         , m_favorite(false)
+        , m_isOwner(false)
     {
     }
 };
@@ -103,7 +106,7 @@ struct GroupMenuEntry
 
 /**
  *  构造群列表右键菜单的行模型。纯函数、无副作用、不创建窗口。
- *    state：被右键那个群的当前状态（能否管理 / 置顶 / 免打扰 / 收藏）。
+ *    state：被右键那个群的当前状态（能否管理 / 是否群主 / 置顶 / 免打扰 / 收藏）。
  *  @return 行模型 vector（值语义，调用方拥有）。m_label 指向静态常量串，可直接持有使用。
  */
 std::vector<GroupMenuEntry> BuildGroupMenuModel(const GroupMenuState& state);

@@ -620,6 +620,25 @@ std::string GroupProtocol::buildAnnouncementNotify(const GroupAnnouncementRecord
     return writeCompact(root);
 }
 
+std::string GroupProtocol::buildMemberLeaveTip(const std::string& nickname)
+{
+    if (nickname.empty())
+        return u8"有成员退出了群聊";
+    return u8"「" + nickname + u8"」退出了群聊";
+}
+
+std::string GroupProtocol::buildOwnerTransferTip(const std::string& fromNickname,
+                                                 const std::string& toNickname)
+{
+    if (!fromNickname.empty() && !toNickname.empty())
+        return u8"「" + fromNickname + u8"」已将群主转让给「" + toNickname + u8"」";
+    if (!toNickname.empty())
+        return u8"群主已转让给「" + toNickname + u8"」";
+    if (!fromNickname.empty())
+        return u8"「" + fromNickname + u8"」已转让群主";
+    return u8"群主已变更";
+}
+
 bool GroupProtocol::isMuteExpired(int muted, int64_t muteUntil, int64_t nowMs)
 {
     //没禁言、或永久禁言（到期时间为 0）都谈不上过期

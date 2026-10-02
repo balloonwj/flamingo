@@ -3,6 +3,7 @@
  *  balloonwj@qq.com   2026-06-02
  */
 #include "ConversationsProtocolClient.h"
+#include "Protocol.h"                     // message_type_system
 #include <stdlib.h>                     // strtoll
 #include "../third-party/jsoncpp-1.9.0/json.h"
 
@@ -177,10 +178,17 @@ int ConversationsProtocolClient::computeTotalUnread(const std::vector<Conversati
     return total;
 }
 
-bool ConversationsProtocolClient::shouldCountAsUnread(unsigned int fromUserId, unsigned int selfId)
+bool ConversationsProtocolClient::shouldCountAsUnread(unsigned int fromUserId, unsigned int selfId,
+                                                      int msgtype)
 {
     //取不到本端 userid（未登录 / 兜底态）时不敢断言消息来自他人，一律不计未读。
     if (selfId == 0)
+    {
+        return false;
+    }
+
+    //服务端生成的系统消息是群里的变动通知，不计未读（与服务端算会话未读数的口径一致）。
+    if (msgtype == message_type_system)
     {
         return false;
     }

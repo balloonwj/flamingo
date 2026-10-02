@@ -135,10 +135,17 @@ private:
     void CommitCardEdit();
 
     /**
-     *  退群:二次确认(MessageBox YESNO),确认后发 cmd_leave_group 并关闭本对话框
-     *  (真实列表清理 / 群聊窗关闭由主面板在退群应答到达时处理)。
+     *  退群:有宿主时交给主面板 RequestLeaveGroup(确认框、群主须先转让、离线判断都在那里),
+     *  请求发出或进入转让流程后关闭本对话框;无宿主(调试入口)时本对话框自己确认后直接发
+     *  cmd_leave_group。列表清理 / 群聊窗关闭由主面板在退群应答到达时处理。
      */
     void ConfirmAndLeave();
+
+    /**
+     *  按当前角色取舍"查看消息记录"按钮的时钟图标:底部两个按钮时带图标;群主的底部有三个
+     *  按钮,宽度不够,不带图标。在设置按钮样式时与每次 ApplyData 之后调用。
+     */
+    void UpdateHistoryButtonIcon();
 
     /**
      *  Lazy 创建本对话框需要的位图资源(退群按钮浅红圆角底,三态;标题栏图标)。

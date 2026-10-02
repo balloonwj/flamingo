@@ -606,6 +606,9 @@
     <ClCompile Include="MainPanelGroupMenuTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
+    <ClCompile Include="GroupExitFlowTests.cpp">
+      <Filter>Tests</Filter>
+    </ClCompile>
     <ClCompile Include="MainPanelRowMarkTests.cpp">
       <Filter>Tests</Filter>
     </ClCompile>
@@ -1258,6 +1261,9 @@
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\MainPanelGroupMenu.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
+    <ClCompile Include="..\UI\BalloonMain\GroupExitFlow.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
     <ClCompile Include="..\UI\BalloonMain\MainPanelConversationMenu.cpp">

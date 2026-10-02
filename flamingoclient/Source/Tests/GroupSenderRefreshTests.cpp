@@ -12,6 +12,10 @@
  *    G3 自己发的消息不受刷新影响
  *    G4 成员表里查不到的发送者（已退群）保持备用信息
  *    G5 刷新只改显示信息：条数、顺序、滚动位置都不变
+ *    GSR1 依次查成员表与通讯录：成员表命中时以成员信息为准，不再查通讯录
+ *    GSR2 成员表里没有（已退群）、通讯录里有：用通讯录里的昵称与头像
+ *    GSR3 两处都没有：查不到，解析结果回退"用户<id>"
+ *    GSR4 成员表到达后刷新：退群者的气泡换成通讯录里的名字，而不是保持"用户<id>"（BUG-49）
  *
  *  全局 _Module 由 BalloonChatLayoutTests.cpp 统一定义，本文件只引用。
  *
@@ -238,4 +242,129 @@ TEST_CASE("G5 刷新只改显示信息，条数、顺序、滚动位置不变", 
     {
         CHECK(after[i]->Msgid() == orderBefore[i]);
     }
+}
+
+// =====================================================================
+// GSR1-GSR4：成员表查不到时再查通讯录（BUG-49，2026-10-02）
+//
+// 已经退群或被移出的人不在成员表里，他以前发的消息原先一律显示"用户<id>"。企业版里这些人
+// 通常仍在通讯录里，故成员表查不到时再查主面板的通讯录缓存，两处都没有才回退。
+// =====================================================================
+
+namespace {
+
+// 通讯录里那位已退群同事的底色。
+const COLORREF kContactColor = RGB(0x10, 0xB9, 0x81);
+
+// 通讯录：只有已退群的 kLeftId 一个人（kMemberId 也放一份不同的名字，用来确认成员表优先）。
+std::map<int64_t, GroupSenderRender> MakeContacts()
+{
+    std::map<int64_t, GroupSenderRender> contacts;
+    GroupSenderRender left;
+    left.m_name  = _T("已退群的同事");
+    left.m_glyph = _T("退");
+    left.m_color = kContactColor;
+    contacts[kLeftId] = left;
+
+    GroupSenderRender member;
+    member.m_name  = _T("通讯录里的名字");
+    member.m_color = kContactColor;
+    contacts[kMemberId] = member;
+    return contacts;
+}
+
+// 成员表与通讯录两份数据，供组合查询回调使用。
+struct SenderSources
+{
+    std::map<int64_t, GroupSenderRender> m_members;    // 本群成员表
+    std::map<int64_t, GroupSenderRender> m_contacts;   // 通讯录缓存
+};
+
+// 组合查询回调：先成员表、再通讯录，即群聊窗传给 ApplyGroupSendersToList 的那种回调。
+bool LookupChainFromSources(void* ctx, int64_t userId, GroupSenderRender& out)
+{
+    SenderSources* src = static_cast<SenderSources*>(ctx);
+    return LookupGroupSenderChain(userId, &LookupFromMap, &src->m_members,
+                                  &LookupFromMap, &src->m_contacts, out);
+}
+
+// 记录通讯录查询被调用的次数，用来确认成员表命中时不再查通讯录。
+int g_contactLookupCalls = 0;
+
+// 计数版通讯录查询回调。
+bool CountingContactLookup(void* ctx, int64_t userId, GroupSenderRender& out)
+{
+    ++g_contactLookupCalls;
+    return LookupFromMap(ctx, userId, out);
+}
+
+} // anonymous namespace
+
+TEST_CASE("GSR1 成员表命中时以成员信息为准，不再查通讯录", "[groupsender][groupexit]")
+{
+    std::map<int64_t, GroupSenderRender> members = MakeMembers();
+    std::map<int64_t, GroupSenderRender> contacts = MakeContacts();
+    g_contactLookupCalls = 0;
+
+    GroupSenderRender out;
+    REQUIRE(LookupGroupSenderChain(kMemberId, &LookupFromMap, &members,
+                                   &CountingContactLookup, &contacts, out));
+    CHECK(out.m_name == CString(_T("韩晓燕888")));
+    CHECK(out.m_color == kMemberColor);
+    CHECK(g_contactLookupCalls == 0);
+}
+
+TEST_CASE("GSR2 成员表里没有、通讯录里有：用通讯录里的昵称与头像", "[groupsender][groupexit]")
+{
+    std::map<int64_t, GroupSenderRender> members = MakeMembers();
+    std::map<int64_t, GroupSenderRender> contacts = MakeContacts();
+
+    GroupSenderRender out;
+    REQUIRE(LookupGroupSenderChain(kLeftId, &LookupFromMap, &members,
+                                   &LookupFromMap, &contacts, out));
+    const GroupSenderRender r = ResolveGroupSender(kLeftId, &out, kFallbackColor);
+    CHECK(r.m_name == CString(_T("已退群的同事")));
+    CHECK(r.m_glyph == CString(_T("退")));
+    CHECK(r.m_color == kContactColor);
+
+    //没有通讯录查询回调（调试入口没有宿主主面板）：只查成员表
+    GroupSenderRender none;
+    CHECK_FALSE(LookupGroupSenderChain(kLeftId, &LookupFromMap, &members, NULL, NULL, none));
+}
+
+TEST_CASE("GSR3 两处都查不到：解析结果回退为用户<id>", "[groupsender][groupexit]")
+{
+    std::map<int64_t, GroupSenderRender> members = MakeMembers();
+    std::map<int64_t, GroupSenderRender> contacts = MakeContacts();
+    const int64_t kStranger = 7777;
+
+    GroupSenderRender out;
+    CHECK_FALSE(LookupGroupSenderChain(kStranger, &LookupFromMap, &members,
+                                       &LookupFromMap, &contacts, out));
+    const GroupSenderRender r = ResolveGroupSender(kStranger, NULL, kFallbackColor);
+    CHECK(r.m_name == CString(_T("用户7777")));
+    CHECK(r.m_color == kFallbackColor);
+}
+
+TEST_CASE("GSR4 成员表到达后刷新：退群者的气泡换成通讯录里的名字", "[groupsender][groupexit]")
+{
+    //历史先到：退群者与成员的消息都按"用户<id>"画出来
+    ChatMessageList list;
+    list.AppendMessage(MakeFallbackMessage(kLeftId, _T("已退群的人发的")));
+    list.AppendMessage(MakeFallbackMessage(kMemberId, _T("成员发的")));
+    RECT rc = { 0, 0, kListW, kListH };
+    list.ForceLayout(rc);
+
+    //成员表到达，群聊窗用组合查询刷新
+    SenderSources src;
+    src.m_members = MakeMembers();
+    src.m_contacts = MakeContacts();
+    CHECK(ApplyGroupSendersToList(list, &LookupChainFromSources, &src) == 2);
+
+    const std::vector<ChatBubble*> bubbles = MessageBubbles(list);
+    REQUIRE(bubbles.size() == 2);
+    CHECK(bubbles[0]->GetMessage().senderName == CString(_T("已退群的同事")));
+    CHECK(bubbles[0]->GetMessage().senderAvatarColor == kContactColor);
+    //成员仍以成员表为准，不被通讯录里的名字覆盖
+    CHECK(bubbles[1]->GetMessage().senderName == CString(_T("韩晓燕888")));
 }

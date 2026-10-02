@@ -1099,6 +1099,50 @@ TEST_CASE("CS2 对账取数只返回指定会话、指定 msgid 范围内的行"
     CHECK_FALSE(closed.QueryMsgidsInRange(1, 10, 0, 1000, ids));
 }
 
+TEST_CASE("CS4 删除某会话的全部消息与覆盖区间，其它会话不受影响", "[coverage][groupexit]")
+{
+    std::wstring path = FreshTempDb(L"flamingo_cs4.db");
+    CV2MsgStore store;
+    REQUIRE(store.Open(path.c_str()));
+
+    //群 10 三条、单聊 10 一条（同 cid 不同 ctype）、群 20 一条
+    store.Upsert(MakeRecord(100, 2, 10, 7, 1, 1000, "a", false, false));
+    store.Upsert(MakeRecord(110, 2, 10, 8, 1, 1100, "b", false, false));
+    store.Upsert(MakeRecord(120, 2, 10, 7, 1, 1200, "c", false, true));
+    store.Upsert(MakeRecord(130, 1, 10, 10, 1, 1300, "d", false, false));
+    store.Upsert(MakeRecord(140, 2, 20, 7, 1, 1400, "e", false, false));
+    REQUIRE(store.SetCoverage(2, 10, MakeStoredCover(100, 120, true)));
+    REQUIRE(store.SetCoverage(1, 10, MakeStoredCover(130, 130, true)));
+
+    int deleted = -1;
+    REQUIRE(store.DeleteConversation(2, 10, deleted));
+    CHECK(deleted == 3);
+
+    std::vector<int64_t> ids;
+    REQUIRE(store.QueryMsgidsInRange(2, 10, 0, 1000000, ids));
+    CHECK(ids.empty());
+    CoverRange got;
+    REQUIRE(store.GetCoverage(2, 10, got));
+    CHECK_FALSE(got.m_valid);
+
+    //单聊 10 与群 20 都还在
+    REQUIRE(store.QueryMsgidsInRange(1, 10, 0, 1000000, ids));
+    CHECK(ids.size() == 1);
+    REQUIRE(store.GetCoverage(1, 10, got));
+    CHECK(got.m_valid);
+    REQUIRE(store.QueryMsgidsInRange(2, 20, 0, 1000000, ids));
+    CHECK(ids.size() == 1);
+
+    //再删一次：本来就没有数据，照样成功，删 0 行
+    REQUIRE(store.DeleteConversation(2, 10, deleted));
+    CHECK(deleted == 0);
+
+    //数据库未打开时返回失败
+    CV2MsgStore closed;
+    CHECK_FALSE(closed.DeleteConversation(2, 10, deleted));
+    CHECK(deleted == 0);
+}
+
 TEST_CASE("CS3 区间内最早一条的时间：只看指定会话、msgid 不小于下界的行", "[coverage]")
 {
     std::wstring path = FreshTempDb(L"flamingo_cs3.db");

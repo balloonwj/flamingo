@@ -27,6 +27,7 @@ const wchar_t* const kLabelCopyName    = L"复制 TA 的昵称";
 const wchar_t* const kLabelSetAdmin    = L"设为管理员";
 const wchar_t* const kLabelCancelAdmin = L"撤销管理员";
 const wchar_t* const kLabelKick        = L"移出本群";
+const wchar_t* const kLabelTransferOwner = L"转让群主";
 
 // 造一行菜单，省得每处写四行。
 MentionMenuEntry MakeEntry(MentionMenuId id, const wchar_t* label, bool enabled)
@@ -101,9 +102,10 @@ std::vector<MentionMenuEntry> BuildMentionMenuModel(long long mentionUid,
     // 故各问各的，不能合并成一个条件。
     const bool canSetAdmin = grouprole::CanSetAdmin(myNetRole, targetNetRole, false);
     const bool canKick     = grouprole::CanKickMember(myNetRole, targetNetRole, false);
+    const bool canTransfer = grouprole::CanTransferOwnerTo(myNetRole, targetNetRole, false);
 
     // 分隔线只在确实要追加管理项时加一条，避免菜单末尾挂一条孤零零的分隔线
-    if (canSetAdmin || canKick)
+    if (canSetAdmin || canKick || canTransfer)
     {
         items.push_back(MakeSeparator());
     }
@@ -118,6 +120,12 @@ std::vector<MentionMenuEntry> BuildMentionMenuModel(long long mentionUid,
         {
             items.push_back(MakeEntry(kMentionMenuSetAdmin, kLabelSetAdmin, true));
         }
+    }
+
+    // 转让群主排在角色项之后：同属"改变对方在群里的身份"，新群主还能再转回来，比移出温和
+    if (canTransfer)
+    {
+        items.push_back(MakeEntry(kMentionMenuTransferOwner, kLabelTransferOwner, true));
     }
 
     // 移出本群排在最末 —— 它是这个菜单里唯一不可撤销的操作，放在最远处，

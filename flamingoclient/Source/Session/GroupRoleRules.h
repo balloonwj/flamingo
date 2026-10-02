@@ -85,6 +85,22 @@ bool ShouldOfferCancelAdmin(int targetNetRole);
 bool CanKickMember(int myNetRole, int targetNetRole, bool targetIsSelf);
 
 /**
+ *  判断"转让群主"这一项该不该出现在针对某成员的菜单里。
+ *
+ *  规则与服务端 ChatSession::onTransferOwner 对齐：
+ *    · 只有群主能转让；
+ *    · 只能转给本群的其他成员（管理员或普通成员），不能转给自己；
+ *    · 目标已不在本群（角色为负）时不给，服务端会以"新群主不是群成员"拒绝。
+ *
+ *    myNetRole：     登录者在本群的角色，取值见 NetGroupRole；负值表示不在本群或角色未知。
+ *    targetNetRole： 目标成员在本群的角色，取值同上；负值表示已不在本群或角色未知。
+ *    targetIsSelf：  目标成员是不是登录者本人。
+ *
+ *  @return true 表示该项应当出现。纯函数，无副作用。
+ */
+bool CanTransferOwnerTo(int myNetRole, int targetNetRole, bool targetIsSelf);
+
+/**
  *  判断登录者能不能改本群的群头像（群管理窗基本信息页的「更换头像」按钮据此
  *  决定可点还是置灰）。
  *

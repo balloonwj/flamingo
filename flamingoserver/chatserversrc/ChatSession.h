@@ -490,6 +490,21 @@ private:
      */
     void sendGroupWelcomeMessage(const GroupRecord& group,
                                  const std::vector<int64_t>& newMembers);
+
+    /**
+     *  往群里插一条系统提示消息（message_type_system）：落库后推给此刻在线的全体群成员。
+     *
+     *  推送只能触达在线的人，而落库的系统消息会进历史与会话预览，当时不在线的成员之后也看得到。
+     *  公告提示、入群欢迎语、退出群聊、转让群主四处共用这一份实现。发送者 userid 记
+     *  kSystemMessageSenderId（0），客户端据此把它渲染成居中的灰色提示行。
+     *    groupid：    目标群ID；推送对象是调用此函数时 t_group_member 里的全体成员；
+     *    text：       提示正文（UTF-8）；
+     *    clientMsgId：占位的客户端消息ID。系统消息没有真实的客户端消息ID，由调用方拼一个以
+     *                 "sys-" 开头、能区分来源的串，保证 saveMessage 的幂等去重键不会与真实消息相撞。
+     *  返回：新消息的 msgid；落库失败时返回 0（已记错误日志，不推送）。
+     */
+    int64_t sendGroupSystemMessage(int64_t groupid, const std::string& text,
+                                   const std::string& clientMsgId);
     //判断当前登录用户能否参与某卡片的互动（须在该卡片所在会话内）
     bool canAccessCard(const MessageRecord& card);
     //向某卡片所在会话的全体成员推送一条通知帧（群→群成员，单聊→收发双方）

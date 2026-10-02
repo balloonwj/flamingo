@@ -37,6 +37,7 @@ enum MentionMenuId
     kMentionMenuCancelAdmin = 6,   // 撤销管理员：仅群主可见，且目标已是管理员时
     kMentionMenuKick        = 7,   // 移出本群：群主可移任何非群主；管理员只能移普通成员
     kMentionMenuStarred     = 8,   // 特别关注 / 取消特别关注：文案随当前关注状态取反；被关注者上下线时桌面右下角弹提示
+    kMentionMenuTransferOwner = 9, // 转让群主：仅群主可见，且目标是本群的其他成员时；确认后把群主转给 TA
 };
 
 /**
@@ -92,9 +93,9 @@ bool ShouldShowMentionMenu(long long mentionUid);
 /**
  *  算出 @ 片段右键菜单的行模型。
  *
- *  末尾的「设为管理员 / 撤销管理员」只对群主出现，判定复用 grouprole::CanSetAdmin
- *  ——与群管理窗口成员卡右键菜单同一份规则，避免两处漂移。出现时前面会带一条
- *  分隔线，把"看 / 聊"这类日常动作与管理动作分开。
+ *  末尾的「设为管理员 / 撤销管理员」与「转让群主」只对群主出现，判定复用 grouprole::CanSetAdmin
+ *  与 grouprole::CanTransferOwnerTo ——与群管理窗口成员卡右键菜单同一份规则，避免两处漂移。
+ *  管理项出现时前面会带一条分隔线，把"看 / 聊"这类日常动作与管理动作分开。
  *
  *    mentionUid：  该片段 @ 的 userid。
  *    selfUid：     本人 userid；传 0（未登录 / 未知）时一律按「不是本人」处理。

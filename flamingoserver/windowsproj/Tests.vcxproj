@@ -107,6 +107,7 @@
     <ClCompile Include="..\tests\test_grouppermission.cpp" />
     <ClCompile Include="..\tests\test_groupautoname.cpp" />
     <ClCompile Include="..\tests\test_pinnedgroups.cpp" />
+    <ClCompile Include="..\tests\test_groupexit.cpp" />
     <ClCompile Include="..\chatserversrc\GroupPermission.cpp" />
     <ClCompile Include="..\chatserversrc\GroupAutoName.cpp" />
     <ClCompile Include="..\chatserversrc\GroupManager.cpp" />

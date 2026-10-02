@@ -327,6 +327,9 @@
     <ClCompile Include="..\tests\test_pinnedgroups.cpp">
       <Filter>tests\logic</Filter>
     </ClCompile>
+    <ClCompile Include="..\tests\test_groupexit.cpp">
+      <Filter>tests\logic</Filter>
+    </ClCompile>
     <ClCompile Include="..\chatserversrc\GroupPermission.cpp">
       <Filter>chatserversrc</Filter>
     </ClCompile>

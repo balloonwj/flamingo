@@ -394,6 +394,7 @@
     <ClCompile Include="MainPanelContactMenuTests.cpp" />
     <ClCompile Include="MainPanelConversationMenuTests.cpp" />
     <ClCompile Include="MainPanelGroupMenuTests.cpp" />
+    <ClCompile Include="GroupExitFlowTests.cpp" />
     <ClCompile Include="MainPanelRowMarkTests.cpp" />
     <ClCompile Include="MainPanelStatusMenuTests.cpp" />
     <ClCompile Include="MainPanelSystemMenuTests.cpp" />
@@ -621,6 +622,7 @@
     <ClCompile Include="..\UI\BalloonMain\MainPanelButtons.cpp" />
     <ClCompile Include="..\UI\BalloonMain\MainPanelContactMenu.cpp" />
     <ClCompile Include="..\UI\BalloonMain\MainPanelGroupMenu.cpp" />
+    <ClCompile Include="..\UI\BalloonMain\GroupExitFlow.cpp" />
     <ClCompile Include="..\UI\BalloonMain\MainPanelConversationMenu.cpp" />
     <ClCompile Include="..\UI\BalloonMain\MainPanelHeader.cpp" />
     <ClCompile Include="..\UI\BalloonMain\MainPanelIcons.cpp" />

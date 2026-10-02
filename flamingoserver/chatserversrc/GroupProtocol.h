@@ -636,6 +636,24 @@ public:
      */
     static int64_t computeMuteUntil(int muted, int durationSeconds, int64_t nowMs);
 
+    /**
+     *  拼"某人退出了群聊"这条群系统提示的正文，退群成功后由服务端插进群里。
+     *  @param nickname 退群者的昵称（UTF-8）；为空时（如用户资料取不到）改用"有成员"，
+     *                  不让提示里出现一对空的书名号
+     *  @return 形如「张三」退出了群聊的 UTF-8 文本
+     */
+    static std::string buildMemberLeaveTip(const std::string& nickname);
+
+    /**
+     *  拼"群主已转让"这条群系统提示的正文，转让群主成功后由服务端插进群里。
+     *  @param fromNickname 原群主昵称（UTF-8），可为空
+     *  @param toNickname   新群主昵称（UTF-8），可为空
+     *  @return 两端都有昵称时形如「张三」已将群主转让给「李四」；缺哪一端就省掉哪一端的名字，
+     *          两端都缺时为"群主已变更"
+     */
+    static std::string buildOwnerTransferTip(const std::string& fromNickname,
+                                             const std::string& toNickname);
+
 private:
     GroupProtocol() = delete;
     ~GroupProtocol() = delete;

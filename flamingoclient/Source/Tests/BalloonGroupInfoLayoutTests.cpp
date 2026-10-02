@@ -23,6 +23,8 @@
  *    GIC1 群名、群号那一行可点，点击复制的文字
  *    GIC2 「查看消息记录」打开本群的消息记录
  *    GIC3 复制提示条落在头部资料区下方，不遮住群名、群号
+ *    GIX1 群主的底部多出「解散群聊」按钮，三个按钮等分一行、互不重叠；其余角色只有两个按钮
+ *    GIX2 先按普通成员排版、再换成群主数据（"隐藏后再显示"的路径），解散按钮的位置与尺寸仍然正确
  *
  *  用 Catch2 v3(amalgamated)。全局 _Module 由 BalloonChatLayoutTests.cpp
  *  统一定义,本文件只引用。
@@ -45,6 +47,8 @@
 #include "../../../third-party/balloonui/balloonui/Controls/Input/DuiEdit.h"
 #include "../../../third-party/balloonui/balloonui/DuiResMgr.h"
 #include "../../../third-party/balloonui/balloonui/DuiDpi.h"
+
+#include <cstdlib>     // std::abs —— GIX 组比较按钮宽度
 
 using namespace balloonwjui;
 using namespace balloonmain;
@@ -474,4 +478,101 @@ TEST_CASE("GIC3 复制提示条落在头部资料区下方，不遮住头像、�
 
     //空根控件返回 -1，调用方保持提示条原有位置
     CHECK(GroupInfoToastTopOffset(nullptr) == -1);
+}
+
+// =====================================================================
+// GIX1 / GIX2：底部按钮按角色区分（2026-10-01）
+// =====================================================================
+
+namespace {
+
+// 群资料窗口客户区尺寸量级（像素），取值无特殊含义，与 GIC 组一致
+const int kGixBodyW = 420;
+const int kGixBodyH = 520;
+
+// 取底部某个按钮当前的矩形；按钮不存在时中止用例。
+RECT GixButtonRect(DuiControl* root, UINT id)
+{
+    DuiControl* c = root->FindCtrlById(id);
+    REQUIRE(c != nullptr);
+    return c->GetRect();
+}
+
+// 两个矩形在水平方向上是否不重叠（左边那个的右沿不超过右边那个的左沿）。
+bool GixNoOverlapH(const RECT& left, const RECT& right)
+{
+    return left.right <= right.left;
+}
+
+// 宽度。
+int GixWidth(const RECT& rc)
+{
+    return rc.right - rc.left;
+}
+
+} // anonymous namespace
+
+TEST_CASE("GIX1 群主的底部多出解散群聊按钮，三个按钮等分一行；其余角色只有两个按钮", "[groupinfo][groupexit]")
+{
+    std::unique_ptr<DuiControl> root = BuildGroupInfoBody();
+    REQUIRE(root != nullptr);
+
+    //按钮存在、文字正确，初始（未知角色）时隐藏
+    DuiButton* btnDismiss = dynamic_cast<DuiButton*>(root->FindCtrlById(kIdGroupBtnDismiss));
+    REQUIRE(btnDismiss != nullptr);
+    CHECK(btnDismiss->GetText() == CString(_T("解散群聊")));
+    CHECK_FALSE(btnDismiss->IsVisible());
+
+    //群主
+    GroupInfoViewData owner = MakeProjectGroupData();
+    owner.isOwner = true;
+    REQUIRE(ApplyGroupInfoDataToView(root.get(), owner));
+    root->ForceLayout(RECT{ 0, 0, kGixBodyW, kGixBodyH });
+    CHECK(btnDismiss->IsVisible());
+    const RECT rcHistory = GixButtonRect(root.get(), kIdGroupBtnHistory);
+    const RECT rcQuit    = GixButtonRect(root.get(), kIdGroupBtnQuit);
+    const RECT rcDismiss = GixButtonRect(root.get(), kIdGroupBtnDismiss);
+    CHECK(GixWidth(rcDismiss) > 0);
+    CHECK(GixNoOverlapH(rcHistory, rcQuit));
+    CHECK(GixNoOverlapH(rcQuit, rcDismiss));
+    //三个按钮等分：宽度相差不超过 1 像素（整除余数）
+    CHECK(std::abs(GixWidth(rcHistory) - GixWidth(rcDismiss)) <= 1);
+    CHECK(std::abs(GixWidth(rcQuit) - GixWidth(rcDismiss)) <= 1);
+    //同一行
+    CHECK(rcDismiss.top == rcQuit.top);
+    CHECK(rcDismiss.bottom == rcQuit.bottom);
+
+    //普通成员：解散按钮隐藏，另两个按钮各占一半，比三等分时更宽
+    GroupInfoViewData member = MakeProjectGroupData();
+    REQUIRE(ApplyGroupInfoDataToView(root.get(), member));
+    root->ForceLayout(RECT{ 0, 0, kGixBodyW, kGixBodyH });
+    CHECK_FALSE(btnDismiss->IsVisible());
+    const RECT rcHistory2 = GixButtonRect(root.get(), kIdGroupBtnHistory);
+    const RECT rcQuit2    = GixButtonRect(root.get(), kIdGroupBtnQuit);
+    CHECK(GixWidth(rcQuit2) > GixWidth(rcQuit));
+    CHECK(std::abs(GixWidth(rcHistory2) - GixWidth(rcQuit2)) <= 1);
+}
+
+TEST_CASE("GIX2 先按普通成员排版再换成群主数据，解散按钮的位置与尺寸仍然正确", "[groupinfo][groupexit]")
+{
+    std::unique_ptr<DuiControl> root = BuildGroupInfoBody();
+    REQUIRE(root != nullptr);
+
+    //先按普通成员排一次版：解散按钮隐藏期间这次排版会跳过它
+    REQUIRE(ApplyGroupInfoDataToView(root.get(), MakeProjectGroupData()));
+    root->ForceLayout(RECT{ 0, 0, kGixBodyW, kGixBodyH });
+
+    //再换成群主数据，不由调用方手动重排：ApplyGroupInfoDataToView 自己负责让底部重新排版
+    GroupInfoViewData owner = MakeProjectGroupData();
+    owner.isOwner = true;
+    REQUIRE(ApplyGroupInfoDataToView(root.get(), owner));
+
+    const RECT rcQuit    = GixButtonRect(root.get(), kIdGroupBtnQuit);
+    const RECT rcDismiss = GixButtonRect(root.get(), kIdGroupBtnDismiss);
+    CHECK(GixWidth(rcDismiss) > 0);
+    CHECK(GixNoOverlapH(rcQuit, rcDismiss));
+    CHECK(std::abs(GixWidth(rcQuit) - GixWidth(rcDismiss)) <= 1);
+    //解散按钮在客户区之内
+    CHECK(rcDismiss.right <= kGixBodyW);
+    CHECK(rcDismiss.top == rcQuit.top);
 }

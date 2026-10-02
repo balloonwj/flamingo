@@ -69,6 +69,11 @@ std::vector<GroupMenuEntry> BuildGroupMenuModel(const GroupMenuState& state)
     // 第二组：影响较大的动作，与上面的日常动作用分隔条隔开，减少误点。
     PushItem(items, kGroupMenuClearMsgs, L"清空聊天记录");
     PushItem(items, kGroupMenuQuit,      L"退出群聊");
+    // 解散只有群主能做，服务端也只认群主；其余角色不显示，免得点了才被拒绝
+    if (state.m_isOwner)
+    {
+        PushItem(items, kGroupMenuDismiss, L"解散群聊");
+    }
     return items;
 }
 

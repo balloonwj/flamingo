@@ -10,7 +10,7 @@
 
 #include "BalloonGroupInfoDlg.h"
 #include "BalloonGroupInfoLayout.h"
-#include "BalloonMainPanel.h"            // CBalloonMainPanel::SetGroupConversation / LeaveGroup(写操作回投宿主)
+#include "BalloonMainPanel.h"            // CBalloonMainPanel::SetGroupConversation / RequestLeaveGroup / RequestDismissGroup(写操作回投宿主)
 #include "../../App/FlamingoClient.h"            // CFlamingoClient::IsOffline
 #include "../../resource.h"                  // IDR_MAINFRAME(标题栏 / 任务栏程序图标)
 #include "../../Common/Util/EncodeUtil.h"                // CString → UTF-8(发往服务端)
@@ -400,13 +400,46 @@ void CBalloonGroupInfoDlg::ApplyQuitButtonStyle()
         }
     }
 
-    // "查看消息记录"按钮:左侧时钟图标。
+    // "解散群聊"按钮(仅群主可见):与"退出群聊"同一套红字 + 浅红底。不加图标 —— 群主的底部有三个
+    // 按钮,每个只有约三分之一行宽,再加图标文字就放不下了。
+    balloonwjui::DuiButton* btnDismiss = dynamic_cast<balloonwjui::DuiButton*>(
+        content->FindCtrlById(kIdGroupBtnDismiss));
+    if (btnDismiss != NULL)
+    {
+        btnDismiss->SetTextColor(RGB(0xE5, 0x39, 0x35));
+        if (m_quitBg != NULL)
+        {
+            btnDismiss->SetBgBitmap(m_quitBg, m_quitBgHover, m_quitBgPressed, NULL);
+            btnDismiss->SetBgInsets(kQuitBtnRadius, kQuitBtnRadius, kQuitBtnRadius, kQuitBtnRadius);
+        }
+    }
+
+    UpdateHistoryButtonIcon();
+}
+
+void CBalloonGroupInfoDlg::UpdateHistoryButtonIcon()
+{
+    balloonwjui::DuiControl* content = GetClientContent();
+    if (content == NULL)
+    {
+        return;
+    }
     balloonwjui::DuiButton* btnHistory = dynamic_cast<balloonwjui::DuiButton*>(
         content->FindCtrlById(kIdGroupBtnHistory));
-    if (btnHistory != NULL && m_iconHistory != NULL)
+    if (btnHistory == NULL)
+    {
+        return;
+    }
+    // 两个按钮并排时左侧带时钟图标;群主的底部有三个按钮,每个只有约三分之一行宽,
+    // 带上图标后"查看消息记录"六个字会顶到按钮边缘,故此时不带图标
+    if (m_iconHistory != NULL && !m_data.isOwner)
     {
         btnHistory->SetLeadingIcon(m_iconHistory);
         btnHistory->SetLeadingIconSize(kFooterIconSize);
+    }
+    else
+    {
+        btnHistory->SetLeadingIcon(NULL);
     }
 }
 
@@ -539,6 +572,8 @@ void CBalloonGroupInfoDlg::ApplyData(const GroupInfoViewData& data)
     if (content != NULL)
     {
         ApplyGroupInfoDataToView(content, m_data);
+        // 本人角色可能刚随群资料应答到达:按钮个数变了,时钟图标跟着取舍
+        UpdateHistoryButtonIcon();
         if (IsWindow())
         {
             ::InvalidateRect(m_hWnd, NULL, FALSE);
@@ -658,6 +693,18 @@ void CBalloonGroupInfoDlg::OnCardSaveResult(int code, const CString& msg)
 
 void CBalloonGroupInfoDlg::ConfirmAndLeave()
 {
+    // 有宿主：确认框、群主须先转让、离线判断都由主面板统一处理（与群列表右键同一条流程），
+    // 请求发出或进入转让流程后关闭本对话框；用户取消时对话框留着
+    if (m_pHost != NULL)
+    {
+        if (m_pHost->RequestLeaveGroup(m_data.groupid, m_hWnd) && IsWindow())
+        {
+            DestroyWindow();
+        }
+        return;
+    }
+
+    // 无宿主（调试入口）：退化为本对话框自己确认后直接发协议
     CString prompt;
     CString name = m_data.groupName.IsEmpty() ? CString(_T("本群")) : m_data.groupName;
     prompt.Format(_T("确定退出群聊「%s」吗？退出后将不再接收该群消息。"),
@@ -676,16 +723,7 @@ void CBalloonGroupInfoDlg::ConfirmAndLeave()
         return;
     }
 
-    // 有宿主：经主面板发退群请求 + 乐观清理群列表 / 关闭群聊窗;无宿主(调试入口)退化
-    // 为直接发协议。随后关闭本对话框。
-    if (m_pHost != NULL)
-    {
-        m_pHost->LeaveGroup(m_data.groupid);
-    }
-    else
-    {
-        CIUSocket::GetInstance().SendLeaveGroup(m_data.groupid);
-    }
+    CIUSocket::GetInstance().SendLeaveGroup(m_data.groupid);
     LOG_INFO(_T("提交退出群聊请求，group=%lld。"), (long long)m_data.groupid);
 
     if (IsWindow())
@@ -803,6 +841,16 @@ LRESULT CBalloonGroupInfoDlg::OnDuiNotify(UINT /*uMsg*/, WPARAM /*wParam*/,
         }
         case kIdGroupBtnQuit:
             ConfirmAndLeave();
+            return 0;
+        case kIdGroupBtnDismiss:
+            // 解散群聊（仅群主可见）：确认与发请求由主面板统一处理；请求发出后关闭本对话框。
+            // 调试入口没有宿主，只记日志
+            if (m_pHost != NULL && m_pHost->RequestDismissGroup(m_data.groupid, m_hWnd) && IsWindow())
+            {
+                DestroyWindow();
+            }
+            LOG_INFO("group info dialog: dismiss clicked, group=%lld, host=%d.",
+                     (long long)m_data.groupid, (int)(m_pHost != NULL));
             return 0;
         default:
             break;

@@ -30,6 +30,8 @@
 #include "MainPanelConversationMenu.h" // BuildConversationMenuModel / ConversationMenuId（会话右键菜单行模型）
 #include "MainPanelContactMenu.h"     // BuildContactMenuModel / ContactMenuId（联系人右键菜单行模型）
 #include "MainPanelGroupMenu.h"       // BuildGroupMenuModel / GroupMenuId / FormatGroupNumber（群列表右键菜单行模型）
+#include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiToast.h"    // 主面板轻提示（退群 / 解散 / 转让的结果）
+#include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"  // 轻提示挂在客户区根容器（DuiVBox）上
 #include "../../Common/Util/ClipboardText.h"   // 右键菜单「复制联系人名 / 复制群号 / 复制群名」写剪贴板
 #include "ConversationListOps.h"    // 会话列表纯操作（排序 / 查找 / 删除 / 置顶 / 免打扰）
 #include "GroupListOps.h"           // 群 Tab 群列表纯操作（置顶优先的显示顺序 / 改置顶状态）
@@ -407,6 +409,8 @@ CBalloonMainPanel::CBalloonMainPanel(CFlamingoClient* pFMGClient)
     , m_pGroupManageWindow(NULL)
     , m_groupManageGroupId(0)
     , m_groupInfoDlgGroupId(0)
+    , m_transferPickGroupId(0)
+    , m_pPanelToast(NULL)
     , m_rangeDeletedRows(0)          // 按时间范围清理本地库：当前区间已删行数
     , m_rangeDeleteRunning(false)    // 按时间范围清理本地库：没有续批消息在途
     , m_presenceBeforeChange(kMyPresenceOnline)   // 默认在线(与 v2 presence_online 同值)；ShowStatusMenu 改状态前会刷新它
@@ -572,6 +576,10 @@ void CBalloonMainPanel::ResetForLogout()
 
     // 已读上报的去重记录只在本次登录内有效，换账号或重新登录后须重新上报
     ResetReadReportDedupe();
+
+    // 退群 / 解散 / 转让的待应答登记属于上一条连接，重新登录后旧应答不会再来
+    m_groupExitTracker.Clear();
+    m_transferPickGroupId = 0;
 
     // 先把远程桌面会话收尾：停被控端推流、关控制端观看窗、隐藏受控提示条。
     // 这一步在协作类抽出之前是缺的 —— 正在被控时登出，屏幕仍会
@@ -912,6 +920,17 @@ void CBalloonMainPanel::InitUi()
     {
         LOG_ERROR(_T("SetClientContent 之后 GetClientContent 仍为空。"));
         return;
+    }
+
+    // 轻提示条挂在客户区根容器末尾（基类按子控件顺序绘制，末尾即最上层），布局 Fixed(0)
+    // 使它不占竖直方向的空间，落点由 DuiToast 自己按"顶部居中"计算。与群资料窗口同一做法
+    m_pPanelToast = NULL;
+    balloonwjui::DuiVBox* rootBox = dynamic_cast<balloonwjui::DuiVBox*>(content);
+    if (rootBox != NULL)
+    {
+        std::unique_ptr<balloonwjui::DuiToast> toast(new balloonwjui::DuiToast());
+        m_pPanelToast = toast.get();
+        rootBox->AddChild(std::move(toast), balloonwjui::DuiLayout::Hint().Fixed(0));
     }
 
     // 搜索框是无窗口控件，构建出来就能用 —— 既不必在宿主窗口就绪后补一次创建，
@@ -3160,9 +3179,11 @@ void CBalloonMainPanel::OnRecvChatMessage(const net::MessageNotify& notify)
         const bool bGroupWatching = IsUserWatchingChatWindow(hGroupWnd);
 
         // 未读只由他人发来的消息构成：服务端把群消息推给<u>包括发送者在内</u>的全体成员，
-        // 自己发的群消息回推回来时若也 +1，自己发一条就会给自己点亮一个红点。
+        // 自己发的群消息回推回来时若也 +1，自己发一条就会给自己点亮一个红点。服务端生成的
+        // 系统消息（有人退群、转让群主、发布公告等）同样不计，只更新会话摘要与时间。
         const bool bGroupCountAsUnread =
-            net::ConversationsProtocolClient::shouldCountAsUnread((UINT)notify.m_from, selfId);
+            net::ConversationsProtocolClient::shouldCountAsUnread((UINT)notify.m_from, selfId,
+                                                                  notify.m_msgtype);
 
         BumpConversation(2, groupId, (UINT)notify.m_from, groupDigest,
                          notify.m_msgtype, notify.m_timestamp, notify.m_msgid,
@@ -3184,13 +3205,14 @@ void CBalloonMainPanel::OnRecvChatMessage(const net::MessageNotify& notify)
         const bool bConvMuted = balloonmain::IsConversationMuted(m_conversations, 2, groupId);
 
         // 判据逐条打日志，理由同单聊分支（见下方 OnRecvChatMessage 单聊部分的注释）。
-        LOG_INFO("群聊托盘闪烁判据: group=%lld, from=%u, self=%u, 群窗已开=%d, "
+        LOG_INFO("群聊托盘闪烁判据: group=%lld, from=%u, self=%u, msgtype=%d, 计未读=%d, 群窗已开=%d, "
                  "免打扰=%d, @我=%d, 正看着=%d。",
-                 (long long)groupId, (UINT)notify.m_from, selfId,
-                 bGroupWindowOpen ? 1 : 0, bConvMuted ? 1 : 0, bAtMe ? 1 : 0,
-                 bGroupWatching ? 1 : 0);
+                 (long long)groupId, (UINT)notify.m_from, selfId, notify.m_msgtype,
+                 bGroupCountAsUnread ? 1 : 0, bGroupWindowOpen ? 1 : 0, bConvMuted ? 1 : 0,
+                 bAtMe ? 1 : 0, bGroupWatching ? 1 : 0);
 
-        if (!bGroupWindowOpen && (UINT)notify.m_from != selfId && (!bConvMuted || bAtMe))
+        // 不计未读的消息（自己同步回来的、系统消息）也不闪托盘、不出声
+        if (!bGroupWindowOpen && bGroupCountAsUnread && (!bConvMuted || bAtMe))
         {
             PostTrayFlash(2, groupId, groupDigest);
             // 群窗未打开、非自己同步消息：闪托盘的同时异步播放新消息提示音（不阻塞 UI 线程）。
@@ -3231,7 +3253,8 @@ void CBalloonMainPanel::OnRecvChatMessage(const net::MessageNotify& notify)
 
     // 同群聊：多端登录时服务端会把自己发的单聊消息同步回本端，那类推送不计未读。
     const bool bCountAsUnread =
-        net::ConversationsProtocolClient::shouldCountAsUnread((UINT)notify.m_from, selfId);
+        net::ConversationsProtocolClient::shouldCountAsUnread((UINT)notify.m_from, selfId,
+                                                              notify.m_msgtype);
 
     BumpConversation(1, (int64_t)peerUserId, (UINT)notify.m_from, digest,
                      notify.m_msgtype, notify.m_timestamp, notify.m_msgid,
@@ -3961,6 +3984,35 @@ void CBalloonMainPanel::OnUserGroupsArrived(const net::UserGroupsResult& result)
 
 void CBalloonMainPanel::OnGroupMembersArrived(const net::GroupMembersResult& members)
 {
+    // 群主退群前选新群主：成员列表到达后剔除本人作为候选，打开「转让群主并退出」的选人对话框
+    if (m_transferPickGroupId != 0 && members.m_groupid == m_transferPickGroupId)
+    {
+        m_transferPickGroupId = 0;
+        if (members.m_code != 0)
+        {
+            ::MessageBox(m_hWnd, _T("未能获取群成员，请稍后重试。"), _T("FlamingoIM"),
+                         MB_OK | MB_ICONWARNING);
+        }
+        else
+        {
+            const std::vector<net::ContactItem> candidates =
+                balloonmain::BuildTransferCandidates(members.m_members, (int64_t)SelfUserId());
+            if (candidates.empty())
+            {
+                ::MessageBox(m_hWnd, _T("群里没有其他成员，无法转让群主。如需退出，请解散本群。"),
+                             _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+            }
+            else
+            {
+                const std::vector<net::DepartmentItem> noDepartments;
+                m_createGroupDlg.OpenForPick(m_hWnd, CCreateGroupDlg::kPurposeTransferThenLeave,
+                                             members.m_groupid, SelfUserId(), candidates, noDepartments);
+                LOG_INFO("Owner leave: member picker opened, groupid=%lld, candidates=%u.",
+                         (long long)members.m_groupid, (unsigned)candidates.size());
+            }
+        }
+    }
+
     // 路由到对应群聊窗，填成员侧栏并建"发送人映射"。
     std::map<int64_t, CBalloonGroupChatWindow*>::iterator it =
         m_groupChatWindows.find(members.m_groupid);
@@ -4037,6 +4089,8 @@ void CBalloonMainPanel::OpenGroupInfo(int64_t groupId)
     // 公告 / 群主显示名 / 我的群名片留空，待 1303 / 1304 应答到达后由 RefreshGroupInfoDialog 补。
     balloonmain::GroupInfoViewData seed;
     seed.groupid = groupId;
+    // 本人角色取自群信息缓存；还没拉到时按非群主处理，群资料应答到达后 RefreshGroupInfoDialog 再更新
+    seed.isOwner = (MyRoleInGroup(groupId) == kGroupRoleOwner);
     std::map<int64_t, GroupBrief>::iterator bit = m_groupInfo.find(groupId);
     if (bit != m_groupInfo.end())
     {
@@ -4077,6 +4131,7 @@ void CBalloonMainPanel::RefreshGroupInfoDialog(int64_t groupId)
 
     balloonmain::GroupInfoViewData data;
     data.groupid = groupId;
+    data.isOwner = (MyRoleInGroup(groupId) == kGroupRoleOwner);
 
     std::map<int64_t, GroupBrief>::iterator bit = m_groupInfo.find(groupId);
     if (bit != m_groupInfo.end())
@@ -4133,21 +4188,207 @@ void CBalloonMainPanel::SetGroupConversation(int64_t groupId, bool hasMute, bool
              (long long)groupId, (int)hasMute, (int)mute, (int)hasPinned, (int)pinned);
 }
 
-void CBalloonMainPanel::LeaveGroup(int64_t groupId)
+bool CBalloonMainPanel::RequestLeaveGroup(int64_t groupId, HWND hDlgOwner)
+{
+    if (groupId <= 0)
+    {
+        return false;
+    }
+    const HWND hOwner = ::IsWindow(hDlgOwner) ? hDlgOwner : m_hWnd;
+    const std::wstring groupName = GroupNameForNotice(groupId);
+
+    if (m_lpFMGClient != NULL && m_lpFMGClient->IsOffline())
+    {
+        ::MessageBox(hOwner, _T("您当前处于离线状态，无法退出群聊，请上线后重试。"),
+                     _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+        return false;
+    }
+
+    // 群主不能直接退群（服务端会拒绝）：先选新群主，转让成功后再退群
+    if (balloonmain::DecideLeavePath(MyRoleInGroup(groupId)) == balloonmain::kLeavePathTransferFirst)
+    {
+        const std::wstring tip = balloonmain::BuildOwnerLeaveConfirmText(groupName);
+        if (::MessageBox(hOwner, tip.c_str(), _T("退出群聊"),
+                         MB_YESNO | MB_ICONQUESTION) != IDYES)
+        {
+            return false;
+        }
+        StartOwnerTransferPick(groupId);
+        return true;
+    }
+
+    const std::wstring tip = balloonmain::BuildLeaveConfirmText(groupName);
+    if (::MessageBox(hOwner, tip.c_str(), _T("退出群聊"),
+                     MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES)
+    {
+        return false;
+    }
+    SendLeaveGroupTracked(groupId, groupName);
+    return true;
+}
+
+bool CBalloonMainPanel::RequestDismissGroup(int64_t groupId, HWND hDlgOwner)
+{
+    if (groupId <= 0)
+    {
+        return false;
+    }
+    const HWND hOwner = ::IsWindow(hDlgOwner) ? hDlgOwner : m_hWnd;
+    const std::wstring groupName = GroupNameForNotice(groupId);
+
+    if (m_lpFMGClient != NULL && m_lpFMGClient->IsOffline())
+    {
+        ::MessageBox(hOwner, _T("您当前处于离线状态，无法解散群聊，请上线后重试。"),
+                     _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+        return false;
+    }
+
+    const std::wstring tip = balloonmain::BuildDismissConfirmText(groupName);
+    if (::MessageBox(hOwner, tip.c_str(), _T("解散群聊"),
+                     MB_YESNO | MB_ICONWARNING | MB_DEFBUTTON2) != IDYES)
+    {
+        return false;
+    }
+
+    CIUSocket::GetInstance().SendDismissGroup(groupId);
+    balloonmain::PendingGroupOp pending;
+    pending.m_groupId = groupId;
+    pending.m_groupName = groupName;
+    m_groupExitTracker.Begin(balloonmain::kGroupExitOpDismiss, pending);
+    LOG_INFO("Dismiss group request sent: groupid=%lld.", (long long)groupId);
+    return true;
+}
+
+void CBalloonMainPanel::SendLeaveGroupTracked(int64_t groupId, const std::wstring& groupName)
+{
+    CIUSocket::GetInstance().SendLeaveGroup(groupId);
+    balloonmain::PendingGroupOp pending;
+    pending.m_groupId = groupId;
+    pending.m_groupName = groupName;
+    m_groupExitTracker.Begin(balloonmain::kGroupExitOpLeave, pending);
+    LOG_INFO("Leave group request sent: groupid=%lld.", (long long)groupId);
+}
+
+void CBalloonMainPanel::StartOwnerTransferPick(int64_t groupId)
+{
+    // 主面板平时不缓存群成员名单，现拉一次；应答到达后在 OnGroupMembersArrived 里打开选人对话框
+    m_transferPickGroupId = groupId;
+    CIUSocket::GetInstance().RequestGroupMembers(groupId);
+    LOG_INFO("Owner leave: fetching members to pick a new owner, groupid=%lld.", (long long)groupId);
+}
+
+void CBalloonMainPanel::ApplyGroupExitOutcome(balloonmain::GroupExitOp op,
+                                              const balloonmain::GroupOpOutcome& outcome)
+{
+    const int64_t groupId = outcome.m_op.m_groupId;
+    if (!outcome.m_succeeded)
+    {
+        LOG_ERROR("Group exit op failed: op=%d, groupid=%lld.", (int)op, (long long)groupId);
+        ::MessageBox(m_hWnd, outcome.m_errorText.c_str(), _T("FlamingoIM"), MB_OK | MB_ICONWARNING);
+        return;
+    }
+
+    switch (op)
+    {
+    //退群成功：提示并清理本地的群数据（随后到达的成员变动推送会发现已经清理过，不再重复提示）
+    case balloonmain::kGroupExitOpLeave:
+        HandleLeftGroup(groupId, balloonmain::kLeaveReasonSelf, outcome.m_op.m_groupName, true);
+        break;
+
+    //解散成功：同上，提示文字是"已解散"
+    case balloonmain::kGroupExitOpDismiss:
+        HandleLeftGroup(groupId, balloonmain::kLeaveReasonDismissedBySelf, outcome.m_op.m_groupName, true);
+        break;
+
+    //转让成功：本人角色的缓存由随后到达的角色变更推送刷新；"转让后退出"的流程接着发退群
+    case balloonmain::kGroupExitOpTransfer:
+        if (outcome.m_sendLeaveNext)
+        {
+            SendLeaveGroupTracked(groupId, outcome.m_op.m_groupName);
+        }
+        else
+        {
+            ShowPanelToast(balloonmain::BuildTransferDoneText(outcome.m_op.m_newOwnerName));
+        }
+        break;
+
+    //未知操作：不会走到这里
+    default:
+        break;
+    }
+    LOG_INFO("Group exit op succeeded: op=%d, groupid=%lld, sendLeaveNext=%d.",
+             (int)op, (long long)groupId, (int)outcome.m_sendLeaveNext);
+}
+
+void CBalloonMainPanel::HandleLeftGroup(int64_t groupId, balloonmain::GroupLeaveReason reason,
+                                        const std::wstring& groupName, bool showNotice)
 {
     if (groupId <= 0)
     {
         return;
     }
 
-    // 发退群请求（应答经 cmd_leave_group 回投本面板记日志 / 失败提示）。
-    CIUSocket::GetInstance().SendLeaveGroup(groupId);
+    // 已经清理过就不再提示：本端发起的退群 / 解散，应答先到、随后的推送又到一次
+    const bool known = IsGroupKnownLocally(groupId);
+    if (known && showNotice)
+    {
+        const std::wstring name = groupName.empty() ? GroupNameForNotice(groupId) : groupName;
+        const std::wstring text = balloonmain::BuildLeaveNoticeText(reason, name);
+        const bool passive = (reason == balloonmain::kLeaveReasonDismissed
+                              || reason == balloonmain::kLeaveReasonKicked);
+        std::map<int64_t, CBalloonGroupChatWindow*>::iterator wit = m_groupChatWindows.find(groupId);
+        const bool chatOpen = (wit != m_groupChatWindows.end() && wit->second != NULL
+                               && wit->second->IsWindow());
+        if (passive && chatOpen)
+        {
+            // 聊天窗随后会被关掉：先在它上面说明原因，输入框里没发出的内容不会无声消失
+            ::MessageBox(wit->second->m_hWnd, text.c_str(), _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+        }
+        else
+        {
+            ShowPanelToast(text);
+        }
+    }
 
-    // 乐观清理：从群列表 / 群信息缓存 / 会话缓存移除该群。若服务端最终拒绝（如群主须先
-    // 转让），下一次同步会把该群重新带回。
     CleanupLeftGroup(groupId);
+    LOG_INFO("Left group handled: groupid=%lld, reason=%d, wasKnown=%d, notice=%d.",
+             (long long)groupId, (int)reason, (int)known, (int)showNotice);
+}
 
-    LOG_INFO("退出群聊并清理本地缓存: groupid=%lld。", (long long)groupId);
+bool CBalloonMainPanel::IsGroupKnownLocally(int64_t groupId) const
+{
+    for (size_t i = 0; i < m_myGroups.size(); ++i)
+    {
+        if (m_myGroups[i].m_groupid == groupId)
+        {
+            return true;
+        }
+    }
+    if (m_groupInfo.find(groupId) != m_groupInfo.end())
+    {
+        return true;
+    }
+    return balloonmain::FindConversation(m_conversations, 2, groupId) != NULL;
+}
+
+std::wstring CBalloonMainPanel::GroupNameForNotice(int64_t groupId) const
+{
+    std::map<int64_t, GroupBrief>::const_iterator it = m_groupInfo.find(groupId);
+    if (it != m_groupInfo.end() && !it->second.m_name.IsEmpty())
+    {
+        return std::wstring((LPCTSTR)it->second.m_name);
+    }
+    return std::wstring();
+}
+
+void CBalloonMainPanel::ShowPanelToast(const std::wstring& text)
+{
+    if (m_pPanelToast == NULL)
+    {
+        LOG_WARNING("Panel toast not available, notice dropped.");
+        return;
+    }
+    m_pPanelToast->Show(text.c_str());
 }
 
 void CBalloonMainPanel::CleanupLeftGroup(int64_t groupId)
@@ -4202,10 +4443,47 @@ void CBalloonMainPanel::CleanupLeftGroup(int64_t groupId)
         wit->second->DestroyWindow();
     }
 
-    // 清空群资料对话框归属标记（对话框由发起端 ConfirmAndLeave 自行关闭）。
+    // 收藏：服务端已删掉各成员对该群的收藏行，本地的收藏标记也去掉并重建收藏分区，
+    // 否则通讯录页的"我的收藏"里会留着一行，点开就是一个已经不在的群
+    if (m_favorites.IsFavorite(conversation_group, groupId))
+    {
+        m_favorites.SetFavorite(conversation_group, groupId, false);
+        if (!RebuildFavoritesSection())
+        {
+            RebuildContactsTree();
+        }
+    }
+
+    // 本地消息记录：之后已经没有入口查看这个群的记录，留着只会让全局搜索搜出一个打不开的群；
+    // 日后重新入群时再从服务端同步
+    if (EnsureMsgStoreOpen())
+    {
+        int deleted = 0;
+        const bool ok = m_msgStore.DeleteConversation(conversation_group, groupId, deleted);
+        LOG_INFO("Local messages of left group deleted: groupid=%lld, rows=%d, ok=%d.",
+                 (long long)groupId, deleted, (int)ok);
+    }
+
+    // 消息记录窗口正显示这个群：它的数据刚删掉，关掉
+    if (m_historyWindow.IsShowingConversation(conversation_group, groupId))
+    {
+        m_historyWindow.DestroyWindow();
+    }
+
+    // 群资料窗口、群管理窗口正为这个群打开（被移出或群被解散时它们还开着）：一并关掉。
+    // 群管理窗口对象留给下次打开时回收，与 OpenGroupManage 的处理一致
+    if (m_groupInfoDlg.IsWindow() && m_groupInfoDlg.GroupId() == groupId)
+    {
+        m_groupInfoDlg.DestroyWindow();
+    }
     if (m_groupInfoDlgGroupId == groupId)
     {
         m_groupInfoDlgGroupId = 0;
+    }
+    CBalloonGroupManageWindow* pManageWin = GetLiveGroupManageWindow(groupId);
+    if (pManageWin != NULL)
+    {
+        pManageWin->DestroyWindow();
     }
 }
 
@@ -6699,6 +6977,7 @@ void CBalloonMainPanel::ShowGroupContextMenu(int64_t groupId)
     // 退出群聊暂无法标红（DuiMenu 不支持单项配色），图标待补资源；"群管理"仅群主/管理员显示。
     balloonmain::GroupMenuState state;
     state.m_canManage = (role == kGroupRoleOwner || role == kGroupRoleAdmin);
+    state.m_isOwner   = (role == kGroupRoleOwner);
     state.m_pinned    = pinned;
     state.m_muted     = muted;
     state.m_favorite  = m_favorites.IsFavorite(2, groupId);
@@ -6765,11 +7044,21 @@ void CBalloonMainPanel::ShowGroupContextMenu(int64_t groupId)
         SetConversationMuteState(2, groupId, !muted);
         break;
 
+    //退出群聊：群主走"先转让群主再退出"，其余成员确认后直接退群
+    case balloonmain::kGroupMenuQuit:
+        RequestLeaveGroup(groupId, m_hWnd);
+        break;
+
+    //解散群聊：仅群主的菜单里有这一项
+    case balloonmain::kGroupMenuDismiss:
+        RequestDismissGroup(groupId, m_hWnd);
+        break;
+
     case 0:
         break;   // 未选中（失焦 / ESC）
 
     default:
-        // 清空聊天记录 / 退出群聊 待接后端（退群目前在群资料对话框内完成）。
+        // 清空聊天记录待接后端。
         ::MessageBox(m_hWnd, _T("该功能正在开发中。"), _T("FlamingoIM"),
                      MB_OK | MB_ICONINFORMATION);
         break;
@@ -7148,8 +7437,23 @@ void CBalloonMainPanel::OnGroupOpResult(int cmd, const net::GroupOpResult& resul
         return;
     }
 
+    //解散与转让也可能由本面板发起（群资料窗口、群列表右键、群聊窗成员右键、群主退群的流程）：
+    //先看本面板有没有登记过这种请求，有就由本面板提示结果；没有才是群管理窗发起的，照旧转交
+    if (cmd == cmd_dismiss_group || cmd == cmd_transfer_owner)
+    {
+        const balloonmain::GroupExitOp op = (cmd == cmd_dismiss_group)
+                                            ? balloonmain::kGroupExitOpDismiss
+                                            : balloonmain::kGroupExitOpTransfer;
+        const balloonmain::GroupOpOutcome outcome = m_groupExitTracker.OnResult(op, result.m_code);
+        if (outcome.m_matched)
+        {
+            ApplyGroupExitOutcome(op, outcome);
+            return;
+        }
+    }
+
     //写操作的应答体里没有 groupid，无从校验是哪个群的；但同一时刻只可能开着
-    //一个群管理窗口，且操作也只能从它发起，故直接转交。
+    //一个群管理窗口，且其余操作也只能从它发起，故直接转交。
     CBalloonGroupManageWindow* pWin = GetLiveGroupManageWindow(0);
     if (pWin == NULL)
     {
@@ -7368,7 +7672,10 @@ void CBalloonMainPanel::OnGroupMemberChanged(const net::GroupMemberChangedNotify
 
             LOG_INFO(_T("本人已离开群 %lld（changetype=%d），清理该群的会话与窗口。"),
                      (long long)notify.m_groupid, notify.m_changetype);
-            CleanupLeftGroup(notify.m_groupid);
+            HandleLeftGroup(notify.m_groupid,
+                            notify.m_changetype == kMemberChangeKick ? balloonmain::kLeaveReasonKicked
+                                                                     : balloonmain::kLeaveReasonSelf,
+                            std::wstring(), true);
             break;
         }
     }
@@ -7383,14 +7690,19 @@ void CBalloonMainPanel::OnGroupInfoChanged(const net::GroupInfoChangedNotify& no
     if (notify.m_changetype == kInfoChangeDismissed)
     {
         LOG_INFO(_T("群 %lld 已被解散，清理其会话与窗口。"), (long long)groupId);
+        //本人是群主：解散是本人发起的（从群管理窗发起时本面板没有登记，走到这里），提示"已解散"
+        const balloonmain::GroupLeaveReason reason = (MyRoleInGroup(groupId) == kGroupRoleOwner)
+                                                     ? balloonmain::kLeaveReasonDismissedBySelf
+                                                     : balloonmain::kLeaveReasonDismissed;
+        bool shownByManageWindow = false;
         CBalloonGroupManageWindow* pWin = GetLiveGroupManageWindow(groupId);
         if (pWin != NULL)
         {
-            //窗口会自行提示并销毁自己，之后这个指针就不能再用了
-            pWin->OnInfoChanged(notify);
-            m_pGroupManageWindow = NULL;
+            //窗口会自行提示并销毁自己；它提示过，本面板就不再提示。对象本身留给下次打开群管理
+            //时回收（OpenGroupManage 的"对象在但窗口已关"分支），不在这里置空，否则对象会泄漏
+            shownByManageWindow = pWin->OnInfoChanged(notify);
         }
-        CleanupLeftGroup(groupId);
+        HandleLeftGroup(groupId, reason, std::wstring(), !shownByManageWindow);
         return;
     }
 
@@ -8201,6 +8513,26 @@ LRESULT CBalloonMainPanel::OnQueryStarredMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
     return m_starred.IsStarred(*pUserId) ? 1 : 0;
 }
 
+LRESULT CBalloonMainPanel::OnQueryContactBriefMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                                  LPARAM lParam, BOOL& /*bHandled*/)
+{
+    balloonchatwnd::ContactBriefQuery* pQuery = (balloonchatwnd::ContactBriefQuery*)lParam;
+    if (pQuery == NULL || pQuery->m_userId <= 0)
+    {
+        return 0;
+    }
+    const net::ContactItem* pContact = FindCachedContact((UINT)pQuery->m_userId);
+    if (pContact == NULL)
+    {
+        return 0;
+    }
+    pQuery->m_found      = true;
+    pQuery->m_nickname   = pContact->m_nickname;
+    pQuery->m_facetype   = pContact->m_facetype;
+    pQuery->m_customface = pContact->m_customface;
+    return 1;
+}
+
 LRESULT CBalloonMainPanel::OnToggleStarredMsg(UINT /*uMsg*/, WPARAM wParam,
                                               LPARAM /*lParam*/, BOOL& /*bHandled*/)
 {
@@ -8343,6 +8675,41 @@ LRESULT CBalloonMainPanel::OnOpenMemberPickerMsg(UINT /*uMsg*/, WPARAM /*wParam*
                                  pReq->m_groupId, selfId, candidates, departments);
     LOG_INFO("打开选人对话框: purpose=%d, groupid=%lld, candidates=%u。",
              pReq->m_purpose, (long long)pReq->m_groupId, (uint32_t)candidates.size());
+    return 0;
+}
+
+LRESULT CBalloonMainPanel::OnTransferGroupOwnerMsg(UINT /*uMsg*/, WPARAM /*wParam*/,
+                                                   LPARAM lParam, BOOL& /*bHandled*/)
+{
+    // lParam 为堆上的转让请求载荷，处理后须 delete。确认框已由发起窗口弹过
+    balloonmain::TransferOwnerRequest* pReq = (balloonmain::TransferOwnerRequest*)lParam;
+    if (pReq == NULL)
+    {
+        return 0;
+    }
+    std::unique_ptr<balloonmain::TransferOwnerRequest> guard(pReq);
+    if (pReq->m_groupId <= 0 || pReq->m_newOwner <= 0)
+    {
+        return 0;
+    }
+
+    if (m_lpFMGClient != NULL && m_lpFMGClient->IsOffline())
+    {
+        ::MessageBox(m_hWnd, _T("您当前处于离线状态，无法转让群主，请上线后重试。"),
+                     _T("FlamingoIM"), MB_OK | MB_ICONINFORMATION);
+        return 0;
+    }
+
+    CIUSocket::GetInstance().SendTransferOwner(pReq->m_groupId, pReq->m_newOwner);
+    balloonmain::PendingGroupOp pending;
+    pending.m_groupId = pReq->m_groupId;
+    pending.m_groupName = GroupNameForNotice(pReq->m_groupId);
+    pending.m_newOwner = pReq->m_newOwner;
+    pending.m_newOwnerName = pReq->m_newOwnerName;
+    pending.m_thenLeave = pReq->m_thenLeave;
+    m_groupExitTracker.Begin(balloonmain::kGroupExitOpTransfer, pending);
+    LOG_INFO("Transfer owner request sent: groupid=%lld, newowner=%lld, thenLeave=%d.",
+             (long long)pReq->m_groupId, (long long)pReq->m_newOwner, (int)pReq->m_thenLeave);
     return 0;
 }
 

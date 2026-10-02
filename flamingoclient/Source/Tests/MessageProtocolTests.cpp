@@ -1635,3 +1635,63 @@ TEST_CASE("FWD-C4 类型 15 的摘要为「[聊天记录]」", "[forward]")
 {
     CHECK(MessageProtocolClient::digestForMsgType(message_type_merged, "") == "[聊天记录]");
 }
+
+// =====================================================================
+// MP-SYS：服务端生成的群系统消息（发布公告、入群欢迎语、退出群聊、转让群主）
+// =====================================================================
+//
+// 这类消息由服务端生成、没有真实发送人，from 统一为 0（服务端 kSystemMessageSenderId）。解析层
+// 原先对所有消息都要求 from > 0，系统消息因此在推送与拉历史两条路径上都被当成脏数据丢掉，
+// 群里从来看不到它们（2026-10-01 联调退群时据日志 "Parse v2 message-notify failed" 发现）。
+
+TEST_CASE("MP-SYS1 parseMessageNotify 接受发送者为 0 的系统消息，非系统消息仍要求发送者为正", "[groupexit][sysmsg]")
+{
+    std::string body =
+        "{\"cid\":\"268435466\",\"clientmsgid\":\"sys-leave-268435466-5308-1790869589000\","
+        "\"content\":{\"text\":\"\\u300c\\u4e59\\u300d\\u9000\\u51fa\\u4e86\\u7fa4\\u804a\"},"
+        "\"ctype\":2,\"from\":\"0\",\"mentionall\":false,\"mentions\":[],\"msgid\":\"1177\","
+        "\"msgtype\":17,\"recalled\":false,\"timestamp\":1790869589000,\"to\":\"268435466\"}";
+    MessageNotify notify;
+    REQUIRE(MessageProtocolClient::parseMessageNotify(body, notify));
+    CHECK(notify.m_msgid == 1177);
+    CHECK(notify.m_from == 0);
+    CHECK(notify.m_ctype == 2);
+    CHECK(notify.m_cid == 268435466LL);
+    CHECK(notify.m_msgtype == message_type_system);
+    CHECK(notify.m_text == std::string(u8"「乙」退出了群聊"));
+
+    //发送者为 0 的普通文本消息仍是脏数据
+    std::string textFromZero =
+        "{\"msgid\":\"1\",\"from\":\"0\",\"to\":\"5002\",\"ctype\":1,"
+        "\"msgtype\":1,\"content\":{\"text\":\"x\"}}";
+    MessageNotify n2;
+    CHECK_FALSE(MessageProtocolClient::parseMessageNotify(textFromZero, n2));
+
+    //系统消息的发送者为负数同样拒收；缺 msgid 照样拒收
+    std::string sysNegative =
+        "{\"msgid\":\"2\",\"from\":\"-1\",\"ctype\":2,\"cid\":\"268435466\","
+        "\"msgtype\":17,\"content\":{\"text\":\"x\"}}";
+    CHECK_FALSE(MessageProtocolClient::parseMessageNotify(sysNegative, n2));
+    std::string sysNoMsgid =
+        "{\"from\":\"0\",\"ctype\":2,\"cid\":\"268435466\",\"msgtype\":17,\"content\":{\"text\":\"x\"}}";
+    CHECK_FALSE(MessageProtocolClient::parseMessageNotify(sysNoMsgid, n2));
+}
+
+TEST_CASE("MP-SYS2 parseSyncMessagesResponse 拉历史时保留系统消息，不当成脏条目跳过", "[groupexit][sysmsg]")
+{
+    std::string body =
+        "{\"code\":0,\"msg\":\"ok\",\"ctype\":2,\"cid\":\"268435466\",\"hasmore\":false,"
+        "\"messages\":["
+        "{\"msgid\":\"1176\",\"from\":\"5127\",\"to\":\"268435466\",\"ctype\":2,\"cid\":\"268435466\","
+        "\"msgtype\":1,\"content\":{\"text\":\"hello\"},\"timestamp\":1790869500000},"
+        "{\"msgid\":\"1177\",\"from\":\"0\",\"to\":\"268435466\",\"ctype\":2,\"cid\":\"268435466\","
+        "\"msgtype\":17,\"content\":{\"text\":\"tip\"},\"timestamp\":1790869589000}"
+        "]}";
+    SyncMessagesResult out;
+    REQUIRE(MessageProtocolClient::parseSyncMessagesResponse(body, out));
+    REQUIRE(out.m_messages.size() == 2);
+    CHECK(out.m_messages[1].m_msgid == 1177);
+    CHECK(out.m_messages[1].m_from == 0);
+    CHECK(out.m_messages[1].m_msgtype == message_type_system);
+    CHECK(out.m_messages[1].m_text == "tip");
+}

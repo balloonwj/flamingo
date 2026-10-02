@@ -64,6 +64,7 @@ enum GroupInfoCtrlId : UINT
     // ---- 底部按钮 ----
     kIdGroupBtnHistory   = 370,  // 查看消息记录(打开本群的消息记录窗口)
     kIdGroupBtnQuit      = 371,  // 退出群聊(危险红)
+    kIdGroupBtnDismiss   = 372,  // 解散群聊(危险红,仅群主可见)
 };
 
 /**
@@ -81,12 +82,14 @@ struct GroupInfoViewData
     CString  myCard;        // 我在本群的昵称(空时显占位"未设置")
     bool     mute;          // 消息免打扰当前态
     bool     pinned;        // 置顶群聊当前态
+    bool     isOwner;       // 本人是否为群主:为 true 时底部多出"解散群聊"按钮,"退出群聊"走先转让再退出
 
     GroupInfoViewData()
         : groupid(0)
         , memberCount(0)
         , mute(false)
         , pinned(false)
+        , isOwner(false)
     {
     }
 };
@@ -103,8 +106,9 @@ std::unique_ptr<balloonwjui::DuiControl> BuildGroupInfoBody();
 
 /**
  *  把 GroupInfoViewData 写入对话框控件树:群名、"群号 N · M 人"、群主行、
- *  公告(空→占位)、我的群名片(view 文字 + edit 初值)、两个开关初值。
- *  不切换可见性(由对话框 / SetGroupInfoCardEditMode 处理)。
+ *  公告(空→占位)、我的群名片(view 文字 + edit 初值)、两个开关初值,并按 data.isOwner
+ *  显示 / 隐藏"解散群聊"按钮(显隐变化时自行让底部按钮行重新排版)。群名片的查看 / 编辑态
+ *  可见性不在这里切换(由 SetGroupInfoCardEditMode 处理)。
  *    root  BuildGroupInfoBody 返回的客户区根控件;null 返 false。
  *    data  群资料字段。
  *  返回:成功 true;root 为 null 或核心控件(群名 label)找不到时 false。

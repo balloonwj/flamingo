@@ -135,6 +135,10 @@ static const char* const kQueryLatestSql =
 static const char* const kDeleteMsgSql =
     "DELETE FROM t_msg WHERE ctype=? AND cid=? AND msgid=?";
 
+//DeleteConversation 用：删除某会话的全部消息，走 idx_conv_time 索引。
+static const char* const kDeleteConversationMsgSql =
+    "DELETE FROM t_msg WHERE ctype=? AND cid=?";
+
 //DeleteByTimeRangeBatch 用：删除全部会话里时间落在 [?, ?] 内的至多 ? 行。先按 rowid 取一批
 //再删，而不是直接 DELETE ... LIMIT —— 后者要求 SQLite 以 SQLITE_ENABLE_UPDATE_DELETE_LIMIT
 //编译，第三方 amalgamation 默认不开。
@@ -613,6 +617,63 @@ bool CV2MsgStore::DeleteMessages(int ctype, int64_t cid, const std::vector<int64
         return false;
     }
     return ExecLocked("COMMIT");
+}
+
+bool CV2MsgStore::DeleteConversation(int ctype, int64_t cid, int& outDeleted)
+{
+    outDeleted = 0;
+
+    std::lock_guard<std::mutex> guard(m_mutex);
+    if (m_db == NULL)
+    {
+        return false;
+    }
+
+    //消息与覆盖区间一起成败：只删了消息而覆盖区间还在，消息记录窗会把空区间当成"已验证完整"
+    if (!ExecLocked("BEGIN IMMEDIATE"))
+    {
+        return false;
+    }
+
+    int deleted = 0;
+    bool ok = false;
+    sqlite3_stmt* stmt = NULL;
+    if (sqlite3_prepare_v2(m_db, kDeleteConversationMsgSql, -1, &stmt, NULL) == SQLITE_OK)
+    {
+        sqlite3_bind_int(stmt, 1, ctype);
+        sqlite3_bind_int64(stmt, 2, cid);
+        ok = (sqlite3_step(stmt) == SQLITE_DONE);
+        if (ok)
+        {
+            deleted = sqlite3_changes(m_db);
+        }
+    }
+    sqlite3_finalize(stmt);
+
+    if (ok)
+    {
+        stmt = NULL;
+        ok = false;
+        if (sqlite3_prepare_v2(m_db, kDeleteCoverSql, -1, &stmt, NULL) == SQLITE_OK)
+        {
+            sqlite3_bind_int(stmt, 1, ctype);
+            sqlite3_bind_int64(stmt, 2, cid);
+            ok = (sqlite3_step(stmt) == SQLITE_DONE);
+        }
+        sqlite3_finalize(stmt);
+    }
+
+    if (!ok)
+    {
+        ExecLocked("ROLLBACK");
+        return false;
+    }
+    if (!ExecLocked("COMMIT"))
+    {
+        return false;
+    }
+    outDeleted = deleted;
+    return true;
 }
 
 bool CV2MsgStore::DeleteByTimeRangeBatch(int64_t beginMs, int64_t endMs, int batchSize,

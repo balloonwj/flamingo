@@ -303,6 +303,8 @@ enum PresenceChangeSource
 #define     FMG_MSG_OPEN_HISTORY            WM_USER + 4500			//聊天窗 / 群聊窗→主面板：打开某会话的历史消息记录窗，wParam 低字节=ctype(1单聊 2群聊)、次低字节=打开后预选的类型胶囊(balloonhistory::HistoryTypeFilter，0=全部 6=Pin；不填即 0)，lParam=堆上 int64_t* cid（处理后 delete）
 #define     FMG_MSG_OPEN_GROUP_MANAGE       WM_USER + 4501			//群聊窗→主面板：打开某群的群管理对话框，lParam=堆上 int64_t* groupId（处理后 delete）
 #define     FMG_MSG_OPEN_FORWARD_PICKER     WM_USER + 4502			//聊天窗 / 群聊窗→主面板：转发多选中的消息，打开目标选择窗，lParam=堆上 balloonmain::ForwardRequest*（UI/BalloonMain/ForwardRequest.h，处理后 delete）。窗口间直投、不经 ProxyWndProc
+#define     FMG_MSG_QUERY_CONTACT_BRIEF     WM_USER + 4505			//群聊窗→主面板（同步 SendMessage）：按 userid 查通讯录缓存里的昵称与头像，供已退群成员的历史消息显示发送人，lParam=调用方栈上的 balloonchatwnd::ContactBriefQuery*（UI/BalloonChatWnd/GroupSenderRefresh.h，主面板就地填写、不 delete），返回 1 查到 / 0 查不到。窗口间直投、不经 ProxyWndProc
+#define     FMG_MSG_TRANSFER_GROUP_OWNER    WM_USER + 4504			//群聊窗成员右键「转让群主」/ 选人对话框「转让群主并退出」→主面板：转让群主（确认框已由发起窗口弹过），lParam=堆上 balloonmain::TransferOwnerRequest*（UI/BalloonMain/GroupExitFlow.h，处理后 delete）。窗口间直投、不经 ProxyWndProc
 #define     FMG_MSG_OPEN_MERGED_VIEWER      WM_USER + 4503			//聊天窗 / 群聊窗 / 聊天记录查看窗→主面板：打开一份合并转发的聊天记录，lParam=堆上 std::string*（合并消息的 content 原文，UTF-8，处理后 delete）。窗口间直投、不经 ProxyWndProc
 #define     FMG_MSG_REFRESH_SELF_HEADER     WM_USER + 4520			//个人信息对话框→主面板：乐观保存后请它按 m_UserInfo 立即刷新本人 Header（昵称/签名/头像）（无参）
 //下面四条是联系人资料对话框的动作出口。该窗口既没有 socket 也没有通讯录 / 收藏 /

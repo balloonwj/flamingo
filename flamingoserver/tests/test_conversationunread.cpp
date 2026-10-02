@@ -8,10 +8,12 @@
  *  改动前预期失败、改完转绿。
  *  CVU7（2026-09-30 补）钉住已读位点的读取口径 getReadMsgid，供单聊同步消息应答
  *  带出「对方已读到哪条」。
+ *  CVU8（2026-10-02 补）：服务端生成的群系统消息（发布公告、入群欢迎语、退出群聊、转让群主，
+ *  msgtype=17、发送者为 0）不计入未读 —— 它们是群里的变动通知，不是有人对你说话。
  *
  *  未读的口径（读 MessageManager.cpp 得出，两条路各一份）：
  *    · 群聊：f_ctype=2 且 f_to=群id 且 <u>f_from != 本人</u> 且 f_msgid > 已读位点，
- *            再排除本人已删除的消息（t_message_deleted）；
+ *            且不是系统消息（f_msgtype != 17），再排除本人已删除的消息（t_message_deleted）；
  *    · 单聊：f_ctype=1 且 <u>f_from=对端 且 f_to=本人</u>（即只数对方发来的）
  *            且 f_msgid > 已读位点，同样排除已删除的。
  *
@@ -94,6 +96,25 @@ static void insertMsg(int64_t msgid, int ctype, int64_t from, int64_t to)
           "f_recalled,f_create_time) VALUES ("
        << msgid << ",'c" << msgid << "'," << ctype << "," << from << "," << to
        << ",1,'" << CVU_CONTENT << "',0," << (CVU_BASE_TIME + msgid) << ")";
+    REQUIRE(pConn->execute(os.str().c_str()));
+}
+
+/**
+ *  插一条服务端生成的群系统消息：发送者为 0、msgtype 为 message_type_system（17）。
+ *    msgid：  消息 id。
+ *    groupid：所在群 id。
+ */
+static void insertSystemMsg(int64_t msgid, int64_t groupid)
+{
+    //系统消息由服务器生成，没有真实发送人，发送者 userid 记 0（与 ChatSession 的 kSystemMessageSenderId 一致）
+    const int64_t kSystemSender = 0;
+    std::unique_ptr<IDatabase> pConn(openConn());
+    std::ostringstream os;
+    os << "INSERT INTO t_chatmsg "
+          "(f_msgid,f_clientmsgid,f_ctype,f_from,f_to,f_msgtype,f_content,"
+          "f_recalled,f_create_time) VALUES ("
+       << msgid << ",'sys" << msgid << "'," << conversation_group << "," << kSystemSender << "," << groupid
+       << "," << message_type_system << ",'" << CVU_CONTENT << "',0," << (CVU_BASE_TIME + msgid) << ")";
     REQUIRE(pConn->execute(os.str().c_str()));
 }
 
@@ -297,6 +318,23 @@ TEST_CASE("CVU7 getReadMsgid 取某人对某会话记下的已读位点")
     //别人对同一个 cid 也没有记录：键里的 userid 必须参与匹配
     REQUIRE(mgr.getReadMsgid((int32_t)CVU_OTHER_ID, conversation_single, CVU_PEER_ID, pos));
     CHECK(pos == 0);
+
+    removeCvuDbFiles();
+}
+
+TEST_CASE("CVU8 群系统消息不计入未读，但仍是会话的最后一条消息")
+{
+    resetCvuDb();
+
+    //别人发 1 条，之后服务端插了 2 条系统提示（例如有人退群、转让群主），一条都没读过
+    insertMsg(1, conversation_group, CVU_OTHER_ID, CVU_GROUP_ID);
+    insertSystemMsg(2, CVU_GROUP_ID);
+    insertSystemMsg(3, CVU_GROUP_ID);
+
+    const ConversationBrief brief = groupBrief();
+    CHECK(brief.unread == 1);
+    //系统消息照样更新会话的最后一条（会话列表的摘要与时间据此显示）
+    CHECK(brief.lastmsgid == 3);
 
     removeCvuDbFiles();
 }

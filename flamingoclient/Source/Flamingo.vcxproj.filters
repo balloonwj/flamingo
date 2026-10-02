@@ -778,6 +778,9 @@
     <ClCompile Include="UI\BalloonMain\MainPanelGroupMenu.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
+    <ClCompile Include="UI\BalloonMain\GroupExitFlow.cpp">
+      <Filter>UI\BalloonMain</Filter>
+    </ClCompile>
     <ClCompile Include="UI\BalloonMain\MainPanelConversationMenu.cpp">
       <Filter>UI\BalloonMain</Filter>
     </ClCompile>
@@ -2010,6 +2013,9 @@
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonMain\MainPanelGroupMenu.h">
+      <Filter>UI\BalloonMain</Filter>
+    </ClInclude>
+    <ClInclude Include="UI\BalloonMain\GroupExitFlow.h">
       <Filter>UI\BalloonMain</Filter>
     </ClInclude>
     <ClInclude Include="UI\BalloonMain\MainPanelConversationMenu.h">

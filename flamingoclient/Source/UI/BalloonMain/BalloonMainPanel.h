@@ -55,6 +55,7 @@
 #include "UnknownSenderRefreshPolicy.h"            // 陌生发送方补拉通讯录的节流器（成员按值持有，需完整类型）
 #include "OnlineCapability.h"                      // kConnUiOnline（备注提交前的连接态门禁）
 #include "CreateGroupDlg.h"                        // 新建群聊对话框（成员需完整类型）
+#include "GroupExitFlow.h"                         // 退群 / 解散 / 转让的待应答登记（成员需完整类型）与提示文字
 #include "ForwardTargetDlg.h"                      // 转发目标选择窗（成员需完整类型）与 IForwardTargetSink
 #include "ForwardDispatcher.h"                     // 转发调度器（成员需完整类型）
 #include "BalloonChangePwdDlg.h"                   // 修改密码对话框（成员需完整类型）
@@ -118,7 +119,7 @@ namespace net { struct ContactsResult; struct MessageNotify; struct SendMessageR
 //没必要让每一个包含主面板头文件的编译单元都背上。
 namespace foldertransfer { struct FolderScanNotice; struct FolderBindNotice;
                            struct FolderProgressNotice; struct FolderResultNotice; }
-namespace balloonwjui { class DuiTreeView; }
+namespace balloonwjui { class DuiTreeView; class DuiToast; }
 
 /**
  *  CBalloonMainPanel
@@ -410,12 +411,28 @@ public:
                               bool hasPinned, bool pinned);
 
     /**
-     *  退出某群（群资料对话框"退出群聊"回投）。发 cmd_leave_group(1309)，并乐观清理：
-     *  从群列表 / 群信息缓存 / 会话缓存移除该群、刷新"群"与"消息"两 Tab、关闭该群已打开的
-     *  群聊窗。若服务端最终拒绝（如群主须先转让），下一次同步会纠正。
-     *    groupId：群 id。
+     *  发起退出群聊（群资料窗口「退出群聊」按钮、群列表右键「退出群聊」共用）。
+     *
+     *  离线时提示后返回。本人是群主时，服务端不允许直接退群：先弹框询问是否现在选择新群主，
+     *  同意后拉取群成员、打开「转让群主并退出」的选人对话框，转让成功后再自动退群。其余角色
+     *  弹确认框，确认后发 cmd_leave_group(1309) 并登记等待应答。<u>不做乐观清理</u>：应答成功、
+     *  或随后的成员变动推送到达时才清理本地的群数据；失败时按错误码给出具体提示。
+     *    groupId：  群ID；非正值直接返回 false。
+     *    hDlgOwner：确认框与提示框的父窗口（发起的那个窗口）；无效时用主面板。
+     *  @return 用户确认并已发出请求、或已进入"先转让群主"的流程时返回 true（发起窗口可据此关闭自己）；
+     *          用户取消或离线时返回 false。
      */
-    void LeaveGroup(int64_t groupId);
+    bool RequestLeaveGroup(int64_t groupId, HWND hDlgOwner);
+
+    /**
+     *  发起解散群聊（群资料窗口「解散群聊」按钮、群列表右键「解散群聊」共用，仅群主可见）。
+     *  离线时提示后返回；否则弹确认框，确认后发 cmd_dismiss_group(1302) 并登记等待应答。成功后
+     *  清理本地的群数据并轻提示；失败时按错误码提示。
+     *    groupId：  群ID；非正值直接返回 false。
+     *    hDlgOwner：确认框与提示框的父窗口；无效时用主面板。
+     *  @return 用户确认并已发出请求时返回 true；用户取消或离线时返回 false。
+     */
+    bool RequestDismissGroup(int64_t groupId, HWND hDlgOwner);
 
     /**
      *  收到 cmd_set_member_card(1315) 应答：转交给群资料对话框处理(成功无动作;失败从
@@ -943,6 +960,7 @@ public:
         MESSAGE_HANDLER(WM_DUI_NOTIFY, OnDuiNotify)
         MESSAGE_HANDLER(FMG_MSG_OPEN_CONTACT_PROFILE, OnOpenContactProfileMsg)
         MESSAGE_HANDLER(FMG_MSG_QUERY_STARRED, OnQueryStarredMsg)
+        MESSAGE_HANDLER(FMG_MSG_QUERY_CONTACT_BRIEF, OnQueryContactBriefMsg)
         MESSAGE_HANDLER(FMG_MSG_TOGGLE_STARRED, OnToggleStarredMsg)
         MESSAGE_HANDLER(FMG_MSG_SET_CONTACT_REMARK, OnSetContactRemarkMsg)
         MESSAGE_HANDLER(FMG_MSG_SET_CONTACT_TAGS, OnSetContactTagsMsg)
@@ -955,6 +973,7 @@ public:
         MESSAGE_HANDLER(FMG_MSG_CONV_MARK_READ, OnConvMarkReadMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_GROUP_MANAGE, OnOpenGroupManageMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_MEMBER_PICKER, OnOpenMemberPickerMsg)
+        MESSAGE_HANDLER(FMG_MSG_TRANSFER_GROUP_OWNER, OnTransferGroupOwnerMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_GROUP_AVATAR_DLG, OnOpenGroupAvatarDlgMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_GROUP_ANNOUNCE, OnOpenGroupAnnounceMsg)
         MESSAGE_HANDLER(FMG_MSG_OPEN_CHANGEPWD, OnOpenChangePwdMsg)
@@ -1949,10 +1968,63 @@ private:
     /**
      *  本人已离开某群（主动退出 / 被移出 / 群被解散）之后的本地收尾：从"我的群"
      *  列表、群资料缓存、会话列表里去掉它，刷新两棵树，清掉托盘上属于它的未读
-     *  提示，并关掉它的聊天窗。
+     *  提示，取消它的收藏标记并重建收藏分区，删除本地库里它的消息，关掉它的聊天窗、
+     *  消息记录窗、群资料窗与群管理窗。可重复调用，第二次起没有可清理的内容。
      *    groupId：群ID；非正值直接返回。
      */
     void CleanupLeftGroup(int64_t groupId);
+
+    /**
+     *  本人离开某群之后的统一处理：先给用户提示，再调 CleanupLeftGroup 收尾。
+     *
+     *  提示方式：被解散 / 被移出时，若该群的聊天窗开着，在聊天窗上弹提示框（用户确认后窗口随
+     *  清理关闭，输入框里没发出的内容不会无声消失）；其余情况在主面板上轻提示。该群在本端已经
+     *  清理过时（例如本端发起的退群：应答先到、随后的成员变动推送又到一次）不再重复提示。
+     *    groupId：   群ID；非正值直接返回。
+     *    reason：    离开的原因，决定提示文字；
+     *    groupName： 群名；为空时取本地缓存里的群名（清理之前取）；
+     *    showNotice：false 时只清理不提示（如群管理窗已经自行提示过）。
+     */
+    void HandleLeftGroup(int64_t groupId, balloonmain::GroupLeaveReason reason,
+                         const std::wstring& groupName, bool showNotice);
+
+    /**
+     *  该群是否还在本端的群列表、群资料缓存或会话列表里（是否还没清理过）。
+     */
+    bool IsGroupKnownLocally(int64_t groupId) const;
+
+    /**
+     *  提示文字里用的群名：取本地群资料缓存里的群名，取不到时返回空串（提示文字会改用不带群名的说法，
+     *  不像 GroupDisplayName 那样退回"群聊(群号)"）。
+     */
+    std::wstring GroupNameForNotice(int64_t groupId) const;
+
+    /**
+     *  发出退群请求并登记等待应答（RequestLeaveGroup 确认之后、"转让后退出"转让成功之后共用）。
+     *    groupId：  群ID；
+     *    groupName：群名，用于应答到达后的提示。
+     */
+    void SendLeaveGroupTracked(int64_t groupId, const std::wstring& groupName);
+
+    /**
+     *  "先转让群主再退出"流程的第一步：记下目标群并拉取群成员，成员列表到达后
+     *  （OnGroupMembersArrived）剔除本人作为候选，打开「转让群主并退出」的选人对话框。
+     */
+    void StartOwnerTransferPick(int64_t groupId);
+
+    /**
+     *  按退群 / 解散 / 转让应答的处理结论更新界面：失败弹提示框；退群与解散成功时提示并清理本地
+     *  的群数据；转让成功时轻提示，若登记时要求接着退群则立即发出退群请求。
+     *    op：      操作类型；
+     *    outcome： GroupExitTracker::OnResult 的结论，调用方已确认 m_matched 为 true。
+     */
+    void ApplyGroupExitOutcome(balloonmain::GroupExitOp op, const balloonmain::GroupOpOutcome& outcome);
+
+    /**
+     *  在主面板上弹一条轻提示（DuiToast，约两秒后自动淡出）。提示条没建出来时只记日志。
+     *    text：提示文字。
+     */
+    void ShowPanelToast(const std::wstring& text);
 
     /**
      *  群名变更后同步到所有显示它的地方：会话列表行、群资料缓存、开着的群聊窗
@@ -2329,6 +2401,11 @@ private:
     // lParam 指向调用方栈上的 int64_t userid；返回 1 已关注 / 0 未关注。
     LRESULT OnQueryStarredMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
+    // 群聊窗代查"通讯录里某人的昵称与头像"（FMG_MSG_QUERY_CONTACT_BRIEF，同步 SendMessage），
+    // 供已退群成员的历史消息显示发送人。lParam 指向调用方栈上的 balloonchatwnd::ContactBriefQuery，
+    // 本函数就地填写；返回 1 查到 / 0 通讯录缓存里没有此人。
+    LRESULT OnQueryContactBriefMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
     // 群聊窗请求切换某联系人的特别关注状态（FMG_MSG_TOGGLE_STARRED，wParam=userid）。
     LRESULT OnToggleStarredMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
 
@@ -2361,6 +2438,13 @@ private:
      *    lParam：堆分配的 int64_t 群ID，本函数处理后 delete。
      */
     LRESULT OnOpenMemberPickerMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
+
+    /**
+     *  群聊窗成员右键「转让群主」、选人对话框「转让群主并退出」请求转让群主（确认框已由发起窗口弹过）。
+     *  离线时提示后丢弃；否则发 cmd_transfer_owner(1316) 并登记等待应答，结果由 ApplyGroupExitOutcome 提示。
+     *    lParam：堆分配的 balloonmain::TransferOwnerRequest*，本函数处理后 delete。
+     */
+    LRESULT OnTransferGroupOwnerMsg(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled);
     /**
      *  群管理窗请求打开「修改群头像」对话框：用本类持有的那一个对话框实例开，
      *  头像图片上传结果才能回到同一个实例（见 GroupAvatarDlgRequest.h 的说明）。
@@ -2678,6 +2762,13 @@ private:
     CString                 m_groupInfoDlgAnnouncement;  // 该群公告（cmd_get_group_info 到达后填）
     CString                 m_groupInfoDlgOwnerName;     // 该群群主显示名（cmd_get_group_members 到达后填）
     CString                 m_groupInfoDlgMyCard;        // 我在该群的群名片（cmd_get_group_members 到达后填）
+    // 本端发出、正在等服务端应答的退群 / 解散 / 转让请求（应答不带群号，靠它对上是哪个群）。
+    // 退出登录时清空
+    balloonmain::GroupExitTracker m_groupExitTracker;
+    // "先转让群主再退出"流程里正在等群成员列表的群ID；0 表示没有。成员列表到达后清零
+    int64_t                 m_transferPickGroupId;
+    // 主面板上的轻提示条（借用，挂在客户区根容器末尾、由控件树持有）。InitUi 里建出，建不出时为 NULL
+    balloonwjui::DuiToast*  m_pPanelToast;
     CSignatureEditPopup     m_signEditPopup;    // Header 签名点击弹出的内联编辑弹层
     CString                 m_signBeforeUpdate; // 乐观更新前的签名快照，应答失败时回退用
     int                     m_presenceBeforeChange; // 改状态前的在线状态快照(v2 presence)，cmd_change_presence 应答失败时回退胶囊用

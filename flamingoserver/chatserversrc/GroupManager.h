@@ -69,9 +69,12 @@ public:
                         const std::vector<int64_t>& memberids, int64_t createTime);
 
     /**
-     *  解散群：删除 t_group 行及该群在 t_group_member 的全部成员行。
+     *  解散群：在一个事务里删除该群的 t_group 行、全部成员行、群公告、加群申请、敏感词、群文件条目，
+     *  以及各成员对该群的收藏行（t_favorite）与会话设置行（t_conversation），任何一步失败都整体回滚。
+     *  群消息（t_chatmsg）保留不删，供企业审计追溯；被钉住的消息由调用方另行清理。
+     *  成功后同时丢弃该群在内存里的敏感词缓存。
      *  @param groupid 目标群ID
-     *  @return 数据库访问成功返回 true
+     *  @return 全部删除成功并提交时返回 true；失败时库里的数据保持原样
      */
     bool dismissGroup(int64_t groupid);
 
@@ -180,10 +183,11 @@ public:
     bool addMembers(int64_t groupid, const std::vector<int64_t>& userids, int64_t joinTime);
 
     /**
-     *  批量移除群成员（用于退群 / 踢人）。
+     *  批量移除群成员（用于退群 / 踢人）：在一个事务里删除这些人的成员行，以及他们对该群的收藏行
+     *  （t_favorite）与会话设置行（t_conversation），任何一步失败都整体回滚。其他成员的数据不动。
      *  @param groupid 目标群ID
-     *  @param userids 待移除的用户userid列表
-     *  @return 数据库访问成功返回 true
+     *  @param userids 待移除的用户userid列表；为空时直接返回 true；其中已不在群里的人不影响结果
+     *  @return 全部删除成功并提交时返回 true；失败时库里的数据保持原样
      */
     bool removeMembers(int64_t groupid, const std::vector<int64_t>& userids);
 
@@ -261,11 +265,12 @@ public:
 
     /**
      *  转让群主（cmd_transfer_owner 用）：把群主从 oldOwner 转给 newOwner。
-     *  会同时更新 t_group.f_ownerid、新群主角色置为群主、原群主角色降为普通成员。
+     *  在一个事务里更新 t_group.f_ownerid、把新群主角色置为群主、把原群主角色降为普通成员，
+     *  任何一步失败都整体回滚。
      *  @param groupid  群ID
      *  @param oldOwner 原群主userid
-     *  @param newOwner 新群主userid（须为该群现有成员）
-     *  @return 数据库访问成功返回 true
+     *  @param newOwner 新群主userid（须为该群现有成员，由调用方校验）
+     *  @return 三处都更新成功并提交时返回 true；失败时库里的数据保持原样
      */
     bool transferOwner(int64_t groupid, int32_t oldOwner, int32_t newOwner);
 

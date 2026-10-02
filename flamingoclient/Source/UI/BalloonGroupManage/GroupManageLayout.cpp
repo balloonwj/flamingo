@@ -2209,7 +2209,7 @@ CString BuildDismissDescription(const CString& groupName)
         name = name.Left(kMaxNameChars) + _T("…");
     }
     CString desc;
-    desc.Format(_T("解散后 %s 的聊天记录将全部删除，所有成员将被移出，此操作不可恢复"),
+    desc.Format(_T("解散后 %s 的所有成员将被移出，成员本地的聊天记录随之清除，此操作不可恢复"),
                 (LPCTSTR)name);
     return desc;
 }

@@ -346,7 +346,8 @@ std::unique_ptr<balloonwjui::DuiControl> BuildGroupInfoBody()
     AddSeparator(root.get());
     AddSpacer(root.get(), 12);
 
-    // ---- 底部按钮:查看消息记录 / 退出群聊(等宽并排) ----
+    // ---- 底部按钮:查看消息记录 / 退出群聊 / 解散群聊(等宽并排;解散只对群主显示,
+    //      隐藏时水平布局跳过它,另两个按钮各占一半) ----
     {
         std::unique_ptr<balloonwjui::DuiHBox> footer(new balloonwjui::DuiHBox());
         footer->SetGap(12);
@@ -368,6 +369,19 @@ std::unique_ptr<balloonwjui::DuiControl> BuildGroupInfoBody()
         // 危险红字(浅红底位图由对话框 EnsureVisualResources 精修;此处先红字兜底)。
         btnQuit->SetTextColor(RGB(0xE5, 0x39, 0x35));
         footer->AddChild(std::move(btnQuit),
+                         balloonwjui::DuiLayout::Hint().Weight(1).Fixed(-1, kFooterBtnHeight)
+                             .AlignC(balloonwjui::DuiLayout::AlignCenter));
+
+        std::unique_ptr<balloonwjui::DuiButton> btnDismiss(new balloonwjui::DuiButton());
+        btnDismiss->SetCtrlId(kIdGroupBtnDismiss);
+        btnDismiss->SetText(_T("解散群聊"));
+        btnDismiss->SetVariant(balloonwjui::DuiButton::Variant::Default);
+        btnDismiss->SetTextPointSize(kFontBody);
+        // 与"退出群聊"同一套危险红样式(浅红底位图同样由对话框精修)。
+        btnDismiss->SetTextColor(RGB(0xE5, 0x39, 0x35));
+        // 本人角色要等群资料应答到达才知道,先隐藏;ApplyGroupInfoDataToView 按 isOwner 显示。
+        btnDismiss->SetVisible(false);
+        footer->AddChild(std::move(btnDismiss),
                          balloonwjui::DuiLayout::Hint().Weight(1).Fixed(-1, kFooterBtnHeight)
                              .AlignC(balloonwjui::DuiLayout::AlignCenter));
 
@@ -468,6 +482,21 @@ bool ApplyGroupInfoDataToView(balloonwjui::DuiControl* root,
     if (pinSw != NULL)
     {
         pinSw->SetChecked(data.pinned, /*animated*/false, /*notify*/false);
+    }
+
+    // ---- "解散群聊"按钮只对群主显示 ----
+    // SetVisible 只置标志位、不重新排版,而水平布局排版时会跳过隐藏的子控件:按钮隐藏期间排过的
+    // 那次版里它没有位置,显示出来时必须让底部按钮行按当前矩形重排一次,否则它会停在过时的矩形上。
+    // 用 ForceLayout 而不是 SetRect:按钮行自身的矩形没有变,SetRect 会直接返回。
+    balloonwjui::DuiButton* btnDismiss = FindCtrl<balloonwjui::DuiButton>(root, kIdGroupBtnDismiss);
+    if (btnDismiss != NULL && btnDismiss->IsVisible() != data.isOwner)
+    {
+        btnDismiss->SetVisible(data.isOwner);
+        balloonwjui::DuiControl* footer = btnDismiss->GetParent();
+        if (footer != NULL)
+        {
+            footer->ForceLayout(footer->GetRect());
+        }
     }
 
     return true;

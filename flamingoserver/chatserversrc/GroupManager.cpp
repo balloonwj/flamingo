@@ -10,10 +10,90 @@
 #include "../dbapi/IDatabase.h"
 #include "../dbapi/DbFactory.h"
 #include "../dbapi/DbConfig.h"
+#include "../dbapi/DbTransaction.h" //CDbTransaction：解散、移出成员、转让群主的多条写语句一起成败
 #include "../base/AsyncLog.h"
 #include "../base/Singleton.h"
 #include "UserManager.h"   //仅为复用群ID下界宏 GROUPID_BOUBDARY
 #include "GroupAutoName.h" //自动群名的生成规则
+
+/**
+ *  执行一条只返回一个整数的查询（如 SELECT MAX(...)），取回这个整数。
+ *    pConn：已建立的数据库连接，不转移所有权；
+ *    sql：  查询语句。
+ *  返回：查询结果；查询失败、没有结果行或结果为 NULL（空表上的 MAX）时返回 0。
+ */
+static int64_t queryInt64(IDatabase* pConn, const char* sql)
+{
+    int64_t value = 0;
+    QueryResult* pResult = pConn->query(sql);
+    if (pResult != NULL)
+    {
+        Field* pRow = pResult->fetch();
+        if (pRow != NULL)
+        {
+            value = static_cast<int64_t>(pRow[0].getUInt64());
+        }
+        pResult->endQuery();
+        delete pResult;
+    }
+    return value;
+}
+
+/**
+ *  在一个事务里依次执行多条写语句，任何一条失败都整体回滚。
+ *
+ *  解散群、移出成员、转让群主都要同时改好几张表，中途失败若不回滚，就会留下"群主指向新群主、
+ *  新群主的角色却还是普通成员"或"成员行已删、收藏行还在"这类不一致的数据。走 CDbTransaction
+ *  守卫而不是自己发事务控制语句：两种后端开启事务的语句不同，由驱动各自处理；每条错误路径直接
+ *  返回即可，守卫析构时自动回滚。
+ *    pConn：     已建立的数据库连接，不转移所有权；
+ *    statements：要执行的写语句，按下标顺序执行；
+ *    caller：    调用方函数名，只用于日志；
+ *    groupid：   本次操作的群ID，只用于日志。
+ *  返回：全部语句执行成功且提交成功时返回 true。
+ */
+static bool executeInTransaction(IDatabase* pConn, const std::vector<std::string>& statements,
+                                 const char* caller, int64_t groupid)
+{
+    CDbTransaction transaction(pConn);
+    if (!transaction.IsActive())
+    {
+        LOGE("%s begin transaction error, groupid: %lld", caller, (long long)groupid);
+        return false;
+    }
+    for (size_t i = 0; i < statements.size(); ++i)
+    {
+        if (!pConn->execute(statements[i].c_str()))
+        {
+            LOGE("%s statement %u failed, rolled back, groupid: %lld, sql: %s",
+                 caller, static_cast<unsigned>(i), (long long)groupid, statements[i].c_str());
+            return false;
+        }
+    }
+    if (!transaction.Commit())
+    {
+        LOGE("%s commit error, groupid: %lld", caller, (long long)groupid);
+        return false;
+    }
+    return true;
+}
+
+/**
+ *  把一组 userid 拼成 "a,b,c"，用于 SQL 的 IN (...)。
+ *    userids：userid 列表，调用方保证非空。
+ *  返回：逗号分隔的十进制串。
+ */
+static std::string joinUserIds(const std::vector<int64_t>& userids)
+{
+    std::ostringstream os;
+    for (size_t i = 0; i < userids.size(); ++i)
+    {
+        if (i > 0)
+            os << ",";
+        os << userids[i];
+    }
+    return os.str();
+}
 
 GroupManager::GroupManager()
 {
@@ -33,23 +113,22 @@ bool GroupManager::init()
         return false;
     }
 
-    //群ID分配器 seed 到当前最大群ID；t_group 为空时退回到 GROUPID_BOUBDARY
+    //群ID分配器 seed 到"用过的最大群ID"；一个群都没有时退回到 GROUPID_BOUBDARY。
+    //
+    //只看 t_group 不够：解散群会删掉 t_group 行，但群消息保留在 t_chatmsg 里供审计。若被解散的
+    //恰好是群号最大的群，重启后新群就会复用这个群号，新群成员也就能翻到旧群的聊天记录。故同时
+    //取 t_chatmsg.f_to 的最大值：群号都大于 GROUPID_BOUBDARY、用户号都小于它，单聊消息的 f_to
+    //不会抬高结果；不加 f_ctype 条件，MAX(f_to) 可以直接走 f_to 打头的索引，不扫表。
     int64_t base = GROUPID_BOUBDARY;
-    QueryResult* pResult = pConn->query("SELECT MAX(f_groupid) FROM t_group");
-    if (pResult != NULL)
-    {
-        Field* pRow = pResult->fetch();
-        if (pRow != NULL)
-        {
-            int64_t maxId = static_cast<int64_t>(pRow[0].getUInt64());
-            if (maxId > base)
-                base = maxId;
-        }
-        pResult->endQuery();
-        delete pResult;
-    }
+    const int64_t maxGroupId = queryInt64(pConn.get(), "SELECT MAX(f_groupid) FROM t_group");
+    if (maxGroupId > base)
+        base = maxGroupId;
+    const int64_t maxMessageTarget = queryInt64(pConn.get(), "SELECT MAX(f_to) FROM t_chatmsg");
+    if (maxMessageTarget > base)
+        base = maxMessageTarget;
     m_baseGroupId = base;
-    LOGI("GroupManager::init ok, group id allocator seeded at %lld", (long long)base);
+    LOGI("GroupManager::init ok, group id allocator seeded at %lld (max groupid %lld, max message target %lld)",
+         (long long)base, (long long)maxGroupId, (long long)maxMessageTarget);
     return true;
 }
 
@@ -258,22 +337,44 @@ bool GroupManager::dismissGroup(int64_t groupid)
         return false;
     }
 
-    //先删全部成员行，再删群行
-    std::ostringstream osMembers;
-    osMembers << "DELETE FROM t_group_member WHERE f_groupid = " << groupid;
-    if (!pConn->execute(osMembers.str().c_str()))
+    //依次删除：各成员对该群的收藏行与会话设置行、群公告、加群申请、敏感词、群文件条目、成员行，
+    //最后删群本身。几点说明：
+    //  · 群消息（t_chatmsg）保留不删，供企业日后审计追溯；群号也因此不会被新群复用，见 init。
+    //  · 群文件只删条目，文件实体按 MD5 去重存放、可能被别的会话引用，不在这里删。
+    //  · 被钉住的消息（t_message_pin）由调用方另经 MessagePinManager::removePinsForGroup 清理。
+    std::vector<std::string> statements;
     {
-        LOGE("GroupManager::dismissGroup delete members error, groupid: %lld", (long long)groupid);
-        return false;
+        std::ostringstream os;
+        os << "DELETE FROM t_favorite WHERE f_ctype = " << conversation_group << " AND f_cid = " << groupid;
+        statements.push_back(os.str());
+    }
+    {
+        std::ostringstream os;
+        os << "DELETE FROM t_conversation WHERE f_ctype = " << conversation_group << " AND f_cid = " << groupid;
+        statements.push_back(os.str());
+    }
+    //以下各表都按 f_groupid 定位
+    const char* const kGroupTables[] = {
+        "t_group_announcement",
+        "t_group_join_request",
+        "t_group_sensitive_word",
+        "t_group_file",
+        "t_group_member",
+        "t_group"
+    };
+    for (size_t i = 0; i < sizeof(kGroupTables) / sizeof(kGroupTables[0]); ++i)
+    {
+        std::ostringstream os;
+        os << "DELETE FROM " << kGroupTables[i] << " WHERE f_groupid = " << groupid;
+        statements.push_back(os.str());
     }
 
-    std::ostringstream osGroup;
-    osGroup << "DELETE FROM t_group WHERE f_groupid = " << groupid;
-    if (!pConn->execute(osGroup.str().c_str()))
-    {
-        LOGE("GroupManager::dismissGroup delete group error, groupid: %lld", (long long)groupid);
+    if (!executeInTransaction(pConn.get(), statements, "GroupManager::dismissGroup", groupid))
         return false;
-    }
+
+    //敏感词已从库里删掉，内存里的词库缓存也一并丢弃
+    invalidateSensitiveCache(groupid);
+    LOGI("GroupManager::dismissGroup ok, groupid: %lld", (long long)groupid);
     return true;
 }
 
@@ -637,20 +738,33 @@ bool GroupManager::removeMembers(int64_t groupid, const std::vector<int64_t>& us
         return false;
     }
 
-    std::ostringstream osSql;
-    osSql << "DELETE FROM t_group_member WHERE f_groupid = " << groupid << " AND f_userid IN (";
-    for (size_t i = 0; i < userids.size(); ++i)
+    //当事人离开后，他对这个群的收藏行与会话设置行（置顶、免打扰、已读位点）都已无意义：收藏
+    //分区显示不出来却仍占收藏上限，日后重新入群时旧的置顶与免打扰状态也会意外恢复。三条语句
+    //一起成败，成员行放在最后删
+    const std::string idList = joinUserIds(userids);
+    std::vector<std::string> statements;
     {
-        if (i > 0)
-            osSql << ",";
-        osSql << userids[i];
+        std::ostringstream os;
+        os << "DELETE FROM t_favorite WHERE f_ctype = " << conversation_group << " AND f_cid = " << groupid
+           << " AND f_userid IN (" << idList << ")";
+        statements.push_back(os.str());
     }
-    osSql << ")";
-    if (!pConn->execute(osSql.str().c_str()))
     {
-        LOGE("GroupManager::removeMembers error, groupid: %lld", (long long)groupid);
+        std::ostringstream os;
+        os << "DELETE FROM t_conversation WHERE f_ctype = " << conversation_group << " AND f_cid = " << groupid
+           << " AND f_userid IN (" << idList << ")";
+        statements.push_back(os.str());
+    }
+    {
+        std::ostringstream os;
+        os << "DELETE FROM t_group_member WHERE f_groupid = " << groupid << " AND f_userid IN (" << idList << ")";
+        statements.push_back(os.str());
+    }
+
+    if (!executeInTransaction(pConn.get(), statements, "GroupManager::removeMembers", groupid))
         return false;
-    }
+
+    LOGI("GroupManager::removeMembers ok, groupid: %lld, users: %s", (long long)groupid, idList.c_str());
     return true;
 }
 
@@ -899,27 +1013,35 @@ bool GroupManager::transferOwner(int64_t groupid, int32_t oldOwner, int32_t newO
         return false;
     }
 
-    //1) t_group 的群主指针指向新群主
-    std::ostringstream osGroup;
-    osGroup << "UPDATE t_group SET f_ownerid = " << newOwner << " WHERE f_groupid = " << groupid;
-    if (!pConn->execute(osGroup.str().c_str()))
+    //三条更新必须一起成败：任何一条失败而不回滚，就会出现"群主指向新群主、新群主的角色却还是
+    //普通成员"或"两个人都是群主角色"，之后的权限判断全乱
+    std::vector<std::string> statements;
     {
-        LOGE("GroupManager::transferOwner update t_group error, groupid: %lld", (long long)groupid);
-        return false;
+        //1) t_group 的群主指针指向新群主
+        std::ostringstream os;
+        os << "UPDATE t_group SET f_ownerid = " << newOwner << " WHERE f_groupid = " << groupid;
+        statements.push_back(os.str());
+    }
+    {
+        //2) 新群主成员行角色置为群主
+        std::ostringstream os;
+        os << "UPDATE t_group_member SET f_role = " << group_role_owner
+           << " WHERE f_groupid = " << groupid << " AND f_userid = " << newOwner;
+        statements.push_back(os.str());
+    }
+    {
+        //3) 原群主成员行角色降为普通成员
+        std::ostringstream os;
+        os << "UPDATE t_group_member SET f_role = " << group_role_member
+           << " WHERE f_groupid = " << groupid << " AND f_userid = " << oldOwner;
+        statements.push_back(os.str());
     }
 
-    //2) 新群主成员行角色置为群主
-    std::ostringstream osNew;
-    osNew << "UPDATE t_group_member SET f_role = " << group_role_owner
-          << " WHERE f_groupid = " << groupid << " AND f_userid = " << newOwner;
-    pConn->execute(osNew.str().c_str());
+    if (!executeInTransaction(pConn.get(), statements, "GroupManager::transferOwner", groupid))
+        return false;
 
-    //3) 原群主成员行角色降为普通成员
-    std::ostringstream osOld;
-    osOld << "UPDATE t_group_member SET f_role = " << group_role_member
-          << " WHERE f_groupid = " << groupid << " AND f_userid = " << oldOwner;
-    pConn->execute(osOld.str().c_str());
-
+    LOGI("GroupManager::transferOwner ok, groupid: %lld, from: %d, to: %d",
+         (long long)groupid, oldOwner, newOwner);
     return true;
 }
 

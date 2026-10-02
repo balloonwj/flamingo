@@ -165,12 +165,17 @@ public:
      *  登录时也会把自己发的消息同步回本端。这类"自己发出、又回推回来"的消息不应
      *  计入未读，否则自己发一条群消息就会给自己点亮一个红点。
      *
-     *  @param fromUserId 消息发送方 userid（取自推送的 from 字段）
+     *  服务端生成的系统消息（发布公告、入群欢迎语、退出群聊、转让群主，msgtype 为
+     *  message_type_system）同样不计：它们是群里的变动通知，不是有人对你说话。服务端算会话
+     *  未读数时也不计它们（MessageManager 的群未读查询），两边口径一致。
+     *
+     *  @param fromUserId 消息发送方 userid（取自推送的 from 字段；系统消息为 0）
      *  @param selfId     本端登录用户的 userid；为 0 表示尚未登录 / 取不到，
      *                    此时一律不计未读，避免在未登录兜底态下误加
-     *  @return 应计未读返回 true；自己发出的、或 selfId 无效时返回 false
+     *  @param msgtype    消息内容类型，取值见 Protocol.h 的 msg_type 一组 message_type_xxx
+     *  @return 应计未读返回 true；自己发出的、系统消息、或 selfId 无效时返回 false
      */
-    static bool shouldCountAsUnread(unsigned int fromUserId, unsigned int selfId);
+    static bool shouldCountAsUnread(unsigned int fromUserId, unsigned int selfId, int msgtype);
 
 private:
     ConversationsProtocolClient() = delete;

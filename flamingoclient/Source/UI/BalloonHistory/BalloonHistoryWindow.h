@@ -103,6 +103,11 @@ public:
     //在回填同步落库后调用，让新拉到的消息即时出现；会话不匹配 / 未开窗则忽略。
     void RefreshIfConversation(int ctype, int64_t cid);
 
+    //本窗是否正打开、且显示的就是 (ctype,cid) 这个会话。主面板在本人离开某群、删掉该群的
+    //本地记录后据此决定要不要关掉本窗。
+    //@return 窗口已创建且当前会话匹配时返回 true
+    bool IsShowingConversation(int ctype, int64_t cid) const;
+
     //若本窗正打开，不论显示的是哪个会话都局部刷新（重查本地库）。供主面板在按时间范围
     //清理本地库之后调用 —— 区间清理作用于全部会话，本窗当前显示的会话必然也受影响。
     //未开窗时忽略。

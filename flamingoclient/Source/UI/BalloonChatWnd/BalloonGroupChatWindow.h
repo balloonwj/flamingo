@@ -1208,10 +1208,22 @@ private:
     // 成员侧栏每次重建时按它给各行设徽标；查不到的成员不画徽标。随窗口存在，关窗即丢弃
     std::map<int64_t, int> m_memberPresence;
 
+    // 成员表里查不到的发送者（已退群、被移出）在通讯录里查到的显示信息，或"通讯录里也没有"的
+    // 结论。一页历史里同一个人往往发很多条，缓存起来只问主面板一次；成员表重新到达时清空
+    struct NonMemberSender
+    {
+        bool                              m_found;       // 通讯录里有没有此人
+        balloonchatwnd::GroupSenderRender m_render;      // 查到时的显示信息（昵称、字形、底色、真图路径）
+        int                               m_facetype;    // 头像类型，真图下载完成后据它回填路径
+        std::string                       m_customface;  // 头像标识（UTF-8），真图为 fileid
+        NonMemberSender() : m_found(false), m_facetype(0) {}
+    };
+    std::map<int64_t, NonMemberSender> m_nonMemberSenders;
+
     /**
-     *  按 userid 解析发送者在气泡里的显示信息：查成员表 m_memberInfo，查不到或字段为空时
-     *  按 ResolveGroupSender 的规则回退（"用户<id>"、首字、按 userid 取的底色）。
-     *  渲染对方的历史 / 实时 / 图片消息时共用这一处。
+     *  按 userid 解析发送者在气泡里的显示信息：先查成员表 m_memberInfo，成员表里没有（已退群、
+     *  被移出）再经主面板查通讯录，两处都没有或字段为空时按 ResolveGroupSender 的规则回退
+     *  （"用户<id>"、首字、按 userid 取的底色）。渲染对方的历史 / 实时 / 图片消息时共用这一处。
      *    userId：发送者 userid。
      *  @return 名字与字形保证非空的显示信息。
      */
@@ -1226,6 +1238,29 @@ private:
      */
     static bool LookupMemberSender(void* ctx, int64_t userId,
                                    balloonchatwnd::GroupSenderRender& out);
+
+    /**
+     *  查通讯录的回调：成员表里查不到的发送者，经 FMG_MSG_QUERY_CONTACT_BRIEF 同步问主面板，取账号
+     *  昵称与头像。结果（含"查不到"）缓存在 m_nonMemberSenders 里。没有宿主主面板（调试入口）时
+     *  一律返回 false。
+     *    ctx：   本窗口（CBalloonGroupChatWindow*）。
+     *    userId：要查的 userid。
+     *    out：   [出参] 查到时填入显示信息。
+     *  @return 通讯录里有此人返回 true。
+     */
+    static bool LookupContactSender(void* ctx, int64_t userId,
+                                    balloonchatwnd::GroupSenderRender& out);
+
+    /**
+     *  ApplyGroupSendersToList 与 ResolveSender 共用的查询回调：先成员表、再通讯录
+     *  （balloonchatwnd::LookupGroupSenderChain）。
+     *    ctx：   本窗口（CBalloonGroupChatWindow*）。
+     *    userId：要查的 userid。
+     *    out：   [出参] 查到时填入显示信息。
+     *  @return 任一处查到返回 true。
+     */
+    static bool LookupSenderChain(void* ctx, int64_t userId,
+                                  balloonchatwnd::GroupSenderRender& out);
 
     // 用户在输入框里插入过的 @ 记录（按插入顺序）。发送时<u>不</u>直接用它，而是以
     // 输入框最终文本为准调 RescanMentions 重扫一遍 —— 插入之后用户还可能把

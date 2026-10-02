@@ -26,6 +26,8 @@
 #include "../../net/ContactsProtocolClient.h"  // net::ContactItem / DepartmentItem / DeptMemberItem
 #include "../../net/GroupProtocolClient.h"     // net::CreateGroupResponse
 #include "../../net/IUSocket.h"            // CIUSocket::SendCreateGroup
+#include "../../Session/UserSessionData.h" // FMG_MSG_TRANSFER_GROUP_OWNER
+#include "GroupExitFlow.h"                 // TransferOwnerRequest / BuildTransferConfirmText
 #include "../../../third-party/balloonui/balloonui/Controls/Layout/DuiLayout.h"      // DuiVBox / DuiHBox / Hint
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiLabel.h"
 #include "../../../third-party/balloonui/balloonui/Controls/Basic/DuiButton.h"
@@ -141,6 +143,7 @@ CCreateGroupDlg::CCreateGroupDlg(CFlamingoClient* pFMGClient)
     , m_selfUserId(0)
     , m_purpose(kPurposeCreateGroup)
     , m_groupId(0)
+    , m_hNotifyTarget(NULL)
     , m_searchInput(NULL)
     , m_nameInput(NULL)
     , m_memberScroll(NULL)
@@ -188,10 +191,12 @@ void CCreateGroupDlg::OpenForPick(HWND owner, Purpose purpose, int64_t groupId,
     OpenInternal(owner, selfUserId, candidates, departments);
 }
 
-void CCreateGroupDlg::OpenInternal(HWND /*owner*/, UINT selfUserId,
+void CCreateGroupDlg::OpenInternal(HWND owner, UINT selfUserId,
                                    const std::vector<net::ContactItem>& contacts,
                                    const std::vector<net::DepartmentItem>& departments)
 {
+    // 只记下来备用（「转让群主并退出」确认后往这里投请求），不作为窗口的 owner，理由见下方 Create 处
+    m_hNotifyTarget = owner;
     m_selfUserId  = selfUserId;
     m_contacts    = contacts;
     m_departments = departments;
@@ -921,6 +926,9 @@ LPCTSTR CCreateGroupDlg::WindowTitleText() const
         return _T("选择要禁言的成员");
     case kPurposeTransfer:
         return _T("转让群主");
+    //群主退群前选新群主
+    case kPurposeTransferThenLeave:
+        return _T("转让群主并退出");
     case kPurposeCreateGroup:
     default:
         return _T("新建群聊");
@@ -937,6 +945,9 @@ LPCTSTR CCreateGroupDlg::ConfirmButtonText() const
         return _T("禁言");
     case kPurposeTransfer:
         return _T("转让");
+    //群主退群前选新群主
+    case kPurposeTransferThenLeave:
+        return _T("转让并退出");
     case kPurposeCreateGroup:
     default:
         return _T("创建群聊");
@@ -987,23 +998,53 @@ void CCreateGroupDlg::DoPickConfirm()
 
     case kPurposeTransfer:
     {
-        //单选：即便界面上意外多选了，也只取第一个 —— 转让群主是不可逆操作，
+        //单选：即便界面上意外多选了，也只取第一个 —— 转让后本人就不再是群主、自己转不回来，
         //宁可少做也不能对多个人各发一次。
         const int64_t newOwner = (int64_t)m_selected[0];
 
-        CString tip;
         const net::ContactItem* c = FindContact(m_selected[0]);
         const CString name = (c != NULL) ? DisplayNameOf(*c) : CString();
-        tip.Format(_T("确定把群主转让给「%s」吗？\n\n转让后你将降为普通成员，此操作不可恢复。"),
-                   (LPCTSTR)name);
-        if (::MessageBox(m_hWnd, (LPCTSTR)tip, _T("转让群主"),
+        const std::wstring tip = balloonmain::BuildTransferConfirmText((LPCTSTR)name, false);
+        if (::MessageBox(m_hWnd, tip.c_str(), _T("转让群主"),
                          MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2) != IDOK)
         {
             return;   // 用户取消：窗口留着，让他重选或关掉
         }
 
         socket.SendTransferOwner(m_groupId, newOwner);
-        LOG_INFO("转让群主: groupid=%lld, newowner=%lld。",
+        LOG_INFO("Transfer group owner from member picker: groupid=%lld, newowner=%lld.",
+                 (long long)m_groupId, (long long)newOwner);
+        break;
+    }
+
+    //群主退群前选新群主：确认后交给主面板。主面板登记这次转让、成功后接着发退群，
+    //失败时提示原因、不退群
+    case kPurposeTransferThenLeave:
+    {
+        const int64_t newOwner = (int64_t)m_selected[0];
+        const net::ContactItem* c = FindContact(m_selected[0]);
+        const CString name = (c != NULL) ? DisplayNameOf(*c) : CString();
+        const std::wstring tip = balloonmain::BuildTransferConfirmText((LPCTSTR)name, true);
+        if (::MessageBox(m_hWnd, tip.c_str(), _T("转让群主并退出"),
+                         MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2) != IDOK)
+        {
+            return;   // 用户取消：窗口留着，让他重选或关掉
+        }
+
+        balloonmain::TransferOwnerRequest* req = new balloonmain::TransferOwnerRequest();
+        req->m_groupId = m_groupId;
+        req->m_newOwner = newOwner;
+        req->m_newOwnerName = (LPCTSTR)name;
+        req->m_thenLeave = true;
+        if (!::IsWindow(m_hNotifyTarget)
+            || !::PostMessage(m_hNotifyTarget, FMG_MSG_TRANSFER_GROUP_OWNER, 0, (LPARAM)req))
+        {
+            delete req;
+            LOG_ERROR("Post transfer-then-leave request failed: groupid=%lld, newowner=%lld.",
+                      (long long)m_groupId, (long long)newOwner);
+            break;
+        }
+        LOG_INFO("Transfer-then-leave request posted to main panel: groupid=%lld, newowner=%lld.",
                  (long long)m_groupId, (long long)newOwner);
         break;
     }

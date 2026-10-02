@@ -132,6 +132,16 @@ public:
     //        未打开数据库返回 false
     bool DeleteMessages(int ctype, int64_t cid, const std::vector<int64_t>& msgids, int& outDeleted);
 
+    //删除某会话的全部消息与它的覆盖区间记录。本人退出群聊、被移出或群被解散后调用：之后已没有
+    //入口查看这个群的记录，留着只会让全局搜索搜出一个打不开的群；日后重新入群时再从服务端同步。
+    //消息与覆盖区间在一个事务里删除，走 (ctype,cid,timestamp) 索引，不扫全表。
+    //@param ctype       会话类型（1 单聊 2 群聊）
+    //@param cid         会话ID（单聊=对端userid，群聊=群id）
+    //@param outDeleted  [出参] 删除的消息行数；失败时为 0
+    //@return 执行成功返回 true（包括本来就没有这个会话的数据）；未打开数据库或出错返回 false，
+    //        出错时整体回滚
+    bool DeleteConversation(int ctype, int64_t cid, int& outDeleted);
+
     //按时间范围删除<u>全部会话</u>里的消息，一次最多删 batchSize 行。收到服务端"本人删除了消息"
     //推送（区间形式）后，由调用方逐批投递消息反复调用，直到 outDeleted 为 0 —— 每批之间让出
     //UI 线程，本地库再大也不会让界面长时间冻结（见 docs/清理聊天记录方案.md §7.1）。

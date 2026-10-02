@@ -1259,11 +1259,15 @@ bool MessageManager::getGroupConversationBriefs(int32_t userid, const std::vecto
         //未读数：来自他人、msgid 大于已读位点的群消息条数。
         //与单聊那条同一套写法：数到 kMaxUnreadCount 就停，工作量与积压量无关。
         //群聊是这次优化的主要受益方 —— 实测里"越用越慢"那条曲线就是这条查询画出来的。
+        //服务端生成的系统消息（发布公告、入群欢迎语、退出群聊、转让群主）不计：它们是群里的
+        //变动通知，不是有人对你说话；客户端实时收到时同样不计（ConversationsProtocolClient::
+        //shouldCountAsUnread），两边口径一致，重新登录后未读数才不会凭空多出来
         {
             std::ostringstream osSql;
             osSql << "SELECT COUNT(*) FROM (SELECT 1 FROM t_chatmsg"
                      " WHERE f_ctype = " << conversation_group
                   << " AND f_to = " << groupid << " AND f_from != " << userid
+                  << " AND f_msgtype != " << message_type_system
                   << " AND f_msgid > " << st.readmsgid << notDeletedClause(userid)
                   << " LIMIT " << kMaxUnreadCount << ") t";
             QueryResult* pResult = pConn->query(osSql.str().c_str());

@@ -503,14 +503,16 @@ TEST_CASE("M9 群主看普通成员：有设为管理员、无撤销管理员", 
     CHECK(HasEntry(items, kMentionMenuSetAdmin));
     CHECK_FALSE(HasEntry(items, kMentionMenuCancelAdmin));
 
-    //管理项排在日常动作那一组（五项）之后，中间隔一条分隔线。群主对普通成员既能
-    //设管理员、又能移出，故管理项有两条：设为管理员 + 移出本群（移出排最末）。
-    REQUIRE(items.size() == 8);
+    //管理项排在日常动作那一组（五项）之后，中间隔一条分隔线。群主对普通成员能设管理员、
+    //能转让群主、也能移出，故管理项有三条：设为管理员 + 转让群主 + 移出本群（移出排最末）。
+    REQUIRE(items.size() == 9);
     CHECK(items[5].isSeparator);
     CHECK(items[6].id == kMentionMenuSetAdmin);
     CHECK(items[6].enabled);
-    CHECK(items[7].id == kMentionMenuKick);
+    CHECK(items[7].id == kMentionMenuTransferOwner);
     CHECK(items[7].enabled);
+    CHECK(items[8].id == kMentionMenuKick);
+    CHECK(items[8].enabled);
 }
 
 TEST_CASE("M10 群主看管理员：有撤销管理员、无设为管理员", "[mention][menu][admin]")
@@ -696,13 +698,14 @@ TEST_CASE("M22 角色未知时不给移出本群", "[mention][menu][kick]")
 
 TEST_CASE("M23 移出本群排在最末，且分隔线只有一条", "[mention][menu][kick]")
 {
-    //群主看普通成员：日常五项 + 分隔线 + 设为管理员 + 移出本群，共 8 行
+    //群主看普通成员：日常五项 + 分隔线 + 设为管理员 + 转让群主 + 移出本群，共 9 行
     std::vector<MentionMenuEntry> byOwner =
         BuildMentionMenuModel(kOtherUid, kMyUid, true, kOwner, kMember);
-    REQUIRE(byOwner.size() == 8);
+    REQUIRE(byOwner.size() == 9);
     CHECK(byOwner[5].isSeparator);
     CHECK(byOwner[6].id == kMentionMenuSetAdmin);
-    CHECK(byOwner[7].id == kMentionMenuKick);   //不可撤销的操作放在最远处
+    CHECK(byOwner[7].id == kMentionMenuTransferOwner);
+    CHECK(byOwner[8].id == kMentionMenuKick);   //不可撤销的操作放在最远处
 
     //管理员看普通成员：没有角色项，只有移出本群 —— 分隔线仍只有一条，
     //且不能因为少了角色项就在末尾留一条孤零零的分隔线
@@ -966,4 +969,56 @@ TEST_CASE("D4 没有可用的宿主窗口时不投递、不崩溃", "[groupmembe
         CHECK(actions.empty());
         DeleteMentionActions(actions);
     }
+}
+
+// =====================================================================
+// M27-M28 —— 菜单里的「转让群主」（2026-10-01）
+// =====================================================================
+//
+// 与服务端 onTransferOwner 对齐：只有群主能转让，只能转给本群的其他成员（管理员或普通成员），
+// 不能转给自己。门控收在 grouprole::CanTransferOwnerTo，与设 / 撤管理员、移出本群并列。
+
+TEST_CASE("M27 CanTransferOwnerTo 的真值表：只有群主能转让，且只能转给本群的其他成员", "[mention][menu][transfer]")
+{
+    const int roles[] = { kUnknown, kMember, kAdmin, kOwner };
+    const size_t n = sizeof(roles) / sizeof(roles[0]);
+    for (size_t i = 0; i < n; ++i)
+    {
+        for (size_t j = 0; j < n; ++j)
+        {
+            INFO("我的角色 = " << roles[i] << "，目标角色 = " << roles[j]);
+            const bool expectWhenOther =
+                (roles[i] == kOwner) && (roles[j] == kMember || roles[j] == kAdmin);
+            CHECK(grouprole::CanTransferOwnerTo(roles[i], roles[j], false) == expectWhenOther);
+            //对自己一律不行
+            CHECK_FALSE(grouprole::CanTransferOwnerTo(roles[i], roles[j], true));
+        }
+    }
+}
+
+TEST_CASE("M28 转让群主排在设 / 撤管理员之后、移出本群之前，文字为「转让群主」", "[mention][menu][transfer]")
+{
+    //群主看管理员：撤销管理员 + 转让群主 + 移出本群
+    std::vector<MentionMenuEntry> onAdmin =
+        BuildMentionMenuModel(kOtherUid, kMyUid, true, kOwner, kAdmin);
+    const int idxCancel   = FindEntryIndex(onAdmin, kMentionMenuCancelAdmin);
+    const int idxTransfer = FindEntryIndex(onAdmin, kMentionMenuTransferOwner);
+    const int idxKick     = FindEntryIndex(onAdmin, kMentionMenuKick);
+    REQUIRE(idxTransfer >= 0);
+    CHECK(idxCancel < idxTransfer);
+    CHECK(idxTransfer < idxKick);
+    CHECK(std::wstring(onAdmin[(size_t)idxTransfer].label) == L"转让群主");
+    CHECK(onAdmin[(size_t)idxTransfer].enabled);
+
+    //管理员、普通成员、角色未知时都没有；群主对自己右键也没有
+    CHECK_FALSE(HasEntry(BuildMentionMenuModel(kOtherUid, kMyUid, true, kAdmin, kMember),
+                         kMentionMenuTransferOwner));
+    CHECK_FALSE(HasEntry(BuildMentionMenuModel(kOtherUid, kMyUid, true, kMember, kMember),
+                         kMentionMenuTransferOwner));
+    CHECK_FALSE(HasEntry(BuildMentionMenuModel(kOtherUid, kMyUid, true, kUnknown, kMember),
+                         kMentionMenuTransferOwner));
+    CHECK_FALSE(HasEntry(BuildMentionMenuModel(kOtherUid, kMyUid, true, kOwner, kUnknown),
+                         kMentionMenuTransferOwner));
+    CHECK_FALSE(HasEntry(BuildMentionMenuModel(kMyUid, kMyUid, true, kOwner, kOwner),
+                         kMentionMenuTransferOwner));
 }

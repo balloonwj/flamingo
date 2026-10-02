@@ -84,6 +84,24 @@ bool CanKickMember(int myNetRole, int targetNetRole, bool targetIsSelf)
     return true;
 }
 
+bool CanTransferOwnerTo(int myNetRole, int targetNetRole, bool targetIsSelf)
+{
+    // 只有群主能转让；角色未知（负值）同样落进这里。
+    if (myNetRole != kNetRoleOwner)
+    {
+        return false;
+    }
+
+    // 转给自己没有意义，服务端也会拒绝。
+    if (targetIsSelf)
+    {
+        return false;
+    }
+
+    // 只能转给本群的其他成员：管理员或普通成员。目标已不在本群（负值）时不给。
+    return targetNetRole == kNetRoleMember || targetNetRole == kNetRoleAdmin;
+}
+
 bool CanChangeGroupAvatar(int myNetRole)
 {
     // 群主与管理员可改；普通成员不行，角色未知（负值，群资料还没到）同样不行。

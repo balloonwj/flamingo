@@ -296,6 +296,8 @@ tests/test_groupprotocol.cpp
 tests/test_grouppermission.cpp
 tests/test_groupautoname.cpp
 tests/test_pinnedgroups.cpp
+# 退群、解散群、转让群主的存储层行为（Suite GX）。被测的 GroupManager 已在下方的实现清单中
+tests/test_groupexit.cpp
 tests/test_cardprotocol.cpp
 tests/test_filetoken.cpp
 tests/test_relaytoken.cpp

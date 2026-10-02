@@ -39,6 +39,7 @@
 #include "ChatImageSaveAs.h"          // SaveChatImageAs（图片另存为，与单聊窗共用）
 #include "ChatReceivedFile.h"         // 文件气泡的构造与本地文件动作（与单聊窗共用）
 #include "../BalloonMain/ForwardRequest.h"    // balloonmain::ForwardRequest（多选转发投给主面板）
+#include "../BalloonMain/GroupExitFlow.h"     // balloonmain::TransferOwnerRequest / BuildTransferConfirmText（成员右键「转让群主」）
 #include "GroupSideTab.h"             // GroupSideTab::SetActive
 #include "SideTabText.h"              // MakeSideTabText（边栏 Tab 的"标题 + 真实数量"文案）
 #include "GroupMemberList.h"          // 成员侧栏容器
@@ -149,6 +150,7 @@ static const int kMsgTypeText  = 1;   // message_type_text
 static const int kMsgTypeImage = 2;   // message_type_image
 static const int kMsgTypeFile  = 3;   // message_type_file：群里只会来自转发（本窗口发文件走群文件库）
 static const int kMsgTypeMerged = 15; // message_type_merged：合并转发的聊天记录，画成卡片
+static const int kMsgTypeSystem = 17; // message_type_system：服务端生成的系统提示（发布公告、入群欢迎语、退出群聊、转让群主），画成居中提示行
 
 // CString(UTF-16) → UTF-8 std::string。空串安全。
 static std::string CStringToUtf8(const CString& text)
@@ -323,6 +325,25 @@ static COLORREF AvatarColorForUser(int64_t userid)
 // 把一条"自己发"的群消息气泡的发送者头像填成本端真实头像（字形 / 真图，按本端
 // (facetype, customface) 解析；真图未缓存会入队下载，完成后 OnAvatarDownloaded 回刷）。
 // 群聊里自己气泡不显示发送者名，故不设 senderName。
+/**
+ *  把一条服务端生成的系统消息（msgtype=17，发送者为 0）构造成居中的灰色提示行。复用列表里
+ *  "居中时间分隔"那一种行（kMsgTime），与单聊窗 AppendSystemTip 的做法一致；带上 msgid 与时间，
+ *  列表据 msgid 去重（推送与拉历史可能各来一次）。
+ *    m：系统消息；正文在 m.m_text（UTF-8），为空时用类型占位文字。
+ *  @return 构造好的提示行。
+ */
+static balloonchatwnd::ChatMessage MakeGroupSystemTip(const net::MessageNotify& m)
+{
+    const std::string text = m.m_text.empty()
+                           ? net::MessageProtocolClient::digestForMsgType(m.m_msgtype, m.m_text)
+                           : m.m_text;
+    balloonchatwnd::ChatMessage tip = balloonchatwnd::MakeTextMessage(false, Utf8ToCString(text));
+    tip.kind        = balloonchatwnd::kMsgTime;
+    tip.msgid       = m.m_msgid;
+    tip.timestampMs = m.m_timestamp;
+    return tip;
+}
+
 static void FillSelfSenderAvatar(CFlamingoClient* client, balloonchatwnd::ChatMessage& msg)
 {
     int64_t     selfId = 0;
@@ -670,13 +691,22 @@ void CBalloonGroupChatWindow::ApplyAdminGearVisibility()
     }
 
     const bool show = (m_myRole == kRoleAdminValue || m_myRole == kRoleOwnerValue);
+    const bool changed = (gear->IsVisible() != show);
     gear->SetVisible(show);
 
-    // 隐藏后头部需重排以收起齿轮槽位；窗口就绪时投递一次重排（HBox 布局会
-    // 自动跳过不可见子控件）。
-    if (IsWindow())
+    // SetVisible 只置标志位、不重新排版，而头部的水平布局排版时会跳过隐藏的子控件：齿轮隐藏期间
+    // 排过的那次版里它没有位置。窗口开着时角色变化（被转让为群主、被设为管理员）把它显示出来，
+    // 若不重排，它会停在宽度为 0 的旧矩形上、看不见，要重开窗口才出现。kRelayoutMsg 只重排消息区，
+    // 管不到头部，故显隐真正变化时对齿轮所在的头部行按当前矩形 ForceLayout 一次。必须作用在这一行
+    // 本身：对客户区根容器 ForceLayout 只强制根这一层，往下仍走 SetRect，而头部行的矩形没变，
+    // SetRect 会直接返回（2026-10-02 联调实测）。窗口还没建出来时由 InitUi 首次排版处理
+    if (changed && IsWindow())
     {
-        ::PostMessage(m_hWnd, kRelayoutMsg, 0, 0);
+        balloonwjui::DuiControl* headerRow = gear->GetParent();
+        if (headerRow != NULL)
+        {
+            headerRow->ForceLayout(headerRow->GetRect());
+        }
     }
 }
 
@@ -3384,6 +3414,24 @@ void CBalloonGroupChatWindow::OnRecvGroupMessage(const net::MessageNotify& notif
         return;
     }
 
+    // 服务端生成的系统提示：画成居中提示行，没有发送人气泡。按 msgid 去重
+    if (notify.m_msgtype == kMsgTypeSystem)
+    {
+        balloonwjui::DuiControl* content = GetClientContent();
+        balloonchatwnd::ChatMessageList* list = (content != NULL)
+            ? dynamic_cast<balloonchatwnd::ChatMessageList*>(
+                  content->FindCtrlById(balloonchatwnd::kGIdMessageArea))
+            : NULL;
+        if (list == NULL || list->ContainsMessage((long long)notify.m_msgid, notify.m_clientmsgid))
+        {
+            return;
+        }
+        list->AppendMessage(MakeGroupSystemTip(notify));
+        LOG_INFO("group chat window: system tip shown, group=%lld, msgid=%lld.",
+                 (long long)m_groupId, (long long)notify.m_msgid);
+        return;
+    }
+
     // 其余非文本类型：解析层只在文本类型时填 m_text，空即非文本（暂不渲染）。
     if (notify.m_text.empty())
     {
@@ -3460,6 +3508,8 @@ void CBalloonGroupChatWindow::OnGroupMembersArrived(const net::GroupMembersResul
 
     // 建"发送人 userid → 昵称/头像"映射（群名片优先→账号昵称→"用户<id>"）。
     m_memberInfo.clear();
+    // 非成员的通讯录查询结果随成员表一起作废：有人可能重新入群，通讯录也可能已更新
+    m_nonMemberSenders.clear();
     for (size_t i = 0; i < members.m_members.size(); ++i)
     {
         const net::GroupMemberItem& m = members.m_members[i];
@@ -3575,8 +3625,9 @@ void CBalloonGroupChatWindow::OnGroupMembersArrived(const net::GroupMembersResul
     int refreshed = 0;
     if (msgList != NULL)
     {
+        //先成员表、再通讯录：已退群的人以前发的消息也能换成真名（BUG-49）
         refreshed = balloonchatwnd::ApplyGroupSendersToList(
-            *msgList, &CBalloonGroupChatWindow::LookupMemberSender, this);
+            *msgList, &CBalloonGroupChatWindow::LookupSenderChain, this);
     }
 
     //sinceOpen：从打开窗口到成员填充完成的累计毫秒数；refreshed：先于成员渲染出来、
@@ -3592,9 +3643,78 @@ void CBalloonGroupChatWindow::OnGroupMembersArrived(const net::GroupMembersResul
 balloonchatwnd::GroupSenderRender CBalloonGroupChatWindow::ResolveSender(int64_t userId) const
 {
     balloonchatwnd::GroupSenderRender found;
-    const bool hit = LookupMemberSender(const_cast<CBalloonGroupChatWindow*>(this), userId, found);
+    const bool hit = LookupSenderChain(const_cast<CBalloonGroupChatWindow*>(this), userId, found);
     return balloonchatwnd::ResolveGroupSender(userId, hit ? &found : NULL,
                                               AvatarColorForUser(userId));
+}
+
+bool CBalloonGroupChatWindow::LookupSenderChain(void* ctx, int64_t userId,
+                                                balloonchatwnd::GroupSenderRender& out)
+{
+    return balloonchatwnd::LookupGroupSenderChain(userId,
+                                                  &CBalloonGroupChatWindow::LookupMemberSender, ctx,
+                                                  &CBalloonGroupChatWindow::LookupContactSender, ctx,
+                                                  out);
+}
+
+bool CBalloonGroupChatWindow::LookupContactSender(void* ctx, int64_t userId,
+                                                  balloonchatwnd::GroupSenderRender& out)
+{
+    CBalloonGroupChatWindow* self = static_cast<CBalloonGroupChatWindow*>(ctx);
+    if (self == NULL || userId <= 0)
+    {
+        return false;
+    }
+
+    std::map<int64_t, NonMemberSender>::const_iterator cached = self->m_nonMemberSenders.find(userId);
+    if (cached != self->m_nonMemberSenders.end())
+    {
+        if (cached->second.m_found)
+        {
+            out = cached->second.m_render;
+        }
+        return cached->second.m_found;
+    }
+
+    //拿不到主面板（调试入口）：不缓存，直接按查不到处理
+    if (self->m_hostPanel == NULL || !::IsWindow(self->m_hostPanel))
+    {
+        return false;
+    }
+
+    //同步问主面板 —— 两者都在 UI 线程上，SendMessage 就是一次直接调用；查询结构在本栈上，
+    //主面板就地填写，不转移所有权
+    balloonchatwnd::ContactBriefQuery query;
+    query.m_userId = userId;
+    ::SendMessage(self->m_hostPanel, FMG_MSG_QUERY_CONTACT_BRIEF, 0, (LPARAM)&query);
+
+    NonMemberSender entry;
+    entry.m_found = query.m_found;
+    if (query.m_found)
+    {
+        const int64_t selfId = (self->m_lpFMGClient != NULL)
+                               ? (int64_t)self->m_lpFMGClient->m_UserMgr.m_UserInfo.m_uUserID : 0;
+        CString name = Utf8ToCString(query.m_nickname);
+        if (name.IsEmpty())
+        {
+            name.Format(_T("用户%lld"), (long long)userId);
+        }
+        //头像解析与成员同一套：字形头像显示选定字形，真图命中缓存给路径、未命中入队下载
+        //（下载完成后 OnAvatarDownloaded 按 m_customface 回填）
+        const balloonchatwnd::AvatarRender ar = balloonchatwnd::ResolveAvatarRender(
+            userId, query.m_facetype, query.m_customface, name, selfId);
+        entry.m_render.m_name      = name;
+        entry.m_render.m_glyph     = ar.m_glyph;
+        entry.m_render.m_color     = ar.m_color;
+        entry.m_render.m_imagePath = ar.m_imagePath;
+        entry.m_facetype           = query.m_facetype;
+        entry.m_customface         = query.m_customface;
+        out = entry.m_render;
+    }
+    self->m_nonMemberSenders[userId] = entry;
+    LOG_INFO("group chat window: sender %lld not in member list, contact lookup found=%d, group=%lld.",
+             (long long)userId, (int)query.m_found, (long long)self->m_groupId);
+    return query.m_found;
 }
 
 bool CBalloonGroupChatWindow::LookupMemberSender(void* ctx, int64_t userId,
@@ -3664,6 +3784,23 @@ void CBalloonGroupChatWindow::OnAvatarDownloaded(const std::string& fileid)
         if (list != NULL)
         {
             list->RefreshSenderAvatar(it->first, imagePath);
+        }
+    }
+
+    // 已退群成员（经通讯录查到的）的真图头像命中：回填路径并刷新他们的气泡。
+    for (std::map<int64_t, NonMemberSender>::iterator nit = m_nonMemberSenders.begin();
+         nit != m_nonMemberSenders.end(); ++nit)
+    {
+        if (!nit->second.m_found
+            || nit->second.m_facetype != balloonmain::avatar_kind_image
+            || nit->second.m_customface != fileid)
+        {
+            continue;
+        }
+        nit->second.m_render.m_imagePath = imagePath;
+        if (list != NULL)
+        {
+            list->RefreshSenderAvatar(nit->first, imagePath);
         }
     }
 
@@ -3802,6 +3939,14 @@ void CBalloonGroupChatWindow::OnHistoryMessages(const net::SyncMessagesResult& r
         {
             RenderIncomingGroupFile(list, fromMe, m);
             breakdown.Add(balloonchatwnd::kHistoryRenderFile, itemWatch.ElapsedMs());
+            continue;
+        }
+
+        // 服务端生成的系统提示：居中提示行，与实时推送同一构造
+        if (m.m_msgtype == kMsgTypeSystem)
+        {
+            list->AppendMessage(MakeGroupSystemTip(m));
+            breakdown.Add(balloonchatwnd::kHistoryRenderText, itemWatch.ElapsedMs());
             continue;
         }
 
@@ -5501,6 +5646,38 @@ LRESULT CBalloonGroupChatWindow::OnChatMentionAction(UINT /*uMsg*/, WPARAM /*wPa
                  (long long)m_groupId, (long long)uid);
         CIUSocket::GetInstance().SendSetMemberRole(m_groupId, uid, false);
         break;
+    //转让群主：菜单只对群主、且目标是本群其他成员时出现。本窗口弹确认框，用户确认后交给主面板
+    //发协议并登记等待应答，结果（成功的轻提示、失败的原因）由主面板给出
+    case balloonchatwnd::kMentionMenuTransferOwner:
+    {
+        const std::wstring tip = balloonmain::BuildTransferConfirmText((LPCTSTR)name, false);
+        if (::MessageBox(m_hWnd, tip.c_str(), _T("转让群主"),
+                         MB_OKCANCEL | MB_ICONWARNING | MB_DEFBUTTON2) != IDOK)
+        {
+            break;
+        }
+        if (m_hostPanel == NULL || !::IsWindow(m_hostPanel))
+        {
+            LOG_WARNING("Transfer owner from chat window ignored: no host panel, group=%lld.",
+                        (long long)m_groupId);
+            break;
+        }
+        balloonmain::TransferOwnerRequest* req = new balloonmain::TransferOwnerRequest();
+        req->m_groupId = m_groupId;
+        req->m_newOwner = uid;
+        req->m_newOwnerName = (LPCTSTR)name;
+        req->m_thenLeave = false;
+        if (!::PostMessage(m_hostPanel, FMG_MSG_TRANSFER_GROUP_OWNER, 0, (LPARAM)req))
+        {
+            delete req;
+            LOG_ERROR("Post transfer owner request failed: group=%lld, uid=%lld.",
+                      (long long)m_groupId, (long long)uid);
+            break;
+        }
+        LOG_INFO("Transfer owner requested from chat window: group=%lld, uid=%lld.",
+                 (long long)m_groupId, (long long)uid);
+        break;
+    }
     case balloonchatwnd::kMentionMenuKick:
     {
         //移出不可撤销，先确认。文案与群管理窗的「移出成员」保持一致。

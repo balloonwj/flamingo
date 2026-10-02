@@ -6,6 +6,7 @@
  */
 #include "catch_amalgamated.hpp"
 #include "../net/ConversationsProtocolClient.h"
+#include "../net/Protocol.h"   // message_type_text / message_type_system
 #include "../third-party/jsoncpp-1.9.0/json.h"
 
 using namespace net;
@@ -368,7 +369,7 @@ TEST_CASE("UN1 他人发来的消息计未读")
 {
     const unsigned int kSelf = 5001;
     const unsigned int kPeer = 5002;
-    CHECK(ConversationsProtocolClient::shouldCountAsUnread(kPeer, kSelf));
+    CHECK(ConversationsProtocolClient::shouldCountAsUnread(kPeer, kSelf, message_type_text));
 }
 
 TEST_CASE("UN2 自己发出、又被服务端回推回来的消息不计未读")
@@ -376,12 +377,27 @@ TEST_CASE("UN2 自己发出、又被服务端回推回来的消息不计未读")
     //服务端把群消息推给包括发送者在内的全体成员，单聊多端登录时也会把自己发的
     //消息同步回本端。这类推送不能给自己点亮红点。
     const unsigned int kSelf = 5001;
-    CHECK_FALSE(ConversationsProtocolClient::shouldCountAsUnread(kSelf, kSelf));
+    CHECK_FALSE(ConversationsProtocolClient::shouldCountAsUnread(kSelf, kSelf, message_type_text));
 }
 
 TEST_CASE("UN3 取不到本端 userid 时一律不计未读")
 {
     //未登录 / 兜底态下无法断言消息来自他人，宁可不加，也不要误点红点。
-    CHECK_FALSE(ConversationsProtocolClient::shouldCountAsUnread(5002, 0));
-    CHECK_FALSE(ConversationsProtocolClient::shouldCountAsUnread(0, 0));
+    CHECK_FALSE(ConversationsProtocolClient::shouldCountAsUnread(5002, 0, message_type_text));
+    CHECK_FALSE(ConversationsProtocolClient::shouldCountAsUnread(0, 0, message_type_text));
+}
+
+TEST_CASE("UN-SYS 服务端生成的群系统消息不计未读，他人的普通消息照常计", "[groupexit][sysmsg]")
+{
+    //系统消息（发布公告、入群欢迎语、退出群聊、转让群主）是群里的变动通知，不是有人对你说话；
+    //服务端算会话未读数时同样不计（MessageManager 的群未读查询），两边口径一致
+    const unsigned int kSelf = 5001;
+    const unsigned int kSystemSender = 0;
+    CHECK_FALSE(ConversationsProtocolClient::shouldCountAsUnread(kSystemSender, kSelf, message_type_system));
+    //即便发送者字段不是 0，只要类型是系统消息也不计
+    CHECK_FALSE(ConversationsProtocolClient::shouldCountAsUnread(5002, kSelf, message_type_system));
+    //他人的普通消息、图片照常计；自己发的照旧不计
+    CHECK(ConversationsProtocolClient::shouldCountAsUnread(5002, kSelf, message_type_text));
+    CHECK(ConversationsProtocolClient::shouldCountAsUnread(5002, kSelf, message_type_image));
+    CHECK_FALSE(ConversationsProtocolClient::shouldCountAsUnread(kSelf, kSelf, message_type_image));
 }

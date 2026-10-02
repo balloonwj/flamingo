@@ -61,6 +61,24 @@ GroupSenderRender ResolveGroupSender(int64_t userId, const GroupSenderRender* fo
     return r;
 }
 
+bool LookupGroupSenderChain(int64_t userId,
+                            GroupSenderLookup memberLookup, void* memberCtx,
+                            GroupSenderLookup contactLookup, void* contactCtx,
+                            GroupSenderRender& out)
+{
+    //成员表优先：群里显示的名字以群名片为准，通讯录只有账号昵称
+    if (memberLookup != NULL && memberLookup(memberCtx, userId, out))
+    {
+        return true;
+    }
+    //成员表里没有（已退群、被移出）：退一步查通讯录
+    if (contactLookup != NULL && contactLookup(contactCtx, userId, out))
+    {
+        return true;
+    }
+    return false;
+}
+
 int ApplyGroupSendersToList(ChatMessageList& list, GroupSenderLookup lookup, void* ctx)
 {
     if (lookup == NULL)

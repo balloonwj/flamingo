@@ -28,6 +28,7 @@
 #include "GroupManageLayout.h"          // GmPageId
 #include "GroupManageMapping.h"         // Apply* / IsPageVisibleForRole / DescribeGroupOpFailure
 #include "../BalloonMain/CreateGroupDlg.h"      // CCreateGroupDlg::Purpose（选人对话框的用途枚举）
+#include "../BalloonMain/GroupExitFlow.h"       // BuildDismissConfirmText（与群资料窗口、群列表右键同一份文案）
 #include "MemberPickerRequest.h"        // 打开选人对话框的请求载荷
 #include "GroupAvatarDlgRequest.h"      // 打开修改群头像对话框的请求载荷
 #include "../../Session/GroupRoleRules.h"          // CanChangeGroupAvatar：谁能改群头像
@@ -794,9 +795,8 @@ bool CBalloonGroupManageWindow::HandlePageButton(UINT ctrlId, LPARAM extra)
     //---- 危险区域：解散群 ----
     case kIdBtnDismiss:
     {
-        if (!ConfirmAction(_T("解散群聊"),
-                           _T("确定解散本群吗？\n\n解散后本群的聊天记录将全部删除，")
-                           _T("所有成员将被移出，此操作不可恢复。")))
+        const std::wstring tip = balloonmain::BuildDismissConfirmText((LPCTSTR)m_model.m_groupName);
+        if (!ConfirmAction(_T("解散群聊"), tip.c_str()))
         {
             return true;
         }

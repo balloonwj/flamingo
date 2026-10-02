@@ -304,6 +304,19 @@ LRESULT CBalloonMainPanel::OnV2GroupWriteResult(UINT uMsg, WPARAM wParam, LPARAM
         return 0;
     }
 
+    // 退群：对上本面板登记的那次请求，成功时提示并清理，失败时按错误码提示。对不上的
+    // （理论上不会出现）落到下面的通用处理
+    if (uMsg == FMG_MSG_V2_LEAVE_GROUP_RESULT)
+    {
+        const balloonmain::GroupOpOutcome outcome =
+            m_groupExitTracker.OnResult(balloonmain::kGroupExitOpLeave, code);
+        if (outcome.m_matched)
+        {
+            ApplyGroupExitOutcome(balloonmain::kGroupExitOpLeave, outcome);
+            return 0;
+        }
+    }
+
     if (code == 0)
     {
         LOG_INFO("v2 group write-op ok, uiMsg=%u.", uMsg);

@@ -7,6 +7,7 @@
  *    CM1  行序与分隔条位置：复制群号、复制群名紧跟「查看历史消息」；「群管理」只在群主 / 管理员
  *         的菜单里出现；命令 id 非 0 且互不重复；置顶 / 免打扰 / 收藏文案随状态取反。
  *    CM4  群号格式化：十进制数字串，不带"群号"字样；群 id 不大于 0 时为空串。
+ *    CM5  群主的菜单在「退出群聊」之后多出「解散群聊」；管理员与普通成员没有。
  *
  *  用 Catch2 v3（amalgamated 形态）。
  *
@@ -122,4 +123,44 @@ TEST_CASE("CM4 群号格式化：十进制数字串，群 id 不大于 0 时为�
     CHECK(FormatGroupNumber(9007199254740993LL) == std::wstring(L"9007199254740993"));
     CHECK(FormatGroupNumber(0LL).empty());
     CHECK(FormatGroupNumber(-5LL).empty());
+}
+
+TEST_CASE("CM5 群主的菜单在退出群聊之后多出解散群聊，管理员和普通成员没有", "[groupmenu][groupexit]")
+{
+    //群主：既能管理，也是群主
+    GroupMenuState owner;
+    owner.m_canManage = true;
+    owner.m_isOwner = true;
+    const std::vector<GroupMenuEntry> mOwner = BuildGroupMenuModel(owner);
+    //12 个功能项 + 1 条分隔条
+    REQUIRE(mOwner.size() == 13);
+    CHECK(mOwner[mOwner.size() - 2].m_id == kGroupMenuQuit);
+    CHECK(mOwner[mOwner.size() - 1].m_id == kGroupMenuDismiss);
+    REQUIRE(LabelOf(mOwner, kGroupMenuDismiss) != NULL);
+    CHECK(wcscmp(LabelOf(mOwner, kGroupMenuDismiss), L"解散群聊") == 0);
+    //群主也保留「退出群聊」：点了之后走"先转让群主再退出"的流程
+    CHECK(wcscmp(LabelOf(mOwner, kGroupMenuQuit), L"退出群聊") == 0);
+
+    //新命令 id 非 0，且与其余各项互不重复
+    CHECK(kGroupMenuDismiss != 0);
+    std::set<UINT> ids;
+    for (size_t i = 0; i < mOwner.size(); ++i)
+    {
+        if (!mOwner[i].m_isSeparator)
+        {
+            CHECK(ids.insert(mOwner[i].m_id).second);
+        }
+    }
+
+    //管理员：有群管理，没有解散
+    GroupMenuState admin;
+    admin.m_canManage = true;
+    const std::vector<GroupMenuEntry> mAdmin = BuildGroupMenuModel(admin);
+    CHECK(LabelOf(mAdmin, kGroupMenuDismiss) == NULL);
+    CHECK(mAdmin.back().m_id == kGroupMenuQuit);
+
+    //普通成员：没有解散
+    const std::vector<GroupMenuEntry> mMember = BuildGroupMenuModel(GroupMenuState());
+    CHECK(LabelOf(mMember, kGroupMenuDismiss) == NULL);
+    CHECK(mMember.back().m_id == kGroupMenuQuit);
 }

@@ -574,16 +574,22 @@ bool MessageProtocolClient::parseSendResponse(const std::string& jsonbody, SendM
 //解析出 MessageNotify。msgid/from 缺失（<=0）视为非法。供推送与历史拉取共用。
 static bool fillMessageFromObject(const Json::Value& root, MessageNotify& notify)
 {
-    notify.m_msgid = jsonToInt64(root["msgid"]);
-    notify.m_from  = jsonToInt64(root["from"]);
-    if (notify.m_msgid <= 0 || notify.m_from <= 0)
+    notify.m_msgid   = jsonToInt64(root["msgid"]);
+    notify.m_from    = jsonToInt64(root["from"]);
+    notify.m_msgtype = root["msgtype"].isInt() ? root["msgtype"].asInt() : 0;
+    if (notify.m_msgid <= 0)
+        return false;
+    //发送者须为正；唯一的例外是服务端生成的系统消息（发布公告、入群欢迎语、退出群聊、转让群主等），
+    //它们没有真实发送人，from 统一为 0（服务端 kSystemMessageSenderId）。若一律要求 from > 0，
+    //这类消息在推送与拉历史时都会被当成脏数据丢掉，群里永远看不到
+    const bool systemFromServer = (notify.m_msgtype == message_type_system && notify.m_from == 0);
+    if (notify.m_from <= 0 && !systemFromServer)
         return false;
 
     notify.m_clientmsgid = root["clientmsgid"].isString() ? root["clientmsgid"].asString() : std::string();
     notify.m_ctype       = root["ctype"].isInt() ? root["ctype"].asInt() : conversation_single;
     notify.m_cid         = jsonToInt64(root["cid"]);
     notify.m_to          = jsonToInt64(root["to"]);
-    notify.m_msgtype     = root["msgtype"].isInt() ? root["msgtype"].asInt() : 0;
     notify.m_timestamp   = root["timestamp"].isNumeric() ? root["timestamp"].asInt64() : 0;
     notify.m_recalled    = root["recalled"].isBool() ? root["recalled"].asBool() : false;
     //文件收取状态：服务端只对"拉取者自己发出的文件消息"回填，其余情形无此字段（保持 0）。

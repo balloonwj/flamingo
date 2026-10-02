@@ -439,6 +439,16 @@ void CBalloonHistoryWindow::OpenForConversation(CBalloonMainPanel* pMainPanel,
     LOG_INFO(_T("历史消息记录窗口已为会话打开。"));
 }
 
+bool CBalloonHistoryWindow::IsShowingConversation(int ctype, int64_t cid) const
+{
+    if (!::IsWindow(m_hWnd))
+    {
+        return false;
+    }
+    const HistoryFilter& filter = m_model.Filter();
+    return filter.m_ctype == ctype && filter.m_cid == cid;
+}
+
 void CBalloonHistoryWindow::RefreshIfConversation(int ctype, int64_t cid)
 {
     if (!IsWindow())

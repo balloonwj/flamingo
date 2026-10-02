@@ -194,7 +194,8 @@ void RefilterMembersPage(balloonwjui::DuiVBox* page, const GroupManageModel& mod
 bool IsGmStyledInput(const balloonwjui::DuiControl* ctrl);
 
 // 拼出危险区域页「解散群聊」卡片的说明文字，带上群名，形如
-// 「解散后 设计组·周会 的聊天记录将全部删除，所有成员将被移出，此操作不可恢复」。
+// 「解散后 设计组·周会 的所有成员将被移出，成员本地的聊天记录随之清除，此操作不可恢复」。
+// 服务端保留群消息供审计，只是各成员客户端里的记录会清除，故不说"全部删除"。
 //   groupName：群名；超过 16 个字时只保留前 16 个字并加省略号，免得卡片放不下。
 //   返回：说明文字。纯函数，无副作用。
 CString BuildDismissDescription(const CString& groupName);

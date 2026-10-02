@@ -55,7 +55,8 @@ public:
         kPurposeCreateGroup = 0,   // 新建群聊：候选=通讯录，多选，带群名输入，发 cmd_create_group
         kPurposeInvite      = 1,   // 邀请入群：候选=通讯录（排除已在群内的），多选，发 cmd_invite_to_group
         kPurposeMute        = 2,   // 添加禁言成员：候选=本群成员（排除群主与自己），多选，发 cmd_mute_member
-        kPurposeTransfer    = 3    // 转让群主：候选=本群成员（排除自己），<u>单选</u>，发 cmd_transfer_owner
+        kPurposeTransfer    = 3,   // 转让群主：候选=本群成员（排除自己），<u>单选</u>，发 cmd_transfer_owner（群管理窗发起，结果由群管理窗提示）
+        kPurposeTransferThenLeave = 4  // 转让群主并退出：群主点「退出群聊」时打开，候选同上、单选；确认后交给主面板先转让、成功后再退群
     };
 
     /**
@@ -88,7 +89,7 @@ public:
      *  以"选人"用途打开对话框（邀请入群 / 添加禁言成员 / 转让群主共用）。
      *
      *  与 OpenForCreate 的差别：不显示群名输入框，底部按钮文案与点击后发出的
-     *  协议按 purpose 决定，kPurposeTransfer 还会切成单选。
+     *  协议按 purpose 决定，kPurposeTransfer / kPurposeTransferThenLeave 还会切成单选。
      *
      *    owner：       owner 窗口句柄。
      *    purpose：     用途，取值见 Purpose；传 kPurposeCreateGroup 无意义。
@@ -190,6 +191,10 @@ private:
 
     // "选人"用途下的目标群ID；kPurposeCreateGroup 时为 0（那时群还不存在）。
     int64_t          m_groupId;
+
+    // 打开本对话框的窗口（主面板）。kPurposeTransferThenLeave 确认后把转让请求投给它；
+    // 其余用途不用。窗口句柄只借用，每次打开时更新。
+    HWND             m_hNotifyTarget;
 
     std::vector<net::ContactItem>    m_contacts;     // 联系人资料池（复制）
     std::vector<net::DepartmentItem> m_departments;  // 部门列表（复制）

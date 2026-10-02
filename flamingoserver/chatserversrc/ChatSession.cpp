@@ -5185,6 +5185,15 @@ void ChatSession::sendAnnouncementSystemMessage(const GroupAnnouncementRecord& i
 
     const std::string text = u8"「" + who + u8"」发布了群公告：" + item.title;
 
+    //占位的客户端消息ID带上公告ID：同一条公告重新发布时去重键不同，各自成一条提示
+    const std::string clientMsgId = "sys-announce-" + std::to_string(item.groupid)
+                                    + "-" + std::to_string(item.id);
+    sendGroupSystemMessage(item.groupid, text, clientMsgId);
+}
+
+int64_t ChatSession::sendGroupSystemMessage(int64_t groupid, const std::string& text,
+                                            const std::string& clientMsgId)
+{
     //系统消息的 content 与文本消息同构（只有一个 text 字段），客户端的文本渲染
     //路径可以直接复用。
     const std::string content = MessageProtocol::buildTextContent(text);
@@ -5201,21 +5210,16 @@ void ChatSession::sendAnnouncementSystemMessage(const GroupAnnouncementRecord& i
     const int64_t kMillisPerSecond = 1000;
     const int64_t now = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
 
-    //系统消息由服务器生成，没有客户端消息ID可用；拼一个带公告ID的串占位，保证
-    //saveMessage 的幂等去重键不会与真实客户端消息撞上。
-    const std::string clientMsgId = "sys-announce-" + std::to_string(item.groupid)
-                                    + "-" + std::to_string(item.id);
-
     MessageManager& msgMgr = Singleton<MessageManager>::Instance();
     const int64_t msgId = msgMgr.saveMessage(clientMsgId, CHAT_TYPE_GROUP,
                                              kSystemMessageSenderId,
-                                             static_cast<int32_t>(item.groupid),
+                                             static_cast<int32_t>(groupid),
                                              message_type_system, storedContent, now);
     if (msgId == 0)
     {
-        LOGE("save announcement system message failed, groupid: %lld, id: %lld",
-             (long long)item.groupid, (long long)item.id);
-        return;
+        LOGE("save group system message failed, groupid: %lld, clientmsgid: %s",
+             (long long)groupid, clientMsgId.c_str());
+        return 0;
     }
 
     MessageRecord rec;
@@ -5223,17 +5227,18 @@ void ChatSession::sendAnnouncementSystemMessage(const GroupAnnouncementRecord& i
     rec.clientmsgid = clientMsgId;
     rec.ctype       = CHAT_TYPE_GROUP;
     rec.from        = kSystemMessageSenderId;
-    rec.to          = item.groupid;
+    rec.to          = groupid;
     rec.msgtype     = message_type_system;
     rec.content     = content;
     rec.mentionall  = false;
     rec.timestamp   = now;
     rec.recalled    = false;
-    notifyGroupMembers(item.groupid, cmd_message_notify,
-                       MessageProtocol::buildMessageNotify(rec, item.groupid));
+    notifyGroupMembers(groupid, cmd_message_notify,
+                       MessageProtocol::buildMessageNotify(rec, groupid));
 
-    LOGI("group announcement system message sent, groupid: %lld, announceid: %lld, msgid: %lld",
-         (long long)item.groupid, (long long)item.id, (long long)msgId);
+    LOGI("group system message sent, groupid: %lld, msgid: %lld, clientmsgid: %s",
+         (long long)groupid, (long long)msgId, clientMsgId.c_str());
+    return msgId;
 }
 
 void ChatSession::notifyGroupAdmins(int64_t groupid, uint16_t cmd, const std::string& body)
@@ -5275,52 +5280,17 @@ void ChatSession::sendGroupWelcomeMessage(const GroupRecord& group,
     if (!names.empty())
         text = names + u8" " + group.welcometext;
 
-    //系统消息的 content 与文本消息同构（只有一个 text 字段），客户端的
-    //文本渲染路径可以直接复用。
-    const std::string content = MessageProtocol::buildTextContent(text);
-
-    //落库前还要再套一层 buildStoredContent 的外壳，理由同
-    //sendAnnouncementSystemMessage：读回时 parseStoredContent 只认最外层的 content
-    //字段，裸 content 会让重新登录后的会话摘要退化成"[消息]"、历史里正文为空。
-    std::vector<int64_t> noMentions;
-    const std::string storedContent =
-        MessageProtocol::buildStoredContent(content, noMentions, false, "");
-
+    //占位的客户端消息ID带上群ID与时间戳：欢迎语没有可用的业务ID
     const int64_t kMillisPerSecond = 1000;
     const int64_t now = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
-
-    //系统消息由服务器生成，没有客户端消息ID可用；拼一个带群ID与时间戳的串
-    //占位，保证 saveMessage 的幂等去重键不会与真实客户端消息撞上。
     const std::string clientMsgId = "sys-welcome-" + std::to_string(group.groupid)
                                     + "-" + std::to_string(now);
-
-    MessageManager& msgMgr = Singleton<MessageManager>::Instance();
-    const int64_t msgId = msgMgr.saveMessage(clientMsgId, CHAT_TYPE_GROUP,
-                                             kSystemMessageSenderId,
-                                             static_cast<int32_t>(group.groupid),
-                                             message_type_system, storedContent, now);
-    if (msgId == 0)
+    const int64_t msgId = sendGroupSystemMessage(group.groupid, text, clientMsgId);
+    if (msgId != 0)
     {
-        LOGE("save group welcome message failed, groupid: %lld", (long long)group.groupid);
-        return;
+        LOGI("group welcome message sent, groupid: %lld, msgid: %lld, newmembers: %d",
+             (long long)group.groupid, (long long)msgId, static_cast<int>(newMembers.size()));
     }
-
-    MessageRecord rec;
-    rec.msgid       = msgId;
-    rec.clientmsgid = clientMsgId;
-    rec.ctype       = CHAT_TYPE_GROUP;
-    rec.from        = kSystemMessageSenderId;
-    rec.to          = group.groupid;
-    rec.msgtype     = message_type_system;
-    rec.content     = content;
-    rec.mentionall  = false;
-    rec.timestamp   = now;
-    rec.recalled    = false;
-    notifyGroupMembers(group.groupid, cmd_message_notify,
-                       MessageProtocol::buildMessageNotify(rec, group.groupid));
-
-    LOGI("group welcome message sent, groupid: %lld, msgid: %lld, newmembers: %d",
-         (long long)group.groupid, (long long)msgId, static_cast<int>(newMembers.size()));
 }
 
 void ChatSession::onInviteToGroup(const std::string& body, const std::shared_ptr<TcpConnection>& conn)
@@ -5716,6 +5686,15 @@ void ChatSession::onLeaveGroup(const std::string& body, const std::shared_ptr<Tc
     //自动命名的群随成员变化重算群名，群名改变时向全群推送资料变更
     Singleton<ChatServer>::Instance().refreshAutoGroupNameAndNotify(groupid);
 
+    //给留下的成员插一条"「某人」退出了群聊"的系统提示。退群者已不在成员表里，收不到这条推送，
+    //他本端的该群数据会在收到上面的成员变动推送后整体清理。占位消息ID带上退群者与时间戳，
+    //同一个人退了又进、再退时各成一条
+    const int64_t kMillisPerSecond = 1000;
+    const int64_t now = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+    const std::string clientMsgId = "sys-leave-" + std::to_string(groupid) + "-"
+                                    + std::to_string(m_userinfo.userid) + "-" + std::to_string(now);
+    sendGroupSystemMessage(groupid, GroupProtocol::buildMemberLeaveTip(m_userinfo.nickname), clientMsgId);
+
     LOGI("leave group ok, groupid: %lld, userid: %d", (long long)groupid, m_userinfo.userid);
 }
 
@@ -6091,6 +6070,19 @@ void ChatSession::onTransferOwner(const std::string& body, const std::shared_ptr
 
     //自动群名不含群主，换了群主之后原群主进入群名、新群主移出群名
     Singleton<ChatServer>::Instance().refreshAutoGroupNameAndNotify(groupid);
+
+    //插一条"「原群主」已将群主转让给「新群主」"的系统提示。新群主的昵称取不到时（资料缺失）
+    //提示里省掉他的名字，不影响转让本身
+    std::string newOwnerNickname;
+    User newOwnerInfo;
+    if (Singleton<UserManager>::Instance().getUserInfoByUserId(targetId, newOwnerInfo))
+        newOwnerNickname = newOwnerInfo.nickname;
+    const int64_t kMillisPerSecond = 1000;
+    const int64_t now = static_cast<int64_t>(time(NULL)) * kMillisPerSecond;
+    const std::string clientMsgId = "sys-transfer-" + std::to_string(groupid) + "-" + std::to_string(now);
+    sendGroupSystemMessage(groupid,
+                           GroupProtocol::buildOwnerTransferTip(m_userinfo.nickname, newOwnerNickname),
+                           clientMsgId);
 
     LOGI("transfer owner ok, groupid: %lld, from: %d, to: %d",
          (long long)groupid, m_userinfo.userid, targetId);

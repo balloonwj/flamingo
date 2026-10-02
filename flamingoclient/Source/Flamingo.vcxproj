@@ -751,6 +751,9 @@
     <ClCompile Include="UI\BalloonMain\MainPanelGroupMenu.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="UI\BalloonMain\GroupExitFlow.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="UI\BalloonMain\MainPanelConversationMenu.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -1449,6 +1452,7 @@
     <ClInclude Include="UI\BalloonMain\MainPanelButtons.h" />
     <ClInclude Include="UI\BalloonMain\MainPanelContactMenu.h" />
     <ClInclude Include="UI\BalloonMain\MainPanelGroupMenu.h" />
+    <ClInclude Include="UI\BalloonMain\GroupExitFlow.h" />
     <ClInclude Include="UI\BalloonMain\MainPanelConversationMenu.h" />
     <ClInclude Include="UI\BalloonMain\MainPanelHeader.h" />
     <ClInclude Include="UI\BalloonMain\MainPanelIcons.h" />
